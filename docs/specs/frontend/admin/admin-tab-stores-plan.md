@@ -55,7 +55,7 @@ rg "StoreStatus" --type ts apps/ packages/
 ## A-0b. 확정된 구현 작업 — 세션·PR·커밋 단위 (Q1~Q13 반영 — 착수 큐)
 
 > **목적**: 판매자 탭 개선의 **세션별 진행 단위·PR 분리·커밋 단위·정합성 검토 시점·e2e 위치**를 못박는다.
-> 코드는 아직 손대지 않음 — 본 절은 **착수 대기 목록**이자 **실행 절차서**다.
+> 2026-10-04 코드 대조: T7·T8(별도 SDD 선결)을 뺀 아래 태스크는 구현됐다(T0 `6c474ce1`·T1/T2 `1bd259a0`·T3 `812f7cdd`·T4 `4d1ffb55`·T6+T9 `76f8f170`·e2e `admin-stores-filter-sort.spec.ts`, T5는 분할 조건 미달로 불필요). 본 절은 당시의 착수 목록·실행 절차 기록이다.
 
 ### 전체 구도 (한눈에)
 
@@ -106,7 +106,7 @@ rg "StoreStatus" --type ts apps/ packages/
 - `_lib.ts`에 `filterStores`·`sortStores`·`getEmptyKind` 및 필터/정렬 옵션 SSOT를 추가했다.
 - `_client.tsx`가 `keyword`·`status`·`sort`·`dir` 쿼리를 동기화하며, 기본값 쿼리는 생략한다.
 - 데스크톱은 헤더 정렬 토글, 모바일은 정렬 Select를 사용하며 새로고침과 조건 불일치 초기화 동선을 추가했다.
-- 기존 읽기 전용 `admin-store-archive.spec.ts`는 제거된 Switch 대신 상태 필터 기본값을 확인하도록 갱신했다(PR-E 신규 상호작용 8건은 미착수 유지).
+- 기존 읽기 전용 `admin-store-archive.spec.ts`는 제거된 Switch 대신 상태 필터 기본값을 확인하도록 갱신했다(PR-E 신규 상호작용은 이후 `apps/e2e/tests/admin-stores-filter-sort.spec.ts`로 추가됨).
 
 **정합성 검토 (PR-B 코드 완료 시점):**
 - [x] C1 tsc 0 — seller·consumer·driver·api 4앱 통과.

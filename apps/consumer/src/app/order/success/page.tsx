@@ -8,6 +8,7 @@ import { useSession } from 'next-auth/react';
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useCart } from '@/hooks/useCart';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
+import { formatCancelReason } from '@/lib/order-cancel-reason';
 import {
   DEFAULT_PAYMENT_FAILURE_MESSAGE,
   type OrderPaymentReturn,
@@ -304,7 +305,10 @@ function OrderSuccessContent() {
   const orderId = resolveSuccessOrderId(params.getAll('orderId'), redirectResult);
   const [paymentReturn, setPaymentReturn] = useState<OrderPaymentReturn | null>(null);
   const handledRedirect = useRef<string | null>(null);
-  const { order, loading, error } = useOrderStatus(orderId, session?.user?.accessToken);
+  const { order, loading, error, pollingExpired, refetch } = useOrderStatus(
+    orderId,
+    session?.user?.accessToken,
+  );
   const validOrder = orderId ? readOrderRecord(order, orderId) : null;
   const successOrder = !loading && !error && orderId ? readSuccessOrder(order, orderId) : null;
 
@@ -376,8 +380,22 @@ function OrderSuccessContent() {
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
               ta="center"
             >
-              잠시만 기다려주세요. 결제 완료 후 자동으로 업데이트됩니다.
+              {isPending && pollingExpired
+                ? '결제 확인이 늦어지고 있어요. 잠시 후 다시 확인해 주세요.'
+                : '잠시만 기다려주세요. 결제 완료 후 자동으로 업데이트됩니다.'}
             </Text>
+            {isPending && pollingExpired && (
+              <Button
+                color="brand"
+                radius="xl"
+                size="lg"
+                mt="md"
+                fullWidth
+                onClick={() => void refetch()}
+              >
+                다시 확인
+              </Button>
+            )}
           </>
         )}
 
@@ -511,9 +529,7 @@ function OrderSuccessContent() {
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
               ta="center"
             >
-              {typeof validOrder.cancelReason === 'string'
-                ? validOrder.cancelReason
-                : '결제 처리 중 오류가 발생했습니다.'}
+              {formatCancelReason(validOrder.cancelReason) ?? '결제 처리 중 오류가 발생했습니다.'}
             </Text>
             <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>
               잠시 후 홈 화면으로 이동합니다.

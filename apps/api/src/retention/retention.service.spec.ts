@@ -1,3 +1,5 @@
+import { Logger } from '@nestjs/common';
+
 type Data = Record<string, unknown>;
 
 type RetentionPurpose = 'DELIVERY_PHOTO' | 'MARKETING_CONSENT' | 'LEGAL_ORDER' | 'LEGAL_DISPUTE';
@@ -56,10 +58,28 @@ function makeService(initial: Record<string, Data> = {}) {
 
   const doc = (path: string) => ({
     path,
+    get: async () => ({ exists: records.has(path), data: () => records.get(path) }),
     set: jest.fn(async (data: Data) => {
       writes.push({ path, data });
       records.set(path, data);
     }),
+  });
+  // 정기 파기 회차 lease용 최소 트랜잭션. 같은 프로세스 안에서 차례로 실행한다.
+  let transactionQueue: Promise<unknown> = Promise.resolve();
+  const runTransaction = jest.fn(<T>(callback: (transaction: Data) => Promise<T>): Promise<T> => {
+    const transaction = {
+      get: async (ref: { path: string }) => ({
+        exists: records.has(ref.path),
+        data: () => records.get(ref.path),
+      }),
+      set: (ref: { path: string }, data: Data, options?: { merge?: boolean }) => {
+        const current = records.get(ref.path);
+        records.set(ref.path, options?.merge && current ? { ...current, ...data } : { ...data });
+      },
+    };
+    const run = transactionQueue.then(() => callback(transaction));
+    transactionQueue = run.catch(() => undefined);
+    return run;
   });
   const collection = (name: string) => {
     const filters: Array<[string, string, unknown]> = [];
@@ -115,6 +135,7 @@ function makeService(initial: Record<string, Data> = {}) {
   const firestore = {
     doc,
     collection,
+    runTransaction,
     batch: jest.fn(createBatch),
     Timestamp: {
       now: jest.fn(() => timestamp('2026-07-17T01:00:00.000Z')),
@@ -394,6 +415,71 @@ describe('보관 기간과 파기 계약', () => {
     }
   });
 
+  it('정기 파기는 회차 lease를 잡은 실행 하나만 돌고 같은 날 다시 돌지 않는다', async () => {
+    jest.useFakeTimers({ now, doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+    const { commits, records, service } = makeService({
+      'legalOrderRecords/order-expired': {
+        expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+      },
+    });
+
+    try {
+      const results = await Promise.all([service.runScheduledPurge(), service.runScheduledPurge()]);
+
+      expect(results.filter((result) => result['skipped'] === true)).toEqual([
+        { skipped: true, reason: 'HELD' },
+      ]);
+      expect(results.find((result) => result['skipped'] !== true)).toMatchObject({
+        deletedCount: 1,
+      });
+      expect(commits).toHaveLength(1);
+      expect(records.get('jobLeases/retention-scheduled-purge')).toMatchObject({
+        holderId: null,
+        lastCompletedSlot: '2026-07-17',
+      });
+
+      await expect(service.runScheduledPurge()).resolves.toEqual({
+        skipped: true,
+        reason: 'ALREADY_DONE',
+      });
+      expect(commits).toHaveLength(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('정기 파기가 실패하면 기존처럼 오류를 올리고 회차를 완료로 남기지 않는다', async () => {
+    jest.useFakeTimers({ now, doNotFake: ['setImmediate', 'nextTick', 'queueMicrotask'] });
+    const { records, service } = makeService();
+    const purge = jest
+      .spyOn(service, 'purgeExpiredRecords')
+      .mockRejectedValueOnce(new Error('purge failed'));
+
+    try {
+      await expect(service.runScheduledPurge()).rejects.toThrow('purge failed');
+      const lease = records.get('jobLeases/retention-scheduled-purge');
+      expect(lease).toMatchObject({ holderId: null, expiresAt: null });
+      expect(lease?.['lastCompletedSlot']).toBeUndefined();
+
+      await expect(service.runScheduledPurge()).resolves.toMatchObject({ deletedCount: 0 });
+      expect(purge).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('회차 lease 저장소를 읽지 못하면 throw하지 않고 파기를 건너뛴다', async () => {
+    const { firestore, service } = makeService();
+    firestore.runTransaction.mockRejectedValueOnce(new Error('UNAVAILABLE'));
+    const purge = jest.spyOn(service, 'purgeExpiredRecords');
+
+    await expect(service.runScheduledPurge()).resolves.toEqual({
+      skipped: true,
+      reason: 'UNAVAILABLE',
+    });
+    expect(purge).not.toHaveBeenCalled();
+  });
+
   it('Storage 삭제 최종 실패는 안전한 운영 예외로 남기고 보관 문서는 유지한다', async () => {
     const { issueWriter, records, service, storage } = makeService({
       'deliveryPhotoRecords/photo-failed': {
@@ -424,6 +510,127 @@ describe('보관 기간과 파기 계약', () => {
     expect(JSON.stringify(issueWriter.createOrMergeIssue.mock.calls[0][0])).not.toMatch(
       /authorization|bearer|secret/i,
     );
+  });
+
+  describe('Storage 객체 삭제 결과 구분', () => {
+    let errorLog: jest.SpyInstance;
+
+    beforeEach(() => {
+      errorLog = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    });
+
+    afterEach(() => {
+      errorLog.mockRestore();
+    });
+
+    it('삭제된 객체는 보관 문서도 파기하고 실패로 세지 않는다', async () => {
+      const { issueWriter, records, service, storage } = makeService({
+        'deliveryPhotoRecords/photo-deleted': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+          storagePath: 'deliveryPhotos/order-safe/photo-deleted.jpg',
+        },
+      });
+
+      await expect(service.purgeExpiredRecords({ now })).resolves.toMatchObject({
+        deletedCount: 1,
+        failedCount: 0,
+        storageNotFoundCount: 0,
+      });
+
+      expect(storage.deleteObject).toHaveBeenCalledTimes(1);
+      expect(records.has('deliveryPhotoRecords/photo-deleted')).toBe(false);
+      expect(issueWriter.createOrMergeIssue).not.toHaveBeenCalled();
+      expect(errorLog).not.toHaveBeenCalled();
+    });
+
+    it('이미 없는 객체(404)는 재시도 없이 삭제된 것으로 보고 따로 센다', async () => {
+      const { issueWriter, records, service, storage } = makeService({
+        'deliveryPhotoRecords/photo-missing': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+          storagePath: 'deliveryPhotos/order-safe/photo-missing.jpg',
+        },
+      });
+      storage.deleteObject.mockRejectedValue(
+        Object.assign(new Error('No such object: deliveryPhotos/order-safe/photo-missing.jpg'), {
+          code: 404,
+        }),
+      );
+
+      await expect(service.purgeExpiredRecords({ now })).resolves.toMatchObject({
+        deletedCount: 1,
+        failedCount: 0,
+        storageNotFoundCount: 1,
+      });
+
+      expect(storage.deleteObject).toHaveBeenCalledTimes(1);
+      expect(records.has('deliveryPhotoRecords/photo-missing')).toBe(false);
+      expect(issueWriter.createOrMergeIssue).not.toHaveBeenCalled();
+      expect(errorLog).not.toHaveBeenCalled();
+    });
+
+    it('삭제 실패는 오류 종류·코드를 남기고 나머지 기록 파기는 계속한다', async () => {
+      class ApiError extends Error {
+        code = 503;
+      }
+      const failedPath = 'deliveryPhotos/order-private/photo-failed.jpg';
+      const { issueWriter, records, service, storage } = makeService({
+        'deliveryPhotoRecords/photo-failed': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+          storagePath: failedPath,
+          storeId: 'store-safe',
+          orderId: 'order-private',
+        },
+        'deliveryPhotoRecords/photo-ok': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+          storagePath: 'deliveryPhotos/order-safe/photo-ok.jpg',
+        },
+        'legalOrderRecords/order-expired': {
+          expiresAt: timestamp('2026-07-16T01:00:00.000Z'),
+        },
+      });
+      storage.deleteObject.mockImplementation(async (path: string) => {
+        if (path === failedPath) {
+          throw new ApiError(`authorization=Bearer secret ${failedPath}`);
+        }
+      });
+
+      await expect(service.purgeExpiredRecords({ now })).resolves.toMatchObject({
+        deletedCount: 2,
+        failedCount: 1,
+        storageNotFoundCount: 0,
+      });
+
+      expect(storage.deleteObject.mock.calls.filter(([path]) => path === failedPath)).toHaveLength(
+        3,
+      );
+      expect(records.has('deliveryPhotoRecords/photo-failed')).toBe(true);
+      expect(records.has('deliveryPhotoRecords/photo-ok')).toBe(false);
+      expect(records.has('legalOrderRecords/order-expired')).toBe(false);
+
+      expect(issueWriter.createOrMergeIssue).toHaveBeenCalledTimes(1);
+      const issue = issueWriter.createOrMergeIssue.mock.calls[0][0] as Data;
+      expect(issue).toMatchObject({
+        type: 'RETENTION_DELETE_FAILED',
+        storeId: 'store-safe',
+        latestSnapshot: {
+          collection: 'deliveryPhotoRecords',
+          failureStage: 'storage_delete',
+          attempts: 3,
+          errorName: 'ApiError',
+          errorCode: '503',
+        },
+      });
+      expect(JSON.stringify(issue['latestSnapshot'])).not.toMatch(
+        /authorization|bearer|secret|order-private/i,
+      );
+
+      expect(errorLog).toHaveBeenCalledTimes(1);
+      const logLine = String(errorLog.mock.calls[0][0]);
+      expect(logLine).toContain('collection=deliveryPhotoRecords');
+      expect(logLine).toContain('errorName=ApiError');
+      expect(logLine).toContain('errorCode=503');
+      expect(logLine).not.toMatch(/authorization|bearer|secret|order-private|deliveryPhotos\//i);
+    });
   });
 
   it('저장 fixture와 파기 결과에 개인정보 본문이나 비밀값을 포함하지 않는다', async () => {

@@ -1,6 +1,9 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, ValidationPipe } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
+import { sanitizedValidationPipeOptions } from '../common/validation/sanitized-validation';
+import { ListOperationIssuesQueryDto } from './dto/list-operation-issues.dto';
 import { OperationActionDto } from './dto/operation-action.dto';
 import { OperationsController } from './operations.controller';
 import { OperationsService } from './operations.service';
@@ -27,25 +30,23 @@ function makeFirestore(initial: Record<string, Data>) {
       }),
     ),
     collection: jest.fn((name: string) => {
-      const filters: Array<[string, unknown]> = [];
-      return {
-        where(field: string, _operator: string, value: unknown) {
-          filters.push([field, value]);
-          return this;
+      const query = (filters: Array<[string, unknown]>, maximum?: number): Data => ({
+        where: (field: string, _operator: string, value: unknown) =>
+          query([...filters, [field, value]], maximum),
+        limit: (value: number) => query(filters, value),
+        get: async () => {
+          const docs = Array.from(records.entries())
+            .filter(
+              ([path, data]) =>
+                path.startsWith(`${name}/`) &&
+                filters.every(([field, value]) => data[field] === value),
+            )
+            .slice(0, maximum)
+            .map(([path, data]) => ({ id: path.split('/')[1], data: () => data }));
+          return { docs, size: docs.length, empty: docs.length === 0 };
         },
-        async get() {
-          return {
-            docs: Array.from(records.entries())
-              .filter(([path, data]) => {
-                return (
-                  path.startsWith(`${name}/`) &&
-                  filters.every(([field, value]) => data[field] === value)
-                );
-              })
-              .map(([, data]) => ({ data: () => data })),
-          };
-        },
-      };
+      });
+      return query([]);
     }),
     Timestamp: { now: jest.fn(() => '2026-07-17T10:00:00.000+09:00') },
   };
@@ -54,7 +55,16 @@ function makeFirestore(initial: Record<string, Data>) {
 
 function makeController(initial: Record<string, Data>) {
   const store = makeFirestore(initial);
-  const payments = { processRefundByOrderId: jest.fn().mockResolvedValue(undefined) };
+  // 실제 환불 경로처럼 주문 결제를 CANCELLED로 바꾼다. 조치 결과는 이 상태를 다시 읽어 확인한다.
+  const payments = {
+    processRefundByOrderId: jest.fn(async (orderId: string) => {
+      for (const [path, data] of store.records) {
+        if (path.startsWith('payments/') && data['orderId'] === orderId) {
+          store.records.set(path, { ...data, status: 'CANCELLED', refundedAt: 'refunded' });
+        }
+      }
+    }),
+  };
   const notifications = { resendSms: jest.fn().mockResolvedValue({ success: true }) };
   const service = new OperationsService(
     store.firestore as never,
@@ -103,9 +113,56 @@ describe('운영 예외 컨트롤러 계약', () => {
       'operationIssues/issue-2': { ...safeIssue, id: 'issue-2', storeId: 'store-2' },
     });
 
-    await expect(controller.list('store-1', seller)).resolves.toMatchObject({
-      items: [{ id: 'issue-1', storeId: 'store-1', status: 'OPEN' }],
+    await expect(controller.list('store-1', seller)).resolves.toEqual({
+      items: [expect.objectContaining({ id: 'issue-1', storeId: 'store-1', status: 'OPEN' })],
+      hasMore: false,
     });
+  });
+
+  it('목록 쿼리의 한도와 orderId를 서비스로 넘긴다', async () => {
+    const { controller } = makeController({
+      'stores/store-1': { ownerId: 'seller-1' },
+      'operationIssues/issue-1': safeIssue,
+      'operationIssues/issue-2': { ...safeIssue, id: 'issue-2', orderId: 'order-2' },
+      'operationIssues/issue-3': { ...safeIssue, id: 'issue-3', orderId: 'order-2' },
+    });
+
+    // 문자열 한도가 그대로 와도 서비스가 해석한다.
+    const query = { orderId: 'order-2', limit: '1' } as unknown as ListOperationIssuesQueryDto;
+    const result = await controller.list('store-1', seller, query);
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({ orderId: 'order-2' });
+    expect(result.hasMore).toBe(true);
+  });
+
+  it.each([
+    [{ limit: '50', orderId: 'order-1' }, []],
+    [{ limit: '0' }, ['limit']],
+    [{ limit: '201' }, ['limit']],
+    [{ limit: '1.5' }, ['limit']],
+    [{ limit: 'abc' }, ['limit']],
+    [{ orderId: '../orders' }, ['orderId']],
+    [{ storeId: 'store-2' }, ['storeId']],
+  ])('목록 쿼리 %j 검증 결과는 %j 오류다', async (query, invalid) => {
+    const dto = plainToInstance(ListOperationIssuesQueryDto, query);
+    const errors = await validate(dto, { whitelist: true, forbidNonWhitelisted: true });
+
+    expect(errors.map((error) => error.property)).toEqual(invalid);
+  });
+
+  it('전역 ValidationPipe는 빈 쿼리와 유효한 쿼리를 통과시키고 잘못된 한도는 400으로 거부한다', async () => {
+    const pipe = new ValidationPipe(sanitizedValidationPipeOptions());
+    const metadata = { type: 'query' as const, metatype: ListOperationIssuesQueryDto };
+
+    await expect(pipe.transform({}, metadata)).resolves.toEqual({});
+    await expect(pipe.transform({ limit: '20', orderId: 'order-1' }, metadata)).resolves.toEqual({
+      limit: 20,
+      orderId: 'order-1',
+    });
+    await expect(pipe.transform({ limit: '500' }, metadata)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 
   it('다른 스토어 목록과 상세 조회를 거부한다', async () => {
@@ -146,7 +203,10 @@ describe('운영 예외 컨트롤러 계약', () => {
         type: actionType === 'RETRY_REFUND' ? 'AUTO_REFUND_FAILED' : 'CUSTOMER_NOTICE_FAILED',
       },
       'orders/order-1': { status: 'CANCELLED' },
-      'payments/payment-1': { status: actionType === 'RETRY_REFUND' ? 'PAID' : 'CANCELLED' },
+      'payments/payment-1': {
+        orderId: 'order-1',
+        status: actionType === 'RETRY_REFUND' ? 'PAID' : 'CANCELLED',
+      },
     });
 
     await controller.execute('store-1', 'issue-1', seller, { actionType });

@@ -77,10 +77,14 @@ import {
   defaultInvokeOpencode,
   defaultRemoveWorkspace,
   fetchBaseline,
+  findProtectedPaths,
   gitCapture,
   isPathAllowed,
   normalizeRepoPath,
   observeChangedPaths,
+  PROTECTED_BASENAME_PATTERNS,
+  PROTECTED_EXACT_PATHS,
+  PROTECTED_PATH_PREFIXES,
   readLiveRemoteMain,
   resolveOpencodeCommand,
 } from './run-once.mjs';
@@ -91,6 +95,7 @@ import {
   PUBLICATION_BLOCKED,
   PUBLICATION_REFRESH_REQUIRED,
   REMOTE_READBACK_FAILED,
+  resolvePositiveTimeoutMs,
 } from './run-publish-once.mjs';
 
 export const BUILD_MODE = 'BUILD';
@@ -446,6 +451,11 @@ function selectorContractLines() {
     '- each task: allow declares at least one path, closes at least one criterion, proof at',
     '  least one command; proof_owner is index-positional with proof when present',
     '- AUTONOMOUSLY_ALLOWED declares at least one path; BUDGET values are non-negative integers',
+    '- protected repository paths must not appear in AUTONOMOUSLY_ALLOWED or task allow, and',
+    '  a task that changes one fails closed: directories',
+    `  ${PROTECTED_PATH_PREFIXES.map((prefix) => `${prefix}/**`).join(', ')}; files`,
+    `  ${PROTECTED_EXACT_PATHS.join(', ')}; any path whose file name matches`,
+    `  ${PROTECTED_BASENAME_PATTERNS.map((pattern) => pattern.source).join(', ')} (case-insensitive)`,
     `- reconciliation is required when satisfied is false and must be one of: ${SELECTOR_RECONCILIATIONS.join(', ')}`,
     '- unknown fields at any level reject the decision (there is no tolerant extra-field mode)',
   ];
@@ -794,9 +804,10 @@ function runFrontierSelector({
       args,
       cwd: workspacePath,
       env: childEnv,
-      timeoutMs: backend === CODEX_EXECUTOR
-        ? options.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS
-        : options.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
+      timeoutMs:
+        backend === CODEX_EXECUTOR
+          ? resolvePositiveTimeoutMs(options.codexTimeoutMs, DEFAULT_CODEX_TIMEOUT_MS)
+          : resolvePositiveTimeoutMs(options.opencodeTimeoutMs, DEFAULT_OPENCODE_TIMEOUT_MS),
     });
     if (backend === CODEX_EXECUTOR) {
       evidence.executor.invocationEvidence = codexInvocationEvidence({
@@ -1099,7 +1110,21 @@ function verifyEntrySatisfaction({ entry, repositoryRoot, pin, options, deps, lo
 }
 
 function validateTaskBoundaries({ taskCatalog, autonomouslyAllowed }) {
+  const protectedAllowed = findProtectedPaths(autonomouslyAllowed);
+  if (protectedAllowed.length > 0) {
+    return {
+      ok: false,
+      reason: `AUTONOMOUSLY_ALLOWED names protected repository path(s): ${protectedAllowed.join(', ')}`,
+    };
+  }
   for (const task of taskCatalog) {
+    const protectedAllow = findProtectedPaths(task.allow);
+    if (protectedAllow.length > 0) {
+      return {
+        ok: false,
+        reason: `task ${task.id} allow names protected repository path(s): ${protectedAllow.join(', ')}`,
+      };
+    }
     const declared = [...task.allow, ...task.semantic_owner, ...task.proof_owner.flat()];
     const outside = declared.filter((path) => !isPathAllowed(path, autonomouslyAllowed));
     if (outside.length > 0) {
@@ -2164,10 +2189,19 @@ export function runBuild(options = {}, deps = {}) {
         agent: selectedOptions.agent ?? null,
         opencodeBin: selectedOptions.opencodeBin ?? null,
         codexBin: selectedOptions.codexBin ?? null,
-        opencodeTimeoutMs: selectedOptions.opencodeTimeoutMs ?? DEFAULT_OPENCODE_TIMEOUT_MS,
-        codexTimeoutMs: selectedOptions.codexTimeoutMs ?? DEFAULT_CODEX_TIMEOUT_MS,
-        proofTimeoutMs: selectedOptions.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS,
-        ciTimeoutMs: selectedOptions.ciTimeoutMs ?? DEFAULT_CI_TIMEOUT_MS,
+        opencodeTimeoutMs: resolvePositiveTimeoutMs(
+          selectedOptions.opencodeTimeoutMs,
+          DEFAULT_OPENCODE_TIMEOUT_MS,
+        ),
+        codexTimeoutMs: resolvePositiveTimeoutMs(
+          selectedOptions.codexTimeoutMs,
+          DEFAULT_CODEX_TIMEOUT_MS,
+        ),
+        proofTimeoutMs: resolvePositiveTimeoutMs(
+          selectedOptions.proofTimeoutMs,
+          DEFAULT_PROOF_TIMEOUT_MS,
+        ),
+        ciTimeoutMs: resolvePositiveTimeoutMs(selectedOptions.ciTimeoutMs, DEFAULT_CI_TIMEOUT_MS),
         maxRebindAttempts: selectedOptions.maxRebindAttempts ?? DEFAULT_MAX_REBIND_ATTEMPTS,
         githubRepository: selectedOptions.githubRepository ?? null,
       },
@@ -2214,10 +2248,10 @@ export const USAGE = [
   '  --agent <name>              optional OpenCode agent override for child tasks',
   '  --opencode-bin <path>       explicit OpenCode executable for child tasks',
   '  --codex-bin <path>          explicit Codex executable for child tasks',
-  '  --opencode-timeout-ms <n>   child/selector opencode timeout in ms (default: 3600000)',
-  '  --codex-timeout-ms <n>      child/selector Codex timeout in ms (default: 3600000)',
-  '  --proof-timeout-ms <n>      child/proof timeout in ms (default: 1800000, 0 disables)',
-  '  --ci-timeout-ms <n>         child required-check watch timeout in ms (default: 2700000)',
+  '  --opencode-timeout-ms <n>   child/selector opencode timeout in ms (default: 3600000, must be > 0)',
+  '  --codex-timeout-ms <n>      child/selector Codex timeout in ms (default: 3600000, must be > 0)',
+  '  --proof-timeout-ms <n>      child/proof timeout in ms (default: 1800000, must be > 0)',
+  '  --ci-timeout-ms <n>         child required-check watch timeout in ms (default: 2700000, must be > 0)',
   '  --max-rebind-attempts <n>   child fresh-main rebind constructions (default: 2)',
   '  --github-repo <owner/name>  optional explicit GitHub repository for child publication',
   '',
@@ -2272,11 +2306,13 @@ export function parseArgs(argv) {
     '--codex-bin': 'codexBin',
     '--github-repo': 'githubRepository',
   };
-  const numberFlags = {
+  const timeoutFlags = {
     '--opencode-timeout-ms': 'opencodeTimeoutMs',
     '--codex-timeout-ms': 'codexTimeoutMs',
     '--proof-timeout-ms': 'proofTimeoutMs',
     '--ci-timeout-ms': 'ciTimeoutMs',
+  };
+  const numberFlags = {
     '--max-rebind-attempts': 'maxRebindAttempts',
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -2290,6 +2326,16 @@ export function parseArgs(argv) {
       if (value === undefined) return { ok: false, error: `${arg} requires a value` };
       index += 1;
       options[valueFlags[arg]] = value;
+      continue;
+    }
+    if (Object.hasOwn(timeoutFlags, arg)) {
+      const value = argv[index + 1];
+      const parsed = Number(value);
+      if (value === undefined || !Number.isFinite(parsed) || parsed <= 0) {
+        return { ok: false, error: `${arg} requires a positive number` };
+      }
+      index += 1;
+      options[timeoutFlags[arg]] = parsed;
       continue;
     }
     if (Object.hasOwn(numberFlags, arg)) {

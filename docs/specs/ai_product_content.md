@@ -24,7 +24,7 @@ AI 상품 콘텐츠를 수정하거나 회귀를 조사할 때는 다음 순서�
 
 - 현재 `Product`의 AI 관련 필드(`varietyId`, `selection`, `sellerNote`, `content`, `sellerOverride`)는 공유 타입에서 optional이다.
 - 현재 `Selection`에는 과거 초안에 없던 `stemType`이 필수이며 `careLevel`도 지원된다.
-- `/ai/generate-content`는 현재 `JwtAuthGuard`로 보호된다.
+- `/ai/generate-content`는 `JwtAuthGuard` + `RolesGuard`(`seller`·`admin`)로 보호된다. 소비자·기사 토큰은 403.
 - 현재 요청 DTO는 `varietyId?`, `category?`, `selection`, `sellerNote?` 구조이며 `selection`에 `colors`, `stemType`, `fragrance`, `bloomCondition`, `bundleUnit`, `careLevel?`을 사용한다.
 - guardrail 검증은 현재 품종의 향기 정보와 seller note/선택값 충돌, `typicalColors` 밖의 색상 선택을 warning으로 반환한다.
 - AI provider 초기화·모델명·오류 처리 방식은 `apps/api/src/ai/ai.service.ts`를 직접 확인한다. 이 문서의 과거 모델명 기록을 운영 설정 정본으로 사용하지 않는다.

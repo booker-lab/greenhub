@@ -415,7 +415,7 @@ describe('driver command error code contract', () => {
   });
 
   it('photo duplicate keeps 409 with STATE code without storage semantics change', async () => {
-    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0xff, 0xd9]);
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02, 0xff, 0xd9]);
     let order: Data = {
       id: 'order-1',
       storeId: 'store-1',

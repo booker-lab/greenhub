@@ -56,7 +56,7 @@ test('Map initial loading precedes any empty render', () => {
 
 // 2. successful results: authoritative GET + filter renders route list.
 test('Map successful results render filtered route list', () => {
-  assert.match(mapSource, /apiFetch\(\s*['"]\/driver\/orders['"]/);
+  assert.match(mapSource, /apiRead\(\s*['"]\/driver\/orders['"]/);
   assert.match(
     mapSource,
     /order\.status\s*===\s*['"]PREPARING['"]\s*\|\|\s*order\.status\s*===\s*['"]DELIVERING['"]/,
@@ -64,7 +64,10 @@ test('Map successful results render filtered route list', () => {
   assert.match(mapSource, /setHasSuccessfulRead\(true\)/);
   assert.match(mapSource, /hasSuccessfulReadRef\.current = true/);
   assert.match(mapSource, /sorted\.map\(\(order, idx\)/);
-  assert.match(mapSource, /buildOrderMapLink\(sorted\[0\]\)/);
+  // 다음 배송지는 경로의 첫 주문이 아니라 첫 배송 중 주문이다.
+  assert.match(mapSource, /const nextStop = pickNextDeliveryStop\(sorted\)/);
+  assert.match(mapSource, /nextStop \? buildOrderMapLink\(nextStop\) : null/);
+  assert.doesNotMatch(mapSource, /buildOrderMapLink\(sorted\[0\]\)/);
 });
 
 // 3. successful empty: only after authoritative success with zero filtered rows.

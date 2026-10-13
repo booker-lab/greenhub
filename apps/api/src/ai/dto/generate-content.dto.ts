@@ -1,9 +1,22 @@
-import { IsString, IsEnum, IsArray, IsOptional, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { COLOR_OPTIONS, type ColorOption } from '@greenhub/shared';
 
+export const SELLER_NOTE_MAX_LENGTH = 1000;
+export const BUNDLE_UNIT_MAX_LENGTH = 50;
+export const VARIETY_ID_MAX_LENGTH = 128;
+
 export class SelectionDto {
   @IsArray()
+  @ArrayMaxSize(COLOR_OPTIONS.length)
   @IsEnum(COLOR_OPTIONS, { each: true })
   colors: ColorOption[];
 
@@ -17,6 +30,7 @@ export class SelectionDto {
   bloomCondition: string;
 
   @IsString()
+  @MaxLength(BUNDLE_UNIT_MAX_LENGTH)
   bundleUnit: string;
 
   @IsOptional()
@@ -27,6 +41,7 @@ export class SelectionDto {
 export class GenerateContentDto {
   @IsOptional()
   @IsString()
+  @MaxLength(VARIETY_ID_MAX_LENGTH)
   varietyId?: string;
 
   @IsOptional()
@@ -39,5 +54,6 @@ export class GenerateContentDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(SELLER_NOTE_MAX_LENGTH)
   sellerNote?: string;
 }

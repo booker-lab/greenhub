@@ -6,6 +6,7 @@ import { SegmentedTabs } from '@/components/SegmentedTabs';
 import type { Settlement, SettlementFilterKey, SettlementStatus } from '../_constants';
 import { SETTLEMENT_FILTER_TABS } from '../_constants';
 import { downloadCSV } from '../_lib';
+import { LoadMoreSettlements } from './LoadMoreSettlements';
 import { SettlementListItem } from './SettlementListItem';
 
 interface OrdersTabProps {
@@ -13,9 +14,21 @@ interface OrdersTabProps {
   listLoading: boolean;
   // status 필터 fetch 배선(T3). 'all' → status 미전달(전체 조회, 기존 동작 유지).
   fetchSettlements: (f?: string, t?: string, status?: SettlementStatus) => void;
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMoreError: string;
+  onLoadMore: () => void;
 }
 
-export function OrdersTab({ settlements, listLoading, fetchSettlements }: OrdersTabProps) {
+export function OrdersTab({
+  settlements,
+  listLoading,
+  fetchSettlements,
+  hasMore,
+  loadingMore,
+  loadMoreError,
+  onLoadMore,
+}: OrdersTabProps) {
   const [activeStatus, setActiveStatus] = useState<SettlementFilterKey>('all');
 
   const handleChange = (key: SettlementFilterKey) => {
@@ -64,6 +77,14 @@ export function OrdersTab({ settlements, listLoading, fetchSettlements }: Orders
           {settlements.map((s) => (
             <SettlementListItem key={s.id} settlement={s} showFee />
           ))}
+          {hasMore && (
+            <LoadMoreSettlements
+              loadedCount={settlements.length}
+              loadingMore={loadingMore}
+              error={loadMoreError}
+              onLoadMore={onLoadMore}
+            />
+          )}
         </>
       )}
     </Stack>

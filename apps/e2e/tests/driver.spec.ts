@@ -18,7 +18,7 @@ test.describe('드라이버 앱', () => {
     await expect(page.locator('body')).toBeVisible()
     // 드라이버 앱은 카카오 OAuth 전용
     await expect(page.locator('text=카카오로 시작하기')).toBeVisible()
-    await expect(page.locator('text=Green Love 드라이버')).toBeVisible()
+    await expect(page.locator('text=Green Love')).toBeVisible()
   })
 })
 

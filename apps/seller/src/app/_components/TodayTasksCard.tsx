@@ -4,20 +4,12 @@ import type { Order, Product } from '@greenhub/shared';
 import { Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { STATUS_GROUP_MAP } from '@/app/orders/_constants';
 import { DashboardCard } from '@/components/DashboardCard';
-import { isDelayed } from '@/lib/prep';
-
-interface TaskRow {
-  key: string;
-  icon: string;
-  label: string;
-  href: string;
-}
+import { buildTodayTasks } from './today-tasks';
 
 /**
  * 홈 최상단 "오늘 할 일" 체크리스트.
- * 각 줄은 건수 > 0일 때만 렌더, 전부 0이면 완료 메시지.
+ * 각 줄은 건수 > 0일 때만 렌더, 전부 0이면 완료 메시지(줄 계산은 today-tasks.ts).
  * 모든 항목은 홈이 이미 로드하는 데이터로 계산 — 신규 API 없음.
  * 상품 집계는 신뢰 가능할 때만 사용한다. 상품 조회 실패·로딩 중에는
  * 비활성 상품 0건으로 오인하지 않고 경고로 분리한다.
@@ -27,45 +19,22 @@ export function TodayTasksCard({
   products,
   productsError,
   productsTrustworthy,
+  openIssueCount = 0,
 }: {
   orders: Order[];
   products: Product[];
   productsError: string | null;
   productsTrustworthy: boolean;
+  /** 가게 전체 열린 운영 기록 수(환불·결제·연락·사진 확인 필요). */
+  openIssueCount?: number;
 }) {
-  const newOrderCount = orders.filter(
-    (o) => STATUS_GROUP_MAP[o.status] === 'ACTION_REQUIRED',
-  ).length;
-  const delayedCount = orders.filter((o) => isDelayed(o)).length;
   const inactiveCount = productsTrustworthy ? products.filter((p) => !p.isActive).length : 0;
-
-  const tasks: TaskRow[] = [];
-  if (newOrderCount > 0)
-    tasks.push({
-      key: 'new',
-      icon: '🔴',
-      label: `신규 주문 ${newOrderCount}건 처리하기`,
-      href: '/orders?tab=ACTION_REQUIRED',
-    });
-  if (delayedCount > 0)
-    tasks.push({
-      key: 'delayed',
-      icon: '🔴',
-      label: `발송 지연 ${delayedCount}건 확인`,
-      href: '/prep',
-    });
-  if (productsTrustworthy && inactiveCount > 0)
-    tasks.push({
-      key: 'inactive',
-      icon: '⚠️',
-      label: `비활성 상품 ${inactiveCount}건 점검`,
-      href: '/products',
-    });
+  const tasks = buildTodayTasks({ orders, openIssueCount, inactiveCount });
 
   const showProductWarning = !productsTrustworthy;
 
   return (
-    <DashboardCard title="☀️ 오늘 할 일">
+    <DashboardCard title="오늘 할 일">
       {showProductWarning && (
         <Text
           role={productsError ? 'alert' : 'status'}
@@ -82,7 +51,7 @@ export function TodayTasksCard({
       )}
       {tasks.length === 0 && productsTrustworthy ? (
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-          오늘 할 일을 모두 마쳤어요 🎉
+          오늘 할 일을 모두 마쳤어요
         </Text>
       ) : tasks.length === 0 && !productsTrustworthy ? (
         <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
@@ -103,7 +72,16 @@ export function TodayTasksCard({
                 borderTop: i > 0 ? '1px solid var(--color-border)' : undefined,
               }}
             >
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{t.icon}</Text>
+              <span
+                aria-hidden="true"
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: '50%',
+                  backgroundColor: t.dot,
+                  flexShrink: 0,
+                }}
+              />
               <Text
                 style={{
                   flex: 1,

@@ -1,42 +1,55 @@
+import { COLOR_OPTIONS, type ColorOption } from '@greenhub/shared';
+import { Type } from 'class-transformer';
 import {
-  IsString,
-  IsNumber,
-  IsEnum,
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsEnum,
+  IsInt,
+  IsISO8601,
   IsOptional,
-  IsUrl,
+  IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
-import { COLOR_OPTIONS, type ColorOption } from '@greenhub/shared';
+import { IsProductImageUrl } from '../validators/product-image-url';
 
-import { Type } from 'class-transformer';
+/** 원 단위 금액 상한(1억 원). */
+export const PRODUCT_MONEY_MAX = 100_000_000;
+/** 공동구매 수량 상한. */
+export const GROUP_QUANTITY_MAX = 100_000;
+/** 상품 이미지 개수 상한. 판매자 화면은 5장까지 올린다. */
+export const PRODUCT_IMAGES_MAX = 10;
 
 export class GroupConfigDto {
-  @IsNumber()
+  @IsInt()
   @Min(1)
+  @Max(GROUP_QUANTITY_MAX)
   minQuantity: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
+  @Max(GROUP_QUANTITY_MAX)
   targetQuantity: number;
 
-  @IsNumber()
+  @IsInt()
   @Min(1)
+  @Max(GROUP_QUANTITY_MAX)
   maxPerPerson: number;
 
-  @IsString()
+  @IsISO8601({ strict: true })
   recruitDeadline: string; // ISO8601
 
-  @IsString()
+  @IsISO8601({ strict: true })
   groupDeliveryDate: string; // ISO8601
 
   @IsEnum(['direct', 'parcel'])
   groupDeliveryMethod: string;
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(PRODUCT_MONEY_MAX)
   deliveryFeeDiscount: number;
 }
 
@@ -78,11 +91,13 @@ export class CreateProductDto {
   name: string;
 
   @IsArray()
-  @IsUrl({ require_tld: true, require_protocol: true }, { each: true })
+  @ArrayMaxSize(PRODUCT_IMAGES_MAX)
+  @IsProductImageUrl({ each: true })
   images: string[];
 
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(PRODUCT_MONEY_MAX)
   price: number;
 
   @IsEnum(['cut_flower', 'orchid', 'foliage'])

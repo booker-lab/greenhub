@@ -329,6 +329,28 @@ describe('ORD-01 주문 mutation authorization 회귀', () => {
     );
   });
 
+  it('상태 알림톡 본문에는 고객 화면과 같은 주문번호를 쓰고 발송 기록은 문서 ID로 둔다', async () => {
+    const context = makeContext({
+      order: { status: 'ACCEPTED', orderNumber: '20261101-000003' },
+    });
+
+    await context.lifecycle.updateStatus(
+      'store-1',
+      'order-1',
+      'seller-1',
+      { status: 'PREPARING' } as never,
+      'seller',
+    );
+
+    expect(context.notifications.sendToUser).toHaveBeenCalledWith(
+      'consumer-1',
+      'ORDER_PREPARING',
+      { orderId: '20261101-000003' },
+      'order-1',
+      undefined,
+    );
+  });
+
   it.each(['direct', 'hub'] as const)(
     '정상 미배정 %s 주문 first claim은 driver를 원자적으로 배정한다',
     async (deliveryMethod) => {

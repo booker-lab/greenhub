@@ -19,22 +19,22 @@ const serviceAccount = require(join(process.cwd(), 'firebase-adminsdk.json'))
 initializeApp({ credential: cert(serviceAccount) })
 const db = getFirestore()
 
-const COLLECTIONS = [
-  'stores',
-  'products',
-  'orders',
-  'payments',
-  'settlements',
-  'deliveryFeeConfig',
-  'dailyCaps',
-  'auditLogs',
-  'refreshTokens',
-]
+// 고정 목록은 회차·청구·운영 이슈처럼 나중에 생긴 컬렉션을 빠뜨렸다. 최상위 컬렉션을
+// 모두 내보내되, 그대로 재사용 가능한 자격 증명은 백업 파일에 남기지 않는다:
+// 로그인 갱신 토큰(refreshTokens), 판매자 가입 초대(invites — 문서 ID가 곧 가입 토큰),
+// 사용자 비밀번호 해시(users.passwordHash). (하위 컬렉션은 포함하지 않는다.)
+const EXCLUDED_COLLECTIONS = new Set(['refreshTokens', 'invites'])
+const REDACTED_FIELDS = { users: ['passwordHash'] }
 
 async function backupCollection(colName) {
   const snap = await db.collection(colName).get()
   const docs = {}
-  snap.docs.forEach(d => { docs[d.id] = d.data() })
+  const redacted = REDACTED_FIELDS[colName] ?? []
+  snap.docs.forEach(d => {
+    const data = { ...d.data() }
+    for (const field of redacted) delete data[field]
+    docs[d.id] = data
+  })
   console.log(`  ${colName}: ${snap.docs.length}건`)
   return docs
 }
@@ -44,9 +44,14 @@ async function main() {
 
   const backup = { exportedAt: new Date().toISOString(), collections: {} }
 
-  for (const col of COLLECTIONS) {
+  const collections = (await db.listCollections())
+    .map((ref) => ref.id)
+    .filter((id) => !EXCLUDED_COLLECTIONS.has(id))
+    .sort()
+  for (const col of collections) {
     backup.collections[col] = await backupCollection(col)
   }
+  console.log(`\n제외: ${[...EXCLUDED_COLLECTIONS].join(', ')}`)
 
   const now = new Date()
   const timestamp = now.toISOString().replace('T', '_').slice(0, 16).replace(':', '-')

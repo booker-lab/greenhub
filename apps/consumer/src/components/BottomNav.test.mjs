@@ -15,7 +15,7 @@ function readConstantBlock(name, nextName) {
 
 test('공개 상품의 storeId와 공개 스토어 salesMode로 내비게이션을 분기한다', () => {
   assert.match(source, /product\.storeId/);
-  assert.match(source, /getDoc\(doc\(db, 'stores', storeId\)\)/);
+  assert.match(source, /fetchPublicStoreProfile\(storeId\)/);
   assert.match(source, /normalizeSalesMode/);
   assert.match(source, /salesMode === 'round_direct'/);
 });

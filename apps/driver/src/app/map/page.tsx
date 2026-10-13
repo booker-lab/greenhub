@@ -2,14 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import { apiFetch } from '@/lib/api';
+import { apiRead } from '@/lib/api';
 import {
   buildDriverListScope,
   shouldPreserveDriverListOnReadError,
   toDriverListReadError,
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
-import { buildOrderMapLink } from './_lib/map-navigation-link';
+import { buildOrderMapLink, pickNextDeliveryStop } from './_lib/map-navigation-link';
 import { Box, Stack, Text, Title, Badge, Button } from '@mantine/core';
 
 type Order = {
@@ -18,6 +18,8 @@ type Order = {
   deliveryMethod: string;
   buyerName?: string;
   address?: string;
+  // 동·호수 없는 기본 주소. 지도 링크가 주소 검색에 쓴다(map-navigation-link).
+  deliveryAddress?: { address?: string };
   hubName?: string;
   hubAddress?: string;
   lat?: number;
@@ -126,7 +128,7 @@ export default function MapPage() {
     setAuthRequired(false);
     setError(null);
 
-    apiFetch('/driver/orders', token, { signal: controller.signal })
+    apiRead('/driver/orders', token, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           throw toDriverListReadError(response.status);
@@ -183,7 +185,9 @@ export default function MapPage() {
   const sorted = nearestNeighbor(orders);
   // 주문에는 배송지 좌표가 없으므로 여러 곳 경유 길안내 대신
   // 다음 배송지 1곳만 연다. 유효 좌표가 없으면 주소 검색 링크로 연다.
-  const nextStopLink = sorted.length > 0 ? buildOrderMapLink(sorted[0]) : null;
+  // 다음 배송지는 이미 수거해 배송 중인 내 주문에서만 고른다.
+  const nextStop = pickNextDeliveryStop(sorted);
+  const nextStopLink = nextStop ? buildOrderMapLink(nextStop) : null;
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -428,15 +432,27 @@ export default function MapPage() {
               <Button fullWidth size="lg" radius="xl" color="gray" disabled>
                 다음 배송지 카카오맵에서 열기
               </Button>
-              <Text
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-danger)',
-                  textAlign: 'center',
-                }}
-              >
-                다음 배송지 주소가 없어 지도를 열 수 없습니다. 목록에서 주소를 확인해 주세요.
-              </Text>
+              {nextStop ? (
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-danger)',
+                    textAlign: 'center',
+                  }}
+                >
+                  다음 배송지 주소가 없어 지도를 열 수 없습니다. 목록에서 주소를 확인해 주세요.
+                </Text>
+              ) : (
+                <Text
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-secondary)',
+                    textAlign: 'center',
+                  }}
+                >
+                  아직 배송 중인 주문이 없습니다. 수거하고 배송을 시작하면 열 수 있습니다.
+                </Text>
+              )}
             </Stack>
           )}
         </Box>

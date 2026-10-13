@@ -1,0 +1,227 @@
+name: CI
+
+# PR 단계 제품 코드 검증. 외부 서비스·비밀값을 쓰지 않는다(빌드는 가짜 공개 설정값만 사용).
+# 운영·Preview 배포, Firebase 프로젝트, PortOne, ALIGO에 접근하지 않는다.
+# 외부 액션은 커밋 SHA로 고정하고 버전을 주석으로 남긴다.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    name: lint · typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # 프런트·패키지는 Biome 오류 0을 유지한다(경고·포맷 부채는 별도 정리 대상).
+      - name: Biome lint (errors)
+        run: pnpm biome lint --diagnostic-level=error apps/consumer/src apps/seller/src apps/driver/src packages
+      - name: Typecheck apps
+        run: |
+          for dir in apps/consumer apps/seller apps/driver apps/e2e packages/shared; do
+            echo "::group::tsc $dir"
+            (cd "$dir" && npx tsc --noEmit -p tsconfig.json)
+            echo "::endgroup::"
+          done
+      - name: Typecheck API (build config)
+        run: cd apps/api && npx tsc --noEmit -p tsconfig.build.json
+      - name: Workspace build selection
+        run: node scripts/check-workspace-build-selection.mjs
+      - name: CSS variables are defined
+        run: node scripts/check-css-vars.mjs
+      # 설치는 모두 루트 pnpm-lock.yaml 하나로 한다. 하위 폴더 lockfile은 어떤 설치에도 쓰이지 않고
+      # 의존성 그래프·스캐너에 실제와 다른 버전을 보여 준다.
+      - name: Single root lockfile
+        run: |
+          stray=$(git ls-files -- '*pnpm-lock.yaml' '*package-lock.json' '*yarn.lock' '*npm-shrinkwrap.json' ':(exclude)pnpm-lock.yaml')
+          if [ -n "$stray" ]; then
+            echo "::error::루트 pnpm-lock.yaml 외의 lockfile이 저장소에 있다. 삭제하고 루트에서 pnpm install로 갱신한다."
+            echo "$stray"
+            exit 1
+          fi
+      # workflow 문법·표현식·스크립트 오류를 검사한다. shellcheck는 warning 이상만 본다.
+      - name: Workflow lint (actionlint)
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+          SHELLCHECK_OPTS: --severity=warning
+        run: |
+          archive="$RUNNER_TEMP/actionlint.tar.gz"
+          curl -sSfL -o "$archive" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint"
+
+      - name: Workflow security audit (zizmor)
+        env:
+          ZIZMOR_VERSION: 1.30.1
+          # zizmor-1.30.1-py3-none-manylinux_2_28_x86_64.whl
+          ZIZMOR_SHA256: eee12266b793cb87ad4a7e3af2e72404f8a63e3de5eb099b80bf7b1cfd232a8e
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zizmor"
+          printf 'zizmor==%s --hash=sha256:%s\n' "$ZIZMOR_VERSION" "$ZIZMOR_SHA256" > "$RUNNER_TEMP/zizmor-requirements.txt"
+          "$RUNNER_TEMP/zizmor/bin/pip" install --quiet --no-deps --only-binary :all: --require-hashes -r "$RUNNER_TEMP/zizmor-requirements.txt"
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --offline --format plain .github/workflows
+
+  unit:
+    name: unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: API (jest)
+        run: pnpm --filter api test
+      - name: API integration (jest e2e, in-memory providers)
+        run: pnpm --filter api test:e2e
+      - name: Seller (vitest)
+        run: pnpm --filter seller test
+      - name: Driver (vitest + node:test)
+        run: pnpm --filter driver test
+      - name: Consumer (node:test)
+        run: pnpm --filter consumer test
+      - name: Shared (vitest)
+        run: pnpm --filter @greenhub/shared test
+
+  scripts:
+    name: script specs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # 실제 하위 프로세스 겹침을 재는 spec이 있어 파일을 하나씩 실행한다.
+      - name: Script specs
+        run: node --test --test-concurrency=1 'scripts/**/*.spec.mjs' 'scripts/**/*.test.mjs'
+      # 회차 E2E가 쓰는 도우미(세션 쿠키 판별·대상 URL)의 단위 테스트. 저장소 루트 기준 경로를 쓰므로 루트에서 실행한다.
+      - name: E2E helper specs
+        run: node --test 'apps/e2e/tests/_helpers/*.test.mjs'
+
+  rules:
+    name: Firebase rules (emulator)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: pnpm install --frozen-lockfile
+      # demo- 프로젝트는 에뮬레이터 전용이며 실제 Firebase에 접근하지 않는다.
+      # 두 파일이 같은 에뮬레이터를 쓰므로 순서대로 실행한다.
+      - name: Firestore·Storage rules
+        run: >
+          npx -y firebase-tools@14.11.1 emulators:exec --only firestore,storage --project demo-greenhub
+          "node --test --test-concurrency=1 tests/firestore/firestore-rules.test.mjs tests/storage/storage-rules.test.mjs"
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # 빌드 전용 가짜 값. 비밀값이 아니며 어떤 외부 서비스에도 연결되지 않는다.
+      AUTH_SECRET: ci-build-only-not-a-secret
+      KAKAO_CLIENT_ID: ci
+      KAKAO_CLIENT_SECRET: ci
+      NEXT_PUBLIC_API_URL: https://api.ci.invalid
+      NEXT_PUBLIC_FIREBASE_API_KEY: ci
+      NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-greenhub.firebaseapp.com
+      NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-greenhub
+      NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: demo-greenhub.appspot.com
+      NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: '0'
+      NEXT_PUBLIC_FIREBASE_APP_ID: ci
+      NEXT_PUBLIC_PORTONE_STORE_ID: ci
+      NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY: ci
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build shared, API, consumer, seller, driver
+        run: pnpm build
+      # API 이미지는 커밋된 packages/shared/dist를 그대로 쓰고 프런트는 src를 다시 빌드한다.
+      # 커밋된 dist가 방금 빌드한 결과와 같아야 두 쪽이 같은 shared 코드를 쓴다.
+      - name: Committed shared dist matches build
+        run: |
+          drift=$(git status --porcelain --untracked-files=all -- packages/shared/dist)
+          if [ -n "$drift" ]; then
+            echo "::error::packages/shared/dist가 src 빌드 결과와 다르다. pnpm --filter @greenhub/shared build 후 dist를 함께 커밋한다."
+            echo "$drift"
+            git --no-pager diff --stat -- packages/shared/dist
+            exit 1
+          fi
+
+  secrets:
+    name: secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # PR·push 변경 범위에서 탐지된 값은 검증 여부와 관계없이 실패로 본다(검증 수단이 없는 형식 포함).
+      # 로그에는 파일·줄·탐지 종류만 남고 값은 남지 않는다. 테스트·문서의 자리표시 값은 그 줄에
+      # `trufflehog:ignore` 주석을 달고, 줄을 고칠 수 없을 때만 제외 경로 파일에 추가한다.
+      # `.trufflehog.yml`은 기본 탐지기에 없는 이 프로젝트의 자격 증명 형식(PortOne, ALIGO, Kakao,
+      # Vercel 우회 secret, 서비스 계정 키, 프록시 URL)을 더한다. 검증 수단이 없어 결과는 unverified다.
+      # 전체 이력은 `secret-scan-scheduled.yml`이 매주 검사한다.
+      - name: Secret scan (changed range)
+        if: github.event_name != 'workflow_dispatch'
+        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+        with:
+          version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
+          extra_args: --results=verified,unverified,unknown --config=.trufflehog.yml --exclude-paths=.github/trufflehog-exclude-paths.txt
+      # 수동 실행은 범위 없이 전체 이력을 검사하므로 지금처럼 검증된 값만 실패로 본다.
+      - name: Secret scan (manual run, full history, verified only)
+        if: github.event_name == 'workflow_dispatch'
+        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+        with:
+          version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
+          extra_args: --only-verified

@@ -100,8 +100,8 @@
 cd apps/e2e
 
 # 환경변수 확인 (.env)
-# - TEST_SELLER_EMAIL=seller@test.com
-# - TEST_SELLER_PASSWORD=test1234
+# - TEST_SELLER_EMAIL=<TEST_SELLER_EMAIL>
+# - TEST_SELLER_PASSWORD=<TEST_SELLER_PASSWORD>
 # - E2E_TEST_SECRET=<32자 base64, Vercel과 동일값>
 
 # 셀러 spec 3종만 실행
@@ -119,7 +119,7 @@ npx playwright test seller-orders.spec.ts seller-order-detail.spec.ts seller-set
 
 1. **`loginViaCredentials` 헬퍼 사용** — `apps/e2e/tests/_helpers/auth.ts`. 헤더 게이팅 통과를 위해 필수 (#CL-20).
 2. **`extraHTTPHeaders` 전역 주입 금지** — Firebase CORS preflight 차단 (세션22 트레일 참조).
-3. **테스트 계정 보존** — `seller@test.com`/test1234, `consumer@test.com`/test1234! 모두 약한비번 의도 보존 (memory `feedback_security_convenience.md`).
+3. **테스트 계정 보존** — `<TEST_SELLER_EMAIL>`, `<TEST_CONSUMER_EMAIL>` 계정 유지. 자격증명은 저장소 밖에서 관리한다.
 4. **로컬 빌드 사전 결함 무시** — `/admin/banner` 빌드 실패는 본 작업 회귀 아님. Vercel 배포 환경에서는 환경변수 충족됨.
 
 ### 회귀 발견 시 대응 흐름

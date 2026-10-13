@@ -16,6 +16,8 @@ export const KAKAO_MAP_LINK_BASE = 'https://map.kakao.com/link';
 export type MapLinkOrder = {
   deliveryMethod?: string;
   address?: string;
+  /** 동·호수가 붙지 않은 기본 주소. 있으면 주소 검색에 address 대신 쓴다. */
+  deliveryAddress?: { address?: unknown } | null;
   hubName?: string;
   hubAddress?: string;
   lat?: unknown;
@@ -49,9 +51,13 @@ export function toValidCoordinate(lat: unknown, lng: unknown): { lat: number; ln
   return { lat, lng };
 }
 
-/** 배송 방식에 따른 목적지 주소 문자열. hub 배송은 거점 주소를 쓴다. */
+/**
+ * 배송 방식에 따른 목적지 주소 문자열. hub 배송은 거점 주소를 쓴다.
+ * 동·호수까지 붙은 전체 주소(address)는 지도 검색에 잘 걸리지 않아 기본 주소가 있으면 그것을 쓴다.
+ */
 export function destinationAddress(order: MapLinkOrder): string {
-  return toPathText(order.deliveryMethod === 'hub' ? order.hubAddress : order.address);
+  if (order.deliveryMethod === 'hub') return toPathText(order.hubAddress);
+  return toPathText(order.deliveryAddress?.address) || toPathText(order.address);
 }
 
 /** 주소 문자열 기반 카카오맵 검색 웹 링크. 빈 주소면 null. */
@@ -70,6 +76,15 @@ export function buildKakaoMapRouteUrl(name: unknown, lat: unknown, lng: unknown)
   if (!coordinate) return null;
   const label = toPathText(normalizeText(name).replace(/,/g, ' ')) || '배송지';
   return `${KAKAO_MAP_LINK_BASE}/to/${encodeURIComponent(label)},${coordinate.lat},${coordinate.lng}`;
+}
+
+/**
+ * 다음 배송지: 경로 순서에서 처음 나오는 배송 중(DELIVERING) 주문.
+ * 수거 대기(PREPARING) 주문은 아직 맡지 않은 주문일 수 있어 고르지 않는다.
+ * 기사 목록 API가 주는 배송 중 주문은 모두 요청한 기사에게 배정된 주문이다.
+ */
+export function pickNextDeliveryStop<T extends { status?: string }>(route: readonly T[]): T | null {
+  return route.find((order) => order.status === 'DELIVERING') ?? null;
 }
 
 /**

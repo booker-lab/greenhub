@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   ConflictException,
   GoneException,
@@ -9,17 +10,38 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { getConfigValues, isProductionRuntime } from '../config/runtime-config';
 import * as bcrypt from 'bcrypt';
 import * as admin from 'firebase-admin';
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { AuditService } from '../common/audit/audit.service';
+import { INVITE_REVOKED_MESSAGE, inviteConflict } from './invite-conflict';
 import type { AddressDto } from './dto/address.dto';
 import type { KakaoLoginDto } from './dto/kakao-login.dto';
 import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 import type { UpdateMeDto } from './dto/update-me.dto';
+import { emailIdentityKey, normalizeEmail } from './email-identity';
 import { KakaoClient } from './kakao.client';
+import {
+  hashRefreshToken,
+  isHashedRefreshTokenRecord,
+  matchesStoredRefreshToken,
+  openRotatedRefreshToken,
+  sealRotatedRefreshToken,
+} from './refresh-token-store';
+import {
+  JWT_ALGORITHM,
+  JWT_AUDIENCE,
+  type TokenType,
+  hasExpectedTokenClaims,
+} from './token-claims';
+import {
+  SESSIONS_REVOKED_AT_FIELD,
+  revokeFirebaseSessions,
+  sessionsRevokedAtMillis,
+} from './session-revocation';
 import type { JwtPayload } from './types/jwt-payload.type';
 
 const USER_ROLES = ['consumer', 'seller', 'driver', 'admin'] as const;
@@ -27,6 +49,30 @@ const USER_ROLES = ['consumer', 'seller', 'driver', 'admin'] as const;
 // 기사 앱(targetRole=driver) 카카오 로그인에서 관리자 계정을 거절할 때 붙이는 code.
 // 기사 앱 `apps/driver/src/auth.ts`가 같은 값을 읽어 로그인 화면 안내로 바꾼다.
 export const KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT = 'KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT';
+
+// 계정이 없거나 비밀번호가 없는 계정의 로그인도 실제 계정과 같은 비용(cost 12)의 bcrypt 비교를
+// 거치게 하는 고정 해시. 어떤 비밀번호와도 일치하지 않는 무작위 값으로 만들었다.
+const DUMMY_PASSWORD_HASH = '$2b$12$kXNeYjWNPfuITzHstqiwSOrcnNfjK8UxQARUTuW1gPuNecbN11Dt.';
+
+const LOGIN_FAILED_MESSAGE = '이메일 또는 비밀번호가 올바르지 않습니다.';
+const EMAIL_IN_USE_MESSAGE = '이미 사용 중인 이메일입니다.';
+
+// 한 사용자가 저장할 수 있는 배송지 수.
+export const SAVED_ADDRESS_MAX_COUNT = 20;
+
+// Firestore gRPC ALREADY_EXISTS(트랜잭션의 create가 이미 있는 문서를 만나면 커밋에서 실패).
+const FIRESTORE_ALREADY_EXISTS = 6;
+
+// 이메일 연결 문서를 다른 가입 요청이 먼저 만들어 커밋이 실패하면 이메일 중복으로 응답한다.
+function rethrowEmailIdentityConflict(error: unknown): never {
+  if ((error as { code?: unknown })?.code === FIRESTORE_ALREADY_EXISTS) {
+    throw new ConflictException(EMAIL_IN_USE_MESSAGE);
+  }
+  throw error;
+}
+
+// 카카오 사용자 id(숫자)를 Firestore 문서 id로 쓸 수 있는지 확인한다.
+const KAKAO_IDENTITY_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 type AuthoritativeUser = {
   role: JwtPayload['role'];
@@ -54,21 +100,28 @@ function toTokenStoreId(storeId: string | null): string | undefined {
 // 흡수할 만큼 짧게 둔다(2026-09-30 사용자 승인).
 export const REFRESH_ROTATION_GRACE_MS = 60_000;
 
-function isWithinRotationGrace(
+// 유예 안에 직전 토큰이 다시 오면 돌려줄 현재 refresh token. 유예 밖이거나 맞지 않으면 null.
+function rotationGraceRefreshToken(
   stored: Record<string, unknown>,
   presented: string,
   nowMillis: number,
-): boolean {
+): string | null {
   const rotatedAt = stored['rotatedAt'];
+  const currentToken = stored['token'];
   if (
-    typeof stored['token'] !== 'string' ||
-    stored['previousToken'] !== presented ||
-    typeof rotatedAt !== 'number'
+    typeof currentToken !== 'string' ||
+    typeof rotatedAt !== 'number' ||
+    !matchesStoredRefreshToken(stored['previousToken'], presented)
   ) {
-    return false;
+    return null;
   }
   const elapsed = nowMillis - rotatedAt;
-  return elapsed >= 0 && elapsed <= REFRESH_ROTATION_GRACE_MS;
+  if (elapsed < 0 || elapsed > REFRESH_ROTATION_GRACE_MS) return null;
+  // 배포 전 원문 기록은 현재 토큰 원문을 그대로 돌려준다.
+  if (!isHashedRefreshTokenRecord(currentToken)) return currentToken;
+  const opened = openRotatedRefreshToken(stored['sealedToken'], presented);
+  if (opened === null || !matchesStoredRefreshToken(currentToken, opened)) return null;
+  return opened;
 }
 
 @Injectable()
@@ -84,6 +137,12 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    // 운영 화면은 카카오 로그인만 쓴다. 운영 런타임의 이메일 가입은 판매자 초대(아래 inviteToken
+    // 검증)만 받고, consumer·driver 가입은 막는다(2026-10-10 결정). local·test·Preview는 그대로 둔다.
+    if (dto.role !== 'seller' && isProductionRuntime(getConfigValues(this.config))) {
+      throw new ForbiddenException('이메일 회원가입은 판매자 초대로만 할 수 있습니다.');
+    }
+
     // T2: seller는 inviteToken 필수 — 존재·만료·재사용 검증
     if (dto.role === 'seller') {
       if (!dto.inviteToken) {
@@ -98,6 +157,11 @@ export class AuthService {
 
       const invite = inviteSnap.data()!;
 
+      // 관리자가 취소한 토큰은 만료·사용 여부보다 먼저 거부한다(상태 우선순위 revokedAt > usedAt > 만료).
+      if (invite['revokedAt'] != null) {
+        throw inviteConflict('already_revoked', INVITE_REVOKED_MESSAGE);
+      }
+
       if ((invite['expiresAt'] as admin.firestore.Timestamp).toMillis() < Date.now()) {
         throw new GoneException('만료된 초대 토큰입니다.');
       }
@@ -107,6 +171,7 @@ export class AuthService {
       }
     }
 
+    // 연결 문서가 없는 기존 계정은 이메일 조회로 막는다.
     const existing = await this.firestore
       .collection('users')
       .where('email', '==', dto.email)
@@ -114,11 +179,11 @@ export class AuthService {
       .get();
 
     if (!existing.empty) {
-      throw new ConflictException('이미 사용 중인 이메일입니다.');
+      throw new ConflictException(EMAIL_IN_USE_MESSAGE);
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12);
-    const userId = uuidv4();
+    const userId = randomUUID();
     const now = this.firestore.Timestamp.now();
 
     const userDoc = {
@@ -137,23 +202,50 @@ export class AuthService {
       updatedAt: now,
     };
 
+    // 같은 이메일의 동시 가입이 사용자 문서를 둘 만들지 않도록 정규화 이메일의 연결 문서를
+    // 사용자 문서와 한 트랜잭션에서 만든다(먼저 커밋한 요청만 성공).
+    const normalizedEmail = normalizeEmail(dto.email);
+    const emailIdentityRef = this.firestore.doc(
+      `emailIdentities/${emailIdentityKey(normalizedEmail)}`,
+    );
+    const claimEmailIdentity = (
+      tx: admin.firestore.Transaction,
+      emailIdentitySnap: admin.firestore.DocumentSnapshot,
+    ) => {
+      if (emailIdentitySnap.exists) {
+        throw new ConflictException(EMAIL_IN_USE_MESSAGE);
+      }
+      tx.create(emailIdentityRef, { userId, email: normalizedEmail, createdAt: now });
+    };
+
     // T3: seller — 사용자 생성 + 토큰 소비를 단일 트랜잭션으로 묶어 정합성 보장
+    let registration: Promise<void>;
     if (dto.role === 'seller' && dto.inviteToken) {
-      await this.firestore.runTransaction(async (tx) => {
+      registration = this.firestore.runTransaction(async (tx) => {
         const inviteRef = this.firestore.doc(`invites/${dto.inviteToken!}`);
         const inviteDoc = await tx.get(inviteRef);
+        const emailIdentitySnap = await tx.get(emailIdentityRef);
 
         // 트랜잭션 내 재검증 — 동시 요청으로 인한 경쟁 조건 방지
+        // (사전 검사 뒤 관리자 취소가 먼저 커밋된 경우도 여기서 거부된다)
+        if (inviteDoc.exists && inviteDoc.data()!['revokedAt'] != null) {
+          throw inviteConflict('already_revoked', INVITE_REVOKED_MESSAGE);
+        }
         if (!inviteDoc.exists || inviteDoc.data()!['usedAt'] !== null) {
           throw new ConflictException('이미 사용된 초대 토큰입니다.');
         }
+        claimEmailIdentity(tx, emailIdentitySnap);
 
         tx.set(this.firestore.doc(`users/${userId}`), userDoc);
         tx.update(inviteRef, { usedAt: now, usedBy: userId });
       });
     } else {
-      await this.firestore.doc(`users/${userId}`).set(userDoc);
+      registration = this.firestore.runTransaction(async (tx) => {
+        claimEmailIdentity(tx, await tx.get(emailIdentityRef));
+        tx.set(this.firestore.doc(`users/${userId}`), userDoc);
+      });
     }
+    await registration.catch(rethrowEmailIdentityConflict);
 
     return { userId };
   }
@@ -165,21 +257,29 @@ export class AuthService {
       .limit(1)
       .get();
 
-    if (snap.empty) {
+    // 계정이 없거나 비밀번호가 없는(카카오 전용) 계정도 같은 비용의 bcrypt 비교를 거쳐
+    // 같은 401로 끝낸다. 응답 내용과 시간으로 가입 여부·가입 방식이 드러나지 않게 한다.
+    const userData = snap.empty ? undefined : snap.docs[0].data();
+    const passwordHash = userData?.['passwordHash'];
+    const hasPassword = typeof passwordHash === 'string';
+    const matched = await bcrypt.compare(
+      dto.password,
+      hasPassword ? passwordHash : DUMMY_PASSWORD_HASH,
+    );
+
+    if (!userData) {
       await this.audit.log('auth.login.failed', {
         detail: { email: dto.email, reason: 'user_not_found' },
       });
-      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
+      throw new UnauthorizedException(LOGIN_FAILED_MESSAGE);
     }
 
-    const userData = snap.docs[0].data();
-    const valid = await bcrypt.compare(dto.password, userData['passwordHash']);
-    if (!valid) {
+    if (!hasPassword || !matched) {
       await this.audit.log('auth.login.failed', {
         userId: userData['id'],
-        detail: { email: dto.email, reason: 'wrong_password' },
+        detail: { email: dto.email, reason: hasPassword ? 'wrong_password' : 'password_not_set' },
       });
-      throw new UnauthorizedException('이메일 또는 비밀번호가 올바르지 않습니다.');
+      throw new UnauthorizedException(LOGIN_FAILED_MESSAGE);
     }
 
     if (userData['suspended'] === true) {
@@ -224,85 +324,106 @@ export class AuthService {
     return this.getMe(userId);
   }
 
+  // 배송지 변경은 savedAddresses 배열 전체를 읽고 다시 쓰므로, 동시 요청이 서로의 변경을
+  // 덮어쓰지 않도록 읽기와 쓰기를 한 트랜잭션에서 한다.
   async addAddress(userId: string, dto: AddressDto) {
     const ref = this.firestore.doc(`users/${userId}`);
-    const snap = await ref.get();
-    if (!snap.exists) throw new NotFoundException();
+    return this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException();
 
-    const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
-    const newAddr = {
-      id: uuidv4(),
-      label: dto.label,
-      address: dto.address,
-      addressDetail: dto.addressDetail,
-      zipCode: dto.zipCode,
-      isDefault: dto.isDefault ?? addresses.length === 0,
-    };
+      const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
+      if (addresses.length >= SAVED_ADDRESS_MAX_COUNT) {
+        throw new BadRequestException(
+          `배송지는 최대 ${SAVED_ADDRESS_MAX_COUNT}개까지 저장할 수 있습니다.`,
+        );
+      }
+      const newAddr = {
+        id: randomUUID(),
+        label: dto.label,
+        address: dto.address,
+        addressDetail: dto.addressDetail,
+        zipCode: dto.zipCode,
+        isDefault: dto.isDefault ?? addresses.length === 0,
+      };
 
-    if (newAddr.isDefault) {
-      addresses.forEach((a) => (a.isDefault = false));
-    }
-    addresses.push(newAddr);
+      if (newAddr.isDefault) {
+        addresses.forEach((a) => {
+          a.isDefault = false;
+        });
+      }
+      addresses.push(newAddr);
 
-    await ref.update({
-      savedAddresses: addresses,
-      updatedAt: this.firestore.Timestamp.now(),
+      tx.update(ref, {
+        savedAddresses: addresses,
+        updatedAt: this.firestore.Timestamp.now(),
+      });
+      return newAddr;
     });
-    return newAddr;
   }
 
   async updateAddress(userId: string, addressId: string, dto: AddressDto) {
     const ref = this.firestore.doc(`users/${userId}`);
-    const snap = await ref.get();
-    if (!snap.exists) throw new NotFoundException();
+    return this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException();
 
-    const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
-    const idx = addresses.findIndex((a) => a.id === addressId);
-    if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
+      const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
+      const idx = addresses.findIndex((a) => a.id === addressId);
+      if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
-    if (dto.isDefault) {
-      addresses.forEach((a) => (a.isDefault = false));
-    }
-    addresses[idx] = { ...addresses[idx], ...dto, id: addressId };
+      if (dto.isDefault) {
+        addresses.forEach((a) => {
+          a.isDefault = false;
+        });
+      }
+      addresses[idx] = { ...addresses[idx], ...dto, id: addressId };
 
-    await ref.update({
-      savedAddresses: addresses,
-      updatedAt: this.firestore.Timestamp.now(),
+      tx.update(ref, {
+        savedAddresses: addresses,
+        updatedAt: this.firestore.Timestamp.now(),
+      });
+      return addresses[idx];
     });
-    return addresses[idx];
   }
 
   async deleteAddress(userId: string, addressId: string) {
     const ref = this.firestore.doc(`users/${userId}`);
-    const snap = await ref.get();
-    if (!snap.exists) throw new NotFoundException();
+    await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException();
 
-    const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
-    const filtered = addresses.filter((a) => a.id !== addressId);
+      const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
+      const filtered = addresses.filter((a) => a.id !== addressId);
 
-    await ref.update({
-      savedAddresses: filtered,
-      updatedAt: this.firestore.Timestamp.now(),
+      tx.update(ref, {
+        savedAddresses: filtered,
+        updatedAt: this.firestore.Timestamp.now(),
+      });
     });
   }
 
   async setDefaultAddress(userId: string, addressId: string) {
     const ref = this.firestore.doc(`users/${userId}`);
-    const snap = await ref.get();
-    if (!snap.exists) throw new NotFoundException();
+    return this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException();
 
-    const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
-    const idx = addresses.findIndex((a) => a.id === addressId);
-    if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
+      const addresses: any[] = snap.data()!['savedAddresses'] ?? [];
+      const idx = addresses.findIndex((a) => a.id === addressId);
+      if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
-    addresses.forEach((a) => (a.isDefault = false));
-    addresses[idx].isDefault = true;
+      addresses.forEach((a) => {
+        a.isDefault = false;
+      });
+      addresses[idx].isDefault = true;
 
-    await ref.update({
-      savedAddresses: addresses,
-      updatedAt: this.firestore.Timestamp.now(),
+      tx.update(ref, {
+        savedAddresses: addresses,
+        updatedAt: this.firestore.Timestamp.now(),
+      });
+      return addresses[idx];
     });
-    return addresses[idx];
   }
 
   async kakaoLogin(dto: KakaoLoginDto) {
@@ -321,25 +442,7 @@ export class AuthService {
       if (dto.targetRole === 'seller') {
         throw new ForbiddenException('판매자 계정은 관리자 초대로만 가입할 수 있습니다.');
       }
-      const userId = uuidv4();
-      const now = this.firestore.Timestamp.now();
-      const newRole = dto.targetRole ?? 'consumer';
-      userData = {
-        id: userId,
-        kakaoId: kakaoProfile.kakaoId,
-        email: kakaoProfile.email,
-        name: kakaoProfile.name,
-        phone: null,
-        role: newRole,
-        ...(newRole === 'driver' ? { driverApproved: false } : {}),
-        storeId: null,
-        providers: ['kakao'],
-        savedAddresses: [],
-        fcmToken: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await this.firestore.doc(`users/${userId}`).set(userData);
+      userData = await this.createKakaoUser(kakaoProfile, dto.targetRole ?? 'consumer');
     }
 
     const role = userData['role'] as string;
@@ -391,13 +494,60 @@ export class AuthService {
     return { accessToken, refreshToken, user: this.sanitizeUser(userData) };
   }
 
+  // 카카오 첫 로그인의 사용자 생성. 같은 카카오 계정의 동시 요청(콜백 중복 등)이 사용자 문서를
+  // 둘 만들지 않도록 `kakaoIdentities/{kakaoId}`를 트랜잭션 안에서 함께 써서 하나로 모은다.
+  // 먼저 커밋한 요청이 만든 사용자를 나중 요청은 그대로 받는다.
+  private async createKakaoUser(
+    kakaoProfile: Awaited<ReturnType<KakaoClient['getUser']>>,
+    newRole: NonNullable<KakaoLoginDto['targetRole']>,
+  ): Promise<Record<string, unknown>> {
+    if (!KAKAO_IDENTITY_ID_PATTERN.test(kakaoProfile.kakaoId)) {
+      throw new UnauthorizedException('카카오 사용자 정보를 확인할 수 없습니다.');
+    }
+    const identityRef = this.firestore.doc(`kakaoIdentities/${kakaoProfile.kakaoId}`);
+
+    return this.firestore.runTransaction(async (tx) => {
+      const identitySnap = await tx.get(identityRef);
+      const linkedUserId = identitySnap.exists ? identitySnap.data()?.['userId'] : undefined;
+      if (typeof linkedUserId === 'string') {
+        const linkedUserSnap = await tx.get(this.firestore.doc(`users/${linkedUserId}`));
+        if (linkedUserSnap.exists) return linkedUserSnap.data() as Record<string, unknown>;
+      }
+
+      const userId = randomUUID();
+      const now = this.firestore.Timestamp.now();
+      const userData: Record<string, unknown> = {
+        id: userId,
+        kakaoId: kakaoProfile.kakaoId,
+        email: kakaoProfile.email,
+        name: kakaoProfile.name,
+        phone: null,
+        role: newRole,
+        ...(newRole === 'driver' ? { driverApproved: false } : {}),
+        storeId: null,
+        providers: ['kakao'],
+        savedAddresses: [],
+        fcmToken: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      tx.set(identityRef, { userId, createdAt: now });
+      tx.set(this.firestore.doc(`users/${userId}`), userData);
+      return userData;
+    });
+  }
+
   async refresh(refreshToken: string) {
     let payload: JwtPayload;
     try {
       payload = this.jwt.verify(refreshToken, {
         secret: this.config.get('JWT_REFRESH_SECRET'),
+        algorithms: [JWT_ALGORITHM],
       });
     } catch {
+      throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
+    }
+    if (!hasExpectedTokenClaims(payload, 'refresh')) {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
     }
 
@@ -423,22 +573,25 @@ export class AuthService {
       const snap = await tx.get(tokenRef);
       if (!snap.exists) return { kind: 'missing' as const };
       const stored = snap.data() ?? {};
-      if (stored['token'] === refreshToken) {
+      // 원문 기록(배포 전)과 맞아도 아래 회전에서 해시 기록으로 다시 쓴다.
+      if (matchesStoredRefreshToken(stored['token'], refreshToken)) {
         const tokens = this.signTokens(nextPayload);
         tx.set(tokenRef, {
-          token: tokens.refreshToken,
-          previousToken: refreshToken,
+          token: hashRefreshToken(tokens.refreshToken),
+          previousToken: hashRefreshToken(refreshToken),
+          sealedToken: sealRotatedRefreshToken(tokens.refreshToken, refreshToken),
           rotatedAt: Date.now(),
           updatedAt: this.firestore.Timestamp.now(),
         });
         return { kind: 'issued' as const, tokens };
       }
-      if (isWithinRotationGrace(stored, refreshToken, Date.now())) {
+      const graceRefreshToken = rotationGraceRefreshToken(stored, refreshToken, Date.now());
+      if (graceRefreshToken !== null) {
         return {
           kind: 'issued' as const,
           tokens: {
             accessToken: this.signAccessToken(nextPayload),
-            refreshToken: stored['token'] as string,
+            refreshToken: graceRefreshToken,
           },
         };
       }
@@ -448,6 +601,7 @@ export class AuthService {
 
     if (outcome.kind === 'reused') {
       await this.audit.log('auth.token.stolen', { userId: payload.sub });
+      await revokeFirebaseSessions(payload.sub, this.logger);
     }
     if (outcome.kind !== 'issued') {
       throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
@@ -487,10 +641,15 @@ export class AuthService {
 
   async logout(userId: string) {
     await this.firestore.doc(`refreshTokens/${userId}`).delete();
+    // 이 시각 이전에 발급된 access token을 JwtStrategy가 거부한다(만료 전 재사용 차단).
+    await this.firestore.doc(`users/${userId}`).update({
+      [SESSIONS_REVOKED_AT_FIELD]: this.firestore.Timestamp.fromMillis(sessionsRevokedAtMillis()),
+    });
+    await revokeFirebaseSessions(userId, this.logger);
     await this.audit.log('auth.logout', { userId });
   }
 
-  async updateFcmToken(userId: string, fcmToken: string) {
+  async updateFcmToken(userId: string, fcmToken: string | null) {
     await this.firestore.doc(`users/${userId}`).update({
       fcmToken,
       updatedAt: this.firestore.Timestamp.now(),
@@ -536,18 +695,26 @@ export class AuthService {
     };
   }
 
+  private withTokenType(payload: JwtPayload, typ: TokenType): JwtPayload {
+    return { sub: payload.sub, role: payload.role, storeId: payload.storeId, typ };
+  }
+
   private signAccessToken(payload: JwtPayload) {
-    return this.jwt.sign(payload, {
+    return this.jwt.sign(this.withTokenType(payload, 'access'), {
       secret: this.config.get('JWT_SECRET'),
       expiresIn: this.config.get('JWT_EXPIRES_IN', '1h'),
+      algorithm: JWT_ALGORITHM,
+      audience: JWT_AUDIENCE,
     });
   }
 
   private signTokens(payload: JwtPayload) {
     const accessToken = this.signAccessToken(payload);
-    const refreshToken = this.jwt.sign(payload, {
+    const refreshToken = this.jwt.sign(this.withTokenType(payload, 'refresh'), {
       secret: this.config.get('JWT_REFRESH_SECRET'),
       expiresIn: this.config.get('JWT_REFRESH_EXPIRES_IN', '30d'),
+      algorithm: JWT_ALGORITHM,
+      audience: JWT_AUDIENCE,
     });
     return { accessToken, refreshToken };
   }
@@ -558,7 +725,7 @@ export class AuthService {
     // Rotation: 최신 refresh token만 유효 (이전 토큰 자동 무효화). 로그인 발급은
     // previousToken을 남기지 않으므로 직전 세션의 회전 유예도 함께 끊는다.
     await this.firestore.doc(`refreshTokens/${payload.sub}`).set({
-      token: refreshToken,
+      token: hashRefreshToken(refreshToken),
       updatedAt: this.firestore.Timestamp.now(),
     });
 

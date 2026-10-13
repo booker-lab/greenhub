@@ -15,6 +15,14 @@ const MAIN_PROVIDER_PAYMENT_ID = 'admin-refund-payment-1';
 const CHARGE_PROVIDER_PAYMENT_ID = `order-charge-${CHARGE_ID}`;
 const HOLD_AT = '2026-08-26T00:00:00.000Z';
 const REFUND_REASON = '관리자 회차 환불 회귀';
+// PortOne 환불 POST는 claim 시 발급된 namespaced provider idempotency key와 함께 호출된다.
+const UUID_PATTERN = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
+const PAYMENT_REFUND_KEY = expect.stringMatching(
+  new RegExp(`^ghr-payment-refund-${UUID_PATTERN}$`),
+);
+const CHARGE_REFUND_KEY = expect.stringMatching(
+  new RegExp(`^ghr-order-charge-refund-${UUID_PATTERN}$`),
+);
 
 function seedRoundRefund(fixture: Fixture, overrides: Data = {}) {
   const orderStatus = overrides.orderStatus ?? 'DELIVERY_HELD';
@@ -231,11 +239,13 @@ describe('관리자 강제 환불 durable 회차 lifecycle 통합 회귀', () =>
       MAIN_PROVIDER_PAYMENT_ID,
       40_000,
       REFUND_REASON,
+      PAYMENT_REFUND_KEY,
     );
     expect(fixture.portone.refund).toHaveBeenCalledWith(
       CHARGE_PROVIDER_PAYMENT_ID,
       5_000,
       REFUND_REASON,
+      CHARGE_REFUND_KEY,
     );
     expectRoundCancellation(fixture, 'cancelled');
   });
@@ -257,7 +267,7 @@ describe('관리자 강제 환불 durable 회차 lifecycle 통합 회귀', () =>
   it('provider 성공 뒤 local capacity 실패는 재시도 상태를 남기고 provider 환불 intent를 반복하지 않는다', async () => {
     seedRoundRefund(fixture);
     const releaseReservation = jest
-      .spyOn(fixture.capacity, 'releaseReservationInTransaction')
+      .spyOn(fixture.capacity, 'releaseForOrderCancellationInTransaction')
       .mockRejectedValueOnce(new Error('예약 반환 실패'));
 
     try {

@@ -136,7 +136,13 @@ const manifest = {
   createdAt: new Date().toISOString(),
   shots: [],
 };
-const browser = await chromium.launch();
+// Playwright 버전과 설치된 브라우저가 다른 환경(예: 클라우드 세션의 /opt/pw-browsers/chromium)에서는
+// GREENHUB_VISUAL_CHROMIUM으로 실행 파일을 지정한다.
+const browser = await chromium.launch(
+  process.env.GREENHUB_VISUAL_CHROMIUM
+    ? { executablePath: process.env.GREENHUB_VISUAL_CHROMIUM }
+    : undefined,
+);
 try {
   for (const viewportName of Object.keys(VIEWPORTS)) {
     const authed = await newContext(browser, viewportName);

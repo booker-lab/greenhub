@@ -16,6 +16,10 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
 import {
+  deliveryHoldResponsibilityFeeHint,
+  parseRedeliveryFee,
+} from '../../_lib/delivery-hold-form';
+import {
   classifyDriverOrderCommandError,
   readDriverOrderCommandErrorCodeFromResponse,
 } from '../../_lib/driver-order-detail';
@@ -112,6 +116,12 @@ export function DeliveryHoldModal({
   const [nextDeliveryAt, setNextDeliveryAt] = useState('');
   const [error, setError] = useState('');
   const isWeather = reasonCode === 'WEATHER';
+  // 기상 외 보류는 고객 책임 ⇔ 재배송비(0원 초과). 어긋나면 저장을 막고 고칠 방법을 보인다.
+  const responsibilityFeeHint = deliveryHoldResponsibilityFeeHint({
+    reasonCode,
+    customerResponsible,
+    redeliveryFee,
+  });
   // C3: 부모 loading state와 무관한 로컬 submitting guard. 동일 frame
   // double-submit에서도 두 번째 PATCH를 dispatch하지 않는다.
   const submittingRef = useRef(false);
@@ -168,16 +178,17 @@ export function DeliveryHoldModal({
       setError('기상 보류의 새 배송 예정 시각을 입력해주세요.');
       return;
     }
+    // 저장 버튼이 막혀 있지만, 어긋난 책임·재배송비는 보내지 않는다(안내는 입력칸 아래에 있다).
+    if (responsibilityFeeHint) return;
     if (!token) {
       setError('인증 정보를 확인할 수 없습니다.');
       return;
     }
-    const fee = typeof redeliveryFee === 'number' ? redeliveryFee : Number(redeliveryFee);
     const deliveryHold = {
       reasonCode,
       reasonMessage: message,
       customerResponsible: isWeather ? false : customerResponsible,
-      redeliveryFee: isWeather || !Number.isFinite(fee) || fee <= 0 ? null : fee,
+      redeliveryFee: isWeather ? null : parseRedeliveryFee(redeliveryFee),
       nextContactAt: nextContactAt ? new Date(nextContactAt).toISOString() : null,
       nextDeliveryAt: nextDeliveryAt ? new Date(nextDeliveryAt).toISOString() : null,
     };
@@ -313,6 +324,11 @@ export function DeliveryHoldModal({
           suffix="원"
           onChange={setRedeliveryFee}
         />
+        {responsibilityFeeHint && (
+          <Text c="red" size="sm">
+            {responsibilityFeeHint}
+          </Text>
+        )}
         <TextInput
           label="다음 연락 예정"
           type="datetime-local"
@@ -330,7 +346,12 @@ export function DeliveryHoldModal({
           <Button variant="default" onClick={onClose} disabled={loading}>
             취소
           </Button>
-          <Button color="red" onClick={submit} loading={loading} disabled={loading}>
+          <Button
+            color="red"
+            onClick={submit}
+            loading={loading}
+            disabled={loading || responsibilityFeeHint !== null}
+          >
             배송 보류 저장
           </Button>
         </Group>

@@ -17,6 +17,8 @@ export const SETTLEMENT_FILTER_TABS: { key: SettlementFilterKey; label: string }
 export interface Settlement {
   id: string;
   orderId: string;
+  /** 2026-10 이후 생성된 정산만 있다. */
+  orderNumber?: string | null;
   totalAmount: number;
   platformFee: number;
   netAmount: number;
@@ -24,6 +26,30 @@ export interface Settlement {
   // settledAt 직렬화 형태가 호출 경로마다 다름(#CL-46): API TimestampInterceptor=ISO 문자열,
   // Firestore raw 직렬화=`{ _seconds }`. toDateStr/toISO가 둘 다 처리.
   settledAt: string | { _seconds: number };
+}
+
+/** 목록 조회 조건. 더 보기도 같은 조건으로 이어 받는다. */
+export interface SettlementListQuery {
+  from?: string;
+  to?: string;
+  status?: SettlementStatus;
+}
+
+/**
+ * GET /stores/:storeId/settlements 응답. hasMore·nextCursor는 페이지 나눔을 지원하는 API만 보낸다
+ * (없으면 이번 응답이 전부).
+ */
+export interface SettlementListResponse {
+  settlements?: Settlement[];
+  total?: number;
+  hasMore?: boolean;
+  nextCursor?: string | null;
+}
+
+export interface SettlementPage {
+  settlements: Settlement[];
+  hasMore: boolean;
+  nextCursor: string | null;
 }
 
 export interface Summary {

@@ -60,7 +60,7 @@ export function InviteGenerator({
             style={{
               fontSize: 'var(--font-size-sm)',
               fontWeight: 'var(--fw-medium)',
-              color: 'var(--color-error, #e03131)',
+              color: 'var(--color-danger)',
             }}
             mb={4}
           >

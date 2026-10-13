@@ -13,6 +13,10 @@ const ctaSource = await readFile(
   'utf8',
 );
 const pageSource = await readFile(new URL('../page.tsx', import.meta.url), 'utf8');
+const quickAddSource = await readFile(
+  new URL('../../../../lib/round-quick-add.ts', import.meta.url),
+  'utf8',
+);
 
 test('상품 상세은 검증한 회차 구매 계약을 ProductActions에 전달하고 legacy 호출을 보존한다', () => {
   assert.match(
@@ -44,10 +48,14 @@ test('round_direct는 회차 가격과 직배송만 사용하고 legacy 선택 U
 test('round_direct는 isPurchasable이 거짓이면 두 구매 동작을 모두 비활성화한다', () => {
   assert.match(roundSource, /canBuy=\{roundProduct\.isPurchasable\}/);
   assert.match(roundSource, /canAddToCart=\{roundProduct\.isPurchasable\}/);
-  // 좁은 화면에서 잘리지 않도록 짧은 문구를 쓰고, 구매 불가일 때는 이유(주문 시작 전·마감)를 보여준다.
+  // 좁은 화면에서 잘리지 않도록 짧은 문구를 쓰고, 구매 불가일 때는 이유(품절·주문 시작 전·마감)를 보여준다.
   assert.match(roundSource, /addToCartLabel="장바구니"/);
   assert.match(roundSource, /buyNowLabel=\{roundProduct\.isPurchasable \? '바로 구매' : undefined\}/);
-  assert.match(roundSource, /unavailableLabel=\{notOpenYet \? '주문 시작 전' : '주문 마감'\}/);
+  assert.match(roundSource, /const soldOut = roundProduct\.state === 'sold_out'/);
+  assert.match(
+    roundSource,
+    /unavailableLabel=\{soldOut \? '품절' : notOpenYet \? '주문 시작 전' : '주문 마감'\}/,
+  );
   assert.match(ctaSource, /disabled=\{!canAddToCart\}/);
   assert.match(ctaSource, /disabled=\{!canBuy\}/);
 });
@@ -57,7 +65,9 @@ test('round_direct는 검증된 회차 장바구니 계약만 저장하고 후�
   assert.match(roundSource, /roundItemId:\s*roundProduct\.item\.id/);
   assert.match(roundSource, /roundPrice:\s*roundProduct\.item\.roundPrice/);
   assert.match(roundSource, /if \(!result\.ok\)/);
-  assert.match(roundSource, /result\.reason === 'different_round'/);
+  // 담기 실패 사유별 문구는 홈 바로 담기와 같은 공통 함수가 소유한다.
+  assert.match(roundSource, /cartAddFailureMessage\(result\.reason\)/);
+  assert.match(quickAddSource, /reason === 'different_round'/);
   assert.doesNotMatch(roundSource, /schemaVersion\s*:/);
   assert.doesNotMatch(roundSource, /acquisition\s*:/);
 });

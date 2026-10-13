@@ -1,4 +1,5 @@
 import { MODULE_METADATA } from '@nestjs/common/constants';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { OperationsModule } from './operations/operations.module';
 import { RetentionModule } from './retention/retention.module';
@@ -18,6 +19,12 @@ describe('애플리케이션 모듈 연결 계약', () => {
   });
 
   it('기능 모듈의 provider를 AppModule에 중복 등록하지 않는다', () => {
-    expect(metadata(AppModule, MODULE_METADATA.PROVIDERS)).toHaveLength(2);
+    // AppService와 전역 요청 제한(APP_GUARD)·일시 오류 응답(APP_FILTER)만 둔다.
+    const providers = metadata<{ provide?: string }>(AppModule, MODULE_METADATA.PROVIDERS);
+    expect(providers).toHaveLength(3);
+    expect(providers.map((provider) => provider.provide).filter(Boolean)).toEqual([
+      APP_GUARD,
+      APP_FILTER,
+    ]);
   });
 });

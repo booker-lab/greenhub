@@ -1,7 +1,13 @@
 import * as crypto from 'node:crypto';
 import { Logger, UnauthorizedException } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
-import { PortoneClient, PortoneError } from './portone.client';
+import { ConfigModule, type ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import {
+  PORTONE_GET_PAYMENT_TIMEOUT_MS,
+  PORTONE_REFUND_TIMEOUT_MS,
+  PortoneClient,
+  PortoneError,
+} from './portone.client';
 
 describe('PortoneClient V2 진단', () => {
   const originalFetch = global.fetch;
@@ -81,6 +87,7 @@ describe('PortoneClient V2 진단', () => {
 
     expect(fetchMock).toHaveBeenCalledWith('https://api.portone.io/payments/payment-1', {
       headers: { Authorization: 'PortOne v2-test-secret' },
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -181,7 +188,9 @@ describe('PortoneClient V2 진단', () => {
 
     it('조회 dispatch를 차단하고 외부 fetch를 하지 않는다', async () => {
       global.fetch = jest.fn();
-      const error = await makeDenyClient().getPayment('payment-1').catch((caught) => caught);
+      const error = await makeDenyClient()
+        .getPayment('payment-1')
+        .catch((caught) => caught);
 
       expect(error).toBeInstanceOf(PortoneError);
       expect(error).toMatchObject({ status: 503, type: 'LOCAL_OUTBOUND_DENIED' });
@@ -197,6 +206,96 @@ describe('PortoneClient V2 진단', () => {
       expect(error).toBeInstanceOf(PortoneError);
       expect(error).toMatchObject({ status: 503, type: 'LOCAL_OUTBOUND_DENIED' });
       expect(global.fetch).not.toHaveBeenCalled();
+    });
+  });
+
+  it('Nest DI에서 ConfigService를 주입받아 생성된다', async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [ConfigModule.forRoot({ ignoreEnvFile: true })],
+      providers: [PortoneClient],
+    }).compile();
+
+    expect(moduleRef.get(PortoneClient)).toBeInstanceOf(PortoneClient);
+    await moduleRef.close();
+  });
+
+  describe('요청 시간 상한', () => {
+    const makeClient = () =>
+      new PortoneClient({
+        get: jest.fn((_key: string, fallback: string) => fallback),
+      } as unknown as ConfigService);
+
+    // 응답하지 않는 PortOne: abort 신호가 올 때까지 끝나지 않는다.
+    const hangingFetch = () =>
+      jest.fn(
+        (_url: string, init: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () =>
+              reject(new DOMException('This operation was aborted', 'AbortError')),
+            );
+          }),
+      );
+
+    beforeEach(() => {
+      jest.useFakeTimers();
+      jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('조회가 상한을 넘기면 PortoneError(504, PORTONE_TIMEOUT)로 끝난다', async () => {
+      global.fetch = hangingFetch() as unknown as typeof fetch;
+
+      const pending = makeClient()
+        .getPayment('payment-1')
+        .catch((caught) => caught);
+      await jest.advanceTimersByTimeAsync(PORTONE_GET_PAYMENT_TIMEOUT_MS - 1);
+      expect(jest.getTimerCount()).toBe(1);
+      await jest.advanceTimersByTimeAsync(1);
+
+      const error = await pending;
+      expect(error).toBeInstanceOf(PortoneError);
+      expect(error).toMatchObject({ status: 504, type: 'PORTONE_TIMEOUT' });
+    });
+
+    it('환불이 상한을 넘기면 PortoneError(504, PORTONE_TIMEOUT)로 끝난다', async () => {
+      global.fetch = hangingFetch() as unknown as typeof fetch;
+
+      const pending = makeClient()
+        .refund('payment-1', 100, '사유')
+        .catch((caught) => caught);
+      await jest.advanceTimersByTimeAsync(PORTONE_GET_PAYMENT_TIMEOUT_MS);
+      expect(jest.getTimerCount()).toBe(1);
+      await jest.advanceTimersByTimeAsync(
+        PORTONE_REFUND_TIMEOUT_MS - PORTONE_GET_PAYMENT_TIMEOUT_MS,
+      );
+
+      const error = await pending;
+      expect(error).toBeInstanceOf(PortoneError);
+      expect(error).toMatchObject({ status: 504, type: 'PORTONE_TIMEOUT' });
+    });
+
+    it('정상 응답 뒤에는 타이머를 남기지 않는다', async () => {
+      global.fetch = jest
+        .fn()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ id: 'payment-1', status: 'PAID' }), { status: 200 }),
+        );
+
+      await makeClient().getPayment('payment-1');
+      await makeClient().refund('payment-1', 100, '사유');
+
+      expect(jest.getTimerCount()).toBe(0);
+    });
+
+    it('시간 초과가 아닌 네트워크 오류는 그대로 전달한다', async () => {
+      const networkError = new TypeError('fetch failed');
+      global.fetch = jest.fn().mockRejectedValue(networkError);
+
+      await expect(makeClient().getPayment('payment-1')).rejects.toBe(networkError);
+      expect(jest.getTimerCount()).toBe(0);
     });
   });
 });

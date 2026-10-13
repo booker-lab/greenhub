@@ -1,24 +1,27 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Patch,
-  Delete,
   Body,
-  Param,
-  Query,
-  UseGuards,
+  Controller,
+  Delete,
+  Get,
   HttpCode,
   HttpStatus,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
 } from '@nestjs/common';
-import { HubsService } from './hubs.service';
-import { CreateHubDto, UpdateHubDto } from './dto/create-hub.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { JwtPayload } from '../auth/types/jwt-payload.type';
+import { Roles } from '../common/decorators/roles.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { CreateHubDto, UpdateHubDto } from './dto/create-hub.dto';
+import { HubsService } from './hubs.service';
 
 @Controller('stores/:storeId/hubs')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('seller', 'admin')
 export class HubsController {
   constructor(private readonly hubsService: HubsService) {}
 
@@ -41,7 +44,7 @@ export class HubsController {
     @Param('storeId') storeId: string,
     @Param('hubId') hubId: string,
     @CurrentUser() user: JwtPayload,
-    @Query('status') status?: string,
+    @Query('status') status?: unknown,
   ) {
     return this.hubsService.getHubOrders(storeId, hubId, user.sub, status);
   }

@@ -5,6 +5,8 @@ import { genericPreviewFixture } from './_helpers/generic-preview'
 const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
 const API = process.env['API_BASE'] ?? 'https://api-production-13e7.up.railway.app'
 const fixture = genericPreviewFixture()
+// 가게가 없으면 처음 등록, 있으면(설정에서 들어온 경우) 프로필 수정 제목이 보인다.
+const ONBOARDING_HEADING = /사업자 (정보 등록|프로필 수정)/
 
 // ── 비인증 ────────────────────────────────────────────────────────────────────
 
@@ -31,12 +33,12 @@ test.describe('셀러 온보딩 — 인증', () => {
 
   test('온보딩 헤더 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/onboarding`)
-    await expect(page.locator('text=사업자 정보 등록')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole('heading', { name: ONBOARDING_HEADING })).toBeVisible({ timeout: 10_000 })
   })
 
   test('필수 입력 필드 4개 렌더링 (상호명·대표자명·연락처·소재지)', async ({ page }) => {
     await page.goto(`${BASE}/onboarding`)
-    await expect(page.locator('text=사업자 정보 등록')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole('heading', { name: ONBOARDING_HEADING })).toBeVisible({ timeout: 10_000 })
     for (const label of ['상호명', '대표자명', '연락처', '소재지']) {
       await expect(page.locator(`text=${label}`).first()).toBeVisible()
     }
@@ -46,7 +48,7 @@ test.describe('셀러 온보딩 — 인증', () => {
 
   test('B1 — storeId 있는 계정 진입 시 상호명 필드 pre-fill', async ({ page }) => {
     await page.goto(`${BASE}/onboarding`)
-    await expect(page.locator('text=사업자 정보 등록')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole('heading', { name: ONBOARDING_HEADING })).toBeVisible({ timeout: 10_000 })
 
     // API 응답 대기 (pre-fill은 useEffect 비동기)
     await page.waitForTimeout(2_000)
@@ -60,7 +62,7 @@ test.describe('셀러 온보딩 — 인증', () => {
 
   test('B1 — pre-fill 후 폼 수정 가능', async ({ page }) => {
     await page.goto(`${BASE}/onboarding`)
-    await expect(page.locator('text=사업자 정보 등록')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole('heading', { name: ONBOARDING_HEADING })).toBeVisible({ timeout: 10_000 })
     await page.waitForTimeout(2_000)
 
     const nameInput = page.locator('input[name="name"]')
@@ -80,7 +82,7 @@ test.describe('셀러 온보딩 — 인증', () => {
     page.on('pageerror', (e) => errors.push(e.message))
 
     await page.goto(`${BASE}/onboarding`)
-    await expect(page.locator('text=사업자 정보 등록')).toBeVisible({ timeout: 10_000 })
+    await expect(page.getByRole('heading', { name: ONBOARDING_HEADING })).toBeVisible({ timeout: 10_000 })
     await page.waitForTimeout(2_000)
 
     expect(errors).toHaveLength(0)

@@ -1,5 +1,5 @@
 import * as crypto from 'node:crypto';
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 interface PortonePaymentData {
@@ -11,6 +11,16 @@ interface PortonePaymentData {
 }
 
 const WEBHOOK_TOLERANCE_SECONDS = 5 * 60;
+
+/**
+ * PortOne 호출 시간 상한. undici 기본값(헤더·본문 각 300초)에 기대지 않는다.
+ * 신호 하나가 연결부터 본문 읽기까지 덮으므로, 시간 초과는 요청이 PortOne에 닿았는지
+ * 구분할 수 없다. 호출부는 기존처럼 모든 throw를 결과 불확실(UNKNOWN)로 다룬다.
+ */
+export const PORTONE_GET_PAYMENT_TIMEOUT_MS = 10_000;
+export const PORTONE_REFUND_TIMEOUT_MS = 15_000;
+export const PORTONE_TIMEOUT_ERROR_STATUS = 504;
+export const PORTONE_TIMEOUT_ERROR_TYPE = 'PORTONE_TIMEOUT';
 
 /**
  * PortOne V2 idempotency contract (PILOT-REFUND-PROVIDER-IDEMPOTENCY-BINDING-28B).
@@ -61,7 +71,7 @@ export class PortoneClient {
   private readonly baseUrl = 'https://api.portone.io';
   private readonly logger = new Logger(PortoneClient.name);
 
-  constructor(private readonly config: ConfigService) {
+  constructor(@Inject(ConfigService) private readonly config: ConfigService) {
     this.secret = config.get<string>('PORTONE_V2_SECRET', '');
   }
 
@@ -104,6 +114,41 @@ export class PortoneClient {
       );
     }
     return new PortoneError(res.status, type, message);
+  }
+
+  /**
+   * 시간 상한을 걸고 PortOne을 호출한다. AbortSignal.timeout() 대신 전역 setTimeout을 써서
+   * 호출이 끝나면 바로 정리하고, 테스트의 가짜 타이머로도 같은 경로를 검증할 수 있게 한다.
+   * 시간 초과는 PortoneError(504, PORTONE_TIMEOUT)로 바꿔 기존 PortoneError 경로로 흐르게 한다.
+   */
+  private async send<T>(
+    action: string,
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+    readBody: (res: Response) => Promise<T>,
+  ): Promise<T> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...init, signal: controller.signal });
+      if (!res.ok) {
+        throw await this.createResponseError(res, action);
+      }
+      return await readBody(res);
+    } catch (error) {
+      if (controller.signal.aborted && !(error instanceof PortoneError)) {
+        this.logger.error(`PortOne 요청 시간 초과 action=${action} timeoutMs=${timeoutMs}`);
+        throw new PortoneError(
+          PORTONE_TIMEOUT_ERROR_STATUS,
+          PORTONE_TIMEOUT_ERROR_TYPE,
+          `PortOne ${action} 요청이 ${timeoutMs}ms 안에 끝나지 않아 결과를 확인할 수 없습니다.`,
+        );
+      }
+      throw error;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** Portone V2 Webhook 서명 검증 (Svix 기반) */
@@ -159,13 +204,13 @@ export class PortoneClient {
 
   async getPayment(paymentId: string): Promise<PortonePaymentData> {
     this.assertOutboundAllowed('getPayment');
-    const res = await fetch(`${this.baseUrl}/payments/${encodeURIComponent(paymentId)}`, {
-      headers: { Authorization: `PortOne ${this.secret}` },
-    });
-    if (!res.ok) {
-      throw await this.createResponseError(res, 'getPayment');
-    }
-    return res.json() as Promise<PortonePaymentData>;
+    return this.send(
+      'getPayment',
+      `${this.baseUrl}/payments/${encodeURIComponent(paymentId)}`,
+      { headers: { Authorization: `PortOne ${this.secret}` } },
+      PORTONE_GET_PAYMENT_TIMEOUT_MS,
+      (res) => res.json() as Promise<PortonePaymentData>,
+    );
   }
 
   async refund(
@@ -192,13 +237,12 @@ export class PortoneClient {
     if (idempotencyKey !== undefined) {
       headers['Idempotency-Key'] = idempotencyKey;
     }
-    const res = await fetch(`${this.baseUrl}/payments/${encodeURIComponent(paymentId)}/cancel`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ reason, amount }),
-    });
-    if (!res.ok) {
-      throw await this.createResponseError(res, 'refund');
-    }
+    await this.send(
+      'refund',
+      `${this.baseUrl}/payments/${encodeURIComponent(paymentId)}/cancel`,
+      { method: 'POST', headers, body: JSON.stringify({ reason, amount }) },
+      PORTONE_REFUND_TIMEOUT_MS,
+      async () => undefined,
+    );
   }
 }

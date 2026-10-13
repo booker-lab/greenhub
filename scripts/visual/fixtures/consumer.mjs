@@ -147,7 +147,7 @@ const SALE_ROUNDS = [
       reservedDeliveryAddresses: 1,
       reservedItemQuantity: 2,
       orderedDeliveryAddresses: 6,
-      orderedItemQuantity: 11,
+      orderedItemQuantity: 16,
       heldOrderCount: 1,
     },
   ),
@@ -165,7 +165,9 @@ const SALE_ROUNDS = [
     { orderedDeliveryAddresses: 15, orderedItemQuantity: 27 },
   ),
 ];
-const ROUND_ORDERED = [4, 5, 2];
+// 판매 중 회차의 상품별 확정 수량. 두 번째 상품은 한도(10개)를 채워 API가 공개 조회에서
+// 계산해 주는 품절(SOLD_OUT) 화면을 확인한다.
+const ROUND_ORDERED = [4, 10, 2];
 function roundItems(round) {
   return PRODUCTS.map((product, i) => ({
     id: `${round.id}-item-${i + 1}`,
@@ -179,7 +181,7 @@ function roundItems(round) {
     reservedQuantity: 0,
     orderedQuantity: round.status === 'OPEN' ? ROUND_ORDERED[i] : 0,
     displayOrder: i,
-    status: 'ACTIVE',
+    status: round.status === 'OPEN' && ROUND_ORDERED[i] >= 10 ? 'SOLD_OUT' : 'ACTIVE',
     createdAt: round.createdAt,
     updatedAt: round.updatedAt,
   }));
@@ -455,6 +457,13 @@ export const screens = [
     group: '둘러보기',
     title: '상품 상세 · 진행 중 회차',
     path: '/products/product-1?round=round-open',
+    auth: false,
+  },
+  {
+    id: 'product-round-soldout',
+    group: '둘러보기',
+    title: '상품 · 회차 품절',
+    path: '/products/product-2?round=round-open',
     auth: false,
   },
   {

@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { JwtStrategy } from './jwt.strategy';
 
@@ -113,5 +113,68 @@ describe('JwtStrategy driver 승인 경계', () => {
     await expect(
       strategy.validate({ sub: 'seller-1', role: 'seller', storeId: 'store-1' }),
     ).resolves.toEqual({ sub: 'seller-1', role: 'seller', storeId: 'store-1' });
+  });
+});
+
+describe('JwtStrategy 세션 폐기 시각(sessionsRevokedAt)', () => {
+  function revokedAt(millis: number) {
+    return { toMillis: () => millis };
+  }
+
+  function consumer(extra: Record<string, unknown> = {}) {
+    return { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false, ...extra };
+  }
+
+  it('폐기 기록이 없으면 iat와 관계없이 통과한다', async () => {
+    const { strategy } = makeStrategy(consumer());
+
+    await expect(
+      strategy.validate({ sub: 'consumer-1', role: 'consumer', iat: 1_000 }),
+    ).resolves.toEqual({ sub: 'consumer-1', role: 'consumer' });
+  });
+
+  it('폐기 시각 이전에 발급된 access token은 만료 전이어도 401로 거부한다', async () => {
+    const { strategy } = makeStrategy(
+      consumer({ sessionsRevokedAt: revokedAt(1_700_000_000_000) }),
+    );
+
+    await expect(
+      strategy.validate({ sub: 'consumer-1', role: 'consumer', iat: 1_699_999_999 }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('로그아웃과 같은 초에 새로 로그인해 받은 토큰은 통과한다(기록 시각은 초 단위로 내림)', async () => {
+    // 로그아웃 시각 1_700_000_000_700ms → 기록 1_700_000_000_000ms. 같은 초의 새 토큰 iat=1_700_000_000.
+    const { strategy } = makeStrategy(
+      consumer({ sessionsRevokedAt: revokedAt(1_700_000_000_000) }),
+    );
+
+    await expect(
+      strategy.validate({ sub: 'consumer-1', role: 'consumer', iat: 1_700_000_000 }),
+    ).resolves.toEqual({ sub: 'consumer-1', role: 'consumer' });
+    await expect(
+      strategy.validate({ sub: 'consumer-1', role: 'consumer', iat: 1_700_000_001 }),
+    ).resolves.toEqual({ sub: 'consumer-1', role: 'consumer' });
+  });
+
+  it.each([
+    ['iat 없는 토큰', consumer({ sessionsRevokedAt: revokedAt(1_700_000_000_000) }), undefined],
+    ['형식을 알 수 없는 폐기 기록', consumer({ sessionsRevokedAt: '2026-10-12' }), 1_800_000_000],
+  ])('%s은 폐기 기록이 있으면 거부한다', async (_label, user, iat) => {
+    const { strategy } = makeStrategy(user);
+
+    await expect(
+      strategy.validate({ sub: 'consumer-1', role: 'consumer', iat } as never),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('정지는 폐기 시각보다 먼저 403으로 거부한다(기존 응답 유지)', async () => {
+    const { strategy } = makeStrategy(
+      consumer({ suspended: true, sessionsRevokedAt: revokedAt(1_700_000_000_000) }),
+    );
+
+    await expect(
+      strategy.validate({ sub: 'consumer-1', role: 'consumer', iat: 1_600_000_000 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

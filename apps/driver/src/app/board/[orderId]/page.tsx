@@ -17,9 +17,10 @@ import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { apiFetch, apiRead } from '@/lib/api';
 import { isApiTimeoutError } from '@/lib/api-timeout';
-import { orderItemsLabel } from '@/lib/order-quantity';
+import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
+import { buildOrderMapLink } from '../../map/_lib/map-navigation-link';
 import {
   buildDriverOrderDetailScope,
   classifyDriverOrderCommandError,
@@ -61,6 +62,7 @@ type Order = {
   hubAddress?: string;
   productName?: string;
   quantity?: number;
+  items?: DriverOrderItem[];
   preparedAt?: string | null;
   updatedAt?: string | null;
   sellerPhone?: string;
@@ -145,7 +147,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       setReadError(null);
       let readback: DriverOrderReadback;
       try {
-        const response = await apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+        const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token);
         if (!isCurrent()) return { kind: 'stale' };
         if (!response.ok) {
           const failure = toDriverOrderReadError(response.status);
@@ -291,7 +293,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       const result = resolveDriverStatusCommandReadback({ requestedStatus: status, readback });
       if (result === 'APPLIED') {
         notifications.show({ message: STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE });
-        if (isDriverTerminalCommandStatus(status)) router.replace('/board?tab=preparing');
+        if (isDriverTerminalCommandStatus(status)) router.replace('/board?tab=delivering');
         return;
       }
       if (result === 'LEFT_DRIVER_SCOPE') {
@@ -300,7 +302,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           color: 'yellow',
           message: STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE,
         });
-        router.replace('/board?tab=preparing');
+        router.replace('/board?tab=delivering');
         return;
       }
       if (result === 'NOT_APPLIED') {
@@ -414,7 +416,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       const isTerminal = status === 'DELIVERED' || status === 'HUB_ARRIVED';
       // ACK 성공 직후 local 합성 없이 authoritative GET으로 수렴한다. 자동 resend는 하지 않는다.
       try {
-        const reread = await apiFetch(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+        const reread = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token);
         if (!isCommandCurrent()) return;
         if (!reread.ok) throw toDriverOrderReadError(reread.status);
         const fresh = (await reread.json()) as Order;
@@ -451,7 +453,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       }
       if (isTerminal) {
         if (!isCommandCurrent()) return;
-        router.replace('/board?tab=preparing');
+        router.replace('/board?tab=delivering');
       }
     } catch (cause: unknown) {
       // H: network/transport error·시간 초과 등 PATCH ACK-uncertain. 같은 PATCH를 자동 재전송하지
@@ -471,6 +473,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       // 409 convergence return, readback 분기 return, throw 모두 여기를 거친다.
       // 이전 command의 finally가 새 scope의 command/loading 상태를 덮지 않도록
       // 동일 generation + 동일 scope일 때만 해제한다.
+      // biome-ignore lint/correctness/noUnsafeFinally: 지난 명령의 오류는 새 화면 상태로 올리지 않고 여기서 끝낸다.
       if (!isCommandCurrent()) return;
       inFlightRef.current = false;
       setLoading(false);
@@ -540,10 +543,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const isPreparing = order.status === 'PREPARING';
   const isHeld = order.status === 'DELIVERY_HELD';
   const isHub = order.deliveryMethod === 'hub';
+  // 소비자 이름은 넣지 않고 주소(거점은 거점 주소)만으로 외부 지도 링크를 만든다.
+  const mapLink = buildOrderMapLink({
+    deliveryMethod: order.deliveryMethod,
+    // 상세 주소(동·호수)가 붙지 않은 기본 주소가 있으면 그것으로 검색한다.
+    address: order.deliveryAddress?.address ?? order.address,
+    hubName: order.hubName,
+    hubAddress: order.hubAddress,
+  });
   const isRoundDirect =
     order.schemaVersion === 2 && Boolean(order.roundId) && order.deliveryMethod === 'direct';
   const paymentPresentation = getRedeliveryPaymentPresentation(order.redeliveryPayment);
   const deliveryStartAllowed = isDeliveryStartAllowed(order.redeliveryPayment);
+  const itemLines = orderItemLines(order.items);
   // 서버가 반드시 허용하는 상태(본인 배정 DELIVERING)에서만 보류 진입을 노출한다.
   const holdEntryVisible = isDriverHoldEntryVisible({ status: order.status, isRoundDirect });
   // stale FETCH_ERROR 또는 readback 미확인 상태의 order는 최신 authoritative state가 아니다.
@@ -699,10 +711,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
               >
                 주문 정보
               </Text>
-              <InfoRow
-                label="상품"
-                value={orderItemsLabel(order.productName, order.quantity)}
-              />
+              {itemLines ? (
+                <InfoLinesRow label="상품" lines={itemLines} />
+              ) : (
+                <InfoRow label="상품" value={orderItemsLabel(order.productName, order.quantity)} />
+              )}
               {isPreparing && <InfoRow label="수거 예정" value={preparedAtStr} />}
               {isHub ? (
                 <>
@@ -714,6 +727,19 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                   label="배송지"
                   value={order.address ?? order.deliveryAddress?.address ?? '-'}
                 />
+              )}
+              {mapLink && (
+                <Button
+                  component="a"
+                  href={mapLink.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  variant="light"
+                  size="sm"
+                  fullWidth
+                >
+                  카카오맵에서 {mapLink.kind === 'route' ? '길찾기' : '주소 보기'}
+                </Button>
               )}
               {isPreparing && <InfoRow label="소비자" value={order.buyerName ?? '-'} />}
               {order.requestNote?.trim() && (
@@ -1020,6 +1046,29 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       >
         {value}
       </Text>
+    </Group>
+  );
+}
+
+// 여러 줄 값(상품별 줄 등)을 InfoRow와 같은 모양으로 한 줄씩 보인다.
+function InfoLinesRow({ label, lines }: { label: string; lines: string[] }) {
+  return (
+    <Group justify="space-between" align="flex-start">
+      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        {label}
+      </Text>{' '}
+      <Stack gap={2} style={{ maxWidth: '60%' }}>
+        {lines.map((line, index) => (
+          <Text
+            // biome-ignore lint/suspicious/noArrayIndexKey: 줄은 받은 순서 그대로 고정 — reorder 없음
+            key={index}
+            style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
+            ta="right"
+          >
+            {line}
+          </Text>
+        ))}
+      </Stack>
     </Group>
   );
 }

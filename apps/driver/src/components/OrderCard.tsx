@@ -2,7 +2,7 @@ import type { Order } from '@greenhub/shared';
 import { Badge, Card, Group, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
 import { getRedeliveryPaymentPresentation } from '@/app/board/_lib/redelivery-payment';
-import { orderItemsLabel } from '@/lib/order-quantity';
+import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
 
 const METHOD_BADGE: Record<string, { label: string; color: string }> = {
   direct: { label: '직배송', color: 'brand' },
@@ -20,9 +20,16 @@ function formatTime(value?: string | null) {
   });
 }
 
-export default function OrderCard({ order, tab }: { order: Order; tab: string }) {
+export default function OrderCard({
+  order,
+  tab,
+}: {
+  order: Order & { items?: DriverOrderItem[] };
+  tab: string;
+}) {
   const badge = METHOD_BADGE[order.deliveryMethod] ?? METHOD_BADGE.direct;
   const payment = getRedeliveryPaymentPresentation(order.redeliveryPayment);
+  const itemLines = orderItemLines(order.items);
   const displayAddress =
     order.deliveryMethod === 'hub' ? (order.hubAddress ?? '-') : (order.address ?? '-');
   const displayLocation =
@@ -72,11 +79,23 @@ export default function OrderCard({ order, tab }: { order: Order; tab: string })
         >
           {displayLocation}
         </Text>
-        {order.productName && (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            {orderItemsLabel(order.productName, order.quantity)}
-          </Text>
-        )}
+        {itemLines
+          ? itemLines.map((line, index) => (
+              <Text
+                // biome-ignore lint/suspicious/noArrayIndexKey: 주문 상품 줄은 응답 순서 그대로 고정 — reorder 없음
+                key={index}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
+                {line}
+              </Text>
+            ))
+          : order.productName && (
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
+                {orderItemsLabel(order.productName, order.quantity)}
+              </Text>
+            )}
         {payment && (
           <Text
             style={{

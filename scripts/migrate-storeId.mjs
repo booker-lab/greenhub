@@ -4,6 +4,7 @@
  * 실행: node scripts/migrate-storeId.mjs
  */
 import { initializeApp, cert } from 'firebase-admin/app'
+import { assertProductionWriteAllowed } from './production-write-guard.mjs'
 import { getFirestore } from 'firebase-admin/firestore'
 import { createRequire } from 'module'
 import { fileURLToPath } from 'url'
@@ -12,6 +13,7 @@ import { dirname, join } from 'path'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
 const serviceAccount = require(join(__dirname, '../apps/api/firebase-adminsdk.json'))
+assertProductionWriteAllowed(serviceAccount, { script: 'migrate-storeId.mjs' })
 
 const OLD_STORE_ID = 'dear-orchid'
 const NEW_STORE_ID = 'eaa96b06-60f6-4a03-a1af-bea3ad6604c6'

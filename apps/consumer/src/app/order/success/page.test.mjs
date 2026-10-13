@@ -29,6 +29,19 @@ new Function(
   }).outputText,
 )(redirectModule, redirectModule.exports);
 
+const cancelReasonSource = await readFile(
+  new URL('../../../lib/order-cancel-reason.ts', import.meta.url),
+  'utf8',
+);
+const cancelReasonModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(cancelReasonSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(cancelReasonModule, cancelReasonModule.exports);
+
 const pageModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -40,6 +53,7 @@ const requireForTest = (specifier) => {
     };
   }
   if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
+  if (specifier === '@/lib/order-cancel-reason') return cancelReasonModule.exports;
   if (specifier === '@/hooks/useCart') return { useCart: () => ({ removeRoundItems: () => {} }) };
   if (specifier === 'react/jsx-runtime') {
     return { Fragment: Symbol('Fragment'), jsx: () => null, jsxs: () => null };
@@ -240,4 +254,21 @@ test('리다이렉트 실패 복귀는 성공 화면 대신 실패 안내와 재
   assert.match(source, /removeItem\('checkout_cart'\)/);
   // 복귀 쿼리가 있으면 orderId가 없어도 홈으로 보내지 않는다.
   assert.match(source, /if \(!orderId && !redirectSearch\) router\.replace\('\/'\)/);
+});
+
+test('결제 취소 사유는 내부 코드 대신 고객이 읽을 문장으로 보인다', () => {
+  assert.match(source, /import \{ formatCancelReason \} from '@\/lib\/order-cancel-reason'/);
+  assert.match(
+    source,
+    /formatCancelReason\(validOrder\.cancelReason\) \?\? '결제 처리 중 오류가 발생했습니다\.'/,
+  );
+  assert.doesNotMatch(source, /\? validOrder\.cancelReason/);
+});
+
+test('결제 확인 자동 갱신이 멈추면 늦어진다는 안내와 다시 확인 버튼을 보인다', () => {
+  assert.match(source, /pollingExpired, refetch \} = useOrderStatus\(/);
+  assert.match(source, /isPending && pollingExpired/);
+  assert.match(source, /결제 확인이 늦어지고 있어요\. 잠시 후 다시 확인해 주세요\./);
+  assert.match(source, /onClick=\{\(\) => void refetch\(\)\}/);
+  assert.match(source, /다시 확인/);
 });

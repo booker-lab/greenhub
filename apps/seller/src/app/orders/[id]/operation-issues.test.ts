@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   getAllowedOperationAction,
+  ISSUE_DESCRIPTIONS,
+  ISSUE_LABELS,
   readOperationIssue,
   readOperationIssueList,
+  readStoreOperationIssueList,
 } from './operation-issues';
 
 const baseIssue = {
@@ -109,5 +112,89 @@ describe('주문 상세 운영 예외 계약', () => {
       status: 'FAILED',
       failureReason: '환불 제공자 일시 오류',
     });
+  });
+});
+
+describe('가게 전체 운영 기록 목록', () => {
+  it('같은 가게의 기록을 열린 기록·critical 우선·최근 순으로 읽고 다른 가게 기록은 버린다', () => {
+    const issues = readStoreOperationIssueList(
+      {
+        items: [
+          {
+            ...baseIssue,
+            id: 'resolved',
+            status: 'RESOLVED',
+            updatedAt: '2026-07-19T00:00:00.000Z',
+          },
+          { ...baseIssue, id: 'warning-new', updatedAt: '2026-07-18T05:00:00.000Z' },
+          {
+            ...baseIssue,
+            id: 'critical-old',
+            type: 'FINALIZATION_REFUND_FAILED',
+            severity: 'critical',
+            updatedAt: '2026-07-18T01:00:00.000Z',
+          },
+          { ...baseIssue, id: 'other-store', storeId: 'store-2' },
+        ],
+      },
+      'store-1',
+    );
+    expect(issues.map((issue) => issue.id)).toEqual(['critical-old', 'warning-new', 'resolved']);
+  });
+
+  it('서버가 critical로 남기는 결과 불명확 기록 유형을 걸러내지 않는다', () => {
+    for (const type of ['FINALIZATION_REFUND_FAILED', 'DELIVERY_PHOTO_RECONCILIATION_REQUIRED']) {
+      const issue = requireIssue({ ...baseIssue, type, severity: 'critical' });
+      expect(issue.type).toBe(type);
+      expect(ISSUE_LABELS[issue.type]).toBeTruthy();
+      expect(getAllowedOperationAction(issue)).toBeNull();
+    }
+  });
+
+  it('결제사 취소·분쟁 기록을 읽어 이름을 붙이고 결제사·정산 상태만 보존한다', () => {
+    const issues = readStoreOperationIssueList(
+      {
+        items: [
+          { ...baseIssue, id: 'warning-new', updatedAt: '2026-07-18T05:00:00.000Z' },
+          {
+            ...baseIssue,
+            id: 'reversal',
+            type: 'PROVIDER_REVERSAL_DETECTED',
+            severity: 'critical',
+            updatedAt: '2026-07-18T01:00:00.000Z',
+            latestSnapshot: {
+              orderStatus: 'ACCEPTED',
+              paymentStatus: 'PAID',
+              providerStatus: 'CANCELLED',
+              providerEvent: 'Transaction.Cancelled',
+              settlementStatus: 'confirmed',
+              failureStage: 'provider_reversal',
+              phone: '010-0000-0000',
+            },
+          },
+        ],
+      },
+      'store-1',
+    );
+
+    expect(issues.map((issue) => issue.id)).toEqual(['reversal', 'warning-new']);
+    const reversal = issues[0];
+    expect(reversal?.type).toBe('PROVIDER_REVERSAL_DETECTED');
+    expect(ISSUE_LABELS.PROVIDER_REVERSAL_DETECTED).toBe('결제사 취소·분쟁 확인');
+    expect(ISSUE_DESCRIPTIONS.PROVIDER_REVERSAL_DETECTED).toContain('PortOne');
+    expect(reversal?.latestSnapshot).toMatchObject({
+      orderStatus: 'ACCEPTED',
+      paymentStatus: 'PAID',
+      providerStatus: 'CANCELLED',
+      providerEvent: 'Transaction.Cancelled',
+      settlementStatus: 'confirmed',
+      failureStage: 'provider_reversal',
+    });
+    expect(reversal?.latestSnapshot).not.toHaveProperty('phone');
+    if (reversal) expect(getAllowedOperationAction(reversal)).toBeNull();
+  });
+
+  it('응답 모양이 다르면 빈 목록으로 위장하지 않는다', () => {
+    expect(() => readStoreOperationIssueList({ issues: [] }, 'store-1')).toThrow();
   });
 });

@@ -24,7 +24,7 @@ env 존재로 무영향 — 환경변수 조치는 불필요로 확정됐다.
 
 | 항목 | 범위 | 필요한 사용자 입력 |
 |------|------|--------------------|
-| **P3 consumer@test.com 강한비번 전환** | Firebase Auth 비번 교체 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 갱신 + e2e 풀런 검증 | `feedback_security_convenience`(편의 우선 — test1234 재사용) 결정과 충돌 → 전환 여부 재확인 필요 |
+| **P3 <TEST_CONSUMER_EMAIL> 강한비번 전환** | Firebase Auth 비번 교체 + `apps/e2e/.env`·repo Secret `TEST_CONSUMER_PASSWORD` 갱신 + e2e 풀런 검증 | `feedback_security_convenience` 결정과 충돌 → 전환 여부 재확인 필요 |
 
 ### 🟠 조건부 / 다른 작업 의존 (단독 착수 비권장)
 
@@ -48,7 +48,7 @@ env 존재로 무영향 — 환경변수 조치는 불필요로 확정됐다.
 
 ## P3 잔여 (BACKLOG §12-2 참조)
 
-- [ ] consumer@test.com 강한비번 전환 — 현재 test1234(편의 결정). 보안 follow-up. **착수 전 사용자 재확인.**
+- [ ] <TEST_CONSUMER_EMAIL> 강한비번 전환 — 보안 follow-up. 자격증명은 저장소 밖에서 관리. **착수 전 사용자 재확인.**
 - [ ] `useOrderActions` 훅 통합 — detail/OrderCard 시그니처 불일치. UI 리팩토링 사이클에서.
 - [ ] G1 `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 신규 구현.
 - [ ] Driver Kakao Maps SDK 연동.

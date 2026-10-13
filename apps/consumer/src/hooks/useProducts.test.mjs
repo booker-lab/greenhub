@@ -117,11 +117,19 @@ function mountHook({ fetchImpl, initialArgs = [] }) {
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => API_BASE_URL };
     }
-    if (specifier === 'firebase/firestore') {
-      return { doc: () => ({}), getDoc: async () => ({ exists: () => false, data: () => ({}) }) };
+    if (specifier === '@/lib/public-store-profile') {
+      // useProducts 목록 조회는 스토어 프로필을 읽지 않는다. 호출되면 계약 위반이다.
+      return {
+        PublicStoreProfileNotFoundError: class PublicStoreProfileNotFoundError extends Error {},
+        fetchPublicStoreProfile: async () => {
+          throw new Error('useProducts 목록 조회가 스토어 프로필을 요청했습니다.');
+        },
+      };
     }
-    if (specifier === '@/lib/firebase') {
-      return { db: {} };
+    if (specifier === '@/lib/shared-request') {
+      // 요청 공유는 lib/shared-request.test.mjs가 검증한다. 여기서는 매번 그대로 보내
+      // 훅의 요청 순서·stale 응답 규칙만 본다.
+      return { sharedRequest: (_key, load) => Promise.resolve().then(load) };
     }
     if (specifier === '@greenhub/shared') return {};
     throw new Error(`예상하지 못한 상품 조회 모듈 요청: ${specifier}`);

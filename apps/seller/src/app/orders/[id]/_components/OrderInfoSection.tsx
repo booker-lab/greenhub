@@ -3,7 +3,7 @@
 import type { GroupProductConfig, Order } from '@greenhub/shared';
 import { Badge, Box, Group, Paper, Stack, Text } from '@mantine/core';
 import { DELIVERY_LABEL, STATUS_COLOR, STATUS_LABEL } from '../../_constants';
-import { formatDeadlineCountdown, toDate } from '../_lib';
+import { formatDeadlineCountdown, resolveOrderItemLines, toDate } from '../_lib';
 import { CustomerInfoSection } from './CustomerInfoSection';
 import { Row } from './OrderRow';
 
@@ -14,6 +14,8 @@ interface OrderInfoSectionProps {
 }
 
 export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoSectionProps) {
+  const itemLines = resolveOrderItemLines(order);
+
   return (
     <>
       <Paper radius="lg" shadow="xs" p="md">
@@ -64,8 +66,49 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           상품 정보
         </Text>
         <Stack gap={6}>
-          <Row label="상품명" value={productName ?? order.productId} />
-          <Row label="수량" value={`${order.quantity}개`} />
+          {itemLines ? (
+            <>
+              {/* 포장할 상품 — 상품마다 한 줄씩 "상품명 × 수량" */}
+              {itemLines.map((line) => (
+                <Group
+                  key={line.key}
+                  justify="space-between"
+                  align="flex-start"
+                  gap="xs"
+                  wrap="nowrap"
+                >
+                  <Text
+                    style={{
+                      minWidth: 0,
+                      wordBreak: 'break-word',
+                      fontSize: 'var(--font-size-sm)',
+                      fontWeight: 'var(--fw-medium)',
+                      color: 'var(--color-text)',
+                    }}
+                  >
+                    {line.productName} × {line.quantity}
+                  </Text>
+                  {line.subtotalAmount !== null && (
+                    <Text
+                      style={{
+                        flexShrink: 0,
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-secondary)',
+                      }}
+                    >
+                      ₩{line.subtotalAmount.toLocaleString()}
+                    </Text>
+                  )}
+                </Group>
+              ))}
+              <Row label="총 수량" value={`${order.quantity}개`} />
+            </>
+          ) : (
+            <>
+              <Row label="상품명" value={productName ?? order.productId} />
+              <Row label="수량" value={`${order.quantity}개`} />
+            </>
+          )}
           <Row
             label="상품 금액"
             value={`₩${(order.totalAmount - order.deliveryFee).toLocaleString()}`}

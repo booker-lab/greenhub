@@ -526,6 +526,7 @@ describe('admin CONFIRMED group forceRefund restoration', () => {
       orderId: 'order-1',
       expectedStatus: 'CONFIRMED',
       reason: '관리자 사유',
+      customerNotice: 'ADMIN_REFUND',
     });
     expect(context.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(context.memory.read('groupProductConfig/product-1')).toMatchObject({

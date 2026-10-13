@@ -81,7 +81,7 @@ NextAuth API route cold start가 set-cookie 누락의 또 다른 원인일 가�
 - `/admin/banner` prerender 실패 — Vercel admin/seller Firebase env 점검·추가·재배포.
 - G1 `apps/seller/src/app/hubs/[id]/page.tsx` 거점 수정 페이지 신규 구현.
 - Driver Kakao Maps SDK 연동.
-- consumer@test.com 강한비번 전환 (현재 test1234 — 편의 결정, 보안 follow-up).
+- <TEST_CONSUMER_EMAIL> 강한비번 전환 (보안 follow-up. 자격증명은 저장소 밖에서 관리).
 
 ---
 

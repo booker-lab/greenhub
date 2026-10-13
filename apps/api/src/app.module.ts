@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './admin/admin.module';
@@ -9,12 +9,14 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { AuditModule } from './common/audit/audit.module';
+import { FirestoreRetryableErrorFilter } from './common/filters/firestore-retryable-error.filter';
 import { shouldEnableScheduledJobs, validateRuntimeConfig, isApiUnitTestEnv } from './config/runtime-config';
 import { DriverModule } from './driver/driver.module';
 import { FirestoreModule } from './firestore/firestore.module';
 import { HubsModule } from './hubs/hubs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OperationsModule } from './operations/operations.module';
+import { OpsAlertModule } from './ops-alerts/ops-alert.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ProductsModule } from './products/products.module';
@@ -35,7 +37,11 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
 
 @Module({
   controllers: [AppController],
-  providers: [AppService, { provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [
+    AppService,
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_FILTER, useClass: FirestoreRetryableErrorFilter },
+  ],
 
   imports: [
     configModule,
@@ -47,8 +53,10 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
     // 라우트까지 10/분으로 묶인다 (P2-A 계측 발견 — #CL-30).
     ThrottlerModule.forRoot({
       throttlers: [{ name: 'default', ttl: 60000, limit: 100 }],
+      errorMessage: '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.',
     }),
     FirestoreModule,
+    OpsAlertModule,
     AuditModule,
     AuthModule,
     ProductsModule,

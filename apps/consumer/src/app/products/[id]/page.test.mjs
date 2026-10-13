@@ -15,7 +15,7 @@ test('round 쿼리는 단일 문자열만 허용하고 임의 기본 회차를 �
 test('공개 상품 storeId와 공개 스토어 salesMode로 상세 경로를 분기한다', () => {
   assert.match(source, /fetch\(`\$\{API_URL\}\/products\/\$\{encodeURIComponent\(id\)\}`/);
   assert.match(source, /product\.storeId/);
-  assert.match(source, /getDoc\(doc\(db, 'stores', storeId\)\)/);
+  assert.match(source, /fetchPublicStoreProfile\(storeId\)/);
   assert.match(source, /normalizeSalesMode/);
   assert.match(source, /salesMode !== 'round_direct'/);
 });
@@ -60,9 +60,27 @@ test('판매 모드와 회차 확인 전에는 상세 본문을 노출하지 않
     source,
     /<ProductImages images=\{product\.images \?\? \[\]\} name=\{product\.name\} \/>/,
   );
-  assert.match(source, /<ProductInfo product=\{product\} variety=\{variety\} \/>/);
+  // legacy(roundProduct=null)에서는 상품 정보 요약을 그대로 보인다.
+  assert.match(
+    source,
+    /<ProductInfo product=\{product\} variety=\{variety\} showSummary=\{!roundProduct\} \/>/,
+  );
   assert.match(source, /<ProductActions product=\{product\} \/>/);
-  assert.doesNotMatch(source, /router\.(?:push|replace)/);
+
+  // 상세 진입·판매 모드 분기·legacy 본문은 다른 경로로 이동하지 않는다.
+  // 유일한 이동은 round_direct 상세가 같은 경로에 연결 회차 쿼리를 남기는 replace다.
+  const pageStart = source.indexOf('export default function ProductDetailPage');
+  const contentStart = source.indexOf('function ProductDetailContent(');
+  const contentEnd = source.indexOf('function RoundDirectProductDetail(', contentStart);
+  assert.ok(pageStart >= 0 && contentStart >= 0 && contentEnd > contentStart);
+  assert.doesNotMatch(source.slice(pageStart), /router\.(?:push|replace)/);
+  assert.doesNotMatch(source.slice(contentStart, contentEnd), /router\.(?:push|replace)/);
+  const navigations = source.match(/router\.(?:push|replace)\(/g) ?? [];
+  assert.equal(navigations.length, 1);
+  assert.match(
+    source,
+    /router\.replace\(`\$\{pathname\}\?\$\{query\.toString\(\)\}`, \{ scroll: false \}\)/,
+  );
 });
 
 test('상품 상세 mount는 기존 당근 유입 캡처 함수를 호출한다', () => {

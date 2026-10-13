@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { BadRequestException, Injectable, Optional } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
+import { isOrderCancelledOrCancelling } from '../orders/order-cancellation-state';
 import {
   isCurrentRedeliveryChargeLinked,
   isCurrentRedeliveryPaymentRequired,
@@ -13,12 +19,17 @@ type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 const PAYMENT_ID_PREFIX = 'order-charge-';
 const REFUND_CLAIM_MS = 5 * 60 * 1000;
 const REFUND_OWNER = 'order-charge-refund';
+const CANCELLED_ORDER_CHARGE_REFUND_REASON = '주문 취소에 따른 재배송비 환불';
+const UNNEEDED_CHARGE_REFUND_REASON = '재배송이 필요 없어진 재배송비 결제 환불';
+// 재배송비 결제가 실제로 필요한 주문 상태(보류 중이거나 결제 후 재개 대기).
+const CHARGE_PAYABLE_ORDER_STATUSES = ['DELIVERY_HELD', 'PREPARING'];
 
 type ChargeRefundClaimStatus = 'CLAIMED' | 'UNKNOWN';
 
 type ChargeRefundPayload = {
   chargeId: string;
   orderId: string;
+  storeId: string;
   portonePaymentId: string;
   amount: number;
 };
@@ -27,7 +38,12 @@ type ChargeRefundClaimOutcome =
   | { outcome: 'claimed_fresh'; token: string; providerKey: string; payload: ChargeRefundPayload }
   | { outcome: 'claimed_retry'; token: string; providerKey: string; payload: ChargeRefundPayload }
   | { outcome: 'already_handled' }
+  // 다른 시도가 아직 만료되지 않은 CLAIMED claim을 쥐고 있고 환불은 끝나지 않았다.
+  | { outcome: 'claim_in_flight' }
   | { outcome: 'doc_missing' };
+
+// 환불 시도 결과. claim_in_flight는 다른 시도가 claim을 쥔 채 환불을 끝내지 않은 상태다.
+type ChargeRefundRunResult = 'handled' | 'claim_in_flight';
 
 @Injectable()
 export class OrderChargePaymentService {
@@ -64,20 +80,42 @@ export class OrderChargePaymentService {
   }
 
   private async finalizePaid(chargeId: string, paymentId: string, paymentData: PaymentData) {
+    const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
     // Retry purity: the post-transaction decision must come only from the
     // committed attempt's return value. An outer `let result` would leak an
     // aborted attempt's decision across OCC retry.
-    const result: Record<string, unknown> =
+    const result: Record<string, unknown> & { refundReason?: string } =
       await this.firestore.runTransaction(async (tx) => {
-        const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
         const chargeSnap = await tx.get(chargeRef);
         if (!chargeSnap.exists) return { ok: false, reason: 'charge_not_found' };
         const charge = chargeSnap.data() as Record<string, any>;
-        if (charge['status'] === 'PAID') {
+        // 이미 환불까지 끝난 결제의 Transaction.Paid 재전송은 처리 완료로 답해
+        // PortOne이 재시도를 멈추게 한다.
+        if (charge['status'] === 'REFUNDED' || charge['refundedAt']) {
           return { ok: true, reason: 'already_processed' };
         }
+        if (charge['status'] === 'PAID') {
+          // A PAID charge on a cancelled/cancelling order must not stay
+          // captured; a redelivered webhook resumes the claim-based refund.
+          const paidOrderSnap = await tx.get(this.firestore.doc(`orders/${charge['orderId']}`));
+          const paidOrder = paidOrderSnap.exists
+            ? (paidOrderSnap.data() as Record<string, any>)
+            : undefined;
+          // 필요 없어진 결제로 기록된 청구도 환불이 끝날 때까지 웹훅 재전송이 환불을 이어 간다.
+          if (isOrderCancelledOrCancelling(paidOrder)) {
+            return {
+              ok: true,
+              reason: 'already_processed',
+              refundReason: CANCELLED_ORDER_CHARGE_REFUND_REASON,
+            };
+          }
+          return charge['unneededPaidAt']
+            ? { ok: true, reason: 'already_processed', refundReason: UNNEEDED_CHARGE_REFUND_REASON }
+            : { ok: true, reason: 'already_processed' };
+        }
+        // 실패 웹훅이 먼저 와 FAILED가 된 청구도 PortOne이 PAID를 확정하면 실제 결제다.
         if (
-          charge['status'] !== 'PENDING' ||
+          !['PENDING', 'FAILED'].includes(charge['status']) ||
           charge['type'] !== 'REDELIVERY_FEE' ||
           charge['portonePaymentId'] !== paymentId ||
           paymentData.status !== 'PAID' ||
@@ -88,8 +126,33 @@ export class OrderChargePaymentService {
 
         const orderSnap = await tx.get(this.firestore.doc(`orders/${charge['orderId']}`));
         const order = orderSnap.data() as Record<string, any> | undefined;
+        if (orderSnap.exists && order?.['storeId'] !== charge['storeId']) {
+          throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
+        }
+        const now = this.firestore.Timestamp.now();
+        const paidUpdate = {
+          status: 'PAID',
+          portoneTransactionId: paymentData.transactionId,
+          payMethod: paymentData.method?.type ?? null,
+          paidAt: now,
+          failedAt: null,
+          updatedAt: now,
+        };
+        if (isOrderCancelledOrCancelling(order)) {
+          // The customer completed payment after the order was cancelled (or
+          // while cancellation is in progress). Record the provider-confirmed
+          // payment and refund it instead of applying it to a cancelled order.
+          tx.update(chargeRef, paidUpdate);
+          return {
+            ok: true,
+            status: 'PAID',
+            reason: 'cancelled_order_refund',
+            refundReason: CANCELLED_ORDER_CHARGE_REFUND_REASON,
+          };
+        }
         if (
           !orderSnap.exists ||
+          !CHARGE_PAYABLE_ORDER_STATUSES.includes(order?.['status']) ||
           !isCurrentRedeliveryPaymentRequired({ ...order, id: charge['orderId'] }) ||
           !isCurrentRedeliveryChargeLinked(
             { ...order, id: charge['orderId'] },
@@ -97,20 +160,32 @@ export class OrderChargePaymentService {
             chargeId,
           )
         ) {
-          throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
+          // 승인된 돈인데 현재 보류에 필요 없는 결제다(주문 없음·보류 해소·다른 보류로 교체·배송 재개 뒤).
+          // 400으로 끝내면 결제만 되고 기록·환불이 남지 않으므로 결제를 기록하고 환불한다.
+          tx.update(chargeRef, { ...paidUpdate, unneededPaidAt: now });
+          return {
+            ok: true,
+            status: 'PAID',
+            reason: 'unneeded_charge_refund',
+            refundReason: UNNEEDED_CHARGE_REFUND_REASON,
+          };
         }
-        const now = this.firestore.Timestamp.now();
-        tx.update(chargeRef, {
-          status: 'PAID',
-          portoneTransactionId: paymentData.transactionId,
-          payMethod: paymentData.method?.type ?? null,
-          paidAt: now,
-          failedAt: null,
-          updatedAt: now,
-        });
+        tx.update(chargeRef, paidUpdate);
         return { ok: true, status: 'PAID' };
       });
-    return result;
+    const { refundReason, ...response } = result;
+    if (refundReason) {
+      const refund = await this.refundCharge(chargeRef, refundReason);
+      if (refund === 'claim_in_flight') {
+        // 다른 시도가 claim을 잡은 뒤 환불 POST나 UNKNOWN 기록 전에 멈췄을 수 있다.
+        // 취소 주문·필요 없어진 PAID 재배송비를 다시 훑는 다른 경로는 없으므로 200으로 끝내지 않고
+        // 재시도 가능한 응답을 준다. PortOne 재전송이 claim 만료 뒤 takeover로 환불을 끝낸다.
+        throw new ServiceUnavailableException(
+          '재배송비 환불이 아직 끝나지 않았습니다. 잠시 후 다시 시도해 주세요.',
+        );
+      }
+    }
+    return response;
   }
 
   private async markFailed(chargeId: string, paymentId: string) {
@@ -136,7 +211,7 @@ export class OrderChargePaymentService {
     return result;
   }
 
-  private async refundCharge(chargeRef: any, reason: string) {
+  private async refundCharge(chargeRef: any, reason: string): Promise<ChargeRefundRunResult> {
     const token = randomUUID();
     // Retry purity: only the committed attempt's return value may authorize
     // the provider refund. An outer `let claimed` would leak an aborted
@@ -178,6 +253,7 @@ export class OrderChargePaymentService {
             payload: {
               chargeId: String(charge['id'] ?? chargeRef.id ?? chargeRef.path ?? ''),
               orderId: String(charge['orderId'] ?? ''),
+              storeId: String(charge['storeId'] ?? ''),
               portonePaymentId: charge['portonePaymentId'],
               amount: charge['amount'],
             },
@@ -185,7 +261,7 @@ export class OrderChargePaymentService {
         }
         if (marker.owner !== REFUND_OWNER) return { outcome: 'already_handled' };
         if (marker.status === 'CLAIMED' && marker.expiresAt > Date.now()) {
-          return { outcome: 'already_handled' };
+          return { outcome: 'claim_in_flight' };
         }
         // Expired CLAIMED or any UNKNOWN: a prior attempt may already have
         // reached the provider. Take over as uncertain so a getPayment
@@ -213,14 +289,16 @@ export class OrderChargePaymentService {
           payload: {
             chargeId: String(charge['id'] ?? chargeRef.id ?? chargeRef.path ?? ''),
             orderId: String(charge['orderId'] ?? ''),
+            storeId: String(charge['storeId'] ?? ''),
             portonePaymentId: charge['portonePaymentId'],
             amount: charge['amount'],
           },
         };
       },
     );
+    if (claimResult.outcome === 'claim_in_flight') return 'claim_in_flight';
     if (claimResult.outcome === 'already_handled' || claimResult.outcome === 'doc_missing') {
-      return;
+      return 'handled';
     }
 
     const charge = claimResult.payload;
@@ -234,7 +312,7 @@ export class OrderChargePaymentService {
         claimToken,
         providerKey,
       );
-      if (reconciled !== 'proceed') return;
+      if (reconciled !== 'proceed') return 'handled';
     }
 
     try {
@@ -259,6 +337,7 @@ export class OrderChargePaymentService {
       );
       throw error;
     }
+    return 'handled';
   }
 
   /**
@@ -359,10 +438,13 @@ export class OrderChargePaymentService {
       });
     });
     if (!this.issueWriter) return;
+    // 판매자 운영 화면은 매장 범위로 기록을 보여 주므로 charge의 storeId로 남긴다.
+    // 본 결제(payments) 문서가 아니므로 paymentId는 비우고 chargeId로 재시도 대상을 가리킨다.
     await this.issueWriter.createOrMergeIssue({
-      storeId: '',
+      storeId: charge.storeId,
       orderId: charge.orderId,
-      paymentId: charge.chargeId,
+      paymentId: null,
+      chargeId: charge.chargeId,
       type: 'AUTO_REFUND_FAILED',
       severity: 'critical',
       title: '재배송비 환불 결과 불명확',

@@ -196,6 +196,15 @@ export default function AdminStoresClient() {
         </Title>
       </Group>
 
+      {/* 가게별 수수료율은 저장만 되고, 정산은 서버 공통 수수료율(PLATFORM_FEE_RATE)로 계산한다.
+          파일럿은 가게가 하나라 그대로 둔다(BACKLOG STORE-COMMISSION-RATE-UNUSED). */}
+      <Text
+        mb="sm"
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+      >
+        수수료율은 저장만 됩니다. 정산은 지금 모든 가게에 공통 수수료율로 계산됩니다.
+      </Text>
+
       <StoresFilters
         keyword={view.keyword}
         status={view.status}

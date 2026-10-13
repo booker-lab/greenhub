@@ -136,7 +136,10 @@ function mountHook({ storeId = 'store-1', fetchImpl }) {
 
   function useState(initial) {
     const index = cursor++;
-    if (stateSlots[index] === undefined) stateSlots[index] = { value: initial };
+    if (stateSlots[index] === undefined) {
+      // React처럼 함수 초기값은 호출해 쓴다.
+      stateSlots[index] = { value: typeof initial === 'function' ? initial() : initial };
+    }
     const slot = stateSlots[index];
     const setState = (next) => {
       const value = typeof next === 'function' ? next(slot.value) : next;
@@ -225,7 +228,12 @@ function mountHook({ storeId = 'store-1', fetchImpl }) {
     currentStoreId = next;
     scheduleRender();
   };
-  return { get, settle, render, setStoreId };
+  const unmount = () => {
+    for (const slot of effectSlots) {
+      if (typeof slot?.cleanup === 'function') slot.cleanup();
+    }
+  };
+  return { get, settle, render, setStoreId, unmount };
 }
 
 test('초기 상태는 회차 데이터 없이 loading이다', () => {
@@ -690,4 +698,168 @@ test('hook 소스는 request race 보호와 scope 격리를 유지한다', () =>
   assert.match(source, /hasRecoverableSaleRoundsData/);
   assert.match(source, /createRefreshingSaleRoundsState/);
   assert.match(source, /createStaleSaleRoundsState/);
+});
+
+const { roundBoundaryRefetchDelay } = saleRoundsModule.exports;
+const OPEN_AT = Date.parse('2026-11-01T01:00:00.000Z'); // 11월 1일 10:00 KST
+const CLOSE_AT = Date.parse('2026-11-08T15:00:00.000Z'); // 11월 9일 00:00 KST
+const DAY_MS = 24 * 60 * 60 * 1000;
+const iso = (millis) => new Date(millis).toISOString();
+const noSpread = () => 0;
+
+function windowRound(id, status, openAt = OPEN_AT, closeAt = CLOSE_AT) {
+  const base = round(id, status, iso(openAt));
+  return {
+    ...base,
+    schedule: { ...base.schedule, orderOpenAt: iso(openAt), orderCloseAt: iso(closeAt) },
+  };
+}
+
+test('판매 예정 회차는 주문 시작 1초 뒤에 0~3초를 흩뿌려 다시 조회한다', () => {
+  const rounds = [windowRound('r', 'SCHEDULED')];
+  const now = OPEN_AT - 10_000;
+  assert.equal(roundBoundaryRefetchDelay(rounds, now, now, noSpread), 11_000);
+  assert.equal(
+    roundBoundaryRefetchDelay(rounds, now, now, () => 0.5),
+    12_500,
+  );
+  const latest = roundBoundaryRefetchDelay(rounds, now, now, () => 0.999999);
+  assert.ok(latest >= 11_000 && latest < 14_000);
+  // 기본 흩뿌림도 0~3초 안이다.
+  for (let i = 0; i < 20; i += 1) {
+    const delay = roundBoundaryRefetchDelay(rounds, now, now);
+    assert.ok(delay >= 11_000 && delay < 14_000);
+  }
+});
+
+test('판매 중 회차는 주문 마감을 기준으로 하고 시간으로 바뀌지 않는 회차는 예약하지 않는다', () => {
+  const now = CLOSE_AT - 60_000;
+  assert.equal(roundBoundaryRefetchDelay([windowRound('r', 'OPEN')], now, now, noSpread), 61_000);
+  for (const status of ['CLOSED', 'COMPLETED', 'CANCELLED', 'DRAFT']) {
+    assert.equal(roundBoundaryRefetchDelay([windowRound('r', status)], now, now, noSpread), null);
+  }
+  const broken = { ...windowRound('r', 'OPEN'), schedule: { orderOpenAt: 'x', orderCloseAt: 'x' } };
+  assert.equal(roundBoundaryRefetchDelay([broken], now, now, noSpread), null);
+  assert.equal(roundBoundaryRefetchDelay([], now, now, noSpread), null);
+  assert.equal(roundBoundaryRefetchDelay([windowRound('r', 'OPEN')], Number.NaN, now), null);
+});
+
+test('24시간보다 먼 경계는 예약하지 않아 setTimeout 상한(약 24.8일)을 넘지 않는다', () => {
+  const rounds = [windowRound('r', 'SCHEDULED')];
+  const far = OPEN_AT - DAY_MS - 1;
+  assert.equal(roundBoundaryRefetchDelay(rounds, far, far, noSpread), null);
+  const withinDay = roundBoundaryRefetchDelay(
+    rounds,
+    OPEN_AT - DAY_MS,
+    OPEN_AT - DAY_MS,
+    () => 0.999999,
+  );
+  assert.ok(withinDay !== null && withinDay < 2 ** 31 - 1);
+});
+
+test('경계 전에 받은 정보는 경계가 지났으면 곧바로, 경계 뒤 정보가 아직 이전 상태면 1분 동안만 다시 확인한다', () => {
+  const rounds = [windowRound('r', 'SCHEDULED')];
+  // 숨은 탭·잠든 기기: 경계 전에 받은 정보는 경계가 한참 지나도 1초 뒤 다시 조회한다.
+  assert.equal(
+    roundBoundaryRefetchDelay(rounds, OPEN_AT + 3 * 3600_000, OPEN_AT - 1, noSpread),
+    1000,
+  );
+  // 경계 뒤에 받았는데 아직 판매 예정(기기 시계가 서버보다 빠름): 5초 뒤 다시 확인, 1분이 지나면 멈춘다.
+  assert.equal(roundBoundaryRefetchDelay(rounds, OPEN_AT + 2000, OPEN_AT + 1500, noSpread), 5000);
+  assert.equal(
+    roundBoundaryRefetchDelay(rounds, OPEN_AT + 60_000, OPEN_AT + 59_000, noSpread),
+    null,
+  );
+});
+
+test('여러 회차 중 가장 가까운 경계를 쓴다', () => {
+  const now = OPEN_AT - 60_000;
+  const rounds = [
+    windowRound('later', 'SCHEDULED', OPEN_AT + 3600_000, CLOSE_AT + DAY_MS),
+    windowRound('soon', 'SCHEDULED'),
+    windowRound('past', 'COMPLETED'),
+  ];
+  assert.equal(roundBoundaryRefetchDelay(rounds, now, now, noSpread), 61_000);
+});
+
+function boundaryServer() {
+  const server = { listCalls: 0 };
+  const current = () => windowRound('round-open', Date.now() >= CLOSE_AT ? 'CLOSED' : 'OPEN');
+  server.fetch = async (input) => {
+    if (String(input).endsWith('/public')) {
+      server.listCalls += 1;
+      return jsonResponse({ items: [current()] });
+    }
+    return jsonResponse({ ...current(), items: [] });
+  };
+  return server;
+}
+
+test('hook: 주문 마감이 지나면 새로고침 없이 다시 조회해 마감 상태로 바꾸고 더 부르지 않는다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: CLOSE_AT - 10_000 });
+  const server = boundaryServer();
+  const harness = mountHook({ storeId: 'store-1', fetchImpl: server.fetch });
+  await harness.settle();
+  assert.equal(harness.get().currentRound?.status, 'OPEN');
+  assert.equal(server.listCalls, 1);
+
+  t.mock.timers.tick(10_000);
+  await harness.settle();
+  assert.equal(server.listCalls, 1, '경계 순간이 아니라 1초 뒤부터 부른다');
+
+  t.mock.timers.tick(4_000);
+  await harness.settle();
+  assert.equal(server.listCalls, 2);
+  assert.equal(harness.get().currentRound?.status, 'CLOSED');
+  assert.equal(harness.get().status, 'success');
+
+  t.mock.timers.tick(10 * 60_000);
+  await harness.settle();
+  assert.equal(server.listCalls, 2);
+  harness.unmount();
+});
+
+test('hook: 화면을 떠나면 경계 다시 조회 예약을 지운다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: CLOSE_AT - 10_000 });
+  const server = boundaryServer();
+  const harness = mountHook({ storeId: 'store-1', fetchImpl: server.fetch });
+  await harness.settle();
+  harness.unmount();
+
+  t.mock.timers.tick(60_000);
+  await harness.settle();
+  assert.equal(server.listCalls, 1);
+});
+
+test('hook: 숨은 탭은 경계 순간에 부르지 않고 화면에 돌아오면 바로 다시 조회한다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'], now: CLOSE_AT - 10_000 });
+  const listeners = new Set();
+  globalThis.document = {
+    visibilityState: 'visible',
+    addEventListener: (type, listener) => type === 'visibilitychange' && listeners.add(listener),
+    removeEventListener: (type, listener) => listeners.delete(listener),
+  };
+  t.after(() => {
+    delete globalThis.document;
+  });
+  const server = boundaryServer();
+  const harness = mountHook({ storeId: 'store-1', fetchImpl: server.fetch });
+  await harness.settle();
+  assert.equal(listeners.size, 1);
+
+  globalThis.document.visibilityState = 'hidden';
+  t.mock.timers.tick(20_000);
+  await harness.settle();
+  assert.equal(server.listCalls, 1);
+
+  globalThis.document.visibilityState = 'visible';
+  for (const listener of listeners) listener();
+  await harness.settle();
+  t.mock.timers.tick(4_000);
+  await harness.settle();
+  assert.equal(server.listCalls, 2);
+  assert.equal(harness.get().currentRound?.status, 'CLOSED');
+
+  harness.unmount();
+  assert.equal(listeners.size, 0);
 });

@@ -22,6 +22,9 @@
 // - Disables scheduler via the existing `GREENHUB_SCHEDULES_ENABLED=false`
 //   contract so full-AppModule boot has no persistent timers.
 // - Pins the existing outbound-deny policy for PortOne/ALIGO defense-in-depth.
+// - Pins synthetic non-operational JWT signing secrets so full-AppModule boot
+//   (`JwtStrategy` requires a secret) never depends on a developer `.env`.
+//   These values are test-only and are never valid outside this E2E process.
 // - Pins `GREENHUB_API_UNIT_TEST=false` to keep E2E distinct from unit's
 //   `ignoreEnvFile` path. E2E preserves env-file semantics but deterministically.
 // - Production validation (`validateRuntimeConfig`,
@@ -39,3 +42,5 @@ process.env.FIRESTORE_EMULATOR_HOST = '';
 process.env.FIREBASE_AUTH_EMULATOR_HOST = '';
 process.env.GREENHUB_SCHEDULES_ENABLED = 'false';
 process.env.GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY = 'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH';
+process.env.JWT_SECRET = 'greenhub-api-e2e-test-jwt-secret';
+process.env.JWT_REFRESH_SECRET = 'greenhub-api-e2e-test-jwt-refresh-secret';

@@ -15,7 +15,10 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { CancelOrderDto } from './dto/cancel-order.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
+import { PickupCodeDto } from './dto/pickup-code.dto';
+import { QueryStoreOrdersDto, SearchStoreOrdersByPhoneDto } from './dto/query-orders.dto';
 import {
   AttachDeliveryPhotoDto,
   CreateRedeliveryFeeDto,
@@ -59,6 +62,20 @@ export class OrdersController {
     return this.ordersService.validateCart(storeId, user.sub, dto);
   }
 
+  // 판매자 주문 전화 검색. 전화번호가 URL·접속 로그에 남지 않도록 본문으로 받는다.
+  // 고정 경로라 POST / 와 :orderId 하위 경로와 겹치지 않는다.
+  @Post('phone-search')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(RolesGuard)
+  @Roles('seller', 'admin')
+  searchOrdersByPhone(
+    @Param('storeId') storeId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: SearchStoreOrdersByPhoneDto,
+  ) {
+    return this.ordersService.getOrders(storeId, user, { phone: dto.phone });
+  }
+
   @Post()
   createOrder(
     @Param('storeId') storeId: string,
@@ -68,13 +85,15 @@ export class OrdersController {
     return this.ordersService.createOrder(storeId, user.sub, dto);
   }
 
+  // @deprecated query.phone(?phone=) 전화 검색: 판매자 앱은 POST phone-search를 쓴다.
+  // API와 판매자 앱이 따로 배포되는 동안 양방향 호환을 위해서만 남기며, 둘 다 배포된 뒤 제거한다.
   @Get()
   @UseGuards(RolesGuard)
   @Roles('seller', 'admin')
   getOrders(
     @Param('storeId') storeId: string,
     @CurrentUser() user: JwtPayload,
-    @Query() query: { userId?: string; status?: string; saleType?: string; phone?: string },
+    @Query() query: QueryStoreOrdersDto,
   ) {
     return this.ordersService.getOrders(storeId, user, query);
   }
@@ -106,9 +125,10 @@ export class OrdersController {
     @Param('storeId') storeId: string,
     @Param('orderId') orderId: string,
     @CurrentUser() user: JwtPayload,
-    @Body('reason') reason?: string,
+    // 본문 없는 취소 요청도 받는다(검증 통과 후 dto가 undefined로 온다).
+    @Body() dto?: CancelOrderDto,
   ) {
-    return this.ordersService.cancelOrder(storeId, orderId, user.sub, reason);
+    return this.ordersService.cancelOrder(storeId, orderId, user.sub, dto?.reason);
   }
 
   @Patch(':orderId/delivery-hold')
@@ -180,9 +200,9 @@ export class OrdersController {
     @Param('storeId') storeId: string,
     @Param('orderId') orderId: string,
     @CurrentUser() user: JwtPayload,
-    @Body('pickupCode') pickupCode: string,
+    @Body() dto: PickupCodeDto,
   ) {
-    return this.ordersService.confirmPickup(storeId, orderId, user.sub, pickupCode);
+    return this.ordersService.confirmPickup(storeId, orderId, user.sub, dto.pickupCode);
   }
 
   @Patch(':orderId/hub-confirm')
@@ -191,8 +211,8 @@ export class OrdersController {
     @Param('storeId') storeId: string,
     @Param('orderId') orderId: string,
     @CurrentUser() user: JwtPayload,
-    @Body('pickupCode') pickupCode: string,
+    @Body() dto: PickupCodeDto,
   ) {
-    return this.ordersService.hubConfirmPickup(storeId, orderId, user.sub, pickupCode);
+    return this.ordersService.hubConfirmPickup(storeId, orderId, user.sub, dto.pickupCode);
   }
 }

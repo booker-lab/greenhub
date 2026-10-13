@@ -192,7 +192,8 @@ describe('OrdersQueryService 조회 권한', () => {
     });
     expect(list[0]).not.toHaveProperty('userId');
     expect(list[0]).not.toHaveProperty('driverId');
-    expect(list[0]).not.toHaveProperty('orderItems');
+    // 목록 카드("첫 상품 외 N종")용 상품 줄은 이름과 수량만 싣고 가격·사진·내부 값은 뺀다.
+    expect(list[0].orderItems).toEqual([{ productName: '호접란', quantity: 2 }]);
     expect(list[0]).not.toHaveProperty('marketingConsent');
     expect(list[0]).not.toHaveProperty('acquisition');
     expect(list[0]).not.toHaveProperty('redeliveryChargeId');
@@ -252,6 +253,15 @@ describe('OrdersQueryService 조회 권한', () => {
     expect(detail.orderItems[0]).not.toHaveProperty('lineAmount');
     expect(detail.orderItems[0]).not.toHaveProperty('internalItemCost');
     expect(detail.redeliveryPayment).not.toHaveProperty('chargeId');
+  });
+
+  it('판매자 목록은 상품 줄이 저장되지 않은 예전 주문에 상품 줄을 만들지 않는다', async () => {
+    const service = new OrdersQueryService(makeFirestore(records) as never);
+
+    const list = await service.getOrders('store-1', requester('seller-1', 'seller'), {});
+
+    expect(list).toHaveLength(2);
+    for (const order of list) expect(order).not.toHaveProperty('orderItems');
   });
 
   describe('판매자 목록 전화 검색', () => {
@@ -402,6 +412,51 @@ describe('OrdersQueryService 조회 권한', () => {
     await expect(service.getOrderById('pilot-foreign-round', driver)).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  it.each([
+    ['PREPARING', false],
+    ['DELIVERING', true],
+    ['DELIVERY_HELD', true],
+  ])('공유 GET의 배정 기사 응답도 기사 전용 조회처럼 %s 단계별로 고객 연락처를 가린다', async (status, phoneVisible) => {
+    const driverRecords: RecordMap = {
+      'users/driver-1': { id: 'driver-1', role: 'driver', driverApproved: true },
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'saleRounds/round-valid': { id: 'round-valid', storeId: 'pilot' },
+      'orders/pilot-order': {
+        id: 'pilot-order',
+        storeId: 'pilot',
+        userId: 'consumer-1',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'direct',
+        status,
+        driverId: 'driver-1',
+        buyerName: '받는 분',
+        buyerPhone: '010-0000-0001',
+        deliveryPhone: '010-0000-0002',
+        sellerPhone: '02-000-0000',
+        requestNote: '문 앞',
+        deliveryAddress: { address: '서울시 어딘가', addressDetail: '101호' },
+        paymentId: 'payment-secret',
+        totalAmount: 10000,
+        quantity: 1,
+      },
+    };
+    const service = new OrdersQueryService(makeFirestore(driverRecords) as never);
+
+    const result = await service.getOrderById('pilot-order', requester('driver-1', 'driver'));
+
+    expect(result).toMatchObject({ id: 'pilot-order', status, requestNote: '문 앞' });
+    expect(result).not.toHaveProperty('userId');
+    expect(result).not.toHaveProperty('paymentId');
+    expect(result).not.toHaveProperty('totalAmount');
+    expect(result).toHaveProperty('deliveryAddress', { address: '서울시 어딘가' });
+    if (phoneVisible) {
+      expect(result).toHaveProperty('buyerPhone', '010-0000-0002');
+    } else {
+      expect(result).not.toHaveProperty('buyerPhone');
+    }
   });
 
   it.each([

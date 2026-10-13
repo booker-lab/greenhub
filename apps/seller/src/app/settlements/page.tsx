@@ -29,7 +29,11 @@ export default function SettlementsPage() {
     settlements,
     listLoading,
     listError,
+    hasMore,
+    loadingMore,
+    loadMoreError,
     fetchSettlements,
+    loadMoreSettlements,
   } = useSettlements(activeTab);
 
   return (
@@ -59,7 +63,11 @@ export default function SettlementsPage() {
             settlements={settlements}
             listLoading={listLoading}
             listError={listError}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            loadMoreError={loadMoreError}
             onSearch={(f, t) => fetchSettlements(f, t)}
+            onLoadMore={loadMoreSettlements}
           />
         )}
         {activeTab === 'orders' && (
@@ -67,6 +75,10 @@ export default function SettlementsPage() {
             settlements={settlements}
             listLoading={listLoading}
             fetchSettlements={fetchSettlements}
+            hasMore={hasMore}
+            loadingMore={loadingMore}
+            loadMoreError={loadMoreError}
+            onLoadMore={loadMoreSettlements}
           />
         )}
       </Container>

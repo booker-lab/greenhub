@@ -1,22 +1,32 @@
 'use client';
 
 import {
+  ActionIcon,
   Box,
   Button,
   Container,
   Divider,
+  Group,
   Paper,
   Stack,
   Text,
   TextInput,
   Title,
 } from '@mantine/core';
+import { notifications } from '@mantine/notifications';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { ChevronLeft, Store } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { ApiError, apiJson } from '@/lib/api';
 import { getFirebaseStorage } from '@/lib/firebase';
+import {
+  ImageReencodeError,
+  imageReencodeFailureMessage,
+  LOGO_IMAGE_ENCODE,
+  reencodeImageToJpeg,
+} from '../products/_components/image-reencode';
 
 export default function OnboardingPage() {
   const { data: session, update } = useSession();
@@ -25,6 +35,8 @@ export default function OnboardingPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState('');
   const [error, setError] = useState('');
+  // 가게가 이미 있으면 설정 > 사업자 프로필 수정으로 들어온 것 — 처음 등록과 제목·버튼·돌아갈 곳이 다르다.
+  const isEdit = !!session?.user.storeId;
 
   const [form, setForm] = useState({
     name: '',
@@ -84,12 +96,18 @@ export default function OnboardingPage() {
         getFirebaseStorage(),
         `logos/${session?.user.id ?? 'unknown'}_${Date.now()}`,
       );
-      await uploadBytes(storageRef, file);
+      // canvas로 다시 그려 EXIF(촬영 위치 등)를 지운 JPEG만 올린다.
+      const jpeg = await reencodeImageToJpeg(file, LOGO_IMAGE_ENCODE);
+      await uploadBytes(storageRef, jpeg, { contentType: 'image/jpeg' });
       const url = await getDownloadURL(storageRef);
       setLogoPreview(url);
       setForm((prev) => ({ ...prev, logoUrl: url }));
-    } catch {
-      setError('로고 업로드에 실패했습니다. 다시 시도해주세요.');
+    } catch (e) {
+      setError(
+        e instanceof ImageReencodeError
+          ? imageReencodeFailureMessage(e.reason)
+          : '로고 업로드에 실패했습니다. 다시 시도해주세요.',
+      );
     } finally {
       setLogoUploading(false);
     }
@@ -144,6 +162,9 @@ export default function OnboardingPage() {
         await update({ storeId: data.storeId });
       } else {
         await apiJson(`/stores/${storeId}`, token, { method: 'PATCH', body });
+        notifications.show({ color: 'brand', message: '사업자 정보를 저장했어요.' });
+        router.push('/settings');
+        return;
       }
       router.push('/orders');
     } catch (e) {
@@ -159,14 +180,30 @@ export default function OnboardingPage() {
       style={{ minHeight: '100vh', backgroundColor: 'var(--color-bg)', padding: '32px 16px' }}
     >
       <Container size="xs">
-        <Stack align="center" gap="xs" mb="xl">
-          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
-            사업자 정보 등록
-          </Title>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            서비스 시작 전 한 번만 입력합니다
-          </Text>
-        </Stack>
+        {isEdit ? (
+          <Group gap="sm" mb="lg" wrap="nowrap">
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              onClick={() => router.push('/settings')}
+              aria-label="설정으로 돌아가기"
+            >
+              <ChevronLeft size={20} />
+            </ActionIcon>
+            <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
+              사업자 프로필 수정
+            </Title>
+          </Group>
+        ) : (
+          <Stack align="center" gap="xs" mb="xl">
+            <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
+              사업자 정보 등록
+            </Title>
+            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              서비스 시작 전 한 번만 입력합니다
+            </Text>
+          </Stack>
+        )}
 
         <Paper radius="lg" shadow="sm" p="lg">
           <form onSubmit={handleSubmit}>
@@ -194,11 +231,7 @@ export default function OnboardingPage() {
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                     />
                   ) : (
-                    <Text
-                      style={{ fontSize: 'var(--font-size-2xl)', color: 'var(--color-border)' }}
-                    >
-                      🏪
-                    </Text>
+                    <Store size={32} color="var(--color-text-disabled)" aria-hidden="true" />
                   )}
                 </Box>
                 <label style={{ cursor: 'pointer' }}>
@@ -229,14 +262,7 @@ export default function OnboardingPage() {
               <Divider />
 
               <TextInput
-                label={
-                  <>
-                    상호명{' '}
-                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
-                      *
-                    </Text>
-                  </>
-                }
+                label="상호명"
                 name="name"
                 value={form.name}
                 onChange={handleChange}
@@ -246,14 +272,7 @@ export default function OnboardingPage() {
               />
 
               <TextInput
-                label={
-                  <>
-                    대표자명{' '}
-                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
-                      *
-                    </Text>
-                  </>
-                }
+                label="대표자명"
                 name="ceoName"
                 value={form.ceoName}
                 onChange={handleChange}
@@ -263,14 +282,7 @@ export default function OnboardingPage() {
               />
 
               <TextInput
-                label={
-                  <>
-                    연락처{' '}
-                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
-                      *
-                    </Text>
-                  </>
-                }
+                label="연락처"
                 name="phone"
                 value={form.phone}
                 onChange={handleChange}
@@ -280,14 +292,7 @@ export default function OnboardingPage() {
               />
 
               <TextInput
-                label={
-                  <>
-                    소재지{' '}
-                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
-                      *
-                    </Text>
-                  </>
-                }
+                label="소재지"
                 name="address"
                 value={form.address}
                 onChange={handleChange}
@@ -335,7 +340,7 @@ export default function OnboardingPage() {
                 mt="xs"
                 style={{ backgroundColor: 'var(--color-primary)' }}
               >
-                {loading ? '저장 중...' : '저장 후 시작하기'}
+                {loading ? '저장 중...' : isEdit ? '저장' : '저장 후 시작하기'}
               </Button>
             </Stack>
           </form>

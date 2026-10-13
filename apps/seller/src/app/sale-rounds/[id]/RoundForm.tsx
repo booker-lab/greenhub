@@ -43,6 +43,8 @@ export interface RoundFormProps {
   carrotLinks: RoundFormCarrotLinks;
   onSave: (input: CreateSaleRoundInput) => Promise<void>;
   disabled?: boolean;
+  /** 서버가 수정을 받지 않는 회차(판매 시작 뒤 등) — 내용만 보여 주고 저장 버튼을 숨긴다. */
+  readOnly?: boolean;
 }
 
 function createDraft(round: SellerSaleRound): FormDraft {
@@ -82,6 +84,7 @@ export function RoundForm({
   carrotLinks,
   onSave,
   disabled = false,
+  readOnly = false,
 }: RoundFormProps) {
   const [draft, setDraft] = useState(() => createDraft(round));
   const [submitting, setSubmitting] = useState(false);
@@ -89,6 +92,8 @@ export function RoundForm({
   const [saveFeedback, setSaveFeedback] = useState<CopyFeedback | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const busy = disabled || submitting;
+  // 읽기 전용이면 입력을 잠그되 당근 링크 복사는 그대로 쓸 수 있게 둔다.
+  const locked = busy || readOnly;
 
   useEffect(() => {
     setDraft(createDraft(round));
@@ -156,6 +161,7 @@ export function RoundForm({
   };
 
   const submit = async () => {
+    if (readOnly) return;
     setValidationErrors([]);
     setSaveFeedback(null);
 
@@ -236,6 +242,11 @@ export function RoundForm({
       }}
     >
       <Stack gap="md">
+        {readOnly && (
+          <Alert color="gray" title="고칠 수 없는 회차예요" role="status">
+            회차 내용은 판매 시작 전에만 고칠 수 있어요. 아래는 저장된 내용이에요.
+          </Alert>
+        )}
         {saveFeedback && (
           <Alert
             color={saveFeedback.kind === 'success' ? 'brand' : 'red'}
@@ -251,31 +262,31 @@ export function RoundForm({
             label="회차 이름"
             value={draft.name}
             onChange={(event) => changeDraft('name', event.currentTarget.value)}
-            disabled={busy}
+            disabled={locked}
             required
           />
         </FormSection>
         <ScheduleSection
           draft={draft}
-          busy={busy}
+          busy={locked}
           onChange={(key, value) => changeDraft(key, value)}
         />
         <DeliveryRegionSection
           region={round.deliveryRegion}
           enabled={draft.deliveryRegionEnabled}
-          busy={busy}
+          busy={locked}
           onChange={(value) => changeDraft('deliveryRegionEnabled', value)}
         />
         <LimitsSection
           maxDeliveryAddresses={draft.maxDeliveryAddresses}
           maxItemQuantity={draft.maxItemQuantity}
-          busy={busy}
+          busy={locked}
           onChange={(key, value) => changeDraft(key, value)}
         />
         <ProductsSection
           items={draft.items}
           availableProducts={availableProducts}
-          busy={busy}
+          busy={locked}
           onAdd={addProduct}
           onRemove={(key) =>
             changeDraft(
@@ -303,15 +314,17 @@ export function RoundForm({
             </Box>
           </Alert>
         )}
-        <Button
-          type="submit"
-          size="md"
-          leftSection={<Save size={18} />}
-          loading={submitting}
-          disabled={busy}
-        >
-          회차 저장
-        </Button>
+        {!readOnly && (
+          <Button
+            type="submit"
+            size="md"
+            leftSection={<Save size={18} />}
+            loading={submitting}
+            disabled={busy}
+          >
+            회차 저장
+          </Button>
+        )}
       </Stack>
     </form>
   );

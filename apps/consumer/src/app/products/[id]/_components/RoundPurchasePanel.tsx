@@ -5,7 +5,7 @@ import { formatOrderCloseLabel, formatRoundTime } from '@/lib/round-schedule-lab
 interface RoundPurchasePanelProps {
   round: SaleRound;
   item: SaleRoundItem;
-  state: 'current' | 'closed';
+  state: 'current' | 'closed' | 'sold_out';
   isPurchasable: boolean;
 }
 
@@ -18,11 +18,13 @@ export default function RoundPurchasePanel({
   isPurchasable,
 }: RoundPurchasePanelProps) {
   const closed = state === 'closed';
-  const statusLabel = isPurchasable ? '구매 가능' : closed ? '판매 마감' : '판매 예정';
+  const soldOut = state === 'sold_out';
+  const roundStateLabel = closed ? '판매 마감' : '판매 예정';
+  const statusLabel = isPurchasable ? '구매 가능' : soldOut ? '품절' : roundStateLabel;
   const notOpenYet = !closed && round.status === 'SCHEDULED';
   const statusTone = isPurchasable
     ? { background: 'var(--color-primary-surface)', color: 'var(--color-primary-dark)' }
-    : closed
+    : closed || soldOut
       ? { background: 'var(--color-surface-muted)', color: 'var(--color-text-secondary)' }
       : { background: 'var(--color-deadline-surface)', color: 'var(--color-deadline-text)' };
 

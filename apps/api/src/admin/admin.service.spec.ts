@@ -14,9 +14,15 @@ describe('AdminService driver session 보강', () => {
       get: jest.fn().mockResolvedValue({ exists, data: () => user }),
       update: jest.fn().mockResolvedValue(undefined),
     };
+    const refreshTokenRef = { delete: jest.fn().mockResolvedValue(undefined) };
     const firestore = {
-      doc: jest.fn().mockReturnValue(userRef),
-      Timestamp: { now: jest.fn(() => 'now') },
+      doc: jest.fn((path: string) =>
+        path.startsWith('refreshTokens/') ? refreshTokenRef : userRef,
+      ),
+      Timestamp: {
+        now: jest.fn(() => 'now'),
+        fromMillis: jest.fn((millis: number) => ({ millis })),
+      },
     };
     const settlements = { cancelSettlement: jest.fn().mockResolvedValue(undefined) };
     const roundLifecycle = { cancelForRound: jest.fn() };
@@ -28,6 +34,7 @@ describe('AdminService driver session 보강', () => {
         settlements as never,
         roundLifecycle as never,
       ),
+      refreshTokenRef,
       userRef,
     };
   }
@@ -39,22 +46,133 @@ describe('AdminService driver session 보강', () => {
   });
 
   it('driver 정지 시 Firebase refresh token을 폐기한다', async () => {
-    const { service, userRef } = makeService({ id: 'driver-1', role: 'driver' });
+    const { firestore, refreshTokenRef, service, userRef } = makeService({
+      id: 'driver-1',
+      role: 'driver',
+    });
 
     await expect(service.suspendDriver('driver-1', { suspended: true })).resolves.toEqual({
       userId: 'driver-1',
       suspended: true,
     });
-    expect(userRef.update).toHaveBeenCalledWith({ suspended: true, updatedAt: 'now' });
+    expect(userRef.update).toHaveBeenCalledWith({
+      suspended: true,
+      sessionsRevokedAt: expect.anything(),
+      updatedAt: 'now',
+    });
+    expect(firestore.doc).toHaveBeenCalledWith('refreshTokens/driver-1');
+    expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
     expect(firebaseAuth.revokeRefreshTokens).toHaveBeenCalledWith('driver-1');
   });
 
   it('driver 정지 해제 시 refresh token 폐기를 다시 호출하지 않는다', async () => {
-    const { service } = makeService({ id: 'driver-1', role: 'driver' });
+    const { refreshTokenRef, service, userRef } = makeService({ id: 'driver-1', role: 'driver' });
 
     await service.suspendDriver('driver-1', { suspended: false });
 
+    expect(userRef.update).toHaveBeenCalledWith({ suspended: false, updatedAt: 'now' });
+    expect(refreshTokenRef.delete).not.toHaveBeenCalled();
     expect(firebaseAuth.revokeRefreshTokens).not.toHaveBeenCalled();
+  });
+
+  it('일반 사용자 정지 시 세션 폐기 시각을 초 단위로 기록하고 refresh 기록과 Firebase 세션을 끊는다', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_987);
+    const { firestore, refreshTokenRef, service, userRef } = makeService({
+      id: 'consumer-1',
+      role: 'consumer',
+    });
+
+    try {
+      await expect(service.suspendUser('consumer-1', { suspended: true })).resolves.toEqual({
+        userId: 'consumer-1',
+        suspended: true,
+      });
+    } finally {
+      nowSpy.mockRestore();
+    }
+    expect(firestore.Timestamp.fromMillis).toHaveBeenCalledWith(1_700_000_000_000);
+    expect(userRef.update).toHaveBeenCalledWith({
+      suspended: true,
+      sessionsRevokedAt: { millis: 1_700_000_000_000 },
+      updatedAt: 'now',
+    });
+    expect(firestore.doc).toHaveBeenCalledWith('refreshTokens/consumer-1');
+    expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
+    expect(firebaseAuth.revokeRefreshTokens).toHaveBeenCalledWith('consumer-1');
+  });
+
+  it('Firebase 사용자 기록이 없어도 일반 사용자 정지는 완료된다', async () => {
+    firebaseAuth.revokeRefreshTokens.mockRejectedValue(
+      Object.assign(new Error('no user'), { code: 'auth/user-not-found' }),
+    );
+    const { refreshTokenRef, service } = makeService({ id: 'consumer-1', role: 'consumer' });
+
+    await expect(service.suspendUser('consumer-1', { suspended: true })).resolves.toEqual({
+      userId: 'consumer-1',
+      suspended: true,
+    });
+    expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
+  });
+
+  it('일반 사용자 정지 해제는 세션을 다시 폐기하지 않는다', async () => {
+    const { refreshTokenRef, service, userRef } = makeService({
+      id: 'consumer-1',
+      role: 'consumer',
+    });
+
+    await service.suspendUser('consumer-1', { suspended: false });
+
+    expect(userRef.update).toHaveBeenCalledWith({ suspended: false, updatedAt: 'now' });
+    expect(refreshTokenRef.delete).not.toHaveBeenCalled();
+    expect(firebaseAuth.revokeRefreshTokens).not.toHaveBeenCalled();
+  });
+});
+
+describe('AdminService 기사 목록', () => {
+  function makeDriversService(count: number) {
+    const docs = Array.from({ length: count }, (_, i) => ({
+      data: () => ({
+        id: `driver-${i}`,
+        role: 'driver',
+        // 앞쪽 문서일수록 오래된 가입. 승인 대기는 짝수 번째만.
+        driverApproved: i % 2 === 1,
+        suspended: false,
+        createdAt: { _seconds: 1_700_000_000 + i },
+        passwordHash: 'hash',
+      }),
+    }));
+    const query = {
+      where: jest.fn().mockReturnThis(),
+      limit: jest.fn((n: number) => ({
+        get: jest.fn().mockResolvedValue({ docs: docs.slice(0, n) }),
+      })),
+    };
+    const firestore = { collection: jest.fn().mockReturnValue(query) };
+    const service = new AdminService(firestore as never, {} as never, {} as never, {} as never);
+    return { query, service };
+  }
+
+  it('100명을 넘는 기사도 상태 필터·최신순 정렬 전에 빠지지 않는다', async () => {
+    const { query, service } = makeDriversService(150);
+
+    const result = await service.getDrivers({ status: 'pending' } as never);
+
+    expect(query.where).toHaveBeenCalledWith('role', '==', 'driver');
+    expect(query.limit).toHaveBeenCalledWith(501);
+    expect(result.total).toBe(75);
+    expect(result.hasMore).toBe(false);
+    expect(result.drivers[0]).toEqual(expect.objectContaining({ id: 'driver-148' }));
+    expect(result.drivers.at(-1)).toEqual(expect.objectContaining({ id: 'driver-0' }));
+    expect(result.drivers[0]).not.toHaveProperty('passwordHash');
+  });
+
+  it('읽기 한도(500)를 넘는 기사가 더 있으면 hasMore를 알린다', async () => {
+    const { service } = makeDriversService(501);
+
+    const result = await service.getDrivers({} as never);
+
+    expect(result.total).toBe(500);
+    expect(result.hasMore).toBe(true);
   });
 });
 
@@ -300,6 +418,7 @@ describe('AdminService 강제 환불 수렴', () => {
       orderId: 'order-1',
       expectedStatus: 'ACCEPTED',
       reason: '관리자 사유',
+      customerNotice: 'ADMIN_REFUND',
     });
     expect(fixture.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(1);

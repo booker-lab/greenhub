@@ -2,7 +2,7 @@
 
 ## 회차 E2E 로컬 대상 모드
 
-원격 회차 E2E(`.github/workflows/e2e-round-direct.yml`, 회차 52건 + 세션 수명주기 12건)를 Vercel 배포 없이 로컬에서 같은 순서·인자로 돌린다. 대상 SHA를 깨끗한 임시 worktree에서 `next build && next start`로 띄운 세 앱을 검증하고, 데이터 대상은 원격과 같은 스테이징 API(`https://api-staging-94af.up.railway.app`)와 E2E Firebase 프로젝트(`greenhub-round-direct-e2e`)다.
+원격 회차 E2E(`.github/workflows/e2e-round-direct.yml`, 회차 64건 + 세션 수명주기 12건)를 Vercel 배포 없이 로컬에서 같은 순서·인자로 돌린다. 대상 SHA를 깨끗한 임시 worktree에서 `next build && next start`로 띄운 세 앱을 검증하고, 데이터 대상은 원격과 같은 스테이징 API(`https://api-staging-94af.up.railway.app`)와 E2E Firebase 프로젝트(`greenhub-round-direct-e2e`)다.
 
 | 앱 | 주소 |
 | --- | --- |
@@ -55,7 +55,7 @@ Windows(Git Bash·PowerShell)에서도 같다. 포트 3101~3103이 이미 쓰이
 3. 빌드 산출물(`.next/static`·`.next/server`)에서 `green-e4fe3`·`api-production-13e7`가 나오면 중단(seller·driver의 운영 차단 가드 리터럴만 예외), 스테이징 API가 인라인되지 않았어도 중단
 4. 앱별 `next start -H <호스트> -p <포트>` → `/login` 200 대기
 5. readiness(로컬 대상 모드) → chromium·mobile fixture seed/verify
-6. 52건 → 무건너뜀 판정 → 세션 수명주기 12건 → 무건너뜀 판정(워크플로와 같은 Playwright 인자)
+6. 64건 → 무건너뜀 판정 → 세션 수명주기 12건 → 무건너뜀 판정(워크플로와 같은 Playwright 인자)
 7. 성공·실패·중단 모두: fixture cleanup → 띄운 서버 종료 → 임시 worktree 제거. 정리 실패는 종료 코드 1과 함께 그대로 출력한다.
 
 결과(`result.json`, 비민감 요약 `evidence/`, 앱 로그 `logs/`, 실패 스크린샷 `test-results/`)는 마지막 줄에 출력되는 OS 임시 디렉터리의 `output/`에 남는다. 확인 후 직접 지운다.

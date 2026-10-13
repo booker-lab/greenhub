@@ -850,7 +850,36 @@ test('이전 데이터가 있는 refresh 실패는 stale을 유지하고 재시�
   assert.match(source, /표시된 정보가 최신이 아닐 수 있습니다/);
   assert.match(source, /\(status === 'network' \|\| status === 'server'\)/);
   assert.match(source, /loading=\{retrying\}/);
-  assert.match(hookSource, /setInterval\(\(\) => void fetchOrder\(\), 3000\)/);
+  // 자동 확인은 결제 확인 중(PENDING) 주문만 2분 안에서 하고, 그 밖에는 다시 시도(refetch)로 읽는다.
+  assert.match(
+    hookSource,
+    /setTimeout\(\(\) => void fetchOrder\(\), ORDER_STATUS_POLL_INTERVAL_MS\)/,
+  );
+  assert.match(hookSource, /shouldPollOrderStatus\(lastStatus, Date\.now\(\) - pollStartedAt\)/);
+  assert.doesNotMatch(hookSource, /setInterval/);
+});
+
+test('모바일 재배송비 결제 복귀는 서버 결제 확인 전까지 주문을 다시 읽는다', () => {
+  // 주문 상태 자동 확인은 PENDING 주문만 하므로, 보류·준비 중 주문의 재배송비 결제는 화면이 따로 다시 읽는다.
+  assert.match(source, /shouldRecheckRedeliveryPayment\(\s*redeliveryRedirect,\s*redeliveryPaid,/);
+  assert.match(source, /ORDER_STATUS_POLL_MAX_MS/);
+  const recheckAt = source.indexOf('if (!awaitingRedeliveryPaid) return;');
+  assert.ok(recheckAt !== -1, '재확인 효과가 있어야 한다');
+  const recheckBlock = source.slice(recheckAt, recheckAt + 900);
+  // 다시 읽기가 끝난 뒤에만 다음 확인을 예약하고, 화면을 떠나면 멈춘다.
+  assert.match(recheckBlock, /void refetch\(\)\.finally\(scheduleRecheck\)/);
+  assert.match(recheckBlock, /ORDER_STATUS_POLL_INTERVAL_MS/);
+  assert.match(recheckBlock, /stopped = true/);
+  assert.match(recheckBlock, /clearTimeout\(timer\)/);
+  // 결제 명령을 자동으로 다시 보내지 않는다.
+  assert.doesNotMatch(recheckBlock, /handleRedeliveryPayment/);
+});
+
+test('취소 사유는 내부 코드 대신 고객이 읽을 문장으로 보인다', () => {
+  assert.match(source, /import \{ formatCancelReason \} from '@\/lib\/order-cancel-reason'/);
+  assert.match(source, /const cancelReasonText = formatCancelReason\(detail\.cancelReason\)/);
+  assert.match(source, /사유: \{cancelReasonText\}/);
+  assert.doesNotMatch(source, /사유: \{detail\.cancelReason\}/);
 });
 
 const {
@@ -941,7 +970,7 @@ test('review 확인 + 재조회 성공은 done으로 수렴한다', () => {
 test('review 확인 + 재조회 실패는 확정 실패가 되지 않는다', () => {
   assert.match(source, /setReviewOutcome\(\{ kind: 'reconcile-failed' \}\)/);
   assert.match(source, /구매 확정 확인됨 · 상태 재확인 필요/);
-  assert.match(source, /실패가 아니므로 바로 다시 확정하지 말고/);
+  assert.match(source, /확정 실패가\s+아니므로 바로 다시 확정하지 말고/);
   // reconcile-failed 동안 명령 버튼은 중복 확정을 막기 위해 비활성화된다.
   assert.match(source, /showReviewReconcileWarning/);
 });

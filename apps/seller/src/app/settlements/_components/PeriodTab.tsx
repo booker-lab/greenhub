@@ -3,6 +3,7 @@
 import { Button, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
 import type { Settlement } from '../_constants';
 import { downloadCSV } from '../_lib';
+import { LoadMoreSettlements } from './LoadMoreSettlements';
 import { SettlementListItem } from './SettlementListItem';
 
 interface PeriodTabProps {
@@ -13,7 +14,11 @@ interface PeriodTabProps {
   settlements: Settlement[];
   listLoading: boolean;
   listError: string;
+  hasMore: boolean;
+  loadingMore: boolean;
+  loadMoreError: string;
   onSearch: (f: string, t: string) => void;
+  onLoadMore: () => void;
 }
 
 export function PeriodTab({
@@ -24,7 +29,11 @@ export function PeriodTab({
   settlements,
   listLoading,
   listError,
+  hasMore,
+  loadingMore,
+  loadMoreError,
   onSearch,
+  onLoadMore,
 }: PeriodTabProps) {
   return (
     <Stack gap="md">
@@ -89,7 +98,7 @@ export function PeriodTab({
         <Stack gap="xs">
           <Group justify="space-between" px={4}>
             <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              {settlements.length}건 조회됨
+              {settlements.length}건 조회됨{hasMore ? ' (더 있음)' : ''}
             </Text>
             <UnstyledButton
               onClick={() => downloadCSV(settlements, from, to)}
@@ -105,6 +114,14 @@ export function PeriodTab({
           {settlements.map((s) => (
             <SettlementListItem key={s.id} settlement={s} />
           ))}
+          {hasMore && (
+            <LoadMoreSettlements
+              loadedCount={settlements.length}
+              loadingMore={loadingMore}
+              error={loadMoreError}
+              onLoadMore={onLoadMore}
+            />
+          )}
         </Stack>
       )}
     </Stack>

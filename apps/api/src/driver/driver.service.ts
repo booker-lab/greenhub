@@ -1,24 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import {
+  DRIVER_DISCOVERY_DELIVERY_METHODS,
+  DRIVER_DISCOVERY_STATUS,
   DriverOrderScopeService,
   DRIVER_VISIBLE_STATUSES,
 } from '../orders/driver-order-scope.service';
 import { throwDriverOrderNotFound } from '../orders/driver-order-error';
+import { type DriverOrderView, projectDriverOrder } from '../orders/driver-order-read-model';
 import { OrdersQueryService } from '../orders/orders-query.service';
-
-type DriverOrderView = 'list' | 'detail';
-type DriverOrderReadModel = Record<string, unknown> & {
-  redeliveryPayment: {
-    required: boolean;
-    holdAt: string | null;
-    chargeId: string | null;
-    status: string;
-    canPay: boolean;
-    paid: boolean;
-    requiresRecovery: boolean;
-  };
-};
 
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null;
@@ -36,10 +26,11 @@ function timestampMillis(value: unknown): number | null {
 }
 
 // preparedAt 오름차순, 없으면 updatedAt으로 대체하고 둘 다 없으면 뒤로 보낸다.
+// 같은 시각이면 Firestore 기본 정렬과 같은 문서 ID 오름차순으로 둔다.
 function compareByPreparedThenUpdated(a: Record<string, any>, b: Record<string, any>): number {
   const aKey = timestampMillis(a.preparedAt) ?? timestampMillis(a.updatedAt);
   const bKey = timestampMillis(b.preparedAt) ?? timestampMillis(b.updatedAt);
-  if (aKey === bKey) return 0;
+  if (aKey === bKey) return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   if (aKey === null) return 1;
   if (bKey === null) return -1;
   return aKey - bKey;
@@ -65,23 +56,37 @@ export class DriverService {
 
     if (requestedStatuses.length === 0) return [];
 
-    // Firestore 'in' 쿼리로 노출 대상 status 동시 조회.
+    // 노출 규칙상 보일 수 있는 주문은 본인 배정 주문과 미배정 discovery 후보뿐이다.
+    // 다른 기사의 배송 중·보류 주문까지 전부 읽지 않도록 두 쿼리로 후보만 읽고, 노출 판정은 그대로 한다.
+    // 미배정 주문은 driverId 필드 자체가 없을 수 있어(주문 생성 시 쓰지 않음) driverId == null로
+    // 좁히지 않고, 모든 주문에 있는 status·deliveryMethod로 discovery 후보를 찾는다.
     // orderBy('preparedAt')는 필드가 없는 문서를 결과에서 제외한다. 회차 주문은 판매자가
     // 준비 시각을 입력하지 않으면 preparedAt이 없으므로 쿼리 정렬 대신 메모리에서 정렬한다.
-    const snap = await this.firestore
-      .collection('orders')
-      .where('status', 'in', requestedStatuses)
-      .get();
+    const orders = this.firestore.collection('orders');
+    const reads = [
+      orders.where('driverId', '==', driverId).where('status', 'in', requestedStatuses),
+    ];
+    if (requestedStatuses.includes(DRIVER_DISCOVERY_STATUS)) {
+      reads.push(
+        orders
+          .where('status', '==', DRIVER_DISCOVERY_STATUS)
+          .where('deliveryMethod', 'in', [...DRIVER_DISCOVERY_DELIVERY_METHODS]),
+      );
+    }
+    const snaps = await Promise.all(reads.map((query) => query.get()));
 
-    const candidates = snap.docs
-      .map((d: any) => ({ id: d.id, ...d.data() }))
-      .sort(compareByPreparedThenUpdated);
-    const visibility = await Promise.all(
-      candidates.map((order: Record<string, unknown>) =>
-        this.driverScope.isOrderVisible(order, driverId, authority),
-      ),
+    const byId = new Map<string, Record<string, any>>();
+    for (const snap of snaps) {
+      for (const d of snap.docs) {
+        if (!byId.has(d.id)) byId.set(d.id, { id: d.id, ...d.data() });
+      }
+    }
+    const candidates = [...byId.values()].sort(compareByPreparedThenUpdated);
+    const visibleOrders = await this.driverScope.filterVisibleOrders(
+      candidates,
+      driverId,
+      authority,
     );
-    const visibleOrders = candidates.filter((_, index) => visibility[index]);
 
     return Promise.all(visibleOrders.map((order) => this.toDriverOrder(order, driverId, 'list')));
   }
@@ -101,112 +106,6 @@ export class DriverService {
 
   private async toDriverOrder(order: Record<string, any>, driverId: string, view: DriverOrderView) {
     const withPayment = await this.ordersQuery.withRedeliveryPayment(order);
-    return this.projectOrder(withPayment, driverId, view);
-  }
-
-  private projectOrder(
-    order: Record<string, any>,
-    driverId: string,
-    view: DriverOrderView,
-  ): DriverOrderReadModel {
-    const isAssignedToRequester = order['driverId'] === driverId;
-    const projected: DriverOrderReadModel = {
-      id: order['id'],
-      status: order['status'],
-      deliveryMethod: order['deliveryMethod'],
-      buyerName: order['buyerName'],
-      address: order['address'] ?? this.deliveryAddressValue(order['deliveryAddress']),
-      hubName: order['hubName'],
-      hubAddress: order['hubAddress'],
-      productName: order['productName'],
-      quantity: order['quantity'],
-      preparedAt: order['preparedAt'],
-      updatedAt: order['updatedAt'],
-      lat: order['lat'],
-      lng: order['lng'],
-      redeliveryPayment: this.projectRedeliveryPayment(order['redeliveryPayment']),
-    };
-
-    if (view === 'list') return projected;
-
-    projected['storeId'] = order['storeId'];
-    projected['schemaVersion'] = order['schemaVersion'];
-    projected['roundId'] = order['roundId'];
-
-    const deliveryAddress = this.projectDeliveryAddress(order['deliveryAddress']);
-    if (deliveryAddress) projected['deliveryAddress'] = deliveryAddress;
-
-    // 요청사항에는 받는 분 정보가 들어갈 수 있어 배정된 기사에게만 보인다.
-    if (isAssignedToRequester && typeof order['requestNote'] === 'string') {
-      projected['requestNote'] = order['requestNote'];
-    }
-
-    if (order['status'] === 'DELIVERY_HELD') {
-      const deliveryHold = this.projectDeliveryHold(order['deliveryHold']);
-      if (deliveryHold) projected['deliveryHold'] = deliveryHold;
-    }
-
-    if (
-      isAssignedToRequester &&
-      (order['status'] === 'PREPARING' ||
-        (order['status'] === 'DELIVERING' && order['deliveryMethod'] === 'hub'))
-    ) {
-      projected['sellerPhone'] = order['sellerPhone'];
-    }
-    // 고객 전화는 본인 배정 직배송 주문의 배송 중·보류(재배송 연락) 단계에서만 노출한다.
-    // 값은 결제 때 받은 수령 연락처(deliveryPhone)를 우선하고, 없으면 가입 프로필 전화로 대체한다.
-    if (
-      isAssignedToRequester &&
-      (order['status'] === 'DELIVERING' || order['status'] === 'DELIVERY_HELD') &&
-      order['deliveryMethod'] !== 'hub'
-    ) {
-      projected['buyerPhone'] = order['deliveryPhone'] ?? order['buyerPhone'];
-    }
-
-    return projected;
-  }
-
-  private projectRedeliveryPayment(payment: unknown): DriverOrderReadModel['redeliveryPayment'] {
-    if (!isRecord(payment)) {
-      return {
-        required: false,
-        holdAt: null,
-        chargeId: null,
-        status: 'NOT_REQUIRED',
-        canPay: false,
-        paid: false,
-        requiresRecovery: false,
-      };
-    }
-    return {
-      required: payment['required'],
-      holdAt: payment['holdAt'],
-      chargeId: payment['chargeId'],
-      status: payment['status'],
-      canPay: payment['canPay'],
-      paid: payment['paid'],
-      requiresRecovery: payment['requiresRecovery'],
-    };
-  }
-
-  private projectDeliveryAddress(value: unknown): Record<string, unknown> | undefined {
-    if (!isRecord(value)) return undefined;
-    return { address: value['address'] };
-  }
-
-  private deliveryAddressValue(value: unknown): unknown {
-    return isRecord(value) ? value['address'] : undefined;
-  }
-
-  private projectDeliveryHold(value: unknown): Record<string, unknown> | undefined {
-    if (!isRecord(value)) return undefined;
-    return {
-      reasonCode: value['reasonCode'],
-      reasonMessage: value['reasonMessage'],
-      customerResponsible: value['customerResponsible'],
-      redeliveryFee: value['redeliveryFee'],
-      nextContactAt: value['nextContactAt'],
-      nextDeliveryAt: value['nextDeliveryAt'],
-    };
+    return projectDriverOrder(withPayment, driverId, view);
   }
 }

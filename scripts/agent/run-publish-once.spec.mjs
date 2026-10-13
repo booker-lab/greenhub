@@ -28,20 +28,27 @@ import {
   PUBLISH_ONCE_STATUSES,
   REMOTE_READBACK_FAILED,
   SUCCESS_PUBLISHED,
+  DEFAULT_CI_TIMEOUT_MS,
   buildCandidateCommitArgs,
   createTemporaryTransportRef,
   parseArgs,
+  resolvePositiveTimeoutMs,
+  runPublicationFinalizer,
   runPublishOnce,
   validatePublishOnceInput,
+  waitForRequiredChecks,
 } from './run-publish-once.mjs';
 import {
   ALREADY_SATISFIED,
   BOUNDARY_VIOLATION,
   CLEANUP_FAILED,
+  DEFAULT_OPENCODE_TIMEOUT_MS,
+  DEFAULT_PROOF_TIMEOUT_MS,
   PROOF_FAILED,
   SUCCESS,
   runOnce,
 } from './run-once.mjs';
+import { DEFAULT_CODEX_TIMEOUT_MS } from './agent-executor.mjs';
 import {
   COMPLETE_ALREADY_PUBLISHED,
   SEMANTIC_OWNER_REVIEW_REQUIRED,
@@ -127,9 +134,14 @@ function runOnceOptions(fixture, overrides = {}) {
   };
 }
 
+// Publication requires at least one proof that ran and passed; publishing
+// fixtures default to a trivial passing proof instead of an empty proof list.
+const TRIVIAL_PROOF = 'node -e "process.exit(0)"';
+
 function publishOptions(fixture, overrides = {}) {
   return {
     ...runOnceOptions(fixture),
+    proofCommands: [TRIVIAL_PROOF],
     commitMessage: 'feat(agent): bounded publication proof',
     prTitle: 'GN-02 bounded publication proof',
     transportRef: 'tmp/spec-transport',
@@ -258,6 +270,7 @@ function createFakeGithub({
   allowSquashMerge = true,
   mergeEffect = null,
   onChecks = null,
+  protectionResponse = null,
 } = {}) {
   const calls = [];
   const prs = new Map();
@@ -300,6 +313,7 @@ function createFakeGithub({
       return ok(JSON.stringify({ allow_squash_merge: allowSquashMerge }));
     }
     if (args[0] === 'api' && args[1] === `repos/${repository}/branches/main/protection`) {
+      if (protectionResponse !== null) return protectionResponse({ ok, fail });
       return ok(JSON.stringify({ required_status_checks: { contexts: requiredChecks, strict: true } }));
     }
     if (args[0] === 'pr' && args[1] === 'create') {
@@ -1348,13 +1362,235 @@ test('invalid input is rejected before any Git, provider, or process effect', ()
   assert.equal(result.publication, null);
   assert.equal(result.workspace.cleanup, 'NOT_CREATED');
   assert.ok(PUBLISH_ONCE_STATUSES.includes('INVALID_INPUT'));
-  assert.equal(validatePublishOnceInput({ commitMessage: 'm', prTitle: 'T' }), null);
+  assert.equal(
+    validatePublishOnceInput({ commitMessage: 'm', prTitle: 'T', proofCommands: [TRIVIAL_PROOF] }),
+    null,
+  );
   assert.equal(validatePublishOnceInput({ commitMessage: '', prTitle: 'T' }), '--commit-message is required');
   assert.equal(validatePublishOnceInput({ commitMessage: 'm', prTitle: '' }), '--pr-title is required');
   assert.equal(
     validatePublishOnceInput({ commitMessage: 'm', prTitle: 'T', githubRepository: 'nope' }),
     '--github-repo must be <owner>/<name>',
   );
+});
+
+const NO_PROOF_MESSAGE = 'at least one --proof command is required for publication';
+
+test('PROOF REQUIRED — publication without any proof command is rejected before any effect', () => {
+  for (const proofCommands of [undefined, [], [''], ['   '], 'node -e 0']) {
+    assert.equal(
+      validatePublishOnceInput({ commitMessage: 'm', prTitle: 'T', proofCommands }),
+      NO_PROOF_MESSAGE,
+    );
+  }
+
+  const fixture = buildFixture();
+  try {
+    const before = git(fixture.root, ['rev-parse', 'HEAD']);
+    let coreCalls = 0;
+    const result = runPublishOnce(publishOptions(fixture, { proofCommands: [] }), {
+      runOnceCore: () => {
+        coreCalls += 1;
+        throw new Error('must not be invoked');
+      },
+      invokeOpencode: () => {
+        throw new Error('must not be invoked');
+      },
+      runGh: () => {
+        throw new Error('must not be invoked');
+      },
+      publishExactCandidate: () => {
+        throw new Error('must not be invoked');
+      },
+      log: () => {},
+    });
+    assert.equal(result.status, 'INVALID_INPUT');
+    assert.equal(result.reason, NO_PROOF_MESSAGE);
+    assert.equal(result.publication, null);
+    assert.deepEqual(result.proofResults, []);
+    assert.equal(result.workspace.cleanup, 'NOT_CREATED');
+    assert.equal(coreCalls, 0);
+    assert.equal(git(fixture.root, ['rev-parse', 'HEAD']), before);
+    assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+  } finally {
+    removeFixture(fixture);
+  }
+
+  const parsed = parseArgs([
+    '--task',
+    't.md',
+    '--allow',
+    'src',
+    '--commit-message',
+    'm',
+    '--pr-title',
+    'T',
+  ]);
+  assert.equal(parsed.ok, false);
+  assert.equal(parsed.error, NO_PROOF_MESSAGE);
+});
+
+test('PROOF REQUIRED — the finalizer blocks publication unless a proof ran and passed', () => {
+  const fixture = buildFixture();
+  try {
+    const cases = [
+      { proofResults: [], reason: /none ran/ },
+      { proofResults: undefined, reason: /none ran/ },
+      {
+        proofResults: [
+          { command: TRIVIAL_PROOF, ok: true },
+          { command: 'node proof-check.cjs', ok: false },
+        ],
+        reason: /every proof command to pass/,
+      },
+    ];
+    for (const entry of cases) {
+      const effects = [];
+      const forbidden = (name) => () => {
+        effects.push(name);
+        throw new Error(`${name} must not be invoked`);
+      };
+      const publication = runPublicationFinalizer({
+        context: {
+          repositoryRoot: fixture.root,
+          remote: 'origin',
+          workspacePath: fixture.root,
+          tempRoot: fixture.root,
+          baselineSha: fixture.baseSha,
+          changedPaths: ['src/allowed.txt'],
+          proofResults: entry.proofResults,
+        },
+        options: publishOptions(fixture),
+        deps: {
+          runGh: forbidden('runGh'),
+          publishExactCandidate: forbidden('publishExactCandidate'),
+          deleteTemporaryTransportRef: forbidden('deleteTemporaryTransportRef'),
+          decidePrePublication: forbidden('decidePrePublication'),
+          decidePreMerge: forbidden('decidePreMerge'),
+          runProofCommand: forbidden('runProofCommand'),
+        },
+        extraBody: null,
+        log: () => {},
+      });
+      assert.equal(publication.outcome, PUBLICATION_BLOCKED);
+      assert.match(publication.reason, entry.reason);
+      assert.equal(publication.stage, 'CANDIDATE');
+      assert.equal(publication.candidate, null);
+      assert.equal(publication.transportCreated, false);
+      assert.equal(publication.pr, null);
+      assert.deepEqual(effects, []);
+      assert.equal(git(fixture.root, ['rev-parse', 'HEAD']), fixture.baseSha);
+      assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+    }
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('TIMEOUTS — CLI rejects zero, negative, and non-finite timeout values', () => {
+  const base = [
+    '--task',
+    't.md',
+    '--allow',
+    'src',
+    '--proof',
+    TRIVIAL_PROOF,
+    '--commit-message',
+    'm',
+    '--pr-title',
+    'T',
+  ];
+  for (const flag of [
+    '--ci-timeout-ms',
+    '--proof-timeout-ms',
+    '--opencode-timeout-ms',
+    '--codex-timeout-ms',
+  ]) {
+    for (const value of ['0', '-1', 'Infinity', '-Infinity', 'NaN', 'abc', '']) {
+      const parsed = parseArgs([...base, flag, value]);
+      assert.equal(parsed.ok, false, `${flag} ${JSON.stringify(value)} must be rejected`);
+      assert.equal(parsed.error, `${flag} requires a positive number`);
+    }
+    assert.equal(parseArgs([...base, flag]).ok, false);
+  }
+  const accepted = parseArgs([
+    ...base,
+    '--ci-timeout-ms',
+    '1000',
+    '--proof-timeout-ms',
+    '2000',
+    '--opencode-timeout-ms',
+    '3000',
+    '--codex-timeout-ms',
+    '4000',
+  ]);
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.options.ciTimeoutMs, 1000);
+  assert.equal(accepted.options.proofTimeoutMs, 2000);
+  assert.equal(accepted.options.opencodeTimeoutMs, 3000);
+  assert.equal(accepted.options.codexTimeoutMs, 4000);
+});
+
+test('TIMEOUTS — a programmatic non-positive timeout falls back to the bounded default', () => {
+  for (const value of [0, -5, Number.POSITIVE_INFINITY, Number.NaN, undefined, null, '100']) {
+    assert.equal(resolvePositiveTimeoutMs(value, 42), 42);
+  }
+  assert.equal(resolvePositiveTimeoutMs(7, 42), 7);
+
+  // The required-check watch is never unbounded, even when 0 arrives directly.
+  const watchTimeouts = [];
+  const runGh = (args, { timeoutMs } = {}) => {
+    if (args.includes('--watch')) watchTimeouts.push(timeoutMs);
+    return {
+      exitCode: 0,
+      signal: null,
+      timedOut: false,
+      startErrorCode: null,
+      stdout: args.includes('--json') ? JSON.stringify([{ name: 'verify', bucket: 'pass' }]) : '',
+      stderr: '',
+    };
+  };
+  const waited = waitForRequiredChecks({
+    runGh,
+    cwd: process.cwd(),
+    repository: 'booker-lab/greenhub',
+    prNumber: 1,
+    requiredChecks: ['verify'],
+    timeoutMs: 0,
+    sleep: () => {},
+  });
+  assert.equal(waited.status, 'PASSED');
+  assert.equal(watchTimeouts.length, 1);
+  assert.ok(watchTimeouts[0] > 0 && watchTimeouts[0] <= DEFAULT_CI_TIMEOUT_MS);
+
+  // runPublishOnce forwards bounded execution timeouts to the run-once core.
+  const forwarded = [];
+  const result = runPublishOnce(
+    {
+      ...publishOptions({ root: process.cwd() }),
+      opencodeTimeoutMs: 0,
+      codexTimeoutMs: -1,
+      proofTimeoutMs: Number.POSITIVE_INFINITY,
+    },
+    {
+      runOnceCore: (options) => {
+        forwarded.push(options);
+        return {
+          status: PROOF_FAILED,
+          reason: 'stub',
+          changedPaths: [],
+          proofResults: [],
+          workspace: { cleanup: 'NOT_CREATED', cleanupErrors: [] },
+        };
+      },
+      log: () => {},
+    },
+  );
+  assert.equal(result.status, PROOF_FAILED);
+  assert.equal(forwarded.length, 1);
+  assert.equal(forwarded[0].opencodeTimeoutMs, DEFAULT_OPENCODE_TIMEOUT_MS);
+  assert.equal(forwarded[0].codexTimeoutMs, DEFAULT_CODEX_TIMEOUT_MS);
+  assert.equal(forwarded[0].proofTimeoutMs, DEFAULT_PROOF_TIMEOUT_MS);
 });
 
 test('transport ref names are task-owned, invocation-unique, and candidate-only', () => {
@@ -1709,6 +1945,151 @@ test('G ??a rebind whose affected proof fails ends PROOF_FAILED with no PR and n
     assert.equal(existsSync(dirname(result.workspace.path)), false);
     assert.equal(result.canonicalCheckout.unchanged, true);
     assert.equal(fake.invocations.length, 1);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Branch protection lookup fails closed
+// ---------------------------------------------------------------------------
+
+for (const [label, response] of [
+  ['HTTP 404 (Branch not protected)', ({ fail }) => fail('gh: Branch not protected (HTTP 404)\n')],
+  [
+    'HTTP 403 (insufficient permission)',
+    ({ fail }) => fail('gh: Resource not accessible (HTTP 403)\n'),
+  ],
+  ['a lookup error', ({ fail }) => fail('gh: connection reset\n')],
+  [
+    'a protection record without required checks',
+    ({ ok }) => ok(JSON.stringify({ required_status_checks: { contexts: [], checks: [] } })),
+  ],
+  [
+    'a protection record without a required_status_checks block',
+    ({ ok }) => ok(JSON.stringify({})),
+  ],
+]) {
+  test(`PROTECTION — ${label} blocks publication before any transport, PR, or merge`, () => {
+    const fixture = buildFixture();
+    try {
+      const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+      const github = createFakeGithub({ bare: fixture.bare, protectionResponse: response });
+      const result = runPublishOnce(publishOptions(fixture), {
+        invokeOpencode: fake.invokeOpencode,
+        runGh: github.runGh,
+        log: () => {},
+      });
+
+      assert.equal(result.status, PUBLICATION_BLOCKED);
+      assert.notEqual(result.publication.protection, 'UNPROTECTED');
+      assert.equal(result.publication.requiredChecks, null);
+      assert.match(result.reason, /branch protection|protection returned no JSON/);
+      assert.equal(github.prs.size, 0);
+      assert.equal(github.state.mergeCalls.length, 0);
+      assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+      assert.equal(remoteRefSha(fixture.bare, 'main'), fixture.baseSha);
+    } finally {
+      removeFixture(fixture);
+    }
+  });
+}
+
+test('PROTECTION — required checks declared through the checks array are honoured', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      protectionResponse: ({ ok }) =>
+        ok(
+          JSON.stringify({
+            required_status_checks: { checks: [{ context: 'verify', app_id: 1 }] },
+          }),
+        ),
+    });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+
+    assert.equal(result.status, SUCCESS_PUBLISHED);
+    assert.equal(result.publication.protection, 'PROTECTED');
+    assert.deepEqual(result.publication.requiredChecks, ['verify']);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Operator kill switch
+// ---------------------------------------------------------------------------
+
+test('KILL SWITCH — a stop file blocks publication before transport', () => {
+  const fixture = buildFixture();
+  try {
+    writeFileSync(join(fixture.root, '.agent-stop'), '');
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+
+    assert.equal(result.status, PUBLICATION_BLOCKED);
+    assert.match(result.reason, /kill switch is active before transport/);
+    assert.equal(github.prs.size, 0);
+    assert.equal(github.state.mergeCalls.length, 0);
+    assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+    assert.equal(remoteRefSha(fixture.bare, 'main'), fixture.baseSha);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('KILL SWITCH — GREENHUB_AGENT_STOP blocks publication before transport', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({ bare: fixture.bare });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+      env: { ...process.env, GREENHUB_AGENT_STOP: '1' },
+    });
+
+    assert.equal(result.status, PUBLICATION_BLOCKED);
+    assert.match(result.reason, /GREENHUB_AGENT_STOP/);
+    assert.equal(github.prs.size, 0);
+    assert.deepEqual(remoteTemporaryRefs(fixture.bare), []);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('KILL SWITCH — a stop file created while checks run blocks the merge and retains the PR', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const github = createFakeGithub({
+      bare: fixture.bare,
+      onChecks: () => writeFileSync(join(fixture.root, '.agent-stop'), ''),
+    });
+    const result = runPublishOnce(publishOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      runGh: github.runGh,
+      log: () => {},
+    });
+
+    assert.equal(result.status, PUBLICATION_BLOCKED);
+    assert.match(result.reason, /kill switch is active before merge/);
+    assert.equal(github.prs.size, 1);
+    assert.equal(github.state.mergeCalls.length, 0);
+    assert.equal(result.publication.retained, true);
+    assert.equal(remoteRefSha(fixture.bare, 'main'), fixture.baseSha);
   } finally {
     removeFixture(fixture);
   }

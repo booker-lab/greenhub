@@ -254,6 +254,20 @@ test('화면은 기존 검증 API와 인증을 사용하고 제외 항목을 장
   assert.doesNotMatch(source, /clearCart\(\).*validate/s);
 });
 
+test('공개 회차에서 품절인 상품은 품절 태그를 달고 결제 제외는 서버 검증이 정한다', () => {
+  assert.match(
+    source,
+    /candidate\.id === roundItem\.roundItemId && candidate\.status === 'SOLD_OUT'/,
+  );
+  assert.match(source, /\{soldOut && \(/);
+  assert.match(source, /품절\s*<\/span>/);
+  // 결제 대상은 여전히 서버 검증(eligible)만으로 고른다.
+  assert.match(
+    source,
+    /items\.filter\(\(item\) => validationByKey\[cartItemKey\(item\)\]\?\.status === 'eligible'\)/,
+  );
+});
+
 test('legacy 필수 정보가 없으면 현재 장바구니 화면에서 수정 후 결제로만 진행한다', () => {
   assert.match(source, /getCartItemValidationIssues/);
   assert.match(source, /getCartValidationError/);

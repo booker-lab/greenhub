@@ -5,6 +5,7 @@ function makeService(records: Array<Record<string, unknown>> = []) {
   const query = {} as {
     where: jest.Mock;
     orderBy: jest.Mock;
+    limit: jest.Mock;
     get: jest.Mock;
   };
   query.where = jest.fn((...args: unknown[]) => {
@@ -15,6 +16,7 @@ function makeService(records: Array<Record<string, unknown>> = []) {
     calls.push(args);
     return query;
   });
+  query.limit = jest.fn(() => query);
   query.get = jest.fn().mockImplementation(async () => ({
     docs: records
       .filter((record) =>

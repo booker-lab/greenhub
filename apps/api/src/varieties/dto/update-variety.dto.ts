@@ -1,9 +1,25 @@
-import { IsString, IsEnum, IsBoolean, IsArray, IsOptional } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { COLOR_OPTIONS, type ColorOption, type FlowerSize, type PlantSize, type StemType } from '@greenhub/shared';
+import {
+  STEM_TYPE_VALUES,
+  VARIETY_BLOOM_DURATION_MAX_LENGTH,
+  VARIETY_NAME_MAX_LENGTH,
+  VARIETY_NOTES_MAX_LENGTH,
+  VARIETY_SUB_CATEGORY_MAX_LENGTH,
+} from './create-variety.dto';
 
 export class UpdateVarietyDto {
   @IsOptional()
   @IsString()
+  @MaxLength(VARIETY_NAME_MAX_LENGTH)
   name?: string;
 
   @IsOptional()
@@ -12,6 +28,7 @@ export class UpdateVarietyDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(VARIETY_SUB_CATEGORY_MAX_LENGTH)
   subCategory?: string;
 
   @IsOptional()
@@ -24,7 +41,8 @@ export class UpdateVarietyDto {
 
   @IsOptional()
   @IsArray()
-  @IsEnum(['외대', '쌍대', '가지', '3대'], { each: true })
+  @ArrayMaxSize(STEM_TYPE_VALUES.length)
+  @IsEnum(STEM_TYPE_VALUES, { each: true })
   availableStemTypes?: StemType[];
 
   @IsOptional()
@@ -37,6 +55,7 @@ export class UpdateVarietyDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(VARIETY_BLOOM_DURATION_MAX_LENGTH)
   bloomDuration?: string;
 
   @IsOptional()
@@ -45,10 +64,12 @@ export class UpdateVarietyDto {
 
   @IsOptional()
   @IsArray()
+  @ArrayMaxSize(COLOR_OPTIONS.length)
   @IsEnum(COLOR_OPTIONS, { each: true })
   typicalColors?: ColorOption[];
 
   @IsOptional()
   @IsString()
+  @MaxLength(VARIETY_NOTES_MAX_LENGTH)
   notes?: string;
 }

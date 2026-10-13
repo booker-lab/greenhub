@@ -50,7 +50,56 @@ const SELLER_ORDERS = [
     deliveryPhone: '010-1234-5678',
   }),
   sellerOrder('order-no-contact', '20260928-000102', { buyerName: null, deliveryPhone: null }),
+  // 판매 중 회차(round-open) 주문: 여러 상품 주문·상태별 한 건씩(회차 상세 "이 회차 주문"·상품별 수량 확인용).
+  roundOrder('order-round-multi', '20261001-000001', 'ACCEPTED', [
+    ['빅립', 30000, 1],
+    ['만천홍', 25000, 2],
+  ]),
+  roundOrder('order-round-single', '20261001-000002', 'ACCEPTED', [['v3', 45000, 1]]),
+  roundOrder('order-round-preparing', '20261001-000003', 'PREPARING', [['빅립', 30000, 2]]),
+  roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]]),
+  roundOrder('order-round-pending', '20261001-000005', 'PENDING', [
+    ['빅립', 30000, 1],
+    ['만천홍', 25000, 1],
+  ]),
 ];
+
+function roundOrder(id, orderNumber, status, items) {
+  const orderItems = items.map(([name, unitPrice, quantity]) => {
+    const index = ['빅립', '만천홍', 'v3'].indexOf(name) + 1;
+    return {
+      roundItemId: `round-open-item-${index}`,
+      productId: `product-${index}`,
+      productName: `동양란 ${name}`,
+      productImageUrl: null,
+      unitPrice,
+      quantity,
+      subtotalAmount: unitPrice * quantity,
+    };
+  });
+  return sellerOrder(id, orderNumber, {
+    schemaVersion: 2,
+    roundId: 'round-open',
+    status,
+    buyerName: '이천손님',
+    deliveryPhone: '010-2345-6789',
+    productId: orderItems[0].productId,
+    productName: orderItems[0].productName,
+    quantity: orderItems.reduce((sum, item) => sum + item.quantity, 0),
+    orderItems,
+    deliveryFee: 0,
+    totalAmount: orderItems.reduce((sum, item) => sum + item.subtotalAmount, 0),
+    deliveryAddress: {
+      address: '경기도 이천시 중리천로 1',
+      addressDetail: '2층',
+      zipCode: '17379',
+    },
+    isMetropolitan: false,
+    requestedDeliveryDate: '2026-10-06',
+    createdAt: '2026-10-01T02:00:00.000Z',
+    updatedAt: '2026-10-01T02:00:00.000Z',
+  });
+}
 
 // ── 셀러 정산 ──
 const SELLER_SETTLEMENTS = [
@@ -229,12 +278,21 @@ const SALE_ROUNDS = [
     deliveryEndAt: '2026-11-10T00:00:00.000Z',
   }),
 ];
+// 상품별 수량은 회차 counters 합계와 맞춘다(판매 중 11개·결제 중 2개, 마감 27개).
+const ROUND_ITEM_QUANTITIES = {
+  OPEN: { ordered: [4, 5, 2], reserved: [1, 1, 0] },
+  CLOSED: { ordered: [10, 10, 7], reserved: [0, 0, 0] },
+};
 function roundItems(round) {
+  const quantities = ROUND_ITEM_QUANTITIES[round.status] ?? {
+    ordered: [0, 0, 0],
+    reserved: [0, 0, 0],
+  };
   return [
-    ['빅립', 30000, 10, 4],
-    ['만천홍', 25000, 10, 5],
-    ['v3', 45000, 10, 2],
-  ].map(([name, price, limit, ordered], i) => ({
+    ['빅립', 30000, 10],
+    ['만천홍', 25000, 10],
+    ['v3', 45000, 10],
+  ].map(([name, price, limit], i) => ({
     id: `${round.id}-item-${i + 1}`,
     roundId: round.id,
     storeId: STORE_ID,
@@ -243,14 +301,58 @@ function roundItems(round) {
     productImageUrlSnapshot: null,
     roundPrice: price,
     saleLimitQuantity: limit,
-    reservedQuantity: 0,
-    orderedQuantity: round.status === 'OPEN' ? ordered : 0,
+    reservedQuantity: quantities.reserved[i],
+    orderedQuantity: quantities.ordered[i],
     displayOrder: i,
     status: 'ACTIVE',
     createdAt: round.createdAt,
     updatedAt: round.updatedAt,
   }));
 }
+
+// ── 운영 확인 기록(가게 전체 목록·주문 상세) ──
+function operationIssue(id, type, severity, status, orderId, updatedAt) {
+  return {
+    id,
+    storeId: STORE_ID,
+    orderId,
+    paymentId: orderId,
+    type,
+    severity,
+    status,
+    createdAt: updatedAt,
+    updatedAt,
+    resolvedAt: status === 'OPEN' ? null : updatedAt,
+    latestSnapshot: { orderStatus: 'CANCELLED', paymentStatus: 'UNKNOWN' },
+    actions: [],
+  };
+}
+const OPERATION_ISSUES = [
+  operationIssue(
+    'issue-visual-0001',
+    'FINALIZATION_REFUND_FAILED',
+    'critical',
+    'OPEN',
+    'order-with-contact',
+    '2026-10-06T01:10:00.000Z',
+  ),
+  operationIssue(
+    'issue-visual-0002',
+    'CUSTOMER_NOTICE_FAILED',
+    'warning',
+    'OPEN',
+    'order-no-contact',
+    '2026-10-06T02:30:00.000Z',
+  ),
+  operationIssue(
+    'issue-visual-0003',
+    'AUTO_REFUND_FAILED',
+    'warning',
+    'RESOLVED',
+    'order-with-contact',
+    '2026-10-05T09:00:00.000Z',
+  ),
+];
 
 // ── 어드민 기사·배너 ──
 const ADMIN_DRIVERS = [
@@ -406,6 +508,25 @@ const VARIETIES = [
   createdAt: '2026-08-01T01:00:00.000Z',
 }));
 
+const HUBS = [
+  {
+    id: 'hub-0001',
+    name: '이천 부발 픽업점',
+    address: '경기도 이천시 부발읍 경충대로 2091',
+    addressDetail: '1층 꽃집',
+    operatingHours: '평일 10:00~19:00',
+    isActive: true,
+  },
+  {
+    id: 'hub-0002',
+    name: '증포동 거점',
+    address: '경기도 이천시 증포동 403',
+    addressDetail: null,
+    operatingHours: null,
+    isActive: false,
+  },
+];
+
 export const routes = [
   ['GET', /^\/stores\/[^/]+\/orders$/, () => ({ body: SELLER_ORDERS })],
   [
@@ -416,7 +537,7 @@ export const routes = [
       return o ? { body: o } : { status: 404, body: { message: '주문 없음' } };
     },
   ],
-  ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: [] } })],
+  ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements\/summary$/,
@@ -457,6 +578,62 @@ export const routes = [
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
   [
     'GET',
+    /^\/stores\/[^/]+\/delivery-config$/,
+    () => ({
+      body: {
+        directFee: 3000,
+        hubFee: 1000,
+        parcelFee: 4000,
+        freeThresholdDirect: 50000,
+        freeThresholdHub: 30000,
+        freeThresholdParcel: 50000,
+        weatherRestrictionActive: false,
+      },
+    }),
+  ],
+  // 이번 달 몇몇 날짜에 한도를 넣는다(보는 달이 바뀌어도 같은 날짜 모양이 보이게 from의 연·월을 따른다).
+  [
+    'GET',
+    /^\/stores\/[^/]+\/daily-caps$/,
+    ({ url }) => {
+      const month = (url.searchParams.get('from') ?? '2026-10-01').slice(0, 7);
+      return {
+        body: {
+          caps: [
+            { date: `${month}-10`, totalCap: 20, usedSlots: 12 },
+            { date: `${month}-11`, totalCap: 20, usedSlots: 20 },
+            { date: `${month}-17`, totalCap: 15, usedSlots: 3 },
+          ],
+        },
+      };
+    },
+  ],
+  ['GET', /^\/stores\/[^/]+\/hubs$/, () => ({ body: { hubs: HUBS } })],
+  [
+    'GET',
+    /^\/stores\/([^/]+)$/,
+    ({ params: [id] }) => ({
+      body: {
+        id,
+        name: '그린러브 검증 가게',
+        ceoName: '김농부',
+        phone: '010-4452-2104',
+        address: '경기도 이천시 부발읍 경충대로 2091',
+        businessNumber: '123-45-67890',
+        logoUrl: '',
+      },
+    }),
+  ],
+  // 파일럿 가게와 같은 회차 판매 가게 — 설정에서 예전 방식 메뉴(배송비·배송 슬롯·거점)가 숨는다.
+  [
+    'GET',
+    /^\/stores\/([^/]+)\/public-profile$/,
+    ({ params: [id] }) => ({
+      body: { id, name: '그린러브 검증 가게', logoUrl: null, salesMode: 'round_direct' },
+    }),
+  ],
+  [
+    'GET',
     /^\/stores\/[^/]+\/products\/([^/]+)\/owner$/,
     ({ params: [id] }) => {
       const product = firestoreSeed.products[id];
@@ -483,6 +660,8 @@ export const routes = [
  */
 export const screens = [
   { id: 'login', group: '판매자', title: '로그인', path: '/login', auth: false },
+  { id: 'home', group: '판매자', title: '홈', path: '/' },
+  { id: 'onboarding', group: '판매자', title: '사업자 프로필 수정', path: '/onboarding' },
   { id: 'orders', group: '판매자', title: '주문 목록', path: '/orders' },
   {
     id: 'order-contact',
@@ -496,7 +675,14 @@ export const screens = [
     title: '주문 상세 · 손님 정보 없음',
     path: '/orders/order-no-contact',
   },
+  {
+    id: 'order-round',
+    group: '판매자',
+    title: '회차 주문 상세(여러 상품)',
+    path: '/orders/order-round-multi',
+  },
   { id: 'prep', group: '판매자', title: '준비', path: '/prep' },
+  { id: 'operations', group: '판매자', title: '운영 확인', path: '/operations' },
   { id: 'sale-rounds', group: '판매자', title: '회차 목록', path: '/sale-rounds' },
   {
     id: 'sale-round-open',
@@ -530,6 +716,19 @@ export const screens = [
     click: '주문별 상세',
   },
   { id: 'settings', group: '판매자', title: '설정', path: '/settings' },
+  {
+    id: 'settings-delivery',
+    group: '판매자',
+    title: '설정 · 배송비',
+    path: '/settings/delivery',
+  },
+  {
+    id: 'settings-daily-caps',
+    group: '판매자',
+    title: '설정 · 배송 한도',
+    path: '/settings/daily-caps',
+  },
+  { id: 'hubs', group: '판매자', title: '거점', path: '/hubs' },
   { id: 'admin-orders', group: '어드민', title: '주문', path: '/admin/orders' },
   { id: 'admin-settlements', group: '어드민', title: '정산', path: '/admin/settlements' },
   { id: 'admin-users', group: '어드민', title: '소비자', path: '/admin/users' },

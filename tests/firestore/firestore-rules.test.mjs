@@ -11,6 +11,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   orderBy,
   query,
   setDoc,
@@ -27,8 +28,23 @@ const SERVER_ONLY_COLLECTIONS = [
   'marketingConsentLogs',
   'deliveryPhotoRecords',
   'notificationDeliveries',
+  // 인증·식별자·알림·결제·정산·감사·운영 기록: firestore.rules의 기본 거부로만
+  // 보호되므로 명시 match가 없어도 모든 클라이언트 직접 접근이 거부되는지 고정한다.
+  'refreshTokens',
+  'emailIdentities',
+  'kakaoIdentities',
+  'invites',
+  'notifications',
+  'payments',
+  'orderCharges',
+  'orderCounters',
+  'settlements',
+  'auditLogs',
+  'aiUsage',
+  'hubs',
+  'deliveryFeeConfig',
 ];
-const PUBLIC_ROUND_COLLECTIONS = ['saleRounds', 'saleRoundItems'];
+const SALE_ROUND_COLLECTIONS = ['saleRounds', 'saleRoundItems'];
 
 let testEnvironment;
 
@@ -216,20 +232,32 @@ async function seedFixtures() {
       'users/seller-role-lifecycle': {
         id: 'seller-role-lifecycle',
         role: 'seller',
-        storeId: 'store-1',
+        storeId: 'store-lc-role',
         suspended: false,
+      },
+      'stores/store-lc-role': {
+        name: 'seller-role-lifecycle 매장',
+        ownerId: 'seller-role-lifecycle',
       },
       'users/seller-store-lifecycle': {
         id: 'seller-store-lifecycle',
         role: 'seller',
-        storeId: 'store-1',
+        storeId: 'store-lc-store',
         suspended: false,
+      },
+      'stores/store-lc-store': {
+        name: 'seller-store-lifecycle 매장',
+        ownerId: 'seller-store-lifecycle',
       },
       'users/seller-suspended-lifecycle': {
         id: 'seller-suspended-lifecycle',
         role: 'seller',
-        storeId: 'store-1',
+        storeId: 'store-lc-suspended',
         suspended: false,
+      },
+      'stores/store-lc-suspended': {
+        name: 'seller-suspended-lifecycle 매장',
+        ownerId: 'seller-suspended-lifecycle',
       },
       'users/admin-role-lifecycle': {
         id: 'admin-role-lifecycle',
@@ -385,9 +413,12 @@ async function seedFixtures() {
     };
 
     for (const collectionName of SERVER_ONLY_COLLECTIONS) {
+      // 각 역할이 소유자로 보일 수 있는 필드를 함께 둬서 소유자 본인 접근도 거부되는지 확인한다.
       fixtures[`${collectionName}/existing`] = {
         ownerId: 'user-1',
+        userId: 'user-1',
         storeId: 'store-1',
+        driverId: 'driver-1',
         status: 'ACTIVE',
       };
     }
@@ -404,6 +435,17 @@ async function assertDirectAccessDenied(collectionName) {
     const created = doc(database, collectionName, `created-${actor}`);
 
     await assertFails(getDoc(existing));
+    await assertFails(getDocs(collection(database, collectionName)));
+    for (const [field, value] of [
+      ['userId', 'user-1'],
+      ['ownerId', 'user-1'],
+      ['storeId', 'store-1'],
+      ['driverId', 'driver-1'],
+    ]) {
+      await assertFails(
+        getDocs(query(collection(database, collectionName), where(field, '==', value), limit(1))),
+      );
+    }
     await assertFails(setDoc(created, { actor }));
     await assertFails(updateDoc(existing, { actor }));
     await assertFails(deleteDoc(existing));
@@ -442,71 +484,85 @@ for (const collectionName of SERVER_ONLY_COLLECTIONS) {
   });
 }
 
-test('saleRounds는 공개 상태의 단건 및 제한된 목록 조회만 허용한다', async () => {
-  const database = testEnvironment.unauthenticatedContext().firestore();
-  const publicQuery = query(
-    collection(database, 'saleRounds'),
-    where('storeId', '==', 'store-1'),
-    where('status', 'in', ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED']),
-  );
+test('users 문서는 본인을 포함한 모든 클라이언트의 직접 읽기·목록·쓰기를 거부한다', async () => {
+  const actors = [
+    ['consumer-1', { role: 'consumer' }],
+    ['seller-1', { role: 'seller', storeId: 'store-1' }],
+    ['driver-1', { role: 'driver', driverApproved: true }],
+    ['pending-driver', { role: 'driver', driverApproved: false }],
+    ['admin-1', { role: 'admin' }],
+    ['user-without-profile', {}],
+  ];
+  const anonymous = testEnvironment.unauthenticatedContext().firestore();
 
-  await assertSucceeds(getDoc(doc(database, 'saleRounds', 'round-1')));
-  for (const roundId of ['round-scheduled', 'round-closed', 'round-completed']) {
-    await assertSucceeds(getDoc(doc(database, 'saleRounds', roundId)));
+  await assertFails(getDoc(doc(anonymous, 'users', 'consumer-1')));
+  await assertFails(getDocs(collection(anonymous, 'users')));
+  await assertFails(setDoc(doc(anonymous, 'users', 'anonymous-created'), { role: 'admin' }));
+
+  for (const [uid, claims] of actors) {
+    const database = testEnvironment.authenticatedContext(uid, claims).firestore();
+    const own = doc(database, 'users', uid);
+
+    await assertFails(getDoc(own));
+    await assertFails(getDoc(doc(database, 'users', 'seller-2')));
+    await assertFails(getDocs(collection(database, 'users')));
+    await assertFails(
+      getDocs(query(collection(database, 'users'), where('role', '==', 'admin'), limit(1))),
+    );
+    // 역할·승인·정지 필드는 rules 권한 판정에 쓰이므로 본인 문서라도 직접 바꿀 수 없다.
+    await assertFails(setDoc(own, { role: 'admin', suspended: false }));
+    await assertFails(updateDoc(own, { role: 'admin' }));
+    await assertFails(updateDoc(own, { driverApproved: true }));
+    await assertFails(updateDoc(own, { suspended: false }));
+    await assertFails(deleteDoc(own));
+    await assertFails(getDoc(doc(database, 'users', uid, 'private', 'profile')));
+    await assertFails(setDoc(doc(database, 'users', uid, 'private', 'profile'), { uid }));
   }
-  await assertSucceeds(getDocs(publicQuery));
-  for (const roundId of ['round-draft', 'round-cancelled', 'round-unknown']) {
-    await assertFails(getDoc(doc(database, 'saleRounds', roundId)));
-  }
-  for (const roundId of [
-    'round-legacy',
-    'round-missing-store',
-    'round-missing-mode',
-    'round-null-mode',
-    'round-invalid-mode',
-  ]) {
-    await assertFails(getDoc(doc(database, 'saleRounds', roundId)));
-  }
-  await assertFails(getDocs(collection(database, 'saleRounds')));
 });
 
-test('saleRoundItems는 공개 회차에 속한 단건 및 제한된 목록 조회만 허용한다', async () => {
-  const database = testEnvironment.unauthenticatedContext().firestore();
-  const publicQuery = query(
-    collection(database, 'saleRoundItems'),
-    where('roundId', '==', 'round-1'),
-    where('storeId', '==', 'store-1'),
-    where('status', 'in', ['ACTIVE', 'SOLD_OUT', 'CLOSED']),
-  );
-  const roundOnlyQuery = query(
-    collection(database, 'saleRoundItems'),
-    where('roundId', '==', 'round-1'),
-  );
+test('saleRounds 원문은 공개 상태여도 모든 클라이언트의 단건·목록 조회를 거부한다', async () => {
+  for (const [, database] of clientContexts()) {
+    const publicQuery = query(
+      collection(database, 'saleRounds'),
+      where('storeId', '==', 'store-1'),
+      where('status', 'in', ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED']),
+    );
 
-  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-1')));
-  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-soldout')));
-  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-closed')));
-  await assertFails(getDoc(doc(database, 'saleRoundItems', 'item-hidden')));
-  await assertSucceeds(getDocs(publicQuery));
-  for (const itemId of [
-    'item-foreign-store',
-    'item-parent-mismatch',
-    'item-missing-parent',
-    'item-draft',
-    'item-cancelled',
-    'item-unknown',
-    'item-legacy',
-    'item-missing-mode',
-    'item-null-mode',
-    'item-invalid-mode',
-  ]) {
-    await assertFails(getDoc(doc(database, 'saleRoundItems', itemId)));
+    for (const roundId of [
+      'round-1',
+      'round-scheduled',
+      'round-closed',
+      'round-completed',
+      'round-draft',
+      'round-cancelled',
+      'round-store-2',
+      'round-legacy',
+    ]) {
+      await assertFails(getDoc(doc(database, 'saleRounds', roundId)));
+    }
+    await assertFails(getDocs(publicQuery));
+    await assertFails(getDocs(collection(database, 'saleRounds')));
   }
-  await assertFails(getDocs(roundOnlyQuery));
-  await assertFails(getDocs(collection(database, 'saleRoundItems')));
 });
 
-for (const collectionName of PUBLIC_ROUND_COLLECTIONS) {
+test('saleRoundItems 원문은 공개 회차 품목이어도 모든 클라이언트의 단건·목록 조회를 거부한다', async () => {
+  for (const [, database] of clientContexts()) {
+    const publicQuery = query(
+      collection(database, 'saleRoundItems'),
+      where('roundId', '==', 'round-1'),
+      where('storeId', '==', 'store-1'),
+      where('status', 'in', ['ACTIVE', 'SOLD_OUT', 'CLOSED']),
+    );
+
+    for (const itemId of ['item-1', 'item-soldout', 'item-closed', 'item-hidden', 'item-draft']) {
+      await assertFails(getDoc(doc(database, 'saleRoundItems', itemId)));
+    }
+    await assertFails(getDocs(publicQuery));
+    await assertFails(getDocs(collection(database, 'saleRoundItems')));
+  }
+});
+
+for (const collectionName of SALE_ROUND_COLLECTIONS) {
   test(`${collectionName}은 모든 직접 클라이언트 생성·수정·삭제를 거부한다`, async () => {
     await assertRoundWritesDenied(collectionName);
   });
@@ -559,16 +615,6 @@ test('익명 groupProductConfig 원문 우회가 불가능하다', async () => {
 
   await assertFails(getDoc(doc(database, 'groupProductConfig', 'product-1')));
   await assertFails(getDocs(collection(database, 'groupProductConfig')));
-});
-
-test('HIDDEN saleRoundItem 익명 직접 읽기가 불가능하다', async () => {
-  const database = testEnvironment.unauthenticatedContext().firestore();
-
-  await assertFails(getDoc(doc(database, 'saleRoundItems', 'item-hidden')));
-  // ACTIVE / SOLD_OUT / CLOSED는 기존 공개 의미를 유지한다.
-  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-1')));
-  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-soldout')));
-  await assertSucceeds(getDoc(doc(database, 'saleRoundItems', 'item-closed')));
 });
 
 test('products owner boundary: consumer/driver는 raw read가 거부된다', async () => {
@@ -730,11 +776,43 @@ test('인증된 seller owner surface 읽기( products/stores/groupConfig )를 �
   await assertSucceeds(getDoc(doc(seller, 'groupProductConfig', 'product-1')));
 });
 
-test('공개 dailyCaps 직접 구독을 보존한다', async () => {
+test('공개 dailyCaps 단건 조회와 배송일 picker 범위 쿼리를 보존한다', async () => {
   const database = testEnvironment.unauthenticatedContext().firestore();
 
   await assertSucceeds(getDoc(doc(database, 'dailyCaps', 'store-1_2026-07-18')));
-  await assertSucceeds(getDocs(collection(database, 'dailyCaps')));
+  // 소비자 useDeliverySlots와 같은 형태: storeId 동등 + 날짜 범위 + limit 62.
+  await assertSucceeds(
+    getDocs(
+      query(
+        collection(database, 'dailyCaps'),
+        where('storeId', '==', 'store-1'),
+        where('date', '>=', '2026-07-01'),
+        where('date', '<=', '2026-08-31'),
+        limit(62),
+      ),
+    ),
+  );
+});
+
+test('dailyCaps는 limit 없는 목록과 상한을 넘는 limit 목록을 거부한다', async () => {
+  const database = testEnvironment.unauthenticatedContext().firestore();
+
+  await assertFails(getDocs(collection(database, 'dailyCaps')));
+  await assertFails(
+    getDocs(query(collection(database, 'dailyCaps'), where('storeId', '==', 'store-1'))),
+  );
+  await assertFails(getDocs(query(collection(database, 'dailyCaps'), limit(63))));
+  await assertFails(
+    getDocs(
+      query(
+        collection(database, 'dailyCaps'),
+        where('storeId', '==', 'store-1'),
+        where('date', '>=', '2026-07-01'),
+        where('date', '<=', '2026-08-31'),
+        limit(63),
+      ),
+    ),
+  );
 });
 
 test('품종은 공개 단건 조회만 허용하고 목록과 모든 직접 쓰기를 거부한다', async () => {
@@ -753,21 +831,33 @@ test('품종은 공개 단건 조회만 허용하고 목록과 모든 직접 쓰
   }
 });
 
-test('기존 주문의 판매자·관리자 읽기와 기사의 API 전용 경계를 보존한다', async () => {
+test('주문 원문은 매장 소유 판매자와 관리자를 포함한 모든 클라이언트가 직접 읽거나 쓸 수 없다', async () => {
   const seller = testEnvironment
     .authenticatedContext('seller-1', { role: 'seller', storeId: 'store-1' })
     .firestore();
-  const driver = testEnvironment
-    .authenticatedContext('driver-1', { role: 'driver', driverApproved: true })
-    .firestore();
   const admin = testEnvironment.authenticatedContext('admin-1', { role: 'admin' }).firestore();
-  const user = testEnvironment.authenticatedContext('user-1').firestore();
 
-  await assertSucceeds(getDoc(doc(seller, 'orders', 'order-store-1')));
-  await assertFails(getDoc(doc(seller, 'orders', 'order-store-2')));
-  await assertFails(getDoc(doc(driver, 'orders', 'order-store-2')));
-  await assertSucceeds(getDoc(doc(admin, 'orders', 'order-store-2')));
-  await assertFails(getDoc(doc(user, 'orders', 'order-store-1')));
+  // 판매자·관리자는 API 응답 투영으로만 주문을 조회한다.
+  await assertFails(getDoc(doc(seller, 'orders', 'order-store-1')));
+  await assertFails(
+    getDocs(query(collection(seller, 'orders'), where('storeId', '==', 'store-1'))),
+  );
+  await assertFails(getDoc(doc(admin, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(admin, 'orders', 'order-store-2')));
+  await assertFails(getDocs(collection(admin, 'orders')));
+
+  for (const [actor, database] of clientContexts()) {
+    const existing = doc(database, 'orders', 'order-store-1');
+
+    await assertFails(getDoc(existing));
+    await assertFails(getDoc(doc(database, 'orders', 'order-store-2')));
+    await assertFails(
+      getDocs(query(collection(database, 'orders'), where('storeId', '==', 'store-1'))),
+    );
+    await assertFails(setDoc(doc(database, 'orders', `created-${actor}`), { storeId: 'store-1' }));
+    await assertFails(updateDoc(existing, { status: 'DELIVERED' }));
+    await assertFails(deleteDoc(existing));
+  }
 });
 
 test('기사는 배정·미배정·무관 주문을 포함한 모든 orders raw read를 거부당한다', async () => {
@@ -1003,20 +1093,23 @@ test('미승인 users가 승인된 뒤 새 승인 token만 주문 read를 허용
   await assertFails(getDoc(doc(newToken, 'orders', 'order-store-1')));
 });
 
-test('seller 주문 read는 token과 현재 user의 role/storeId/suspension을 함께 검증한다', async () => {
+test('seller 매장 read는 token과 현재 user의 role/storeId/suspension을 함께 검증한다', async () => {
   const roleChanged = testEnvironment
-    .authenticatedContext('seller-role-lifecycle', { role: 'seller', storeId: 'store-1' })
+    .authenticatedContext('seller-role-lifecycle', { role: 'seller', storeId: 'store-lc-role' })
     .firestore();
   const storeChanged = testEnvironment
-    .authenticatedContext('seller-store-lifecycle', { role: 'seller', storeId: 'store-1' })
+    .authenticatedContext('seller-store-lifecycle', { role: 'seller', storeId: 'store-lc-store' })
     .firestore();
   const suspended = testEnvironment
-    .authenticatedContext('seller-suspended-lifecycle', { role: 'seller', storeId: 'store-1' })
+    .authenticatedContext('seller-suspended-lifecycle', {
+      role: 'seller',
+      storeId: 'store-lc-suspended',
+    })
     .firestore();
 
-  await assertSucceeds(getDoc(doc(roleChanged, 'orders', 'order-store-1')));
-  await assertSucceeds(getDoc(doc(storeChanged, 'orders', 'order-store-1')));
-  await assertSucceeds(getDoc(doc(suspended, 'orders', 'order-store-1')));
+  await assertSucceeds(getDoc(doc(roleChanged, 'stores', 'store-lc-role')));
+  await assertSucceeds(getDoc(doc(storeChanged, 'stores', 'store-lc-store')));
+  await assertSucceeds(getDoc(doc(suspended, 'stores', 'store-lc-suspended')));
 
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     const database = context.firestore();
@@ -1025,12 +1118,12 @@ test('seller 주문 read는 token과 현재 user의 role/storeId/suspension을 �
     await updateDoc(doc(database, 'users', 'seller-suspended-lifecycle'), { suspended: true });
   });
 
-  await assertFails(getDoc(doc(roleChanged, 'orders', 'order-store-1')));
-  await assertFails(getDoc(doc(storeChanged, 'orders', 'order-store-1')));
-  await assertFails(getDoc(doc(suspended, 'orders', 'order-store-1')));
+  await assertFails(getDoc(doc(roleChanged, 'stores', 'store-lc-role')));
+  await assertFails(getDoc(doc(storeChanged, 'stores', 'store-lc-store')));
+  await assertFails(getDoc(doc(suspended, 'stores', 'store-lc-suspended')));
 });
 
-test('admin 주문 read는 token과 현재 user의 role/suspension을 함께 검증한다', async () => {
+test('admin 매장 read는 token과 현재 user의 role/suspension을 함께 검증한다', async () => {
   const roleChanged = testEnvironment
     .authenticatedContext('admin-role-lifecycle', { role: 'admin' })
     .firestore();
@@ -1038,8 +1131,8 @@ test('admin 주문 read는 token과 현재 user의 role/suspension을 함께 검
     .authenticatedContext('admin-suspended-lifecycle', { role: 'admin' })
     .firestore();
 
-  await assertSucceeds(getDoc(doc(roleChanged, 'orders', 'order-store-2')));
-  await assertSucceeds(getDoc(doc(suspended, 'orders', 'order-store-2')));
+  await assertSucceeds(getDoc(doc(roleChanged, 'stores', 'store-2')));
+  await assertSucceeds(getDoc(doc(suspended, 'stores', 'store-2')));
 
   await testEnvironment.withSecurityRulesDisabled(async (context) => {
     const database = context.firestore();
@@ -1047,6 +1140,6 @@ test('admin 주문 read는 token과 현재 user의 role/suspension을 함께 검
     await updateDoc(doc(database, 'users', 'admin-suspended-lifecycle'), { suspended: true });
   });
 
-  await assertFails(getDoc(doc(roleChanged, 'orders', 'order-store-2')));
-  await assertFails(getDoc(doc(suspended, 'orders', 'order-store-2')));
+  await assertFails(getDoc(doc(roleChanged, 'stores', 'store-2')));
+  await assertFails(getDoc(doc(suspended, 'stores', 'store-2')));
 });

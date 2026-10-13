@@ -1,4 +1,10 @@
-import type { Settlement, SettlementStatus } from './_constants';
+import type {
+  Settlement,
+  SettlementListQuery,
+  SettlementListResponse,
+  SettlementPage,
+  SettlementStatus,
+} from './_constants';
 import { STATUS_LABEL } from './_constants';
 
 export function toKRW(n: number) {
@@ -47,8 +53,15 @@ export function toKSTISO(value: unknown): string {
   return `${new Date(date.getTime() + KST_OFFSET_MS).toISOString().slice(0, 19)}+09:00`;
 }
 
-export function downloadCSV(items: Settlement[], from: string, to: string) {
-  const header = '주문ID,정산일시,총금액,플랫폼수수료,정산액,상태';
+/** CSV 칸: 쉼표·따옴표·줄바꿈이 있으면 따옴표로 감싸고, 수식으로 해석될 첫 글자는 막는다. */
+export function csvCell(value: unknown): string {
+  let text = value === null || value === undefined ? '' : String(value);
+  if (/^[=+\-@]/.test(text) && typeof value === 'string') text = `'${text}`;
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+export function buildSettlementCsv(items: Settlement[]): string {
+  const header = ['주문ID', '정산일시', '총금액', '플랫폼수수료', '정산액', '상태', '주문번호'];
   const rows = items.map((s: Settlement) =>
     [
       s.orderId,
@@ -57,14 +70,59 @@ export function downloadCSV(items: Settlement[], from: string, to: string) {
       s.platformFee,
       s.netAmount,
       STATUS_LABEL[s.status as SettlementStatus],
-    ].join(','),
+      s.orderNumber ?? '',
+    ]
+      .map(csvCell)
+      .join(','),
   );
-  const csv = [header, ...rows].join('\n');
-  const blob = new Blob([`﻿${csv}`], { type: 'text/csv;charset=utf-8;' });
+  return [header.join(','), ...rows].join('\n');
+}
+
+export function downloadCSV(items: Settlement[], from: string, to: string) {
+  const csv = buildSettlementCsv(items);
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = `settlements_${from || 'all'}_${to || 'all'}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/**
+ * 정산 목록 요청 경로. limit은 보내지 않고 서버 기본값을 쓴다.
+ * 이전 API는 모르는 쿼리를 400으로 거절하므로 cursor도 서버가 nextCursor를 준 뒤에만 붙인다.
+ */
+export function settlementListPath(
+  storeId: string,
+  query: SettlementListQuery,
+  cursor?: string | null,
+): string {
+  const params = new URLSearchParams();
+  if (query.from) params.set('from', query.from);
+  if (query.to) params.set('to', query.to);
+  if (query.status) params.set('status', query.status);
+  if (cursor) params.set('cursor', cursor);
+  return `/stores/${encodeURIComponent(storeId)}/settlements?${params.toString()}`;
+}
+
+/** 응답을 한 페이지로 읽는다. hasMore·nextCursor가 없는 이전 API 응답은 마지막 페이지로 본다. */
+export function readSettlementPage(
+  data: SettlementListResponse | null | undefined,
+): SettlementPage {
+  const list = data?.settlements;
+  const cursor = data?.nextCursor;
+  const nextCursor =
+    data?.hasMore === true && typeof cursor === 'string' && cursor !== '' ? cursor : null;
+  return {
+    settlements: Array.isArray(list) ? list : [],
+    hasMore: nextCursor !== null,
+    nextCursor,
+  };
+}
+
+/** 더 보기로 받은 페이지를 뒤에 붙인다. 이미 있는 정산 id는 다시 넣지 않는다. */
+export function appendSettlementPage(current: Settlement[], next: Settlement[]): Settlement[] {
+  const seen = new Set(current.map((s) => s.id));
+  return [...current, ...next.filter((s) => !seen.has(s.id))];
 }

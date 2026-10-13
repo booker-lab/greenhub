@@ -6,38 +6,47 @@ import { DriverService } from './driver.service';
 type Data = Record<string, any>;
 
 function makeFirestore(records: Record<string, Data>) {
-  const filters: Array<[string, string, unknown]> = [];
-  const orderFields: string[] = [];
-  const query = {
-    where: jest.fn((field: string, operator: string, value: unknown) => {
-      filters.push([field, operator, value]);
-      return query;
-    }),
+  // 쿼리마다 필터를 따로 두고, 실제 Firestore처럼 결과를 문서 ID 오름차순으로 돌려준다.
+  const reads = { orderDocs: 0 };
+  const where = jest.fn();
+  const orderBy = jest.fn();
+  const makeQuery = (
+    filters: Array<[string, string, unknown]>,
+    orderFields: string[],
+  ): Record<string, any> => ({
+    where: (field: string, operator: string, value: unknown) => {
+      where(field, operator, value);
+      return makeQuery([...filters, [field, operator, value]], orderFields);
+    },
     // 실제 Firestore처럼 orderBy 필드가 없는 문서는 결과에서 제외한다.
-    orderBy: jest.fn((field: string) => {
-      orderFields.push(field);
-      return query;
-    }),
+    orderBy: (field: string) => {
+      orderBy(field);
+      return makeQuery(filters, [...orderFields, field]);
+    },
     get: jest.fn(async () => {
+      // 실제 Firestore처럼 == null·in은 필드가 없는 문서와 일치하지 않는다.
       const docs = Object.entries(records)
         .filter(([path]) => path.startsWith('orders/'))
         .filter(([, data]) =>
           filters.every(([field, operator, value]) =>
             operator === 'in'
-              ? Array.isArray(value) && value.includes(data[field])
-              : data[field] === value,
+              ? Array.isArray(value) && field in data && value.includes(data[field])
+              : field in data && data[field] === value,
           ),
         )
         .filter(([, data]) => orderFields.every((field) => field in data))
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([path, data]) => ({
           id: path.split('/')[1],
           data: () => data,
         }));
+      reads.orderDocs += docs.length;
       return { docs };
     }),
-  };
+  });
+  const query = { where, orderBy };
   const firestore = {
-    collection: jest.fn(() => query),
+    collection: jest.fn((_path: string) => makeQuery([], [])),
     doc: jest.fn((path: string) => ({
       get: jest.fn(async () => ({
         exists: path in records,
@@ -45,20 +54,160 @@ function makeFirestore(records: Record<string, Data>) {
       })),
     })),
   };
-  return { firestore, query };
+  return { firestore, query, reads };
 }
 
 function makeService(
   records: Record<string, Data>,
   driver: Data = { role: 'driver', driverApproved: true },
 ) {
-  const { firestore, query } = makeFirestore(records);
+  const { firestore, query, reads } = makeFirestore(records);
   records['users/driver-1'] = { id: 'driver-1', ...driver };
   const ordersQuery = new OrdersQueryService(firestore as never);
   const driverScope = new DriverOrderScopeService(firestore as never);
   return {
     service: new DriverService(firestore as never, ordersQuery, driverScope),
+    driverScope,
     query,
+    firestore,
+    reads,
+  };
+}
+
+// 이 변경 전 목록 구현: 노출 대상 status 주문을 매장·기사와 관계없이 모두 읽은 뒤 메모리에서 판정한다.
+async function previousListIds(
+  firestore: ReturnType<typeof makeFirestore>['firestore'],
+  driverScope: DriverOrderScopeService,
+  driverId: string,
+  statuses: string[],
+): Promise<string[]> {
+  const millis = (value: unknown) => (typeof value === 'string' ? new Date(value).getTime() : null);
+  const snap = await firestore.collection('orders').where('status', 'in', statuses).get();
+  const candidates = snap.docs
+    .map((d: { id: string; data: () => Data }) => ({ id: d.id, ...d.data() }))
+    .sort((a: Data, b: Data) => {
+      const aKey = millis(a.preparedAt) ?? millis(a.updatedAt);
+      const bKey = millis(b.preparedAt) ?? millis(b.updatedAt);
+      if (aKey === bKey) return 0;
+      if (aKey === null) return 1;
+      if (bKey === null) return -1;
+      return aKey - bKey;
+    });
+  const visible = await driverScope.filterVisibleOrders(candidates, driverId);
+  return visible.map((order: Data) => order.id);
+}
+
+// 본인·다른 기사 배정, driverId가 null인 미배정과 필드 자체가 없는 이전 미배정, 비활성 상태,
+// 여러 매장(round_direct·legacy·매장 없음·없는 매장)을 섞은 목록 fixture.
+function mixedBoardRecords(): Record<string, Data> {
+  const pilot = { storeId: 'pilot', schemaVersion: 2, roundId: 'round-valid' };
+  return {
+    'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+    'stores/legacy': { id: 'legacy', salesMode: 'legacy' },
+    'saleRounds/round-valid': { id: 'round-valid', storeId: 'pilot' },
+    'orders/mine-preparing-redelivery': {
+      storeId: 'legacy',
+      status: 'PREPARING',
+      deliveryMethod: 'direct',
+      driverId: 'driver-1',
+      updatedAt: '2026-09-01T03:00:00Z',
+    },
+    'orders/mine-preparing-parcel': {
+      status: 'PREPARING',
+      deliveryMethod: 'parcel',
+      driverId: 'driver-1',
+    },
+    'orders/mine-delivering-pilot': {
+      ...pilot,
+      status: 'DELIVERING',
+      deliveryMethod: 'direct',
+      driverId: 'driver-1',
+      preparedAt: '2026-09-01T01:00:00Z',
+    },
+    'orders/mine-held-hub': {
+      status: 'DELIVERY_HELD',
+      deliveryMethod: 'hub',
+      driverId: 'driver-1',
+      updatedAt: '2026-09-01T03:00:00Z',
+    },
+    'orders/mine-delivered': {
+      status: 'DELIVERED',
+      deliveryMethod: 'direct',
+      driverId: 'driver-1',
+    },
+    'orders/mine-pilot-without-schema': {
+      storeId: 'pilot',
+      roundId: 'round-valid',
+      status: 'DELIVERING',
+      deliveryMethod: 'direct',
+      driverId: 'driver-1',
+    },
+    'orders/other-preparing': {
+      storeId: 'legacy',
+      status: 'PREPARING',
+      deliveryMethod: 'direct',
+      driverId: 'driver-2',
+    },
+    'orders/other-delivering-pilot': {
+      ...pilot,
+      status: 'DELIVERING',
+      deliveryMethod: 'direct',
+      driverId: 'driver-2',
+    },
+    'orders/other-delivering-legacy': {
+      storeId: 'legacy',
+      status: 'DELIVERING',
+      deliveryMethod: 'hub',
+      driverId: 'driver-3',
+    },
+    'orders/other-held': {
+      status: 'DELIVERY_HELD',
+      deliveryMethod: 'direct',
+      driverId: 'driver-2',
+    },
+    'orders/unassigned-null-direct': {
+      storeId: 'legacy',
+      status: 'PREPARING',
+      deliveryMethod: 'direct',
+      driverId: null,
+      updatedAt: '2026-09-01T02:00:00Z',
+    },
+    'orders/unassigned-missing-hub': {
+      status: 'PREPARING',
+      deliveryMethod: 'hub',
+      updatedAt: '2026-09-01T03:00:00Z',
+    },
+    'orders/unassigned-missing-pilot': {
+      ...pilot,
+      status: 'PREPARING',
+      deliveryMethod: 'direct',
+      preparedAt: '2026-09-01T00:30:00Z',
+    },
+    'orders/unassigned-missing-pilot-hub': { ...pilot, status: 'PREPARING', deliveryMethod: 'hub' },
+    'orders/unassigned-missing-parcel': { status: 'PREPARING', deliveryMethod: 'parcel' },
+    'orders/unassigned-missing-cancelling': {
+      status: 'PREPARING',
+      deliveryMethod: 'direct',
+      cancellation: { status: 'REFUNDING' },
+    },
+    'orders/unassigned-missing-pilot-no-round': {
+      storeId: 'pilot',
+      schemaVersion: 2,
+      status: 'PREPARING',
+      deliveryMethod: 'direct',
+    },
+    'orders/unassigned-missing-ghost-store': {
+      storeId: 'ghost',
+      status: 'PREPARING',
+      deliveryMethod: 'direct',
+    },
+    'orders/unassigned-null-delivering': {
+      status: 'DELIVERING',
+      deliveryMethod: 'direct',
+      driverId: null,
+    },
+    'orders/unassigned-accepted': { status: 'ACCEPTED', deliveryMethod: 'direct' },
+    'orders/unassigned-cancelled': { status: 'CANCELLED', deliveryMethod: 'hub', driverId: null },
   };
 }
 
@@ -104,10 +253,11 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
 
     const result = await service.getOrders('driver-1');
 
+    // 시각이 같으면 Firestore 기본 정렬처럼 문서 ID 순이다.
     expect(result.map((order) => order.id)).toEqual([
+      'assigned-preparing',
       'pickup-direct',
       'pickup-hub',
-      'assigned-preparing',
     ]);
   });
 
@@ -137,7 +287,7 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
 
     const result = await service.getOrders('driver-1');
 
-    expect(result.map((order) => order.id)).toEqual(['assigned-held', 'assigned-delivering']);
+    expect(result.map((order) => order.id)).toEqual(['assigned-delivering', 'assigned-held']);
   });
 
   it('preparedAt이 없는 주문도 제외하지 않고 preparedAt, 없으면 updatedAt 순으로 정렬한다', async () => {
@@ -189,7 +339,10 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     });
 
     await expect(service.getOrders('driver-1', 'DELIVERY_HELD')).resolves.toHaveLength(1);
+    expect(query.where).toHaveBeenCalledWith('driverId', '==', 'driver-1');
     expect(query.where).toHaveBeenCalledWith('status', 'in', ['DELIVERY_HELD']);
+    // PREPARING을 요청하지 않으면 미배정 discovery 후보 쿼리를 보내지 않는다.
+    expect(query.where).not.toHaveBeenCalledWith('deliveryMethod', 'in', expect.anything());
   });
 
   it('payment-required PREPARING·DELIVERY_HELD 주문에 authoritative 7개 필드를 포함한다', async () => {
@@ -331,6 +484,108 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     await expect(service.getOrder('driver-1', 'assigned-preparing')).resolves.toHaveProperty(
       'requestNote',
       '받는 분 김그린 010-3333-3333',
+    );
+  });
+
+  it('목록·상세에 상품별 이름·수량만 싣고 가격·상품 ID는 싣지 않는다', async () => {
+    const { service } = makeService({
+      'orders/round-two-items': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        productName: '동양란 만천홍',
+        quantity: 3,
+        orderItems: [
+          {
+            roundItemId: 'round-item-1',
+            productId: 'product-1',
+            productName: '동양란 만천홍',
+            productImageUrl: 'https://example.com/1.jpg',
+            unitPrice: 30000,
+            quantity: 2,
+            subtotalAmount: 60000,
+          },
+          {
+            roundItemId: 'round-item-2',
+            productId: 'product-2',
+            productName: '호접란',
+            productImageUrl: null,
+            unitPrice: 50000,
+            quantity: 1,
+            subtotalAmount: 50000,
+          },
+        ],
+      },
+      'orders/legacy-single': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        productId: 'product-legacy',
+        productName: '산세베리아',
+        quantity: 2,
+        totalAmount: 40000,
+      },
+      'orders/malformed-items': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        productName: '동양란',
+        quantity: 2,
+        orderItems: [
+          { productName: '동양란', quantity: 1 },
+          { productName: ' ', quantity: 1 },
+        ],
+      },
+    });
+    const expectedItems = [
+      { productName: '동양란 만천홍', quantity: 2 },
+      { productName: '호접란', quantity: 1 },
+    ];
+
+    const list = await service.getOrders('driver-1');
+    const byId = Object.fromEntries(list.map((order) => [order.id, order]));
+    expect(byId['round-two-items'].items).toEqual(expectedItems);
+    for (const item of byId['round-two-items'].items as Array<Record<string, unknown>>) {
+      expect(Object.keys(item).sort()).toEqual(['productName', 'quantity']);
+    }
+    // 상품 스냅샷이 없는 이전 주문은 주문의 상품·수량 한 줄이 된다.
+    expect(byId['legacy-single'].items).toEqual([{ productName: '산세베리아', quantity: 2 }]);
+    // 하나라도 어긋나면 통째로 빼서 앱이 기존 한 줄 표기로 대신한다.
+    expect(byId['malformed-items']).not.toHaveProperty('items');
+
+    const detail = await service.getOrder('driver-1', 'round-two-items');
+    expect(detail.items).toEqual(expectedItems);
+    expect(detail).not.toHaveProperty('orderItems');
+  });
+
+  it('목록은 전체 주소를 싣는 행에만 지도 검색용 기본 주소를 함께 싣는다', async () => {
+    const { service } = makeService({
+      'orders/with-address': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        address: '경기도 이천시 중리천로 1 101동 1001호',
+        deliveryAddress: {
+          address: '경기도 이천시 중리천로 1',
+          addressDetail: '101동 1001호',
+          zipCode: '17379',
+        },
+      },
+      'orders/without-address': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+        deliveryAddress: { addressDetail: '101동 1001호', zipCode: '17379' },
+      },
+    });
+
+    const list = await service.getOrders('driver-1');
+    const withAddress = list.find((order) => order.id === 'with-address');
+    expect(withAddress).toMatchObject({ address: '경기도 이천시 중리천로 1 101동 1001호' });
+    // 상세 주소·우편번호는 목록에 따로 싣지 않는다.
+    expect(withAddress?.['deliveryAddress']).toEqual({ address: '경기도 이천시 중리천로 1' });
+    expect(list.find((order) => order.id === 'without-address')).not.toHaveProperty(
+      'deliveryAddress',
     );
   });
 
@@ -571,11 +826,132 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     const result = await service.getOrders('driver-1');
 
     expect(result.map((order) => order.id)).toEqual([
-      'pilot-valid',
-      'pilot-assigned',
       'legacy-direct',
       'legacy-hub',
+      'pilot-assigned',
+      'pilot-valid',
     ]);
+  });
+
+  it('목록 한 번의 요청에서 같은 stores·saleRounds 문서는 주문 수와 관계없이 한 번만 읽는다', async () => {
+    const records: Record<string, Data> = {
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'stores/legacy': { id: 'legacy', salesMode: 'legacy' },
+      'saleRounds/round-valid': { id: 'round-valid', storeId: 'pilot' },
+    };
+    for (let i = 0; i < 4; i += 1) {
+      records[`orders/pilot-${i}`] = {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-valid',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: `2026-01-01T00:0${i}:00.000Z`,
+      };
+      records[`orders/legacy-${i}`] = {
+        storeId: 'legacy',
+        deliveryMethod: 'hub',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: `2026-01-01T01:0${i}:00.000Z`,
+      };
+    }
+    const { service, firestore } = makeService(records);
+
+    const result = await service.getOrders('driver-1');
+
+    expect(result.map((order) => order.id)).toEqual([
+      'pilot-0',
+      'pilot-1',
+      'pilot-2',
+      'pilot-3',
+      'legacy-0',
+      'legacy-1',
+      'legacy-2',
+      'legacy-3',
+    ]);
+    const readCount = (path: string) =>
+      firestore.doc.mock.calls.filter(([called]) => called === path).length;
+    expect(readCount('stores/pilot')).toBe(1);
+    expect(readCount('stores/legacy')).toBe(1);
+    expect(readCount('saleRounds/round-valid')).toBe(1);
+  });
+
+  it.each([
+    [undefined],
+    ['PREPARING'],
+    ['DELIVERING'],
+    ['DELIVERY_HELD'],
+    ['PREPARING,DELIVERY_HELD'],
+    ['DELIVERING,DELIVERY_HELD'],
+  ])('status=%s 목록이 이전 전체 조회 구현과 같은 주문을 같은 순서로 반환한다', async (status) => {
+    const { service, firestore, driverScope } = makeService(mixedBoardRecords());
+    const statuses = status ? status.split(',') : ['PREPARING', 'DELIVERING', 'DELIVERY_HELD'];
+
+    const result = (await service.getOrders('driver-1', status)).map((order) => order.id);
+
+    expect(result).toEqual(await previousListIds(firestore, driverScope, 'driver-1', statuses));
+  });
+
+  it('driverId 필드가 없는 이전 미배정 주문도 목록에서 빠지지 않는다', async () => {
+    const { service } = makeService(mixedBoardRecords());
+
+    const result = (await service.getOrders('driver-1')).map((order) => order.id);
+
+    expect(result).toEqual([
+      'unassigned-missing-pilot',
+      'mine-delivering-pilot',
+      'unassigned-null-direct',
+      'mine-held-hub',
+      'mine-preparing-redelivery',
+      'unassigned-missing-hub',
+      'mine-preparing-parcel',
+    ]);
+  });
+
+  it('다른 기사의 배송 주문이 대부분이어도 본인 배정과 미배정 후보 주문만 읽는다', async () => {
+    const records: Record<string, Data> = {
+      'stores/legacy': { id: 'legacy', salesMode: 'legacy' },
+      'orders/mine': {
+        storeId: 'legacy',
+        status: 'DELIVERING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+      },
+      'orders/open': { storeId: 'legacy', status: 'PREPARING', deliveryMethod: 'hub' },
+    };
+    for (let i = 0; i < 30; i += 1) {
+      records[`orders/other-${String(i).padStart(2, '0')}`] = {
+        storeId: i % 3 === 0 ? 'legacy' : `store-${i % 3}`,
+        status: i % 2 === 0 ? 'DELIVERING' : 'DELIVERY_HELD',
+        deliveryMethod: 'direct',
+        driverId: `driver-${(i % 4) + 2}`,
+      };
+    }
+    for (let i = 0; i < 5; i += 1) {
+      records[`orders/parcel-${i}`] = { status: 'PREPARING', deliveryMethod: 'parcel' };
+      records[`orders/done-${i}`] = {
+        status: 'DELIVERED',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+      };
+    }
+    const { service, firestore, driverScope, reads } = makeService(records);
+
+    const result = (await service.getOrders('driver-1')).map((order) => order.id);
+    const narrowedReads = reads.orderDocs;
+    reads.orderDocs = 0;
+    const previous = await previousListIds(firestore, driverScope, 'driver-1', [
+      'PREPARING',
+      'DELIVERING',
+      'DELIVERY_HELD',
+    ]);
+
+    expect(result).toEqual(previous);
+    expect(result).toEqual(['mine', 'open']);
+    expect(narrowedReads).toBe(2);
+    expect(reads.orderDocs).toBe(37);
   });
 
   it.each([
