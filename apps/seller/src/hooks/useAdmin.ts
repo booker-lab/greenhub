@@ -3,10 +3,13 @@
 import type { OrderStatus, SettlementStatus, StoreStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { type DependencyList, useCallback, useEffect, useState } from 'react';
-import { apiJson } from '@/lib/api';
+import { apiFetch, apiJson } from '@/lib/api';
 import {
   type AdminCommandOutcome,
+  classifyAdminCommandError,
   executeAdminCommand,
+  missingTokenOutcome,
+  resolveConfirmedOutcome,
 } from './useAdmin.outcome';
 
 export type { AdminCommandOutcome } from './useAdmin.outcome';
@@ -74,7 +77,19 @@ export interface InviteToken {
   usedBy: string | null;
   expiresAt: string | null;
   createdAt: string | null;
+  /** 관리자 취소 시각. 취소 기능 이전에 만든 문서에는 필드가 없다. */
+  revokedAt?: string | null;
+  revokedBy?: string | null;
 }
+
+/**
+ * 초대 취소 결과. 공통 AdminCommandOutcome에 409 본문의 reason
+ * (already_revoked·already_used·expired)을 더해 화면이 사유별 안내를 고를 수 있게 한다.
+ */
+export type InviteRevokeOutcome =
+  | Extract<AdminCommandOutcome, { kind: 'confirmed' }>
+  | (Extract<AdminCommandOutcome, { kind: 'rejected' }> & { reason: string | null })
+  | Extract<AdminCommandOutcome, { kind: 'unknown' }>;
 
 export type DriverStatus = 'all' | 'pending' | 'approved' | 'suspended';
 
@@ -446,5 +461,29 @@ export function useAdminInvite() {
     }
   };
 
-  return { invites, loading, error, generating, generateError, generate, reload };
+  // 취소 — 409 reason을 보존해야 하므로 apiJson 대신 apiFetch로 본문을 직접 읽는다.
+  // 4xx는 rejected(+reason), 5xx·transport는 unknown, 2xx는 목록 reload 결과로 reconciliation한다.
+  const revoke = async (inviteToken: string): Promise<InviteRevokeOutcome> => {
+    if (!token) return { ...missingTokenOutcome(), reason: null };
+    let res: Response;
+    try {
+      res = await apiFetch(`/admin/invite/${encodeURIComponent(inviteToken)}/revoke`, token, {
+        method: 'POST',
+      });
+    } catch (err) {
+      const outcome = classifyAdminCommandError(err);
+      return outcome.kind === 'unknown' ? outcome : { ...outcome, reason: null };
+    }
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { message?: unknown; reason?: unknown };
+      const message =
+        typeof body?.message === 'string' ? body.message : `서버 오류 (${res.status})`;
+      const outcome = classifyAdminCommandError({ status: res.status, message });
+      if (outcome.kind === 'unknown') return outcome;
+      return { ...outcome, reason: typeof body?.reason === 'string' ? body.reason : null };
+    }
+    return resolveConfirmedOutcome(await reload());
+  };
+
+  return { invites, loading, error, generating, generateError, generate, revoke, reload };
 }
