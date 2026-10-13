@@ -24,7 +24,7 @@ import { StorageService } from './storage.service';
 })
 export class FirestoreModule implements OnApplicationShutdown {
   async onApplicationShutdown() {
-    await Promise.all(admin.apps.map((app) => app?.delete()));
+    await Promise.all(admin.apps.map((app) => app?.delete() ?? Promise.resolve()));
   }
 }
 

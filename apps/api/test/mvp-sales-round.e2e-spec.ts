@@ -17,7 +17,7 @@ describe('회차 직배송 서버 전체 흐름 통합 계약', () => {
   afterAll(async () => app.close());
 
   function asUser<T extends request.Test>(call: T, userId: string, role: string): T {
-    return call.set('x-test-user', userId).set('x-test-role', role) as T;
+    return call.set('x-test-user', userId).set('x-test-role', role);
   }
 
   function roundInput(maxDeliveryAddresses = 3, maxItemQuantity = 10) {

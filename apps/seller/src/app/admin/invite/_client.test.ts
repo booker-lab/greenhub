@@ -83,6 +83,32 @@ describe('AdminInviteClient recovery wiring', () => {
   });
 });
 
+describe('받는 사람 이메일 배선', () => {
+  it('형식이 틀리면 발급 요청 없이 입력 오류를 보여 주고, 맞으면 정리한 값을 generate에 넘긴다', () => {
+    const parseIndex = source.indexOf('parseInviteRecipientEmail(recipientEmail)');
+    const errorIndex = source.indexOf('setRecipientEmailError(recipient.error)');
+    const generateIndex = source.indexOf('await generate(recipient.value ?? undefined)');
+    expect(parseIndex).toBeGreaterThan(-1);
+    expect(errorIndex).toBeGreaterThan(parseIndex);
+    expect(generateIndex).toBeGreaterThan(errorIndex);
+    expect(source).toContain('recipientEmail={recipientEmail}');
+    expect(source).toContain('recipientEmailError={recipientEmailError}');
+    expect(source).toContain('onRecipientEmailChange={handleRecipientEmailChange}');
+  });
+
+  it('발급에 성공한 뒤에만 입력을 비운다', () => {
+    expect(source).toContain("if (result) setRecipientEmail('')");
+  });
+
+  it('hook은 받는 사람이 있을 때만 발급 본문에 담는다', () => {
+    const block = inviteBlock();
+    expect(block).toContain('generate = async (recipientEmail?: string)');
+    expect(block).toContain(
+      '...(recipientEmail ? { body: JSON.stringify({ recipientEmail }) } : {})',
+    );
+  });
+});
+
 describe('useAdminInvite hook recovery wiring', () => {
   it('invite history error를 hook 밖으로 노출한다', () => {
     const block = inviteBlock();

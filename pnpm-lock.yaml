@@ -162,9 +162,6 @@ importers:
 
   apps/consumer:
     dependencies:
-      '@ducanh2912/next-pwa':
-        specifier: ^10.2.9
-        version: 10.2.9(@types/babel__core@7.20.5)(next@16.4.0(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(@types/node@20.19.37)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(webpack@5.106.2)
       '@greenhub/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -202,6 +199,9 @@ importers:
         specifier: 13.15.26
         version: 13.15.26
     devDependencies:
+      '@ducanh2912/next-pwa':
+        specifier: ^10.2.9
+        version: 10.2.9(@types/babel__core@7.20.5)(next@16.4.0(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(@types/node@20.19.37)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(webpack@5.106.2)
       '@next/bundle-analyzer':
         specifier: ^16.4.0
         version: 16.4.0
@@ -229,9 +229,6 @@ importers:
 
   apps/driver:
     dependencies:
-      '@ducanh2912/next-pwa':
-        specifier: ^10.2.9
-        version: 10.2.9(@types/babel__core@7.20.5)(next@16.4.0(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(@types/node@20.19.37)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(webpack@5.106.2)
       '@greenhub/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -263,6 +260,9 @@ importers:
         specifier: 19.2.6
         version: 19.2.6(react@19.2.6)
     devDependencies:
+      '@ducanh2912/next-pwa':
+        specifier: ^10.2.9
+        version: 10.2.9(@types/babel__core@7.20.5)(next@16.4.0(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(@types/node@20.19.37)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(webpack@5.106.2)
       '@next/bundle-analyzer':
         specifier: ^16.4.0
         version: 16.4.0
@@ -296,9 +296,6 @@ importers:
 
   apps/seller:
     dependencies:
-      '@ducanh2912/next-pwa':
-        specifier: ^10.2.9
-        version: 10.2.9(@types/babel__core@7.20.5)(next@16.4.0(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(@types/node@20.19.37)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(webpack@5.106.2)
       '@greenhub/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -333,6 +330,9 @@ importers:
         specifier: 19.2.6
         version: 19.2.6(react@19.2.6)
     devDependencies:
+      '@ducanh2912/next-pwa':
+        specifier: ^10.2.9
+        version: 10.2.9(@types/babel__core@7.20.5)(next@16.4.0(@opentelemetry/api@1.9.1)(@playwright/test@1.59.1)(@types/node@20.19.37)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(webpack@5.106.2)
       '@next/bundle-analyzer':
         specifier: ^16.4.0
         version: 16.4.0

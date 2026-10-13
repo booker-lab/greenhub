@@ -112,6 +112,27 @@ export function getAdminInviteReadState(args: {
   return 'HAS_RESULTS';
 }
 
+// 받는 사람 이메일 입력 판정. 비우면 받는 사람 제한 없는 초대(value null), 형식이 맞으면 앞뒤 공백을 뺀 값.
+// 최종 형식 검사와 정규화(소문자)는 서버가 한다. 여기서는 명백히 잘못된 입력만 요청 전에 막는다.
+export const INVITE_RECIPIENT_EMAIL_MAX_LENGTH = 254;
+const INVITE_RECIPIENT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export type InviteRecipientEmailInput =
+  | { ok: true; value: string | null }
+  | { ok: false; error: string };
+
+export function parseInviteRecipientEmail(input: string): InviteRecipientEmailInput {
+  const value = input.trim();
+  if (value === '') return { ok: true, value: null };
+  if (
+    value.length > INVITE_RECIPIENT_EMAIL_MAX_LENGTH ||
+    !INVITE_RECIPIENT_EMAIL_PATTERN.test(value)
+  ) {
+    return { ok: false, error: '이메일 형식이 올바르지 않아요.' };
+  }
+  return { ok: true, value };
+}
+
 // 발급 직후 만료일 긴 표기(년 월 일).
 export function formatExpiryLong(expiresAt: string): string {
   return new Date(expiresAt).toLocaleDateString('ko-KR', {

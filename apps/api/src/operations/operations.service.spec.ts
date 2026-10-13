@@ -170,7 +170,7 @@ describe('운영 예외 통합과 조치 계약', () => {
       },
       actions: [{ actionType: 'RETRY_REFUND', status: 'SUCCEEDED' }],
     });
-    expect(records.get(`operationIssues/${reopened.id}`)).toMatchObject(reopened);
+    expect(records.get(`operationIssues/${reopened.id as string}`)).toMatchObject(reopened);
   });
 
   it('같은 실패 원인과 업무 대상은 하나의 열린 운영 예외로 통합한다', async () => {
@@ -682,7 +682,7 @@ describe('운영 예외 목록 한도와 주문 필터', () => {
 
     expect(result.items).toHaveLength(100);
     expect(result.hasMore).toBe(true);
-    // 기존 항목 모양은 그대로다(hasMore만 응답에 추가).
+    // 기존 항목 모양은 그대로다(hasMore와 수동 닫기 경위 resolution만 추가).
     expect(Object.keys(result.items[0]).sort()).toEqual([
       'actions',
       'createdAt',
@@ -690,6 +690,7 @@ describe('운영 예외 목록 한도와 주문 필터', () => {
       'latestSnapshot',
       'orderId',
       'paymentId',
+      'resolution',
       'resolvedAt',
       'severity',
       'status',

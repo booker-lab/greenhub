@@ -315,7 +315,7 @@ POST /auth/kakao-login
 POST /auth/refresh
 ```
 
-`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다(`apps/api/src/auth/auth.controller.ts`). 이 한도에는 직접 테스트가 없다. 한도는 요청 IP별로 집계되지만 API에 `trust proxy`·별도 tracker 설정이 없어 proxy 뒤에서 실제 손님 IP로 집계되는지는 미결 PR #404에 달려 있다(`docs/BACKLOG.md` `RATE-LIMIT-CLIENT-IP`).
+`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `login`은 클라이언트 IP+정규화한 이메일 단위로 세고, 이메일과 무관한 클라이언트 IP 단위 1분 60회 상한을 함께 둔다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다(`apps/api/src/auth/auth.controller.ts`). `refresh`는 서명 검증된 refresh token의 사용자 단위로 세고(검증 실패 시 IP 단위), 그 밖의 인증 요청은 서명 검증된 access token의 사용자 단위, 없으면 클라이언트 IP 단위로 센다. 집계 기준은 `ClientThrottlerGuard`가 정하고, 클라이언트 IP는 `trust proxy` 홉 수(`TRUST_PROXY_HOPS`, 미설정 시 Railway 런타임 1·그 밖 0)로 해석한 Express `req.ip`다. 이 한도와 집계 기준은 `apps/api/src/common/guards/client-throttler.guard.spec.ts`가 검증한다.
 
 주의:
 
@@ -326,6 +326,7 @@ POST /auth/refresh
 - `login`은 계정 없음·비밀번호 불일치·비밀번호 없는(카카오 전용) 계정을 모두 같은 bcrypt 비교 비용을 거쳐 같은 401 메시지로 거부한다.
 - 카카오 첫 로그인의 사용자 생성은 `kakaoIdentities/{kakaoId}`(`userId`)를 사용자 문서와 한 트랜잭션에서 함께 써서, 같은 카카오 계정의 동시 요청이 사용자 문서를 하나만 만들게 한다(`apps/api/src/auth/auth.kakao-signup-occ.spec.ts`). 이 연결 문서가 없는 기존 사용자는 지금처럼 `users.kakaoId` 조회로 찾는다.
 - 운영 런타임(`isProductionRuntime`: `RAILWAY_ENVIRONMENT_NAME` → `VERCEL_ENV` → `NODE_ENV` 순으로 `production` 판정)의 `register`는 판매자 초대 가입(유효한 `inviteToken`)만 받고 `consumer`·`driver` 이메일 가입은 403으로 거부한다(2026-10-10 결정, 운영 화면은 카카오 로그인만 사용). local·test·Preview 런타임의 가입은 그대로다.
+- 판매자 가입의 초대 판정(`apps/api/src/auth/auth.service.ts` `assertInviteRedeemable`, #512): `inviteToken`이 없으면 403, 영숫자 1~64자가 아니면 404, 문서가 없으면 403이다. 그다음 취소(409 `already_revoked`) → 만료(410) → 사용(409) → 받는 사람(초대에 `recipientEmail`이 있고 정규화한 가입 이메일과 다르면 409 `recipient_mismatch`) 순으로 확인한다. 같은 판정을 가입 트랜잭션 안에서 다시 해 만료·취소·동시 가입을 막고, 통과할 때만 `usedAt`·`usedBy`를 기록한다(받는 사람 불일치는 토큰을 소모하지 않는다). 초대 유효 기간은 72시간이다.
 - 이메일 가입은 정규화 이메일(trim·소문자)의 SHA-256(hex)을 키로 한 `emailIdentities/{key}`(`userId`·`email`)를 사용자 문서와 한 트랜잭션에서 `create`해, 같은 이메일의 동시 가입이 사용자 문서를 하나만 만들게 한다(나머지는 409). 이 연결 문서가 없는 기존 계정은 지금처럼 `users.email` 조회로 409가 된다. 로그인 경로는 바뀌지 않는다.
 - Seller/Driver의 explicit local-runtime branch 역시 production indicator(`NODE_ENV`·`VERCEL_ENV`·`RAILWAY_ENVIRONMENT_NAME` 중 어느 하나라도 `production`)가 존재하면 fail-closed된다. local marker를 켜도 production runtime에서는 local admission이 열리지 않으며, Seller는 기존 E2E header gate로, Driver는 기존 Preview/E2E gate로 복귀한다. production에서 local marker를 켠다고 사용할 수 있는 것이 아니다.
 
@@ -344,7 +345,7 @@ GET    /auth/firebase-token
 POST   /auth/logout
 ```
 
-모두 `JwtAuthGuard`가 적용된다. `firebase-token`은 throttle 예외지만 JWT 인증이 필요하고, Firebase 클라이언트를 쓰는 `seller`·`driver`·`admin`만 받는다(`consumer`는 403).
+모두 `JwtAuthGuard`가 적용된다. `firebase-token`은 JWT 인증이 필요하고, 서명 검증된 access token의 사용자(`sub`) 단위로 1분 60회 throttle이 걸린다(`FIREBASE_TOKEN_THROTTLE`, `apps/api/src/auth/auth.controller.ts`, #488). 또 Firebase 클라이언트를 쓰는 `seller`·`driver`·`admin`만 받는다(`consumer`는 403).
 
 ## 8. 사용자 프로필 공통 타입
 

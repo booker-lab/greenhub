@@ -282,15 +282,15 @@ Preview E2E credentials는 별도 allowlist/secret gate를 사용하므로 admin
 
 ```text
 POST /admin/invite
+{ recipientEmail?: string }   // 선택, 이메일 형식·254자 이하
 ```
 
-현재 구현:
+현재 구현(`apps/api/src/admin/admin.service.ts` `generateInvite`):
 
 - UUID에서 하이픈 제거 후 앞 16자를 대문자로 사용
-- `invites/{token}` 저장
-- 생성자 admin user ID 기록
-- `usedAt`, `usedBy` 초기 null
-- 만료: 생성 시점 + 7일
+- `invites/{token}` 저장: `createdBy`(admin user ID), `usedAt`·`usedBy` 초기 null, `createdAt`
+- `recipientEmail`: 주면 trim·소문자로 정규화해 저장하고, 비우면 null(받는 사람 제한 없음)
+- 만료: 생성 시점 + 72시간(`INVITE_TTL_MS`, #512)
 
 응답:
 
@@ -298,6 +298,7 @@ POST /admin/invite
 {
   token: string
   expiresAt: string
+  recipientEmail: string | null
 }
 ```
 
@@ -311,6 +312,20 @@ GET /admin/invite
 
 - `createdAt DESC`
 - 최대 50건
+
+### 취소
+
+```text
+POST /admin/invite/:token/revoke
+```
+
+- 토큰이 영숫자 1~64자가 아니면 404(가입과 같은 형식 규칙, `apps/api/src/auth/invite-conflict.ts`), 문서가 없어도 404
+- 트랜잭션에서 취소 → 사용 → 만료 순으로 확인해 409 `reason`(`already_revoked`·`already_used`·`expired`)으로 거부한다
+- 성공하면 문서를 지우지 않고 `revokedAt`·`revokedBy`를 남긴다. 응답 `{ token, revokedAt }`
+
+### 가입 때의 초대 판정
+
+`POST /auth/register`(role `seller`)는 `inviteToken`이 필수다. 판정은 `docs/specs/api/auth.md`를 따른다.
 
 ## 9. Banner 관리
 

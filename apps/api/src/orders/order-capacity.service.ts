@@ -99,8 +99,6 @@ export class OrderCapacityService {
     deliveryAddress: DeliveryAddressInput;
     items: RoundItemInput[];
   }): Promise<ReservationRecord> {
-    const reservationId = this.reservationId(input.storeId, input.roundId, input.idempotencyKey);
-    const reservationRef = this.firestore.doc(`checkoutReservations/${reservationId}`);
     let result: ReservationRecord | null = null;
 
     await this.firestore.runTransaction(async (tx: any) => {
@@ -915,7 +913,7 @@ export class OrderCapacityService {
 
   private countersStrict(
     raw: Partial<CapacityCounters> | null | undefined,
-    scope: 'round',
+    _scope: 'round',
   ): CapacityCounters {
     const current = this.counters(raw);
     (Object.keys(current) as Array<keyof CapacityCounters>).forEach((key) => {
@@ -927,7 +925,7 @@ export class OrderCapacityService {
     return current;
   }
 
-  private assertFiniteCounter(value: unknown, scope: 'item'): number {
+  private assertFiniteCounter(value: unknown, _scope: 'item'): number {
     const numeric = (value ?? 0) as unknown;
     if (typeof numeric !== 'number' || !Number.isFinite(numeric)) {
       throw new ConflictException('회차 상품 수량 상태가 올바르지 않아 처리할 수 없습니다.');
