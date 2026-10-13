@@ -662,7 +662,7 @@ describe('AuthService', () => {
     ])('%s 정지 사용자의 custom token 발급을 거부한다', async (_label, user) => {
       const { service } = makeKakaoLoginService({ user });
 
-      await expect(service.getFirebaseToken(user.id as string)).rejects.toMatchObject({
+      await expect(service.getFirebaseToken(user.id)).rejects.toMatchObject({
         status: 401,
       });
       expect(firebaseAuth.createCustomToken).not.toHaveBeenCalled();

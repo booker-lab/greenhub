@@ -341,7 +341,7 @@ export class NotificationsService {
     const classification = readProviderErrorClassification(raw);
     const originIdempotencyKey =
       typeof notification['idempotencyKey'] === 'string'
-        ? (notification['idempotencyKey'] as string)
+        ? notification['idempotencyKey']
         : null;
     await this.logNotification({
       userId: String(notification['userId']),

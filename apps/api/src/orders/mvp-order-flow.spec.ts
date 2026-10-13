@@ -1463,7 +1463,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     const originalCombined = realCapacity[
       'releaseForOrderCancellationInTransaction'
     ] as (...args: unknown[]) => Promise<unknown>;
-    (realCapacity['releaseForOrderCancellationInTransaction'] as unknown as jest.Mock) = jest
+    (realCapacity['releaseForOrderCancellationInTransaction'] as jest.Mock) = jest
       .fn()
       .mockRejectedValueOnce(new Error('예약 반환 실패'))
       .mockImplementationOnce((...args: unknown[]) =>

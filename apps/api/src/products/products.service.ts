@@ -79,12 +79,12 @@ export class ProductsService {
       const gc = groupConfigMap.get(p['id'] as string);
       const summary = toPublicProductSummary(
         p as Record<string, unknown>,
-        (gc as Record<string, unknown> | undefined) ?? null,
+        gc ?? null,
       );
       // Backfill groupSummary for group products when the helper omitted it
       // (kept for contract compat with the previous manual shape).
       if (p['saleType'] === 'group' && gc && !summary['groupSummary']) {
-        summary['groupSummary'] = toPublicGroupSummary(gc as Record<string, unknown>);
+        summary['groupSummary'] = toPublicGroupSummary(gc);
       }
       return summary;
     });

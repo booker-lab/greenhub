@@ -107,7 +107,7 @@ function toPublicContent(
     return undefined;
   }
   // Explicitly drop content.isEditedByUser (internal).
-  return { headline: c['headline'] as string, description: c['description'] as string };
+  return { headline: c['headline'], description: c['description'] };
 }
 
 /**

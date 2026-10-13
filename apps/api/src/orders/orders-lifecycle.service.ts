@@ -792,7 +792,7 @@ export class OrdersLifecycleService {
       });
       if (gcSnap.exists) {
         tx.update(gcRef, {
-          currentQuantity: this.firestore.FieldValue.increment(-(quantity as number)),
+          currentQuantity: this.firestore.FieldValue.increment(-quantity),
         });
       }
     });

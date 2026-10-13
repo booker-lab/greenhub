@@ -612,7 +612,7 @@ describe('OrdersQueryService 조회 권한', () => {
         ...expected,
       }),
     );
-    expect(Object.keys(result.redeliveryPayment!).sort()).toEqual(
+    expect(Object.keys(result.redeliveryPayment).sort()).toEqual(
       ['required', 'holdAt', 'chargeId', 'status', 'canPay', 'paid', 'requiresRecovery'].sort(),
     );
   });
