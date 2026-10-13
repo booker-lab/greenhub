@@ -1,4 +1,5 @@
 import {
+  IsIn,
   IsOptional,
   IsString,
   IsBoolean,
@@ -8,6 +9,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { SETTLEMENT_STATUSES, type SettlementStatus } from '@greenhub/shared';
 
 export class QueryAdminSettlementsDto {
   @IsOptional()
@@ -21,6 +23,11 @@ export class QueryAdminSettlementsDto {
   @IsOptional()
   @IsString()
   storeId?: string;
+
+  // 허용값은 shared 정산 status SSOT. 셀러 QuerySettlementsDto와 같은 방식으로 검증한다.
+  @IsOptional()
+  @IsIn(SETTLEMENT_STATUSES)
+  status?: SettlementStatus;
 }
 
 export class QueryAdminOrdersDto {
