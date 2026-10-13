@@ -22,7 +22,7 @@ const PAYMENT_PATH = `payments/${ORDER_ID}`;
 function makeService(occ: Occ) {
   let providerCalls = 0;
   const payments = {
-    processRefundByOrderId: jest.fn(async (orderId: string) => {
+    processRefundByOrderId: jest.fn(async (_orderId: string) => {
       providerCalls += 1;
       // Simulate provider success converging the payment doc so the retry
       // observes refunded state (paymentIsPaid === false afterwards).

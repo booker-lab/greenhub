@@ -474,8 +474,8 @@ describe('AdminService.markAsPaid 상태 계약', () => {
 
     expect(successes).toHaveLength(1);
     expect(failures).toHaveLength(1);
-    expect((failures[0] as PromiseRejectedResult).reason).toBeInstanceOf(BadRequestException);
-    expect((failures[0] as PromiseRejectedResult).reason.message).toBe(
+    expect(failures[0].reason).toBeInstanceOf(BadRequestException);
+    expect(failures[0].reason.message).toBe(
       '이미 지급 완료된 정산입니다.',
     );
     expect(fixture.transactionReads).toEqual([

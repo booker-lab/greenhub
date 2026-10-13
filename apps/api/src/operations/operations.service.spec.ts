@@ -170,7 +170,7 @@ describe('운영 예외 통합과 조치 계약', () => {
       },
       actions: [{ actionType: 'RETRY_REFUND', status: 'SUCCEEDED' }],
     });
-    expect(records.get(`operationIssues/${reopened.id}`)).toMatchObject(reopened);
+    expect(records.get(`operationIssues/${reopened.id as string}`)).toMatchObject(reopened);
   });
 
   it('같은 실패 원인과 업무 대상은 하나의 열린 운영 예외로 통합한다', async () => {

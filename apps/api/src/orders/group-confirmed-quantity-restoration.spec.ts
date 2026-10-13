@@ -289,7 +289,7 @@ describe('seller CONFIRMED group quantity restoration', () => {
 
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
+    expect(rejected[0].reason).toBeInstanceOf(ConflictException);
     expect(context.memory.read('orders/order-1')).toMatchObject({ status: 'CANCELLED' });
     expect(context.memory.read('groupProductConfig/product-1')).toMatchObject({
       currentQuantity: 5,

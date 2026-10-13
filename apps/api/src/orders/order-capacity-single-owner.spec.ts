@@ -233,15 +233,15 @@ describe('CAPACITY single-owner remediation proof', () => {
 
   it('G. underflow aborts with no clamp and no terminal flip', async () => {
     const base = seedBase();
-    (base['saleRounds/round-1'] as Data).counters = {
+    base['saleRounds/round-1'].counters = {
       reservedDeliveryAddresses: 0,
       reservedItemQuantity: 0,
       orderedDeliveryAddresses: 0,
       orderedItemQuantity: 0,
       heldOrderCount: 0,
     };
-    (base['saleRoundItems/round-item-1'] as Data).reservedQuantity = 0;
-    (base['saleRoundItems/round-item-1'] as Data).orderedQuantity = 0;
+    base['saleRoundItems/round-item-1'].reservedQuantity = 0;
+    base['saleRoundItems/round-item-1'].orderedQuantity = 0;
     base['checkoutReservations/corrupt-held'] = {
       id: 'corrupt-held',
       roundId: 'round-1',
@@ -280,10 +280,10 @@ describe('CAPACITY single-owner remediation proof', () => {
 
     // Corrupt CONSUMED ordered underflow also aborts.
     const base2 = seedBase();
-    (base2['saleRounds/round-1'] as Data).counters.orderedDeliveryAddresses = 0;
-    (base2['saleRounds/round-1'] as Data).counters.orderedItemQuantity = 0;
+    base2['saleRounds/round-1'].counters.orderedDeliveryAddresses = 0;
+    base2['saleRounds/round-1'].counters.orderedItemQuantity = 0;
     base2['checkoutReservations/corrupt-consumed'] = {
-      ...(base['checkoutReservations/corrupt-held'] as Data),
+      ...base['checkoutReservations/corrupt-held'],
       id: 'corrupt-consumed',
       status: 'CONSUMED',
       orderId: 'order-1',
@@ -683,7 +683,7 @@ describe('CAPACITY single-owner remediation proof', () => {
 
     // Capacity full => refund path with zero reservation leak.
     const fullBase = seedBase();
-    (fullBase['saleRounds/round-1'] as Data).limits = {
+    fullBase['saleRounds/round-1'].limits = {
       maxDeliveryAddresses: 0,
       maxItemQuantity: 0,
     };

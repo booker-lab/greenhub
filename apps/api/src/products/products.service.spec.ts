@@ -69,7 +69,7 @@ describe('공개 상품 API', () => {
     };
     const service = new ProductsService(firestore as never);
 
-    const detail = (await service.getPublicProduct(product.id)) as Record<string, unknown>;
+    const detail = await service.getPublicProduct(product.id);
     expect(detail).not.toHaveProperty('sellerNote');
     expect(detail).not.toHaveProperty('sellerOverride');
     expect(detail).not.toHaveProperty('testOnly');
@@ -111,7 +111,7 @@ describe('공개 상품 API', () => {
     };
     const service = new ProductsService(firestore as never);
 
-    const detail = (await service.getPublicProduct('group-001')) as Record<string, unknown>;
+    const detail = await service.getPublicProduct('group-001');
     const gc = detail['groupConfig'] as Record<string, unknown>;
     expect(gc).not.toHaveProperty('isProcessed');
     expect(gc['currentQuantity']).toBe(3);
@@ -210,10 +210,7 @@ describe('seller owner/internal read regression', () => {
     };
     const service = new ProductsService(firestore as never);
 
-    const owner = (await service.getOwnerProduct('s-1', 'p-1', 'seller-1', 'seller')) as Record<
-      string,
-      unknown
-    >;
+    const owner = await service.getOwnerProduct('s-1', 'p-1', 'seller-1', 'seller');
     expect(owner['sellerNote']).toBe('내부 메모');
     expect(owner['sellerOverride']).toBe(true);
     expect(owner['content']).toEqual({

@@ -728,7 +728,7 @@ export class AligoClient {
       if (record['code'] !== 0) {
         const messageText =
           typeof record['message'] === 'string' && record['message'].trim().length > 0
-            ? (record['message'] as string)
+            ? record['message']
             : '알림톡 발송에 실패했습니다.';
         const errorInput = {
           code: record['code'],
@@ -812,7 +812,7 @@ export class AligoClient {
       if (resultCode !== 0 && resultCode !== 1) {
         const messageText =
           typeof record['message'] === 'string' && record['message'].trim().length > 0
-            ? (record['message'] as string)
+            ? record['message']
             : '문자 대체 발송에 실패했습니다.';
         const errorInput = { code: resultCode, message: messageText, httpStatus: res.status };
         const errorClass = classifySmsProviderError(errorInput);
