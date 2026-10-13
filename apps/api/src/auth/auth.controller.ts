@@ -18,6 +18,7 @@ import { UpdateMeDto } from './dto/update-me.dto';
 import { AddressDto } from './dto/address.dto';
 import { FcmTokenDto } from './dto/fcm-token.dto';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -30,6 +31,11 @@ const AUTH_THROTTLE = { default: { limit: 10, ttl: 60000 } };
 // Vercel 서버다. 여러 손님이 같은 서버 IP를 나눠 쓰므로 10회/분이면 오픈 직후 로그인이 막힌다.
 // 유효한 카카오 토큰·리프레시 토큰이 있어야만 성공하는 경로라 대입 공격 위험이 낮아 한도를 넓힌다.
 const RELAYED_AUTH_THROTTLE = { default: { limit: 120, ttl: 60000 } };
+// firebase-token은 판매자·기사 앱 브라우저가 화면을 새로 열 때와 access token이 바뀔 때(약 1시간마다)
+// 한 번씩 부른다. 집계는 ClientThrottlerGuard가 서명 검증된 access token의 사용자(sub) 단위로 하므로,
+// 한 사용자가 여러 탭·기기를 함께 열어도 닿지 않을 만큼 두되, 전역 기본(100/분)보다는 낮춰 커스텀 토큰
+// 발급이 반복 호출로 몰리지 않게 한다.
+export const FIREBASE_TOKEN_THROTTLE = { default: { limit: 60, ttl: 60000 } };
 
 @Controller('auth')
 export class AuthController {
@@ -58,8 +64,8 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @Throttle(RELAYED_AUTH_THROTTLE)
-  refresh(@Body('refreshToken') refreshToken: string) {
-    return this.authService.refresh(refreshToken);
+  refresh(@Body() dto: RefreshTokenDto) {
+    return this.authService.refresh(dto.refreshToken);
   }
 
   @Get('session')
@@ -121,7 +127,7 @@ export class AuthController {
   @Get('firebase-token')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('seller', 'driver', 'admin')
-  @SkipThrottle()
+  @Throttle(FIREBASE_TOKEN_THROTTLE)
   getFirebaseToken(@CurrentUser() user: JwtPayload) {
     return this.authService.getFirebaseToken(user.sub);
   }
