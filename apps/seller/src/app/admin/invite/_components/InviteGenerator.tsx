@@ -42,7 +42,7 @@ export function InviteGenerator({
         style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
         mb="md"
       >
-        판매자 초대 토큰을 생성합니다. 토큰은 발급 후 <strong>7일간</strong> 유효합니다.
+        판매자 초대 토큰을 생성합니다. 토큰은 발급 후 <strong>72시간</strong> 유효합니다.
       </Text>
 
       <TextInput

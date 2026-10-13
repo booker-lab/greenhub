@@ -76,6 +76,12 @@ describe('InviteGenerator command state', () => {
     expect(texts).not.toContain('생성된 초대 토큰');
   });
 
+  it('토큰 유효 기간을 서버와 같은 72시간으로 안내한다', () => {
+    const texts = textsOf(InviteGenerator({ ...baseProps }));
+    expect(texts).toContain('72시간');
+    expect(texts.some((t) => t.includes('7일'))).toBe(false);
+  });
+
   it('생성 중에는 진행 copy를 표시한다', () => {
     const tree = InviteGenerator({ ...baseProps, generating: true });
     expect(textsOf(tree)).toContain('생성중…');

@@ -100,7 +100,7 @@ function seedInvite(occ: Occ, token: string, overrides: Data = {}) {
     createdBy: 'admin-1',
     usedAt: null,
     usedBy: null,
-    expiresAt: new Date(Date.now() + 7 * DAY_MS),
+    expiresAt: new Date(Date.now() + INVITE_TTL_MS),
     createdAt: new Date(),
     ...overrides,
   });
@@ -277,6 +277,27 @@ describe('관리자 초대 토큰 취소(POST /admin/invite/:token/revoke)와 �
     expect(occ.listData('invites/')).toHaveLength(0);
   });
 
+  it.each([
+    'A/B',
+    'invites/OTHER',
+    '../VALIDTOKEN000001',
+    'BAD-TOKEN',
+    'TOKEN 0001',
+    'A'.repeat(65),
+  ])('형식이 틀린 초대 토큰 %p의 판매자 가입은 취소 경로와 같은 404이고 아무 문서도 만들지 않는다', async (token) => {
+    seedInvite(occ, 'VALIDTOKEN000001');
+
+    const response = await registerSeller(token).expect(404);
+
+    expect(response.body).toMatchObject({
+      statusCode: 404,
+      message: '초대 토큰을 찾을 수 없습니다.',
+    });
+    expect(sellerUsers()).toHaveLength(0);
+    expect(occ.listData('emailIdentities/')).toHaveLength(0);
+    expect(occ.getData('invites/VALIDTOKEN000001')).toMatchObject({ usedAt: null, usedBy: null });
+  });
+
   it('가입 사전 검사 뒤 취소가 먼저 커밋되면 가입 트랜잭션이 409 already_revoked로 거부한다', async () => {
     seedInvite(occ, 'RACETOKEN0000001');
     occ.setBeforeAttempt(async () => {
@@ -332,15 +353,17 @@ describe('관리자 초대 토큰 취소(POST /admin/invite/:token/revoke)와 �
       jest.restoreAllMocks();
     });
 
-    it('받는 사람 없이 발급하면 recipientEmail이 null로 남고, 어떤 이메일로든 가입할 수 있다', async () => {
+    it('받는 사람 없이 발급하면 72시간 뒤 만료되고 recipientEmail이 null로 남으며, 어떤 이메일로든 가입할 수 있다', async () => {
+      const seventyTwoHoursMs = 72 * 60 * 60 * 1000;
+      expect(INVITE_TTL_MS).toBe(seventyTwoHoursMs);
       const before = Date.now();
       const issued = await issue().expect(201);
       const token = issued.body.token as string;
 
       expect(issued.body).toEqual({ token, expiresAt: expect.any(String), recipientEmail: null });
       const expiresAtMs = Date.parse(issued.body.expiresAt as string);
-      expect(expiresAtMs).toBeGreaterThanOrEqual(before + INVITE_TTL_MS);
-      expect(expiresAtMs).toBeLessThanOrEqual(Date.now() + INVITE_TTL_MS);
+      expect(expiresAtMs).toBeGreaterThanOrEqual(before + seventyTwoHoursMs);
+      expect(expiresAtMs).toBeLessThanOrEqual(Date.now() + seventyTwoHoursMs);
       expect(occ.getData(`invites/${token}`)).toMatchObject({ recipientEmail: null });
 
       await registerSeller(token, 'anyone@example.com').expect(201);

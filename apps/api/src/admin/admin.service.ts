@@ -9,7 +9,11 @@ import { randomUUID } from 'node:crypto';
 import { dateRangeKST } from '@greenhub/shared';
 import type * as admin from 'firebase-admin';
 import { normalizeEmail } from '../auth/email-identity';
-import { inviteConflict } from '../auth/invite-conflict';
+import {
+  INVITE_NOT_FOUND_MESSAGE,
+  assertInviteTokenFormat,
+  inviteConflict,
+} from '../auth/invite-conflict';
 import { FirestoreService } from '../firestore/firestore.service';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 import type { OrderStatus } from '../orders/dto/update-status.dto';
@@ -36,10 +40,8 @@ import {
 import type { GenerateInviteDto } from './dto/invite.dto';
 
 const LEGACY_REFUND_CLAIM_MS = 5 * 60 * 1000;
-// 발급 토큰은 영숫자뿐이다. 경로 구분자 등이 섞인 값으로 다른 문서를 가리키지 못하게 막는다.
-const INVITE_TOKEN_PATTERN = /^[A-Za-z0-9]{1,64}$/;
-// 판매자 초대 토큰 유효 기간(발급 시점부터 7일).
-export const INVITE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+// 판매자 초대 토큰 유효 기간(발급 시점부터 72시간).
+export const INVITE_TTL_MS = 72 * 60 * 60 * 1000;
 
 type LegacyRefundClaimResult =
   | { kind: 'done' }
@@ -590,15 +592,13 @@ export class AdminService {
    * 가입 트랜잭션과 같은 문서를 트랜잭션으로 읽어 동시 가입과 한쪽만 성공하게 한다.
    */
   async revokeInvite(token: string, adminId: string) {
-    if (!INVITE_TOKEN_PATTERN.test(token)) {
-      throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
-    }
+    assertInviteTokenFormat(token);
     const ref = this.firestore.doc(`invites/${token}`);
     const revokedAt = new Date();
 
     await this.firestore.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
-      if (!snap.exists) throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
+      if (!snap.exists) throw new NotFoundException(INVITE_NOT_FOUND_MESSAGE);
       const invite = snap.data()!;
 
       if (invite['revokedAt'] != null) {

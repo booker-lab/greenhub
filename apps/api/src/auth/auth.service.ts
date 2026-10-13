@@ -19,6 +19,7 @@ import { AuditService } from '../common/audit/audit.service';
 import {
   INVITE_RECIPIENT_MISMATCH_MESSAGE,
   INVITE_REVOKED_MESSAGE,
+  assertInviteTokenFormat,
   inviteConflict,
 } from './invite-conflict';
 import type { AddressDto } from './dto/address.dto';
@@ -178,6 +179,8 @@ export class AuthService {
       if (!dto.inviteToken) {
         throw new ForbiddenException('판매자 계정은 초대 토큰이 필요합니다.');
       }
+      // 문서 경로에 쓰기 전에 관리자 취소 경로와 같은 형식 규칙으로 거른다(경로 구분자 등은 404).
+      assertInviteTokenFormat(dto.inviteToken);
 
       const inviteSnap = await this.firestore.doc(`invites/${dto.inviteToken}`).get();
 
