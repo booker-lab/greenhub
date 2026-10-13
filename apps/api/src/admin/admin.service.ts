@@ -420,6 +420,9 @@ export class AdminService {
     if (dto.storeId) {
       query = query.where('storeId', '==', dto.storeId);
     }
+    if (dto.status) {
+      query = query.where('status', '==', dto.status);
+    }
     if (dto.from) {
       const { start } = dateRangeKST(dto.from);
       query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(start));
