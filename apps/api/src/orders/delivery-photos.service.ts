@@ -273,14 +273,14 @@ export class DeliveryPhotosService {
       order['storeId'] !== storeId ||
       order['schemaVersion'] !== 2 ||
       typeof order['roundId'] !== 'string' ||
-      (order['roundId'] as string).trim().length === 0 ||
+      order['roundId'].trim().length === 0 ||
       order['deliveryMethod'] !== 'direct' ||
       order['status'] !== 'DELIVERED' ||
       !photoIds.includes(photoId)
     ) {
       throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
     }
-    const roundId = order['roundId'] as string;
+    const roundId = order['roundId'];
     const snapshot = await this.firestore.doc(`saleRounds/${roundId}`).get();
     if (!snapshot.exists) {
       throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
@@ -302,14 +302,14 @@ export class DeliveryPhotosService {
       order['storeId'] !== storeId ||
       order['schemaVersion'] !== 2 ||
       typeof order['roundId'] !== 'string' ||
-      (order['roundId'] as string).trim().length === 0 ||
+      order['roundId'].trim().length === 0 ||
       order['deliveryMethod'] !== 'direct' ||
       order['status'] !== 'DELIVERED' ||
       !photoIds.includes(photoId)
     ) {
       throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
     }
-    const roundId = order['roundId'] as string;
+    const roundId = order['roundId'];
     const snapshot = await transaction.get(this.firestore.doc(`saleRounds/${roundId}`));
     if (!snapshot.exists) {
       throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');

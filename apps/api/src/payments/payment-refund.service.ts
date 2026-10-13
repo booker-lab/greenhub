@@ -350,7 +350,7 @@ export class PaymentRefundService {
     const owner = typeof marker['owner'] === 'string' ? marker['owner'] : REFUND_OWNER;
     const providerKey =
       typeof marker['providerKey'] === 'string' && marker['providerKey'].length > 0
-        ? (marker['providerKey'] as string)
+        ? marker['providerKey']
         : null;
     const expiresAt = typeof marker['expiresAt'] === 'number' ? marker['expiresAt'] : 0;
     return { token: marker['token'], owner, status, providerKey, expiresAt };

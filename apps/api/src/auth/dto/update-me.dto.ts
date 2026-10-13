@@ -4,9 +4,11 @@ import { IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 export const PROFILE_NAME_MAX_LENGTH = 20;
 
 // 제어문자(줄바꿈·탭 포함), 줄/문단 구분자, 보이지 않는 서식 문자를 포함하지 않는다.
+/* eslint-disable no-control-regex -- 제어문자를 거부하기 위한 패턴이다. */
 export const PROFILE_NAME_NO_CONTROL_PATTERN =
   // biome-ignore lint/suspicious/noControlCharactersInRegex: 제어문자를 거부하기 위한 패턴이다.
   /^[^\u0000-\u001F\u007F-\u009F\u00AD\u200B\u200C\u200E\u200F\u2028\u2029\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]*$/;
+/* eslint-enable no-control-regex */
 
 // scheme URL, www., 도메인(`<문자>.<영문>/…` 경로가 붙거나 흔한 최상위 도메인으로 끝남)을 포함하지 않는다.
 // `john.doe`·`Mr.Kim`처럼 점이 들어간 이름은 받는다. 알림 본문의 이름 판정과 같은 규칙이다.

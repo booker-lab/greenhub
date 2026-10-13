@@ -294,7 +294,7 @@ describe('specialized command race convergence (review/confirm/hub-confirm)', ()
 
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
+    expect(rejected[0].reason).toBeInstanceOf(ConflictException);
     expect(context.firestore.getData('orders/order-1')).toMatchObject({ status: 'REVIEWED' });
     expect(context.firestore.orderTransactionUpdates('orders/order-1')).toHaveLength(1);
     expect(context.firestore.listData('settlements/')).toHaveLength(1);
@@ -393,7 +393,7 @@ describe('specialized command race convergence (review/confirm/hub-confirm)', ()
 
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
+    expect(rejected[0].reason).toBeInstanceOf(ConflictException);
     expect(context.firestore.getData('orders/order-1')).toMatchObject({ status: 'PICKED_UP' });
     expect(context.firestore.orderTransactionUpdates('orders/order-1')).toHaveLength(1);
     expect(context.firestore.listData('settlements/')).toHaveLength(1);
@@ -462,7 +462,7 @@ describe('specialized command race convergence (review/confirm/hub-confirm)', ()
 
     expect(fulfilled).toHaveLength(1);
     expect(rejected).toHaveLength(1);
-    expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
+    expect(rejected[0].reason).toBeInstanceOf(ConflictException);
     expect(context.firestore.getData('orders/order-1')).toMatchObject({ status: 'PICKED_UP' });
     expect(context.firestore.orderTransactionUpdates('orders/order-1')).toHaveLength(1);
     expect(context.firestore.listData('settlements/')).toHaveLength(1);

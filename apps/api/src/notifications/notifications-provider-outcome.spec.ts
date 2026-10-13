@@ -180,7 +180,7 @@ function makeServiceHarness(opts: {
     }),
   };
   const issueWriter = { createOrMergeIssue: jest.fn(async (issue: Data) => issue) };
-  const service = new (NotificationsService as any)(firestore, aligo, {}, issueWriter) as any;
+  const service = new (NotificationsService as any)(firestore, aligo, {}, issueWriter);
 
   return {
     service: service as NotificationsService,
@@ -556,7 +556,7 @@ describe('delivery outcome reconciliation (NotificationsService)', () => {
     const result = await (h.service as any).resendSms(issue);
     expect(result).toMatchObject({ outcome: 'ACCEPTED', providerReceipt: 'MSGID-RESEND-001' });
     const notifs = h.readNotifications();
-    const resend = notifs.find((n) => (n as Data)['resendOfNotificationId'] === 'origin-1') as Data;
+    const resend = notifs.find((n) => n['resendOfNotificationId'] === 'origin-1') as Data;
     expect(resend).toMatchObject({
       attemptId: 'attempt-resend-1',
       providerReceipt: 'MSGID-RESEND-001',
@@ -581,7 +581,7 @@ describe('delivery outcome reconciliation (NotificationsService)', () => {
     expect(h.aligo.sendSms).toHaveBeenCalledTimes(2);
     const unknowns = h
       .readNotifications()
-      .filter((n) => (n as Data)['attemptId'] === 'attempt-resend-unknown-1');
+      .filter((n) => n['attemptId'] === 'attempt-resend-unknown-1');
     expect(unknowns).toHaveLength(1);
     expect(unknowns[0]).toMatchObject({ status: 'pending', providerOutcome: 'UNKNOWN' });
   });

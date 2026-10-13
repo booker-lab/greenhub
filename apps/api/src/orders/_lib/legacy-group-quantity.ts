@@ -81,7 +81,7 @@ export async function releaseLegacyGroupQuantityInTransaction(
   }
 
   tx.update(gcRef, {
-    currentQuantity: firestore.FieldValue.increment(-(quantity as number)),
+    currentQuantity: firestore.FieldValue.increment(-quantity),
   });
   return 'RELEASED';
 }

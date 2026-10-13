@@ -130,7 +130,7 @@ function makeContext(options: {
     deliveryMethod: 'direct',
     ...options.order,
   };
-  const storeId = order.storeId as string;
+  const storeId = order.storeId;
   const roundRecords =
     typeof order['roundId'] === 'string' && options.round !== null
       ? {
