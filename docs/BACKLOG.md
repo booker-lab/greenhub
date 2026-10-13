@@ -719,7 +719,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. **2026-10-12 구현 완료(2026-10-13 운영 반영)**: 주문 요청 수량·회차 품목 수 입력 상한(#422), 같은 고객의 같은 회차 활성 결제 예약 최대 3건(#427, `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`의 이전 예약 유지는 그대로, `checkout-hold-per-user.spec.ts`), 운영에서 판매자 초대 가입 외 `POST /auth/register` 403(#474, `auth.service.ts` `register`). 운영 외 환경의 register는 그대로 열려 있다.
 
 ### OPERATION-ISSUE-MANUAL-RESOLVE
-- [ ] 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.
+- [x] **2026-10-13 #510 구현(운영 미배포)**: 판매자·관리자가 메모와 함께 운영 기록을 `RESOLVED`로 닫는다. 정산 보류·환불 미확정 유형 3종은 관리자만 닫는다(판매자 운영 화면 `ResolveIssueModal`, 계약은 `docs/specs/mvp-sales-round-direct-delivery.md` `operationIssues`). 이전 기록: 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.
 
 ### CHECKOUT-DELIVERY-PHONE-CLIENT-CHECK
 - [x] 받는 분 연락처는 휴대폰 번호만 받는다(**2026-10-10 결정**). 서버 검사는 #445로 들어갔다. **2026-10-13**: 소비자 회차 결제 화면도 같은 규칙(`apps/consumer/src/lib/korean-mobile-phone.ts`)으로 결제 버튼을 막고 칸을 벗어나면 서버와 같은 안내 문구를 보여 준다(운영 미배포).
