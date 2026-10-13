@@ -78,7 +78,9 @@ function rethrowEmailIdentityConflict(error: unknown): never {
 
 // 판매자 가입에 쓸 수 있는 초대인지 판정한다. 사전 검사와 가입 트랜잭션이 같은 순서
 // (취소 > 만료 > 사용 > 받는 사람)로 판정해, 사전 검사 뒤 상태가 바뀌어도 트랜잭션 안에서 같은 응답으로 거부한다.
-// 받는 사람 이메일(recipientEmail)이 없는 초대는 이메일 제한이 없다. 값이 있으면 정규화 이메일이 같아야 한다.
+// 새 초대는 받는 사람 이메일(recipientEmail)을 반드시 저장하고, 값이 있으면 정규화 이메일이 같아야 한다.
+// 필수화 전에 저장된 초대(값이 null이거나 없음)는 만료나 취소 전까지 이메일 제한 없이 받는다(데이터는 옮기지 않는다).
+// 문자열이 아닌 값은 제한 없음으로 보지 않고 recipient_mismatch로 거부한다.
 function assertInviteRedeemable(
   invite: admin.firestore.DocumentData,
   normalizedEmail: string,

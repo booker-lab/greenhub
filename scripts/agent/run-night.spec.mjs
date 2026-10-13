@@ -60,6 +60,10 @@ import { OPENCODE_ATTACH_URL_ENV } from './run-once.mjs';
 
 const RUN_NIGHT_PATH = fileURLToPath(new URL('./run-night.mjs', import.meta.url));
 
+// Visible server basic-auth fixture (a clearly fake placeholder).
+const VISIBLE_TEST_PASSWORD = 'fixture-placeholder'; // trufflehog:ignore
+const VISIBLE_TEST_AUTHORIZATION = `Basic ${Buffer.from(`opencode:${VISIBLE_TEST_PASSWORD}`).toString('base64')}`;
+
 // ---------------------------------------------------------------------------
 // Fixture lifetime ownership (development-authority section 7.1)
 // ---------------------------------------------------------------------------
@@ -970,15 +974,22 @@ test('N13a — an operator attach URL is explicitly preserved into every BUILD c
           })
         : syntheticCycleResult({ status: ALREADY_SATISFIED }),
   });
-  harness.deps.env = { PATH: 'fake-path', [OPENCODE_ATTACH_URL_ENV]: `  ${attach}  ` };
-  harness.deps.probeVisibleServer = () => {
+  harness.deps.env = {
+    PATH: 'fake-path',
+    [OPENCODE_ATTACH_URL_ENV]: `  ${attach}  `,
+    OPENCODE_SERVER_PASSWORD: VISIBLE_TEST_PASSWORD,
+  };
+  const probeCalls = [];
+  harness.deps.probeVisibleServer = (input) => {
     probes += 1;
+    probeCalls.push(input);
     return { attempted: true, ok: true, error: null };
   };
 
   const result = await runHarness(harness);
 
   assert.equal(probes, 1);
+  assert.equal(probeCalls[0].authorization, VISIBLE_TEST_AUTHORIZATION);
   assert.equal(result.status, ALREADY_SATISFIED);
   assert.equal(result.visibility.requested, true);
   assert.equal(result.visibility.attachUrl, attach);
@@ -990,6 +1001,7 @@ test('N13a — an operator attach URL is explicitly preserved into every BUILD c
   for (const call of harness.buildCalls) {
     assert.equal(call.env[OPENCODE_ATTACH_URL_ENV], attach);
     assert.equal(call.env.PATH, 'fake-path');
+    assert.equal(call.env.OPENCODE_SERVER_PASSWORD, VISIBLE_TEST_PASSWORD);
   }
   assert.equal(harness.buildCalls[0].env[OPENCODE_ATTACH_URL_ENV], attach);
   assert.match(
@@ -1035,8 +1047,22 @@ test('N13b — an invalid or unavailable attach target fails closed with no BUIL
   assert.equal(invalidHarness.buildCalls.length, 0);
   assert.match(invalid.stopReason, /VISIBILITY_UNAVAILABLE/);
 
+  const noPasswordHarness = createNightHarness({ buildCycle: CYCLE_COMPLETE });
+  noPasswordHarness.deps.env = { [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096' };
+  noPasswordHarness.deps.probeVisibleServer = () => {
+    throw new Error('a target without server credentials must not be probed');
+  };
+  const noPassword = await runHarness(noPasswordHarness);
+  assert.equal(noPassword.status, BLOCKED_EXTERNAL);
+  assert.equal(noPassword.visibility.health, 'INVALID');
+  assert.equal(noPasswordHarness.buildCalls.length, 0);
+  assert.match(noPassword.stopReason, /OPENCODE_SERVER_PASSWORD/);
+
   const downHarness = createNightHarness({ buildCycle: CYCLE_COMPLETE });
-  downHarness.deps.env = { [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096' };
+  downHarness.deps.env = {
+    [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096',
+    OPENCODE_SERVER_PASSWORD: VISIBLE_TEST_PASSWORD,
+  };
   downHarness.deps.probeVisibleServer = () => ({
     attempted: true,
     ok: false,
@@ -1113,11 +1139,22 @@ test('N11 — canonical foreign dirty state, worktrees, and temp dirs survive un
 // N7 / N8 — real child process, real run-build, real console Ctrl+C
 // ---------------------------------------------------------------------------
 
+// Executor children receive an allow-listed environment, so a fake executor
+// reads its fixture paths from a config file next to its own source.
+function writeFakeConfig({ binDir, eventsDir, writePath = null }) {
+  writeFileSync(
+    join(binDir, 'fake-config.json'),
+    JSON.stringify({ dir: eventsDir, writePath }),
+    'utf8',
+  );
+}
+
 const FAKE_OPENCODE_SOURCE = [
   "const fs = require('node:fs');",
   "const path = require('node:path');",
-  'const dir = process.env.GREENHUB_NIGHT_FAKE_DIR;',
-  "if (!dir) { console.error('fake opencode: GREENHUB_NIGHT_FAKE_DIR is required'); process.exit(2); }",
+  "const fakeConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'fake-config.json'), 'utf8'));",
+  'const dir = fakeConfig.dir;',
+  "if (!dir) { console.error('fake opencode: fake-config.json dir is required'); process.exit(2); }",
   'const args = process.argv.slice(2);',
   "const dirIndex = args.indexOf('--dir');",
   'const workspace = dirIndex >= 0 ? args[dirIndex + 1] : null;',
@@ -1153,15 +1190,17 @@ const FAKE_OPENCODE_SOURCE = [
 const FAKE_VISIBLE_OPENCODE_SOURCE = [
   "const fs = require('node:fs');",
   "const path = require('node:path');",
-  'const dir = process.env.GREENHUB_NIGHT_FAKE_DIR;',
-  "if (!dir) { console.error('fake opencode: GREENHUB_NIGHT_FAKE_DIR is required'); process.exit(2); }",
+  "const fakeConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'fake-config.json'), 'utf8'));",
+  'const dir = fakeConfig.dir;',
+  "if (!dir) { console.error('fake opencode: fake-config.json dir is required'); process.exit(2); }",
   'const args = process.argv.slice(2);',
   'const valueOf = (flag) => { const at = args.indexOf(flag); return at >= 0 ? args[at + 1] : null; };',
   'const title = valueOf("--title");',
   'const attach = valueOf("--attach");',
   'const workspace = valueOf("--dir");',
   "const marker = 'invoke-' + process.pid + '-' + Math.random().toString(16).slice(2) + '.json';",
-  'fs.writeFileSync(path.join(dir, marker), JSON.stringify({ pid: process.pid, title, attach, workspace, args: args.length }));',
+  'const serverPassword = Boolean(process.env.OPENCODE_SERVER_PASSWORD);',
+  'fs.writeFileSync(path.join(dir, marker), JSON.stringify({ pid: process.pid, title, attach, workspace, serverPassword, args: args.length }));',
   'if (title !== null && title.indexOf("selector") >= 0) {',
   "  const decision = JSON.parse(fs.readFileSync(path.join(dir, 'selector-decision.json'), 'utf8'));",
   "  process.stdout.write(JSON.stringify({ type: 'text', part: { text: JSON.stringify(decision) } }) + '\\n');",
@@ -1180,7 +1219,7 @@ const FAKE_VISIBLE_OPENCODE_SOURCE = [
   '    return;',
   '  }',
   '  clearInterval(timer);',
-  'const writePath = process.env.GREENHUB_NIGHT_FAKE_WRITE;',
+  'const writePath = fakeConfig.writePath;',
   'if (workspace !== null && writePath) {',
   '  const absolute = path.join(workspace, writePath);',
   '  fs.mkdirSync(path.dirname(absolute), { recursive: true });',
@@ -1195,6 +1234,7 @@ const FAKE_VISIBLE_OPENCODE_SOURCE = [
 function createFakeNightOpencode({ source = FAKE_OPENCODE_SOURCE, writePath = null } = {}) {
   const binDir = mkdtempSync(join(tmpdir(), 'greenhub-run-night-fake-opencode-'));
   const eventsDir = mkdtempSync(join(tmpdir(), 'greenhub-run-night-fake-events-'));
+  writeFakeConfig({ binDir, eventsDir, writePath });
   writeFileSync(join(binDir, 'fake-opencode.cjs'), source, 'utf8');
   if (process.platform === 'win32') {
     writeFileSync(
@@ -1231,7 +1271,8 @@ function createFakeNightOpencode({ source = FAKE_OPENCODE_SOURCE, writePath = nu
 const FAKE_CODEX_SOURCE = [
   "const fs = require('node:fs');",
   "const path = require('node:path');",
-  'const dir = process.env.GREENHUB_NIGHT_FAKE_DIR;',
+  "const fakeConfig = JSON.parse(fs.readFileSync(path.join(__dirname, 'fake-config.json'), 'utf8'));",
+  'const dir = fakeConfig.dir;',
   'const args = process.argv.slice(2);',
   'const valueOf = (flag) => { const at = args.indexOf(flag); return at >= 0 ? args[at + 1] : null; };',
   'const sandbox = valueOf("--sandbox");',
@@ -1259,7 +1300,7 @@ const FAKE_CODEX_SOURCE = [
   '  if (Date.now() > deadline) process.exit(3);',
   '  sleep(25);',
   '}',
-  'const writePath = process.env.GREENHUB_NIGHT_FAKE_WRITE;',
+  'const writePath = fakeConfig.writePath;',
   'if (writePath) {',
   '  const absolute = path.join(process.cwd(), writePath);',
   '  fs.mkdirSync(path.dirname(absolute), { recursive: true });',
@@ -1274,6 +1315,7 @@ const FAKE_CODEX_SOURCE = [
 function createFakeNightCodex({ writePath = 'docs/feature.md' } = {}) {
   const binDir = mkdtempSync(join(tmpdir(), 'greenhub-run-night-fake-codex-'));
   const eventsDir = mkdtempSync(join(tmpdir(), 'greenhub-run-night-fake-codex-events-'));
+  writeFakeConfig({ binDir, eventsDir, writePath });
   writeFileSync(join(binDir, 'fake-codex.cjs'), FAKE_CODEX_SOURCE, 'utf8');
   let codexBin;
   if (process.platform === 'win32') {
@@ -1316,7 +1358,16 @@ function createFakeNightCodex({ writePath = 'docs/feature.md' } = {}) {
 async function startFakeTuiServer() {
   const requests = [];
   const server = createServer((request, response) => {
-    requests.push({ method: request.method, url: request.url });
+    requests.push({
+      method: request.method,
+      url: request.url,
+      authorized: request.headers.authorization === VISIBLE_TEST_AUTHORIZATION,
+    });
+    if (request.headers.authorization !== VISIBLE_TEST_AUTHORIZATION) {
+      response.writeHead(401, { 'content-type': 'application/json' });
+      response.end('{}');
+      return;
+    }
     if (request.url?.startsWith('/global/health')) {
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ healthy: true }));
@@ -1869,7 +1920,10 @@ test('H8 — VISIBLE_TUI 중 Night Run Ctrl+C는 mutation child와 visible serve
           fixture,
           fake,
           maxCycles: 2,
-          extraEnv: { [OPENCODE_ATTACH_URL_ENV]: tui.url },
+          extraEnv: {
+            [OPENCODE_ATTACH_URL_ENV]: tui.url,
+            OPENCODE_SERVER_PASSWORD: VISIBLE_TEST_PASSWORD,
+          },
         });
         await waitFor(() => existsSync(join(fake.eventsDir, 'mutation-ready')), {
           timeoutMs: 90000,
@@ -1928,12 +1982,29 @@ test('H8 — VISIBLE_TUI 중 Night Run Ctrl+C는 mutation child와 visible serve
           1,
         );
         assert.equal(
-          tui.requests.some((request) => request.url.startsWith('/global/health')),
+          tui.requests.some(
+            (request) => request.url.startsWith('/global/health') && request.authorized,
+          ),
           true,
-          'the visible preflight never reached the TUI-owned server',
+          'the authenticated visible preflight never reached the TUI-owned server',
         );
+        assert.equal(
+          tui.requests.every((request) => request.authorized),
+          true,
+          'every runner request to the visible server carries basic auth',
+        );
+        assert.equal(mutationInvocation.serverPassword, true);
+        assert.equal(selectorInvocation.serverPassword, false);
         assert.match(exited.stderr, /visible OpenCode TUI/);
-        assert.equal((await fetch(`${tui.url}/global/health`)).status, 200);
+        assert.equal((await fetch(`${tui.url}/global/health`)).status, 401);
+        assert.equal(
+          (
+            await fetch(`${tui.url}/global/health`, {
+              headers: { authorization: VISIBLE_TEST_AUTHORIZATION },
+            })
+          ).status,
+          200,
+        );
       } finally {
         writeFileSync(join(fake.eventsDir, 'proceed'), '');
         night?.cleanup();
@@ -2034,6 +2105,35 @@ test('CLI1 — --max-cycles is required before any BUILD invocation', async () =
   assert.equal(result.status, INVALID_NIGHT_REQUEST);
   assert.equal(harness.buildCalls.length, 0);
   assert.match(result.stopReason, /--max-cycles must be a positive integer/);
+});
+
+test('CLI1b — zero or infinite timeouts are rejected before any BUILD invocation', async () => {
+  for (const [key, flag] of [
+    ['opencodeTimeoutMs', '--opencode-timeout-ms'],
+    ['codexTimeoutMs', '--codex-timeout-ms'],
+    ['proofTimeoutMs', '--proof-timeout-ms'],
+    ['ciTimeoutMs', '--ci-timeout-ms'],
+  ]) {
+    for (const value of ['0', '-1', 'Infinity']) {
+      assert.equal(parseArgs(['--max-cycles', '1', flag, value]).ok, false, `${flag} ${value}`);
+    }
+    assert.equal(parseArgs(['--max-cycles', '1', flag, '1000']).ok, true);
+
+    const harness = createNightHarness({ buildCycle: CYCLE_COMPLETE });
+    const result = await runNight(
+      {
+        requestText: DEFAULT_REQUEST,
+        repositoryRoot: process.cwd(),
+        remote: 'origin',
+        maxCycles: 1,
+        [key]: 0,
+      },
+      harness.deps,
+    );
+    assert.equal(result.status, INVALID_NIGHT_REQUEST);
+    assert.equal(harness.buildCalls.length, 0);
+    assert.match(result.stopReason, new RegExp(`${flag} must be a positive number`));
+  }
 });
 
 test('CLI2 — parseArgs keeps a strict explicit flag surface', () => {

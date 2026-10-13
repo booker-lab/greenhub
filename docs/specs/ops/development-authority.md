@@ -235,7 +235,7 @@ RUN NIGHT
 - visible mode는 조용히 `HEADLESS`로 downgrade되지 않는다. attach URL이 invalid하거나 server가 healthy하지 않으면 Night Run은 BUILD를 시작하지 않고 `VISIBILITY_UNAVAILABLE` reason의 `BLOCKED_EXTERNAL`로 fail closed한다. mutation 단계에서도 run-once의 기존 fail-closed preflight가 유지된다.
 - Night Run의 Ctrl+C는 Night Run process-local stop request로만 처리된다. Night Run은 OpenCode TUI/server/attached mutation에 SIGINT를 전달하지 않는다. mutation child는 자체 process group(detached)이고 TUI는 별도 foreground process다.
 - summary는 `visibility.requested`, `attachUrl`, `health`, `preservedToBuildChildren`, `mutationExecutorModes`, `visibleTuiTasks`와 cycle별 `executorModes`를 기록한다.
-- Windows 사용법: Window A에서 `node scripts/agent/open-visible-tui.mjs`, 별도 Window B에서 `$env:GREENHUB_OPENCODE_ATTACH_URL='http://127.0.0.1:4096'` 설정 뒤 `node scripts/agent/run-night.mjs --request .\night-request.txt --max-cycles 10`. 종료는 Window B에서 Ctrl+C 한 번이다.
+- Windows 사용법: Window A에서 `node scripts/agent/open-visible-tui.mjs`를 실행하면 임의의 빈 loopback port의 attach URL과 실행마다 새로 만든 server password를 출력한다. 별도 Window B에서 그 출력대로 `$env:GREENHUB_OPENCODE_ATTACH_URL='http://127.0.0.1:<port>'`와 `$env:OPENCODE_SERVER_PASSWORD='<출력된 password>'`를 설정한 뒤 `node scripts/agent/run-night.mjs --request .\night-request.txt --max-cycles 10`. password가 없으면 visible run은 fail closed한다. model provider key는 executor child에 전달되지 않으므로 OpenCode 인증은 미리 `opencode auth login`으로 해 둔다. 종료는 Window B에서 Ctrl+C 한 번이다.
 - focused deterministic proof: `pnpm test:agent-night` (N13). 실제 두 창 operator run은 Windows에서 별도로 수행한다.
 
 ### 10.2 선택 가능한 agent executor

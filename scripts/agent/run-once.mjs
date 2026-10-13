@@ -36,7 +36,9 @@
 // retry. Isolation, boundary, proof, publication, and credential rules are
 // unchanged; the attach URL is only the transport for the same single
 // invocation, and tool execution stays in the server process, which the
-// operator starts under this same sanitized environment.
+// operator starts under this same sanitized environment. The server requires
+// HTTP basic auth (`OPENCODE_SERVER_PASSWORD`); without it the visible run
+// fails closed.
 
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -102,6 +104,58 @@ export const DEFAULT_VISIBLE_PREFLIGHT_TIMEOUT_MS = 15000;
 export const VISIBLE_CLEANUP_RETRY_ATTEMPTS = 5;
 export const VISIBLE_CLEANUP_RETRY_DELAY_MS = 300;
 
+// Visible-mode server authentication. The loopback OpenCode server runs with
+// HTTP basic auth (`OPENCODE_SERVER_PASSWORD`, optional
+// `OPENCODE_SERVER_USERNAME`, default user `opencode`), so another local
+// process cannot open sessions on it. The runner requires the password before
+// attaching, sends it on its own health/disposal requests, and hands it only to
+// the attached `opencode run --attach` client.
+export const OPENCODE_SERVER_PASSWORD_ENV = 'OPENCODE_SERVER_PASSWORD';
+export const OPENCODE_SERVER_USERNAME_ENV = 'OPENCODE_SERVER_USERNAME';
+export const DEFAULT_OPENCODE_SERVER_USERNAME = 'opencode';
+const VISIBLE_AUTHORIZATION_ENV = 'GREENHUB_VISIBLE_SERVER_AUTHORIZATION';
+
+/**
+ * Resolve the visible server credentials from the operator environment.
+ * Returns `{ ok: true, username, password, authorization }` or
+ * `{ ok: false, reason }` when no password is configured.
+ */
+export function resolveVisibleServerAuth(baseEnv) {
+  const password =
+    typeof baseEnv?.[OPENCODE_SERVER_PASSWORD_ENV] === 'string'
+      ? baseEnv[OPENCODE_SERVER_PASSWORD_ENV]
+      : '';
+  if (password.trim().length === 0) {
+    return {
+      ok: false,
+      reason:
+        `${OPENCODE_SERVER_PASSWORD_ENV} is required: the visible OpenCode server must run ` +
+        'with basic auth (start it with scripts/agent/open-visible-tui.mjs)',
+    };
+  }
+  const rawUsername =
+    typeof baseEnv?.[OPENCODE_SERVER_USERNAME_ENV] === 'string'
+      ? baseEnv[OPENCODE_SERVER_USERNAME_ENV].trim()
+      : '';
+  const username = rawUsername.length > 0 ? rawUsername : DEFAULT_OPENCODE_SERVER_USERNAME;
+  return {
+    ok: true,
+    username,
+    password,
+    authorization: `Basic ${Buffer.from(`${username}:${password}`, 'utf8').toString('base64')}`,
+  };
+}
+
+/** Environment for a short runner-owned request child carrying the auth header. */
+function visibleRequestEnv(authorization) {
+  const env = { ...process.env };
+  delete env[VISIBLE_AUTHORIZATION_ENV];
+  if (typeof authorization === 'string' && authorization.length > 0) {
+    env[VISIBLE_AUTHORIZATION_ENV] = authorization;
+  }
+  return env;
+}
+
 function sleepSync(ms) {
   try {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -110,9 +164,10 @@ function sleepSync(ms) {
   }
 }
 
-// Credential-shaped environment names that must not reach the OpenCode child.
-// Operational publication/provider credentials are dropped here; model provider
-// authentication is expected to come from the existing OpenCode auth store.
+// Credential-shaped environment names that must never reach a child process,
+// even when an allow-listed name or prefix matches them. Executor and proof
+// children are built from explicit allowlists (below); model provider
+// authentication is expected to come from the executor's own auth store.
 const DENIED_ENV_NAME_PATTERNS = Object.freeze([
   /^GH_/i,
   /^GITHUB/i,
@@ -268,28 +323,102 @@ export function isDeniedEnvName(name, backend = OPENCODE_EXECUTOR) {
     (backend === CODEX_EXECUTOR && CODEX_CREDENTIAL_ENV_NAME_PATTERNS.some((pattern) => pattern.test(name)));
 }
 
-function redactCredentialValues(value, baseEnv) {
+export const REDACTED_MARKER = '[가림]';
+
+const CREDENTIAL_ENV_NAME_PATTERN =
+  /(?:API[_-]?KEY|(?:^|_)TOKEN$|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|CREDENTIAL|AUTH)/i;
+
+// Credential-shaped literals masked in executor and proof output even when the
+// value did not come from the runner environment (for example a key printed
+// from a file a proof read). Each entry is [pattern, replacement].
+const CREDENTIAL_SHAPED_PATTERNS = Object.freeze([
+  [
+    /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z0-9 ]*PRIVATE KEY-----|$)/g,
+    REDACTED_MARKER,
+  ],
+  [/\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g, REDACTED_MARKER],
+  [/\bsk-[A-Za-z0-9_-]{20,}/g, REDACTED_MARKER],
+  [/\bnpm_[A-Za-z0-9]{30,}/g, REDACTED_MARKER],
+  [/\bA(?:KIA|SIA)[0-9A-Z]{16}\b/g, REDACTED_MARKER],
+  [/\bAIza[0-9A-Za-z_-]{35}/g, REDACTED_MARKER],
+  [/\bxox[abposr]-[A-Za-z0-9-]{10,}/g, REDACTED_MARKER],
+  [/\beyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/g, REDACTED_MARKER],
+  [
+    /\b(Bearer|Basic)\s+(?=[A-Za-z0-9._~+/-]*[0-9+/])[A-Za-z0-9._~+/-]{12,}=*/gi,
+    `$1 ${REDACTED_MARKER}`,
+  ],
+  [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/?#@]+:)[^\s/?#@]+@/gi, `$1${REDACTED_MARKER}@`],
+]);
+
+/**
+ * Mask credentials in child output before it is logged or persisted: values of
+ * credential-named variables in the runner environment, then credential-shaped
+ * literals (tokens, keys, private key blocks, auth headers, URL user info).
+ */
+export function redactSensitiveOutput(value, baseEnv) {
   if (typeof value !== 'string' || value.length === 0) return value ?? '';
   let redacted = value;
   for (const [name, secret] of Object.entries(baseEnv ?? {})) {
     if (
       typeof secret === 'string' &&
       secret.length >= 3 &&
-      /(?:API[_-]?KEY|(?:^|_)TOKEN$|SECRET|PASSWORD|PASSWD|PRIVATE_KEY|CREDENTIAL|AUTH)/i.test(name)
+      CREDENTIAL_ENV_NAME_PATTERN.test(name)
     ) {
-      redacted = redacted.replaceAll(secret, '[가림]');
+      redacted = redacted.replaceAll(secret, REDACTED_MARKER);
     }
+  }
+  for (const [pattern, replacement] of CREDENTIAL_SHAPED_PATTERNS) {
+    redacted = redacted.replace(pattern, replacement);
   }
   return redacted;
 }
 
-export function buildChildEnv({ baseEnv, scratchDir, backend = OPENCODE_EXECUTOR }) {
+// Executor (OpenCode/Codex) children receive the proof allowlist plus only the
+// names an executor itself needs: proxy and CA trust for its model provider
+// connection, terminal capabilities for the visible TUI, Windows program and
+// shell lookup, and the executor's own non-credential configuration
+// (`OPENCODE_*`, `CODEX_*`). Every other operator variable is dropped, and the
+// credential-shaped denylist still applies to every allowed name or prefix.
+export const EXECUTOR_ENV_ALLOWED_NAMES = Object.freeze([
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'ALL_PROXY',
+  'NODE_EXTRA_CA_CERTS',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+  'COLORTERM',
+  'TERM_PROGRAM',
+  'TERM_PROGRAM_VERSION',
+  'WT_SESSION',
+  'PROGRAMDATA',
+  'PROGRAMFILES',
+  'PROGRAMFILES(X86)',
+  'PROGRAMW6432',
+  'COMMONPROGRAMFILES',
+  'COMMONPROGRAMFILES(X86)',
+  'PSMODULEPATH',
+  'PROCESSOR_ARCHITECTURE',
+  'NUMBER_OF_PROCESSORS',
+  'OS',
+]);
+export const EXECUTOR_ENV_ALLOWED_PREFIXES = Object.freeze(['OPENCODE_', 'CODEX_']);
+
+export function isExecutorEnvNameAllowed(name) {
+  if (isProofEnvNameAllowed(name)) return true;
+  const upper = String(name).toUpperCase();
+  const listed =
+    EXECUTOR_ENV_ALLOWED_NAMES.includes(upper) ||
+    EXECUTOR_ENV_ALLOWED_PREFIXES.some((prefix) => upper.startsWith(prefix));
+  if (!listed) return false;
+  return !isDeniedEnvName(name, CODEX_EXECUTOR) && !/(?:^|_)(?:KEY|AUTH)(?:_|$)/i.test(name);
+}
+
+export function buildChildEnv({ baseEnv, scratchDir }) {
   const childEnv = {};
-  for (const [name, value] of Object.entries(baseEnv)) {
-    if (value === undefined) continue;
-    if (isDeniedEnvName(name, backend)) continue;
-    if (/^GIT_CONFIG_/i.test(name)) continue;
-    if (backend === CODEX_EXECUTOR && name.toUpperCase() === OPENCODE_ATTACH_URL_ENV) continue;
+  for (const [name, value] of Object.entries(baseEnv ?? {})) {
+    if (typeof value !== 'string') continue;
+    if (!isExecutorEnvNameAllowed(name)) continue;
     childEnv[name] = value;
   }
   Object.assign(childEnv, CHILD_GIT_SAFETY_ENV);
@@ -456,27 +585,51 @@ export function parseVisibleAttachUrl(value) {
 // requested visible run must not silently become an invisible standalone run.
 // The preflight asks the target server for its health endpoint from a short
 // child process so the runner stays synchronous.
+// The basic-auth header reaches the request child through its environment, not
+// its argv, so it never appears in a process listing.
 const HEALTH_PREFLIGHT_SCRIPT = [
   'const [url] = process.argv.slice(1);',
-  "fetch(url + '/global/health', { signal: AbortSignal.timeout(4000) })",
-  '  .then((response) => response.json())',
-  '  .then((body) => process.exit(body && body.healthy === true ? 0 : 1))',
+  `const authorization = process.env.${VISIBLE_AUTHORIZATION_ENV};`,
+  'const headers = authorization ? { authorization } : {};',
+  "fetch(url + '/global/health', { headers, signal: AbortSignal.timeout(4000) })",
+  '  .then((response) => {',
+  '    if (response.status === 401 || response.status === 403) {',
+  "      const message = 'visible server rejected the configured credentials (HTTP ' + response.status + ')';",
+  '      process.stderr.write(message, () => process.exit(1));',
+  '      return;',
+  '    }',
+  '    return response.json().then((body) => process.exit(body && body.healthy === true ? 0 : 1));',
+  '  })',
   '  .catch(() => process.exit(1));',
 ].join('\n');
 
+/** A finite positive timeout; a missing, zero, or negative value uses `fallback`. */
+export function boundedTimeoutMs(value, fallback) {
+  return Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
 export function probeVisibleServer({
   attachUrl,
+  authorization = null,
   spawn = spawnSync,
   execPath = process.execPath,
   timeoutMs = DEFAULT_VISIBLE_PREFLIGHT_TIMEOUT_MS,
 } = {}) {
   if (!attachUrl) return { attempted: false, ok: false, error: 'attach URL is required' };
+  if (typeof authorization !== 'string' || authorization.length === 0) {
+    return {
+      attempted: false,
+      ok: false,
+      error: `visible server credentials are required (${OPENCODE_SERVER_PASSWORD_ENV})`,
+    };
+  }
   let result;
   try {
     result = spawn(execPath, ['-e', HEALTH_PREFLIGHT_SCRIPT, attachUrl], {
       encoding: 'utf8',
+      env: visibleRequestEnv(authorization),
       stdio: ['ignore', 'ignore', 'pipe'],
-      timeout: timeoutMs > 0 ? timeoutMs : undefined,
+      timeout: boundedTimeoutMs(timeoutMs, DEFAULT_VISIBLE_PREFLIGHT_TIMEOUT_MS),
       windowsHide: true,
     });
   } catch (error) {
@@ -654,7 +807,7 @@ export function defaultInvokeOpencode({ resolvedCommand, args, cwd, env, timeout
     env,
     encoding: 'utf8',
     maxBuffer: 128 * 1024 * 1024,
-    timeout: timeoutMs > 0 ? timeoutMs : undefined,
+    timeout: boundedTimeoutMs(timeoutMs, DEFAULT_OPENCODE_TIMEOUT_MS),
     windowsHide: true,
   });
   return {
@@ -680,7 +833,7 @@ export function defaultRunProofCommand({
     env: buildProofEnv(env ?? process.env),
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
-    timeout: timeoutMs > 0 ? timeoutMs : undefined,
+    timeout: boundedTimeoutMs(timeoutMs, DEFAULT_PROOF_TIMEOUT_MS),
     windowsHide: true,
   };
   const argv = splitProofCommand(command, platform);
@@ -709,9 +862,12 @@ export function defaultRunProofCommand({
 const DISPOSE_INSTANCE_SCRIPT = [
   'const [url, directory] = process.argv.slice(1);',
   "const query = '?directory=' + encodeURIComponent(directory);",
+  `const authorization = process.env.${VISIBLE_AUTHORIZATION_ENV};`,
+  'const headers = authorization ? { authorization } : {};',
   'async function main() {',
   '  try {',
   '    const statusResponse = await fetch(url + "/mcp" + query, {',
+  '      headers,',
   '      signal: AbortSignal.timeout(5000),',
   '    });',
   '    if (statusResponse.ok) {',
@@ -720,7 +876,7 @@ const DISPOSE_INSTANCE_SCRIPT = [
   '        try {',
   '          await fetch(',
   '            url + "/mcp/" + encodeURIComponent(name) + "/disconnect" + query,',
-  '            { method: "POST", signal: AbortSignal.timeout(5000) },',
+  '            { method: "POST", headers, signal: AbortSignal.timeout(5000) },',
   '          );',
   '        } catch {}',
   '      }',
@@ -730,6 +886,7 @@ const DISPOSE_INSTANCE_SCRIPT = [
   '  try {',
   '    const response = await fetch(url + "/instance/dispose" + query, {',
   '      method: "POST",',
+  '      headers,',
   '      signal: AbortSignal.timeout(5000),',
   '    });',
   '    disposed = response.ok;',
@@ -742,6 +899,7 @@ const DISPOSE_INSTANCE_SCRIPT = [
 export function disposeVisibleInstance({
   attachUrl,
   workspacePath,
+  authorization = null,
   spawn = spawnSync,
   execPath = process.execPath,
 } = {}) {
@@ -750,6 +908,7 @@ export function disposeVisibleInstance({
   try {
     result = spawn(execPath, ['-e', DISPOSE_INSTANCE_SCRIPT, attachUrl, workspacePath], {
       encoding: 'utf8',
+      env: visibleRequestEnv(authorization),
       stdio: ['ignore', 'ignore', 'pipe'],
       timeout: 30000,
       windowsHide: true,
@@ -1007,7 +1166,9 @@ function validateRunOnceInput(options) {
   }
   for (const numeric of ['opencodeTimeoutMs', 'codexTimeoutMs', 'proofTimeoutMs']) {
     const value = options[numeric];
-    if (value != null && (!Number.isFinite(value) || value < 0)) return `${numeric} must be >= 0`;
+    if (value != null && (!Number.isFinite(value) || value <= 0)) {
+      return `${numeric} must be a positive finite number`;
+    }
   }
   return null;
 }
@@ -1065,6 +1226,7 @@ export function runOnce(options, deps = {}) {
       ? baseEnv[OPENCODE_ATTACH_URL_ENV].trim()
       : '';
   let attachUrl = null;
+  let visibleAuth = null;
   if (requestedAttachUrl.length > 0) {
     const parsedAttach = parseVisibleAttachUrl(requestedAttachUrl);
     if (!parsedAttach.ok) {
@@ -1073,10 +1235,20 @@ export function runOnce(options, deps = {}) {
       result.reason = `VISIBLE_TUI mode was requested but the attach target is not allowed: ${parsedAttach.reason}`;
       return result;
     }
+    visibleAuth = resolveVisibleServerAuth(baseEnv);
+    if (!visibleAuth.ok) {
+      result.executor.mode = VISIBLE_TUI_MODE;
+      result.status = EXECUTOR_FAILED;
+      result.reason = `VISIBLE_TUI mode was requested without server credentials: ${visibleAuth.reason}`;
+      return result;
+    }
     attachUrl = parsedAttach.url;
     result.executor.mode = VISIBLE_TUI_MODE;
     result.executor.attachUrl = attachUrl;
-    const preflight = probeVisibleServerImpl({ attachUrl });
+    const preflight = probeVisibleServerImpl({
+      attachUrl,
+      authorization: visibleAuth.authorization,
+    });
     result.executor.preflight = preflight.ok ? 'HEALTHY' : 'FAILED';
     if (!preflight.ok) {
       result.status = EXECUTOR_FAILED;
@@ -1197,6 +1369,12 @@ export function runOnce(options, deps = {}) {
             attachUrl,
           });
       const childEnv = buildChildEnv({ baseEnv, scratchDir: tempRoot, backend });
+      if (attachUrl !== null && visibleAuth?.ok) {
+        // Only the attached client receives the server credentials; tools run
+        // in the operator-started server process, not in this client.
+        childEnv[OPENCODE_SERVER_PASSWORD_ENV] = visibleAuth.password;
+        childEnv[OPENCODE_SERVER_USERNAME_ENV] = visibleAuth.username;
+      }
       if (backend === CODEX_EXECUTOR) {
         result.executor.invocationEvidence = codexInvocationEvidence({
           resolvedCommand,
@@ -1236,13 +1414,17 @@ export function runOnce(options, deps = {}) {
       result.executor.timedOut = Boolean(execution.timedOut);
       result.executor.startErrorCode = execution.startErrorCode ?? null;
       result.executor.stdoutBytes = Buffer.byteLength(execution.stdout ?? '', 'utf8');
-      result.executor.stdoutTail = tail(redactCredentialValues(execution.finalText ?? execution.stdout, baseEnv));
-      result.executor.stderrTail = tail(redactCredentialValues(execution.stderr, baseEnv));
+      result.executor.stdoutTail = tail(
+        redactSensitiveOutput(execution.finalText ?? execution.stdout, baseEnv),
+      );
+      result.executor.stderrTail = tail(redactSensitiveOutput(execution.stderr, baseEnv));
       log(
         `[run-once] ${backend.toLowerCase()} exit=${result.executor.exitCode} timedOut=${result.executor.timedOut} stdoutBytes=${result.executor.stdoutBytes}`,
       );
       if (execution.stderr) {
-        log(`[run-once] ${backend.toLowerCase()} stderr:\n${tail(redactCredentialValues(execution.stderr, baseEnv), 6000)}`);
+        log(
+          `[run-once] ${backend.toLowerCase()} stderr:\n${tail(redactSensitiveOutput(execution.stderr, baseEnv), 6000)}`,
+        );
       }
     } catch (error) {
       result.executor.invoked = true;
@@ -1340,12 +1522,16 @@ export function runOnce(options, deps = {}) {
         timedOut: Boolean(proof.timedOut),
         startErrorCode: proof.startErrorCode ?? null,
         ok: proof.exitCode === 0 && !proof.startErrorCode,
-        stdoutTail: tail(proof.stdout),
-        stderrTail: tail(proof.stderr),
+        stdoutTail: tail(redactSensitiveOutput(proof.stdout, baseEnv)),
+        stderrTail: tail(redactSensitiveOutput(proof.stderr, baseEnv)),
       };
       result.proofResults.push(entry);
       log(`[run-once] proof "${command}" exit=${entry.exitCode} ok=${entry.ok}`);
-      if (proof.stderr) log(`[run-once] proof stderr:\n${tail(proof.stderr, 6000)}`);
+      if (proof.stderr) {
+        log(
+          `[run-once] proof stderr:\n${tail(redactSensitiveOutput(proof.stderr, baseEnv), 6000)}`,
+        );
+      }
     }
     const failedProof = result.proofResults.find((entry) => !entry.ok);
     if (failedProof) {
@@ -1404,7 +1590,11 @@ export function runOnce(options, deps = {}) {
   }
 
   if (attachUrl !== null && workspacePath !== null) {
-    const disposal = disposeVisibleInstanceImpl({ attachUrl, workspacePath });
+    const disposal = disposeVisibleInstanceImpl({
+      attachUrl,
+      workspacePath,
+      authorization: visibleAuth?.authorization ?? null,
+    });
     result.executor.instanceDisposal = disposal.ok ? 'DISPOSED' : 'FAILED';
     if (!disposal.ok) {
       log(`[run-once] visible OpenCode instance disposal failed: ${disposal.error}`);
@@ -1426,7 +1616,11 @@ export function runOnce(options, deps = {}) {
           attempt += 1
         ) {
           sleepSync(VISIBLE_CLEANUP_RETRY_DELAY_MS);
-          disposeVisibleInstanceImpl({ attachUrl, workspacePath });
+          disposeVisibleInstanceImpl({
+            attachUrl,
+            workspacePath,
+            authorization: visibleAuth?.authorization ?? null,
+          });
           removal = removeWorkspace({ repositoryRoot, tempRoot, workspacePath });
         }
       }
@@ -1474,17 +1668,21 @@ export const USAGE = [
   '  --codex-bin <path>          explicit Codex executable (default: resolved from PATH)',
   '  --repo <dir>                canonical checkout root (default: current directory)',
   '  --remote <name>             publication remote observed for the live baseline (default: origin)',
-  '  --opencode-timeout-ms <n>   opencode timeout in ms (default: 3600000, 0 disables)',
-  '  --codex-timeout-ms <n>      Codex timeout in ms (default: 3600000, 0 disables)',
-  '  --proof-timeout-ms <n>      per-proof timeout in ms (default: 1800000, 0 disables)',
+  '  --opencode-timeout-ms <n>   opencode timeout in ms (positive; default: 3600000)',
+  '  --codex-timeout-ms <n>      Codex timeout in ms (positive; default: 3600000)',
+  '  --proof-timeout-ms <n>      per-proof timeout in ms (positive; default: 1800000)',
   '',
   'Environment:',
   `  ${OPENCODE_ATTACH_URL_ENV}=<loopback origin>`,
   '                              attaches the single mutation invocation to an',
   '                              already running visible OpenCode server',
-  '                              (e.g. http://127.0.0.1:4096). An unreachable or',
+  '                              (e.g. http://127.0.0.1:<port>). An unreachable or',
   '                              non-loopback target fails closed; there is no',
   '                              private standalone fallback.',
+  `  ${OPENCODE_SERVER_PASSWORD_ENV}=<password>`,
+  '                              required with the attach URL: basic-auth password',
+  '                              of the visible server (open-visible-tui.mjs prints',
+  `                              it; optional ${OPENCODE_SERVER_USERNAME_ENV})`,
   `  GREENHUB_AGENT_EXECUTOR=opencode|codex (explicit --executor overrides it)`,
   '',
   'Prints one deterministic JSON result to stdout. Exit code 0 for SUCCESS/ALREADY_SATISFIED.',
@@ -1559,8 +1757,8 @@ export function parseArgs(argv) {
     if (Object.hasOwn(numberFlags, arg)) {
       const value = argv[index + 1];
       const parsed = Number(value);
-      if (value === undefined || !Number.isFinite(parsed) || parsed < 0) {
-        return { ok: false, error: `${arg} requires a non-negative number` };
+      if (value === undefined || !Number.isFinite(parsed) || parsed <= 0) {
+        return { ok: false, error: `${arg} requires a positive number` };
       }
       index += 1;
       options[numberFlags[arg]] = parsed;
