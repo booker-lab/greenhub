@@ -30,6 +30,8 @@ export const UNKNOWN = 'UNKNOWN';
 
 export const MIN_JWT_SECRET_BYTES = 32;
 export const CONSUMER_STORE_ID_KEY = 'NEXT_PUBLIC_PORTONE_STORE_ID';
+/** API `resolveTrustProxyHops`와 같은 상한. 이 범위 밖이면 API가 기동하지 않는다. */
+export const MAX_TRUST_PROXY_HOPS = 10;
 
 /** 값을 읽어 판정하는 Railway 변수. 읽는 즉시 마스킹한다. */
 export const RAILWAY_CHECKED_KEYS = Object.freeze([
@@ -38,6 +40,8 @@ export const RAILWAY_CHECKED_KEYS = Object.freeze([
   'PORTONE_STORE_ID',
   'PORTONE_WEBHOOK_SECRET',
   'GOOGLE_GEMINI_BASE_URL',
+  'CORS_ALLOW_VERCEL_PREVIEWS',
+  'TRUST_PROXY_HOPS',
 ]);
 
 /** 출력 순서이자 점검 목록. */
@@ -51,6 +55,8 @@ export const CHECK_NAMES = Object.freeze([
   'portone_store_id_set',
   'portone_webhook_secret_set',
   'google_gemini_base_url_absent',
+  'cors_vercel_previews_not_allowed',
+  'trust_proxy_hops_valid',
   'vercel_consumer_env_read',
   'consumer_portone_store_id_set',
   'portone_store_id_matches_consumer',
@@ -65,6 +71,24 @@ class CheckError extends Error {}
 
 function isSet(value) {
   return typeof value === 'string' && value.trim() !== '';
+}
+
+/**
+ * 운영 API는 Preview origin을 받지 않는다. 미설정이거나 false면 PASS, true면 FAIL,
+ * 그 밖의 값은 API가 기동을 거부하므로 FAIL(API `common/cors-origin.ts`와 같은 해석).
+ */
+export function previewOriginStatus(value) {
+  if (value === undefined) return PASS;
+  const raw = value.trim().toLowerCase();
+  return raw === '' || raw === 'false' ? PASS : FAIL;
+}
+
+/** 미설정이면 Railway 기본값(1)을 쓴다. 명시값은 0~10 정수여야 API가 기동한다. */
+export function trustProxyHopsStatus(value) {
+  if (value === undefined) return PASS;
+  const raw = value.trim();
+  if (raw === '') return PASS;
+  return /^\d+$/.test(raw) && Number(raw) <= MAX_TRUST_PROXY_HOPS ? PASS : FAIL;
 }
 
 function escapeCommandData(value) {
@@ -259,6 +283,10 @@ export function evaluate({ railway, vercel }) {
     checks.google_gemini_base_url_absent = check(
       Object.hasOwn(railway, 'GOOGLE_GEMINI_BASE_URL') ? FAIL : PASS,
     );
+    checks.cors_vercel_previews_not_allowed = check(
+      previewOriginStatus(railway.CORS_ALLOW_VERCEL_PREVIEWS),
+    );
+    checks.trust_proxy_hops_valid = check(trustProxyHopsStatus(railway.TRUST_PROXY_HOPS));
   } else {
     for (const name of [
       'jwt_secret_set',
@@ -269,6 +297,8 @@ export function evaluate({ railway, vercel }) {
       'portone_store_id_set',
       'portone_webhook_secret_set',
       'google_gemini_base_url_absent',
+      'cors_vercel_previews_not_allowed',
+      'trust_proxy_hops_valid',
     ]) {
       checks[name] = check(UNKNOWN, 'Railway 조회 실패');
     }
