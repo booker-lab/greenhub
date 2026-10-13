@@ -1,7 +1,10 @@
+import { Logger } from '@nestjs/common';
 import {
   isProductionRuntime,
   RuntimeConfigurationError,
+  resolveAdcProjectIds,
   resolveFirebaseAdminSettings,
+  resolveTrustProxyHops,
   shouldEnableScheduledJobs,
   validateRuntimeConfig,
 } from './runtime-config';
@@ -15,8 +18,8 @@ const validProductionConfig = {
     client_email: 'firebase@example.test',
     private_key: 'private-key',
   }),
-  JWT_SECRET: 'access-secret',
-  JWT_REFRESH_SECRET: 'refresh-secret',
+  JWT_SECRET: 'access-secret-0123456789abcdef0123456789',
+  JWT_REFRESH_SECRET: 'refresh-secret-0123456789abcdef0123456789',
   PORTONE_V2_SECRET: 'portone-secret',
   PORTONE_WEBHOOK_SECRET: 'webhook-secret',
 };
@@ -147,5 +150,157 @@ describe('API 런타임 구성 fail-closed 계약', () => {
   it('scheduler는 명시적으로 끈 경우에만 끄고 기본은 기존 활성 동작을 유지한다', () => {
     expect(shouldEnableScheduledJobs({ NODE_ENV: 'production' })).toBe(true);
     expect(shouldEnableScheduledJobs({ GREENHUB_SCHEDULES_ENABLED: 'false' })).toBe(false);
+  });
+});
+
+describe('운영 JWT secret 구성', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('access와 refresh secret이 같으면 운영 기동을 거부한다', () => {
+    const sameSecret = 'same-secret-0123456789abcdef0123456789';
+    const invalid = {
+      ...validProductionConfig,
+      JWT_SECRET: sameSecret,
+      JWT_REFRESH_SECRET: ` ${sameSecret} `,
+    };
+
+    expect(() => validateRuntimeConfig(invalid)).toThrow(
+      'JWT_SECRET과 JWT_REFRESH_SECRET은 서로 달라야 합니다.',
+    );
+    expect(() => validateRuntimeConfig(invalid)).not.toThrow(sameSecret);
+  });
+
+  it('32바이트 미만 secret은 운영 기동을 막지 않고 값 없이 경고만 남긴다', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const shortSecrets = {
+      ...validProductionConfig,
+      JWT_SECRET: 'short-access',
+      JWT_REFRESH_SECRET: 'short-refresh',
+    };
+
+    expect(validateRuntimeConfig(shortSecrets)).toBe(shortSecrets);
+    expect(warn).toHaveBeenCalledTimes(1);
+    const message = String(warn.mock.calls[0][0]);
+    expect(message).toContain('JWT_SECRET, JWT_REFRESH_SECRET');
+    expect(message).not.toContain('short-access');
+    expect(message).not.toContain('short-refresh');
+  });
+
+  it('충분히 긴 서로 다른 secret은 경고하지 않는다', () => {
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+
+    validateRuntimeConfig(validProductionConfig);
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('비운영 실행은 JWT secret 동일 여부로 기동을 막지 않는다', () => {
+    expect(() =>
+      validateRuntimeConfig({
+        NODE_ENV: 'development',
+        JWT_SECRET: 'same',
+        JWT_REFRESH_SECRET: 'same',
+      }),
+    ).not.toThrow();
+  });
+});
+
+describe('비운영 기본 자격 증명(ADC) project 가드', () => {
+  const productionKeyFile = JSON.stringify({
+    project_id: 'green-e4fe3',
+    client_email: 'firebase@example.test',
+    private_key: 'private-key',
+  });
+
+  it('비운영에서 운영 project 키 파일을 가리키는 ADC를 거부한다', () => {
+    const readFile = jest.fn(() => productionKeyFile);
+
+    expect(() =>
+      resolveFirebaseAdminSettings(
+        { NODE_ENV: 'development', GOOGLE_APPLICATION_CREDENTIALS: './key.json' },
+        readFile,
+      ),
+    ).toThrow('비운영 환경에서 운영 Firebase project의 기본 자격 증명을 사용할 수 없습니다.');
+    expect(readFile).toHaveBeenCalledWith('./key.json');
+  });
+
+  it.each([
+    'GOOGLE_CLOUD_PROJECT',
+    'GCLOUD_PROJECT',
+  ])('비운영에서 %s가 운영 project면 거부한다', (key) => {
+    expect(() =>
+      resolveFirebaseAdminSettings({ NODE_ENV: 'development', [key]: 'green-e4fe3' }, () => '{}'),
+    ).toThrow(RuntimeConfigurationError);
+  });
+
+  it('FIREBASE_PROJECT_ID가 비운영이어도 ADC가 운영 project면 거부한다', () => {
+    expect(() =>
+      resolveFirebaseAdminSettings(
+        {
+          NODE_ENV: 'development',
+          FIREBASE_PROJECT_ID: 'greenhub-staging',
+          GOOGLE_APPLICATION_CREDENTIALS: './key.json',
+        },
+        () => productionKeyFile,
+      ),
+    ).toThrow(RuntimeConfigurationError);
+  });
+
+  it('비운영 project의 ADC와 읽을 수 없는 키 파일은 기존대로 통과시킨다', () => {
+    expect(
+      resolveFirebaseAdminSettings(
+        { NODE_ENV: 'development', GOOGLE_APPLICATION_CREDENTIALS: './key.json' },
+        () => JSON.stringify({ project_id: 'greenhub-staging' }),
+      ),
+    ).toEqual({ projectId: undefined, storageBucket: undefined, serviceAccount: undefined });
+    expect(
+      resolveAdcProjectIds({ GOOGLE_APPLICATION_CREDENTIALS: './missing.json' }, () => {
+        throw new Error('ENOENT');
+      }),
+    ).toEqual([]);
+  });
+
+  it('운영 런타임은 운영 project ADC를 그대로 허용한다', () => {
+    expect(() =>
+      resolveFirebaseAdminSettings(
+        {
+          RAILWAY_ENVIRONMENT_NAME: 'production',
+          FIREBASE_PROJECT_ID: 'green-e4fe3',
+          FIREBASE_STORAGE_BUCKET: 'green-e4fe3.appspot.com',
+          GOOGLE_CLOUD_PROJECT: 'green-e4fe3',
+        },
+        () => '{}',
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe('trust proxy 홉 수 구성', () => {
+  it('명시값이 없으면 Railway 런타임은 1홉, 로컬은 0홉이다', () => {
+    expect(resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'production' })).toBe(1);
+    expect(resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'staging' })).toBe(1);
+    expect(resolveTrustProxyHops({ NODE_ENV: 'development' })).toBe(0);
+  });
+
+  it('명시한 정수 홉 수를 따른다', () => {
+    expect(
+      resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'production', TRUST_PROXY_HOPS: '0' }),
+    ).toBe(0);
+    expect(resolveTrustProxyHops({ TRUST_PROXY_HOPS: '2' })).toBe(2);
+  });
+
+  it.each([
+    'true',
+    '-1',
+    '1.5',
+    '11',
+    'loopback',
+  ])('TRUST_PROXY_HOPS=%s는 기동을 거부한다', (value) => {
+    expect(() => resolveTrustProxyHops({ TRUST_PROXY_HOPS: value })).toThrow(
+      RuntimeConfigurationError,
+    );
+    expect(() =>
+      validateRuntimeConfig({ NODE_ENV: 'development', TRUST_PROXY_HOPS: value }),
+    ).toThrow(RuntimeConfigurationError);
   });
 });
