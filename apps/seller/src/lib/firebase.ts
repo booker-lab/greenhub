@@ -1,5 +1,11 @@
 import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
-import { connectAuthEmulator, getAuth, type Auth } from 'firebase/auth';
+import {
+  browserSessionPersistence,
+  connectAuthEmulator,
+  getAuth,
+  setPersistence,
+  type Auth,
+} from 'firebase/auth';
 import {
   connectFirestoreEmulator,
   getFirestore,
@@ -280,6 +286,14 @@ export function getFirebaseAuth(): Auth {
       });
       emulators.auth = true;
     }
+  }
+  // Firebase 로그인 상태를 탭 세션(sessionStorage)에만 둔다. 탭을 닫으면 사라지고,
+  // 같은 탭의 새로고침·이동에서는 유지돼 Firestore 구독과 Storage 업로드가 그대로 동작한다.
+  // 이전 기본값(IndexedDB)에 남아 있던 로그인 상태는 이 호출이 옮긴 뒤 지운다.
+  if (typeof window !== 'undefined') {
+    setPersistence(auth, browserSessionPersistence).catch((error: unknown) => {
+      console.error('[firebase] auth persistence 설정 실패', error);
+    });
   }
   registry.auth = auth;
   return auth;

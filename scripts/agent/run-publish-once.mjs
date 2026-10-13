@@ -32,18 +32,23 @@ import {
   INVALID_INPUT,
   PROOF_FAILED,
   SUCCESS,
+  buildProofEnv,
   createBaselineWorkspace,
   defaultRemoveWorkspace,
   defaultRunProofCommand,
+  DEFAULT_OPENCODE_TIMEOUT_MS,
   DEFAULT_PROOF_TIMEOUT_MS,
   fetchBaseline,
   gitCapture,
+  findProtectedPaths,
   normalizeRepoPath,
+  observeKillSwitch,
   parseArgs as parseRunOnceArgs,
   readLiveRemoteMain,
   revParse,
   runOnce,
 } from './run-once.mjs';
+import { DEFAULT_CODEX_TIMEOUT_MS } from './agent-executor.mjs';
 import {
   COMPLETE_ALREADY_PUBLISHED,
   PUBLICATION_ALLOWED,
@@ -98,6 +103,27 @@ export const DEFAULT_CI_TIMEOUT_MS = 45 * 60 * 1000;
 export const DEFAULT_MERGE_TIMEOUT_MS = 10 * 60 * 1000;
 export const DEFAULT_MAX_REBIND_ATTEMPTS = 2;
 export const DEFAULT_REQUIRED_CHECKS_RETRY_MS = 5000;
+
+/**
+ * Every bounded wait in this entrypoint keeps a finite, positive budget. A
+ * programmatic caller that passes 0, a negative, or a non-finite value gets the
+ * named default instead of an unbounded wait; the CLI rejects such values.
+ */
+export function resolvePositiveTimeoutMs(value, fallback) {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+}
+
+function isPositiveTimeoutArg(value) {
+  if (value === undefined) return false;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0;
+}
+
+const DELEGATED_TIMEOUT_FLAGS = Object.freeze([
+  '--opencode-timeout-ms',
+  '--codex-timeout-ms',
+  '--proof-timeout-ms',
+]);
 
 // Transient per-command commit identity. Global and repository Git config are
 // never modified; signing and hooks are disabled per command so publication is
@@ -465,21 +491,37 @@ function readRequiredChecks({ runGh, cwd, repository }) {
       reason: `main protection could not be read: ${ghMessageOf(protection)}`,
     };
   }
+  // Fail closed: a missing, unreadable, or forbidden protection record (HTTP
+  // 404/403 included) is never read as "no required checks". Publication
+  // continues only against a confirmed protection record that names at least
+  // one required status check.
   if (protection.exitCode !== 0) {
-    const message = ghMessageOf(protection);
-    if (/not protected|Branch not protected|HTTP 404/i.test(message)) {
-      return { ok: true, requiredChecks: [], protection: 'UNPROTECTED' };
-    }
-    return { ok: false, reason: `main protection could not be read: ${message}` };
+    return {
+      ok: false,
+      reason:
+        `main branch protection could not be confirmed, so publication is refused: ` +
+        ghMessageOf(protection),
+    };
   }
   const payload = parseJson(protection.stdout);
   if (payload === null || typeof payload !== 'object') {
     return { ok: false, reason: 'main protection returned no JSON payload' };
   }
   const contexts = payload?.required_status_checks?.contexts;
-  const requiredChecks = Array.isArray(contexts)
-    ? contexts.map((entry) => String(entry)).filter((entry) => entry.trim().length > 0)
-    : [];
+  const checks = payload?.required_status_checks?.checks;
+  const requiredChecks = [
+    ...new Set([
+      ...(Array.isArray(contexts) ? contexts.map((entry) => String(entry)) : []),
+      ...(Array.isArray(checks) ? checks.map((entry) => String(entry?.context ?? '')) : []),
+    ]),
+  ].filter((entry) => entry.trim().length > 0);
+  if (requiredChecks.length === 0) {
+    return {
+      ok: false,
+      reason:
+        'main branch protection declares no required status checks, so publication is refused',
+    };
+  }
   return { ok: true, requiredChecks, protection: 'PROTECTED' };
 }
 
@@ -585,7 +627,8 @@ function isRequiredChecksRegistrationError(message) {
  *      re-invokes OpenCode, or starts a background watcher.
  *
  * Actual check failures fail fast, permanent provider errors fail closed, and
- * budget exhaustion returns TIMED_OUT. `timeoutMs = 0` disables the bound.
+ * budget exhaustion returns TIMED_OUT. A non-positive or non-finite
+ * `timeoutMs` falls back to DEFAULT_CI_TIMEOUT_MS; the watch is never unbounded.
  */
 export function waitForRequiredChecks({
   runGh,
@@ -597,12 +640,17 @@ export function waitForRequiredChecks({
   sleep = defaultSleep,
 }) {
   if (!Array.isArray(requiredChecks) || requiredChecks.length === 0) {
-    return { ok: true, status: 'NONE_REQUIRED', checks: [] };
+    return {
+      ok: false,
+      status: 'NO_REQUIRED_CHECKS',
+      checks: [],
+      reason: 'no required status check is declared, so the merge gate cannot be observed',
+    };
   }
-  const deadline = timeoutMs > 0 ? Date.now() + timeoutMs : null;
+  const deadline = Date.now() + resolvePositiveTimeoutMs(timeoutMs, DEFAULT_CI_TIMEOUT_MS);
   for (;;) {
-    const remainingMs = deadline === null ? 0 : Math.max(0, deadline - Date.now());
-    if (deadline !== null && remainingMs === 0) {
+    const remainingMs = Math.max(0, deadline - Date.now());
+    if (remainingMs === 0) {
       return {
         ok: false,
         status: 'TIMED_OUT',
@@ -642,7 +690,7 @@ export function waitForRequiredChecks({
         };
       }
       if (pending.length > 0) {
-        const remainingNow = deadline === null ? null : Math.max(0, deadline - Date.now());
+        const remainingNow = Math.max(0, deadline - Date.now());
         if (remainingNow === 0) {
           return {
             ok: false,
@@ -653,11 +701,7 @@ export function waitForRequiredChecks({
               `${pending.map((entry) => entry.name).join(', ')}`,
           };
         }
-        sleep(
-          remainingNow === null
-            ? DEFAULT_REQUIRED_CHECKS_RETRY_MS
-            : Math.min(DEFAULT_REQUIRED_CHECKS_RETRY_MS, remainingNow),
-        );
+        sleep(Math.min(DEFAULT_REQUIRED_CHECKS_RETRY_MS, remainingNow));
         continue;
       }
       return { ok: true, status: 'PASSED', checks };
@@ -666,7 +710,7 @@ export function waitForRequiredChecks({
     if (
       !watch.timedOut &&
       isRequiredChecksRegistrationError(ghMessageOf(watch)) &&
-      (deadline === null || Date.now() < deadline)
+      Date.now() < deadline
     ) {
       sleep(DEFAULT_REQUIRED_CHECKS_RETRY_MS);
       continue;
@@ -778,7 +822,7 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
   const decidePreMrg = deps.decidePreMerge ?? decidePreMerge;
   const runProofCommand = deps.runProofCommand ?? defaultRunProofCommand;
   const baseEnv = deps.env ?? process.env;
-  const proofTimeoutMs = options.proofTimeoutMs ?? DEFAULT_PROOF_TIMEOUT_MS;
+  const proofTimeoutMs = resolvePositiveTimeoutMs(options.proofTimeoutMs, DEFAULT_PROOF_TIMEOUT_MS);
   const maxRebindAttempts = Number.isInteger(options.maxRebindAttempts)
     ? options.maxRebindAttempts
     : DEFAULT_MAX_REBIND_ATTEMPTS;
@@ -917,6 +961,17 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
   };
 
   try {
+    // Publication is admitted only on direct proof evidence: at least one
+    // caller-declared proof command must have run in this workspace and passed.
+    const executedProofs = Array.isArray(context.proofResults) ? context.proofResults : [];
+    if (executedProofs.length === 0 || executedProofs.some((entry) => entry?.ok !== true)) {
+      return finish(
+        PUBLICATION_BLOCKED,
+        executedProofs.length === 0
+          ? 'publication requires at least one proof command that ran and passed; none ran'
+          : 'publication requires every proof command to pass before any candidate is published',
+      );
+    }
     const candidate = createCandidateCommit({
       workspacePath: context.workspacePath,
       tempRoot: context.tempRoot,
@@ -936,6 +991,13 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
       return finish(candidate.status, candidate.reason);
     }
     publication.ownedPaths = candidate.changedPaths;
+    const protectedOwned = findProtectedPaths(candidate.changedPaths);
+    if (protectedOwned.length > 0) {
+      return finish(
+        PUBLICATION_BLOCKED,
+        `candidate changes protected repository path(s): ${protectedOwned.join(', ')}`,
+      );
+    }
     log(
       `[run-publish-once] candidate ${candidate.candidateSha} (${candidate.changedPaths.length} owned path(s))`,
     );
@@ -1014,7 +1076,7 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
             entries: staleEntries,
             timeoutMs: proofTimeoutMs,
             runProofCommand,
-            env: baseEnv,
+            env: buildProofEnv(baseEnv),
             log,
           });
           if (proofRun.cleanup === 'FAILED') {
@@ -1142,6 +1204,18 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
         provider = { repository: repository.repository };
       }
 
+      const transportStop = observeKillSwitch({
+        repositoryRoot: context.repositoryRoot,
+        env: baseEnv,
+      });
+      if (transportStop.stop) {
+        if (openAttempt !== null) publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `operator kill switch is active before transport: ${transportStop.reason}`,
+        );
+      }
+
       const retired = retireOpenPublication('rebind re-publication');
       if (!retired.ok) {
         publication.retained = true;
@@ -1212,7 +1286,7 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
         repository: provider.repository,
         prNumber: prResult.pr.number,
         requiredChecks: publication.requiredChecks,
-        timeoutMs: options.ciTimeoutMs ?? DEFAULT_CI_TIMEOUT_MS,
+        timeoutMs: resolvePositiveTimeoutMs(options.ciTimeoutMs, DEFAULT_CI_TIMEOUT_MS),
         sleep: deps.sleep,
       });
       publication.checks = {
@@ -1369,6 +1443,15 @@ export function runPublicationFinalizer({ context, options, deps, extraBody, log
         );
       }
 
+      const mergeStop = observeKillSwitch({ repositoryRoot: context.repositoryRoot, env: baseEnv });
+      if (mergeStop.stop) {
+        publication.retained = true;
+        return finish(
+          PUBLICATION_BLOCKED,
+          `operator kill switch is active before merge: ${mergeStop.reason}`,
+        );
+      }
+
       publication.stage = 'MERGE';
       const merge = mergePullRequest({
         runGh,
@@ -1457,6 +1540,15 @@ export function validatePublishOnceInput(options) {
   ) {
     return '--github-repo must be <owner>/<name>';
   }
+  if (
+    !Array.isArray(options.proofCommands) ||
+    options.proofCommands.length === 0 ||
+    options.proofCommands.some(
+      (command) => typeof command !== 'string' || command.trim().length === 0,
+    )
+  ) {
+    return 'at least one --proof command is required for publication';
+  }
   if (options.ciTimeoutMs != null && (!Number.isFinite(options.ciTimeoutMs) || options.ciTimeoutMs < 0)) {
     return '--ci-timeout-ms must be >= 0';
   }
@@ -1508,7 +1600,7 @@ export function runPublishOnce(options, deps = {}) {
       remote: options.remote ?? 'origin',
       taskText: options.taskText,
       allowedPaths: options.allowedPaths,
-      proofCommands: options.proofCommands ?? [],
+      proofCommands: options.proofCommands,
       proofOwners: options.proofOwners,
       title: options.title ?? null,
       executor: options.executor ?? null,
@@ -1517,9 +1609,12 @@ export function runPublishOnce(options, deps = {}) {
       agent: options.agent ?? null,
       opencodeBin: options.opencodeBin ?? null,
       codexBin: options.codexBin ?? null,
-      opencodeTimeoutMs: options.opencodeTimeoutMs,
-      codexTimeoutMs: options.codexTimeoutMs,
-      proofTimeoutMs: options.proofTimeoutMs,
+      opencodeTimeoutMs: resolvePositiveTimeoutMs(
+        options.opencodeTimeoutMs,
+        DEFAULT_OPENCODE_TIMEOUT_MS,
+      ),
+      codexTimeoutMs: resolvePositiveTimeoutMs(options.codexTimeoutMs, DEFAULT_CODEX_TIMEOUT_MS),
+      proofTimeoutMs: resolvePositiveTimeoutMs(options.proofTimeoutMs, DEFAULT_PROOF_TIMEOUT_MS),
     },
     {
       invokeOpencode: deps.invokeOpencode,
@@ -1568,14 +1663,14 @@ export const USAGE = [
   '',
   '  --task <file>               bounded task contract file (OUTCOME/PRESERVE/PROOF/ESCALATE ONLY IF)',
   '  --allow <path>              repo-relative path the task may mutate (repeatable, required)',
-  '  --proof <command>           focused proof command, run in order in the workspace (repeatable)',
+  '  --proof <command>           focused proof command, run in order in the workspace (repeatable, at least one required)',
   '  --proof-owner <path>        semantic/proof owner path for the most recent --proof (repeatable)',
   '  --commit-message <message>  candidate commit message (required)',
   '  --pr-title <title>          pull request title (required)',
   '  --pr-body <file>            optional pull request body file, appended before execution evidence',
   '  --transport-ref <name>      optional explicit temporary transport ref name',
   '  --github-repo <owner/name>  optional explicit GitHub repository (default: resolved by gh)',
-  '  --ci-timeout-ms <n>         required-check watch timeout in ms (default: 2700000, 0 disables)',
+  '  --ci-timeout-ms <n>         required-check watch timeout in ms (default: 2700000, must be > 0)',
   '  --max-rebind-attempts <n>   bounded fresh-main rebind constructions per process (default: 2)',
   '  --title <title>             optional OpenCode session title',
   '  --model <value>             backend가 지원하는 model 지정; Codex에서는 값을 그대로 전달',
@@ -1584,11 +1679,11 @@ export const USAGE = [
   '  --opencode-bin <path>       explicit OpenCode executable (default: resolved from PATH)',
   '  --executor <name>           실행 backend: opencode (기본값) 또는 codex',
   '  --codex-bin <path>          Codex 실행 파일 경로를 지정',
-  '  --codex-timeout-ms <n>      Codex 제한 시간(ms, 기본값: 3600000, 0이면 제한 없음)',
+  '  --codex-timeout-ms <n>      Codex 제한 시간(ms, 기본값: 3600000, 0보다 커야 함)',
   '  --repo <dir>                canonical checkout root (default: current directory)',
   '  --remote <name>             publication remote observed for the live baseline (default: origin)',
-  '  --opencode-timeout-ms <n>   opencode timeout in ms (default: 3600000, 0 disables)',
-  '  --proof-timeout-ms <n>      per-proof timeout in ms (default: 1800000, 0 disables)',
+  '  --opencode-timeout-ms <n>   opencode timeout in ms (default: 3600000, must be > 0)',
+  '  --proof-timeout-ms <n>      per-proof timeout in ms (default: 1800000, must be > 0)',
   '',
   'Prints one deterministic JSON result to stdout.',
   'Exit code 0 for SUCCESS_PUBLISHED/ALREADY_SATISFIED/COMPLETE_ALREADY_PUBLISHED/SUPERSEDED_ALREADY_PUBLISHED.',
@@ -1624,8 +1719,8 @@ export function parseArgs(argv) {
     if (arg === '--ci-timeout-ms') {
       const value = argv[index + 1];
       const parsed = Number(value);
-      if (value === undefined || !Number.isFinite(parsed) || parsed < 0) {
-        return { ok: false, error: '--ci-timeout-ms requires a non-negative number' };
+      if (!isPositiveTimeoutArg(value)) {
+        return { ok: false, error: '--ci-timeout-ms requires a positive number' };
       }
       index += 1;
       publication.ciTimeoutMs = parsed;
@@ -1641,6 +1736,15 @@ export function parseArgs(argv) {
       publication.maxRebindAttempts = parsed;
       continue;
     }
+    if (DELEGATED_TIMEOUT_FLAGS.includes(arg)) {
+      const value = argv[index + 1];
+      if (!isPositiveTimeoutArg(value)) {
+        return { ok: false, error: `${arg} requires a positive number` };
+      }
+      index += 1;
+      executionArgs.push(arg, value);
+      continue;
+    }
     executionArgs.push(arg);
   }
   const execution = parseRunOnceArgs(executionArgs);
@@ -1650,6 +1754,12 @@ export function parseArgs(argv) {
   }
   if (!publication.commitMessage) return { ok: false, error: '--commit-message is required' };
   if (!publication.prTitle) return { ok: false, error: '--pr-title is required' };
+  if (
+    !Array.isArray(execution.options.proofCommands) ||
+    execution.options.proofCommands.length === 0
+  ) {
+    return { ok: false, error: 'at least one --proof command is required for publication' };
+  }
   return { ok: true, options: { ...execution.options, ...publication } };
 }
 

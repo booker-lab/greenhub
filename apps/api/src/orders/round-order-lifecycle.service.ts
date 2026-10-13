@@ -22,12 +22,19 @@ import {
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
-import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
+import {
+  isAllowedRedeliveryFee,
+  MAX_REDELIVERY_FEE_KRW,
+  type OrderStatus,
+  type UpdateStatusDto,
+} from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { DriverOrderScopeService } from './driver-order-scope.service';
+import { isOrderCancellationInProgress } from './order-cancellation-state';
 import {
   assertPaidRedeliveryResume,
   isCurrentRedeliveryPaymentRequired,
+  isDeliveryHoldUnresolved,
 } from './redelivery-resume-gate';
 import {
   throwDriverOrderNotFound,
@@ -36,6 +43,16 @@ import {
 import { customerOrderLabel } from '../notifications/customer-order-label';
 
 type OrderRecord = Record<string, any>;
+
+// 판매자·소비자·회차 취소가 시작될 수 있는 주문 상태. 로컬 취소 확정도 같은 상태에서만 한다.
+const CANCELLABLE_ORDER_STATUSES = [
+  'PENDING',
+  'ACCEPTED',
+  'RECRUITING',
+  'CONFIRMED',
+  'PREPARING',
+  'DELIVERY_HELD',
+];
 
 @Injectable()
 export class RoundOrderLifecycleService {
@@ -85,6 +102,15 @@ export class RoundOrderLifecycleService {
         }
         throw new ConflictException('주문 상태가 변경되었습니다.');
       }
+      if (isOrderCancellationInProgress(order)) {
+        if (input.requesterRole === 'driver') {
+          throwDriverOrderStateConflict(
+            '주문 취소가 진행 중이어서 배송 상태를 변경할 수 없습니다.',
+            true,
+          );
+        }
+        throw new ConflictException('주문 취소가 진행 중이어서 주문 상태를 변경할 수 없습니다.');
+      }
       if (input.requesterRole === 'driver') {
         const mutationInput = {
           requesterId: input.requesterId,
@@ -108,6 +134,21 @@ export class RoundOrderLifecycleService {
           orderId: input.orderId,
           requesterRole: input.requesterRole,
         });
+      }
+      // 재배송비 결제를 기다리는 보류는 PREPARING으로 돌아와도 보류 집계에 남고, 결제는 그 보류의
+      // heldAt에 연결돼 있다. 다시 보류하면 집계가 두 번 늘고 새 heldAt이 결제 연결을 끊으므로
+      // 결제로 재개하거나 취소할 때까지 거절한다.
+      if (
+        input.dto.status === 'DELIVERY_HELD' &&
+        order['status'] === 'PREPARING' &&
+        isCurrentRedeliveryPaymentRequired(order)
+      ) {
+        const message =
+          '재배송비 결제를 기다리는 주문은 다시 배송 보류할 수 없습니다. 결제를 기다리거나 주문을 취소해 주세요.';
+        if (input.requesterRole === 'driver') {
+          throwDriverOrderStateConflict(message, true);
+        }
+        throw new ConflictException(message);
       }
       if (
         input.dto.status === 'DELIVERED' &&
@@ -315,16 +356,7 @@ export class RoundOrderLifecycleService {
           return { done: false, needsRefund: paymentIsPaid };
         }
         if (!['LOCAL_PENDING', 'LOCAL_FAILED'].includes(cancellationStatus ?? '')) {
-          if (
-            ![
-              'PENDING',
-              'ACCEPTED',
-              'RECRUITING',
-              'CONFIRMED',
-              'PREPARING',
-              'DELIVERY_HELD',
-            ].includes(order['status'])
-          ) {
+          if (!CANCELLABLE_ORDER_STATUSES.includes(order['status'])) {
             throw new ForbiddenException('취소할 수 없는 주문 상태입니다.');
           }
           if (input.requireOpenRound) await this.assertRoundOpen(tx, order, input.storeId);
@@ -412,11 +444,25 @@ export class RoundOrderLifecycleService {
           });
           return { completed: false, needsRefund: true };
         }
+        // Re-read guard: the cancellation was claimed from a cancellable status.
+        // If the order has since moved elsewhere (e.g. delivery progressed), do
+        // not blindly overwrite it to CANCELLED; the caller records LOCAL_FAILED.
+        if (!CANCELLABLE_ORDER_STATUSES.includes(order['status'])) {
+          throw new ConflictException(
+            '주문 상태가 취소 가능한 상태가 아니어서 주문 취소를 완료하지 못했습니다.',
+          );
+        }
+        // An unresolved paid-redelivery hold keeps the order in the held
+        // projection even after DELIVERY_HELD → PREPARING (see updateStatus
+        // heldOrderDelta), so cancelling from there must exit it too.
+        const holdStillCounted =
+          order['status'] === 'DELIVERY_HELD' ||
+          (order['status'] === 'PREPARING' && isCurrentRedeliveryPaymentRequired(order));
         // Single-owner cancellation convergence: reservation ordered
         // projection and held projection move exactly once in one read phase
         // (reservation + round + items) followed by one write phase. No direct
         // FieldValue.increment outside OrderCapacityService.
-        const needsHeldExit = order['status'] === 'DELIVERY_HELD' && order['roundId'];
+        const needsHeldExit = holdStillCounted && order['roundId'];
         if (order['reservationId'] || needsHeldExit) {
           await this.capacity.releaseForOrderCancellationInTransaction(tx, {
             reservationId: order['reservationId'] ?? null,
@@ -426,7 +472,7 @@ export class RoundOrderLifecycleService {
             now,
           });
         }
-        tx.update(orderRef, {
+        const cancelledUpdate: OrderRecord = {
           status: 'CANCELLED',
           cancelReason: input.reason,
           cancellation: {
@@ -436,7 +482,16 @@ export class RoundOrderLifecycleService {
             updatedAt: this.toIso(now),
           },
           updatedAt: now,
-        });
+        };
+        // Close any open delivery hold so a cancelled order no longer asks for
+        // a redelivery fee payment.
+        if (isDeliveryHoldUnresolved(order['deliveryHold'])) {
+          cancelledUpdate['deliveryHold'] = {
+            ...(order['deliveryHold'] as OrderRecord),
+            resolvedAt: this.toIso(now),
+          };
+        }
+        tx.update(orderRef, cancelledUpdate);
         return { completed: true, needsRefund: false };
       },
     );
@@ -555,6 +610,11 @@ export class RoundOrderLifecycleService {
         throw new BadRequestException('배송 보류 사유가 필요합니다.');
       }
       assertDeliveryHoldPolicy(hold);
+      if (!isAllowedRedeliveryFee(hold['redeliveryFee'])) {
+        throw new BadRequestException(
+          `재배송비는 0원 이상 ${MAX_REDELIVERY_FEE_KRW.toLocaleString('ko-KR')}원 이하의 정수여야 합니다.`,
+        );
+      }
       update['deliveryHold'] = {
         ...hold,
         heldAt: this.toIso(now),

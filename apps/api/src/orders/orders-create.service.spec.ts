@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { OrdersCreateService } from './orders-create.service';
 
 type Data = Record<string, any>;
@@ -92,7 +92,7 @@ function legacyRecords(cap: Data, deliveryMethod = 'direct') {
     },
     'dailyCaps/store-1_2026-08-25': cap,
     ...(deliveryMethod === 'hub'
-      ? { 'hubs/hub-1': { id: 'hub-1', name: '이천 거점', address: '이천시 중리천로' } }
+      ? { 'hubs/hub-1': { id: 'hub-1', storeId: 'store-1', name: '이천 거점', address: '이천시 중리천로' } }
       : {}),
   };
 }
@@ -212,5 +212,29 @@ describe('legacy daily capacity 주문 예약', () => {
     await expect(
       service.createOrder('store-1', 'user-1', orderRequest({ quantity: 1 }) as never),
     ).rejects.toThrow('당일 배송 슬롯이 마감되었습니다.');
+  });
+});
+
+describe('legacy 거점 주문의 매장 확인', () => {
+  it.each([
+    ['다른 매장의 거점', { id: 'hub-1', storeId: 'store-2', name: '다른 거점', address: '서울' }],
+    ['없는 거점', null],
+  ])('%s으로는 주문하지 않고 용량도 쓰지 않는다', async (_label, hub) => {
+    const records = legacyRecords(
+      { storeId: 'store-1', date: '2026-08-25', totalCap: 10, usedSlots: 2 },
+      'direct',
+    ) as Data;
+    if (hub) records['hubs/hub-1'] = hub;
+    const { firestore, records: stored } = makeFirestore(records);
+    const service = makeService(firestore);
+
+    await expect(
+      service.createOrder(
+        'store-1',
+        'user-1',
+        orderRequest({ deliveryMethod: 'hub', hubId: 'hub-1' }) as never,
+      ),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(stored.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(2);
   });
 });

@@ -36,6 +36,9 @@ function makeFirestore(initial: Record<string, Data>) {
         filters.push([field, operator, value]);
         return query;
       },
+      limit() {
+        return query;
+      },
       async get() {
         const docs = Array.from(records.entries())
           .filter(([path]) => path.startsWith(`${name}/`))

@@ -1,4 +1,9 @@
-import { BadRequestException, type INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  type INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -25,10 +30,13 @@ type MutationName =
   | 'restoreStore'
   | 'suspendUser'
   | 'generateInvite'
+  | 'revokeInvite'
   | 'upsertBanner';
 
 const JWT_SECRET = 'admin-privileged-mutation-test-secret';
 const SETTLEMENT_PATH = 'settlements/settlement-1';
+const REVERSAL_QUERY_READ =
+  'operationIssues?orderId==order-1&type==PROVIDER_REVERSAL_DETECTED&status==OPEN&limit=1';
 
 function makeHttpHarness() {
   const users = new Map<string, Data>([
@@ -115,6 +123,10 @@ function makeHttpHarness() {
       token: 'TESTINVITE12345678',
       expiresAt: new Date(0).toISOString(),
     }),
+    revokeInvite: jest.spyOn(adminService, 'revokeInvite').mockResolvedValue({
+      token: 'TESTINVITE123456',
+      revokedAt: new Date(0).toISOString(),
+    }),
     upsertBanner: jest.spyOn(adminService, 'upsertBanner').mockResolvedValue({
       headline: '검증 배너',
     }),
@@ -185,6 +197,8 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         return http.patch('/admin/users/consumer-1/status').send({ suspended: true });
       case 'generateInvite':
         return http.post('/admin/invite');
+      case 'revokeInvite':
+        return http.post('/admin/invite/TESTINVITE123456/revoke');
       case 'upsertBanner':
         return http.put('/admin/banner').send({ headline: '검증 배너' });
     }
@@ -197,7 +211,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
   }
 
   function successStatus(name: MutationName) {
-    return name === 'refund' || name === 'generateInvite' ? 201 : 200;
+    return name === 'refund' || name === 'generateInvite' || name === 'revokeInvite' ? 201 : 200;
   }
 
   const mutations: MutationName[] = [
@@ -210,6 +224,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     'restoreStore',
     'suspendUser',
     'generateInvite',
+    'revokeInvite',
     'upsertBanner',
   ];
 
@@ -225,6 +240,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.generateInvite).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.revokeInvite).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.upsertBanner).not.toHaveBeenCalled();
     expect(harness.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(harness.settlements.cancelSettlement).not.toHaveBeenCalled();
@@ -250,6 +266,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.generateInvite).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.revokeInvite).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.upsertBanner).not.toHaveBeenCalled();
     expect(harness.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(harness.settlements.cancelSettlement).not.toHaveBeenCalled();
@@ -298,6 +315,12 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
       case 'generateInvite':
         expect(harness.serviceBoundary.generateInvite).toHaveBeenCalledWith('admin-1');
         break;
+      case 'revokeInvite':
+        expect(harness.serviceBoundary.revokeInvite).toHaveBeenCalledWith(
+          'TESTINVITE123456',
+          'admin-1',
+        );
+        break;
       case 'upsertBanner':
         expect(harness.serviceBoundary.upsertBanner).toHaveBeenCalledWith({
           headline: '검증 배너',
@@ -307,9 +330,18 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
   });
 });
 
-function makeMarkAsPaidFixture(status?: string) {
+type IssueQuery = {
+  collectionName: string;
+  filters: Array<[string, string, unknown]>;
+  maximum?: number;
+};
+
+function makeMarkAsPaidFixture(status?: string, issues: Data[] = []) {
   const records = new Map<string, Data>();
-  if (status !== undefined) records.set(SETTLEMENT_PATH, { id: 'settlement-1', status });
+  if (status !== undefined) {
+    records.set(SETTLEMENT_PATH, { id: 'settlement-1', orderId: 'order-1', status });
+  }
+  for (const issue of issues) records.set(`operationIssues/${issue['id']}`, issue);
 
   const refs = new Map<string, Data>();
   const transactionReads: string[] = [];
@@ -321,11 +353,37 @@ function makeMarkAsPaidFixture(status?: string) {
     return refs.get(path);
   });
 
+  const makeQuery = (query: IssueQuery): Data => ({
+    __query: query,
+    where: (field: string, operator: string, value: unknown) =>
+      makeQuery({ ...query, filters: [...query.filters, [field, operator, value]] }),
+    limit: (maximum: number) => makeQuery({ ...query, maximum }),
+  });
+  const collection = jest.fn((collectionName: string) =>
+    makeQuery({ collectionName, filters: [] }),
+  );
+  const runQuery = ({ collectionName, filters, maximum }: IssueQuery) => {
+    const docs = [...records.entries()]
+      .filter(([path]) => path.startsWith(`${collectionName}/`))
+      .filter(([, data]) =>
+        filters.every(([field, operator, value]) => operator === '==' && data[field] === value),
+      )
+      .slice(0, maximum)
+      .map(([, data]) => ({ data: () => data }));
+    return { empty: docs.length === 0, docs };
+  };
+
   const runTransaction = jest.fn().mockImplementation((callback: (tx: Data) => Promise<unknown>) => {
     const execute = transactionTail.then(async () => {
       const pending = new Map<string, Data>();
       const tx = {
         get: jest.fn(async (ref: Data) => {
+          if (ref['__query']) {
+            const query = ref['__query'] as IssueQuery;
+            const where = query.filters.map(([f, o, v]) => `${f}${o}${String(v)}`).join('&');
+            transactionReads.push(`${query.collectionName}?${where}&limit=${query.maximum}`);
+            return runQuery(query);
+          }
           transactionReads.push(ref.path);
           const data = pending.get(ref.path) ?? records.get(ref.path);
           return { exists: data !== undefined, data: () => data, ref };
@@ -348,6 +406,7 @@ function makeMarkAsPaidFixture(status?: string) {
 
   const firestore = {
     doc,
+    collection,
     runTransaction,
     Timestamp: { now: jest.fn(() => 'transaction-now') },
   };
@@ -384,7 +443,7 @@ describe('AdminService.markAsPaid 상태 계약', () => {
       status: 'paid',
     });
 
-    expect(fixture.transactionReads).toEqual([SETTLEMENT_PATH]);
+    expect(fixture.transactionReads).toEqual([SETTLEMENT_PATH, REVERSAL_QUERY_READ]);
     expect(fixture.transactionUpdates).toEqual([
       {
         path: SETTLEMENT_PATH,
@@ -418,8 +477,54 @@ describe('AdminService.markAsPaid 상태 계약', () => {
     expect((failures[0] as PromiseRejectedResult).reason.message).toBe(
       '이미 지급 완료된 정산입니다.',
     );
-    expect(fixture.transactionReads).toEqual([SETTLEMENT_PATH, SETTLEMENT_PATH]);
+    expect(fixture.transactionReads).toEqual([
+      SETTLEMENT_PATH,
+      REVERSAL_QUERY_READ,
+      SETTLEMENT_PATH,
+    ]);
     expect(fixture.transactionUpdates).toHaveLength(1);
     expect(fixture.records.get(SETTLEMENT_PATH)).toMatchObject({ status: 'paid' });
+  });
+
+  function reversalIssue(status: string, overrides: Data = {}): Data {
+    return {
+      id: `issue-${status}`,
+      orderId: 'order-1',
+      type: 'PROVIDER_REVERSAL_DETECTED',
+      status,
+      severity: 'critical',
+      ...overrides,
+    };
+  }
+
+  it('결제사 취소·분쟁 기록이 OPEN이면 409로 거부하고 transaction write를 만들지 않는다', async () => {
+    const fixture = makeMarkAsPaidFixture('confirmed', [reversalIssue('OPEN')]);
+
+    const error = await fixture.service.markAsPaid('settlement-1').catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error.getStatus()).toBe(409);
+    expect(error.message).toBe(
+      '결제사 취소·분쟁 확인이 끝나지 않은 주문입니다. 운영 확인 기록을 먼저 처리한 뒤 지급하세요.',
+    );
+    expect(fixture.transactionReads).toEqual([SETTLEMENT_PATH, REVERSAL_QUERY_READ]);
+    expect(fixture.transactionUpdates).toHaveLength(0);
+    expect(fixture.records.get(SETTLEMENT_PATH)).toMatchObject({ status: 'confirmed' });
+  });
+
+  it.each([
+    ['RESOLVED 기록', [reversalIssue('RESOLVED')]],
+    ['DISMISSED 기록', [reversalIssue('DISMISSED')]],
+    ['다른 주문의 OPEN 기록', [reversalIssue('OPEN', { orderId: 'order-2' })]],
+    ['다른 유형의 OPEN 기록', [reversalIssue('OPEN', { type: 'PAYMENT_LOOKUP_FAILED' })]],
+    ['기록 없음', []],
+  ] as const)('%s은 지급을 막지 않는다', async (_label, issues) => {
+    const fixture = makeMarkAsPaidFixture('confirmed', [...issues]);
+
+    await expect(fixture.service.markAsPaid('settlement-1')).resolves.toEqual({
+      settlementId: 'settlement-1',
+      status: 'paid',
+    });
+    expect(fixture.transactionUpdates).toHaveLength(1);
   });
 });

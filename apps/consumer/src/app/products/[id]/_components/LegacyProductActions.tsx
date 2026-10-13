@@ -147,7 +147,6 @@ export default function LegacyProductActions({ product }: Props) {
       quantity: String(quantity),
       saleType: product.saleType,
       deliveryMethod,
-      totalAmount: String(totalAmount),
     });
     if (needsDeliveryDate && deliveryDate) {
       p.set('requestedDeliveryDate', deliveryDate);

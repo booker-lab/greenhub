@@ -16,8 +16,11 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
 import { AddressDto } from './dto/address.dto';
+import { FcmTokenDto } from './dto/fcm-token.dto';
 import { KakaoLoginDto } from './dto/kakao-login.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from './types/jwt-payload.type';
 
@@ -110,12 +113,14 @@ export class AuthController {
   @Patch('me/fcm-token')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
-  updateFcmToken(@CurrentUser() user: JwtPayload, @Body('fcmToken') fcmToken: string) {
-    return this.authService.updateFcmToken(user.sub, fcmToken);
+  updateFcmToken(@CurrentUser() user: JwtPayload, @Body() dto: FcmTokenDto) {
+    return this.authService.updateFcmToken(user.sub, dto.fcmToken);
   }
 
+  // Firebase 클라이언트(Storage·Firestore 직접 접근)를 쓰는 판매자 앱(seller·admin)과 기사 앱(driver)만 받는다.
   @Get('firebase-token')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('seller', 'driver', 'admin')
   @SkipThrottle()
   getFirebaseToken(@CurrentUser() user: JwtPayload) {
     return this.authService.getFirebaseToken(user.sub);

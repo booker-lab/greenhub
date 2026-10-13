@@ -210,7 +210,8 @@ test('동결된 포트·marker·Firebase identity를 모든 child spec에 투영
     assert.equal(spec.env.FIREBASE_STORAGE_BUCKET, 'greenhub-local.appspot.com');
     assert.equal(spec.env.FIRESTORE_EMULATOR_HOST, '127.0.0.1:8080');
     assert.equal(spec.env.FIREBASE_AUTH_EMULATOR_HOST, '127.0.0.1:9099');
-    assert.equal(spec.env.STORAGE_EMULATOR_HOST, '127.0.0.1:9199');
+    assert.equal(spec.env.STORAGE_EMULATOR_HOST, 'http://127.0.0.1:9199');
+    assert.equal(spec.env.FIREBASE_STORAGE_EMULATOR_HOST, '127.0.0.1:9199');
     assert.equal(
       spec.env.GREENHUB_LOCAL_PROVIDER_OUTBOUND_POLICY,
       'DENY_ALL_EXTERNAL_PROVIDER_DISPATCH',

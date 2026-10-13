@@ -1,7 +1,7 @@
 # 세션35 진입 가이드 — P3 잔여 기능 항목
 
 > 작성: 2026-05-17 (세션34 종료 시) · SSOT: `docs/BACKLOG.md` §12
-> 선행: 세션34 — P3 consumer@test.com 강한비번 전환. 풀런 167/0 유지.
+> 선행: 세션34 — P3 <TEST_CONSUMER_EMAIL> 강한비번 전환. 풀런 167/0 유지.
 > 진행 원칙: **아토믹 태스크 단위** — 한 태스크 = 한 커밋. 각 태스크 끝에 **정합성 검토** 후 통과해야 다음 진행.
 
 ---
@@ -9,7 +9,7 @@
 ## 배경
 
 세션34에 P3 consumer 강한비번 전환을 완료했다. 세션22에 편의 우선으로 채택했던
-약한비번(`test1234!`)을 사용자가 보안 우선으로 재확인 → `reset-user-password.mjs`로
+약한비번(`<TEST_CONSUMER_PASSWORD>`)을 사용자가 보안 우선으로 재확인 → `reset-user-password.mjs`로
 Firestore `passwordHash`를 30자 랜덤 비번(bcrypt-12)으로 갱신, `apps/e2e/.env`·repo
 Secret `TEST_CONSUMER_PASSWORD` 동기 교체. e2e 풀런 167/0 회귀 0건.
 

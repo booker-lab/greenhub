@@ -28,10 +28,15 @@ service firebase.storage {
       return currentRole('admin');
     }
 
+    // Firestore rules·API와 같은 매장 소유 기준: token storeId + users storeId +
+    // stores/{storeId}.ownerId가 모두 현재 판매자와 일치해야 한다.
     function isSellerFor(storeId) {
       return currentRole('seller') &&
         request.auth.token.get('storeId', null) == storeId &&
-        firestore.get(currentUserPath()).data.get('storeId', null) == storeId;
+        firestore.get(currentUserPath()).data.get('storeId', null) == storeId &&
+        firestore.get(
+          /databases/(default)/documents/stores/$(storeId)
+        ).data.get('ownerId', null) == request.auth.uid;
     }
 
     function isDriver() {
@@ -100,24 +105,27 @@ service firebase.storage {
         request.resource.contentType == 'image/jpeg';
     }
 
-    // 공개 상품 이미지: 소유 판매자와 관리자만 변경
+    // 공개 상품 이미지: 단건 조회만 공개하고 소유 판매자와 관리자만 변경
     match /products/{storeId}/{fileName} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if false;
       allow create, update: if isProductImage() &&
         (isSellerFor(storeId) || isAdmin());
       allow delete: if isSellerFor(storeId) || isAdmin();
     }
 
-    // 공개 메인 배너: 관리자만 변경
+    // 공개 메인 배너: 단건 조회만 공개하고 관리자만 변경
     match /banners/main_hero/{fileName} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if false;
       allow create, update: if isProductImage() && isAdmin();
       allow delete: if isAdmin();
     }
 
-    // 공개 상점 로고: 판매자 본인 이름의 객체만 변경
+    // 공개 상점 로고: 단건 조회만 공개하고 판매자 본인 이름의 객체만 변경
     match /logos/{fileName} {
-      allow read: if true;
+      allow get: if true;
+      allow list: if false;
       allow create, update: if isLogoImage() && isOwnedSellerLogo(fileName);
       allow delete: if isOwnedSellerLogo(fileName);
     }

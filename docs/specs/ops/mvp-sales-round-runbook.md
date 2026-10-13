@@ -16,7 +16,7 @@
 - 경매·매입: 월요일
 - 직접배송: 화요일 00:00~09:00
 
-현재 **출시 전 게이트와 작업 순서**의 정본은 `docs/memory.md`, `docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`, `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`다. 이 런북에 남은 운영 절차가 활성 출시 PLAN의 승인·검증 게이트를 대체하지 않는다.
+현재 **출시·배포 게이트와 작업 순서**의 정본은 `docs/memory.md`다(`docs/plans/HANDOFF_mvp_round_direct_aligo_review_pause.md`, `docs/plans/PLAN_mvp_round_direct_launch_blockers.md`는 2026-09-05 snapshot인 역사 자료). 이 런북에 남은 운영 절차가 `docs/memory.md`의 승인 경계와 배포 안전 PLAN의 검증 게이트를 대체하지 않는다.
 
 이 문서는 명령 실행 권한을 부여하지 않는다. 아래 명령은 절차를 설명하는 예시이며, 승인 기록 없이 실행하지 않는다. 특히 `--apply`, 환불, 문자 발송, 회차·주문 상태 변경, 파기 재실행은 별도 승인과 담당자 확인이 필요하다.
 
@@ -229,7 +229,7 @@ node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=round_dir
 
 셀러는 판매자 앱 주문 상세에서 처리한다.
 
-- "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`): 결제 전 유료 재배송(고객 책임·재배송비 > 0)이면 고객에게 `ORDER_REDELIVERY_PAYMENT_REQUESTED` 알림톡이 가고 결제 전에는 기사가 배송을 다시 시작할 수 없다. 무료·판매자 책임 보류는 알림톡 없이 기사 수거 대기로 돌아간다. 이미 결제된 유료 재배송도 서버가 결제 요청 알림톡을 한 번 더 보내므로, 기사가 맡은 주문이면 기사 화면에서 바로 재개하는 편이 낫다.
+- "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`): 결제 전 유료 재배송(고객 책임·재배송비 > 0)이면 고객에게 `ORDER_REDELIVERY_PAYMENT_REQUESTED` 알림톡이 가고 결제 전에는 기사가 배송을 다시 시작할 수 없다. 무료·판매자 책임 보류는 알림톡 없이 기사 수거 대기로 돌아간다. 이미 결제된 유료 재배송은 결제 요청 알림톡 없이 기사 수거 대기로 돌아간다.
 - "주문 취소·환불"(`DELIVERY_HELD → CANCELLED`): 본 결제와 결제된 재배송비를 환불하고 고객에게 `ORDER_CANCELLED`(입력한 사유)가 간다.
 - 기사가 가져가기 전 준비 중인 회차 직배송 주문은 "배송 보류"로 한 건씩 멈출 수 있다(위 표와 같은 사유·책임·재배송비 규칙, 일괄 보류 없음). 재배송비 결제를 기다리는 보류가 아직 열린 주문(유료 재배송을 재배송 준비로 돌린 주문)은 다시 보류하지 않는다. 셀러가 보류한 미배정 주문은 기사 화면에 나오지 않으므로 다시 보낼 때 "재배송 준비로 돌리기"가 필요하다.
 
@@ -380,6 +380,16 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 - [ ] 롤백 명령과 승인자 확인
 - [ ] 비밀정보 없는 증거 묶음 확인
 
+### Firebase 규칙·Storage CORS 반영 (#402 이후)
+
+규칙은 앱 배포 뒤에 낸다(#402 규칙은 운영 중인 옛 프런트의 직접 조회를 막지 않지만 순서를 지킨다). 모두 운영 Firebase 권한이 있는 사람이 별도 승인으로 실행한다.
+
+0. 배포 전 데이터 점검(읽기 전용): `node scripts/release/pre-deploy-check.mjs`(운영 서비스 계정 필요). 취소 진행 중 주문, 범위 밖 재배송비, 판매자가 아닌 매장 소유자, 매장 2개 이상 소유 계정, 판매자 storeId·ownerId 불일치, 자사 bucket 밖 상품 이미지를 문서 ID와 건수로 낸다. 하나라도 걸리면(exit 1) 배포 전에 정리한다.
+1. 상품 이미지 업로드 조건 확인: 운영 판매자 계정의 `stores/{storeId}.ownerId`가 그 판매자 uid와 같은지 콘솔에서 본다(#402부터 `storage.rules`가 요구).
+2. 규칙 배포: `firebase deploy --only firestore:rules,storage --project <운영 프로젝트>` 뒤 콘솔에서 ruleset이 저장소 파일과 같은지 재조회한다.
+3. CORS(선택, `firebase deploy`로 반영되지 않음): 적용 전 `gsutil cors get gs://<운영 버킷>`으로 현재 값을 남기고, `gsutil cors set cors.json gs://<운영 버킷>`으로 GET·HEAD만 허용한다. 버킷 이름은 운영 `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` 값으로 확인한다.
+4. 적용 직후 판매자 상품 이미지 업로드와 기사 배송 사진 업로드·표시를 한 번씩 확인한다. 업로드가 CORS로 막히면 3에서 남긴 값으로 즉시 되돌린다(이전 저장소 값: `git show 0bcceaea:cors.json`).
+
 ### 출시 후 첫 두 회차
 
 - [ ] 매일 `OPEN` 운영 예외 점검
@@ -401,5 +411,6 @@ node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-12 | #402 이후 Firebase 규칙 배포 순서와 `cors.json` 버킷 적용·확인·되돌리기 절차 추가 |
 | 2026-09-02 | 회차 edit/open/reservation race와 취소 recovery, 보관 failure routing의 현재 미해결 범위를 `docs/BACKLOG.md`와 정합화 |
 | 2026-08-23 | 과거 `Task 6.7` 출시 전제 표현을 현재 `memory`/HANDOFF/launch PLAN 게이트와 실제 출시 SHA 원격 E2E 기준으로 정합화 |

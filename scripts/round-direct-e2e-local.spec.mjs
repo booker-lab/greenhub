@@ -40,6 +40,8 @@ const SERVICE_ACCOUNT_JSON = JSON.stringify({
   private_key: 'fake-private-key-for-test',
 });
 const WEB_API_KEY = 'web-api-key-value-for-test';
+// 실행기가 회차 Playwright 단계에 붙이는 이름(워크플로 단계 이름과 같다).
+const ROUND_STEP = `소비자·셀러·드라이버 ${EXPECTED_ROUND_TESTS}건 실행`;
 
 function validFileEnv(overrides = {}) {
   return {
@@ -296,12 +298,12 @@ describe('로컬 대상 모드 실행 env', () => {
         storagePrefix: `e2e/round-direct/${RUN_ID}/`,
       },
     );
-    // 워크플로처럼 52건 단계에는 서비스 계정을 넘기지 않는다.
+    // 워크플로처럼 회차 단계에는 서비스 계정을 넘기지 않는다.
     assert.equal(runner.FIREBASE_SERVICE_ACCOUNT_JSON, undefined);
     assert.equal(withServiceAccount.FIREBASE_SERVICE_ACCOUNT_JSON, SERVICE_ACCOUNT_JSON);
   });
 
-  it('Playwright 인자는 원격 워크플로의 52건·12건 실행 인자와 같다', () => {
+  it('Playwright 인자는 원격 워크플로의 회차·세션 실행 인자와 같다', () => {
     const workflow = fs.readFileSync(
       path.join(REPO_ROOT, '.github/workflows/e2e-round-direct.yml'),
       'utf8',
@@ -317,12 +319,18 @@ describe('로컬 대상 모드 실행 env', () => {
   });
 
   it('무건너뜀 판정은 expected·skipped·unexpected·flaky를 모두 본다', () => {
-    const stats = { expected: 52, skipped: 0, unexpected: 0, flaky: 0 };
-    assert.equal(evaluatePlaywrightStats({ stats }, 52).ok, true);
-    for (const patch of [{ expected: 51 }, { skipped: 1 }, { unexpected: 1 }, { flaky: 1 }]) {
-      assert.equal(evaluatePlaywrightStats({ stats: { ...stats, ...patch } }, 52).ok, false);
+    const expected = EXPECTED_ROUND_TESTS;
+    const stats = { expected, skipped: 0, unexpected: 0, flaky: 0 };
+    assert.equal(evaluatePlaywrightStats({ stats }, expected).ok, true);
+    for (const patch of [
+      { expected: expected - 1 },
+      { skipped: 1 },
+      { unexpected: 1 },
+      { flaky: 1 },
+    ]) {
+      assert.equal(evaluatePlaywrightStats({ stats: { ...stats, ...patch } }, expected).ok, false);
     }
-    assert.equal(evaluatePlaywrightStats(null, 52).ok, false);
+    assert.equal(evaluatePlaywrightStats(null, expected).ok, false);
   });
 });
 
@@ -432,10 +440,15 @@ function createFakeOps({ failStep, cleanupReady = true, throwIn, scanOk = true }
           remainingObjects: [],
         });
       }
-      if (name.includes('52건 실행')) {
+      if (name === ROUND_STEP) {
         assert.equal(env.FIREBASE_SERVICE_ACCOUNT_JSON, undefined);
         files.set(env.PLAYWRIGHT_JSON_OUTPUT_FILE, {
-          stats: { expected: 52, skipped: 0, unexpected: failStep === name ? 1 : 0, flaky: 0 },
+          stats: {
+            expected: EXPECTED_ROUND_TESTS,
+            skipped: 0,
+            unexpected: failStep === name ? 1 : 0,
+            flaky: 0,
+          },
         });
       }
       if (name.includes('12건 실행')) {
@@ -453,11 +466,11 @@ function createFakeOps({ failStep, cleanupReady = true, throwIn, scanOk = true }
 const cleanupNames = ['chromium fixture cleanup', 'mobile fixture cleanup'];
 
 describe('로컬 대상 모드 cleanup 수명주기', () => {
-  it('성공 경로는 52건 뒤 12건을 실행하고 fixture·서버·worktree를 모두 정리한다', async () => {
+  it('성공 경로는 회차 단계 뒤 세션 12건을 실행하고 fixture·서버·worktree를 모두 정리한다', async () => {
     const ops = createFakeOps();
     const result = await runLocalRoundDirectE2E(runContext(), ops);
     assert.deepEqual(result, { ok: true, failures: [], cleanupFailures: [] });
-    const roundIndex = ops.calls.indexOf('소비자·셀러·드라이버 52건 실행');
+    const roundIndex = ops.calls.indexOf(ROUND_STEP);
     const sessionIndex = ops.calls.indexOf('세션 수명주기 12건 실행');
     assert.ok(roundIndex > ops.calls.indexOf('mobile fixture verify'));
     assert.ok(sessionIndex > roundIndex);
@@ -471,11 +484,11 @@ describe('로컬 대상 모드 cleanup 수명주기', () => {
     ]);
   });
 
-  it('52건 판정 실패 시 세션 단계는 건너뛰고 cleanup은 모두 수행한다', async () => {
-    const ops = createFakeOps({ failStep: '소비자·셀러·드라이버 52건 실행' });
+  it('회차 단계 판정 실패 시 세션 단계는 건너뛰고 cleanup은 모두 수행한다', async () => {
+    const ops = createFakeOps({ failStep: ROUND_STEP });
     const result = await runLocalRoundDirectE2E(runContext(), ops);
     assert.equal(result.ok, false);
-    assert.match(result.failures[0], /52건 실행 실패/);
+    assert.match(result.failures[0], new RegExp(`${EXPECTED_ROUND_TESTS}건 실행 실패`));
     assert.equal(ops.calls.includes('세션 수명주기 12건 실행'), false);
     for (const name of [...cleanupNames, 'stop:consumer', 'removeWorktree']) {
       assert.ok(ops.calls.includes(name), name);

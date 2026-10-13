@@ -2,12 +2,13 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { dateRangeKST } from '@greenhub/shared';
-import * as admin from 'firebase-admin';
-import { v4 as uuidv4 } from 'uuid';
+import type * as admin from 'firebase-admin';
+import { inviteConflict } from '../auth/invite-conflict';
 import { FirestoreService } from '../firestore/firestore.service';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 import type { OrderStatus } from '../orders/dto/update-status.dto';
@@ -15,7 +16,13 @@ import { getAllowedTransitions } from '../orders/orders.helpers';
 import { PaymentsService } from '../payments/payments.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 import { releaseLegacyGroupQuantityInTransaction } from '../orders/_lib/legacy-group-quantity';
+import { hasOpenProviderReversalInTransaction } from '../settlements/_lib/provider-reversal-hold';
 import { SettlementsService } from '../settlements/settlements.service';
+import {
+  SESSIONS_REVOKED_AT_FIELD,
+  revokeFirebaseSessions,
+  sessionsRevokedAtMillis,
+} from '../auth/session-revocation';
 import {
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
@@ -27,6 +34,8 @@ import {
 } from './dto/admin.dto';
 
 const LEGACY_REFUND_CLAIM_MS = 5 * 60 * 1000;
+// 발급 토큰은 영숫자뿐이다. 경로 구분자 등이 섞인 값으로 다른 문서를 가리키지 못하게 막는다.
+const INVITE_TOKEN_PATTERN = /^[A-Za-z0-9]{1,64}$/;
 
 type LegacyRefundClaimResult =
   | { kind: 'done' }
@@ -35,6 +44,8 @@ type LegacyRefundClaimResult =
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name);
+
   constructor(
     private readonly firestore: FirestoreService,
     private readonly payments: PaymentsService,
@@ -128,11 +139,32 @@ export class AdminService {
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('사용자를 찾을 수 없습니다.');
 
-    await ref.update({
-      suspended: dto.suspended,
-      updatedAt: this.firestore.Timestamp.now(),
-    });
+    await ref.update(this.suspensionUpdate(dto.suspended));
+    if (dto.suspended) {
+      await this.revokeSuspendedUserSessions(userId);
+    }
     return { userId, suspended: dto.suspended };
+  }
+
+  // 정지할 때는 이전에 발급된 API access token도 거부되도록 세션 폐기 시각을 함께 기록한다.
+  private suspensionUpdate(suspended: boolean) {
+    return {
+      suspended,
+      ...(suspended
+        ? {
+            [SESSIONS_REVOKED_AT_FIELD]: this.firestore.Timestamp.fromMillis(
+              sessionsRevokedAtMillis(),
+            ),
+          }
+        : {}),
+      updatedAt: this.firestore.Timestamp.now(),
+    };
+  }
+
+  // 정지된 계정의 API refresh 기록과 Firebase 클라이언트 세션을 끊는다(로그아웃과 같은 폐기).
+  private async revokeSuspendedUserSessions(userId: string) {
+    await this.firestore.doc(`refreshTokens/${userId}`).delete();
+    await revokeFirebaseSessions(userId, this.logger);
   }
 
   // ── Orders ───────────────────────────────────────────────────────
@@ -388,6 +420,9 @@ export class AdminService {
     if (dto.storeId) {
       query = query.where('storeId', '==', dto.storeId);
     }
+    if (dto.status) {
+      query = query.where('status', '==', dto.status);
+    }
     if (dto.from) {
       const { start } = dateRangeKST(dto.from);
       query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(start));
@@ -422,6 +457,13 @@ export class AdminService {
       if (data['status'] !== 'confirmed') {
         throw new BadRequestException('confirmed 상태의 정산만 지급 처리할 수 있습니다.');
       }
+      // 결제사 취소·분쟁 운영 기록이 OPEN이면 지급하지 않는다. 같은 트랜잭션에서 읽어 경합을 막는다.
+      const orderId = typeof data['orderId'] === 'string' ? data['orderId'] : settlementId;
+      if (await hasOpenProviderReversalInTransaction(this.firestore, t, orderId)) {
+        throw new ConflictException(
+          '결제사 취소·분쟁 확인이 끝나지 않은 주문입니다. 운영 확인 기록을 먼저 처리한 뒤 지급하세요.',
+        );
+      }
 
       const now = this.firestore.Timestamp.now();
       t.update(ref, {
@@ -437,12 +479,18 @@ export class AdminService {
   // ── Drivers ──────────────────────────────────────────────────────
 
   async getDrivers(dto: QueryAdminDriversDto) {
-    // 복합 인덱스 없이도 동작하도록 role 단일 필터 후 메모리 필터링
+    // 복합 인덱스 없이도 동작하도록 role 단일 필터 후 메모리 필터링·정렬한다.
+    // 정렬 전에 잘리지 않도록 넉넉히 읽고, 한도를 넘는 기사가 더 있으면 hasMore로 알린다.
+    const ADMIN_DRIVER_SCAN_LIMIT = 500;
     const snap = await (
-      this.firestore.collection('users').where('role', '==', 'driver').limit(100) as any
+      this.firestore
+        .collection('users')
+        .where('role', '==', 'driver')
+        .limit(ADMIN_DRIVER_SCAN_LIMIT + 1) as any
     ).get();
+    const hasMore = snap.docs.length > ADMIN_DRIVER_SCAN_LIMIT;
 
-    let drivers = snap.docs.map((d: any) => {
+    let drivers = snap.docs.slice(0, ADMIN_DRIVER_SCAN_LIMIT).map((d: any) => {
       const { passwordHash: _pw, ...user } = d.data();
       return user;
     });
@@ -457,7 +505,7 @@ export class AdminService {
 
     drivers.sort((a: any, b: any) => (b.createdAt?._seconds ?? 0) - (a.createdAt?._seconds ?? 0));
 
-    return { drivers, total: drivers.length };
+    return { drivers, total: drivers.length, hasMore };
   }
 
   async approveDriver(userId: string) {
@@ -487,12 +535,9 @@ export class AdminService {
       throw new BadRequestException('드라이버 계정이 아닙니다.');
     }
 
-    await ref.update({
-      suspended: dto.suspended,
-      updatedAt: this.firestore.Timestamp.now(),
-    });
+    await ref.update(this.suspensionUpdate(dto.suspended));
     if (dto.suspended) {
-      await admin.auth().revokeRefreshTokens(userId);
+      await this.revokeSuspendedUserSessions(userId);
     }
     return { userId, suspended: dto.suspended };
   }
@@ -500,7 +545,7 @@ export class AdminService {
   // ── Invite ───────────────────────────────────────────────────────
 
   async generateInvite(adminId: string) {
-    const token = uuidv4().replace(/-/g, '').substring(0, 16).toUpperCase();
+    const token = randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase();
     const now = this.firestore.Timestamp.now();
 
     // 7일 만료
@@ -528,6 +573,42 @@ export class AdminService {
     ).get();
 
     return snap.docs.map((d: any) => d.data());
+  }
+
+  /**
+   * 아직 쓰이지 않은 유효 초대 토큰만 취소한다. 문서는 지우지 않고 revokedAt·revokedBy를 남긴다.
+   * 상태 우선순위(revokedAt > usedAt > 만료)대로 409 + reason으로 거부하고,
+   * 가입 트랜잭션과 같은 문서를 트랜잭션으로 읽어 동시 가입과 한쪽만 성공하게 한다.
+   */
+  async revokeInvite(token: string, adminId: string) {
+    if (!INVITE_TOKEN_PATTERN.test(token)) {
+      throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
+    }
+    const ref = this.firestore.doc(`invites/${token}`);
+    const revokedAt = new Date();
+
+    await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException('초대 토큰을 찾을 수 없습니다.');
+      const invite = snap.data()!;
+
+      if (invite['revokedAt'] != null) {
+        throw inviteConflict('already_revoked', '이미 취소된 초대 토큰입니다.');
+      }
+      if (invite['usedAt'] != null) {
+        throw inviteConflict('already_used', '이미 사용된 초대 토큰은 취소할 수 없습니다.');
+      }
+      if ((invite['expiresAt'] as admin.firestore.Timestamp).toMillis() < revokedAt.getTime()) {
+        throw inviteConflict('expired', '만료된 초대 토큰은 취소할 수 없습니다.');
+      }
+
+      tx.update(ref, {
+        revokedAt: this.firestore.Timestamp.fromDate(revokedAt),
+        revokedBy: adminId,
+      });
+    });
+
+    return { token, revokedAt: revokedAt.toISOString() };
   }
 
   // ── Banner ───────────────────────────────────────────────────────

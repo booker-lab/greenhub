@@ -21,6 +21,12 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { ApiError, apiJson } from '@/lib/api';
 import { getFirebaseStorage } from '@/lib/firebase';
+import {
+  ImageReencodeError,
+  imageReencodeFailureMessage,
+  LOGO_IMAGE_ENCODE,
+  reencodeImageToJpeg,
+} from '../products/_components/image-reencode';
 
 export default function OnboardingPage() {
   const { data: session, update } = useSession();
@@ -90,12 +96,18 @@ export default function OnboardingPage() {
         getFirebaseStorage(),
         `logos/${session?.user.id ?? 'unknown'}_${Date.now()}`,
       );
-      await uploadBytes(storageRef, file);
+      // canvas로 다시 그려 EXIF(촬영 위치 등)를 지운 JPEG만 올린다.
+      const jpeg = await reencodeImageToJpeg(file, LOGO_IMAGE_ENCODE);
+      await uploadBytes(storageRef, jpeg, { contentType: 'image/jpeg' });
       const url = await getDownloadURL(storageRef);
       setLogoPreview(url);
       setForm((prev) => ({ ...prev, logoUrl: url }));
-    } catch {
-      setError('로고 업로드에 실패했습니다. 다시 시도해주세요.');
+    } catch (e) {
+      setError(
+        e instanceof ImageReencodeError
+          ? imageReencodeFailureMessage(e.reason)
+          : '로고 업로드에 실패했습니다. 다시 시도해주세요.',
+      );
     } finally {
       setLogoUploading(false);
     }

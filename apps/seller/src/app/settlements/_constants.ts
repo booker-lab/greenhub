@@ -28,6 +28,30 @@ export interface Settlement {
   settledAt: string | { _seconds: number };
 }
 
+/** 목록 조회 조건. 더 보기도 같은 조건으로 이어 받는다. */
+export interface SettlementListQuery {
+  from?: string;
+  to?: string;
+  status?: SettlementStatus;
+}
+
+/**
+ * GET /stores/:storeId/settlements 응답. hasMore·nextCursor는 페이지 나눔을 지원하는 API만 보낸다
+ * (없으면 이번 응답이 전부).
+ */
+export interface SettlementListResponse {
+  settlements?: Settlement[];
+  total?: number;
+  hasMore?: boolean;
+  nextCursor?: string | null;
+}
+
+export interface SettlementPage {
+  settlements: Settlement[];
+  hasMore: boolean;
+  nextCursor: string | null;
+}
+
 export interface Summary {
   date: string;
   count: number;

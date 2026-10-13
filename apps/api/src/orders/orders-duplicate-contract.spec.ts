@@ -112,7 +112,11 @@ function makeFirestore(
 
   return {
     firestore,
-    read: (path: string) => clone(records.get(path)),
+    read: (path: string) => {
+      const record = records.get(path);
+      if (!record) throw new Error(`테스트 문서가 없다: ${path}`);
+      return clone(record);
+    },
     writes,
     directWrites,
   };

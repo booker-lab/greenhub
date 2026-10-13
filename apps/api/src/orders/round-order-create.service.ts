@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { FirestoreService } from '../firestore/firestore.service';
+import {
+  INVISIBLE_FORMAT_CHARACTERS,
+  toSingleLineText,
+} from '../notifications/notification-templates';
 import { RetentionService } from '../retention/retention.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
@@ -81,10 +85,7 @@ export class RoundOrderCreateService {
       const orderNumber = `${orderCounter.yyyymmdd}-${String(orderCounter.seq).padStart(6, '0')}`;
       const user = userSnap.data() as Record<string, any> | undefined;
       const store = storeSnap.data() as Record<string, any>;
-      const buyerEmail = user?.['email'] ?? '';
-      const rawBuyerName = user?.['name'] ?? '';
-      const buyerName =
-        rawBuyerName && rawBuyerName !== '???' ? rawBuyerName : buyerEmail.split('@')[0] || userId;
+      const buyerName = resolveOrderBuyerName(user, userId);
       const totalAmount = roundItems.reduce((sum, item) => sum + item.subtotalAmount, 0);
       const order = {
         id: orderId,
@@ -213,8 +214,34 @@ export class RoundOrderCreateService {
 }
 
 // 요청사항은 줄바꿈을 LF로 맞추고 앞뒤 공백을 지운다. 비어 있으면 null로 저장한다.
+// 주문에 복사하는 구매자 표시 이름의 최대 글자 수. 프로필 이름 입력 상한과 같다.
+export const ORDER_BUYER_NAME_MAX_LENGTH = 20;
+
+/**
+ * 사용자 프로필에서 주문의 buyerName을 만든다. 이름은 한 줄로 정리하고 상한으로 자르며,
+ * 비어 있거나 '???'이면 이메일 앞부분, 그것도 없으면 userId를 쓴다.
+ */
+export function resolveOrderBuyerName(
+  user: Record<string, unknown> | undefined,
+  userId: string,
+): string {
+  const name = toSingleLineText(user?.['name'], ORDER_BUYER_NAME_MAX_LENGTH);
+  if (name && name !== '???') return name;
+  const email = typeof user?.['email'] === 'string' ? user['email'] : '';
+  return toSingleLineText(email.split('@')[0], ORDER_BUYER_NAME_MAX_LENGTH) || userId;
+}
+
+// 요청사항은 여러 줄을 허용하되 줄바꿈 외 제어문자와 보이지 않는 서식 문자는 저장하지 않는다.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: 제어문자를 제거하기 위한 패턴이다.
+const REQUEST_NOTE_CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u2028\u2029]/g;
+
 export function normalizeRequestNote(value: string | undefined): string | null {
   if (typeof value !== 'string') return null;
-  const normalized = value.replace(/\r\n?/g, '\n').trim();
+  const normalized = value
+    .replace(/\r\n?/g, '\n')
+    .replace(/\t/g, ' ')
+    .replace(INVISIBLE_FORMAT_CHARACTERS, '')
+    .replace(REQUEST_NOTE_CONTROL_CHARACTERS, '')
+    .trim();
   return normalized.length > 0 ? normalized : null;
 }

@@ -47,6 +47,10 @@ export function resolveApiBaseUrl({
   if (nodeEnv === 'production' && isLoopbackHost(url.hostname)) {
     throw new ApiConfigurationError('Production API URL은 localhost를 사용할 수 없습니다.');
   }
+  // 로그인 비밀번호·refresh 토큰이 평문 구간을 지나지 않도록 운영에서는 HTTPS만 허용한다.
+  if (nodeEnv === 'production' && url.protocol !== 'https:') {
+    throw new ApiConfigurationError('Production API URL은 HTTPS를 사용해야 합니다.');
+  }
 
   return url.toString().replace(/\/$/, '');
 }

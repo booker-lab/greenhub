@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { buildSettlementCsv, csvCell, toDateStr, toKSTISO } from './_lib';
+import type { Settlement } from './_constants';
+import {
+  appendSettlementPage,
+  buildSettlementCsv,
+  csvCell,
+  readSettlementPage,
+  settlementListPath,
+  toDateStr,
+  toKSTISO,
+} from './_lib';
 
 // 오전/오후 표기는 ICU 버전에 따라 달라질 수 있어 월·일과 시:분 숫자만 검증한다.
 // 포매터가 timeZone을 고정하므로 실행 환경 시간대와 무관하다.
@@ -84,5 +93,65 @@ describe('정산 CSV', () => {
     expect(csvCell('=SUM(A1)')).toBe("'=SUM(A1)");
     expect(csvCell(-1500)).toBe('-1500');
     expect(csvCell(null)).toBe('');
+  });
+});
+
+function row(id: string): Settlement {
+  return {
+    id,
+    orderId: id,
+    totalAmount: 1000,
+    platformFee: 50,
+    netAmount: 950,
+    status: 'pending',
+    settledAt: '2026-10-01T00:00:00.000Z',
+  };
+}
+
+describe('정산 목록 페이지 나눔', () => {
+  it('첫 조회는 limit·cursor 없이 기존 조건만 보낸다(이전 API도 그대로 받는다)', () => {
+    expect(settlementListPath('store-1', {})).toBe('/stores/store-1/settlements?');
+    expect(
+      settlementListPath('store-1', { from: '2026-10-01', to: '2026-10-10', status: 'paid' }),
+    ).toBe('/stores/store-1/settlements?from=2026-10-01&to=2026-10-10&status=paid');
+  });
+
+  it('더 보기는 같은 조건에 서버가 준 cursor만 더한다', () => {
+    expect(settlementListPath('store-1', { status: 'pending' }, 's-5')).toBe(
+      '/stores/store-1/settlements?status=pending&cursor=s-5',
+    );
+    expect(settlementListPath('store-1', {}, null)).toBe('/stores/store-1/settlements?');
+  });
+
+  it('hasMore·nextCursor가 없는 이전 API 응답은 마지막 페이지로 읽는다', () => {
+    expect(readSettlementPage({ settlements: [row('a')], total: 1 })).toEqual({
+      settlements: [row('a')],
+      hasMore: false,
+      nextCursor: null,
+    });
+    expect(readSettlementPage(undefined)).toEqual({
+      settlements: [],
+      hasMore: false,
+      nextCursor: null,
+    });
+  });
+
+  it('hasMore=true와 nextCursor가 함께 와야만 더 보기를 연다', () => {
+    expect(readSettlementPage({ settlements: [row('a')], hasMore: true, nextCursor: 'a' })).toEqual(
+      { settlements: [row('a')], hasMore: true, nextCursor: 'a' },
+    );
+    expect(readSettlementPage({ settlements: [], hasMore: true, nextCursor: null }).hasMore).toBe(
+      false,
+    );
+    expect(readSettlementPage({ settlements: [], hasMore: false, nextCursor: 'a' })).toMatchObject({
+      hasMore: false,
+      nextCursor: null,
+    });
+  });
+
+  it('이어 받은 페이지는 뒤에 붙이고 이미 있는 정산은 다시 넣지 않는다', () => {
+    expect(
+      appendSettlementPage([row('a'), row('b')], [row('b'), row('c')]).map((s) => s.id),
+    ).toEqual(['a', 'b', 'c']);
   });
 });

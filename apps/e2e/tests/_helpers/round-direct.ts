@@ -18,6 +18,7 @@ export type RoundDirectFixture = {
   productId: string
   secondProductId: string
   closedProductId: string
+  soldOutProductId: string
   openRoundId: string
   openRoundItemId: string
   secondOpenRoundItemId: string
@@ -56,6 +57,7 @@ export function roundDirectFixture(testInfo: TestInfo): RoundDirectFixture {
   const productId = `${namespace}-product-1`
   const secondProductId = `${namespace}-product-2`
   const closedProductId = `${namespace}-product-closed`
+  const soldOutProductId = `${namespace}-product-soldout`
   const openRoundId = `${namespace}-round-open`
   const openRoundItemId = `${openRoundId}-item-1`
   const secondOpenRoundItemId = `${openRoundId}-item-2`
@@ -68,6 +70,7 @@ export function roundDirectFixture(testInfo: TestInfo): RoundDirectFixture {
     productId,
     secondProductId,
     closedProductId,
+    soldOutProductId,
     openRoundId,
     openRoundItemId,
     secondOpenRoundItemId,

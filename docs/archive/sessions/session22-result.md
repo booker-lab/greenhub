@@ -17,7 +17,7 @@
 | e2e migration | ✅ 12개 spec을 `loginViaCredentials` 헬퍼로 통일 (`page.fill` 폼 입력 패턴 폐기) |
 | 트랙 4 (통합 검증 5종) | ✅ 모두 통과 |
 | 트랙 5 (메모리·문서) | ✅ #CL-19 SUPERSEDED + #CL-20·#CL-21 추가, memory.md 88줄, auto-memory 4건 갱신 |
-| 추가: consumer@test.com 비번 강화 | ✅ `test1234` → `test1234!` (COMMON_WEAK 사전 미매칭) |
+| 추가: <TEST_CONSUMER_EMAIL> 비번 강화 | ✅ `<TEST_SELLER_PASSWORD>` → `<TEST_CONSUMER_PASSWORD>` (COMMON_WEAK 사전 미매칭) |
 | 추가: Firebase CORS 부수효과 진단·해결 | ✅ `extraHTTPHeaders` 전역 주입 → helper 명시 주입으로 전환 |
 | 최종 e2e | ✅ seller-orders 12/12 passed, 핵심 spec(consumer-cart·checkout, seller-onboarding) 각 1 passed |
 
@@ -28,13 +28,13 @@
 | # | 결정 | 결과 반영 |
 |---|------|----------|
 | 1 | `test@test.com`·`test@example.com` 처리 | 둘 다 `EXPLICIT_DELETE_EMAILS`에 추가, 삭제됨 |
-| 2 | consumer 인증 e2e 처리 | (b) 새 e2e consumer 발급 — `consumer@test.com` 신규 생성 |
+| 2 | consumer 인증 e2e 처리 | (b) 새 e2e consumer 발급 — `<TEST_CONSUMER_EMAIL>` 신규 생성 |
 | 3 | 옵션 A vs B 우선순위 | **B 진행** + A는 #CL-21 향후 과제로 기록 |
 | 4 | `seller-auth-invite.spec.ts` afterEach cleanup 포함 여부 | 포함 — `afterAll` + `scripts/cleanup-spec-residue.mjs` |
 
 세션 중 추가 결정 (충돌·정합성 검토에서 도출):
-- 5. 기존 `consumer@test.com`(약한비번 미상) 처리 → EXPLICIT_DELETE 추가 후 새로 register
-- 6. 새 consumer 비번 → `test1234` 우선(편의), 막판에 `test1234!`로 강화
+- 5. 기존 `<TEST_CONSUMER_EMAIL>`(약한비번 미상) 처리 → EXPLICIT_DELETE 추가 후 새로 register
+- 6. 새 consumer 비번 → `<TEST_SELLER_PASSWORD>` 우선(편의), 막판에 `<TEST_CONSUMER_PASSWORD>`로 강화
 - 7. seller-orders empty state 실패 진단 → 옵션 B 부수효과 아닌 것 확인 후 helper 명시 주입으로 해결
 
 ---
@@ -44,9 +44,9 @@
 | # | 검증 항목 | 결과 |
 |---|-----------|------|
 | 1 | `curl https://seller.greenlove.co.kr/login` `type="email"`/`type="password"` 카운트 | seller 0 / consumer 0, 카카오 버튼 1 |
-| 2 | Railway `/auth/login` 약한비번(`e2e.consumer@test.com`·`customer@test.com`·`consumer-sec-…@example.com`/test1234·password123) | 모두 401 |
-| 3 | Railway `/auth/login` 보존 계정(`seller@test.com`/test1234, `consumer@test.com`/test1234!) | 둘 다 200 |
-| 4 | Firestore email-provider count | 2건 (seller@test.com, consumer@test.com) |
+| 2 | Railway `/auth/login` 약한비번(`<DELETED_TEST_EMAIL_C>`·`<DELETED_TEST_EMAIL_B>`·`consumer-sec-…@example.com`/<TEST_SELLER_PASSWORD>·password123) | 모두 401 |
+| 3 | Railway `/auth/login` 보존 계정(`<TEST_SELLER_EMAIL>`/<TEST_SELLER_PASSWORD>, `<TEST_CONSUMER_EMAIL>`/<TEST_CONSUMER_PASSWORD>) | 둘 다 200 |
+| 4 | Firestore email-provider count | 2건 (<TEST_SELLER_EMAIL>, <TEST_CONSUMER_EMAIL>) |
 | 5 | NextAuth `/api/auth/callback/credentials` 헤더 게이팅 | 헤더 없음 → `Location: /login?error=CredentialsSignin&code=credentials`, 정상 SECRET → `Location: <callbackUrl>` |
 
 ---
@@ -67,11 +67,11 @@
 ## 트랙 2 — 약한비번 일소 (10분)
 
 **조치**:
-1. `scripts/delete-test-accounts.mjs`의 `EXPLICIT_DELETE_EMAILS`에 5건 추가(test@test.com, test@example.com, 그 후 충돌 발견되어 consumer@test.com도 추가)
+1. `scripts/delete-test-accounts.mjs`의 `EXPLICIT_DELETE_EMAILS`에 5건 추가(test@test.com, test@example.com, 그 후 충돌 발견되어 <TEST_CONSUMER_EMAIL>도 추가)
 2. dry-run으로 매칭 54건 확인 (storeId 보유 0건 — 안전)
 3. `--apply` 실행 → users 54건 + refreshTokens 2건 삭제
 4. Railway `/auth/login`으로 약한비번 401 + 보존 200 검증
-5. `consumer@test.com` 신규 register (`/auth/register` POST, role=consumer, password=test1234)
+5. `<TEST_CONSUMER_EMAIL>` 신규 register (`/auth/register` POST, role=consumer, password=<TEST_SELLER_PASSWORD>)
 6. `apps/e2e/.env`의 `TEST_CONSUMER_EMAIL` 갱신
 7. `seller-auth-invite.spec.ts`에 `test.afterAll` cleanup 추가 + `scripts/cleanup-spec-residue.mjs` 신규 (PROTECT 가드 + ALLOWED_PATTERN 정규식 검증)
 
@@ -83,8 +83,8 @@
 - `scripts/cleanup-spec-residue.mjs` (신규 — afterAll 호출용)
 
 **검증**:
-- 잔여 email-provider 계정: seller@test.com (test1234) + consumer@test.com (이후 test1234! 로 강화)
-- e2e.consumer@test.com → 401 ✓ / seller@test.com → 200 ✓
+- 잔여 email-provider 계정: <TEST_SELLER_EMAIL> (<TEST_SELLER_PASSWORD>) + <TEST_CONSUMER_EMAIL> (이후 <TEST_CONSUMER_PASSWORD> 로 강화)
+- <DELETED_TEST_EMAIL_C> → 401 ✓ / <TEST_SELLER_EMAIL> → 200 ✓
 
 ---
 
@@ -106,16 +106,16 @@
 
 ---
 
-## 추가 작업 1 — consumer@test.com 비번 강화
+## 추가 작업 1 — <TEST_CONSUMER_EMAIL> 비번 강화
 
-**조치**: `scripts/reset-user-password.mjs` 신규(bcrypt 12 rounds로 Firestore passwordHash 갱신, user_id 유지). `consumer@test.com` 비번을 `test1234` → `test1234!`로 갱신.
+**조치**: `scripts/reset-user-password.mjs` 신규(bcrypt 12 rounds로 Firestore passwordHash 갱신, user_id 유지). `<TEST_CONSUMER_EMAIL>` 비번을 `<TEST_SELLER_PASSWORD>` → `<TEST_CONSUMER_PASSWORD>`로 갱신.
 
 **연관 갱신**:
-- `apps/e2e/.env` `TEST_CONSUMER_PASSWORD=test1234!` (gitignore)
-- `scripts/delete-test-accounts.mjs` `PROTECT_EMAILS`에 `consumer@test.com` 추가, `EXPLICIT_DELETE_EMAILS`에서 제거
+- `apps/e2e/.env` `TEST_CONSUMER_PASSWORD=<TEST_CONSUMER_PASSWORD>` (gitignore)
+- `scripts/delete-test-accounts.mjs` `PROTECT_EMAILS`에 `<TEST_CONSUMER_EMAIL>` 추가, `EXPLICIT_DELETE_EMAILS`에서 제거
 - `MEMORY/test_accounts.md` 갱신
 
-**검증**: `/auth/login test1234! → 200`, `test1234 → 401`, consumer-cart e2e 1 passed.
+**검증**: `/auth/login <TEST_CONSUMER_PASSWORD> → 200`, `<TEST_SELLER_PASSWORD> → 401`, consumer-cart e2e 1 passed.
 
 **커밋**: `9b25d20 feat(scripts)`
 
@@ -150,7 +150,7 @@
 | `51971ce` | feat(security): 옵션 B 헤더 게이팅 도입 + 약한비번 일소 인프라 |
 | `e684c01` | test(e2e): 11개 spec helper migration — 옵션 B 헤더 게이팅에 정합 |
 | `8bf1c19` | docs(session22): 보안 결함 정리 마무리 — 결정·메모리·진단 스크립트 보존 |
-| `9b25d20` | feat(scripts): consumer@test.com 비번 강화 + reset-user-password 헬퍼 추가 |
+| `9b25d20` | feat(scripts): <TEST_CONSUMER_EMAIL> 비번 강화 + reset-user-password 헬퍼 추가 |
 | `de35d21` | fix(e2e): seller-orders empty state 테스트 skip + Firebase CORS 이슈 기록 |
 | `45691c8` | fix(e2e): extraHTTPHeaders 제거 + helper 명시 헤더 주입 — Firebase CORS 차단 해소 |
 

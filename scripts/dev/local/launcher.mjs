@@ -668,7 +668,9 @@ function fixedLocalEnvironment(overrides = {}) {
     FIREBASE_STORAGE_BUCKET: LOCAL_RUNTIME_CONTRACT.storageBucket,
     FIREBASE_AUTH_EMULATOR_HOST: `127.0.0.1:${LOCAL_RUNTIME_CONTRACT.ports.auth}`,
     FIRESTORE_EMULATOR_HOST: `127.0.0.1:${LOCAL_RUNTIME_CONTRACT.ports.firestore}`,
-    STORAGE_EMULATOR_HOST: `127.0.0.1:${LOCAL_RUNTIME_CONTRACT.ports.storage}`,
+    // @google-cloud/storage는 scheme 없는 값 앞에 https를 붙여 에뮬레이터(http) 업로드가 EPROTO로 실패한다.
+    // firebase-admin은 이 값이 이미 있으면 FIREBASE_STORAGE_EMULATOR_HOST로 http 주소를 만들지 않으므로 여기서 붙인다.
+    STORAGE_EMULATOR_HOST: `http://127.0.0.1:${LOCAL_RUNTIME_CONTRACT.ports.storage}`,
     FIREBASE_STORAGE_EMULATOR_HOST: `127.0.0.1:${LOCAL_RUNTIME_CONTRACT.ports.storage}`,
     NEXT_PUBLIC_GREENHUB_LOCAL_RUNTIME: 'true',
     NEXT_PUBLIC_FIREBASE_API_KEY: 'greenhub-local-emulator-key',

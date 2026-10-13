@@ -1,16 +1,24 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
   IsBoolean,
   IsEnum,
-  IsNumber,
+  IsInt,
   IsOptional,
   IsString,
-  IsUrl,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
-import { ContentDto, GroupConfigDto, SelectionDto } from './create-product.dto';
+import { IsProductImageUrl } from '../validators/product-image-url';
+import {
+  ContentDto,
+  GroupConfigDto,
+  PRODUCT_IMAGES_MAX,
+  PRODUCT_MONEY_MAX,
+  SelectionDto,
+} from './create-product.dto';
 
 export class UpdateProductDto {
   @IsOptional()
@@ -19,12 +27,14 @@ export class UpdateProductDto {
 
   @IsOptional()
   @IsArray()
-  @IsUrl({ require_tld: true, require_protocol: true }, { each: true })
+  @ArrayMaxSize(PRODUCT_IMAGES_MAX)
+  @IsProductImageUrl({ each: true })
   images?: string[];
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   @Min(0)
+  @Max(PRODUCT_MONEY_MAX)
   price?: number;
 
   @IsOptional()

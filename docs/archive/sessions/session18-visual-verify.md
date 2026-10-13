@@ -1,7 +1,7 @@
 # 세션18 — 시각 검증 체크리스트
 
 > 기준 URL: `https://seller.greenlove.co.kr`
-> 테스트 계정: `seller@test.com / test1234`
+> 테스트 계정: `<TEST_SELLER_EMAIL> / <TEST_SELLER_PASSWORD>`
 > 작성: 2026-05-08 (세션18 종료)
 > 목적: 다음 세션에서 눈으로 직접 기능 동작을 확인하기 위한 가이드
 
@@ -10,7 +10,7 @@
 ## 사전 준비
 
 1. 브라우저 DevTools 콘솔 열기 (F12 → Console)
-2. `seller@test.com / test1234`로 로그인
+2. `<TEST_SELLER_EMAIL> / <TEST_SELLER_PASSWORD>`로 로그인
 3. 각 항목 확인 후 체크박스 표시
 
 ---

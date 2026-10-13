@@ -105,11 +105,13 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
   test('회차 배송 보드는 직접배송 주문만 노출하고 거점배송·택배 주문은 제외한다', async ({ page, roundDirect }) => {
     await page.goto(`${BASE}/board?tab=preparing`);
 
-    await expect(
-      page.getByTestId(
-        `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
-      ),
-    ).toBeVisible();
+    const directCard = page.getByTestId(
+      `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
+    );
+    await expect(directCard).toBeVisible();
+    // 상품마다 한 줄로 챙길 개수를 보인다.
+    await expect(directCard.getByText('E2E 호접란 · 1개', { exact: true })).toBeVisible();
+    await expect(directCard.getByText('E2E 미니 호접란 · 1개', { exact: true })).toBeVisible();
     await expect(
       page.getByTestId(
         `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_HUB)}`,
@@ -127,6 +129,12 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.goto(`${BASE}/board/${orderId}`);
 
     await expect(page.getByText('직배송')).toBeVisible();
+    await expect(page.getByText('E2E 미니 호접란 · 1개', { exact: true })).toBeVisible();
+    // 지도는 동·호수 없는 기본 주소로 검색한다.
+    await expect(page.getByRole('link', { name: '카카오맵에서 주소 보기' })).toHaveAttribute(
+      'href',
+      `https://map.kakao.com/link/search/${encodeURIComponent('경기도 이천시 테스트로 1')}`,
+    );
     await page.getByRole('button', { name: '수거 완료 / 배송 시작' }).click();
 
     await expect(page.getByText('배송 중')).toBeVisible();
@@ -171,7 +179,11 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.getByRole('radio', { name: '출입 불가' }).check();
     await page.getByLabel('보류 사유').fill('공동현관 출입 정보를 확인할 수 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
+    // 고객 책임이면 재배송비를 넣어야 저장할 수 있다.
+    await expect(page.getByText('고객 책임이면 재배송비를 입력해 주세요.')).toBeVisible();
+    await expect(page.getByRole('button', { name: '배송 보류 저장' })).toBeDisabled();
     await page.getByLabel('재배송비').fill('3000');
+    await expect(page.getByText('고객 책임이면 재배송비를 입력해 주세요.')).toHaveCount(0);
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T09:00');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T11:00');
     await page.getByRole('button', { name: '배송 보류 저장' }).click();

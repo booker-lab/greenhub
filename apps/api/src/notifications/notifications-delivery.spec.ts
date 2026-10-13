@@ -294,6 +294,60 @@ describe('회차 직배송 알림 전달 계약', () => {
       expect(aligo.sendAlimtalk).toHaveBeenCalledWith('01011112222', templateCode, variables);
     });
 
+    it('배송 연락처가 휴대폰 형식이 아니면 주문자 프로필 연락처를 숫자만 남겨 사용한다', async () => {
+      const { service, aligo } = makeService(
+        {
+          success: true,
+          channel: 'alimtalk',
+          message: '승인된 배송 보류 본문',
+          alimtalkAttempts: 1,
+          smsAttempts: 0,
+        },
+        { deliveryPhone: '01012345678,01087654321' },
+      );
+
+      await service.sendToUser('user-1', templateCode, variables, 'order-1');
+
+      expect(aligo.sendAlimtalk).toHaveBeenCalledWith('01011112222', templateCode, variables);
+    });
+
+    it('하이픈이 있는 배송 연락처는 숫자만 남겨 수신번호로 쓴다', async () => {
+      const { service, aligo } = makeService(
+        {
+          success: true,
+          channel: 'alimtalk',
+          message: '승인된 배송 보류 본문',
+          alimtalkAttempts: 1,
+          smsAttempts: 0,
+        },
+        { deliveryPhone: '010-3333-4444' },
+      );
+
+      await service.sendToUser('user-1', templateCode, variables, 'order-1');
+
+      expect(aligo.sendAlimtalk).toHaveBeenCalledWith('01033334444', templateCode, variables);
+    });
+
+    it('배송·프로필 연락처가 모두 단일 휴대폰 번호가 아니면 발송하지 않고 운영 예외를 만든다', async () => {
+      const { service, writes, aligo } = makeService(
+        {
+          success: true,
+          channel: 'alimtalk',
+          message: '호출되면 안 됨',
+          alimtalkAttempts: 1,
+          smsAttempts: 0,
+        },
+        { deliveryPhone: '02-123-4567' },
+      );
+      const user = (await (service as any).firestore.doc('users/user-1').get()).data();
+      user.phone = '01011112222,01099998888';
+
+      await service.sendToUser('user-1', templateCode, variables, 'order-1');
+
+      expect(aligo.sendAlimtalk).not.toHaveBeenCalled();
+      expect(writes.filter(({ path }) => path.startsWith('operationIssues/'))).toHaveLength(1);
+    });
+
     it('배송 연락처와 허용된 대체 연락처가 모두 없으면 성공 기록 없이 운영 예외를 만든다', async () => {
       const { service, writes, aligo } = makeService(
         {

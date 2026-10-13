@@ -177,6 +177,7 @@ describe('legacy daily capacity 정책', () => {
       fixture.service,
       {} as never,
       { isOrderChargePaymentId: jest.fn().mockReturnValue(false) } as never,
+      { createOrMergeIssue: jest.fn() } as never,
     );
 
     await service.handleWebhook({

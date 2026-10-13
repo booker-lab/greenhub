@@ -30,7 +30,7 @@
 | **세션31**: P2-A Railway latency 계측(synthetic) + 계측 중 발견한 throttler 전역 누수 버그 수정 (#CL-30) | 2026-05-16 |
 | **세션32**: e2e 안정성 2건 — consumer-groupbuy flake + cleanup-spec-residue CI 인증(env 전환·BOM 방어). 풀런 167/0 | 2026-05-17 |
 | **세션33**: P3 `/admin/banner` prerender 실패 해소 — seller firebase `getAuth` 지연 초기화 (#CL-31) | 2026-05-17 |
-| **세션34**: P3 consumer@test.com 강한비번 전환 — Firestore `passwordHash` + `.env`·repo Secret 동기 교체, 풀런 167/0 | 2026-05-17 |
+| **세션34**: P3 <TEST_CONSUMER_EMAIL> 강한비번 전환 — Firestore `passwordHash` + `.env`·repo Secret 동기 교체, 풀런 167/0 | 2026-05-17 |
 
 ---
 
@@ -38,7 +38,7 @@
 
 **트랙별 결과**:
 - **트랙 1**: seller·consumer Vercel `E2E_TEST` Production env 삭제 + 재배포 → `/login` HTML에서 `type="email"`·`type="password"` 0건 확인
-- **트랙 2**: `scripts/delete-test-accounts.mjs --apply`로 54건 user + 2건 refreshToken 삭제. seller@test.com만 보존 결정. 새 e2e consumer로 `consumer@test.com` 생성(test1234 — 사용자 결정, 강한비번 권장은 follow-up). `seller-auth-invite.spec.ts`에 `afterAll` cleanup + `scripts/cleanup-spec-residue.mjs` 헬퍼 추가
+- **트랙 2**: `scripts/delete-test-accounts.mjs --apply`로 54건 user + 2건 refreshToken 삭제. <TEST_SELLER_EMAIL>만 보존 결정. 새 e2e consumer로 `<TEST_CONSUMER_EMAIL>` 생성(자격증명은 저장소 밖에서 관리). `seller-auth-invite.spec.ts`에 `afterAll` cleanup + `scripts/cleanup-spec-residue.mjs` 헬퍼 추가
 - **트랙 3 옵션 B**: `E2E_TEST_SECRET` 32자 6환경 적용. `auth.ts`(seller·consumer) Credentials Provider 상시 등록 + `request.headers.get('x-e2e-test-token')` 검증. `apps/e2e/tests/_helpers/auth.ts` + `playwright.config.ts extraHTTPHeaders` 도입. 12개 spec helper migration 완료
 - **트랙 4 통합 검증 5종**: 폼 노출 0, 약한비번 401, 보존 200, Firestore email-provider 2건(seller·consumer), 헤더 없는 credentials 호출 → `error=CredentialsSignin` ✓
 
@@ -130,6 +130,6 @@
 
 ## 세션34 — consumer 강한비번 전환
 
-- **배경**: 세션22에 편의 우선으로 채택한 `consumer@test.com` 약한비번(`test1234!`)을 보안 follow-up으로 전환. 사용자가 보안 우선으로 정책 재확인.
+- **배경**: 세션22에 편의 우선으로 채택한 `<TEST_CONSUMER_EMAIL>` 약한비번(`<TEST_CONSUMER_PASSWORD>`)을 보안 follow-up으로 전환. 사용자가 보안 우선으로 정책 재확인.
 - **처리**: `scripts/reset-user-password.mjs`로 Firestore `users` 문서 `passwordHash`를 30자 랜덤 비번(bcrypt-12)으로 갱신. `apps/e2e/.env`(gitignored)·repo Secret `TEST_CONSUMER_PASSWORD` 동기 교체(`gh secret set --body`로 BOM 회피). `/auth/login` 직접 curl — 새 비번 200·기존 401 확인.
-- **검증**: e2e 풀런 run 25966655016 **167 passed / 0 failed / 11 skipped**. `seller@test.com`은 본 항목 범위 밖 — 약한비번 유지.
+- **검증**: e2e 풀런 run 25966655016 **167 passed / 0 failed / 11 skipped**. `<TEST_SELLER_EMAIL>`은 본 항목 범위 밖 — 자격증명은 저장소 밖에서 관리.

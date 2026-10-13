@@ -6,7 +6,7 @@
       "https://seller.greenlove.co.kr",
       "https://driver.greenlove.co.kr"
     ],
-    "method": ["GET", "POST", "PUT", "DELETE", "HEAD"],
+    "method": ["GET", "HEAD"],
     "maxAgeSeconds": 3600,
     "responseHeader": ["Content-Type", "Authorization", "Content-Length", "X-Requested-With"]
   }

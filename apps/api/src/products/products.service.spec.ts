@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ProductsService } from './products.service';
 
 describe('공개 상품 API', () => {
@@ -204,8 +204,7 @@ describe('seller owner/internal read regression', () => {
       doc: jest.fn((path: string) => ({
         get: jest.fn().mockResolvedValue({
           exists: true,
-          data: () =>
-            path === 'stores/s-1' ? { ownerId: 'seller-1' } : product,
+          data: () => (path === 'stores/s-1' ? { ownerId: 'seller-1' } : product),
         }),
       })),
     };
@@ -342,5 +341,155 @@ describe('legacy daily cap 초기화', () => {
       usedSlots: 3,
     });
     expect(records.get('dailyCaps/store-1_2026-08-26')).not.toHaveProperty('usedSlots');
+  });
+});
+
+describe('판매자 상품·배송비 쓰기 경로', () => {
+  type Data = Record<string, any>;
+  const NOW = { seconds: 1_790_000_000, nanoseconds: 0 };
+
+  function makeFirestore(initial: Record<string, Data>) {
+    const records = new Map(Object.entries(initial));
+    const doc = jest.fn((path: string) => ({
+      get: jest.fn(async () => ({ exists: records.has(path), data: () => records.get(path) })),
+      set: jest.fn(async (data: Data, options?: { merge?: boolean }) => {
+        records.set(path, options?.merge ? { ...(records.get(path) ?? {}), ...data } : data);
+      }),
+      update: jest.fn(async (data: Data) => {
+        records.set(path, { ...(records.get(path) ?? {}), ...data });
+      }),
+      delete: jest.fn(async () => {
+        records.delete(path);
+      }),
+    }));
+    const firestore = { doc, Timestamp: { now: () => NOW } };
+    return { firestore, records };
+  }
+
+  const ownedStore = { 'stores/store-1': { id: 'store-1', ownerId: 'seller-1' } };
+  const baseDto = {
+    name: '호접란',
+    images: ['https://firebasestorage.googleapis.com/v0/b/b/o/products%2Fstore-1%2Fa.jpg'],
+    price: 12000,
+    category: 'orchid',
+    saleType: 'normal',
+    deliverySize: 'small',
+  };
+
+  it('상품 생성은 소유 매장에 활성 상품을 만들고 owner 상세를 돌려준다', async () => {
+    const { firestore, records } = makeFirestore(ownedStore);
+    const service = new ProductsService(firestore as never);
+
+    const detail = (await service.createProduct('store-1', 'seller-1', baseDto)) as Data;
+    const [path, stored] = [...records].find(([key]) => key.startsWith('products/'))!;
+
+    expect(stored).toMatchObject({
+      ...baseDto,
+      id: path.replace('products/', ''),
+      storeId: 'store-1',
+      isActive: true,
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    expect(detail['id']).toBe(stored['id']);
+    expect([...records.keys()].some((key) => key.startsWith('groupProductConfig/'))).toBe(false);
+  });
+
+  it('공동구매 상품 생성은 모집 설정을 날짜로 바꿔 함께 저장한다', async () => {
+    const { firestore, records } = makeFirestore(ownedStore);
+    const service = new ProductsService(firestore as never);
+
+    await service.createProduct('store-1', 'seller-1', {
+      ...baseDto,
+      saleType: 'group',
+      isActive: false,
+      groupConfig: {
+        minQuantity: 5,
+        targetQuantity: 10,
+        maxPerPerson: 2,
+        recruitDeadline: '2026-09-10T00:00:00.000Z',
+        groupDeliveryDate: '2026-09-15T00:00:00.000Z',
+        groupDeliveryMethod: 'direct',
+        deliveryFeeDiscount: 0,
+      },
+    });
+    const product = [...records].find(([key]) => key.startsWith('products/'))![1];
+    const config = records.get(`groupProductConfig/${product['id']}`)!;
+
+    expect(product['isActive']).toBe(false);
+    expect(product).not.toHaveProperty('groupConfig');
+    expect(config).toMatchObject({
+      productId: product['id'],
+      currentQuantity: 0,
+      isProcessed: false,
+      recruitDeadline: new Date('2026-09-10T00:00:00.000Z'),
+      groupDeliveryDate: new Date('2026-09-15T00:00:00.000Z'),
+    });
+  });
+
+  it('소유하지 않은 매장에는 상품을 만들지 않는다', async () => {
+    const { firestore, records } = makeFirestore(ownedStore);
+    const service = new ProductsService(firestore as never);
+
+    await expect(service.createProduct('store-1', 'seller-2', baseDto)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect([...records.keys()]).toEqual(['stores/store-1']);
+  });
+
+  it('상품 삭제는 같은 매장 상품만 지운다', async () => {
+    const { firestore, records } = makeFirestore({
+      ...ownedStore,
+      'products/p-1': { id: 'p-1', storeId: 'store-1' },
+      'products/p-2': { id: 'p-2', storeId: 'store-2' },
+    });
+    const service = new ProductsService(firestore as never);
+
+    await service.deleteProduct('store-1', 'p-1', 'seller-1');
+    await expect(service.deleteProduct('store-1', 'p-2', 'seller-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    await expect(service.deleteProduct('store-1', 'missing', 'seller-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+
+    expect(records.has('products/p-1')).toBe(false);
+    expect(records.has('products/p-2')).toBe(true);
+  });
+
+  it('소유하지 않은 판매자의 상품 삭제를 거부한다', async () => {
+    const { firestore, records } = makeFirestore({
+      ...ownedStore,
+      'products/p-1': { id: 'p-1', storeId: 'store-1' },
+    });
+    const service = new ProductsService(firestore as never);
+
+    await expect(service.deleteProduct('store-1', 'p-1', 'seller-2')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(records.has('products/p-1')).toBe(true);
+  });
+
+  it('배송비 수정은 기존 설정에 병합하고 저장된 설정을 돌려준다', async () => {
+    const { firestore, records } = makeFirestore({
+      ...ownedStore,
+      'deliveryFeeConfig/store-1': { storeId: 'store-1', directFee: 3000, hubFee: 1000 },
+    });
+    const service = new ProductsService(firestore as never);
+
+    const result = await service.updateDeliveryConfig('store-1', 'seller-1', { directFee: 3500 });
+
+    expect(result).toEqual({ storeId: 'store-1', directFee: 3500, hubFee: 1000, updatedAt: NOW });
+    expect(records.get('deliveryFeeConfig/store-1')).toEqual(result);
+  });
+
+  it('소유하지 않은 판매자의 배송비 수정을 거부한다', async () => {
+    const { firestore, records } = makeFirestore(ownedStore);
+    const service = new ProductsService(firestore as never);
+
+    await expect(
+      service.updateDeliveryConfig('store-1', 'seller-2', { directFee: 0 }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(records.has('deliveryFeeConfig/store-1')).toBe(false);
   });
 });

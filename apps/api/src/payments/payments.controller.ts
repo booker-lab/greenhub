@@ -1,74 +1,36 @@
 import {
+  Body,
   Controller,
   Get,
-  Post,
-  Body,
-  Param,
-  Req,
   Headers,
-  UseGuards,
   HttpCode,
   HttpStatus,
   Logger,
-  UnauthorizedException,
+  Param,
+  Post,
+  UseGuards,
 } from '@nestjs/common';
-import type { RawBodyRequest } from '@nestjs/common';
-import type { Request } from 'express';
 import { SkipThrottle } from '@nestjs/throttler';
-import { PaymentsService } from './payments.service';
-import { AuditService } from '../common/audit/audit.service';
-import { PortoneClient } from './portone.client';
-import { PortoneWebhookDto } from './dto/portone-webhook.dto';
-import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { JwtPayload } from '../auth/types/jwt-payload.type';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { PortoneWebhookDto } from './dto/portone-webhook.dto';
+import { PaymentsService } from './payments.service';
+import { PortoneWebhookSignatureGuard } from './portone-webhook-signature.guard';
 
 @Controller('payments')
 export class PaymentsController {
   private readonly logger = new Logger(PaymentsController.name);
 
-  constructor(
-    private readonly paymentsService: PaymentsService,
-    private readonly portone: PortoneClient,
-    private readonly audit: AuditService,
-  ) {}
+  constructor(private readonly paymentsService: PaymentsService) {}
 
+  // 서명 검증은 가드에서 본문 검증보다 먼저 끝난다. 여기에는 서명이 맞는 요청만 들어온다.
   @Post('webhook/portone')
   @HttpCode(HttpStatus.OK)
   @SkipThrottle()
-  async handleWebhook(
-    @Req() req: RawBodyRequest<Request>,
-    @Body() dto: PortoneWebhookDto,
-    @Headers('webhook-id') webhookId: string,
-    @Headers('webhook-timestamp') webhookTimestamp: string,
-    @Headers('webhook-signature') webhookSignature: string,
-  ) {
-    const rawBody = req.rawBody;
-    this.logger.log(
-      `webhook received: id=${webhookId ?? 'MISSING'} ts=${webhookTimestamp ?? 'MISSING'} sig=${webhookSignature ? 'present' : 'MISSING'} rawBody=${rawBody ? `${rawBody.length}bytes` : 'MISSING'}`,
-    );
-
-    try {
-      if (
-        !Buffer.isBuffer(rawBody) ||
-        !webhookId?.trim() ||
-        !webhookTimestamp?.trim() ||
-        !webhookSignature?.trim()
-      ) {
-        throw new UnauthorizedException('웹훅 인증 정보가 누락되었습니다.');
-      }
-      this.portone.verifyWebhookSignature(webhookId, webhookTimestamp, rawBody, webhookSignature);
-    } catch (e) {
-      this.logger.error(`webhook sig verify failed: ${(e as Error).message}`);
-      await this.audit.log('payment.webhook.invalid_sig', {
-        detail: {
-          webhookId: webhookId ?? null,
-          webhookTimestamp: webhookTimestamp ?? null,
-          error: (e as Error).message,
-        },
-      });
-      throw e;
-    }
+  @UseGuards(PortoneWebhookSignatureGuard)
+  async handleWebhook(@Body() dto: PortoneWebhookDto, @Headers('webhook-id') webhookId: string) {
+    this.logger.log(`webhook verified: id=${webhookId.slice(0, 80)} type=${dto.type.slice(0, 60)}`);
     return this.paymentsService.handleWebhook(dto);
   }
 

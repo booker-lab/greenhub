@@ -106,17 +106,91 @@ export const NOTIFICATION_TEMPLATES: Record<ApiNotificationTemplateCode, Notific
   },
 };
 
+/**
+ * 본문 변수 1개의 최대 글자 수(코드 포인트 기준). 알림톡·SMS 본문은 등록 템플릿의 고정 문구가
+ * 대부분을 차지하고 변수는 한 줄 값만 들어가야 하므로, 변수별 상한을 두고 넘으면 자른다.
+ * 목록에 없는 변수는 NOTIFICATION_VARIABLE_DEFAULT_MAX_LENGTH를 쓴다.
+ */
+export const NOTIFICATION_VARIABLE_MAX_LENGTH: Readonly<Record<string, number>> = {
+  name: 20,
+  orderId: 64,
+  reason: 100,
+  productName: 60,
+  pickupCode: 20,
+  hubAddress: 120,
+  groupDeliveryDate: 40,
+  currentParticipants: 20,
+  minParticipants: 20,
+  remaining: 20,
+  orderCount: 20,
+  totalAmount: 20,
+};
+
+export const NOTIFICATION_VARIABLE_DEFAULT_MAX_LENGTH = 100;
+
+// 이름 변수가 링크·도메인처럼 보이면 본문에 그대로 넣지 않고 이 값으로 바꾼다.
+export const NOTIFICATION_NAME_FALLBACK = '고객';
+
+// 제어문자(줄바꿈·탭 포함)와 줄/문단 구분자는 공백으로 바꾼다.
+const NOTIFICATION_LINE_BREAK_OR_CONTROL = /[\p{Cc}\u2028\u2029]/gu;
+// 보이지 않는 서식 문자(soft hyphen, zero-width space/non-joiner, 양방향 제어, BOM 등)는
+// 제거한다. 이모지 조합에 쓰이는 zero-width joiner(U+200D)는 남긴다.
+export const INVISIBLE_FORMAT_CHARACTERS =
+  /[\u00AD\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
+// scheme URL, www., 또는 도메인(`<문자>.<영문>/…` 경로가 붙거나 흔한 최상위 도메인으로 끝남).
+// `john.doe`·`Mr.Kim`처럼 점이 들어간 이름은 링크로 보지 않는다.
+const NOTIFICATION_LINK_LIKE =
+  /[a-z][a-z0-9+.-]*:\/\/|www\.|[\p{L}\p{N}-]+\.(?:[a-z]{2,}\/|(?:com|net|org|kr|co|io|me|ly|gl|to|cc|tv|us|jp|cn|app|xyz|info|biz|shop|site|top|link|online|store)(?![a-z]))/iu;
+
+/**
+ * 알림 본문 변수 1개를 한 줄 텍스트로 정리한다. 제어문자·줄바꿈은 공백으로, 보이지 않는 서식
+ * 문자는 제거하고, 연속 공백을 하나로 줄인 뒤 변수별 상한으로 자른다. 한글 등 일반 문자는 그대로 둔다.
+ */
+export function sanitizeNotificationVariable(key: string, value: unknown): string {
+  const maxLength =
+    NOTIFICATION_VARIABLE_MAX_LENGTH[key] ?? NOTIFICATION_VARIABLE_DEFAULT_MAX_LENGTH;
+  const singleLine = toSingleLineText(value, Number.POSITIVE_INFINITY);
+  if (key === 'name' && NOTIFICATION_LINK_LIKE.test(singleLine)) {
+    return NOTIFICATION_NAME_FALLBACK;
+  }
+  return toSingleLineText(singleLine, maxLength);
+}
+
+/**
+ * 문자열을 한 줄 텍스트로 정리하고 maxLength(코드 포인트)를 넘으면 말줄임표로 자른다.
+ * 문자열이 아니면 빈 문자열을 돌려준다.
+ */
+export function toSingleLineText(value: unknown, maxLength: number): string {
+  if (typeof value !== 'string') return '';
+  const singleLine = value
+    .replace(INVISIBLE_FORMAT_CHARACTERS, '')
+    .replace(NOTIFICATION_LINE_BREAK_OR_CONTROL, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const characters = Array.from(singleLine);
+  if (characters.length <= maxLength) return singleLine;
+  return `${characters
+    .slice(0, Math.max(0, maxLength - 1))
+    .join('')
+    .trimEnd()}…`;
+}
+
 export function renderNotificationMessage(
   templateCode: ApiNotificationTemplateCode,
   variables: Record<string, string>,
 ): string {
   const template = NOTIFICATION_TEMPLATES[templateCode];
+  const sanitized: Record<string, string> = {};
   for (const key of template.requiredVariables) {
-    const value = variables[key];
-    if (typeof value !== 'string' || value.trim().length === 0) {
+    const value = sanitizeNotificationVariable(key, variables[key]);
+    if (value.length === 0) {
       throw new Error(`${templateCode} 알림의 필수 본문 변수 ${key}가 누락되었습니다.`);
     }
+    sanitized[key] = value;
   }
 
-  return template.body.replace(/#\{([A-Za-z0-9_]+)\}/g, (_, key: string) => variables[key]);
+  return template.body.replace(
+    /#\{([A-Za-z0-9_]+)\}/g,
+    (_, key: string) => sanitized[key] ?? sanitizeNotificationVariable(key, variables[key]),
+  );
 }

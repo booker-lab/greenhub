@@ -103,6 +103,9 @@ function IssueCard({
     ['결제 상태', issue.currentState?.paymentStatus ?? issue.latestSnapshot.paymentStatus],
     ['실패 단계', issue.latestSnapshot.failureStage],
     ['알림 코드', issue.latestSnapshot.templateCode],
+    ['결제사 상태', issue.latestSnapshot.providerStatus],
+    ['결제사 알림', issue.latestSnapshot.providerEvent],
+    ['정산 상태', issue.latestSnapshot.settlementStatus],
   ].filter((row): row is [string, string] => typeof row[1] === 'string');
 
   return (

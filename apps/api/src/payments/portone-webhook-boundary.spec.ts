@@ -2,13 +2,15 @@ import * as crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { AuditService } from '../common/audit/audit.service';
+import { sanitizedValidationPipeOptions } from '../common/validation/sanitized-validation';
 import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { PortoneClient } from './portone.client';
+import { WEBHOOK_REJECTION_LOG_WINDOW_MS } from './portone-webhook-signature.guard';
 
 type WebhookRequest = {
   rawBody: Buffer;
@@ -46,10 +48,6 @@ const paymentsService = {
     sideEffects.capacityMutation += 1;
     return { ok: true };
   }),
-};
-
-const auditService = {
-  log: jest.fn().mockResolvedValue(undefined),
 };
 
 function timestampAtOffset(offsetSeconds: number): string {
@@ -156,11 +154,12 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
       providers: [
         { provide: PaymentsService, useValue: paymentsService },
         { provide: PortoneClient, useValue: portoneClient },
-        { provide: AuditService, useValue: auditService },
       ],
     }).compile();
 
     app = module.createNestApplication({ rawBody: true });
+    // main.ts와 같은 전역 ValidationPipe를 걸어, 서명 검증이 본문 검증보다 먼저인지 실제 순서로 확인한다.
+    app.useGlobalPipes(new ValidationPipe(sanitizedValidationPipeOptions()));
     await app.init();
   });
 
@@ -235,15 +234,6 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     const response = await postWebhook(webhook);
 
     expect(response.status).toBe(401);
-    expect(auditService.log).toHaveBeenCalledWith(
-      'payment.webhook.invalid_sig',
-      expect.objectContaining({
-        detail: expect.objectContaining({
-          webhookId: webhook.webhookId,
-          webhookTimestamp: webhook.webhookTimestamp,
-        }),
-      }),
-    );
     expectBusinessBoundaryClosed();
   });
 
@@ -277,10 +267,6 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     const response = await postWebhook(createSignedWebhook(), omitHeader);
 
     expect(response.status).toBe(401);
-    expect(auditService.log).toHaveBeenCalledWith(
-      'payment.webhook.invalid_sig',
-      expect.anything(),
-    );
     expectBusinessBoundaryClosed();
   });
 
@@ -295,5 +281,114 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     expect(sideEffects.paymentMutation).toBe(0);
     expect(sideEffects.orderChargeMutation).toBe(0);
     expect(sideEffects.capacityMutation).toBe(0);
+  });
+
+  it('서명 실패는 요청 값 없이 구간당 경고 한 줄로 모으고 다음 구간에 묶인 건수를 남긴다', async () => {
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    const errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+    const windowStart = FIXED_NOW_MS + 10 * WEBHOOK_REJECTION_LOG_WINDOW_MS;
+    (Date.now as jest.Mock).mockReturnValue(windowStart);
+    const forged = (index: number) => ({
+      ...createSignedWebhook({ webhookId: `forged-id-${index}` }),
+      webhookSignature: invalidHmacHeader(),
+    });
+
+    for (let index = 0; index < 5; index += 1) {
+      await postWebhook(forged(index)).expect(401);
+    }
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    // 앞선 테스트의 실패 건수가 이 구간 첫 경고에 합쳐질 수 있다.
+    expect(warnSpy.mock.calls[0][0]).toMatch(
+      /^webhook rejected: reason=timestamp_out_of_range( suppressedSinceLastWarning=\d+)?$/,
+    );
+
+    (Date.now as jest.Mock).mockReturnValue(windowStart + WEBHOOK_REJECTION_LOG_WINDOW_MS);
+    const late = createSignedWebhook({
+      webhookId: 'forged-id-late',
+      webhookTimestamp: String(Math.floor((windowStart + WEBHOOK_REJECTION_LOG_WINDOW_MS) / 1000)),
+    });
+    await postWebhook({ ...late, webhookSignature: invalidHmacHeader() }).expect(401);
+
+    expect(warnSpy).toHaveBeenCalledTimes(2);
+    expect(warnSpy.mock.calls[1][0]).toBe(
+      'webhook rejected: reason=signature_mismatch suppressedSinceLastWarning=4',
+    );
+    const logged = JSON.stringify([...warnSpy.mock.calls, ...errorSpy.mock.calls]);
+    expect(logged).not.toMatch(/forged-id|payment-1|store-1/);
+    expectBusinessBoundaryClosed();
+  });
+
+  describe('서명 검증은 본문 검증보다 먼저 끝난다', () => {
+    const INVALID_DTO_BODY = Buffer.from(
+      JSON.stringify({ type: 42, data: { paymentId: 7 }, unexpected: 'field' }),
+      'utf8',
+    );
+
+    function expectUnauthorizedWithoutValidationDetail(response: request.Response): void {
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({
+        statusCode: 401,
+        error: 'Unauthorized',
+        message: expect.any(String),
+      });
+      expect(JSON.stringify(response.body)).not.toMatch(
+        /validation|paymentId|storeId|unexpected|isString|whitelist/,
+      );
+    }
+
+    it('서명 헤더 없이 DTO 형식이 틀린 본문을 보내면 400 검증 상세 대신 401만 받는다', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/payments/webhook/portone')
+        .set('Content-Type', 'application/json')
+        .send(INVALID_DTO_BODY.toString('utf8'));
+
+      expectUnauthorizedWithoutValidationDetail(response);
+      expectBusinessBoundaryClosed();
+    });
+
+    it('서명이 틀리고 DTO 형식도 틀린 본문은 400 검증 상세 대신 401만 받는다', async () => {
+      const webhook = createSignedWebhook({ rawBody: INVALID_DTO_BODY });
+      webhook.webhookSignature = invalidHmacHeader();
+
+      const response = await postWebhook(webhook);
+
+      expectUnauthorizedWithoutValidationDetail(response);
+      expectBusinessBoundaryClosed();
+    });
+
+    it.each(
+      missingHeaderCases,
+    )('%s 헤더가 빠진 DTO 위반 본문도 401만 받는다', async (omitHeader) => {
+      const response = await postWebhook(
+        createSignedWebhook({ rawBody: INVALID_DTO_BODY }),
+        omitHeader,
+      );
+
+      expectUnauthorizedWithoutValidationDetail(response);
+      expectBusinessBoundaryClosed();
+    });
+
+    it('서명이 맞는 요청은 이전과 같이 본문 검증을 거쳐 DTO 위반이면 400을 받는다', async () => {
+      const verifySpy = jest.spyOn(portoneClient, 'verifyWebhookSignature');
+
+      const response = await postWebhook(createSignedWebhook({ rawBody: INVALID_DTO_BODY }));
+
+      expect(verifySpy).toHaveBeenCalledTimes(1);
+      expect(response.status).toBe(400);
+      expectBusinessBoundaryClosed();
+    });
+
+    it('서명이 맞고 DTO도 맞으면 검증 완료 로그 뒤 업무 처리로 넘어간다', async () => {
+      const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+
+      const response = await postWebhook(createSignedWebhook({ webhookId: 'webhook-log-1' }));
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ ok: true });
+      expect(logSpy).toHaveBeenCalledWith(
+        'webhook verified: id=webhook-log-1 type=Transaction.Paid',
+      );
+      expect(paymentsService.handleWebhook).toHaveBeenCalledTimes(1);
+    });
   });
 });

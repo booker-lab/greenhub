@@ -13,7 +13,7 @@
 | Vercel `E2E_TEST=true` Production | seller·consumer 양쪽 (driver는 미설정) | 48~49분 전 추가 — `5a4e4a5` 커밋 시점 |
 | 폼 노출 (HTML curl) | seller·consumer 둘 다 input[type=email/password] 노출 | 즉시 차단 필요 |
 | `seller_test@greenhub.dev` (난플렉스) | **세션21에 삭제 완료** (API 401 검증됨) | store는 보존 |
-| 약한 비번(test1234) 잔존 | `seller@test.com`, `consumer_test@…`, `customer@test.com`, `e2e.consumer@test.com` | seller@test.com만 보존 결정됨 |
+| 공통 테스트 비번(<TEST_SELLER_PASSWORD>) 잔존 | `<TEST_SELLER_EMAIL>`, `<DELETED_TEST_EMAIL_A>`, `<DELETED_TEST_EMAIL_B>`, `<DELETED_TEST_EMAIL_C>` | <TEST_SELLER_EMAIL>만 보존 결정됨 (자격증명은 저장소 밖에서 관리) |
 | 약한 비번(password123) 잔존 | `*-sec-*@example.com` 51개 | [seller-auth-invite.spec.ts:50,66](../../apps/e2e/tests/seller-auth-invite.spec.ts) 가 매 실행마다 등록만 하고 정리 안 함 |
 | 추가 의심 계정 | `test@test.com`, `test@example.com` (consumer) | 약한 비번 미적중, 정체 불명 — 사용자 확인 필요 |
 | 옵션 B 기술 검증 | `authorize(credentials, request: Request)` — 헤더 접근 가능 | [@auth/core/providers/credentials.d.ts:64-65](../../node_modules/.pnpm/@auth+core@0.41.2/node_modules/@auth/core/providers/credentials.d.ts) |
@@ -67,7 +67,7 @@
   curl -sS https://greenlove.co.kr/login | grep -c 'type="email"'
   ```
 - 기대: `0`
-- 추가: `curl -X POST https://api-production-13e7.up.railway.app/auth/login -d {seller@test.com 자격}` 은 **여전히 200** (API는 변경 없음 — 의도대로)
+- 추가: `curl -X POST https://api-production-13e7.up.railway.app/auth/login -d {<TEST_SELLER_EMAIL> 자격}` 은 **여전히 200** (API는 변경 없음 — 의도대로)
 - 사용자 시각 확인: 두 도메인 `/login` 새로고침 후 카카오 버튼만 노출
 
 ---
@@ -81,7 +81,7 @@
 ### T2.2 — Dry-run 재실행
 - 명령: `node scripts/delete-test-accounts.mjs`
 - 정합성 검증:
-  - "보존: seller@test.com" 출력 확인
+  - "보존: <TEST_SELLER_EMAIL>" 출력 확인
   - 삭제 대상 카운트가 예상과 일치 (현재: 51건 + 결정사항 추가)
   - storeId 보유 계정이 0건 (dry-run에서 확인)
 
@@ -89,19 +89,19 @@
 - 명령: `node scripts/delete-test-accounts.mjs --apply`
 - 정합성 검증:
   - 종료 메시지 `✅ 삭제 완료 users: N건, refreshTokens: M건`
-  - `node scripts/diagnose-email-accounts.mjs` 재실행 → email provider 계정이 1건(seller@test.com) + 사용자 결정 잔존만
+  - `node scripts/diagnose-email-accounts.mjs` 재실행 → email provider 계정이 1건(<TEST_SELLER_EMAIL>) + 사용자 결정 잔존만
 
 ### T2.4 — Railway API 차단 확인
 - 명령:
   ```bash
   curl -X POST https://api-production-13e7.up.railway.app/auth/login \
     -H "Content-Type: application/json" \
-    -d '{"email":"e2e.consumer@test.com","password":"test1234"}'
+    -d '{"email":"<DELETED_TEST_EMAIL_C>","password":"<TEST_SELLER_PASSWORD>"}'
   ```
 - 기대: `HTTP 401`
 
-### T2.5 — seller@test.com 보존 검증
-- 명령: 위와 동일하되 `seller@test.com / test1234`
+### T2.5 — <TEST_SELLER_EMAIL> 보존 검증
+- 명령: 위와 동일하되 `<TEST_SELLER_EMAIL> / <TEST_SELLER_PASSWORD>`
 - 기대: `HTTP 200 + accessToken` (e2e 회복용)
 
 ### T2.6 — `seller-auth-invite.spec.ts` 잔여물 방지 (선택)
@@ -174,12 +174,12 @@ use: {
 1. **HTML curl**: `curl -sS https://seller.greenlove.co.kr/login | grep -c 'type="email"'` = 0
 2. **API 약한 비번 시도**:
    ```
-   curl -X POST <api>/auth/login -d '{"email":"e2e.consumer@test.com","password":"test1234"}'
+   curl -X POST <api>/auth/login -d '{"email":"<DELETED_TEST_EMAIL_C>","password":"<TEST_SELLER_PASSWORD>"}'
    ```
    = 401
 3. **API 보존 계정**:
    ```
-   curl -X POST <api>/auth/login -d '{"email":"seller@test.com","password":"test1234"}'
+   curl -X POST <api>/auth/login -d '{"email":"<TEST_SELLER_EMAIL>","password":"<TEST_SELLER_PASSWORD>"}'
    ```
    = 200 (seller 보존)
 4. **Firestore email-provider count**: `node scripts/diagnose-email-accounts.mjs` → 보존 1건 + 사용자 결정 잔존만
@@ -189,7 +189,7 @@ use: {
 ## 안전 가드 요약
 
 - 모든 삭제 스크립트는 **dry-run 기본**, `--apply` 명시 필요
-- `PROTECT_EMAILS` 리스트로 `seller@test.com` 보호 (defensive 검증 + 매칭 단계)
+- `PROTECT_EMAILS` 리스트로 `<TEST_SELLER_EMAIL>` 보호 (defensive 검증 + 매칭 단계)
 - storeId 보유 계정은 별도 표시 + `--include-stored` 명시 시에만 처리
 - Vercel env 변경 후 즉시 재배포 트리거 (변경이 캐시 빌드에 안 들어가면 무용)
 - 트랙별 정합성 검증을 건너뛰지 않음

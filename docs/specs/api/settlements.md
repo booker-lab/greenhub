@@ -121,6 +121,8 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 
 배치 도중 다른 경로가 `cancelled`로 바꾸면 transaction 재확인에서 skip해 취소 상태를 덮어쓰지 않는다.
 
+결제사 취소·분쟁 보류: 같은 주문(`orderId`)에 `operationIssues`의 `type == PROVIDER_REVERSAL_DETECTED`, `status == OPEN` 기록이 있으면 자동 확정은 그 정산을 `pending`으로 둔 채 건너뛰고(warn 로그만 남기며 새 운영 기록은 만들지 않음), admin 지급(`markAsPaid`)은 `confirmed`여도 409로 거부한다. 판정은 각 transaction 안에서 동등 조건 조회(`orderId`·`type`·`status`, `limit 1`)로 하므로 복합 인덱스가 필요 없고, `RESOLVED`·`DISMISSED` 기록은 막지 않아 처리 후 다음 배치에서 확정·지급된다. 직접 증거: `settlements-lifecycle.spec.ts`(confirm 보류), `admin-privileged-mutation.spec.ts`(지급 409).
+
 ## 7. 취소 반영
 
 `cancelSettlement(orderId)`는 연결 settlement가 있으면 취소를 반영한다.
@@ -176,17 +178,18 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 
 ## 8. Seller 정산 API
 
-모든 seller settlement endpoint는 `JwtAuthGuard`가 적용된다.
+모든 seller settlement endpoint는 `JwtAuthGuard` + `RolesGuard`(`@Roles('seller', 'admin')`)가 적용된다.
 
 권한:
 
+- `seller`·`admin` 외 role(consumer, driver)은 store 조회 전에 403
 - `admin` → store ownership 검사 예외
 - 그 외 → `stores/{storeId}.ownerId === requesterId`
 
 ### 목록
 
 ```text
-GET /stores/:storeId/settlements?from=<date>&to=<date>&status=<status>
+GET /stores/:storeId/settlements?from=<date>&to=<date>&status=<status>&limit=<n>&cursor=<id>
 ```
 
 query:
@@ -195,11 +198,15 @@ query:
 from?: ISO date string
  to?: ISO date string
 status?: pending | confirmed | paid | cancelled
+limit?: 1 이상 정수 (생략 시 500, 500 초과는 500으로 줄인다)
+cursor?: 앞 응답의 nextCursor (정산 문서 id)
 ```
 
 - `to`는 해당 날짜 23:59:59.999까지 포함한다.
 - 결과는 `settledAt DESC` 최신순이다.
-- 응답: `{ settlements, total }`.
+- `limit + 1`건을 읽어 다음 페이지 여부를 판단하고, cursor 문서 snapshot 기준 `startAfter`로 이어 읽어 같은 `settledAt`도 빠짐·겹침이 없다.
+- 다른 store의 cursor, 없는 cursor, 형식이 틀린 cursor는 목록 조회 전에 400이다.
+- 응답: `{ settlements, total, hasMore, nextCursor }`. `total`은 이번 응답에 담긴 건수이고, `nextCursor`는 `hasMore`일 때만 값이 있다(아니면 `null`).
 
 ### 일별 요약
 
@@ -332,6 +339,7 @@ admin 지급 상태 전이는 코드의 transaction 존재만으로 `VERIFIED` �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-10 | seller 정산 API에 `RolesGuard`(seller, admin)를 적용하고, 목록에 `limit`(기본·상한 500)·`cursor` 페이지네이션과 `hasMore`·`nextCursor` 응답 필드를 추가 |
 | 2026-09-26 | admin 강제 환불이 `cancelSettlement()`로 pending/confirmed를 cancelled로 수렴하고 paid를 역전하지 않는 계약을 `admin.service.spec.ts`·`admin-legacy-refund-occ-retry.spec.ts` proof로 `ADMIN-FORCE-REFUND-CONSISTENCY` `IMPLEMENTATION_PROVEN`에 동기화 |
 | 2026-09-26 | admin privileged mutation authorization과 `markAsPaid` 지급 전이가 `admin-privileged-mutation.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`임을 §9·§12에 동기화 |
 | 2026-09-25 | core lifecycle이 `settlements-lifecycle.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`임을 §7·§12에 동기화 |

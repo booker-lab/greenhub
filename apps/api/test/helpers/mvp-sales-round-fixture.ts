@@ -163,6 +163,7 @@ export async function createMvpSalesRoundFixture() {
     finalization,
     refunds,
     chargePayments,
+    issueWriter,
   );
   const roundLifecycle = new RoundOrderLifecycleService(firestore, payments, settlements, capacity);
   const lifecycle = new OrdersLifecycleService(

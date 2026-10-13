@@ -107,6 +107,7 @@ FSM 표만 근거로 Firestore 주문 상태를 직접 수정하지 않는다.
 - 고객 책임 첫 배송 실패에 양수 재배송비가 필요하면 주문자 본인이 `REDELIVERY_FEE` charge를 생성·결제한다.
 - 같은 hold에 charge를 중복 생성하지 않는다.
 - **유료 재배송은 결제 완료 전 실제 배송을 다시 시작하면 안 된다.**
+- 해소되지 않은 유료 재배송 보류(결제 전, 또는 결제 후 배송 재개 전)가 열린 `PREPARING` 주문(재배송 준비로 돌린 주문)의 `→ DELIVERY_HELD`는 `409`(기사 요청은 `DRIVER_ORDER_STATE_CONFLICT`)다. 같은 주문이 회차 보류 건수에 두 번 세어지고 재배송비 결제 연결이 끊기는 것을 막는다.
 - 결제 요청 알림을 받은 동안 소비자가 실제 결제 endpoint/UI를 사용할 수 있어야 한다.
 - 유료 재배송까지 실패하면 자동 환불을 추측하지 않고 `REDELIVERY_FAILED` 운영 이슈로 이관한다.
 
@@ -168,8 +169,9 @@ PATCH /stores/:storeId/orders/:orderId/hub-confirm
   않는다.
 - driver는 기존 CLOSED `SEC-02` API 경계와 배송 업무 projection을 사용한다. 이 문서는 driver
   authorization을 재설계하지 않는다.
-- Firestore Rules의 legacy direct-read 잔여 계약이 별도로 남아 있다면 현재 API projection의
-  근거로 사용하지 않으며, 법률 문구가 원문 전체 접근을 정당화하지 않는다.
+- Firestore Rules는 #402부터 `orders` 원문 직접 읽기·쓰기를 판매자·관리자·기사를 포함한 모든
+  클라이언트에 거부하며(`tests/firestore/firestore-rules.test.mjs`), 주문 조회는 API 응답 투영만
+  사용한다. 법률 문구가 원문 전체 접근을 정당화하지 않는다.
 
 ### 상태 변경 authorization — `IMPLEMENTED / PROVEN`
 
@@ -204,6 +206,14 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 - sequential duplicate(`CANCELLED+COMPLETED` 뒤 재요청)는 `403`을 유지하고 refund/quantity/notification을 반복하지 않는다.
 - group scheduler(`confirmGroupBuy`/`cancelGroupBuyLack`)는 active cancellation ownership을 transaction fresh 재확인으로 존중하고 broadcast에서 제외한다.
 - 증거: `apps/api/src/orders/orders-lifecycle.service.ts`, `apps/api/src/notifications/notifications.service.ts`, `apps/api/src/orders/legacy-consumer-cancel-convergence.spec.ts`(`8 tests`).
+
+### 8A-2. Legacy seller cancel — 환불 전 claim
+
+- 대상: legacy 주문(`schemaVersion: 2 + roundId` 아님)의 `PATCH .../status`(`status = CANCELLED`) 중 환불 대상 상태(`ACCEPTED|RECRUITING|CONFIRMED|PREPARING|DELIVERY_HELD`).
+- provider refund 전에 fresh status가 진입 상태와 같은지 확인하고 `cancellation = { status: REFUNDING, refundClaim: { token, expiresAt } }`를 transaction으로 획득한다. 상태가 바뀌었거나 다른 활성 claim이 있으면 `409`이고 refund side effect는 `0`이다.
+- claim이 `REFUNDING|LOCAL_PENDING|LOCAL_FAILED|REFUND_FAILED`인 동안 legacy 상태 전이(기사 배송 시작 등)는 `409`로 거절한다. 환불이 끝난 주문이 배송·정산으로 진행되지 않는다.
+- refund 실패는 `REFUND_FAILED`, refund 뒤 local 실패는 `LOCAL_FAILED`로 남고 판매자 재요청은 claim을 다시 잡아 수렴한다. local 취소는 token 검증 transaction에서 `CANCELLED` + `cancellation.status = COMPLETED`로 닫는다.
+- 증거: `apps/api/src/orders/legacy-seller-cancel-claim.spec.ts`, `apps/api/src/orders/group-confirmed-quantity-restoration.spec.ts`.
 
 ### 8B. Specialized pickup/review commands — `IMPLEMENTATION COMPLETE`
 
@@ -404,6 +414,7 @@ admin force-refund 우회는 `ADMIN-FORCE-REFUND-CONSISTENCY`를 따른다.
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-09 | legacy 판매자 취소의 환불 전 `REFUNDING` claim과 claim 중 legacy 상태 전이 거절(Section 8A-2), 주문 `buyerName` 한 줄 정리·20자 상한, 요청사항 제어문자 제거 반영 |
 | 2026-09-11 | Generic consumer `REVIEWED`와 specialized `reviewOrder`를 single semantic owner(`executeConsumerReviewedConvergence`)로 수렴 + settlement failure/retry convergence 회귀 9건 추가 |
 | 2026-09-11 | `ORDER-SPECIALIZED-COMMAND-RACE-CONVERGENCE-01`: review/confirmPickup/hubConfirmPickup fresh expected-status transaction + cross-command CAS + settlement convergence 수렴(`specialized-command-race-convergence.spec.ts` 18 tests PASS) 후 Section 8B를 `IMPLEMENTATION COMPLETE`로 수렴 |
 | 2026-09-10 | `DRIVER-COMMAND-IDEMPOTENCY-SERVER-CONTRACT-DECISION-01` 결정 계약 게시: Status/Hold duplicate submission & convergence contract 추가, S1은 `IMPLEMENTATION PENDING`으로 명시 |

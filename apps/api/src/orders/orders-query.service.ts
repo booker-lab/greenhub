@@ -7,6 +7,7 @@ import {
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FirestoreService } from '../firestore/firestore.service';
 import { StorageService } from '../firestore/storage.service';
+import { projectDriverOrder } from './driver-order-read-model';
 import { DriverOrderScopeService } from './driver-order-scope.service';
 import {
   isCurrentRedeliveryPaymentRequired,
@@ -120,6 +121,11 @@ export class OrdersQueryService {
     if (requester.role === 'seller') {
       const withPayment = await this.withRedeliveryPayment({ id: orderId, ...order });
       return projectSellerOrder(withPayment, 'detail');
+    }
+    if (requester.role === 'driver') {
+      // Same stage-based contact masking as the driver endpoints.
+      const withPayment = await this.withRedeliveryPayment({ id: orderId, ...order });
+      return projectDriverOrder(withPayment, requester.sub, 'detail');
     }
     return this.withReadModel(orderId, order, requester);
   }
