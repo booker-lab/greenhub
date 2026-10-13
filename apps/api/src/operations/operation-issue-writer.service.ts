@@ -53,6 +53,8 @@ export class OperationIssueWriterService {
           },
           actions: existing.actions ?? [],
           resolvedAt: null,
+          // 사람이 닫았던 경위는 다시 열린 기록의 것이 아니다. 이력은 resolutionHistory에 남는다.
+          resolution: null,
           createdAt: existing.createdAt ?? now,
           updatedAt: now,
         } as OperationIssueRecord;
