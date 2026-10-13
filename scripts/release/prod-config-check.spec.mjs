@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   CHECK_NAMES,
+  previewOriginStatus,
   evaluate,
   maskCommands,
   readConsumerStoreId,
   readRailwayVariables,
   run,
   summarize,
+  trustProxyHopsStatus,
 } from './prod-config-check.mjs';
 
 const JWT = 'j'.repeat(40);
@@ -225,6 +227,35 @@ test('GOOGLE_GEMINI_BASE_URL이 있으면(빈 값 포함) FAIL', async () => {
 
   const empty = await runWith({ railwayVars: { ...BASE_RAILWAY, GOOGLE_GEMINI_BASE_URL: '' } });
   assert.equal(empty.summary.checks.google_gemini_base_url_absent, false);
+});
+
+test('운영 API가 Preview origin을 받거나 기동을 거부할 CORS·프록시 값이면 FAIL', async () => {
+  const allowed = await runWith({
+    railwayVars: { ...BASE_RAILWAY, CORS_ALLOW_VERCEL_PREVIEWS: 'true', TRUST_PROXY_HOPS: '11' },
+  });
+  assert.equal(allowed.summary.checks.cors_vercel_previews_not_allowed, false);
+  assert.equal(allowed.summary.checks.trust_proxy_hops_valid, false);
+  assert.equal(allowed.summary.ok, false);
+  assertNoValues(allowed.out);
+
+  const explicit = await runWith({
+    railwayVars: { ...BASE_RAILWAY, CORS_ALLOW_VERCEL_PREVIEWS: ' FALSE ', TRUST_PROXY_HOPS: '1' },
+  });
+  assert.equal(explicit.summary.checks.cors_vercel_previews_not_allowed, true);
+  assert.equal(explicit.summary.checks.trust_proxy_hops_valid, true);
+
+  for (const value of [undefined, '', 'false', 'False']) {
+    assert.equal(previewOriginStatus(value), 'PASS', String(value));
+  }
+  for (const value of ['true', 'TRUE', 'yes', '1']) {
+    assert.equal(previewOriginStatus(value), 'FAIL', value);
+  }
+  for (const value of [undefined, '', ' ', '0', '1', '10']) {
+    assert.equal(trustProxyHopsStatus(value), 'PASS', String(value));
+  }
+  for (const value of ['11', 'true', '-1', '1.5', 'loopback']) {
+    assert.equal(trustProxyHopsStatus(value), 'FAIL', value);
+  }
 });
 
 test('sensitive 변수는 비교 불가(UNKNOWN)로 두고 실패로 보지 않는다', async () => {
