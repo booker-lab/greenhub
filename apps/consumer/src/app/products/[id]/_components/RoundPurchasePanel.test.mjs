@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const panelSource = await readFile(new URL('./RoundPurchasePanel.tsx', import.meta.url), 'utf8');
-const pageSource = await readFile(new URL('../page.tsx', import.meta.url), 'utf8');
+const pageSource = await readFile(new URL('../ProductDetailClient.tsx', import.meta.url), 'utf8');
 
 test('회차 가격은 상품 원본 가격이 아니라 SaleRoundItem.roundPrice를 사용한다', () => {
   assert.match(panelSource, /item\.roundPrice\.toLocaleString\('ko-KR'\)/);

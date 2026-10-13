@@ -2,10 +2,15 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
+const source = await readFile(new URL('./ProductDetailClient.tsx', import.meta.url), 'utf8');
+const serverPageSource = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
+const serverDataSource = await readFile(new URL('./product-server.ts', import.meta.url), 'utf8');
+const layoutSource = await readFile(new URL('./layout.tsx', import.meta.url), 'utf8');
 
 test('round 쿼리는 단일 문자열만 허용하고 임의 기본 회차를 만들지 않는다', () => {
-  assert.match(source, /searchParams: Promise<\{[^}]*round\?: string \| string\[\]/s);
+  assert.match(source, /roundQuery: string \| string\[\] \| undefined;/);
+  assert.match(source, /const roundId = readRoundId\(roundQuery\);/);
+  assert.match(serverPageSource, /roundQuery=\{query\.round\}/);
   assert.match(source, /typeof value !== 'string'/);
   assert.match(source, /value\.trim\(\)/);
   assert.match(source, /value\.length/);
@@ -69,7 +74,7 @@ test('판매 모드와 회차 확인 전에는 상세 본문을 노출하지 않
 
   // 상세 진입·판매 모드 분기·legacy 본문은 다른 경로로 이동하지 않는다.
   // 유일한 이동은 round_direct 상세가 같은 경로에 연결 회차 쿼리를 남기는 replace다.
-  const pageStart = source.indexOf('export default function ProductDetailPage');
+  const pageStart = source.indexOf('export default function ProductDetailClient');
   const contentStart = source.indexOf('function ProductDetailContent(');
   const contentEnd = source.indexOf('function RoundDirectProductDetail(', contentStart);
   assert.ok(pageStart >= 0 && contentStart >= 0 && contentEnd > contentStart);
@@ -84,7 +89,7 @@ test('판매 모드와 회차 확인 전에는 상세 본문을 노출하지 않
 });
 
 test('상품 상세 mount는 기존 당근 유입 캡처 함수를 호출한다', () => {
-  const start = source.indexOf('export default function ProductDetailPage');
+  const start = source.indexOf('export default function ProductDetailClient');
   const pageSource = source.slice(start);
 
   assert.notEqual(start, -1);
@@ -120,4 +125,34 @@ test('회차에 없는 상품은 사진·이름·설명을 보이되 원래 가�
   assert.match(block, /href="\/"/);
   assert.doesNotMatch(block, /ProductActions/);
   assert.doesNotMatch(block, /product\.price/);
+});
+
+test('서버 단서로 상품·매장·품종 조회를 함께 시작하되, 화면은 최신 상품으로만 그린다', () => {
+  // 서버 화면은 메타데이터와 같은 요청 안의 상품 조회를 재사용해 매장·품종 ID만 넘긴다.
+  assert.doesNotMatch(serverPageSource, /'use client'/);
+  assert.match(serverPageSource, /loadProductHint\(id\)/);
+  assert.match(
+    serverPageSource,
+    /<ProductDetailClient id=\{id\} roundQuery=\{query\.round\} hint=\{hint\} \/>/,
+  );
+  assert.match(serverDataSource, /export const fetchCachedProduct = cache\(/);
+  assert.match(layoutSource, /fetchCachedProduct\(id\)/);
+  assert.match(
+    serverDataSource,
+    /storeId: optionalId\(product\.storeId\), varietyId: optionalId\(product\.varietyId\)/,
+  );
+
+  // 다른 상품의 단서는 쓰지 않는다.
+  assert.match(source, /const validHint = hint\?\.id === id \? hint : null;/);
+  // 매장 판매 방식은 단서로 먼저 읽고, 최신 상품이 오면 그 매장으로 다시 맞춘다.
+  assert.match(
+    source,
+    /useStoreMode\(readyProduct\?\.storeId \?\? validHint\?\.storeId \?\? null\)/,
+  );
+  assert.match(source, /storeMode\.storeId !== product\.storeId/);
+  // 품종도 함께 읽고, 최신 상품의 품종이 다르면 다시 읽는다.
+  assert.match(source, /product\.varietyId === hintVarietyId && hintedVariety/);
+  assert.match(source, /await fetchVariety\(product\.varietyId, controller\.signal\)/);
+  // 상품 본문은 여전히 브라우저가 새로 읽은 상품으로만 그린다.
+  assert.match(source, /fetchProduct\(id, controller\.signal\)/);
 });
