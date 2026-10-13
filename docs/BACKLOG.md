@@ -540,7 +540,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 > **2026-10-13 재대조**(`main` `bd159830`, 아래 항목 근거 spec 297건 통과): 위 각 절의 미체크 상자는 당시 기록이고, 현재 코드·직접 회귀 기준 판정은 다음과 같다. 출시 절차 상자(legal 포함 release SHA 이하)는 2026-09-28 출시(`197f84a4`)와 그 뒤 운영 배포로 끝난 역사 기록이다(`STALE_SPEC`, 현재 운영 SHA는 `docs/memory.md`).
 >
 > - `PAYMENT-FINALIZATION-PAID-GUARD`·`PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`·`ADMIN-FORCE-REFUND-CONSISTENCY`: `VERIFIED` — `docs/reports/REPORT_payments_auth_rules_reaudit_20261010.md`.
-> - `ORDER-REDELIVERY-PAID-RESUME-GATE`: `VERIFIED` — `orders/redelivery-resume-gate.spec.ts`. 레거시 판매자 경로는 직접 테스트가 없고 재배송비는 schemaVersion 2에서만 생긴다.
+> - `ORDER-REDELIVERY-PAID-RESUME-GATE`: `VERIFIED` — `orders/redelivery-resume-gate.spec.ts`, 레거시 판매자 경로는 `orders/legacy-redelivery-resume-gate.spec.ts`(#505, 48건). 재배송비는 schemaVersion 2에서만 생긴다(`LEGACY-ORDER-REDELIVERY-GAPS`).
 > - `ADMIN-PRIVILEGED-MUTATION-COVERAGE`: `VERIFIED` — `admin/admin-privileged-mutation.spec.ts`(실제 HTTP 401, consumer·seller·driver 403과 side effect 0, `markAsPaid` 상태 계약·동시 지급 race).
 > - `SETTLEMENT-LIFECYCLE-COVERAGE`: `VERIFIED` — `settlements/settlements-lifecycle.spec.ts`(생성 멱등·동시 완료 수렴·confirm 계약).
 > - `ORDER-MUTATION-AUTHORIZATION-COVERAGE`: `VERIFIED` — `orders/order-mutation-authorization.spec.ts`(정상 허용과 타 매장·비담당 기사 거부).
@@ -738,6 +738,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### RATE-LIMIT-CLIENT-IP
 - [ ] 인증 요청 한도(10회/분·120회/분)는 직접 테스트가 없고, API에 `trust proxy`·클라이언트 IP 추적 설정이 없다. Railway 앞단 프록시 주소가 `req.ip`로 잡히면 한도가 모든 손님에게 공유될 수 있다. 집계 기준을 고치는 PR #404(보안 세션)가 이 항목을 소유한다. #404는 `JWT_SECRET`·`JWT_REFRESH_SECRET`이 같으면 API가 기동하지 않고 `TRUST_PROXY_HOPS=1` 명시를 권장하므로, 병합 전 운영 Railway 값 확인(사용자)이 필요하다.
+
+### LEGACY-ORDER-REDELIVERY-GAPS
+- [ ] 2026-10-13 #505 조사 중 발견(코드 미변경, 파일럿은 회차 주문만 쓴다). ① `roundId`가 있는 schemaVersion 1 주문을 관리자가 `PREPARING → DELIVERING`으로 재개하면 회차 `heldOrderCount`가 줄지 않는다고 보고됐다(현재 주문 생성 경로로는 이 형태가 생기지 않음, 감사 세션 미검증). ② schemaVersion 1 주문은 `OrderChargesService.createRedeliveryFeeCharge()`가 schemaVersion 2만 받아 고객 책임 유료 보류에서 재배송비를 결제할 경로가 없고 취소만 가능하다(fail closed, `apps/api/src/orders/order-charges.service.ts`). 레거시 주문을 다시 받기 전에 정한다.
 
 ### STORAGE-CORS-APPLY
 - [ ] #402가 `cors.json`의 허용 메서드를 GET·HEAD로 줄였지만 `firebase deploy`로 반영되지 않고 버킷에 따로 적용해야 한다. 적용 절차 문서와 확인 테스트가 없다. Firebase SDK 업로드는 다른 엔드포인트를 쓰므로 영향이 없을 가능성이 크지만 확인이 필요하다. 적용 여부와 절차를 정해 런북에 적는다. **2026-10-12**: 절차는 `docs/specs/ops/mvp-sales-round-runbook.md` §10에 적었다(적용 전 현재 값 보관 → 적용 → 업로드 확인 → 막히면 되돌리기). 남은 일: 운영 버킷에 적용할지 결정하고 실행(사용자, GCP 권한 필요).
