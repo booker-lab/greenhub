@@ -1,14 +1,20 @@
 'use client';
 
-import { Box, Button, Group, Paper, Text } from '@mantine/core';
-import { formatExpiryLong } from '../_lib';
+import { Box, Button, Group, Paper, Text, TextInput } from '@mantine/core';
+import type { IssuedInvite } from '@/hooks/useAdmin';
+import { formatExpiryLong, INVITE_RECIPIENT_EMAIL_MAX_LENGTH } from '../_lib';
 
 interface InviteGeneratorProps {
   generating: boolean;
-  lastToken: { token: string; expiresAt: string } | null;
+  lastToken: IssuedInvite | null;
   copied: boolean;
   /** useAdminInvite 발급 command 실패 메시지. null이면 마지막 발급이 실패하지 않았음. */
   generateError: string | null;
+  /** 받는 사람 이메일 입력값(선택). 비우면 받는 사람 제한 없는 초대를 발급한다. */
+  recipientEmail: string;
+  /** 받는 사람 이메일 입력 오류. null이면 오류 없음. */
+  recipientEmailError: string | null;
+  onRecipientEmailChange: (value: string) => void;
   onGenerate: () => void;
   onCopy: () => void;
 }
@@ -18,6 +24,9 @@ export function InviteGenerator({
   lastToken,
   copied,
   generateError,
+  recipientEmail,
+  recipientEmailError,
+  onRecipientEmailChange,
   onGenerate,
   onCopy,
 }: InviteGeneratorProps) {
@@ -35,6 +44,20 @@ export function InviteGenerator({
       >
         판매자 초대 토큰을 생성합니다. 토큰은 발급 후 <strong>7일간</strong> 유효합니다.
       </Text>
+
+      <TextInput
+        type="email"
+        label="받는 사람 이메일 (선택)"
+        description="입력하면 이 이메일로만 가입할 수 있어요. 비우면 누구나 이 토큰으로 가입할 수 있어요."
+        placeholder="seller@example.com"
+        value={recipientEmail}
+        onChange={(event) => onRecipientEmailChange(event.currentTarget.value)}
+        error={recipientEmailError}
+        maxLength={INVITE_RECIPIENT_EMAIL_MAX_LENGTH}
+        disabled={generating}
+        autoComplete="off"
+        mb="md"
+      />
 
       <Button
         onClick={onGenerate}
@@ -116,6 +139,14 @@ export function InviteGenerator({
           >
             만료: {formatExpiryLong(lastToken.expiresAt)}
           </Text>
+          {lastToken.recipientEmail && (
+            <Text
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
+              mt={4}
+            >
+              받는 사람: {lastToken.recipientEmail}
+            </Text>
+          )}
         </Box>
       )}
     </Paper>

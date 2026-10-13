@@ -76,6 +76,23 @@ function RevokeInviteButton({
   );
 }
 
+/** 받는 사람을 지정한 초대만 이메일을 보여 준다. 지정하지 않은 초대는 아무것도 그리지 않는다. */
+function recipientEmailText(recipientEmail: string | null | undefined) {
+  if (!recipientEmail) return null;
+  return (
+    <Text
+      mt={4}
+      style={{
+        fontSize: 'var(--font-size-sm)',
+        color: 'var(--color-text-disabled)',
+        wordBreak: 'break-all',
+      }}
+    >
+      받는 사람 {recipientEmail}
+    </Text>
+  );
+}
+
 export function InviteHistoryTable({
   invites,
   loading,
@@ -187,6 +204,7 @@ export function InviteHistoryTable({
               >
                 만료 {formatExpiry(expDate)}
               </Text>
+              {recipientEmailText(inv.recipientEmail)}
             </Paper>
           );
         })}
@@ -246,6 +264,7 @@ export function InviteHistoryTable({
                         onCopy={onCopy}
                       />
                     </Group>
+                    {recipientEmailText(inv.recipientEmail)}
                   </Box>
                   <Box component="td" style={{ padding: '12px 16px' }}>
                     <Group gap="xs" wrap="nowrap">
