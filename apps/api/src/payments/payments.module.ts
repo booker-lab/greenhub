@@ -7,6 +7,7 @@ import { OrderCapacityModule } from '../orders/order-capacity.module';
 import { RetentionModule } from '../retention/retention.module';
 import { OrderChargePaymentService } from './order-charge-payment.service';
 import { PaymentFinalizationService } from './payment-finalization.service';
+import { PaymentProviderReconcileService } from './payment-provider-reconcile.service';
 import { PaymentRefundService } from './payment-refund.service';
 import { PaymentsController, RefundController } from './payments.controller';
 import { PaymentsService } from './payments.service';
@@ -33,6 +34,7 @@ export function createPortoneProvider(config: ConfigService): PortoneClient {
     PaymentFinalizationService,
     PaymentRefundService,
     OrderChargePaymentService,
+    PaymentProviderReconcileService,
     {
       provide: PortoneClient,
       inject: [ConfigService],

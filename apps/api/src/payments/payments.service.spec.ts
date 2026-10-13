@@ -1053,3 +1053,88 @@ describe('PENDING 정리 cron 동시성', () => {
     expect(fixture.portone.getPayment).toHaveBeenCalledTimes(6);
   });
 });
+
+describe('웹훅 상점 ID 사전 확인', () => {
+  function makeWebhookFacade(configValues?: Record<string, string>) {
+    const { firestore } = makeFirestore({
+      'orders/order-1': { id: 'order-1', storeId: 'store-1', status: 'PENDING' },
+    });
+    const portone = { getPayment: jest.fn().mockResolvedValue(paymentData) };
+    const finalization = {
+      finalizePaidOrder: jest.fn().mockResolvedValue({ ok: true, status: 'ACCEPTED' }),
+      cancelPendingOrder: jest.fn().mockResolvedValue(true),
+      recordPaymentLookupFailure: jest.fn(),
+    };
+    const orderChargePayments = {
+      isOrderChargePaymentId: jest.fn((id: string) => id.startsWith('order-charge-')),
+      handleWebhook: jest.fn().mockResolvedValue({ ok: true, status: 'PAID' }),
+    };
+    const service = new PaymentsService(
+      firestore as never,
+      portone as never,
+      finalization as never,
+      { refundByOrderId: jest.fn() } as never,
+      orderChargePayments as never,
+      { createOrMergeIssue: jest.fn() } as never,
+      configValues ? makeConfig(configValues) : undefined,
+    );
+    return { service, firestore, portone, finalization, orderChargePayments };
+  }
+
+  it.each([
+    ['주문 결제', 'order-1'],
+    ['재배송비 결제', 'order-charge-charge-1'],
+  ])('설정된 상점과 다른 storeId의 %s 웹훅은 아무것도 바꾸지 않고 무시한다', async (_label, id) => {
+    const fixture = makeWebhookFacade({ PORTONE_STORE_ID: 'store-portone-live' });
+
+    for (const type of ['Transaction.Paid', 'Transaction.Failed', 'Transaction.Cancelled']) {
+      await expect(
+        fixture.service.handleWebhook({
+          type,
+          data: { paymentId: id, storeId: 'store-other' },
+        } as never),
+      ).resolves.toEqual({ ok: false, reason: 'store_mismatch' });
+    }
+
+    expect(fixture.firestore.doc).not.toHaveBeenCalled();
+    expect(fixture.portone.getPayment).not.toHaveBeenCalled();
+    expect(fixture.finalization.finalizePaidOrder).not.toHaveBeenCalled();
+    expect(fixture.finalization.cancelPendingOrder).not.toHaveBeenCalled();
+    expect(fixture.orderChargePayments.handleWebhook).not.toHaveBeenCalled();
+  });
+
+  it('설정된 상점과 같은 storeId(앞뒤 공백 무시)는 기존처럼 처리한다', async () => {
+    const fixture = makeWebhookFacade({ PORTONE_STORE_ID: 'store-portone-live' });
+
+    await fixture.service.handleWebhook({
+      type: 'Transaction.Paid',
+      data: { paymentId: 'order-1', storeId: ' store-portone-live ' },
+    } as never);
+    await fixture.service.handleWebhook({
+      type: 'Transaction.Paid',
+      data: { paymentId: 'order-charge-charge-1', storeId: 'store-portone-live' },
+    } as never);
+
+    expect(fixture.finalization.finalizePaidOrder).toHaveBeenCalledTimes(1);
+    expect(fixture.orderChargePayments.handleWebhook).toHaveBeenCalledWith(
+      'Transaction.Paid',
+      'order-charge-charge-1',
+    );
+  });
+
+  it('PORTONE_STORE_ID가 비어 있거나 본문에 storeId가 없으면 비교하지 않는다', async () => {
+    const unset = makeWebhookFacade({ RAILWAY_ENVIRONMENT_NAME: 'production' });
+    await unset.service.handleWebhook({
+      type: 'Transaction.Paid',
+      data: { paymentId: 'order-1', storeId: 'store-other' },
+    } as never);
+    expect(unset.finalization.finalizePaidOrder).toHaveBeenCalledTimes(1);
+
+    const missing = makeWebhookFacade({ PORTONE_STORE_ID: 'store-portone-live' });
+    await missing.service.handleWebhook({
+      type: 'Transaction.Paid',
+      data: { paymentId: 'order-1' },
+    } as never);
+    expect(missing.finalization.finalizePaidOrder).toHaveBeenCalledTimes(1);
+  });
+});

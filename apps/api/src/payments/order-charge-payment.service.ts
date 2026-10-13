@@ -2,9 +2,11 @@ import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
   Injectable,
+  Logger,
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { isOrderCancelledOrCancelling } from '../orders/order-cancellation-state';
@@ -13,6 +15,11 @@ import {
   isCurrentRedeliveryPaymentRequired,
 } from '../orders/redelivery-resume-gate';
 import { PortoneClient, createPortoneRefundIdempotencyKey } from './portone.client';
+import {
+  findPortonePaymentContextMismatch,
+  type PortonePaymentContextPolicy,
+  resolvePortonePaymentContextPolicyFromConfig,
+} from './portone-payment-context';
 
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 
@@ -24,7 +31,33 @@ const UNNEEDED_CHARGE_REFUND_REASON = '재배송이 필요 없어진 재배송�
 // 재배송비 결제가 실제로 필요한 주문 상태(보류 중이거나 결제 후 재개 대기).
 const CHARGE_PAYABLE_ORDER_STATUSES = ['DELIVERY_HELD', 'PREPARING'];
 
+const CHARGE_MISMATCH_MESSAGE = '재배송비 결제 정보가 일치하지 않습니다.';
+
 type ChargeRefundClaimStatus = 'CLAIMED' | 'UNKNOWN';
+
+// 재배송비 Paid 웹훅을 확정하지 못한 이유. 운영 기록에는 이 값만 남긴다(결제 원문은 남기지 않는다).
+type ChargePaymentMismatchField =
+  | 'charge.status'
+  | 'charge.type'
+  | 'portonePaymentId'
+  | 'payment.status'
+  | 'amount'
+  | 'storeId'
+  | 'currency'
+  | 'channel.type'
+  | 'order.storeId';
+
+type ChargePaymentMismatch = {
+  field: ChargePaymentMismatchField;
+  chargeStatus: string | null;
+  storeId: string;
+  orderId: string;
+};
+
+type FinalizePaidResult = Record<string, unknown> & {
+  refundReason?: string;
+  mismatch?: ChargePaymentMismatch;
+};
 
 type ChargeRefundPayload = {
   chargeId: string;
@@ -47,11 +80,19 @@ type ChargeRefundRunResult = 'handled' | 'claim_in_flight';
 
 @Injectable()
 export class OrderChargePaymentService {
+  private readonly logger = new Logger(OrderChargePaymentService.name);
+  private readonly paymentContextPolicy: PortonePaymentContextPolicy;
+
   constructor(
     private readonly firestore: FirestoreService,
     private readonly portone: PortoneClient,
     @Optional() private readonly issueWriter?: OperationIssueWriterService,
-  ) {}
+    // Nest DI는 전역 ConfigService를 항상 주입한다. 직접 생성하는 테스트만 process.env를 쓴다.
+    @Optional() config?: ConfigService,
+  ) {
+    // 주문 결제 확정과 같은 상점·통화·채널 정책을 쓴다.
+    this.paymentContextPolicy = resolvePortonePaymentContextPolicyFromConfig(config);
+  }
 
   isOrderChargePaymentId(paymentId: string) {
     return paymentId.startsWith(PAYMENT_ID_PREFIX);
@@ -84,7 +125,7 @@ export class OrderChargePaymentService {
     // Retry purity: the post-transaction decision must come only from the
     // committed attempt's return value. An outer `let result` would leak an
     // aborted attempt's decision across OCC retry.
-    const result: Record<string, unknown> & { refundReason?: string } =
+    const result: FinalizePaidResult =
       await this.firestore.runTransaction(async (tx) => {
         const chargeSnap = await tx.get(chargeRef);
         if (!chargeSnap.exists) return { ok: false, reason: 'charge_not_found' };
@@ -114,20 +155,16 @@ export class OrderChargePaymentService {
             : { ok: true, reason: 'already_processed' };
         }
         // 실패 웹훅이 먼저 와 FAILED가 된 청구도 PortOne이 PAID를 확정하면 실제 결제다.
-        if (
-          !['PENDING', 'FAILED'].includes(charge['status']) ||
-          charge['type'] !== 'REDELIVERY_FEE' ||
-          charge['portonePaymentId'] !== paymentId ||
-          paymentData.status !== 'PAID' ||
-          paymentData.amount.total !== charge['amount']
-        ) {
-          throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
+        // 불일치는 확정하지 않는다. 결과만 돌려주고 운영 기록·400 응답은 트랜잭션 밖에서 한다.
+        const mismatchField = this.findChargePaymentMismatch(charge, paymentId, paymentData);
+        if (mismatchField) {
+          return { ok: false, mismatch: this.describeMismatch(mismatchField, charge) };
         }
 
         const orderSnap = await tx.get(this.firestore.doc(`orders/${charge['orderId']}`));
         const order = orderSnap.data() as Record<string, any> | undefined;
         if (orderSnap.exists && order?.['storeId'] !== charge['storeId']) {
-          throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
+          return { ok: false, mismatch: this.describeMismatch('order.storeId', charge) };
         }
         const now = this.firestore.Timestamp.now();
         const paidUpdate = {
@@ -173,7 +210,11 @@ export class OrderChargePaymentService {
         tx.update(chargeRef, paidUpdate);
         return { ok: true, status: 'PAID' };
       });
-    const { refundReason, ...response } = result;
+    const { refundReason, mismatch, ...response } = result;
+    if (mismatch) {
+      await this.recordPaidChargeMismatch(chargeId, paymentId, paymentData, mismatch);
+      throw new BadRequestException(CHARGE_MISMATCH_MESSAGE);
+    }
     if (refundReason) {
       const refund = await this.refundCharge(chargeRef, refundReason);
       if (refund === 'claim_in_flight') {
@@ -186,6 +227,73 @@ export class OrderChargePaymentService {
       }
     }
     return response;
+  }
+
+  /** 확정 전 청구·PortOne 결제 비교. 주문 결제 확정과 같은 상점·통화·채널 확인을 포함한다. */
+  private findChargePaymentMismatch(
+    charge: Record<string, any>,
+    paymentId: string,
+    paymentData: PaymentData,
+  ): ChargePaymentMismatchField | null {
+    if (!['PENDING', 'FAILED'].includes(charge['status'])) return 'charge.status';
+    if (charge['type'] !== 'REDELIVERY_FEE') return 'charge.type';
+    if (charge['portonePaymentId'] !== paymentId) return 'portonePaymentId';
+    if (paymentData.status !== 'PAID') return 'payment.status';
+    const contextMismatch = findPortonePaymentContextMismatch(
+      paymentData,
+      this.paymentContextPolicy,
+    );
+    if (contextMismatch) return contextMismatch.field;
+    if (paymentData.amount.total !== charge['amount']) return 'amount';
+    return null;
+  }
+
+  private describeMismatch(
+    field: ChargePaymentMismatchField,
+    charge: Record<string, any>,
+  ): ChargePaymentMismatch {
+    return {
+      field,
+      chargeStatus: typeof charge['status'] === 'string' ? charge['status'].slice(0, 40) : null,
+      storeId: String(charge['storeId'] ?? ''),
+      orderId: String(charge['orderId'] ?? ''),
+    };
+  }
+
+  /**
+   * PortOne이 PAID로 확정한(돈이 승인된) 재배송비 결제를 청구 정보와 맞지 않아 반영하지 못했으면
+   * 운영 확인 기록을 남긴다. 청구는 PAID로 바꾸지 않는다. 같은 청구·결제 ID의 웹훅 재전송은
+   * 같은 idempotencyKey로 하나의 기록에 합쳐진다. PortOne이 PAID가 아니면 승인된 돈이 없으므로
+   * 기록하지 않는다.
+   */
+  private async recordPaidChargeMismatch(
+    chargeId: string,
+    paymentId: string,
+    paymentData: PaymentData,
+    mismatch: ChargePaymentMismatch,
+  ) {
+    this.logger.warn(
+      `[OrderChargeWebhook] 재배송비 결제 불일치 chargeId=${chargeId} field=${mismatch.field} providerStatus=${String(paymentData.status).slice(0, 40)}`,
+    );
+    if (paymentData.status !== 'PAID' || !this.issueWriter) return;
+    await this.issueWriter.createOrMergeIssue({
+      storeId: mismatch.storeId,
+      orderId: mismatch.orderId,
+      paymentId: null,
+      chargeId,
+      type: 'PAYMENT_LOOKUP_FAILED',
+      severity: 'critical',
+      title: '재배송비 결제 확인 필요',
+      message:
+        'PortOne에서 승인된 재배송비 결제가 청구 정보와 맞지 않아 결제 완료로 반영하지 않았습니다. PortOne 콘솔에서 결제를 확인하세요.',
+      idempotencyKey: `charge-payment-mismatch:${chargeId}:${paymentId}`,
+      latestSnapshot: {
+        chargeStatus: mismatch.chargeStatus,
+        providerStatus: 'PAID',
+        mismatchField: mismatch.field,
+        failureStage: 'charge_payment_mismatch',
+      },
+    });
   }
 
   private async markFailed(chargeId: string, paymentId: string) {

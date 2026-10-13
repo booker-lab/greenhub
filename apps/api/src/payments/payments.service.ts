@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
@@ -7,6 +8,11 @@ import { OrderChargePaymentService } from './order-charge-payment.service';
 import { PaymentFinalizationService } from './payment-finalization.service';
 import { PaymentRefundService } from './payment-refund.service';
 import { PortoneClient, PortoneError } from './portone.client';
+import {
+  isForeignPortoneWebhookStore,
+  type PortonePaymentContextPolicy,
+  resolvePortonePaymentContextPolicyFromConfig,
+} from './portone-payment-context';
 
 const REFUNDABLE_STATUSES = ['ACCEPTED', 'RECRUITING', 'CONFIRMED', 'PREPARING'];
 
@@ -23,9 +29,27 @@ const PROVIDER_REVERSAL_ISSUE_TYPE = 'PROVIDER_REVERSAL_DETECTED';
 // 매분 도는 PENDING 정리 cron의 PortOne 동시 호출 수.
 const CLEANUP_CONCURRENCY = 4;
 
+/**
+ * 결제 확정 뒤 PortOne 쪽 취소가 우리 쪽 환불·취소 흐름의 결과인지 판단한다.
+ * 결제 문서가 이미 취소·환불됐거나 환불 claim이 걸려 있거나, 결제 확정 중 환불 marker가 있으면
+ * 우리 쪽이 소유한 되돌림이라 운영 기록 대상이 아니다. 웹훅 처리와 일일 대사가 함께 쓴다.
+ */
+export function isPaymentReversalOwnedLocally(
+  order: Record<string, unknown>,
+  payment: Record<string, unknown> | null,
+): boolean {
+  return Boolean(
+    payment?.['status'] === 'CANCELLED' ||
+      payment?.['refundedAt'] ||
+      payment?.['refundClaim'] ||
+      order['finalizationRefund'],
+  );
+}
+
 @Injectable()
 export class PaymentsService {
   private readonly logger = new Logger(PaymentsService.name);
+  private readonly paymentContextPolicy: PortonePaymentContextPolicy;
 
   constructor(
     private readonly firestore: FirestoreService,
@@ -34,13 +58,24 @@ export class PaymentsService {
     private readonly refunds: PaymentRefundService,
     private readonly orderChargePayments: OrderChargePaymentService,
     private readonly issueWriter: OperationIssueWriterService,
-  ) {}
+    // Nest DI는 전역 ConfigService를 항상 주입한다. 직접 생성하는 테스트만 process.env를 쓴다.
+    config?: ConfigService,
+  ) {
+    this.paymentContextPolicy = resolvePortonePaymentContextPolicyFromConfig(config);
+  }
 
   // 같은 프로세스 안에서 이전 cleanup 실행이 끝나기 전에 다음 실행이 겹치지 않게 막는다.
   private cleanupInFlight = false;
 
   async handleWebhook(dto: PortoneWebhookDto) {
     const orderId = dto.data.paymentId;
+    // 다른 PortOne 상점의 웹훅은 결제 조회·상태 변경 없이 무시한다(PORTONE_STORE_ID가 설정된 경우만).
+    if (isForeignPortoneWebhookStore(dto.data.storeId, this.paymentContextPolicy)) {
+      this.logger.warn(
+        `[PaymentsWebhook] 설정된 상점과 다른 storeId 웹훅을 무시합니다. type=${String(dto.type).slice(0, 40)}`,
+      );
+      return { ok: false, reason: 'store_mismatch' };
+    }
     if (this.orderChargePayments.isOrderChargePaymentId(orderId)) {
       return this.orderChargePayments.handleWebhook(dto.type, orderId);
     }
@@ -193,12 +228,7 @@ export class PaymentsService {
     if (!isDispute) {
       // 우리 쪽 취소·환불 흐름이 만든 취소 웹훅은 정상 결과이므로 기록하지 않는다.
       if (orderStatus === 'CANCELLED') return { ok: true, reason: 'order_cancelled' };
-      if (
-        payment?.['status'] === 'CANCELLED' ||
-        payment?.['refundedAt'] ||
-        payment?.['refundClaim'] ||
-        order['finalizationRefund']
-      ) {
+      if (isPaymentReversalOwnedLocally(order, payment)) {
         return { ok: true, reason: 'refund_owned_locally' };
       }
     }

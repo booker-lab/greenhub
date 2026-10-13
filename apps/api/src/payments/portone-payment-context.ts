@@ -1,4 +1,5 @@
-import { isProductionRuntime } from '../config/runtime-config';
+import type { ConfigService } from '@nestjs/config';
+import { getConfigValues, isProductionRuntime } from '../config/runtime-config';
 
 /**
  * PortOne V2 결제 재조회 결과의 상점·통화·채널 확인.
@@ -54,6 +55,33 @@ export function resolvePortonePaymentContextPolicy(
     requireLiveChannel: production,
     requireContextFields: production,
   };
+}
+
+/**
+ * Nest `ConfigService`에서(없으면 `process.env`에서) 정책을 읽는다.
+ * 주문 결제 확정(PaymentFinalizationService)과 같은 값을 쓴다.
+ */
+export function resolvePortonePaymentContextPolicyFromConfig(
+  config?: ConfigService,
+): PortonePaymentContextPolicy {
+  return resolvePortonePaymentContextPolicy(
+    config
+      ? { ...getConfigValues(config), PORTONE_STORE_ID: config.get<string>('PORTONE_STORE_ID') }
+      : process.env,
+  );
+}
+
+/**
+ * 웹훅 본문의 `data.storeId`가 있고 설정된 상점 ID와 다르면 true.
+ * 설정이 비어 있거나 본문에 값이 없으면 비교하지 않는다(결제 확정 쪽 정책과 같다).
+ */
+export function isForeignPortoneWebhookStore(
+  webhookStoreId: unknown,
+  policy: PortonePaymentContextPolicy,
+): boolean {
+  if (!policy.expectedStoreId) return false;
+  const storeId = readTrimmed(webhookStoreId);
+  return storeId !== null && storeId !== policy.expectedStoreId;
 }
 
 export function findPortonePaymentContextMismatch(
