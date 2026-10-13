@@ -482,6 +482,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [x] activation — 2026-09-29 `salesMode` `round_direct` 전환, 첫 회차 `SCHEDULED`(read-back 확인)
 - [x] 첫 회차 자동 오픈 차단 — 2026-09-29 회차 일정을 11/1 오픈·11/10 배송으로 이동
 - [ ] 파일럿 운영 시작 — 2026-11-01(첫 회차 주문 11/1 10:00 자동 오픈)
+- [ ] **파일럿 전 필수: PortOne 실연동(LIVE) 채널** (`PORTONE-CHANNEL-CHECK`). 2026-10-13 사용자 PortOne 콘솔 확인: 운영 상점에 LIVE 채널이 없고 테스트 채널("카카오페이_테스트")만 있다. 이대로 11/1 첫 회차가 열리면 실제 돈이 오가지 않는 테스트 결제로 주문이 확정된다. PG 심사에 기간이 걸리므로 11/1 기준으로 일찍 신청한다. 순서는 `PORTONE-CHANNEL-CHECK` 참조.
 - [ ] 파일럿 시작 직후 실제 결제·환불 1건 시험
 
 ### 법무·출시 후보 정합성
@@ -734,7 +735,13 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] **2026-10-10 수정(운영 반영)**: 기록을 charge의 `storeId`·`paymentId: null`·`chargeId`로 남기고, `RETRY_REFUND`가 `chargeId` 기록이면 `orderCharges` 문서를 대상으로 재배송비 환불을 다시 부른 뒤 `REFUNDED`일 때만 해결한다. 직접 회귀: `order-charge-refund-provider-ambiguity.spec.ts` C8, `operations.service.spec.ts` "재배송비 환불 기록은 orderCharges를 대상으로 재시도한다". 남은 일: 수정 전에 빈 `storeId`로 생긴 운영 기록이 있는지 운영 데이터 확인(사용자 승인 필요, 파일럿 전이라 없을 가능성이 크다). 이전 기록 — **IMPLEMENTATION FINDING** (2026-10-10 재대조 발견, 돈이 잘못 빠지는 문제는 아니고 운영 복구 문제): 재배송비 환불 결과가 불명확하면(PortOne 504 등) `AUTO_REFUND_FAILED`를 `storeId: ''`, `paymentId: chargeId`로 남긴다(`apps/api/src/payments/order-charge-payment.service.ts` `persistUncertainRefund`). 판매자 운영 화면은 매장 범위로만 보여 이 기록이 안 보이고, `RETRY_REFUND`는 `payments/<chargeId>`를 읽어 늘 `PAYMENT_NOT_FOUND`(409)로 끝난다. 남은 신호는 텔레그램 알림·아침 요약의 critical 건수뿐이다. 완료 조건: 주문의 실제 `storeId`로 기록하고, 재배송비 환불 재시도가 `orderCharges`를 대상으로 동작하며, 직접 회귀 테스트가 있다.
 
 ### PORTONE-CHANNEL-CHECK
-- [ ] **2026-10-13 운영 설정 점검(#503, run `38386740268`)**: Railway API에 `PORTONE_STORE_ID`가 없다(FAIL, consumer 쪽 값은 있음). #426을 병합·배포하기 전에 사용자가 Railway에 consumer와 같은 값을 넣고 이 점검을 다시 돌려 PASS를 확인해야 한다. 이전 기록: 결제 확정은 PortOne 결제의 상태와 금액만 확인한다. 상점·통화·채널 확인 PR #426은 아직 병합되지 않았다(2026-10-10 기준 열림). 소비자 앱은 `channelKey`를 공개 환경 변수에서 넘기므로, 운영 PortOne 상점에 TEST 채널이 함께 있으면 테스트 결제로 금액만 맞춘 `PAID`가 실제 주문을 확정할 수 있다. 파일럿 전에 PortOne 콘솔에서 운영 상점의 TEST 채널 유무를 확인하고(사용자), #426 병합 여부를 정한다. #426(보안 세션)이 이 항목을 소유한다. 병합 전 조건: 운영 결제 채널 키가 LIVE, API `PORTONE_STORE_ID`와 consumer `NEXT_PUBLIC_PORTONE_STORE_ID` 일치, `RAILWAY_ENVIRONMENT_NAME=production`(아니면 결제가 자동 환불·취소된다).
+- [ ] **2026-10-13 파일럿 전 필수(사용자 PortOne 콘솔 확인)**: 운영 상점(대표상점)에 실연동(LIVE) 채널이 없고 테스트 채널 "카카오페이_테스트"만 있다. #426은 운영에서 LIVE 채널을 요구하므로(`requireLiveChannel: true`, #426 브랜치 `apps/api/src/payments/portone-payment-context.ts`) LIVE 채널 없이 배포하면 테스트 채널 결제가 모두 확정되지 않고 환불·취소된다. 그래서 #426은 LIVE 채널이 생긴 뒤 병합한다. 반대로 #426 없이 지금 상태로 파일럿을 열면 테스트 결제로 주문이 확정된다. 순서:
+  1. (사용자) PortOne 콘솔 "전자결제 신청"으로 PG 계약 → 심사 → 실연동 채널 추가. 실연동은 이용료 결제 카드 등록도 필요하다(월 매출 5천만 원 미만 무과금). PG 심사에 기간이 걸리므로 11/1 파일럿 기준으로 일찍 신청한다.
+  2. (사용자) Vercel consumer의 결제 채널 키 공개 환경 변수를 LIVE 채널 키로 교체한다.
+  3. (보안 세션) 운영 설정 점검(#503) 재실행으로 `PORTONE_STORE_ID` PASS 확인. 사용자가 2026-10-13 Railway에 값을 넣었고(직전 run `38386740268`은 추가 전 실행이라 FAIL), 재실행은 배포 동결이 풀린 뒤 한다.
+  4. (보안 세션) #426과 결제 정합성 PR 병합 → 배포. 이어서 `payments.service.spec.ts:311` ESLint 1건 수정과 CI eslint 단계 추가(`API-LINT-BASELINE`).
+  5. 파일럿 시작 직후 실제 결제·환불 1건 시험(NEXT 항목).
+  이전 기록: 2026-10-13 운영 설정 점검(#503, run `38386740268`)에서 Railway API에 `PORTONE_STORE_ID`가 없었다(FAIL). 그 전 기록: 결제 확정은 PortOne 결제의 상태와 금액만 확인한다. 상점·통화·채널 확인 PR #426은 아직 병합되지 않았다(2026-10-10 기준 열림). 소비자 앱은 `channelKey`를 공개 환경 변수에서 넘기므로, 운영 PortOne 상점에 TEST 채널이 함께 있으면 테스트 결제로 금액만 맞춘 `PAID`가 실제 주문을 확정할 수 있다. 파일럿 전에 PortOne 콘솔에서 운영 상점의 TEST 채널 유무를 확인하고(사용자), #426 병합 여부를 정한다. #426(보안 세션)이 이 항목을 소유한다. 병합 전 조건: 운영 결제 채널 키가 LIVE, API `PORTONE_STORE_ID`와 consumer `NEXT_PUBLIC_PORTONE_STORE_ID` 일치, `RAILWAY_ENVIRONMENT_NAME=production`(아니면 결제가 자동 환불·취소된다).
 
 ### RATE-LIMIT-CLIENT-IP
 - [x] **2026-10-13 #404·#488 병합(운영 미배포)**: 요청 한도를 서명 검증된 토큰의 사용자(`sub`) 또는 신뢰 프록시 홉(`TRUST_PROXY_HOPS`, Railway 기본 1)으로 정한 클라이언트 IP 단위로 세고(`apps/api/src/common/guards/client-throttler.guard.ts`·`.spec.ts`), `login`은 IP+이메일 단위와 IP 단위 1분 60회 상한을 함께 둔다. `firebase-token`은 사용자당 1분 60회, `refresh` 본문은 DTO로 검증한다(#488). 운영 API는 `JWT_SECRET`·`JWT_REFRESH_SECRET`이 같으면 기동하지 않는다. 운영 Railway 값은 운영 설정 점검 workflow(#503, run `38386740268`)에서 둘 다 설정·서로 다름·32바이트 이상으로 PASS다. `TRUST_PROXY_HOPS`·`CORS_ALLOW_VERCEL_PREVIEWS`는 운영에 두지 않는다(비우면 Railway 1홉, Preview origin 거부). 남은 일: 다음 운영 배포 뒤 Railway HTTP 로그의 요청자 IP가 실제 클라이언트 IP인지 한 번 확인한다. 이전 기록: 인증 요청 한도(10회/분·120회/분)는 직접 테스트가 없고, API에 `trust proxy`·클라이언트 IP 추적 설정이 없다. Railway 앞단 프록시 주소가 `req.ip`로 잡히면 한도가 모든 손님에게 공유될 수 있다. 집계 기준을 고치는 PR #404(보안 세션)가 이 항목을 소유한다. #404는 `JWT_SECRET`·`JWT_REFRESH_SECRET`이 같으면 API가 기동하지 않으므로 병합 전 운영 Railway 값 확인이 필요했다.
