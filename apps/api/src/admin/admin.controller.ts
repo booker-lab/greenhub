@@ -14,6 +14,7 @@ import {
   ForceRefundDto,
   UpsertBannerDto,
 } from './dto/admin.dto';
+import { GenerateInviteDto } from './dto/invite.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -99,8 +100,8 @@ export class AdminController {
   // ── Invite ───────────────────────────────────────────────────────
 
   @Post('invite')
-  generateInvite(@CurrentUser() user: JwtPayload) {
-    return this.admin.generateInvite(user.sub);
+  generateInvite(@CurrentUser() user: JwtPayload, @Body() dto: GenerateInviteDto) {
+    return this.admin.generateInvite(user.sub, dto);
   }
 
   @Get('invite')

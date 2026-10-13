@@ -80,6 +80,15 @@ export interface InviteToken {
   /** 관리자 취소 시각. 취소 기능 이전에 만든 문서에는 필드가 없다. */
   revokedAt?: string | null;
   revokedBy?: string | null;
+  /** 받는 사람 이메일(정규화). 지정하지 않은 초대는 null, 이 기능 이전 문서에는 필드가 없다. */
+  recipientEmail?: string | null;
+}
+
+/** 초대 발급 응답. */
+export interface IssuedInvite {
+  token: string;
+  expiresAt: string;
+  recipientEmail?: string | null;
 }
 
 /**
@@ -443,13 +452,15 @@ export function useAdminInvite() {
   // 호출자(_client)가 result null 가드로 lastToken 갱신을 제한해 보장한다.
   const [generateError, setGenerateError] = useState<string | null>(null);
 
-  const generate = async (): Promise<{ token: string; expiresAt: string } | null> => {
+  // recipientEmail을 주면 그 이메일로만 가입할 수 있는 초대를 발급한다. 비우면 기존처럼 제한 없이 발급한다.
+  const generate = async (recipientEmail?: string): Promise<IssuedInvite | null> => {
     if (!token) return null;
     setGenerating(true);
     setGenerateError(null);
     try {
-      const data = await apiJson<{ token: string; expiresAt: string }>('/admin/invite', token, {
+      const data = await apiJson<IssuedInvite>('/admin/invite', token, {
         method: 'POST',
+        ...(recipientEmail ? { body: JSON.stringify({ recipientEmail }) } : {}),
       });
       await reload();
       return data;

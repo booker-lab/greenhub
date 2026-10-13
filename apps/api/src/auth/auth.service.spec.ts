@@ -1278,7 +1278,7 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.register(registerDto({ role: 'seller', inviteToken: 'invite-1' })),
+        service.register(registerDto({ role: 'seller', inviteToken: 'INVITE0000000001' })),
       ).resolves.toEqual({ userId: expect.any(String) });
       expect(userRef.set).toHaveBeenCalledWith(expect.objectContaining({ role: 'seller' }));
       expect(inviteRef.update).toHaveBeenCalledWith(

@@ -109,6 +109,24 @@ function expand(el: ReactElement<CopyButtonProps>): ReactNode {
   return (el.type as (p: CopyButtonProps) => ReactNode)(el.props);
 }
 
+describe('InviteHistoryTable 받는 사람 표시', () => {
+  it('받는 사람을 지정한 초대는 모바일 카드와 데스크톱 행 모두에 이메일을 보여 준다', () => {
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      invites: [{ ...invite('test-invite-aaa'), recipientEmail: 'seller@example.com' }],
+    });
+    expect(textsOf(tree).filter((t) => t === 'seller@example.com')).toHaveLength(2);
+  });
+
+  it('받는 사람이 없거나 필드가 없는 기존 초대는 받는 사람 줄을 그리지 않는다', () => {
+    const tree = InviteHistoryTable({
+      ...baseProps,
+      invites: [{ ...invite('test-invite-aaa'), recipientEmail: null }, invite('test-invite-bbb')],
+    });
+    expect(textsOf(tree).some((t) => t.includes('받는 사람'))).toBe(false);
+  });
+});
+
 describe('InviteHistoryTable read state', () => {
   it('loading은 로딩 UI를 표시한다', () => {
     const tree = InviteHistoryTable({ ...baseProps, loading: true });
