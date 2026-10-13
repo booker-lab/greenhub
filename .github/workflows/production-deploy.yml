@@ -1,0 +1,285 @@
+name: Production deploy
+
+# 운영 배포. 사용자가 채팅에서 "<SHA> 운영 배포해"라고 명시적으로 승인한 뒤에만 실행한다(AGENTS.md 승인 경계).
+# 이 저장소 plan은 Environment required reviewer를 쓸 수 없으므로, 승인은 dispatch 입력(approval)과
+# 실행자=저장소 owner 확인으로 강제한다(e2e-round-direct.yml과 같은 방식).
+#
+# 순서(docs/memory.md 운영 배포 순서와 같다):
+#   같은 SHA 원격 회차 E2E 통과 확인 → Firestore 인덱스(READY까지 대기) → API(Railway, /health commit 확인)
+#   → 프런트 3개(Vercel production, 변경 없는 앱은 빌드 생략) → Firestore·Storage 규칙 → post-deploy-smoke
+# scope로 일부만 다시 실행할 수 있다(예: API만 늦었을 때 api).
+#
+# 1회 준비(저장소 Settings → Environments → production → Environment secrets):
+#   RAILWAY_TOKEN                         Railway 프로젝트 Settings → Tokens에서 production 환경용 project token
+#   RAILWAY_API_SERVICE_ID                Railway API 서비스 ID(서비스 화면 주소 .../service/<ID>)
+#   VERCEL_PRODUCTION_TOKEN               Vercel Account Settings → Tokens, 팀 범위 token
+#   FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON  green-e4fe3 서비스 계정 키(역할: Firebase Admin, Service Usage Consumer)
+# 비밀값은 production Environment에만 두어 이 workflow의 deploy job만 읽는다. 값은 출력하지 않는다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: '운영에 내보낼 40자리 commit SHA(원격 회차 E2E를 통과한 것)'
+        required: true
+        type: string
+      e2e_run_id:
+        description: '같은 SHA로 통과한 Round direct E2E run ID'
+        required: true
+        type: string
+      scope:
+        description: '배포 범위'
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - indexes
+          - api
+          - frontends
+          - rules
+      approval:
+        description: '사용자가 채팅에서 이 SHA의 운영 배포를 승인했습니다.'
+        required: true
+        type: choice
+        options:
+          - PRODUCTION_DEPLOY_APPROVED
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 승인·SHA·E2E 확인
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: dispatch·실행자·승인·SHA 형식 확인
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          APPROVAL: ${{ inputs.approval }}
+          SHA: ${{ inputs.sha }}
+          SCOPE: ${{ inputs.scope }}
+        run: |
+          set -euo pipefail
+          printf 'sha=%s scope=%s actor=%s\n' "$SHA" "$SCOPE" "$ACTOR"
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch로만 운영 배포를 실행합니다.' >&2; exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" || "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo '실행자가 저장소 owner가 아니어서 차단합니다.' >&2; exit 1
+          fi
+          if [[ "$APPROVAL" != 'PRODUCTION_DEPLOY_APPROVED' ]]; then
+            echo '운영 배포 승인이 없어 차단합니다.' >&2; exit 1
+          fi
+          if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'SHA는 40자리 소문자 16진수여야 합니다.' >&2; exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: SHA가 main 이력에 있는지 확인
+        shell: bash
+        env:
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          git cat-file -e "${SHA}^{commit}"
+          git merge-base --is-ancestor "$SHA" origin/main
+
+      - name: 같은 SHA 원격 회차 E2E 통과 확인
+        shell: bash
+        env:
+          SHA: ${{ inputs.sha }}
+          E2E_RUN_ID: ${{ inputs.e2e_run_id }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          node scripts/release/production-deploy.mjs verify-e2e --sha="$SHA" --run-id="$E2E_RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: 운영 배포
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    environment:
+      name: production
+    permissions:
+      contents: read
+    env:
+      SHA: ${{ inputs.sha }}
+      SCOPE: ${{ inputs.scope }}
+      FIREBASE_PROJECT: green-e4fe3
+    steps:
+      - name: 배포 도구 checkout(main)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: 배포 대상 SHA checkout(규칙·인덱스 원본)
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.sha }}
+          path: target
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      - name: 범위별 비밀값 확인(배포 전에 멈춤)
+        shell: bash
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_SERVICE_ID: ${{ secrets.RAILWAY_API_SERVICE_ID }}
+          VERCEL_PRODUCTION_TOKEN: ${{ secrets.VERCEL_PRODUCTION_TOKEN }}
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          missing=()
+          need() { [[ -n "${!1:-}" ]] || missing+=("$1"); }
+          case "$SCOPE" in
+            all) need RAILWAY_TOKEN; need RAILWAY_API_SERVICE_ID; need VERCEL_PRODUCTION_TOKEN; need FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON ;;
+            indexes|rules) need FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON ;;
+            api) need RAILWAY_TOKEN; need RAILWAY_API_SERVICE_ID ;;
+            frontends) need VERCEL_PRODUCTION_TOKEN ;;
+            *) echo "알 수 없는 scope: $SCOPE" >&2; exit 1 ;;
+          esac
+          if (( ${#missing[@]} )); then
+            printf 'production Environment 비밀값이 없습니다: %s\n' "${missing[*]}" >&2; exit 1
+          fi
+          {
+            echo "## 운영 배포 \`$SHA\` (scope: $SCOPE)"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Firebase 인증
+        if: inputs.scope == 'all' || inputs.scope == 'indexes' || inputs.scope == 'rules'
+        shell: bash
+        env:
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          key="$RUNNER_TEMP/firebase-deploy.json"
+          umask 077
+          printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key"
+          project="$(jq -r .project_id "$key")"
+          if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
+            echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
+          fi
+          gcloud auth activate-service-account --key-file="$key" --quiet
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$key" >> "$GITHUB_ENV"
+
+      - name: Firestore 인덱스 배포
+        if: inputs.scope == 'all' || inputs.scope == 'indexes'
+        shell: bash
+        working-directory: target
+        run: |
+          set -euo pipefail
+          npx -y firebase-tools@14.11.1 deploy --only firestore:indexes --project "$FIREBASE_PROJECT" --non-interactive
+
+      - name: Firestore 인덱스 READY 대기
+        if: inputs.scope == 'all' || inputs.scope == 'indexes'
+        shell: bash
+        run: |
+          set -euo pipefail
+          deadline=$(( $(date +%s) + 45 * 60 ))
+          while :; do
+            pending="$(gcloud firestore indexes composite list --project="$FIREBASE_PROJECT" --format=json \
+              | jq -r '[.[] | select(.state != "READY") | .name] | join(" ")')"
+            if [[ -z "$pending" ]]; then
+              echo "- Firestore 인덱스: 모두 READY" >> "$GITHUB_STEP_SUMMARY"
+              break
+            fi
+            if (( $(date +%s) > deadline )); then
+              echo "인덱스가 제한 시간 안에 READY가 되지 않았습니다: $pending" >&2; exit 1
+            fi
+            echo "READY 대기: $pending"
+            sleep 30
+          done
+
+      - name: API 배포(Railway)
+        if: inputs.scope == 'all' || inputs.scope == 'api'
+        shell: bash
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_API_SERVICE_ID: ${{ secrets.RAILWAY_API_SERVICE_ID }}
+        run: |
+          set -euo pipefail
+          result="$(node scripts/release/production-deploy.mjs railway --sha="$SHA")"
+          echo "$result"
+          echo "- API(Railway): \`$result\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: API /health commit 확인
+        if: inputs.scope == 'all' || inputs.scope == 'api'
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(node scripts/release/production-deploy.mjs health --sha="$SHA")"
+          echo "$result"
+          echo "- API /health: \`$result\`" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 프런트 3개 배포(Vercel production)
+        if: inputs.scope == 'all' || inputs.scope == 'frontends'
+        shell: bash
+        env:
+          VERCEL_PRODUCTION_TOKEN: ${{ secrets.VERCEL_PRODUCTION_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Vercel Hobby는 동시 빌드 1개라 consumer부터 차례로 배포한다(consumer가 규칙보다 먼저 나가야 한다).
+          for app in consumer seller driver; do
+            result="$(node scripts/release/production-deploy.mjs vercel --sha="$SHA" --app="$app")"
+            echo "$result"
+            echo "- $app(Vercel): \`$result\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+
+      - name: Firestore·Storage 규칙 배포
+        if: inputs.scope == 'all' || inputs.scope == 'rules'
+        shell: bash
+        working-directory: target
+        run: |
+          set -euo pipefail
+          npx -y firebase-tools@14.11.1 deploy --only firestore:rules,storage --project "$FIREBASE_PROJECT" --non-interactive
+          echo "- Firestore·Storage 규칙: 배포됨" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 배포 뒤 확인(post-deploy-smoke)
+        if: always() && !cancelled()
+        shell: bash
+        run: |
+          set -uo pipefail
+          expect=()
+          if [[ "$SCOPE" == 'all' || "$SCOPE" == 'api' ]]; then expect=(--expect-sha="$SHA"); fi
+          status=0
+          node scripts/release/post-deploy-smoke.mjs "${expect[@]}" > /tmp/smoke.txt 2>&1 || status=$?
+          cat /tmp/smoke.txt
+          {
+            echo ""
+            echo "### post-deploy-smoke"
+            echo '```'
+            cat /tmp/smoke.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+
+      - name: 서비스 계정 키 삭제
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/firebase-deploy.json"

@@ -16,6 +16,7 @@ import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { AuditService } from '../common/audit/audit.service';
+import { INVITE_REVOKED_MESSAGE, inviteConflict } from './invite-conflict';
 import type { AddressDto } from './dto/address.dto';
 import type { KakaoLoginDto } from './dto/kakao-login.dto';
 import type { LoginDto } from './dto/login.dto';
@@ -156,6 +157,11 @@ export class AuthService {
 
       const invite = inviteSnap.data()!;
 
+      // 관리자가 취소한 토큰은 만료·사용 여부보다 먼저 거부한다(상태 우선순위 revokedAt > usedAt > 만료).
+      if (invite['revokedAt'] != null) {
+        throw inviteConflict('already_revoked', INVITE_REVOKED_MESSAGE);
+      }
+
       if ((invite['expiresAt'] as admin.firestore.Timestamp).toMillis() < Date.now()) {
         throw new GoneException('만료된 초대 토큰입니다.');
       }
@@ -221,6 +227,10 @@ export class AuthService {
         const emailIdentitySnap = await tx.get(emailIdentityRef);
 
         // 트랜잭션 내 재검증 — 동시 요청으로 인한 경쟁 조건 방지
+        // (사전 검사 뒤 관리자 취소가 먼저 커밋된 경우도 여기서 거부된다)
+        if (inviteDoc.exists && inviteDoc.data()!['revokedAt'] != null) {
+          throw inviteConflict('already_revoked', INVITE_REVOKED_MESSAGE);
+        }
         if (!inviteDoc.exists || inviteDoc.data()!['usedAt'] !== null) {
           throw new ConflictException('이미 사용된 초대 토큰입니다.');
         }
@@ -338,7 +348,9 @@ export class AuthService {
       };
 
       if (newAddr.isDefault) {
-        addresses.forEach((a) => (a.isDefault = false));
+        addresses.forEach((a) => {
+          a.isDefault = false;
+        });
       }
       addresses.push(newAddr);
 
@@ -361,7 +373,9 @@ export class AuthService {
       if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
       if (dto.isDefault) {
-        addresses.forEach((a) => (a.isDefault = false));
+        addresses.forEach((a) => {
+          a.isDefault = false;
+        });
       }
       addresses[idx] = { ...addresses[idx], ...dto, id: addressId };
 
@@ -399,7 +413,9 @@ export class AuthService {
       const idx = addresses.findIndex((a) => a.id === addressId);
       if (idx === -1) throw new NotFoundException('배송지를 찾을 수 없습니다.');
 
-      addresses.forEach((a) => (a.isDefault = false));
+      addresses.forEach((a) => {
+        a.isDefault = false;
+      });
       addresses[idx].isDefault = true;
 
       tx.update(ref, {

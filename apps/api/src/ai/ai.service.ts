@@ -6,7 +6,7 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI, type GenerativeModel } from '@google/generative-ai';
+import { FinishReason, GoogleGenAI, type GenerateContentResponse } from '@google/genai';
 import { buildProductContentPrompt } from './prompts/product-content.prompt';
 import type { Selection, Variety } from '@greenhub/shared';
 
@@ -29,21 +29,30 @@ export const AI_GENERATION_FAILED_MESSAGE =
   'AI 콘텐츠 생성에 실패했습니다. 잠시 후 다시 시도해주세요.';
 export const AI_TIMEOUT_MESSAGE = 'AI 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.';
 
+const GEMINI_MODEL = 'gemini-3-flash-preview';
+
+/** 첫 후보가 이 사유로 끝나면 본문을 쓰지 않고 생성 실패로 처리한다. */
+const BLOCKED_FINISH_REASONS: ReadonlySet<FinishReason> = new Set([
+  FinishReason.SAFETY,
+  FinishReason.RECITATION,
+  FinishReason.LANGUAGE,
+]);
+
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private model?: GenerativeModel;
+  private client?: GoogleGenAI;
 
   constructor(private readonly config: ConfigService) {}
 
   async generateProductContent(params: GenerateContentParams): Promise<GenerateContentResult> {
     const prompt = buildProductContentPrompt(params);
-    const model = this.getModel();
+    const client = this.getClient();
 
     let text: string;
     try {
-      const result = await this.callWithTimeout(model, prompt);
-      text = result.response.text().trim();
+      const response = await this.callWithTimeout(client, prompt);
+      text = extractResponseText(response).trim();
     } catch (e: unknown) {
       if (e instanceof GatewayTimeoutException) {
         this.logger.warn(`Gemini 호출 시간 초과 (${GEMINI_TIMEOUT_MS}ms)`);
@@ -83,8 +92,8 @@ export class AiService {
     };
   }
 
-  private getModel(): GenerativeModel {
-    if (this.model) return this.model;
+  private getClient(): GoogleGenAI {
+    if (this.client) return this.client;
 
     const apiKey = this.config.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
@@ -92,12 +101,15 @@ export class AiService {
       throw new ServiceUnavailableException(AI_UNAVAILABLE_MESSAGE);
     }
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    this.model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
-    return this.model;
+    // 환경 변수(GOOGLE_GENAI_USE_VERTEXAI 등)와 무관하게 Gemini API 키 방식으로 고정한다.
+    this.client = new GoogleGenAI({ apiKey, vertexai: false });
+    return this.client;
   }
 
-  private async callWithTimeout(model: GenerativeModel, prompt: string) {
+  private async callWithTimeout(
+    client: GoogleGenAI,
+    prompt: string,
+  ): Promise<GenerateContentResponse> {
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
@@ -108,11 +120,37 @@ export class AiService {
     });
     try {
       return await Promise.race([
-        model.generateContent(prompt, { signal: controller.signal }),
+        client.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: prompt,
+          config: { abortSignal: controller.signal },
+        }),
         timeout,
       ]);
     } finally {
       clearTimeout(timer);
     }
   }
+}
+
+/**
+ * 응답에서 첫 후보의 텍스트를 꺼낸다. 프롬프트가 차단됐거나 첫 후보가 차단 사유로 끝났으면
+ * 사유를 담은 오류를 던지고, 텍스트가 없으면 빈 문자열을 돌려준다.
+ */
+function extractResponseText(response: GenerateContentResponse): string {
+  const candidate = response.candidates?.[0];
+  if (!candidate) {
+    const feedback = response.promptFeedback;
+    if (feedback) {
+      const reason = feedback.blockReason ? ` due to ${feedback.blockReason}` : '';
+      const detail = feedback.blockReasonMessage ? `: ${feedback.blockReasonMessage}` : '';
+      throw new Error(`Text not available. Response was blocked${reason}${detail}`);
+    }
+    return '';
+  }
+  if (candidate.finishReason && BLOCKED_FINISH_REASONS.has(candidate.finishReason)) {
+    const detail = candidate.finishMessage ? `: ${candidate.finishMessage}` : '';
+    throw new Error(`Candidate was blocked due to ${candidate.finishReason}${detail}`);
+  }
+  return response.text ?? '';
 }

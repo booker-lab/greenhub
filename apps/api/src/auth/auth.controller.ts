@@ -32,8 +32,9 @@ const AUTH_THROTTLE = { default: { limit: 10, ttl: 60000 } };
 // 유효한 카카오 토큰·리프레시 토큰이 있어야만 성공하는 경로라 대입 공격 위험이 낮아 한도를 넓힌다.
 const RELAYED_AUTH_THROTTLE = { default: { limit: 120, ttl: 60000 } };
 // firebase-token은 판매자·기사 앱 브라우저가 화면을 새로 열 때와 access token이 바뀔 때(약 1시간마다)
-// 한 번씩 부른다. 한 사무실 IP 뒤의 직원 여럿이 동시에 써도 닿지 않을 만큼 두되, 전역 기본(100/분)보다는
-// 낮춰 커스텀 토큰 발급이 반복 호출로 몰리지 않게 한다.
+// 한 번씩 부른다. 집계는 ClientThrottlerGuard가 서명 검증된 access token의 사용자(sub) 단위로 하므로,
+// 한 사용자가 여러 탭·기기를 함께 열어도 닿지 않을 만큼 두되, 전역 기본(100/분)보다는 낮춰 커스텀 토큰
+// 발급이 반복 호출로 몰리지 않게 한다.
 export const FIREBASE_TOKEN_THROTTLE = { default: { limit: 60, ttl: 60000 } };
 
 @Controller('auth')

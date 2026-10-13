@@ -285,7 +285,7 @@ round checkout 선택 마케팅 consent, user preference, 철회, retention evid
 
 ### 역사적 P0 — ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION
 
-> 2026-10-10: #402로 `orders`·`saleRounds`·`saleRoundItems` 원문 직접 읽기·쓰기를 모든 클라이언트에 거부한다(`main`, 운영 미배포). 세 앱 모두 이 원문을 직접 읽지 않는다.
+> 2026-10-10: #402로 `orders`·`saleRounds`·`saleRoundItems` 원문 직접 읽기·쓰기를 모든 클라이언트에 거부한다(운영 반영). 세 앱 모두 이 원문을 직접 읽지 않는다.
 
 API authorization보다 seller/driver raw Firestore read 경계가 넓다.
 
@@ -537,16 +537,27 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### 역사적 P0 — 출시 후보 검증·운영 준비
 
-- [ ] `PAYMENT-FINALIZATION-PAID-GUARD`
-- [ ] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
-- [ ] `ORDER-REDELIVERY-PAID-RESUME-GATE`
-- [ ] `ADMIN-FORCE-REFUND-CONSISTENCY`
-- [ ] `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
-- [ ] `SETTLEMENT-LIFECYCLE-COVERAGE`
-- [ ] `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
-- [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
-- [ ] `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
-- [ ] `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
+> **2026-10-13 재대조**(`main` `bd159830`, 아래 항목 근거 spec 297건 통과): 위 각 절의 미체크 상자는 당시 기록이고, 현재 코드·직접 회귀 기준 판정은 다음과 같다. 출시 절차 상자(legal 포함 release SHA 이하)는 2026-09-28 출시(`197f84a4`)와 그 뒤 운영 배포로 끝난 역사 기록이다(`STALE_SPEC`, 현재 운영 SHA는 `docs/memory.md`).
+>
+> - `PAYMENT-FINALIZATION-PAID-GUARD`·`PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`·`ADMIN-FORCE-REFUND-CONSISTENCY`: `VERIFIED` — `docs/reports/REPORT_payments_auth_rules_reaudit_20261010.md`.
+> - `ORDER-REDELIVERY-PAID-RESUME-GATE`: `VERIFIED` — `orders/redelivery-resume-gate.spec.ts`. 레거시 판매자 경로는 직접 테스트가 없고 재배송비는 schemaVersion 2에서만 생긴다.
+> - `ADMIN-PRIVILEGED-MUTATION-COVERAGE`: `VERIFIED` — `admin/admin-privileged-mutation.spec.ts`(실제 HTTP 401, consumer·seller·driver 403과 side effect 0, `markAsPaid` 상태 계약·동시 지급 race).
+> - `SETTLEMENT-LIFECYCLE-COVERAGE`: `VERIFIED` — `settlements/settlements-lifecycle.spec.ts`(생성 멱등·동시 완료 수렴·confirm 계약).
+> - `ORDER-MUTATION-AUTHORIZATION-COVERAGE`: `VERIFIED` — `orders/order-mutation-authorization.spec.ts`(정상 허용과 타 매장·비담당 기사 거부).
+> - `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`: `VERIFIED` — #402로 `orders` 원문 직접 읽기·쓰기를 모든 클라이언트에 거부(`tests/firestore/firestore-rules.test.mjs`, CI 에뮬레이터).
+> - `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`: `VERIFIED` — 승인 게이트·refresh 권한 재조회·즉시 폐기(D2)·로그아웃/정지 `sessionsRevokedAt`(#474), `auth.service.spec.ts`·`strategies/jwt.strategy.spec.ts`. 로그아웃 런타임 확인은 `AUTH-LOGOUT-SERVER-REVOCATION`에 남는다.
+> - `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`: `STALE_SPEC` — Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`(`docs/memory.md`).
+
+- [x] `PAYMENT-FINALIZATION-PAID-GUARD`
+- [x] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
+- [x] `ORDER-REDELIVERY-PAID-RESUME-GATE`
+- [x] `ADMIN-FORCE-REFUND-CONSISTENCY`
+- [x] `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
+- [x] `SETTLEMENT-LIFECYCLE-COVERAGE`
+- [x] `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
+- [x] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
+- [x] `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
+- [x] `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
 - [x] Issue #32 — 2026-09-05 GitHub 보호 상태 직접 재확인
 - [ ] legal 포함 actual release SHA
 - [ ] exact SHA E2E 52 + cleanup
@@ -696,31 +707,31 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
 
 ### SILENT-REFUND-CUSTOMER-NOTICE
-- [ ] 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다. 2026-10-09 코드 반영(#420, 운영 미배포). 남은 일은 `apps/api/src/notifications/refund-notice-reasons.ts` 문구 확정이다.
+- [ ] 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다. 2026-10-09 코드 반영(#420, 운영 반영). 남은 일은 `apps/api/src/notifications/refund-notice-reasons.ts` 문구 확정이다.
 
 ### OPS-ALERTING
-- [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다. 2026-10-09 코드 반영(#421, 텔레그램 봇과 GitHub 15분 가동 확인, 운영 미배포). 남은 일은 `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`를 Railway 운영과 GitHub Actions 비밀값에 넣는 것이다(`docs/specs/ops/ops-alerts.md` §2).
+- [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다. 2026-10-09 코드 반영(#421, 텔레그램 봇과 GitHub 15분 가동 확인, 운영 반영). 남은 일은 `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`를 Railway 운영과 GitHub Actions 비밀값에 넣는 것이다(`docs/specs/ops/ops-alerts.md` §2).
 
 ### FIRESTORE-MANAGED-BACKUP
 - [ ] 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
 
 ### ROUND-HOLD-ABUSE-LIMITS
-- [x] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. **2026-10-12 구현 완료(운영 미배포)**: 주문 요청 수량·회차 품목 수 입력 상한(#422), 같은 고객의 같은 회차 활성 결제 예약 최대 3건(#427, `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`의 이전 예약 유지는 그대로, `checkout-hold-per-user.spec.ts`), 운영에서 판매자 초대 가입 외 `POST /auth/register` 403(#474, `auth.service.ts` `register`). 운영 외 환경의 register는 그대로 열려 있다.
+- [x] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. **2026-10-12 구현 완료(2026-10-13 운영 반영)**: 주문 요청 수량·회차 품목 수 입력 상한(#422), 같은 고객의 같은 회차 활성 결제 예약 최대 3건(#427, `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`의 이전 예약 유지는 그대로, `checkout-hold-per-user.spec.ts`), 운영에서 판매자 초대 가입 외 `POST /auth/register` 403(#474, `auth.service.ts` `register`). 운영 외 환경의 register는 그대로 열려 있다.
 
 ### OPERATION-ISSUE-MANUAL-RESOLVE
 - [ ] 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.
 
 ### CHECKOUT-DELIVERY-PHONE-CLIENT-CHECK
-- [ ] 받는 분 연락처는 휴대폰 번호만 받는다(**2026-10-10 결정**). 서버 검사는 #445로 들어갔다. 결제 화면 입력 단계 검사는 같은 화면을 고치는 병행 PR #437 병합 뒤 맞춘다(그전에도 서버 400 안내 문구가 결제 화면에 보인다).
+- [x] 받는 분 연락처는 휴대폰 번호만 받는다(**2026-10-10 결정**). 서버 검사는 #445로 들어갔다. **2026-10-13**: 소비자 회차 결제 화면도 같은 규칙(`apps/consumer/src/lib/korean-mobile-phone.ts`)으로 결제 버튼을 막고 칸을 벗어나면 서버와 같은 안내 문구를 보여 준다(운영 미배포).
 
 ### REDELIVERY-PAID-REQUEST-RESEND
-- [ ] 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 PR #448이 연결 결제가 PAID면 건너뛰게 고치고, 판매자 확인 창 문구·런북도 함께 맞춘다. 2026-10-10 발견.
+- [x] **2026-10-13 재대조: #448로 해결(운영 반영)** — 연결 결제가 PAID면 결제 요청 알림톡을 건너뛰고 판매자 확인 창 문구·런북도 맞췄다(`orders-lifecycle.service.ts`, `redelivery-resume-gate.spec.ts`). 이전 기록: 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 PR #448이 연결 결제가 PAID면 건너뛰게 고치고, 판매자 확인 창 문구·런북도 함께 맞춘다. 2026-10-10 발견.
 
 ### AUTH-MULTI-DEVICE-SESSION
 - [ ] **DECISION REQUIRED** (2026-10-10 재대조 발견): `refreshTokens/{sub}`가 사용자당 문서 1개다. 같은 계정으로 두 번째 기기에서 로그인하면 문서를 덮어써(`apps/api/src/auth/auth.service.ts` `issueTokens`) 첫 기기의 다음 refresh(최대 약 55분 뒤)가 재사용으로 판정된다. 그러면 문서 삭제·Firebase 세션 폐기·`auth.token.stolen` 기록으로 두 기기 모두 끊기고 거짓 탈취 기록이 남는다. 한 기기 로그아웃도 모든 기기를 끊는다. 판매자가 휴대폰과 PC를 함께 쓰면 파일럿에서 겪을 수 있다. 사용자당 단일 세션을 계약으로 확정할지, 기기별 refresh 문서로 바꿀지 정한다. **2026-10-12**: #474 병합 뒤에도 refresh 문서는 사용자당 1개(해시 저장)이고, 로그아웃이 기록하는 `sessionsRevokedAt`이 사용자 단위라 한 기기 로그아웃이 다른 기기의 access token까지 즉시 끊는다. 기기별 문서로 바꾸면 로그아웃 폐기 범위(사용자 단위 `sessionsRevokedAt`)도 함께 정해야 한다.
 
 ### CHARGE-REFUND-ISSUE-ROUTING
-- [x] **2026-10-10 수정(운영 미배포)**: 기록을 charge의 `storeId`·`paymentId: null`·`chargeId`로 남기고, `RETRY_REFUND`가 `chargeId` 기록이면 `orderCharges` 문서를 대상으로 재배송비 환불을 다시 부른 뒤 `REFUNDED`일 때만 해결한다. 직접 회귀: `order-charge-refund-provider-ambiguity.spec.ts` C8, `operations.service.spec.ts` "재배송비 환불 기록은 orderCharges를 대상으로 재시도한다". 남은 일: 수정 전에 빈 `storeId`로 생긴 운영 기록이 있는지 운영 데이터 확인(사용자 승인 필요, 파일럿 전이라 없을 가능성이 크다). 이전 기록 — **IMPLEMENTATION FINDING** (2026-10-10 재대조 발견, 돈이 잘못 빠지는 문제는 아니고 운영 복구 문제): 재배송비 환불 결과가 불명확하면(PortOne 504 등) `AUTO_REFUND_FAILED`를 `storeId: ''`, `paymentId: chargeId`로 남긴다(`apps/api/src/payments/order-charge-payment.service.ts` `persistUncertainRefund`). 판매자 운영 화면은 매장 범위로만 보여 이 기록이 안 보이고, `RETRY_REFUND`는 `payments/<chargeId>`를 읽어 늘 `PAYMENT_NOT_FOUND`(409)로 끝난다. 남은 신호는 텔레그램 알림·아침 요약의 critical 건수뿐이다. 완료 조건: 주문의 실제 `storeId`로 기록하고, 재배송비 환불 재시도가 `orderCharges`를 대상으로 동작하며, 직접 회귀 테스트가 있다.
+- [x] **2026-10-10 수정(운영 반영)**: 기록을 charge의 `storeId`·`paymentId: null`·`chargeId`로 남기고, `RETRY_REFUND`가 `chargeId` 기록이면 `orderCharges` 문서를 대상으로 재배송비 환불을 다시 부른 뒤 `REFUNDED`일 때만 해결한다. 직접 회귀: `order-charge-refund-provider-ambiguity.spec.ts` C8, `operations.service.spec.ts` "재배송비 환불 기록은 orderCharges를 대상으로 재시도한다". 남은 일: 수정 전에 빈 `storeId`로 생긴 운영 기록이 있는지 운영 데이터 확인(사용자 승인 필요, 파일럿 전이라 없을 가능성이 크다). 이전 기록 — **IMPLEMENTATION FINDING** (2026-10-10 재대조 발견, 돈이 잘못 빠지는 문제는 아니고 운영 복구 문제): 재배송비 환불 결과가 불명확하면(PortOne 504 등) `AUTO_REFUND_FAILED`를 `storeId: ''`, `paymentId: chargeId`로 남긴다(`apps/api/src/payments/order-charge-payment.service.ts` `persistUncertainRefund`). 판매자 운영 화면은 매장 범위로만 보여 이 기록이 안 보이고, `RETRY_REFUND`는 `payments/<chargeId>`를 읽어 늘 `PAYMENT_NOT_FOUND`(409)로 끝난다. 남은 신호는 텔레그램 알림·아침 요약의 critical 건수뿐이다. 완료 조건: 주문의 실제 `storeId`로 기록하고, 재배송비 환불 재시도가 `orderCharges`를 대상으로 동작하며, 직접 회귀 테스트가 있다.
 
 ### PORTONE-CHANNEL-CHECK
 - [ ] 결제 확정은 PortOne 결제의 상태와 금액만 확인한다. 상점·통화·채널 확인 PR #426은 아직 병합되지 않았다(2026-10-10 기준 열림). 소비자 앱은 `channelKey`를 공개 환경 변수에서 넘기므로, 운영 PortOne 상점에 TEST 채널이 함께 있으면 테스트 결제로 금액만 맞춘 `PAID`가 실제 주문을 확정할 수 있다. 파일럿 전에 PortOne 콘솔에서 운영 상점의 TEST 채널 유무를 확인하고(사용자), #426 병합 여부를 정한다. #426(보안 세션)이 이 항목을 소유한다. 병합 전 조건: 운영 결제 채널 키가 LIVE, API `PORTONE_STORE_ID`와 consumer `NEXT_PUBLIC_PORTONE_STORE_ID` 일치, `RAILWAY_ENVIRONMENT_NAME=production`(아니면 결제가 자동 환불·취소된다).

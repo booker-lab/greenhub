@@ -148,6 +148,38 @@ const QUERY_CONTRACTS: QueryContract[] = [
     ],
   },
   {
+    id: 'admin-settlements-by-status-date-desc',
+    sourceFile: 'apps/api/src/admin/admin.service.ts',
+    sourcePatterns: [
+      'async getSettlements(dto: QueryAdminSettlementsDto)',
+      "query.where('status', '==', dto.status)",
+      "query.orderBy('settledAt', 'desc')",
+    ],
+    collectionGroup: 'settlements',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'settledAt', order: 'DESCENDING' },
+    ],
+  },
+  {
+    id: 'admin-settlements-by-store-status-date-desc',
+    sourceFile: 'apps/api/src/admin/admin.service.ts',
+    sourcePatterns: [
+      'async getSettlements(dto: QueryAdminSettlementsDto)',
+      "query.where('storeId', '==', dto.storeId)",
+      "query.where('status', '==', dto.status)",
+      "query.orderBy('settledAt', 'desc')",
+    ],
+    collectionGroup: 'settlements',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'storeId', order: 'ASCENDING' },
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'settledAt', order: 'DESCENDING' },
+    ],
+  },
+  {
     id: 'settlement-summary-by-store-date',
     sourceFile: 'apps/api/src/settlements/settlements.service.ts',
     sourcePatterns: [

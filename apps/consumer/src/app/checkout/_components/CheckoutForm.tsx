@@ -45,6 +45,8 @@ export interface CheckoutFormProps {
   onAddressChange: (a: DeliveryAddress) => void;
   deliveryPhone: string;
   onDeliveryPhoneChange: (phone: string) => void;
+  /** 연락처 칸을 벗어난 뒤 보여 줄 형식 오류. 회차 주문만 넘긴다. */
+  deliveryPhoneError?: string | null;
   /** 회차 주문에서만 넘긴다. 없으면 요청사항 칸을 그리지 않는다. */
   requestNote?: string;
   onRequestNoteChange?: (note: string) => void;
@@ -80,6 +82,7 @@ export default function CheckoutForm({
   onAddressChange,
   deliveryPhone,
   onDeliveryPhoneChange,
+  deliveryPhoneError,
   requestNote,
   onRequestNoteChange,
   paymentMethod,
@@ -91,6 +94,7 @@ export default function CheckoutForm({
   singleSummary,
 }: CheckoutFormProps) {
   const [roundDetailsConfirmed, setRoundDetailsConfirmed] = useState(false);
+  const [deliveryPhoneTouched, setDeliveryPhoneTouched] = useState(false);
   const isRoundCheckout = items.length > 0 && items.every(isRoundCartItem);
   const isIcheonAddress = isIcheonDeliveryAddress(address.address);
   const confirmationKey = isRoundCheckout
@@ -314,6 +318,8 @@ export default function CheckoutForm({
           type="tel"
           value={deliveryPhone}
           onChange={(e) => onDeliveryPhoneChange(e.target.value)}
+          onBlur={() => setDeliveryPhoneTouched(true)}
+          error={deliveryPhoneTouched && deliveryPhoneError ? deliveryPhoneError : undefined}
           autoComplete="tel"
           required
         />

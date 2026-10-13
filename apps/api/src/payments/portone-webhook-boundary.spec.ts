@@ -2,13 +2,15 @@ import * as crypto from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { INestApplication } from '@nestjs/common';
-import { Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
-import { PaymentsController, WEBHOOK_REJECTION_LOG_WINDOW_MS } from './payments.controller';
+import { sanitizedValidationPipeOptions } from '../common/validation/sanitized-validation';
+import { PaymentsController } from './payments.controller';
 import { PaymentsService } from './payments.service';
 import { PortoneClient } from './portone.client';
+import { WEBHOOK_REJECTION_LOG_WINDOW_MS } from './portone-webhook-signature.guard';
 
 type WebhookRequest = {
   rawBody: Buffer;
@@ -156,6 +158,8 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     }).compile();
 
     app = module.createNestApplication({ rawBody: true });
+    // main.ts와 같은 전역 ValidationPipe를 걸어, 서명 검증이 본문 검증보다 먼저인지 실제 순서로 확인한다.
+    app.useGlobalPipes(new ValidationPipe(sanitizedValidationPipeOptions()));
     await app.init();
   });
 
@@ -312,5 +316,79 @@ describe('P2 PAY-02 PortOne 웹훅 서명 경계', () => {
     const logged = JSON.stringify([...warnSpy.mock.calls, ...errorSpy.mock.calls]);
     expect(logged).not.toMatch(/forged-id|payment-1|store-1/);
     expectBusinessBoundaryClosed();
+  });
+
+  describe('서명 검증은 본문 검증보다 먼저 끝난다', () => {
+    const INVALID_DTO_BODY = Buffer.from(
+      JSON.stringify({ type: 42, data: { paymentId: 7 }, unexpected: 'field' }),
+      'utf8',
+    );
+
+    function expectUnauthorizedWithoutValidationDetail(response: request.Response): void {
+      expect(response.status).toBe(401);
+      expect(response.body).toEqual({
+        statusCode: 401,
+        error: 'Unauthorized',
+        message: expect.any(String),
+      });
+      expect(JSON.stringify(response.body)).not.toMatch(
+        /validation|paymentId|storeId|unexpected|isString|whitelist/,
+      );
+    }
+
+    it('서명 헤더 없이 DTO 형식이 틀린 본문을 보내면 400 검증 상세 대신 401만 받는다', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/payments/webhook/portone')
+        .set('Content-Type', 'application/json')
+        .send(INVALID_DTO_BODY.toString('utf8'));
+
+      expectUnauthorizedWithoutValidationDetail(response);
+      expectBusinessBoundaryClosed();
+    });
+
+    it('서명이 틀리고 DTO 형식도 틀린 본문은 400 검증 상세 대신 401만 받는다', async () => {
+      const webhook = createSignedWebhook({ rawBody: INVALID_DTO_BODY });
+      webhook.webhookSignature = invalidHmacHeader();
+
+      const response = await postWebhook(webhook);
+
+      expectUnauthorizedWithoutValidationDetail(response);
+      expectBusinessBoundaryClosed();
+    });
+
+    it.each(
+      missingHeaderCases,
+    )('%s 헤더가 빠진 DTO 위반 본문도 401만 받는다', async (omitHeader) => {
+      const response = await postWebhook(
+        createSignedWebhook({ rawBody: INVALID_DTO_BODY }),
+        omitHeader,
+      );
+
+      expectUnauthorizedWithoutValidationDetail(response);
+      expectBusinessBoundaryClosed();
+    });
+
+    it('서명이 맞는 요청은 이전과 같이 본문 검증을 거쳐 DTO 위반이면 400을 받는다', async () => {
+      const verifySpy = jest.spyOn(portoneClient, 'verifyWebhookSignature');
+
+      const response = await postWebhook(createSignedWebhook({ rawBody: INVALID_DTO_BODY }));
+
+      expect(verifySpy).toHaveBeenCalledTimes(1);
+      expect(response.status).toBe(400);
+      expectBusinessBoundaryClosed();
+    });
+
+    it('서명이 맞고 DTO도 맞으면 검증 완료 로그 뒤 업무 처리로 넘어간다', async () => {
+      const logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+
+      const response = await postWebhook(createSignedWebhook({ webhookId: 'webhook-log-1' }));
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ ok: true });
+      expect(logSpy).toHaveBeenCalledWith(
+        'webhook verified: id=webhook-log-1 type=Transaction.Paid',
+      );
+      expect(paymentsService.handleWebhook).toHaveBeenCalledTimes(1);
+    });
   });
 });

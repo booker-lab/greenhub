@@ -3,12 +3,13 @@ import { ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import * as bcrypt from 'bcrypt';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AuditService } from '../common/audit/audit.service';
 import { FirestoreService } from '../firestore/firestore.service';
+import { ClientThrottlerGuard } from '../common/guards/client-throttler.guard';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AuthController, FIREBASE_TOKEN_THROTTLE } from './auth.controller';
@@ -21,6 +22,7 @@ import {
 } from './dto/address.dto';
 import { FCM_TOKEN_MAX_LENGTH } from './dto/fcm-token.dto';
 import { REFRESH_TOKEN_MAX_LENGTH } from './dto/refresh-token.dto';
+import { JWT_ALGORITHM, JWT_AUDIENCE } from './token-claims';
 import { KakaoClient } from './kakao.client';
 
 type UserRecord = Record<string, unknown>;
@@ -444,12 +446,21 @@ describe('AuthController POST /auth/refresh 입력 검증', () => {
 });
 
 describe('AuthController GET /auth/firebase-token 요청 한도', () => {
+  const ACCESS_SECRET = 'access-secret-for-firebase-token-spec-0123456789';
+  const signer = new JwtService();
+  // AuthService와 같은 형태(typ·aud·HS256)로 서명한 access token.
+  const accessToken = (sub: string) =>
+    signer.sign(
+      { sub, role: 'seller', typ: 'access' },
+      { secret: ACCESS_SECRET, expiresIn: '1h', algorithm: JWT_ALGORITHM, audience: JWT_AUDIENCE },
+    );
+
   let app: INestApplication<App>;
-  const getFirebaseToken = jest.fn().mockResolvedValue('custom-token');
+  const getFirebaseToken = jest.fn((sub: string) => Promise.resolve(`custom-token:${sub}`));
 
   beforeEach(async () => {
     jest.clearAllMocks();
-    // app.module과 같은 단일 'default' throttler(100/분)를 전역 가드로 건다.
+    // app.module과 같은 단일 'default' throttler(100/분)와 ClientThrottlerGuard를 전역 가드로 건다.
     const module = await Test.createTestingModule({
       imports: [
         ThrottlerModule.forRoot({ throttlers: [{ name: 'default', ttl: 60000, limit: 100 }] }),
@@ -457,13 +468,22 @@ describe('AuthController GET /auth/firebase-token 요청 한도', () => {
       controllers: [AuthController],
       providers: [
         { provide: AuthService, useValue: { getFirebaseToken } },
-        { provide: APP_GUARD, useClass: ThrottlerGuard },
+        {
+          provide: ConfigService,
+          useValue: { get: (key: string) => (key === 'JWT_SECRET' ? ACCESS_SECRET : undefined) },
+        },
+        JwtService,
+        { provide: APP_GUARD, useClass: ClientThrottlerGuard },
       ],
     })
+      // 인증 가드는 이 테스트의 대상이 아니라 Bearer 토큰의 sub를 그대로 user로 올린다.
       .overrideGuard(JwtAuthGuard)
       .useValue({
         canActivate: (ctx: ExecutionContext) => {
-          ctx.switchToHttp().getRequest().user = { sub: 'seller-1', role: 'seller' };
+          const req = ctx.switchToHttp().getRequest();
+          const token = String(req.headers.authorization ?? '').replace(/^Bearer\s+/i, '');
+          const payload = signer.decode<{ sub: string; role: string }>(token);
+          req.user = { sub: payload.sub, role: payload.role };
           return true;
         },
       })
@@ -478,21 +498,31 @@ describe('AuthController GET /auth/firebase-token 요청 한도', () => {
     await app?.close();
   });
 
-  it('한도 안에서는 커스텀 토큰을 돌려주고, 한도를 넘으면 429를 돌려준다', async () => {
+  const call = (token: string) =>
+    request(app.getHttpServer()).get('/auth/firebase-token').set('Authorization', `Bearer ${token}`);
+
+  it('검증된 사용자별로 한도 안에서는 커스텀 토큰을 돌려주고, 넘으면 429를 돌려준다', async () => {
     const { limit } = FIREBASE_TOKEN_THROTTLE.default;
+    const sellerA = accessToken('seller-a');
     for (let i = 0; i < limit; i += 1) {
-      await request(app.getHttpServer())
-        .get('/auth/firebase-token')
+      await call(sellerA)
         .expect(200)
         .expect(({ text }) => {
-          expect(text).toBe('custom-token');
+          expect(text).toBe('custom-token:seller-a');
         });
     }
-    await request(app.getHttpServer()).get('/auth/firebase-token').expect(429);
+    await call(sellerA).expect(429);
     expect(getFirebaseToken).toHaveBeenCalledTimes(limit);
+
+    // 같은 IP(테스트 클라이언트)를 쓰는 다른 사용자는 별도 버킷이라 막히지 않는다.
+    await call(accessToken('seller-b'))
+      .expect(200)
+      .expect(({ text }) => {
+        expect(text).toBe('custom-token:seller-b');
+      });
   });
 
-  it('한도는 한 사무실 IP 뒤 직원 여럿이 쓸 수 있는 분당 60회다', () => {
+  it('한도는 사용자당 분당 60회다', () => {
     expect(FIREBASE_TOKEN_THROTTLE).toEqual({ default: { limit: 60, ttl: 60000 } });
   });
 });
