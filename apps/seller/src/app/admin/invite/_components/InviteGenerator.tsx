@@ -10,7 +10,7 @@ interface InviteGeneratorProps {
   copied: boolean;
   /** useAdminInvite 발급 command 실패 메시지. null이면 마지막 발급이 실패하지 않았음. */
   generateError: string | null;
-  /** 받는 사람 이메일 입력값(선택). 비우면 받는 사람 제한 없는 초대를 발급한다. */
+  /** 받는 사람 이메일 입력값(필수). 비어 있으면 생성 버튼을 막는다. */
   recipientEmail: string;
   /** 받는 사람 이메일 입력 오류. null이면 오류 없음. */
   recipientEmailError: string | null;
@@ -30,6 +30,9 @@ export function InviteGenerator({
   onGenerate,
   onCopy,
 }: InviteGeneratorProps) {
+  // 받는 사람 이메일은 필수다. 비어 있으면 생성 버튼을 막고, 형식 오류는 누른 뒤 입력란에 보여 준다.
+  const recipientMissing = recipientEmail.trim() === '';
+
   return (
     <Paper
       radius="lg"
@@ -47,8 +50,9 @@ export function InviteGenerator({
 
       <TextInput
         type="email"
-        label="받는 사람 이메일 (선택)"
-        description="입력하면 이 이메일로만 가입할 수 있어요. 비우면 누구나 이 토큰으로 가입할 수 있어요."
+        label="받는 사람 이메일"
+        description="이 이메일로만 가입할 수 있어요."
+        required
         placeholder="seller@example.com"
         value={recipientEmail}
         onChange={(event) => onRecipientEmailChange(event.currentTarget.value)}
@@ -61,7 +65,7 @@ export function InviteGenerator({
 
       <Button
         onClick={onGenerate}
-        disabled={generating}
+        disabled={generating || recipientMissing}
         size="md"
         radius="xl"
         style={{ backgroundColor: 'var(--color-primary)' }}

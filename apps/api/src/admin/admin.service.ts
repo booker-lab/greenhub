@@ -551,15 +551,14 @@ export class AdminService {
   // ── Invite ───────────────────────────────────────────────────────
 
   /**
-   * 판매자 초대 토큰을 발급한다. recipientEmail을 주면 정규화(trim·소문자)해 저장하고,
-   * 가입은 같은 정규화 이메일로만 받는다. 주지 않으면 받는 사람 제한 없이 기존처럼 발급한다.
+   * 판매자 초대 토큰을 발급한다. 받는 사람 이메일(recipientEmail)은 필수이고(DTO 검증),
+   * 정규화(trim·소문자)해 저장한다. 가입은 같은 정규화 이메일로만 받는다.
    */
-  async generateInvite(adminId: string, dto: GenerateInviteDto = {}) {
+  async generateInvite(adminId: string, dto: GenerateInviteDto) {
     const token = randomUUID().replace(/-/g, '').substring(0, 16).toUpperCase();
     const now = this.firestore.Timestamp.now();
     const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
-    const recipientEmail =
-      typeof dto.recipientEmail === 'string' ? normalizeEmail(dto.recipientEmail) : null;
+    const recipientEmail = normalizeEmail(dto.recipientEmail);
 
     await this.firestore.doc(`invites/${token}`).set({
       token,

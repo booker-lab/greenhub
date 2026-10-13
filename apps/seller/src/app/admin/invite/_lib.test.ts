@@ -201,9 +201,14 @@ describe('describeInviteRevokeOutcome', () => {
 });
 
 describe('parseInviteRecipientEmail', () => {
-  it('비우거나 공백만 입력하면 받는 사람 제한 없는 초대(null)로 본다', () => {
-    expect(parseInviteRecipientEmail('')).toEqual({ ok: true, value: null });
-    expect(parseInviteRecipientEmail('   ')).toEqual({ ok: true, value: null });
+  it.each([
+    '',
+    '   ',
+  ])('받는 사람 이메일은 필수라 비운 입력 %p는 입력 요청 문구를 돌려준다', (input) => {
+    expect(parseInviteRecipientEmail(input)).toEqual({
+      ok: false,
+      error: '받는 사람 이메일을 입력해 주세요.',
+    });
   });
 
   it('형식이 맞으면 앞뒤 공백을 뺀 값을 돌려준다', () => {
