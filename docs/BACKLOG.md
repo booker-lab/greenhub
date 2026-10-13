@@ -537,16 +537,27 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 ### 역사적 P0 — 출시 후보 검증·운영 준비
 
-- [ ] `PAYMENT-FINALIZATION-PAID-GUARD`
-- [ ] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
-- [ ] `ORDER-REDELIVERY-PAID-RESUME-GATE`
-- [ ] `ADMIN-FORCE-REFUND-CONSISTENCY`
-- [ ] `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
-- [ ] `SETTLEMENT-LIFECYCLE-COVERAGE`
-- [ ] `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
-- [ ] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
-- [ ] `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
-- [ ] `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
+> **2026-10-13 재대조**(`main` `bd159830`, 아래 항목 근거 spec 297건 통과): 위 각 절의 미체크 상자는 당시 기록이고, 현재 코드·직접 회귀 기준 판정은 다음과 같다. 출시 절차 상자(legal 포함 release SHA 이하)는 2026-09-28 출시(`197f84a4`)와 그 뒤 운영 배포로 끝난 역사 기록이다(`STALE_SPEC`, 현재 운영 SHA는 `docs/memory.md`).
+>
+> - `PAYMENT-FINALIZATION-PAID-GUARD`·`PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`·`ADMIN-FORCE-REFUND-CONSISTENCY`: `VERIFIED` — `docs/reports/REPORT_payments_auth_rules_reaudit_20261010.md`.
+> - `ORDER-REDELIVERY-PAID-RESUME-GATE`: `VERIFIED` — `orders/redelivery-resume-gate.spec.ts`. 레거시 판매자 경로는 직접 테스트가 없고 재배송비는 schemaVersion 2에서만 생긴다.
+> - `ADMIN-PRIVILEGED-MUTATION-COVERAGE`: `VERIFIED` — `admin/admin-privileged-mutation.spec.ts`(실제 HTTP 401, consumer·seller·driver 403과 side effect 0, `markAsPaid` 상태 계약·동시 지급 race).
+> - `SETTLEMENT-LIFECYCLE-COVERAGE`: `VERIFIED` — `settlements/settlements-lifecycle.spec.ts`(생성 멱등·동시 완료 수렴·confirm 계약).
+> - `ORDER-MUTATION-AUTHORIZATION-COVERAGE`: `VERIFIED` — `orders/order-mutation-authorization.spec.ts`(정상 허용과 타 매장·비담당 기사 거부).
+> - `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`: `VERIFIED` — #402로 `orders` 원문 직접 읽기·쓰기를 모든 클라이언트에 거부(`tests/firestore/firestore-rules.test.mjs`, CI 에뮬레이터).
+> - `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`: `VERIFIED` — 승인 게이트·refresh 권한 재조회·즉시 폐기(D2)·로그아웃/정지 `sessionsRevokedAt`(#474), `auth.service.spec.ts`·`strategies/jwt.strategy.spec.ts`. 로그아웃 런타임 확인은 `AUTH-LOGOUT-SERVER-REVOCATION`에 남는다.
+> - `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`: `STALE_SPEC` — Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`(`docs/memory.md`).
+
+- [x] `PAYMENT-FINALIZATION-PAID-GUARD`
+- [x] `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`
+- [x] `ORDER-REDELIVERY-PAID-RESUME-GATE`
+- [x] `ADMIN-FORCE-REFUND-CONSISTENCY`
+- [x] `ADMIN-PRIVILEGED-MUTATION-COVERAGE`
+- [x] `SETTLEMENT-LIFECYCLE-COVERAGE`
+- [x] `MARKETING-CONSENT-LIFECYCLE-CONSISTENCY`
+- [x] `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`
+- [x] `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`
+- [x] `ORDER-MUTATION-AUTHORIZATION-COVERAGE`
 - [x] Issue #32 — 2026-09-05 GitHub 보호 상태 직접 재확인
 - [ ] legal 포함 actual release SHA
 - [ ] exact SHA E2E 52 + cleanup
