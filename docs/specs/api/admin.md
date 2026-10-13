@@ -190,11 +190,12 @@ admin 환불의 주문·결제·정산·회차 capacity 후속효과 수렴은 `
 ### 목록
 
 ```text
-GET /admin/settlements?storeId=<storeId>&from=<date>&to=<date>
+GET /admin/settlements?storeId=<storeId>&from=<date>&to=<date>&status=<status>
 ```
 
 - `settledAt DESC`
 - 최대 500건
+- `status`(선택)는 shared `SETTLEMENT_STATUSES`(`pending`·`confirmed`·`paid`·`cancelled`)만 허용하고, 다른 값은 400. 지정하지 않으면 모든 상태를 돌려준다. 사용하는 복합 인덱스: `status+settledAt DESC`, `storeId+status+settledAt DESC`(`firestore.indexes.json`, 계약 `firestore-indexes.spec.ts`). 직접 증거: `apps/api/src/admin/admin-settlements-status-filter.spec.ts`
 - `{ settlements, total }`
 
 ### 지급 처리
