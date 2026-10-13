@@ -48,10 +48,14 @@ import {
 } from './run-build.mjs';
 import { MAX_BATCH_CONCURRENCY } from './run-goal.mjs';
 import {
+  DEFAULT_OPENCODE_TIMEOUT_MS,
+  DEFAULT_PROOF_TIMEOUT_MS,
   PROTECTED_BASENAME_PATTERNS,
   PROTECTED_EXACT_PATHS,
   PROTECTED_PATH_PREFIXES,
 } from './run-once.mjs';
+import { DEFAULT_CODEX_TIMEOUT_MS } from './agent-executor.mjs';
+import { DEFAULT_CI_TIMEOUT_MS } from './run-publish-once.mjs';
 
 // ---------------------------------------------------------------------------
 // Fixture lifetime ownership (development-authority section 7.1)
@@ -524,6 +528,43 @@ test('CASE A0c — parseArgs requires only an explicit flag surface', () => {
   assert.equal(parseArgs(['--request', 'req.txt', '--reasoning-effort', 'ultra']).ok, false);
 });
 
+test('CASE A0c2 — parseArgs rejects zero, negative, and non-finite timeouts', () => {
+  for (const flag of [
+    '--opencode-timeout-ms',
+    '--codex-timeout-ms',
+    '--proof-timeout-ms',
+    '--ci-timeout-ms',
+  ]) {
+    for (const value of ['0', '-1', 'Infinity', '-Infinity', 'NaN', 'abc', '']) {
+      const parsed = parseArgs(['--request', 'req.txt', flag, value]);
+      assert.equal(parsed.ok, false, `${flag} ${JSON.stringify(value)} must be rejected`);
+      assert.equal(parsed.error, `${flag} requires a positive number`);
+    }
+    assert.equal(parseArgs(['--request', 'req.txt', flag]).ok, false);
+  }
+  const accepted = parseArgs([
+    '--request',
+    'req.txt',
+    '--opencode-timeout-ms',
+    '1000',
+    '--codex-timeout-ms',
+    '2000',
+    '--proof-timeout-ms',
+    '3000',
+    '--ci-timeout-ms',
+    '4000',
+  ]);
+  assert.equal(accepted.ok, true);
+  assert.equal(accepted.options.opencodeTimeoutMs, 1000);
+  assert.equal(accepted.options.codexTimeoutMs, 2000);
+  assert.equal(accepted.options.proofTimeoutMs, 3000);
+  assert.equal(accepted.options.ciTimeoutMs, 4000);
+  // A zero rebind budget is still a valid, bounded choice.
+  const noRebind = parseArgs(['--request', 'req.txt', '--max-rebind-attempts', '0']);
+  assert.equal(noRebind.ok, true);
+  assert.equal(noRebind.options.maxRebindAttempts, 0);
+});
+
 test('CASE A0d — the selector prompt states the ACCEPTANCE_AUTHORITY completeness rule', () => {
   const prompt = buildFrontierPrompt({
     buildRequest: 'MODE: BUILD\n\nclose exactly one bounded frontier',
@@ -610,6 +651,73 @@ test('CASE A — one natural-language request yields one validated ephemeral Goa
     assert.deepEqual(fake.calls.runPublishOnce[0].proofCommands, ['node proof-feature.cjs']);
     assert.deepEqual(fake.calls.runPublishOnce[0].allowedPaths, ['docs/feature.md']);
     assert.equal(fake.calls.runPublishOnce[0].commitMessage, 'feat(agent): T1');
+    assertSelectorWorkspaceRemoved(selector);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('CASE A1t — programmatic non-positive timeouts fall back to bounded defaults', () => {
+  const fixture = buildFixture();
+  try {
+    const entry = {
+      priority: 1,
+      id: 'F1',
+      statement: 'docs/feature.md exists at live main.',
+      kind: 'PRODUCT',
+      criteria: [criterion({ id: 'C1', path: 'docs/feature.md' })],
+      satisfied: false,
+    };
+    const decision = frontierDecision({
+      considered: [entry],
+      selected: {
+        priority: 1,
+        id: 'F1',
+        statement: entry.statement,
+        kind: 'PRODUCT',
+        why_selected: 'only considered open product frontier',
+        goal: goalFor({
+          criteria: entry.criteria,
+          tasks: [
+            task({
+              id: 'T1',
+              closes: ['C1'],
+              allow: ['docs/feature.md'],
+              proof: ['node proof-feature.cjs'],
+            }),
+          ],
+        }),
+      },
+    });
+    const selector = createFakeSelector({ decision });
+    const fake = createFakeChildren({
+      runPublishBehavior: (options) => {
+        pushCommitToLiveMain(fixture, { path: options.allowedPaths[0], content: 'deliverable\n' });
+        return { status: 'SUCCESS_PUBLISHED', reason: 'fake publication' };
+      },
+    });
+    const result = runBuild(
+      {
+        requestText: DEFAULT_REQUEST,
+        repositoryRoot: fixture.root,
+        remote: 'origin',
+        opencodeTimeoutMs: 0,
+        codexTimeoutMs: -1,
+        proofTimeoutMs: Number.POSITIVE_INFINITY,
+        ciTimeoutMs: 0,
+      },
+      { log: () => {}, ...selector.deps, ...fake.deps },
+    );
+
+    assert.equal(result.status, FRONTIER_COMPLETE);
+    assert.equal(selector.calls.length, 1);
+    assert.equal(selector.calls[0].timeoutMs, DEFAULT_OPENCODE_TIMEOUT_MS);
+    assert.equal(fake.calls.runPublishOnce.length, 1);
+    const child = fake.calls.runPublishOnce[0];
+    assert.equal(child.opencodeTimeoutMs, DEFAULT_OPENCODE_TIMEOUT_MS);
+    assert.equal(child.codexTimeoutMs, DEFAULT_CODEX_TIMEOUT_MS);
+    assert.equal(child.proofTimeoutMs, DEFAULT_PROOF_TIMEOUT_MS);
+    assert.equal(child.ciTimeoutMs, DEFAULT_CI_TIMEOUT_MS);
     assertSelectorWorkspaceRemoved(selector);
   } finally {
     removeFixture(fixture);

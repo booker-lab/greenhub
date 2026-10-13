@@ -41,8 +41,9 @@ test-e2e:
     pnpm test:e2e
 
 # ── 보안 스캔 ─────────────────────────────────────────────────
+# 전체 이력 검사. CI 전체 이력 실패 단계(secret-scan-scheduled.yml)와 같은 설정·제외 경로를 쓴다.
 secret-scan:
-    trufflehog git file://. --only-verified
+    trufflehog git file://. --only-verified --fail --config=.trufflehog.yml --exclude-paths=.github/trufflehog-exclude-paths.txt
 
 # ── CI 파이프라인 ──────────────────────────────────────────────
 ci: format-check lint typecheck secret-scan
