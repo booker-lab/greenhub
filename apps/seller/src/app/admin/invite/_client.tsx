@@ -19,7 +19,7 @@ export default function AdminInviteClient() {
   const { copiedToken, manualToken, copy, closeManual } = useTokenCopy();
   const copied = lastToken !== null && copiedToken === lastToken.token;
 
-  // 받는 사람 이메일(선택) — 형식이 틀리면 요청하지 않고 입력란에 오류를 보여 준다.
+  // 받는 사람 이메일(필수) — 비었거나 형식이 틀리면 요청하지 않고 입력란에 오류를 보여 준다.
   const [recipientEmail, setRecipientEmail] = useState('');
   const [recipientEmailError, setRecipientEmailError] = useState<string | null>(null);
 
@@ -34,7 +34,7 @@ export default function AdminInviteClient() {
       setRecipientEmailError(recipient.error);
       return;
     }
-    const result = await generate(recipient.value ?? undefined);
+    const result = await generate(recipient.value);
     // 성공한 경우에만 lastToken 갱신 — 실패(null)는 이전 성공 token을 덮어쓰지 않는다.
     if (result) setLastToken(result);
     // 다음 발급이 같은 받는 사람으로 묶이지 않게 성공한 뒤에만 입력을 비운다.

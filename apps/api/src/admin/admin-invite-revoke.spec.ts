@@ -179,6 +179,7 @@ describe('관리자 초대 토큰 취소(POST /admin/invite/:token/revoke)와 �
     const issued = await request(app.getHttpServer())
       .post('/admin/invite')
       .set('Authorization', bearer('admin'))
+      .send({ recipientEmail: 'new-seller@example.com' })
       .expect(201);
     const token = issued.body.token as string;
 
@@ -337,7 +338,7 @@ describe('관리자 초대 토큰 취소(POST /admin/invite/:token/revoke)와 �
     }
   });
 
-  describe('받는 사람 이메일 지정과 가입 트랜잭션의 만료 재검증', () => {
+  describe('받는 사람 이메일 필수 발급과 가입 트랜잭션의 만료 재검증', () => {
     function issue(body?: Data) {
       const test = request(app.getHttpServer())
         .post('/admin/invite')
@@ -353,21 +354,67 @@ describe('관리자 초대 토큰 취소(POST /admin/invite/:token/revoke)와 �
       jest.restoreAllMocks();
     });
 
-    it('받는 사람 없이 발급하면 72시간 뒤 만료되고 recipientEmail이 null로 남으며, 어떤 이메일로든 가입할 수 있다', async () => {
+    it('받는 사람 이메일을 주면 201이고 72시간 뒤 만료되며, 그 값을 그대로 저장한다', async () => {
       const seventyTwoHoursMs = 72 * 60 * 60 * 1000;
       expect(INVITE_TTL_MS).toBe(seventyTwoHoursMs);
       const before = Date.now();
-      const issued = await issue().expect(201);
+      const issued = await issue({ recipientEmail: 'new-seller@example.com' }).expect(201);
       const token = issued.body.token as string;
 
-      expect(issued.body).toEqual({ token, expiresAt: expect.any(String), recipientEmail: null });
+      expect(issued.body).toEqual({
+        token,
+        expiresAt: expect.any(String),
+        recipientEmail: 'new-seller@example.com',
+      });
       const expiresAtMs = Date.parse(issued.body.expiresAt as string);
       expect(expiresAtMs).toBeGreaterThanOrEqual(before + seventyTwoHoursMs);
       expect(expiresAtMs).toBeLessThanOrEqual(Date.now() + seventyTwoHoursMs);
-      expect(occ.getData(`invites/${token}`)).toMatchObject({ recipientEmail: null });
+      expect(occ.listData('invites/')).toHaveLength(1);
+      expect(occ.getData(`invites/${token}`)).toMatchObject({
+        token,
+        createdBy: 'admin-1',
+        usedAt: null,
+        usedBy: null,
+        recipientEmail: 'new-seller@example.com',
+      });
+    });
 
-      await registerSeller(token, 'anyone@example.com').expect(201);
+    it.each([
+      ['본문 없음', undefined],
+      ['빈 본문', {}],
+      ['recipientEmail: null', { recipientEmail: null }],
+      ['빈 문자열', { recipientEmail: '' }],
+      ['공백뿐인 문자열', { recipientEmail: '   ' }],
+    ] as const)('받는 사람 이메일이 없으면(%s) 400이고 초대 문서를 만들지 않는다', async (_label, body) => {
+      const response = await issue(body === undefined ? undefined : { ...body }).expect(400);
+
+      expect(response.body).toMatchObject({ statusCode: 400 });
+      expect(occ.listData('invites/')).toHaveLength(0);
+    });
+
+    it.each([
+      ['recipientEmail이 null로 저장된', { recipientEmail: null }],
+      ['recipientEmail 필드가 없는', {}],
+    ] as const)('필수화 전에 %s 기존 초대는 만료 전까지 어떤 이메일로든 가입할 수 있다', async (_label, overrides) => {
+      seedInvite(occ, 'LEGACYTOKEN00001', { ...overrides });
+
+      await registerSeller('LEGACYTOKEN00001', 'anyone@example.com').expect(201);
+
       expect(usersWithEmail('anyone@example.com')).toHaveLength(1);
+      expect(occ.getData('invites/LEGACYTOKEN00001')).toMatchObject({
+        usedAt: expect.any(Date),
+        usedBy: usersWithEmail('anyone@example.com')[0]?.['id'],
+      });
+    });
+
+    it('받는 사람 값이 문자열이 아닌 저장 초대는 제한 없음으로 보지 않고 409 recipient_mismatch로 거부한다', async () => {
+      seedInvite(occ, 'MALFORMEDTOKEN01', { recipientEmail: 123 });
+
+      const rejected = await registerSeller('MALFORMEDTOKEN01', 'anyone@example.com').expect(409);
+
+      expect(rejected.body).toMatchObject({ statusCode: 409, reason: 'recipient_mismatch' });
+      expect(usersWithEmail('anyone@example.com')).toHaveLength(0);
+      expect(occ.getData('invites/MALFORMEDTOKEN01')).toMatchObject({ usedAt: null, usedBy: null });
     });
 
     it('받는 사람 이메일을 지정하면 정규화해 저장하고, 대소문자만 다른 같은 이메일의 가입은 받는다', async () => {
