@@ -61,6 +61,9 @@ const requireForTest = (specifier) => {
     return { pickCheckoutPrefill: () => ({}), prefillAddress: (c) => c, prefillPhone: (c) => c };
   }
   if (specifier === '@/lib/payment-redirect') return {};
+  if (specifier === '@/lib/korean-mobile-phone') {
+    return { isKoreanMobilePhone: () => true, ROUND_DELIVERY_PHONE_ERROR: '' };
+  }
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }
@@ -487,5 +490,18 @@ test('단건 checkout은 URL의 totalAmount 쿼리를 읽지 않는다', () => {
   assert.match(
     singleCheckoutSource,
     /resolveSingleCheckoutAmount\(product, quantity, productUnavailable\)/,
+  );
+});
+
+test('회차 결제는 받는 분 연락처가 휴대폰 번호일 때만 결제 버튼을 연다', () => {
+  const roundSection = source.slice(source.indexOf('function RoundCartCheckoutContent'));
+  assert.match(
+    roundSection,
+    /const deliveryPhoneValid = isKoreanMobilePhone\(deliveryPhone\.trim\(\)\);/,
+  );
+  assert.match(roundSection, /deliveryPhoneValid &&\n\s+!!session;/);
+  assert.match(
+    roundSection,
+    /deliveryPhoneError=\{deliveryPhoneValid \? null : ROUND_DELIVERY_PHONE_ERROR\}/,
   );
 });
