@@ -738,7 +738,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] **2026-10-13 파일럿 전 필수(사용자 PortOne 콘솔 확인)**: 운영 상점(대표상점)에 실연동(LIVE) 채널이 없고 테스트 채널 "카카오페이_테스트"만 있다. #426은 운영에서 LIVE 채널을 요구하므로(`requireLiveChannel: true`, #426 브랜치 `apps/api/src/payments/portone-payment-context.ts`) LIVE 채널 없이 배포하면 테스트 채널 결제가 모두 확정되지 않고 환불·취소된다. 그래서 #426은 LIVE 채널이 생긴 뒤 병합한다. 반대로 #426 없이 지금 상태로 파일럿을 열면 테스트 결제로 주문이 확정된다. 순서:
   1. (사용자) PortOne 콘솔 "전자결제 신청"으로 PG 계약 → 심사 → 실연동 채널 추가. 실연동은 이용료 결제 카드 등록도 필요하다(월 매출 5천만 원 미만 무과금). PG 심사에 기간이 걸리므로 11/1 파일럿 기준으로 일찍 신청한다.
   2. (사용자) Vercel consumer의 결제 채널 키 공개 환경 변수를 LIVE 채널 키로 교체한다.
-  3. (보안 세션) 운영 설정 점검(#503) 재실행으로 `PORTONE_STORE_ID` PASS 확인. 사용자가 2026-10-13 Railway에 값을 넣었고(직전 run `38386740268`은 추가 전 실행이라 FAIL), 재실행은 배포 동결이 풀린 뒤 한다.
+  3. ~~운영 설정 점검 재실행~~ **완료**: 사용자가 2026-10-13 Railway에 `PORTONE_STORE_ID`를 넣었고, run `38407326491`(main `1c703a5b`)에서 `portone_store_id_set`·`portone_store_id_matches_consumer`를 포함한 전 항목 PASS(success).
   4. (보안 세션) #426과 결제 정합성 PR 병합 → 배포. 이어서 `payments.service.spec.ts:311` ESLint 1건 수정과 CI eslint 단계 추가(`API-LINT-BASELINE`).
   5. 파일럿 시작 직후 실제 결제·환불 1건 시험(NEXT 항목).
   이전 기록: 2026-10-13 운영 설정 점검(#503, run `38386740268`)에서 Railway API에 `PORTONE_STORE_ID`가 없었다(FAIL). 그 전 기록: 결제 확정은 PortOne 결제의 상태와 금액만 확인한다. 상점·통화·채널 확인 PR #426은 아직 병합되지 않았다(2026-10-10 기준 열림). 소비자 앱은 `channelKey`를 공개 환경 변수에서 넘기므로, 운영 PortOne 상점에 TEST 채널이 함께 있으면 테스트 결제로 금액만 맞춘 `PAID`가 실제 주문을 확정할 수 있다. 파일럿 전에 PortOne 콘솔에서 운영 상점의 TEST 채널 유무를 확인하고(사용자), #426 병합 여부를 정한다. #426(보안 세션)이 이 항목을 소유한다. 병합 전 조건: 운영 결제 채널 키가 LIVE, API `PORTONE_STORE_ID`와 consumer `NEXT_PUBLIC_PORTONE_STORE_ID` 일치, `RAILWAY_ENVIRONMENT_NAME=production`(아니면 결제가 자동 환불·취소된다).
@@ -748,6 +748,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### LEGACY-ORDER-REDELIVERY-GAPS
 - [ ] 2026-10-13 #505 조사 중 발견(코드 미변경, 파일럿은 회차 주문만 쓴다). ① `roundId`가 있는 schemaVersion 1 주문을 관리자가 `PREPARING → DELIVERING`으로 재개하면 회차 `heldOrderCount`가 줄지 않는다고 보고됐다(현재 주문 생성 경로로는 이 형태가 생기지 않음, 감사 세션 미검증). ② schemaVersion 1 주문은 `OrderChargesService.createRedeliveryFeeCharge()`가 schemaVersion 2만 받아 고객 책임 유료 보류에서 재배송비를 결제할 경로가 없고 취소만 가능하다(fail closed, `apps/api/src/orders/order-charges.service.ts`). 레거시 주문을 다시 받기 전에 정한다.
+
+### FIRESTORE-INDEX-DRIFT-ORDERS-PREPAREDAT
+- [ ] 2026-10-13 운영 설정 점검(run `38407326491`) 인덱스 비교: 운영 composite index 45개, `firestore.indexes.json` 44개. 운영에만 `orders`(COLLECTION) `[status ASC, deliveryMethod ASC, preparedAt ASC]`가 있다(fieldOverrides는 일치). 예전 기사 discovery 쿼리(`orderBy('preparedAt')`)용 잔재로 보이며 현재 `apps/api/src/driver/driver.service.ts`는 `status ==`·`deliveryMethod in`으로 읽고 메모리에서 정렬하므로 쓰지 않는다. 위험이 낮아 LATER: 운영에서 지우거나(운영 변경, 사용자 승인) 그대로 두고 점검의 drift 경고를 감수한다.
 
 ### STORAGE-CORS-APPLY
 - [ ] #402가 `cors.json`의 허용 메서드를 GET·HEAD로 줄였지만 `firebase deploy`로 반영되지 않고 버킷에 따로 적용해야 한다. 적용 절차 문서와 확인 테스트가 없다. Firebase SDK 업로드는 다른 엔드포인트를 쓰므로 영향이 없을 가능성이 크지만 확인이 필요하다. 적용 여부와 절차를 정해 런북에 적는다. **2026-10-12**: 절차는 `docs/specs/ops/mvp-sales-round-runbook.md` §10에 적었다(적용 전 현재 값 보관 → 적용 → 업로드 확인 → 막히면 되돌리기). 남은 일: 운영 버킷에 적용할지 결정하고 실행(사용자, GCP 권한 필요).
