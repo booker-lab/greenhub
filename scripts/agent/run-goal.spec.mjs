@@ -327,15 +327,17 @@ function createFakeOpencodeBin({ expected }) {
   const script = [
     "const fs = require('node:fs');",
     "const path = require('node:path');",
-    'const dir = process.env.GREENHUB_GA03_FAKE_DIR;',
-    'const expected = Number(process.env.GREENHUB_GA03_FAKE_EXPECT || "5");',
+    // The executor child environment is allow-listed, so the fake receives its
+    // fixture paths in its own source instead of through the environment.
+    `const dir = ${JSON.stringify(eventsDir)};`,
+    `const expected = ${JSON.stringify(expected)};`,
     'const args = process.argv.slice(2);',
     "const dirIndex = args.indexOf('--dir');",
     'const workspace = dirIndex >= 0 ? args[dirIndex + 1] : null;',
     "const titleIndex = args.indexOf('--title');",
     'const title = titleIndex >= 0 ? args[titleIndex + 1] : null;',
     'if (!dir || !workspace) {',
-    "  console.error('fake opencode: --dir and GREENHUB_GA03_FAKE_DIR are required');",
+    "  console.error('fake opencode: --dir and the fixture events directory are required');",
     '  process.exit(2);',
     '}',
     'const key = path.basename(path.dirname(workspace));',
@@ -378,8 +380,6 @@ function createFakeOpencodeBin({ expected }) {
     env: {
       ...process.env,
       PATH: `${binDir}${delimiter}${process.env.PATH ?? ''}`,
-      GREENHUB_GA03_FAKE_DIR: eventsDir,
-      GREENHUB_GA03_FAKE_EXPECT: String(expected),
     },
     readEvents(prefix) {
       return readdirSync(eventsDir)
@@ -1254,6 +1254,25 @@ test('contract validation fails closed on malformed criteria and catalog tasks',
     validateGoalContract(withTask({ commit_message: null })).kind,
     INVALID_TASK,
   );
+  // a published task must declare at least one proof command
+  const proofless = validateGoalContract(withTask({ proof: [], proof_owner: [] }));
+  assert.equal(proofless.kind, INVALID_TASK);
+  assert.ok(
+    proofless.errors.some((error) => /at least one proof command/.test(error)),
+    JSON.stringify(proofless.errors),
+  );
+  assert.equal(
+    validateGoalContract(
+      withTask({
+        proof: [],
+        proof_owner: [],
+        publication: 'none',
+        commit_message: null,
+        pr_title: null,
+      }),
+    ).ok,
+    true,
+  );
   assert.equal(
     validateGoalContract(clone({ BUDGET: { max_iterations: -1 } })).kind,
     INVALID_GOAL,
@@ -1335,6 +1354,22 @@ test('parseArgs requires an explicit goal contract', () => {
   assert.equal(parseArgs(['--goal', 'goal.json', '--reasoning-effort', 'ultra']).ok, false);
   assert.equal(parseArgs(['--goal', 'goal.json', '--bogus']).ok, false);
   assert.equal(parseArgs(['--goal', 'goal.json', '--max-tasks', '3']).ok, false);
+});
+
+test('parseArgs rejects zero, negative, or infinite timeouts', () => {
+  for (const flag of [
+    '--opencode-timeout-ms',
+    '--codex-timeout-ms',
+    '--proof-timeout-ms',
+    '--ci-timeout-ms',
+  ]) {
+    for (const value of ['0', '-5', 'Infinity', 'abc']) {
+      assert.equal(parseArgs(['--goal', 'goal.json', flag, value]).ok, false, `${flag} ${value}`);
+    }
+    const parsed = parseArgs(['--goal', 'goal.json', flag, '1000']);
+    assert.equal(parsed.ok, true);
+  }
+  assert.equal(parseArgs(['--goal', 'goal.json', '--max-rebind-attempts', '0']).ok, true);
 });
 
 test('PLANNER A — an absent or disabled planner keeps the GA-01A NO_TASK_FOR_GAP behavior', () => {
@@ -1964,6 +1999,8 @@ test('PLANNER Q — the planner child environment excludes publication and provi
           MY_PASSWORD: 'password-value',
           GH_SAFE_MARKER: 'safe-value',
           SAFE_MARKER: 'present',
+          ANTHROPIC_API_KEY: 'provider-placeholder',
+          SERVICE_ACCESS_TOKEN: 'service-placeholder',
         },
       },
     );
@@ -1987,10 +2024,14 @@ test('PLANNER Q — the planner child environment excludes publication and provi
       'MY_SECRET',
       'MY_PASSWORD',
       'GH_SAFE_MARKER',
+      // the executor environment is allow-listed: unrelated names are dropped
+      'SAFE_MARKER',
+      'ANTHROPIC_API_KEY',
+      'SERVICE_ACCESS_TOKEN',
     ]) {
       assert.equal(denied in childEnv, false, `${denied} must not reach the planner child`);
     }
-    assert.equal(childEnv.SAFE_MARKER, 'present');
+    assert.equal(childEnv.PATH, process.env.PATH);
     assert.equal(childEnv.GIT_TERMINAL_PROMPT, '0');
     assert.ok(childEnv.GH_CONFIG_DIR.length > 0);
   } finally {
@@ -2318,16 +2359,16 @@ test('GA-03 C — overlapping semantic_owner tasks serialize across batches', ()
             closes: ['C1'],
             allow: ['docs/one.md'],
             semantic_owner: ['docs/shared'],
-            proof: [],
-            proof_owner: [],
+            proof: ['node proof-ok.cjs'],
+            proof_owner: [[]],
           }),
           publicationTask({
             id: 'T2',
             closes: ['C2'],
             allow: ['docs/two.md'],
             semantic_owner: ['docs/shared'],
-            proof: [],
-            proof_owner: [],
+            proof: ['node proof-ok.cjs'],
+            proof_owner: [[]],
           }),
         ],
         BUDGET: { max_iterations: 4, max_tasks: 4, max_wall_clock_ms: 60000 },
@@ -2381,16 +2422,16 @@ test('GA-03 D — overlapping declared allow surfaces serialize', () => {
             closes: ['C1'],
             allow: ['docs/a'],
             semantic_owner: [],
-            proof: [],
-            proof_owner: [],
+            proof: ['node proof-ok.cjs'],
+            proof_owner: [[]],
           }),
           publicationTask({
             id: 'T2',
             closes: ['C2'],
             allow: ['docs/a/nested'],
             semantic_owner: [],
-            proof: [],
-            proof_owner: [],
+            proof: ['node proof-ok.cjs'],
+            proof_owner: [[]],
           }),
         ],
         BUDGET: { max_iterations: 4, max_tasks: 4, max_wall_clock_ms: 60000 },
@@ -2444,8 +2485,8 @@ test('GA-03 C2 — a proof_owner against a sibling mutation surface serializes',
             closes: ['C2'],
             allow: ['docs/two.md'],
             semantic_owner: [],
-            proof: [],
-            proof_owner: [],
+            proof: ['node proof-ok.cjs'],
+            proof_owner: [[]],
           }),
         ],
         BUDGET: { max_iterations: 4, max_tasks: 4, max_wall_clock_ms: 60000 },
@@ -2628,8 +2669,8 @@ test('GA-03 H — sibling-caused live-main movement does not reinvoke executed t
           pathCriterion({ id: 'C2', path: 'docs/two.md' }),
         ],
         TASK_CATALOG: [
-          publicationTask({ id: 'T1', closes: ['C1'], allow: ['docs/one.md'], semantic_owner: ['docs/one.md'], proof: [], proof_owner: [] }),
-          publicationTask({ id: 'T2', closes: ['C2'], allow: ['docs/two.md'], semantic_owner: ['docs/two.md'], proof: [], proof_owner: [] }),
+          publicationTask({ id: 'T1', closes: ['C1'], allow: ['docs/one.md'], semantic_owner: ['docs/one.md'], proof: ['node proof-ok.cjs'], proof_owner: [[]] }),
+          publicationTask({ id: 'T2', closes: ['C2'], allow: ['docs/two.md'], semantic_owner: ['docs/two.md'], proof: ['node proof-ok.cjs'], proof_owner: [[]] }),
         ],
         BUDGET: { max_iterations: 4, max_tasks: 4, max_wall_clock_ms: 60000 },
       }),
@@ -3028,6 +3069,32 @@ test('PROOF ENV — PROOF_AT_MAIN criterion commands receive the sanitized envir
       assert.equal(env.FIREBASE_SERVICE_ACCOUNT_JSON, undefined);
       assert.equal(env.PATH, process.env.PATH);
     }
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('PROOF OUTPUT — PROOF_AT_MAIN output is masked before it is persisted', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeChildren();
+    const shapedToken = `gh${'p'}_${'b2'.repeat(18)}`; // trufflehog:ignore
+    const result = runGoalOn(fixture, baseContract({ CRITERIA: [proofCriterion()] }), {
+      ...fake.deps,
+      env: { ...process.env, SERVICE_API_SECRET: 'env-secret-placeholder' },
+      runProofCommand: () => ({
+        exitCode: 1,
+        signal: null,
+        timedOut: false,
+        stdout: `printed env-secret-placeholder and ${shapedToken}`,
+        stderr: `failed with env-secret-placeholder`,
+      }),
+    });
+
+    const persisted = JSON.stringify(result);
+    assert.equal(persisted.includes('env-secret-placeholder'), false);
+    assert.equal(persisted.includes(shapedToken), false);
+    assert.match(persisted, /printed \[가림\] and \[가림\]/);
   } finally {
     removeFixture(fixture);
   }

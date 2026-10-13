@@ -15,11 +15,14 @@ import {
   buildOperatorArgs,
   buildOperatorInvocation,
   DEFAULT_VISIBLE_HOSTNAME,
-  DEFAULT_VISIBLE_TUI_PORT,
+  generateServerPassword,
   main,
   parseArgs,
+  pickFreeLoopbackPort,
   probeTcpPort,
 } from './open-visible-tui.mjs';
+
+const TEST_PASSWORD = 'fixture-placeholder'; // trufflehog:ignore
 
 const FORBIDDEN_OPERATOR_SUBCOMMANDS = ['web', 'serve', 'attach'];
 
@@ -69,7 +72,7 @@ function waitFor(predicate, { timeoutMs = 2000, intervalMs = 10 } = {}) {
 test('visible-tui parseArgs accepts only a bounded loopback port and a bin override', () => {
   const defaults = parseArgs([]);
   assert.equal(defaults.ok, true);
-  assert.equal(defaults.options.port, DEFAULT_VISIBLE_TUI_PORT);
+  assert.equal(defaults.options.port, null, 'no fixed default port: a free one is picked');
   assert.equal(defaults.options.opencodeBin, null);
 
   const custom = parseArgs(['--port', '4901', '--opencode-bin', '/opt/opencode']);
@@ -102,14 +105,7 @@ test('the operator topology is one TUI pinned to the repository root on an expli
   assert.deepEqual(args, ['/repo', '--hostname', '127.0.0.1', '--port', '4901']);
   assert.equal(DEFAULT_VISIBLE_HOSTNAME, '127.0.0.1');
 
-  const defaults = buildOperatorArgs({ repositoryRoot: '/repo' });
-  assert.deepEqual(defaults, [
-    '/repo',
-    '--hostname',
-    '127.0.0.1',
-    '--port',
-    String(DEFAULT_VISIBLE_TUI_PORT),
-  ]);
+  assert.throws(() => buildOperatorArgs({ repositoryRoot: '/repo' }), /explicit loopback port/);
 });
 
 test('WEB-UI REGRESSION GUARD: the launcher command topology contains no web subcommand', () => {
@@ -143,13 +139,29 @@ test('the operator TUI invocation inherits the sanitized child environment', () 
     FIREBASE_TOKEN: 'firebase',
     GIT_CONFIG_COUNT: '9',
     GIT_CONFIG_KEY_1: 'attacker.injected',
+    OPENCODE_SERVER_PASSWORD: 'operator-shell-placeholder', // trufflehog:ignore
+    OPENCODE_SERVER_USERNAME: 'someone-else',
+    UNRELATED_OPERATOR_SETTING: 'operator-only',
   };
   const scratchDir = join(tmpdir(), 'greenhub-visible-tui-spec-scratch');
+  assert.throws(
+    () =>
+      buildOperatorInvocation({
+        opencodeBin: '/fake/opencode',
+        env,
+        scratchDir,
+        port: 4901,
+        repositoryRoot: '/repo',
+        exists: () => true,
+      }),
+    /server password/,
+  );
   const invocation = buildOperatorInvocation({
     opencodeBin: '/fake/opencode',
     env,
     scratchDir,
     port: 4901,
+    password: TEST_PASSWORD,
     repositoryRoot: '/repo',
     exists: () => true,
   });
@@ -157,9 +169,20 @@ test('the operator TUI invocation inherits the sanitized child environment', () 
   assert.equal(invocation.resolvedCommand.command, '/fake/opencode');
   assert.equal(invocation.resolvedCommand.source, 'explicit');
   assert.deepEqual(invocation.args, ['/repo', '--hostname', '127.0.0.1', '--port', '4901']);
-  for (const dropped of ['GH_TOKEN', 'GITHUB_TOKEN', 'VERCEL_TOKEN', 'FIREBASE_TOKEN']) {
+  for (const dropped of [
+    'GH_TOKEN',
+    'GITHUB_TOKEN',
+    'VERCEL_TOKEN',
+    'FIREBASE_TOKEN',
+    'UNRELATED_OPERATOR_SETTING',
+    'OPENCODE_SERVER_USERNAME',
+  ]) {
     assert.equal(invocation.env[dropped], undefined, `${dropped} must not reach the TUI`);
   }
+  // the launch-owned password turns on server basic auth and replaces any
+  // value from the operator shell
+  assert.equal(invocation.env.OPENCODE_SERVER_PASSWORD, TEST_PASSWORD);
+  assert.equal(invocation.env.PATH, 'x');
   assert.equal(
     invocation.env.GIT_CONFIG_COUNT,
     '5',
@@ -212,6 +235,9 @@ test('main launches exactly one operator-visible TUI process, not serve + attach
   assert.equal(tui.options.windowsHide, false);
   assert.equal(tui.options.env.GH_TOKEN, undefined);
   assert.equal(tui.options.env.GIT_CONFIG_KEY_1, 'protocol.allow');
+  const password = tui.options.env.OPENCODE_SERVER_PASSWORD;
+  assert.equal(typeof password, 'string');
+  assert.ok(password.length >= 32, 'the server password is long and random');
   assert.ok(
     tui.options.env.GH_CONFIG_DIR.startsWith(tmpdir()),
     'the empty GH config directory must live in launcher scratch',
@@ -224,6 +250,78 @@ test('main launches exactly one operator-visible TUI process, not serve + attach
   const text = stderr.writes.join('');
   assert.match(text, /http:\/\/127\.0\.0\.1:4901/);
   assert.match(text, /GREENHUB_OPENCODE_ATTACH_URL/);
+  assert.ok(
+    text.includes(`$env:OPENCODE_SERVER_PASSWORD='${password}'`),
+    'the operator is shown the password the executor needs to attach',
+  );
+  assert.ok(!tui.args.some((arg) => arg.includes(password)), 'the password is not in argv');
+});
+
+test('main picks a free random loopback port by default and a fresh password per launch', async () => {
+  const launches = [];
+  for (const pickedPort of [45001, 45002]) {
+    const stderr = createStderrRecorder();
+    let tuiChild = null;
+    const probed = [];
+    const pending = main([], {
+      env: { PATH: process.env.PATH },
+      stderr,
+      spawnFn: (_command, args, options) => {
+        tuiChild = createFakeChild();
+        launches.push({ args, env: options.env, text: () => stderr.writes.join('') });
+        return tuiChild;
+      },
+      repositoryRoot: '/repo',
+      probePortFn: async ({ port }) => {
+        probed.push(port);
+        return false;
+      },
+      pickPortFn: async () => pickedPort,
+    });
+    await waitFor(() => tuiChild !== null);
+    tuiChild.exitCode = 0;
+    tuiChild.emit('exit', 0);
+    assert.equal(await pending, 0);
+    assert.deepEqual(probed, [pickedPort], 'the picked port is still probed before launch');
+  }
+  assert.deepEqual(launches[0].args, ['/repo', '--hostname', '127.0.0.1', '--port', '45001']);
+  assert.deepEqual(launches[1].args, ['/repo', '--hostname', '127.0.0.1', '--port', '45002']);
+  assert.match(launches[0].text(), /http:\/\/127\.0\.0\.1:45001/);
+  assert.notEqual(
+    launches[0].env.OPENCODE_SERVER_PASSWORD,
+    launches[1].env.OPENCODE_SERVER_PASSWORD,
+  );
+});
+
+test('main fails closed when no free loopback port can be picked', async () => {
+  const stderr = createStderrRecorder();
+  let spawned = 0;
+  const code = await main([], {
+    env: { PATH: process.env.PATH },
+    stderr,
+    spawnFn: () => {
+      spawned += 1;
+      return createFakeChild();
+    },
+    repositoryRoot: '/repo',
+    probePortFn: async () => false,
+    pickPortFn: async () => {
+      throw new Error('EADDRNOTAVAIL');
+    },
+  });
+  assert.equal(code, 1);
+  assert.equal(spawned, 0);
+  assert.match(stderr.writes.join(''), /could not pick a free loopback port/);
+});
+
+test('pickFreeLoopbackPort returns a real free loopback port; passwords are random', async () => {
+  const port = await pickFreeLoopbackPort();
+  assert.ok(Number.isInteger(port) && port > 0 && port <= 65535);
+  assert.equal(await probeTcpPort({ port }), false);
+  const first = generateServerPassword();
+  const second = generateServerPassword();
+  assert.notEqual(first, second);
+  assert.match(first, /^[A-Za-z0-9_-]{32}$/);
 });
 
 test('main refuses to start when the loopback port is already occupied', async () => {

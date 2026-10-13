@@ -8,6 +8,12 @@
 //
 //   opencode <repository-root> --hostname 127.0.0.1 --port <port>
 //
+// The server is never left open to other local processes: by default the
+// launcher picks a free random loopback port, and every launch generates a
+// fresh basic-auth password (`OPENCODE_SERVER_PASSWORD`) that only the operator
+// sees. The executor (run-once VISIBLE_TUI mode) must present the same
+// password to attach.
+//
 // This launcher is a transport/observation surface only:
 //
 //   - foreground process only; no background ownership and no supervision loop
@@ -29,17 +35,24 @@
 // when the TUI exits.
 
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { createConnection } from 'node:net';
+import { createConnection, createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildChildEnv, OPENCODE_ATTACH_URL_ENV, resolveOpencodeCommand } from './run-once.mjs';
+import {
+  buildChildEnv,
+  OPENCODE_ATTACH_URL_ENV,
+  OPENCODE_SERVER_PASSWORD_ENV,
+  OPENCODE_SERVER_USERNAME_ENV,
+  resolveOpencodeCommand,
+} from './run-once.mjs';
 
 export const DEFAULT_VISIBLE_HOSTNAME = '127.0.0.1';
-export const DEFAULT_VISIBLE_TUI_PORT = 4096;
 export const PORT_PROBE_TIMEOUT_MS = 1000;
+export const SERVER_PASSWORD_BYTES = 24;
 
 function messageOf(error) {
   if (error instanceof Error && typeof error.message === 'string') return error.message;
@@ -50,8 +63,32 @@ export function repositoryRootFromScript() {
   return resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 }
 
-export function visibleServerUrl({ port = DEFAULT_VISIBLE_TUI_PORT } = {}) {
+export function visibleServerUrl({ port } = {}) {
   return `http://${DEFAULT_VISIBLE_HOSTNAME}:${port}`;
+}
+
+/** A fresh random basic-auth password for one launch of the TUI-owned server. */
+export function generateServerPassword() {
+  return randomBytes(SERVER_PASSWORD_BYTES).toString('base64url');
+}
+
+/**
+ * Ask the OS for a free loopback port by binding port 0 and releasing it. The
+ * launcher still probes the port right before starting the TUI.
+ */
+export function pickFreeLoopbackPort({ host = DEFAULT_VISIBLE_HOSTNAME } = {}) {
+  return new Promise((resolvePick, rejectPick) => {
+    const server = createServer();
+    server.once('error', rejectPick);
+    server.listen(0, host, () => {
+      const address = server.address();
+      const port = typeof address === 'object' && address !== null ? address.port : null;
+      server.close(() => {
+        if (Number.isInteger(port) && port > 0) resolvePick(port);
+        else rejectPick(new Error('could not obtain a free loopback port'));
+      });
+    });
+  });
 }
 
 /**
@@ -90,9 +127,12 @@ export function probeTcpPort({
  */
 export function buildOperatorArgs({
   repositoryRoot,
-  port = DEFAULT_VISIBLE_TUI_PORT,
+  port,
   hostname = DEFAULT_VISIBLE_HOSTNAME,
 } = {}) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error('the operator TUI requires an explicit loopback port');
+  }
   return [repositoryRoot, '--hostname', hostname, '--port', String(port)];
 }
 
@@ -101,18 +141,23 @@ export function buildOperatorArgs({
  * executor uses. `--hostname` is intentionally not caller-selectable at the
  * CLI; the TUI-owned server stays on loopback and runs under the sanitized
  * child environment (no publication/provider credentials, hardened Git), which
- * is the environment attached mutation sessions execute in.
+ * is the environment attached mutation sessions execute in. The launch-owned
+ * password is added after sanitization and turns on the server's basic auth.
  */
 export function buildOperatorInvocation({
   opencodeBin = null,
   env = process.env,
   scratchDir,
-  port = DEFAULT_VISIBLE_TUI_PORT,
+  port,
+  password,
   repositoryRoot,
   platform,
   exists,
   readFile,
 } = {}) {
+  if (typeof password !== 'string' || password.length === 0) {
+    throw new Error('the operator TUI requires a server password');
+  }
   const resolvedCommand = resolveOpencodeCommand({
     explicitBin: opencodeBin,
     baseEnv: env,
@@ -120,15 +165,20 @@ export function buildOperatorInvocation({
     ...(exists === undefined ? {} : { exists }),
     ...(readFile === undefined ? {} : { readFile }),
   });
+  const childEnv = buildChildEnv({ baseEnv: env, scratchDir });
+  // The server uses its default basic-auth user; the executor resolves the
+  // same default when no username is configured.
+  delete childEnv[OPENCODE_SERVER_USERNAME_ENV];
+  childEnv[OPENCODE_SERVER_PASSWORD_ENV] = password;
   return {
     resolvedCommand,
     args: buildOperatorArgs({ repositoryRoot, port }),
-    env: buildChildEnv({ baseEnv: env, scratchDir }),
+    env: childEnv,
   };
 }
 
 export function parseArgs(argv) {
-  const options = { port: DEFAULT_VISIBLE_TUI_PORT, opencodeBin: null, help: false };
+  const options = { port: null, opencodeBin: null, help: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--help' || arg === '-h') {
@@ -162,16 +212,18 @@ export function parseArgs(argv) {
 export const USAGE = [
   'usage: node scripts/agent/open-visible-tui.mjs [--port <n>] [--opencode-bin <path>]',
   '',
-  `  --port <n>                  loopback port for the TUI-owned server (default: ${DEFAULT_VISIBLE_TUI_PORT})`,
+  '  --port <n>                  loopback port for the TUI-owned server (default: a free random port)',
   '  --opencode-bin <path>       explicit OpenCode executable (default: resolved from PATH)',
   '',
   'Starts one foreground OpenCode TUI bound to the repository root. The TUI owns',
   'its own server on 127.0.0.1 with the same sanitized environment as the',
   'mutation executor, so it is the only operator-visible process: no separate',
-  'serve + attach pair and no web UI. Mutation tasks become visible as sessions',
-  'in this TUI once the executor runs with:',
+  'serve + attach pair and no web UI. Each launch generates a fresh basic-auth',
+  'password for that server. Mutation tasks become visible as sessions in this',
+  'TUI once the executor runs with the two values the launcher prints:',
   '',
-  `  $env:${OPENCODE_ATTACH_URL_ENV}='${visibleServerUrl()}'`,
+  `  $env:${OPENCODE_ATTACH_URL_ENV}='http://${DEFAULT_VISIBLE_HOSTNAME}:<port>'`,
+  `  $env:${OPENCODE_SERVER_PASSWORD_ENV}='<password>'`,
   '',
   'Select them with the normal session selector (Ctrl+X L or /sessions).',
   'Stop the TUI normally; the launcher then removes its temporary security',
@@ -213,6 +265,8 @@ export async function main(
     spawnFn = spawn,
     repositoryRoot = repositoryRootFromScript(),
     probePortFn = probeTcpPort,
+    pickPortFn = pickFreeLoopbackPort,
+    generatePasswordFn = generateServerPassword,
   } = {},
 ) {
   const parsed = parseArgs(argv);
@@ -225,7 +279,15 @@ export async function main(
     return 0;
   }
 
-  const port = parsed.options.port;
+  let port = parsed.options.port;
+  if (port === null) {
+    try {
+      port = await pickPortFn();
+    } catch (error) {
+      stderr.write(`[visible-tui] could not pick a free loopback port: ${messageOf(error)}\n`);
+      return 1;
+    }
+  }
   const url = visibleServerUrl({ port });
   const scratchDir = mkdtempSync(join(tmpdir(), 'greenhub-visible-tui-'));
   let tui = null;
@@ -249,16 +311,21 @@ export async function main(
       return 1;
     }
 
+    const password = generatePasswordFn();
     const invocation = buildOperatorInvocation({
       opencodeBin: parsed.options.opencodeBin,
       env,
       scratchDir,
       port,
+      password,
       repositoryRoot,
     });
 
+    // The password is shown once, to the operator terminal only, so the
+    // executor window can attach; it is never written to a file or a log.
     stderr.write(`[visible-tui] operator TUI: ${url} (project: ${repositoryRoot})\n`);
     stderr.write(`[visible-tui] automation: $env:${OPENCODE_ATTACH_URL_ENV}='${url}'\n`);
+    stderr.write(`[visible-tui] automation: $env:${OPENCODE_SERVER_PASSWORD_ENV}='${password}'\n`);
 
     process.once('SIGINT', forwardSignal);
     process.once('SIGTERM', forwardSignal);

@@ -32,6 +32,7 @@ import {
   INVALID_INPUT,
   PROOF_FAILED,
   SUCCESS,
+  boundedTimeoutMs as resolvePositiveTimeoutMs,
   buildProofEnv,
   createBaselineWorkspace,
   defaultRemoveWorkspace,
@@ -107,11 +108,11 @@ export const DEFAULT_REQUIRED_CHECKS_RETRY_MS = 5000;
 /**
  * Every bounded wait in this entrypoint keeps a finite, positive budget. A
  * programmatic caller that passes 0, a negative, or a non-finite value gets the
- * named default instead of an unbounded wait; the CLI rejects such values.
+ * named default instead of an unbounded wait; the CLI rejects such values. The
+ * rule has one implementation (`boundedTimeoutMs` in run-once), re-exported
+ * here under the name run-build already imports.
  */
-export function resolvePositiveTimeoutMs(value, fallback) {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
-}
+export { resolvePositiveTimeoutMs };
 
 function isPositiveTimeoutArg(value) {
   if (value === undefined) return false;
@@ -1736,13 +1737,11 @@ export function parseArgs(argv) {
       publication.maxRebindAttempts = parsed;
       continue;
     }
-    if (DELEGATED_TIMEOUT_FLAGS.includes(arg)) {
-      const value = argv[index + 1];
-      if (!isPositiveTimeoutArg(value)) {
-        return { ok: false, error: `${arg} requires a positive number` };
-      }
+    if (DELEGATED_TIMEOUT_FLAGS.includes(arg) && index + 1 < argv.length) {
+      // Keep the flag and its value together; run-once's parser rejects a
+      // missing, zero, negative, or non-finite value.
       index += 1;
-      executionArgs.push(arg, value);
+      executionArgs.push(arg, argv[index]);
       continue;
     }
     executionArgs.push(arg);
