@@ -112,7 +112,8 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     // 서버 확인이 끝나면 상품마다 '서버 확인 완료 · 같은 회차 상품'도 떠서, 안내 문장 하나만 집어 확인한다.
     await expect(page.getByText(/같은 회차 상품을 서버에서 확인해/)).toBeVisible();
     await expect(page.getByText(/회차 가격/).first()).toBeVisible();
-    await expect(page.getByText(/한 번에 결제/)).toBeVisible();
+    // 안내 문장에도 '한 번에 결제'가 있어 서버 확인이 끝나면 버튼과 두 곳이 잡힌다. 결제 버튼으로 확인한다.
+    await expect(page.getByRole('button', { name: /한 번에 결제/ })).toBeVisible();
     await expect(page.getByText(/다른 회차 상품/)).toHaveCount(0);
   });
 
