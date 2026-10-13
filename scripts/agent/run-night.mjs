@@ -73,6 +73,7 @@ import {
   parseVisibleAttachUrl,
   probeVisibleServer,
   readLiveRemoteMain,
+  resolveVisibleServerAuth,
 } from './run-once.mjs';
 import { DEFAULT_CI_TIMEOUT_MS, DEFAULT_MAX_REBIND_ATTEMPTS } from './run-publish-once.mjs';
 
@@ -278,7 +279,13 @@ function resolveNightVisibility({ baseEnv, backend, probe = probeVisibleServer }
   if (!parsed.ok) {
     return { requested: true, attachUrl: null, health: 'INVALID', error: parsed.reason };
   }
-  const preflight = probe({ attachUrl: parsed.url });
+  // The visible server runs with basic auth; the BUILD children inherit the
+  // credential from this same operator environment.
+  const auth = resolveVisibleServerAuth(baseEnv);
+  if (!auth.ok) {
+    return { requested: true, attachUrl: null, health: 'INVALID', error: auth.reason };
+  }
+  const preflight = probe({ attachUrl: parsed.url, authorization: auth.authorization });
   if (!preflight?.ok) {
     return {
       requested: true,
@@ -774,6 +781,17 @@ export async function runNight(options = {}, deps = {}) {
   if (maxMinutes !== null && (!Number.isFinite(maxMinutes) || maxMinutes <= 0)) {
     return finish(INVALID_NIGHT_REQUEST, '--max-minutes must be a positive number');
   }
+  for (const [key, flag] of [
+    ['opencodeTimeoutMs', '--opencode-timeout-ms'],
+    ['codexTimeoutMs', '--codex-timeout-ms'],
+    ['proofTimeoutMs', '--proof-timeout-ms'],
+    ['ciTimeoutMs', '--ci-timeout-ms'],
+  ]) {
+    const value = options[key];
+    if (value != null && (!Number.isFinite(value) || value <= 0)) {
+      return finish(INVALID_NIGHT_REQUEST, `${flag} must be a positive number`);
+    }
+  }
 
   let stopRequested = false;
   let activeBuild = false;
@@ -1106,7 +1124,7 @@ export const USAGE = [
   '  --opencode-timeout-ms <n>   child/selector opencode timeout in ms (default: 3600000)',
   '  --codex-bin <path>          Codex 실행 파일 경로를 지정',
   '  --codex-timeout-ms <n>      Codex 자식/selector 제한 시간(ms, 기본값: 3600000)',
-  '  --proof-timeout-ms <n>      child/proof timeout in ms (default: 1800000, 0 disables)',
+  '  --proof-timeout-ms <n>      child/proof timeout in ms (positive; default: 1800000)',
   '  --ci-timeout-ms <n>         child required-check watch timeout in ms (default: 2700000)',
   '  --max-rebind-attempts <n>   child fresh-main rebind constructions (default: 2)',
   '  --github-repo <owner/name>  optional explicit GitHub repository for child publication',
@@ -1124,14 +1142,15 @@ export const USAGE = [
   'Windows two-window usage (operator-visible OpenCode TUI):',
   '  Window A - OpenCode TUI:',
   '    node scripts/agent/open-visible-tui.mjs',
-  '    -> prints the loopback URL for this TUI-owned server.',
+  '    -> prints the loopback URL and basic-auth password for this TUI-owned server.',
   '  Window B - Night Run control (separate PowerShell):',
-  "    $env:GREENHUB_OPENCODE_ATTACH_URL='http://127.0.0.1:4096'",
+  "    $env:GREENHUB_OPENCODE_ATTACH_URL='http://127.0.0.1:<port>'",
+  "    $env:OPENCODE_SERVER_PASSWORD='<printed password>'",
   '    node scripts/agent/run-night.mjs --request .\\night-request.txt --max-cycles 10',
   '  Watch the current mutation BUILD in Window A with /sessions or Ctrl+X L.',
   '  Press Ctrl+C once in Window B only; the active BUILD finishes safely, no',
   '  new BUILD starts, and the OpenCode TUI is never signaled.',
-  '  If the attach URL is set but invalid or the server is unavailable, Night Run',
+  '  If the attach URL is set but invalid, the password is missing, or the server is unavailable, Night Run',
   '  fails closed with VISIBILITY_UNAVAILABLE instead of downgrading to HEADLESS.',
   '  Codex는 OpenCode TUI 연결을 사용하지 않으며 진행 상태는 이 control terminal에 표시된다.',
   '',
@@ -1176,12 +1195,16 @@ export function parseArgs(argv) {
     '--github-repo': 'githubRepository',
   };
   const positiveIntegerFlags = { '--max-cycles': 'maxCycles' };
-  const positiveNumberFlags = { '--max-minutes': 'maxMinutes' };
-  const numberFlags = {
+  // Timeouts are always finite and positive: a zero or negative value would
+  // disable the bound on a child, selector, proof, or CI watch.
+  const positiveNumberFlags = {
+    '--max-minutes': 'maxMinutes',
     '--opencode-timeout-ms': 'opencodeTimeoutMs',
     '--codex-timeout-ms': 'codexTimeoutMs',
     '--proof-timeout-ms': 'proofTimeoutMs',
     '--ci-timeout-ms': 'ciTimeoutMs',
+  };
+  const numberFlags = {
     '--max-rebind-attempts': 'maxRebindAttempts',
   };
   for (let index = 0; index < argv.length; index += 1) {

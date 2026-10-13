@@ -107,6 +107,7 @@ import {
   normalizeRepoPath,
   observeChangedPaths,
   readLiveRemoteMain,
+  redactSensitiveOutput,
   resolveOpencodeCommand,
   runOnce as defaultRunOnce,
 } from './run-once.mjs';
@@ -523,6 +524,12 @@ function validateTask(raw, errors) {
   let commitMessage = null;
   let prTitle = null;
   if (publication === 'required') {
+    // A published change must be backed by at least one executed proof
+    // command; the child runs every declared proof and refuses publication
+    // when any of them does not pass.
+    if (proof.length === 0) {
+      errors.push(`task ${label} requires at least one proof command when publication is required`);
+    }
     if (!isNonEmptyString(raw.commit_message)) {
       errors.push(`task ${label} requires commit_message when publication is required`);
     } else {
@@ -904,8 +911,8 @@ export function evaluateCriterion({ criterion, repositoryRoot, pin, options = {}
           timedOut: Boolean(proof.timedOut),
           startErrorCode: proof.startErrorCode ?? null,
           ok: proof.exitCode === 0 && !proof.startErrorCode,
-          stdoutTail: tail(proof.stdout),
-          stderrTail: tail(proof.stderr),
+          stdoutTail: tail(redactSensitiveOutput(proof.stdout, deps.env ?? process.env)),
+          stderrTail: tail(redactSensitiveOutput(proof.stderr, deps.env ?? process.env)),
         };
         result.satisfied = result.proofResult.ok;
         result.reason = result.satisfied
@@ -2750,10 +2757,10 @@ export const USAGE = [
   '  --agent <name>              optional OpenCode agent override for child tasks',
   '  --opencode-bin <path>       explicit OpenCode executable for child tasks',
   '  --codex-bin <path>          explicit Codex executable for child tasks',
-  '  --opencode-timeout-ms <n>   child opencode timeout in ms (default: 3600000, 0 disables)',
-  '  --codex-timeout-ms <n>      child Codex timeout in ms (default: 3600000, 0 disables)',
-  '  --proof-timeout-ms <n>      child/proof timeout in ms (default: 1800000, 0 disables)',
-  '  --ci-timeout-ms <n>         child required-check watch timeout in ms (default: 2700000)',
+  '  --opencode-timeout-ms <n>   child opencode timeout in ms (positive; default: 3600000)',
+  '  --codex-timeout-ms <n>      child Codex timeout in ms (positive; default: 3600000)',
+  '  --proof-timeout-ms <n>      child/proof timeout in ms (positive; default: 1800000)',
+  '  --ci-timeout-ms <n>         child required-check watch timeout in ms (positive; default: 2700000)',
   '  --max-rebind-attempts <n>   child fresh-main rebind constructions (default: 2)',
   '  --github-repo <owner/name>  optional explicit GitHub repository for child publication',
   '',
@@ -2793,11 +2800,15 @@ export function parseArgs(argv) {
     '--codex-bin': 'codexBin',
     '--github-repo': 'githubRepository',
   };
-  const numberFlags = {
+  // Timeouts are always finite and positive: a zero or negative value would
+  // disable the bound on a child, proof, or CI watch.
+  const positiveNumberFlags = {
     '--opencode-timeout-ms': 'opencodeTimeoutMs',
     '--codex-timeout-ms': 'codexTimeoutMs',
     '--proof-timeout-ms': 'proofTimeoutMs',
     '--ci-timeout-ms': 'ciTimeoutMs',
+  };
+  const numberFlags = {
     '--max-rebind-attempts': 'maxRebindAttempts',
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -2811,6 +2822,16 @@ export function parseArgs(argv) {
       if (value === undefined) return { ok: false, error: `${arg} requires a value` };
       index += 1;
       options[valueFlags[arg]] = value;
+      continue;
+    }
+    if (Object.hasOwn(positiveNumberFlags, arg)) {
+      const value = argv[index + 1];
+      const parsed = Number(value);
+      if (value === undefined || !Number.isFinite(parsed) || parsed <= 0) {
+        return { ok: false, error: `${arg} requires a positive number` };
+      }
+      index += 1;
+      options[positiveNumberFlags[arg]] = parsed;
       continue;
     }
     if (Object.hasOwn(numberFlags, arg)) {

@@ -15,6 +15,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -32,6 +33,7 @@ import {
   CLEANUP_FAILED,
   classifyChangedPaths,
   defaultRemoveWorkspace,
+  DEFAULT_PROOF_TIMEOUT_MS,
   defaultRunProofCommand,
   EXECUTOR_FAILED,
   extractWindowsShimTarget,
@@ -43,10 +45,16 @@ import {
   isProtectedPath,
   observeKillSwitch,
   OPENCODE_ATTACH_URL_ENV,
+  OPENCODE_SERVER_PASSWORD_ENV,
+  OPENCODE_SERVER_USERNAME_ENV,
   PROOF_FAILED,
   parseArgs,
   parseVisibleAttachUrl,
   probeVisibleServer,
+  disposeVisibleInstance,
+  REDACTED_MARKER,
+  redactSensitiveOutput,
+  resolveVisibleServerAuth,
   RUN_ONCE_STATUSES,
   resolveOpencodeCommand,
   runOnce,
@@ -984,7 +992,14 @@ test('child environment drops operational credentials and hardens git', () => {
       OPENAI_API_KEY: 'openai-model-key',
       CODEX_API_KEY: 'codex-model-key',
       SERVICE_ACCESS_TOKEN: 'service-token-value',
+      UNRELATED_OPERATOR_SETTING: 'operator-only',
+      DATABASE_URL: 'postgres://db.local/greenhub',
       [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096',
+      [OPENCODE_SERVER_PASSWORD_ENV]: 'fixture-placeholder', // trufflehog:ignore
+      OPENCODE_CONFIG: '/home/operator/.config/opencode/opencode.json',
+      CODEX_HOME: '/home/operator/.codex',
+      HTTPS_PROXY: 'http://proxy.local:8080',
+      COLORTERM: 'truecolor',
       GIT_CONFIG_COUNT: '99',
       GIT_CONFIG_KEY_0: 'attacker',
       OPENCODE: '1',
@@ -1005,6 +1020,15 @@ test('child environment drops operational credentials and hardens git', () => {
     'GREENHUB_LOCAL_SELLER_PASSWORD',
     'OPENCODE',
     'OPENCODE_PID',
+    // allowlist: names that are neither runtime nor executor configuration
+    'ANTHROPIC_API_KEY',
+    'OPENAI_API_KEY',
+    'CODEX_API_KEY',
+    'SERVICE_ACCESS_TOKEN',
+    'UNRELATED_OPERATOR_SETTING',
+    'DATABASE_URL',
+    OPENCODE_ATTACH_URL_ENV,
+    OPENCODE_SERVER_PASSWORD_ENV,
   ]) {
     assert.equal(env[dropped], undefined, `${dropped} must not reach the child`);
   }
@@ -1012,12 +1036,12 @@ test('child environment drops operational credentials and hardens git', () => {
     !Object.values(env).includes('attacker'),
     'parent Git config overrides must be dropped',
   );
-  assert.equal(env.ANTHROPIC_API_KEY, 'model-provider-key');
-  assert.equal(env.OPENAI_API_KEY, 'openai-model-key');
-  assert.equal(env.CODEX_API_KEY, 'codex-model-key');
-  assert.equal(env.SERVICE_ACCESS_TOKEN, 'service-token-value');
-  assert.equal(env[OPENCODE_ATTACH_URL_ENV], 'http://127.0.0.1:4096');
+  assert.equal(env.PATH, '/usr/bin');
   assert.equal(env.HOME, '/home/operator');
+  assert.equal(env.OPENCODE_CONFIG, '/home/operator/.config/opencode/opencode.json');
+  assert.equal(env.CODEX_HOME, '/home/operator/.codex');
+  assert.equal(env.HTTPS_PROXY, 'http://proxy.local:8080');
+  assert.equal(env.COLORTERM, 'truecolor');
   assert.equal(env.GIT_CONFIG_COUNT, '5');
   assert.equal(env.GIT_CONFIG_KEY_0, 'credential.helper');
   assert.equal(env.GIT_CONFIG_VALUE_0, '');
@@ -1034,6 +1058,7 @@ test('child environment drops operational credentials and hardens git', () => {
       [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096',
       OPENAI_API_KEY: 'openai-model-key',
       CODEX_API_KEY: 'codex-model-key',
+      CODEX_HOME: '/home/operator/.codex',
     },
     scratchDir: '/tmp/codex-scratch',
     backend: CODEX_EXECUTOR,
@@ -1041,6 +1066,43 @@ test('child environment drops operational credentials and hardens git', () => {
   assert.equal(codexEnv[OPENCODE_ATTACH_URL_ENV], undefined);
   assert.equal(codexEnv.OPENAI_API_KEY, undefined);
   assert.equal(codexEnv.CODEX_API_KEY, undefined);
+  assert.equal(codexEnv.CODEX_HOME, '/home/operator/.codex');
+});
+
+test('child environment keeps Windows runtime names case-insensitively', () => {
+  const env = buildChildEnv({
+    baseEnv: {
+      Path: 'C:\\Windows\\System32',
+      PATHEXT: '.COM;.EXE;.CMD',
+      SystemRoot: 'C:\\Windows',
+      USERPROFILE: 'C:\\Users\\operator',
+      APPDATA: 'C:\\Users\\operator\\AppData\\Roaming',
+      LOCALAPPDATA: 'C:\\Users\\operator\\AppData\\Local',
+      ComSpec: 'C:\\Windows\\System32\\cmd.exe',
+      ProgramFiles: 'C:\\Program Files',
+      'ProgramFiles(x86)': 'C:\\Program Files (x86)',
+      PSModulePath: 'C:\\Program Files\\PowerShell\\Modules',
+      WT_SESSION: 'session-id',
+      OneDrive: 'C:\\Users\\operator\\OneDrive',
+    },
+    scratchDir: 'C:\\scratch',
+  });
+  for (const kept of [
+    'Path',
+    'PATHEXT',
+    'SystemRoot',
+    'USERPROFILE',
+    'APPDATA',
+    'LOCALAPPDATA',
+    'ComSpec',
+    'ProgramFiles',
+    'ProgramFiles(x86)',
+    'PSModulePath',
+    'WT_SESSION',
+  ]) {
+    assert.ok(Object.hasOwn(env, kept), `${kept} must reach the executor child`);
+  }
+  assert.equal(env.OneDrive, undefined);
 });
 
 test('OpenCode command builder uses one-shot JSON automation flags', () => {
@@ -1312,8 +1374,15 @@ test('task prompt carries the contract and the execution boundary', () => {
   assert.match(prompt, /Do not run git push/);
 });
 
+const VISIBLE_TEST_PASSWORD = 'fixture-placeholder'; // trufflehog:ignore
+const VISIBLE_TEST_AUTHORIZATION = `Basic ${Buffer.from(`opencode:${VISIBLE_TEST_PASSWORD}`).toString('base64')}`;
+
 function visibleEnv(attachUrl) {
-  return { PATH: process.env.PATH, [OPENCODE_ATTACH_URL_ENV]: attachUrl };
+  return {
+    PATH: process.env.PATH,
+    [OPENCODE_ATTACH_URL_ENV]: attachUrl,
+    [OPENCODE_SERVER_PASSWORD_ENV]: VISIBLE_TEST_PASSWORD,
+  };
 }
 
 function createDisposalRecorder({ ok = true, error = null, calls = [] } = {}) {
@@ -1400,6 +1469,7 @@ test('VISIBLE_TUI B ??a loopback attach URL produces one attached invocation wit
     assert.equal(result.executor.preflight, 'HEALTHY');
     assert.equal(preflightCalls.length, 1);
     assert.equal(preflightCalls[0].attachUrl, 'http://127.0.0.1:4096');
+    assert.equal(preflightCalls[0].authorization, VISIBLE_TEST_AUTHORIZATION);
     assert.equal(fake.invocations.length, 1);
     const invocation = fake.invocations[0];
     assert.deepEqual(invocation.args.slice(0, 8), [
@@ -1554,17 +1624,28 @@ test('VISIBLE_TUI E ??the attached mutation child keeps the sanitized child envi
       GITHUB_TOKEN: 'github',
       VERCEL_TOKEN: 'vercel',
       [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096',
+      [OPENCODE_SERVER_PASSWORD_ENV]: VISIBLE_TEST_PASSWORD,
+      [OPENCODE_SERVER_USERNAME_ENV]: 'operator',
     };
+    const disposalCalls = [];
     const result = runOnce(runOptions(fixture), {
       invokeOpencode: fake.invokeOpencode,
       probeVisibleServer: createPreflightRecorder(),
-      disposeVisibleInstance: createDisposalRecorder(),
+      disposeVisibleInstance: createDisposalRecorder({ calls: disposalCalls }),
       env: baseEnv,
       log: () => {},
     });
 
     assert.equal(result.status, SUCCESS);
     const childEnv = fake.invocations[0].env;
+    // the attached client authenticates to the visible server
+    assert.equal(childEnv[OPENCODE_SERVER_PASSWORD_ENV], VISIBLE_TEST_PASSWORD);
+    assert.equal(childEnv[OPENCODE_SERVER_USERNAME_ENV], 'operator');
+    assert.equal(childEnv[OPENCODE_ATTACH_URL_ENV], undefined);
+    assert.equal(
+      disposalCalls[0].authorization,
+      `Basic ${Buffer.from(`operator:${VISIBLE_TEST_PASSWORD}`).toString('base64')}`,
+    );
     for (const dropped of ['GH_TOKEN', 'GITHUB_TOKEN', 'VERCEL_TOKEN']) {
       assert.equal(childEnv[dropped], undefined, `${dropped} must not reach the child`);
     }
@@ -1765,22 +1846,33 @@ test('VISIBLE_TUI H ??an unhealthy visible server fails closed as VISIBILITY_UNA
 test('VISIBLE_TUI H2 ??probeVisibleServer reports health through its spawn seam only', () => {
   const healthy = probeVisibleServer({
     attachUrl: 'http://127.0.0.1:4096',
+    authorization: VISIBLE_TEST_AUTHORIZATION,
     spawn: () => ({ status: 0, stderr: '' }),
   });
   assert.deepEqual(healthy, { attempted: true, ok: true, error: null });
 
-  let observedArgs = null;
+  let observed = null;
   const unhealthy = probeVisibleServer({
     attachUrl: 'http://127.0.0.1:4096',
-    spawn: (command, args) => {
-      observedArgs = { command, args };
+    authorization: VISIBLE_TEST_AUTHORIZATION,
+    spawn: (command, args, options) => {
+      observed = { command, args, options };
       return { status: 1, stderr: 'connect ECONNREFUSED 127.0.0.1:4096\n' };
     },
   });
   assert.equal(unhealthy.attempted, true);
   assert.equal(unhealthy.ok, false);
   assert.match(unhealthy.error, /ECONNREFUSED/);
-  assert.equal(observedArgs.args[observedArgs.args.length - 1], 'http://127.0.0.1:4096');
+  assert.equal(observed.args[observed.args.length - 1], 'http://127.0.0.1:4096');
+  assert.ok(
+    !observed.args.some((arg) => arg.includes(VISIBLE_TEST_AUTHORIZATION)),
+    'the credential must not appear in the request child argv',
+  );
+  assert.equal(
+    observed.options.env.GREENHUB_VISIBLE_SERVER_AUTHORIZATION,
+    VISIBLE_TEST_AUTHORIZATION,
+  );
+  assert.ok(observed.options.timeout > 0, 'the preflight is always time-bounded');
 
   const missingTarget = probeVisibleServer({ spawn: () => ({ status: 0, stderr: '' }) });
   assert.deepEqual(missingTarget, {
@@ -1788,6 +1880,138 @@ test('VISIBLE_TUI H2 ??probeVisibleServer reports health through its spawn seam 
     ok: false,
     error: 'attach URL is required',
   });
+
+  let spawned = false;
+  const missingCredentials = probeVisibleServer({
+    attachUrl: 'http://127.0.0.1:4096',
+    spawn: () => {
+      spawned = true;
+      return { status: 0, stderr: '' };
+    },
+  });
+  assert.equal(missingCredentials.ok, false);
+  assert.equal(spawned, false);
+  assert.match(missingCredentials.error, /OPENCODE_SERVER_PASSWORD/);
+});
+
+test('VISIBLE_TUI H3 ??visible server credentials are required and resolved from the environment', () => {
+  assert.equal(resolveVisibleServerAuth({}).ok, false);
+  assert.equal(resolveVisibleServerAuth({ [OPENCODE_SERVER_PASSWORD_ENV]: '   ' }).ok, false);
+  const auth = resolveVisibleServerAuth({ [OPENCODE_SERVER_PASSWORD_ENV]: VISIBLE_TEST_PASSWORD });
+  assert.equal(auth.ok, true);
+  assert.equal(auth.username, 'opencode');
+  assert.equal(auth.authorization, VISIBLE_TEST_AUTHORIZATION);
+  const custom = resolveVisibleServerAuth({
+    [OPENCODE_SERVER_PASSWORD_ENV]: VISIBLE_TEST_PASSWORD,
+    [OPENCODE_SERVER_USERNAME_ENV]: ' operator ',
+  });
+  assert.equal(custom.username, 'operator');
+
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const preflightCalls = [];
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: fake.invokeOpencode,
+      probeVisibleServer: createPreflightRecorder({ calls: preflightCalls }),
+      disposeVisibleInstance: createDisposalRecorder(),
+      env: { PATH: process.env.PATH, [OPENCODE_ATTACH_URL_ENV]: 'http://127.0.0.1:4096' },
+      log: () => {},
+    });
+    assert.equal(result.status, EXECUTOR_FAILED);
+    assert.equal(result.executor.mode, VISIBLE_TUI_MODE);
+    assert.match(result.reason, /OPENCODE_SERVER_PASSWORD/);
+    assert.equal(preflightCalls.length, 0);
+    assert.equal(fake.invocations.length, 0);
+    assert.equal(result.workspace.cleanup, 'NOT_CREATED');
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+// Runs the request child that a seam captured as a real async process, so the
+// in-process HTTP server below keeps serving while the child talks to it.
+function runCapturedRequestChild(invoke) {
+  const captured = [];
+  invoke((command, args, options) => {
+    captured.push({ command, args, options });
+    return { status: 0, stderr: '' };
+  });
+  const [call] = captured;
+  return new Promise((resolveRun, rejectRun) => {
+    const child = spawn(call.command, call.args, {
+      env: call.options.env,
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    let stderr = '';
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', rejectRun);
+    child.on('close', (status) => resolveRun({ status, stderr }));
+  });
+}
+
+test('VISIBLE_TUI H4 ??real preflight and disposal requests carry basic auth', async () => {
+  const requests = [];
+  const server = createHttpServer((request, response) => {
+    requests.push({ url: request.url, authorization: request.headers.authorization ?? null });
+    if (request.headers.authorization !== VISIBLE_TEST_AUTHORIZATION) {
+      response.writeHead(401, { 'content-type': 'application/json' });
+      response.end('{}');
+      return;
+    }
+    if (request.url?.startsWith('/global/health')) {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ healthy: true }));
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(request.url?.startsWith('/mcp?') ? '{"local":{}}' : '{}');
+  });
+  await new Promise((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
+  const url = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const authorized = await runCapturedRequestChild((seam) =>
+      probeVisibleServer({
+        attachUrl: url,
+        authorization: VISIBLE_TEST_AUTHORIZATION,
+        spawn: seam,
+      }),
+    );
+    assert.equal(authorized.status, 0, authorized.stderr);
+
+    const rejected = await runCapturedRequestChild((seam) =>
+      probeVisibleServer({
+        attachUrl: url,
+        authorization: `Basic ${Buffer.from('opencode:wrong-placeholder').toString('base64')}`,
+        spawn: seam,
+      }),
+    );
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /rejected the configured credentials \(HTTP 401\)/);
+
+    const disposed = await runCapturedRequestChild((seam) =>
+      disposeVisibleInstance({
+        attachUrl: url,
+        workspacePath: '/tmp/visible-workspace',
+        authorization: VISIBLE_TEST_AUTHORIZATION,
+        spawn: seam,
+      }),
+    );
+    assert.equal(disposed.status, 0, disposed.stderr);
+    const disposalRequests = requests.filter((entry) => !entry.url.startsWith('/global/health'));
+    assert.deepEqual(
+      disposalRequests.map((entry) => entry.url.split('?')[0]),
+      ['/mcp', '/mcp/local/disconnect', '/instance/dispose'],
+    );
+    assert.ok(
+      disposalRequests.every((entry) => entry.authorization === VISIBLE_TEST_AUTHORIZATION),
+    );
+  } finally {
+    server.closeAllConnections?.();
+    await new Promise((resolveClose) => server.close(() => resolveClose()));
+  }
 });
 
 // Real-process child runner for the C6 concurrency proof. It imports the
@@ -2286,4 +2510,153 @@ test('KILL SWITCH — env flag and stop file are observed; 0 and absence are not
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Output redaction and bounded timeouts
+// ---------------------------------------------------------------------------
+
+// Credential-shaped fixtures are assembled at runtime from low-entropy
+// placeholders so that no literal token shape is committed.
+const SHAPED_FIXTURES = Object.freeze({
+  github: `gh${'p'}_${'a1'.repeat(18)}`, // trufflehog:ignore
+  modelKey: `s${'k'}-${'placeholder'.repeat(3)}`, // trufflehog:ignore
+  awsId: `AKI${'A'}${'X'.repeat(16)}`, // trufflehog:ignore
+  jwt: ['eyJ', 'placeholder', '.eyJ', 'placeholder', '.', 'signature0'].join(''), // trufflehog:ignore
+  bearer: `Bearer ${'abc123'.repeat(4)}`, // trufflehog:ignore
+  urlUserInfo: `https://operator:${'pw'.repeat(4)}@proxy.local:8080/`, // trufflehog:ignore
+  pem: [
+    `-----BEGIN ${'PRIVATE'} KEY-----`,
+    'placeholderplaceholder',
+    `-----END ${'PRIVATE'} KEY-----`,
+  ].join('\n'),
+});
+
+test('REDACTION — credential values and credential-shaped literals are masked', () => {
+  const env = { PATH: '/usr/bin', SERVICE_API_SECRET: 'env-secret-placeholder' };
+  const text = [
+    'proof printed env-secret-placeholder',
+    `token ${SHAPED_FIXTURES.github}`,
+    `key ${SHAPED_FIXTURES.modelKey}`,
+    `aws ${SHAPED_FIXTURES.awsId}`,
+    `jwt ${SHAPED_FIXTURES.jwt}`,
+    `header ${SHAPED_FIXTURES.bearer}`,
+    `proxy ${SHAPED_FIXTURES.urlUserInfo}`,
+    SHAPED_FIXTURES.pem,
+    'Basic authentication is required for /usr/bin access',
+  ].join('\n');
+  const redacted = redactSensitiveOutput(text, env);
+  for (const secret of [
+    'env-secret-placeholder',
+    SHAPED_FIXTURES.github,
+    SHAPED_FIXTURES.modelKey,
+    SHAPED_FIXTURES.awsId,
+    SHAPED_FIXTURES.jwt,
+    'abc123abc123',
+    'pwpwpwpw',
+    'placeholderplaceholder',
+  ]) {
+    assert.equal(redacted.includes(secret), false, `${secret} must be masked`);
+  }
+  assert.match(redacted, /Bearer \[가림\]/);
+  assert.match(redacted, /https:\/\/operator:\[가림\]@proxy\.local:8080\//);
+  assert.match(redacted, /Basic authentication is required for \/usr\/bin access/);
+  assert.equal(redactSensitiveOutput('', env), '');
+  assert.equal(redactSensitiveOutput(undefined, env), '');
+  assert.ok(redacted.includes(REDACTED_MARKER));
+});
+
+test('REDACTION — proof output is masked in results and logs', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const logs = [];
+    const result = runOnce(runOptions(fixture, { proofCommands: ['node proof-check.cjs'] }), {
+      invokeOpencode: fake.invokeOpencode,
+      runProofCommand: () => ({
+        exitCode: 1,
+        signal: null,
+        timedOut: false,
+        stdout: `config dump: env-secret-placeholder ${SHAPED_FIXTURES.github}`,
+        stderr: `request failed with ${SHAPED_FIXTURES.bearer} for env-secret-placeholder`,
+      }),
+      env: { PATH: process.env.PATH, SERVICE_API_SECRET: 'env-secret-placeholder' },
+      log: (message) => logs.push(message),
+    });
+    assert.equal(result.status, PROOF_FAILED);
+    const [entry] = result.proofResults;
+    const persisted = JSON.stringify(result);
+    const logged = logs.join('\n');
+    for (const secret of ['env-secret-placeholder', SHAPED_FIXTURES.github, 'abc123abc123']) {
+      assert.equal(persisted.includes(secret), false, `${secret} must not be persisted`);
+      assert.equal(logged.includes(secret), false, `${secret} must not be logged`);
+    }
+    assert.match(entry.stdoutTail, /config dump: \[가림\] \[가림\]/);
+    assert.match(entry.stderrTail, /Bearer \[가림\]/);
+    assert.match(logged, /proof stderr:/);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('REDACTION — executor output masks credential-shaped literals', () => {
+  const fixture = buildFixture();
+  try {
+    const fake = createFakeOpencode({ writes: [{ path: 'src/allowed.txt', content: 'ok\n' }] });
+    const result = runOnce(runOptions(fixture), {
+      invokeOpencode: (invocation) => {
+        const execution = fake.invokeOpencode(invocation);
+        return {
+          ...execution,
+          stdout: `done ${SHAPED_FIXTURES.modelKey}`,
+          stderr: `warn ${SHAPED_FIXTURES.urlUserInfo}`,
+        };
+      },
+      env: { PATH: process.env.PATH },
+      log: () => {},
+    });
+    assert.equal(result.status, SUCCESS);
+    assert.equal(result.executor.stdoutTail, `done ${REDACTED_MARKER}`);
+    assert.equal(result.executor.stderrTail.includes('pwpwpwpw'), false);
+  } finally {
+    removeFixture(fixture);
+  }
+});
+
+test('TIMEOUTS — zero or negative timeouts are rejected instead of disabling the bound', () => {
+  for (const flag of ['--opencode-timeout-ms', '--codex-timeout-ms', '--proof-timeout-ms']) {
+    for (const value of ['0', '-1', 'Infinity']) {
+      const parsed = parseArgs(['--task', 't.md', '--allow', 'src', flag, value]);
+      assert.equal(parsed.ok, false, `${flag} ${value} must be rejected`);
+    }
+    assert.equal(parseArgs(['--task', 't.md', '--allow', 'src', flag, '1000']).ok, true);
+  }
+
+  for (const key of ['opencodeTimeoutMs', 'codexTimeoutMs', 'proofTimeoutMs']) {
+    const result = runOnce(
+      { repositoryRoot: process.cwd(), allowedPaths: ['src'], taskText: 'x', [key]: 0 },
+      {
+        invokeOpencode: () => {
+          throw new Error('must not be invoked');
+        },
+        log: () => {},
+      },
+    );
+    assert.equal(result.status, INVALID_INPUT, key);
+    assert.match(result.reason, new RegExp(`${key} must be a positive finite number`));
+  }
+
+  const calls = [];
+  defaultRunProofCommand({
+    command: 'node --version',
+    cwd: '/work',
+    env: { PATH: '/usr/bin' },
+    timeoutMs: 0,
+    platform: 'linux',
+    spawn: (...args) => {
+      calls.push(args);
+      return { status: 0, signal: null, stdout: '', stderr: '' };
+    },
+  });
+  assert.equal(calls[0][2].timeout, DEFAULT_PROOF_TIMEOUT_MS);
 });
