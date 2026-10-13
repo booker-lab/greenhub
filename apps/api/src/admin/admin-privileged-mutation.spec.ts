@@ -122,7 +122,7 @@ function makeHttpHarness() {
     generateInvite: jest.spyOn(adminService, 'generateInvite').mockResolvedValue({
       token: 'TESTINVITE12345678',
       expiresAt: new Date(0).toISOString(),
-      recipientEmail: null,
+      recipientEmail: 'new-seller@example.com',
     }),
     revokeInvite: jest.spyOn(adminService, 'revokeInvite').mockResolvedValue({
       token: 'TESTINVITE123456',
@@ -197,7 +197,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
       case 'suspendUser':
         return http.patch('/admin/users/consumer-1/status').send({ suspended: true });
       case 'generateInvite':
-        return http.post('/admin/invite');
+        return http.post('/admin/invite').send({ recipientEmail: 'new-seller@example.com' });
       case 'revokeInvite':
         return http.post('/admin/invite/TESTINVITE123456/revoke');
       case 'upsertBanner':
@@ -314,7 +314,9 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         });
         break;
       case 'generateInvite':
-        expect(harness.serviceBoundary.generateInvite).toHaveBeenCalledWith('admin-1', undefined);
+        expect(harness.serviceBoundary.generateInvite).toHaveBeenCalledWith('admin-1', {
+          recipientEmail: 'new-seller@example.com',
+        });
         break;
       case 'revokeInvite':
         expect(harness.serviceBoundary.revokeInvite).toHaveBeenCalledWith(

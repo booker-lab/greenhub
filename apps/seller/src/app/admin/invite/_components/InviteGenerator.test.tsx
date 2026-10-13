@@ -163,6 +163,7 @@ describe('InviteGenerator command state', () => {
 
 interface InputLike {
   label?: unknown;
+  required?: unknown;
   error?: unknown;
   value?: unknown;
   onChange?: unknown;
@@ -179,7 +180,7 @@ function recipientInputProps(tree: ReactNode): InputLike | null {
     }
     if (!isElement(current)) return;
     const props = current.props as InputLike & Clickable;
-    if (props.label === '받는 사람 이메일 (선택)') {
+    if (props.label === '받는 사람 이메일') {
       found = props;
       return;
     }
@@ -189,8 +190,50 @@ function recipientInputProps(tree: ReactNode): InputLike | null {
   return found;
 }
 
+/** 주어진 라벨을 포함한 버튼의 disabled 값을 찾는다. */
+function disabledFor(tree: ReactNode, label: string): unknown {
+  let found: { disabled?: unknown } | null = null;
+  const visit = (current: ReactNode): void => {
+    if (found) return;
+    if (Array.isArray(current)) {
+      for (const child of current) visit(child);
+      return;
+    }
+    if (!isElement(current)) return;
+    if (typeof current.props.onClick === 'function' && textsOf(current).includes(label)) {
+      found = current.props as { disabled?: unknown };
+      return;
+    }
+    visit(current.props.children);
+  };
+  visit(tree);
+  return (found as { disabled?: unknown } | null)?.disabled;
+}
+
 describe('InviteGenerator 받는 사람 이메일', () => {
-  it('선택 입력란에 현재 값과 오류를 전달한다', () => {
+  it('받는 사람 이메일을 필수 입력란으로 표시하고 (선택) 문구를 쓰지 않는다', () => {
+    const tree = InviteGenerator({ ...baseProps });
+    const input = recipientInputProps(tree);
+    expect(input).not.toBeNull();
+    expect(input?.required).toBe(true);
+    expect(textsOf(tree).some((t) => t.includes('(선택)'))).toBe(false);
+  });
+
+  it.each([
+    '',
+    '   ',
+  ])('받는 사람 이메일이 비어 있으면(%p) 생성 버튼을 막는다', (recipientEmail) => {
+    const tree = InviteGenerator({ ...baseProps, recipientEmail });
+    expect(disabledFor(tree, '새 토큰 생성')).toBe(true);
+  });
+
+  it('받는 사람 이메일을 입력하면 생성 버튼을 누를 수 있고, 생성 중에는 막는다', () => {
+    const filled = { ...baseProps, recipientEmail: 'seller@example.com' };
+    expect(disabledFor(InviteGenerator(filled), '새 토큰 생성')).toBe(false);
+    expect(disabledFor(InviteGenerator({ ...filled, generating: true }), '생성중…')).toBe(true);
+  });
+
+  it('입력란에 현재 값과 오류를 전달한다', () => {
     const tree = InviteGenerator({
       ...baseProps,
       recipientEmail: 'seller@example.com',

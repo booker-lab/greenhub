@@ -452,15 +452,15 @@ export function useAdminInvite() {
   // 호출자(_client)가 result null 가드로 lastToken 갱신을 제한해 보장한다.
   const [generateError, setGenerateError] = useState<string | null>(null);
 
-  // recipientEmail을 주면 그 이메일로만 가입할 수 있는 초대를 발급한다. 비우면 기존처럼 제한 없이 발급한다.
-  const generate = async (recipientEmail?: string): Promise<IssuedInvite | null> => {
+  // 받는 사람 이메일(필수)로만 가입할 수 있는 초대를 발급한다. 본문에는 항상 recipientEmail을 담는다.
+  const generate = async (recipientEmail: string): Promise<IssuedInvite | null> => {
     if (!token) return null;
     setGenerating(true);
     setGenerateError(null);
     try {
       const data = await apiJson<IssuedInvite>('/admin/invite', token, {
         method: 'POST',
-        ...(recipientEmail ? { body: JSON.stringify({ recipientEmail }) } : {}),
+        body: JSON.stringify({ recipientEmail }),
       });
       await reload();
       return data;
