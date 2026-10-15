@@ -1,0 +1,147 @@
+name: Ops lock account
+
+# 운영 사용자 계정 1개를 이메일로 찾아 상태를 보거나(check) 잠근다(lock). 저장소 owner가 main에서 수동 실행할 때만
+# production Environment의 Firebase 서비스 계정 키를 쓴다. 스크립트: scripts/ops/lock-account.mjs
+#   - check: 존재 여부·role·매장 연결·생성/최근 로그인 시각·잠금 여부·활성 refresh 세션 수(판매자는 매장 주문·상품 수)만 출력
+#   - lock: 비밀번호 해시를 무작위 값의 해시로 교체, 정지, 세션 폐기(refreshTokens 삭제·sessionsRevokedAt·activeSessionIds),
+#     Firebase Auth 사용자가 있으면 refresh token 폐기와 disabled, auditLogs 기록. 사용자·매장·주문·상품은 지우지 않는다.
+# 이메일은 로그에 마스킹해서만 남긴다. 입력 원문은 step env에 두지 않고 이벤트 payload에서 읽는다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: 대상 계정 이메일
+        required: true
+        type: string
+      mode:
+        description: check(조회만) 또는 lock(잠금)
+        required: true
+        type: choice
+        options:
+          - check
+          - lock
+        default: check
+      expected_role:
+        description: 계정 role이 이 값과 다르면 아무것도 바꾸지 않고 중단(any는 확인 안 함)
+        required: true
+        type: choice
+        options:
+          - seller
+          - consumer
+          - driver
+          - admin
+          - any
+        default: seller
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-lock-account
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 실행자 확인
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: dispatch·실행자·ref 확인
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch로만 실행합니다.' >&2; exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" || "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo '실행자가 저장소 owner가 아니어서 차단합니다.' >&2; exit 1
+          fi
+          if [[ "$REF" != 'refs/heads/main' ]]; then
+            echo 'main에서만 실행합니다.' >&2; exit 1
+          fi
+
+  lock-account:
+    name: 계정 확인·잠금
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    permissions:
+      contents: read
+    env:
+      FIREBASE_PROJECT: green-e4fe3
+    steps:
+      # 이후 모든 로그에서 입력 이메일 원문을 가린다. 값은 step env가 아니라 이벤트 payload에서 읽는다.
+      - name: 입력 이메일 마스킹
+        shell: bash
+        run: |
+          set -euo pipefail
+          email="$(jq -r '.inputs.email // empty' "$GITHUB_EVENT_PATH")"
+          if [[ -z "$email" ]]; then
+            echo '입력 email이 비었습니다.' >&2; exit 1
+          fi
+          echo "::add-mask::$email"
+          lower="$(printf '%s' "$email" | tr '[:upper:]' '[:lower:]')"
+          echo "::add-mask::$lower"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      # scripts 워크스페이스(firebase-admin·bcrypt)만 설치한다.
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile --filter ./scripts
+
+      # prod-config-check.yml index-drift와 같은 방식으로 키를 RUNNER_TEMP에 600 권한으로 쓴다.
+      - name: Firebase 인증
+        shell: bash
+        env:
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo 'production Environment 비밀값이 없습니다: FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON' >&2; exit 1
+          fi
+          key="$RUNNER_TEMP/firebase-deploy.json"
+          umask 077
+          printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key"
+          chmod 600 "$key"
+          project="$(jq -r .project_id "$key")"
+          if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
+            echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
+          fi
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$key" >> "$GITHUB_ENV"
+
+      - name: 계정 확인·잠금 실행
+        shell: bash
+        env:
+          LOCK_MODE: ${{ inputs.mode }}
+          EXPECTED_ROLE_INPUT: ${{ inputs.expected_role }}
+        run: |
+          set -euo pipefail
+          expected_role=''
+          if [[ "$EXPECTED_ROLE_INPUT" != 'any' ]]; then expected_role="$EXPECTED_ROLE_INPUT"; fi
+          LOCK_EMAIL="$(jq -r '.inputs.email // empty' "$GITHUB_EVENT_PATH")" \
+            LOCK_EXPECTED_ROLE="$expected_role" \
+            node scripts/ops/lock-account.mjs
+
+      - name: 서비스 계정 키 삭제
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/firebase-deploy.json"

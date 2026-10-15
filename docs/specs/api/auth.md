@@ -240,7 +240,7 @@ consumer | seller | driver
 
 API가 발급하는 access/refresh token에는 `typ`(`access`/`refresh`)와 `aud`(`greenhub-api`)가 들어가고 HS256으로 서명한다. `JwtStrategy`와 `AuthService.refresh()`는 HS256만 받고, `typ`·`aud`가 있으면 기대값과 같아야 한다(refresh token을 Bearer로 쓰거나 access token을 refresh로 쓰면 401). 이 claim이 없는 이전 발급 token은 만료까지 계속 받는다(`apps/api/src/auth/auth.token-boundary.spec.ts`, `auth.service.spec.ts` `토큰 종류·수신자 claim`). refresh token 저장 형식(평문 단일 문서)은 바뀌지 않았다.
 
-refresh token은 사용자당 `refreshTokens/{sub}` 문서 하나에 저장되고 회전한다. 로그인(email·Kakao)은 이 문서를 새 token으로 덮어쓰고 직전 token 유예를 남기지 않는다. `POST /auth/refresh`는 저장된 최신 token이면 새 token으로 회전하면서 직전 token과 회전 시각을 함께 저장한다. 같은 세션의 동시 갱신·쿠키 반영 전 재요청으로 직전 token이 회전 후 60초(`REFRESH_ROTATION_GRACE_MS`) 안에 다시 오면 재회전 없이 현재 refresh token과 새 access token을 준다. 그 밖의 token은 재사용(탈취)으로 보고 문서를 삭제하고 Firebase refresh token을 폐기하며 `auth.token.stolen`을 기록한 뒤 401로 거부한다. 유예 안이어도 현재 권한 재조회를 통과해야 한다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts` `refresh current authority`.
+refresh token은 기기(로그인)별 세션으로 저장되고 세션마다 회전한다(2026-10-15 결정, #526). 로그인(email·Kakao)마다 새 세션 ID(`sid`, access·refresh token payload에 실음)를 만들고 `refreshTokens/{sub}.sessions[sid]`와 `users/{sub}.activeSessionIds`를 한 트랜잭션에서 함께 기록한다. 사용자당 세션은 최대 10개(`REFRESH_SESSION_MAX_COUNT`)이며, 넘치면 가장 오래 쓰이지 않은 세션(생성·회전 시각 중 늦은 쪽 기준)부터 지우고 `auth.session.evicted`를 서버 로그에 남긴다. 다른 기기의 로그인은 기존 세션을 건드리지 않는다. `POST /auth/refresh`는 token의 `sid` 세션에 저장된 최신 token이면 새 token으로 회전하면서 그 세션에 직전 token과 회전 시각을 함께 저장한다. 같은 세션의 동시 갱신·쿠키 반영 전 재요청으로 직전 token이 회전 후 60초(`REFRESH_ROTATION_GRACE_MS`) 안에 다시 오면 재회전 없이 현재 refresh token과 새 access token을 준다. 그 세션의 그 밖의 token은 재사용(탈취)으로 보고 **그 사용자의 모든 세션**을 끊는다: `refreshTokens/{sub}` 삭제, `activeSessionIds` 비움, `sessionsRevokedAt` 기록, Firebase refresh token 폐기, `auth.token.stolen`(`sessionId` 포함) 기록 뒤 401로 거부한다. `sid`가 없는 token(#526 이전 발급)이나 이미 없어진 세션(로그아웃·축출)의 token은 audit 없이 401(`만료된 리프레시 토큰`)로 거부해 다시 로그인하게 한다. 유예 안이어도 현재 권한 재조회를 통과해야 한다. 직접 근거: `apps/api/src/auth/auth.per-device-sessions.spec.ts`, `apps/api/src/auth/auth.service.spec.ts` `refresh current authority`.
 
 ### 현재 구현 한계 — stale authorization claims
 
@@ -255,18 +255,18 @@ rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/s
 문서의 `suspended/role/storeId/driverApproved`를 재검증한다
 (`apps/api/src/auth/strategies/jwt.strategy.spec.ts`).
 
-관리자가 계정을 정지하거나 role/store 연결·기사 승인을 바꾼 뒤 기존 세션의 **revocation window는 즉시(다음 요청)**다(2026-09-28 결정 D2). 이미 발급된 API access token도 `JwtStrategy.validate()`가 요청마다 authoritative user를 재조회해 `suspended`·role 불일치·`driverApproved` 철회를 403으로 거부하고(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`), Firestore Rules는 `get(users/{uid})`로 `suspended`·role·storeId를 실시간 확인한다. 다만 refresh 경로는 더 이상 stale claims를 재발급하지 않는다: `AuthService.refresh()`가 authoritative user를 재조회해 불일치를 거부하고(`refresh current authority`), `GET /auth/session`이 `JwtAuthGuard` 재검증 + authoritative user 재조회 + `refreshTokens/{sub}` 존재 검사로 same-deployment session authority를 확인하며(`getSession same-deployment authority`), 세 앱 `jwt` callback이 매 호출마다 이를 확인한다.
+관리자가 계정을 정지하거나 role/store 연결·기사 승인을 바꾼 뒤 기존 세션의 **revocation window는 즉시(다음 요청)**다(2026-09-28 결정 D2). 이미 발급된 API access token도 `JwtStrategy.validate()`가 요청마다 authoritative user를 재조회해 `suspended`·role 불일치·`driverApproved` 철회를 403으로 거부하고(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`), Firestore Rules는 `get(users/{uid})`로 `suspended`·role·storeId를 실시간 확인한다. 다만 refresh 경로는 더 이상 stale claims를 재발급하지 않는다: `AuthService.refresh()`가 authoritative user를 재조회해 불일치를 거부하고(`refresh current authority`), `GET /auth/session`이 `JwtAuthGuard` 재검증 + authoritative user 재조회 + access token `sid` 세션 존재 검사로 same-deployment session authority를 확인하며(`getSession same-deployment authority`), 세 앱 `jwt` callback이 매 호출마다 이를 확인한다.
 
 판정:
 
 - 신규 로그인에서 `suspended === true`를 거부하는 동작은 구현·테스트됨.
 - refresh/session 경계의 stale-claim 재발급 차단과 `suspended`/`role`/`store`/`driverApproved` 변경 수렴은 `IMPLEMENTED / PROVEN`이다.
 - revocation window는 즉시(다음 요청)로 결정됐고(D2), runtime/browser session lifecycle은 Preview에서 `RUNTIME_PROVEN`이다(run `36341189483`, 12건, 2026-10-10 로그아웃·token 변경 이전 source 기준).
-- `POST /auth/logout`은 `refreshTokens/{sub}` 삭제와 함께 Firebase refresh token을 폐기한다(`revokeRefreshTokens`). refresh token 재사용 감지도 같은 폐기를 수행한다. Firebase 사용자 기록이 없으면(custom token 미사용) 폐기할 것이 없으므로 그대로 진행하고, 그 밖의 폐기 실패는 API 세션 폐기를 되돌리지 않고 서버 로그에만 남긴다. 이미 발급된 Firebase ID token은 만료(최대 1시간)까지 남는다.
-- `POST /auth/logout`과 관리자 정지(`PATCH /admin/users/:userId/status`, `PATCH /admin/drivers/:userId/suspend`에서 `suspended: true`)는 `users/{uid}.sessionsRevokedAt`(Timestamp, 초 단위로 내린 시각)을 기록한다. `JwtStrategy`는 access token의 `iat * 1000`이 이 시각보다 이전이면 만료 전이어도 401로 거부한다(`iat` 없는 토큰·형식을 알 수 없는 기록도 거부). 같은 초에 새로 로그인해 받은 토큰은 통과한다. 정지는 `refreshTokens/{uid}` 삭제와 Firebase refresh token 폐기(로그아웃과 같은 처리)도 함께 한다. 정지 해제는 폐기 시각을 지우지 않으므로 정지 전 토큰은 다시 쓰이지 않는다(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`, `apps/api/src/admin/admin.service.spec.ts`).
-- `refreshTokens/{sub}`의 `token`·`previousToken`은 refresh token 원문이 아니라 SHA-256(hex)이다. 회전 유예(60초) 동안 직전 토큰을 다시 보낸 요청에 현재 토큰을 돌려주기 위해, 현재 토큰을 직전 토큰에서 만든 키로 암호화한 `sealedToken`을 함께 둔다. 해시 형식(64자 hex)이 아닌 배포 전 원문 기록은 원문과 timing-safe로 한 번 비교하고, 맞으면 그 회전에서 해시 기록으로 바뀐다. 재사용 탐지(유예 밖 직전 토큰·그 밖의 토큰은 기록 삭제와 Firebase 폐기)는 그대로다.
-- 세 앱 Auth.js 로그아웃은 쿠키 삭제와 함께 `events.signOut`에서 `POST /auth/logout`을 호출해 서버 `refreshTokens/{sub}`를 폐기한다(`apps/{consumer,seller,driver}/src/auth.ts`, 각 `src/auth-runtime.ts`의 `revokeApiSession`). access token이 401/403이면 refresh로 새 access token을 받아 한 번 더 호출하고, refresh도 401/403이면 이미 끝난 세션으로 본다. 폐기 실패·네트워크 오류·시간 제한(5초) 초과는 예외 없이 끝나 로그아웃 자체는 계속되며, 이 경우 서버 세션은 남는다. 직접 근거는 각 앱 `auth-runtime` 단위 테스트이며, `events.signOut` 연결은 소스 대조로만 확인한다. Preview E2E(`auth-session-lifecycle.spec.ts`)는 로그아웃 뒤 쿠키·세션 소멸만 확인하고 서버 token 폐기는 직접 확인하지 않는다.
-- 알려진 한계(결정된 계약 아님): `refreshTokens/{sub}`가 사용자당 문서 하나이므로, 같은 계정이 두 번째 기기에서 로그인하면 첫 기기의 다음 refresh가 재사용으로 판정되어 두 기기 모두 로그아웃되고 Firebase 세션이 폐기되며 `auth.token.stolen`이 기록된다. 한 기기의 로그아웃도 같은 계정의 모든 기기를 로그아웃시킨다. 로그아웃은 `sessionsRevokedAt`도 기록하므로 다른 기기에 남은 access token도 다음 요청부터 거부된다. 로그아웃 뒤 같은 계정이 다시 로그인해도 로그아웃 전 쿠키의 access token은 `iat`가 폐기 시각보다 이르므로 `GET /auth/session`을 포함한 API 요청에서 거부된다(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`). 다기기 정책은 `docs/BACKLOG.md`의 `AUTH-MULTI-DEVICE-SESSION`(DECISION REQUIRED)에서 다룬다.
+- `POST /auth/logout`은 access token의 `sid` 세션 하나만 끊는다: `refreshTokens/{sub}.sessions[sid]`와 `activeSessionIds`의 그 `sid`를 지우고 `auth.logout`(`sessionId` 포함)을 기록한다. Firebase refresh token 폐기는 사용자 단위라 다른 기기까지 끊으므로 이때는 하지 않으며, `sessionsRevokedAt`도 기록하지 않는다. `sid`가 없는 access token(#526 이전 발급)의 로그아웃은 모든 세션을 끊는다(`refreshTokens/{sub}` 삭제, `activeSessionIds` 비움, `sessionsRevokedAt` 기록, Firebase 폐기, audit `scope: all`). 재사용 감지도 모든 세션을 끊는 같은 처리를 한다. Firebase 사용자 기록이 없으면(custom token 미사용) 폐기할 것이 없으므로 그대로 진행하고, 그 밖의 폐기 실패는 API 세션 폐기를 되돌리지 않고 서버 로그에만 남긴다. 이미 발급된 Firebase ID token은 만료(최대 1시간)까지 남는다.
+- 모든 세션을 끊는 경로(`sid` 없는 로그아웃·재사용 감지)와 관리자 정지(`PATCH /admin/users/:userId/status`, `PATCH /admin/drivers/:userId/suspend`에서 `suspended: true`)는 `users/{uid}.sessionsRevokedAt`(Timestamp, 초 단위로 내린 시각)을 기록한다. `JwtStrategy`는 access token의 `iat * 1000`이 이 시각보다 이전이면 만료 전이어도 401로 거부한다(`iat` 없는 토큰·형식을 알 수 없는 기록도 거부). 같은 초에 새로 로그인해 받은 토큰은 통과한다. 또 `JwtStrategy`는 access token에 `sid`가 있으면 그 값이 `users/{uid}.activeSessionIds`에 있어야 통과시키고, 없으면 401(`폐기된 세션의 인증 토큰입니다.`)로 거부한다. 그래서 한 기기의 로그아웃·축출은 그 기기의 access token만 다음 요청부터 거부하고 다른 기기는 그대로 쓴다. `sid` 없는 access token은 `sessionsRevokedAt` 비교만 받으며 만료(최대 1시간)까지 남는다. 정지는 `refreshTokens/{uid}` 삭제와 Firebase refresh token 폐기(로그아웃과 같은 처리)도 함께 한다. 정지 해제는 폐기 시각을 지우지 않으므로 정지 전 토큰은 다시 쓰이지 않는다(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`, `apps/api/src/admin/admin.service.spec.ts`).
+- 세션 기록(`refreshTokens/{sub}.sessions[sid]`)의 `token`·`previousToken`은 refresh token 원문이 아니라 SHA-256(hex)이다. 회전 유예(60초) 동안 직전 토큰을 다시 보낸 요청에 현재 토큰을 돌려주기 위해, 현재 토큰을 직전 토큰에서 만든 키로 암호화한 `sealedToken`을 함께 둔다. #526 이전의 사용자당 단일 기록(원문 기록 포함)은 읽지 않으며, 그 기록에 묶인 token은 `sid`가 없어 refresh가 401로 끝나고 다시 로그인해야 한다.
+- 세 앱 Auth.js 로그아웃은 쿠키 삭제와 함께 `events.signOut`에서 `POST /auth/logout`을 호출해 그 기기의 서버 세션(`sid`)을 폐기한다(`apps/{consumer,seller,driver}/src/auth.ts`, 각 `src/auth-runtime.ts`의 `revokeApiSession`). access token이 401/403이면 refresh로 새 access token을 받아 한 번 더 호출하고, refresh도 401/403이면 이미 끝난 세션으로 본다. 폐기 실패·네트워크 오류·시간 제한(5초) 초과는 예외 없이 끝나 로그아웃 자체는 계속되며, 이 경우 서버 세션은 남는다. 직접 근거는 각 앱 `auth-runtime` 단위 테스트이며, `events.signOut` 연결은 소스 대조로만 확인한다. Preview E2E(`auth-session-lifecycle.spec.ts`)는 로그아웃 뒤 쿠키·세션 소멸만 확인하고 서버 token 폐기는 직접 확인하지 않는다.
+- 다기기 정책(2026-10-15 결정, `docs/BACKLOG.md` `AUTH-MULTI-DEVICE-SESSION`): 같은 계정이 여러 기기에서 로그인해도 서로의 refresh를 재사용으로 판정하지 않고, 한 기기의 로그아웃은 그 기기만 끊는다. 재사용 감지·관리자 정지·`sid` 없는 로그아웃은 계속 모든 기기를 끊는다. 로그아웃 뒤 같은 계정이 다시 로그인해도 로그아웃한 기기 쿠키의 access token은 그 `sid`가 `activeSessionIds`에 없으므로 `GET /auth/session`을 포함한 API 요청에서 거부된다(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`, `apps/api/src/auth/auth.per-device-sessions.spec.ts`).
 - “정지된 계정이 refresh를 통해 계속 새 권한 토큰을 얻을 수 있음”은 현재 계약이 아니다.
 
 Task 2F-A/2F-B의 public approval-gate와 current-user 경계 검증에 더해, 위 refresh/session 직접 회귀가 static/refresh 경계를 닫는다.
@@ -277,7 +277,7 @@ API access-token 검증만으로는 닫히지 않는 Auth.js same-deployment sta
 gap을 다음 최소 authority로 닫는다.
 
 - canonical owner는 `GET /auth/session` 하나다. `JwtAuthGuard` 재검증 +
-  authoritative user 재조회 + `refreshTokens/{sub}` 존재 검사를 수행하는
+  authoritative user 재조회 + access token `sid` 세션 존재 검사를 수행하는
   read-only endpoint이며, `{ sub, role, storeId? }` projection만 반환한다
   (토큰·비밀값 반환 없음, write/rotation/deletion 없음).
 - 세 앱 `src/auth.ts`의 `jwt` callback은 `accessTokenExpires` TTL과 무관하게
@@ -289,8 +289,9 @@ gap을 다음 최소 authority로 닫는다.
 - TTL 만료 단독은 폐기로 단정하지 않는다. verify가 `401/403`이어도
   `POST /auth/refresh`를 한 번 시도해 access 만료(refresh 성공, 새 토큰)인가
   실제 폐기(refresh도 명시적 거부, `null`)인가를 구분한다.
-- `ACCESS_TOKEN_TTL` 단축으로 해결하지 않으며, user 문서 스키마·firestore.rules
-  변경 없이 기존 `refreshTokens` 바인딩을 재사용한다.
+- `ACCESS_TOKEN_TTL` 단축으로 해결하지 않으며, firestore.rules 변경 없이
+  `refreshTokens/{sub}.sessions` 바인딩을 재사용한다(2026-10-15 #526에서
+  user 문서에 `activeSessionIds`가 추가됐다).
 
 `AUTH-SESSION-CLAIM-REVOCATION` 최소 완료 조건:
 
@@ -461,6 +462,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-15 | 기기별 refresh 세션(#526): 로그인마다 `sid`, `refreshTokens/{sub}.sessions`·`users.activeSessionIds`(최대 10개, LRU 축출), 세션별 회전·유예, 재사용 감지 시 전 세션 폐기, `sid` 로그아웃은 그 세션만 폐기, `JwtStrategy`의 `activeSessionIds` 확인, `sid` 없는 이전 refresh 401. 단일 문서 다기기 한계 해소 |
 | 2026-10-12 | logout·관리자 정지의 `sessionsRevokedAt` 기록과 access token `iat` 비교, 정지 시 refresh 기록·Firebase 세션 폐기, refresh token 해시 저장(원문 기록 자동 전환), 운영 이메일 가입을 판매자 초대로 제한, `emailIdentities` 이메일 가입 단일화, fcm-token·배송지 입력 상한과 배송지 트랜잭션 반영 |
 | 2026-10-10 | 코드 대조 정합화: 세 앱 로그아웃의 API 세션 폐기, refresh 회전 60초 유예·재사용 감지, 사용자당 단일 refresh 문서의 다기기 한계(`AUTH-MULTI-DEVICE-SESSION`), 운영 runtime의 테스트 전용 Credentials 미등록·local-runtime loopback 조건, `KAKAO_APP_ID` 토큰 발급 앱 확인, 앱 서버 쪽 API 호출 시간 제한, Firebase custom token의 현재 user 재조회, 요청 한도 미검증·IP 집계 의존(#404) 반영, candidate·출시 후 과제 표현 정리 |
 | 2026-10-10 | access/refresh token `typ`·`aud`·HS256 검증(이전 발급 token 호환), logout·refresh 재사용 감지의 Firebase refresh token 폐기, `firebase-token` 역할 제한, email login 응답 균일화, 카카오 첫 로그인 사용자 생성 단일화 반영 |
