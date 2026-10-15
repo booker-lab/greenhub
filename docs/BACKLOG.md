@@ -757,6 +757,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### STORAGE-CORS-APPLY
 - [ ] #402가 `cors.json`의 허용 메서드를 GET·HEAD로 줄였지만 `firebase deploy`로 반영되지 않고 버킷에 따로 적용해야 한다. 적용 절차 문서와 확인 테스트가 없다. Firebase SDK 업로드는 다른 엔드포인트를 쓰므로 영향이 없을 가능성이 크지만 확인이 필요하다. 적용 여부와 절차를 정해 런북에 적는다. **2026-10-12**: 절차는 `docs/specs/ops/mvp-sales-round-runbook.md` §10에 적었다(적용 전 현재 값 보관 → 적용 → 업로드 확인 → 막히면 되돌리기). 남은 일: 운영 버킷에 적용할지 결정하고 실행(사용자, GCP 권한 필요).
 
+### OPS-TEST-SELLER-ACCOUNTS-LOCKED
+- [ ] **2026-10-15 잠금 완료, 삭제는 후보로 남김.** 보안 감사(SEC-02 운영 테스트 판매자 계정)에서 같은 테스트 이메일로 운영 판매자 계정이 2개 발견됐다: fingerprint `58c6b2338d`(주문·상품 0건, 로그인 기록 없음), `acaa8d90e7`(연결 매장 주문 6건·상품 2개, 마지막 refresh 9/5). 사용자 결정: 판매자 앱은 카카오 로그인만 쓰므로 이메일 계정은 폐기한다. `Ops lock account` workflow(`.github/workflows/ops-lock-account.yml`, #527·#531) run `38717140324`·`38739558760`(둘 다 success)으로 두 계정 모두 비밀번호 해시 무작위 교체·`suspended: true`·세션 폐기·Firebase Auth disabled. 삭제는 하지 않았다. 남은 일: (1) `acaa8d90e7`에 연결된 매장과 주문 6건·상품 2개가 실제 매장과 무관한지 확인한 뒤 계정 삭제 여부를 정한다(운영 데이터 변경, 사용자 승인 필요). (2) 디어 오키드 매장(`stores/80189070-…`)의 `ownerId`(`7ec0e26b-…`, `docs/memory.md` 기록상 삭제된 `seller_test` 계정)와의 관계는 저장소 증거로 판정할 수 없다(fingerprint는 uid 전체의 SHA-256 앞 10자인데 저장소에 uid 전체가 없다). `acaa8d90e7`의 `storeId`가 디어 오키드 매장인지, 그 fingerprint가 `7ec0e26b-…`의 것인지 운영 읽기로 확인해 디어 오키드 소유자 연결 결정에 반영한다. (3) LATER: `scripts/diagnose-test-account.mjs` 등 스크립트에 남은 테스트 이메일 문자열 정리(계정이 잠겨 위험 없음).
+
 ---
 
 ## STALE_OR_SUPERSEDED
