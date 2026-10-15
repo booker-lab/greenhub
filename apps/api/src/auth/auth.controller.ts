@@ -136,6 +136,6 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.NO_CONTENT)
   logout(@CurrentUser() user: JwtPayload) {
-    return this.authService.logout(user.sub);
+    return this.authService.logout(user.sub, user.sid);
   }
 }

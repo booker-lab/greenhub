@@ -178,3 +178,39 @@ describe('JwtStrategy 세션 폐기 시각(sessionsRevokedAt)', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
+
+describe('JwtStrategy 기기별 세션(sid)', () => {
+  function consumer(extra: Record<string, unknown> = {}) {
+    return { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false, ...extra };
+  }
+
+  it('살아 있는 세션의 access token은 통과하고 request.user에 sid를 넘긴다', async () => {
+    const { strategy } = makeStrategy(consumer({ activeSessionIds: ['sid-a', 'sid-b'] }));
+
+    await expect(
+      strategy.validate({ sub: 'consumer-1', role: 'consumer', sid: 'sid-b' }),
+    ).resolves.toEqual({ sub: 'consumer-1', role: 'consumer', sid: 'sid-b' });
+  });
+
+  it.each([
+    ['로그아웃 등으로 목록에서 빠진 세션', consumer({ activeSessionIds: ['sid-b'] }), 'sid-a'],
+    ['세션 목록이 없는 사용자', consumer(), 'sid-a'],
+    ['형식을 알 수 없는 세션 목록', consumer({ activeSessionIds: 'sid-a' }), 'sid-a'],
+    ['문자열이 아닌 sid', consumer({ activeSessionIds: ['1'] }), 1],
+  ])('%s의 access token은 만료 전이어도 401로 거부한다', async (_label, user, sid) => {
+    const { strategy } = makeStrategy(user);
+
+    await expect(
+      strategy.validate({ sub: 'consumer-1', role: 'consumer', sid } as never),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('sid 없는 이전 발급 access token은 사용자 단위 검사만 받는다', async () => {
+    const { strategy } = makeStrategy(consumer({ activeSessionIds: [] }));
+
+    await expect(strategy.validate({ sub: 'consumer-1', role: 'consumer' })).resolves.toEqual({
+      sub: 'consumer-1',
+      role: 'consumer',
+    });
+  });
+});
