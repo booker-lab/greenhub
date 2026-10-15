@@ -6,6 +6,7 @@ import {
   countRefreshSessions,
   EXPECTED_PROJECT_ID,
   emailIdentityKey,
+  idPrefix,
   maskEmail,
   run,
   uidFingerprint,
@@ -640,4 +641,143 @@ test('error messages containing the raw email are masked', async () => {
   assert.ok(!h.output().includes(EMAIL));
   assert.match(h.output(), new RegExp(MASKED.replace(/[.*]/g, '\\$&')));
   h.fake.db.recursiveDelete = original;
+});
+
+// ── check: 매장 정보 ────────────────────────────────────────────────────────
+
+const STORE_NAME = '디어 오키드 픽스처';
+const KAKAO_UID = 'kakao-fixture-seller-9';
+const GONE_OWNER_UID = 'deleted-owner-fixture-7';
+
+test('check prints uid prefix and store details when the user owns the store', async () => {
+  const seed = baseSeed();
+  seed[`stores/${STORE}`].name = STORE_NAME;
+  const h = harness({ seed });
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  assert.match(out, new RegExp(`^uidPrefix: ${UID.slice(0, 8)}$`, 'm'));
+  assert.match(out, new RegExp(`^storeIdPrefix: ${STORE.slice(0, 8)}$`, 'm'));
+  assert.match(out, /^storeDoc: yes$/m);
+  assert.match(out, new RegExp(`^storeName: ${STORE_NAME}$`, 'm'));
+  assert.match(out, new RegExp(`^storeOwnerIdPrefix: ${UID.slice(0, 8)}$`, 'm'));
+  assert.match(out, /^storeOwnerIsThisUser: yes$/m);
+  assert.ok(!out.includes('storeOwnerUserDoc'));
+  assert.match(out, /^storeSellerUsers: 1$/m);
+  assert.match(
+    out,
+    new RegExp(
+      `storeUser: uidPrefix=${UID.slice(0, 8)} fingerprint=${fp(UID)} role=seller providers=email suspended=no thisCandidate=yes storeOwner=yes`,
+    ),
+  );
+  assert.ok(!out.includes(UID));
+  assert.ok(!out.includes(STORE));
+  assert.ok(!out.toLowerCase().includes(EMAIL.toLowerCase()));
+  assert.deepEqual(h.fake.writes, []);
+  assert.deepEqual(h.fakeAuth.calls, []);
+});
+
+test('check flags a store owned by another (deleted) user and lists other sellers on it', async () => {
+  const seed = baseSeed({
+    [`stores/${STORE}`]: { id: STORE, ownerId: GONE_OWNER_UID, name: STORE_NAME },
+    [`users/${KAKAO_UID}`]: {
+      id: KAKAO_UID,
+      email: 'kakao.seller@example.test',
+      role: 'seller',
+      storeId: STORE,
+      providers: ['kakao'],
+      passwordHash: OLD_HASH,
+    },
+    'users/unrelated-seller-fixture': { id: 'x', role: 'seller', storeId: 'other-store' },
+  });
+  seed[`users/${UID}`].suspended = true;
+  const h = harness({ seed });
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  assert.match(out, new RegExp(`^storeOwnerIdPrefix: ${GONE_OWNER_UID.slice(0, 8)}$`, 'm'));
+  assert.match(out, /^storeOwnerIsThisUser: no$/m);
+  assert.match(out, /^storeOwnerUserDoc: no$/m);
+  assert.match(out, /^storeSellerUsers: 2$/m);
+  assert.match(
+    out,
+    new RegExp(
+      `storeUser: uidPrefix=${UID.slice(0, 8)} fingerprint=${fp(UID)} role=seller providers=email suspended=yes thisCandidate=yes storeOwner=no`,
+    ),
+  );
+  assert.match(
+    out,
+    new RegExp(
+      `storeUser: uidPrefix=${KAKAO_UID.slice(0, 8)} fingerprint=${fp(KAKAO_UID)} role=seller providers=kakao suspended=no thisCandidate=no storeOwner=no`,
+    ),
+  );
+  assert.ok(!out.includes('unrelated'));
+  for (const uid of [UID, KAKAO_UID, GONE_OWNER_UID])
+    assert.ok(!out.includes(uid), 'uid in output');
+  for (const email of [EMAIL, 'kakao.seller@example.test']) {
+    assert.ok(!out.toLowerCase().includes(email), 'full email in output');
+  }
+  assert.ok(!out.includes('$2b$'));
+  assert.deepEqual(h.fake.writes, []);
+  assert.deepEqual(h.fakeAuth.calls, []);
+});
+
+test('multi-candidate check adds store details per candidate with a linked store', async () => {
+  const seed = multiSeed();
+  seed[`stores/${STORE}`].name = STORE_NAME;
+  const h = harness({ seed, authUsers: MULTI_AUTH, env: { LOCK_EMAIL: MIXED_EMAIL } });
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  assertNoIdentifiers(out);
+  assertNothingWritten(h);
+
+  const exact = candidateBlock(out, UID);
+  assert.match(exact, new RegExp(`uidPrefix: ${UID.slice(0, 8)}\n`));
+  assert.match(exact, new RegExp(`storeName: ${STORE_NAME}\n`));
+  assert.match(exact, /storeOwnerIsThisUser: yes/);
+  assert.match(exact, /storeSellerUsers: 1\n/);
+
+  const normalized = candidateBlock(out, OTHER_UID);
+  assert.match(normalized, new RegExp(`uidPrefix: ${OTHER_UID.slice(0, 8)}\n`));
+  assert.ok(!normalized.includes('storeIdPrefix'));
+  assert.ok(!normalized.includes('storeSellerUsers'));
+
+  // 매장 문서가 없는 연결도 읽기만 하고 사실대로 출력한다.
+  const linked = candidateBlock(out, LINKED_UID);
+  assert.match(linked, new RegExp(`storeIdPrefix: ${LINKED_STORE.slice(0, 8)}\n`));
+  assert.match(linked, /storeDoc: no/);
+  assert.ok(!linked.includes('storeName'));
+  assert.match(linked, /storeSellerUsers: 1\n/);
+  assert.match(linked, /thisCandidate=yes/);
+});
+
+test('store user listing is bounded to 20 docs', async () => {
+  const extra = {};
+  for (let i = 0; i < 25; i += 1) {
+    extra[`users/bulk-seller-fixture-${String(i).padStart(2, '0')}`] = {
+      role: 'seller',
+      storeId: STORE,
+      providers: ['kakao'],
+    };
+  }
+  const h = harness({ seed: baseSeed(extra) });
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  assert.match(out, /^storeSellerUsers: 20\+ \(limit reached\)$/m);
+  assert.equal(out.match(/storeUser: /g).length, 20);
+  assert.deepEqual(h.fake.writes, []);
+});
+
+test('lock output is unchanged by store details', async () => {
+  const h = harness({ env: { LOCK_MODE: 'lock' } });
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  for (const key of ['uidPrefix', 'storeIdPrefix', 'storeName', 'storeOwner', 'storeSellerUsers']) {
+    assert.ok(!out.includes(key), key);
+  }
+  assert.match(out, /locked: yes/);
+});
+
+test('idPrefix keeps only the first 8 characters', () => {
+  assert.equal(idPrefix('7ec0e26b-aaaa-bbbb'), '7ec0e26b');
+  assert.equal(idPrefix(''), 'n/a');
+  assert.equal(idPrefix(undefined), 'n/a');
 });
