@@ -7,6 +7,8 @@ export class JwtPayload {
   // 토큰 종류와 수신자. 배포 전에 발급된 토큰에는 없으므로 선택 필드로 둔다.
   typ?: 'access' | 'refresh';
   aud?: string | string[];
+  // 로그인(기기)마다 만드는 refresh 세션 id. 이 변경 전에 발급된 토큰에는 없다.
+  sid?: string;
   iat?: number;
   exp?: number;
 }

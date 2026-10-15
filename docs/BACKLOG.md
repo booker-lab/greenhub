@@ -482,7 +482,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [x] activation — 2026-09-29 `salesMode` `round_direct` 전환, 첫 회차 `SCHEDULED`(read-back 확인)
 - [x] 첫 회차 자동 오픈 차단 — 2026-09-29 회차 일정을 11/1 오픈·11/10 배송으로 이동
 - [ ] 파일럿 운영 시작 — 2026-11-01(첫 회차 주문 11/1 10:00 자동 오픈)
-- [ ] **파일럿 전 필수: PortOne 실연동(LIVE) 채널** (`PORTONE-CHANNEL-CHECK`). 2026-10-13 사용자 PortOne 콘솔 확인: 운영 상점에 LIVE 채널이 없고 테스트 채널("카카오페이_테스트")만 있다. 이대로 11/1 첫 회차가 열리면 실제 돈이 오가지 않는 테스트 결제로 주문이 확정된다. PG 심사에 기간이 걸리므로 11/1 기준으로 일찍 신청한다. 순서는 `PORTONE-CHANNEL-CHECK` 참조.
+- [ ] **파일럿 전 필수: PortOne 실연동(LIVE) 채널** (`PORTONE-CHANNEL-CHECK`). 2026-10-13 사용자 PortOne 콘솔 확인: 운영 상점에 LIVE 채널이 없고 테스트 채널("카카오페이_테스트")만 있다. 이대로 11/1 첫 회차가 열리면 실제 돈이 오가지 않는 테스트 결제로 주문이 확정된다. PG 심사에 기간이 걸리므로 11/1 기준으로 일찍 신청한다. 순서는 `PORTONE-CHANNEL-CHECK` 참조. **2026-10-15**: 카카오페이 가맹점 심사가 아직 "심사중"(8/31 신청)이라 11/1 전 LIVE 전환이 불확실하다. **결정 필요(제안 기한 10/27)**: 그때까지 LIVE 채널이 없으면 자동 오픈 전에 첫 회차 일정을 옮긴다.
 - [ ] 파일럿 시작 직후 실제 결제·환불 1건 시험
 
 ### 법무·출시 후보 정합성
@@ -708,7 +708,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
 
 ### SILENT-REFUND-CUSTOMER-NOTICE
-- [ ] 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다. 2026-10-09 코드 반영(#420, 운영 반영). 남은 일은 `apps/api/src/notifications/refund-notice-reasons.ts` 문구 확정이다.
+- [x] **2026-10-15 사용자 결정: 현재 문구로 확정**(`apps/api/src/notifications/refund-notice-reasons.ts`의 `ROUND_CANCELLED`·`ADMIN_REFUND`·`LATE_PAYMENT`, 코드 변경 없음). 이전 기록: 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다. 2026-10-09 코드 반영(#420, 운영 반영). 남은 일은 `apps/api/src/notifications/refund-notice-reasons.ts` 문구 확정이다.
 
 ### OPS-ALERTING
 - [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다. 2026-10-09 코드 반영(#421, 텔레그램 봇과 GitHub 15분 가동 확인, 운영 반영). 남은 일은 `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`를 Railway 운영과 GitHub Actions 비밀값에 넣는 것이다(`docs/specs/ops/ops-alerts.md` §2).
@@ -729,13 +729,15 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] **2026-10-13 재대조: #448로 해결(운영 반영)** — 연결 결제가 PAID면 결제 요청 알림톡을 건너뛰고 판매자 확인 창 문구·런북도 맞췄다(`orders-lifecycle.service.ts`, `redelivery-resume-gate.spec.ts`). 이전 기록: 재배송비를 이미 결제한 보류 주문을 판매자가 "재배송 준비로 돌리기"(`DELIVERY_HELD → PREPARING`)하면 서버가 `ORDER_REDELIVERY_PAYMENT_REQUESTED`를 한 번 더 보낸다(연결 결제 PAID 여부를 보지 않음). 판매자 확인 창은 이 사실을 알린다(#446). 병행 PR #448이 연결 결제가 PAID면 건너뛰게 고치고, 판매자 확인 창 문구·런북도 함께 맞춘다. 2026-10-10 발견.
 
 ### AUTH-MULTI-DEVICE-SESSION
-- [ ] **DECISION REQUIRED** (2026-10-10 재대조 발견): `refreshTokens/{sub}`가 사용자당 문서 1개다. 같은 계정으로 두 번째 기기에서 로그인하면 문서를 덮어써(`apps/api/src/auth/auth.service.ts` `issueTokens`) 첫 기기의 다음 refresh(최대 약 55분 뒤)가 재사용으로 판정된다. 그러면 문서 삭제·Firebase 세션 폐기·`auth.token.stolen` 기록으로 두 기기 모두 끊기고 거짓 탈취 기록이 남는다. 한 기기 로그아웃도 모든 기기를 끊는다. 판매자가 휴대폰과 PC를 함께 쓰면 파일럿에서 겪을 수 있다. 사용자당 단일 세션을 계약으로 확정할지, 기기별 refresh 문서로 바꿀지 정한다. **2026-10-12**: #474 병합 뒤에도 refresh 문서는 사용자당 1개(해시 저장)이고, 로그아웃이 기록하는 `sessionsRevokedAt`이 사용자 단위라 한 기기 로그아웃이 다른 기기의 access token까지 즉시 끊는다. 기기별 문서로 바꾸면 로그아웃 폐기 범위(사용자 단위 `sessionsRevokedAt`)도 함께 정해야 한다.
+- [ ] **2026-10-15 사용자 결정: 기기별 세션으로 바꾼다.** 보안 세션이 구현 중이다(브랜치 `claude/zen-curie-mcbly7-per-device-sessions`). PR 병합 뒤 `docs/specs/api/auth.md`의 단일 `refreshTokens/{sub}` 서술과 알려진 한계를 맞춘다. 이전 기록: **DECISION REQUIRED** (2026-10-10 재대조 발견): `refreshTokens/{sub}`가 사용자당 문서 1개다. 같은 계정으로 두 번째 기기에서 로그인하면 문서를 덮어써(`apps/api/src/auth/auth.service.ts` `issueTokens`) 첫 기기의 다음 refresh(최대 약 55분 뒤)가 재사용으로 판정된다. 그러면 문서 삭제·Firebase 세션 폐기·`auth.token.stolen` 기록으로 두 기기 모두 끊기고 거짓 탈취 기록이 남는다. 한 기기 로그아웃도 모든 기기를 끊는다. 판매자가 휴대폰과 PC를 함께 쓰면 파일럿에서 겪을 수 있다. 사용자당 단일 세션을 계약으로 확정할지, 기기별 refresh 문서로 바꿀지 정한다. **2026-10-12**: #474 병합 뒤에도 refresh 문서는 사용자당 1개(해시 저장)이고, 로그아웃이 기록하는 `sessionsRevokedAt`이 사용자 단위라 한 기기 로그아웃이 다른 기기의 access token까지 즉시 끊는다. 기기별 문서로 바꾸면 로그아웃 폐기 범위(사용자 단위 `sessionsRevokedAt`)도 함께 정해야 한다.
 
 ### CHARGE-REFUND-ISSUE-ROUTING
 - [x] **2026-10-10 수정(운영 반영)**: 기록을 charge의 `storeId`·`paymentId: null`·`chargeId`로 남기고, `RETRY_REFUND`가 `chargeId` 기록이면 `orderCharges` 문서를 대상으로 재배송비 환불을 다시 부른 뒤 `REFUNDED`일 때만 해결한다. 직접 회귀: `order-charge-refund-provider-ambiguity.spec.ts` C8, `operations.service.spec.ts` "재배송비 환불 기록은 orderCharges를 대상으로 재시도한다". 남은 일: 수정 전에 빈 `storeId`로 생긴 운영 기록이 있는지 운영 데이터 확인(사용자 승인 필요, 파일럿 전이라 없을 가능성이 크다). 이전 기록 — **IMPLEMENTATION FINDING** (2026-10-10 재대조 발견, 돈이 잘못 빠지는 문제는 아니고 운영 복구 문제): 재배송비 환불 결과가 불명확하면(PortOne 504 등) `AUTO_REFUND_FAILED`를 `storeId: ''`, `paymentId: chargeId`로 남긴다(`apps/api/src/payments/order-charge-payment.service.ts` `persistUncertainRefund`). 판매자 운영 화면은 매장 범위로만 보여 이 기록이 안 보이고, `RETRY_REFUND`는 `payments/<chargeId>`를 읽어 늘 `PAYMENT_NOT_FOUND`(409)로 끝난다. 남은 신호는 텔레그램 알림·아침 요약의 critical 건수뿐이다. 완료 조건: 주문의 실제 `storeId`로 기록하고, 재배송비 환불 재시도가 `orderCharges`를 대상으로 동작하며, 직접 회귀 테스트가 있다.
 
 ### PORTONE-CHANNEL-CHECK
 - [ ] **2026-10-13 파일럿 전 필수(사용자 PortOne 콘솔 확인)**: 운영 상점(대표상점)에 실연동(LIVE) 채널이 없고 테스트 채널 "카카오페이_테스트"만 있다. #426은 운영에서 LIVE 채널을 요구하므로(`requireLiveChannel: true`, #426 브랜치 `apps/api/src/payments/portone-payment-context.ts`) LIVE 채널 없이 배포하면 테스트 채널 결제가 모두 확정되지 않고 환불·취소된다. 그래서 #426은 LIVE 채널이 생긴 뒤 병합한다. 반대로 #426 없이 지금 상태로 파일럿을 열면 테스트 결제로 주문이 확정된다. 순서:
+  - **2026-10-15 사용자 확인**: 카카오페이 가맹점 심사는 8/31 신청(결제수단 카카오페이머니·카드) 뒤 지금도 "심사중"이다(카카오페이 가맹점센터 전화 확인). PortOne에서 "PG 계약 지연 안내" 메일을 받았다: 접수일부터 90일 안에 계약이 진행되지 않으면 자동 철회(기한 약 11/29). 진행 단계는 PG 계약 → 포트원 결제 연동 → 카드사 심사 → 서비스 오픈이라 카카오페이 승인 뒤에도 카드사 심사가 남는다. 카카오페이 답변: 통신판매업 신고는 심사에 영향이 없지만 나중에 필요하니 미리 신청한다. PortOne 실연동 탭에는 아직 채널이 없고, 이용료 결제 카드는 등록을 마쳤다.
+  - **위험과 결정 필요**: 11/1 10:00 첫 회차 자동 오픈 때 실연동 채널이 없으면 소비자 결제가 TEST 채널로 들어가 실제 돈 없이 주문이 확정된다. LIVE 전환이 늦으면 자동 오픈 전에 회차 일정을 옮긴다(사용자 결정, 제안 기한 10/27).
   1. (사용자) PortOne 콘솔 "전자결제 신청"으로 PG 계약 → 심사 → 실연동 채널 추가. 실연동은 이용료 결제 카드 등록도 필요하다(월 매출 5천만 원 미만 무과금). PG 심사에 기간이 걸리므로 11/1 파일럿 기준으로 일찍 신청한다.
   2. (사용자) Vercel consumer의 결제 채널 키 공개 환경 변수를 LIVE 채널 키로 교체한다.
   3. ~~운영 설정 점검 재실행~~ **완료**: 사용자가 2026-10-13 Railway에 `PORTONE_STORE_ID`를 넣었고, run `38407326491`(main `1c703a5b`)에서 `portone_store_id_set`·`portone_store_id_matches_consumer`를 포함한 전 항목 PASS(success).

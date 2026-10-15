@@ -37,6 +37,13 @@ import {
   sealRotatedRefreshToken,
 } from './refresh-token-store';
 import {
+  ACTIVE_SESSION_IDS_FIELD,
+  type RefreshSessions,
+  addRefreshSession,
+  isSessionId,
+  readRefreshSessions,
+} from './refresh-sessions';
+import {
   JWT_ALGORITHM,
   JWT_AUDIENCE,
   type TokenType,
@@ -332,7 +339,7 @@ export class AuthService {
   }
 
   private sanitizeUser(data: Record<string, unknown>) {
-    const { passwordHash: _pw, ...user } = data;
+    const { passwordHash: _pw, [ACTIVE_SESSION_IDS_FIELD]: _sessions, ...user } = data;
     return user;
   }
 
@@ -571,6 +578,13 @@ export class AuthService {
       throw new UnauthorizedException('유효하지 않은 리프레시 토큰입니다.');
     }
 
+    // 기기별 세션 도입 전에 발급된 refresh token(`sid` 없음)은 이어 쓸 세션이 없으므로 다시 로그인하게 한다.
+    // 재사용 신호가 아니므로 기록 변경·감사 없이 401로 끝낸다.
+    const sid = payload.sid;
+    if (!isSessionId(sid)) {
+      throw new UnauthorizedException('만료된 리프레시 토큰입니다.');
+    }
+
     const currentUser = await this.getAuthoritativeUser(payload.sub);
     if (
       !isStoreIdValue(payload.storeId) ||
@@ -583,29 +597,39 @@ export class AuthService {
       sub: payload.sub,
       role: currentUser.role,
       storeId: toTokenStoreId(currentUser.storeId),
+      sid,
     };
 
-    // Rotation: 저장된 최신 토큰이면 회전한다. 같은 세션의 동시 요청이나 쿠키 반영 전
+    // Rotation(세션별): 이 세션에 저장된 최신 토큰이면 회전한다. 같은 세션의 동시 요청이나 쿠키 반영 전
     // 재요청으로 직전 토큰이 짧은 유예 안에 다시 오면, 다시 회전하지 않고 현재 토큰을 돌려준다.
-    // 그 밖의 토큰은 탈취 후 재사용으로 보고 모든 세션을 무효화한다.
+    // 같은 세션의 그 밖의 토큰(이미 회전된 이전 토큰)은 탈취 후 재사용으로 보고 이 사용자의 모든 세션을
+    // 끊는다. 다른 기기의 로그인·회전은 이 세션의 기록을 바꾸지 않으므로 재사용으로 판정되지 않는다.
+    // 세션이 없으면(로그아웃·상한 초과로 끊김·이미 폐기) 재사용 신호로 보지 않고 401만 준다.
     const tokenRef = this.firestore.doc(`refreshTokens/${payload.sub}`);
+    const userRef = this.firestore.doc(`users/${payload.sub}`);
     const outcome = await this.firestore.runTransaction(async (tx) => {
       const snap = await tx.get(tokenRef);
-      if (!snap.exists) return { kind: 'missing' as const };
-      const stored = snap.data() ?? {};
-      // 원문 기록(배포 전)과 맞아도 아래 회전에서 해시 기록으로 다시 쓴다.
-      if (matchesStoredRefreshToken(stored['token'], refreshToken)) {
+      const sessions = readRefreshSessions(snap.exists ? snap.data() : undefined);
+      const session = sessions[sid];
+      if (session === undefined) return { kind: 'missing' as const };
+      if (matchesStoredRefreshToken(session.token, refreshToken)) {
         const tokens = this.signTokens(nextPayload);
         tx.set(tokenRef, {
-          token: hashRefreshToken(tokens.refreshToken),
-          previousToken: hashRefreshToken(refreshToken),
-          sealedToken: sealRotatedRefreshToken(tokens.refreshToken, refreshToken),
-          rotatedAt: Date.now(),
+          sessions: {
+            ...sessions,
+            [sid]: {
+              token: hashRefreshToken(tokens.refreshToken),
+              previousToken: hashRefreshToken(refreshToken),
+              sealedToken: sealRotatedRefreshToken(tokens.refreshToken, refreshToken),
+              rotatedAt: Date.now(),
+              createdAt: session.createdAt,
+            },
+          },
           updatedAt: this.firestore.Timestamp.now(),
         });
         return { kind: 'issued' as const, tokens };
       }
-      const graceRefreshToken = rotationGraceRefreshToken(stored, refreshToken, Date.now());
+      const graceRefreshToken = rotationGraceRefreshToken(session, refreshToken, Date.now());
       if (graceRefreshToken !== null) {
         return {
           kind: 'issued' as const,
@@ -615,12 +639,15 @@ export class AuthService {
           },
         };
       }
-      tx.delete(tokenRef);
+      this.revokeAllSessionsInTransaction(tx, tokenRef, userRef);
       return { kind: 'reused' as const };
     });
 
     if (outcome.kind === 'reused') {
-      await this.audit.log('auth.token.stolen', { userId: payload.sub });
+      await this.audit.log('auth.token.stolen', {
+        userId: payload.sub,
+        detail: { sessionId: sid },
+      });
       await revokeFirebaseSessions(payload.sub, this.logger);
     }
     if (outcome.kind !== 'issued') {
@@ -638,6 +665,8 @@ export class AuthService {
     // mismatch, driver approval withdrawal, and explicit logout (refresh doc
     // deleted). Transient Firestore/network failures throw other errors and
     // must not be mistaken for revocation by callers.
+    // 기기별 세션: refresh 바인딩은 access token의 `sid` 세션이다. `sid` 없는 이전 발급 토큰은
+    // 이어 쓸 세션이 없으므로 폐기된 세션으로 본다.
     const currentUser = await this.getAuthoritativeUser(user.sub);
     if (
       !isStoreIdValue(user.storeId) ||
@@ -647,8 +676,12 @@ export class AuthService {
       throw new UnauthorizedException('현재 사용자 권한과 일치하지 않는 세션입니다.');
     }
 
+    if (!isSessionId(user.sid)) {
+      throw new UnauthorizedException('폐기된 세션입니다.');
+    }
     const tokenSnap = await this.firestore.doc(`refreshTokens/${user.sub}`).get();
-    if (!tokenSnap.exists) {
+    const sessions = readRefreshSessions(tokenSnap.exists ? tokenSnap.data() : undefined);
+    if (sessions[user.sid] === undefined) {
       throw new UnauthorizedException('폐기된 세션입니다.');
     }
 
@@ -659,14 +692,31 @@ export class AuthService {
     };
   }
 
-  async logout(userId: string) {
-    await this.firestore.doc(`refreshTokens/${userId}`).delete();
-    // 이 시각 이전에 발급된 access token을 JwtStrategy가 거부한다(만료 전 재사용 차단).
-    await this.firestore.doc(`users/${userId}`).update({
-      [SESSIONS_REVOKED_AT_FIELD]: this.firestore.Timestamp.fromMillis(sessionsRevokedAtMillis()),
+  // 로그아웃은 요청한 access token의 세션(기기)만 끝낸다. 다른 기기의 refresh 세션과 access token,
+  // Firebase 세션은 그대로 둔다(Firebase refresh token 폐기는 사용자 단위라 기기별로 끊을 수 없다).
+  // 끝난 세션의 access token은 사용자 문서의 세션 목록에서 빠지므로 다음 요청부터 거부된다.
+  // `sid` 없는 이전 발급 access token의 로그아웃은 어느 세션인지 알 수 없으므로 이전처럼 모든 세션을 끊는다.
+  async logout(userId: string, sessionId?: string) {
+    const tokenRef = this.firestore.doc(`refreshTokens/${userId}`);
+    const userRef = this.firestore.doc(`users/${userId}`);
+
+    if (!isSessionId(sessionId)) {
+      await this.firestore.runTransaction(async (tx) => {
+        this.revokeAllSessionsInTransaction(tx, tokenRef, userRef);
+      });
+      await revokeFirebaseSessions(userId, this.logger);
+      await this.audit.log('auth.logout', { userId, detail: { scope: 'all' } });
+      return;
+    }
+
+    await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(tokenRef);
+      const { [sessionId]: _ended, ...remaining } = readRefreshSessions(
+        snap.exists ? snap.data() : undefined,
+      );
+      this.writeSessionsInTransaction(tx, tokenRef, userRef, remaining);
     });
-    await revokeFirebaseSessions(userId, this.logger);
-    await this.audit.log('auth.logout', { userId });
+    await this.audit.log('auth.logout', { userId, detail: { sessionId } });
   }
 
   async updateFcmToken(userId: string, fcmToken: string | null) {
@@ -716,7 +766,13 @@ export class AuthService {
   }
 
   private withTokenType(payload: JwtPayload, typ: TokenType): JwtPayload {
-    return { sub: payload.sub, role: payload.role, storeId: payload.storeId, typ };
+    return {
+      sub: payload.sub,
+      role: payload.role,
+      storeId: payload.storeId,
+      sid: payload.sid,
+      typ,
+    };
   }
 
   private signAccessToken(payload: JwtPayload) {
@@ -739,16 +795,61 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  private async issueTokens(payload: JwtPayload) {
-    const { accessToken, refreshToken } = this.signTokens(payload);
+  // 로그인(기기)마다 새 세션을 만든다. 같은 사용자의 다른 세션은 그대로 두고, 세션 수가 상한을 넘으면
+  // 가장 오래 쓰이지 않은 세션을 끊는다(그 세션의 access token도 목록에서 빠져 거부된다).
+  private async issueTokens(payload: Omit<JwtPayload, 'sid'>) {
+    const sid = randomUUID();
+    const { accessToken, refreshToken } = this.signTokens({ ...payload, sid });
+    const tokenRef = this.firestore.doc(`refreshTokens/${payload.sub}`);
+    const userRef = this.firestore.doc(`users/${payload.sub}`);
 
-    // Rotation: 최신 refresh token만 유효 (이전 토큰 자동 무효화). 로그인 발급은
-    // previousToken을 남기지 않으므로 직전 세션의 회전 유예도 함께 끊는다.
-    await this.firestore.doc(`refreshTokens/${payload.sub}`).set({
-      token: hashRefreshToken(refreshToken),
-      updatedAt: this.firestore.Timestamp.now(),
+    const evicted = await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(tokenRef);
+      const next = addRefreshSession(
+        readRefreshSessions(snap.exists ? snap.data() : undefined),
+        sid,
+        {
+          token: hashRefreshToken(refreshToken),
+          createdAt: Date.now(),
+        },
+      );
+      this.writeSessionsInTransaction(tx, tokenRef, userRef, next.sessions);
+      return next.evicted;
     });
+    if (evicted.length > 0) {
+      this.logger.log(`auth.session.evicted userId=${payload.sub} count=${evicted.length}`);
+    }
 
     return { accessToken, refreshToken };
+  }
+
+  // 세션 맵과 사용자 문서의 살아 있는 세션 목록을 함께 다시 쓴다. 이전 단일 기록 형식의 필드는 남기지 않는다.
+  private writeSessionsInTransaction(
+    tx: admin.firestore.Transaction,
+    tokenRef: admin.firestore.DocumentReference,
+    userRef: admin.firestore.DocumentReference,
+    sessions: RefreshSessions,
+  ) {
+    const sessionIds = Object.keys(sessions);
+    if (sessionIds.length === 0) {
+      tx.delete(tokenRef);
+    } else {
+      tx.set(tokenRef, { sessions, updatedAt: this.firestore.Timestamp.now() });
+    }
+    tx.update(userRef, { [ACTIVE_SESSION_IDS_FIELD]: sessionIds });
+  }
+
+  // 모든 세션 폐기(재사용 감지·`sid` 없는 이전 토큰의 로그아웃). 사용자 단위 폐기 시각은 이 경로와
+  // 관리자 정지에서만 기록해, `sid` 없는 이전 발급 access token까지 다음 요청부터 거부되게 한다.
+  private revokeAllSessionsInTransaction(
+    tx: admin.firestore.Transaction,
+    tokenRef: admin.firestore.DocumentReference,
+    userRef: admin.firestore.DocumentReference,
+  ) {
+    tx.delete(tokenRef);
+    tx.update(userRef, {
+      [ACTIVE_SESSION_IDS_FIELD]: [],
+      [SESSIONS_REVOKED_AT_FIELD]: this.firestore.Timestamp.fromMillis(sessionsRevokedAtMillis()),
+    });
   }
 }

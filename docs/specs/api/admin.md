@@ -282,14 +282,14 @@ Preview E2E credentials는 별도 allowlist/secret gate를 사용하므로 admin
 
 ```text
 POST /admin/invite
-{ recipientEmail?: string }   // 선택, 이메일 형식·254자 이하
+{ recipientEmail: string }   // 필수, 이메일 형식·254자 이하(#518)
 ```
 
 현재 구현(`apps/api/src/admin/admin.service.ts` `generateInvite`):
 
 - UUID에서 하이픈 제거 후 앞 16자를 대문자로 사용
 - `invites/{token}` 저장: `createdBy`(admin user ID), `usedAt`·`usedBy` 초기 null, `createdAt`
-- `recipientEmail`: 주면 trim·소문자로 정규화해 저장하고, 비우면 null(받는 사람 제한 없음)
+- `recipientEmail`: 필수. 빠지거나 빈 값·공백뿐이면 400이고, trim·소문자로 정규화해 저장한다(#518). #518 이전에 발급된 받는 사람 없는 초대(`recipientEmail: null`)는 가입 때 받는 사람 확인을 건너뛴다
 - 만료: 생성 시점 + 72시간(`INVITE_TTL_MS`, #512)
 
 응답:
@@ -298,7 +298,7 @@ POST /admin/invite
 {
   token: string
   expiresAt: string
-  recipientEmail: string | null
+  recipientEmail: string
 }
 ```
 
