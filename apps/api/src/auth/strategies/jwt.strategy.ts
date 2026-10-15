@@ -3,7 +3,12 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { FirestoreService } from '../../firestore/firestore.service';
-import { isIssuedBeforeSessionRevocation, SESSIONS_REVOKED_AT_FIELD } from '../session-revocation';
+import { ACTIVE_SESSION_IDS_FIELD } from '../refresh-sessions';
+import {
+  isActiveAccessSession,
+  isIssuedBeforeSessionRevocation,
+  SESSIONS_REVOKED_AT_FIELD,
+} from '../session-revocation';
 import { hasExpectedTokenClaims, JWT_ALGORITHM } from '../token-claims';
 import { JwtPayload } from '../types/jwt-payload.type';
 
@@ -65,11 +70,21 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       throw new UnauthorizedException('폐기된 세션의 인증 토큰입니다.');
     }
 
+    // 기기별 세션: 로그아웃 등으로 끝난 세션의 토큰은 같은 사용자 문서의 목록으로 거부한다
+    // (추가 읽기 없음). `sid`가 없는 이전 발급 토큰은 위 사용자 단위 검사만 받고 만료(최대 1시간)까지 남는다.
+    if (
+      payload.sid !== undefined &&
+      !isActiveAccessSession(payload.sid, user?.[ACTIVE_SESSION_IDS_FIELD])
+    ) {
+      throw new UnauthorizedException('폐기된 세션의 인증 토큰입니다.');
+    }
+
     const storeId = normalizeStoreId(user?.['storeId']);
     return {
       sub: payload.sub,
       role: currentRole,
       ...(storeId !== null ? { storeId } : {}),
+      ...(payload.sid !== undefined ? { sid: payload.sid } : {}),
     };
   }
 }

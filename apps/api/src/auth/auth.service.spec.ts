@@ -22,12 +22,17 @@ jest.mock('bcrypt', () => {
   };
 });
 
+// 테스트 refresh token이 속한 세션 id.
+const SID = 'sid-1';
+
 describe('AuthService', () => {
   function makeKakaoLoginService(options: {
     user?: Record<string, unknown>;
     kakaoError?: Error;
     refreshToken?: string;
+    // SID 세션의 기록(회전 필드). 문서 전체를 직접 줄 때는 refreshDoc을 쓴다.
     refreshRecord?: Record<string, unknown>;
+    refreshDoc?: Record<string, unknown>;
     kakaoIdentity?: Record<string, unknown>;
     emailIdentity?: Record<string, unknown>;
     invite?: Record<string, unknown>;
@@ -49,9 +54,11 @@ describe('AuthService', () => {
       set: jest.fn().mockResolvedValue(undefined),
       update: jest.fn().mockResolvedValue(undefined),
     };
+    const sessionRecord =
+      options.refreshRecord ?? (options.refreshToken ? { token: options.refreshToken } : undefined);
     const refreshRecord =
-      options.refreshRecord ??
-      (options.refreshToken ? { token: options.refreshToken } : undefined);
+      options.refreshDoc ??
+      (sessionRecord ? { sessions: { [SID]: { createdAt: 1, ...sessionRecord } } } : undefined);
     const refreshTokenRef = {
       delete: jest.fn().mockResolvedValue(undefined),
       get: jest.fn().mockResolvedValue({
@@ -675,7 +682,7 @@ describe('AuthService', () => {
         user: { id: 'seller-1', role: 'seller', storeId: 'store-1', suspended: false },
         refreshToken: 'presented-refresh',
       });
-      jwt.verify.mockReturnValue({ sub: 'seller-1', role: 'seller', storeId: 'store-1' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'seller-1', role: 'seller', storeId: 'store-1' });
 
       await expect(service.refresh('presented-refresh')).resolves.toEqual({
         accessToken: 'access-token',
@@ -683,7 +690,7 @@ describe('AuthService', () => {
       });
       expect(jwt.sign).toHaveBeenNthCalledWith(
         1,
-        { sub: 'seller-1', role: 'seller', storeId: 'store-1', typ: 'access' },
+        { sub: 'seller-1', role: 'seller', storeId: 'store-1', sid: SID, typ: 'access' },
         expect.objectContaining({ secret: 'access-secret' }),
       );
       expect(refreshTokenRef.set).toHaveBeenCalledTimes(1);
@@ -693,7 +700,7 @@ describe('AuthService', () => {
       const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
         user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
       });
-      jwt.verify.mockReturnValue({ sub: 'consumer-1', role: 'consumer' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'consumer-1', role: 'consumer' });
 
       await expect(service.refresh('presented-refresh')).rejects.toMatchObject({ status: 401 });
       expect(jwt.sign).not.toHaveBeenCalled();
@@ -705,7 +712,7 @@ describe('AuthService', () => {
         user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
         refreshToken: 'stored-refresh',
       });
-      jwt.verify.mockReturnValue({ sub: 'consumer-1', role: 'consumer' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'consumer-1', role: 'consumer' });
 
       await expect(service.refresh('presented-refresh')).rejects.toMatchObject({ status: 401 });
       expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
@@ -718,17 +725,21 @@ describe('AuthService', () => {
         user: { id: 'driver-1', role: 'driver', driverApproved: true, suspended: false },
         refreshToken: 'presented-refresh',
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
       await service.refresh('presented-refresh');
-      // 원문 대신 SHA-256(hex)을 저장한다.
-      expect(refreshTokenRef.set).toHaveBeenCalledWith(
-        expect.objectContaining({
-          token: hashRefreshToken('refresh-token'),
-          previousToken: hashRefreshToken('presented-refresh'),
-          rotatedAt: expect.any(Number),
-        }),
-      );
+      // 원문 대신 SHA-256(hex)을 이 세션 기록에 저장한다.
+      expect(refreshTokenRef.set).toHaveBeenCalledWith({
+        sessions: {
+          [SID]: expect.objectContaining({
+            token: hashRefreshToken('refresh-token'),
+            previousToken: hashRefreshToken('presented-refresh'),
+            rotatedAt: expect.any(Number),
+            createdAt: 1,
+          }),
+        },
+        updatedAt: 'now',
+      });
     });
 
     it('유예 안에 직전 토큰이 다시 오면 재회전 없이 현재 토큰과 새 access token을 준다', async () => {
@@ -740,7 +751,7 @@ describe('AuthService', () => {
           rotatedAt: Date.now() - 5_000,
         },
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
       await expect(service.refresh('previous-refresh')).resolves.toEqual({
         accessToken: 'access-token',
@@ -761,11 +772,14 @@ describe('AuthService', () => {
         user: { id: 'driver-1', role: 'driver', driverApproved: true, suspended: false },
         refreshRecord: { token: 'current-refresh', ...record },
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
       await expect(service.refresh('previous-refresh')).rejects.toMatchObject({ status: 401 });
       expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
-      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', { userId: 'driver-1' });
+      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', {
+        userId: 'driver-1',
+        detail: { sessionId: SID },
+      });
       expect(jwt.sign).not.toHaveBeenCalled();
     });
 
@@ -778,7 +792,7 @@ describe('AuthService', () => {
           rotatedAt: Date.now() - 5_000,
         },
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
       await expect(service.refresh('previous-refresh')).rejects.toMatchObject({ status: 401 });
       expect(jwt.sign).not.toHaveBeenCalled();
@@ -815,7 +829,7 @@ describe('AuthService', () => {
         user,
         refreshToken: 'presented-refresh',
       });
-      jwt.verify.mockReturnValue(payload);
+      jwt.verify.mockReturnValue({ sid: SID, ...payload });
 
       await expect(service.refresh('presented-refresh')).rejects.toMatchObject({ status });
       expect(jwt.sign).not.toHaveBeenCalled();
@@ -911,7 +925,7 @@ describe('AuthService', () => {
         user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
         refreshToken: 'presented-refresh',
       });
-      jwt.verify.mockReturnValue({ sub: 'consumer-1', role: 'consumer' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'consumer-1', role: 'consumer' });
 
       await service.refresh('presented-refresh');
       expect(jwt.verify).toHaveBeenCalledWith('presented-refresh', {
@@ -920,14 +934,14 @@ describe('AuthService', () => {
       });
     });
 
-    it('typ·aud가 없는 기존 refresh 토큰은 만료 전까지 계속 받는다', async () => {
+    it('typ·aud가 없어도 세션(sid)이 맞는 refresh 토큰은 회전한다', async () => {
       const { jwt, service } = makeKakaoLoginService({
         user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
-        refreshToken: 'legacy-refresh',
+        refreshToken: 'presented-refresh',
       });
-      jwt.verify.mockReturnValue({ sub: 'consumer-1', role: 'consumer', iat: 1, exp: 2 });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'consumer-1', role: 'consumer', iat: 1, exp: 2 });
 
-      await expect(service.refresh('legacy-refresh')).resolves.toEqual({
+      await expect(service.refresh('presented-refresh')).resolves.toEqual({
         accessToken: 'access-token',
         refreshToken: 'refresh-token',
       });
@@ -942,7 +956,7 @@ describe('AuthService', () => {
         user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
         refreshToken: 'presented-refresh',
       });
-      jwt.verify.mockReturnValue({ sub: 'consumer-1', role: 'consumer', ...claims });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'consumer-1', role: 'consumer', ...claims });
 
       await expect(service.refresh('presented-refresh')).rejects.toMatchObject({ status: 401 });
       expect(firestore.doc).not.toHaveBeenCalled();
@@ -961,7 +975,22 @@ describe('AuthService', () => {
       (admin.auth as jest.Mock).mockReturnValue(firebaseAuth);
     });
 
-    it('logout은 refresh 기록을 지우고 Firebase refresh token도 폐기한다', async () => {
+    it('기기(세션) logout은 그 세션 기록만 지우고 Firebase 세션은 건드리지 않는다', async () => {
+      const { audit, refreshTokenRef, service } = makeKakaoLoginService({
+        user: { id: 'seller-1', role: 'seller', storeId: 'store-1' },
+        refreshToken: 'stored-refresh',
+      });
+
+      await expect(service.logout('seller-1', SID)).resolves.toBeUndefined();
+      expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
+      expect(firebaseAuth.revokeRefreshTokens).not.toHaveBeenCalled();
+      expect(audit.log).toHaveBeenCalledWith('auth.logout', {
+        userId: 'seller-1',
+        detail: { sessionId: SID },
+      });
+    });
+
+    it('sid 없는 이전 access token의 logout은 모든 세션과 Firebase refresh token을 폐기한다', async () => {
       const { audit, refreshTokenRef, service } = makeKakaoLoginService({
         user: { id: 'seller-1', role: 'seller', storeId: 'store-1' },
         refreshToken: 'stored-refresh',
@@ -970,7 +999,10 @@ describe('AuthService', () => {
       await expect(service.logout('seller-1')).resolves.toBeUndefined();
       expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
       expect(firebaseAuth.revokeRefreshTokens).toHaveBeenCalledWith('seller-1');
-      expect(audit.log).toHaveBeenCalledWith('auth.logout', { userId: 'seller-1' });
+      expect(audit.log).toHaveBeenCalledWith('auth.logout', {
+        userId: 'seller-1',
+        detail: { scope: 'all' },
+      });
     });
 
     it('Firebase 사용자 기록이 없으면(custom token 미사용) logout을 그대로 마친다', async () => {
@@ -983,7 +1015,10 @@ describe('AuthService', () => {
 
       await expect(service.logout('consumer-1')).resolves.toBeUndefined();
       expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
-      expect(audit.log).toHaveBeenCalledWith('auth.logout', { userId: 'consumer-1' });
+      expect(audit.log).toHaveBeenCalledWith('auth.logout', {
+        userId: 'consumer-1',
+        detail: { scope: 'all' },
+      });
     });
 
     it('Firebase 폐기가 실패해도 API 세션 폐기는 유지된다', async () => {
@@ -994,7 +1029,10 @@ describe('AuthService', () => {
 
       await expect(service.logout('driver-1')).resolves.toBeUndefined();
       expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
-      expect(audit.log).toHaveBeenCalledWith('auth.logout', { userId: 'driver-1' });
+      expect(audit.log).toHaveBeenCalledWith('auth.logout', {
+        userId: 'driver-1',
+        detail: { scope: 'all' },
+      });
     });
 
     it('refresh 재사용을 감지하면 Firebase refresh token도 폐기한다', async () => {
@@ -1002,11 +1040,14 @@ describe('AuthService', () => {
         user: { id: 'driver-1', role: 'driver', driverApproved: true, suspended: false },
         refreshRecord: { token: 'current-refresh' },
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver', typ: 'refresh' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver', typ: 'refresh' });
 
       await expect(service.refresh('stale-refresh')).rejects.toMatchObject({ status: 401 });
       expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
-      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', { userId: 'driver-1' });
+      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', {
+        userId: 'driver-1',
+        detail: { sessionId: SID },
+      });
       expect(firebaseAuth.revokeRefreshTokens).toHaveBeenCalledWith('driver-1');
     });
 
@@ -1015,7 +1056,7 @@ describe('AuthService', () => {
         user: { id: 'driver-1', role: 'driver', driverApproved: true, suspended: false },
         refreshToken: 'presented-refresh',
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver', typ: 'refresh' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver', typ: 'refresh' });
 
       await service.refresh('presented-refresh');
       expect(firebaseAuth.revokeRefreshTokens).not.toHaveBeenCalled();
@@ -1030,7 +1071,7 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.getSession({ sub: 'seller-1', role: 'seller', storeId: 'store-1' }),
+        service.getSession({ sub: 'seller-1', role: 'seller', storeId: 'store-1', sid: SID }),
       ).resolves.toEqual({ sub: 'seller-1', role: 'seller', storeId: 'store-1' });
     });
 
@@ -1041,7 +1082,7 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.getSession({ sub: 'consumer-1', role: 'consumer' }),
+        service.getSession({ sub: 'consumer-1', role: 'consumer', sid: SID }),
       ).resolves.toEqual({ sub: 'consumer-1', role: 'consumer' });
     });
 
@@ -1051,10 +1092,24 @@ describe('AuthService', () => {
       });
 
       await expect(
-        service.getSession({ sub: 'consumer-1', role: 'consumer' }),
+        service.getSession({ sub: 'consumer-1', role: 'consumer', sid: SID }),
       ).rejects.toMatchObject({ status: 401 });
       expect(jwt.sign).not.toHaveBeenCalled();
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['sid 없는 이전 발급 access token', undefined],
+      ['다른 세션(로그아웃·상한 초과로 끊긴 세션)', 'sid-ended'],
+    ])('%s의 session은 거부한다', async (_label, sid) => {
+      const { service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
+        refreshToken: 'stored-refresh',
+      });
+
+      await expect(
+        service.getSession({ sub: 'consumer-1', role: 'consumer', sid }),
+      ).rejects.toMatchObject({ status: 401 });
     });
 
     it.each([
@@ -1104,7 +1159,7 @@ describe('AuthService', () => {
       (admin.auth as jest.Mock).mockReturnValue(firebaseAuth);
     });
 
-    it('logout은 초 단위로 내린 sessionsRevokedAt을 사용자 문서에 기록한다', async () => {
+    it('sid 없는 이전 토큰의 logout은 초 단위로 내린 sessionsRevokedAt을 사용자 문서에 기록한다', async () => {
       const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1_700_000_000_700);
       const { firestore, userRef, service } = makeKakaoLoginService({
         user: { id: 'consumer-1', role: 'consumer' },
@@ -1118,9 +1173,32 @@ describe('AuthService', () => {
       }
       expect(firestore.Timestamp.fromMillis).toHaveBeenCalledWith(1_700_000_000_000);
       expect(userRef.update).toHaveBeenCalledWith({
+        activeSessionIds: [],
         sessionsRevokedAt: expect.objectContaining({ toMillis: expect.any(Function) }),
       });
       expect(firestore.doc).toHaveBeenCalledWith('users/consumer-1');
+    });
+
+    it('기기(세션) logout은 사용자 단위 폐기 시각을 쓰지 않고 그 세션만 목록에서 뺀다', async () => {
+      const { firestore, refreshTokenRef, userRef, service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer' },
+        refreshDoc: {
+          sessions: {
+            [SID]: { token: hashRefreshToken('a'), createdAt: 1 },
+            'sid-2': { token: hashRefreshToken('b'), createdAt: 2 },
+          },
+        },
+      });
+
+      await service.logout('consumer-1', SID);
+
+      expect(firestore.Timestamp.fromMillis).not.toHaveBeenCalled();
+      expect(refreshTokenRef.delete).not.toHaveBeenCalled();
+      expect(refreshTokenRef.set).toHaveBeenCalledWith({
+        sessions: { 'sid-2': { token: hashRefreshToken('b'), createdAt: 2 } },
+        updatedAt: 'now',
+      });
+      expect(userRef.update).toHaveBeenCalledWith({ activeSessionIds: ['sid-2'] });
     });
   });
 
@@ -1132,10 +1210,14 @@ describe('AuthService', () => {
 
       await service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' });
 
-      expect(refreshTokenRef.set).toHaveBeenCalledWith({
-        token: hashRefreshToken('refresh-token'),
-        updatedAt: 'now',
-      });
+      const written = refreshTokenRef.set.mock.calls[0][0] as {
+        sessions: Record<string, unknown>;
+        updatedAt: unknown;
+      };
+      expect(written.updatedAt).toBe('now');
+      expect(Object.values(written.sessions)).toEqual([
+        { token: hashRefreshToken('refresh-token'), createdAt: expect.any(Number) },
+      ]);
       expect(hashRefreshToken('refresh-token')).toMatch(/^[0-9a-f]{64}$/);
     });
 
@@ -1144,7 +1226,7 @@ describe('AuthService', () => {
         user,
         refreshRecord: { token: hashRefreshToken('presented-refresh') },
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
       await expect(service.refresh('presented-refresh')).resolves.toEqual({
         accessToken: 'access-token',
@@ -1155,21 +1237,16 @@ describe('AuthService', () => {
       expect(audit.log).not.toHaveBeenCalled();
     });
 
-    it('배포 전 원문 기록과 맞으면 회전하면서 해시 기록으로 다시 쓴다', async () => {
+    it('회전 기록에는 refresh token 원문을 남기지 않는다', async () => {
       const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
         user,
-        refreshRecord: { token: 'legacy-refresh', updatedAt: 'before' },
+        refreshRecord: { token: hashRefreshToken('presented-refresh') },
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
-      await expect(service.refresh('legacy-refresh')).resolves.toEqual({
-        accessToken: 'access-token',
-        refreshToken: 'refresh-token',
-      });
+      await service.refresh('presented-refresh');
       const written = refreshTokenRef.set.mock.calls[0][0] as Record<string, unknown>;
-      expect(written.token).toBe(hashRefreshToken('refresh-token'));
-      expect(written.previousToken).toBe(hashRefreshToken('legacy-refresh'));
-      expect(JSON.stringify(written)).not.toContain('legacy-refresh');
+      expect(JSON.stringify(written)).not.toContain('presented-refresh');
       expect(JSON.stringify(written)).not.toContain('"refresh-token"');
     });
 
@@ -1178,11 +1255,14 @@ describe('AuthService', () => {
         user,
         refreshRecord: { token: hashRefreshToken('current-refresh') },
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
       await expect(service.refresh('other-refresh')).rejects.toMatchObject({ status: 401 });
       expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
-      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', { userId: 'driver-1' });
+      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', {
+        userId: 'driver-1',
+        detail: { sessionId: SID },
+      });
     });
 
     it('회전 직후 유예 안에 직전 토큰이 다시 오면 저장된 해시 기록에서 현재 토큰을 돌려준다', async () => {
@@ -1191,13 +1271,13 @@ describe('AuthService', () => {
         user,
         refreshRecord: { token: hashRefreshToken('old-refresh') },
       });
-      first.jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      first.jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
       await first.service.refresh('old-refresh');
       const rotated = first.refreshTokenRef.set.mock.calls[0][0] as Record<string, unknown>;
 
       // 2차: 같은 세션의 동시 요청이 직전 토큰을 다시 보낸다.
-      const second = makeKakaoLoginService({ user, refreshRecord: rotated });
-      second.jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      const second = makeKakaoLoginService({ user, refreshDoc: rotated });
+      second.jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
       await expect(second.service.refresh('old-refresh')).resolves.toEqual({
         accessToken: 'access-token',
@@ -1217,11 +1297,14 @@ describe('AuthService', () => {
           rotatedAt: Date.now() - 5_000,
         },
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
       await expect(service.refresh('previous-refresh')).rejects.toMatchObject({ status: 401 });
       expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
-      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', { userId: 'driver-1' });
+      expect(audit.log).toHaveBeenCalledWith('auth.token.stolen', {
+        userId: 'driver-1',
+        detail: { sessionId: SID },
+      });
     });
 
     it('유예가 지난 해시 기록의 직전 토큰은 재사용으로 본다', async () => {
@@ -1234,7 +1317,7 @@ describe('AuthService', () => {
           rotatedAt: Date.now() - 61_000,
         },
       });
-      jwt.verify.mockReturnValue({ sub: 'driver-1', role: 'driver' });
+      jwt.verify.mockReturnValue({ sid: SID, sub: 'driver-1', role: 'driver' });
 
       await expect(service.refresh('previous-refresh')).rejects.toMatchObject({ status: 401 });
       expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);

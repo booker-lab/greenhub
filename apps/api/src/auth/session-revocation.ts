@@ -34,6 +34,14 @@ export function isIssuedBeforeSessionRevocation(
   return iatSeconds * 1000 < revokedAtMillis;
 }
 
+// access token의 세션(`sid`)이 사용자 문서의 살아 있는 세션 목록에 있는지 판정한다.
+// 로그아웃·세션 상한 초과·재사용 감지로 목록에서 빠진 세션의 토큰은 만료 전이어도 거부한다.
+// 목록이 없거나 형식을 알 수 없으면 거부(fail closed)한다.
+export function isActiveAccessSession(sid: unknown, activeSessionIds: unknown): boolean {
+  if (typeof sid !== 'string' || sid.length === 0) return false;
+  return Array.isArray(activeSessionIds) && activeSessionIds.includes(sid);
+}
+
 // `/auth/firebase-token`으로 시작한 Firebase 클라이언트 세션의 갱신을 끊는다. 이미 발급된
 // Firebase ID 토큰은 만료(최대 1시간)까지 남는다. custom token을 받은 적 없는 사용자는 Firebase
 // 사용자 기록이 없으므로 끊을 세션도 없다. 그 밖의 실패는 API 세션 폐기를 되돌리지 않고 기록만 남긴다.
