@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import {
   AUDIT_ACTION,
@@ -7,6 +8,7 @@ import {
   emailIdentityKey,
   maskEmail,
   run,
+  uidFingerprint,
 } from './lock-account.mjs';
 
 const EMAIL = 'seller.fixture@example.test';
@@ -428,6 +430,204 @@ test('two different accounts for one email abort', async () => {
   const h = harness({ seed, env: { LOCK_EMAIL: EMAIL.toUpperCase(), LOCK_MODE: 'lock' } });
   assert.equal(await h.run(), 1);
   assert.deepEqual(h.fake.writes, []);
+});
+
+// ── 같은 이메일로 계정이 여럿인 경우 ─────────────────────────────────────────
+
+const MIXED_EMAIL = 'Seller.Fixture@example.test';
+const OTHER_UID = 'user-fixture-other-2';
+const LINKED_UID = 'user-fixture-linked-3';
+const LINKED_EMAIL = 'legacy.fixture@example.test';
+const LINKED_STORE = 'store-fixture-linked';
+const fp = (uid) => createHash('sha256').update(uid, 'utf8').digest('hex').slice(0, 10);
+
+// exact(UID, 입력 그대로), normalized(OTHER_UID, 소문자), emailIdentities(LINKED_UID, 다른 이메일) 세 계정.
+function multiSeed() {
+  const seed = baseSeed({
+    [`users/${OTHER_UID}`]: {
+      id: OTHER_UID,
+      email: EMAIL,
+      role: 'consumer',
+      passwordHash: OLD_HASH,
+      createdAt: FakeTimestamp.fromMillis(Date.UTC(2026, 6, 1)),
+    },
+    [`refreshTokens/${OTHER_UID}`]: { token: 'f'.repeat(64) },
+    [`users/${LINKED_UID}`]: {
+      id: LINKED_UID,
+      email: LINKED_EMAIL,
+      role: 'seller',
+      storeId: LINKED_STORE,
+      suspended: true,
+      passwordHash: OLD_HASH,
+      createdAt: FakeTimestamp.fromMillis(Date.UTC(2025, 11, 24)),
+    },
+    [`emailIdentities/${emailIdentityKey(EMAIL)}`]: { userId: LINKED_UID, email: EMAIL },
+    'orders/o9': { storeId: LINKED_STORE },
+  });
+  seed[`users/${UID}`].email = MIXED_EMAIL;
+  return seed;
+}
+
+const MULTI_AUTH = {
+  ...AUTH_USERS,
+  [OTHER_UID]: { uid: OTHER_UID, disabled: false, metadata: {} },
+};
+
+function multiHarness(env = {}) {
+  return harness({
+    seed: multiSeed(),
+    authUsers: MULTI_AUTH,
+    env: { LOCK_EMAIL: MIXED_EMAIL, ...env },
+  });
+}
+
+function assertNoIdentifiers(out) {
+  const lower = out.toLowerCase();
+  for (const value of [EMAIL, MIXED_EMAIL, LINKED_EMAIL]) {
+    assert.ok(!lower.includes(value.toLowerCase()), 'full email in output');
+  }
+  for (const uid of [UID, OTHER_UID, LINKED_UID]) assert.ok(!out.includes(uid), 'uid in output');
+  assert.ok(!out.includes('$2b$'));
+}
+
+function assertNothingWritten(h) {
+  assert.deepEqual(h.fake.writes, []);
+  assert.deepEqual(h.fakeAuth.calls, []);
+  assert.equal(h.generated.length, 0);
+  for (const uid of [UID, OTHER_UID, LINKED_UID]) {
+    assert.equal(h.fake.docs.get(`users/${uid}`).passwordHash, OLD_HASH);
+  }
+}
+
+// 출력에서 fingerprint로 그 계정 블록만 잘라낸다.
+function candidateBlock(out, uid) {
+  const blocks = out.split(/^candidate \d+\/\d+$/m).slice(1);
+  const block = blocks.find((b) => b.includes(`fingerprint: ${fp(uid)}`));
+  assert.ok(block, `block for ${fp(uid)}`);
+  return block;
+}
+
+test('uidFingerprint is the first 10 hex chars of sha256(uid)', () => {
+  assert.equal(uidFingerprint(UID), fp(UID));
+  assert.match(uidFingerprint(UID), /^[0-9a-f]{10}$/);
+});
+
+test('multi-candidate check lists every candidate and writes nothing', async () => {
+  const h = multiHarness({ LOCK_EXPECTED_ROLE: 'seller' });
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  assertNoIdentifiers(out);
+  assertNothingWritten(h);
+  assert.match(out, /candidates: 3/);
+  assert.equal(out.match(/^candidate \d\/3$/gm).length, 3);
+
+  const exact = candidateBlock(out, UID);
+  assert.match(exact, /matchedBy: exact\n/);
+  assert.match(exact, /storedEmail: S\*\*\*@e\*\*\*\.test/);
+  assert.match(exact, /role: seller/);
+  assert.match(exact, /suspended: no/);
+  assert.match(exact, /alreadyLocked: no/);
+  assert.match(exact, /storeLinked: yes/);
+  assert.match(exact, /storeOrders: 2/);
+  assert.match(exact, /storeProducts: 1/);
+  assert.match(exact, /createdAt: 2026-05-05T00:00:00\.000Z/);
+  assert.match(exact, /lastLogin: 2026-06-06T01:02:03\.000Z/);
+  assert.match(exact, /activeRefreshSessions: 1/);
+  assert.match(exact, /roleMatchesExpected: yes/);
+
+  const normalized = candidateBlock(out, OTHER_UID);
+  assert.match(normalized, /matchedBy: normalized\n/);
+  assert.match(normalized, /role: consumer/);
+  assert.match(normalized, /storeLinked: no/);
+  assert.ok(!normalized.includes('storeOrders'));
+  assert.match(normalized, /lastLogin: n\/a/);
+  assert.match(normalized, /roleMatchesExpected: no/);
+
+  const linked = candidateBlock(out, LINKED_UID);
+  assert.match(linked, /matchedBy: emailIdentities\n/);
+  assert.match(linked, /storedEmail: l\*\*\*@e\*\*\*\.test/);
+  assert.match(linked, /suspended: yes/);
+  assert.match(linked, /firebaseAuthUser: no/);
+  assert.match(linked, /storeOrders: 1/);
+  assert.match(linked, /storeProducts: 0/);
+  assert.match(linked, /activeRefreshSessions: 0/);
+});
+
+test('multi-candidate lock without a fingerprint aborts before any write', async () => {
+  const h = multiHarness({ LOCK_MODE: 'lock' });
+  assert.equal(await h.run(), 1);
+  assertNothingWritten(h);
+  assert.match(h.output(), /target_fingerprint/);
+  assertNoIdentifiers(h.output());
+});
+
+test('multi-candidate lock with a fingerprint locks only that account', async () => {
+  const h = multiHarness({
+    LOCK_MODE: 'lock',
+    LOCK_EXPECTED_ROLE: 'consumer',
+    LOCK_TARGET_FINGERPRINT: fp(OTHER_UID).toUpperCase(),
+  });
+  assert.equal(await h.run(), 0);
+
+  const target = h.fake.docs.get(`users/${OTHER_UID}`);
+  assert.equal(target.suspended, true);
+  assert.notEqual(target.passwordHash, OLD_HASH);
+  assert.ok(!h.fake.docs.has(`refreshTokens/${OTHER_UID}`));
+  assert.equal(h.fakeAuth.state[OTHER_UID].disabled, true);
+
+  // 다른 계정은 그대로다.
+  for (const uid of [UID, LINKED_UID]) {
+    assert.equal(h.fake.docs.get(`users/${uid}`).passwordHash, OLD_HASH);
+  }
+  assert.equal(userDoc(h).suspended, undefined);
+  assert.ok(h.fake.docs.has(`refreshTokens/${UID}`));
+  assert.equal(h.fakeAuth.state[UID].disabled, false);
+  assert.ok(h.fakeAuth.calls.every(([, uid]) => uid === OTHER_UID));
+  const userWrites = h.fake.writes.filter(([, p]) => p.startsWith('users/'));
+  assert.deepEqual(userWrites, [['update', `users/${OTHER_UID}`]]);
+
+  const audits = auditDocs(h);
+  assert.equal(audits.length, 1);
+  assert.equal(audits[0].userId, OTHER_UID);
+  assert.match(h.output(), /locked: yes/);
+  assertNoIdentifiers(h.output());
+});
+
+test('a wrong or malformed fingerprint aborts before any write', async () => {
+  const wrong = multiHarness({ LOCK_MODE: 'lock', LOCK_TARGET_FINGERPRINT: '0123456789' });
+  assert.notEqual(fp(UID), '0123456789');
+  assert.equal(await wrong.run(), 1);
+  assert.match(wrong.output(), /일치하는 계정이 0개/);
+  assertNothingWritten(wrong);
+
+  const malformed = multiHarness({ LOCK_MODE: 'lock', LOCK_TARGET_FINGERPRINT: 'not-a-hash' });
+  assert.equal(await malformed.run(), 1);
+  assert.equal(malformed.connected(), 0);
+  assertNothingWritten(malformed);
+});
+
+test('expected role still applies to the targeted account', async () => {
+  const h = multiHarness({
+    LOCK_MODE: 'lock',
+    LOCK_EXPECTED_ROLE: 'seller',
+    LOCK_TARGET_FINGERPRINT: fp(OTHER_UID),
+  });
+  assert.equal(await h.run(), 1);
+  assert.match(h.output(), /role: consumer/);
+  assertNothingWritten(h);
+});
+
+test('single-candidate lock requires a given fingerprint to match', async () => {
+  const wrong = harness({ env: { LOCK_MODE: 'lock', LOCK_TARGET_FINGERPRINT: fp(OTHER_UID) } });
+  assert.equal(await wrong.run(), 1);
+  assert.deepEqual(wrong.fake.writes, []);
+  assert.deepEqual(wrong.fakeAuth.calls, []);
+  assert.equal(userDoc(wrong).passwordHash, OLD_HASH);
+
+  const right = harness({ env: { LOCK_MODE: 'lock', LOCK_TARGET_FINGERPRINT: fp(UID) } });
+  assert.equal(await right.run(), 0);
+  assert.equal(userDoc(right).suspended, true);
+  assert.match(right.output(), new RegExp(`fingerprint: ${fp(UID)}`));
 });
 
 test('error messages containing the raw email are masked', async () => {

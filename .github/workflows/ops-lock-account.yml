@@ -2,9 +2,11 @@ name: Ops lock account
 
 # 운영 사용자 계정 1개를 이메일로 찾아 상태를 보거나(check) 잠근다(lock). 저장소 owner가 main에서 수동 실행할 때만
 # production Environment의 Firebase 서비스 계정 키를 쓴다. 스크립트: scripts/ops/lock-account.mjs
-#   - check: 존재 여부·role·매장 연결·생성/최근 로그인 시각·잠금 여부·활성 refresh 세션 수(판매자는 매장 주문·상품 수)만 출력
+#   - check: 존재 여부·role·매장 연결·생성/최근 로그인 시각·잠금 여부·활성 refresh 세션 수(판매자는 매장 주문·상품 수)만 출력.
+#     같은 이메일로 찾은 계정이 둘 이상이면 계정마다 fingerprint(sha256(uid) 앞 10자리)와 찾은 방법을 함께 출력한다.
 #   - lock: 비밀번호 해시를 무작위 값의 해시로 교체, 정지, 세션 폐기(refreshTokens 삭제·sessionsRevokedAt·activeSessionIds),
 #     Firebase Auth 사용자가 있으면 refresh token 폐기와 disabled, auditLogs 기록. 사용자·매장·주문·상품은 지우지 않는다.
+#     계정이 둘 이상이면 target_fingerprint가 필수이고 일치하는 계정 하나만 잠근다.
 # 이메일은 로그에 마스킹해서만 남긴다. 입력 원문은 step env에 두지 않고 이벤트 payload에서 읽는다.
 
 on:
@@ -33,6 +35,11 @@ on:
           - admin
           - any
         default: seller
+      target_fingerprint:
+        description: 선택. check가 출력한 fingerprint(10자리 hex). 같은 이메일 계정이 둘 이상이면 lock에 필수
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -138,6 +145,7 @@ jobs:
           expected_role=''
           if [[ "$EXPECTED_ROLE_INPUT" != 'any' ]]; then expected_role="$EXPECTED_ROLE_INPUT"; fi
           LOCK_EMAIL="$(jq -r '.inputs.email // empty' "$GITHUB_EVENT_PATH")" \
+            LOCK_TARGET_FINGERPRINT="$(jq -r '.inputs.target_fingerprint // empty' "$GITHUB_EVENT_PATH")" \
             LOCK_EXPECTED_ROLE="$expected_role" \
             node scripts/ops/lock-account.mjs
 
