@@ -1,0 +1,126 @@
+name: Ops link store owner
+
+# 운영 매장 1개의 소유자(stores/{storeId}.ownerId)를 카카오로 로그인하는 판매자·관리자 계정 하나에 연결한다.
+# 저장소 owner가 main에서 수동 실행할 때만 production Environment의 Firebase 서비스 계정 키를 쓴다.
+# 스크립트: scripts/ops/link-store-owner.mjs
+#   - check: 매장 이름·현재 owner(앞 8자·문서 존재·role·정지 여부)·같은 매장 사용자와, 연결 후보(role admin|seller이고
+#     카카오로 로그인하는 계정)를 fingerprint(sha256(uid) 앞 10자리)·uid 앞 8자·마스킹 이메일·연결/소유 매장과 함께 출력(읽기 전용).
+#   - link: target_fingerprint로 지정한 후보 하나를 매장 owner로 연결하고 users.storeId를 맞춘다. role은 바꾸지 않는다.
+#     현재 owner가 정지되지 않은 기존 계정이거나 대상이 다른 매장에 연결·소유 중이면 아무것도 바꾸지 않고 중단한다.
+#     auditLogs에 이전 ownerId를 남긴다(되돌리기용). 연결 뒤 대상 계정은 다시 로그인해야 한다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      store_id:
+        description: 대상 매장 문서 ID(stores/{storeId})
+        required: true
+        type: string
+      mode:
+        description: check(조회만) 또는 link(연결)
+        required: true
+        type: choice
+        options:
+          - check
+          - link
+        default: check
+      target_fingerprint:
+        description: link에 필수. check가 출력한 후보 fingerprint(10자리 hex)
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-link-store-owner
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 실행자 확인
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: dispatch·실행자·ref 확인
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch로만 실행합니다.' >&2; exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" || "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo '실행자가 저장소 owner가 아니어서 차단합니다.' >&2; exit 1
+          fi
+          if [[ "$REF" != 'refs/heads/main' ]]; then
+            echo 'main에서만 실행합니다.' >&2; exit 1
+          fi
+
+  link-store-owner:
+    name: 매장 소유자 확인·연결
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    permissions:
+      contents: read
+    env:
+      FIREBASE_PROJECT: green-e4fe3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+
+      # scripts 워크스페이스(firebase-admin·bcrypt)만 설치한다.
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile --filter ./scripts
+
+      # prod-config-check.yml index-drift와 같은 방식으로 키를 RUNNER_TEMP에 600 권한으로 쓴다.
+      - name: Firebase 인증
+        shell: bash
+        env:
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo 'production Environment 비밀값이 없습니다: FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON' >&2; exit 1
+          fi
+          key="$RUNNER_TEMP/firebase-deploy.json"
+          umask 077
+          printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key"
+          chmod 600 "$key"
+          project="$(jq -r .project_id "$key")"
+          if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
+            echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
+          fi
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$key" >> "$GITHUB_ENV"
+
+      - name: 매장 소유자 확인·연결 실행
+        shell: bash
+        run: |
+          set -euo pipefail
+          LINK_STORE_ID="$(jq -r '.inputs.store_id // empty' "$GITHUB_EVENT_PATH")" \
+            LINK_MODE="$(jq -r '.inputs.mode // empty' "$GITHUB_EVENT_PATH")" \
+            LINK_TARGET_FINGERPRINT="$(jq -r '.inputs.target_fingerprint // empty' "$GITHUB_EVENT_PATH")" \
+            node scripts/ops/link-store-owner.mjs
+
+      - name: 서비스 계정 키 삭제
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/firebase-deploy.json"
