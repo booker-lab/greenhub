@@ -483,7 +483,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [x] 첫 회차 자동 오픈 차단 — 2026-09-29 회차 일정을 11/1 오픈·11/10 배송으로 이동
 - [ ] 파일럿 운영 시작 — 2026-11-01(첫 회차 주문 11/1 10:00 자동 오픈)
 - [ ] **파일럿 전 필수: PortOne 실연동(LIVE) 채널** (`PORTONE-CHANNEL-CHECK`). 2026-10-13 사용자 PortOne 콘솔 확인: 운영 상점에 LIVE 채널이 없고 테스트 채널("카카오페이_테스트")만 있다. 이대로 11/1 첫 회차가 열리면 실제 돈이 오가지 않는 테스트 결제로 주문이 확정된다. PG 심사에 기간이 걸리므로 11/1 기준으로 일찍 신청한다. 순서는 `PORTONE-CHANNEL-CHECK` 참조. **2026-10-15**: 카카오페이 가맹점 심사가 아직 "심사중"(8/31 신청)이라 11/1 전 LIVE 전환이 불확실하다. **결정 필요(제안 기한 10/27)**: 그때까지 LIVE 채널이 없으면 자동 오픈 전에 첫 회차 일정을 옮긴다.
-- [ ] **파일럿 전 필수: 디어 오키드 매장 판매자 계정 연결** (`DEAR-ORCHID-STORE-OWNER-LINK`). 매장 `ownerId`가 삭제된 테스트 계정이라 판매자 알림 수신자와 판매자 앱 관리 권한이 없다. 운영 데이터 변경이라 사용자 확인 뒤 진행.
+- [x] **파일럿 전 필수: 디어 오키드 매장 판매자 계정 연결** (`DEAR-ORCHID-STORE-OWNER-LINK`). 2026-10-15 사용자 승인으로 카카오 관리자 겸 판매자 계정에 연결(run `38757569432`).
 - [ ] 파일럿 시작 직후 실제 결제·환불 1건 시험
 
 ### 법무·출시 후보 정합성
@@ -762,7 +762,10 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] **2026-10-15 잠금 완료, 실제 매장 무관 확인.** 보안 감사(SEC-02 운영 테스트 판매자 계정)에서 같은 테스트 이메일로 운영 판매자 계정이 2개 발견됐다. 사용자 결정: 판매자 앱은 카카오 로그인만 쓰므로 이메일 계정은 폐기한다. `Ops lock account` workflow(`.github/workflows/ops-lock-account.yml`, #527·#531·#533) run `38717140324`·`38739558760`(lock, 둘 다 success)으로 두 계정 모두 비밀번호 해시 무작위 교체·`suspended: true`·세션 폐기·Firebase Auth disabled. check run `38742460503`(main `068d271e`, success) 결과: fingerprint `58c6b2338d`는 테스트 매장 「테스트 꽃 농장」(주문 0·상품 0), `acaa8d90e7`는 테스트 매장 「테스트 상점」(주문 6·상품 2)에 연결돼 있고 두 매장 모두 `ownerId`가 그 계정 본인이며 판매자 사용자는 1명이다. 두 계정 모두 providers=email, 활성 세션 0. 디어 오키드 매장(`stores/80189070-…`)과는 연결되지 않아 실제 매장 영향은 없다. 테스트 계정·매장·주문 기록은 삭제하지 않고 잠금 상태로 둔다(되돌릴 수 없고 실익이 적음). 남은 일(LATER): `scripts/diagnose-test-account.mjs` 등 스크립트에 남은 테스트 이메일 문자열 정리(계정이 잠겨 위험 없음).
 
 ### DEAR-ORCHID-STORE-OWNER-LINK
-- [ ] **파일럿 전 필수(운영 데이터 변경, 사용자 확인 필요).** 디어 오키드 매장(`stores/80189070-…`)의 `ownerId`(`7ec0e26b-…`)는 삭제된 `seller_test` 계정을 가리킨다(`docs/memory.md` 운영 메모 5번, 2026-10-15 check run `38742460503`로 이번 계정 잠금과 무관함 확인). 매장 `ownerId`는 판매자 주문 조회·상태 변경(`orders-query`·`orders-lifecycle`), 상품·판매 회차·정산·매장 수정·허브, 이미지 업로드(`storage.service`·`storage.rules`), Firestore 규칙(`firestore.rules`)의 판매자 권한 판정에 쓰이고, 판매자 알림은 `ownerId`에게만 보낸다(`apps/api/src/notifications/notifications.service.ts` `sendToStoreOwner` 경로). 이대로면 파일럿에서 디어 오키드 신규 주문의 판매자 알림을 받을 사람이 없고 판매자 앱으로 매장을 관리할 수 없다(관리자만 가능). 카카오로 로그인하는 실제 판매자 계정이 이 매장에 연결돼 있는지는 아직 확인하지 않았다(이메일 기준 도구 범위 밖). 할 일: 실제 판매자 카카오 계정을 확인하고 그 `users.storeId`와 매장 `ownerId`를 서로 연결한다(owner 전용 운영 작업, 보안 세션 진행 예정). 완료 확인: 판매자 앱 로그인 뒤 주문·상품 화면 접근과 신규 주문 알림 수신.
+- [x] **2026-10-15 완료(사용자 승인: "연결해주고, 동시에 어드민 계정이기도해").** owner 전용 `Ops link store owner` workflow(`.github/workflows/ops-link-store-owner.yml`, #537). check run `38757362950`: 디어 오키드 매장(`stores/80189070-…`)의 이전 `ownerId` `7ec0e26b-…`는 사용자 문서가 없었고, 이 매장에 연결된 사용자는 카카오 로그인 `admin` 1명(fingerprint `20bad34db8`, uid `6c176cb5…`, `users.storeId`가 이미 이 매장인 겸직 계정)뿐이었다. link run `38757569432`(success, main `1c7d93a7`): `stores.ownerId`를 이 계정으로 바꿨고 `users.storeId`·role은 바꾸지 않았다(재로그인 불필요). audit `store.owner_linked_by_owner_maintenance`(이전 `ownerId` 포함). 이전 기록: 매장 `ownerId`가 삭제된 `seller_test`를 가리켜 판매자 권한 판정(`orders-query`·`orders-lifecycle`·상품·회차·정산·매장·허브·이미지 업로드·`firestore.rules`)과 판매자 알림(`sendToStoreOwner`) 대상이 없었다.
+
+### DEAR-ORCHID-OWNER-PHONE
+- [ ] 2026-10-15 발견(보안 세션 check): 디어 오키드 소유자 계정(uid `6c176cb5…`)의 `users.phone`이 비어 있다. 판매자 앱에는 본인 전화번호 입력 화면이 없다(API `PATCH /auth/me`는 `phone`을 받는다). 해결 방식은 사용자에게 묻는 중. **영향 범위(2026-10-15 코드 대조)**: 소유자 `users.phone`을 쓰는 곳은 `NotificationsService.sendToStoreOwner` → `sendToUser`(`resolveRecipientPhone`)뿐이고, 호출처는 legacy 공동구매의 `SELLER_GROUP_CONFIRMED`·`SELLER_GROUP_CANCELLED_LACK` 두 곳이다(`apps/api/src/notifications/notifications.service.ts`). 회차 직접 판매(파일럿 `round_direct`) 흐름에는 판매자 알림톡·문자 호출이 없고(`SELLER_ORDER_BATCH`는 registry에만 있고 호출처 없음), 회차 주문의 기사용 판매자 연락처는 매장 문서 `stores.phone`에서 가져온다(`apps/api/src/orders/round-order-create.service.ts`). 따라서 현재 코드에서 이 빈 값은 파일럿 회차 흐름의 알림을 막지 않는다. 회차 파일럿에서 판매자가 신규 주문 알림을 받아야 하는지는 정해진 계약이 없다(지금은 판매자 앱 주문 화면으로 확인한다). 매장 문서 `stores.phone` 값은 이번에 확인하지 않았다. 필요하면 별도 제품 결정으로 다룬다.
 
 ---
 
