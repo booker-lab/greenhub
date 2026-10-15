@@ -13,6 +13,9 @@
  * check: 계정 상태 사실만 출력한다(이메일은 마스킹, 비밀번호 해시·uid는 출력하지 않는다).
  *   찾은 계정이 둘 이상이면 중단하지 않고 계정마다 fingerprint·찾은 방법(exact|normalized|emailIdentities)·
  *   저장된 이메일(마스킹)·role·정지/잠금 여부·매장 연결(판매자는 주문·상품 수)·생성/최근 로그인 시각·활성 세션 수를 출력한다.
+ *   check는 계정마다 uid 앞 8자(uidPrefix)를, 매장이 연결된 계정이면 매장 정보(storeId 앞 8자·매장 이름·
+ *   ownerId 앞 8자와 이 계정 여부·owner 사용자 문서 존재 여부)와 같은 storeId를 가진 사용자 목록(최대 20개, 사용자마다
+ *   uid 앞 8자·fingerprint·role·providers·정지 여부)을 함께 출력한다. lock은 이 정보를 읽거나 출력하지 않는다.
  * lock(여러 번 실행해도 같은 결과):
  *   - users/{uid}.passwordHash를 메모리에서 만든 무작위 32바이트 값의 bcrypt 해시로 바꾼다(원문은 어디에도 남기지 않는다).
  *   - users/{uid}.suspended = true(API 로그인·refresh·Firebase custom token·JwtStrategy가 모두 거부),
@@ -34,6 +37,10 @@ export const FINGERPRINT_LENGTH = 10;
 const MATCH_ORDER = Object.freeze(['exact', 'normalized', 'emailIdentities']);
 // 후보를 모두 보이기 위한 질의 상한(정상 데이터라면 1개).
 const CANDIDATE_QUERY_LIMIT = 20;
+// check에서 같은 매장에 연결된 사용자를 보이기 위한 질의 상한.
+export const STORE_USERS_QUERY_LIMIT = 20;
+export const ID_PREFIX_LENGTH = 8;
+const STORE_NAME_MAX_LENGTH = 80;
 const REFRESH_SUBCOLLECTION = 'sessions';
 
 export class LockAccountError extends Error {}
@@ -208,6 +215,76 @@ function roleOf(user) {
   return typeof user.role === 'string' ? user.role : 'unknown';
 }
 
+// uid·storeId·ownerId 원문 대신 앞 8자만 출력한다.
+export function idPrefix(value) {
+  return typeof value === 'string' && value ? value.slice(0, ID_PREFIX_LENGTH) : 'n/a';
+}
+
+function providersOf(user) {
+  const list = Array.isArray(user.providers)
+    ? user.providers.filter((p) => typeof p === 'string' && p)
+    : [];
+  return list.length > 0 ? list.join('/') : 'n/a';
+}
+
+// 매장 이름은 한 줄로만 출력한다(제어 문자 제거, 길이 제한).
+function storeNameOf(store) {
+  if (typeof store?.name !== 'string') return 'n/a';
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: 제어 문자를 지우기 위한 패턴
+  const name = store.name.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  if (!name) return 'n/a';
+  return name.length > STORE_NAME_MAX_LENGTH ? `${name.slice(0, STORE_NAME_MAX_LENGTH)}…` : name;
+}
+
+// check 전용. 읽기만 한다: uid 앞 8자와, 매장이 연결돼 있으면 매장 문서·owner·같은 storeId 사용자 목록.
+async function checkOnlyLines(db, candidate) {
+  const { uid, data: user } = candidate;
+  const lines = [`uidPrefix: ${idPrefix(uid)}`];
+  const storeId = typeof user.storeId === 'string' && user.storeId ? user.storeId : null;
+  if (!storeId) return lines;
+
+  const storeSnap = await db.doc(`stores/${storeId}`).get();
+  const store = storeSnap.exists ? (storeSnap.data() ?? {}) : null;
+  const ownerId = typeof store?.ownerId === 'string' && store.ownerId ? store.ownerId : null;
+  lines.push(`storeIdPrefix: ${idPrefix(storeId)}`);
+  lines.push(`storeDoc: ${store ? 'yes' : 'no'}`);
+  if (store) {
+    lines.push(`storeName: ${storeNameOf(store)}`);
+    lines.push(`storeOwnerIdPrefix: ${idPrefix(ownerId)}`);
+    lines.push(`storeOwnerIsThisUser: ${ownerId === uid ? 'yes' : 'no'}`);
+    if (ownerId && ownerId !== uid) {
+      const ownerSnap = await db.doc(`users/${ownerId}`).get();
+      lines.push(`storeOwnerUserDoc: ${ownerSnap.exists ? 'yes' : 'no'}`);
+    }
+  }
+
+  const usersSnap = await db
+    .collection('users')
+    .where('storeId', '==', storeId)
+    .limit(STORE_USERS_QUERY_LIMIT)
+    .get();
+  const storeUsers = usersSnap.docs
+    .map((doc) => ({ id: doc.id, data: doc.data() ?? {}, fingerprint: uidFingerprint(doc.id) }))
+    .sort((a, b) => a.fingerprint.localeCompare(b.fingerprint));
+  const reachedLimit = storeUsers.length >= STORE_USERS_QUERY_LIMIT;
+  lines.push(`storeSellerUsers: ${storeUsers.length}${reachedLimit ? '+ (limit reached)' : ''}`);
+  for (const storeUser of storeUsers) {
+    lines.push(
+      [
+        '  storeUser:',
+        `uidPrefix=${idPrefix(storeUser.id)}`,
+        `fingerprint=${storeUser.fingerprint}`,
+        `role=${roleOf(storeUser.data)}`,
+        `providers=${providersOf(storeUser.data)}`,
+        `suspended=${storeUser.data.suspended === true ? 'yes' : 'no'}`,
+        `thisCandidate=${storeUser.id === uid ? 'yes' : 'no'}`,
+        `storeOwner=${storeUser.id === ownerId ? 'yes' : 'no'}`,
+      ].join(' '),
+    );
+  }
+  return lines;
+}
+
 // 계정 식별 줄: uid·이메일 원문 없이 fingerprint·찾은 방법·저장된 이메일(마스킹)·role만 출력한다.
 function identityLines(candidate) {
   return [
@@ -315,7 +392,8 @@ export async function run({
       for (const [index, candidate] of candidates.entries()) {
         out(`candidate ${index + 1}/${candidates.length}`);
         const { lines } = await inspectCandidate(db, auth, candidate);
-        for (const line of [...identityLines(candidate), ...lines]) out(`  ${line}`);
+        const extra = await checkOnlyLines(db, candidate);
+        for (const line of [...identityLines(candidate), ...lines, ...extra]) out(`  ${line}`);
         if (inputs.expectedRole) {
           const matches = roleOf(candidate.data) === inputs.expectedRole;
           out(`  roleMatchesExpected: ${matches ? 'yes' : 'no'}`);
@@ -360,7 +438,10 @@ export async function run({
     const { authUser, before, lockedBefore, lines } = await inspectCandidate(db, auth, target);
     for (const line of lines) out(line);
 
-    if (inputs.mode === 'check') return 0;
+    if (inputs.mode === 'check') {
+      for (const line of await checkOnlyLines(db, target)) out(line);
+      return 0;
+    }
 
     // 비밀번호 원문은 이 블록 밖으로 나가지 않는다(출력·로그·저장 없음).
     const passwordHash = await hashPassword(randomBytes(32).toString('base64url'));

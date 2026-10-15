@@ -4,6 +4,8 @@ name: Ops lock account
 # production Environment의 Firebase 서비스 계정 키를 쓴다. 스크립트: scripts/ops/lock-account.mjs
 #   - check: 존재 여부·role·매장 연결·생성/최근 로그인 시각·잠금 여부·활성 refresh 세션 수(판매자는 매장 주문·상품 수)만 출력.
 #     같은 이메일로 찾은 계정이 둘 이상이면 계정마다 fingerprint(sha256(uid) 앞 10자리)와 찾은 방법을 함께 출력한다.
+#     계정마다 uid 앞 8자를, 매장이 연결돼 있으면 매장 이름·storeId/ownerId 앞 8자·owner 여부와 같은 매장의 사용자 목록
+#     (최대 20개, uid 앞 8자·fingerprint·role·providers·정지 여부)을 함께 출력한다(읽기 전용).
 #   - lock: 비밀번호 해시를 무작위 값의 해시로 교체, 정지, 세션 폐기(refreshTokens 삭제·sessionsRevokedAt·activeSessionIds),
 #     Firebase Auth 사용자가 있으면 refresh token 폐기와 disabled, auditLogs 기록. 사용자·매장·주문·상품은 지우지 않는다.
 #     계정이 둘 이상이면 target_fingerprint가 필수이고 일치하는 계정 하나만 잠근다.
