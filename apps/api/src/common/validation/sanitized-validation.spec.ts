@@ -198,12 +198,32 @@ function makeAuthHarness() {
             users.set(userId, data);
             return Promise.resolve();
           },
+          update: (data: UserRecord) => {
+            users.set(userId, { ...users.get(userId), ...data });
+            return Promise.resolve();
+          },
         };
       }
       if (path.startsWith('refreshTokens/')) {
-        return { set: () => Promise.resolve() };
+        return {
+          get: () => Promise.resolve({ exists: false, data: () => undefined }),
+          set: () => Promise.resolve(),
+        };
       }
       throw new Error(`Unexpected document path: ${path}`);
+    },
+    // 로그인 발급은 세션 맵과 사용자 문서를 한 트랜잭션에서 쓴다. 테스트에서는 즉시 반영한다.
+    runTransaction: async (fn: (tx: unknown) => Promise<unknown>) => {
+      type TxRef = {
+        get: () => Promise<unknown>;
+        set?: (data: UserRecord) => Promise<void>;
+        update?: (data: UserRecord) => Promise<void>;
+      };
+      return fn({
+        get: (ref: TxRef) => ref.get(),
+        set: (ref: TxRef, data: UserRecord) => ref.set?.(data),
+        update: (ref: TxRef, data: UserRecord) => ref.update?.(data),
+      });
     },
     Timestamp: { now: jest.fn(() => 'now') },
   };

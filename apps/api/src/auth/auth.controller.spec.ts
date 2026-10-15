@@ -73,11 +73,16 @@ function makeAuthHarness() {
             users.set(userId, data);
             return Promise.resolve();
           },
+          update: (data: UserRecord) => {
+            users.set(userId, { ...users.get(userId), ...data });
+            return Promise.resolve();
+          },
         };
       }
 
       if (path.startsWith('refreshTokens/')) {
         return {
+          get: () => Promise.resolve({ exists: false, data: () => undefined }),
           set: (data: UserRecord) => {
             refreshTokenWrites.push({ path, data });
             return Promise.resolve();
@@ -109,12 +114,14 @@ function makeAuthHarness() {
         get: () => Promise<unknown>;
         set?: (data: UserRecord) => Promise<void>;
         create?: (data: UserRecord) => Promise<void>;
+        update?: (data: UserRecord) => Promise<void>;
       };
       const writes: Array<() => Promise<void> | undefined> = [];
       const result = await fn({
         get: (ref: TxRef) => ref.get(),
         set: (ref: TxRef, data: UserRecord) => writes.push(() => ref.set?.(data)),
         create: (ref: TxRef, data: UserRecord) => writes.push(() => ref.create?.(data)),
+        update: (ref: TxRef, data: UserRecord) => writes.push(() => ref.update?.(data)),
       });
       for (const write of writes) await write();
       return result;
