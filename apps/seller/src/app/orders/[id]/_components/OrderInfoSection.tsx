@@ -112,7 +112,8 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           )}
           <Row
             label="상품 금액"
-            value={`₩${(order.totalAmount - order.deliveryFee).toLocaleString()}`}
+            // 쿠폰 할인(비교 기능) 주문은 결제 금액에서 빠진 할인액을 되돌려 상품 금액을 보인다. 할인 없는 주문은 이전과 같다.
+            value={`₩${(order.totalAmount + (order.discountAmount ?? 0) - order.deliveryFee).toLocaleString()}`}
           />
           <Row label="배송비" value={`₩${order.deliveryFee.toLocaleString()}`} />
           <Box style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginTop: 4 }}>

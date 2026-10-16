@@ -548,6 +548,31 @@ function OrderSuccessContent() {
                 잠시 후 홈 화면으로 이동합니다.
               </Text>
             )}
+            {/* 결제 실패 화면 유지(payment-fail-stay): 홈으로 보내는 대신 장바구니에서 다시 결제할 길을 준다. */}
+            {isFeatureOn('payment-fail-stay') && (
+              <>
+                <Button
+                  color="brand"
+                  radius="xl"
+                  size="lg"
+                  mt="lg"
+                  fullWidth
+                  onClick={() => router.push('/cart')}
+                >
+                  장바구니에서 다시 결제하기
+                </Button>
+                <Button
+                  variant="subtle"
+                  color="gray"
+                  radius="xl"
+                  size="md"
+                  fullWidth
+                  onClick={() => router.push('/')}
+                >
+                  홈으로
+                </Button>
+              </>
+            )}
           </>
         )}
 

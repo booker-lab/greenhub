@@ -111,7 +111,9 @@ export default function SearchPage() {
               에 대한 검색 결과가 없습니다.
             </Text>
             {isFeatureOn('product-request') && (
-              <ProductRequestBox key={query} storeId={products[0]?.storeId ?? null} initialText={query.trim()} />
+              <Box w="100%" mt="md">
+                <ProductRequestBox key={query} storeId={products[0]?.storeId ?? null} initialText={query.trim()} />
+              </Box>
             )}
           </Stack>
         )}
