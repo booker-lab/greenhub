@@ -49,9 +49,11 @@ import {
   isStaleOrderRead,
   type OrderDetailView,
   readCommandConfirmation,
+  readOrderBenchmarkExtras,
   readOrderDetail,
   readRedeliveryPaymentResponse,
 } from './_detail';
+import OrderDetailExtras from '@/components/benchmark/OrderDetailExtras';
 
 const API_URL = getApiBaseUrl();
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
@@ -743,6 +745,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </Group>
         </Stack>
       </Paper>
+
+      {/* 벤치마킹 비교 기능(옵션·쿠폰·선물 표시, 후기, 관리 안내, 다시 주문) */}
+      <OrderDetailExtras
+        orderId={detail.id}
+        storeId={detail.storeId}
+        status={detail.status}
+        isRoundOrder={detail.isRoundOrder}
+        items={detail.items}
+        extras={readOrderBenchmarkExtras(order)}
+      />
 
       <Paper withBorder radius="lg" p="md" mb="lg">
         <Stack gap="xs">

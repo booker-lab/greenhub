@@ -15,7 +15,10 @@ import {
 import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
+import { CartArrivalLine, CartUpsell, IcheonPrecheck } from '@/components/benchmark/CartExtras';
+import { useBestCoupon } from '@/hooks/useBenchmark';
+import { isFeatureOn } from '@/lib/features';
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
@@ -171,6 +174,10 @@ function resolveRoundCartBatchValidation(items: RoundCartItem[], value: unknown)
   }
   return resolved;
 }
+function firstRoundItemStoreId(items: CartItem[]): string | null {
+  const first = items.find(isRoundCartItem);
+  return first?.storeId ?? null;
+}
 function selectCheckoutItems(items: CartItem[], validationByKey: ValidationByKey) {
   if (!items.every(isRoundCartItem)) return items;
   return items.filter((item) => validationByKey[cartItemKey(item)]?.status === 'eligible');
@@ -322,6 +329,8 @@ export default function CartPage() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const { items, updateQuantity, removeItem, clearCart } = useCart();
+  // 비회원 장바구니(guest-cart): 로그인 전에는 담은 상품만 보여주고, 주문할 때 로그인한다.
+  const isGuest = isFeatureOn('guest-cart') && sessionStatus === 'unauthenticated';
   const validation = useRoundCartValidation(items, session?.user?.accessToken, sessionStatus);
   const isRoundCart = items.length > 0 && items.every(isRoundCartItem);
   const checkoutItems = selectCheckoutItems(items, validation.items);
@@ -332,7 +341,17 @@ export default function CartPage() {
   const legacyValidationError = getCartValidationError(legacyItems);
   const hasLegacyValidationIssues = legacyValidationError !== null;
   const isChecking = isRoundCart && validation.status !== 'ready';
+  const guestAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
+  const coupon = useBestCoupon(
+    isRoundCart ? (firstRoundItemStoreId(items) ?? null) : null,
+    checkoutAmount,
+    isFeatureOn('coupons') && isRoundCart && !isGuest,
+  );
   function handleCheckout() {
+    if (isGuest) {
+      void signIn(undefined, { callbackUrl: '/cart' });
+      return;
+    }
     if (checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues) return;
     sessionStorage.setItem('checkout_cart', JSON.stringify(checkoutItems));
     router.push('/checkout?from=cart');
@@ -430,6 +449,15 @@ export default function CartPage() {
               배송돼요.
             </Box>
           )}
+          {cartRound && <CartArrivalLine round={cartRound} />}
+          {isGuest && (
+            <Box px="md" py="sm" style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}>
+              <Text size="sm" fw={700}>
+                로그인하면 구매 가능 여부와 최신 가격을 확인하고 바로 주문할 수 있어요.
+              </Text>
+            </Box>
+          )}
+          <IcheonPrecheck />
         </Stack>
       )}
       <Stack gap="sm" mb="lg">
@@ -520,6 +548,14 @@ export default function CartPage() {
                       >
                         회차 가격 {roundItem.roundPrice.toLocaleString('ko-KR')}원
                       </span>
+                      {roundItem.optionLabel && (
+                        <Text size="sm" c="var(--color-text-secondary)" mt={4}>
+                          {roundItem.optionLabel}
+                          {roundItem.optionPriceDelta
+                            ? ` (+${roundItem.optionPriceDelta.toLocaleString('ko-KR')}원)`
+                            : ''}
+                        </Text>
+                      )}
                       {soldOut && (
                         <span
                           style={{
@@ -537,7 +573,7 @@ export default function CartPage() {
                           품절
                         </span>
                       )}
-                      <RoundValidationNotice validation={itemValidation} />
+                      {!isGuest && <RoundValidationNotice validation={itemValidation} />}
                     </>
                   ) : (
                     <>
@@ -634,7 +670,8 @@ export default function CartPage() {
           );
         })}
       </Stack>
-      {excludedCount > 0 && (
+      {cartRound && <CartUpsell round={cartRound} items={items} />}
+      {excludedCount > 0 && !isGuest && (
         <Paper
           p="sm"
           mb="md"
@@ -658,9 +695,19 @@ export default function CartPage() {
             결제 대상 상품 수
           </Text>
           <Text size="sm" c="var(--color-text)" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {checkoutCount}개
+            {isGuest ? items.reduce((sum, item) => sum + item.quantity, 0) : checkoutCount}개
           </Text>
         </Group>
+        {coupon && (
+          <Group justify="space-between">
+            <Text size="sm" c="var(--color-primary-dark)" fw={700}>
+              쿠폰 자동 적용 · {coupon.coupon.name}
+            </Text>
+            <Text size="sm" c="var(--color-primary-dark)" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
+              −{coupon.discount.toLocaleString('ko-KR')}원
+            </Text>
+          </Group>
+        )}
         <Group
           justify="space-between"
           align="baseline"
@@ -678,7 +725,7 @@ export default function CartPage() {
               fontWeight: 'var(--fw-extrabold)',
             }}
           >
-            {checkoutAmount.toLocaleString('ko-KR')}원
+            {(isGuest ? guestAmount : checkoutAmount - (coupon?.discount ?? 0)).toLocaleString('ko-KR')}원
           </Text>
         </Group>
       </Stack>
@@ -692,10 +739,14 @@ export default function CartPage() {
         size="lg"
         color="brand"
         radius="xl"
-        disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
+        disabled={
+          !isGuest && (checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues)
+        }
         onClick={handleCheckout}
       >
-        {isChecking
+        {isGuest
+          ? '로그인하고 주문하기'
+          : isChecking
           ? '구매 가능 여부 확인 중'
           : isRoundCart
             ? `${checkoutCount}개 상품 한 번에 결제`

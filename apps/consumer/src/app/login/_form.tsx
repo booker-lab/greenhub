@@ -3,7 +3,9 @@
 import { Alert, Button, Divider, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
+import Link from 'next/link';
 import { useState } from 'react';
+import { isFeatureOn } from '@/lib/features';
 import { safeCallbackPath } from './_callback-url';
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
@@ -38,8 +40,29 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
     window.location.href = resolveCallbackUrl();
   };
 
+  // 비회원 장바구니(guest-cart): 주문하러 온 손님에게 왜 로그인하는지 알려 준다.
+  const forOrder =
+    isFeatureOn('guest-cart') &&
+    /^\/(cart|checkout)(\/|\?|$)/.test(rawCallbackUrl ?? '');
+
   return (
     <Stack gap="sm">
+      {forOrder && (
+        <Text
+          role="status"
+          ta="center"
+          style={{
+            background: 'var(--color-primary-surface)',
+            borderRadius: 'var(--radius)',
+            color: 'var(--color-primary-dark)',
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-bold)',
+            padding: '12px 16px',
+          }}
+        >
+          주문하려면 로그인이 필요해요. 장바구니는 그대로 남아 있어요.
+        </Text>
+      )}
       <Button
         fullWidth
         radius="xl"
@@ -84,6 +107,19 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
             </Stack>
           </form>
         </>
+      )}
+      {isFeatureOn('guest-cart') && (
+        <Link
+          href="/"
+          style={{
+            color: 'var(--color-text-secondary)',
+            fontSize: 'var(--font-size-sm)',
+            marginTop: 8,
+            textAlign: 'center',
+          }}
+        >
+          로그인 없이 더 둘러보기
+        </Link>
       )}
     </Stack>
   );

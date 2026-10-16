@@ -37,6 +37,8 @@ const requireForTest = (specifier) => {
   }
   if (specifier === '@mantine/core') return {};
   if (specifier === '@greenhub/shared') return { ORDER_REQUEST_NOTE_MAX_LENGTH: 200 };
+  // 벤치마킹 비교 기능(선물하기) 칸은 이 테스트에서 그리지 않는다.
+  if (specifier === '@/components/benchmark/GiftFields') return { default: () => null };
   throw new Error(`예상하지 못한 결제 폼 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(

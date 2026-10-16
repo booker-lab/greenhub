@@ -18,6 +18,8 @@ import {
   resolveOrderPaymentReturn,
   takePendingOrderPayment,
 } from '@/lib/payment-redirect';
+import OrderSuccessGuide from '@/components/benchmark/OrderSuccessGuide';
+import { isFeatureOn } from '@/lib/features';
 
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   PENDING: '결제 확인 중...',
@@ -198,7 +200,9 @@ function readSuccessOrder(value: unknown, requestedOrderId: string): SuccessOrde
   const items = readRoundOrderItems(order.orderItems);
   if (!items) return null;
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  const totalAmount = items.reduce((sum, item) => sum + item.subtotalAmount, 0);
+  // 쿠폰(벤치마킹 비교 기능)을 쓴 주문은 상품 합계에서 할인액을 뺀 금액이 결제 금액이다.
+  const discount = isMoney(order.discountAmount) ? order.discountAmount : 0;
+  const totalAmount = items.reduce((sum, item) => sum + item.subtotalAmount, 0) - discount;
   if (
     !Number.isSafeInteger(totalQuantity) ||
     !Number.isSafeInteger(totalAmount) ||
@@ -339,6 +343,8 @@ function OrderSuccessContent() {
 
   useEffect(() => {
     if (validOrder?.status !== 'CANCELLED') return;
+    // 결제 실패 화면 유지(payment-fail-stay): 다시 결제하기를 누를 수 있게 자동으로 홈에 보내지 않는다.
+    if (isFeatureOn('payment-fail-stay')) return;
     const timer = setTimeout(() => router.replace('/'), 4000);
     return () => clearTimeout(timer);
   }, [router, validOrder?.status]);
@@ -471,6 +477,15 @@ function OrderSuccessContent() {
                   </Stack>
                 </Paper>
 
+                {isFeatureOn('order-success-guide') ? (
+                  <OrderSuccessGuide
+                    requestedDeliveryDate={
+                      typeof (order as Record<string, unknown> | null)?.['requestedDeliveryDate'] === 'string'
+                        ? ((order as Record<string, unknown>)['requestedDeliveryDate'] as string)
+                        : null
+                    }
+                  />
+                ) : (
                 <Paper
                   p="md"
                   mt="sm"
@@ -487,6 +502,7 @@ function OrderSuccessContent() {
                     화요일 오전 9시까지 문 앞 배송합니다. 경기도 이천시 직접배송 주문입니다.
                   </Text>
                 </Paper>
+                )}
               </>
             )}
 
@@ -531,9 +547,11 @@ function OrderSuccessContent() {
             >
               {formatCancelReason(validOrder.cancelReason) ?? '결제 처리 중 오류가 발생했습니다.'}
             </Text>
-            <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>
-              잠시 후 홈 화면으로 이동합니다.
-            </Text>
+            {!isFeatureOn('payment-fail-stay') && (
+              <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>
+                잠시 후 홈 화면으로 이동합니다.
+              </Text>
+            )}
           </>
         )}
 

@@ -23,8 +23,17 @@ function continueWithCsp(request: NextRequest): NextResponse {
 // 로그인 검사는 아래 config.matcher의 앞 네 경로(이전 matcher)에서만 한다.
 const AUTH_PATH_PREFIXES = ['/mypage', '/checkout', '/order'];
 
+// 비회원 장바구니(guest-cart, 팔도감 벤치마킹 비교 기능)가 켜지면 장바구니는 로그인 없이 열고,
+// 결제(/checkout)에서 로그인한다. 값은 빌드 때 굳는다(packages/shared features.ts와 같은 형식).
+// 테스트가 proxy만 따로 읽으므로 기능 토글 모듈을 불러오지 않고 여기서 직접 읽는다.
+export function isGuestCartEnabled(value: string | undefined): boolean {
+  const keys = (value ?? '').split(',').map((key) => key.trim());
+  return keys.includes('all') || keys.includes('guest-cart');
+}
+const GUEST_CART = isGuestCartEnabled(process.env.NEXT_PUBLIC_GREENHUB_FEATURES);
+
 function isAuthGatedPath(pathname: string): boolean {
-  if (pathname === '/cart' || pathname === '/cart/') return true;
+  if (pathname === '/cart' || pathname === '/cart/') return !GUEST_CART;
   return AUTH_PATH_PREFIXES.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );

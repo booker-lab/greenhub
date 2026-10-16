@@ -21,6 +21,7 @@ import {
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
+import GiftFields, { type GiftState } from '@/components/benchmark/GiftFields';
 
 const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY;
 
@@ -61,6 +62,12 @@ export interface CheckoutFormProps {
     deliveryMethod: DeliveryMethod;
     requestedDeliveryDate?: string;
   };
+  /** 벤치마킹 비교 기능(도착 시각·쿠폰 할인·선물). 회차 결제에서만 넘긴다. */
+  benchmark?: {
+    arrivalLabel?: string | null;
+    discount?: { name: string; amount: number } | null;
+    gift?: { value: GiftState; onChange: (next: GiftState) => void };
+  };
 }
 
 export function isIcheonDeliveryAddress(value: string): boolean {
@@ -92,6 +99,7 @@ export default function CheckoutForm({
   error,
   onPay,
   singleSummary,
+  benchmark,
 }: CheckoutFormProps) {
   const [roundDetailsConfirmed, setRoundDetailsConfirmed] = useState(false);
   const [deliveryPhoneTouched, setDeliveryPhoneTouched] = useState(false);
@@ -194,6 +202,11 @@ export default function CheckoutForm({
                       {(item.price * item.quantity).toLocaleString()}원
                     </Text>
                   </Group>
+                  {item.optionLabel && (
+                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+                      {item.optionLabel}
+                    </Text>
+                  )}
                   {item.requestedDeliveryDate && (
                     <Text
                       style={{
@@ -242,6 +255,33 @@ export default function CheckoutForm({
               </Text>
               <Text style={{ fontSize: 'var(--font-size-sm)' }}>
                 {formatDeliveryDate(singleSummary.requestedDeliveryDate)}
+              </Text>
+            </Group>
+          )}
+          {benchmark?.arrivalLabel && (
+            <Group justify="space-between">
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+                도착
+              </Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
+                {benchmark.arrivalLabel}까지
+              </Text>
+            </Group>
+          )}
+          {benchmark?.discount && (
+            <Group justify="space-between">
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}>
+                쿠폰 · {benchmark.discount.name}
+              </Text>
+              <Text
+                style={{
+                  color: 'var(--color-primary-dark)',
+                  fontSize: 'var(--font-size-sm)',
+                  fontVariantNumeric: 'tabular-nums',
+                  fontWeight: 'var(--fw-bold)',
+                }}
+              >
+                −{benchmark.discount.amount.toLocaleString()}원
               </Text>
             </Group>
           )}
@@ -323,6 +363,9 @@ export default function CheckoutForm({
           autoComplete="tel"
           required
         />
+        {isRoundCheckout && benchmark?.gift && (
+          <GiftFields value={benchmark.gift.value} onChange={benchmark.gift.onChange} />
+        )}
         {isRoundCheckout && onRequestNoteChange && (
           <Textarea
             label="요청사항 (선택)"

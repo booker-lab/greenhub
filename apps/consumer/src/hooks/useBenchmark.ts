@@ -1,11 +1,12 @@
 'use client';
 
-import type {
-  ProductReviewsResponse,
-  PurchaseStampsResponse,
-  ReviewSummary,
-  StorePublicProfile,
-  UserCoupon,
+import {
+  pickBestCoupon,
+  type ProductReviewsResponse,
+  type PurchaseStampsResponse,
+  type ReviewSummary,
+  type StorePublicProfile,
+  type UserCoupon,
 } from '@greenhub/shared';
 import { signIn, useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -242,4 +243,11 @@ export function useStamps(storeId: string | null, enabled: boolean) {
     [storeId, token],
   );
   return { stamps, claim, signedIn: Boolean(token) };
+}
+
+/** 장바구니·결제의 자동 최대 할인(coupons): 쓸 수 있는 내 쿠폰 중 할인액이 가장 큰 것. */
+export function useBestCoupon(storeId: string | null, orderAmount: number, enabled: boolean) {
+  const { available } = useCoupons(storeId, enabled);
+  if (!enabled || orderAmount <= 0) return null;
+  return pickBestCoupon(available, orderAmount);
 }
