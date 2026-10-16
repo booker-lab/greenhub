@@ -105,3 +105,44 @@ describe('public product projection', () => {
     expect(config['groupDeliveryDate']).toBe('2026-09-15T00:00:00.000Z');
   });
 });
+
+describe('public product extras (benchmark compare)', () => {
+  const base = {
+    id: 'p-x',
+    storeId: 's-1',
+    name: '추가 정보 상품',
+    images: [],
+    price: 30000,
+    category: 'orchid',
+    saleType: 'normal',
+    deliverySize: 'medium',
+    isActive: true,
+  };
+
+  it('추가 정보가 없으면 공개 응답에 키를 만들지 않는다', () => {
+    const detail = toPublicProductDetail(base);
+    expect(detail).not.toHaveProperty('listPrice');
+    expect(detail).not.toHaveProperty('options');
+    expect(toPublicProductSummary(base)).not.toHaveProperty('size');
+  });
+
+  it('공개 허용 추가 정보만 상세·목록에 옮기고 내부 필드는 옮기지 않는다', () => {
+    const stored = {
+      ...base,
+      listPrice: 39000,
+      size: { heightCm: 60, potDiameterCm: 15 },
+      light: 'medium',
+      placements: ['living'],
+      guaranteed: true,
+      options: [{ id: 'pot', name: '화분', choices: [{ id: 'basic', label: '기본', priceDelta: 0 }] }],
+      sellerNote: '내부 메모',
+    };
+    const detail = toPublicProductDetail(stored);
+    expect(detail['listPrice']).toBe(39000);
+    expect(detail['options']).toEqual(stored.options);
+    expect(detail).not.toHaveProperty('sellerNote');
+    const summary = toPublicProductSummary(stored);
+    expect(summary['guaranteed']).toBe(true);
+    expect(summary).not.toHaveProperty('sellerNote');
+  });
+});

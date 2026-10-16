@@ -21,6 +21,7 @@ import {
   type SaleRoundRecord,
 } from '../sale-rounds/sale-round-state.contract';
 
+import { resolveSelectedOptions } from './_lib/round-order-extras';
 @Injectable()
 export class OrdersCreateService {
   constructor(
@@ -277,13 +278,24 @@ export class OrdersCreateService {
         if (nextQuantity > (item['saleLimitQuantity'] ?? 0)) {
           throw new ConflictException('회차 상품 수량이 마감되었습니다.');
         }
+        // 옵션 시트(벤치마킹 비교 기능): 옵션을 고른 상품만 상품 문서를 읽어 금액을 더한다.
+        let option: ReturnType<typeof resolveSelectedOptions> = { selected: [], priceDelta: 0 };
+        if (input.optionChoiceIds?.length) {
+          const productSnap = await this.firestore.doc(`products/${item['productId']}`).get();
+          option = resolveSelectedOptions(
+            productSnap.exists ? productSnap.data()?.['options'] : undefined,
+            input.optionChoiceIds,
+          );
+        }
+        const unitPrice = item['roundPrice'] + option.priceDelta;
         return {
           roundItemId: input.roundItemId,
           productId: item['productId'],
           productName: item['productNameSnapshot'],
-          unitPrice: item['roundPrice'],
+          unitPrice,
           quantity: input.quantity,
-          subtotalAmount: item['roundPrice'] * input.quantity,
+          subtotalAmount: unitPrice * input.quantity,
+          ...(option.selected.length > 0 ? { selectedOptions: option.selected } : {}),
         };
       }),
     );

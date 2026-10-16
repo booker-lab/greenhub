@@ -13,6 +13,8 @@ import { FirestoreRetryableErrorFilter } from './common/filters/firestore-retrya
 import { ClientThrottlerGuard } from './common/guards/client-throttler.guard';
 import { shouldEnableScheduledJobs, validateRuntimeConfig, isApiUnitTestEnv } from './config/runtime-config';
 import { DriverModule } from './driver/driver.module';
+import { CouponsModule } from './coupons/coupons.module';
+import { EngagementModule } from './engagement/engagement.module';
 import { FirestoreModule } from './firestore/firestore.module';
 import { HubsModule } from './hubs/hubs.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -75,6 +77,9 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
     SaleRoundsModule,
     OperationsModule,
     RetentionModule,
+    // 팔도감 벤치마킹 비교용(쿠폰·스탬프, 후기·찜·알림 신청·제안·입점 문의)
+    CouponsModule,
+    EngagementModule,
   ],
 })
 export class AppModule {}

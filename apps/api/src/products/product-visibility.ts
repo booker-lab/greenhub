@@ -110,6 +110,28 @@ function toPublicContent(
   return { headline: c['headline'], description: c['description'] };
 }
 
+/** 팔도감 벤치마킹 비교용 상품 추가 정보(ProductExtras) — 공개해도 되는 필드만 옮긴다. */
+export const PUBLIC_PRODUCT_EXTRA_FIELDS = [
+  'listPrice',
+  'size',
+  'light',
+  'placements',
+  'petSafe',
+  'curations',
+  'careGuide',
+  'options',
+  'guaranteed',
+  'aliases',
+] as const;
+
+export function pickPublicProductExtras(p: Record<string, unknown>): Record<string, unknown> {
+  const extras: Record<string, unknown> = {};
+  for (const key of PUBLIC_PRODUCT_EXTRA_FIELDS) {
+    if (p[key] !== undefined && p[key] !== null) extras[key] = p[key];
+  }
+  return extras;
+}
+
 /**
  * Public list summary — allowlist only.
  * Never spreads the stored document.
@@ -130,6 +152,7 @@ export function toPublicProductSummary(
     isActive: p['isActive'],
   };
   if (opts.includeStoreId) summary['storeId'] = p['storeId'];
+  Object.assign(summary, pickPublicProductExtras(p));
   if (p['saleType'] === 'group' && groupConfig) {
     summary['groupSummary'] = toPublicGroupSummary(groupConfig);
   }
@@ -165,6 +188,7 @@ export function toPublicProductDetail(
   if (p['colors'] !== undefined) detail['colors'] = p['colors'];
   const content = toPublicContent(p['content']);
   if (content) detail['content'] = content;
+  Object.assign(detail, pickPublicProductExtras(p));
   if (groupConfig) {
     detail['groupConfig'] = toPublicGroupConfig(groupConfig);
   }

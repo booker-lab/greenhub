@@ -1,4 +1,8 @@
-import { ORDER_REQUEST_NOTE_MAX_LENGTH } from '@greenhub/shared';
+import {
+  GIFT_MESSAGE_MAX_LENGTH,
+  ORDER_REQUEST_NOTE_MAX_LENGTH,
+  PRODUCT_OPTION_GROUP_MAX,
+} from '@greenhub/shared';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -65,6 +69,28 @@ class RoundOrderItemDto {
   @Min(1)
   @Max(ORDER_ITEM_MAX_QUANTITY)
   quantity: number;
+
+  // 옵션 시트(벤치마킹 비교 기능): 옵션 묶음마다 고른 선택지 id. 없으면 기존 주문과 같다.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(PRODUCT_OPTION_GROUP_MAX)
+  @Matches(/^[A-Za-z0-9_-]{1,40}$/, { each: true, message: DOCUMENT_ID_MESSAGE })
+  optionChoiceIds?: string[];
+}
+
+// 선물하기(벤치마킹 비교 기능)
+class GiftDto {
+  @IsString()
+  @MaxLength(20)
+  recipientName: string;
+
+  @IsString()
+  @MaxLength(20)
+  senderName: string;
+
+  @IsString()
+  @MaxLength(GIFT_MESSAGE_MAX_LENGTH)
+  cardMessage: string;
 }
 
 class MarketingConsentDto {
@@ -184,4 +210,15 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => AcquisitionDto)
   acquisition?: AcquisitionDto;
+
+  // 쿠폰(벤치마킹 비교 기능): 고객이 받은 쿠폰(userCoupons) id. 회차 주문에서만 쓴다.
+  @IsOptional()
+  @IsString()
+  @Matches(/^[A-Za-z0-9_-]{1,200}$/, { message: DOCUMENT_ID_MESSAGE })
+  couponId?: string;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GiftDto)
+  gift?: GiftDto;
 }

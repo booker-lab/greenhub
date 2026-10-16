@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { CouponsService, type PreparedOrderCoupon } from '../coupons/coupons.service';
 import { FirestoreService } from '../firestore/firestore.service';
 import {
   INVISIBLE_FORMAT_CHARACTERS,
@@ -14,6 +15,10 @@ import { RetentionService } from '../retention/retention.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { normalizeKoreanMobilePhone } from './_lib/korean-mobile-phone';
+import { normalizeGift, resolveSelectedOptions } from './_lib/round-order-extras';
+
+/** 쿠폰을 쓴 뒤 결제 금액 하한(원). 결제사가 0원 결제를 받지 않는다. */
+export const ROUND_ORDER_MIN_PAYMENT_AMOUNT = 100;
 
 @Injectable()
 export class RoundOrderCreateService {
@@ -21,6 +26,8 @@ export class RoundOrderCreateService {
     private readonly firestore: FirestoreService,
     private readonly capacity: OrderCapacityService,
     private readonly retention: RetentionService,
+    // 쿠폰(벤치마킹 비교 기능). 쿠폰 없는 주문은 쓰지 않으므로 기존 단위 테스트는 넘기지 않는다.
+    private readonly coupons?: CouponsService,
   ) {}
 
   async create(storeId: string, userId: string, dto: CreateOrderDto) {
@@ -34,6 +41,7 @@ export class RoundOrderCreateService {
     const requestId = dto.clientOrderRequestId!;
     const orderId = this.stableId(storeId, userId, requestId);
     const payloadHash = this.payloadHash(storeId, userId, dto);
+    const gift = normalizeGift(dto.gift);
     const orderRef = this.firestore.doc(`orders/${orderId}`);
     let result: Record<string, unknown> | null = null;
 
@@ -63,6 +71,18 @@ export class RoundOrderCreateService {
         ...counter,
         seq: (counterSnap.exists ? counterSnap.data()?.['seq'] : 0) + 1,
       };
+      // 옵션·쿠폰 확인은 읽기 단계에서 끝낸다(예약이 쓰기를 시작하면 더 읽을 수 없다).
+      const optionPricing = await this.readOptionPricing(tx, storeId, dto);
+      let coupon: PreparedOrderCoupon | null = null;
+      if (dto.couponId) {
+        if (!this.coupons) throw new BadRequestException('쿠폰을 쓸 수 없습니다.');
+        coupon = await this.coupons.prepareOrderCoupon(tx, {
+          storeId,
+          userId,
+          userCouponId: dto.couponId,
+          orderAmount: optionPricing.orderAmount,
+        });
+      }
       const reservation = await this.capacity.reserveCheckoutInTransaction(tx, {
         storeId,
         roundId: dto.roundId!,
@@ -71,22 +91,32 @@ export class RoundOrderCreateService {
         deliveryAddress: dto.deliveryAddress,
         items: dto.roundItems!,
       });
-      const roundItems = reservation.items.map((item) => ({
-        roundItemId: item.roundItemId,
-        productId: item.productId,
-        productName: item.productName,
-        productImageUrl: item.productImageUrl,
-        unitPrice: item.unitPrice,
-        quantity: item.quantity,
-        subtotalAmount: item.unitPrice * item.quantity,
-      }));
+      const roundItems = reservation.items.map((item) => {
+        const option = optionPricing.byRoundItemId.get(item.roundItemId);
+        const unitPrice = item.unitPrice + (option?.priceDelta ?? 0);
+        return {
+          roundItemId: item.roundItemId,
+          productId: item.productId,
+          productName: item.productName,
+          productImageUrl: item.productImageUrl,
+          unitPrice,
+          quantity: item.quantity,
+          subtotalAmount: unitPrice * item.quantity,
+          ...(option && option.selected.length > 0 ? { selectedOptions: option.selected } : {}),
+        };
+      });
 
       const now = this.firestore.Timestamp.now();
       const orderNumber = `${orderCounter.yyyymmdd}-${String(orderCounter.seq).padStart(6, '0')}`;
       const user = userSnap.data() as Record<string, any> | undefined;
       const store = storeSnap.data() as Record<string, any>;
       const buyerName = resolveOrderBuyerName(user, userId);
-      const totalAmount = roundItems.reduce((sum, item) => sum + item.subtotalAmount, 0);
+      const itemsAmount = roundItems.reduce((sum, item) => sum + item.subtotalAmount, 0);
+      const discountAmount = coupon?.discountAmount ?? 0;
+      const totalAmount = itemsAmount - discountAmount;
+      if (coupon && totalAmount < ROUND_ORDER_MIN_PAYMENT_AMOUNT) {
+        throw new BadRequestException('쿠폰을 쓰면 결제 금액이 너무 작아져요. 다른 쿠폰을 골라 주세요.');
+      }
       const order = {
         id: orderId,
         orderNumber,
@@ -117,11 +147,16 @@ export class RoundOrderCreateService {
         orderItems: roundItems,
         acquisition: dto.acquisition ?? null,
         totalAmount,
+        ...(coupon
+          ? { discountAmount, couponId: coupon.userCouponId, couponName: coupon.name }
+          : {}),
+        ...(gift ? { gift } : {}),
         createdAt: now,
         updatedAt: now,
       };
       tx.set(orderCounter.ref, { seq: orderCounter.seq, updatedAt: now }, { merge: true });
       tx.set(orderRef, order);
+      coupon?.markUsed(tx, orderId);
       await this.retention.saveRecord({
         id: `${orderId}:contract`,
         purpose: 'LEGAL_ORDER',
@@ -159,6 +194,43 @@ export class RoundOrderCreateService {
     if (new Set(itemIds).size !== itemIds.length) {
       throw new BadRequestException('같은 회차 상품을 중복으로 주문할 수 없습니다.');
     }
+  }
+
+  /**
+   * 옵션을 고른 회차 상품의 상품 문서를 읽어 옵션 금액을 계산하고, 쿠폰 판정용 주문 금액을 구한다.
+   * 회차 상품·상품 문서는 예약 단계에서 다시 읽지만, 같은 트랜잭션 안이라 값이 같다.
+   */
+  private async readOptionPricing(tx: any, storeId: string, dto: CreateOrderDto) {
+    const byRoundItemId = new Map<string, ReturnType<typeof resolveSelectedOptions>>();
+    const needsItems = Boolean(dto.couponId) || dto.roundItems!.some((item) => item.optionChoiceIds?.length);
+    if (!needsItems) return { byRoundItemId, orderAmount: 0 };
+    const itemSnaps = await Promise.all(
+      dto.roundItems!.map((item) => tx.get(this.firestore.doc(`saleRoundItems/${item.roundItemId}`))),
+    );
+    const roundItems = itemSnaps.map((snap: any) => {
+      const data = snap.exists ? (snap.data() as Record<string, any>) : null;
+      if (!data || data['storeId'] !== storeId || data['roundId'] !== dto.roundId) {
+        throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
+      }
+      return data;
+    });
+    const productSnaps = await Promise.all(
+      roundItems.map((item, index) =>
+        dto.roundItems![index].optionChoiceIds?.length
+          ? tx.get(this.firestore.doc(`products/${item['productId']}`))
+          : Promise.resolve(null),
+      ),
+    );
+    let orderAmount = 0;
+    dto.roundItems!.forEach((input, index) => {
+      const productSnap = productSnaps[index] as { exists: boolean; data: () => any } | null;
+      const option = productSnap
+        ? resolveSelectedOptions(productSnap.exists ? productSnap.data()?.['options'] : undefined, input.optionChoiceIds)
+        : { selected: [], priceDelta: 0 };
+      byRoundItemId.set(input.roundItemId, option);
+      orderAmount += (Number(roundItems[index]['roundPrice']) + option.priceDelta) * input.quantity;
+    });
+    return { byRoundItemId, orderAmount };
   }
 
   private response(order: Record<string, any>) {
@@ -203,6 +275,9 @@ export class RoundOrderCreateService {
           acquisition: dto.acquisition ?? null,
           // 요청사항이 없으면 필드 자체를 빼서 기존 결제 시도의 해시를 유지한다.
           ...(requestNote !== null ? { requestNote } : {}),
+          // 쿠폰·선물도 쓸 때만 넣어 기존 해시를 바꾸지 않는다.
+          ...(dto.couponId ? { couponId: dto.couponId } : {}),
+          ...(dto.gift ? { gift: dto.gift } : {}),
         }),
       )
       .digest('hex');
