@@ -1,5 +1,6 @@
 'use client';
 
+import type { Product } from '@greenhub/shared';
 import { Box, Button, Container, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -16,8 +17,10 @@ export default function WishlistPage() {
 function WishlistContent() {
   const wishlist = useProductToggleSet('wishlist', true);
   const { products, loading } = useProducts();
-  const byId = new Map(products.map((p) => [p.id, p]));
-  const items = [...wishlist.ids].map((id) => byId.get(id)).filter((p) => p !== undefined);
+  const byId = new Map<string, Product>(products.map((p: Product) => [p.id, p]));
+  const items = [...wishlist.ids]
+    .map((id) => byId.get(id))
+    .filter((p): p is Product => p !== undefined);
 
   return (
     <Container size="sm" px="md" pt="lg" pb={100}>

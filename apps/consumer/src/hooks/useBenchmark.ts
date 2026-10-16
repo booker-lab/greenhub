@@ -246,8 +246,12 @@ export function useStamps(storeId: string | null, enabled: boolean) {
 }
 
 /** 장바구니·결제의 자동 최대 할인(coupons): 쓸 수 있는 내 쿠폰 중 할인액이 가장 큰 것. */
-export function useBestCoupon(storeId: string | null, orderAmount: number, enabled: boolean) {
+export function useBestCoupon(
+  storeId: string | null,
+  orderAmount: number,
+  enabled: boolean,
+): { coupon: UserCoupon; discount: number } | null {
   const { available } = useCoupons(storeId, enabled);
   if (!enabled || orderAmount <= 0) return null;
-  return pickBestCoupon(available, orderAmount);
+  return pickBestCoupon<UserCoupon>(available, orderAmount);
 }

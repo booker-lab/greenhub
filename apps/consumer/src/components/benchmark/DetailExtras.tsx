@@ -126,7 +126,7 @@ export function ReviewsSection({ productId }: { productId: string }) {
 
 function Recommendations({ product, round }: { product: Product; round: PublicSaleRound }) {
   const { products } = useProducts();
-  const byId = new Map(products.map((p) => [p.id, p]));
+  const byId = new Map<string, Product>(products.map((p: Product) => [p.id, p]));
   const sameCare = (other: Product | undefined) =>
     !!other &&
     ((product.light && other.light === product.light) ||

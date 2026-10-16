@@ -479,11 +479,7 @@ function OrderSuccessContent() {
 
                 {isFeatureOn('order-success-guide') ? (
                   <OrderSuccessGuide
-                    requestedDeliveryDate={
-                      typeof (order as Record<string, unknown> | null)?.['requestedDeliveryDate'] === 'string'
-                        ? ((order as Record<string, unknown>)['requestedDeliveryDate'] as string)
-                        : null
-                    }
+                    requestedDeliveryDate={order?.requestedDeliveryDate ?? null}
                   />
                 ) : (
                 <Paper
