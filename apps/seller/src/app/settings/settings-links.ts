@@ -1,4 +1,4 @@
-import type { SalesMode } from '@greenhub/shared';
+import type { FeatureKey, SalesMode } from '@greenhub/shared';
 
 export const SELLER_OPERATION_SETTINGS = [
   {
@@ -29,4 +29,26 @@ const LEGACY_ONLY_SECTIONS = new Set(['배송', '거점']);
 export function operationSettingsFor(salesMode: SalesMode | undefined) {
   if (salesMode === 'legacy') return SELLER_OPERATION_SETTINGS;
   return SELLER_OPERATION_SETTINGS.filter((section) => !LEGACY_ONLY_SECTIONS.has(section.label));
+}
+
+/** 팔도감 벤치마킹 비교 기능 메뉴. 켜진 기능의 메뉴만 보여 준다(운영 기본값은 모두 꺼짐). */
+const BENCHMARK_LINKS: ReadonlyArray<{ href: string; label: string; features: FeatureKey[] }> = [
+  {
+    href: '/settings/store-profile',
+    label: '가게 소개·품질 보장',
+    features: ['seller-store', 'quality-guarantee', 'demand-signals'],
+  },
+  { href: '/coupons', label: '쿠폰', features: ['coupons'] },
+  {
+    href: '/reactions',
+    label: '고객 반응 (후기·알림 신청·찾는 상품)',
+    features: ['reviews', 'restock-alert', 'product-request'],
+  },
+];
+
+export function benchmarkSettingsLinks(isOn: (key: FeatureKey) => boolean) {
+  return BENCHMARK_LINKS.filter((link) => link.features.some(isOn)).map(({ href, label }) => ({
+    href,
+    label,
+  }));
 }
