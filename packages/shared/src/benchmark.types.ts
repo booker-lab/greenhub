@@ -170,6 +170,8 @@ export type UserCouponStatus = 'available' | 'used'
 export interface UserCoupon extends CouponSpec {
   id: string
   storeId: string
+  /** 받은 쿠폰의 원본 쿠폰 id. 스탬프 쿠폰은 null */
+  couponId: string | null
   source: 'claim' | 'stamp'
   status: UserCouponStatus
   usedOrderId: string | null

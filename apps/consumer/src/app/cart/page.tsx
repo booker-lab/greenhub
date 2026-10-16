@@ -77,7 +77,12 @@ function buildRoundCartValidationRequest(value: RoundCartItem | RoundCartItem[])
     },
     deliveryPhone: '00000000',
     roundId: item.roundId,
-    roundItems: items.map(({ roundItemId, quantity }) => ({ roundItemId, quantity })),
+    roundItems: items.map(({ roundItemId, quantity, optionChoiceIds }) => ({
+      roundItemId,
+      quantity,
+      // 옵션 시트(벤치마킹 비교 기능)로 고른 옵션. 없으면 기존 요청과 같다.
+      ...(optionChoiceIds?.length ? { optionChoiceIds } : {}),
+    })),
   };
 }
 function resolveRoundCartValidation(
@@ -107,7 +112,8 @@ function resolveRoundCartValidation(
   ) {
     return { status: 'unavailable', reason: '서버 검증 응답을 확인할 수 없습니다.' };
   }
-  if (serverItem.unitPrice !== item.roundPrice) {
+  // 옵션을 고른 상품은 옵션 금액을 더한 가격(price)과 비교한다. 옵션이 없으면 price === roundPrice.
+  if (serverItem.unitPrice !== item.price) {
     return {
       status: 'price_changed',
       currentUnitPrice: serverItem.unitPrice,

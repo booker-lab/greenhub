@@ -339,6 +339,7 @@ export class CouponsService {
     return {
       id,
       storeId: data['storeId'],
+      couponId: typeof data['couponId'] === 'string' ? data['couponId'] : null,
       source: data['source'] === 'stamp' ? 'stamp' : 'claim',
       ...specOf(data),
       status: data['status'] === 'used' ? 'used' : 'available',

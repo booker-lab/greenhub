@@ -3,8 +3,11 @@
 import { useState, useMemo } from 'react';
 import { Container, Box, TextInput, ActionIcon, Text, SimpleGrid, Stack, Button } from '@mantine/core';
 import { Search } from 'lucide-react';
+import ProductRequestBox from '@/components/benchmark/ProductRequestBox';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
+import { matchesPlantQuery } from '@/lib/benchmark-format';
+import { isFeatureOn } from '@/lib/features';
 
 export default function SearchPage() {
   const [query, setQuery] = useState('');
@@ -13,6 +16,12 @@ export default function SearchPage() {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
+    // 식물 이름 검색(plant-search): 별칭·학명과 상품 별칭(aliases)까지 본다.
+    if (isFeatureOn('plant-search')) {
+      return products.filter((p) =>
+        matchesPlantQuery(q, [p.name, p.description, p.content?.headline, ...(p.aliases ?? [])]),
+      );
+    }
     return products.filter(
       (p) => p.name.toLowerCase().includes(q) || p.description?.toLowerCase().includes(q),
     );
@@ -38,7 +47,7 @@ export default function SearchPage() {
         <TextInput
           value={query}
           onChange={(e) => setQuery(e.target.value)}
-          placeholder="상품명을 검색하세요"
+          placeholder={isFeatureOn('plant-search') ? '꽃 이름·별칭으로 찾기' : '상품명을 검색하세요'}
           autoFocus
           radius="lg"
           leftSection={<Search size={16} />}
@@ -101,6 +110,9 @@ export default function SearchPage() {
               </Text>
               에 대한 검색 결과가 없습니다.
             </Text>
+            {isFeatureOn('product-request') && (
+              <ProductRequestBox key={query} storeId={products[0]?.storeId ?? null} initialText={query.trim()} />
+            )}
           </Stack>
         )}
 

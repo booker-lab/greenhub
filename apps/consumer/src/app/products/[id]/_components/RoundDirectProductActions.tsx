@@ -1,7 +1,7 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { ActionIcon, Box, Divider, Group, Stack, Text } from '@mantine/core';
+import { ActionIcon, Box, Button, Divider, Group, Stack, Text } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { useState } from 'react';
@@ -11,6 +11,9 @@ import { type RoundCartItem, useCart } from '@/hooks/useCart';
 import { useStore } from '@/hooks/useProducts';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import { cartAddFailureMessage } from '@/lib/round-quick-add';
+import OptionSheet, { type OptionSelection } from '@/components/benchmark/OptionSheet';
+import { useProductToggleSet } from '@/hooks/useBenchmark';
+import { isFeatureOn } from '@/lib/features';
 import type { RoundProductActionContext } from './ProductActions';
 
 interface Props {
@@ -25,25 +28,45 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
   const { store } = useStore(product.storeId ?? null);
   const [quantity, setQuantity] = useState(1);
   const [cartError, setCartError] = useState<string | null>(null);
+  // 옵션 시트(option-sheet): 옵션이 있는 상품은 담기·바로 구매 전에 시트에서 옵션을 고른다.
+  const optionGroups = isFeatureOn('option-sheet') ? (product.options ?? []) : [];
+  const [sheetIntent, setSheetIntent] = useState<'cart' | 'buy' | null>(null);
+  const wishlist = useProductToggleSet('wishlist', isFeatureOn('wishlist'));
+  const restock = useProductToggleSet('restock', isFeatureOn('restock-alert'));
   const totalAmount = roundProduct.item.roundPrice * quantity;
   const notOpenYet = roundProduct.state === 'current' && roundProduct.round?.status === 'SCHEDULED';
   const soldOut = roundProduct.state === 'sold_out';
 
-  function handleAddToCart() {
+  function optionFields(selection?: OptionSelection) {
+    return selection
+      ? {
+          price: roundProduct.item.roundPrice + selection.priceDelta,
+          optionChoiceIds: selection.choiceIds,
+          optionLabel: selection.label,
+          optionPriceDelta: selection.priceDelta,
+        }
+      : { price: roundProduct.item.roundPrice };
+  }
+
+  function handleAddToCart(selection?: OptionSelection, chosenQuantity = quantity) {
     if (!roundProduct.isPurchasable) return;
+    if (optionGroups.length > 0 && !selection) {
+      setSheetIntent('cart');
+      return;
+    }
 
     const result = addItem({
       productId: product.id,
       name: product.name,
-      price: roundProduct.item.roundPrice,
       image: product.images?.[0] ?? '',
       saleType: 'normal',
       deliveryMethod: 'direct',
       storeId: product.storeId,
-      quantity,
+      quantity: chosenQuantity,
       roundId: roundProduct.item.roundId,
       roundItemId: roundProduct.item.id,
       roundPrice: roundProduct.item.roundPrice,
+      ...optionFields(selection),
     });
     if (!result.ok) {
       setCartError(cartAddFailureMessage(result.reason));
@@ -53,15 +76,19 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
     router.push('/cart');
   }
 
-  function handleBuyNow() {
+  function handleBuyNow(selection?: OptionSelection, chosenQuantity = quantity) {
     if (!roundProduct.isPurchasable) return;
+    if (optionGroups.length > 0 && !selection) {
+      setSheetIntent('buy');
+      return;
+    }
 
     const checkoutItem: RoundCartItem = {
       productId: product.id,
       name: product.name,
-      price: roundProduct.item.roundPrice,
+      ...optionFields(selection),
       image: product.images?.[0] ?? '',
-      quantity,
+      quantity: chosenQuantity,
       saleType: 'normal',
       deliveryMethod: 'direct',
       storeId: product.storeId,
@@ -178,10 +205,58 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
         </Box>
       )}
 
+      {(isFeatureOn('wishlist') || (isFeatureOn('restock-alert') && !roundProduct.isPurchasable)) && (
+        <Group gap={8} mt="lg" wrap="nowrap">
+          {isFeatureOn('wishlist') && (
+            <Button
+              variant={wishlist.ids.has(product.id) ? 'filled' : 'outline'}
+              radius="xl"
+              flex={1}
+              aria-pressed={wishlist.ids.has(product.id)}
+              onClick={() => void wishlist.toggle(product.id)}
+            >
+              {wishlist.ids.has(product.id) ? '찜했어요' : '찜하기'}
+            </Button>
+          )}
+          {isFeatureOn('restock-alert') && !roundProduct.isPurchasable && (
+            <Button
+              variant={restock.ids.has(product.id) ? 'filled' : 'outline'}
+              radius="xl"
+              flex={2}
+              aria-pressed={restock.ids.has(product.id)}
+              onClick={() => void restock.toggle(product.id)}
+            >
+              {restock.ids.has(product.id) ? '다음 회차 알림 신청함' : '다음 회차에 다시 보고 싶어요'}
+            </Button>
+          )}
+        </Group>
+      )}
+      {isFeatureOn('restock-alert') && !roundProduct.isPurchasable && (
+        <Text mt={6} size="sm" c="var(--color-text-secondary)">
+          신청 수는 판매자가 다음 회차 상품을 고를 때 참고해요. 알림 문자는 아직 보내지 않아요.
+        </Text>
+      )}
+
       {cartError && (
         <Text role="alert" mt="md" c="red" size="sm">
           {cartError}
         </Text>
+      )}
+
+      {optionGroups.length > 0 && (
+        <OptionSheet
+          opened={sheetIntent !== null}
+          onClose={() => setSheetIntent(null)}
+          groups={optionGroups}
+          basePrice={roundProduct.item.roundPrice}
+          initialQuantity={quantity}
+          intent={sheetIntent ?? 'cart'}
+          onConfirm={(selection, chosenQuantity, intent) => {
+            setSheetIntent(null);
+            if (intent === 'cart') handleAddToCart(selection, chosenQuantity);
+            else handleBuyNow(selection, chosenQuantity);
+          }}
+        />
       )}
 
       <ProductCTABar
@@ -193,8 +268,8 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
         canAddToCart={roundProduct.isPurchasable}
         addToCartLabel="장바구니"
         buyNowLabel={roundProduct.isPurchasable ? '바로 구매' : undefined}
-        onAddToCart={handleAddToCart}
-        onBuyNow={handleBuyNow}
+        onAddToCart={() => handleAddToCart()}
+        onBuyNow={() => handleBuyNow()}
       />
     </Stack>
   );
