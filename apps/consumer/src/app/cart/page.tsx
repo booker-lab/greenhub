@@ -424,13 +424,16 @@ export default function CartPage() {
                   같은 회차 상품을 서버에서 확인해 한 번에 결제합니다.
                 </Text>
               </Box>
-              <Badge
-                color={isChecking ? 'gray' : 'brand'}
-                variant={isChecking ? 'light' : 'filled'}
-                style={{ flexShrink: 0 }}
-              >
-                {isChecking ? '확인 중' : '확인 완료'}
-              </Badge>
+              {/* 비로그인 장바구니(guest-cart)는 서버 확인을 하지 않으므로 확인 표시를 두지 않는다. */}
+              {!isGuest && (
+                <Badge
+                  color={isChecking ? 'gray' : 'brand'}
+                  variant={isChecking ? 'light' : 'filled'}
+                  style={{ flexShrink: 0 }}
+                >
+                  {isChecking ? '확인 중' : '확인 완료'}
+                </Badge>
+              )}
             </Group>
           </Box>
           {cartRound && (
@@ -734,24 +737,27 @@ export default function CartPage() {
           문제 있는 상품을 다시 선택하면 결제할 수 있어요.
         </Text>
       )}
-      <Button
-        fullWidth
-        size="lg"
-        color="brand"
-        radius="xl"
-        disabled={
-          !isGuest && (checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues)
-        }
-        onClick={handleCheckout}
-      >
-        {isGuest
-          ? '로그인하고 주문하기'
-          : isChecking
-          ? '구매 가능 여부 확인 중'
-          : isRoundCart
-            ? `${checkoutCount}개 상품 한 번에 결제`
-            : '결제하기'}
-      </Button>
+      {isGuest ? (
+        // 비로그인 장바구니(guest-cart): 로그인한 뒤 같은 장바구니로 돌아온다.
+        <Button fullWidth size="lg" color="brand" radius="xl" onClick={handleCheckout}>
+          로그인하고 주문하기
+        </Button>
+      ) : (
+        <Button
+          fullWidth
+          size="lg"
+          color="brand"
+          radius="xl"
+          disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
+          onClick={handleCheckout}
+        >
+          {isChecking
+            ? '구매 가능 여부 확인 중'
+            : isRoundCart
+              ? `${checkoutCount}개 상품 한 번에 결제`
+              : '결제하기'}
+        </Button>
+      )}
     </Container>
   );
 }

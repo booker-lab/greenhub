@@ -193,6 +193,16 @@ export default function DetailExtras({
   const care = isFeatureOn('care-guide') ? product.careGuide : undefined;
   const producer = isFeatureOn('seller-store') && store && (store.intro || store.story) ? store : null;
 
+  // 켜진 기능이 하나도 없으면 빈 칸(아래 여백)도 남기지 않는다. 운영 기본값(모두 꺼짐)에서 화면이 지금과 같아야 한다.
+  const anyOn =
+    isFeatureOn('quality-guarantee') ||
+    isFeatureOn('size-info') ||
+    isFeatureOn('care-guide') ||
+    isFeatureOn('seller-store') ||
+    isFeatureOn('reviews') ||
+    isFeatureOn('recommendations');
+  if (!anyOn) return null;
+
   return (
     <Stack gap="lg" px="md" pb="lg">
       {guarantee && (

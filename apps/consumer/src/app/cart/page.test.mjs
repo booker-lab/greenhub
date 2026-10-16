@@ -49,6 +49,16 @@ const requireForTest = (specifier) => {
       getCartValidationError: () => null,
     };
   }
+  // 팔도감 벤치마킹 비교 기능(기능 토글이 꺼진 운영 기본값으로 검사한다).
+  if (specifier === '@/lib/features') {
+    return { isFeatureOn: () => false };
+  }
+  if (specifier === '@/hooks/useBenchmark') {
+    return { useBestCoupon: () => null };
+  }
+  if (specifier === '@/components/benchmark/CartExtras') {
+    return {};
+  }
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }

@@ -67,7 +67,11 @@ export default function OptionSheet({
       size="auto"
       radius="lg"
       title="옵션 고르기"
-      styles={{ title: { fontWeight: 800, fontSize: 'var(--font-size-lg)' } }}
+      styles={{
+        title: { fontWeight: 800, fontSize: 'var(--font-size-lg)' },
+        // 아래에서 올라오는 시트는 내용 높이만큼만 차지한다(최대 화면의 85%).
+        content: { flex: '0 0 auto', height: 'auto', maxHeight: '85dvh' },
+      }}
     >
       <Stack gap="lg" pb="md">
         {groups.map((group) => (
