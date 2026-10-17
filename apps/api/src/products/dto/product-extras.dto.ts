@@ -26,8 +26,6 @@ import {
 // 팔도감 벤치마킹 비교용 상품 추가 정보(packages/shared benchmark.types.ts ProductExtras).
 // 모두 선택이며, 없으면 기존 상품과 같다.
 
-/** create-product.dto.ts PRODUCT_MONEY_MAX와 같은 값(순환 import를 피해 따로 둔다). */
-const LIST_PRICE_MAX = 100_000_000;
 const OPTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
 const CARE_TEXT_MAX = 120;
 const ALIAS_MAX_LENGTH = 30;
@@ -115,12 +113,6 @@ export class ProductOptionGroupDto {
 
 /** Create/UpdateProductDto가 상속한다. */
 export class ProductExtrasDto {
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(LIST_PRICE_MAX)
-  listPrice?: number;
-
   @IsOptional()
   @ValidateNested()
   @Type(() => ProductSizeDto)

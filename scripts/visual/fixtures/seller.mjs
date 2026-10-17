@@ -502,7 +502,6 @@ export const firestoreSeed = {
     'product-1': storeProduct('동양란 빅립', 30000, {
       createdAt: '2026-09-03T01:00:00.000Z',
       // 비교 기능 상품 추가 정보(소비자 fixture와 같은 값)
-      listPrice: 36000,
       size: { heightCm: 55, widthCm: 40, potDiameterCm: 15, bloomCount: 12 },
       light: 'medium',
       placements: ['living', 'office'],

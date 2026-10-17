@@ -84,6 +84,8 @@ export interface PublicSaleRoundItem {
   displayOrder: number;
   status: SaleRoundItem['status'];
   demand?: { remainingQuantity: number };
+  /** 같은 가게·같은 상품이 직전 마감 회차에서 판 회차 가격. 근거가 없으면 키가 없다(card-discount). */
+  previousRoundPrice?: number;
 }
 
 export type PublicSaleRoundWithItems = PublicSaleRound & {
@@ -178,6 +180,73 @@ export function withDemandSignals(
   };
 }
 
+/**
+ * 지난 회차 대비 가격 비교(card-discount)의 기준 회차 상태.
+ * COMPLETED는 CLOSED에서만 넘어가는 다음 상태라(sale-round-state.contract.ts) 함께 마감 회차로 본다.
+ * 소비자 앱의 "지난 회차"(useSaleRounds pastRounds)와 같은 범위다.
+ */
+const PREVIOUS_ROUND_STATUSES: ReadonlyArray<SaleRound['status']> = ['CLOSED', 'COMPLETED'];
+
+function isoMillis(value: unknown): number | null {
+  if (typeof value !== 'string') return null;
+  const millis = Date.parse(value);
+  return Number.isNaN(millis) ? null : millis;
+}
+
+/**
+ * 직전 마감 회차를 고른다. 회차 순서는 소비자 앱 관례(useSaleRounds sortLatestFirst)와 같이
+ * schedule.orderOpenAt으로 매긴다. 지금 회차보다 주문 시작이 이른 마감 회차 가운데 가장 늦은 것을 고르고,
+ * 시작 시각이 같으면 마감 시각이 늦은 것, 그다음 id 순으로 정해 결과가 흔들리지 않게 한다.
+ * rounds는 실효 상태(applyEffectiveState)를 입힌 같은 가게의 회차여야 한다.
+ */
+export function selectPreviousClosedRound(
+  current: Pick<SaleRound, 'id' | 'storeId' | 'schedule'>,
+  rounds: ReadonlyArray<Pick<SaleRound, 'id' | 'storeId' | 'status' | 'schedule'>>,
+): Pick<SaleRound, 'id' | 'storeId' | 'status' | 'schedule'> | null {
+  const currentOpen = isoMillis(current.schedule?.orderOpenAt);
+  if (currentOpen === null) return null;
+  const candidates = rounds.flatMap((round) => {
+    if (round.id === current.id || round.storeId !== current.storeId) return [];
+    if (!PREVIOUS_ROUND_STATUSES.includes(round.status)) return [];
+    const open = isoMillis(round.schedule?.orderOpenAt);
+    if (open === null || open >= currentOpen) return [];
+    return [{ round, open, close: isoMillis(round.schedule?.orderCloseAt) ?? 0 }];
+  });
+  candidates.sort(
+    (a, b) => b.open - a.open || b.close - a.close || (a.round.id < b.round.id ? 1 : -1),
+  );
+  return candidates[0]?.round ?? null;
+}
+
+/**
+ * 직전 마감 회차의 상품별 판매가를 지금 회차 상품에 previousRoundPrice로 붙인다.
+ * 직전 회차에서도 공개된(HIDDEN이 아닌) 같은 가게의 상품만 근거로 쓰고,
+ * 같은 상품이 여럿이면 진열 순서가 앞선 것을 쓴다.
+ * 근거가 없는 상품은 키를 만들지 않는다.
+ */
+export function withPreviousRoundPrices(
+  round: PublicSaleRoundWithItems,
+  previousItems: ReadonlyArray<SaleRoundItem>,
+): PublicSaleRoundWithItems {
+  const priceByProduct = new Map<string, number>();
+  const ordered = [...previousItems].sort((a, b) => a.displayOrder - b.displayOrder);
+  for (const item of ordered) {
+    if (item.storeId !== round.storeId || !isPubliclyVisibleRoundItem(item)) continue;
+    if (priceByProduct.has(item.productId)) continue;
+    const price = item.roundPrice;
+    if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) continue;
+    priceByProduct.set(item.productId, price);
+  }
+  if (priceByProduct.size === 0) return round;
+  return {
+    ...round,
+    items: round.items.map((item) => {
+      const previousRoundPrice = priceByProduct.get(item.productId);
+      return previousRoundPrice === undefined ? item : { ...item, previousRoundPrice };
+    }),
+  };
+}
+
 function toPublicRoundItems(items: SaleRoundItem[]): PublicSaleRoundItem[] {
   // Preserve displayOrder sorting done by getRoundItems; HIDDEN filter first,
   // then explicit projection (same visibility predicate as before).
@@ -259,7 +328,31 @@ export class SaleRoundsService {
     const round = this.normalizeRound(this.applyEffectiveState(stored, nowMillis));
     const items = await this.getRoundItems(roundId, storeId);
     const projected = { ...toPublicSaleRound(round), items: toPublicRoundItems(items) };
-    return showDemandSignals ? withDemandSignals(projected, round, items) : projected;
+    const withDemand = showDemandSignals ? withDemandSignals(projected, round, items) : projected;
+    if (withDemand.items.length === 0) return withDemand;
+    const previousItems = await this.getPreviousClosedRoundItems(round, nowMillis);
+    return withPreviousRoundPrices(withDemand, previousItems);
+  }
+  /**
+   * 지난 회차 대비 가격(card-discount)의 근거. 공개 회차 상세 한 번에 가게 회차 목록 1회 +
+   * 직전 마감 회차의 상품 1회만 읽는다(직전 회차가 없으면 상품은 읽지 않는다).
+   * 회차 목록 조회는 listPublicRounds와 같은 조건(storeId + status in)이라 새 색인이 필요 없다.
+   * READ-ONLY: 실효 상태는 저장하지 않고 계산만 한다.
+   */
+  private async getPreviousClosedRoundItems(
+    current: SaleRound,
+    nowMillis: number,
+  ): Promise<SaleRoundItem[]> {
+    const snap = await this.firestore
+      .collection('saleRounds')
+      .where('storeId', '==', current.storeId)
+      .where('status', 'in', PUBLIC_SALE_ROUND_STATUSES)
+      .get();
+    const rounds = snap.docs.map((doc: any) =>
+      this.normalizeRound(this.applyEffectiveState(doc.data() as SaleRound, nowMillis)),
+    );
+    const previous = selectPreviousClosedRound(current, rounds);
+    return previous ? this.getRoundItems(previous.id, current.storeId) : [];
   }
   async getPublicRound(storeId: string, roundId: string): Promise<PublicSaleRoundWithItems> {
     const store = await this.assertPublicRoundStore(storeId);
