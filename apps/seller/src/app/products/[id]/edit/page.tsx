@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { LoadingState } from '@/components/StateViews';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { apiPathSegment, readRouteParam } from '@/lib/api-path';
 import type { ProductFormData } from '../../_components/ProductForm';
 import ProductForm from '../../_components/ProductForm';
 
@@ -37,7 +38,8 @@ function toDateStr(value: unknown): string {
 export default function EditProductPage() {
   const params = useParams();
   const router = useRouter();
-  const productId = params.id as string;
+  // 경로 파라미터는 형식을 검사한 원래 ID로 읽는다. 맞지 않으면 요청하지 않고 "찾을 수 없음"을 보여 준다.
+  const productId = readRouteParam(params.id);
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? '';
   const token = session?.user.accessToken ?? '';
@@ -48,9 +50,14 @@ export default function EditProductPage() {
   useEffect(() => {
     if (!storeId || !token || !productId) return;
 
-    fetch(`${getApiBaseUrl()}/stores/${storeId}/products/${productId}/owner`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    // 경로 조각 검증 실패도 요청 없이 아래 catch(찾을 수 없음)로 모인다.
+    Promise.resolve()
+      .then(() =>
+        fetch(
+          `${getApiBaseUrl()}/stores/${apiPathSegment(storeId)}/products/${apiPathSegment(productId)}/owner`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        ),
+      )
       .then(async (res) => {
         if (!res.ok) {
           setNotFound(true);
@@ -97,7 +104,7 @@ export default function EditProductPage() {
       .catch(() => setNotFound(true));
   }, [storeId, token, productId]);
 
-  if (notFound) {
+  if (notFound || !productId) {
     return (
       <Box
         style={{

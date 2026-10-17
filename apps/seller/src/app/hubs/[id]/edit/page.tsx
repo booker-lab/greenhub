@@ -8,6 +8,10 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
+import { apiPathSegment, readRouteParam } from '@/lib/api-path';
+
+const INVALID_HUB_ADDRESS_MESSAGE =
+  '거점 주소가 올바르지 않습니다. 거점 목록에서 다시 선택해 주세요.';
 
 interface Hub {
   id: string;
@@ -46,7 +50,8 @@ export default function EditHubPage() {
   const { data: session } = useSession();
   const params = useParams();
   const router = useRouter();
-  const hubId = params.id as string;
+  // 경로 파라미터는 형식을 검사한 원래 ID로 읽는다. 맞지 않으면 요청하지 않는다.
+  const hubId = readRouteParam(params.id);
 
   const storeId = session?.user.storeId;
   const token = session?.user.accessToken;
@@ -62,11 +67,14 @@ export default function EditHubPage() {
   });
 
   const fetchHub = useCallback(async () => {
-    if (!storeId || !token) return;
+    if (!storeId || !token || !hubId) return;
     setLoading(true);
     setError('');
     try {
-      const hub = await apiJson<Hub>(`/stores/${storeId}/hubs/${hubId}`, token);
+      const hub = await apiJson<Hub>(
+        `/stores/${apiPathSegment(storeId)}/hubs/${apiPathSegment(hubId)}`,
+        token,
+      );
       setForm({
         name: hub.name,
         address: hub.address,
@@ -90,14 +98,14 @@ export default function EditHubPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!storeId || !token) return;
+    if (!storeId || !token || !hubId) return;
 
     setError('');
     setSaving(true);
     try {
       // addressDetail·operatingHours는 폼 값을 그대로 전송 — 빈 문자열로
       // 비우면 updateHub가 해당 필드를 ''로 갱신한다(undefined면 미변경).
-      await apiJson(`/stores/${storeId}/hubs/${hubId}`, token, {
+      await apiJson(`/stores/${apiPathSegment(storeId)}/hubs/${apiPathSegment(hubId)}`, token, {
         method: 'PATCH',
         body: JSON.stringify({
           name: form.name,
@@ -106,7 +114,7 @@ export default function EditHubPage() {
           operatingHours: form.operatingHours,
         }),
       });
-      router.push(`/hubs/${hubId}`);
+      router.push(`/hubs/${encodeURIComponent(hubId)}`);
     } catch (err) {
       setError(err instanceof ApiError ? err.message : '저장에 실패했습니다');
       setSaving(false);
@@ -118,7 +126,11 @@ export default function EditHubPage() {
       <PageHeader title="거점 수정" onBack={() => router.back()} />
 
       <Container size="sm" px="md" py="md">
-        {loading ? (
+        {!hubId ? (
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+            {INVALID_HUB_ADDRESS_MESSAGE}
+          </Text>
+        ) : loading ? (
           <LoadingState />
         ) : (
           <Paper radius="lg" shadow="sm" p="lg">

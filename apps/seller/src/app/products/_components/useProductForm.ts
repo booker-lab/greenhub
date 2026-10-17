@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
+import { apiPathSegment } from '@/lib/api-path';
 import type { ConflictWarning } from './AIPreviewPanel';
 import {
   defaultForm,
@@ -200,8 +201,8 @@ export function useProductForm({
     try {
       const url =
         mode === 'create'
-          ? `/stores/${storeId}/products`
-          : `/stores/${storeId}/products/${productId}`;
+          ? `/stores/${apiPathSegment(storeId)}/products`
+          : `/stores/${apiPathSegment(storeId)}/products/${apiPathSegment(productId)}`;
       await apiJson(url, token, {
         method: mode === 'create' ? 'POST' : 'PATCH',
         body: JSON.stringify(body),
