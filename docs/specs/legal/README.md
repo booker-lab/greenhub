@@ -13,6 +13,7 @@
   - `apps/consumer/src/app/terms/page.tsx`
 - 공개 사업자 정보 정본: `apps/consumer/src/lib/publicBusinessInfo.ts`
 - 공개 경로: `/privacy`, `/terms`
+- 변경 초안(미시행): 선물하기 개인정보처리방침 변경 `docs/specs/legal/privacy-gift-amendment-draft.md`
 
 이 문서는 RC-D 실제 사용 정합성의 현재 사실을 관리한다. 공개 페이지의 시행일과 이전 버전은
 실제 계약·처리 흐름이 바뀔 때 함께 갱신한다. 이 문서와 공개 페이지의 일치는 production 배포,
