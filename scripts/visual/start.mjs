@@ -90,7 +90,9 @@ const logs = {
 };
 for (const f of Object.values(logs)) fs.writeFileSync(f, '');
 
-const { user, routes, firestoreSeed, firebaseClaims } = await import(`./fixtures/${appName}.mjs`);
+const { user, routes, scenarioRoutes, firestoreSeed, firebaseClaims } = await import(
+  `./fixtures/${appName}.mjs`
+);
 
 // fixture에 firestoreSeed가 있으면(셀러 상품·준비처럼 Firestore를 직접 구독하는 화면) Auth·Firestore 에뮬레이터를
 // 띄우고 데이터를 넣는다. 앱 계약상 에뮬레이터 주소가 127.0.0.1로 고정이라 --phone에서는 쓰지 않는다.
@@ -114,7 +116,7 @@ const mock = startMockApi({
   port: app.apiPort,
   hosts: [...new Set(['127.0.0.1', host])],
   allowedOrigins: [appUrl, `http://localhost:${app.port}`],
-  fixtures: { user, routes },
+  fixtures: { user, routes, scenarioRoutes },
   logFile: logs.api,
   firebaseToken: useEmulator
     ? () =>

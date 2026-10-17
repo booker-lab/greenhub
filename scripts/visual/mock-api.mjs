@@ -65,7 +65,9 @@ export function startMockApi({
       req.on('end', () => resolve(data));
     });
 
-  const { user, routes } = fixtures;
+  const { user, routes, scenarioRoutes = {} } = fixtures;
+  // 화면별 상황(scenario): 캡처 스크립트가 /__scenario로 고르면 그 경로들을 기본 경로 앞에 끼운다.
+  let scenario = [];
 
   async function handler(req, res) {
     const url = new URL(req.url, `http://localhost:${port}`);
@@ -87,6 +89,13 @@ export function startMockApi({
     if (p === '/__log/reset' && m === 'POST') {
       log.length = 0;
       return send(req, res, 200, { ok: true });
+    }
+    if (p === '/__scenario' && m === 'POST') {
+      const name = url.searchParams.get('name') || '';
+      if (name && !scenarioRoutes[name])
+        return send(req, res, 400, { message: `없는 상황: ${name}` });
+      scenario = name ? scenarioRoutes[name] : [];
+      return send(req, res, 200, { ok: true, scenario: name || null });
     }
 
     const body = m === 'GET' || m === 'HEAD' ? '' : await readBody(req);
@@ -122,7 +131,7 @@ export function startMockApi({
 
     // ── fixture 경로 표에서 같은 메서드의 첫 일치 ──
     const isWrite = m !== 'GET' && m !== 'HEAD';
-    for (const [method, pattern, handle] of routes) {
+    for (const [method, pattern, handle] of [...scenario, ...routes]) {
       if (method !== m) continue;
       const match = p.match(pattern);
       if (!match) continue;
