@@ -746,7 +746,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </Stack>
       </Paper>
 
-      {/* 벤치마킹 비교 기능(옵션·쿠폰·선물 표시, 후기, 관리 안내, 다시 주문) */}
+      {/* 벤치마킹 비교 기능(옵션·선물 표시, 후기, 관리 안내, 다시 주문) */}
       <OrderDetailExtras
         orderId={detail.id}
         storeId={detail.storeId}
