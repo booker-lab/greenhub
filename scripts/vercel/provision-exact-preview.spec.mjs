@@ -14,12 +14,12 @@
  * - provisioning bypass scoped to preview-exact/* (no leak to preview/main)
  * - mismatched githubCommitSha FAILs, non-READY never passes
  * - Driver single-scope exact binding via canonical PREVIEW_APPS mapping
- * - workflow contract: driver in input/preflight/ref validation
+ * - Git ref push workflow(provision-exact-preview.yml)가 제거된 상태 유지
  */
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -405,21 +405,13 @@ test('driver exact binding uses canonical driver project identity', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 8. Workflow contract: driver in input/preflight/ref validation
+// 8. Git ref push workflow 제거
 // ---------------------------------------------------------------------------
 
-test('workflow contract includes driver scope without weakening push guards', () => {
+// ref push로는 Vercel Preview가 만들어지지 않는다(앱 vercel.json이 Git 배포를 끈다, 42C 확인).
+// exact Preview는 Vercel API(gitSource.ref=preview-exact/<scope>/<sha>)로 만들고, 이 모듈은 그 도구가
+// 쓰는 검증 함수만 제공한다. contents:write로 ref를 push하던 workflow는 지웠다.
+test('preview-exact ref를 push하던 workflow는 남아 있지 않다', () => {
   const workflowPath = path.join(REPO_ROOT, '.github', 'workflows', 'provision-exact-preview.yml');
-  const workflow = readFileSync(workflowPath, 'utf8');
-  // workflow_dispatch app choice includes driver.
-  assert.match(workflow, /- driver/);
-  assert.match(workflow, /consumer\|seller\|driver\|both/);
-  // dedicated provisioning ref validation includes driver.
-  assert.match(workflow, /preview-exact\/\(consumer\|seller\|driver\|both\)/);
-  // push target stays scoped to preview-exact/<scope>/<sha>.
-  assert.match(workflow, /preview-exact\/\$APP\/\$EXACT_SHA/);
-  // main/preview push and force/history guards stay intact.
-  assert.match(workflow, /main\/preview ref push/);
-  assert.match(workflow, /--driver-deployment-id/);
-  assert.match(workflow, /--only=driver/);
+  assert.equal(existsSync(workflowPath), false);
 });

@@ -2,13 +2,14 @@ name: Ops lock account
 
 # 운영 사용자 계정 1개를 이메일로 찾아 상태를 보거나(check) 잠근다(lock). 저장소 owner가 main에서 수동 실행할 때만
 # production Environment의 Firebase 서비스 계정 키를 쓴다. 스크립트: scripts/ops/lock-account.mjs
-#   - check: 존재 여부·role·매장 연결·생성/최근 로그인 시각·잠금 여부·활성 refresh 세션 수(판매자는 매장 주문·상품 수)만 출력.
-#     같은 이메일로 찾은 계정이 둘 이상이면 계정마다 fingerprint(sha256(uid) 앞 10자리)와 찾은 방법을 함께 출력한다.
-#     계정마다 uid 앞 8자를, 매장이 연결돼 있으면 매장 이름·storeId/ownerId 앞 8자·owner 여부와 같은 매장의 사용자 목록
-#     (최대 20개, uid 앞 8자·fingerprint·role·providers·정지 여부)을 함께 출력한다(읽기 전용).
+# 저장소가 공개라 Actions 로그도 공개다. 이 workflow는 스크립트 기본 출력(개수·참거짓·role 같은 범주 값)만 남긴다.
+#   - check: 찾은 계정 수, 계정마다 찾은 방법·role·정지/잠금 여부·매장 연결 여부·활성 refresh 세션 수(판매자는 매장 주문·상품 수),
+#     매장이 연결돼 있으면 매장 문서 존재·owner 여부·같은 매장 사용자 수(읽기 전용).
+#     fingerprint·마스킹 이메일·uid/storeId 앞 8자·매장 이름·사용자 목록·시각은 로컬에서 `--detail`로 실행할 때만 나온다
+#     (스크립트가 Actions·CI에서 `--detail`을 거부한다).
 #   - lock: 비밀번호 해시를 무작위 값의 해시로 교체, 정지, 세션 폐기(refreshTokens 삭제·sessionsRevokedAt·activeSessionIds),
 #     Firebase Auth 사용자가 있으면 refresh token 폐기와 disabled, auditLogs 기록. 사용자·매장·주문·상품은 지우지 않는다.
-#     계정이 둘 이상이면 target_fingerprint가 필수이고 일치하는 계정 하나만 잠근다.
+#     계정이 둘 이상이면 target_fingerprint(로컬 check --detail로 확인)가 필수이고 일치하는 계정 하나만 잠근다.
 # 이메일은 로그에 마스킹해서만 남긴다. 입력 원문은 step env에 두지 않고 이벤트 payload에서 읽는다.
 
 on:
@@ -38,7 +39,7 @@ on:
           - any
         default: seller
       target_fingerprint:
-        description: 선택. check가 출력한 fingerprint(10자리 hex). 같은 이메일 계정이 둘 이상이면 lock에 필수
+        description: 선택. 로컬 check --detail이 출력한 fingerprint(10자리 hex). 같은 이메일 계정이 둘 이상이면 lock에 필수
         required: false
         type: string
         default: ''

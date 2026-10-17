@@ -2255,6 +2255,18 @@ test('PROTECTED — protected repository paths are recognised regardless of decl
     '.codex/hooks.json',
     'docs/goals/pilot.goal.json',
     './.GitHub/workflows/x.yml',
+    // 운영·E2E 비밀값으로 실행되는 스크립트와 그 의존성 정의
+    'scripts/release/production-deploy.mjs',
+    'scripts/release/prod-config-check.spec.mjs',
+    'scripts/ops/lock-account.mjs',
+    'scripts/ops/new-tool.mjs',
+    'scripts/check-round-direct-e2e-readiness.mjs',
+    'scripts/round-direct-e2e-fixtures.mjs',
+    'scripts/round-direct-e2e-fixtures-cli.mjs',
+    'scripts/wait-preview-deploy.mjs',
+    'scripts/package.json',
+    'pnpm-lock.yaml',
+    'scripts\\release\\post-deploy-smoke.mjs',
   ]) {
     assert.equal(isProtectedPath(path), true, `${path} must be protected`);
   }
@@ -2266,6 +2278,11 @@ test('PROTECTED — protected repository paths are recognised regardless of decl
     'apps/api/src/environment.ts',
     'docs/AGENTS-guide.md',
     'scripts',
+    'scripts/releases/notes.md',
+    'scripts/operations.mjs',
+    'scripts/round-direct-e2e-fixtures.spec.mjs',
+    'apps/api/package.json',
+    'apps/api/pnpm-lock.yaml.bak',
   ]) {
     assert.equal(isProtectedPath(path), false, `${path} must not be protected`);
   }

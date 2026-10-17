@@ -1,8 +1,9 @@
 name: Production deploy
 
 # 운영 배포. 사용자가 채팅에서 "<SHA> 운영 배포해"라고 명시적으로 승인한 뒤에만 실행한다(AGENTS.md 승인 경계).
-# 이 저장소 plan은 Environment required reviewer를 쓸 수 없으므로, 승인은 dispatch 입력(approval)과
-# 실행자=저장소 owner 확인으로 강제한다(e2e-round-direct.yml과 같은 방식).
+# 이 파일은 승인을 dispatch 입력(approval)·실행자=저장소 owner·실행 ref=main 확인으로 강제한다
+# (e2e-round-direct.yml과 같은 방식). 저장소가 공개라 production Environment에 required reviewer를 둘 수 있지만,
+# 그 설정은 GitHub 저장소 설정이라 이 파일이 대신하지 않는다.
 #
 # 순서(docs/memory.md 운영 배포 순서와 같다):
 #   같은 SHA 원격 회차 E2E 통과 확인 → Firestore 인덱스(READY까지 대기) → API(Railway, /health commit 확인)
@@ -61,24 +62,29 @@ jobs:
       contents: read
       actions: read
     steps:
-      - name: dispatch·실행자·승인·SHA 형식 확인
+      - name: dispatch·실행자·ref·승인·SHA 형식 확인
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
           APPROVAL: ${{ inputs.approval }}
           SHA: ${{ inputs.sha }}
           SCOPE: ${{ inputs.scope }}
         run: |
           set -euo pipefail
-          printf 'sha=%s scope=%s actor=%s\n' "$SHA" "$SCOPE" "$ACTOR"
+          printf 'sha=%s scope=%s actor=%s ref=%s\n' "$SHA" "$SCOPE" "$ACTOR" "$REF"
           if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
             echo 'workflow_dispatch로만 운영 배포를 실행합니다.' >&2; exit 1
           fi
           if [[ "$ACTOR" != "$REPOSITORY_OWNER" || "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
             echo '실행자가 저장소 owner가 아니어서 차단합니다.' >&2; exit 1
+          fi
+          # 다른 브랜치에서 실행하면 그 브랜치의 workflow·배포 도구가 쓰인다. main에서만 받는다.
+          if [[ "$REF" != 'refs/heads/main' ]]; then
+            echo 'main에서만 운영 배포를 실행합니다.' >&2; exit 1
           fi
           if [[ "$APPROVAL" != 'PRODUCTION_DEPLOY_APPROVED' ]]; then
             echo '운영 배포 승인이 없어 차단합니다.' >&2; exit 1
@@ -129,9 +135,11 @@ jobs:
       SCOPE: ${{ inputs.scope }}
       FIREBASE_PROJECT: green-e4fe3
     steps:
+      # 배포 스크립트는 실행 ref와 상관없이 main에서 가져온다(gate도 main 실행만 통과시킨다).
       - name: 배포 도구 checkout(main)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
           persist-credentials: false
 
       - name: 배포 대상 SHA checkout(규칙·인덱스 원본)
