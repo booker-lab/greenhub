@@ -4,7 +4,8 @@ import type { Metadata } from 'next';
 export const SITE_URL = 'https://greenlove.co.kr';
 export const SITE_NAME = '그린러브';
 export const SITE_SHARE_DESCRIPTION = '월요일 경매 당일 매입, 화요일 오전 이천 문 앞 배송';
-export const DEFAULT_SHARE_IMAGE = '/icons/icon-512x512.png';
+// 카카오톡·당근 큰 미리보기 비율(1.91:1)에 맞춘 그림. 앱 아이콘(정사각)은 잘려 보인다.
+export const DEFAULT_SHARE_IMAGE = '/og-default.png';
 
 const MAX_DESCRIPTION_LENGTH = 80;
 
