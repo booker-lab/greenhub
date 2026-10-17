@@ -133,6 +133,12 @@ export default function BusinessInfoFooter() {
           <dt style={termStyle}>사업자등록번호</dt>
           <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.registrationNumber}</dd>
         </div>
+        {PUBLIC_BUSINESS_INFO.mailOrderRegistrationNumber ? (
+          <div style={itemStyle}>
+            <dt style={termStyle}>통신판매업 신고번호</dt>
+            <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.mailOrderRegistrationNumber}</dd>
+          </div>
+        ) : null}
         <div style={itemStyle}>
           <dt style={termStyle}>주소</dt>
           <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.address}</dd>
