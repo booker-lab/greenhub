@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test'
 import { AUTH_STATE_PATH } from './_helpers/auth'
 import { genericPreviewFixture } from './_helpers/generic-preview'
+import { E2E_API_BASE_MISSING_REASON, resolveE2EApiBase } from './_helpers/target-url'
 
 const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr'
-const API = process.env['API_BASE'] ?? 'https://api-production-13e7.up.railway.app'
+// 운영 기본값 없음 — API_BASE가 없으면 API 묶음만 건너뛰고, 운영 API를 지정하면 파일 로드 단계에서 중단한다.
+const API = resolveE2EApiBase()
 const fixture = genericPreviewFixture()
 // 가게가 없으면 처음 등록, 있으면(설정에서 들어온 경우) 프로필 수정 제목이 보인다.
 const ONBOARDING_HEADING = /사업자 (정보 등록|프로필 수정)/
@@ -92,6 +94,7 @@ test.describe('셀러 온보딩 — 인증', () => {
 // ── B1: API GET /stores/:storeId ──────────────────────────────────────────────
 
 test.describe('B1 — GET /stores/:storeId API', () => {
+  test.skip(!API, E2E_API_BASE_MISSING_REASON)
   test.skip(skipAuth, '환경변수 TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 필요')
 
   let accessToken: string
