@@ -9,17 +9,6 @@ export function discountRate(listPrice: number | undefined, price: number): numb
   return rate >= 1 ? rate : null;
 }
 
-/** 카드 한 줄 크기 요약. 예: "높이 60cm · 화분 15cm · 꽃 18송이". 값이 없으면 null. */
-export function sizeSummary(size: ProductSize | undefined): string | null {
-  if (!size) return null;
-  const parts: string[] = [];
-  if (size.heightCm) parts.push(`높이 ${size.heightCm}cm`);
-  if (size.potDiameterCm) parts.push(`화분 ${size.potDiameterCm}cm`);
-  if (size.bloomCount) parts.push(`꽃 ${size.bloomCount}송이`);
-  if (parts.length === 0 && size.widthCm) parts.push(`폭 ${size.widthCm}cm`);
-  return parts.length ? parts.join(' · ') : null;
-}
-
 /** 상세 크기 표 행. */
 export function sizeRows(size: ProductSize | undefined): Array<[string, string]> {
   if (!size) return [];

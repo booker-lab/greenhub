@@ -376,12 +376,9 @@ export default function MyPageClient() {
           내 정보
         </Title>
         <Stack gap="xs">
-          {/* 벤치마킹 비교 기능: 찜(wishlist)·쿠폰(coupons) */}
+          {/* 벤치마킹 비교 기능: 이번 회차 찜(wishlist) */}
           {isFeatureOn('wishlist') && (
-            <MenuLink label="찜한 꽃" onClick={() => router.push('/mypage/wishlist')} />
-          )}
-          {isFeatureOn('coupons') && (
-            <MenuLink label="내 쿠폰" onClick={() => router.push('/mypage/coupons')} />
+            <MenuLink label="이번 회차 찜" onClick={() => router.push('/mypage/wishlist')} />
           )}
           <UnstyledButton
             onClick={() => router.push('/mypage/notifications')}

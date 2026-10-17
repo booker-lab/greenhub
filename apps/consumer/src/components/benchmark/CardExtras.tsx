@@ -4,16 +4,18 @@ import type { Product, ReviewSummary, SaleRoundItem, StorePublicProfile } from '
 import { Heart } from 'lucide-react';
 import { createContext, type ReactNode, useContext } from 'react';
 import { isFeatureOn } from '@/lib/features';
-import { discountRate, sizeSummary } from '@/lib/benchmark-format';
+import { discountRate } from '@/lib/benchmark-format';
 
-// 회차 상품 카드에 붙는 벤치마킹 비교 기능(할인율·별점·크기·판매자·보장·남은 수량·찜).
+// 회차 상품 카드에 붙는 벤치마킹 비교 기능(할인율·별점·판매자·보장·남은 수량·이번 회차 찜).
+// 크기 정보는 카드에 두지 않고 상품 상세에서만 보여 준다.
 // 홈·상품 탭이 Provider로 상품 원본과 통계를 넘기고, 카드는 기능 토글이 켜진 것만 그린다.
 
 export interface CardContextValue {
   productsById: ReadonlyMap<string, Product>;
   reviewStats: Record<string, ReviewSummary>;
   storeProfile: StorePublicProfile | null;
-  wishlist?: { ids: ReadonlySet<string>; toggle: (productId: string) => void };
+  /** 이번 회차 찜. roundId 회차의 카드에만 버튼을 단다. */
+  wishlist?: { roundId: string; ids: ReadonlySet<string>; toggle: (productId: string) => void };
 }
 
 const CardContext = createContext<CardContextValue | null>(null);
@@ -61,18 +63,17 @@ export function CardDiscount({ item }: { item: SaleRoundItem }) {
   );
 }
 
-/** 가격 아래 별점·크기·보장·남은 수량. */
+/** 가격 아래 별점·보장·남은 수량. */
 export function CardMeta({ item, isPast }: { item: SaleRoundItem; isPast: boolean }) {
   const ctx = useBenchmarkCard();
   const product = ctx?.productsById.get(item.productId);
   const review = ctx?.reviewStats[item.productId];
-  const size = isFeatureOn('size-info') ? sizeSummary(product?.size) : null;
   const showRating = isFeatureOn('reviews') && review && review.count > 0;
   const guaranteed =
     isFeatureOn('quality-guarantee') && product?.guaranteed && ctx?.storeProfile?.guarantee?.enabled;
   const remaining = isFeatureOn('demand-signals') && !isPast ? item.demand?.remainingQuantity : undefined;
   const lowStock = typeof remaining === 'number' && remaining > 0 && remaining <= 5;
-  if (!size && !showRating && !guaranteed && !lowStock) return null;
+  if (!showRating && !guaranteed && !lowStock) return null;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
       {showRating && (
@@ -81,7 +82,6 @@ export function CardMeta({ item, isPast }: { item: SaleRoundItem; isPast: boolea
           <span style={{ fontWeight: 400 }}>({review.count})</span>
         </span>
       )}
-      {size && <span style={{ ...smallText, fontWeight: 400 }}>{size}</span>}
       {(guaranteed || lowStock) && (
         <span style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
           {guaranteed && (
@@ -108,10 +108,10 @@ const tagStyle = {
   padding: '2px 7px',
 } as const;
 
-/** 사진 왼쪽 위 찜 버튼(wishlist). 링크 밖 형제로 겹쳐 둔다. */
-export function CardWishButton({ productId, name }: { productId: string; name: string }) {
+/** 사진 왼쪽 위 이번 회차 찜 버튼(wishlist). 링크 밖 형제로 겹쳐 둔다. 지난 회차 카드에는 없다. */
+export function CardWishButton({ productId, roundId, name }: { productId: string; roundId: string; name: string }) {
   const ctx = useBenchmarkCard();
-  if (!isFeatureOn('wishlist') || !ctx?.wishlist) return null;
+  if (!isFeatureOn('wishlist') || !ctx?.wishlist || ctx.wishlist.roundId !== roundId) return null;
   const on = ctx.wishlist.ids.has(productId);
   return (
     <button

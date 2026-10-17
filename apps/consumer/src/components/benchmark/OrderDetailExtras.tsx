@@ -13,7 +13,7 @@ import { isFeatureOn } from '@/lib/features';
 import { roundItemCartInput } from '@/lib/round-quick-add';
 import type { OrderBenchmarkExtras } from '@/app/mypage/orders/[id]/_detail';
 
-// MY 주문 상세의 벤치마킹 비교 기능: 옵션·쿠폰·선물 표시, 후기 쓰기, 다시 주문하기, 관리 안내.
+// MY 주문 상세의 벤치마킹 비교 기능: 옵션·선물 표시, 후기 쓰기, 다시 주문하기, 관리 안내.
 
 const REVIEWABLE = new Set(['DELIVERED', 'PICKED_UP', 'REVIEWED']);
 
@@ -137,7 +137,7 @@ export default function OrderDetailExtras({
 
   const nameOf = (id: string) => items.find((item) => item.id === id)?.productName ?? '상품';
   const optionLines = isFeatureOn('option-sheet') ? extras.items.filter((item) => item.optionLabel) : [];
-  const showMoney = extras.discountAmount > 0 || (isFeatureOn('gift') && extras.gift);
+  const showGift = isFeatureOn('gift') && extras.gift;
   const reorderable =
     reorderOn && currentRound?.status === 'OPEN'
       ? extras.items
@@ -152,7 +152,7 @@ export default function OrderDetailExtras({
 
   if (
     optionLines.length === 0 &&
-    !showMoney &&
+    !showGift &&
     !reviewsOn &&
     !reorderOn &&
     !(isFeatureOn('care-guide') && REVIEWABLE.has(status))
@@ -162,7 +162,7 @@ export default function OrderDetailExtras({
 
   return (
     <Stack gap="md" mb="lg">
-      {(optionLines.length > 0 || showMoney) && (
+      {(optionLines.length > 0 || showGift) && (
         <Paper p="md" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
           <Stack gap={4}>
             {optionLines.map((item) => (
@@ -170,17 +170,16 @@ export default function OrderDetailExtras({
                 {nameOf(item.id)} · {item.optionLabel}
               </Text>
             ))}
-            {extras.discountAmount > 0 && (
-              <Text size="sm" c="var(--color-primary-dark)" fw={700}>
-                쿠폰 할인{extras.couponName ? ` (${extras.couponName})` : ''} −
-                {extras.discountAmount.toLocaleString('ko-KR')}원
-              </Text>
-            )}
-            {isFeatureOn('gift') && extras.gift && (
-              <Text size="sm">
-                선물 · {extras.gift.senderName} → {extras.gift.recipientName}
-                {extras.gift.cardMessage ? ` · "${extras.gift.cardMessage}"` : ''}
-              </Text>
+            {showGift && extras.gift && (
+              <Stack gap={2} mt={optionLines.length > 0 ? 6 : 0}>
+                <Text size="sm" fw={700}>
+                  선물
+                </Text>
+                <Text size="sm">받는 분 · {extras.gift.recipientName}</Text>
+                {extras.gift.recipientPhone && <Text size="sm">받는 분 연락처 · {extras.gift.recipientPhone}</Text>}
+                <Text size="sm">보내는 분 · {extras.gift.senderName}</Text>
+                {extras.gift.cardMessage && <Text size="sm">카드 문구 · "{extras.gift.cardMessage}"</Text>}
+              </Stack>
             )}
           </Stack>
         </Paper>

@@ -38,7 +38,6 @@ const BENCHMARK_LINKS: ReadonlyArray<{ href: string; label: string; features: Fe
     label: '가게 소개·품질 보장',
     features: ['seller-store', 'quality-guarantee', 'demand-signals'],
   },
-  { href: '/coupons', label: '쿠폰', features: ['coupons'] },
   {
     href: '/reactions',
     label: '고객 반응 (후기·알림 신청·찾는 상품)',

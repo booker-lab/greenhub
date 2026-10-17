@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { CouponsModule } from '../coupons/coupons.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { OperationIssuesModule } from '../operations/operation-issues.module';
 import { PaymentsModule } from '../payments/payments.module';
@@ -20,7 +19,6 @@ import { DriverOrderScopeService } from './driver-order-scope.service';
 
 @Module({
   imports: [
-    CouponsModule,
     NotificationsModule,
     PaymentsModule,
     SettlementsModule,

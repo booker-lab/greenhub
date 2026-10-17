@@ -29,13 +29,6 @@ export const PLACEMENT_LABELS: Record<Placement, string> = {
   store: '매장·개업',
 }
 
-export const CURATIONS = ['gift', 'monthly'] as const
-export type Curation = (typeof CURATIONS)[number]
-export const CURATION_LABELS: Record<Curation, string> = {
-  gift: '선물용',
-  monthly: '이달의 꽃',
-}
-
 /** 관리 안내 카드. 각 항목은 한두 문장. */
 export interface CareGuide {
   watering: string
@@ -49,6 +42,8 @@ export interface ProductOptionChoice {
   label: string
   /** 회차 가격에 더하는 금액(원). 0 이상. */
   priceDelta: number
+  /** 고객이 문구를 직접 써야 하는 선택지(예: 스티커 라벨·3D 토퍼) */
+  needsText?: boolean
 }
 
 /** 옵션 묶음. 묶음마다 선택지 하나를 고른다. */
@@ -61,6 +56,8 @@ export interface ProductOptionGroup {
 export const PRODUCT_OPTION_GROUP_MAX = 3
 export const PRODUCT_OPTION_CHOICE_MAX = 6
 export const PRODUCT_OPTION_PRICE_DELTA_MAX = 200_000
+/** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
+export const OPTION_TEXT_MAX_LENGTH = 20
 
 export interface ProductExtras {
   /** 정상가. 회차 가격보다 높을 때만 할인율을 보여준다. */
@@ -68,8 +65,6 @@ export interface ProductExtras {
   size?: ProductSize
   light?: LightLevel
   placements?: Placement[]
-  petSafe?: boolean
-  curations?: Curation[]
   careGuide?: CareGuide
   options?: ProductOptionGroup[]
   /** 품질 보장 대상 */
@@ -85,6 +80,8 @@ export interface SelectedProductOption {
   choiceId: string
   choiceLabel: string
   priceDelta: number
+  /** 문구가 필요한 선택지에 고객이 쓴 문구 */
+  text?: string
 }
 
 // ── 판매자 공개 소개 ───────────────────────────────────────────
@@ -140,99 +137,14 @@ export interface CreateReviewRequest {
   text: string
 }
 
-// ── 쿠폰·스탬프 ───────────────────────────────────────────────
-
-export type CouponDiscountType = 'amount' | 'percent'
-
-export interface CouponSpec {
-  name: string
-  discountType: CouponDiscountType
-  /** amount면 원, percent면 % */
-  value: number
-  /** percent 쿠폰의 최대 할인(원) */
-  maxDiscount?: number | null
-  minOrderAmount: number
-  endsAt: string | null
-}
-
-export interface StoreCoupon extends CouponSpec {
-  id: string
-  storeId: string
-  active: boolean
-  claimable: boolean
-  startsAt: string | null
-  createdAt?: string
-  updatedAt?: string
-}
-
-export type UserCouponStatus = 'available' | 'used'
-
-export interface UserCoupon extends CouponSpec {
-  id: string
-  storeId: string
-  /** 받은 쿠폰의 원본 쿠폰 id. 스탬프 쿠폰은 null */
-  couponId: string | null
-  source: 'claim' | 'stamp'
-  status: UserCouponStatus
-  usedOrderId: string | null
-  claimedAt: string
-}
-
-export interface PurchaseStampStage {
-  /** 이 단계에 도달하는 배송 완료 주문 수 */
-  at: number
-  reward: CouponSpec
-  /** 받은 쿠폰 id. 아직 안 받았으면 null */
-  claimedCouponId: string | null
-}
-
-export interface PurchaseStampsResponse {
-  count: number
-  stages: PurchaseStampStage[]
-}
-
-/** 쿠폰 할인액. 최소 주문 금액에 못 미치면 0. 할인액은 주문 금액을 넘지 않는다. */
-export function couponDiscountAmount(spec: CouponSpec, orderAmount: number, now = Date.now()): number {
-  if (!Number.isFinite(orderAmount) || orderAmount <= 0) return 0
-  if (orderAmount < spec.minOrderAmount) return 0
-  if (spec.endsAt && Date.parse(spec.endsAt) < now) return 0
-  let discount =
-    spec.discountType === 'amount'
-      ? spec.value
-      : Math.floor((orderAmount * spec.value) / 100 / 10) * 10
-  if (spec.discountType === 'percent' && spec.maxDiscount) discount = Math.min(discount, spec.maxDiscount)
-  return Math.max(0, Math.min(discount, orderAmount))
-}
-
-/** 쓸 수 있는 쿠폰 중 할인액이 가장 큰 것. 같으면 먼저 끝나는 쿠폰. */
-export function pickBestCoupon<T extends CouponSpec & { status?: UserCouponStatus }>(
-  coupons: T[],
-  orderAmount: number,
-  now = Date.now(),
-): { coupon: T; discount: number } | null {
-  let best: { coupon: T; discount: number } | null = null
-  for (const coupon of coupons) {
-    if (coupon.status && coupon.status !== 'available') continue
-    const discount = couponDiscountAmount(coupon, orderAmount, now)
-    if (discount <= 0) continue
-    if (
-      !best ||
-      discount > best.discount ||
-      (discount === best.discount &&
-        Date.parse(coupon.endsAt ?? '9999-12-31') < Date.parse(best.coupon.endsAt ?? '9999-12-31'))
-    ) {
-      best = { coupon, discount }
-    }
-  }
-  return best
-}
-
 // ── 선물·요청·문의 ────────────────────────────────────────────
 
 export const GIFT_MESSAGE_MAX_LENGTH = 100
 
 export interface GiftInfo {
   recipientName: string
+  /** 받는 분 휴대폰(배송 연락용) */
+  recipientPhone: string
   senderName: string
   cardMessage: string
 }

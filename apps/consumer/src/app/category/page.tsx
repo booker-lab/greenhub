@@ -23,7 +23,6 @@ import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
 import { CardDiscount, CardMeta, CardSellerLine, BenchmarkCardProvider } from '@/components/benchmark/CardExtras';
-import HomeDiscovery, { useDiscovery } from '@/components/benchmark/HomeDiscovery';
 import ProductRequestBox from '@/components/benchmark/ProductRequestBox';
 import { useHomeCardContext } from '@/components/HomeProductList';
 import { isFeatureOn } from '@/lib/features';
@@ -205,8 +204,7 @@ function RoundDirectCategory({
   status,
   refetch,
 }: ReturnType<typeof useSaleRounds> & { products: Product[] }) {
-  const card = useHomeCardContext(currentRound?.storeId ?? null, products);
-  const discovery = useDiscovery(card.productsById, card.reviewStats);
+  const card = useHomeCardContext(currentRound?.storeId ?? null, products, currentRound?.id ?? null);
   if (loading) {
     return (
       <Stack gap="md" aria-label="판매 회차 불러오는 중">
@@ -239,14 +237,12 @@ function RoundDirectCategory({
   }
 
   const productById = new Map(products.map((product) => [product.id, product]));
-  const allCurrentItems = currentRound ? visibleOrchidItems(currentRound, productById) : [];
-  // 분류 칩·큐레이션 탭(벤치마킹 비교 기능)으로 거른 현재 회차 상품
-  const currentItems = discovery.filtering ? discovery.apply(allCurrentItems) : allCurrentItems;
+  const currentItems = currentRound ? visibleOrchidItems(currentRound, productById) : [];
   const pastRoundItems = pastRounds
     .map((round) => ({ round, items: visibleOrchidItems(round, productById) }))
     .filter(({ items }) => items.length > 0);
 
-  if (allCurrentItems.length === 0 && pastRoundItems.length === 0) {
+  if (currentItems.length === 0 && pastRoundItems.length === 0) {
     return (
       <Stack align="center" py={64}>
         <Text size="xl">🌱</Text>
@@ -297,9 +293,6 @@ function RoundDirectCategory({
         >
           {currentRound?.status === 'SCHEDULED' ? '판매 예정 회차' : '이번 주 회차'}
         </Title>
-        {currentRound && allCurrentItems.length > 0 && (
-          <HomeDiscovery state={discovery.state} onChange={discovery.setState} />
-        )}
         {currentRound && currentItems.length > 0 ? (
           <Stack gap="sm">
             <Text size="sm" fw={700} c="var(--color-text-secondary)">
@@ -314,7 +307,7 @@ function RoundDirectCategory({
           </Stack>
         ) : (
           <Text size="sm" c="var(--color-text-disabled)" py="md">
-            {allCurrentItems.length > 0 ? '조건에 맞는 상품이 없어요.' : '현재 회차에 판매 중인 호접란이 없습니다.'}
+            현재 회차에 판매 중인 호접란이 없습니다.
           </Text>
         )}
       </Box>

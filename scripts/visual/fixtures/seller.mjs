@@ -56,28 +56,37 @@ const SELLER_ORDERS = [
     ['만천홍', 25000, 2],
   ]),
   roundOrder('order-round-single', '20261001-000002', 'ACCEPTED', [['v3', 45000, 1]]),
-  // 비교 기능(옵션·쿠폰·선물)이 담긴 회차 주문 — 포장할 때 옵션과 선물 카드를 봐야 한다.
-  roundOrder('order-round-gift', '20261002-000007', 'ACCEPTED', [['빅립', 38000, 1]], {
+  // 비교 기능(옵션·토퍼 문구·선물)이 담긴 회차 주문 — 포장할 때 옵션·문구와 선물 카드를 봐야 한다.
+  roundOrder('order-round-gift', '20261002-000007', 'ACCEPTED', [['빅립', 43000, 1]], {
     orderItems: [
       {
         roundItemId: 'round-open-item-1',
         productId: 'product-1',
         productName: '동양란 빅립',
         productImageUrl: null,
-        unitPrice: 38000,
+        unitPrice: 43000,
         quantity: 1,
-        subtotalAmount: 38000,
+        subtotalAmount: 43000,
         selectedOptions: [
           { groupId: 'g1', groupName: '화분', choiceId: 'c2', choiceLabel: '백자 도자기 화분', priceDelta: 8000 },
-          { groupId: 'g2', groupName: '리본', choiceId: 'c3', choiceLabel: '리본 없음', priceDelta: 0 },
+          {
+            groupId: 'g2',
+            groupName: '문구',
+            choiceId: 'c5',
+            choiceLabel: '3D 토퍼',
+            priceDelta: 5000,
+            text: '엄마 생신 축하해요',
+          },
         ],
       },
     ],
-    totalAmount: 35000,
-    discountAmount: 3000,
-    couponId: 'consumer-0001_coupon-first',
-    couponName: '첫 주문 3,000원',
-    gift: { recipientName: '박엄마', senderName: '김그린', cardMessage: '늘 고마워요. 건강하세요!' },
+    totalAmount: 43000,
+    gift: {
+      recipientName: '박엄마',
+      recipientPhone: '010-2345-6789',
+      senderName: '김그린',
+      cardMessage: '늘 고마워요. 건강하세요!',
+    },
   }),
   roundOrder('order-round-preparing', '20261001-000003', 'PREPARING', [['빅립', 30000, 2]]),
   roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]]),
@@ -497,8 +506,6 @@ export const firestoreSeed = {
       size: { heightCm: 55, widthCm: 40, potDiameterCm: 15, bloomCount: 12 },
       light: 'medium',
       placements: ['living', 'office'],
-      petSafe: true,
-      curations: ['monthly'],
       careGuide: {
         watering: '겉흙이 마르면 2주에 한 번, 화분 밑으로 물이 흐를 만큼 줘요.',
         light: '직사광선을 피한 밝은 창가가 좋아요.',
@@ -512,6 +519,15 @@ export const firestoreSeed = {
           choices: [
             { id: 'c1', label: '기본 플라스틱 화분', priceDelta: 0 },
             { id: 'c2', label: '백자 도자기 화분', priceDelta: 8000 },
+          ],
+        },
+        {
+          id: 'g2',
+          name: '문구',
+          choices: [
+            { id: 'c3', label: '문구 없음', priceDelta: 0 },
+            { id: 'c4', label: '스티커 라벨', priceDelta: 2000, needsText: true },
+            { id: 'c5', label: '3D 토퍼', priceDelta: 5000, needsText: true },
           ],
         },
       ],
@@ -576,42 +592,13 @@ const HUBS = [
   },
 ];
 
-// ── 팔도감 벤치마킹 비교 기능(쿠폰·고객 반응·입점 문의) ──
-const STORE_COUPONS = [
-  {
-    id: 'coupon-first',
-    storeId: STORE_ID,
-    name: '첫 주문 3,000원',
-    discountType: 'amount',
-    value: 3000,
-    maxDiscount: null,
-    minOrderAmount: 30000,
-    startsAt: null,
-    endsAt: '2026-10-31T14:59:59.000Z',
-    active: true,
-    claimable: true,
-  },
-  {
-    id: 'coupon-october',
-    storeId: STORE_ID,
-    name: '10월 10% 할인',
-    discountType: 'percent',
-    value: 10,
-    maxDiscount: 5000,
-    minOrderAmount: 50000,
-    startsAt: null,
-    endsAt: '2026-10-31T14:59:59.000Z',
-    active: false,
-    claimable: true,
-  },
-];
+// ── 팔도감 벤치마킹 비교 기능(고객 반응·입점 문의) ──
 const STORE_REVIEWS = [
   ['review-1', 'product-1', 5, '꽃대가 사진보다 튼실하게 왔어요. 화요일 아침에 정확히 문 앞에 있었습니다.', '이*연', '2026-09-30T02:00:00.000Z'],
   ['review-2', 'product-1', 5, '도자기 화분으로 골랐는데 선물하기 좋네요.', '정*호', '2026-09-23T05:00:00.000Z'],
   ['review-3', 'product-2', 4, '반쯤 핀 상태로 와서 일주일 뒤에 활짝 폈어요.', '최*은', '2026-09-16T08:00:00.000Z'],
 ].map(([id, productId, rating, text, authorName, createdAt]) => ({ id, productId, rating, text, authorName, createdAt }));
 const benchmarkRoutes = [
-  ['GET', /^\/stores\/[^/]+\/coupons$/, () => ({ body: STORE_COUPONS })],
   ['GET', /^\/stores\/[^/]+\/reviews$/, () => ({ body: STORE_REVIEWS })],
   [
     'GET',
@@ -761,16 +748,16 @@ export const routes = [
         logoUrl: null,
         salesMode: 'round_direct',
         // 비교 기능: 가게 소개·품질 보장·남은 수량 공개
-        intro: '이천에서 30년 난을 키워 온 농원',
+        intro: '매주 경매에서 직접 골라 보내는 이천 꽃집',
         story: '매주 경매에서 상태 좋은 동양란만 골라 들여옵니다.',
         region: '경기 이천',
         sinceYear: 1996,
         guarantee: {
           enabled: true,
-          title: '받은 날 상태 보장',
+          title: '꽃 상태 보장',
           terms: [
-            '받은 날 꽃이 시들었거나 화분이 깨졌다면 사진과 함께 알려 주세요.',
-            '확인 후 다음 회차에 다시 보내 드리거나 환불해 드려요.',
+            '받은 날 사진과 함께 알려 주시면 가장 빨리 다시 보내 드려요.',
+            '꽃이 시들었거나 화분이 깨졌다면 다음 회차에 다시 보내 드리거나 환불해 드려요.',
           ],
         },
         showDemandSignals: true,
@@ -893,7 +880,7 @@ export const benchmarkScreens = [
     group: '판매자',
     title: '설정(고객 관리 메뉴)',
     path: '/settings',
-    features: ['seller-store', 'coupons', 'reviews'],
+    features: ['seller-store', 'reviews'],
   },
   {
     id: 'bm-seller-store-profile',
@@ -909,16 +896,8 @@ export const benchmarkScreens = [
     path: '/products/product-1/edit',
     clicks: ['다음', '다음', '다음', '다음'],
     features: [
-      'card-discount', 'size-info', 'category-chips', 'curation-tabs', 'care-guide', 'option-sheet',
-      'quality-guarantee', 'plant-search',
+      'card-discount', 'size-info', 'care-guide', 'option-sheet', 'quality-guarantee', 'plant-search',
     ],
-  },
-  {
-    id: 'bm-seller-coupons',
-    group: '판매자',
-    title: '쿠폰 관리',
-    path: '/coupons',
-    features: ['coupons'],
   },
   {
     id: 'bm-seller-reviews',
@@ -946,9 +925,9 @@ export const benchmarkScreens = [
   {
     id: 'bm-seller-order-gift',
     group: '판매자',
-    title: '주문 상세 · 옵션·쿠폰·선물',
+    title: '주문 상세 · 옵션 문구·선물',
     path: '/orders/order-round-gift',
-    features: ['option-sheet', 'coupons', 'gift'],
+    features: ['option-sheet', 'gift'],
   },
   {
     id: 'bm-admin-partner',

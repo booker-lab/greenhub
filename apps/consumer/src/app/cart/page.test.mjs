@@ -53,9 +53,6 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/features') {
     return { isFeatureOn: () => false };
   }
-  if (specifier === '@/hooks/useBenchmark') {
-    return { useBestCoupon: () => null };
-  }
   if (specifier === '@/components/benchmark/CartExtras') {
     return {};
   }

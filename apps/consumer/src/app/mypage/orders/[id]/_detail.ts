@@ -339,9 +339,7 @@ export function readOrderDetail(value: unknown, requestedOrderId: string): Order
       return null;
     }
     const itemTotal = items.reduce((sum, item) => sum + item.subtotalAmount, 0);
-    // 쿠폰(벤치마킹 비교 기능)을 쓴 주문은 상품 합계에서 할인액을 뺀 금액이 결제 금액이다.
-    const discount = isMoney(value.discountAmount) ? value.discountAmount : 0;
-    if (!Number.isSafeInteger(itemTotal) || itemTotal - discount !== value.totalAmount) return null;
+    if (!Number.isSafeInteger(itemTotal) || itemTotal !== value.totalAmount) return null;
   }
 
   const deliveryHold = value.deliveryHold == null ? null : readDeliveryHold(value.deliveryHold);
@@ -486,12 +484,10 @@ export function hasAuthoritativeOrderStatus(
   return detail !== null && detail.status === expected;
 }
 
-/** 벤치마킹 비교 기능(후기·다시 주문·옵션·쿠폰·선물)이 주문 상세에서 읽는 값. 기존 상세 계약과 따로 둔다. */
+/** 벤치마킹 비교 기능(후기·다시 주문·옵션·선물)이 주문 상세에서 읽는 값. 기존 상세 계약과 따로 둔다. */
 export interface OrderBenchmarkExtras {
   items: Array<{ id: string; productId: string; roundItemId: string | null; quantity: number; optionLabel: string | null }>;
-  discountAmount: number;
-  couponName: string | null;
-  gift: { recipientName: string; senderName: string; cardMessage: string } | null;
+  gift: { recipientName: string; recipientPhone: string; senderName: string; cardMessage: string } | null;
 }
 
 export function readOrderBenchmarkExtras(value: unknown): OrderBenchmarkExtras {
@@ -504,7 +500,12 @@ export function readOrderBenchmarkExtras(value: unknown): OrderBenchmarkExtras {
         const options = Array.isArray(item.selectedOptions)
           ? item.selectedOptions
               .filter(isRecord)
-              .map((option) => `${String(option.groupName ?? '')}: ${String(option.choiceLabel ?? '')}`)
+              .map(
+                (option) =>
+                  `${String(option.groupName ?? '')}: ${String(option.choiceLabel ?? '')}${
+                    typeof option.text === 'string' && option.text ? ` "${option.text}"` : ''
+                  }`,
+              )
           : [];
         const roundItemId = isSafeIdentifier(item.roundItemId) ? item.roundItemId : null;
         return {
@@ -515,14 +516,13 @@ export function readOrderBenchmarkExtras(value: unknown): OrderBenchmarkExtras {
           optionLabel: options.length > 0 ? options.join(' · ') : null,
         };
       }),
-    discountAmount: isMoney(order.discountAmount) ? order.discountAmount : 0,
-    couponName: typeof order.couponName === 'string' ? order.couponName : null,
     gift:
       isRecord(order.gift) &&
       typeof order.gift.recipientName === 'string' &&
       typeof order.gift.senderName === 'string'
         ? {
             recipientName: order.gift.recipientName,
+            recipientPhone: typeof order.gift.recipientPhone === 'string' ? order.gift.recipientPhone : '',
             senderName: order.gift.senderName,
             cardMessage: typeof order.gift.cardMessage === 'string' ? order.gift.cardMessage : '',
           }

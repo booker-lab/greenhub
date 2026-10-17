@@ -42,11 +42,8 @@ import {
   CardWishButton,
   type CardContextValue,
 } from './benchmark/CardExtras';
-import CouponStrip from './benchmark/CouponStrip';
-import HomeDiscovery, { useDiscovery } from './benchmark/HomeDiscovery';
 import KakaoChannelCta from './benchmark/KakaoChannelCta';
-import StampCard from './benchmark/StampCard';
-import { useProductToggleSet, useReviewStats, useStoreProfile } from '@/hooks/useBenchmark';
+import { useReviewStats, useRoundWishlist, useStoreProfile } from '@/hooks/useBenchmark';
 import { isFeatureOn } from '@/lib/features';
 
 type StoreModeStatus = 'loading' | 'ready' | 'error';
@@ -177,7 +174,7 @@ function RoundProductCard({
           width: '100%',
         }}
       >
-        <CardWishButton productId={item.productId} name={item.productNameSnapshot} />
+        <CardWishButton productId={item.productId} roundId={round.id} name={item.productNameSnapshot} />
       </Box>
       {quickAdd && (
         // 사진과 같은 정사각형 영역 위에 + 버튼을 겹친다(링크 안에 버튼을 넣지 않기 위해 형제로 둔다).
@@ -327,21 +324,17 @@ function RoundItems({
   round,
   isPast = false,
   onQuickAdd,
-  transform,
 }: {
   round: PublicSaleRound;
   isPast?: boolean;
   onQuickAdd?: (item: SaleRoundItem) => void;
-  /** 큐레이션 탭·분류 칩(벤치마킹 비교 기능)으로 거른 목록 */
-  transform?: (items: SaleRoundItem[]) => SaleRoundItem[];
 }) {
-  const visible = visibleItems(round);
-  const items = transform ? transform(visible) : visible;
+  const items = visibleItems(round);
   if (items.length === 0) {
     return (
       <Stack align="center" py={32}>
         <Text size="sm" c="var(--color-text-disabled)">
-          {visible.length > 0 ? '조건에 맞는 상품이 없어요.' : '공개된 회차 상품이 없습니다.'}
+          공개된 회차 상품이 없습니다.
         </Text>
       </Stack>
     );
@@ -383,7 +376,6 @@ function RoundDirectHome({
   card,
 }: ReturnType<typeof useSaleRounds> & { storeId: string | null; card: CardContextValue }) {
   const { addItem } = useCart();
-  const discovery = useDiscovery(card.productsById, card.reviewStats);
   const [toast, setToast] = useState<QuickAddToastState | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
   const handleQuickAdd = useCallback(
@@ -508,16 +500,9 @@ function RoundDirectHome({
             <KakaoChannelCta />
           </Box>
         )}
-        {currentRound && (
-          <HomeDiscovery state={discovery.state} onChange={discovery.setState} />
-        )}
 
         {currentRound ? (
-          <RoundItems
-            round={currentRound}
-            onQuickAdd={handleQuickAdd}
-            transform={discovery.filtering ? discovery.apply : undefined}
-          />
+          <RoundItems round={currentRound} onQuickAdd={handleQuickAdd} />
         ) : (
           <Stack align="center" py={40}>
             <Text size="sm" c="var(--color-text-disabled)">
@@ -528,8 +513,6 @@ function RoundDirectHome({
           </Stack>
         )}
       </Box>
-
-      {isFeatureOn('purchase-stamps') && <StampCard storeId={storeId} />}
 
       {!(isFeatureOn('hide-empty-past') && pastRounds.length === 0) && (
       <>
@@ -701,25 +684,33 @@ function LegacyHomeProductList({
   );
 }
 
-/** 회차 카드의 벤치마킹 비교 기능(별점·할인율·판매자·찜 등)이 쓰는 상품 원본·통계. */
-export function useHomeCardContext(storeId: string | null, products: Product[]): CardContextValue {
+/**
+ * 회차 카드의 벤치마킹 비교 기능(별점·할인율·판매자·찜 등)이 쓰는 상품 원본·통계.
+ * wishRoundId: 이번 회차 찜을 붙일 회차(보통 지금 판매 중이거나 예정된 회차). 다른 회차 카드에는 찜이 없다.
+ */
+export function useHomeCardContext(
+  storeId: string | null,
+  products: Product[],
+  wishRoundId: string | null = null,
+): CardContextValue {
   const productsById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
   const reviewStats = useReviewStats(storeId, isFeatureOn('reviews'));
   const storeProfile = useStoreProfile(
     storeId,
     isFeatureOn('seller-store') || isFeatureOn('quality-guarantee'),
   );
-  const wishlist = useProductToggleSet('wishlist', isFeatureOn('wishlist'));
+  const wishlist = useRoundWishlist(wishRoundId, isFeatureOn('wishlist'));
   return useMemo(
     () => ({
       productsById,
       reviewStats,
       storeProfile,
-      wishlist: isFeatureOn('wishlist')
-        ? { ids: wishlist.ids, toggle: (id: string) => void wishlist.toggle(id) }
-        : undefined,
+      wishlist:
+        isFeatureOn('wishlist') && wishRoundId
+          ? { roundId: wishRoundId, ids: wishlist.ids, toggle: wishlist.toggle }
+          : undefined,
     }),
-    [productsById, reviewStats, storeProfile, wishlist.ids, wishlist.toggle],
+    [productsById, reviewStats, storeProfile, wishRoundId, wishlist.ids, wishlist.toggle],
   );
 }
 
@@ -745,7 +736,11 @@ export default function HomeProductList({ banner }: { banner?: ReactNode }) {
     storeMode.salesMode === 'round_direct' ? storeMode.storeId : null,
   );
   const isRoundDirect = storeMode.status === 'ready' && storeMode.salesMode === 'round_direct';
-  const card = useHomeCardContext(isRoundDirect ? storeMode.storeId : null, products);
+  const card = useHomeCardContext(
+    isRoundDirect ? storeMode.storeId : null,
+    products,
+    saleRounds.currentRound?.id ?? null,
+  );
 
   let content: ReactNode;
   if (storeMode.status === 'loading') {
@@ -785,7 +780,6 @@ export default function HomeProductList({ banner }: { banner?: ReactNode }) {
 
   return (
     <>
-      {isRoundDirect && isFeatureOn('coupons') && <CouponStrip storeId={storeMode.storeId} />}
       {isRoundDirect && saleRounds.currentRound && (
         <RoundCountdownStrip
           status={saleRounds.currentRound.status}

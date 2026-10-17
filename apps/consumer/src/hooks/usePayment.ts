@@ -32,12 +32,9 @@ export type RoundPaymentOrderRequest = Pick<
   Partial<
     Pick<
       CreateOrderRequest,
-      'requestedDeliveryDate' | 'acquisition' | 'requestNote' | 'couponId' | 'gift'
+      'requestedDeliveryDate' | 'acquisition' | 'requestNote' | 'gift'
     >
-  > & {
-    /** 쿠폰(벤치마킹 비교 기능)으로 빠질 금액. 서버 결제 금액과 맞춰 본다. */
-    expectedDiscount?: number;
-  };
+  >;
 
 export type UsePaymentOptions = BasePaymentOptions &
   (
@@ -137,7 +134,7 @@ function prepareRoundOrderRequest(
     throw new Error('같은 회차 상품을 중복으로 결제할 수 없습니다.');
   }
 
-  const itemsAmount = roundItems.reduce((sum, item) => {
+  const expectedAmount = roundItems.reduce((sum, item) => {
     // 옵션을 고른 상품은 옵션 금액을 더한 price, 아니면 price === roundPrice.
     const subtotal = item.price * item.quantity;
     if (!Number.isSafeInteger(subtotal) || subtotal < 0) {
@@ -145,7 +142,6 @@ function prepareRoundOrderRequest(
     }
     return sum + subtotal;
   }, 0);
-  const expectedAmount = itemsAmount - (orderRequest.couponId ? (orderRequest.expectedDiscount ?? 0) : 0);
   if (!Number.isSafeInteger(expectedAmount) || expectedAmount <= 0) {
     throw new Error('회차 주문 금액을 확인할 수 없습니다.');
   }
@@ -163,13 +159,13 @@ function prepareRoundOrderRequest(
         : {}),
       ...(orderRequest.acquisition ? { acquisition: orderRequest.acquisition } : {}),
       ...(orderRequest.requestNote ? { requestNote: orderRequest.requestNote } : {}),
-      ...(orderRequest.couponId ? { couponId: orderRequest.couponId } : {}),
       ...(orderRequest.gift ? { gift: orderRequest.gift } : {}),
       roundId: firstItem.roundId,
       roundItems: roundItems.map((item) => ({
         roundItemId: item.roundItemId,
         quantity: item.quantity,
         ...(item.optionChoiceIds?.length ? { optionChoiceIds: item.optionChoiceIds } : {}),
+        ...(item.optionText ? { optionText: item.optionText } : {}),
       })),
       clientOrderRequestId,
     },

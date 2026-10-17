@@ -200,9 +200,7 @@ function readSuccessOrder(value: unknown, requestedOrderId: string): SuccessOrde
   const items = readRoundOrderItems(order.orderItems);
   if (!items) return null;
   const totalQuantity = items.reduce((sum, item) => sum + item.quantity, 0);
-  // 쿠폰(벤치마킹 비교 기능)을 쓴 주문은 상품 합계에서 할인액을 뺀 금액이 결제 금액이다.
-  const discount = isMoney(order.discountAmount) ? order.discountAmount : 0;
-  const totalAmount = items.reduce((sum, item) => sum + item.subtotalAmount, 0) - discount;
+  const totalAmount = items.reduce((sum, item) => sum + item.subtotalAmount, 0);
   if (
     !Number.isSafeInteger(totalQuantity) ||
     !Number.isSafeInteger(totalAmount) ||

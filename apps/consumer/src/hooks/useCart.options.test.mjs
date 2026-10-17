@@ -61,3 +61,16 @@ test('같은 회차 상품을 다른 옵션으로 다시 담으면 새 옵션으
   assert.equal(second.items[0].price, 38000);
   assert.deepEqual(second.items[0].optionChoiceIds, ['ceramic']);
 });
+
+test('라벨·토퍼 문구를 함께 담고 다시 열어도 그대로 둔다', () => {
+  const result = addCartItem([], {
+    ...withCeramic,
+    optionLabel: '화분: 도자기 화분 · 문구: 3D 토퍼 "개업 축하"',
+    optionText: '개업 축하',
+    quantity: 1,
+  });
+  assert.equal(result.ok, true);
+  const restored = parseCartSnapshot(JSON.stringify(result.items));
+  assert.equal(restored[0].optionText, '개업 축하');
+  assert.equal(addCartItem([], { ...withCeramic, optionText: 42, quantity: 1 }).ok, false);
+});

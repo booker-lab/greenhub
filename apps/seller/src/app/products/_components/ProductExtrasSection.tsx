@@ -1,8 +1,6 @@
 'use client';
 
 import {
-  CURATION_LABELS,
-  CURATIONS,
   LIGHT_LABELS,
   LIGHT_LEVELS,
   PLACEMENT_LABELS,
@@ -47,8 +45,6 @@ export function ProductExtrasSection({
   const on = {
     discount: isFeatureOn('card-discount'),
     size: isFeatureOn('size-info'),
-    chips: isFeatureOn('category-chips'),
-    curation: isFeatureOn('curation-tabs'),
     care: isFeatureOn('care-guide'),
     options: isFeatureOn('option-sheet'),
     guarantee: isFeatureOn('quality-guarantee'),
@@ -79,8 +75,8 @@ export function ProductExtrasSection({
         </FieldCard>
       )}
 
-      {on.chips && (
-        <FieldCard label="두는 곳·빛·반려동물">
+      {on.size && (
+        <FieldCard label="두는 곳·빛 (상품 상세에만 보여요)">
           <Stack gap="xs">
             <Chip.Group
               multiple
@@ -107,31 +103,7 @@ export function ProductExtrasSection({
                 ))}
               </Group>
             </Chip.Group>
-            <Checkbox
-              color="green"
-              label="반려동물과 함께 두어도 괜찮아요"
-              checked={extras.petSafe}
-              onChange={(event) => patch({ petSafe: event.currentTarget.checked })}
-            />
           </Stack>
-        </FieldCard>
-      )}
-
-      {on.curation && (
-        <FieldCard label="홈 기획전">
-          <Chip.Group
-            multiple
-            value={extras.curations}
-            onChange={(value) => patch({ curations: CURATIONS.filter((c) => value.includes(c)) })}
-          >
-            <Group gap={6}>
-              {CURATIONS.map((curation) => (
-                <Chip key={curation} value={curation} color="green">
-                  {CURATION_LABELS[curation]}
-                </Chip>
-              ))}
-            </Group>
-          </Chip.Group>
         </FieldCard>
       )}
 
@@ -181,7 +153,8 @@ export function ProductExtrasSection({
                   </Button>
                 </Group>
                 {group.choices.map((choice, choiceIndex) => (
-                  <Group key={choice.id} gap="xs" wrap="nowrap">
+                  <Stack key={choice.id} gap={4}>
+                  <Group gap="xs" wrap="nowrap">
                     <TextInput
                       aria-label="선택지 이름"
                       placeholder="예: 도자기 화분"
@@ -215,6 +188,21 @@ export function ProductExtrasSection({
                       w={110}
                     />
                   </Group>
+                  {/* 스티커 라벨·3D 토퍼처럼 손님이 문구를 써야 하는 선택지 */}
+                  <Checkbox
+                    color="green"
+                    size="xs"
+                    label="손님이 문구를 직접 써요 (라벨·토퍼)"
+                    checked={choice.needsText}
+                    onChange={(event) => {
+                      const choices = [...group.choices];
+                      choices[choiceIndex] = { ...choice, needsText: event.currentTarget.checked };
+                      const next = [...extras.options];
+                      next[groupIndex] = { ...group, choices };
+                      setGroups(next);
+                    }}
+                  />
+                  </Stack>
                 ))}
                 {group.choices.length < PRODUCT_OPTION_CHOICE_MAX && (
                   <Button
@@ -227,7 +215,7 @@ export function ProductExtrasSection({
                         ...group,
                         choices: [
                           ...group.choices,
-                          { id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '' },
+                          { id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', needsText: false },
                         ],
                       };
                       setGroups(next);
@@ -249,7 +237,7 @@ export function ProductExtrasSection({
                     {
                       id: nextOptionId('g', extras.options.map((group) => group.id)),
                       name: '',
-                      choices: [{ id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '' }],
+                      choices: [{ id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', needsText: false }],
                     },
                   ])
                 }

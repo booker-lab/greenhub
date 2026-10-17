@@ -29,6 +29,8 @@ export interface CartItem {
   optionChoiceIds?: string[];
   optionLabel?: string;
   optionPriceDelta?: number;
+  /** 문구가 필요한 옵션(스티커 라벨·3D 토퍼)에 넣을 문구 */
+  optionText?: string;
 }
 
 export interface RoundCartItem extends CartItem {
@@ -109,7 +111,7 @@ function hasRoundMetadata(value: Record<string, unknown>) {
 /** 옵션 필드가 함께 있으면 셋 다 형식이 맞아야 옵션으로 본다. 없으면 null(옵션 없음). */
 function readCartOptions(
   value: Record<string, unknown>,
-): Pick<CartItem, 'optionChoiceIds' | 'optionLabel' | 'optionPriceDelta'> | null | 'invalid' {
+): Pick<CartItem, 'optionChoiceIds' | 'optionLabel' | 'optionPriceDelta' | 'optionText'> | null | 'invalid' {
   const hasAny =
     'optionChoiceIds' in value || 'optionLabel' in value || 'optionPriceDelta' in value;
   if (!hasAny) return null;
@@ -120,7 +122,8 @@ function readCartOptions(
     ids.length > 3 ||
     !ids.every(isCartIdentifier) ||
     typeof value.optionLabel !== 'string' ||
-    !isPrice(value.optionPriceDelta)
+    !isPrice(value.optionPriceDelta) ||
+    (value.optionText !== undefined && (typeof value.optionText !== 'string' || value.optionText.length > 40))
   ) {
     return 'invalid';
   }
@@ -128,6 +131,7 @@ function readCartOptions(
     optionChoiceIds: ids as string[],
     optionLabel: value.optionLabel,
     optionPriceDelta: value.optionPriceDelta,
+    ...(typeof value.optionText === 'string' && value.optionText ? { optionText: value.optionText } : {}),
   };
 }
 

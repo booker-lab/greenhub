@@ -126,10 +126,6 @@ export interface Order {
   deliveryPhone?: string | null
   requestNote?: string | null        // 소비자 요청사항 — 회차 주문만, 없으면 null
   deliveryPhotoIds?: string[]
-  /** 쿠폰 할인액(원). totalAmount는 할인 뒤 결제 금액이다. */
-  discountAmount?: number
-  couponId?: string | null
-  couponName?: string | null
   gift?: GiftInfo | null
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
@@ -170,8 +166,9 @@ export interface CreateOrderRequest {
     quantity: number
     /** 옵션 묶음마다 고른 선택지 id */
     optionChoiceIds?: string[]
+    /** 문구가 필요한 선택지(라벨·토퍼)에 넣을 문구 */
+    optionText?: string
   }>
-  couponId?: string
   gift?: GiftInfo
   deliveryPhone: string
   requestNote?: string           // 선택 — ORDER_REQUEST_NOTE_MAX_LENGTH 이하

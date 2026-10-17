@@ -17,7 +17,6 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { CartArrivalLine, CartUpsell, IcheonPrecheck } from '@/components/benchmark/CartExtras';
-import { useBestCoupon } from '@/hooks/useBenchmark';
 import { isFeatureOn } from '@/lib/features';
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
@@ -80,11 +79,12 @@ function buildRoundCartValidationRequest(value: RoundCartItem | RoundCartItem[])
     },
     deliveryPhone: '00000000',
     roundId: item.roundId,
-    roundItems: items.map(({ roundItemId, quantity, optionChoiceIds }) => ({
+    roundItems: items.map(({ roundItemId, quantity, optionChoiceIds, optionText }) => ({
       roundItemId,
       quantity,
-      // 옵션 시트(벤치마킹 비교 기능)로 고른 옵션. 없으면 기존 요청과 같다.
+      // 옵션 시트(벤치마킹 비교 기능)로 고른 옵션과 라벨·토퍼 문구. 없으면 기존 요청과 같다.
       ...(optionChoiceIds?.length ? { optionChoiceIds } : {}),
+      ...(optionText ? { optionText } : {}),
     })),
   };
 }
@@ -173,10 +173,6 @@ function resolveRoundCartBatchValidation(items: RoundCartItem[], value: unknown)
     return unavailableValidations(items);
   }
   return resolved;
-}
-function firstRoundItemStoreId(items: CartItem[]): string | null {
-  const first = items.find(isRoundCartItem);
-  return first?.storeId ?? null;
 }
 function selectCheckoutItems(items: CartItem[], validationByKey: ValidationByKey) {
   if (!items.every(isRoundCartItem)) return items;
@@ -342,11 +338,6 @@ export default function CartPage() {
   const hasLegacyValidationIssues = legacyValidationError !== null;
   const isChecking = isRoundCart && validation.status !== 'ready';
   const guestAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const coupon = useBestCoupon(
-    isRoundCart ? (firstRoundItemStoreId(items) ?? null) : null,
-    checkoutAmount,
-    isFeatureOn('coupons') && isRoundCart && !isGuest,
-  );
   function handleCheckout() {
     if (isGuest) {
       void signIn(undefined, { callbackUrl: '/cart' });
@@ -701,16 +692,6 @@ export default function CartPage() {
             {isGuest ? items.reduce((sum, item) => sum + item.quantity, 0) : checkoutCount}개
           </Text>
         </Group>
-        {coupon && (
-          <Group justify="space-between">
-            <Text size="sm" c="var(--color-primary-dark)" fw={700}>
-              쿠폰 자동 적용 · {coupon.coupon.name}
-            </Text>
-            <Text size="sm" c="var(--color-primary-dark)" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>
-              −{coupon.discount.toLocaleString('ko-KR')}원
-            </Text>
-          </Group>
-        )}
         <Group
           justify="space-between"
           align="baseline"
@@ -728,7 +709,7 @@ export default function CartPage() {
               fontWeight: 'var(--fw-extrabold)',
             }}
           >
-            {(isGuest ? guestAmount : checkoutAmount - (coupon?.discount ?? 0)).toLocaleString('ko-KR')}원
+            {(isGuest ? guestAmount : checkoutAmount).toLocaleString('ko-KR')}원
           </Text>
         </Group>
       </Stack>

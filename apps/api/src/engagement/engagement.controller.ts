@@ -60,7 +60,7 @@ export class PublicEngagementController {
   }
 }
 
-/** 로그인한 고객의 후기·찜·알림 신청. */
+/** 로그인한 고객의 후기·알림 신청. */
 @Controller()
 @UseGuards(JwtAuthGuard)
 export class MyEngagementController {
@@ -84,21 +84,6 @@ export class MyEngagementController {
     @Body() dto: CreateReviewDto,
   ) {
     return this.reviews.createReview(orderId, user.sub, dto);
-  }
-
-  @Get('me/wishlist')
-  wishlist(@CurrentUser() user: JwtPayload) {
-    return this.engagement.listWishlist(user.sub);
-  }
-
-  @Put('me/wishlist/:productId')
-  addWishlist(@Param('productId') productId: string, @CurrentUser() user: JwtPayload) {
-    return this.engagement.addWishlist(user.sub, productId);
-  }
-
-  @Delete('me/wishlist/:productId')
-  removeWishlist(@Param('productId') productId: string, @CurrentUser() user: JwtPayload) {
-    return this.engagement.removeWishlist(user.sub, productId);
   }
 
   @Get('me/restock-subscriptions')

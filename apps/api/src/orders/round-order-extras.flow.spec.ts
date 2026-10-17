@@ -1,9 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
-import { CouponsService } from '../coupons/coupons.service';
+import { BadRequestException } from '@nestjs/common';
 import { OrderCapacityService } from './order-capacity.service';
 import { RoundOrderCreateService } from './round-order-create.service';
 
-// 팔도감 벤치마킹 비교 기능(옵션·쿠폰·선물)을 실은 회차 주문 흐름.
+// 팔도감 벤치마킹 비교 기능(옵션·문구·선물)을 실은 회차 주문 흐름.
 // 이 가짜 Firestore 트랜잭션은 실제처럼 쓰기를 시작한 뒤의 읽기를 거부한다.
 
 type RecordData = Record<string, any>;
@@ -85,6 +84,14 @@ function seed(extra: Record<string, RecordData> = {}) {
             { id: 'ceramic', label: '도자기 화분', priceDelta: 8000 },
           ],
         },
+        {
+          id: 'msg',
+          name: '문구',
+          choices: [
+            { id: 'none', label: '문구 없음', priceDelta: 0 },
+            { id: 'topper', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+          ],
+        },
       ],
     },
     'saleRounds/round-1': {
@@ -123,22 +130,6 @@ function seed(extra: Record<string, RecordData> = {}) {
   };
 }
 
-const COUPON = {
-  id: 'user-1_coupon-1',
-  userId: 'user-1',
-  storeId: 'store-round',
-  source: 'claim',
-  name: '3천원 할인',
-  discountType: 'amount',
-  value: 3000,
-  maxDiscount: null,
-  minOrderAmount: 20000,
-  endsAt: null,
-  status: 'available',
-  usedOrderId: null,
-  claimedAt: '2026-07-14T00:00:00.000Z',
-};
-
 function request(overrides: RecordData = {}) {
   return {
     clientOrderRequestId: 'payment-attempt-extras',
@@ -148,7 +139,9 @@ function request(overrides: RecordData = {}) {
     deliveryMethod: 'direct',
     requestedDeliveryDate: '2026-07-21',
     roundId: 'round-1',
-    roundItems: [{ roundItemId: 'round-item-1', quantity: 2, optionChoiceIds: ['ceramic'] }],
+    roundItems: [
+      { roundItemId: 'round-item-1', quantity: 2, optionChoiceIds: ['ceramic', 'topper'], optionText: '개업 축하' },
+    ],
     deliveryPhone: '010-9999-0000',
     deliveryAddress: { address: '경기도 이천시 중리천로 1', addressDetail: '201호', zipCode: '17373' },
     ...overrides,
@@ -158,40 +151,30 @@ function request(overrides: RecordData = {}) {
 function makeService(firestore: any) {
   const capacity = new OrderCapacityService(firestore);
   const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
-  return new RoundOrderCreateService(firestore, capacity, retention as never, new CouponsService(firestore));
+  return new RoundOrderCreateService(firestore, capacity, retention as never);
 }
 
-describe('회차 주문 옵션·쿠폰·선물(벤치마킹 비교 기능)', () => {
-  it('옵션 금액을 단가에 더하고, 쿠폰을 빼서 결제 금액을 만들고, 쿠폰을 사용 처리한다', async () => {
-    const { firestore, records } = makeFirestore(seed({ 'userCoupons/user-1_coupon-1': COUPON }));
-    const result = await makeService(firestore).create(
-      'store-round',
-      'user-1',
-      request({
-        couponId: 'user-1_coupon-1',
-        gift: { recipientName: '박꽃님', senderName: '김그린', cardMessage: '개업 축하해요' },
-      }) as never,
-    );
+describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () => {
+  const GIFT = { recipientName: '박꽃님', recipientPhone: '01098765432', senderName: '김그린', cardMessage: '개업 축하해요' };
+
+  it('옵션 금액을 단가에 더하고, 문구와 선물 정보를 주문서에 남긴다', async () => {
+    const { firestore, records } = makeFirestore(seed());
+    const result = await makeService(firestore).create('store-round', 'user-1', request({ gift: GIFT }) as never);
     const order = records.get(`orders/${(result as any).orderId}`)!;
     expect(order['orderItems'][0]).toMatchObject({
-      unitPrice: 38000,
-      subtotalAmount: 76000,
+      unitPrice: 43000,
+      subtotalAmount: 86000,
       selectedOptions: [
         { groupId: 'pot', groupName: '화분', choiceId: 'ceramic', choiceLabel: '도자기 화분', priceDelta: 8000 },
+        { groupId: 'msg', groupName: '문구', choiceId: 'topper', choiceLabel: '3D 토퍼', priceDelta: 5000, text: '개업 축하' },
       ],
     });
-    expect(order['discountAmount']).toBe(3000);
-    expect(order['totalAmount']).toBe(73000);
-    expect(order['couponName']).toBe('3천원 할인');
-    expect(order['gift']).toEqual({ recipientName: '박꽃님', senderName: '김그린', cardMessage: '개업 축하해요' });
-    expect((result as any).portonePaymentParams.amount).toBe(73000);
-    expect(records.get('userCoupons/user-1_coupon-1')).toMatchObject({
-      status: 'used',
-      usedOrderId: (result as any).orderId,
-    });
+    expect(order['totalAmount']).toBe(86000);
+    expect(order['gift']).toEqual({ ...GIFT, recipientPhone: '010-9876-5432' });
+    expect((result as any).portonePaymentParams.amount).toBe(86000);
   });
 
-  it('옵션·쿠폰·선물이 없으면 주문서에 새 필드를 만들지 않는다', async () => {
+  it('옵션·선물이 없으면 주문서에 새 필드를 만들지 않는다', async () => {
     const { firestore, records } = makeFirestore(seed());
     const result = await makeService(firestore).create(
       'store-round',
@@ -200,41 +183,31 @@ describe('회차 주문 옵션·쿠폰·선물(벤치마킹 비교 기능)', () 
     );
     const order = records.get(`orders/${(result as any).orderId}`)!;
     expect(order['totalAmount']).toBe(30000);
-    expect(order).not.toHaveProperty('discountAmount');
     expect(order).not.toHaveProperty('gift');
     expect(order['orderItems'][0]).not.toHaveProperty('selectedOptions');
   });
 
-  it('이미 쓴 쿠폰(취소되지 않은 주문)은 거부한다', async () => {
-    const { firestore } = makeFirestore(
-      seed({
-        'userCoupons/user-1_coupon-1': { ...COUPON, status: 'used', usedOrderId: 'order-paid' },
-        'orders/order-paid': { id: 'order-paid', status: 'ACCEPTED' },
-      }),
-    );
+  it('토퍼를 고르고 문구를 비우면 거부한다', async () => {
+    const { firestore } = makeFirestore(seed());
     await expect(
-      makeService(firestore).create('store-round', 'user-1', request({ couponId: 'user-1_coupon-1' }) as never),
-    ).rejects.toBeInstanceOf(ConflictException);
+      makeService(firestore).create(
+        'store-round',
+        'user-1',
+        request({
+          roundItems: [{ roundItemId: 'round-item-1', quantity: 1, optionChoiceIds: ['basic', 'topper'] }],
+        }) as never,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('취소된 주문에 쓰였던 쿠폰은 다시 쓸 수 있다', async () => {
-    const { firestore } = makeFirestore(
-      seed({
-        'userCoupons/user-1_coupon-1': { ...COUPON, status: 'used', usedOrderId: 'order-cancelled' },
-        'orders/order-cancelled': { id: 'order-cancelled', status: 'CANCELLED' },
-      }),
-    );
+  it('선물 받는 분 연락처가 없으면 거부한다', async () => {
+    const { firestore } = makeFirestore(seed());
     await expect(
-      makeService(firestore).create('store-round', 'user-1', request({ couponId: 'user-1_coupon-1' }) as never),
-    ).resolves.toBeDefined();
-  });
-
-  it('최소 주문 금액에 못 미치면 쿠폰을 거부한다', async () => {
-    const { firestore } = makeFirestore(
-      seed({ 'userCoupons/user-1_coupon-1': { ...COUPON, minOrderAmount: 100000 } }),
-    );
-    await expect(
-      makeService(firestore).create('store-round', 'user-1', request({ couponId: 'user-1_coupon-1' }) as never),
+      makeService(firestore).create(
+        'store-round',
+        'user-1',
+        request({ gift: { ...GIFT, recipientPhone: '' } }) as never,
+      ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -244,7 +217,7 @@ describe('회차 주문 옵션·쿠폰·선물(벤치마킹 비교 기능)', () 
       makeService(firestore).create(
         'store-round',
         'user-1',
-        request({ roundItems: [{ roundItemId: 'round-item-1', quantity: 1, optionChoiceIds: ['gold'] }] }) as never,
+        request({ roundItems: [{ roundItemId: 'round-item-1', quantity: 1, optionChoiceIds: ['gold', 'none'] }] }) as never,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });

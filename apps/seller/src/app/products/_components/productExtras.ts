@@ -1,7 +1,5 @@
 import {
-  CURATIONS,
   type CareGuide,
-  type Curation,
   LIGHT_LEVELS,
   type LightLevel,
   PLACEMENTS,
@@ -24,6 +22,8 @@ export interface OptionChoiceForm {
   id: string;
   label: string;
   priceDelta: string;
+  /** 손님이 문구를 직접 쓰는 선택지(스티커 라벨·3D 토퍼) */
+  needsText: boolean;
 }
 
 export interface OptionGroupForm {
@@ -40,8 +40,6 @@ export interface ProductExtrasForm {
   bloomCount: string;
   light: '' | LightLevel;
   placements: Placement[];
-  petSafe: boolean;
-  curations: Curation[];
   careGuide: CareGuide;
   options: OptionGroupForm[];
   guaranteed: boolean;
@@ -58,8 +56,6 @@ export function defaultExtras(): ProductExtrasForm {
     bloomCount: '',
     light: '',
     placements: [],
-    petSafe: false,
-    curations: [],
     careGuide: { watering: '', light: '', temperature: '', repotting: '' },
     options: [],
     guaranteed: false,
@@ -87,8 +83,6 @@ export function extrasFromProduct(data: Partial<ProductExtras> | null | undefine
     bloomCount: numText(data.size?.bloomCount),
     light: LIGHT_LEVELS.includes(data.light as LightLevel) ? (data.light as LightLevel) : '',
     placements: pick(PLACEMENTS, data.placements),
-    petSafe: data.petSafe === true,
-    curations: pick(CURATIONS, data.curations),
     careGuide: { ...base.careGuide, ...(data.careGuide ?? {}) },
     options: options.map((group) => ({
       id: group.id,
@@ -97,6 +91,7 @@ export function extrasFromProduct(data: Partial<ProductExtras> | null | undefine
         id: choice.id,
         label: choice.label,
         priceDelta: String(choice.priceDelta),
+        needsText: choice.needsText === true,
       })),
     })),
     guaranteed: data.guaranteed === true,
@@ -168,6 +163,7 @@ export function extrasBody(form: ProductExtrasForm, price: number): ExtrasBodyRe
           id: choice.id,
           label: choice.label,
           priceDelta: optionalInt(choice.priceDelta, '추가 금액', 0, PRODUCT_OPTION_PRICE_DELTA_MAX) ?? 0,
+          ...(choice.needsText ? { needsText: true } : {}),
         })),
       });
     }
@@ -185,8 +181,6 @@ export function extrasBody(form: ProductExtrasForm, price: number): ExtrasBodyRe
 
     const body: ProductExtras = {
       placements: form.placements,
-      petSafe: form.petSafe,
-      curations: form.curations,
       options,
       guaranteed: form.guaranteed,
       aliases,

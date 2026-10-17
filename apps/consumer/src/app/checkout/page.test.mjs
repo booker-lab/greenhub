@@ -80,7 +80,6 @@ const requireForTest = (specifier) => {
   if (specifier === '@/components/benchmark/GiftFields') {
     return { EMPTY_GIFT: { enabled: false }, giftPayload: () => null };
   }
-  if (specifier === '@/hooks/useBenchmark') return { useBestCoupon: () => null };
   if (specifier === '@/lib/features') return { isFeatureOn: () => false };
   if (specifier === '@/lib/round-schedule-label') return { formatRoundTime: () => null };
   if (

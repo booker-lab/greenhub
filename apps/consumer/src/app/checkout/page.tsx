@@ -37,7 +37,6 @@ import {
 import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import CheckoutForm from './_components/CheckoutForm';
 import { EMPTY_GIFT, type GiftState, giftPayload } from '@/components/benchmark/GiftFields';
-import { useBestCoupon } from '@/hooks/useBenchmark';
 import { isFeatureOn } from '@/lib/features';
 import { formatRoundTime } from '@/lib/round-schedule-label';
 
@@ -461,11 +460,9 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   const storeId = cartItems[0]?.storeId ?? '';
   const saleRounds = useSaleRounds(storeId || null);
   const schedule = resolveRoundCheckoutSchedule(cartItems, saleRounds.rounds);
-  // 벤치마킹 비교 기능: 선물하기(gift)·쿠폰 자동 최대 할인(coupons)
+  // 벤치마킹 비교 기능: 선물하기(gift)
   const [gift, setGift] = useState<GiftState>(EMPTY_GIFT);
-  const itemsAmount = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  const bestCoupon = useBestCoupon(storeId || null, itemsAmount, isFeatureOn('coupons'));
-  const giftInfo = isFeatureOn('gift') ? giftPayload(gift) : null;
+  const giftInfo = isFeatureOn('gift') ? giftPayload(gift, deliveryPhone) : null;
 
   useEffect(() => {
     setAcquisition(getAcquisitionSnapshot());
@@ -502,9 +499,6 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       ...(requestNote.trim() ? { requestNote: requestNote.trim() } : {}),
       ...(schedule ? { requestedDeliveryDate: schedule.requestedDeliveryDate } : {}),
       ...(acquisition ? { acquisition } : {}),
-      ...(bestCoupon
-        ? { couponId: bestCoupon.coupon.id, expectedDiscount: bestCoupon.discount }
-        : {}),
       ...(giftInfo ? { gift: giftInfo } : {}),
     },
     roundItems: cartItems,
@@ -525,7 +519,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   }, [cartItems, orderId, removeRoundItems, router, state]);
 
   // 옵션을 고른 상품은 옵션 금액을 더한 price를 쓴다(옵션이 없으면 price === roundPrice).
-  const totalAmount = itemsAmount - (bestCoupon?.discount ?? 0);
+  const totalAmount = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const isLoading = state === 'creating' || state === 'paying';
   const scheduleError =
     saleRounds.status === 'error'
@@ -602,7 +596,6 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
           isFeatureOn('arrival-everywhere') && schedule
             ? formatRoundTime(schedule.round.schedule.deliveryEndAt)
             : null,
-        discount: bestCoupon ? { name: bestCoupon.coupon.name, amount: bestCoupon.discount } : null,
         gift: isFeatureOn('gift') ? { value: gift, onChange: setGift } : undefined,
       }}
     />

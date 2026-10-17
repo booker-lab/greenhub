@@ -1,5 +1,4 @@
 import {
-  CURATIONS,
   LIGHT_LEVELS,
   PLACEMENTS,
   PRODUCT_OPTION_CHOICE_MAX,
@@ -90,6 +89,11 @@ export class ProductOptionChoiceDto {
   @Min(0)
   @Max(PRODUCT_OPTION_PRICE_DELTA_MAX)
   priceDelta: number;
+
+  /** 고객이 문구를 직접 써야 하는 선택지(스티커 라벨·3D 토퍼) */
+  @IsOptional()
+  @IsBoolean()
+  needsText?: boolean;
 }
 
 export class ProductOptionGroupDto {
@@ -131,16 +135,6 @@ export class ProductExtrasDto {
   @ArrayMaxSize(PLACEMENTS.length)
   @IsEnum(PLACEMENTS, { each: true })
   placements?: string[];
-
-  @IsOptional()
-  @IsBoolean()
-  petSafe?: boolean;
-
-  @IsOptional()
-  @IsArray()
-  @ArrayMaxSize(CURATIONS.length)
-  @IsEnum(CURATIONS, { each: true })
-  curations?: string[];
 
   @IsOptional()
   @ValidateNested()

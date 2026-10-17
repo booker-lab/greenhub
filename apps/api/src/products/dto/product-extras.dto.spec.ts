@@ -19,8 +19,6 @@ const extras = {
   size: { heightCm: 60, widthCm: 40, potDiameterCm: 15, bloomCount: 18 },
   light: 'medium',
   placements: ['living', 'office'],
-  petSafe: false,
-  curations: ['gift'],
   careGuide: {
     watering: '겉흙이 마르면 일주일에 한 번',
     light: '직사광선을 피한 밝은 곳',
@@ -34,6 +32,14 @@ const extras = {
       choices: [
         { id: 'basic', label: '기본 화분', priceDelta: 0 },
         { id: 'ceramic', label: '도자기 화분', priceDelta: 8000 },
+      ],
+    },
+    {
+      id: 'message',
+      name: '문구',
+      choices: [
+        { id: 'none', label: '문구 없음', priceDelta: 0 },
+        { id: 'topper', label: '3D 토퍼', priceDelta: 5000, needsText: true },
       ],
     },
   ],
@@ -54,6 +60,7 @@ describe('상품 추가 정보(벤치마킹 비교) 계약', () => {
   it.each([
     ['모르는 빛 조건', { light: 'dark' }],
     ['모르는 놓을 곳', { placements: ['garage'] }],
+    ['문구 여부가 참·거짓이 아닌 선택지', { options: [{ id: 'msg', name: '문구', choices: [{ id: 'a', label: 'A', priceDelta: 0, needsText: 'yes' }] }] }],
     ['음수 옵션 금액', { options: [{ id: 'pot', name: '화분', choices: [{ id: 'a', label: 'A', priceDelta: -1 }] }] }],
     ['선택지 없는 옵션 묶음', { options: [{ id: 'pot', name: '화분', choices: [] }] }],
     ['id 형식이 틀린 옵션', { options: [{ id: 'p o t', name: '화분', choices: [{ id: 'a', label: 'A', priceDelta: 0 }] }] }],

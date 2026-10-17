@@ -116,8 +116,6 @@ export const PUBLIC_PRODUCT_EXTRA_FIELDS = [
   'size',
   'light',
   'placements',
-  'petSafe',
-  'curations',
   'careGuide',
   'options',
   'guaranteed',

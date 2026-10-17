@@ -14,9 +14,11 @@ import { isFeatureOn } from '@/lib/features';
 
 // 가게 소개(공개 페이지)·품질 보장 문구·남은 수량 공개 여부. 팔도감 벤치마킹 비교 기능.
 
+// 빨리 알려 주면 좋은 점을 앞세운다. "받은 날만 환불" 같은 기한 제한은 쓰지 않는다
+// (하자 상품의 청약철회 기간은 법으로 정해져 있어 이보다 줄인 약속은 효력이 없을 수 있다).
 const DEFAULT_TERMS = [
-  '받은 날 꽃이 시들었거나 깨졌다면 사진과 함께 알려 주세요.',
-  '확인 후 다음 회차에 다시 보내 드리거나 환불해 드려요.',
+  '받은 날 사진과 함께 알려 주시면 가장 빨리 다시 보내 드려요.',
+  '꽃이 시들었거나 화분이 깨졌다면 다음 회차에 다시 보내 드리거나 환불해 드려요.',
 ];
 
 interface FormState {
@@ -37,7 +39,7 @@ function toForm(profile: StoreProfileExtras): FormState {
     region: profile.region ?? '',
     sinceYear: profile.sinceYear ? String(profile.sinceYear) : '',
     guaranteeEnabled: profile.guarantee?.enabled ?? false,
-    guaranteeTitle: profile.guarantee?.title ?? '받은 날 상태 보장',
+    guaranteeTitle: profile.guarantee?.title ?? '꽃 상태 보장',
     guaranteeTerms: (profile.guarantee?.terms ?? DEFAULT_TERMS).join('\n'),
     showDemandSignals: profile.showDemandSignals ?? false,
   };
@@ -103,12 +105,12 @@ export default function StoreProfileSettingsPage() {
                   <TextInput
                     label="한 줄 소개"
                     maxLength={60}
-                    placeholder="예: 이천에서 30년 난을 키워 온 농원"
+                    placeholder="예: 매주 경매에서 직접 골라 보내는 이천 꽃집"
                     value={form.intro}
                     onChange={(event) => patch({ intro: event.currentTarget.value })}
                   />
                   <Textarea
-                    label="재배·매입 이야기"
+                    label="고르는 기준·매입 이야기"
                     maxLength={600}
                     autosize
                     minRows={3}
@@ -156,7 +158,8 @@ export default function StoreProfileSettingsPage() {
                     onChange={(event) => patch({ guaranteeTerms: event.currentTarget.value })}
                   />
                   <Text size="sm" c="var(--color-text-secondary)">
-                    실제로 지킬 수 있는 약속만 써 주세요. 소비자 화면에 그대로 보여요.
+                    실제로 지킬 수 있는 약속만 써 주세요. 소비자 화면에 그대로 보여요. &quot;받은 날만 환불&quot;처럼
+                    기한을 줄이는 문구는 쓰지 마세요.
                   </Text>
                 </Stack>
               </Paper>

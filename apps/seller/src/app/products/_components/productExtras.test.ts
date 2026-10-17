@@ -5,7 +5,7 @@ describe('productExtras', () => {
   it('기본 입력은 빈 목록과 꺼진 여부 값만 보낸다', () => {
     expect(extrasBody(defaultExtras(), 10000)).toEqual({
       ok: true,
-      body: { placements: [], petSafe: false, curations: [], options: [], guaranteed: false, aliases: [] },
+      body: { placements: [], options: [], guaranteed: false, aliases: [] },
     });
   });
 
@@ -26,9 +26,9 @@ describe('productExtras', () => {
           id: 'g1',
           name: '화분',
           choices: [
-            { id: 'c1', label: '기본', priceDelta: '' },
-            { id: 'c2', label: '도자기', priceDelta: '5000' },
-            { id: 'c3', label: ' ', priceDelta: '' },
+            { id: 'c1', label: '기본', priceDelta: '', needsText: false },
+            { id: 'c2', label: '3D 토퍼', priceDelta: '5000', needsText: true },
+            { id: 'c3', label: ' ', priceDelta: '', needsText: false },
           ],
         },
       ],
@@ -48,7 +48,7 @@ describe('productExtras', () => {
             name: '화분',
             choices: [
               { id: 'c1', label: '기본', priceDelta: 0 },
-              { id: 'c2', label: '도자기', priceDelta: 5000 },
+              { id: 'c2', label: '3D 토퍼', priceDelta: 5000, needsText: true },
             ],
           },
         ],
@@ -66,12 +66,13 @@ describe('productExtras', () => {
     const form = extrasFromProduct({
       listPrice: 20000,
       placements: ['living', 'garden' as never],
-      options: [{ id: 'g1', name: '크기', choices: [{ id: 'c1', label: '대', priceDelta: 3000 }] }],
+      options: [{ id: 'g1', name: '크기', choices: [{ id: 'c1', label: '대', priceDelta: 3000, needsText: true }] }],
       aliases: ['a', 'b'],
     });
     expect(form.listPrice).toBe('20000');
     expect(form.placements).toEqual(['living']);
     expect(form.options[0].choices[0].priceDelta).toBe('3000');
+    expect(form.options[0].choices[0].needsText).toBe(true);
     expect(form.aliases).toBe('a, b');
   });
 

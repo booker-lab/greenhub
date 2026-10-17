@@ -15,7 +15,7 @@ import type { PublicSaleRound } from '@/hooks/useSaleRounds';
 import { sizeRows } from '@/lib/benchmark-format';
 import { isFeatureOn } from '@/lib/features';
 
-// 상품 상세의 벤치마킹 비교 기능 묶음(품질 보장·크기·관리 안내·생산자 소개·후기·비슷한 꽃).
+// 상품 상세의 벤치마킹 비교 기능 묶음(품질 보장·크기·관리 안내·판매자 소개·후기·비슷한 꽃).
 // 각 칸은 기능 토글이 켜져 있고 보여줄 값이 있을 때만 그린다.
 
 const sectionTitle = {

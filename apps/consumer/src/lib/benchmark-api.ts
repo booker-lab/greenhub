@@ -1,14 +1,11 @@
 'use client';
 
 import type {
-  CouponSpec,
   CreateReviewRequest,
   PartnerInquiryRequest,
   ProductReviewsResponse,
-  PurchaseStampsResponse,
   ReviewPublic,
   ReviewSummary,
-  UserCoupon,
 } from '@greenhub/shared';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { sharedRequest } from '@/lib/shared-request';
@@ -82,15 +79,7 @@ export function createReview(
   return request<ReviewPublic>(`/orders/${enc(orderId)}/reviews`, { method: 'POST', token, body });
 }
 
-// ── 찜·다음 회차 알림 ──
-export function fetchWishlist(token: string): Promise<string[]> {
-  return request<string[]>('/me/wishlist', { token });
-}
-
-export function setWishlist(token: string, productId: string, on: boolean): Promise<unknown> {
-  return request(`/me/wishlist/${enc(productId)}`, { method: on ? 'PUT' : 'DELETE', token });
-}
-
+// ── 다음 회차 알림 ──
 export function fetchRestockSubscriptions(token: string): Promise<string[]> {
   return request<string[]>('/me/restock-subscriptions', { token });
 }
@@ -98,39 +87,6 @@ export function fetchRestockSubscriptions(token: string): Promise<string[]> {
 export function setRestockSubscription(token: string, productId: string, on: boolean): Promise<unknown> {
   return request(`/me/restock-subscriptions/${enc(productId)}`, {
     method: on ? 'PUT' : 'DELETE',
-    token,
-  });
-}
-
-// ── 쿠폰·스탬프 ──
-export type ClaimableCoupon = CouponSpec & { id: string };
-
-export function fetchClaimableCoupons(storeId: string): Promise<ClaimableCoupon[]> {
-  return sharedRequest(
-    `claimable-coupons:${storeId}`,
-    () => request<ClaimableCoupon[]>(`/stores/${enc(storeId)}/coupons/public`),
-    { ttlMs: SHARE_MS },
-  );
-}
-
-export function fetchMyCoupons(storeId: string, token: string): Promise<UserCoupon[]> {
-  return request<UserCoupon[]>(`/stores/${enc(storeId)}/me/coupons`, { token });
-}
-
-export function claimCoupon(storeId: string, couponId: string, token: string): Promise<UserCoupon> {
-  return request<UserCoupon>(`/stores/${enc(storeId)}/coupons/${enc(couponId)}/claim`, {
-    method: 'POST',
-    token,
-  });
-}
-
-export function fetchStamps(storeId: string, token: string): Promise<PurchaseStampsResponse> {
-  return request<PurchaseStampsResponse>(`/stores/${enc(storeId)}/me/stamps`, { token });
-}
-
-export function claimStampReward(storeId: string, at: number, token: string): Promise<UserCoupon> {
-  return request<UserCoupon>(`/stores/${enc(storeId)}/me/stamps/${at}/claim`, {
-    method: 'POST',
     token,
   });
 }

@@ -32,9 +32,7 @@ const DETAIL_FIELDS = [
   'hubId',
   'cancelReason',
   'requestNote',
-  // 벤치마킹 비교 기능: 쿠폰 할인·선물 정보(없으면 응답에 키가 없다).
-  'discountAmount',
-  'couponName',
+  // 벤치마킹 비교 기능: 선물 정보(없으면 응답에 키가 없다).
   'gift',
 ] as const;
 

@@ -74,15 +74,11 @@ describe('후기(벤치마킹 비교 기능)', () => {
   });
 });
 
-describe('찜·다음 회차 알림·찾는 상품·입점 문의(벤치마킹 비교 기능)', () => {
-  it('공개 상품만 찜하고 알림 신청하며, 판매자는 신청 수를 모아 본다', async () => {
+describe('다음 회차 알림·찾는 상품·입점 문의(벤치마킹 비교 기능)', () => {
+  it('공개 상품만 알림 신청하며, 판매자는 신청 수를 모아 본다', async () => {
     const { firestore } = createMemoryFirestore(BASE);
     const service = new EngagementService(firestore as never);
-    await service.addWishlist('user-1', 'product-1');
-    expect(await service.listWishlist('user-1')).toEqual(['product-1']);
-    await service.removeWishlist('user-1', 'product-1');
-    expect(await service.listWishlist('user-1')).toEqual([]);
-    await expect(service.addWishlist('user-1', 'product-hidden')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.subscribeRestock('user-1', 'product-hidden')).rejects.toBeInstanceOf(NotFoundException);
 
     await service.subscribeRestock('user-1', 'product-1');
     await service.subscribeRestock('user-2', 'product-1');
@@ -112,5 +108,21 @@ describe('찜·다음 회차 알림·찾는 상품·입점 문의(벤치마킹 �
     });
     expect(records.get(`partnerInquiries/${id}`)?.['deleteAfter']).toBeInstanceOf(Date);
     expect((await service.listPartnerInquiries())[0]).toMatchObject({ farmName: '초록농원' });
+  });
+
+  it('파기 예정 시각이 지난 입점 문의만 지우고, 시각이 없는 문서는 남긴다', async () => {
+    const { firestore, records } = createMemoryFirestore({
+      'partnerInquiries/old': { id: 'old', deleteAfter: new Date('2026-01-01T00:00:00Z') },
+      'partnerInquiries/fresh': { id: 'fresh', deleteAfter: new Date('2027-12-31T00:00:00Z') },
+      'partnerInquiries/unknown': { id: 'unknown' },
+    });
+    const service = new EngagementService(firestore as never);
+    expect(await service.purgeExpiredPartnerInquiries(new Date('2026-10-17T00:00:00Z'))).toEqual({
+      deleted: 1,
+      skipped: 1,
+    });
+    expect(records.has('partnerInquiries/old')).toBe(false);
+    expect(records.has('partnerInquiries/fresh')).toBe(true);
+    expect(records.has('partnerInquiries/unknown')).toBe(true);
   });
 });

@@ -1,31 +1,16 @@
 'use client';
 
-import {
-  pickBestCoupon,
-  type ProductReviewsResponse,
-  type PurchaseStampsResponse,
-  type ReviewSummary,
-  type StorePublicProfile,
-  type UserCoupon,
-} from '@greenhub/shared';
+import type { ProductReviewsResponse, ReviewSummary, StorePublicProfile } from '@greenhub/shared';
 import { signIn, useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  BenchmarkApiError,
-  type ClaimableCoupon,
-  claimCoupon,
-  claimStampReward,
-  fetchClaimableCoupons,
-  fetchMyCoupons,
   fetchProductReviews,
   fetchRestockSubscriptions,
-  fetchStamps,
   fetchStoreReviewStats,
-  fetchWishlist,
   setRestockSubscription,
-  setWishlist,
 } from '@/lib/benchmark-api';
 import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import { readRoundWish, ROUND_WISH_CHANGE_EVENT, toggleRoundWish } from '@/lib/round-wishlist';
 
 // 팔도감 벤치마킹 비교 기능의 화면 상태. enabled=false면 요청을 보내지 않는다.
 
@@ -93,12 +78,10 @@ export function useProductReviews(productId: string | null, enabled: boolean) {
   return reviews;
 }
 
-type ToggleKind = 'wishlist' | 'restock';
-
 /**
- * 찜·다음 회차 알림 신청 목록. 로그인하지 않았으면 toggle이 로그인으로 보낸다.
+ * 다음 회차 알림 신청 목록. 로그인하지 않았으면 toggle이 로그인으로 보낸다.
  */
-export function useProductToggleSet(kind: ToggleKind, enabled: boolean) {
+export function useRestockSubscriptions(enabled: boolean) {
   const { token, status } = useAccessToken();
   const [ids, setIds] = useState<ReadonlySet<string>>(new Set());
   const [pending, setPending] = useState<string | null>(null);
@@ -109,8 +92,7 @@ export function useProductToggleSet(kind: ToggleKind, enabled: boolean) {
       return;
     }
     let active = true;
-    const load = kind === 'wishlist' ? fetchWishlist : fetchRestockSubscriptions;
-    load(token)
+    fetchRestockSubscriptions(token)
       .then((list) => {
         if (active) setIds(new Set(list ?? []));
       })
@@ -118,7 +100,7 @@ export function useProductToggleSet(kind: ToggleKind, enabled: boolean) {
     return () => {
       active = false;
     };
-  }, [enabled, kind, token]);
+  }, [enabled, token]);
 
   const toggle = useCallback(
     async (productId: string): Promise<'login' | 'on' | 'off' | 'error'> => {
@@ -131,7 +113,7 @@ export function useProductToggleSet(kind: ToggleKind, enabled: boolean) {
       const next = !ids.has(productId);
       setPending(productId);
       try {
-        await (kind === 'wishlist' ? setWishlist : setRestockSubscription)(token, productId, next);
+        await setRestockSubscription(token, productId, next);
         setIds((current) => {
           const copy = new Set(current);
           if (next) copy.add(productId);
@@ -145,113 +127,50 @@ export function useProductToggleSet(kind: ToggleKind, enabled: boolean) {
         setPending(null);
       }
     },
-    [ids, kind, status, token],
+    [ids, status, token],
   );
 
   return { ids, toggle, pending, signedIn: Boolean(token) };
 }
 
-/** 받을 수 있는 쿠폰(공개)과 내 쿠폰(로그인). */
-export function useCoupons(storeId: string | null, enabled: boolean) {
-  const { token } = useAccessToken();
-  const [claimable, setClaimable] = useState<ClaimableCoupon[]>([]);
-  const [mine, setMine] = useState<UserCoupon[]>([]);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    if (!enabled || !storeId) return;
-    let active = true;
-    fetchClaimableCoupons(storeId)
-      .then((value) => {
-        if (active) setClaimable(value ?? []);
-      })
-      .catch(() => {});
-    if (token) {
-      fetchMyCoupons(storeId, token)
-        .then((value) => {
-          if (active) setMine(value ?? []);
-        })
-        .catch(() => {});
-    } else {
-      setMine([]);
-    }
-    return () => {
-      active = false;
-    };
-  }, [enabled, storeId, token, tick]);
-
-  const claim = useCallback(
-    async (couponId: string): Promise<'login' | 'ok' | string> => {
-      if (!storeId) return '쿠폰을 받을 수 없어요';
-      if (!token) {
-        void signIn(undefined, { callbackUrl: window.location.pathname + window.location.search });
-        return 'login';
-      }
-      try {
-        await claimCoupon(storeId, couponId, token);
-        setTick((n) => n + 1);
-        return 'ok';
-      } catch (error) {
-        return error instanceof BenchmarkApiError ? error.message : '쿠폰을 받지 못했어요';
-      }
-    },
-    [storeId, token],
-  );
-
-  const claimedCouponIds = new Set(mine.map((coupon) => coupon.couponId).filter(Boolean));
-  return {
-    claimable,
-    unclaimed: claimable.filter((coupon) => !claimedCouponIds.has(coupon.id)),
-    mine,
-    available: mine.filter((coupon) => coupon.status === 'available'),
-    claim,
-    signedIn: Boolean(token),
-  };
+function browserStorage(): Storage | null {
+  try {
+    return typeof window === 'undefined' ? null : window.localStorage;
+  } catch {
+    return null;
+  }
 }
 
-export function useStamps(storeId: string | null, enabled: boolean) {
-  const { token } = useAccessToken();
-  const [stamps, setStamps] = useState<PurchaseStampsResponse | null>(null);
-  const [tick, setTick] = useState(0);
+/**
+ * 이번 회차 찜(wishlist). 로그인 없이 이 브라우저에만, 이 회차에만 남는다.
+ * 같은 화면의 다른 찜 버튼도 함께 바뀌도록 변경을 알린다.
+ */
+export function useRoundWishlist(roundId: string | null, enabled: boolean) {
+  const [ids, setIds] = useState<ReadonlySet<string>>(new Set());
+
   useEffect(() => {
-    if (!enabled || !storeId || !token) {
-      setStamps(null);
+    if (!enabled || !roundId) {
+      setIds(new Set());
       return;
     }
-    let active = true;
-    fetchStamps(storeId, token)
-      .then((value) => {
-        if (active) setStamps(value);
-      })
-      .catch(() => {});
+    const sync = () => setIds(new Set(readRoundWish(browserStorage(), roundId)));
+    sync();
+    window.addEventListener(ROUND_WISH_CHANGE_EVENT, sync);
+    window.addEventListener('storage', sync);
     return () => {
-      active = false;
+      window.removeEventListener(ROUND_WISH_CHANGE_EVENT, sync);
+      window.removeEventListener('storage', sync);
     };
-  }, [enabled, storeId, token, tick]);
+  }, [enabled, roundId]);
 
-  const claim = useCallback(
-    async (at: number) => {
-      if (!storeId || !token) return false;
-      try {
-        await claimStampReward(storeId, at, token);
-        setTick((n) => n + 1);
-        return true;
-      } catch {
-        return false;
-      }
+  const toggle = useCallback(
+    (productId: string) => {
+      if (!enabled || !roundId) return;
+      setIds(new Set(toggleRoundWish(browserStorage(), roundId, productId)));
+      window.dispatchEvent(new Event(ROUND_WISH_CHANGE_EVENT));
     },
-    [storeId, token],
+    [enabled, roundId],
   );
-  return { stamps, claim, signedIn: Boolean(token) };
-}
 
-/** 장바구니·결제의 자동 최대 할인(coupons): 쓸 수 있는 내 쿠폰 중 할인액이 가장 큰 것. */
-export function useBestCoupon(
-  storeId: string | null,
-  orderAmount: number,
-  enabled: boolean,
-): { coupon: UserCoupon; discount: number } | null {
-  const { available } = useCoupons(storeId, enabled);
-  if (!enabled || orderAmount <= 0) return null;
-  return pickBestCoupon<UserCoupon>(available, orderAmount);
+  return { ids, toggle };
 }

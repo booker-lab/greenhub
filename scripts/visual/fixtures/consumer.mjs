@@ -34,8 +34,6 @@ const PRODUCT_SPECS = [
       size: { heightCm: 55, widthCm: 40, potDiameterCm: 15, bloomCount: 12 },
       light: 'medium',
       placements: ['living', 'office'],
-      petSafe: true,
-      curations: ['monthly'],
       careGuide: {
         watering: '겉흙이 마르면 2주에 한 번, 화분 밑으로 물이 흐를 만큼 줘요.',
         light: '직사광선을 피한 밝은 창가가 좋아요.',
@@ -53,10 +51,11 @@ const PRODUCT_SPECS = [
         },
         {
           id: 'g2',
-          name: '리본',
+          name: '문구',
           choices: [
-            { id: 'c3', label: '리본 없음', priceDelta: 0 },
-            { id: 'c4', label: '축하 리본', priceDelta: 3000 },
+            { id: 'c3', label: '문구 없음', priceDelta: 0 },
+            { id: 'c4', label: '스티커 라벨', priceDelta: 2000, needsText: true },
+            { id: 'c5', label: '3D 토퍼', priceDelta: 5000, needsText: true },
           ],
         },
       ],
@@ -78,7 +77,6 @@ const PRODUCT_SPECS = [
       size: { heightCm: 50, potDiameterCm: 15 },
       light: 'bright',
       placements: ['store', 'office'],
-      curations: ['gift'],
       guaranteed: true,
       aliases: ['개업 선물 난'],
     },
@@ -96,7 +94,6 @@ const PRODUCT_SPECS = [
       size: { heightCm: 70, widthCm: 45, potDiameterCm: 18, bloomCount: 30 },
       light: 'medium',
       placements: ['living'],
-      curations: ['gift'],
     },
   },
 ];
@@ -131,17 +128,17 @@ const PUBLIC_PROFILE = {
   logoUrl: null,
   salesMode: 'round_direct',
   // 비교 기능: 가게 소개·품질 보장·남은 수량 공개
-  intro: '이천에서 30년 난을 키워 온 농원',
+  intro: '매주 경매에서 직접 골라 보내는 이천 꽃집',
   story:
     '매주 경매에서 상태 좋은 동양란만 골라 들여옵니다.\n온실에서 하루 쉬게 한 뒤 직접 차에 실어 문 앞까지 가져다드려요.',
   region: '경기 이천',
   sinceYear: 1996,
   guarantee: {
     enabled: true,
-    title: '받은 날 상태 보장',
+    title: '꽃 상태 보장',
     terms: [
-      '받은 날 꽃이 시들었거나 화분이 깨졌다면 사진과 함께 알려 주세요.',
-      '확인 후 다음 회차에 다시 보내 드리거나 환불해 드려요.',
+      '받은 날 사진과 함께 알려 주시면 가장 빨리 다시 보내 드려요.',
+      '꽃이 시들었거나 화분이 깨졌다면 다음 회차에 다시 보내 드리거나 환불해 드려요.',
     ],
   },
   showDemandSignals: true,
@@ -337,16 +334,28 @@ const ORDERS = [
     orderItems: [
       {
         ...orderItem(ROUND_CLOSED, 0, 1),
-        unitPrice: PRODUCTS[0].price + 8000,
-        subtotalAmount: PRODUCTS[0].price + 8000,
+        unitPrice: PRODUCTS[0].price + 13000,
+        subtotalAmount: PRODUCTS[0].price + 13000,
         selectedOptions: [
           { groupId: 'g1', groupName: '화분', choiceId: 'c2', choiceLabel: '백자 도자기 화분', priceDelta: 8000 },
-          { groupId: 'g2', groupName: '리본', choiceId: 'c3', choiceLabel: '리본 없음', priceDelta: 0 },
+          {
+            groupId: 'g2',
+            groupName: '문구',
+            choiceId: 'c5',
+            choiceLabel: '3D 토퍼',
+            priceDelta: 5000,
+            text: '엄마 생신 축하해요',
+          },
         ],
       },
     ],
-    totalAmount: PRODUCTS[0].price + 8000,
-    gift: { recipientName: '박엄마', senderName: '김그린', cardMessage: '늘 고마워요. 건강하세요!' },
+    totalAmount: PRODUCTS[0].price + 13000,
+    gift: {
+      recipientName: '박엄마',
+      recipientPhone: '010-1234-5678',
+      senderName: '김그린',
+      cardMessage: '늘 고마워요. 건강하세요!',
+    },
     createdAt: '2026-09-25T04:00:00.000Z',
     updatedAt: '2026-09-29T00:10:00.000Z',
   }),
@@ -491,71 +500,6 @@ const REVIEWS = [
     createdAt: '2026-09-16T08:00:00.000Z',
   },
 ];
-const COUPON_ENDS_AT = '2026-10-31T14:59:59.000Z';
-const CLAIMABLE_COUPONS = [
-  {
-    id: 'coupon-first',
-    name: '첫 주문 3,000원',
-    discountType: 'amount',
-    value: 3000,
-    maxDiscount: null,
-    minOrderAmount: 30000,
-    endsAt: COUPON_ENDS_AT,
-  },
-  {
-    id: 'coupon-october',
-    name: '10월 10% 할인',
-    discountType: 'percent',
-    value: 10,
-    maxDiscount: 5000,
-    minOrderAmount: 50000,
-    endsAt: COUPON_ENDS_AT,
-  },
-];
-const MY_COUPONS = [
-  {
-    ...CLAIMABLE_COUPONS[0],
-    id: `${user.id}_coupon-first`,
-    storeId: STORE_ID,
-    couponId: 'coupon-first',
-    source: 'claim',
-    status: 'available',
-    usedOrderId: null,
-    claimedAt: '2026-10-02T01:00:00.000Z',
-  },
-  {
-    name: '스탬프 1회 보상 1,000원',
-    discountType: 'amount',
-    value: 1000,
-    maxDiscount: null,
-    minOrderAmount: 20000,
-    endsAt: COUPON_ENDS_AT,
-    id: `${user.id}_stamp_${STORE_ID}_1`,
-    storeId: STORE_ID,
-    couponId: null,
-    source: 'stamp',
-    status: 'used',
-    usedOrderId: 'order-round-delivering',
-    claimedAt: '2026-09-29T03:00:00.000Z',
-  },
-];
-const stampReward = (value, minOrderAmount) => ({
-  name: `스탬프 보상 ${value.toLocaleString('ko-KR')}원`,
-  discountType: 'amount',
-  value,
-  maxDiscount: null,
-  minOrderAmount,
-  endsAt: null,
-});
-const STAMPS = {
-  count: 2,
-  stages: [
-    { at: 1, reward: stampReward(1000, 20000), claimedCouponId: MY_COUPONS[1].id },
-    { at: 3, reward: stampReward(2000, 30000), claimedCouponId: null },
-    { at: 5, reward: stampReward(3000, 30000), claimedCouponId: null },
-    { at: 7, reward: stampReward(5000, 50000), claimedCouponId: null },
-  ],
-};
 const benchmarkRoutes = [
   ['GET', /^\/stores\/[^/]+\/review-stats$/, () => ({ body: REVIEW_STATS })],
   [
@@ -567,12 +511,7 @@ const benchmarkRoutes = [
     },
   ],
   ['GET', /^\/orders\/[^/]+\/reviews$/, () => ({ body: [] })],
-  ['GET', /^\/me\/wishlist$/, () => ({ body: ['product-1', 'product-3'] })],
   ['GET', /^\/me\/restock-subscriptions$/, () => ({ body: [] })],
-  ['GET', /^\/stores\/[^/]+\/coupons\/public$/, () => ({ body: CLAIMABLE_COUPONS })],
-  ['GET', /^\/stores\/[^/]+\/me\/coupons$/, () => ({ body: MY_COUPONS })],
-  ['GET', /^\/stores\/[^/]+\/me\/stamps$/, () => ({ body: STAMPS })],
-  ['POST', /^\/stores\/[^/]+\/coupons\/([^/]+)\/claim$/, () => ({ body: MY_COUPONS[0] })],
   ['POST', /^\/stores\/[^/]+\/product-requests$/, () => ({ body: { id: 'request-visual' } })],
   ['POST', /^\/partner-inquiries$/, () => ({ body: { id: 'inquiry-visual' } })],
 ];
@@ -762,10 +701,18 @@ export const screens = [
   { id: 'privacy', group: '안내', title: '개인정보처리방침', path: '/privacy', auth: false },
 ];
 
+/** 이번 회차 찜(wishlist)은 브라우저에만 있다. wish: true 화면은 열기 전에 이 값을 넣는다. */
+export const wishStorage = {
+  localStorage: { 'greenhub_round_wish:round-open': JSON.stringify(['product-1', 'product-3']) },
+};
+
 /**
  * 팔도감 벤치마킹 비교(수정 전·후)용 화면. features는 그 화면에서 보이는 기능 토글 키다.
  * - scenario: scenarioRoutes 이름(그 화면을 열 때만 경로를 바꾼다)
- * - fill: 찍기 전에 첫 입력칸에 넣을 글자, click: 찍기 전에 누를 글자(없으면 건너뛴다)
+ * - storage: 장바구니·결제 대상, wish: 이번 회차 찜을 브라우저에 넣고 연다
+ * - steps: 찍기 전에 차례로 할 일. { click: '글자' } 또는 { fill: { label, value } } / { fill: '첫 입력칸 값' }.
+ *   누를 글자가 없으면(수정 전 화면) 거기서 멈추고 찍는다.
+ * - viewport: true면 지금 보이는 화면만 찍는다(아래에서 올라오는 시트 등)
  */
 export const benchmarkScreens = [
   {
@@ -773,10 +720,10 @@ export const benchmarkScreens = [
     group: '홈',
     title: '홈 · 회차 진행 중(로그인)',
     path: '/',
+    wish: true,
     features: [
       'countdown-date', 'demand-signals', 'card-discount', 'reviews', 'seller-store', 'wishlist',
-      'size-info', 'quality-guarantee', 'coupons', 'purchase-stamps', 'curation-tabs',
-      'category-chips', 'plant-search', 'partner-inquiry',
+      'quality-guarantee', 'plant-search', 'partner-inquiry',
     ],
   },
   {
@@ -792,7 +739,7 @@ export const benchmarkScreens = [
     group: '찾기',
     title: '검색 · 별칭으로 찾기 "개업 선물"',
     path: '/search',
-    fill: '개업 선물',
+    steps: [{ fill: '개업 선물' }],
     features: ['plant-search'],
   },
   {
@@ -800,7 +747,7 @@ export const benchmarkScreens = [
     group: '찾기',
     title: '검색 · 결과 없음 "수국"',
     path: '/search',
-    fill: '수국',
+    steps: [{ fill: '수국' }],
     features: ['product-request'],
   },
   {
@@ -808,13 +755,14 @@ export const benchmarkScreens = [
     group: '찾기',
     title: '상품 탭',
     path: '/category',
-    features: ['category-round-label', 'curation-tabs', 'category-chips', 'product-request'],
+    features: ['category-round-label', 'product-request'],
   },
   {
     id: 'bm-product',
     group: '상품',
     title: '상품 상세 · 판매 중',
     path: '/products/product-1?round=round-open',
+    wish: true,
     features: [
       'detail-images', 'size-info', 'care-guide', 'reviews', 'seller-store', 'quality-guarantee',
       'recommendations', 'card-discount', 'wishlist',
@@ -823,9 +771,14 @@ export const benchmarkScreens = [
   {
     id: 'bm-product-options',
     group: '상품',
-    title: '상품 상세 · 장바구니 누름(옵션 시트)',
+    title: '상품 상세 · 옵션 시트(토퍼 문구 입력)',
     path: '/products/product-1?round=round-open',
-    click: '장바구니',
+    viewport: true,
+    steps: [
+      { click: '장바구니' },
+      { click: '3D 토퍼' },
+      { fill: { label: '3D 토퍼에 넣을 문구', value: '개업을 축하해요' } },
+    ],
     features: ['option-sheet'],
   },
   {
@@ -841,7 +794,7 @@ export const benchmarkScreens = [
     title: '장바구니(로그인)',
     path: '/cart',
     storage: true,
-    features: ['arrival-everywhere', 'icheon-precheck', 'cart-upsell', 'coupons'],
+    features: ['arrival-everywhere', 'icheon-precheck', 'cart-upsell'],
   },
   {
     id: 'bm-cart-guest',
@@ -866,7 +819,21 @@ export const benchmarkScreens = [
     title: '결제',
     path: '/checkout?from=cart',
     storage: true,
-    features: ['gift', 'coupons', 'arrival-everywhere'],
+    features: ['arrival-everywhere'],
+  },
+  {
+    id: 'bm-checkout-gift',
+    group: '구매',
+    title: '결제 · 선물로 보내요',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [
+      { click: '선물로 보내요' },
+      { fill: { label: '이름', value: '박엄마', nth: 0 } },
+      { fill: { label: '이름', value: '김그린', nth: 1 } },
+      { fill: { label: '카드 문구', value: '늘 고마워요. 건강하세요!' } },
+    ],
+    features: ['gift'],
   },
   {
     id: 'bm-success',
@@ -887,33 +854,27 @@ export const benchmarkScreens = [
     group: 'MY',
     title: 'MY',
     path: '/mypage',
-    features: ['wishlist', 'coupons'],
+    features: ['wishlist'],
   },
   {
     id: 'bm-wishlist',
     group: 'MY',
-    title: 'MY · 찜',
+    title: 'MY · 이번 회차 찜',
     path: '/mypage/wishlist',
+    wish: true,
     features: ['wishlist'],
-  },
-  {
-    id: 'bm-coupons',
-    group: 'MY',
-    title: 'MY · 쿠폰·스탬프',
-    path: '/mypage/coupons',
-    features: ['coupons', 'purchase-stamps'],
   },
   {
     id: 'bm-order-delivered',
     group: 'MY',
-    title: '주문 상세 · 배송 완료',
+    title: '주문 상세 · 배송 완료(옵션 문구·선물)',
     path: '/mypage/orders/order-round-delivered',
     features: ['reviews', 'care-guide', 'reorder', 'option-sheet', 'gift'],
   },
   {
     id: 'bm-store',
     group: '가게·안내',
-    title: '가게 소개',
+    title: '판매자 소개',
     path: '/store/store-visual-0001',
     auth: false,
     features: ['seller-store', 'reviews'],

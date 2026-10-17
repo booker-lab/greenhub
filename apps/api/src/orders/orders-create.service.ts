@@ -285,6 +285,7 @@ export class OrdersCreateService {
           option = resolveSelectedOptions(
             productSnap.exists ? productSnap.data()?.['options'] : undefined,
             input.optionChoiceIds,
+            input.optionText,
           );
         }
         const unitPrice = item['roundPrice'] + option.priceDelta;

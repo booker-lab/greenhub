@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { createHash } from 'crypto';
-import { CouponsService, type PreparedOrderCoupon } from '../coupons/coupons.service';
 import { FirestoreService } from '../firestore/firestore.service';
 import {
   INVISIBLE_FORMAT_CHARACTERS,
@@ -17,17 +16,12 @@ import { OrderCapacityService } from './order-capacity.service';
 import { normalizeKoreanMobilePhone } from './_lib/korean-mobile-phone';
 import { normalizeGift, resolveSelectedOptions } from './_lib/round-order-extras';
 
-/** 쿠폰을 쓴 뒤 결제 금액 하한(원). 결제사가 0원 결제를 받지 않는다. */
-export const ROUND_ORDER_MIN_PAYMENT_AMOUNT = 100;
-
 @Injectable()
 export class RoundOrderCreateService {
   constructor(
     private readonly firestore: FirestoreService,
     private readonly capacity: OrderCapacityService,
     private readonly retention: RetentionService,
-    // 쿠폰(벤치마킹 비교 기능). 쿠폰 없는 주문은 쓰지 않으므로 기존 단위 테스트는 넘기지 않는다.
-    private readonly coupons?: CouponsService,
   ) {}
 
   async create(storeId: string, userId: string, dto: CreateOrderDto) {
@@ -71,18 +65,8 @@ export class RoundOrderCreateService {
         ...counter,
         seq: (counterSnap.exists ? counterSnap.data()?.['seq'] : 0) + 1,
       };
-      // 옵션·쿠폰 확인은 읽기 단계에서 끝낸다(예약이 쓰기를 시작하면 더 읽을 수 없다).
+      // 옵션 확인은 읽기 단계에서 끝낸다(예약이 쓰기를 시작하면 더 읽을 수 없다).
       const optionPricing = await this.readOptionPricing(tx, storeId, dto);
-      let coupon: PreparedOrderCoupon | null = null;
-      if (dto.couponId) {
-        if (!this.coupons) throw new BadRequestException('쿠폰을 쓸 수 없습니다.');
-        coupon = await this.coupons.prepareOrderCoupon(tx, {
-          storeId,
-          userId,
-          userCouponId: dto.couponId,
-          orderAmount: optionPricing.orderAmount,
-        });
-      }
       const reservation = await this.capacity.reserveCheckoutInTransaction(tx, {
         storeId,
         roundId: dto.roundId!,
@@ -111,12 +95,7 @@ export class RoundOrderCreateService {
       const user = userSnap.data() as Record<string, any> | undefined;
       const store = storeSnap.data() as Record<string, any>;
       const buyerName = resolveOrderBuyerName(user, userId);
-      const itemsAmount = roundItems.reduce((sum, item) => sum + item.subtotalAmount, 0);
-      const discountAmount = coupon?.discountAmount ?? 0;
-      const totalAmount = itemsAmount - discountAmount;
-      if (coupon && totalAmount < ROUND_ORDER_MIN_PAYMENT_AMOUNT) {
-        throw new BadRequestException('쿠폰을 쓰면 결제 금액이 너무 작아져요. 다른 쿠폰을 골라 주세요.');
-      }
+      const totalAmount = roundItems.reduce((sum, item) => sum + item.subtotalAmount, 0);
       const order = {
         id: orderId,
         orderNumber,
@@ -147,16 +126,12 @@ export class RoundOrderCreateService {
         orderItems: roundItems,
         acquisition: dto.acquisition ?? null,
         totalAmount,
-        ...(coupon
-          ? { discountAmount, couponId: coupon.userCouponId, couponName: coupon.name }
-          : {}),
         ...(gift ? { gift } : {}),
         createdAt: now,
         updatedAt: now,
       };
       tx.set(orderCounter.ref, { seq: orderCounter.seq, updatedAt: now }, { merge: true });
       tx.set(orderRef, order);
-      coupon?.markUsed(tx, orderId);
       await this.retention.saveRecord({
         id: `${orderId}:contract`,
         purpose: 'LEGAL_ORDER',
@@ -197,13 +172,13 @@ export class RoundOrderCreateService {
   }
 
   /**
-   * 옵션을 고른 회차 상품의 상품 문서를 읽어 옵션 금액을 계산하고, 쿠폰 판정용 주문 금액을 구한다.
+   * 옵션을 고른 회차 상품의 상품 문서를 읽어 옵션 금액과 스냅샷을 만든다.
    * 회차 상품·상품 문서는 예약 단계에서 다시 읽지만, 같은 트랜잭션 안이라 값이 같다.
    */
   private async readOptionPricing(tx: any, storeId: string, dto: CreateOrderDto) {
     const byRoundItemId = new Map<string, ReturnType<typeof resolveSelectedOptions>>();
-    const needsItems = Boolean(dto.couponId) || dto.roundItems!.some((item) => item.optionChoiceIds?.length);
-    if (!needsItems) return { byRoundItemId, orderAmount: 0 };
+    const needsItems = dto.roundItems!.some((item) => item.optionChoiceIds?.length);
+    if (!needsItems) return { byRoundItemId };
     const itemSnaps = await Promise.all(
       dto.roundItems!.map((item) => tx.get(this.firestore.doc(`saleRoundItems/${item.roundItemId}`))),
     );
@@ -221,16 +196,18 @@ export class RoundOrderCreateService {
           : Promise.resolve(null),
       ),
     );
-    let orderAmount = 0;
     dto.roundItems!.forEach((input, index) => {
       const productSnap = productSnaps[index] as { exists: boolean; data: () => any } | null;
       const option = productSnap
-        ? resolveSelectedOptions(productSnap.exists ? productSnap.data()?.['options'] : undefined, input.optionChoiceIds)
+        ? resolveSelectedOptions(
+            productSnap.exists ? productSnap.data()?.['options'] : undefined,
+            input.optionChoiceIds,
+            input.optionText,
+          )
         : { selected: [], priceDelta: 0 };
       byRoundItemId.set(input.roundItemId, option);
-      orderAmount += (Number(roundItems[index]['roundPrice']) + option.priceDelta) * input.quantity;
     });
-    return { byRoundItemId, orderAmount };
+    return { byRoundItemId };
   }
 
   private response(order: Record<string, any>) {
@@ -275,8 +252,7 @@ export class RoundOrderCreateService {
           acquisition: dto.acquisition ?? null,
           // 요청사항이 없으면 필드 자체를 빼서 기존 결제 시도의 해시를 유지한다.
           ...(requestNote !== null ? { requestNote } : {}),
-          // 쿠폰·선물도 쓸 때만 넣어 기존 해시를 바꾸지 않는다.
-          ...(dto.couponId ? { couponId: dto.couponId } : {}),
+          // 선물도 쓸 때만 넣어 기존 해시를 바꾸지 않는다.
           ...(dto.gift ? { gift: dto.gift } : {}),
         }),
       )
