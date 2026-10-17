@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     url: SITE_URL,
     title: '그린러브 | 경매 당일 매입 호접란 이천 직배송',
     description: SITE_SHARE_DESCRIPTION,
-    images: [{ url: DEFAULT_SHARE_IMAGE }],
+    images: [{ url: DEFAULT_SHARE_IMAGE, width: 1200, height: 630, alt: SITE_NAME }],
   },
   manifest: '/manifest.json',
   icons: { icon: '/icons/icon-192x192.png' },
