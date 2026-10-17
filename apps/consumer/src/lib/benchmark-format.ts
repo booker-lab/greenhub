@@ -30,6 +30,17 @@ export const PLANT_SYNONYMS: ReadonlyArray<readonly string[]> = [
   ['심비디움', 'cymbidium'],
   ['만천홍', '빨간 호접란', '붉은 호접란'],
   ['빅립', 'big lip', '빅 립'],
+  // 관엽·화훼. 짧은 영어 이름(rose 등)은 다른 이름 안에 들어가(로즈마리) 엉뚱한 상품을 찾으므로 넣지 않는다.
+  ['금전수', '돈나무', '자미오쿨카스', 'zamioculcas', 'zz플랜트', 'zz plant'],
+  ['몬스테라', '몬스테라 델리시오사', 'monstera'],
+  ['산세베리아', '산세비에리아', '스투키', 'sansevieria'],
+  ['행운목', '드라세나 맛상게아나', '맛상게아나', 'massangeana'],
+  ['고무나무', '인도고무나무', '피쿠스 엘라스티카', 'ficus elastica'],
+  ['장미', '장미꽃', '미니장미'],
+  ['수국', '하이드레인지아', 'hydrangea'],
+  ['튤립', 'tulip'],
+  ['카네이션', 'carnation'],
+  ['거베라', 'gerbera'],
 ];
 
 export function normalizeSearchText(value: string): string {

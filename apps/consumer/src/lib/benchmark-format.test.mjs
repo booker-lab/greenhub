@@ -32,3 +32,26 @@ test('식물 검색은 별칭·학명으로도 찾고, 상관없는 이름은 �
   assert.ok(!matchesPlantQuery('카스테라', ['호접란 빅립']));
   assert.ok(!matchesPlantQuery('  ', ['호접란 빅립']));
 });
+
+test('식물 이름 묶음: 흔한 관엽·화훼 별칭으로도 찾는다', () => {
+  assert.ok(matchesPlantQuery('돈나무', ['금전수 대형']));
+  assert.ok(matchesPlantQuery('자미오쿨카스', ['금전수']));
+  assert.ok(matchesPlantQuery('스투키', ['산세베리아 스투키 화분']));
+  assert.ok(matchesPlantQuery('산세비에리아', ['산세베리아']));
+  assert.ok(matchesPlantQuery('monstera', ['몬스테라 델리시오사']));
+  assert.ok(matchesPlantQuery('맛상게아나', ['행운목']));
+  assert.ok(matchesPlantQuery('인도고무나무', ['고무나무 중형']));
+  assert.ok(matchesPlantQuery('hydrangea', ['수국 꽃다발']));
+  assert.ok(matchesPlantQuery('Tulip', ['튤립 10송이']));
+  assert.ok(matchesPlantQuery('carnation', ['카네이션 바구니']));
+  assert.ok(matchesPlantQuery('gerbera', ['거베라']));
+  assert.ok(matchesPlantQuery('미니장미', ['장미 화분']));
+});
+
+test('식물 이름 묶음: 다른 꽃끼리는 섞이지 않는다', () => {
+  assert.ok(!matchesPlantQuery('로즈마리', ['장미 화분']));
+  assert.ok(!matchesPlantQuery('튤립', ['수국 꽃다발']));
+  assert.ok(!matchesPlantQuery('몬스테라', ['고무나무']));
+  assert.ok(!matchesPlantQuery('카네이션', ['호접란 빅립']));
+  assert.ok(!expandPlantQuery('금전수').includes('행운목'));
+});
