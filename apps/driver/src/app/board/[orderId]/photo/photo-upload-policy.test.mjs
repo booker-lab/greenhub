@@ -15,6 +15,7 @@ import {
   photoUploadFailureMessage,
   planNextEncodeStep,
   readDriverOrderStatus,
+  readDriverOrderStoreId,
   resolvePhotoUploadFailure,
 } from './photo-upload-policy.ts';
 
@@ -292,4 +293,15 @@ test('주문 재조회: 같은 주문의 문자열 상태만 읽는다', () => {
   assert.equal(readDriverOrderStatus({ id: 'o2', status: 'DELIVERED' }, 'o1'), null);
   assert.equal(readDriverOrderStatus({ id: 'o1', status: 3 }, 'o1'), null);
   assert.equal(readDriverOrderStatus(null, 'o1'), null);
+});
+
+test('주문 재조회: 명령 경로의 판매자 ID는 같은 주문 응답의 storeId만 읽는다', () => {
+  assert.equal(readDriverOrderStoreId({ id: 'o1', storeId: 'store-1' }, 'o1'), 'store-1');
+  // 다른 주문의 응답이면 쓰지 않는다.
+  assert.equal(readDriverOrderStoreId({ id: 'o2', storeId: 'store-1' }, 'o1'), null);
+  assert.equal(readDriverOrderStoreId({ id: 'o1', storeId: '' }, 'o1'), null);
+  assert.equal(readDriverOrderStoreId({ id: 'o1', storeId: 7 }, 'o1'), null);
+  assert.equal(readDriverOrderStoreId({ id: 'o1' }, 'o1'), null);
+  assert.equal(readDriverOrderStoreId(null, 'o1'), null);
+  assert.equal(readDriverOrderStoreId('store-1', 'o1'), null);
 });
