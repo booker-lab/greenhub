@@ -112,8 +112,8 @@ function StoreContent() {
                       {item.productNameSnapshot}
                     </Text>
                     <Text size="md" fw={800} mt={2}>
-                      <CardDiscount item={item} />
                       {item.roundPrice.toLocaleString()}원
+                      <CardDiscount item={item} />
                     </Text>
                     <CardMeta item={item} isPast={false} />
                   </Box>

@@ -15,7 +15,6 @@ const validProduct = {
 };
 
 const extras = {
-  listPrice: 39000,
   size: { heightCm: 60, widthCm: 40, potDiameterCm: 15, bloomCount: 18 },
   light: 'medium',
   placements: ['living', 'office'],
@@ -68,6 +67,14 @@ describe('상품 추가 정보(벤치마킹 비교) 계약', () => {
     ['너무 긴 관리 안내', { careGuide: { ...extras.careGuide, watering: '가'.repeat(121) } }],
   ])('%s을 거부한다', async (_label, patch) => {
     expect(await validate(plainToInstance(UpdateProductDto, patch))).not.toHaveLength(0);
+  });
+
+  it('정상가(listPrice)는 더 이상 받지 않는다 — 할인 표시는 지난 회차 가격으로 서버가 계산한다', async () => {
+    const errors = await validate(plainToInstance(UpdateProductDto, { listPrice: 39000 }), {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    expect(errors.map((error) => error.property)).toContain('listPrice');
   });
 
   it('옵션 묶음·선택지 id 중복을 찾는다', () => {

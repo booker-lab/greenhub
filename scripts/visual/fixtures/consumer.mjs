@@ -30,7 +30,6 @@ const PRODUCT_SPECS = [
     bloom: 'half',
     care: 'easy',
     extras: {
-      listPrice: 36000,
       size: { heightCm: 55, widthCm: 40, potDiameterCm: 15, bloomCount: 12 },
       light: 'medium',
       placements: ['living', 'office'],
@@ -73,7 +72,6 @@ const PRODUCT_SPECS = [
     bloom: 'full',
     care: 'normal',
     extras: {
-      listPrice: 32000,
       size: { heightCm: 50, potDiameterCm: 15 },
       light: 'bright',
       placements: ['store', 'office'],
@@ -231,6 +229,9 @@ const SALE_ROUNDS = [
 // 판매 중 회차의 상품별 확정 수량. 두 번째 상품은 한도(10개)를 채워 API가 공개 조회에서
 // 계산해 주는 품절(SOLD_OUT) 화면을 확인한다.
 const ROUND_ORDERED = [4, 10, 2];
+// 비교 기능(card-discount): API가 판매 중 회차 상품에 붙여 주는 직전 마감 회차 판매가.
+// 빅립은 3,000원 내린 문구가 보이고, 만천홍은 같은 값이라 아무것도 보이지 않으며, v3는 근거가 없다.
+const PREVIOUS_ROUND_PRICES = { 'product-1': 33000, 'product-2': 25000 };
 function roundItems(round) {
   return PRODUCTS.map((product, i) => ({
     id: `${round.id}-item-${i + 1}`,
@@ -603,10 +604,15 @@ export const routes = [
       const round = publicRounds.find((r) => r.id === id);
       if (!round) return notFound('회차 없음');
       // 비교 기능(demand-signals): showDemandSignals 가게만 API가 붙여 준다.
-      const items = roundItems(round).map((item) => ({
-        ...item,
-        demand: { remainingQuantity: Math.max(0, item.saleLimitQuantity - item.orderedQuantity) },
-      }));
+      const items = roundItems(round).map((item) => {
+        const previousRoundPrice =
+          round.status === 'OPEN' ? PREVIOUS_ROUND_PRICES[item.productId] : undefined;
+        return {
+          ...item,
+          demand: { remainingQuantity: Math.max(0, item.saleLimitQuantity - item.orderedQuantity) },
+          ...(previousRoundPrice === undefined ? {} : { previousRoundPrice }),
+        };
+      });
       return {
         body: {
           ...round,

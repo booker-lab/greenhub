@@ -56,7 +56,7 @@ export const FEATURES = [
     { key: 'seller-store', group: 'matrix', title: '판매자 소개', summary: '판매자 화면과 상세에 누가 골라 보내는지 판매자 소개를 보여준다' },
     { key: 'quality-guarantee', group: 'matrix', title: '품질 보장 라벨', summary: '보장 대상 상품에 라벨을 달고 보장 조건을 모아 보여준다' },
     { key: 'reviews', group: 'matrix', title: '후기·별점', summary: '배송 받은 주문에 후기를 남기고, 카드와 상세에 별점·후기 수를 보여준다' },
-    { key: 'card-discount', group: 'matrix', title: '할인율 표시', summary: '정상가가 있으면 카드와 상세에 할인율을 보여준다' },
+    { key: 'card-discount', group: 'matrix', title: '지난 회차 대비 가격', summary: '직전 마감 회차보다 싸게 팔면 카드와 상세에 "지난 회차보다 N원 내렸어요"를 보여준다' },
     { key: 'size-info', group: 'gap', title: '크기 정보', summary: '키·폭·화분 지름·꽃 송이 수를 상품 상세에서만 보여준다' },
     { key: 'wishlist', group: 'matrix', title: '이번 회차 찜', summary: '이번 회차 상품만 가볍게 찜하고, 회차가 끝나면 비운다. 다음 회차는 알림 신청으로 받는다' },
     { key: 'restock-alert', group: 'matrix', title: '다음 회차 알림 신청', summary: '품절·마감 상품에 다음 회차 알림을 신청한다(발송은 하지 않음)' },
