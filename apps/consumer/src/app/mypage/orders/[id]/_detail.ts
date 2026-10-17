@@ -483,3 +483,49 @@ export function hasAuthoritativeOrderStatus(
 ): boolean {
   return detail !== null && detail.status === expected;
 }
+
+/** 벤치마킹 비교 기능(후기·다시 주문·옵션·선물)이 주문 상세에서 읽는 값. 기존 상세 계약과 따로 둔다. */
+export interface OrderBenchmarkExtras {
+  items: Array<{ id: string; productId: string; roundItemId: string | null; quantity: number; optionLabel: string | null }>;
+  gift: { recipientName: string; recipientPhone: string; senderName: string; cardMessage: string } | null;
+}
+
+export function readOrderBenchmarkExtras(value: unknown): OrderBenchmarkExtras {
+  const order = isRecord(value) ? value : {};
+  const items = Array.isArray(order.orderItems) ? order.orderItems.filter(isRecord) : [];
+  return {
+    items: items
+      .filter((item) => isSafeIdentifier(item.productId))
+      .map((item) => {
+        const options = Array.isArray(item.selectedOptions)
+          ? item.selectedOptions
+              .filter(isRecord)
+              .map(
+                (option) =>
+                  `${String(option.groupName ?? '')}: ${String(option.choiceLabel ?? '')}${
+                    typeof option.text === 'string' && option.text ? ` "${option.text}"` : ''
+                  }`,
+              )
+          : [];
+        const roundItemId = isSafeIdentifier(item.roundItemId) ? item.roundItemId : null;
+        return {
+          id: roundItemId ?? (item.productId as string),
+          productId: item.productId as string,
+          roundItemId,
+          quantity: isPositiveQuantity(item.quantity) ? item.quantity : 1,
+          optionLabel: options.length > 0 ? options.join(' · ') : null,
+        };
+      }),
+    gift:
+      isRecord(order.gift) &&
+      typeof order.gift.recipientName === 'string' &&
+      typeof order.gift.senderName === 'string'
+        ? {
+            recipientName: order.gift.recipientName,
+            recipientPhone: typeof order.gift.recipientPhone === 'string' ? order.gift.recipientPhone : '',
+            senderName: order.gift.senderName,
+            cardMessage: typeof order.gift.cardMessage === 'string' ? order.gift.cardMessage : '',
+          }
+        : null,
+  };
+}

@@ -14,6 +14,10 @@ import {
   resolveFirebaseAdminSettings,
 } from '../config/runtime-config';
 import { FirestoreService } from '../firestore/firestore.service';
+import {
+  pickStoreProfileExtras,
+  STORE_PROFILE_EXTRA_FIELDS,
+} from './dto/store-profile-extras.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import { isAllowedStoreLogoUrl, type StoreLogoUrlPolicy } from './store-logo-url';
 
@@ -78,6 +82,8 @@ export class StoresService {
       name: data.name ?? '',
       logoUrl: data.logoUrl ?? null,
       salesMode,
+      // 판매자가 적은 공개 소개(벤치마킹 비교 기능). 값이 있을 때만 붙는다.
+      ...pickStoreProfileExtras(data),
     };
   }
 
@@ -184,6 +190,9 @@ export class StoresService {
     if (dto.address !== undefined) updatePayload.address = dto.address;
     if (dto.businessNumber !== undefined) updatePayload.businessNumber = dto.businessNumber;
     if (dto.logoUrl !== undefined) updatePayload.logoUrl = dto.logoUrl;
+    for (const key of STORE_PROFILE_EXTRA_FIELDS) {
+      if (dto[key] !== undefined) updatePayload[key] = dto[key];
+    }
 
     // **온보딩 완료 판별**: 필수 4개 필드 모두 채워지면 status를 active로 전환
     const merged = { ...storeData, ...updatePayload };

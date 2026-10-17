@@ -1,3 +1,4 @@
+import type { RoundDemandSignal, RoundItemDemandSignal } from './benchmark.types.js'
 export type SaleRoundStatus =
   | 'DRAFT'
   | 'SCHEDULED'
@@ -101,6 +102,8 @@ export interface SaleRound {
   limits: SaleRoundLimits
   counters: SaleRoundCounters
   carrotLandingUrl: string | null
+  /** 공개 회차에서 판매자가 수요 신호를 켠 경우에만 있다(demand-signals). */
+  demand?: RoundDemandSignal
   cancelledAt: string | null // ISO8601
   completedAt: string | null // ISO8601
   createdAt: string // ISO8601
@@ -120,6 +123,8 @@ export interface SaleRoundItem {
   orderedQuantity: number
   displayOrder: number
   status: SaleRoundItemStatus
+  /** 공개 회차에서 판매자가 수요 신호를 켠 경우에만 있다(demand-signals). */
+  demand?: RoundItemDemandSignal
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
 }

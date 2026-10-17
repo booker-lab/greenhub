@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { isFeatureOn } from '@/lib/features';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 
 // 쇼핑앱 footer 문법: 고객센터를 크게 위에, 약관 링크 한 줄, 법정 사업자 정보는 작은 회색 글로 아래에.
@@ -112,6 +113,15 @@ export default function BusinessInfoFooter() {
         >
           개인정보처리방침
         </Link>
+        {/* 입점 문의(partner-inquiry, 벤치마킹 비교 기능) */}
+        {isFeatureOn('partner-inquiry') && (
+          <>
+            <span aria-hidden style={{ background: 'var(--color-border)', height: 12, width: 1 }} />
+            <Link href="/partner" style={legalLinkStyle}>
+              입점 문의
+            </Link>
+          </>
+        )}
       </nav>
 
       <h2

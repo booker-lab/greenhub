@@ -56,6 +56,38 @@ const SELLER_ORDERS = [
     ['만천홍', 25000, 2],
   ]),
   roundOrder('order-round-single', '20261001-000002', 'ACCEPTED', [['v3', 45000, 1]]),
+  // 비교 기능(옵션·토퍼 문구·선물)이 담긴 회차 주문 — 포장할 때 옵션·문구와 선물 카드를 봐야 한다.
+  roundOrder('order-round-gift', '20261002-000007', 'ACCEPTED', [['빅립', 43000, 1]], {
+    orderItems: [
+      {
+        roundItemId: 'round-open-item-1',
+        productId: 'product-1',
+        productName: '동양란 빅립',
+        productImageUrl: null,
+        unitPrice: 43000,
+        quantity: 1,
+        subtotalAmount: 43000,
+        selectedOptions: [
+          { groupId: 'g1', groupName: '화분', choiceId: 'c2', choiceLabel: '백자 도자기 화분', priceDelta: 8000 },
+          {
+            groupId: 'g2',
+            groupName: '문구',
+            choiceId: 'c5',
+            choiceLabel: '3D 토퍼',
+            priceDelta: 5000,
+            text: '엄마 생신 축하해요',
+          },
+        ],
+      },
+    ],
+    totalAmount: 43000,
+    gift: {
+      recipientName: '박엄마',
+      recipientPhone: '010-2345-6789',
+      senderName: '김그린',
+      cardMessage: '늘 고마워요. 건강하세요!',
+    },
+  }),
   roundOrder('order-round-preparing', '20261001-000003', 'PREPARING', [['빅립', 30000, 2]]),
   roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]]),
   roundOrder('order-round-pending', '20261001-000005', 'PENDING', [
@@ -64,7 +96,7 @@ const SELLER_ORDERS = [
   ]),
 ];
 
-function roundOrder(id, orderNumber, status, items) {
+function roundOrder(id, orderNumber, status, items, extra = {}) {
   const orderItems = items.map(([name, unitPrice, quantity]) => {
     const index = ['빅립', '만천홍', 'v3'].indexOf(name) + 1;
     return {
@@ -98,6 +130,7 @@ function roundOrder(id, orderNumber, status, items) {
     requestedDeliveryDate: '2026-10-06',
     createdAt: '2026-10-01T02:00:00.000Z',
     updatedAt: '2026-10-01T02:00:00.000Z',
+    ...extra,
   });
 }
 
@@ -468,6 +501,38 @@ export const firestoreSeed = {
     }),
     'product-1': storeProduct('동양란 빅립', 30000, {
       createdAt: '2026-09-03T01:00:00.000Z',
+      // 비교 기능 상품 추가 정보(소비자 fixture와 같은 값)
+      listPrice: 36000,
+      size: { heightCm: 55, widthCm: 40, potDiameterCm: 15, bloomCount: 12 },
+      light: 'medium',
+      placements: ['living', 'office'],
+      careGuide: {
+        watering: '겉흙이 마르면 2주에 한 번, 화분 밑으로 물이 흐를 만큼 줘요.',
+        light: '직사광선을 피한 밝은 창가가 좋아요.',
+        temperature: '15~25도. 겨울 창가 찬바람을 피해 주세요.',
+        repotting: '꽃이 진 뒤 2년에 한 번 바크로 갈아 주세요.',
+      },
+      options: [
+        {
+          id: 'g1',
+          name: '화분',
+          choices: [
+            { id: 'c1', label: '기본 플라스틱 화분', priceDelta: 0 },
+            { id: 'c2', label: '백자 도자기 화분', priceDelta: 8000 },
+          ],
+        },
+        {
+          id: 'g2',
+          name: '문구',
+          choices: [
+            { id: 'c3', label: '문구 없음', priceDelta: 0 },
+            { id: 'c4', label: '스티커 라벨', priceDelta: 2000, needsText: true },
+            { id: 'c5', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+          ],
+        },
+      ],
+      guaranteed: true,
+      aliases: ['빅립 동양란', 'Big lip'],
     }),
     'product-2': storeProduct('동양란 만천홍', 25000, {
       createdAt: '2026-09-02T01:00:00.000Z',
@@ -527,7 +592,55 @@ const HUBS = [
   },
 ];
 
+// ── 팔도감 벤치마킹 비교 기능(고객 반응·입점 문의) ──
+const STORE_REVIEWS = [
+  ['review-1', 'product-1', 5, '꽃대가 사진보다 튼실하게 왔어요. 화요일 아침에 정확히 문 앞에 있었습니다.', '이*연', '2026-09-30T02:00:00.000Z'],
+  ['review-2', 'product-1', 5, '도자기 화분으로 골랐는데 선물하기 좋네요.', '정*호', '2026-09-23T05:00:00.000Z'],
+  ['review-3', 'product-2', 4, '반쯤 핀 상태로 와서 일주일 뒤에 활짝 폈어요.', '최*은', '2026-09-16T08:00:00.000Z'],
+].map(([id, productId, rating, text, authorName, createdAt]) => ({ id, productId, rating, text, authorName, createdAt }));
+const benchmarkRoutes = [
+  ['GET', /^\/stores\/[^/]+\/reviews$/, () => ({ body: STORE_REVIEWS })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/restock-subscriptions\/summary$/,
+    () => ({
+      body: [
+        { productId: 'product-2', productName: '동양란 만천홍', count: 7 },
+        { productId: 'product-4', productName: '오렌지 글로우', count: 3 },
+      ],
+    }),
+  ],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/product-requests$/,
+    () => ({
+      body: [
+        { id: 'request-1', text: '흰 호접란 큰 화분', createdAt: '2026-10-02T03:00:00.000Z' },
+        { id: 'request-2', text: '수국', createdAt: '2026-10-01T09:00:00.000Z' },
+        { id: 'request-3', text: '개업 축하용 금전수', createdAt: '2026-09-29T01:00:00.000Z' },
+      ],
+    }),
+  ],
+  [
+    'GET',
+    /^\/admin\/partner-inquiries$/,
+    () => ({
+      body: [
+        {
+          id: 'inquiry-1',
+          farmName: '여주 햇살농원',
+          region: '경기 여주',
+          contact: '010-9876-5432',
+          message: '호접란 2,000분 규모로 재배합니다. 주 1회 납품 가능합니다.',
+          createdAt: '2026-10-02T05:00:00.000Z',
+        },
+      ],
+    }),
+  ],
+];
+
 export const routes = [
+  ...benchmarkRoutes,
   ['GET', /^\/stores\/[^/]+\/orders$/, () => ({ body: SELLER_ORDERS })],
   [
     'GET',
@@ -629,7 +742,26 @@ export const routes = [
     'GET',
     /^\/stores\/([^/]+)\/public-profile$/,
     ({ params: [id] }) => ({
-      body: { id, name: '그린러브 검증 가게', logoUrl: null, salesMode: 'round_direct' },
+      body: {
+        id,
+        name: '그린러브 검증 가게',
+        logoUrl: null,
+        salesMode: 'round_direct',
+        // 비교 기능: 가게 소개·품질 보장·남은 수량 공개
+        intro: '매주 경매에서 직접 골라 보내는 이천 꽃집',
+        story: '매주 경매에서 상태 좋은 동양란만 골라 들여옵니다.',
+        region: '경기 이천',
+        sinceYear: 1996,
+        guarantee: {
+          enabled: true,
+          title: '꽃 상태 보장',
+          terms: [
+            '받은 날 사진과 함께 알려 주시면 가장 빨리 다시 보내 드려요.',
+            '꽃이 시들었거나 화분이 깨졌다면 다음 회차에 다시 보내 드리거나 환불해 드려요.',
+          ],
+        },
+        showDemandSignals: true,
+      },
     }),
   ],
   [
@@ -736,4 +868,72 @@ export const screens = [
   { id: 'admin-stores', group: '어드민', title: '판매자', path: '/admin/stores' },
   { id: 'admin-drivers', group: '어드민', title: '기사', path: '/admin/drivers' },
   { id: 'admin-banner', group: '어드민', title: '배너', path: '/admin/banner' },
+];
+
+/**
+ * 팔도감 벤치마킹 비교(수정 전·후)용 판매자 화면. features는 그 화면에서 보이는 기능 토글 키다.
+ * clicks: 찍기 전에 차례로 누를 글자(없으면 건너뛴다)
+ */
+export const benchmarkScreens = [
+  {
+    id: 'bm-seller-settings',
+    group: '판매자',
+    title: '설정(고객 관리 메뉴)',
+    path: '/settings',
+    features: ['seller-store', 'reviews'],
+  },
+  {
+    id: 'bm-seller-store-profile',
+    group: '판매자',
+    title: '가게 소개·품질 보장 설정',
+    path: '/settings/store-profile',
+    features: ['seller-store', 'quality-guarantee', 'demand-signals'],
+  },
+  {
+    id: 'bm-seller-product-extras',
+    group: '판매자',
+    title: '상품 수정 · 마지막 단계(추가 정보)',
+    path: '/products/product-1/edit',
+    clicks: ['다음', '다음', '다음', '다음'],
+    features: [
+      'card-discount', 'size-info', 'care-guide', 'option-sheet', 'quality-guarantee', 'plant-search',
+    ],
+  },
+  {
+    id: 'bm-seller-reviews',
+    group: '판매자',
+    title: '고객 반응 · 후기',
+    path: '/reactions',
+    features: ['reviews'],
+  },
+  {
+    id: 'bm-seller-restock',
+    group: '판매자',
+    title: '고객 반응 · 알림 신청',
+    path: '/reactions',
+    clicks: ['알림 신청'],
+    features: ['restock-alert'],
+  },
+  {
+    id: 'bm-seller-requests',
+    group: '판매자',
+    title: '고객 반응 · 찾는 상품',
+    path: '/reactions',
+    clicks: ['찾는 상품'],
+    features: ['product-request'],
+  },
+  {
+    id: 'bm-seller-order-gift',
+    group: '판매자',
+    title: '주문 상세 · 옵션 문구·선물',
+    path: '/orders/order-round-gift',
+    features: ['option-sheet', 'gift'],
+  },
+  {
+    id: 'bm-admin-partner',
+    group: '관리자',
+    title: '관리자 · 입점 문의',
+    path: '/admin/partner-inquiries',
+    features: ['partner-inquiry'],
+  },
 ];

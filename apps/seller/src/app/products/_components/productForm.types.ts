@@ -1,3 +1,4 @@
+import { defaultExtras, type ProductExtrasForm } from './productExtras';
 import type { SelectionForm } from './TouchSelector';
 
 export const CATEGORIES = [
@@ -42,6 +43,8 @@ export interface ProductFormData {
   sellerNote: string;
   content: ContentForm;
   sellerOverride: boolean;
+  /** 팔도감 벤치마킹 비교용 추가 정보(기능 토글이 켜졌을 때만 화면에 보이고 제출된다) */
+  extras: ProductExtrasForm;
 }
 
 export interface ProductFormProps {
@@ -81,5 +84,6 @@ export function defaultForm(): ProductFormData {
     sellerNote: '',
     content: { headline: '', description: '', isEditedByUser: false },
     sellerOverride: false,
+    extras: defaultExtras(),
   };
 }

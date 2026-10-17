@@ -83,9 +83,13 @@ export interface PublicSaleRoundItem {
   saleLimitQuantity: number;
   displayOrder: number;
   status: SaleRoundItem['status'];
+  demand?: { remainingQuantity: number };
 }
 
-export type PublicSaleRoundWithItems = PublicSaleRound & { items: PublicSaleRoundItem[] };
+export type PublicSaleRoundWithItems = PublicSaleRound & {
+  items: PublicSaleRoundItem[];
+  demand?: { buyerCount: number };
+};
 
 export function toPublicSaleRound(round: SaleRound): PublicSaleRound {
   return {
@@ -141,6 +145,36 @@ export function toPublicSaleRoundItem(item: SaleRoundItem): PublicSaleRoundItem 
     saleLimitQuantity: item.saleLimitQuantity,
     displayOrder: item.displayOrder,
     status: resolvePublicRoundItemStatus(item),
+  };
+}
+
+/**
+ * 판매자가 수요 신호를 켠 스토어(showDemandSignals)에서만 붙이는 공개 수량 정보(벤치마킹 비교 기능).
+ * 남은 수량은 판매 한도에서 결제 대기·주문 수량을 뺀 값이고, 구매 수는 주문한 배송지 수다.
+ * 켜지 않은 스토어는 기존처럼 수량을 공개하지 않는다.
+ */
+export function remainingRoundItemQuantity(
+  item: Pick<SaleRoundItem, 'saleLimitQuantity' | 'reservedQuantity' | 'orderedQuantity'>,
+): number {
+  const reserved = itemCount(item.reservedQuantity) ?? 0;
+  const ordered = itemCount(item.orderedQuantity) ?? 0;
+  const limit = itemCount(item.saleLimitQuantity) ?? 0;
+  return Math.max(0, limit - reserved - ordered);
+}
+
+export function withDemandSignals(
+  round: PublicSaleRoundWithItems,
+  stored: Pick<SaleRound, 'counters'>,
+  items: SaleRoundItem[],
+): PublicSaleRoundWithItems {
+  const byId = new Map(items.map((item) => [item.id, item]));
+  return {
+    ...round,
+    demand: { buyerCount: itemCount(stored.counters?.orderedDeliveryAddresses) ?? 0 },
+    items: round.items.map((item) => {
+      const source = byId.get(item.id);
+      return source ? { ...item, demand: { remainingQuantity: remainingRoundItemQuantity(source) } } : item;
+    }),
   };
 }
 
@@ -216,6 +250,7 @@ export class SaleRoundsService {
   private async getPublicRoundWithItems(
     storeId: string,
     roundId: string,
+    showDemandSignals = false,
   ): Promise<PublicSaleRoundWithItems> {
     // READ-ONLY: derive effective status purely; never call refreshRoundStatus
     // (which persists via transaction) from the public path.
@@ -223,13 +258,18 @@ export class SaleRoundsService {
     const nowMillis = timestampMillis(this.firestore.Timestamp.now());
     const round = this.normalizeRound(this.applyEffectiveState(stored, nowMillis));
     const items = await this.getRoundItems(roundId, storeId);
-    return { ...toPublicSaleRound(round), items: toPublicRoundItems(items) };
+    const projected = { ...toPublicSaleRound(round), items: toPublicRoundItems(items) };
+    return showDemandSignals ? withDemandSignals(projected, round, items) : projected;
   }
   async getPublicRound(storeId: string, roundId: string): Promise<PublicSaleRoundWithItems> {
-    await this.assertPublicRoundStore(storeId);
+    const store = await this.assertPublicRoundStore(storeId);
     const storedRound = await this.getStoredRound(storeId, roundId);
     this.assertPublicRoundBoundary(storeId, storedRound);
-    const round = await this.getPublicRoundWithItems(storeId, roundId);
+    const round = await this.getPublicRoundWithItems(
+      storeId,
+      roundId,
+      store['showDemandSignals'] === true,
+    );
     this.assertPublicRoundBoundary(storeId, round);
     return round;
   }
@@ -403,11 +443,12 @@ export class SaleRoundsService {
       throw new ForbiddenException('해당 스토어의 회차를 관리할 권한이 없습니다.');
     }
   }
-  private async assertPublicRoundStore(storeId: string) {
+  private async assertPublicRoundStore(storeId: string): Promise<Record<string, unknown>> {
     const snap = await this.firestore.doc(`stores/${storeId}`).get();
     if (!snap.exists || snap.data()?.['salesMode'] !== 'round_direct') {
       throw new NotFoundException('공개 회차를 찾을 수 없습니다.');
     }
+    return snap.data() ?? {};
   }
   private assertPublicRoundBoundary(storeId: string, round: Record<string, any>) {
     if (round['storeId'] !== storeId || !isPublicSaleRoundStatus(round['status'])) {
