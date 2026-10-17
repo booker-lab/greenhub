@@ -121,7 +121,7 @@ describe('public product extras (benchmark compare)', () => {
 
   it('추가 정보가 없으면 공개 응답에 키를 만들지 않는다', () => {
     const detail = toPublicProductDetail(base);
-    expect(detail).not.toHaveProperty('listPrice');
+    expect(detail).not.toHaveProperty('size');
     expect(detail).not.toHaveProperty('options');
     expect(toPublicProductSummary(base)).not.toHaveProperty('size');
   });
@@ -138,7 +138,9 @@ describe('public product extras (benchmark compare)', () => {
       sellerNote: '내부 메모',
     };
     const detail = toPublicProductDetail(stored);
-    expect(detail['listPrice']).toBe(39000);
+    expect(detail['size']).toEqual(stored.size);
+    // 걷어낸 정상가가 저장 문서에 남아 있어도 공개 응답에 옮기지 않는다.
+    expect(detail).not.toHaveProperty('listPrice');
     expect(detail['options']).toEqual(stored.options);
     expect(detail).not.toHaveProperty('sellerNote');
     const summary = toPublicProductSummary(stored);

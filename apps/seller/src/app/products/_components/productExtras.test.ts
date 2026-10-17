@@ -3,21 +3,22 @@ import { defaultExtras, extrasBody, extrasFromProduct, nextOptionId } from './pr
 
 describe('productExtras', () => {
   it('기본 입력은 빈 목록과 꺼진 여부 값만 보낸다', () => {
-    expect(extrasBody(defaultExtras(), 10000)).toEqual({
+    expect(extrasBody(defaultExtras())).toEqual({
       ok: true,
       body: { placements: [], options: [], guaranteed: false, aliases: [] },
     });
   });
 
-  it('정상가가 판매가 이하이면 막는다', () => {
-    const result = extrasBody({ ...defaultExtras(), listPrice: '10000' }, 10000);
-    expect(result.ok).toBe(false);
+  it('정상가 칸은 없고, 응답에 남은 정상가도 본문에 다시 싣지 않는다', () => {
+    const form = extrasFromProduct({ listPrice: 39000 } as never);
+    expect(form).not.toHaveProperty('listPrice');
+    const result = extrasBody(form);
+    expect(result.ok && result.body).not.toHaveProperty('listPrice');
   });
 
   it('크기·관리법·옵션·다른 이름을 API 계약으로 바꾼다', () => {
     const form = {
       ...defaultExtras(),
-      listPrice: '39000',
       heightCm: '60',
       light: 'medium' as const,
       careGuide: { watering: ' 겉흙이 마르면 ', light: '', temperature: '', repotting: '' },
@@ -34,11 +35,10 @@ describe('productExtras', () => {
       ],
       aliases: '몬스테라, Monstera deliciosa,',
     };
-    const result = extrasBody(form, 29000);
+    const result = extrasBody(form);
     expect(result).toMatchObject({
       ok: true,
       body: {
-        listPrice: 39000,
         size: { heightCm: 60 },
         light: 'medium',
         careGuide: { watering: '겉흙이 마르면', light: '' },
@@ -58,18 +58,16 @@ describe('productExtras', () => {
   });
 
   it('범위를 벗어난 숫자는 오류로 돌려준다', () => {
-    expect(extrasBody({ ...defaultExtras(), heightCm: '0' }, 1000).ok).toBe(false);
-    expect(extrasBody({ ...defaultExtras(), heightCm: '1.5' }, 1000).ok).toBe(false);
+    expect(extrasBody({ ...defaultExtras(), heightCm: '0' }).ok).toBe(false);
+    expect(extrasBody({ ...defaultExtras(), heightCm: '1.5' }).ok).toBe(false);
   });
 
   it('API 응답을 입력 상태로 되돌리고 모르는 값은 버린다', () => {
     const form = extrasFromProduct({
-      listPrice: 20000,
       placements: ['living', 'garden' as never],
       options: [{ id: 'g1', name: '크기', choices: [{ id: 'c1', label: '대', priceDelta: 3000, needsText: true }] }],
       aliases: ['a', 'b'],
     });
-    expect(form.listPrice).toBe('20000');
     expect(form.placements).toEqual(['living']);
     expect(form.options[0].choices[0].priceDelta).toBe('3000');
     expect(form.options[0].choices[0].needsText).toBe(true);

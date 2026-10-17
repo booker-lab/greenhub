@@ -184,8 +184,8 @@ function RoundProductCard({
           회차 가격
         </Text>
         <Text size="sm" fw={700} c="var(--color-text-secondary)">
-          <CardDiscount item={item} />
           {item.roundPrice.toLocaleString()}원
+          <CardDiscount item={item} />
         </Text>
         <CardMeta item={item} isPast={isPast} />
       </Box>

@@ -9,13 +9,26 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 new Function('module', 'exports', compiled)(module, module.exports);
-const { discountRate, sizeRows, expandPlantQuery, matchesPlantQuery } = module.exports;
+const {
+  priceDropFromPreviousRound,
+  previousRoundDropLabel,
+  sizeRows,
+  expandPlantQuery,
+  matchesPlantQuery,
+} = module.exports;
 
-test('할인율은 정상가가 회차 가격보다 높을 때만 내림으로 보여준다', () => {
-  assert.equal(discountRate(39000, 30000), 23);
-  assert.equal(discountRate(30000, 30000), null);
-  assert.equal(discountRate(undefined, 30000), null);
-  assert.equal(discountRate(30100, 30000), null);
+test('지난 회차 대비 가격은 지금 가격이 더 낮을 때만 내린 금액을 돌려준다', () => {
+  assert.equal(priceDropFromPreviousRound(33000, 30000), 3000);
+  assert.equal(priceDropFromPreviousRound(30000, 30000), null);
+  assert.equal(priceDropFromPreviousRound(29000, 30000), null);
+  assert.equal(priceDropFromPreviousRound(undefined, 30000), null);
+  assert.equal(priceDropFromPreviousRound(Number.NaN, 30000), null);
+});
+
+test('내린 금액 문구는 천 단위 콤마를 넣는다', () => {
+  assert.equal(previousRoundDropLabel(3000), '지난 회차보다 3,000원 내렸어요');
+  assert.equal(previousRoundDropLabel(500), '지난 회차보다 500원 내렸어요');
+  assert.equal(previousRoundDropLabel(1234567), '지난 회차보다 1,234,567원 내렸어요');
 });
 
 test('크기 요약은 있는 값만 이어 붙인다', () => {

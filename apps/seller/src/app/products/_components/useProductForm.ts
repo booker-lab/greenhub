@@ -191,7 +191,7 @@ export function useProductForm({
       sellerOverride: form.sellerOverride,
     };
     if (FEATURE_KEYS.some(isFeatureOn)) {
-      const extras = extrasBody(form.extras, Number(form.price));
+      const extras = extrasBody(form.extras);
       if (!extras.ok) {
         setError(extras.error);
         setSubmitting(false);

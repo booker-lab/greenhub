@@ -1,7 +1,7 @@
 import type { SaleRound } from '@greenhub/shared';
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { SaleRoundStateService } from './sale-round-state.service';
-import { SaleRoundsService } from './sale-rounds.service';
+import { SaleRoundsService, selectPreviousClosedRound } from './sale-rounds.service';
 
 type Data = Record<string, any>;
 
@@ -1404,6 +1404,185 @@ describe('SaleRoundsService', () => {
       ).resolves.toMatchObject({
         items: [{ status: 'OPEN', cancellation: { status: 'LOCAL_FAILED' } }],
       });
+    });
+  });
+
+  describe('지난 회차 대비 가격(card-discount): previousRoundPrice', () => {
+    // 지금 회차(round-1)는 7/13 주문 시작. 그보다 이른 마감 회차 가운데 가장 늦은 것이 직전 회차다.
+    function pastRound(
+      id: string,
+      orderOpenAt: string,
+      orderCloseAt: string,
+      overrides: Partial<SaleRound> = {},
+    ): Data {
+      return makeRound({
+        id,
+        status: 'CLOSED',
+        closeReason: 'SCHEDULE_ENDED',
+        schedule: { ...makeRound().schedule, orderOpenAt, orderCloseAt },
+        ...overrides,
+      }) as unknown as Data;
+    }
+
+    function currentItems(): Record<string, Data> {
+      return {
+        'saleRoundItems/item-1': makeItem({
+          id: 'item-1',
+          productId: 'product-1',
+          roundPrice: 10000,
+          displayOrder: 0,
+        }),
+        'saleRoundItems/item-2': makeItem({
+          id: 'item-2',
+          productId: 'product-2',
+          roundPrice: 20000,
+          displayOrder: 1,
+        }),
+      };
+    }
+
+    function prevItem(
+      id: string,
+      roundId: string,
+      productId: string,
+      roundPrice: number,
+      extra: Data = {},
+    ) {
+      return makeItem({ id, roundId, productId, roundPrice, ...extra });
+    }
+
+    function itemsByProduct(round: { items: Array<{ productId: string }> }): Record<string, Data> {
+      return Object.fromEntries(round.items.map((item) => [item.productId, item]));
+    }
+
+    const PREV_OPEN = '2026-07-06T00:00:00.000+09:00';
+    const PREV_CLOSE = '2026-07-12T00:00:00.000+09:00';
+
+    it('직전 CLOSED 회차의 같은 상품 판매가를 붙이고, 더 오래된·취소·다른 가게·미래 회차는 쓰지 않는다', async () => {
+      const { service, collectionCalls, writes } = makeService({
+        ...currentItems(),
+        'saleRounds/round-prev': pastRound('round-prev', PREV_OPEN, PREV_CLOSE),
+        'saleRounds/round-older': pastRound(
+          'round-older',
+          '2026-06-29T00:00:00.000+09:00',
+          '2026-07-05T00:00:00.000+09:00',
+          { status: 'COMPLETED' },
+        ),
+        'saleRounds/round-cancelled': pastRound(
+          'round-cancelled',
+          '2026-07-09T00:00:00.000+09:00',
+          '2026-07-10T00:00:00.000+09:00',
+          { status: 'CANCELLED' },
+        ),
+        'saleRounds/round-other-store': pastRound(
+          'round-other-store',
+          '2026-07-10T00:00:00.000+09:00',
+          '2026-07-11T00:00:00.000+09:00',
+          { storeId: 'store-2' },
+        ),
+        'saleRounds/round-next': makeRound({
+          id: 'round-next',
+          status: 'SCHEDULED',
+          schedule: {
+            ...makeRound().schedule,
+            orderOpenAt: '2026-07-20T00:00:00.000+09:00',
+            orderCloseAt: '2026-07-27T00:00:00.000+09:00',
+          },
+        }) as unknown as Data,
+        'saleRoundItems/prev-1': prevItem('prev-1', 'round-prev', 'product-1', 13000),
+        'saleRoundItems/older-2': prevItem('older-2', 'round-older', 'product-2', 25000),
+        'saleRoundItems/cancelled-1': prevItem(
+          'cancelled-1',
+          'round-cancelled',
+          'product-1',
+          99000,
+        ),
+        'saleRoundItems/other-1': prevItem('other-1', 'round-other-store', 'product-1', 88000, {
+          storeId: 'store-2',
+        }),
+        'saleRoundItems/next-1': prevItem('next-1', 'round-next', 'product-1', 50000),
+      });
+
+      const byProduct = itemsByProduct(await service.getPublicRound('store-1', 'round-1'));
+
+      expect(byProduct['product-1']['previousRoundPrice']).toBe(13000);
+      // 직전 회차에 없는 상품은 더 오래된 회차 값으로 채우지 않는다.
+      expect(byProduct['product-2']).not.toHaveProperty('previousRoundPrice');
+      // 회차 목록 1회 + 지금 회차 상품 1회 + 직전 회차 상품 1회. 저장은 하지 않는다.
+      expect(collectionCalls.filter(({ name }) => name === 'saleRounds')).toHaveLength(1);
+      expect(collectionCalls.filter(({ name }) => name === 'saleRoundItems')).toHaveLength(2);
+      expect(collectionCalls.find(({ name }) => name === 'saleRounds')?.filters).toEqual([
+        ['storeId', '==', 'store-1'],
+        ['status', 'in', ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED']],
+      ]);
+      expect(writes).toHaveLength(0);
+    });
+
+    it('직전 CLOSED 회차에 그 상품이 없거나 숨김이면 필드를 넣지 않는다', async () => {
+      const { service } = makeService({
+        ...currentItems(),
+        'saleRounds/round-prev': pastRound('round-prev', PREV_OPEN, PREV_CLOSE),
+        'saleRoundItems/prev-other': prevItem('prev-other', 'round-prev', 'product-9', 9000),
+        'saleRoundItems/prev-hidden': prevItem('prev-hidden', 'round-prev', 'product-1', 13000, {
+          status: 'HIDDEN',
+        }),
+      });
+
+      const round = await service.getPublicRound('store-1', 'round-1');
+
+      for (const item of round.items) expect(item).not.toHaveProperty('previousRoundPrice');
+    });
+
+    it('직전 마감 회차가 없으면 필드를 넣지 않고 직전 회차 상품도 읽지 않는다', async () => {
+      const { service, collectionCalls } = makeService(currentItems());
+
+      const round = await service.getPublicRound('store-1', 'round-1');
+
+      for (const item of round.items) expect(item).not.toHaveProperty('previousRoundPrice');
+      expect(collectionCalls.filter(({ name }) => name === 'saleRoundItems')).toHaveLength(1);
+    });
+
+    it('직전 회차 가격이 같거나 높아도 실제 판매가를 그대로 싣는다(표시 여부는 소비자 화면이 정한다)', async () => {
+      const { service } = makeService({
+        ...currentItems(),
+        'saleRounds/round-prev': pastRound('round-prev', PREV_OPEN, PREV_CLOSE),
+        'saleRoundItems/prev-1': prevItem('prev-1', 'round-prev', 'product-1', 10000),
+        'saleRoundItems/prev-2': prevItem('prev-2', 'round-prev', 'product-2', 18000),
+      });
+
+      const byProduct = itemsByProduct(await service.getPublicRound('store-1', 'round-1'));
+
+      expect(byProduct['product-1']['previousRoundPrice']).toBe(10000);
+      expect(byProduct['product-2']['previousRoundPrice']).toBe(18000);
+    });
+
+    it('저장 상태가 OPEN이어도 주문 마감이 지난 회차는 실효 상태 CLOSED로 보고 직전 회차로 고른다', async () => {
+      const { service, writes } = makeService({
+        ...currentItems(),
+        'saleRounds/round-prev': pastRound('round-prev', PREV_OPEN, PREV_CLOSE),
+        'saleRounds/round-late-open': pastRound(
+          'round-late-open',
+          '2026-07-08T00:00:00.000+09:00',
+          '2026-07-12T12:00:00.000+09:00',
+          { status: 'OPEN', closeReason: null },
+        ),
+        'saleRoundItems/prev-1': prevItem('prev-1', 'round-prev', 'product-1', 13000),
+        'saleRoundItems/late-1': prevItem('late-1', 'round-late-open', 'product-1', 11000),
+      });
+
+      const byProduct = itemsByProduct(await service.getPublicRound('store-1', 'round-1'));
+
+      expect(byProduct['product-1']['previousRoundPrice']).toBe(11000);
+      expect(writes).toHaveLength(0);
+    });
+
+    it('주문 시작이 같은 마감 회차는 마감이 늦은 것을 고르고, 자기 자신은 고르지 않는다', () => {
+      const current = makeRound();
+      const a = pastRound('round-a', PREV_OPEN, '2026-07-10T00:00:00.000+09:00');
+      const b = pastRound('round-b', PREV_OPEN, '2026-07-11T00:00:00.000+09:00');
+      expect(selectPreviousClosedRound(current, [a, b] as SaleRound[])?.id).toBe('round-b');
+      expect(selectPreviousClosedRound(current, [b, a] as SaleRound[])?.id).toBe('round-b');
+      expect(selectPreviousClosedRound(current, [{ ...current, status: 'CLOSED' }])).toBeNull();
     });
   });
 });

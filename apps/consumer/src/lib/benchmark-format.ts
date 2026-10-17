@@ -2,11 +2,24 @@ import type { ProductSize } from '@greenhub/shared';
 
 // 팔도감 벤치마킹 비교 기능의 표시용 계산. 다른 모듈을 불러오지 않아 테스트가 그대로 실행한다.
 
-/** 정상가 대비 할인율(%). 정상가가 없거나 회차 가격보다 낮으면 null. 1% 미만은 표시하지 않는다. */
-export function discountRate(listPrice: number | undefined, price: number): number | null {
-  if (!listPrice || !Number.isFinite(listPrice) || listPrice <= price || price < 0) return null;
-  const rate = Math.floor(((listPrice - price) / listPrice) * 100);
-  return rate >= 1 ? rate : null;
+/**
+ * 지난 회차보다 내린 금액(원). 지금 가격이 직전 마감 회차 가격보다 낮을 때만 양수를 돌려주고,
+ * 같거나 높거나 근거(previousRoundPrice)가 없으면 null.
+ */
+export function priceDropFromPreviousRound(
+  previousRoundPrice: number | undefined,
+  price: number,
+): number | null {
+  if (typeof previousRoundPrice !== 'number' || !Number.isFinite(previousRoundPrice)) return null;
+  if (!Number.isFinite(price) || price < 0) return null;
+  const drop = previousRoundPrice - price;
+  return drop > 0 ? drop : null;
+}
+
+/** "지난 회차보다 3,000원 내렸어요". 천 단위 콤마는 실행 환경 locale과 무관하게 직접 넣는다. */
+export function previousRoundDropLabel(drop: number): string {
+  const amount = String(Math.trunc(drop)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `지난 회차보다 ${amount}원 내렸어요`;
 }
 
 /** 상세 크기 표 행. */
