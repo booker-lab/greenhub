@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import ProductDetailClient from './ProductDetailClient';
+import ProductJsonLd from './ProductJsonLd';
 import { loadProductHint } from './product-server';
 
 interface ProductDetailPageProps {
@@ -10,5 +12,12 @@ interface ProductDetailPageProps {
 export default async function ProductDetailPage({ params, searchParams }: ProductDetailPageProps) {
   const { id } = await params;
   const [query, hint] = await Promise.all([searchParams, loadProductHint(id)]);
-  return <ProductDetailClient id={id} roundQuery={query.round} hint={hint} />;
+  return (
+    <>
+      <ProductDetailClient id={id} roundQuery={query.round} hint={hint} />
+      <Suspense fallback={null}>
+        <ProductJsonLd id={id} />
+      </Suspense>
+    </>
+  );
 }

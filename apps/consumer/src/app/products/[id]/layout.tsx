@@ -12,7 +12,10 @@ export async function generateMetadata({
   const product = await fetchCachedProduct(id);
   // 미리보기 실패가 상품 화면 표시를 막지 않도록 사이트 기본값으로 둔다.
   if (!product) return {};
-  return buildProductShareMetadata(product) ?? {};
+  const metadata = buildProductShareMetadata(product);
+  if (!metadata) return {};
+  // 회차(?round=)마다 주소가 달라져도 검색엔진에는 상품 주소 하나로 알린다.
+  return { ...metadata, alternates: { canonical: `/products/${encodeURIComponent(id)}` } };
 }
 
 export default function ProductLayout({ children }: { children: React.ReactNode }) {
