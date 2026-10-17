@@ -10,4 +10,6 @@ export * from './sale-round.types.js';
 export * from './settlement.types.js';
 export * from './date.js';
 export * from './group-buy.js';
+export * from './features.js';
+export * from './benchmark.types.js';
 //# sourceMappingURL=index.js.map

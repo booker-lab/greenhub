@@ -64,7 +64,7 @@ function Rows({ rows }: { rows: Array<[string, string]> }) {
 function Stars({ value }: { value: number }) {
   const full = Math.round(value);
   return (
-    <span aria-label={`별점 ${value.toFixed(1)}점`} style={{ color: '#F5A524', letterSpacing: 1 }}>
+    <span role="img" aria-label={`별점 ${value.toFixed(1)}점`} style={{ color: '#F5A524', letterSpacing: 1 }}>
       {'★'.repeat(full)}
       <span style={{ color: 'var(--color-border)' }}>{'★'.repeat(5 - full)}</span>
     </span>

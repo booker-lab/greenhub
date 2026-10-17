@@ -36,13 +36,12 @@ function ReviewForm({
   const [sending, setSending] = useState(false);
   return (
     <Stack gap={6} mt="xs">
-      <Group gap={2} role="radiogroup" aria-label={`${productName} 별점`}>
+      <Group gap={2} role="group" aria-label={`${productName} 별점`}>
         {[1, 2, 3, 4, 5].map((value) => (
           <button
             key={value}
             type="button"
-            role="radio"
-            aria-checked={rating === value}
+            aria-pressed={rating === value}
             aria-label={`${value}점`}
             onClick={() => setRating(value)}
             style={{
