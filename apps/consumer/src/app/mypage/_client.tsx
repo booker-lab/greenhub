@@ -380,6 +380,10 @@ export default function MyPageClient() {
           {isFeatureOn('wishlist') && (
             <MenuLink label="이번 회차 찜" onClick={() => router.push('/mypage/wishlist')} />
           )}
+          {/* 벤치마킹 비교 기능: 구매한 꽃(purchase-history) */}
+          {isFeatureOn('purchase-history') && (
+            <MenuLink label="구매한 꽃" onClick={() => router.push('/mypage/purchase-history')} />
+          )}
           <UnstyledButton
             onClick={() => router.push('/mypage/notifications')}
             style={{
