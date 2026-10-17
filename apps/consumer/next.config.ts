@@ -117,6 +117,8 @@ export default withBundleAnalyzer(withPWA({
   disable: process.env.NODE_ENV === "development",
   // 위 NetworkOnly 규칙을 앞에 두고, 정적 자산 등 나머지 기본 규칙은 그대로 유지한다
   extendDefaultRuntimeCaching: true,
+  // 공유 미리보기 그림은 카카오톡·검색엔진이 읽는 파일이라 설치 때 받아 둘 필요가 없다.
+  publicExcludes: ["!noprecache/**/*", "!og-default.png"],
   workboxOptions: {
     exclude: precacheExclude,
     runtimeCaching: networkOnlyRuntimeCaching,
