@@ -98,3 +98,37 @@ export function resolveE2ETargetUrl(app: TargetApp, env: NodeJS.ProcessEnv = pro
 
   return normalizeTargetUrl(env[TARGET_ENV_NAMES[app]]) ?? DEFAULT_TARGET_URLS[app];
 }
+
+// API를 직접 부르는 spec의 대상(API_BASE). 앱 base와 달리 운영 기본값이 없고 운영 API 지정도 거부한다.
+// 운영 판정은 scripts/check-round-direct-e2e-readiness.mjs의 운영 API origin 판정과 같아야 한다(테스트로 고정).
+const PRODUCTION_API_HOSTS: readonly string[] = ['api-production-13e7.up.railway.app'];
+
+export const E2E_API_BASE_MISSING_REASON =
+  'API_BASE(스테이징 또는 로컬 API 주소)가 없어 건너뜀 — 운영 API로는 실행하지 않는다';
+
+function isProductionApiHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === 'greenlove.co.kr' ||
+    host.endsWith('.greenlove.co.kr') ||
+    PRODUCTION_API_HOSTS.includes(host) ||
+    host.startsWith('api-production-')
+  );
+}
+
+/** API_BASE가 없으면 null(호출 측이 건너뜀), 형식이 잘못됐거나 운영 API면 요청 전에 throw한다. */
+export function resolveE2EApiBase(env: NodeJS.ProcessEnv = process.env): string | null {
+  const raw = env.API_BASE?.trim();
+  if (!raw) return null;
+
+  const apiBase = normalizeTargetUrl(raw);
+  if (!apiBase) {
+    throw new Error(
+      'API_BASE 형식이 올바르지 않습니다. 인증 정보·쿼리 없는 http(s) 주소를 지정하세요.',
+    );
+  }
+  if (isProductionApiHost(new URL(apiBase).hostname)) {
+    throw new Error('API_BASE에 운영 API는 쓸 수 없습니다. 스테이징 또는 로컬 API를 지정하세요.');
+  }
+  return apiBase;
+}
