@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test'
 import { spawnSync } from 'node:child_process'
 import { resolve } from 'node:path'
+import { E2E_API_BASE_MISSING_REASON, resolveE2EApiBase } from './_helpers/target-url'
 
-const API = process.env['API_BASE'] ?? 'https://api-production-13e7.up.railway.app'
+// 운영 기본값 없음 — API_BASE가 없으면 건너뛰고, 운영 API를 지정하면 파일 로드 단계에서 중단한다.
+const API = resolveE2EApiBase()
 const CLEANUP_SCRIPT = resolve(__dirname, '../../../scripts/cleanup-spec-residue.mjs')
 
 /**
@@ -14,6 +16,8 @@ const CLEANUP_SCRIPT = resolve(__dirname, '../../../scripts/cleanup-spec-residue
  * 주의: API 배포 후 실행 필요.
  */
 test.describe('POST /auth/register — 초대 토큰 검증', () => {
+  test.skip(!API, E2E_API_BASE_MISSING_REASON)
+
   // afterAll에서 일괄 삭제 — 잔여물 누적 방지 (세션22 보안 결함 정리)
   const registeredEmails: string[] = []
 
