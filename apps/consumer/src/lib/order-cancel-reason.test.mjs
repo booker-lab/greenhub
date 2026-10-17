@@ -22,10 +22,14 @@ test('서버 자동 취소 코드는 고객이 읽을 해요체 문장으로 바
     formatCancelReason('amount_mismatch'),
     '결제 금액이 주문 금액과 달라 주문이 자동으로 취소되고 결제한 금액은 환불돼요',
   );
+  assert.equal(
+    formatCancelReason('payment_context_mismatch'),
+    '결제 정보를 확인할 수 없어 주문이 자동으로 취소되고 결제한 금액은 환불돼요',
+  );
 });
 
 test('알려진 코드는 모두 내부 코드 글자를 드러내지 않는다', () => {
-  for (const code of ['timeout', 'payment_failed', 'amount_mismatch']) {
+  for (const code of ['timeout', 'payment_failed', 'amount_mismatch', 'payment_context_mismatch']) {
     const label = formatCancelReason(code);
     assert.ok(label);
     assert.doesNotMatch(label, /[a-z_]/);

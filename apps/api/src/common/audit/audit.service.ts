@@ -10,6 +10,7 @@ export type AuditAction =
   | 'auth.token.stolen' // refresh token 재사용 감지
   | 'auth.kakao.forbidden'
   | 'payment.amount_tampered' // 금액 위변조 감지
+  | 'payment.context_mismatch' // 결제 상점·통화·채널 불일치(운영 TEST 채널 포함)
   | 'payment.webhook.invalid_sig'; // 서명 검증 실패
 
 export interface AuditLog {
