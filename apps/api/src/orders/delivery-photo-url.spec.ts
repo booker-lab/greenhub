@@ -230,6 +230,8 @@ describe('거점 주문 배송 사진 저장', () => {
     userId: 'consumer-1',
     status: 'DELIVERING',
     deliveryMethod: 'hub',
+    // 거점 주문은 생성 때 픽업 코드를 받는다(거점 도착 전이는 픽업 코드가 있어야 한다).
+    pickupCode: '123456',
     driverId: 'driver-1',
   });
 

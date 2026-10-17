@@ -131,29 +131,124 @@ export const NOTIFICATION_VARIABLE_DEFAULT_MAX_LENGTH = 100;
 // 이름 변수가 링크·도메인처럼 보이면 본문에 그대로 넣지 않고 이 값으로 바꾼다.
 export const NOTIFICATION_NAME_FALLBACK = '고객';
 
+/**
+ * 판매자가 직접 입력한 값이 들어가는 본문 변수와, 그 값에 웹 주소·도메인·전화번호가 있을 때 대신 넣을
+ * 고정 문구. 승인된 템플릿 본문은 그대로 두고 변수 값만 바꾼다.
+ * - reason: 판매자 취소 사유(ORDER_CANCELLED). 보류 사유·환불 안내 사유는 서버 고정 문구다.
+ * - productName: 상품명(거점 도착·공동구매 알림).
+ * - hubAddress: 판매자가 등록한 거점 주소(거점 도착 알림).
+ */
+export const NOTIFICATION_SELLER_TEXT_FALLBACKS: Readonly<Record<string, string>> = {
+  reason: '판매자 사정',
+  productName: '주문 상품',
+  hubAddress: '주문 상세에서 확인해 주세요',
+};
+
 // 제어문자(줄바꿈·탭 포함)와 줄/문단 구분자는 공백으로 바꾼다.
 const NOTIFICATION_LINE_BREAK_OR_CONTROL = /[\p{Cc}\u2028\u2029]/gu;
 // 보이지 않는 서식 문자(soft hyphen, zero-width space/non-joiner, 양방향 제어, BOM 등)는
 // 제거한다. 이모지 조합에 쓰이는 zero-width joiner(U+200D)는 남긴다.
 export const INVISIBLE_FORMAT_CHARACTERS =
   /[\u00AD\u200B\u200C\u200E\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]/g;
-// scheme URL, www., 또는 도메인(`<문자>.<영문>/…` 경로가 붙거나 흔한 최상위 도메인으로 끝남).
+// 점 뒤에 오면 링크로 보는 흔한 최상위 도메인. 점 뒤에 경로(/)가 붙으면 목록과 무관하게 링크로 본다.
+// 한국 성씨 로마자(Do·So·Im·Ga·Kim·Lee 등)와 겹치는 도메인은 이름 오판을 피하려고 넣지 않는다.
+const COMMON_TOP_LEVEL_DOMAINS =
+  'com|net|org|kr|co|io|me|ly|gl|to|cc|tv|us|jp|cn|app|xyz|info|biz|shop|site|top|link|online|' +
+  'store|ai|dev|page|gg|ws|ru|club|vip|live|click|pw|tk|ml|icu|cyou|sbs|cfd|bond|buzz|asia|' +
+  'mobi|win|bid|loan|website|tech|cloud';
+// 띄어 쓴 점(`naver . com`)·dot으로 쓴 도메인은 영문 앞말과 이 도메인일 때만 링크로 본다
+// (한글 문장 끝 마침표 뒤의 영문 단어를 링크로 오판하지 않게).
+const SPACED_DOT_TOP_LEVEL_DOMAINS = 'com|net|org|kr|shop|site|store|xyz|link|info|biz|online|club';
+
+// 링크 판정. 판정 전에 보이지 않는 서식 문자를 지우고 NFKC로 전각 문자를 반각으로 바꾼다.
 // `john.doe`·`Mr.Kim`처럼 점이 들어간 이름은 링크로 보지 않는다.
-const NOTIFICATION_LINK_LIKE =
-  /[a-z][a-z0-9+.-]*:\/\/|www\.|[\p{L}\p{N}-]+\.(?:[a-z]{2,}\/|(?:com|net|org|kr|co|io|me|ly|gl|to|cc|tv|us|jp|cn|app|xyz|info|biz|shop|site|top|link|online|store)(?![a-z]))/iu;
+const NOTIFICATION_LINK_LIKE = new RegExp(
+  [
+    // scheme URL(http://, https://, intent:// 등)과 www.
+    '[a-z][a-z0-9+.-]*:\\/\\/',
+    'www\\s*[.\\u3002]',
+    // 도메인: `<문자>.<영문>/…` 경로가 붙거나 흔한 최상위 도메인으로 끝남
+    `[\\p{L}\\p{N}-]+[.\\u3002](?:[a-z]{2,}\\/|(?:${COMMON_TOP_LEVEL_DOMAINS})(?![a-z]))`,
+    // 한글 국가 도메인(.한국)
+    '[\\p{L}\\p{N}-]+[.\\u3002]한국(?!\\p{L})',
+    // 띄어 쓴 점·괄호로 감싼 점·dot·닷으로 가린 도메인(naver . com, naver[.]com, naver dot com, naver닷컴)
+    `[a-z0-9-]{2,}\\s*[.\\u3002]\\s*(?:${SPACED_DOT_TOP_LEVEL_DOMAINS})(?![a-z])`,
+    '[\\p{L}\\p{N}-]+\\s*[\\[({]\\s*(?:[.\\u3002]|dot|점|닷)\\s*[\\])}]\\s*[a-z]{2,}',
+    `[a-z0-9-]{2,}\\s+dot\\s+(?:${SPACED_DOT_TOP_LEVEL_DOMAINS}|co)(?![a-z])`,
+    '닷\\s*(?:컴|넷|kr|com|net|org)',
+    // IPv4 주소
+    '(?<![\\d.])\\d{1,3}(?:\\.\\d{1,3}){3}(?!\\d)',
+  ].join('|'),
+  'iu',
+);
+
+// 전화번호 숫자 사이 구분자: 공백·점·하이픈과 여러 대시 문자.
+const PHONE_SEPARATOR = '[\\s.\\-\\u2010-\\u2015\\u2212]';
+// 국내 전화번호. 휴대폰(01X), 서울(02), 지역 유선(031~064), 정보이용(060), 인터넷전화(070),
+// 수신자부담(080), 안심번호(050X)와 대표번호(15XX·16XX·18XX). 괄호 국번과 +82 국가번호도 본다.
+// 앞뒤가 숫자로 이어지면(주문번호·송장번호 등) 전화번호로 보지 않는다.
+const KOREAN_PHONE_NUMBER = new RegExp(
+  [
+    `(?<!\\d)(?:\\+\\s*82${PHONE_SEPARATOR}*\\(?0?\\)?${PHONE_SEPARATOR}*|\\(?0)` +
+      `(?:1[016789]|2|3[1-3]|4[1-4]|5[1-5]|6[0-4]|70|80|50[2-8])\\)?` +
+      `${PHONE_SEPARATOR}*\\d{3,4}${PHONE_SEPARATOR}*\\d{4}(?!\\d)`,
+    `(?<!\\d)1[568]\\d{2}${PHONE_SEPARATOR}?\\d{4}(?!\\d)`,
+  ].join('|'),
+  'u',
+);
+
+// 변수 상한 뒤로 더 보는 글자 수(자르는 경계에 걸친 링크·번호를 놓치지 않을 만큼).
+const NOTIFICATION_CONTACT_DETECTION_MARGIN = 32;
+
+function normalizeForContactDetection(text: string): string {
+  return text.replace(INVISIBLE_FORMAT_CHARACTERS, '').normalize('NFKC');
+}
+
+/**
+ * 웹 주소·도메인처럼 보이는 부분이 있는지(scheme URL, www., 흔한 도메인, 가린 도메인, IP 주소).
+ * 판정 비용이 길이에 비례해 크게 늘 수 있으므로 길이를 제한한 문자열(수백 자 이하)에만 쓴다.
+ */
+export function containsLinkLike(text: string): boolean {
+  return NOTIFICATION_LINK_LIKE.test(normalizeForContactDetection(text));
+}
+
+/**
+ * 국내 전화번호(휴대폰·유선·인터넷전화·안심번호·대표번호)가 있는지. containsLinkLike와 같이 길이를
+ * 제한한 문자열에만 쓴다.
+ */
+export function containsPhoneNumber(text: string): boolean {
+  return KOREAN_PHONE_NUMBER.test(normalizeForContactDetection(text));
+}
 
 /**
  * 알림 본문 변수 1개를 한 줄 텍스트로 정리한다. 제어문자·줄바꿈은 공백으로, 보이지 않는 서식
  * 문자는 제거하고, 연속 공백을 하나로 줄인 뒤 변수별 상한으로 자른다. 한글 등 일반 문자는 그대로 둔다.
+ * 이름이 링크처럼 보이면 고정 호칭으로, 판매자 입력 변수(NOTIFICATION_SELLER_TEXT_FALLBACKS)에 웹 주소·
+ * 도메인·전화번호가 있으면 그 변수의 고정 문구로 바꾼다.
  */
 export function sanitizeNotificationVariable(key: string, value: unknown): string {
   const maxLength =
     NOTIFICATION_VARIABLE_MAX_LENGTH[key] ?? NOTIFICATION_VARIABLE_DEFAULT_MAX_LENGTH;
   const singleLine = toSingleLineText(value, Number.POSITIVE_INFINITY);
-  if (key === 'name' && NOTIFICATION_LINK_LIKE.test(singleLine)) {
+  const truncated = toSingleLineText(singleLine, maxLength);
+  // 링크·번호 판정은 본문에 실리는 값(자른 결과)과, 자르는 경계에 걸친 표현까지 보도록 상한보다 조금
+  // 긴 앞부분을 본다. 자른 결과가 새로 링크처럼 보일 수 있고(`abc.community` → `abc.co…`), 아주 긴
+  // 입력(길이 제한 없는 거점 주소 등)에서 정규식 판정 비용이 커지지 않게 판정 범위를 제한한다.
+  const inspected = [
+    truncated,
+    singleLine.slice(0, (maxLength + NOTIFICATION_CONTACT_DETECTION_MARGIN) * 2),
+  ];
+  if (key === 'name' && inspected.some(containsLinkLike)) {
     return NOTIFICATION_NAME_FALLBACK;
   }
-  return toSingleLineText(singleLine, maxLength);
+  const sellerTextFallback = NOTIFICATION_SELLER_TEXT_FALLBACKS[key];
+  if (
+    sellerTextFallback !== undefined &&
+    inspected.some((text) => containsLinkLike(text) || containsPhoneNumber(text))
+  ) {
+    return sellerTextFallback;
+  }
+  return truncated;
 }
 
 /**
