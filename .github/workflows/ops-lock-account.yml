@@ -114,9 +114,9 @@ jobs:
         with:
           node-version: '22'
 
-      # scripts 워크스페이스(firebase-admin·bcrypt)만 설치한다.
+      # scripts 워크스페이스의 운영 의존성(firebase-admin·bcrypt)만 설치한다. devDependency인 firebase-tools는 설치하지 않는다.
       - name: 의존성 설치
-        run: pnpm install --frozen-lockfile --filter ./scripts
+        run: pnpm install --frozen-lockfile --filter ./scripts --prod
 
       # prod-config-check.yml index-drift와 같은 방식으로 키를 RUNNER_TEMP에 600 권한으로 쓴다.
       - name: Firebase 인증
