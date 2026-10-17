@@ -854,7 +854,7 @@ export const benchmarkScreens = [
     group: 'MY',
     title: 'MY',
     path: '/mypage',
-    features: ['wishlist'],
+    features: ['wishlist', 'purchase-history'],
   },
   {
     id: 'bm-wishlist',
@@ -863,6 +863,14 @@ export const benchmarkScreens = [
     path: '/mypage/wishlist',
     wish: true,
     features: ['wishlist'],
+  },
+  {
+    // 기존 주문 4건 재사용: 빅립 2건(접수·배송 완료)·만천홍 1건(취소 주문은 빠짐)·세 번째 상품 1건.
+    id: 'bm-purchase-history',
+    group: 'MY',
+    title: 'MY · 구매한 꽃',
+    path: '/mypage/purchase-history',
+    features: ['purchase-history'],
   },
   {
     id: 'bm-order-delivered',
