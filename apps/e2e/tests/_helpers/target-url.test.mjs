@@ -1,9 +1,14 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { LOCAL_TARGET_ORIGINS } from '../../../../scripts/check-round-direct-e2e-readiness.mjs';
+import {
+  evaluateTargetReadiness,
+  LOCAL_TARGET_ORIGINS,
+  PRODUCTION_API_HOSTS,
+} from '../../../../scripts/check-round-direct-e2e-readiness.mjs';
 import {
   ROUND_DIRECT_LOCAL_TARGET_ORIGINS,
   readRoundDirectTargetUrls,
+  resolveE2EApiBase,
   resolveE2ETargetUrl,
 } from './target-url.ts';
 
@@ -154,5 +159,79 @@ describe('Playwright 로컬 대상 모드 계약', () => {
       resolveE2ETargetUrl('consumer', { ROUND_DIRECT_E2E_TARGET_MODE: 'local' }),
       'https://greenlove.co.kr',
     );
+  });
+});
+
+describe('API 직접 호출 spec의 API_BASE 계약', () => {
+  it('API_BASE가 없거나 비어 있으면 운영 기본값 없이 null을 돌려준다', () => {
+    assert.equal(resolveE2EApiBase({}), null);
+    assert.equal(resolveE2EApiBase({ API_BASE: '' }), null);
+    assert.equal(resolveE2EApiBase({ API_BASE: '   ' }), null);
+  });
+
+  it('비운영 API 주소는 끝 슬래시만 정리해 그대로 쓴다', () => {
+    assert.equal(
+      resolveE2EApiBase({ API_BASE: 'https://api-staging-94af.up.railway.app/' }),
+      'https://api-staging-94af.up.railway.app',
+    );
+    assert.equal(
+      resolveE2EApiBase({ API_BASE: ' http://localhost:3000 ' }),
+      'http://localhost:3000',
+    );
+  });
+
+  it('운영 API를 지정하면 요청 전에 거부한다', () => {
+    const rejected = [
+      'https://api-production-13e7.up.railway.app',
+      'https://api-production-13e7.up.railway.app/',
+      'http://API-PRODUCTION-13E7.up.railway.app',
+      'https://api-production-0000.up.railway.app',
+      'https://greenlove.co.kr',
+      'https://seller.greenlove.co.kr',
+    ];
+    for (const value of rejected) {
+      assert.throws(() => resolveE2EApiBase({ API_BASE: value }), /운영 API/, value);
+    }
+  });
+
+  it('형식이 잘못된 API_BASE는 거부한다', () => {
+    const rejected = [
+      'api-staging-94af.up.railway.app',
+      'localhost:3000',
+      'ftp://api.example.test',
+      'https://user:secret@api.example.test',
+      'https://api.example.test/?target=staging',
+      'https://api.example.test/#staging',
+    ];
+    for (const value of rejected) {
+      assert.throws(() => resolveE2EApiBase({ API_BASE: value }), /형식/, value);
+    }
+  });
+
+  it('운영 API 판정은 readiness 가드의 운영 API origin 판정과 같다', () => {
+    const candidates = [
+      ...PRODUCTION_API_HOSTS.map((host) => `https://${host}`),
+      'https://api-production-0000.up.railway.app',
+      'https://greenlove.co.kr',
+      'https://api.greenlove.co.kr',
+      'https://api-staging-94af.up.railway.app',
+      'https://staging-api-production.example.test',
+      'http://localhost:3000',
+      'http://127.0.0.1:3000',
+    ];
+    for (const origin of candidates) {
+      const readiness = evaluateTargetReadiness({ apiOrigin: origin, allowedApiOrigins: [origin] });
+      let rejectedAsProduction = false;
+      try {
+        resolveE2EApiBase({ API_BASE: origin });
+      } catch (error) {
+        rejectedAsProduction = /운영 API/.test(error.message);
+      }
+      assert.equal(
+        rejectedAsProduction,
+        readiness.failureCodes.includes('PRODUCTION_API_ORIGIN'),
+        origin,
+      );
+    }
   });
 });
