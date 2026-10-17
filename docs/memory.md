@@ -82,7 +82,7 @@
 - consumer 구매, seller 회차·주문, driver 직배송, 결제·환불·재배송비·보류·사진·운영 예외 흐름 존재.
 - 카카오 비즈니스 채널 승인 완료.
 - repository ALIGO logical 8-code contract: `VERIFIED` — #65에서 확인한 repository 계약.
-- ALIGO 템플릿 8종(UK_5691~5698): 2026-09-28 콘솔에서 코드·이름·승인완료·본문·변수 일치 확인. 격리 실제 알림톡은 2026-09-28 휴대폰 도착 확인, SMS는 발신번호 차단으로 미완료(아래 4절).
+- ALIGO 템플릿 8종(UK_5691~5698): 2026-09-28 콘솔에서 코드·이름·승인완료·본문·변수 일치 확인. 격리 실제 알림톡은 2026-09-28 휴대폰 도착 확인, SMS는 2026-10-08 사업자 발신번호로 교체 뒤 실수신 확인(아래 4절).
 - **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. 이후 2026-09-30 `389066c8`(회차 주문 요청사항 칸 포함), 2026-10-03 `f89f9ed9`(회차 자동 오픈·55분 로그아웃 방지 등 #325~#340)로 API·프런트 3개를 갱신했고, 10/3~10/8 사이 여러 차례 더 갱신했다(규칙·인덱스 변경 없음). 2026-10-12 `55ed02d9`(API·프런트 3개·Firestore/Storage 규칙)를 거쳐 `bd159830`(2026-10-13 오전, API·프런트 3개·Firestore 규칙·인덱스 3개 추가)을 거쳐 `098affbc`(2026-10-13 저녁, API·프런트 3개, 규칙·인덱스 변경 없음)를 거쳐 `032b221a`(2026-10-13 밤, API·seller, 규칙·인덱스 변경 없음)를 거쳐 현재 운영 SHA는 `030f4c1e`(2026-10-15, API 기기별 refresh 세션 #526, 규칙·인덱스 변경 없음)다. 상세는 아래 5절.
 - production 배포 완료. 첫 회차 "11월 10일 배송 회차"가 `SCHEDULED`다(주문 11/1 10:00 오픈).
 - 판매 모드: **`round_direct`**(2026-09-29 전환). 파일럿 운영 시작은 **2026-11-01로 연기**했다.
@@ -136,7 +136,7 @@ revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른�
 - 템플릿 8종과 운영 매핑 `ALIGO_TEMPLATE_CODES_JSON`(Railway 저장값)은 일치한다.
 - 2026-09-28 출시 배포로 운영 API 프로세스에 ALIGO 변수가 반영됐다.
 - ALIGO는 등록 IP만 허용한다. Railway 현재 요금제에 고정 송신 IP가 없어 Fixie 고정 IP 프록시(`ALIGO_OUTBOUND_PROXY_URL`)를 거친다. 2026-09-28 운영 컨테이너 조회에서 `code=0`, 템플릿 8종 API 기준 글자 단위 일치를 확인했다.
-- 격리 실발송: 알림톡은 휴대폰 도착까지 확인했다. 문자(SMS fallback)는 발신번호(`ALIGO_SENDER_PHONE`, 개인 휴대폰)가 통신사 번호도용 문자차단 서비스에 가입돼 차단된다 → 사업자 번호로 교체 필요.
+- 격리 실발송: 알림톡은 휴대폰 도착까지 확인했다. 문자는 처음에 개인 휴대폰 발신번호가 통신사 번호도용 문자차단 서비스에 막혔고, 2026-10-08 운영 `ALIGO_SENDER_PHONE`을 ALIGO 승인된 사업자 번호(끝 2104)로 바꾸고 격리 실발송 알림톡(`TEST-1008`)·문자(`TEST-1008-SMS`)가 모두 접수·1회 시도·휴대폰 실수신됐다(사용자 확인).
 
 ### 5. Production activation
 
@@ -300,7 +300,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 - production mapping: Railway production 변수 `ALIGO_TEMPLATE_CODES_JSON`이 8종을 올바른 코드로 매핑하고, 2026-09-28 출시 배포로 운영 API 프로세스에 반영됐다.
 - 운영 송신 IP: Railway 송신 IP는 재배포로 바뀐다(`152.55.176.19` → `152.55.177.34`). 그래서 ALIGO 호출은 Fixie 고정 IP 2개를 거치며, 두 IP를 ALIGO 허용 IP에 등록했다(2026-09-28, 조회 `code=0`). Railway Pro 전환 시에는 고정 IP 3개를 먼저 추가 등록한 뒤 `ALIGO_OUTBOUND_PROXY_URL`을 삭제한다.
 - actual Alimtalk: 2026-09-28 격리 시험(`ORDER_PREPARING`, 가짜 주문번호 `TEST-0928`)에서 `@greenlove` 채널로 휴대폰 도착 확인. 첫 시도는 ALIGO 선불 잔액 부족으로 거부됐고 충전 뒤 성공했다.
-- actual SMS: ALIGO 접수 뒤 `이통사 번호도용문자차단서비스에 가입된 발신번호 사용`으로 차단. 사업자 번호를 ALIGO 발신번호로 추가 등록(통신서비스 이용증명원 필요)하고 승인 뒤 `ALIGO_SENDER_PHONE`을 교체한 다음 재시험한다. 새 번호가 승인되기 전에 변수를 바꾸면 알림톡 요청에도 같은 발신번호가 쓰여 실패한다.
+- actual SMS: 처음엔 개인 번호 발신이 `이통사 번호도용문자차단서비스에 가입된 발신번호 사용`으로 차단됐다. 2026-10-08 운영 `ALIGO_SENDER_PHONE`을 ALIGO 승인된 사업자 번호(끝 2104)로 바꾸고 격리 실발송 알림톡(`TEST-1008`)·문자(`TEST-1008-SMS`)가 모두 접수·1회 시도·휴대폰 실수신됐다(사용자 확인). 알림톡 실패 뒤 문자로 넘어가는 자동 fallback 자체는 운영에서 따로 재현하지 않았다(코드 회귀만 있음).
 
 ### 역사적 provider snapshot
 
@@ -371,7 +371,7 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
 ## 다음 작업
 
 1. 파일럿 시작(2026-11-01) 전 프런트엔드 점검: 첫 회차는 `orderOpenAt`(11/1 10:00)에 자동 `OPEN`된다. 일정을 다시 미루면 그 전에 회차 일정을 옮긴다. 파일럿 전 결정 3건은 2026-10-04에 정리됐다(환불 재시도 버튼 만들지 않음, 판매자 목록 손님 이름·검색 #383, 어드민 넓은 레이아웃 #354). 파일럿용 기사 계정은 관리자 계정과 다른 카카오 계정으로 가입·승인해 둔다(기사 앱은 기사 역할만 허용, #381).
-2. SMS 발신번호를 사업자 번호로 교체하고 문자 재시험. 사업자 번호를 ALIGO 발신번호로 추가 등록해 승인 대기 중이다(2026-10-02). 승인 전에 `ALIGO_SENDER_PHONE`을 바꾸면 알림톡도 실패하므로 승인 확인 뒤 바꾼다.
+2. SMS 발신번호 교체는 완료(2026-10-08): 2026-10-08 운영 `ALIGO_SENDER_PHONE`을 ALIGO 승인된 사업자 번호(끝 2104)로 바꾸고 격리 실발송 알림톡(`TEST-1008`)·문자(`TEST-1008-SMS`)가 모두 접수·1회 시도·휴대폰 실수신됐다(사용자 확인). 이때 운영 변수 변경이 Railway 재배포를 일으켜 검증 안 된 `main` HEAD가 나갔고, 곧바로 검증 SHA `f259b433`으로 다시 배포했다. **운영 Railway 변수(예: 텔레그램 `OPS_TELEGRAM_*`)를 바꿀 때는 변경 직후 검증된 SHA로 다시 배포하거나 운영 배포와 함께 넣는다.**
 3. 파일럿 시작 직후 실제 결제 1건(결제 → 접수 알림톡 → 소비자 취소·환불 → 취소 알림톡)으로 운영 PortOne 경로를 확인한다. 결제는 지금까지 E2E 모의 결제로만 검증됐다. 2026-10-13 사용자 PortOne 콘솔 확인 결과 운영 상점에 LIVE 채널이 없고 테스트 채널만 있다(테스트 채널 결제는 전부 환불됨). 11/1 10:00 자동 오픈 전에 LIVE 채널을 발급받아 consumer 채널 키를 교체해야 실결제가 된다. #426(PortOne 채널 확인)과 결제 정합성 PR은 LIVE 채널이 생길 때까지 병합하지 않는다(BACKLOG `PORTONE-CHANNEL-CHECK`).
 4. 운영 배포는 검증된 SHA를 지정해 API → 프런트 → 규칙 순으로 한다. Railway UI "Deploy"는 `main` HEAD를 배포하므로 병합 후 미검증 코드가 나갈 수 있다.
    - 자동 배포: `.github/workflows/production-deploy.yml`(사용자가 채팅에서 SHA를 지정해 승인한 뒤 dispatch). 같은 SHA 회차 E2E run 확인 → 인덱스(READY 대기) → Railway API(`/health` commit 확인) → Vercel 3개 → 규칙 → `post-deploy-smoke`를 한 번에 하고, `scope`로 일부만 다시 할 수 있다. production Environment 비밀값 4개(파일 머리 주석)가 등록돼야 동작한다. `pre-deploy-check`는 포함하지 않는다.
@@ -382,4 +382,4 @@ repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protec
    - `098affbc` 배포 뒤 남은 확인: Railway HTTP 로그의 요청자 IP가 실제 클라이언트 IP인지 1회(#404), 판매자·기사 앱 firebase-token 정상(#488), 판매자 앱 운영 기록 해결·초대 화면(#510·#512), 소비자 상품 상세 `/products/<id>`(`?round=` 포함)와 링크 미리보기 메타데이터(#509).
    - `bd159830` 배포 뒤 남은 확인(사용자): 첫 cron 실행 때 API가 운영 Firestore에 `jobLeases` 문서 2개를 만든다(#491, 일일 운영 요약·보관 파기를 하루 1회로 제한). 상품 문구 생성은 `@google/genai` SDK로 바뀌었으므로(#493) 판매자 앱에서 한 번 생성해 실제 응답을 확인하고, Railway 운영 변수에 `GOOGLE_GEMINI_BASE_URL`이 없는지 본다(SDK가 이 값을 읽으면 호출 주소가 바뀜). 웹 Firebase 클라이언트 12.19(#492)는 세 앱 재배포 때 반영된다.
 5. 디어 오키드 매장(`stores/80189070-…`)의 `ownerId`는 2026-10-15 사용자 승인으로 카카오 로그인 관리자 겸 판매자 계정(uid `6c176cb5…`, role `admin`, `users.storeId`는 이미 이 매장)으로 바꿨다(이전 값 `7ec0e26b-…`는 사용자 문서가 없는 삭제된 `seller_test`). `Ops link store owner` run `38757569432`, audit `store.owner_linked_by_owner_maintenance`. 이 계정의 `users.phone`은 비어 있다(`DEAR-ORCHID-OWNER-PHONE`). `cors.json`(Storage CORS를 GET·HEAD로 축소, `gsutil cors set`)은 아직 적용하지 않았다. 선택 환경 변수 `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`(없으면 운영자 휴대폰 알림만 꺼짐)·`KAKAO_APP_ID`(없으면 카카오 토큰 앱 확인을 건너뛰고 경고 로그)의 설정 여부는 확인하지 않았다.
-6. 사용자 작업(코드 밖): CI 필수 검사 지정(`CI-REQUIRED-CHECK`), 텔레그램 비밀값 등록(`OPS-ALERTING`), Firestore 복구 연습 1회(`FIRESTORE-MANAGED-BACKUP`, PITR 7일·일일 백업 14일 보관은 2026-10-15 켜짐 확인), 고객 환불 안내 사유 문구 확정(`SILENT-REFUND-CUSTOMER-NOTICE`), 개인정보 보호책임자와 통신판매업 신고번호.
+6. 사용자 작업(코드 밖, 2026-10-18 재대조): PortOne LIVE 채널(`PORTONE-CHANNEL-CHECK`, 10/27까지 없으면 자동 오픈 전에 회차 일정 이동 결정), CI 필수 검사 지정(`CI-REQUIRED-CHECK`, 현재 필수 검사는 `verify` 하나), 텔레그램 비밀값 등록(`OPS-ALERTING`, GitHub Actions 저장소 비밀값에 `OPS_TELEGRAM_*` 없음, Railway 값은 2번 주의), Firestore 복구 연습 1회(`FIRESTORE-MANAGED-BACKUP`, PITR 7일·일일 백업 14일 보관은 2026-10-15 켜짐 확인), 통신판매업 신고(`LEGAL-MAIL-ORDER-REGISTRATION`), 파일럿용 기사 계정 준비(1번). 환불 안내 문구(2026-10-15)와 개인정보 보호책임자(2026-10-10)는 끝났다.

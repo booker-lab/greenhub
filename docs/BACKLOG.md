@@ -474,7 +474,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [x] provider 템플릿과 repository logical 8-code mapping 대조 (2026-09-28 콘솔)
 - [x] 운영 ALIGO 호출 경로 — Fixie 고정 IP 프록시 경유, 2026-09-28 `code=0`·템플릿 8종 API 대조 일치
 - [x] 격리 실제 알림톡 — 2026-09-28 휴대폰 도착 확인
-- [ ] SMS fallback — 발신번호(개인 휴대폰) 통신사 번호도용 차단으로 실패. 사업자 번호로 발신번호 교체 후 재시험
+- [x] SMS 발신번호 — 개인 휴대폰 번호는 통신사 번호도용 차단으로 실패했다. 2026-10-08 운영 `ALIGO_SENDER_PHONE`을 ALIGO 승인된 사업자 번호(끝 2104)로 바꾸고 격리 실발송 알림톡(`TEST-1008`)·문자(`TEST-1008-SMS`)가 모두 접수·1회 시도·휴대폰 실수신됐다(사용자 확인).
 - [ ] 별도 authority 후 격리 actual Alimtalk/SMS 및 fallback 검증
 - [x] exact release SHA 기준 원격 회차 E2E 52 + 세션 12 재실행 — `197f84a4`, run `36372493414`
 - [x] 운영 Firebase rules/indexes 대조와 배포 — 7/31 배포본 → `197f84a4` 규칙 반영, 재조회 일치
