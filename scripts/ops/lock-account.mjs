@@ -10,12 +10,21 @@
  *                       필수이고 일치하는 계정 하나만 잠근다. 계정이 하나여도 값이 있으면 그 계정과 일치해야 한다.
  *   GOOGLE_APPLICATION_CREDENTIALS  서비스 계정 키 경로. project_id가 운영(green-e4fe3)이 아니면 거부한다.
  *
- * check: 계정 상태 사실만 출력한다(이메일은 마스킹, 비밀번호 해시·uid는 출력하지 않는다).
- *   찾은 계정이 둘 이상이면 중단하지 않고 계정마다 fingerprint·찾은 방법(exact|normalized|emailIdentities)·
- *   저장된 이메일(마스킹)·role·정지/잠금 여부·매장 연결(판매자는 주문·상품 수)·생성/최근 로그인 시각·활성 세션 수를 출력한다.
- *   check는 계정마다 uid 앞 8자(uidPrefix)를, 매장이 연결된 계정이면 매장 정보(storeId 앞 8자·매장 이름·
- *   ownerId 앞 8자와 이 계정 여부·owner 사용자 문서 존재 여부)와 같은 storeId를 가진 사용자 목록(최대 20개, 사용자마다
- *   uid 앞 8자·fingerprint·role·providers·정지 여부)을 함께 출력한다. lock은 이 정보를 읽거나 출력하지 않는다.
+ * 인자: --detail  로컬 실행 전용 상세 출력. GITHUB_ACTIONS·CI 환경에서는 연결 전에 거부한다.
+ *
+ * 출력 범위: 기본 출력은 공개 Actions 로그에 남으므로 개수·참거짓과 role·찾은 방법 같은 범주 값만 낸다.
+ *   계정·매장을 가리키는 값(입력·저장 이메일 마스킹, fingerprint, uid·storeId·ownerId 앞 8자, 매장 이름,
+ *   같은 매장 사용자 목록, 생성·최근 로그인·refresh 시각)은 --detail에서만 낸다. 비밀번호 해시와 uid 원문은
+ *   어느 쪽에서도 내지 않는다. 예상하지 못한 오류는 기본 출력에서 코드와 정제한 메시지(이메일·문서 경로·URL·
+ *   긴 식별자 제거)만 낸다.
+ *
+ * check: 계정 상태 사실만 출력한다. 기본 출력은 찾은 계정 수, 계정마다 찾은 방법(exact|normalized|emailIdentities)·
+ *   role·정지/잠금 여부·매장 연결 여부(판매자는 주문·상품 수)·Firebase Auth 사용자 여부·활성 세션 수와, 매장이 연결된
+ *   계정이면 매장 문서 존재·이 계정이 owner인지·owner 사용자 문서 존재·같은 storeId 사용자 수다.
+ *   --detail은 여기에 계정마다 fingerprint·저장된 이메일(마스킹)·uid 앞 8자·생성/최근 로그인/refresh 시각과
+ *   매장 정보(storeId 앞 8자·매장 이름·ownerId 앞 8자)·같은 매장 사용자 목록(최대 20개)을 더한다.
+ *   같은 이메일 계정이 둘 이상이면 lock에 target_fingerprint가 필요하므로 로컬에서 --detail로 fingerprint를 확인한다.
+ *   lock은 매장 정보를 읽거나 출력하지 않는다.
  * lock(여러 번 실행해도 같은 결과):
  *   - users/{uid}.passwordHash를 메모리에서 만든 무작위 32바이트 값의 bcrypt 해시로 바꾼다(원문은 어디에도 남기지 않는다).
  *   - users/{uid}.suspended = true(API 로그인·refresh·Firebase custom token·JwtStrategy가 모두 거부),
@@ -44,6 +53,79 @@ const STORE_NAME_MAX_LENGTH = 80;
 const REFRESH_SUBCOLLECTION = 'sessions';
 
 export class LockAccountError extends Error {}
+
+// ── 출력 범위(link-store-owner.mjs와 함께 쓴다) ──────────────────────────────
+
+export const DETAIL_FLAG = '--detail';
+const ERROR_MESSAGE_MAX_LENGTH = 200;
+
+/** 출력 옵션 오류. 메시지에 입력값을 넣지 않는다. */
+export class OpsOutputError extends Error {}
+
+export function isCiEnvironment(env = {}) {
+  return env.GITHUB_ACTIONS === 'true' || env.CI === 'true' || env.CI === '1';
+}
+
+/** 인자는 --detail 하나만 받는다. --detail은 로컬 실행에서만 허용한다(Actions 로그는 공개). */
+export function readOutputOptions(argv = [], env = {}) {
+  if (argv.some((arg) => arg !== DETAIL_FLAG)) {
+    throw new OpsOutputError(`알 수 없는 인자가 있습니다. ${DETAIL_FLAG}만 받습니다.`);
+  }
+  const detail = argv.includes(DETAIL_FLAG);
+  if (detail && isCiEnvironment(env)) {
+    throw new OpsOutputError(
+      `${DETAIL_FLAG}는 로컬 실행에서만 쓸 수 있습니다(Actions 로그는 공개). 아무것도 읽지 않고 중단합니다.`,
+    );
+  }
+  return { detail };
+}
+
+/** --detail에서만 내는 줄. */
+export function detailLine(text) {
+  return { detail: true, text: String(text) };
+}
+
+/** 줄 출력기. detailLine은 isDetail()이 참일 때만 낸다. */
+export function createLinePrinter({ isDetail, emit }) {
+  return (line, prefix = '') => {
+    if (line && typeof line === 'object') {
+      if (line.detail && !isDetail()) return;
+      emit(`${prefix}${line.text}`);
+      return;
+    }
+    emit(`${prefix}${line}`);
+  };
+}
+
+/**
+ * 예상하지 못한 오류 메시지에서 계정·문서를 가리킬 수 있는 부분을 지운다.
+ * URL, 이메일, Firestore 문서 경로, UUID, 숫자가 섞인 16자 이상·대소문자가 섞인 20자 이상 토큰을 가리고 길이를 자른다.
+ */
+export function sanitizeErrorMessage(message) {
+  return String(message ?? '')
+    .replace(/https?:\/\/\S+/g, '[url]')
+    .replace(/[^\s@'"<>(),;]+@[^\s@'"<>(),;]+/g, '[email]')
+    .replace(
+      /\b(documents|users|stores|refreshTokens|emailIdentities|auditLogs|orders|products)\/[^\s'",;)]+/g,
+      '$1/[path]',
+    )
+    .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, '[id]')
+    .replace(/(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{16,}/g, '[id]')
+    .replace(/(?=[A-Za-z0-9_-]*[a-z])(?=[A-Za-z0-9_-]*[A-Z])[A-Za-z0-9_-]{20,}/g, '[id]')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, ERROR_MESSAGE_MAX_LENGTH);
+}
+
+/** 예상하지 못한 오류 한 줄. 기본은 코드와 정제한 메시지, --detail(로컬)은 원문 메시지. */
+export function describeError(error, { detail = false } = {}) {
+  const rawCode = String(error?.code ?? error?.name ?? 'error');
+  const code = /^[A-Za-z0-9/_.-]{1,64}$/.test(rawCode) ? rawCode : 'error';
+  const message = detail
+    ? String(error?.message ?? '').trim()
+    : sanitizeErrorMessage(error?.message);
+  return `실패: ${code}${message ? ` ${message}` : ''}`;
+}
 
 // t***@d***.com 형태. 로컬 부분과 도메인 첫 라벨의 첫 글자만 남긴다.
 export function maskEmail(email) {
@@ -237,20 +319,21 @@ function storeNameOf(store) {
 }
 
 // check 전용. 읽기만 한다: uid 앞 8자와, 매장이 연결돼 있으면 매장 문서·owner·같은 storeId 사용자 목록.
+// 식별값(uid·storeId·ownerId 앞 8자, 매장 이름, 사용자 목록)은 --detail에서만 낸다.
 async function checkOnlyLines(db, candidate) {
   const { uid, data: user } = candidate;
-  const lines = [`uidPrefix: ${idPrefix(uid)}`];
+  const lines = [detailLine(`uidPrefix: ${idPrefix(uid)}`)];
   const storeId = typeof user.storeId === 'string' && user.storeId ? user.storeId : null;
   if (!storeId) return lines;
 
   const storeSnap = await db.doc(`stores/${storeId}`).get();
   const store = storeSnap.exists ? (storeSnap.data() ?? {}) : null;
   const ownerId = typeof store?.ownerId === 'string' && store.ownerId ? store.ownerId : null;
-  lines.push(`storeIdPrefix: ${idPrefix(storeId)}`);
+  lines.push(detailLine(`storeIdPrefix: ${idPrefix(storeId)}`));
   lines.push(`storeDoc: ${store ? 'yes' : 'no'}`);
   if (store) {
-    lines.push(`storeName: ${storeNameOf(store)}`);
-    lines.push(`storeOwnerIdPrefix: ${idPrefix(ownerId)}`);
+    lines.push(detailLine(`storeName: ${storeNameOf(store)}`));
+    lines.push(detailLine(`storeOwnerIdPrefix: ${idPrefix(ownerId)}`));
     lines.push(`storeOwnerIsThisUser: ${ownerId === uid ? 'yes' : 'no'}`);
     if (ownerId && ownerId !== uid) {
       const ownerSnap = await db.doc(`users/${ownerId}`).get();
@@ -270,27 +353,29 @@ async function checkOnlyLines(db, candidate) {
   lines.push(`storeSellerUsers: ${storeUsers.length}${reachedLimit ? '+ (limit reached)' : ''}`);
   for (const storeUser of storeUsers) {
     lines.push(
-      [
-        '  storeUser:',
-        `uidPrefix=${idPrefix(storeUser.id)}`,
-        `fingerprint=${storeUser.fingerprint}`,
-        `role=${roleOf(storeUser.data)}`,
-        `providers=${providersOf(storeUser.data)}`,
-        `suspended=${storeUser.data.suspended === true ? 'yes' : 'no'}`,
-        `thisCandidate=${storeUser.id === uid ? 'yes' : 'no'}`,
-        `storeOwner=${storeUser.id === ownerId ? 'yes' : 'no'}`,
-      ].join(' '),
+      detailLine(
+        [
+          '  storeUser:',
+          `uidPrefix=${idPrefix(storeUser.id)}`,
+          `fingerprint=${storeUser.fingerprint}`,
+          `role=${roleOf(storeUser.data)}`,
+          `providers=${providersOf(storeUser.data)}`,
+          `suspended=${storeUser.data.suspended === true ? 'yes' : 'no'}`,
+          `thisCandidate=${storeUser.id === uid ? 'yes' : 'no'}`,
+          `storeOwner=${storeUser.id === ownerId ? 'yes' : 'no'}`,
+        ].join(' '),
+      ),
     );
   }
   return lines;
 }
 
-// 계정 식별 줄: uid·이메일 원문 없이 fingerprint·찾은 방법·저장된 이메일(마스킹)·role만 출력한다.
+// 계정 식별 줄: uid·이메일 원문 없이 찾은 방법·role, --detail에서는 fingerprint·저장된 이메일(마스킹)도 낸다.
 function identityLines(candidate) {
   return [
-    `fingerprint: ${candidate.fingerprint}`,
+    detailLine(`fingerprint: ${candidate.fingerprint}`),
     `matchedBy: ${candidate.matchedBy.join(',')}`,
-    `storedEmail: ${maskEmail(candidate.data.email)}`,
+    detailLine(`storedEmail: ${maskEmail(candidate.data.email)}`),
     `role: ${roleOf(candidate.data)}`,
   ];
 }
@@ -305,9 +390,9 @@ async function inspectCandidate(db, auth, candidate) {
   const lines = [
     `suspended: ${user.suspended === true ? 'yes' : 'no'}`,
     `storeLinked: ${storeId ? 'yes' : 'no'}`,
-    `createdAt: ${formatDate(user.createdAt)}`,
-    `lastLogin: ${formatDate(authUser?.metadata?.lastSignInTime)}`,
-    `lastRefreshAt: ${formatDate(before.refreshData?.updatedAt)}`,
+    detailLine(`createdAt: ${formatDate(user.createdAt)}`),
+    detailLine(`lastLogin: ${formatDate(authUser?.metadata?.lastSignInTime)}`),
+    detailLine(`lastRefreshAt: ${formatDate(before.refreshData?.updatedAt)}`),
     `firebaseAuthUser: ${authUser ? 'yes' : 'no'}`,
     `alreadyLocked: ${lockedBefore ? 'yes' : 'no'}`,
     `activeRefreshSessions: ${before.activeSessions}`,
@@ -349,6 +434,7 @@ async function countByStore(db, collection, storeId) {
 }
 
 export async function run({
+  argv = process.argv.slice(2),
   env = process.env,
   write = (line) => console.log(line),
   loadFile = (path) => readFile(path, 'utf8'),
@@ -358,6 +444,7 @@ export async function run({
 } = {}) {
   // 출력 직전에 입력 이메일 원문이 섞여 있으면 마스킹한다(오류 메시지 포함).
   let rawEmail = '';
+  let detail = false;
   const out = (line) => {
     let text = String(line);
     if (rawEmail) {
@@ -366,44 +453,48 @@ export async function run({
     }
     write(text);
   };
+  const print = createLinePrinter({ isDetail: () => detail, emit: out });
 
   try {
+    ({ detail } = readOutputOptions(argv, env));
     const inputs = readInputs(env);
     rawEmail = inputs.email;
     const serviceAccount = await readServiceAccount(env, loadFile);
-    out(`mode: ${inputs.mode}`);
-    out(`email: ${maskEmail(inputs.email)}`);
-    out(`project: ${serviceAccount.project_id}`);
+    print(`mode: ${inputs.mode}`);
+    print(detailLine(`email: ${maskEmail(inputs.email)}`));
+    print(`project: ${serviceAccount.project_id}`);
 
-    if (inputs.targetFingerprint) out(`targetFingerprint: ${inputs.targetFingerprint}`);
+    if (inputs.targetFingerprint)
+      print(detailLine(`targetFingerprint: ${inputs.targetFingerprint}`));
 
     const { db, auth, Timestamp } = await connect(serviceAccount);
     const candidates = await findCandidates(db, inputs.email);
     if (candidates.length === 0) {
-      out('found: no');
-      out('not found');
+      print('found: no');
+      print('not found');
       return 0;
     }
-    out('found: yes');
-    out(`candidates: ${candidates.length}`);
+    print('found: yes');
+    print(`candidates: ${candidates.length}`);
 
     // check에서 계정이 둘 이상이면 중단하지 않고 계정마다 읽기 전용 사실만 출력한다.
     if (inputs.mode === 'check' && candidates.length > 1) {
       for (const [index, candidate] of candidates.entries()) {
-        out(`candidate ${index + 1}/${candidates.length}`);
+        print(`candidate ${index + 1}/${candidates.length}`);
         const { lines } = await inspectCandidate(db, auth, candidate);
         const extra = await checkOnlyLines(db, candidate);
-        for (const line of [...identityLines(candidate), ...lines, ...extra]) out(`  ${line}`);
+        for (const line of [...identityLines(candidate), ...lines, ...extra]) print(line, '  ');
         if (inputs.expectedRole) {
           const matches = roleOf(candidate.data) === inputs.expectedRole;
-          out(`  roleMatchesExpected: ${matches ? 'yes' : 'no'}`);
+          print(`  roleMatchesExpected: ${matches ? 'yes' : 'no'}`);
         }
         if (inputs.targetFingerprint) {
-          out(`  target: ${candidate.fingerprint === inputs.targetFingerprint ? 'yes' : 'no'}`);
+          print(`  target: ${candidate.fingerprint === inputs.targetFingerprint ? 'yes' : 'no'}`);
         }
       }
-      out(
-        '같은 이메일로 찾은 계정이 둘 이상입니다. 잠그려면 lock에서 target_fingerprint로 하나를 지정하세요.',
+      print(
+        '같은 이메일로 찾은 계정이 둘 이상입니다. 잠그려면 lock에서 target_fingerprint로 하나를 지정하세요' +
+          '(fingerprint는 로컬에서 --detail로 실행하면 보입니다).',
       );
       return 0;
     }
@@ -412,15 +503,15 @@ export async function run({
     if (inputs.targetFingerprint) {
       const hits = candidates.filter((c) => c.fingerprint === inputs.targetFingerprint);
       if (hits.length !== 1) {
-        out(
+        print(
           `target_fingerprint와 일치하는 계정이 ${hits.length}개라 아무것도 바꾸지 않고 중단합니다.`,
         );
         return 1;
       }
       [target] = hits;
     } else if (candidates.length > 1) {
-      out(
-        '같은 이메일로 찾은 계정이 둘 이상이라 중단합니다. check로 확인한 뒤 target_fingerprint로 하나를 지정하세요.',
+      print(
+        '같은 이메일로 찾은 계정이 둘 이상이라 중단합니다. 로컬에서 check --detail로 확인한 뒤 target_fingerprint로 하나를 지정하세요.',
       );
       return 1;
     } else {
@@ -429,17 +520,17 @@ export async function run({
 
     const { uid, ref: userRef, data: user } = target;
     const role = roleOf(user);
-    for (const line of identityLines(target)) out(line);
+    for (const line of identityLines(target)) print(line);
     if (inputs.expectedRole && inputs.expectedRole !== role) {
-      out(`role이 기대값(${inputs.expectedRole})과 달라 아무것도 바꾸지 않고 중단합니다.`);
+      print(`role이 기대값(${inputs.expectedRole})과 달라 아무것도 바꾸지 않고 중단합니다.`);
       return 1;
     }
 
     const { authUser, before, lockedBefore, lines } = await inspectCandidate(db, auth, target);
-    for (const line of lines) out(line);
+    for (const line of lines) print(line);
 
     if (inputs.mode === 'check') {
-      for (const line of await checkOnlyLines(db, target)) out(line);
+      for (const line of await checkOnlyLines(db, target)) print(line);
       return 0;
     }
 
@@ -477,15 +568,15 @@ export async function run({
     });
 
     const after = await readSessionState(db, uid, (await userRef.get()).data() ?? {});
-    out('locked: yes');
-    out(`activeRefreshSessionsAfter: ${after.activeSessions}`);
-    out(`firebaseAuthDisabled: ${authUser ? 'yes' : 'n/a'}`);
+    print('locked: yes');
+    print(`activeRefreshSessionsAfter: ${after.activeSessions}`);
+    print(`firebaseAuthDisabled: ${authUser ? 'yes' : 'n/a'}`);
     return 0;
   } catch (error) {
     const message =
-      error instanceof LockAccountError
+      error instanceof LockAccountError || error instanceof OpsOutputError
         ? error.message
-        : `실패: ${error?.code ?? error?.name ?? 'error'} ${error?.message ?? ''}`.trim();
+        : describeError(error, { detail });
     out(message);
     return 1;
   }

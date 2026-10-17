@@ -18,6 +18,8 @@ const json = (body, status = 200) =>
 function githubFetch({
   path = '.github/workflows/e2e-round-direct.yml',
   conclusion = 'success',
+  headBranch = 'main',
+  event = 'workflow_dispatch',
   log,
 } = {}) {
   const calls = [];
@@ -26,6 +28,8 @@ function githubFetch({
     if (url.endsWith('/runs/123')) {
       return json({
         path,
+        head_branch: headBranch,
+        event,
         status: 'completed',
         conclusion,
         html_url: 'https://github.test/run/123',
@@ -94,6 +98,23 @@ test('verify-e2e: 다른 SHA·실패·다른 workflow는 거부한다', async ()
     verifyE2eRun({ sha: SHA, runId: 'abc', token: 't', fetchImpl: githubFetch().impl }),
     /숫자/,
   );
+});
+
+test('verify-e2e: main이 아닌 브랜치·수동 실행이 아닌 run은 로그를 보기 전에 거부한다', async () => {
+  for (const options of [
+    { headBranch: 'feature/skip-tests' },
+    { headBranch: null },
+    { event: 'push' },
+    { event: 'pull_request', headBranch: 'main' },
+  ]) {
+    const { impl, calls } = githubFetch(options);
+    await assert.rejects(
+      verifyE2eRun({ sha: SHA, runId: '123', token: 't', fetchImpl: impl }),
+      /main에서 수동 실행한 회차 E2E가 아닙니다/,
+      JSON.stringify(options),
+    );
+    assert.equal(calls.length, 1, '실행 브랜치가 틀리면 job·로그를 조회하지 않는다');
+  }
 });
 
 function railwayFetch(statuses, { deployResult = 'dep_1' } = {}) {
