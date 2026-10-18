@@ -9,6 +9,7 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 import { apiPathSegment, readRouteParam } from '@/lib/api-path';
 import type { ProductFormData } from '../../_components/ProductForm';
 import ProductForm from '../../_components/ProductForm';
+import { extrasFromProduct } from '../../_components/productExtras';
 
 // Firestore Timestamp | ISO string → YYYY-MM-DD
 function toISODate(value: unknown): Date | null {
@@ -88,6 +89,7 @@ export default function EditProductPage() {
             isEditedByUser: true,
           },
           sellerOverride: data.sellerOverride ?? false,
+          extras: extrasFromProduct(data),
         };
         if (data.groupConfig) {
           mapped.groupConfig = {

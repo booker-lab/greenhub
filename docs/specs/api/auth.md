@@ -324,10 +324,10 @@ POST /auth/refresh
 - **이 두 endpoint가 공개라는 사실 자체는 현재 보안 경계다. UI 미노출을 authorization control로 취급하지 않는다.**
 - `role: driver` register→login 승인 우회는 해소됐다: 공개 `register`는 `driverApproved: false`를 저장하고 client 주입을 거부하며, 승인값이 false/누락인 driver의 `login`·`getFirebaseToken`은 token side effect 전에 거부된다(`apps/api/src/auth/auth.service.spec.ts`). 공개 endpoint라는 사실 자체는 계속 현재 보안 경계다.
 - 일반 사용자에게 credentials 인증을 제품 기능으로 노출하려면 별도 제품·보안 결정이 필요하다.
-- `login`은 계정 없음·비밀번호 불일치·비밀번호 없는(카카오 전용) 계정을 모두 같은 bcrypt 비교 비용을 거쳐 같은 401 메시지로 거부한다.
+- 운영 런타임(`isProductionRuntime`: `RAILWAY_ENVIRONMENT_NAME` → `VERCEL_ENV` → `NODE_ENV` 순으로 `production` 판정)은 이메일 `login`·`register`를 모두 받지 않는다(2026-10-18 결정, 운영 화면은 카카오 로그인만 사용. 판매자 초대 가입만 받던 2026-10-10 결정을 대체). `login`은 계정 조회·비밀번호 비교 전에 403(`이메일 로그인은 지원하지 않습니다.`)이고, `register`는 역할·초대 토큰과 관계없이 사용자·초대 문서를 읽기 전에 403(`이메일 회원가입은 지원하지 않습니다.`)이다. 계정 유무·상태와 관계없이 같은 응답이고 감사 기록·토큰 발급·초대 소모가 없다. 운영에서 새 판매자를 받는 방식은 정해지지 않았다(별도 결정). local·test·Preview·스테이징 런타임의 로그인·가입은 그대로다(E2E와 로컬 시드가 쓴다). 직접 근거: `apps/api/src/auth/auth.service.spec.ts` `이메일 로그인 운영 제한`·`이메일 가입 운영 제한·중복 방지`, `apps/api/src/auth/auth.production-email.spec.ts`.
+- 운영이 아닌 런타임의 `login`은 계정 없음·비밀번호 불일치·비밀번호 없는(카카오 전용) 계정을 모두 같은 bcrypt 비교 비용을 거쳐 같은 401 메시지로 거부한다.
 - 카카오 첫 로그인의 사용자 생성은 `kakaoIdentities/{kakaoId}`(`userId`)를 사용자 문서와 한 트랜잭션에서 함께 써서, 같은 카카오 계정의 동시 요청이 사용자 문서를 하나만 만들게 한다(`apps/api/src/auth/auth.kakao-signup-occ.spec.ts`). 이 연결 문서가 없는 기존 사용자는 지금처럼 `users.kakaoId` 조회로 찾는다.
-- 운영 런타임(`isProductionRuntime`: `RAILWAY_ENVIRONMENT_NAME` → `VERCEL_ENV` → `NODE_ENV` 순으로 `production` 판정)의 `register`는 판매자 초대 가입(유효한 `inviteToken`)만 받고 `consumer`·`driver` 이메일 가입은 403으로 거부한다(2026-10-10 결정, 운영 화면은 카카오 로그인만 사용). local·test·Preview 런타임의 가입은 그대로다.
-- 판매자 가입의 초대 판정(`apps/api/src/auth/auth.service.ts` `assertInviteRedeemable`, #512): `inviteToken`이 없으면 403, 영숫자 1~64자가 아니면 404, 문서가 없으면 403이다. 그다음 취소(409 `already_revoked`) → 만료(410) → 사용(409) → 받는 사람(초대의 `recipientEmail`과 정규화한 가입 이메일이 다르면 409 `recipient_mismatch`. #518부터 새 초대는 받는 사람 이메일이 필수이고, 그 전에 발급된 `recipientEmail` 없는 초대만 이 확인을 건너뛴다) 순으로 확인한다. 같은 판정을 가입 트랜잭션 안에서 다시 해 만료·취소·동시 가입을 막고, 통과할 때만 `usedAt`·`usedBy`를 기록한다(받는 사람 불일치는 토큰을 소모하지 않는다). 초대 유효 기간은 72시간이다.
+- 운영이 아닌 런타임에서 판매자 가입의 초대 판정(`apps/api/src/auth/auth.service.ts` `assertInviteRedeemable`, #512): `inviteToken`이 없으면 403, 영숫자 1~64자가 아니면 404, 문서가 없으면 403이다. 그다음 취소(409 `already_revoked`) → 만료(410) → 사용(409) → 받는 사람(초대의 `recipientEmail`과 정규화한 가입 이메일이 다르면 409 `recipient_mismatch`. #518부터 새 초대는 받는 사람 이메일이 필수이고, 그 전에 발급된 `recipientEmail` 없는 초대만 이 확인을 건너뛴다) 순으로 확인한다. 같은 판정을 가입 트랜잭션 안에서 다시 해 만료·취소·동시 가입을 막고, 통과할 때만 `usedAt`·`usedBy`를 기록한다(받는 사람 불일치는 토큰을 소모하지 않는다). 초대 유효 기간은 72시간이다.
 - 이메일 가입은 정규화 이메일(trim·소문자)의 SHA-256(hex)을 키로 한 `emailIdentities/{key}`(`userId`·`email`)를 사용자 문서와 한 트랜잭션에서 `create`해, 같은 이메일의 동시 가입이 사용자 문서를 하나만 만들게 한다(나머지는 409). 이 연결 문서가 없는 기존 계정은 지금처럼 `users.email` 조회로 409가 된다. 로그인 경로는 바뀌지 않는다.
 - Seller/Driver의 explicit local-runtime branch 역시 production indicator(`NODE_ENV`·`VERCEL_ENV`·`RAILWAY_ENVIRONMENT_NAME` 중 어느 하나라도 `production`)가 존재하면 fail-closed된다. local marker를 켜도 production runtime에서는 local admission이 열리지 않으며, Seller는 기존 E2E header gate로, Driver는 기존 Preview/E2E gate로 복귀한다. production에서 local marker를 켠다고 사용할 수 있는 것이 아니다.
 
@@ -462,6 +462,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-18 | 운영 런타임의 이메일 `login`·`register`를 모두 403으로 거부(계정·초대 조회 전, 판매자 초대 가입만 받던 2026-10-10 결정을 대체). 운영이 아닌 런타임은 그대로 |
 | 2026-10-15 | 기기별 refresh 세션(#526): 로그인마다 `sid`, `refreshTokens/{sub}.sessions`·`users.activeSessionIds`(최대 10개, LRU 축출), 세션별 회전·유예, 재사용 감지 시 전 세션 폐기, `sid` 로그아웃은 그 세션만 폐기, `JwtStrategy`의 `activeSessionIds` 확인, `sid` 없는 이전 refresh 401. 단일 문서 다기기 한계 해소 |
 | 2026-10-12 | logout·관리자 정지의 `sessionsRevokedAt` 기록과 access token `iat` 비교, 정지 시 refresh 기록·Firebase 세션 폐기, refresh token 해시 저장(원문 기록 자동 전환), 운영 이메일 가입을 판매자 초대로 제한, `emailIdentities` 이메일 가입 단일화, fcm-token·배송지 입력 상한과 배송지 트랜잭션 반영 |
 | 2026-10-10 | 코드 대조 정합화: 세 앱 로그아웃의 API 세션 폐기, refresh 회전 60초 유예·재사용 감지, 사용자당 단일 refresh 문서의 다기기 한계(`AUTH-MULTI-DEVICE-SESSION`), 운영 runtime의 테스트 전용 Credentials 미등록·local-runtime loopback 조건, `KAKAO_APP_ID` 토큰 발급 앱 확인, 앱 서버 쪽 API 호출 시간 제한, Firebase custom token의 현재 user 재조회, 요청 한도 미검증·IP 집계 의존(#404) 반영, candidate·출시 후 과제 표현 정리 |

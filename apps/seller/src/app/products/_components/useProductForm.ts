@@ -1,8 +1,10 @@
 'use client';
 
+import { FEATURE_KEYS } from '@greenhub/shared';
 import { useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
 import { apiPathSegment } from '@/lib/api-path';
+import { isFeatureOn } from '@/lib/features';
 import type { ConflictWarning } from './AIPreviewPanel';
 import {
   defaultForm,
@@ -10,6 +12,7 @@ import {
   type ProductFormData,
   type ProductFormProps,
 } from './productForm.types';
+import { extrasBody } from './productExtras';
 
 /** ProductForm의 상태·검증·임시저장·제출 로직을 모두 담는 훅. */
 export function useProductForm({
@@ -47,6 +50,7 @@ export function useProductForm({
           groupConfig: { ...def.groupConfig, ...(p.groupConfig ?? {}) },
           selection: { ...def.selection, ...(p.selection ?? {}) },
           content: { ...def.content, ...(p.content ?? {}) },
+          extras: { ...def.extras, ...(p.extras ?? {}) },
         });
         if (p._step) setStep(p._step);
       }
@@ -187,6 +191,15 @@ export function useProductForm({
       content: form.content,
       sellerOverride: form.sellerOverride,
     };
+    if (FEATURE_KEYS.some(isFeatureOn)) {
+      const extras = extrasBody(form.extras);
+      if (!extras.ok) {
+        setError(extras.error);
+        setSubmitting(false);
+        return;
+      }
+      Object.assign(body, extras.body);
+    }
     if (form.saleType === 'group') {
       body.groupConfig = {
         minQuantity: Number(form.groupConfig.minQuantity),

@@ -9,6 +9,8 @@ export const PUBLIC_BUSINESS_INFO = {
   email: 'support@greenlove.co.kr',
   emailHref: 'mailto:support@greenlove.co.kr',
   hostingProvider: 'Vercel Inc.',
+  // 통신판매업 신고 뒤 받은 번호를 넣는다(예: '2026-경기이천-0000'). 빈 값이면 footer에 칸을 그리지 않는다.
+  mailOrderRegistrationNumber: '' as string,
   supportHours: '09:00~18:00 (점심시간 12:00~13:00)',
   relationship: '그린러브는 디어 오키드가 운영하는 화훼 쇼핑몰입니다.',
   kakaoChannel: {
