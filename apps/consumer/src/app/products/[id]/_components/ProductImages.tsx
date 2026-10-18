@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import { Box } from '@mantine/core';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
+import { isFeatureOn } from '@/lib/features';
 
 interface Props {
   images: string[];
@@ -11,6 +12,7 @@ interface Props {
 
 export default function ProductImages({ images, name }: Props) {
   const displayImages = images.length ? images : [PRODUCT_IMAGE_FALLBACK];
+  const detailImages = isFeatureOn('detail-images');
   const [activeIdx, setActiveIdx] = useState(0);
   const carouselRef = useRef<HTMLDivElement>(null);
 
@@ -50,8 +52,11 @@ export default function ProductImages({ images, name }: Props) {
               src={src}
               fallbackSrc={PRODUCT_IMAGE_FALLBACK}
               alt={`${name} ${i + 1}`}
-              sizes="100vw"
+              // 상세 사진 정리(detail-images): 화면 폭만큼만 받고 첫 장을 먼저 요청한다.
+              sizes={detailImages ? '(max-width: 720px) 100vw, 720px' : '100vw'}
               preload={i === 0}
+              fetchPriority={detailImages && i === 0 ? 'high' : undefined}
+              loading={detailImages && i > 0 ? 'lazy' : undefined}
               style={{ objectFit: 'cover' }}
             />
           </Box>

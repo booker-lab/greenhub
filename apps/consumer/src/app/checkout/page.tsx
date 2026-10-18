@@ -36,6 +36,9 @@ import {
 } from '@/lib/payment-redirect';
 import { readPortonePaymentConfiguration } from '@/lib/portone-config';
 import CheckoutForm from './_components/CheckoutForm';
+import { EMPTY_GIFT, type GiftState, giftPayload } from '@/components/benchmark/GiftFields';
+import { isFeatureOn } from '@/lib/features';
+import { formatRoundTime } from '@/lib/round-schedule-label';
 
 declare global {
   interface Window {
@@ -457,6 +460,9 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   const storeId = cartItems[0]?.storeId ?? '';
   const saleRounds = useSaleRounds(storeId || null);
   const schedule = resolveRoundCheckoutSchedule(cartItems, saleRounds.rounds);
+  // 벤치마킹 비교 기능: 선물하기(gift)
+  const [gift, setGift] = useState<GiftState>(EMPTY_GIFT);
+  const giftInfo = isFeatureOn('gift') ? giftPayload(gift, deliveryPhone) : null;
 
   useEffect(() => {
     setAcquisition(getAcquisitionSnapshot());
@@ -493,6 +499,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       ...(requestNote.trim() ? { requestNote: requestNote.trim() } : {}),
       ...(schedule ? { requestedDeliveryDate: schedule.requestedDeliveryDate } : {}),
       ...(acquisition ? { acquisition } : {}),
+      ...(giftInfo ? { gift: giftInfo } : {}),
     },
     roundItems: cartItems,
     accessToken: session?.user?.accessToken ?? '',
@@ -511,7 +518,8 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     router.replace(`/order/success?orderId=${orderId}`);
   }, [cartItems, orderId, removeRoundItems, router, state]);
 
-  const totalAmount = cartItems.reduce((sum, item) => sum + item.roundPrice * item.quantity, 0);
+  // 옵션을 고른 상품은 옵션 금액을 더한 price를 쓴다(옵션이 없으면 price === roundPrice).
+  const totalAmount = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const isLoading = state === 'creating' || state === 'paying';
   const scheduleError =
     saleRounds.status === 'error'
@@ -533,6 +541,8 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     !!address.zipCode &&
     deliveryPhoneValid &&
     !!session;
+  // 선물을 켰으면 받는 분·보내는 분 이름을 모두 적어야 결제한다(gift).
+  const giftReady = !isFeatureOn('gift') || !gift.enabled || giftInfo !== null;
 
   return (
     <>
@@ -578,9 +588,16 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       paymentMethod={paymentMethod}
       onPaymentMethodChange={setPaymentMethod}
       isLoading={isLoading}
-      canPay={canPay}
+      canPay={canPay && giftReady}
       error={scheduleError ?? error}
       onPay={requestPayment}
+      benchmark={{
+        arrivalLabel:
+          isFeatureOn('arrival-everywhere') && schedule
+            ? formatRoundTime(schedule.round.schedule.deliveryEndAt)
+            : null,
+        gift: isFeatureOn('gift') ? { value: gift, onChange: setGift } : undefined,
+      }}
     />
     </>
   );

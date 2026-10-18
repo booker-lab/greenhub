@@ -1,3 +1,4 @@
+import type { RoundDemandSignal, RoundItemDemandSignal } from './benchmark.types.js';
 export type SaleRoundStatus = 'DRAFT' | 'SCHEDULED' | 'OPEN' | 'CLOSED' | 'COMPLETED' | 'CANCELLED';
 export type SaleRoundCloseReason = 'SCHEDULE_ENDED' | 'CAPACITY' | 'MANUAL';
 export type SaleRoundCancellationStatus = 'CANCELLING' | 'LOCAL_FAILED' | 'COMPLETED';
@@ -58,6 +59,8 @@ export interface SaleRound {
     limits: SaleRoundLimits;
     counters: SaleRoundCounters;
     carrotLandingUrl: string | null;
+    /** 공개 회차에서 판매자가 수요 신호를 켠 경우에만 있다(demand-signals). */
+    demand?: RoundDemandSignal;
     cancelledAt: string | null;
     completedAt: string | null;
     createdAt: string;
@@ -76,6 +79,8 @@ export interface SaleRoundItem {
     orderedQuantity: number;
     displayOrder: number;
     status: SaleRoundItemStatus;
+    /** 공개 회차에서 판매자가 수요 신호를 켠 경우에만 있다(demand-signals). */
+    demand?: RoundItemDemandSignal;
     createdAt: string;
     updatedAt: string;
 }

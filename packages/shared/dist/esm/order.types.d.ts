@@ -1,3 +1,4 @@
+import type { GiftInfo, SelectedProductOption } from './benchmark.types.js';
 import type { ClientOrderRequestId } from './sale-round.types.js';
 export type OrderStatus = 'PENDING' | 'RECRUITING' | 'CONFIRMED' | 'ACCEPTED' | 'PREPARING' | 'DELIVERING' | 'DELIVERY_HELD' | 'HUB_ARRIVED' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED' | 'REVIEWED';
 export type DeliveryMethod = 'direct' | 'hub' | 'parcel';
@@ -22,6 +23,8 @@ export interface OrderItemSnapshot {
     unitPrice: number;
     quantity: number;
     subtotalAmount: number;
+    /** 고른 옵션(옵션 시트 기능). unitPrice에 이미 더해져 있다. */
+    selectedOptions?: SelectedProductOption[];
 }
 export interface OrderAcquisitionSnapshot {
     source: 'carrot' | 'direct' | 'unknown';
@@ -86,6 +89,7 @@ export interface Order {
     deliveryPhone?: string | null;
     requestNote?: string | null;
     deliveryPhotoIds?: string[];
+    gift?: GiftInfo | null;
     createdAt: string;
     updatedAt: string;
     productName?: string;
@@ -120,7 +124,12 @@ export interface CreateOrderRequest {
     roundItems?: Array<{
         roundItemId: string;
         quantity: number;
+        /** 옵션 묶음마다 고른 선택지 id */
+        optionChoiceIds?: string[];
+        /** 문구가 필요한 선택지(라벨·토퍼)에 넣을 문구 */
+        optionText?: string;
     }>;
+    gift?: GiftInfo;
     deliveryPhone: string;
     requestNote?: string;
     marketingConsent?: MarketingConsentInput;
