@@ -3,7 +3,10 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { parseFeatureFlags } from '@greenhub/shared';
 import { createHash } from 'crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import {
@@ -22,6 +25,8 @@ export class RoundOrderCreateService {
     private readonly firestore: FirestoreService,
     private readonly capacity: OrderCapacityService,
     private readonly retention: RetentionService,
+    // 설정이 없으면(테스트 생성 등) 비교 기능은 모두 꺼진 것으로 본다.
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   async create(storeId: string, userId: string, dto: CreateOrderDto) {
@@ -35,7 +40,9 @@ export class RoundOrderCreateService {
     const requestId = dto.clientOrderRequestId!;
     const orderId = this.stableId(storeId, userId, requestId);
     const payloadHash = this.payloadHash(storeId, userId, dto);
-    const gift = normalizeGift(dto.gift);
+    // 선물(받는 분 이름·휴대폰 등 개인정보)은 GREENHUB_FEATURES에 gift가 켜졌을 때만 저장한다.
+    // 꺼져 있으면 옛 앱 호환을 위해 거부하지 않고 조용히 버린다.
+    const gift = this.isGiftEnabled() ? normalizeGift(dto.gift) : null;
     const orderRef = this.firestore.doc(`orders/${orderId}`);
     let result: Record<string, unknown> | null = null;
 
@@ -150,6 +157,10 @@ export class RoundOrderCreateService {
     });
 
     return result!;
+  }
+
+  private isGiftEnabled(): boolean {
+    return parseFeatureFlags(this.config?.get<string>('GREENHUB_FEATURES')).has('gift');
   }
 
   private assertRequest(dto: CreateOrderDto) {
