@@ -1,7 +1,7 @@
 /**
  * 공동구매 수량 기반 전환 — 실 검증 스크립트
  *
- * 실행: node scripts/verify-groupbuy-migration.mjs
+ * 실행: PUBLIC_API_BASE=<API 주소> node scripts/verify-groupbuy-migration.mjs
  *
  * 검증 항목:
  *   [1] Firestore groupProductConfig — 신규 필드 존재, 구 필드 부재
@@ -16,9 +16,15 @@ import { dirname, join } from 'path'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const require = createRequire(import.meta.url)
-const serviceAccount = require(join(__dirname, '../apps/api/firebase-adminsdk.json'))
 
-const API_BASE = 'https://api-production-13e7.up.railway.app'
+// 대상 API는 실행할 때마다 명시한다(운영 기본값 없음). 아래 Firestore 자격과 같은 환경의 API여야 한다.
+const API_BASE = process.env.PUBLIC_API_BASE?.trim().replace(/\/$/, '')
+if (!API_BASE) {
+  console.error('PUBLIC_API_BASE(조회할 API 주소)를 지정하세요. 운영 기본값은 없습니다.')
+  process.exit(1)
+}
+
+const serviceAccount = require(join(__dirname, '../apps/api/firebase-adminsdk.json'))
 
 initializeApp({ credential: cert(serviceAccount) })
 const db = getFirestore()
