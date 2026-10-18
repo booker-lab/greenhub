@@ -81,6 +81,11 @@ export interface SaleRoundItem {
     status: SaleRoundItemStatus;
     /** 공개 회차에서 판매자가 수요 신호를 켠 경우에만 있다(demand-signals). */
     demand?: RoundItemDemandSignal;
+    /**
+     * 공개 회차 응답에만 있다. 같은 가게·같은 상품이 직전 마감 회차에서 판 회차 가격(card-discount).
+     * 직전 마감 회차가 없거나 그 회차에 이 상품이 없으면 키가 없다.
+     */
+    previousRoundPrice?: number;
     createdAt: string;
     updatedAt: string;
 }

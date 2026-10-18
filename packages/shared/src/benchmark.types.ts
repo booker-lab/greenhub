@@ -60,8 +60,6 @@ export const PRODUCT_OPTION_PRICE_DELTA_MAX = 200_000
 export const OPTION_TEXT_MAX_LENGTH = 20
 
 export interface ProductExtras {
-  /** 정상가. 회차 가격보다 높을 때만 할인율을 보여준다. */
-  listPrice?: number
   size?: ProductSize
   light?: LightLevel
   placements?: Placement[]
