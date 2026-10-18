@@ -1,4 +1,4 @@
-export declare const FEATURE_KEYS: readonly ["payment-fail-stay", "open-alert", "hide-empty-past", "countdown-date", "detail-images", "arrival-everywhere", "category-round-label", "guest-cart", "icheon-precheck", "order-success-guide", "reorder", "option-sheet", "seller-store", "quality-guarantee", "reviews", "card-discount", "size-info", "wishlist", "restock-alert", "gift", "cart-upsell", "product-request", "demand-signals", "plant-search", "care-guide", "recommendations", "partner-inquiry"];
+export declare const FEATURE_KEYS: readonly ["payment-fail-stay", "open-alert", "hide-empty-past", "countdown-date", "detail-images", "arrival-everywhere", "category-round-label", "guest-cart", "icheon-precheck", "order-success-guide", "reorder", "purchase-history", "option-sheet", "seller-store", "quality-guarantee", "reviews", "card-discount", "size-info", "wishlist", "restock-alert", "gift", "cart-upsell", "product-request", "demand-signals", "plant-search", "care-guide", "recommendations", "partner-inquiry"];
 export type FeatureKey = (typeof FEATURE_KEYS)[number];
 export type FeatureGroup = 'ux' | 'matrix' | 'gap';
 export interface FeatureInfo {
