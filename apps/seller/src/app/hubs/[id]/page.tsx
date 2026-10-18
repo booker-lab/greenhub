@@ -9,6 +9,10 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
+import { apiPathSegment, readRouteParam } from '@/lib/api-path';
+
+const INVALID_HUB_ADDRESS_MESSAGE =
+  '거점 주소가 올바르지 않습니다. 거점 목록에서 다시 선택해 주세요.';
 
 interface Hub {
   id: string;
@@ -46,7 +50,8 @@ export default function HubDetailPage() {
   const { data: session } = useSession();
   const params = useParams();
   const router = useRouter();
-  const hubId = params.id as string;
+  // 경로 파라미터는 형식을 검사한 원래 ID로 읽는다. 맞지 않으면 요청하지 않는다.
+  const hubId = readRouteParam(params.id);
 
   const [hub, setHub] = useState<Hub | null>(null);
   const [orders, setOrders] = useState<HubOrder[]>([]);
@@ -57,15 +62,13 @@ export default function HubDetailPage() {
   const token = session?.user.accessToken;
 
   const fetchData = useCallback(async () => {
-    if (!storeId || !token) return;
+    if (!storeId || !token || !hubId) return;
     setLoading(true);
     try {
+      const hubPath = `/stores/${apiPathSegment(storeId)}/hubs/${apiPathSegment(hubId)}`;
       const [hubData, ordersData] = await Promise.all([
-        apiJson<Hub>(`/stores/${storeId}/hubs/${hubId}`, token),
-        apiJson<{ orders?: HubOrder[] }>(
-          `/stores/${storeId}/hubs/${hubId}/orders?status=HUB_ARRIVED`,
-          token,
-        ),
+        apiJson<Hub>(hubPath, token),
+        apiJson<{ orders?: HubOrder[] }>(`${hubPath}/orders?status=HUB_ARRIVED`, token),
       ]);
       setHub(hubData);
       setOrders(ordersData.orders ?? []);
@@ -82,6 +85,19 @@ export default function HubDetailPage() {
 
   const orderId = (o: HubOrder) => o.id ?? o.orderId ?? '';
 
+  if (!hubId) {
+    return (
+      <PageShell>
+        <PageHeader title="거점 상세" onBack={() => router.back()} />
+        <Container size="sm" px="md" py="md">
+          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+            {INVALID_HUB_ADDRESS_MESSAGE}
+          </Text>
+        </Container>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell>
       <PageHeader
@@ -91,7 +107,7 @@ export default function HubDetailPage() {
           hub ? (
             <Button
               component={Link}
-              href={`/hubs/${hubId}/edit`}
+              href={`/hubs/${encodeURIComponent(hubId)}/edit`}
               size="xs"
               variant="light"
               color="gray"
@@ -209,7 +225,9 @@ export default function HubDetailPage() {
                         py="md"
                         shadow="xs"
                         onClick={() =>
-                          router.push(`/hubs/${hubId}/pickup?orderId=${orderId(order)}`)
+                          router.push(
+                            `/hubs/${encodeURIComponent(hubId)}/pickup?orderId=${encodeURIComponent(orderId(order))}`,
+                          )
                         }
                         style={{ width: '100%', cursor: 'pointer', textAlign: 'left' }}
                       >
