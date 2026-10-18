@@ -14,6 +14,9 @@ import { stripJpegMetadata } from './jpeg-metadata';
 const DELIVERY_PHOTO_URL_TTL_MS = 15 * 60 * 1000;
 const DELIVERY_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+const REVIEW_PHOTO_URL_TTL_MS = 60 * 60 * 1000;
+// reviewPhotos/{orderId}_{productId}/{photoId}.jpg — 후기 사진은 서버만 쓰고 서명 URL로만 읽는다.
+const REVIEW_PHOTO_PATH_PATTERN = /^reviewPhotos\/[A-Za-z0-9_-]{1,257}\/[A-Za-z0-9_-]{1,128}\.jpg$/;
 
 type RequesterRole = 'admin' | 'seller' | 'driver' | 'consumer';
 
@@ -231,6 +234,35 @@ export class StorageService {
     };
   }
 
+  /** 후기 사진(메타데이터를 지운 JPEG)을 비공개 경로에 새로 만든다. 같은 경로가 있으면 실패한다. */
+  async saveReviewPhoto(path: string, content: Buffer): Promise<void> {
+    this.assertReviewPhotoPath(path);
+    await this.bucket.file(path).save(content, {
+      resumable: false,
+      validation: 'crc32c',
+      preconditionOpts: { ifGenerationMatch: 0 },
+      metadata: {
+        contentType: 'image/jpeg',
+        cacheControl: 'private, max-age=0, no-store',
+      },
+    });
+  }
+
+  async createReviewPhotoReadUrl(path: string, now: Date = new Date()): Promise<string> {
+    this.assertReviewPhotoPath(path);
+    const [url] = await this.bucket.file(path).getSignedUrl({
+      version: 'v4',
+      action: 'read',
+      expires: new Date(now.getTime() + REVIEW_PHOTO_URL_TTL_MS),
+    });
+    return url;
+  }
+
+  async deleteReviewPhoto(path: string): Promise<void> {
+    this.assertReviewPhotoPath(path);
+    await this.bucket.file(path).delete({ ignoreNotFound: true });
+  }
+
   async deleteObject(path: string): Promise<void> {
     this.assertDeliveryPhotoPath(path);
     await this.bucket.file(path).delete({ ignoreNotFound: true });
@@ -292,6 +324,12 @@ export class StorageService {
     const match = /^deliveryPhotos\/([A-Za-z0-9_-]+)\/([A-Za-z0-9_-]+)\.jpg$/.exec(path);
     if (!match) {
       throw new BadRequestException('유효하지 않은 배송 사진 경로입니다.');
+    }
+  }
+
+  private assertReviewPhotoPath(path: string): void {
+    if (!REVIEW_PHOTO_PATH_PATTERN.test(path)) {
+      throw new BadRequestException('유효하지 않은 후기 사진 경로입니다.');
     }
   }
 

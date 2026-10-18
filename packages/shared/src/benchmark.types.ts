@@ -108,6 +108,14 @@ export interface StoreProfileExtras {
 
 export const REVIEW_TEXT_MAX_LENGTH = 500
 
+/** 후기 하나에 붙일 수 있는 사진 수 */
+export const REVIEW_PHOTO_MAX_COUNT = 3
+/** 후기 사진 한 장의 최대 크기(바이트). 앱은 JPEG로 줄여 올린다. */
+export const REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024
+/** 서버가 받는 후기 사진 형식. 위치 정보 등 메타데이터를 지울 수 있는 JPEG만 받는다. */
+export const REVIEW_PHOTO_CONTENT_TYPES = ['image/jpeg'] as const
+export const REVIEW_HIDE_REASON_MAX_LENGTH = 200
+
 export interface ReviewPublic {
   id: string
   productId: string
@@ -116,6 +124,30 @@ export interface ReviewPublic {
   /** 가린 이름(예: 김*린) */
   authorName: string
   createdAt: string
+  /** 사진 읽기용 짧은 기간 서명 URL. 사진이 없으면 빈 배열이거나 없다. */
+  photoUrls?: string[]
+}
+
+/** 후기를 숨기거나 숨김 해제한 사람의 역할 */
+export type ReviewModeratorRole = 'seller' | 'admin'
+
+/** 쓴 사람이 자기 주문에서 보는 후기 */
+export interface OwnReview extends ReviewPublic {
+  /** 판매자·관리자가 숨긴 후기면 true(공개 목록·별점에서 빠진다) */
+  hidden: boolean
+}
+
+/** 판매자·관리자가 보는 후기(숨김 상태 포함) */
+export interface ManagedReview extends ReviewPublic {
+  hidden: boolean
+  /** 숨긴 사유·시각·역할. 숨김을 해제하면 비운다(기록은 서버 이력에 남는다). */
+  hiddenReason?: string
+  hiddenAt?: string
+  hiddenByRole?: ReviewModeratorRole
+}
+
+export interface HideReviewRequest {
+  reason: string
 }
 
 export interface ReviewSummary {
