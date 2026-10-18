@@ -66,7 +66,11 @@
       "serialize-javascript": "^7.0.5",
       "@babel/plugin-transform-modules-systemjs": "^7.29.4",
       "@firebase/firestore>@grpc/grpc-js": "^1.13.6",
-      "rollup@4": "4.60.4"
+      "rollup@4": "4.60.4",
+      "@google/genai>@modelcontextprotocol/sdk": "-",
+      "express@5>qs": "^6.16.0",
+      "express@5>body-parser": "^2.3.0",
+      "body-parser@2>qs": "^6.16.0"
     }
   }
 }

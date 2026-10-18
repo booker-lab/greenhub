@@ -4,11 +4,14 @@ import { test } from 'node:test';
 import {
   AUDIT_ACTION,
   countRefreshSessions,
+  describeError,
   EXPECTED_PROJECT_ID,
   emailIdentityKey,
   idPrefix,
   maskEmail,
+  readOutputOptions,
   run,
+  sanitizeErrorMessage,
   uidFingerprint,
 } from './lock-account.mjs';
 
@@ -180,13 +183,23 @@ const AUTH_USERS = {
   },
 };
 
-function harness({ seed = baseSeed(), authUsers = AUTH_USERS, env = {}, project } = {}) {
+// detail: true면 로컬 --detail 실행을 흉내 낸다. 기본은 공개 Actions 로그와 같은 기본 출력이다.
+function harness({
+  seed = baseSeed(),
+  authUsers = AUTH_USERS,
+  env = {},
+  project,
+  detail = false,
+  argv,
+} = {}) {
   const fake = createFakeDb(seed);
   const fakeAuth = createFakeAuth(authUsers);
   const lines = [];
   const generated = [];
   let connected = 0;
+  let loaded = 0;
   const options = {
+    argv: argv ?? (detail ? ['--detail'] : []),
     env: {
       LOCK_EMAIL: EMAIL,
       LOCK_MODE: 'check',
@@ -195,6 +208,7 @@ function harness({ seed = baseSeed(), authUsers = AUTH_USERS, env = {}, project 
     },
     write: (line) => lines.push(line),
     loadFile: async (path) => {
+      loaded += 1;
       assert.equal(path, KEY_PATH);
       return JSON.stringify({ project_id: project ?? EXPECTED_PROJECT_ID, private_key: 'fixture' });
     },
@@ -214,9 +228,31 @@ function harness({ seed = baseSeed(), authUsers = AUTH_USERS, env = {}, project 
     lines,
     generated,
     connected: () => connected,
+    loaded: () => loaded,
     run: () => run(options),
     output: () => lines.join('\n'),
   };
+}
+
+// 기본 출력(공개 로그)에 나오면 안 되는 상세 항목 이름.
+const DETAIL_KEYS = [
+  'email:',
+  'storedEmail',
+  'fingerprint:',
+  'targetFingerprint',
+  'uidPrefix',
+  'storeIdPrefix',
+  'storeName',
+  'storeOwnerIdPrefix',
+  'storeUser:',
+  'createdAt',
+  'lastLogin',
+  'lastRefreshAt',
+];
+
+function assertNoDetailKeys(out) {
+  for (const key of DETAIL_KEYS)
+    assert.ok(!out.includes(key), `detail key in default output: ${key}`);
 }
 
 const userDoc = (h) => h.fake.docs.get(`users/${UID}`);
@@ -232,8 +268,51 @@ test('maskEmail keeps only the first characters', () => {
   assert.equal(maskEmail('nope'), '***');
 });
 
-test('check prints facts only and never the full email or the hash', async () => {
-  const h = harness();
+test('default check prints counts and booleans only (no email, ids, store name, or times)', async () => {
+  const seed = baseSeed();
+  seed[`stores/${STORE}`].name = '디어 오키드 픽스처';
+  const h = harness({ seed });
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  assertNoDetailKeys(out);
+  for (const raw of [
+    EMAIL,
+    MASKED,
+    UID,
+    STORE,
+    uidFingerprint(UID),
+    '디어 오키드 픽스처',
+    OLD_HASH,
+  ]) {
+    assert.ok(!out.includes(raw), 'identifier in default output');
+  }
+  assert.ok(!out.includes('2026-'), 'timestamps in default output');
+  for (const line of [
+    'mode: check',
+    `project: ${EXPECTED_PROJECT_ID}`,
+    'found: yes',
+    'candidates: 1',
+    'role: seller',
+    'suspended: no',
+    'storeLinked: yes',
+    'firebaseAuthUser: yes',
+    'alreadyLocked: no',
+    'activeRefreshSessions: 1',
+    'storeOrders: 2',
+    'storeProducts: 1',
+    'storeDoc: yes',
+    'storeOwnerIsThisUser: yes',
+    'storeSellerUsers: 1',
+  ]) {
+    assert.ok(h.lines.includes(line), line);
+  }
+  assert.match(out, /^matchedBy: exact,normalized,emailIdentities$/m);
+  assert.deepEqual(h.fake.writes, []);
+  assert.deepEqual(h.fakeAuth.calls, []);
+});
+
+test('check --detail prints facts only and never the full email or the hash', async () => {
+  const h = harness({ detail: true });
   assert.equal(await h.run(), 0);
   const out = h.output();
   assert.ok(!out.toLowerCase().includes(EMAIL.toLowerCase()));
@@ -474,11 +553,12 @@ const MULTI_AUTH = {
   [OTHER_UID]: { uid: OTHER_UID, disabled: false, metadata: {} },
 };
 
-function multiHarness(env = {}) {
+function multiHarness(env = {}, { detail = false } = {}) {
   return harness({
     seed: multiSeed(),
     authUsers: MULTI_AUTH,
     env: { LOCK_EMAIL: MIXED_EMAIL, ...env },
+    detail,
   });
 }
 
@@ -513,8 +593,33 @@ test('uidFingerprint is the first 10 hex chars of sha256(uid)', () => {
   assert.match(uidFingerprint(UID), /^[0-9a-f]{10}$/);
 });
 
-test('multi-candidate check lists every candidate and writes nothing', async () => {
+test('default multi-candidate check lists categories per candidate without fingerprints', async () => {
   const h = multiHarness({ LOCK_EXPECTED_ROLE: 'seller' });
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  assertNoIdentifiers(out);
+  assertNothingWritten(h);
+  assertNoDetailKeys(out);
+  for (const uid of [UID, OTHER_UID, LINKED_UID]) assert.ok(!out.includes(fp(uid)), 'fingerprint');
+  assert.match(out, /^candidates: 3$/m);
+  assert.equal(out.match(/^candidate \d\/3$/gm).length, 3);
+  // 후보는 fingerprint 순이라 블록 순서는 고정이다. 범주·참거짓·개수만 보인다.
+  for (const expected of [
+    /^ {2}matchedBy: exact$/m,
+    /^ {2}matchedBy: normalized$/m,
+    /^ {2}matchedBy: emailIdentities$/m,
+    /^ {2}role: consumer$/m,
+    /^ {2}suspended: yes$/m,
+    /^ {2}storeOrders: 2$/m,
+    /^ {2}roleMatchesExpected: no$/m,
+  ]) {
+    assert.match(out, expected);
+  }
+  assert.match(out, /로컬에서 --detail/);
+});
+
+test('multi-candidate check --detail lists every candidate and writes nothing', async () => {
+  const h = multiHarness({ LOCK_EXPECTED_ROLE: 'seller' }, { detail: true });
   assert.equal(await h.run(), 0);
   const out = h.output();
   assertNoIdentifiers(out);
@@ -628,19 +733,129 @@ test('single-candidate lock requires a given fingerprint to match', async () => 
   const right = harness({ env: { LOCK_MODE: 'lock', LOCK_TARGET_FINGERPRINT: fp(UID) } });
   assert.equal(await right.run(), 0);
   assert.equal(userDoc(right).suspended, true);
-  assert.match(right.output(), new RegExp(`fingerprint: ${fp(UID)}`));
+  assert.match(right.output(), /locked: yes/);
+  // 입력한 fingerprint도 기본 출력에 다시 내지 않는다.
+  assert.ok(!right.output().includes(fp(UID)));
+
+  const detailed = harness({
+    detail: true,
+    env: { LOCK_MODE: 'lock', LOCK_TARGET_FINGERPRINT: fp(UID) },
+  });
+  assert.equal(await detailed.run(), 0);
+  assert.match(detailed.output(), new RegExp(`fingerprint: ${fp(UID)}`));
 });
 
 test('error messages containing the raw email are masked', async () => {
+  for (const detail of [false, true]) {
+    const h = harness({ detail, env: { LOCK_MODE: 'lock' } });
+    h.fake.db.recursiveDelete = async () => {
+      throw new Error(`boom for ${EMAIL}`);
+    };
+    assert.equal(await h.run(), 1);
+    const out = h.output();
+    assert.ok(!out.includes(EMAIL));
+    if (detail) assert.match(out, new RegExp(`boom for ${MASKED.replace(/[.*]/g, '\\$&')}`));
+    else assert.match(out, /^실패: Error boom for \[email\]$/m);
+  }
+});
+
+test('unexpected errors print only a code and a sanitized message by default', async () => {
+  const docUid = '7ec0e26b-1a2b-4c3d-8e9f-0123456789ab';
+  const failure = () => {
+    const error = new Error(
+      `5 NOT_FOUND: No document to update: projects/green-e4fe3/databases/(default)/documents/users/${docUid} ` +
+        `see https://console.firebase.google.com/project/green-e4fe3/firestore/data/~2Fusers~2F${UID}`,
+    );
+    error.code = 5;
+    return error;
+  };
+
   const h = harness({ env: { LOCK_MODE: 'lock' } });
-  const original = h.fake.db.recursiveDelete;
   h.fake.db.recursiveDelete = async () => {
-    throw new Error(`boom for ${EMAIL}`);
+    throw failure();
   };
   assert.equal(await h.run(), 1);
-  assert.ok(!h.output().includes(EMAIL));
-  assert.match(h.output(), new RegExp(MASKED.replace(/[.*]/g, '\\$&')));
-  h.fake.db.recursiveDelete = original;
+  const out = h.output();
+  assert.match(
+    out,
+    /^실패: 5 5 NOT_FOUND: No document to update: projects\/green-e4fe3\/databases\/\(default\)\/documents\/\[path\] see \[url\]$/m,
+  );
+  for (const raw of [docUid, UID, 'https://']) assert.ok(!out.includes(raw), raw);
+
+  // 로컬 --detail은 원문을 그대로 보여 준다.
+  const local = harness({ detail: true, env: { LOCK_MODE: 'lock' } });
+  local.fake.db.recursiveDelete = async () => {
+    throw failure();
+  };
+  assert.equal(await local.run(), 1);
+  assert.ok(local.output().includes(docUid));
+});
+
+test('--detail is refused in Actions/CI before reading the key or connecting', async () => {
+  for (const ciEnv of [{ GITHUB_ACTIONS: 'true' }, { CI: 'true' }, { CI: '1' }]) {
+    const h = harness({ detail: true, env: ciEnv });
+    assert.equal(await h.run(), 1, JSON.stringify(ciEnv));
+    assert.equal(h.loaded(), 0);
+    assert.equal(h.connected(), 0);
+    assert.match(h.output(), /로컬 실행에서만/);
+    assert.ok(!h.output().includes('found'));
+  }
+});
+
+test('unknown arguments are refused without echoing them', async () => {
+  const h = harness({ argv: ['--verbose=yes'] });
+  assert.equal(await h.run(), 1);
+  assert.equal(h.connected(), 0);
+  assert.match(h.output(), /--detail만 받습니다/);
+  assert.ok(!h.output().includes('--verbose'));
+});
+
+test('readOutputOptions accepts only --detail and only outside CI', () => {
+  assert.deepEqual(readOutputOptions([], {}), { detail: false });
+  assert.deepEqual(readOutputOptions(['--detail'], {}), { detail: true });
+  assert.deepEqual(readOutputOptions([], { GITHUB_ACTIONS: 'true' }), { detail: false });
+  assert.throws(
+    () => readOutputOptions(['--detail'], { GITHUB_ACTIONS: 'true' }),
+    /로컬 실행에서만/,
+  );
+  assert.throws(() => readOutputOptions(['--detail', '-x'], {}), /--detail만 받습니다/);
+});
+
+test('sanitizeErrorMessage removes emails, document paths, urls and long ids', () => {
+  assert.equal(
+    sanitizeErrorMessage(
+      '9 FAILED_PRECONDITION: The query requires an index. You can create it here: https://console.firebase.google.com/v1/r/project/green-e4fe3/firestore/indexes?create_composite=Clh',
+    ),
+    '9 FAILED_PRECONDITION: The query requires an index. You can create it here: [url]',
+  );
+  assert.equal(
+    sanitizeErrorMessage('no user for Seller.Fixture@Example.test.'),
+    'no user for [email]',
+  );
+  assert.equal(
+    sanitizeErrorMessage('missing refreshTokens/abc/sessions/def'),
+    'missing refreshTokens/[path]',
+  );
+  assert.equal(sanitizeErrorMessage('uid 80189070-2c3d-45f2-bc11-68a870b13951 x'), 'uid [id] x');
+  assert.equal(sanitizeErrorMessage('uid Xy7kQ2mN9pL4rT6vB8wC1dE3fG5h'), 'uid [id]');
+  assert.equal(sanitizeErrorMessage('uid AbCdEfGhIjKlMnOpQrStUv'), 'uid [id]');
+  assert.equal(
+    sanitizeErrorMessage('7 PERMISSION_DENIED: Missing or insufficient permissions.'),
+    '7 PERMISSION_DENIED: Missing or insufficient permissions.',
+  );
+  assert.equal(sanitizeErrorMessage(` a \n b `), 'a b');
+  assert.equal(sanitizeErrorMessage('x'.repeat(500)).length, 200);
+  assert.equal(sanitizeErrorMessage(undefined), '');
+});
+
+test('describeError keeps only a safe code', () => {
+  assert.equal(
+    describeError({ code: 'auth/user-disabled', message: '' }),
+    '실패: auth/user-disabled',
+  );
+  assert.equal(describeError({ code: 'weird code <x>', message: 'm' }), '실패: error m');
+  assert.equal(describeError(new TypeError('bad')), '실패: TypeError bad');
+  assert.equal(describeError(undefined), '실패: error');
 });
 
 // ── check: 매장 정보 ────────────────────────────────────────────────────────
@@ -649,10 +864,10 @@ const STORE_NAME = '디어 오키드 픽스처';
 const KAKAO_UID = 'kakao-fixture-seller-9';
 const GONE_OWNER_UID = 'deleted-owner-fixture-7';
 
-test('check prints uid prefix and store details when the user owns the store', async () => {
+test('check --detail prints uid prefix and store details when the user owns the store', async () => {
   const seed = baseSeed();
   seed[`stores/${STORE}`].name = STORE_NAME;
-  const h = harness({ seed });
+  const h = harness({ seed, detail: true });
   assert.equal(await h.run(), 0);
   const out = h.output();
   assert.match(out, new RegExp(`^uidPrefix: ${UID.slice(0, 8)}$`, 'm'));
@@ -676,7 +891,7 @@ test('check prints uid prefix and store details when the user owns the store', a
   assert.deepEqual(h.fakeAuth.calls, []);
 });
 
-test('check flags a store owned by another (deleted) user and lists other sellers on it', async () => {
+test('check --detail flags a store owned by another (deleted) user and lists other sellers on it', async () => {
   const seed = baseSeed({
     [`stores/${STORE}`]: { id: STORE, ownerId: GONE_OWNER_UID, name: STORE_NAME },
     [`users/${KAKAO_UID}`]: {
@@ -690,7 +905,7 @@ test('check flags a store owned by another (deleted) user and lists other seller
     'users/unrelated-seller-fixture': { id: 'x', role: 'seller', storeId: 'other-store' },
   });
   seed[`users/${UID}`].suspended = true;
-  const h = harness({ seed });
+  const h = harness({ seed, detail: true });
   assert.equal(await h.run(), 0);
   const out = h.output();
   assert.match(out, new RegExp(`^storeOwnerIdPrefix: ${GONE_OWNER_UID.slice(0, 8)}$`, 'm'));
@@ -720,10 +935,15 @@ test('check flags a store owned by another (deleted) user and lists other seller
   assert.deepEqual(h.fakeAuth.calls, []);
 });
 
-test('multi-candidate check adds store details per candidate with a linked store', async () => {
+test('multi-candidate check --detail adds store details per candidate with a linked store', async () => {
   const seed = multiSeed();
   seed[`stores/${STORE}`].name = STORE_NAME;
-  const h = harness({ seed, authUsers: MULTI_AUTH, env: { LOCK_EMAIL: MIXED_EMAIL } });
+  const h = harness({
+    seed,
+    authUsers: MULTI_AUTH,
+    env: { LOCK_EMAIL: MIXED_EMAIL },
+    detail: true,
+  });
   assert.equal(await h.run(), 0);
   const out = h.output();
   assertNoIdentifiers(out);
@@ -758,12 +978,19 @@ test('store user listing is bounded to 20 docs', async () => {
       providers: ['kakao'],
     };
   }
-  const h = harness({ seed: baseSeed(extra) });
+  const h = harness({ seed: baseSeed(extra), detail: true });
   assert.equal(await h.run(), 0);
   const out = h.output();
   assert.match(out, /^storeSellerUsers: 20\+ \(limit reached\)$/m);
   assert.equal(out.match(/storeUser: /g).length, 20);
   assert.deepEqual(h.fake.writes, []);
+
+  // 기본 출력은 개수만 내고 사용자 목록은 내지 않는다.
+  const summary = harness({ seed: baseSeed(extra) });
+  assert.equal(await summary.run(), 0);
+  assert.match(summary.output(), /^storeSellerUsers: 20\+ \(limit reached\)$/m);
+  assert.ok(!summary.output().includes('storeUser:'));
+  assert.ok(!summary.output().includes('bulk-sel'));
 });
 
 test('lock output is unchanged by store details', async () => {

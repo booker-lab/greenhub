@@ -9,9 +9,18 @@
  *   LINK_TARGET_FINGERPRINT  link에 필수. check가 출력한 sha256(uid) 앞 10자리 hex
  *   GOOGLE_APPLICATION_CREDENTIALS  서비스 계정 키 경로. project_id가 운영(green-e4fe3)이 아니면 거부한다.
  *
- * check(읽기 전용): 매장 이름·ownerId 앞 8자·현재 owner 사용자 문서 존재/role/정지 여부, 같은 storeId를 가진 사용자,
- *   그리고 연결 후보(role이 admin 또는 seller이고 providers에 kakao가 있거나 kakaoId가 저장된 계정)를 계정마다 fingerprint·uid 앞 8자·
- *   role·providers·저장된 이메일(마스킹)·정지 여부·전화번호 등록 여부·연결 매장·소유 매장 수·생성/최근 refresh 시각으로 출력한다.
+ * 인자: --detail  로컬 실행 전용 상세 출력. GITHUB_ACTIONS·CI 환경에서는 연결 전에 거부한다(lock-account.mjs와 같은 규칙).
+ *
+ * 출력 범위: 기본 출력은 공개 Actions 로그에 남으므로 개수·참거짓과 role·providers 같은 범주 값만 낸다.
+ *   매장 이름, storeId·ownerId·uid 앞 8자, fingerprint, 마스킹 이메일, 생성·refresh 시각, 후보 목록은 --detail에서만 낸다.
+ *   예상하지 못한 오류는 기본 출력에서 코드와 정제한 메시지만 낸다.
+ *
+ * check(읽기 전용): 기본 출력은 매장 문서 존재·owner 지정 여부·현재 owner 사용자 문서 존재/role/정지 여부·같은 storeId
+ *   사용자 수·연결 후보(role이 admin 또는 seller이고 providers에 kakao가 있거나 kakaoId가 저장된 계정) 수다.
+ *   target_fingerprint를 주면 일치하는 후보 수와 그 후보의 role·providers·정지·전화번호 등록·매장 연결·소유 매장 수를 더한다.
+ *   --detail은 매장 이름·ownerId 앞 8자·같은 매장 사용자 목록과, 후보마다 fingerprint·uid 앞 8자·role·providers·
+ *   저장된 이메일(마스킹)·정지 여부·전화번호 등록 여부·연결 매장·소유 매장·생성/최근 refresh 시각을 출력한다.
+ *   link에 쓸 fingerprint는 로컬에서 --detail로 확인한다.
  * link(여러 번 실행해도 같은 결과): 아래 조건을 모두 만족할 때만 한 트랜잭션에서
  *   stores/{storeId}.ownerId = uid, users/{uid}.storeId = storeId로 바꾸고 auditLogs에
  *   store.owner_linked_by_owner_maintenance(이전 ownerId 포함, 되돌리기용)를 남긴다. role은 바꾸지 않는다
@@ -26,7 +35,16 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { idPrefix, maskEmail, uidFingerprint } from './lock-account.mjs';
+import {
+  createLinePrinter,
+  describeError,
+  detailLine,
+  idPrefix,
+  maskEmail,
+  OpsOutputError,
+  readOutputOptions,
+  uidFingerprint,
+} from './lock-account.mjs';
 
 export const EXPECTED_PROJECT_ID = 'green-e4fe3';
 export const AUDIT_ACTION = 'store.owner_linked_by_owner_maintenance';
@@ -162,18 +180,21 @@ async function usersWithStore(db, storeId) {
     .sort((a, b) => a.fingerprint.localeCompare(b.fingerprint));
 }
 
+// 매장 줄. 매장 이름·식별값·같은 매장 사용자 목록은 --detail에서만 낸다.
 async function storeLines(db, storeId, store) {
   const ownerId = ownerIdOf(store);
   const lines = [
-    `storeIdPrefix: ${idPrefix(storeId)}`,
-    `storeName: ${storeNameOf(store)}`,
-    `storeOwnerIdPrefix: ${idPrefix(ownerId)}`,
+    detailLine(`storeIdPrefix: ${idPrefix(storeId)}`),
+    'storeDoc: yes',
+    detailLine(`storeName: ${storeNameOf(store)}`),
+    `storeOwnerSet: ${ownerId ? 'yes' : 'no'}`,
+    detailLine(`storeOwnerIdPrefix: ${idPrefix(ownerId)}`),
   ];
   let owner = null;
   if (ownerId) {
     const ownerSnap = await db.doc(`users/${ownerId}`).get();
     owner = ownerSnap.exists ? (ownerSnap.data() ?? {}) : null;
-    lines.push(`storeOwnerFingerprint: ${uidFingerprint(ownerId)}`);
+    lines.push(detailLine(`storeOwnerFingerprint: ${uidFingerprint(ownerId)}`));
     lines.push(`storeOwnerUserDoc: ${owner ? 'yes' : 'no'}`);
     if (owner) {
       lines.push(`storeOwnerRole: ${roleOf(owner)}`);
@@ -185,121 +206,158 @@ async function storeLines(db, storeId, store) {
   lines.push(`storeUsers: ${storeUsers.length}${reachedLimit ? '+ (limit reached)' : ''}`);
   for (const u of storeUsers) {
     lines.push(
-      [
-        '  storeUser:',
-        `uidPrefix=${idPrefix(u.uid)}`,
-        `fingerprint=${u.fingerprint}`,
-        `role=${roleOf(u.data)}`,
-        `providers=${providersList(u.data).join('/') || 'n/a'}`,
-        `suspended=${u.data.suspended === true ? 'yes' : 'no'}`,
-        `storeOwner=${u.uid === ownerId ? 'yes' : 'no'}`,
-      ].join(' '),
+      detailLine(
+        [
+          '  storeUser:',
+          `uidPrefix=${idPrefix(u.uid)}`,
+          `fingerprint=${u.fingerprint}`,
+          `role=${roleOf(u.data)}`,
+          `providers=${providersList(u.data).join('/') || 'n/a'}`,
+          `suspended=${u.data.suspended === true ? 'yes' : 'no'}`,
+          `storeOwner=${u.uid === ownerId ? 'yes' : 'no'}`,
+        ].join(' '),
+      ),
     );
   }
   return { lines, ownerId, owner, storeUsers };
 }
 
-async function candidateLines(db, candidate) {
+// 후보 줄. 범주·참거짓·개수는 늘 내고, 계정·매장을 가리키는 값과 시각은 --detail에서만 낸다.
+async function candidateLines(db, candidate, storeId) {
   const { uid, data } = candidate;
   const linkedStoreId = storeIdOf(data);
   const owned = await storesOwnedBy(db, uid);
   const refreshSnap = await db.doc(`refreshTokens/${uid}`).get();
   const lines = [
-    `fingerprint: ${candidate.fingerprint}`,
-    `uidPrefix: ${idPrefix(uid)}`,
+    detailLine(`fingerprint: ${candidate.fingerprint}`),
+    detailLine(`uidPrefix: ${idPrefix(uid)}`),
     `role: ${roleOf(data)}`,
     `providers: ${providersList(data).join('/') || 'n/a'}`,
-    `storedEmail: ${maskEmail(data.email)}`,
+    detailLine(`storedEmail: ${maskEmail(data.email)}`),
     `suspended: ${data.suspended === true ? 'yes' : 'no'}`,
     // 판매자 알림 문자는 users.phone으로 보낸다. 번호는 출력하지 않는다.
     `phoneSet: ${typeof data.phone === 'string' && data.phone.trim() ? 'yes' : 'no'}`,
-    `storeIdPrefix: ${idPrefix(linkedStoreId)}`,
-    `ownsStores: ${owned.length}${owned.length ? ` (${owned.map(idPrefix).join(',')})` : ''}`,
-    `createdAt: ${formatDate(data.createdAt)}`,
-    `lastRefreshAt: ${formatDate(refreshSnap.exists ? refreshSnap.data()?.updatedAt : null)}`,
+    `storeLinked: ${!linkedStoreId ? 'no' : linkedStoreId === storeId ? 'this' : 'other'}`,
+    detailLine(`storeIdPrefix: ${idPrefix(linkedStoreId)}`),
+    `ownsStores: ${owned.length}`,
   ];
+  if (owned.length) lines.push(detailLine(`ownsStoreIdPrefixes: ${owned.map(idPrefix).join(',')}`));
+  lines.push(detailLine(`createdAt: ${formatDate(data.createdAt)}`));
+  lines.push(
+    detailLine(
+      `lastRefreshAt: ${formatDate(refreshSnap.exists ? refreshSnap.data()?.updatedAt : null)}`,
+    ),
+  );
   if (linkedStoreId) {
     const linkedSnap = await db.doc(`stores/${linkedStoreId}`).get();
-    lines.push(`linkedStoreName: ${linkedSnap.exists ? storeNameOf(linkedSnap.data()) : 'n/a'}`);
+    lines.push(
+      detailLine(`linkedStoreName: ${linkedSnap.exists ? storeNameOf(linkedSnap.data()) : 'n/a'}`),
+    );
   }
   return lines;
 }
 
 // link 전 조건. 문제가 있으면 이유 목록을 돌려준다(비었으면 진행 가능).
+// 이유마다 text(늘 출력)와 detail(식별값, --detail에서만 출력)을 둔다.
 export function linkBlockers({ storeId, target, targetOwnedStores, ownerId, owner, storeUsers }) {
   const reasons = [];
   const user = target.data;
   if (!LINKABLE_ROLES.includes(roleOf(user)))
-    reasons.push(`대상 계정 role(${roleOf(user)})이 admin|seller가 아닙니다.`);
-  if (user.suspended === true) reasons.push('대상 계정이 정지 상태입니다.');
+    reasons.push({ text: `대상 계정 role(${roleOf(user)})이 admin|seller가 아닙니다.` });
+  if (user.suspended === true) reasons.push({ text: '대상 계정이 정지 상태입니다.' });
   const linked = storeIdOf(user);
   if (linked && linked !== storeId)
-    reasons.push(`대상 계정이 이미 다른 매장(${idPrefix(linked)})에 연결돼 있습니다.`);
+    reasons.push({
+      text: '대상 계정이 이미 다른 매장에 연결돼 있습니다.',
+      detail: `storeIdPrefix=${idPrefix(linked)}`,
+    });
   const otherOwned = targetOwnedStores.filter((id) => id !== storeId);
   if (otherOwned.length > 0)
-    reasons.push(`대상 계정이 소유한 다른 매장이 있습니다(${otherOwned.map(idPrefix).join(',')}).`);
+    reasons.push({
+      text: `대상 계정이 소유한 다른 매장이 ${otherOwned.length}개 있습니다.`,
+      detail: `storeIdPrefixes=${otherOwned.map(idPrefix).join(',')}`,
+    });
   if (ownerId && ownerId !== target.uid && owner && owner.suspended !== true)
-    reasons.push('현재 매장 owner가 정지되지 않은 기존 계정이라 옮기지 않습니다.');
+    reasons.push({ text: '현재 매장 owner가 정지되지 않은 기존 계정이라 옮기지 않습니다.' });
   const activeOthers = storeUsers.filter((u) => u.uid !== target.uid && u.data.suspended !== true);
   if (activeOthers.length > 0)
-    reasons.push(
-      `대상 외에 이 매장에 연결된 활성 사용자가 있습니다(${activeOthers.map((u) => u.fingerprint).join(',')}).`,
-    );
+    reasons.push({
+      text: `대상 외에 이 매장에 연결된 활성 사용자가 ${activeOthers.length}명 있습니다.`,
+      detail: `fingerprints=${activeOthers.map((u) => u.fingerprint).join(',')}`,
+    });
   return reasons;
 }
 
 export async function run({
+  argv = process.argv.slice(2),
   env = process.env,
   write = (line) => console.log(line),
   loadFile = (path) => readFile(path, 'utf8'),
   connect = defaultConnect,
   now = () => Date.now(),
 } = {}) {
+  let detail = false;
   const out = (line) => write(String(line));
+  const print = createLinePrinter({ isDetail: () => detail, emit: out });
   try {
+    ({ detail } = readOutputOptions(argv, env));
     const inputs = readInputs(env);
     const serviceAccount = await readServiceAccount(env, loadFile);
-    out(`mode: ${inputs.mode}`);
-    out(`project: ${serviceAccount.project_id}`);
-    if (inputs.targetFingerprint) out(`targetFingerprint: ${inputs.targetFingerprint}`);
+    print(`mode: ${inputs.mode}`);
+    print(`project: ${serviceAccount.project_id}`);
+    if (inputs.targetFingerprint)
+      print(detailLine(`targetFingerprint: ${inputs.targetFingerprint}`));
 
     const { db, Timestamp } = await connect(serviceAccount);
     const storeRef = db.doc(`stores/${inputs.storeId}`);
     const storeSnap = await storeRef.get();
     if (!storeSnap.exists) {
-      out(`storeIdPrefix: ${idPrefix(inputs.storeId)}`);
-      out('storeDoc: no');
+      print(detailLine(`storeIdPrefix: ${idPrefix(inputs.storeId)}`));
+      print('storeDoc: no');
       return inputs.mode === 'check' ? 0 : 1;
     }
     const store = storeSnap.data() ?? {};
     const storeInfo = await storeLines(db, inputs.storeId, store);
-    for (const line of storeInfo.lines) out(line);
+    for (const line of storeInfo.lines) print(line);
 
     const candidates = await findCandidates(db);
     if (inputs.mode === 'check') {
-      out(`kakaoCandidates: ${candidates.length}`);
-      for (const [index, candidate] of candidates.entries()) {
-        out(`candidate ${index + 1}/${candidates.length}`);
-        for (const line of await candidateLines(db, candidate)) out(`  ${line}`);
-        if (inputs.targetFingerprint) {
-          out(`  target: ${candidate.fingerprint === inputs.targetFingerprint ? 'yes' : 'no'}`);
+      print(`kakaoCandidates: ${candidates.length}`);
+      if (detail) {
+        for (const [index, candidate] of candidates.entries()) {
+          print(`candidate ${index + 1}/${candidates.length}`);
+          for (const line of await candidateLines(db, candidate, inputs.storeId)) print(line, '  ');
+          if (inputs.targetFingerprint) {
+            print(`  target: ${candidate.fingerprint === inputs.targetFingerprint ? 'yes' : 'no'}`);
+          }
         }
+        return 0;
+      }
+      // 기본 출력은 후보 목록을 내지 않는다. fingerprint를 주면 그 후보의 범주·참거짓만 낸다.
+      if (inputs.targetFingerprint) {
+        const hits = candidates.filter((c) => c.fingerprint === inputs.targetFingerprint);
+        print(`targetCandidates: ${hits.length}`);
+        for (const hit of hits) {
+          for (const line of await candidateLines(db, hit, inputs.storeId)) print(line, 'target ');
+        }
+      } else {
+        print('후보 목록과 fingerprint는 로컬에서 --detail로 실행하면 보입니다.');
       }
       return 0;
     }
 
     const hits = candidates.filter((c) => c.fingerprint === inputs.targetFingerprint);
     if (hits.length !== 1) {
-      out(
+      print(
         `target_fingerprint와 일치하는 후보가 ${hits.length}개라 아무것도 바꾸지 않고 중단합니다.`,
       );
       return 1;
     }
     const [target] = hits;
-    for (const line of await candidateLines(db, target)) out(`target ${line}`);
+    for (const line of await candidateLines(db, target, inputs.storeId)) print(line, 'target ');
 
     if (storeInfo.ownerId === target.uid && storeIdOf(target.data) === inputs.storeId) {
-      out('alreadyLinked: yes');
+      print('alreadyLinked: yes');
       return 0;
     }
 
@@ -312,8 +370,11 @@ export async function run({
       storeUsers: storeInfo.storeUsers,
     });
     if (blockers.length > 0) {
-      for (const reason of blockers) out(`blocked: ${reason}`);
-      out('아무것도 바꾸지 않고 중단합니다.');
+      for (const reason of blockers) {
+        print(`blocked: ${reason.text}`);
+        if (reason.detail) print(detailLine(`  ${reason.detail}`));
+      }
+      print('아무것도 바꾸지 않고 중단합니다.');
       return 1;
     }
 
@@ -354,16 +415,17 @@ export async function run({
       });
     });
 
-    out('linked: yes');
-    out(`previousOwnerIdPrefix: ${idPrefix(previousOwnerId)}`);
-    out(`auditLogIdPrefix: ${idPrefix(auditId)}`);
-    out('대상 계정은 판매자 앱에서 로그아웃한 뒤 다시 로그인해야 합니다.');
+    print('linked: yes');
+    print('auditLogged: yes');
+    print(detailLine(`previousOwnerIdPrefix: ${idPrefix(previousOwnerId)}`));
+    print(detailLine(`auditLogIdPrefix: ${idPrefix(auditId)}`));
+    print('대상 계정은 판매자 앱에서 로그아웃한 뒤 다시 로그인해야 합니다.');
     return 0;
   } catch (error) {
     const message =
-      error instanceof LinkStoreOwnerError
+      error instanceof LinkStoreOwnerError || error instanceof OpsOutputError
         ? error.message
-        : `실패: ${error?.code ?? error?.name ?? 'error'} ${error?.message ?? ''}`.trim();
+        : describeError(error, { detail });
     out(message);
     return 1;
   }
