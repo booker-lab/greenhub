@@ -19,8 +19,9 @@ import {
   PRODUCT_MONEY_MAX,
   SelectionDto,
 } from './create-product.dto';
+import { ProductExtrasDto } from './product-extras.dto';
 
-export class UpdateProductDto {
+export class UpdateProductDto extends ProductExtrasDto {
   @IsOptional()
   @IsString()
   name?: string;

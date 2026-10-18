@@ -14,6 +14,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { IsProductImageUrl } from '../validators/product-image-url';
+import { ProductExtrasDto } from './product-extras.dto';
 
 /** 원 단위 금액 상한(1억 원). */
 export const PRODUCT_MONEY_MAX = 100_000_000;
@@ -86,7 +87,7 @@ export class ContentDto {
   isEditedByUser: boolean;
 }
 
-export class CreateProductDto {
+export class CreateProductDto extends ProductExtrasDto {
   @IsString()
   name: string;
 

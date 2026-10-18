@@ -22,6 +22,10 @@ import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import { CardDiscount, CardMeta, CardSellerLine, BenchmarkCardProvider } from '@/components/benchmark/CardExtras';
+import ProductRequestBox from '@/components/benchmark/ProductRequestBox';
+import { useHomeCardContext } from '@/components/HomeProductList';
+import { isFeatureOn } from '@/lib/features';
 
 const TABS: { label: string; value: Category | undefined; saleType?: SaleType }[] = [
   { label: '전체', value: undefined },
@@ -119,6 +123,13 @@ function visibleOrchidItems(round: PublicSaleRound, productById: Map<string, Pro
     });
 }
 
+/** 카드 라벨. 상품 탭 회차 라벨(category-round-label)이 켜지면 판매 예정 회차를 따로 부른다. */
+function roundCardLabel(round: PublicSaleRound, isPast: boolean): string {
+  if (isPast) return '지난 회차';
+  if (isFeatureOn('category-round-label') && round.status === 'SCHEDULED') return '판매 예정';
+  return '이번 주 회차';
+}
+
 function RoundProductCard({
   item,
   round,
@@ -128,13 +139,14 @@ function RoundProductCard({
   round: PublicSaleRound;
   isPast: boolean;
 }) {
+  const label = roundCardLabel(round, isPast);
   const href = `/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(round.id)}`;
 
   return (
     <Box
       component={Link}
       href={href}
-      aria-label={`${isPast ? '지난 회차' : '이번 주 회차'} ${item.productNameSnapshot}`}
+      aria-label={`${label} ${item.productNameSnapshot}`}
       style={{
         display: 'block',
         overflow: 'hidden',
@@ -162,8 +174,9 @@ function RoundProductCard({
       </Box>
       <Box p="xs">
         <Text size="xs" fw={700} c="var(--color-primary-dark)" mb={4}>
-          {isPast ? '지난 회차' : '이번 주 회차'}
+          {label}
         </Text>
+        <CardSellerLine />
         <Text size="sm" fw={500} c="var(--color-text)" lineClamp={2}>
           {item.productNameSnapshot}
         </Text>
@@ -172,7 +185,9 @@ function RoundProductCard({
         </Text>
         <Text size="sm" fw={700} c="var(--color-text-secondary)">
           {item.roundPrice.toLocaleString()}원
+          <CardDiscount item={item} />
         </Text>
+        <CardMeta item={item} isPast={isPast} />
       </Box>
     </Box>
   );
@@ -189,6 +204,7 @@ function RoundDirectCategory({
   status,
   refetch,
 }: ReturnType<typeof useSaleRounds> & { products: Product[] }) {
+  const card = useHomeCardContext(currentRound?.storeId ?? null, products, currentRound?.id ?? null);
   if (loading) {
     return (
       <Stack gap="md" aria-label="판매 회차 불러오는 중">
@@ -238,6 +254,7 @@ function RoundDirectCategory({
   }
 
   return (
+    <BenchmarkCardProvider value={card}>
     <Stack gap="xl">
       {isRefreshing && (
         <Text size="sm" c="var(--color-text-secondary)" ta="center" aria-live="polite">
@@ -327,7 +344,9 @@ function RoundDirectCategory({
           </Text>
         )}
       </Box>
+      {isFeatureOn('product-request') && <ProductRequestBox storeId={currentRound?.storeId ?? null} />}
     </Stack>
+    </BenchmarkCardProvider>
   );
 }
 

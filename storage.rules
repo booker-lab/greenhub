@@ -147,6 +147,12 @@ service firebase.storage {
       allow read, write: if false;
     }
 
+    // 후기 사진: API 서버(Admin SDK)만 형식·크기·쓴 사람을 확인해 올리고, 서명 URL로만 읽는다.
+    // 숨기거나 지운 후기의 사진이 직접 주소로 새지 않도록 클라이언트 직접 접근은 모두 막는다.
+    match /reviewPhotos/{reviewId}/{fileName} {
+      allow read, write: if false;
+    }
+
     match /{allPaths=**} {
       allow read, write: if false;
     }

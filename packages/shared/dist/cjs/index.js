@@ -26,3 +26,5 @@ __exportStar(require("./sale-round.types.js"), exports);
 __exportStar(require("./settlement.types.js"), exports);
 __exportStar(require("./date.js"), exports);
 __exportStar(require("./group-buy.js"), exports);
+__exportStar(require("./features.js"), exports);
+__exportStar(require("./benchmark.types.js"), exports);

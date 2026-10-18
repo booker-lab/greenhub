@@ -165,6 +165,7 @@ async function seedFixtures() {
         status: 'DELIVERING',
       }),
       upload(storage, 'deliveryPhotos/order-1/private-photo.jpg', 'image/jpeg'),
+      upload(storage, 'reviewPhotos/order-1_product-1/private-review-photo.jpg', 'image/jpeg'),
       upload(storage, 'deliveryPhotos/order-legacy_1721433600000.jpg', 'image/jpeg'),
       upload(storage, 'deliveryPhotos/order_legacy_1721433600000.jpg', 'image/jpeg'),
       upload(storage, 'deliveryPhotos/order-driver-lifecycle_1721433600000.jpg', 'image/jpeg'),
@@ -226,6 +227,31 @@ test('회차 직배송 사진 주문 폴더와 상위 폴더 목록 조회는 �
   for (const [, storage] of actorStorages()) {
     await assertFails(objectRef(storage, 'deliveryPhotos/order-1').listAll());
     await assertFails(objectRef(storage, 'deliveryPhotos').listAll());
+  }
+});
+
+test('후기 사진은 쓴 고객·판매자·관리자를 포함한 모든 클라이언트의 직접 읽기·생성·수정·삭제를 거부한다', async () => {
+  for (const [actor, storage] of actorStorages()) {
+    const existing = objectRef(storage, 'reviewPhotos/order-1_product-1/private-review-photo.jpg');
+
+    await assertFails(existing.getMetadata());
+    await assertFails(existing.getDownloadURL());
+    await assertFails(
+      upload(
+        storage,
+        `reviewPhotos/order-1_product-1/created-${encodeURIComponent(actor)}.jpg`,
+        'image/jpeg',
+      ),
+    );
+    await assertFails(existing.put(content(), { contentType: 'image/jpeg' }));
+    await assertFails(existing.delete());
+  }
+});
+
+test('후기 사진 폴더와 상위 폴더 목록 조회는 모든 클라이언트에서 거부한다', async () => {
+  for (const [, storage] of actorStorages()) {
+    await assertFails(objectRef(storage, 'reviewPhotos/order-1_product-1').listAll());
+    await assertFails(objectRef(storage, 'reviewPhotos').listAll());
   }
 });
 

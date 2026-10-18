@@ -474,7 +474,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [x] provider 템플릿과 repository logical 8-code mapping 대조 (2026-09-28 콘솔)
 - [x] 운영 ALIGO 호출 경로 — Fixie 고정 IP 프록시 경유, 2026-09-28 `code=0`·템플릿 8종 API 대조 일치
 - [x] 격리 실제 알림톡 — 2026-09-28 휴대폰 도착 확인
-- [ ] SMS fallback — 발신번호(개인 휴대폰) 통신사 번호도용 차단으로 실패. 사업자 번호로 발신번호 교체 후 재시험
+- [x] SMS 발신번호 — 개인 휴대폰 번호는 통신사 번호도용 차단으로 실패했다. 2026-10-08 운영 `ALIGO_SENDER_PHONE`을 ALIGO 승인된 사업자 번호(끝 2104)로 바꾸고 격리 실발송 알림톡(`TEST-1008`)·문자(`TEST-1008-SMS`)가 모두 접수·1회 시도·휴대폰 실수신됐다(사용자 확인).
 - [ ] 별도 authority 후 격리 actual Alimtalk/SMS 및 fallback 검증
 - [x] exact release SHA 기준 원격 회차 E2E 52 + 세션 12 재실행 — `197f84a4`, run `36372493414`
 - [x] 운영 Firebase rules/indexes 대조와 배포 — 7/31 배포본 → `197f84a4` 규칙 반영, 재조회 일치
@@ -494,7 +494,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [ ] settlement 및 payment 검증 결과 반영
 - [x] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영 — 8/30 판 `/privacy` 4절. ALIGO 고정 IP 프록시는 HTTPS 터널이라 위탁 고지 대상 아님(2026-10-10)
 - [x] **`LEGAL-PRIVACY-OFFICER`**: 2026-10-10 사용자 결정(대표자)으로 `/privacy` 9절에 반영, `legal-documents.test.mjs`에 고정. 2026-11-01 시행 개정판이며 운영 배포 대기 묶음과 함께 나간다.
-- [ ] **`LEGAL-MAIL-ORDER-REGISTRATION`** (파일럿 전, 사람 결정): 통신판매업 신고 대상 여부를 정한다. 신고하면 번호를 footer에 넣고 `BusinessInfoFooter.test.mjs`의 미노출 단언을 바꾼다.
+- [ ] **`LEGAL-MAIL-ORDER-REGISTRATION`** (파일럿 전, 사람 결정): 통신판매업 신고 대상 여부를 정한다. 2026-10-18 footer 칸을 미리 만들었다: 신고하면 `apps/consumer/src/lib/publicBusinessInfo.ts`의 `mailOrderRegistrationNumber`에 번호만 넣고 consumer를 배포한다(빈 값이면 footer에 칸이 나오지 않는다).
 - [x] **`LEGAL-DRIVER-KAKAOMAP-NOTICE`**: 2026-10-10 사용자 결정(고지)으로 `/privacy` 4절에 반영.
 - [x] **`LEGAL-LATE-PAYMENT-REFUND-TERMS`**: `/terms` 제7조에 반영(2026-11-01 시행).
 - [x] **`LEGAL-REVISION-EFFECTIVE-DATE`**: 2026-10-12 `55ed02d9` 운영 배포로 개정판이 시행일(2026-11-01) 전에 게시됐다.
@@ -718,7 +718,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] **2026-10-15 사용자 콘솔 확인: 켜져 있다.** 운영 `green-e4fe3` `(default)` 재해 복구 화면: PITR 사용 설정, 보관 7일, 가장 이른 버전 2026-10-08 23:46 KST. 예약 백업 일일, 보관 14일(주간 백업 없음). 같은 날 Google Cloud 콘솔 백업 목록 확인: 2026-10-09부터 10-15까지 매일 새벽(약 00:30~01:20 KST) 백업 7개가 생성돼 있고 각각 14일 뒤 만료된다. 남은 일: 비운영 프로젝트(또는 새 데이터베이스)로 복구 연습 1회. 이전 기록: 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이었다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
 
 ### ROUND-HOLD-ABUSE-LIMITS
-- [x] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. **2026-10-12 구현 완료(2026-10-13 운영 반영)**: 주문 요청 수량·회차 품목 수 입력 상한(#422), 같은 고객의 같은 회차 활성 결제 예약 최대 3건(#427, `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`의 이전 예약 유지는 그대로, `checkout-hold-per-user.spec.ts`), 운영에서 판매자 초대 가입 외 `POST /auth/register` 403(#474, `auth.service.ts` `register`). 운영 외 환경의 register는 그대로 열려 있다.
+- [x] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. **2026-10-12 구현 완료(2026-10-13 운영 반영)**: 주문 요청 수량·회차 품목 수 입력 상한(#422), 같은 고객의 같은 회차 활성 결제 예약 최대 3건(#427, `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`의 이전 예약 유지는 그대로, `checkout-hold-per-user.spec.ts`), 운영에서 판매자 초대 가입 외 `POST /auth/register` 403(#474, `auth.service.ts` `register`). **2026-10-18 결정으로 운영은 판매자 초대 가입을 포함한 이메일 가입과 이메일 로그인을 모두 403으로 거부하도록 바뀌었다**(`docs/specs/api/auth.md` §7, 운영 반영은 다음 배포 묶음). 운영 외 환경의 register·login은 그대로 열려 있다.
 
 ### OPERATION-ISSUE-MANUAL-RESOLVE
 - [x] **2026-10-13 #510 구현(2026-10-13 `098affbc` 운영 반영)**: 판매자·관리자가 메모와 함께 운영 기록을 `RESOLVED`로 닫는다. 정산 보류·환불 미확정 유형 3종은 관리자만 닫는다(판매자 운영 화면 `ResolveIssueModal`, 계약은 `docs/specs/mvp-sales-round-direct-delivery.md` `operationIssues`). 이전 기록: 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.

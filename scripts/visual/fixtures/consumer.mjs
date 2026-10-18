@@ -29,6 +29,38 @@ const PRODUCT_SPECS = [
     fragrance: 'light',
     bloom: 'half',
     care: 'easy',
+    extras: {
+      size: { heightCm: 55, widthCm: 40, potDiameterCm: 15, bloomCount: 12 },
+      light: 'medium',
+      placements: ['living', 'office'],
+      careGuide: {
+        watering: '겉흙이 마르면 2주에 한 번, 화분 밑으로 물이 흐를 만큼 줘요.',
+        light: '직사광선을 피한 밝은 창가가 좋아요.',
+        temperature: '15~25도. 겨울 창가 찬바람을 피해 주세요.',
+        repotting: '꽃이 진 뒤 2년에 한 번 바크로 갈아 주세요.',
+      },
+      options: [
+        {
+          id: 'g1',
+          name: '화분',
+          choices: [
+            { id: 'c1', label: '기본 플라스틱 화분', priceDelta: 0 },
+            { id: 'c2', label: '백자 도자기 화분', priceDelta: 8000 },
+          ],
+        },
+        {
+          id: 'g2',
+          name: '문구',
+          choices: [
+            { id: 'c3', label: '문구 없음', priceDelta: 0 },
+            { id: 'c4', label: '스티커 라벨', priceDelta: 2000, needsText: true },
+            { id: 'c5', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+          ],
+        },
+      ],
+      guaranteed: true,
+      aliases: ['빅립 동양란', 'Big lip'],
+    },
   },
   {
     name: '만천홍',
@@ -39,6 +71,13 @@ const PRODUCT_SPECS = [
     fragrance: 'none',
     bloom: 'full',
     care: 'normal',
+    extras: {
+      size: { heightCm: 50, potDiameterCm: 15 },
+      light: 'bright',
+      placements: ['store', 'office'],
+      guaranteed: true,
+      aliases: ['개업 선물 난'],
+    },
   },
   {
     name: 'v3',
@@ -49,6 +88,11 @@ const PRODUCT_SPECS = [
     fragrance: 'light',
     bloom: 'bud',
     care: 'normal',
+    extras: {
+      size: { heightCm: 70, widthCm: 45, potDiameterCm: 18, bloomCount: 30 },
+      light: 'medium',
+      placements: ['living'],
+    },
   },
 ];
 const PRODUCTS = PRODUCT_SPECS.map((spec, i) => ({
@@ -72,6 +116,8 @@ const PRODUCTS = PRODUCT_SPECS.map((spec, i) => ({
     careLevel: spec.care,
   },
   content: { headline: spec.headline, description: spec.description, isEditedByUser: false },
+  // 팔도감 벤치마킹 비교 기능의 상품 추가 정보. 기능이 꺼진 화면은 읽지 않는다.
+  ...(spec.extras ?? {}),
 }));
 
 const PUBLIC_PROFILE = {
@@ -79,6 +125,21 @@ const PUBLIC_PROFILE = {
   name: STORE_NAME,
   logoUrl: null,
   salesMode: 'round_direct',
+  // 비교 기능: 가게 소개·품질 보장·남은 수량 공개
+  intro: '매주 경매에서 직접 골라 보내는 이천 꽃집',
+  story:
+    '매주 경매에서 상태 좋은 동양란만 골라 들여옵니다.\n온실에서 하루 쉬게 한 뒤 직접 차에 실어 문 앞까지 가져다드려요.',
+  region: '경기 이천',
+  sinceYear: 1996,
+  guarantee: {
+    enabled: true,
+    title: '꽃 상태 보장',
+    terms: [
+      '받은 날 사진과 함께 알려 주시면 가장 빨리 다시 보내 드려요.',
+      '꽃이 시들었거나 화분이 깨졌다면 다음 회차에 다시 보내 드리거나 환불해 드려요.',
+    ],
+  },
+  showDemandSignals: true,
 };
 
 const BANNER = {
@@ -168,6 +229,9 @@ const SALE_ROUNDS = [
 // 판매 중 회차의 상품별 확정 수량. 두 번째 상품은 한도(10개)를 채워 API가 공개 조회에서
 // 계산해 주는 품절(SOLD_OUT) 화면을 확인한다.
 const ROUND_ORDERED = [4, 10, 2];
+// 비교 기능(card-discount): API가 판매 중 회차 상품에 붙여 주는 직전 마감 회차 판매가.
+// 빅립은 3,000원 내린 문구가 보이고, 만천홍은 같은 값이라 아무것도 보이지 않으며, v3는 근거가 없다.
+const PREVIOUS_ROUND_PRICES = { 'product-1': 33000, 'product-2': 25000 };
 function roundItems(round) {
   return PRODUCTS.map((product, i) => ({
     id: `${round.id}-item-${i + 1}`,
@@ -266,6 +330,36 @@ const ORDERS = [
     createdAt: '2026-09-26T05:10:00.000Z',
     updatedAt: '2026-09-28T22:30:00.000Z',
   }),
+  // 비교 기능 화면(후기·관리 안내·다시 주문·옵션·선물)을 보는 배송 완료 주문.
+  roundOrder('order-round-delivered', '20260925-000020', ROUND_CLOSED, 'DELIVERED', [[0, 1]], {
+    orderItems: [
+      {
+        ...orderItem(ROUND_CLOSED, 0, 1),
+        unitPrice: PRODUCTS[0].price + 13000,
+        subtotalAmount: PRODUCTS[0].price + 13000,
+        selectedOptions: [
+          { groupId: 'g1', groupName: '화분', choiceId: 'c2', choiceLabel: '백자 도자기 화분', priceDelta: 8000 },
+          {
+            groupId: 'g2',
+            groupName: '문구',
+            choiceId: 'c5',
+            choiceLabel: '3D 토퍼',
+            priceDelta: 5000,
+            text: '엄마 생신 축하해요',
+          },
+        ],
+      },
+    ],
+    totalAmount: PRODUCTS[0].price + 13000,
+    gift: {
+      recipientName: '박엄마',
+      recipientPhone: '010-1234-5678',
+      senderName: '김그린',
+      cardMessage: '늘 고마워요. 건강하세요!',
+    },
+    createdAt: '2026-09-25T04:00:00.000Z',
+    updatedAt: '2026-09-29T00:10:00.000Z',
+  }),
   roundOrder('order-round-cancelled', '20261001-000004', ROUND_OPEN, 'CANCELLED', [[1, 1]], {
     cancelReason: '고객 요청',
     createdAt: '2026-10-01T02:05:00.000Z',
@@ -354,7 +448,7 @@ const NOTIFICATIONS = [
  */
 const CART_ITEMS = [
   [0, 1],
-  [1, 2],
+  [2, 1],
 ].map(([index, quantity]) => {
   const product = PRODUCTS[index];
   return {
@@ -376,31 +470,112 @@ export const browserStorage = {
   sessionStorage: { checkout_cart: JSON.stringify(CART_ITEMS) },
 };
 
+// ── 팔도감 벤치마킹 비교 기능 응답(기능이 꺼진 화면은 부르지 않는다) ──
+const REVIEW_STATS = {
+  'product-1': { count: 24, average: 4.8 },
+  'product-2': { count: 9, average: 4.6 },
+};
+const REVIEWS = [
+  {
+    id: 'review-1',
+    productId: 'product-1',
+    rating: 5,
+    text: '꽃대가 사진보다 튼실하게 왔어요. 화요일 아침에 정확히 문 앞에 있었습니다.',
+    authorName: '이*연',
+    createdAt: '2026-09-30T02:00:00.000Z',
+  },
+  {
+    id: 'review-2',
+    productId: 'product-1',
+    rating: 5,
+    text: '도자기 화분으로 골랐는데 선물하기 좋네요. 관리법 카드도 들어 있었어요.',
+    authorName: '정*호',
+    createdAt: '2026-09-23T05:00:00.000Z',
+  },
+  {
+    id: 'review-3',
+    productId: 'product-1',
+    rating: 4,
+    text: '반쯤 핀 상태로 와서 일주일 뒤에 활짝 폈어요.',
+    authorName: '최*은',
+    createdAt: '2026-09-16T08:00:00.000Z',
+  },
+];
+const benchmarkRoutes = [
+  ['GET', /^\/stores\/[^/]+\/review-stats$/, () => ({ body: REVIEW_STATS })],
+  [
+    'GET',
+    /^\/products\/([^/]+)\/reviews$/,
+    ({ params: [id] }) => {
+      const items = REVIEWS.filter((review) => review.productId === id);
+      return { body: { summary: REVIEW_STATS[id] ?? { count: 0, average: 0 }, items } };
+    },
+  ],
+  ['GET', /^\/orders\/[^/]+\/reviews$/, () => ({ body: [] })],
+  ['GET', /^\/me\/restock-subscriptions$/, () => ({ body: [] })],
+  ['POST', /^\/stores\/[^/]+\/product-requests$/, () => ({ body: { id: 'request-visual' } })],
+  ['POST', /^\/partner-inquiries$/, () => ({ body: { id: 'inquiry-visual' } })],
+];
+
+/**
+ * 화면별 상황. 캡처 스크립트가 화면을 열기 전에 이 경로들을 기본 경로 앞에 끼운다.
+ * - scheduled: 판매 중·지난 회차 없이 다음 회차만 예정된 주(오픈 알림·빈 지난 회차 숨김).
+ */
+export const scenarioRoutes = {
+  scheduled: [
+    [
+      'GET',
+      /^\/stores\/[^/]+\/sale-rounds\/public$/,
+      () => ({ body: { items: SALE_ROUNDS.filter((round) => round.status === 'SCHEDULED') } }),
+    ],
+  ],
+};
+
 const notFound = (message) => ({ status: 404, body: { message } });
 const publicRounds = SALE_ROUNDS;
 
 /** [메서드, 경로 정규식, 처리 함수] — 첫 일치가 응답한다. 처리 함수는 { status?, body, delay? }를 돌려준다. */
 export const routes = [
   // 장바구니·결제 화면이 읽는 서버 검증 응답(쓰기 요청이지만 화면이 응답 내용을 쓴다).
+  // 화면이 보낸 회차 상품만 그대로 돌려준다(품절 상품을 빼고 보내면 응답에서도 빠진다).
   [
     'POST',
     /^\/stores\/[^/]+\/orders\/validate-cart$/,
-    () => ({
-      body: {
-        ok: true,
-        salesMode: 'round_direct',
-        roundId: 'round-open',
-        itemQuantityTotal: CART_ITEMS.reduce((sum, item) => sum + item.quantity, 0),
-        totalAmount: CART_ITEMS.reduce((sum, item) => sum + item.roundPrice * item.quantity, 0),
-        items: CART_ITEMS.map((item) => ({
-          roundItemId: item.roundItemId,
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: item.roundPrice,
-          subtotalAmount: item.roundPrice * item.quantity,
-        })),
-      },
-    }),
+    ({ body }) => {
+      let request = {};
+      try {
+        request = JSON.parse(body || '{}');
+      } catch {
+        /* 빈 본문 */
+      }
+      const lines = Array.isArray(request.roundItems) ? request.roundItems : [];
+      const items = lines.map((line) => {
+        const index = Number(String(line.roundItemId).split('-item-')[1]) - 1;
+        const product = PRODUCTS[index];
+        const delta = (product?.options ?? [])
+          .flatMap((group) => group.choices)
+          .filter((choice) => (line.optionChoiceIds ?? []).includes(choice.id))
+          .reduce((sum, choice) => sum + choice.priceDelta, 0);
+        const unitPrice = (product?.price ?? 0) + delta;
+        return {
+          roundItemId: line.roundItemId,
+          productId: product?.id,
+          quantity: line.quantity,
+          unitPrice,
+          subtotalAmount: unitPrice * line.quantity,
+        };
+      });
+      return {
+        body: {
+          ok: true,
+          salesMode: 'round_direct',
+          roundId: request.roundId ?? 'round-open',
+          itemQuantityTotal: items.reduce((sum, item) => sum + item.quantity, 0),
+          totalAmount: items.reduce((sum, item) => sum + item.subtotalAmount, 0),
+          items,
+        },
+      };
+    },
   ],
   // 홈·하단 메뉴·상품 상세: 일반 상품만 둔다(공동구매 목록은 비움).
   [
@@ -427,7 +602,24 @@ export const routes = [
     /^\/stores\/[^/]+\/sale-rounds\/public\/([^/]+)$/,
     ({ params: [id] }) => {
       const round = publicRounds.find((r) => r.id === id);
-      return round ? { body: { ...round, items: roundItems(round) } } : notFound('회차 없음');
+      if (!round) return notFound('회차 없음');
+      // 비교 기능(demand-signals): showDemandSignals 가게만 API가 붙여 준다.
+      const items = roundItems(round).map((item) => {
+        const previousRoundPrice =
+          round.status === 'OPEN' ? PREVIOUS_ROUND_PRICES[item.productId] : undefined;
+        return {
+          ...item,
+          demand: { remainingQuantity: Math.max(0, item.saleLimitQuantity - item.orderedQuantity) },
+          ...(previousRoundPrice === undefined ? {} : { previousRoundPrice }),
+        };
+      });
+      return {
+        body: {
+          ...round,
+          items,
+          demand: { buyerCount: round.counters.orderedDeliveryAddresses },
+        },
+      };
     },
   ],
   ['GET', /^\/banner$/, () => ({ body: BANNER })],
@@ -444,6 +636,7 @@ export const routes = [
   // 배송지(useAddresses는 /auth/me의 savedAddresses를 읽는다)
   ['GET', /^\/auth\/me$/, () => ({ body: ME })],
   ['GET', /^\/notifications\/me$/, () => ({ body: { items: NOTIFICATIONS } })],
+  ...benchmarkRoutes,
 ];
 
 /**
@@ -512,4 +705,208 @@ export const screens = [
   { id: 'notifications', group: 'MY', title: '알림', path: '/mypage/notifications' },
   { id: 'terms', group: '안내', title: '이용약관', path: '/terms', auth: false },
   { id: 'privacy', group: '안내', title: '개인정보처리방침', path: '/privacy', auth: false },
+];
+
+/** 이번 회차 찜(wishlist)은 브라우저에만 있다. wish: true 화면은 열기 전에 이 값을 넣는다. */
+export const wishStorage = {
+  localStorage: { 'greenhub_round_wish:round-open': JSON.stringify(['product-1', 'product-3']) },
+};
+
+/**
+ * 팔도감 벤치마킹 비교(수정 전·후)용 화면. features는 그 화면에서 보이는 기능 토글 키다.
+ * - scenario: scenarioRoutes 이름(그 화면을 열 때만 경로를 바꾼다)
+ * - storage: 장바구니·결제 대상, wish: 이번 회차 찜을 브라우저에 넣고 연다
+ * - steps: 찍기 전에 차례로 할 일. { click: '글자' } 또는 { fill: { label, value } } / { fill: '첫 입력칸 값' }.
+ *   누를 글자가 없으면(수정 전 화면) 거기서 멈추고 찍는다.
+ * - viewport: true면 지금 보이는 화면만 찍는다(아래에서 올라오는 시트 등)
+ */
+export const benchmarkScreens = [
+  {
+    id: 'bm-home',
+    group: '홈',
+    title: '홈 · 회차 진행 중(로그인)',
+    path: '/',
+    wish: true,
+    features: [
+      'countdown-date', 'demand-signals', 'card-discount', 'reviews', 'seller-store', 'wishlist',
+      'quality-guarantee', 'plant-search', 'partner-inquiry',
+    ],
+  },
+  {
+    id: 'bm-home-scheduled',
+    group: '홈',
+    title: '홈 · 다음 회차만 예정',
+    path: '/',
+    scenario: 'scheduled',
+    features: ['open-alert', 'hide-empty-past', 'countdown-date'],
+  },
+  {
+    id: 'bm-search-alias',
+    group: '찾기',
+    title: '검색 · 별칭으로 찾기 "개업 선물"',
+    path: '/search',
+    steps: [{ fill: '개업 선물' }],
+    features: ['plant-search'],
+  },
+  {
+    id: 'bm-search-empty',
+    group: '찾기',
+    title: '검색 · 결과 없음 "수국"',
+    path: '/search',
+    steps: [{ fill: '수국' }],
+    features: ['product-request'],
+  },
+  {
+    id: 'bm-category',
+    group: '찾기',
+    title: '상품 탭',
+    path: '/category',
+    features: ['category-round-label', 'product-request'],
+  },
+  {
+    id: 'bm-product',
+    group: '상품',
+    title: '상품 상세 · 판매 중',
+    path: '/products/product-1?round=round-open',
+    wish: true,
+    features: [
+      'detail-images', 'size-info', 'care-guide', 'reviews', 'seller-store', 'quality-guarantee',
+      'recommendations', 'card-discount', 'wishlist',
+    ],
+  },
+  {
+    id: 'bm-product-options',
+    group: '상품',
+    title: '상품 상세 · 옵션 시트(토퍼 문구 입력)',
+    path: '/products/product-1?round=round-open',
+    viewport: true,
+    steps: [
+      { click: '장바구니' },
+      { click: '3D 토퍼' },
+      { fill: { label: '3D 토퍼에 넣을 문구', value: '개업을 축하해요' } },
+    ],
+    features: ['option-sheet'],
+  },
+  {
+    id: 'bm-product-soldout',
+    group: '상품',
+    title: '상품 상세 · 품절',
+    path: '/products/product-2?round=round-open',
+    features: ['restock-alert'],
+  },
+  {
+    id: 'bm-cart',
+    group: '구매',
+    title: '장바구니(로그인)',
+    path: '/cart',
+    storage: true,
+    features: ['arrival-everywhere', 'icheon-precheck', 'cart-upsell'],
+  },
+  {
+    id: 'bm-cart-guest',
+    group: '구매',
+    title: '장바구니(비로그인)',
+    path: '/cart',
+    storage: true,
+    auth: false,
+    features: ['guest-cart'],
+  },
+  {
+    id: 'bm-login',
+    group: '구매',
+    title: '로그인',
+    path: '/login?callbackUrl=%2Fcart',
+    auth: false,
+    features: ['guest-cart'],
+  },
+  {
+    id: 'bm-checkout',
+    group: '구매',
+    title: '결제',
+    path: '/checkout?from=cart',
+    storage: true,
+    features: ['arrival-everywhere'],
+  },
+  {
+    id: 'bm-checkout-gift',
+    group: '구매',
+    title: '결제 · 선물로 보내요',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [
+      { click: '선물로 보내요' },
+      { fill: { label: '이름', value: '박엄마', nth: 0 } },
+      { fill: { label: '이름', value: '김그린', nth: 1 } },
+      { fill: { label: '카드 문구', value: '늘 고마워요. 건강하세요!' } },
+    ],
+    features: ['gift'],
+  },
+  {
+    id: 'bm-success',
+    group: '구매',
+    title: '주문 완료',
+    path: '/order/success?orderId=order-round-accepted',
+    features: ['order-success-guide'],
+  },
+  {
+    id: 'bm-success-cancelled',
+    group: '구매',
+    title: '주문 완료 화면 · 결제 취소(실패)',
+    path: '/order/success?orderId=order-round-cancelled',
+    features: ['payment-fail-stay'],
+  },
+  {
+    id: 'bm-mypage',
+    group: 'MY',
+    title: 'MY',
+    path: '/mypage',
+    features: ['wishlist', 'purchase-history'],
+  },
+  {
+    id: 'bm-wishlist',
+    group: 'MY',
+    title: 'MY · 이번 회차 찜',
+    path: '/mypage/wishlist',
+    wish: true,
+    features: ['wishlist'],
+  },
+  {
+    // 기존 주문 4건 재사용: 빅립 2건(접수·배송 완료)·만천홍 1건(취소 주문은 빠짐)·세 번째 상품 1건.
+    id: 'bm-purchase-history',
+    group: 'MY',
+    title: 'MY · 구매한 꽃',
+    path: '/mypage/purchase-history',
+    features: ['purchase-history'],
+  },
+  {
+    id: 'bm-order-delivered',
+    group: 'MY',
+    title: '주문 상세 · 배송 완료(옵션 문구·선물)',
+    path: '/mypage/orders/order-round-delivered',
+    features: ['reviews', 'care-guide', 'reorder', 'option-sheet', 'gift'],
+  },
+  {
+    id: 'bm-store',
+    group: '가게·안내',
+    title: '판매자 소개',
+    path: '/store/store-visual-0001',
+    auth: false,
+    features: ['seller-store', 'reviews'],
+  },
+  {
+    id: 'bm-guarantee',
+    group: '가게·안내',
+    title: '품질 보장 안내',
+    path: '/guarantee',
+    auth: false,
+    features: ['quality-guarantee'],
+  },
+  {
+    id: 'bm-partner',
+    group: '가게·안내',
+    title: '입점 문의',
+    path: '/partner',
+    auth: false,
+    features: ['partner-inquiry'],
+  },
 ];
