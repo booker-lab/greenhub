@@ -591,3 +591,54 @@ describe('배송 사진 Storage 계약', () => {
     expect(context.deleteFile).not.toHaveBeenCalled();
   });
 });
+
+describe('후기 사진 Storage 계약', () => {
+  const PATH = 'reviewPhotos/order-1_product-1/0b6c7a3e-4b1f-4c43-9d43-1d5f2b0c9a11.jpg';
+
+  it('비공개 JPEG로 새로 만들고, 같은 경로를 덮어쓰지 않는다', async () => {
+    const { file, save, service } = makeService();
+    await service.saveReviewPhoto(PATH, Buffer.from([0xff, 0xd8, 0xff, 0xd9]));
+
+    expect(file).toHaveBeenCalledWith(PATH);
+    expect(save).toHaveBeenCalledWith(
+      expect.any(Buffer),
+      expect.objectContaining({
+        preconditionOpts: { ifGenerationMatch: 0 },
+        metadata: expect.objectContaining({
+          contentType: 'image/jpeg',
+          cacheControl: 'private, max-age=0, no-store',
+        }),
+      }),
+    );
+  });
+
+  it('읽기는 한 시간짜리 서명 URL만 만든다', async () => {
+    const { getSignedUrl, service } = makeService();
+    const now = new Date('2026-10-18T00:00:00.000Z');
+    await service.createReviewPhotoReadUrl(PATH, now);
+    expect(getSignedUrl).toHaveBeenCalledWith({
+      version: 'v4',
+      action: 'read',
+      expires: new Date('2026-10-18T01:00:00.000Z'),
+    });
+  });
+
+  it.each([
+    'deliveryPhotos/order-1/photo.jpg',
+    'reviewPhotos/../users/photo.jpg',
+    'reviewPhotos/order-1_product-1/photo.png',
+    'reviewPhotos/order-1_product-1/nested/photo.jpg',
+  ])('후기 사진 경로가 아니면(%s) 저장·읽기·삭제를 거부한다', async (path) => {
+    const { save, getSignedUrl, deleteFile, service } = makeService();
+    await expect(service.saveReviewPhoto(path, Buffer.from([0xff]))).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(service.createReviewPhotoReadUrl(path)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(service.deleteReviewPhoto(path)).rejects.toBeInstanceOf(BadRequestException);
+    expect(save).not.toHaveBeenCalled();
+    expect(getSignedUrl).not.toHaveBeenCalled();
+    expect(deleteFile).not.toHaveBeenCalled();
+  });
+});
