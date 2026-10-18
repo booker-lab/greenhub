@@ -102,6 +102,7 @@ build, test, formatter가 생성한 파일은 의도한 소스 변경과 분리�
 `main` 대상 PR·push마다 다음을 실행한다. 비밀값과 외부 서비스를 쓰지 않는다.
 
 - Biome lint 오류 0(프런트 3개 앱 `src`, `packages`) — 경고·포맷 부채는 범위 밖
+- API ESLint 오류 0(`pnpm --filter api exec eslint "{src,apps,libs,test}/**/*.ts" --quiet`) — 경고는 범위 밖(`API-LINT-BASELINE` ②)
 - 정의되지 않은 CSS 변수 0(`scripts/check-css-vars.mjs`)
 - `tsc --noEmit`: consumer·seller·driver·e2e·shared, API는 `tsconfig.build.json`
 - 단위 테스트: API jest·API 통합(`test:e2e`), seller vitest, driver vitest + node:test, consumer node:test, shared vitest
@@ -110,7 +111,7 @@ build, test, formatter가 생성한 파일은 의도한 소스 변경과 분리�
 - `pnpm build`(가짜 공개 설정값으로 Next 빌드)
 - TruffleHog(검증된 비밀값만)
 
-필수 검사(branch protection) 지정은 GitHub 설정 변경이라 별도 승인 대상이다. API ESLint(`API-LINT-BASELINE`)는 기존 오류가 정리된 뒤 추가한다.
+필수 검사(branch protection) 지정은 GitHub 설정 변경이라 별도 승인 대상이다.
 
 ## 5.2 배포 후 점검
 

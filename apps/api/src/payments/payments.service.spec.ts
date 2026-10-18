@@ -307,9 +307,8 @@ describe('결제 최종화 경쟁 조건', () => {
       // Atomic late-payment convergence: finalize-first uses consume,
       // cancel-first-then-late uses single-commit reacquire (no orphan HELD).
       const consumeCalls = fixture.capacity.consumeReservationInTransaction.mock.calls.length;
-      const reacquireCalls = (
-        fixture.capacity.reacquireAndConsumeLatePaymentInTransaction as jest.Mock
-      ).mock.calls.length;
+      const reacquireCalls =
+        fixture.capacity.reacquireAndConsumeLatePaymentInTransaction.mock.calls.length;
       expect(consumeCalls + reacquireCalls).toBe(1);
     } else {
       expect(order.cancelReason).toBe('timeout');

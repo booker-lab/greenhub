@@ -639,7 +639,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 정본: `docs/specs/api/notifications.md`. 회귀: `apps/api/src/notifications/notification-retry-policy.spec.ts`, `apps/api/src/notifications/notification-retry-metrics.spec.ts`.
 
 ### API-LINT-BASELINE
-- [ ] **2026-10-13 #516 병합**: API ESLint 오류를 1건까지 줄였다(`main` `b48a22b1`, 남은 1건은 `apps/api/src/payments/payments.service.spec.ts:311` `no-unnecessary-type-assertion`, #426 병합 뒤 수정). 남은 일: ① 그 1건을 고친 뒤 CI에 `pnpm --filter api exec eslint "{src,apps,libs,test}/**/*.ts" --quiet` 단계를 넣는다(`lint` 스크립트는 `--fix`라 CI·검증에 쓰지 않는다). ② 경고로 남긴 동작 관련 지적 `require-await` 8건, `no-base-to-string` 25건, `no-floating-promises` 1건을 하나씩 판정한다. 타입 관련 `no-unsafe-*` 경고 약 2,240건은 `any` 정리 때 함께 줄인다. 이전 기록: auth `any`, spec mock 타입, lint command 분리
+- [ ] **2026-10-13 #516 병합**: API ESLint 오류를 1건까지 줄였다(`main` `b48a22b1`, 남은 1건은 `apps/api/src/payments/payments.service.spec.ts:311` `no-unnecessary-type-assertion`). **2026-10-18 ① 완료**: 그 1건(불필요한 `as jest.Mock` 캐스트)을 고쳐 API ESLint 오류를 0으로 만들고, CI `lint · typecheck` job에 `pnpm --filter api exec eslint "{src,apps,libs,test}/**/*.ts" --quiet` 단계를 넣었다(오류만 실패, `lint` 스크립트는 `--fix`라 CI·검증에 쓰지 않는다). 처음에는 #426 병합 뒤 고치기로 했으나 #426은 #540으로 대체돼 닫혔고, #540은 LIVE 채널이 생길 때까지 병합 보류라 main에서 먼저 고쳤다(#540은 이 spec의 다른 줄만 바꾼다). 남은 일: ② 경고로 남긴 동작 관련 지적 `require-await` 8건, `no-base-to-string` 25건, `no-floating-promises` 1건을 하나씩 판정한다. 타입 관련 `no-unsafe-*` 경고 약 2,240건은 `any` 정리 때 함께 줄인다. 이전 기록: auth `any`, spec mock 타입, lint command 분리
 
 ### LOCAL-DEV-FULLSTACK
 - [ ] API/consumer/seller/driver launcher·CORS·`dev.bat` 정책
