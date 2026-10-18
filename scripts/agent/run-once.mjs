@@ -227,16 +227,26 @@ export const CHILD_GIT_SAFETY_ENV = Object.freeze({
 // runner and Git publication guardrails themselves, agent instruction and
 // configuration files, security rules, container configuration, and env files.
 // A task that changes one of them fails closed before publication.
+// 운영·E2E 비밀값을 가진 workflow가 실행하는 스크립트(같은 프로세스로 import되는 모듈 포함)와,
+// 그 job이 설치하는 의존성 정의(scripts/package.json·pnpm-lock.yaml)도 같은 이유로 보호한다.
 export const PROTECTED_PATH_PREFIXES = Object.freeze([
   '.github',
   'scripts/agent',
   'scripts/git',
+  'scripts/release',
+  'scripts/ops',
   '.codex',
   '.opencode',
   'docs/goals',
 ]);
 export const PROTECTED_EXACT_PATHS = Object.freeze([
   'scripts/verify-deployment-safety.mjs',
+  'scripts/check-round-direct-e2e-readiness.mjs',
+  'scripts/round-direct-e2e-fixtures.mjs',
+  'scripts/round-direct-e2e-fixtures-cli.mjs',
+  'scripts/wait-preview-deploy.mjs',
+  'scripts/package.json',
+  'pnpm-lock.yaml',
   'firestore.rules',
   'storage.rules',
   'firebase.json',

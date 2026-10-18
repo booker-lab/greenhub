@@ -128,10 +128,12 @@ function baseSeed(overrides = {}) {
   };
 }
 
-function harness({ seed = baseSeed(), env = {}, project, beforeCommit } = {}) {
+// detail: true면 로컬 --detail 실행을 흉내 낸다. 기본은 공개 Actions 로그와 같은 기본 출력이다.
+function harness({ seed = baseSeed(), env = {}, project, beforeCommit, detail = false } = {}) {
   const fake = createFakeDb(seed, { beforeCommit });
   const lines = [];
   const options = {
+    argv: detail ? ['--detail'] : [],
     env: {
       LINK_STORE_ID: STORE,
       LINK_MODE: 'check',
@@ -157,8 +159,77 @@ const link = (fingerprint, extra = {}) => ({
 const audits = (h) =>
   [...h.fake.docs.entries()].filter(([p]) => p.startsWith('auditLogs/')).map(([, d]) => d);
 
-test('check lists the store and kakao admin/seller candidates without writing', async () => {
+// 기본 출력(공개 로그)에 나오면 안 되는 상세 항목 이름.
+const DETAIL_KEYS = [
+  'storeIdPrefix',
+  'storeName',
+  'storeOwnerIdPrefix',
+  'storeOwnerFingerprint',
+  'storeUser:',
+  'fingerprint:',
+  'targetFingerprint',
+  'uidPrefix',
+  'storedEmail',
+  'createdAt',
+  'lastRefreshAt',
+  'linkedStoreName',
+  'ownsStoreIdPrefixes',
+  'previousOwnerIdPrefix',
+  'auditLogIdPrefix',
+  'candidate 1/',
+];
+
+function assertDefaultOutput(out) {
+  for (const key of DETAIL_KEYS)
+    assert.ok(!out.includes(key), `detail key in default output: ${key}`);
+  for (const raw of [EMAIL_ADMIN, ADMIN, SELLER, OLD_OWNER, STORE, '실제 매장', '01012345678']) {
+    assert.ok(!out.includes(raw), 'identifier in default output');
+  }
+  for (const uid of [ADMIN, SELLER, OLD_OWNER]) assert.ok(!out.includes(uidFingerprint(uid)));
+  assert.ok(!out.includes('2026-'), 'timestamps in default output');
+}
+
+test('default check prints counts and booleans only, without the candidate list', async () => {
   const h = harness();
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  assertDefaultOutput(out);
+  for (const line of [
+    'mode: check',
+    'storeDoc: yes',
+    'storeOwnerSet: yes',
+    'storeOwnerUserDoc: no',
+    'storeUsers: 0',
+    'kakaoCandidates: 2',
+  ]) {
+    assert.ok(h.lines.includes(line), line);
+  }
+  assert.match(out, /로컬에서 --detail/);
+  assert.deepEqual(h.fake.writes, []);
+});
+
+test('default check with a fingerprint prints only that candidate as categories', async () => {
+  const h = harness({ env: { LINK_TARGET_FINGERPRINT: uidFingerprint(ADMIN) } });
+  assert.equal(await h.run(), 0);
+  const out = h.output();
+  assertDefaultOutput(out);
+  for (const line of [
+    'targetCandidates: 1',
+    'target role: admin',
+    'target providers: kakao',
+    'target suspended: no',
+    'target phoneSet: yes',
+    'target storeLinked: no',
+    'target ownsStores: 0',
+  ]) {
+    assert.ok(h.lines.includes(line), line);
+  }
+  assert.ok(!out.includes('role: seller'), 'other candidates are not listed');
+  assert.deepEqual(h.fake.writes, []);
+});
+
+test('check --detail lists the store and kakao admin/seller candidates without writing', async () => {
+  const h = harness({ detail: true });
   assert.equal(await h.run(), 0);
   const out = h.output();
   assert.match(out, /storeName: 실제 매장/);
@@ -193,7 +264,9 @@ test('link connects an admin to an orphan store, keeps the role, and writes an a
   assert.equal(audit.detail.previousOwnerId, OLD_OWNER);
   assert.equal(audit.detail.storeId, STORE);
   assert.match(h.output(), /linked: yes/);
+  assert.match(h.output(), /^auditLogged: yes$/m);
   assert.ok(!h.output().includes(ADMIN));
+  assertDefaultOutput(h.output());
 
   // 다시 실행해도 같은 결과(추가 쓰기 없음).
   const again = harness({
@@ -225,8 +298,15 @@ test('link refuses to move a store owned by an active account', async () => {
   const h = harness({ seed, env: link(uidFingerprint(ADMIN)) });
   assert.equal(await h.run(), 1);
   assert.match(h.output(), /blocked: 현재 매장 owner가 정지되지 않은 기존 계정/);
-  assert.match(h.output(), /blocked: 대상 외에 이 매장에 연결된 활성 사용자/);
+  assert.match(h.output(), /blocked: 대상 외에 이 매장에 연결된 활성 사용자가 1명 있습니다/);
+  // 막힌 이유의 식별값(fingerprint)은 --detail에서만 낸다.
+  assertDefaultOutput(h.output());
   assert.deepEqual(h.fake.writes, []);
+
+  const detailed = harness({ seed, env: link(uidFingerprint(ADMIN)), detail: true });
+  assert.equal(await detailed.run(), 1);
+  assert.match(detailed.output(), new RegExp(`fingerprints=${uidFingerprint(OLD_OWNER)}`));
+  assert.deepEqual(detailed.fake.writes, []);
 });
 
 test('link allows replacing a suspended owner', async () => {
@@ -304,4 +384,36 @@ test('rejects non-production keys, missing stores, and bad inputs', async () => 
   assert.equal(await badId.run(), 1);
   const badFp = harness({ env: link('xyz') });
   assert.equal(await badFp.run(), 1);
+});
+
+test('--detail is refused in Actions/CI before connecting', async () => {
+  for (const ciEnv of [{ GITHUB_ACTIONS: 'true' }, { CI: 'true' }]) {
+    const h = harness({ detail: true, env: ciEnv });
+    assert.equal(await h.run(), 1);
+    assert.match(h.output(), /로컬 실행에서만/);
+    assert.ok(!h.output().includes('storeDoc'));
+    assert.deepEqual(h.fake.writes, []);
+  }
+});
+
+test('unexpected errors print only a code and a sanitized message by default', async () => {
+  const fail = () => {
+    const error = new Error(
+      `10 ABORTED: Transaction lock timeout on documents/stores/${STORE} for users/${ADMIN} (${EMAIL_ADMIN})`,
+    );
+    error.code = 10;
+    return error;
+  };
+  const h = harness({ env: link(uidFingerprint(ADMIN)) });
+  h.fake.db.runTransaction = async () => {
+    throw fail();
+  };
+  assert.equal(await h.run(), 1);
+  const out = h.output();
+  assert.match(
+    out,
+    /^실패: 10 10 ABORTED: Transaction lock timeout on documents\/\[path\] for users\/\[path\] \(\[email\]\)$/m,
+  );
+  for (const raw of [STORE, ADMIN, EMAIL_ADMIN]) assert.ok(!out.includes(raw), raw);
+  assert.deepEqual(h.fake.writes, []);
 });
