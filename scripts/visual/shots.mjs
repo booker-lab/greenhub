@@ -1,6 +1,7 @@
 // 화면 자동 캡처 — start.mjs로 띄운 화면 확인 서버에서 fixtures/<app>.mjs의 screens를 모바일·데스크톱으로 찍는다.
 //
-//   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3202]
+//   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3202] [--set benchmark]
+//     --set benchmark  fixtures의 benchmarkScreens(팔도감 벤치마킹 비교 화면)를 찍는다
 //
 // 결과: %TEMP%/greenhub-visual/<app>/shots/<label>/ 아래 PNG와 manifest.json.
 // manifest에는 화면별 최종 주소·콘솔 오류·fixture 없는 API 경로가 남는다(report.mjs가 읽는다).
@@ -46,7 +47,10 @@ const label = option('label', 'current');
 const only = option('only', '')?.split(',').filter(Boolean) ?? [];
 const outDir = option('out', path.join(os.tmpdir(), 'greenhub-visual', appName, 'shots', label));
 
-const { screens: allScreens, browserStorage } = await import(`./fixtures/${appName}.mjs`);
+const fixture = await import(`./fixtures/${appName}.mjs`);
+const { browserStorage, wishStorage } = fixture;
+const screenSet = option('set', '');
+const allScreens = screenSet === 'benchmark' ? (fixture.benchmarkScreens ?? []) : fixture.screens;
 const screens = only.length ? allScreens.filter((s) => only.includes(s.id)) : allScreens;
 
 const { chromium } = createRequire(path.join(ROOT, 'apps/e2e/package.json'))('@playwright/test');
@@ -106,7 +110,35 @@ async function login(context) {
   if (!session?.user?.accessToken) throw new Error('가짜 계정 로그인 실패');
 }
 
-async function capture(page, file) {
+/** steps: 찍기 전에 차례로 누르거나 적는다. 누를 글자가 없으면(기능이 꺼진 화면) 거기서 멈춘다. */
+async function runSteps(page, steps) {
+  for (const step of steps) {
+    if (step.click) {
+      const target = page.getByText(step.click, { exact: true }).first();
+      if (!(await target.isVisible().catch(() => false))) return `누를 글자 없음: ${step.click}`;
+      await target.click();
+    } else if (typeof step.fill === 'string') {
+      await page.getByRole('textbox').first().fill(step.fill);
+    } else if (step.fill) {
+      const { label, value, nth = 0 } = step.fill;
+      const target = page.getByLabel(label).nth(nth);
+      if (!(await target.isVisible().catch(() => false))) return `입력칸 없음: ${label}`;
+      await target.fill(value);
+    }
+    await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => {});
+    await page.waitForTimeout(600);
+  }
+  return null;
+}
+
+async function capture(page, file, { viewportOnly = false } = {}) {
+  if (viewportOnly) {
+    // 아래에서 올라오는 시트처럼 지금 보이는 화면이 중요한 경우는 화면 크기 그대로 찍는다.
+    await page.addStyleTag({ content: 'nextjs-portal{display:none!important}' });
+    await page.waitForTimeout(400);
+    await page.screenshot({ path: file });
+    return;
+  }
   // 하단 고정 메뉴가 본문 중간에 겹쳐 찍히지 않도록, 화면 높이를 문서 높이로 늘려 한 장으로 찍는다.
   const size = page.viewportSize();
   const height = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -173,6 +205,17 @@ try {
             sessionStorage.setItem(k, v);
         }, browserStorage);
       }
+      // wish: true인 화면은 이번 회차 찜(브라우저 저장)을 넣고 연다.
+      if (screen.wish && wishStorage) {
+        await page.addInitScript((stored) => {
+          for (const [k, v] of Object.entries(stored.localStorage ?? {}))
+            localStorage.setItem(k, v);
+        }, wishStorage);
+      }
+      // scenario: 그 화면을 열 때만 가짜 API 경로를 바꾼다.
+      await fetch(`${apiBase}/__scenario?name=${encodeURIComponent(screen.scenario ?? '')}`, {
+        method: 'POST',
+      });
       await fetch(`${apiBase}/__log/reset`, { method: 'POST' });
       const t0 = Date.now();
       await page.goto(`${base}${screen.path}`, { waitUntil: 'load', timeout: 180_000 });
@@ -188,8 +231,9 @@ try {
         await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => {});
         await page.waitForTimeout(800);
       }
+      const stepNote = screen.steps ? await runSteps(page, screen.steps) : null;
       const file = `${screen.id}-${viewportName}.png`;
-      await capture(page, path.join(outDir, file));
+      await capture(page, path.join(outDir, file), { viewportOnly: screen.viewport === true });
       const log = await (await fetch(`${apiBase}/__log`)).json();
       const missing = [...new Set(log.filter((e) => e.kind === 'missing').map((e) => e.path))];
       manifest.shots.push({
@@ -202,11 +246,12 @@ try {
         finalPath: new URL(page.url()).pathname,
         missing,
         errors: [...new Set(errors)],
+        ...(stepNote ? { stepNote } : {}),
         ms: Date.now() - t0,
       });
       const mark = missing.length || errors.length ? '⚠️' : '✅';
       console.log(
-        `${mark} ${viewportName} ${screen.id} (${Date.now() - t0}ms)${missing.length ? ` fixture 없음: ${missing.join(', ')}` : ''}`,
+        `${mark} ${viewportName} ${screen.id} (${Date.now() - t0}ms)${missing.length ? ` fixture 없음: ${missing.join(', ')}` : ''}${stepNote ? ` · ${stepNote}` : ''}${errors.length ? ` · 오류 ${errors.length}건` : ''}`,
       );
       await page.close();
     }
@@ -214,6 +259,7 @@ try {
     await guest.close();
   }
 } finally {
+  await fetch(`${apiBase}/__scenario?name=`, { method: 'POST' }).catch(() => {});
   await browser.close();
 }
 

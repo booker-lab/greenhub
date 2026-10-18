@@ -77,7 +77,18 @@ test('확정되지 않은 외부 증거는 노출하지 않는다', () => {
   const source = `${loadComponentSource()}\n${loadBusinessInfoSource()}`;
 
   assert.doesNotMatch(source, /naver\.(?:me|com)/i);
-  assert.doesNotMatch(source, /통신판매업 신고번호/);
+});
+
+test('통신판매업 신고번호는 번호가 있을 때만 그린다', () => {
+  const componentSource = loadComponentSource();
+  const businessInfoSource = loadBusinessInfoSource();
+
+  // 신고 전에는 빈 값이고, 신고 뒤에는 정본 한 줄만 바꾸면 footer에 나온다.
+  assert.match(businessInfoSource, /mailOrderRegistrationNumber: '[^']*' as string/);
+  assert.match(
+    componentSource,
+    /\{PUBLIC_BUSINESS_INFO\.mailOrderRegistrationNumber \? \([\s\S]*통신판매업 신고번호[\s\S]*\) : null\}/,
+  );
 });
 
 test('사업자 정보 다음에 공개 법적 고지 링크를 충분한 터치 영역으로 제공한다', () => {

@@ -21,6 +21,7 @@ import {
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
+import GiftFields, { type GiftState } from '@/components/benchmark/GiftFields';
 
 const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY;
 
@@ -61,6 +62,11 @@ export interface CheckoutFormProps {
     deliveryMethod: DeliveryMethod;
     requestedDeliveryDate?: string;
   };
+  /** 벤치마킹 비교 기능(도착 시각·선물). 회차 결제에서만 넘긴다. */
+  benchmark?: {
+    arrivalLabel?: string | null;
+    gift?: { value: GiftState; onChange: (next: GiftState) => void };
+  };
 }
 
 export function isIcheonDeliveryAddress(value: string): boolean {
@@ -92,10 +98,13 @@ export default function CheckoutForm({
   error,
   onPay,
   singleSummary,
+  benchmark,
 }: CheckoutFormProps) {
   const [roundDetailsConfirmed, setRoundDetailsConfirmed] = useState(false);
   const [deliveryPhoneTouched, setDeliveryPhoneTouched] = useState(false);
   const isRoundCheckout = items.length > 0 && items.every(isRoundCartItem);
+  // 선물하기(gift)를 켜면 배송 연락처(받는 분 휴대폰)를 선물 칸의 "받는 분" 묶음으로 옮긴다.
+  const giftOn = isRoundCheckout && Boolean(benchmark?.gift?.value.enabled);
   const isIcheonAddress = isIcheonDeliveryAddress(address.address);
   const confirmationKey = isRoundCheckout
     ? items
@@ -194,6 +203,11 @@ export default function CheckoutForm({
                       {(item.price * item.quantity).toLocaleString()}원
                     </Text>
                   </Group>
+                  {item.optionLabel && (
+                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+                      {item.optionLabel}
+                    </Text>
+                  )}
                   {item.requestedDeliveryDate && (
                     <Text
                       style={{
@@ -242,6 +256,16 @@ export default function CheckoutForm({
               </Text>
               <Text style={{ fontSize: 'var(--font-size-sm)' }}>
                 {formatDeliveryDate(singleSummary.requestedDeliveryDate)}
+              </Text>
+            </Group>
+          )}
+          {benchmark?.arrivalLabel && (
+            <Group justify="space-between">
+              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+                도착
+              </Text>
+              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
+                {benchmark.arrivalLabel}까지
               </Text>
             </Group>
           )}
@@ -307,6 +331,7 @@ export default function CheckoutForm({
           onChange={(e) => onAddressChange({ ...address, addressDetail: e.target.value })}
         />
         <TextInput placeholder="우편번호 (자동 입력)" value={address.zipCode} readOnly />
+        {!giftOn && (
         <TextInput
           label={isRoundCheckout ? '배송 연락처 (필수)' : '연락처'}
           description={
@@ -323,13 +348,45 @@ export default function CheckoutForm({
           autoComplete="tel"
           required
         />
+        )}
+        {isRoundCheckout && benchmark?.gift && (
+          // 선물하기(gift): 받는 분·보내는 분·카드 문구를 따로 받고, 배송 연락처는 받는 분 묶음으로 옮긴다.
+          <GiftFields
+            value={benchmark.gift.value}
+            onChange={benchmark.gift.onChange}
+            phoneSlot={
+              giftOn ? (
+                <TextInput
+                  label="휴대폰 (배송 연락처)"
+                  description="배송 안내가 이 번호로 가요."
+                  placeholder="010-1234-5678"
+                  type="tel"
+                  value={deliveryPhone}
+                  onChange={(e) => onDeliveryPhoneChange(e.target.value)}
+                  onBlur={() => setDeliveryPhoneTouched(true)}
+                  error={deliveryPhoneTouched && deliveryPhoneError ? deliveryPhoneError : undefined}
+                  autoComplete="tel"
+                  required
+                />
+              ) : null
+            }
+          />
+        )}
         {isRoundCheckout && onRequestNoteChange && (
           <Textarea
             label="요청사항 (선택)"
-            description={`받는 분 성함·연락처, 선물 문구, 배송 요청을 적어 주세요. (${
+            description={
+              benchmark?.gift
+                ? `배송 요청을 적어 주세요. 선물 받는 분·카드 문구는 위 선물 칸에 적어요. (${
+                    requestNote?.length ?? 0
+                  }/${ORDER_REQUEST_NOTE_MAX_LENGTH})`
+                : `받는 분 성함·연락처, 선물 문구, 배송 요청을 적어 주세요. (${
               requestNote?.length ?? 0
-            }/${ORDER_REQUEST_NOTE_MAX_LENGTH})`}
-            placeholder="예) 받는 분 김그린 010-0000-0000 / 문구: 개업을 축하합니다"
+            }/${ORDER_REQUEST_NOTE_MAX_LENGTH})`
+            }
+            placeholder={
+              benchmark?.gift ? '예) 경비실에 맡겨 주세요' : "예) 받는 분 김그린 010-0000-0000 / 문구: 개업을 축하합니다"
+            }
             value={requestNote ?? ''}
             onChange={(e) => onRequestNoteChange(e.target.value)}
             maxLength={ORDER_REQUEST_NOTE_MAX_LENGTH}

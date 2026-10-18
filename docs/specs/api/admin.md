@@ -327,6 +327,8 @@ POST /admin/invite/:token/revoke
 
 `POST /auth/register`(role `seller`)는 `inviteToken`이 필수다. 판정은 `docs/specs/api/auth.md`를 따른다.
 
+운영 런타임은 이메일 가입을 받지 않으므로(2026-10-18 결정, `docs/specs/api/auth.md` §7) 운영에서는 초대 토큰으로 가입할 수 없다. 초대 발급·목록·취소 API는 그대로 동작한다. 운영에서 새 판매자를 받는 방식은 정해지지 않았다(별도 결정).
+
 ## 9. Banner 관리
 
 Admin:
@@ -411,6 +413,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-18 | 운영 런타임의 이메일 가입 전면 거부로 운영에서는 초대 토큰 가입이 불가함을 명시(발급·목록·취소는 그대로) |
 | 2026-09-26 | admin force refund가 `RoundOrderLifecycleService.cancelForRound` + `SettlementsService.cancelSettlement`로 수렴하고 `admin.service.spec.ts`·`admin-legacy-refund-occ-retry.spec.ts`로 직접 증명되어 `ADMIN-FORCE-REFUND-CONSISTENCY` P0 불일치 서술을 proven 계약으로 대체 |
 | 2026-09-26 | privileged mutation HTTP authorization과 `markAsPaid` 지급 전이를 `admin-privileged-mutation.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`에 동기화하고, 회차 취소 OCC retry purity를 `round-cancellation-occ-retry.spec.ts`에 연결 |
 | 2026-08-24 | admin privileged mutation 서버 authorization과 settlement 지급 상태 전이의 직접 회귀 부재를 `ADMIN-PRIVILEGED-MUTATION-COVERAGE` P0로 분리 |

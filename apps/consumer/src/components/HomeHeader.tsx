@@ -1,5 +1,6 @@
-import { Bell, ShoppingBag } from 'lucide-react';
+import { Bell, Search, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
+import { isFeatureOn } from '@/lib/features';
 
 // 홈 맨 위 초록 머리띠(docs/specs/frontend/design-standard.md §5). 다른 화면에는 쓰지 않는다.
 const iconLinkStyle = {
@@ -12,7 +13,9 @@ const iconLinkStyle = {
 } as const;
 
 export default function HomeHeader() {
+  const search = isFeatureOn('plant-search');
   return (
+    <>
     <header
       style={{
         alignItems: 'center',
@@ -44,5 +47,30 @@ export default function HomeHeader() {
         </Link>
       </nav>
     </header>
+    {search && (
+      // 식물 이름 검색(plant-search): 디자인 기준 §5 머리띠 검색창. 누르면 검색 화면으로 간다.
+      <div style={{ background: 'var(--color-primary)', padding: '0 16px 12px' }}>
+        <Link
+          href="/search"
+          aria-label="꽃 이름으로 찾기"
+          style={{
+            alignItems: 'center',
+            background: 'var(--color-bg)',
+            borderRadius: 'var(--radius-full)',
+            color: 'var(--color-text-secondary)',
+            display: 'flex',
+            fontSize: 'var(--font-size-sm)',
+            gap: 8,
+            minHeight: 'var(--touch-target)',
+            padding: '0 16px',
+            textDecoration: 'none',
+          }}
+        >
+          <Search size={18} aria-hidden />
+          꽃 이름으로 찾기 (호접란, 팔레놉시스…)
+        </Link>
+      </div>
+    )}
+    </>
   );
 }

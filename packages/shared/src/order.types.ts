@@ -1,3 +1,4 @@
+import type { GiftInfo, SelectedProductOption } from './benchmark.types.js'
 import type { ClientOrderRequestId } from './sale-round.types.js'
 
 export type OrderStatus =
@@ -41,6 +42,8 @@ export interface OrderItemSnapshot {
   unitPrice: number
   quantity: number
   subtotalAmount: number
+  /** 고른 옵션(옵션 시트 기능). unitPrice에 이미 더해져 있다. */
+  selectedOptions?: SelectedProductOption[]
 }
 
 export interface OrderAcquisitionSnapshot {
@@ -123,6 +126,7 @@ export interface Order {
   deliveryPhone?: string | null
   requestNote?: string | null        // 소비자 요청사항 — 회차 주문만, 없으면 null
   deliveryPhotoIds?: string[]
+  gift?: GiftInfo | null
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
   // Denormalized fields — 드라이버 앱 실시간 표시용
@@ -160,7 +164,12 @@ export interface CreateOrderRequest {
   roundItems?: Array<{
     roundItemId: string
     quantity: number
+    /** 옵션 묶음마다 고른 선택지 id */
+    optionChoiceIds?: string[]
+    /** 문구가 필요한 선택지(라벨·토퍼)에 넣을 문구 */
+    optionText?: string
   }>
+  gift?: GiftInfo
   deliveryPhone: string
   requestNote?: string           // 선택 — ORDER_REQUEST_NOTE_MAX_LENGTH 이하
   marketingConsent?: MarketingConsentInput

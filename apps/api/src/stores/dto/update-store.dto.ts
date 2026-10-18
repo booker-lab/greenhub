@@ -1,7 +1,8 @@
 import { IsNotEmpty, IsOptional, IsString, Matches, MaxLength } from 'class-validator';
 import { STORE_LOGO_URL_MAX_LENGTH } from '../store-logo-url';
+import { StoreProfileExtrasDto } from './store-profile-extras.dto';
 
-export class UpdateStoreDto {
+export class UpdateStoreDto extends StoreProfileExtrasDto {
   @IsString()
   @IsNotEmpty()
   @IsOptional()

@@ -1,6 +1,7 @@
 import { Box, Text, Title, Stack, Group, Badge, Divider, Paper, SimpleGrid } from '@mantine/core';
 import type { Product, Variety } from '@greenhub/shared';
 import { HideOnErrorImage } from '@/components/ResilientImage';
+import { isFeatureOn } from '@/lib/features';
 
 const FRAGRANCE_LABEL: Record<string, string> = {
   none: '없음',
@@ -208,7 +209,8 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
         </Text>
       )}
 
-      {(product.images?.length ?? 0) > 0 && (
+      {/* 상세 사진 정리(detail-images): 위 사진 넘김에 이미 나온 사진은 다시 보여주지 않는다. */}
+      {(product.images?.length ?? 0) > 0 && !isFeatureOn('detail-images') && (
         <Box mx={-16} mb="lg">
           {product.images?.map((src, i) => (
             <HideOnErrorImage
@@ -222,7 +224,7 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
         </Box>
       )}
 
-      {displayColors.length > 0 && (
+      {displayColors.length > 0 && !(isFeatureOn('detail-images') && product.varietyId) && (
         <Group gap="xs" mb="lg" style={{ flexWrap: 'wrap' }}>
           {displayColors.map((color) => (
             <Badge key={color} variant="outline" color="gray" radius="xl" size="sm">
