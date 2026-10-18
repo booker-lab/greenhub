@@ -15,7 +15,9 @@ import {
 import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useSession } from 'next-auth/react';
+import { signIn, useSession } from 'next-auth/react';
+import { CartArrivalLine, CartUpsell, IcheonPrecheck } from '@/components/benchmark/CartExtras';
+import { isFeatureOn } from '@/lib/features';
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
@@ -77,7 +79,13 @@ function buildRoundCartValidationRequest(value: RoundCartItem | RoundCartItem[])
     },
     deliveryPhone: '00000000',
     roundId: item.roundId,
-    roundItems: items.map(({ roundItemId, quantity }) => ({ roundItemId, quantity })),
+    roundItems: items.map(({ roundItemId, quantity, optionChoiceIds, optionText }) => ({
+      roundItemId,
+      quantity,
+      // 옵션 시트(벤치마킹 비교 기능)로 고른 옵션과 라벨·토퍼 문구. 없으면 기존 요청과 같다.
+      ...(optionChoiceIds?.length ? { optionChoiceIds } : {}),
+      ...(optionText ? { optionText } : {}),
+    })),
   };
 }
 function resolveRoundCartValidation(
@@ -107,7 +115,8 @@ function resolveRoundCartValidation(
   ) {
     return { status: 'unavailable', reason: '서버 검증 응답을 확인할 수 없습니다.' };
   }
-  if (serverItem.unitPrice !== item.roundPrice) {
+  // 옵션을 고른 상품은 옵션 금액을 더한 가격(price)과 비교한다. 옵션이 없으면 price === roundPrice.
+  if (serverItem.unitPrice !== item.price) {
     return {
       status: 'price_changed',
       currentUnitPrice: serverItem.unitPrice,
@@ -316,6 +325,8 @@ export default function CartPage() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const { items, updateQuantity, removeItem, clearCart } = useCart();
+  // 비회원 장바구니(guest-cart): 로그인 전에는 담은 상품만 보여주고, 주문할 때 로그인한다.
+  const isGuest = isFeatureOn('guest-cart') && sessionStatus === 'unauthenticated';
   const validation = useRoundCartValidation(items, session?.user?.accessToken, sessionStatus);
   const isRoundCart = items.length > 0 && items.every(isRoundCartItem);
   const checkoutItems = selectCheckoutItems(items, validation.items);
@@ -326,7 +337,12 @@ export default function CartPage() {
   const legacyValidationError = getCartValidationError(legacyItems);
   const hasLegacyValidationIssues = legacyValidationError !== null;
   const isChecking = isRoundCart && validation.status !== 'ready';
+  const guestAmount = items.reduce((sum, item) => sum + item.price * item.quantity, 0);
   function handleCheckout() {
+    if (isGuest) {
+      void signIn(undefined, { callbackUrl: '/cart' });
+      return;
+    }
     if (checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues) return;
     sessionStorage.setItem('checkout_cart', JSON.stringify(checkoutItems));
     router.push('/checkout?from=cart');
@@ -399,13 +415,16 @@ export default function CartPage() {
                   같은 회차 상품을 서버에서 확인해 한 번에 결제합니다.
                 </Text>
               </Box>
-              <Badge
-                color={isChecking ? 'gray' : 'brand'}
-                variant={isChecking ? 'light' : 'filled'}
-                style={{ flexShrink: 0 }}
-              >
-                {isChecking ? '확인 중' : '확인 완료'}
-              </Badge>
+              {/* 비로그인 장바구니(guest-cart)는 서버 확인을 하지 않으므로 확인 표시를 두지 않는다. */}
+              {!isGuest && (
+                <Badge
+                  color={isChecking ? 'gray' : 'brand'}
+                  variant={isChecking ? 'light' : 'filled'}
+                  style={{ flexShrink: 0 }}
+                >
+                  {isChecking ? '확인 중' : '확인 완료'}
+                </Badge>
+              )}
             </Group>
           </Box>
           {cartRound && (
@@ -424,6 +443,15 @@ export default function CartPage() {
               배송돼요.
             </Box>
           )}
+          {cartRound && <CartArrivalLine round={cartRound} />}
+          {isGuest && (
+            <Box px="md" py="sm" style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}>
+              <Text size="sm" fw={700}>
+                로그인하면 구매 가능 여부와 최신 가격을 확인하고 바로 주문할 수 있어요.
+              </Text>
+            </Box>
+          )}
+          <IcheonPrecheck />
         </Stack>
       )}
       <Stack gap="sm" mb="lg">
@@ -514,6 +542,14 @@ export default function CartPage() {
                       >
                         회차 가격 {roundItem.roundPrice.toLocaleString('ko-KR')}원
                       </span>
+                      {roundItem.optionLabel && (
+                        <Text size="sm" c="var(--color-text-secondary)" mt={4}>
+                          {roundItem.optionLabel}
+                          {roundItem.optionPriceDelta
+                            ? ` (+${roundItem.optionPriceDelta.toLocaleString('ko-KR')}원)`
+                            : ''}
+                        </Text>
+                      )}
                       {soldOut && (
                         <span
                           style={{
@@ -531,7 +567,7 @@ export default function CartPage() {
                           품절
                         </span>
                       )}
-                      <RoundValidationNotice validation={itemValidation} />
+                      {!isGuest && <RoundValidationNotice validation={itemValidation} />}
                     </>
                   ) : (
                     <>
@@ -628,7 +664,8 @@ export default function CartPage() {
           );
         })}
       </Stack>
-      {excludedCount > 0 && (
+      {cartRound && <CartUpsell round={cartRound} items={items} />}
+      {excludedCount > 0 && !isGuest && (
         <Paper
           p="sm"
           mb="md"
@@ -652,7 +689,7 @@ export default function CartPage() {
             결제 대상 상품 수
           </Text>
           <Text size="sm" c="var(--color-text)" style={{ fontVariantNumeric: 'tabular-nums' }}>
-            {checkoutCount}개
+            {isGuest ? items.reduce((sum, item) => sum + item.quantity, 0) : checkoutCount}개
           </Text>
         </Group>
         <Group
@@ -672,7 +709,7 @@ export default function CartPage() {
               fontWeight: 'var(--fw-extrabold)',
             }}
           >
-            {checkoutAmount.toLocaleString('ko-KR')}원
+            {(isGuest ? guestAmount : checkoutAmount).toLocaleString('ko-KR')}원
           </Text>
         </Group>
       </Stack>
@@ -681,20 +718,27 @@ export default function CartPage() {
           문제 있는 상품을 다시 선택하면 결제할 수 있어요.
         </Text>
       )}
-      <Button
-        fullWidth
-        size="lg"
-        color="brand"
-        radius="xl"
-        disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
-        onClick={handleCheckout}
-      >
-        {isChecking
-          ? '구매 가능 여부 확인 중'
-          : isRoundCart
-            ? `${checkoutCount}개 상품 한 번에 결제`
-            : '결제하기'}
-      </Button>
+      {isGuest ? (
+        // 비로그인 장바구니(guest-cart): 로그인한 뒤 같은 장바구니로 돌아온다.
+        <Button fullWidth size="lg" color="brand" radius="xl" onClick={handleCheckout}>
+          로그인하고 주문하기
+        </Button>
+      ) : (
+        <Button
+          fullWidth
+          size="lg"
+          color="brand"
+          radius="xl"
+          disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
+          onClick={handleCheckout}
+        >
+          {isChecking
+            ? '구매 가능 여부 확인 중'
+            : isRoundCart
+              ? `${checkoutCount}개 상품 한 번에 결제`
+              : '결제하기'}
+        </Button>
+      )}
     </Container>
   );
 }

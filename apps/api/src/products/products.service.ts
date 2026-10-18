@@ -1,8 +1,14 @@
 import { todayKST } from '@greenhub/shared';
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { CreateProductDto } from './dto/create-product.dto';
+import { findProductOptionIdConflict } from './dto/product-extras.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -13,6 +19,11 @@ import {
   toPublicProductDetail,
   toPublicProductSummary,
 } from './product-visibility';
+
+function assertProductOptionIds(options: CreateProductDto['options']): void {
+  const conflict = findProductOptionIdConflict(options);
+  if (conflict) throw new BadRequestException(conflict);
+}
 
 @Injectable()
 export class ProductsService {
@@ -139,6 +150,7 @@ export class ProductsService {
 
   async createProduct(storeId: string, sellerId: string, dto: CreateProductDto, role?: string) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
+    assertProductOptionIds(dto.options);
 
     const productId = randomUUID();
     const now = this.firestore.Timestamp.now();
@@ -175,6 +187,7 @@ export class ProductsService {
     role?: string,
   ) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
+    assertProductOptionIds(dto.options);
     const snap = await this.firestore.doc(`products/${productId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException();

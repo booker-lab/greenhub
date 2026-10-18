@@ -327,3 +327,31 @@ describe('store update logoUrl', () => {
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ name: '새 이름' }));
   });
 });
+
+describe('public store profile extras (benchmark compare)', () => {
+  it('판매자가 적은 공개 소개를 붙이고 내부 필드는 여전히 뺀다', async () => {
+    const service = makeService({
+      id: 's-1',
+      ownerId: 'seller-1',
+      name: '디어오키드',
+      phone: '010-1234-5678',
+      logoUrl: null,
+      salesMode: 'round_direct',
+      intro: '8년차 난 농부가 고른 호접란',
+      region: '경기 이천',
+      guarantee: { enabled: true, title: '도착 품질 보장', terms: ['도착 후 3일 안에 사진으로 알려 주세요'] },
+      showDemandSignals: true,
+    });
+    const profile = (await service.getPublicProfile('s-1')) as Record<string, unknown>;
+    expect(profile['intro']).toBe('8년차 난 농부가 고른 호접란');
+    expect(profile['region']).toBe('경기 이천');
+    expect(profile['guarantee']).toEqual({
+      enabled: true,
+      title: '도착 품질 보장',
+      terms: ['도착 후 3일 안에 사진으로 알려 주세요'],
+    });
+    expect(profile['showDemandSignals']).toBe(true);
+    expect(profile).not.toHaveProperty('ownerId');
+    expect(profile).not.toHaveProperty('phone');
+  });
+});

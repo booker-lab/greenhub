@@ -29,7 +29,12 @@ export type RoundPaymentOrderRequest = Pick<
   CreateOrderRequest,
   'deliveryAddress' | 'deliveryPhone'
 > &
-  Partial<Pick<CreateOrderRequest, 'requestedDeliveryDate' | 'acquisition' | 'requestNote'>>;
+  Partial<
+    Pick<
+      CreateOrderRequest,
+      'requestedDeliveryDate' | 'acquisition' | 'requestNote' | 'gift'
+    >
+  >;
 
 export type UsePaymentOptions = BasePaymentOptions &
   (
@@ -130,7 +135,8 @@ function prepareRoundOrderRequest(
   }
 
   const expectedAmount = roundItems.reduce((sum, item) => {
-    const subtotal = item.roundPrice * item.quantity;
+    // 옵션을 고른 상품은 옵션 금액을 더한 price, 아니면 price === roundPrice.
+    const subtotal = item.price * item.quantity;
     if (!Number.isSafeInteger(subtotal) || subtotal < 0) {
       throw new Error('회차 상품 금액을 확인할 수 없습니다.');
     }
@@ -153,10 +159,13 @@ function prepareRoundOrderRequest(
         : {}),
       ...(orderRequest.acquisition ? { acquisition: orderRequest.acquisition } : {}),
       ...(orderRequest.requestNote ? { requestNote: orderRequest.requestNote } : {}),
+      ...(orderRequest.gift ? { gift: orderRequest.gift } : {}),
       roundId: firstItem.roundId,
       roundItems: roundItems.map((item) => ({
         roundItemId: item.roundItemId,
         quantity: item.quantity,
+        ...(item.optionChoiceIds?.length ? { optionChoiceIds: item.optionChoiceIds } : {}),
+        ...(item.optionText ? { optionText: item.optionText } : {}),
       })),
       clientOrderRequestId,
     },

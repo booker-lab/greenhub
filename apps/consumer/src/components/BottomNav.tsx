@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
 import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import { isFeatureOn } from '@/lib/features';
 
 const ROUND_DIRECT_TABS = [
   { href: '/', label: '홈', Icon: Home, showBadge: false },
@@ -87,7 +88,11 @@ export default function BottomNav() {
   const pathname = usePathname();
   const { status: sessionStatus } = useSession();
   const { itemCount } = useCart();
-  const visibleItemCount = sessionStatus === 'authenticated' ? itemCount : 0;
+  // 비회원 장바구니(guest-cart, 벤치마킹 비교 기능)가 켜지면 로그인 전에도 담은 수를 보여준다.
+  const visibleItemCount =
+    sessionStatus === 'authenticated' || (isFeatureOn('guest-cart') && sessionStatus !== 'loading')
+      ? itemCount
+      : 0;
   const { products, loading: productsLoading, error: productsError } = useProducts();
   const storeId = useMemo(() => findSingleStoreId(products), [products]);
   const storeMode = useStoreMode(storeId, productsLoading);
