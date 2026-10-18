@@ -177,10 +177,11 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
-    // 운영 화면은 카카오 로그인만 쓴다. 운영 런타임의 이메일 가입은 판매자 초대(아래 inviteToken
-    // 검증)만 받고, consumer·driver 가입은 막는다(2026-10-10 결정). local·test·Preview는 그대로 둔다.
-    if (dto.role !== 'seller' && isProductionRuntime(getConfigValues(this.config))) {
-      throw new ForbiddenException('이메일 회원가입은 판매자 초대로만 할 수 있습니다.');
+    // 운영 화면은 카카오 로그인만 쓴다. 운영 런타임의 이메일 가입은 판매자 초대를 포함해 모두 막는다
+    // (2026-10-18 결정, 판매자 초대만 받던 2026-10-10 결정을 대체). 초대 조회·소모 전에 막는다.
+    // local·test·Preview·스테이징은 그대로 둔다(E2E와 로컬 시드가 쓴다).
+    if (isProductionRuntime(getConfigValues(this.config))) {
+      throw new ForbiddenException('이메일 회원가입은 지원하지 않습니다.');
     }
 
     // T2: seller는 inviteToken 필수 — 존재·취소·만료·재사용·받는 사람 검증
@@ -278,6 +279,12 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
+    // 운영 화면은 카카오 로그인만 쓴다. 운영 런타임의 이메일 로그인은 받지 않는다(2026-10-18 결정).
+    // 계정 조회·비밀번호 비교 전에 막아 계정 상태와 무관하게 같은 응답을 준다. local·test·Preview·스테이징은 그대로 둔다.
+    if (isProductionRuntime(getConfigValues(this.config))) {
+      throw new ForbiddenException('이메일 로그인은 지원하지 않습니다.');
+    }
+
     const snap = await this.firestore
       .collection('users')
       .where('email', '==', dto.email)

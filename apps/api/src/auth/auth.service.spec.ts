@@ -894,6 +894,74 @@ describe('AuthService', () => {
     });
   });
 
+  describe('이메일 로그인 운영 제한', () => {
+    const password = 'password-123';
+    const PRODUCTION_LOGIN_BLOCKED = { status: 403, message: '이메일 로그인은 지원하지 않습니다.' };
+    const compare = bcrypt.compare as unknown as jest.Mock;
+
+    beforeEach(() => {
+      compare.mockClear();
+    });
+
+    async function makePasswordUser() {
+      return {
+        id: 'seller-1',
+        email: 'seller@example.com',
+        role: 'seller',
+        storeId: 'store-1',
+        suspended: false,
+        passwordHash: await bcrypt.hash(password, 4),
+      };
+    }
+
+    it.each([
+      ['RAILWAY_ENVIRONMENT_NAME', { RAILWAY_ENVIRONMENT_NAME: 'production' }],
+      ['VERCEL_ENV', { VERCEL_ENV: 'production' }],
+      ['NODE_ENV', { NODE_ENV: 'production' }],
+    ])(
+      '운영 런타임(%s)에서는 비밀번호가 맞아도 계정 조회 전에 403으로 막는다',
+      async (_label, config) => {
+        const { audit, jwt, refreshTokenRef, service, usersQuery } = makeKakaoLoginService({
+          config,
+          user: await makePasswordUser(),
+        });
+
+        await expect(
+          service.login({ email: 'seller@example.com', password }),
+        ).rejects.toMatchObject(PRODUCTION_LOGIN_BLOCKED);
+        expect(usersQuery.get).not.toHaveBeenCalled();
+        expect(compare).not.toHaveBeenCalled();
+        expect(audit.log).not.toHaveBeenCalled();
+        expect(jwt.sign).not.toHaveBeenCalled();
+        expect(refreshTokenRef.set).not.toHaveBeenCalled();
+      },
+    );
+
+    it('운영 런타임에서는 없는 계정도 같은 403이라 가입 여부가 드러나지 않는다', async () => {
+      const { service, usersQuery } = makeKakaoLoginService({
+        config: { RAILWAY_ENVIRONMENT_NAME: 'production' },
+      });
+
+      await expect(service.login({ email: 'nobody@example.com', password })).rejects.toMatchObject(
+        PRODUCTION_LOGIN_BLOCKED,
+      );
+      expect(usersQuery.get).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['Railway 스테이징', { RAILWAY_ENVIRONMENT_NAME: 'staging', NODE_ENV: 'production' }],
+      ['Vercel Preview', { VERCEL_ENV: 'preview', NODE_ENV: 'production' }],
+      ['로컬·테스트', {}],
+    ])('운영이 아닌 런타임(%s)에서는 이메일 로그인을 그대로 받는다', async (_label, config) => {
+      const { jwt, service } = makeKakaoLoginService({ config, user: await makePasswordUser() });
+
+      const result = await service.login({ email: 'seller@example.com', password });
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
+      expect(jwt.sign).toHaveBeenCalledTimes(2);
+    });
+  });
+
   describe('토큰 종류·수신자 claim', () => {
     it('access/refresh 토큰에 typ·aud를 넣고 HS256으로 서명한다', async () => {
       const { jwt, service } = makeKakaoLoginService({
@@ -1339,44 +1407,44 @@ describe('AuthService', () => {
       usedAt: null,
     };
 
+    const PRODUCTION_REGISTER_BLOCKED = {
+      status: 403,
+      message: '이메일 회원가입은 지원하지 않습니다.',
+    };
+
     it.each([
       ['RAILWAY_ENVIRONMENT_NAME', { RAILWAY_ENVIRONMENT_NAME: 'production' }],
+      ['VERCEL_ENV', { VERCEL_ENV: 'production' }],
       ['NODE_ENV', { NODE_ENV: 'production' }],
-    ])('운영 런타임(%s)에서는 consumer·driver 이메일 가입을 403으로 막는다', async (_label, config) => {
-      for (const role of ['consumer', 'driver']) {
-        const { firestore, service, userRef } = makeKakaoLoginService({ config });
+    ])(
+      '운영 런타임(%s)에서는 consumer·driver·판매자 이메일 가입을 모두 403으로 막는다',
+      async (_label, config) => {
+        for (const role of ['consumer', 'driver', 'seller']) {
+          const { firestore, service, userRef, usersQuery } = makeKakaoLoginService({ config });
 
-        await expect(service.register(registerDto({ role }))).rejects.toMatchObject({
-          status: 403,
-        });
-        expect(firestore.runTransaction).not.toHaveBeenCalled();
-        expect(userRef.set).not.toHaveBeenCalled();
-      }
-    });
+          await expect(service.register(registerDto({ role }))).rejects.toMatchObject(
+            PRODUCTION_REGISTER_BLOCKED,
+          );
+          expect(usersQuery.get).not.toHaveBeenCalled();
+          expect(firestore.runTransaction).not.toHaveBeenCalled();
+          expect(userRef.set).not.toHaveBeenCalled();
+        }
+      },
+    );
 
-    it('운영 런타임에서도 유효한 초대 토큰의 판매자 가입은 받는다', async () => {
-      const { inviteRef, service, userRef } = makeKakaoLoginService({
+    it('운영 런타임에서는 유효한 초대 토큰이 있어도 판매자 가입을 막고 초대를 조회·소모하지 않는다', async () => {
+      const { firestore, inviteRef, service, userRef } = makeKakaoLoginService({
         config: { RAILWAY_ENVIRONMENT_NAME: 'production' },
         invite: validInvite,
       });
 
       await expect(
         service.register(registerDto({ role: 'seller', inviteToken: 'INVITE0000000001' })),
-      ).resolves.toEqual({ userId: expect.any(String) });
-      expect(userRef.set).toHaveBeenCalledWith(expect.objectContaining({ role: 'seller' }));
-      expect(inviteRef.update).toHaveBeenCalledWith(
-        expect.objectContaining({ usedAt: 'now', usedBy: expect.any(String) }),
-      );
-    });
-
-    it('운영 런타임에서 초대 토큰 없는 판매자 가입은 기존처럼 403이다', async () => {
-      const { service } = makeKakaoLoginService({
-        config: { RAILWAY_ENVIRONMENT_NAME: 'production' },
-      });
-
-      await expect(service.register(registerDto({ role: 'seller' }))).rejects.toMatchObject({
-        status: 403,
-      });
+      ).rejects.toMatchObject(PRODUCTION_REGISTER_BLOCKED);
+      expect(inviteRef.get).not.toHaveBeenCalled();
+      expect(inviteRef.update).not.toHaveBeenCalled();
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(userRef.set).not.toHaveBeenCalled();
     });
 
     it('운영이 아닌 런타임(Preview 등)에서는 consumer 이메일 가입을 그대로 받는다', async () => {
@@ -1388,6 +1456,21 @@ describe('AuthService', () => {
         userId: expect.any(String),
       });
       expect(userRef.set).toHaveBeenCalledWith(expect.objectContaining({ role: 'consumer' }));
+    });
+
+    it('운영이 아닌 런타임(Railway 스테이징)에서는 유효한 초대 토큰의 판매자 가입을 그대로 받는다', async () => {
+      const { inviteRef, service, userRef } = makeKakaoLoginService({
+        config: { RAILWAY_ENVIRONMENT_NAME: 'staging', NODE_ENV: 'production' },
+        invite: validInvite,
+      });
+
+      await expect(
+        service.register(registerDto({ role: 'seller', inviteToken: 'INVITE0000000001' })),
+      ).resolves.toEqual({ userId: expect.any(String) });
+      expect(userRef.set).toHaveBeenCalledWith(expect.objectContaining({ role: 'seller' }));
+      expect(inviteRef.update).toHaveBeenCalledWith(
+        expect.objectContaining({ usedAt: 'now', usedBy: expect.any(String) }),
+      );
     });
 
     it('정규화 이메일 키의 연결 문서를 사용자 문서와 같은 트랜잭션에서 만든다', async () => {
