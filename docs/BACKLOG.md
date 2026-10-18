@@ -474,7 +474,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [x] provider 템플릿과 repository logical 8-code mapping 대조 (2026-09-28 콘솔)
 - [x] 운영 ALIGO 호출 경로 — Fixie 고정 IP 프록시 경유, 2026-09-28 `code=0`·템플릿 8종 API 대조 일치
 - [x] 격리 실제 알림톡 — 2026-09-28 휴대폰 도착 확인
-- [ ] SMS fallback — 발신번호(개인 휴대폰) 통신사 번호도용 차단으로 실패. 사업자 번호로 발신번호 교체 후 재시험
+- [x] SMS 발신번호 — 개인 휴대폰 번호는 통신사 번호도용 차단으로 실패했다. 2026-10-08 운영 `ALIGO_SENDER_PHONE`을 ALIGO 승인된 사업자 번호(끝 2104)로 바꾸고 격리 실발송 알림톡(`TEST-1008`)·문자(`TEST-1008-SMS`)가 모두 접수·1회 시도·휴대폰 실수신됐다(사용자 확인).
 - [ ] 별도 authority 후 격리 actual Alimtalk/SMS 및 fallback 검증
 - [x] exact release SHA 기준 원격 회차 E2E 52 + 세션 12 재실행 — `197f84a4`, run `36372493414`
 - [x] 운영 Firebase rules/indexes 대조와 배포 — 7/31 배포본 → `197f84a4` 규칙 반영, 재조회 일치
@@ -494,7 +494,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [ ] settlement 및 payment 검증 결과 반영
 - [x] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영 — 8/30 판 `/privacy` 4절. ALIGO 고정 IP 프록시는 HTTPS 터널이라 위탁 고지 대상 아님(2026-10-10)
 - [x] **`LEGAL-PRIVACY-OFFICER`**: 2026-10-10 사용자 결정(대표자)으로 `/privacy` 9절에 반영, `legal-documents.test.mjs`에 고정. 2026-11-01 시행 개정판이며 운영 배포 대기 묶음과 함께 나간다.
-- [ ] **`LEGAL-MAIL-ORDER-REGISTRATION`** (파일럿 전, 사람 결정): 통신판매업 신고 대상 여부를 정한다. 신고하면 번호를 footer에 넣고 `BusinessInfoFooter.test.mjs`의 미노출 단언을 바꾼다.
+- [ ] **`LEGAL-MAIL-ORDER-REGISTRATION`** (파일럿 전, 사람 결정): 통신판매업 신고 대상 여부를 정한다. 2026-10-18 footer 칸을 미리 만들었다: 신고하면 `apps/consumer/src/lib/publicBusinessInfo.ts`의 `mailOrderRegistrationNumber`에 번호만 넣고 consumer를 배포한다(빈 값이면 footer에 칸이 나오지 않는다).
 - [x] **`LEGAL-DRIVER-KAKAOMAP-NOTICE`**: 2026-10-10 사용자 결정(고지)으로 `/privacy` 4절에 반영.
 - [x] **`LEGAL-LATE-PAYMENT-REFUND-TERMS`**: `/terms` 제7조에 반영(2026-11-01 시행).
 - [x] **`LEGAL-REVISION-EFFECTIVE-DATE`**: 2026-10-12 `55ed02d9` 운영 배포로 개정판이 시행일(2026-11-01) 전에 게시됐다.
