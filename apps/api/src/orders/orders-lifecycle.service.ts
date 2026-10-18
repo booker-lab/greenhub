@@ -18,7 +18,11 @@ import {
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { DriverOrderScopeService } from './driver-order-scope.service';
-import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
+import {
+  deliveryTransitionViolation,
+  getAllowedTransitions,
+  NOTIFICATION_MAP,
+} from './orders.helpers';
 import {
   assertPaidRedeliveryResume,
   isCurrentRedeliveryPaymentRequired,
@@ -29,10 +33,19 @@ import {
   throwDriverOrderStateConflict,
 } from './driver-order-error';
 import { randomUUID } from 'node:crypto';
+import {
+  exceedsDeliveryHoldNoticeLimit,
+  groupTransitionNoticeScope,
+  MAX_NOTIFIED_DELIVERY_HOLDS,
+  orderTransitionNoticeKey,
+  readDeliveryHoldCount,
+  transitionHoldCycle,
+} from './order-transition-notice';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 import { releaseLegacyGroupQuantityInTransaction } from './_lib/legacy-group-quantity';
 import { customerOrderLabel } from '../notifications/customer-order-label';
+import { containsLinkLike, containsPhoneNumber } from '../notifications/notification-templates';
 
 const LEGACY_CONSUMER_CANCEL_CLAIM_MS = 5 * 60 * 1000;
 const LEGACY_SELLER_CANCEL_CLAIM_MS = 5 * 60 * 1000;
@@ -53,7 +66,8 @@ type LegacyConsumerCancelClaimResult =
   | { kind: 'in_progress' }
   | { kind: 'claimed'; token: string };
 
-const DELIVERY_HOLD_CUSTOMER_REASONS: Record<string, string> = {
+// 배송 보류 알림톡의 사유(고정 문구). 판매자·기사의 자유 입력(reasonMessage)은 고객 알림에 싣지 않는다.
+export const DELIVERY_HOLD_CUSTOMER_REASONS: Readonly<Record<string, string>> = {
   WEATHER: '기상 상황으로 배송이 지연되었습니다.',
   ACCESS_UNAVAILABLE: '배송지 출입이 어려워 배송이 보류되었습니다.',
   ADDRESS_ISSUE: '배송지 주소를 확인할 수 없어 배송이 보류되었습니다.',
@@ -148,6 +162,15 @@ export class OrdersLifecycleService {
       }
       throw new ForbiddenException(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
     }
+    // 배송 방법으로 갈 수 없는 전이는 역할과 무관하게 막는다. 셀러의 PREPARING → DELIVERED(택배 발송
+    // 완료)가 택배 주문에서만 되는 BUG-16 T2 가드도 여기에 포함된다.
+    const deliveryViolation = deliveryTransitionViolation(currentStatus, dto.status, order);
+    if (deliveryViolation) {
+      if (role === 'driver') {
+        throwDriverOrderStateConflict(deliveryViolation);
+      }
+      throw new ForbiddenException(deliveryViolation);
+    }
 
     const notificationVariables: Record<string, string> = {};
     let confirmedCancelReason: string | null = null;
@@ -159,17 +182,6 @@ export class OrdersLifecycleService {
       notificationVariables['reason'] = this.resolveDeliveryHoldCustomerReason(
         dto.deliveryHold?.reasonCode,
       );
-    }
-
-    // BUG-16 T2: 셀러의 PREPARING → DELIVERED는 택배(parcel) 주문에서만 허용.
-    // direct/hub 주문은 드라이버 수거(DELIVERING)를 거쳐야 하므로 셀러 임의 발송 완료 차단.
-    if (
-      role === 'seller' &&
-      currentStatus === 'PREPARING' &&
-      nextStatus === 'DELIVERED' &&
-      order['deliveryMethod'] !== 'parcel'
-    ) {
-      throw new ForbiddenException('택배 발송 완료는 택배 주문에서만 가능합니다.');
     }
 
     if (order['schemaVersion'] === 2 && order['roundId']) {
@@ -441,7 +453,7 @@ export class OrdersLifecycleService {
       'DELIVERING',
       'DELIVERED',
       orderId,
-      `order-transition:${orderId}:DELIVERING:DELIVERED`,
+      orderTransitionNoticeKey(orderId, 'DELIVERING', 'DELIVERED', 0),
     );
     return { orderId, status: 'DELIVERED' as const };
   }
@@ -1169,6 +1181,8 @@ export class OrdersLifecycleService {
         nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
         resolvedAt: null,
       };
+      // 보류 회차 번호. 보류·재개 알림의 멱등 키와 반복 상한(order-transition-notice)에 쓴다.
+      update['deliveryHoldCount'] = readDeliveryHoldCount(order) + 1;
     } else if (
       (dto.status === 'DELIVERING' && isCurrentRedeliveryPaymentRequired(order)) ||
       (order['status'] === 'DELIVERY_HELD' && !isCurrentRedeliveryPaymentRequired(order))
@@ -1236,6 +1250,16 @@ export class OrdersLifecycleService {
 
     if (!templateCode) return;
 
+    // 같은 전이 알림은 결정적인 멱등 키로 한 번만 보내고, 보류·재개를 반복하면 보류 회차 상한까지만 보낸다.
+    const holdCycle = transitionHoldCycle(order, to);
+    if (exceedsDeliveryHoldNoticeLimit(from, to, holdCycle)) {
+      this.logger.warn(
+        `배송 보류 알림 상한(${MAX_NOTIFIED_DELIVERY_HOLDS}회)을 넘어 알림을 보내지 않습니다 (orderId=${orderId}, holdCycle=${holdCycle}, ${from}→${to})`,
+      );
+      return;
+    }
+    const noticeKey = idempotencyKey ?? orderTransitionNoticeKey(orderId, from, to, holdCycle);
+
     const variables: Record<string, string> = {
       orderId: customerOrderLabel(order, orderId),
       ...extraVariables,
@@ -1254,10 +1278,13 @@ export class OrdersLifecycleService {
 
     if (isGroup && GROUP_TEMPLATES.includes(templateCode)) {
       variables['productName'] = String(order['productName'] ?? '');
+      // 전체 참여자 알림은 참여 주문마다 같은 단계 알림을 한 번만 보낸다(여러 참여 주문이 같은 단계로
+      // 바뀌어도 참여자가 같은 알림을 거듭 받지 않는다).
       await this.notifications.sendToGroupParticipants(
         order['productId'] as string,
         templateCode as any,
         variables,
+        groupTransitionNoticeScope(String(order['productId']), templateCode),
       );
     } else {
       await this.notifications.sendToUser(
@@ -1265,7 +1292,7 @@ export class OrdersLifecycleService {
         templateCode as any,
         variables,
         orderId,
-        idempotencyKey,
+        noticeKey,
       );
     }
   }
@@ -1327,11 +1354,17 @@ export class OrdersLifecycleService {
     ) {
       throw new BadRequestException('취소 사유에는 줄바꿈이나 제어문자를 사용할 수 없습니다.');
     }
+    // 취소 사유는 고객 알림톡(ORDER_CANCELLED)에 그대로 실리므로 연락처·링크를 받지 않는다.
+    // 전화번호는 휴대폰뿐 아니라 유선·인터넷전화·안심번호·대표번호(1588 등)도 막는다.
     if (
       /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(normalized) ||
-      /(?:01[016789])[\s-]?\d{3,4}[\s-]?\d{4}/.test(normalized)
+      /(?:01[016789])[\s-]?\d{3,4}[\s-]?\d{4}/.test(normalized) ||
+      containsPhoneNumber(normalized)
     ) {
       throw new BadRequestException('취소 사유에는 이메일이나 전화번호를 포함할 수 없습니다.');
+    }
+    if (containsLinkLike(normalized)) {
+      throw new BadRequestException('취소 사유에는 웹 주소나 도메인을 포함할 수 없습니다.');
     }
     return normalized;
   }

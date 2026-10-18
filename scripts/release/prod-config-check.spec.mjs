@@ -250,11 +250,25 @@ test('운영 API가 Preview origin을 받거나 기동을 거부할 CORS·프록
   for (const value of ['true', 'TRUE', 'yes', '1']) {
     assert.equal(previewOriginStatus(value), 'FAIL', value);
   }
-  for (const value of [undefined, '', ' ', '0', '1', '10']) {
+  // 미설정(Railway 기본 1)이거나 API가 1로 읽는 값만 PASS다.
+  for (const value of [undefined, '', ' ', '1', ' 1 ', '01']) {
     assert.equal(trustProxyHopsStatus(value), 'PASS', String(value));
   }
-  for (const value of ['11', 'true', '-1', '1.5', 'loopback']) {
+  // 형식은 맞아도 1이 아닌 홉 수(0, 2~10)와 API가 기동을 거부하는 값은 FAIL이다.
+  for (const value of ['0', '00', '2', '3', '10', '11', 'true', '-1', '1.5', 'loopback']) {
     assert.equal(trustProxyHopsStatus(value), 'FAIL', value);
+  }
+});
+
+test('형식은 맞지만 1이 아닌 TRUST_PROXY_HOPS(0·2 이상)는 FAIL이고 값은 출력하지 않는다', async () => {
+  for (const hops of ['0', '2', '10']) {
+    const { summary, out } = await runWith({
+      railwayVars: { ...BASE_RAILWAY, TRUST_PROXY_HOPS: hops },
+    });
+    assert.equal(summary.checks.trust_proxy_hops_valid, false, hops);
+    assert.equal(summary.ok, false, hops);
+    assert.equal(statusLine(out, 'trust_proxy_hops_valid'), 'trust_proxy_hops_valid: FAIL');
+    assertNoValues(out);
   }
 });
 

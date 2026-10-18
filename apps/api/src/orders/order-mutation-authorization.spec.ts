@@ -325,7 +325,7 @@ describe('ORD-01 주문 mutation authorization 회귀', () => {
       'ORDER_PREPARING',
       { orderId: 'order-1' },
       'order-1',
-      undefined,
+      'order-transition:order-1:ACCEPTED:PREPARING',
     );
   });
 
@@ -347,7 +347,7 @@ describe('ORD-01 주문 mutation authorization 회귀', () => {
       'ORDER_PREPARING',
       { orderId: '20261101-000003' },
       'order-1',
-      undefined,
+      'order-transition:order-1:ACCEPTED:PREPARING',
     );
   });
 

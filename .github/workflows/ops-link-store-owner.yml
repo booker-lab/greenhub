@@ -3,8 +3,11 @@ name: Ops link store owner
 # 운영 매장 1개의 소유자(stores/{storeId}.ownerId)를 카카오로 로그인하는 판매자·관리자 계정 하나에 연결한다.
 # 저장소 owner가 main에서 수동 실행할 때만 production Environment의 Firebase 서비스 계정 키를 쓴다.
 # 스크립트: scripts/ops/link-store-owner.mjs
-#   - check: 매장 이름·현재 owner(앞 8자·문서 존재·role·정지 여부)·같은 매장 사용자와, 연결 후보(role admin|seller이고
-#     카카오로 로그인하는 계정)를 fingerprint(sha256(uid) 앞 10자리)·uid 앞 8자·마스킹 이메일·연결/소유 매장과 함께 출력(읽기 전용).
+# 저장소가 공개라 Actions 로그도 공개다. 이 workflow는 스크립트 기본 출력(개수·참거짓·role 같은 범주 값)만 남긴다.
+#   - check: 매장 문서 존재·owner 지정 여부·현재 owner 문서 존재/role/정지 여부·같은 매장 사용자 수·연결 후보(role admin|seller이고
+#     카카오로 로그인하는 계정) 수(읽기 전용). target_fingerprint를 주면 그 후보의 role·정지·전화번호 등록·매장 연결·소유 매장 수를 더한다.
+#     후보 목록·fingerprint(sha256(uid) 앞 10자리)·uid 앞 8자·마스킹 이메일·매장 이름·시각은 로컬에서 `--detail`로 실행할 때만 나온다
+#     (스크립트가 Actions·CI에서 `--detail`을 거부한다).
 #   - link: target_fingerprint로 지정한 후보 하나를 매장 owner로 연결하고 users.storeId를 맞춘다. role은 바꾸지 않는다.
 #     현재 owner가 정지되지 않은 기존 계정이거나 대상이 다른 매장에 연결·소유 중이면 아무것도 바꾸지 않고 중단한다.
 #     auditLogs에 이전 ownerId를 남긴다(되돌리기용). 연결 뒤 대상 계정은 다시 로그인해야 한다.
@@ -25,7 +28,7 @@ on:
           - link
         default: check
       target_fingerprint:
-        description: link에 필수. check가 출력한 후보 fingerprint(10자리 hex)
+        description: link에 필수. 로컬 check --detail이 출력한 후보 fingerprint(10자리 hex)
         required: false
         type: string
         default: ''
@@ -87,9 +90,9 @@ jobs:
         with:
           node-version: '22'
 
-      # scripts 워크스페이스(firebase-admin·bcrypt)만 설치한다.
+      # scripts 워크스페이스의 운영 의존성(firebase-admin·bcrypt)만 설치한다. devDependency인 firebase-tools는 설치하지 않는다.
       - name: 의존성 설치
-        run: pnpm install --frozen-lockfile --filter ./scripts
+        run: pnpm install --frozen-lockfile --filter ./scripts --prod
 
       # prod-config-check.yml index-drift와 같은 방식으로 키를 RUNNER_TEMP에 600 권한으로 쓴다.
       - name: Firebase 인증
