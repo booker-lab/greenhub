@@ -3,5 +3,8 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "firebase-admin": "^13.10.0"
+  },
+  "devDependencies": {
+    "firebase-tools": "14.11.1"
   }
 }

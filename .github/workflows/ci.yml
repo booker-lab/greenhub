@@ -158,9 +158,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       # demo- 프로젝트는 에뮬레이터 전용이며 실제 Firebase에 접근하지 않는다.
       # 두 파일이 같은 에뮬레이터를 쓰므로 순서대로 실행한다.
+      # firebase-tools는 npx로 받지 않고 lockfile에 고정된 scripts devDependency를 쓴다(운영 배포 job과 같은 버전).
       - name: Firestore·Storage rules
         run: >
-          npx -y firebase-tools@14.11.1 emulators:exec --only firestore,storage --project demo-greenhub
+          scripts/node_modules/.bin/firebase emulators:exec --only firestore,storage --project demo-greenhub
           "node --test --test-concurrency=1 tests/firestore/firestore-rules.test.mjs tests/storage/storage-rules.test.mjs"
 
   build:

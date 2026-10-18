@@ -30,8 +30,8 @@ export const UNKNOWN = 'UNKNOWN';
 
 export const MIN_JWT_SECRET_BYTES = 32;
 export const CONSUMER_STORE_ID_KEY = 'NEXT_PUBLIC_PORTONE_STORE_ID';
-/** API `resolveTrustProxyHops`와 같은 상한. 이 범위 밖이면 API가 기동하지 않는다. */
-export const MAX_TRUST_PROXY_HOPS = 10;
+/** 운영 Railway API 앞의 프록시는 엣지 1홉이다. 미설정이면 API가 이 값을 쓴다(`resolveTrustProxyHops`). */
+export const EXPECTED_TRUST_PROXY_HOPS = 1;
 
 /** 값을 읽어 판정하는 Railway 변수. 읽는 즉시 마스킹한다. */
 export const RAILWAY_CHECKED_KEYS = Object.freeze([
@@ -83,12 +83,16 @@ export function previewOriginStatus(value) {
   return raw === '' || raw === 'false' ? PASS : FAIL;
 }
 
-/** 미설정이면 Railway 기본값(1)을 쓴다. 명시값은 0~10 정수여야 API가 기동한다. */
+/**
+ * 미설정(빈 값 포함)이면 API가 Railway 기본값 1을 쓰므로 PASS, 명시값은 API가 1로 읽을 때만 PASS.
+ * 형식이 맞아도 1이 아니면 FAIL이다. 0이면 요청 한도가 클라이언트가 아니라 프록시 주소 하나로 묶이고,
+ * 2 이상이면 엣지 프록시가 붙인 값보다 앞쪽 헤더 값까지 클라이언트 IP로 믿는다. 형식이 틀리면 API가 기동을 거부한다.
+ */
 export function trustProxyHopsStatus(value) {
   if (value === undefined) return PASS;
   const raw = value.trim();
   if (raw === '') return PASS;
-  return /^\d+$/.test(raw) && Number(raw) <= MAX_TRUST_PROXY_HOPS ? PASS : FAIL;
+  return /^\d+$/.test(raw) && Number(raw) === EXPECTED_TRUST_PROXY_HOPS ? PASS : FAIL;
 }
 
 function escapeCommandData(value) {
