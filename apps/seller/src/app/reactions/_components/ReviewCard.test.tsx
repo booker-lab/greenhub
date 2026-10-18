@@ -1,4 +1,5 @@
 import type { ManagedReview } from '@greenhub/shared';
+import { Radio } from '@mantine/core';
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ReviewCard, type ReviewCardProps } from './ReviewCard';
@@ -17,7 +18,15 @@ function review(overrides: Partial<ManagedReview> = {}): ManagedReview {
   };
 }
 
-type Props = { children?: ReactNode; onClick?: () => void; 'aria-label'?: string };
+type Props = {
+  children?: ReactNode;
+  onClick?: () => void;
+  onChange?: (value: string) => void;
+  'aria-label'?: string;
+  label?: ReactNode;
+  value?: string | null;
+  disabled?: boolean;
+};
 
 function isElement(node: ReactNode): node is ReactElement<Props> {
   return typeof node === 'object' && node !== null && 'props' in node;
@@ -51,14 +60,15 @@ function render(overrides: Partial<ReviewCardProps> = {}) {
   const handlers = {
     onStartHide: vi.fn(),
     onReasonChange: vi.fn(),
+    onNoteChange: vi.fn(),
     onCancel: vi.fn(),
     onConfirmHide: vi.fn(),
-    onUnhide: vi.fn(),
   };
   const tree = ReviewCard({
     review: review(),
     editing: false,
-    reason: '',
+    reasonCode: null,
+    note: '',
     busy: false,
     error: null,
     ...handlers,
@@ -79,31 +89,51 @@ describe('고객 반응 후기 카드 숨기기', () => {
     expect(handlers.onStartHide).toHaveBeenCalledTimes(1);
   });
 
-  it('숨기기를 누르면 사유 입력과 확인·취소 버튼이 나온다', () => {
-    const { elements, button, handlers } = render({ editing: true, reason: '광고' });
-    expect(elements.some((element) => element.props['aria-label'] === '숨기는 사유')).toBe(true);
+  it('숨기기를 누르면 안내 문구·네 가지 사유 선택·설명(선택)·확인/취소가 나온다', () => {
+    const { texts, elements, button, handlers } = render({ editing: true });
+    expect(texts.join('')).toContain('불만이나 낮은 별점이라는 이유로는 숨길 수 없어요');
+    const radios = elements.filter((element) => element.type === Radio);
+    expect(radios.map((radio) => radio.props.label)).toEqual([
+      '광고·스팸',
+      '욕설·비방',
+      '개인정보 노출',
+      '상품과 무관',
+    ]);
+    const group = elements.find((element) => element.props.label === '숨기는 사유');
+    group?.props.onChange?.('abuse');
+    expect(handlers.onReasonChange).toHaveBeenCalledWith('abuse');
+    expect(elements.some((element) => element.props.label === '설명(선택)')).toBe(true);
     expect(button('숨기기')).toBeUndefined();
-    button('숨기기 확인')?.props.onClick?.();
+    // 사유를 고르기 전에는 확인 버튼이 꺼져 있다.
+    expect(button('숨기기 확인')?.props.disabled).toBe(true);
     button('취소')?.props.onClick?.();
-    expect(handlers.onConfirmHide).toHaveBeenCalledTimes(1);
     expect(handlers.onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it('숨긴 후기는 숨김 배지·누가·언제·사유와 숨김 해제 버튼을 보여준다', () => {
-    const { texts, button, handlers } = render({
+  it('사유를 고르면 숨기기 확인을 누를 수 있다', () => {
+    const { button, handlers } = render({ editing: true, reasonCode: 'spam' });
+    expect(button('숨기기 확인')?.props.disabled).toBe(false);
+    button('숨기기 확인')?.props.onClick?.();
+    expect(handlers.onConfirmHide).toHaveBeenCalledTimes(1);
+  });
+
+  it('숨긴 후기는 숨김 배지·누가·언제·사유·설명을 보여주고, 판매자 화면에는 해제 버튼이 없다', () => {
+    const { texts, button } = render({
       review: review({
         hidden: true,
-        hiddenReason: '상품과 관계없는 광고',
-        hiddenByRole: 'admin',
+        hiddenReasonCode: 'spam',
+        hiddenNote: '다른 가게 홍보',
+        hiddenByRole: 'seller',
         hiddenAt: '2026-10-17T15:30:00.000Z',
       }),
     });
+    const joined = texts.join('');
     expect(texts).toContain('숨김');
-    expect(texts.join('')).toContain('관리자가 10월 18일 숨김');
-    expect(texts.join('')).toContain('사유: 상품과 관계없는 광고');
+    expect(joined).toContain('판매자가 10월 18일 숨김');
+    expect(joined).toContain('사유: 광고·스팸 · 다른 가게 홍보');
+    expect(joined).toContain('관리자에게 요청');
     expect(button('숨기기')).toBeUndefined();
-    button('숨김 해제')?.props.onClick?.();
-    expect(handlers.onUnhide).toHaveBeenCalledTimes(1);
+    expect(button('숨김 해제')).toBeUndefined();
   });
 
   it('후기 사진과 오류 문구를 보여준다', () => {

@@ -15,6 +15,7 @@ const {
   sizeRows,
   expandPlantQuery,
   matchesPlantQuery,
+  hiddenReviewNotice,
 } = module.exports;
 
 test('지난 회차 대비 가격은 지금 가격이 더 낮을 때만 내린 금액을 돌려준다', () => {
@@ -67,4 +68,15 @@ test('식물 이름 묶음: 다른 꽃끼리는 섞이지 않는다', () => {
   assert.ok(!matchesPlantQuery('몬스테라', ['고무나무']));
   assert.ok(!matchesPlantQuery('카네이션', ['호접란 빅립']));
   assert.ok(!expandPlantQuery('금전수').includes('행운목'));
+});
+
+test('숨겨진 내 후기 안내는 사유 분류를 보여주고, 분류가 없으면 사유 없이 안내한다', () => {
+  assert.equal(
+    hiddenReviewNotice('광고·스팸'),
+    '숨겨진 후기예요. 사유: 광고·스팸. 다른 고객에게는 보이지 않고 별점에도 들어가지 않아요.',
+  );
+  assert.equal(
+    hiddenReviewNotice(undefined),
+    '숨겨진 후기예요. 다른 고객에게는 보이지 않고 별점에도 들어가지 않아요.',
+  );
 });

@@ -84,7 +84,15 @@ export declare const REVIEW_PHOTO_MAX_COUNT = 3;
 export declare const REVIEW_PHOTO_MAX_BYTES: number;
 /** 서버가 받는 후기 사진 형식. 위치 정보 등 메타데이터를 지울 수 있는 JPEG만 받는다. */
 export declare const REVIEW_PHOTO_CONTENT_TYPES: readonly ["image/jpeg"];
+/** 숨길 때 덧붙이는 설명(선택)의 최대 길이 */
 export declare const REVIEW_HIDE_REASON_MAX_LENGTH = 200;
+/**
+ * 후기를 숨길 수 있는 사유. 이 목록에서만 고른다.
+ * 불만이나 낮은 별점은 숨김 사유가 아니다.
+ */
+export declare const REVIEW_HIDE_REASONS: readonly ["spam", "abuse", "privacy", "off-topic"];
+export type ReviewHideReason = (typeof REVIEW_HIDE_REASONS)[number];
+export declare const REVIEW_HIDE_REASON_LABELS: Record<ReviewHideReason, string>;
 export interface ReviewPublic {
     id: string;
     productId: string;
@@ -102,17 +110,28 @@ export type ReviewModeratorRole = 'seller' | 'admin';
 export interface OwnReview extends ReviewPublic {
     /** 판매자·관리자가 숨긴 후기면 true(공개 목록·별점에서 빠진다) */
     hidden: boolean;
+    /** 숨긴 사유 분류. 숨긴 사람이 쓴 설명은 보내지 않는다. */
+    hiddenReasonCode?: ReviewHideReason;
 }
 /** 판매자·관리자가 보는 후기(숨김 상태 포함) */
 export interface ManagedReview extends ReviewPublic {
     hidden: boolean;
-    /** 숨긴 사유·시각·역할. 숨김을 해제하면 비운다(기록은 서버 이력에 남는다). */
-    hiddenReason?: string;
+    /** 숨긴 사유 분류·설명·시각·역할. 숨김을 해제하면 비운다(기록은 서버 이력에 남는다). */
+    hiddenReasonCode?: ReviewHideReason;
+    hiddenNote?: string;
     hiddenAt?: string;
     hiddenByRole?: ReviewModeratorRole;
 }
+/** 관리자 콘솔 숨긴 후기 목록 한 줄 */
+export interface AdminHiddenReview extends ManagedReview {
+    storeId: string;
+    storeName: string | null;
+    productName: string | null;
+}
 export interface HideReviewRequest {
-    reason: string;
+    reasonCode: ReviewHideReason;
+    /** 선택 설명(관리자·판매자만 본다) */
+    note?: string;
 }
 export interface ReviewSummary {
     count: number;

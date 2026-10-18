@@ -1,6 +1,14 @@
 import type { ManagedReview } from '@greenhub/shared';
 import { describe, expect, it } from 'vitest';
-import { hiddenSummary, hideReasonError, replaceReview, visibleReviewSummary } from './_lib';
+import {
+  buildHideRequest,
+  HIDE_POLICY_NOTE,
+  HIDE_REASON_OPTIONS,
+  hiddenReasonLabel,
+  hiddenSummary,
+  replaceReview,
+  visibleReviewSummary,
+} from './_lib';
 
 function review(overrides: Partial<ManagedReview> = {}): ManagedReview {
   return {
@@ -31,14 +39,31 @@ describe('고객 반응 후기 탭 판단', () => {
     expect(visibleReviewSummary([])).toEqual({ count: 0, average: null, hiddenCount: 0 });
   });
 
-  it('숨기는 사유는 비울 수 없고 200자를 넘을 수 없다', () => {
-    expect(hideReasonError('  ')).toBe('숨기는 사유를 적어 주세요.');
-    expect(hideReasonError('가'.repeat(201))).toBe('사유는 200자까지 적을 수 있어요.');
-    expect(hideReasonError('가'.repeat(200))).toBeNull();
-    expect(hideReasonError(' 광고 글 ')).toBeNull();
+  it('숨김 사유는 정해진 네 가지 목록뿐이고, 낮은 별점·불만은 숨길 수 없다고 안내한다', () => {
+    expect(HIDE_REASON_OPTIONS.map((option) => option.label)).toEqual([
+      '광고·스팸',
+      '욕설·비방',
+      '개인정보 노출',
+      '상품과 무관',
+    ]);
+    expect(HIDE_POLICY_NOTE).toContain('불만이나 낮은 별점');
   });
 
-  it('숨김 안내는 누가·언제(KST)를 보여준다', () => {
+  it('사유를 고르지 않았거나 목록 밖이면 막고, 설명은 선택이며 200자까지다', () => {
+    expect(buildHideRequest(null, '')).toEqual({ body: null, error: '숨기는 사유를 골라 주세요.' });
+    expect(buildHideRequest('low-rating', '')).toMatchObject({ body: null });
+    expect(buildHideRequest('spam', '가'.repeat(201))).toEqual({
+      body: null,
+      error: '설명은 200자까지 적을 수 있어요.',
+    });
+    expect(buildHideRequest('spam', '  ')).toEqual({ body: { reasonCode: 'spam' }, error: null });
+    expect(buildHideRequest('privacy', ' 전화번호 노출 ')).toEqual({
+      body: { reasonCode: 'privacy', note: '전화번호 노출' },
+      error: null,
+    });
+  });
+
+  it('숨김 안내는 누가·언제(KST)와 사유 분류 이름을 보여준다', () => {
     expect(hiddenSummary(review())).toBeNull();
     // UTC 10/17 15:30 = KST 10/18 00:30
     expect(
@@ -47,11 +72,13 @@ describe('고객 반응 후기 탭 판단', () => {
       ),
     ).toBe('판매자가 10월 18일 숨김');
     expect(hiddenSummary(review({ hidden: true, hiddenByRole: 'admin' }))).toBe('관리자가 숨김');
+    expect(hiddenReasonLabel({ hiddenReasonCode: 'off-topic' })).toBe('상품과 무관');
+    expect(hiddenReasonLabel({})).toBeNull();
   });
 
   it('서버가 돌려준 후기로 같은 id만 바꾼다', () => {
     const list = [review({ id: 'a' }), review({ id: 'b' })];
-    const next = replaceReview(list, review({ id: 'b', hidden: true, hiddenReason: '광고' }));
+    const next = replaceReview(list, review({ id: 'b', hidden: true, hiddenReasonCode: 'spam' }));
     expect(next.map((item) => item.hidden)).toEqual([false, true]);
     expect(list[1]?.hidden).toBe(false);
   });

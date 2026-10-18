@@ -1,6 +1,11 @@
 'use client';
 
-import { type OwnReview, REVIEW_PHOTO_MAX_COUNT, REVIEW_TEXT_MAX_LENGTH } from '@greenhub/shared';
+import {
+  type OwnReview,
+  REVIEW_HIDE_REASON_LABELS,
+  REVIEW_PHOTO_MAX_COUNT,
+  REVIEW_TEXT_MAX_LENGTH,
+} from '@greenhub/shared';
 import { Box, Button, Group, Paper, Stack, Text, Textarea } from '@mantine/core';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { HideOnErrorImage } from '@/components/ResilientImage';
@@ -11,6 +16,7 @@ import {
   fetchOrderReviews,
   uploadReviewPhotos,
 } from '@/lib/benchmark-api';
+import { hiddenReviewNotice } from '@/lib/benchmark-format';
 import { canAddReviewPhotos, selectReviewPhotos } from '@/lib/review-photo';
 import { encodeReviewPhoto, ReviewPhotoEncodeError } from '@/lib/review-photo-encode';
 import { ReviewPhotoStrip } from './ReviewPhotos';
@@ -266,7 +272,9 @@ function WrittenReview({
     <Stack gap={6} mt={4}>
       {review.hidden && (
         <Text size="sm" c="var(--color-text-secondary)">
-          판매자가 숨긴 후기예요. 다른 고객에게는 보이지 않아요.
+          {hiddenReviewNotice(
+            review.hiddenReasonCode ? REVIEW_HIDE_REASON_LABELS[review.hiddenReasonCode] : null,
+          )}
         </Text>
       )}
       <ReviewPhotoStrip urls={review.photoUrls} label={productName} />

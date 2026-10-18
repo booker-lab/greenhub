@@ -2,7 +2,7 @@
 // 팔도감 벤치마킹 비교용 기능의 공개 계약. 모든 필드는 선택이라 기존 데이터·응답과 호환된다.
 // 기능 토글은 features.ts를 따른다.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PRODUCT_REQUEST_MAX_LENGTH = exports.GIFT_MESSAGE_MAX_LENGTH = exports.REVIEW_HIDE_REASON_MAX_LENGTH = exports.REVIEW_PHOTO_CONTENT_TYPES = exports.REVIEW_PHOTO_MAX_BYTES = exports.REVIEW_PHOTO_MAX_COUNT = exports.REVIEW_TEXT_MAX_LENGTH = exports.OPTION_TEXT_MAX_LENGTH = exports.PRODUCT_OPTION_PRICE_DELTA_MAX = exports.PRODUCT_OPTION_CHOICE_MAX = exports.PRODUCT_OPTION_GROUP_MAX = exports.PLACEMENT_LABELS = exports.PLACEMENTS = exports.LIGHT_LABELS = exports.LIGHT_LEVELS = void 0;
+exports.PRODUCT_REQUEST_MAX_LENGTH = exports.GIFT_MESSAGE_MAX_LENGTH = exports.REVIEW_HIDE_REASON_LABELS = exports.REVIEW_HIDE_REASONS = exports.REVIEW_HIDE_REASON_MAX_LENGTH = exports.REVIEW_PHOTO_CONTENT_TYPES = exports.REVIEW_PHOTO_MAX_BYTES = exports.REVIEW_PHOTO_MAX_COUNT = exports.REVIEW_TEXT_MAX_LENGTH = exports.OPTION_TEXT_MAX_LENGTH = exports.PRODUCT_OPTION_PRICE_DELTA_MAX = exports.PRODUCT_OPTION_CHOICE_MAX = exports.PRODUCT_OPTION_GROUP_MAX = exports.PLACEMENT_LABELS = exports.PLACEMENTS = exports.LIGHT_LABELS = exports.LIGHT_LEVELS = void 0;
 exports.LIGHT_LEVELS = ['bright', 'medium', 'low'];
 exports.LIGHT_LABELS = {
     bright: '밝은 곳',
@@ -29,7 +29,19 @@ exports.REVIEW_PHOTO_MAX_COUNT = 3;
 exports.REVIEW_PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 /** 서버가 받는 후기 사진 형식. 위치 정보 등 메타데이터를 지울 수 있는 JPEG만 받는다. */
 exports.REVIEW_PHOTO_CONTENT_TYPES = ['image/jpeg'];
+/** 숨길 때 덧붙이는 설명(선택)의 최대 길이 */
 exports.REVIEW_HIDE_REASON_MAX_LENGTH = 200;
+/**
+ * 후기를 숨길 수 있는 사유. 이 목록에서만 고른다.
+ * 불만이나 낮은 별점은 숨김 사유가 아니다.
+ */
+exports.REVIEW_HIDE_REASONS = ['spam', 'abuse', 'privacy', 'off-topic'];
+exports.REVIEW_HIDE_REASON_LABELS = {
+    spam: '광고·스팸',
+    abuse: '욕설·비방',
+    privacy: '개인정보 노출',
+    'off-topic': '상품과 무관',
+};
 // ── 선물·요청·문의 ────────────────────────────────────────────
 exports.GIFT_MESSAGE_MAX_LENGTH = 100;
 exports.PRODUCT_REQUEST_MAX_LENGTH = 60;

@@ -12,7 +12,7 @@ import { EmptyState, LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import { ReviewCard } from './_components/ReviewCard';
-import { hideReasonError, replaceReview, visibleReviewSummary } from './_lib';
+import { buildHideRequest, replaceReview, visibleReviewSummary } from './_lib';
 
 // 고객 반응: 후기, 다음 회차 알림 신청 수, 찾는 상품 제안. 다음 회차 상품을 고를 때 참고한다.
 
@@ -35,9 +35,10 @@ export default function ReactionsPage() {
   const token = session?.user.accessToken;
   const [tab, setTab] = useState<Tab>(tabs[0].value);
   const [reviews, setReviews] = useState<ManagedReview[] | null>(null);
-  // 숨기기: 사유를 적는 후기 하나, 요청 중인 후기 하나, 후기별 오류 문구.
+  // 숨기기: 사유를 고르는 후기 하나, 요청 중인 후기 하나, 후기별 오류 문구.
   const [hidingId, setHidingId] = useState<string | null>(null);
-  const [reason, setReason] = useState('');
+  const [reasonCode, setReasonCode] = useState<string | null>(null);
+  const [note, setNote] = useState('');
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [restock, setRestock] = useState<RestockSummaryItem[] | null>(null);
@@ -61,34 +62,29 @@ export default function ReactionsPage() {
 
   const summary = visibleReviewSummary(reviews ?? []);
 
-  const moderate = async (review: ManagedReview, action: 'hide' | 'unhide') => {
+  // 판매자는 숨기기만 한다. 숨김 해제는 관리자 콘솔에서만 한다.
+  const hide = async (review: ManagedReview) => {
     if (!token) return;
-    if (action === 'hide') {
-      const problem = hideReasonError(reason);
-      if (problem) {
-        setErrors((current) => ({ ...current, [review.id]: problem }));
-        return;
-      }
-    } else if (!window.confirm('이 후기를 다시 고객에게 보이고 별점에 넣을까요?')) {
+    const { body, error } = buildHideRequest(reasonCode, note);
+    if (!body) {
+      setErrors((current) => ({ ...current, [review.id]: error }));
       return;
     }
     setBusyId(review.id);
     setErrors(({ [review.id]: _old, ...rest }) => rest);
     try {
       const updated = await apiJson<ManagedReview>(
-        `/reviews/${encodeURIComponent(review.id)}/${action}`,
+        `/reviews/${encodeURIComponent(review.id)}/hide`,
         token,
-        {
-          method: 'POST',
-          body: JSON.stringify(action === 'hide' ? { reason: reason.trim() } : {}),
-        },
+        { method: 'POST', body: JSON.stringify(body) },
       );
       setReviews((current) => (current ? replaceReview(current, updated) : current));
       setHidingId(null);
-      setReason('');
-    } catch (error) {
+      setReasonCode(null);
+      setNote('');
+    } catch (failure) {
       const message =
-        error instanceof ApiError ? error.message : '처리하지 못했어요. 다시 시도해 주세요.';
+        failure instanceof ApiError ? failure.message : '처리하지 못했어요. 다시 시도해 주세요.';
       setErrors((current) => ({ ...current, [review.id]: message }));
     } finally {
       setBusyId(null);
@@ -125,17 +121,19 @@ export default function ReactionsPage() {
                     key={review.id}
                     review={review}
                     editing={hidingId === review.id}
-                    reason={hidingId === review.id ? reason : ''}
+                    reasonCode={hidingId === review.id ? reasonCode : null}
+                    note={hidingId === review.id ? note : ''}
                     busy={busyId === review.id}
                     error={errors[review.id] ?? null}
                     onStartHide={() => {
                       setHidingId(review.id);
-                      setReason('');
+                      setReasonCode(null);
+                      setNote('');
                     }}
-                    onReasonChange={setReason}
+                    onReasonChange={setReasonCode}
+                    onNoteChange={setNote}
                     onCancel={() => setHidingId(null)}
-                    onConfirmHide={() => moderate(review, 'hide')}
-                    onUnhide={() => moderate(review, 'unhide')}
+                    onConfirmHide={() => hide(review)}
                   />
                 ))}
               </>

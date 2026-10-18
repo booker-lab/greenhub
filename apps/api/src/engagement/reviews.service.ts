@@ -1,12 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import {
+  type AdminHiddenReview,
   type ManagedReview,
   type OwnReview,
   type ProductReviewsResponse,
   REVIEW_HIDE_REASON_MAX_LENGTH,
+  REVIEW_HIDE_REASONS,
   REVIEW_PHOTO_CONTENT_TYPES,
   REVIEW_PHOTO_MAX_BYTES,
   REVIEW_PHOTO_MAX_COUNT,
+  type ReviewHideReason,
   type ReviewModeratorRole,
   type ReviewPublic,
   type ReviewSummary,
@@ -36,6 +39,7 @@ import type { CreateReviewDto } from './dto/engagement.dto';
 export const REVIEWABLE_ORDER_STATUSES = ['DELIVERED', 'PICKED_UP', 'REVIEWED'] as const;
 const PUBLIC_REVIEW_LIMIT = 50;
 const MODERATION_LOG_LIMIT = 20;
+const ADMIN_HIDDEN_REVIEW_LIMIT = 200;
 // {orderId}_{productId}: 각 식별자는 DOCUMENT_ID_PATTERN(128자)을 따른다.
 const REVIEW_ID_PATTERN = /^[A-Za-z0-9_-]{1,257}$/;
 
@@ -78,6 +82,10 @@ export function normalizeReviewText(text: string): string {
 /** 숨긴 후기는 공개 목록·별점에서 빠진다. 예전 문서(필드 없음)는 숨기지 않은 후기다. */
 export function isHiddenReview(data: ReviewRecord | undefined): boolean {
   return data?.['hidden'] === true;
+}
+
+export function isReviewHideReason(value: unknown): value is ReviewHideReason {
+  return typeof value === 'string' && (REVIEW_HIDE_REASONS as readonly string[]).includes(value);
 }
 
 function photoPathsOf(data: ReviewRecord | undefined): string[] {
@@ -235,28 +243,68 @@ export class ReviewsService {
     return { id: reviewId, deleted: true };
   }
 
-  /** 판매자(자기 가게)·관리자가 후기를 숨긴다. 공개 목록·별점에서 빠지고 사유·시각·역할을 남긴다. */
+  /**
+   * 판매자(자기 가게)·관리자가 후기를 숨긴다. 사유는 정해진 분류에서만 고르고 설명은 선택이다.
+   * 공개 목록·별점에서 빠지고 사유·설명·시각·사람·역할을 남긴다.
+   */
   async hideReview(
     reviewId: string,
     moderator: ReviewModerator,
-    reason: string,
+    reasonCode: string,
+    note?: string,
   ): Promise<ManagedReview> {
-    const cleanReason = toSingleLineText(reason, REVIEW_HIDE_REASON_MAX_LENGTH);
-    if (cleanReason.length === 0) throw new BadRequestException('숨기는 사유를 적어 주세요.');
-    return this.moderate(reviewId, moderator, 'hide', cleanReason);
+    if (!isReviewHideReason(reasonCode)) {
+      throw new BadRequestException('숨김 사유를 목록에서 골라 주세요.');
+    }
+    return this.moderate(reviewId, moderator, {
+      action: 'hide',
+      reasonCode,
+      note: toSingleLineText(note ?? '', REVIEW_HIDE_REASON_MAX_LENGTH),
+    });
   }
 
-  /** 숨긴 후기를 다시 공개한다. 해제 기록도 이력에 남긴다. */
+  /** 숨긴 후기를 다시 공개한다. 관리자만 할 수 있고, 해제 기록도 이력에 남긴다. */
   async unhideReview(
     reviewId: string,
     moderator: ReviewModerator,
-    reason?: string,
+    note?: string,
   ): Promise<ManagedReview> {
-    return this.moderate(
-      reviewId,
-      moderator,
-      'unhide',
-      toSingleLineText(reason ?? '', REVIEW_HIDE_REASON_MAX_LENGTH),
+    if (moderator.role !== 'admin') {
+      throw new ForbiddenException('숨김 해제는 관리자만 할 수 있습니다.');
+    }
+    return this.moderate(reviewId, moderator, {
+      action: 'unhide',
+      note: toSingleLineText(note ?? '', REVIEW_HIDE_REASON_MAX_LENGTH),
+    });
+  }
+
+  /** 관리자 콘솔: 숨긴 후기 전체(가게·상품 이름 포함), 숨긴 시각 최신순. */
+  async listHiddenReviews(): Promise<AdminHiddenReview[]> {
+    // 단일 필드 같음 조건이라 새 복합 색인이 필요 없다.
+    const snap = await this.firestore.collection('reviews').where('hidden', '==', true).get();
+    const recent = snap.docs
+      .map((doc: any) => doc.data() as ReviewRecord)
+      .sort((a: ReviewRecord, b: ReviewRecord) =>
+        toIso(b['hiddenAt']).localeCompare(toIso(a['hiddenAt'])),
+      )
+      .slice(0, ADMIN_HIDDEN_REVIEW_LIMIT);
+    const [stores, products] = await Promise.all([
+      this.namesOf(
+        'stores',
+        recent.map((data: ReviewRecord) => data['storeId']),
+      ),
+      this.namesOf(
+        'products',
+        recent.map((data: ReviewRecord) => data['productId']),
+      ),
+    ]);
+    return Promise.all(
+      recent.map(async (data: ReviewRecord) => ({
+        ...(await this.toManaged(data)),
+        storeId: data['storeId'],
+        storeName: stores.get(data['storeId']) ?? null,
+        productName: products.get(data['productId']) ?? null,
+      })),
     );
   }
 
@@ -319,9 +367,11 @@ export class ReviewsService {
   private async moderate(
     reviewId: string,
     moderator: ReviewModerator,
-    action: 'hide' | 'unhide',
-    reason: string,
+    change:
+      | { action: 'hide'; reasonCode: ReviewHideReason; note: string }
+      | { action: 'unhide'; note: string },
   ): Promise<ManagedReview> {
+    const { action } = change;
     this.assertReviewId(reviewId);
     const reviewRef = this.firestore.doc(`reviews/${reviewId}`);
     const before = await reviewRef.get();
@@ -350,14 +400,29 @@ export class ReviewsService {
 
       const now = this.firestore.Timestamp.now();
       const log = Array.isArray(data['moderationLog']) ? data['moderationLog'] : [];
-      const entry = { action, by: moderator.userId, role: byRole, at: now, reason };
-      const { hiddenReason: _r, hiddenAt: _a, hiddenBy: _b, hiddenByRole: _br, ...rest } = data;
+      const entry = {
+        action,
+        by: moderator.userId,
+        role: byRole,
+        at: now,
+        ...(change.action === 'hide' ? { reasonCode: change.reasonCode } : {}),
+        note: change.note,
+      };
+      const {
+        hiddenReasonCode: _c,
+        hiddenNote: _n,
+        hiddenAt: _a,
+        hiddenBy: _b,
+        hiddenByRole: _br,
+        ...rest
+      } = data;
       const next: ReviewRecord = {
         ...rest,
         hidden: action === 'hide',
-        ...(action === 'hide'
+        ...(change.action === 'hide'
           ? {
-              hiddenReason: reason,
+              hiddenReasonCode: change.reasonCode,
+              ...(change.note ? { hiddenNote: change.note } : {}),
               hiddenAt: now,
               hiddenBy: moderator.userId,
               hiddenByRole: byRole,
@@ -443,8 +508,32 @@ export class ReviewsService {
     }
   }
 
+  /** 문서 id → name 지도(없거나 이름이 없으면 null). */
+  private async namesOf(collection: string, ids: unknown[]): Promise<Map<string, string | null>> {
+    const unique = [
+      ...new Set(ids.filter((id): id is string => typeof id === 'string' && id.length > 0)),
+    ];
+    const snaps = await Promise.all(
+      unique.map((id) => this.firestore.doc(`${collection}/${id}`).get()),
+    );
+    return new Map(
+      snaps.map((doc: any, index: number): [string, string | null] => {
+        const name = doc.exists ? doc.data()?.['name'] : null;
+        return [unique[index], typeof name === 'string' ? name : null];
+      }),
+    );
+  }
+
   private async toOwn(data: ReviewRecord): Promise<OwnReview> {
-    return { ...this.toPublic(data, await this.photoUrlsOf(data)), hidden: isHiddenReview(data) };
+    const review: OwnReview = {
+      ...this.toPublic(data, await this.photoUrlsOf(data)),
+      hidden: isHiddenReview(data),
+    };
+    // 쓴 사람에게는 숨김 사실과 사유 분류만 보낸다(숨긴 사람이 쓴 설명은 보내지 않는다).
+    if (review.hidden && isReviewHideReason(data['hiddenReasonCode'])) {
+      review.hiddenReasonCode = data['hiddenReasonCode'];
+    }
+    return review;
   }
 
   private async toManaged(data: ReviewRecord): Promise<ManagedReview> {
@@ -453,7 +542,12 @@ export class ReviewsService {
       hidden: isHiddenReview(data),
     };
     if (review.hidden) {
-      if (typeof data['hiddenReason'] === 'string') review.hiddenReason = data['hiddenReason'];
+      if (isReviewHideReason(data['hiddenReasonCode'])) {
+        review.hiddenReasonCode = data['hiddenReasonCode'];
+      }
+      if (typeof data['hiddenNote'] === 'string' && data['hiddenNote']) {
+        review.hiddenNote = data['hiddenNote'];
+      }
       const hiddenAt = toIso(data['hiddenAt']);
       if (hiddenAt) review.hiddenAt = hiddenAt;
       if (data['hiddenByRole'] === 'admin' || data['hiddenByRole'] === 'seller') {

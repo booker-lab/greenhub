@@ -166,17 +166,12 @@ export class SellerEngagementController {
     @CurrentUser() user: JwtPayload,
     @Body() dto: HideReviewDto,
   ) {
-    return this.reviews.hideReview(reviewId, { userId: user.sub, role: user.role }, dto.reason);
-  }
-
-  @Post('reviews/:reviewId/unhide')
-  @HttpCode(HttpStatus.OK)
-  unhideReview(
-    @Param('reviewId') reviewId: string,
-    @CurrentUser() user: JwtPayload,
-    @Body() dto: UnhideReviewDto,
-  ) {
-    return this.reviews.unhideReview(reviewId, { userId: user.sub, role: user.role }, dto.reason);
+    return this.reviews.hideReview(
+      reviewId,
+      { userId: user.sub, role: user.role },
+      dto.reasonCode,
+      dto.note,
+    );
   }
 
   @Get('stores/:storeId/restock-subscriptions/summary')
@@ -190,15 +185,34 @@ export class SellerEngagementController {
   }
 }
 
-/** 관리자 전용 입점 문의 목록. */
+/** 관리자 전용: 입점 문의 목록, 숨긴 후기 목록과 숨김 해제. */
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 export class AdminEngagementController {
-  constructor(private readonly engagement: EngagementService) {}
+  constructor(
+    private readonly engagement: EngagementService,
+    private readonly reviews: ReviewsService,
+  ) {}
 
   @Get('admin/partner-inquiries')
   partnerInquiries() {
     return this.engagement.listPartnerInquiries();
+  }
+
+  @Get('admin/reviews/hidden')
+  hiddenReviews() {
+    return this.reviews.listHiddenReviews();
+  }
+
+  // 판매자가 숨긴 후기도 관리자만 다시 공개한다(판매자 해제 불가).
+  @Post('admin/reviews/:reviewId/unhide')
+  @HttpCode(HttpStatus.OK)
+  unhideReview(
+    @Param('reviewId') reviewId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UnhideReviewDto,
+  ) {
+    return this.reviews.unhideReview(reviewId, { userId: user.sub, role: user.role }, dto.reason);
   }
 }

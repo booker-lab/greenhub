@@ -5,7 +5,11 @@ import request from 'supertest';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { sanitizedValidationPipeOptions } from '../common/validation/sanitized-validation';
-import { MyEngagementController, SellerEngagementController } from './engagement.controller';
+import {
+  AdminEngagementController,
+  MyEngagementController,
+  SellerEngagementController,
+} from './engagement.controller';
 import { EngagementService } from './engagement.service';
 import { ReviewsService } from './reviews.service';
 
@@ -19,6 +23,7 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
     deleteOwnReview: jest.fn(),
     hideReview: jest.fn(),
     unhideReview: jest.fn(),
+    listHiddenReviews: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -26,8 +31,9 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
     reviews.deleteOwnReview.mockResolvedValue({ id: 'order-1_product-1', deleted: true });
     reviews.hideReview.mockResolvedValue({ id: 'order-1_product-1', hidden: true });
     reviews.unhideReview.mockResolvedValue({ id: 'order-1_product-1', hidden: false });
+    reviews.listHiddenReviews.mockResolvedValue([]);
     const module = await Test.createTestingModule({
-      controllers: [MyEngagementController, SellerEngagementController],
+      controllers: [MyEngagementController, SellerEngagementController, AdminEngagementController],
       providers: [
         { provide: ReviewsService, useValue: reviews },
         { provide: EngagementService, useValue: {} },
@@ -120,31 +126,60 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
     expect(reviews.deleteOwnReview).toHaveBeenCalledWith('order-1_product-1', 'consumer-1');
   });
 
-  it('숨기기는 판매자·관리자만, 사유가 꼭 있어야 한다', async () => {
-    expect(
-      (await post('/reviews/order-1_product-1/hide', 'consumer').send({ reason: '광고' })).status,
-    ).toBe(403);
-    expect((await post('/reviews/order-1_product-1/hide', 'seller').send({})).status).toBe(400);
-    expect(
-      (await post('/reviews/order-1_product-1/hide', 'seller').send({ reason: 'x'.repeat(201) }))
-        .status,
-    ).toBe(400);
+  it('숨기기는 판매자·관리자만, 사유는 목록의 분류만 받고 설명은 선택이다', async () => {
+    const hidePath = '/reviews/order-1_product-1/hide';
+    expect((await post(hidePath, 'consumer').send({ reasonCode: 'spam' })).status).toBe(403);
+    for (const body of [
+      {},
+      { reasonCode: 'low-rating' },
+      { reasonCode: '광고·스팸' },
+      { reason: '광고' },
+      { reasonCode: 'spam', note: 'x'.repeat(201) },
+    ]) {
+      expect((await post(hidePath, 'seller').send(body)).status).toBe(400);
+    }
     expect(reviews.hideReview).not.toHaveBeenCalled();
 
-    const hide = await post('/reviews/order-1_product-1/hide', 'seller').send({ reason: '광고' });
+    const hide = await post(hidePath, 'seller').send({ reasonCode: 'spam', note: '홍보 링크' });
     expect(hide.status).toBe(200);
     expect(reviews.hideReview).toHaveBeenCalledWith(
       'order-1_product-1',
       { userId: 'seller-1', role: 'seller' },
-      '광고',
+      'spam',
+      '홍보 링크',
     );
+    const withoutNote = await post(hidePath, 'admin').send({ reasonCode: 'privacy' });
+    expect(withoutNote.status).toBe(200);
+    expect(reviews.hideReview).toHaveBeenLastCalledWith(
+      'order-1_product-1',
+      { userId: 'admin-1', role: 'admin' },
+      'privacy',
+      undefined,
+    );
+  });
 
-    const unhide = await post('/reviews/order-1_product-1/unhide', 'admin').send({});
+  it('숨김 해제와 숨긴 후기 목록은 관리자만 쓸 수 있다(판매자 403)', async () => {
+    const unhidePath = '/admin/reviews/order-1_product-1/unhide';
+    expect((await post(unhidePath, 'seller').send({})).status).toBe(403);
+    expect((await post('/reviews/order-1_product-1/unhide', 'seller').send({})).status).toBe(404);
+    const sellerList = await request(app.getHttpServer())
+      .get('/admin/reviews/hidden')
+      .set('x-test-role', 'seller');
+    expect(sellerList.status).toBe(403);
+    expect(reviews.unhideReview).not.toHaveBeenCalled();
+    expect(reviews.listHiddenReviews).not.toHaveBeenCalled();
+
+    const unhide = await post(unhidePath, 'admin').send({});
     expect(unhide.status).toBe(200);
     expect(reviews.unhideReview).toHaveBeenCalledWith(
       'order-1_product-1',
       { userId: 'admin-1', role: 'admin' },
       undefined,
     );
+    const adminList = await request(app.getHttpServer())
+      .get('/admin/reviews/hidden')
+      .set('x-test-role', 'admin');
+    expect(adminList.status).toBe(200);
+    expect(reviews.listHiddenReviews).toHaveBeenCalledTimes(1);
   });
 });

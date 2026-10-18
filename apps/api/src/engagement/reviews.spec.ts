@@ -10,7 +10,11 @@ import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { createMemoryFirestore } from '../common/testing/memory-firestore';
-import { MyEngagementController, SellerEngagementController } from './engagement.controller';
+import {
+  AdminEngagementController,
+  MyEngagementController,
+  SellerEngagementController,
+} from './engagement.controller';
 import { adjustReviewStats, ReviewsService } from './reviews.service';
 
 // 8x8 JPEG (Pillow) + EXIF APP1(기기·GPS) + COM. jpeg-metadata.spec.ts와 같은 표본.
@@ -96,14 +100,23 @@ describe('후기 쓰기 권한(로그인한 본인의 배송 완료 주문만)',
     }
   });
 
-  it('숨기기·숨김 해제는 로그인한 판매자·관리자 경로에만 있다', () => {
+  it('숨기기는 판매자·관리자 경로에, 숨김 해제·숨긴 후기 목록은 관리자 경로에만 있다', () => {
     expect(Reflect.getMetadata(GUARDS_METADATA, SellerEngagementController)).toEqual([
       JwtAuthGuard,
       RolesGuard,
     ]);
     expect(Reflect.getMetadata(ROLES_KEY, SellerEngagementController)).toEqual(['seller', 'admin']);
     expect(typeof SellerEngagementController.prototype.hideReview).toBe('function');
-    expect(typeof SellerEngagementController.prototype.unhideReview).toBe('function');
+    expect(
+      (SellerEngagementController.prototype as Record<string, unknown>)['unhideReview'],
+    ).toBeUndefined();
+    expect(Reflect.getMetadata(GUARDS_METADATA, AdminEngagementController)).toEqual([
+      JwtAuthGuard,
+      RolesGuard,
+    ]);
+    expect(Reflect.getMetadata(ROLES_KEY, AdminEngagementController)).toEqual(['admin']);
+    expect(typeof AdminEngagementController.prototype.unhideReview).toBe('function');
+    expect(typeof AdminEngagementController.prototype.hiddenReviews).toBe('function');
     expect(
       (MyEngagementController.prototype as Record<string, unknown>)['hideReview'],
     ).toBeUndefined();
@@ -306,15 +319,15 @@ describe('고객 본인 후기 삭제', () => {
   it('숨긴 후기를 지우면 이미 빠진 통계를 한 번 더 빼지 않는다', async () => {
     const { service, records } = setup();
     await seedTwoReviews(service);
-    await service.hideReview('order-other_product-1', SELLER, '욕설');
+    await service.hideReview('order-other_product-1', SELLER, 'abuse');
     expect(records.get('reviewStats/product-1')).toMatchObject({ count: 1, sum: 5 });
     await service.deleteOwnReview('order-other_product-1', 'user-2');
     expect(records.get('reviewStats/product-1')).toMatchObject({ count: 1, sum: 5 });
   });
 });
 
-describe('판매자·관리자 숨기기와 숨김 해제', () => {
-  it('자기 가게 판매자가 숨기면 공개 목록·별점·가게 통계에서 빠지고, 누가·언제·사유가 남는다', async () => {
+describe('판매자·관리자 숨기기와 관리자 숨김 해제', () => {
+  it('자기 가게 판매자가 숨기면 공개 목록·별점·가게 통계에서 빠지고, 사유 분류·설명·누가·언제가 남는다', async () => {
     const { service, records } = setup();
     await seedTwoReviews(service);
     expect((await service.getProductReviews('product-1')).summary).toEqual({
@@ -325,23 +338,31 @@ describe('판매자·관리자 숨기기와 숨김 해제', () => {
     const hidden = await service.hideReview(
       'order-other_product-1',
       SELLER,
-      '  상품과 관계없는\n광고 글  ',
+      'spam',
+      '  다른 가게\n홍보 링크  ',
     );
     expect(hidden).toMatchObject({
       hidden: true,
-      hiddenReason: '상품과 관계없는 광고 글',
+      hiddenReasonCode: 'spam',
+      hiddenNote: '다른 가게 홍보 링크',
       hiddenByRole: 'seller',
     });
     expect(hidden.hiddenAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
     const doc = records.get('reviews/order-other_product-1')!;
-    expect(doc).toMatchObject({ hidden: true, hiddenBy: 'seller-1', hiddenByRole: 'seller' });
+    expect(doc).toMatchObject({
+      hidden: true,
+      hiddenReasonCode: 'spam',
+      hiddenBy: 'seller-1',
+      hiddenByRole: 'seller',
+    });
     expect(doc['moderationLog']).toEqual([
       expect.objectContaining({
         action: 'hide',
         by: 'seller-1',
         role: 'seller',
-        reason: '상품과 관계없는 광고 글',
+        reasonCode: 'spam',
+        note: '다른 가게 홍보 링크',
       }),
     ]);
 
@@ -357,40 +378,72 @@ describe('판매자·관리자 숨기기와 숨김 해제', () => {
     const managed = await service.listStoreReviews('store-1', 'seller-1', 'seller');
     expect(managed.find((review) => review.id === 'order-other_product-1')).toMatchObject({
       hidden: true,
-      hiddenReason: '상품과 관계없는 광고 글',
+      hiddenReasonCode: 'spam',
+      hiddenNote: '다른 가게 홍보 링크',
     });
-    // 쓴 사람은 자기 후기가 숨겨졌다는 것만 본다(사유는 보내지 않는다).
+    // 쓴 사람은 숨김 사실과 사유 분류를 보고, 판매자가 쓴 설명은 받지 않는다.
     const own = await service.listOrderReviews('order-other', 'user-2');
-    expect(own[0]).toMatchObject({ hidden: true });
-    expect(own[0]).not.toHaveProperty('hiddenReason');
+    expect(own[0]).toMatchObject({ hidden: true, hiddenReasonCode: 'spam' });
+    expect(own[0]).not.toHaveProperty('hiddenNote');
+    expect(own[0]).not.toHaveProperty('hiddenByRole');
   });
 
-  it('숨김 해제는 통계를 되돌리고 숨김 정보를 비우되 이력은 남긴다', async () => {
+  it('설명 없이 사유 분류만으로도 숨길 수 있다', async () => {
     const { service, records } = setup();
     await seedTwoReviews(service);
-    await service.hideReview('order-other_product-1', SELLER, '오해 소지');
+    const hidden = await service.hideReview('order-other_product-1', SELLER, 'privacy');
+    expect(hidden).toMatchObject({ hidden: true, hiddenReasonCode: 'privacy' });
+    expect(hidden).not.toHaveProperty('hiddenNote');
+    expect(records.get('reviews/order-other_product-1')).not.toHaveProperty('hiddenNote');
+  });
+
+  it.each([
+    '',
+    'low-rating',
+    '불만',
+    'SPAM',
+  ])('목록에 없는 사유(%s)로는 숨길 수 없다', async (reasonCode) => {
+    const { service, records } = setup();
+    await seedTwoReviews(service);
+    await expect(
+      service.hideReview('order-other_product-1', SELLER, reasonCode),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(records.get('reviews/order-other_product-1')).toMatchObject({ hidden: false });
+  });
+
+  it('판매자는 숨김을 해제할 수 없고, 관리자만 해제한다(통계 복구·이력 유지)', async () => {
+    const { service, records } = setup();
+    await seedTwoReviews(service);
+    await service.hideReview('order-other_product-1', SELLER, 'off-topic', '오해 소지');
+    await expect(service.unhideReview('order-other_product-1', SELLER)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    expect(records.get('reviews/order-other_product-1')).toMatchObject({ hidden: true });
+
     const shown = await service.unhideReview('order-other_product-1', ADMIN, '확인 결과 문제 없음');
     expect(shown).toMatchObject({ hidden: false });
-    expect(shown).not.toHaveProperty('hiddenReason');
+    expect(shown).not.toHaveProperty('hiddenReasonCode');
     expect((await service.getProductReviews('product-1')).summary).toEqual({
       count: 2,
       average: 3,
     });
 
     const doc = records.get('reviews/order-other_product-1')!;
-    expect(doc).not.toHaveProperty('hiddenReason');
+    expect(doc).not.toHaveProperty('hiddenReasonCode');
+    expect(doc).not.toHaveProperty('hiddenNote');
     expect(doc['moderationLog']).toEqual([
       expect.objectContaining({
         action: 'hide',
         by: 'seller-1',
         role: 'seller',
-        reason: '오해 소지',
+        reasonCode: 'off-topic',
+        note: '오해 소지',
       }),
       expect.objectContaining({
         action: 'unhide',
         by: 'admin-1',
         role: 'admin',
-        reason: '확인 결과 문제 없음',
+        note: '확인 결과 문제 없음',
       }),
     ]);
   });
@@ -399,33 +452,30 @@ describe('판매자·관리자 숨기기와 숨김 해제', () => {
     const { service } = setup();
     await seedTwoReviews(service);
     await expect(
-      service.hideReview('order-other_product-1', OTHER_SELLER, '사유'),
+      service.hideReview('order-other_product-1', OTHER_SELLER, 'spam'),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      service.hideReview('order-other_product-1', { userId: 'user-1', role: 'consumer' }, '사유'),
+      service.hideReview('order-other_product-1', { userId: 'user-1', role: 'consumer' }, 'spam'),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
-      service.hideReview('order-other_product-1', ADMIN, '신고 접수'),
+      service.hideReview('order-other_product-1', ADMIN, 'abuse'),
     ).resolves.toMatchObject({
       hidden: true,
       hiddenByRole: 'admin',
     });
   });
 
-  it('사유 없는 숨기기, 두 번 숨기기, 숨기지 않은 후기 해제, 없는 후기는 거부한다', async () => {
+  it('두 번 숨기기, 숨기지 않은 후기 해제, 없는 후기는 거부한다', async () => {
     const { service, records } = setup();
     await seedTwoReviews(service);
-    await expect(
-      service.hideReview('order-other_product-1', SELLER, ' \n '),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.unhideReview('order-other_product-1', SELLER)).rejects.toBeInstanceOf(
+    await expect(service.unhideReview('order-other_product-1', ADMIN)).rejects.toBeInstanceOf(
       ConflictException,
     );
-    await service.hideReview('order-other_product-1', SELLER, '사유');
+    await service.hideReview('order-other_product-1', SELLER, 'spam');
     await expect(
-      service.hideReview('order-other_product-1', SELLER, '사유'),
+      service.hideReview('order-other_product-1', SELLER, 'spam'),
     ).rejects.toBeInstanceOf(ConflictException);
-    await expect(service.hideReview('order-none_product-1', SELLER, '사유')).rejects.toBeInstanceOf(
+    await expect(service.hideReview('order-none_product-1', SELLER, 'spam')).rejects.toBeInstanceOf(
       NotFoundException,
     );
     expect(records.get('reviewStats/product-1')).toMatchObject({ count: 1, sum: 5 });
@@ -434,10 +484,44 @@ describe('판매자·관리자 숨기기와 숨김 해제', () => {
   it('숨긴 후기에는 사진을 더할 수 없다', async () => {
     const { service } = setup();
     await seedTwoReviews(service);
-    await service.hideReview('order-other_product-1', SELLER, '사유');
+    await service.hideReview('order-other_product-1', SELLER, 'spam');
     await expect(
       service.addReviewPhotos('order-other_product-1', 'user-2', [jpeg()]),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('관리자 숨긴 후기 목록은 숨긴 후기만, 가게·상품 이름과 함께 최신 숨김순으로 준다', async () => {
+    const { service } = setup({
+      ...BASE,
+      'stores/store-1': { id: 'store-1', ownerId: 'seller-1', name: '초록농원' },
+      'products/product-1': { id: 'product-1', storeId: 'store-1', name: '호접란 빅립' },
+      'orders/order-picked': order('order-picked', 'PICKED_UP', 'user-2'),
+    });
+    await seedTwoReviews(service);
+    await service.createReview('order-picked', 'user-2', {
+      productId: 'product-1',
+      rating: 2,
+      text: '연락처를 남겨요 010',
+    });
+    await service.hideReview('order-other_product-1', SELLER, 'abuse', '욕설');
+    await service.hideReview('order-picked_product-1', ADMIN, 'privacy');
+
+    const list = await service.listHiddenReviews();
+    expect(list.map((review) => review.id)).toEqual([
+      'order-picked_product-1',
+      'order-other_product-1',
+    ]);
+    expect(list[1]).toMatchObject({
+      storeId: 'store-1',
+      storeName: '초록농원',
+      productName: '호접란 빅립',
+      hiddenReasonCode: 'abuse',
+      hiddenNote: '욕설',
+      hiddenByRole: 'seller',
+      rating: 1,
+      text: '꽃이 다 졌어요',
+    });
+    expect(list[0]).toMatchObject({ hiddenReasonCode: 'privacy', hiddenByRole: 'admin' });
   });
 
   it('통계 조정은 0 아래로 내려가지 않는다', () => {

@@ -1,8 +1,9 @@
 import { type ManagedReview, REVIEW_HIDE_REASON_MAX_LENGTH } from '@greenhub/shared';
-import { Badge, Button, Group, Paper, Stack, Text, Textarea } from '@mantine/core';
-import { hiddenSummary } from '../_lib';
+import { Badge, Button, Group, Paper, Radio, Stack, Text, Textarea } from '@mantine/core';
+import { HIDE_POLICY_NOTE, HIDE_REASON_OPTIONS, hiddenReasonLabel, hiddenSummary } from '../_lib';
 
-// 후기 한 건. 숨기기(사유 입력)·숨김 해제 버튼과 숨김 상태를 보여준다. 상태는 부모(page)가 가진다.
+// 후기 한 건. 숨기기(사유 고르기·설명 선택)와 숨김 상태를 보여준다. 상태는 부모(page)가 가진다.
+// 숨김 해제는 관리자 콘솔에서만 한다(판매자 화면에는 버튼이 없다).
 
 const day = (iso: string) =>
   new Date(iso).toLocaleDateString('ko-KR', {
@@ -13,31 +14,34 @@ const day = (iso: string) =>
 
 export interface ReviewCardProps {
   review: ManagedReview;
-  /** 이 후기의 숨김 사유를 적는 중인지 */
+  /** 이 후기의 숨김 사유를 고르는 중인지 */
   editing: boolean;
-  reason: string;
+  reasonCode: string | null;
+  note: string;
   busy: boolean;
   error: string | null;
   onStartHide: () => void;
   onReasonChange: (value: string) => void;
+  onNoteChange: (value: string) => void;
   onCancel: () => void;
   onConfirmHide: () => void;
-  onUnhide: () => void;
 }
 
 export function ReviewCard({
   review,
   editing,
-  reason,
+  reasonCode,
+  note,
   busy,
   error,
   onStartHide,
   onReasonChange,
+  onNoteChange,
   onCancel,
   onConfirmHide,
-  onUnhide,
 }: ReviewCardProps) {
   const summary = hiddenSummary(review);
+  const reasonLabel = hiddenReasonLabel(review);
   return (
     <Paper
       radius="lg"
@@ -93,53 +97,69 @@ export function ReviewCard({
           <Text size="sm" fw={700}>
             {summary} · 고객 화면과 별점에서 빠졌어요
           </Text>
-          {review.hiddenReason && (
+          {reasonLabel && (
             <Text size="sm" c="var(--color-text-secondary)">
-              사유: {review.hiddenReason}
+              사유: {reasonLabel}
+              {review.hiddenNote ? ` · ${review.hiddenNote}` : ''}
             </Text>
           )}
+          <Text size="sm" c="var(--color-text-secondary)">
+            다시 보이게 하려면 관리자에게 요청해 주세요.
+          </Text>
         </Stack>
       )}
 
-      {editing && !review.hidden ? (
-        <Stack gap={6} mt={8}>
-          <Textarea
-            aria-label="숨기는 사유"
-            placeholder="예: 상품과 관계없는 광고 글"
-            maxLength={REVIEW_HIDE_REASON_MAX_LENGTH}
-            autosize
-            minRows={2}
-            value={reason}
-            onChange={(event) => onReasonChange(event.currentTarget.value)}
-          />
-          <Group gap="xs" justify="flex-end">
-            <Button
-              variant="default"
-              radius="xl"
-              size="compact-sm"
-              disabled={busy}
-              onClick={onCancel}
+      {!review.hidden &&
+        (editing ? (
+          <Stack gap={8} mt={8}>
+            <Text size="sm" c="var(--color-text-secondary)">
+              {HIDE_POLICY_NOTE}
+            </Text>
+            <Radio.Group
+              label="숨기는 사유"
+              value={reasonCode}
+              onChange={onReasonChange}
+              withAsterisk
             >
-              취소
-            </Button>
-            <Button
-              color="red"
-              radius="xl"
-              size="compact-sm"
-              loading={busy}
-              onClick={onConfirmHide}
-            >
-              숨기기 확인
-            </Button>
-          </Group>
-        </Stack>
-      ) : (
-        <Group justify="flex-end" mt={8}>
-          {review.hidden ? (
-            <Button variant="light" radius="xl" size="compact-sm" loading={busy} onClick={onUnhide}>
-              숨김 해제
-            </Button>
-          ) : (
+              <Stack gap={6} mt={4}>
+                {HIDE_REASON_OPTIONS.map((option) => (
+                  <Radio key={option.value} value={option.value} label={option.label} />
+                ))}
+              </Stack>
+            </Radio.Group>
+            <Textarea
+              label="설명(선택)"
+              placeholder="관리자에게 남길 설명이 있으면 적어 주세요. 고객에게는 보이지 않아요."
+              maxLength={REVIEW_HIDE_REASON_MAX_LENGTH}
+              autosize
+              minRows={2}
+              value={note}
+              onChange={(event) => onNoteChange(event.currentTarget.value)}
+            />
+            <Group gap="xs" justify="flex-end">
+              <Button
+                variant="default"
+                radius="xl"
+                size="compact-sm"
+                disabled={busy}
+                onClick={onCancel}
+              >
+                취소
+              </Button>
+              <Button
+                color="red"
+                radius="xl"
+                size="compact-sm"
+                loading={busy}
+                disabled={!reasonCode}
+                onClick={onConfirmHide}
+              >
+                숨기기 확인
+              </Button>
+            </Group>
+          </Stack>
+        ) : (
+          <Group justify="flex-end" mt={8}>
             <Button
               variant="subtle"
               color="red"
@@ -150,9 +170,8 @@ export function ReviewCard({
             >
               숨기기
             </Button>
-          )}
-        </Group>
-      )}
+          </Group>
+        ))}
 
       {error && (
         <Text role="alert" size="sm" mt={6} c="var(--color-danger)">
