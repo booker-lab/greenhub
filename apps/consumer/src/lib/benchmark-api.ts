@@ -2,6 +2,7 @@
 
 import type {
   CreateReviewRequest,
+  OwnReview,
   PartnerInquiryRequest,
   ProductReviewsResponse,
   ReviewPublic,
@@ -28,11 +29,18 @@ async function request<T>(
 ): Promise<T> {
   const headers: Record<string, string> = {};
   if (init.token) headers.Authorization = `Bearer ${init.token}`;
-  if (init.body !== undefined) headers['Content-Type'] = 'application/json';
+  // FormData(사진)는 브라우저가 multipart 경계를 붙이도록 Content-Type을 비워 둔다.
+  const isForm = typeof FormData !== 'undefined' && init.body instanceof FormData;
+  if (init.body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
   const res = await fetch(`${getApiBaseUrl()}${path}`, {
     method: init.method ?? 'GET',
     headers,
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
+    body:
+      init.body === undefined
+        ? undefined
+        : isForm
+          ? (init.body as FormData)
+          : JSON.stringify(init.body),
   });
   if (!res.ok) {
     const payload = (await res.json().catch(() => null)) as { message?: unknown } | null;
@@ -67,8 +75,8 @@ export function fetchProductReviews(productId: string): Promise<ProductReviewsRe
   );
 }
 
-export function fetchOrderReviews(orderId: string, token: string): Promise<ReviewPublic[]> {
-  return request<ReviewPublic[]>(`/orders/${enc(orderId)}/reviews`, { token });
+export function fetchOrderReviews(orderId: string, token: string): Promise<OwnReview[]> {
+  return request<OwnReview[]>(`/orders/${enc(orderId)}/reviews`, { token });
 }
 
 export function createReview(
@@ -79,12 +87,40 @@ export function createReview(
   return request<ReviewPublic>(`/orders/${enc(orderId)}/reviews`, { method: 'POST', token, body });
 }
 
+/** 쓴 후기에 사진(JPEG)을 더한다. 후기 하나에 모두 3장까지. */
+export function uploadReviewPhotos(
+  reviewId: string,
+  token: string,
+  photos: Blob[],
+): Promise<OwnReview> {
+  const form = new FormData();
+  photos.forEach((photo, index) => {
+    form.append('photos', photo, `review-${index + 1}.jpg`);
+  });
+  return request<OwnReview>(`/reviews/${enc(reviewId)}/photos`, {
+    method: 'POST',
+    token,
+    body: form,
+  });
+}
+
+export function deleteReview(
+  reviewId: string,
+  token: string,
+): Promise<{ id: string; deleted: true }> {
+  return request(`/reviews/${enc(reviewId)}`, { method: 'DELETE', token });
+}
+
 // ── 다음 회차 알림 ──
 export function fetchRestockSubscriptions(token: string): Promise<string[]> {
   return request<string[]>('/me/restock-subscriptions', { token });
 }
 
-export function setRestockSubscription(token: string, productId: string, on: boolean): Promise<unknown> {
+export function setRestockSubscription(
+  token: string,
+  productId: string,
+  on: boolean,
+): Promise<unknown> {
   return request(`/me/restock-subscriptions/${enc(productId)}`, {
     method: on ? 'PUT' : 'DELETE',
     token,

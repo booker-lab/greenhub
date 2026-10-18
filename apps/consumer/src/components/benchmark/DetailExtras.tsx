@@ -14,6 +14,7 @@ import { useProducts } from '@/hooks/useProducts';
 import type { PublicSaleRound } from '@/hooks/useSaleRounds';
 import { sizeRows } from '@/lib/benchmark-format';
 import { isFeatureOn } from '@/lib/features';
+import { ReviewPhotoStrip } from './ReviewPhotos';
 
 // 상품 상세의 벤치마킹 비교 기능 묶음(품질 보장·크기·관리 안내·판매자 소개·후기·비슷한 꽃).
 // 각 칸은 기능 토글이 켜져 있고 보여줄 값이 있을 때만 그린다.
@@ -99,6 +100,7 @@ export function ReviewsSection({ productId }: { productId: string }) {
               <Text size="sm" mt={4} style={{ whiteSpace: 'pre-line' }}>
                 {review.text}
               </Text>
+              <ReviewPhotoStrip urls={review.photoUrls} label={`${review.authorName} 후기`} />
             </Box>
           ))}
           {reviews.items.length > 3 && (

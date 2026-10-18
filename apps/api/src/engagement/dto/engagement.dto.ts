@@ -1,9 +1,17 @@
-import { PRODUCT_REQUEST_MAX_LENGTH, REVIEW_TEXT_MAX_LENGTH } from '@greenhub/shared';
+import {
+  PRODUCT_REQUEST_MAX_LENGTH,
+  REVIEW_HIDE_REASON_MAX_LENGTH,
+  REVIEW_HIDE_REASONS,
+  REVIEW_TEXT_MAX_LENGTH,
+  type ReviewHideReason,
+} from '@greenhub/shared';
 import {
   Equals,
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   Max,
@@ -29,6 +37,25 @@ export class CreateReviewDto {
   @MinLength(5, { message: '후기는 다섯 글자 이상 적어 주세요.' })
   @MaxLength(REVIEW_TEXT_MAX_LENGTH)
   text: string;
+}
+
+/** 판매자·관리자가 후기를 숨길 때: 사유는 정해진 목록에서만 고르고, 설명은 선택이다. */
+export class HideReviewDto {
+  @IsIn(REVIEW_HIDE_REASONS, { message: '숨김 사유를 목록에서 골라 주세요.' })
+  reasonCode: ReviewHideReason;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(REVIEW_HIDE_REASON_MAX_LENGTH)
+  note?: string;
+}
+
+/** 숨김 해제 사유는 선택이다. */
+export class UnhideReviewDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(REVIEW_HIDE_REASON_MAX_LENGTH)
+  reason?: string;
 }
 
 export class CreateProductRequestDto {

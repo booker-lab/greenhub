@@ -84,3 +84,11 @@ export function matchesPlantQuery(
   const haystack = fields.filter(Boolean).map((field) => normalizeSearchText(String(field)));
   return terms.some((term) => haystack.some((text) => text.includes(term)));
 }
+
+// ── 후기(reviews) ──
+
+/** 숨겨진 내 후기 안내. 사유 분류 이름이 있으면 함께 보여준다(숨긴 사람의 설명은 받지 않는다). */
+export function hiddenReviewNotice(reasonLabel: string | null | undefined): string {
+  const reason = reasonLabel ? ` 사유: ${reasonLabel}.` : '';
+  return `숨겨진 후기예요.${reason} 다른 고객에게는 보이지 않고 별점에도 들어가지 않아요.`;
+}

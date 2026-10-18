@@ -9,6 +9,13 @@ import { maskDisplayName } from '../common/store-ownership';
 import { EngagementService } from './engagement.service';
 import { normalizeReviewText, ReviewsService } from './reviews.service';
 
+/** 사진이 없는 후기 테스트용 Storage. 서명 URL 요청이 오면 실패로 드러난다. */
+const NO_STORAGE = {
+  saveReviewPhoto: jest.fn(),
+  createReviewPhotoReadUrl: jest.fn(),
+  deleteReviewPhoto: jest.fn(),
+};
+
 const BASE = {
   'stores/store-1': { id: 'store-1', ownerId: 'seller-1' },
   'users/user-1': { id: 'user-1', name: '김그린' },
@@ -33,7 +40,7 @@ const BASE = {
 describe('후기(벤치마킹 비교 기능)', () => {
   it('배송 받은 주문의 상품에 한 번만 후기를 남기고 별점 통계를 올린다', async () => {
     const { firestore, records } = createMemoryFirestore(BASE);
-    const service = new ReviewsService(firestore as never);
+    const service = new ReviewsService(firestore as never, NO_STORAGE as never);
     const review = await service.createReview('order-delivered', 'user-1', {
       productId: 'product-1',
       rating: 4,
@@ -55,7 +62,7 @@ describe('후기(벤치마킹 비교 기능)', () => {
 
   it('배송 전 주문, 남의 주문, 주문에 없는 상품은 거부한다', async () => {
     const { firestore } = createMemoryFirestore(BASE);
-    const service = new ReviewsService(firestore as never);
+    const service = new ReviewsService(firestore as never, NO_STORAGE as never);
     const dto = { productId: 'product-1', rating: 5, text: '좋아요 좋아요' };
     await expect(service.createReview('order-paid', 'user-1', dto)).rejects.toBeInstanceOf(BadRequestException);
     await expect(service.createReview('order-delivered', 'user-2', dto)).rejects.toBeInstanceOf(
