@@ -34,6 +34,8 @@ const PLACEHOLDER_SECRET_VALUES = new Set([
 // JWT secret 권장 최소 길이(바이트). 미달은 운영 기동을 막지 않고 경고만 남긴다.
 const RECOMMENDED_JWT_SECRET_BYTES = 32;
 const MAX_TRUST_PROXY_HOPS = 10;
+// Railway 런타임 기본 홉 수. scripts/release/prod-config-check.mjs의 EXPECTED_TRUST_PROXY_HOPS와 같아야 한다.
+export const RAILWAY_TRUST_PROXY_HOPS = 2;
 
 const runtimeConfigLogger = new Logger('RuntimeConfig');
 
@@ -256,12 +258,14 @@ export function resolveFirebaseAdminSettings(
 
 /**
  * Express `trust proxy` 홉 수. 명시값(TRUST_PROXY_HOPS)이 없으면 Railway 런타임은
- * 엣지 프록시 1홉, 그 밖(로컬 등)은 0(프록시 헤더 미신뢰)이다. `true` 같은 무제한
- * 신뢰는 X-Forwarded-For를 그대로 믿게 되므로 정수만 허용한다.
+ * 2홉, 그 밖(로컬 등)은 0(프록시 헤더 미신뢰)이다. Railway는 엣지 뒤에 중계 노드가 한 번 더
+ * 붙는다: 2026-10-18 운영·스테이징 실측에서 1홉은 연결마다 바뀌는 중계 노드 IP를 접속자로
+ * 잡았고, 2홉은 접속자마다 한 버킷이면서 클라이언트가 보낸 X-Forwarded-For를 무시했다.
+ * `true` 같은 무제한 신뢰는 X-Forwarded-For를 그대로 믿게 되므로 정수만 허용한다.
  */
 export function resolveTrustProxyHops(values: RuntimeConfigValues = process.env): number {
   const raw = readString(values, 'TRUST_PROXY_HOPS');
-  if (!raw) return readString(values, 'RAILWAY_ENVIRONMENT_NAME') ? 1 : 0;
+  if (!raw) return readString(values, 'RAILWAY_ENVIRONMENT_NAME') ? RAILWAY_TRUST_PROXY_HOPS : 0;
   if (!/^\d+$/.test(raw) || Number(raw) > MAX_TRUST_PROXY_HOPS) {
     throw new RuntimeConfigurationError(
       `TRUST_PROXY_HOPS는 0~${MAX_TRUST_PROXY_HOPS} 사이의 정수여야 합니다.`,

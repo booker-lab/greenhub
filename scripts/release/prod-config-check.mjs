@@ -30,8 +30,11 @@ export const UNKNOWN = 'UNKNOWN';
 
 export const MIN_JWT_SECRET_BYTES = 32;
 export const CONSUMER_STORE_ID_KEY = 'NEXT_PUBLIC_PORTONE_STORE_ID';
-/** 운영 Railway API 앞의 프록시는 엣지 1홉이다. 미설정이면 API가 이 값을 쓴다(`resolveTrustProxyHops`). */
-export const EXPECTED_TRUST_PROXY_HOPS = 1;
+/**
+ * 운영 Railway API 앞의 프록시는 엣지와 중계 노드 2홉이다(2026-10-18 운영·스테이징 실측).
+ * 미설정이면 API가 이 값을 쓴다(`apps/api/src/config/runtime-config.ts`의 `RAILWAY_TRUST_PROXY_HOPS`와 같아야 한다).
+ */
+export const EXPECTED_TRUST_PROXY_HOPS = 2;
 
 /** 값을 읽어 판정하는 Railway 변수. 읽는 즉시 마스킹한다. */
 export const RAILWAY_CHECKED_KEYS = Object.freeze([
@@ -84,9 +87,9 @@ export function previewOriginStatus(value) {
 }
 
 /**
- * 미설정(빈 값 포함)이면 API가 Railway 기본값 1을 쓰므로 PASS, 명시값은 API가 1로 읽을 때만 PASS.
- * 형식이 맞아도 1이 아니면 FAIL이다. 0이면 요청 한도가 클라이언트가 아니라 프록시 주소 하나로 묶이고,
- * 2 이상이면 엣지 프록시가 붙인 값보다 앞쪽 헤더 값까지 클라이언트 IP로 믿는다. 형식이 틀리면 API가 기동을 거부한다.
+ * 미설정(빈 값 포함)이면 API가 Railway 기본값 2를 쓰므로 PASS, 명시값은 API가 2로 읽을 때만 PASS.
+ * 형식이 맞아도 2가 아니면 FAIL이다. 0이면 요청 한도가 클라이언트가 아니라 프록시 주소 하나로 묶이고,
+ * 1이면 연결마다 바뀌는 중계 노드 주소로 묶이며, 3 이상이면 엣지가 붙인 값보다 앞쪽(클라이언트가 보낸) 헤더 값까지 믿는다. 형식이 틀리면 API가 기동을 거부한다.
  */
 export function trustProxyHopsStatus(value) {
   if (value === undefined) return PASS;

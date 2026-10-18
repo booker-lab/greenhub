@@ -239,7 +239,7 @@ test('운영 API가 Preview origin을 받거나 기동을 거부할 CORS·프록
   assertNoValues(allowed.out);
 
   const explicit = await runWith({
-    railwayVars: { ...BASE_RAILWAY, CORS_ALLOW_VERCEL_PREVIEWS: ' FALSE ', TRUST_PROXY_HOPS: '1' },
+    railwayVars: { ...BASE_RAILWAY, CORS_ALLOW_VERCEL_PREVIEWS: ' FALSE ', TRUST_PROXY_HOPS: '2' },
   });
   assert.equal(explicit.summary.checks.cors_vercel_previews_not_allowed, true);
   assert.equal(explicit.summary.checks.trust_proxy_hops_valid, true);
@@ -250,18 +250,18 @@ test('운영 API가 Preview origin을 받거나 기동을 거부할 CORS·프록
   for (const value of ['true', 'TRUE', 'yes', '1']) {
     assert.equal(previewOriginStatus(value), 'FAIL', value);
   }
-  // 미설정(Railway 기본 1)이거나 API가 1로 읽는 값만 PASS다.
-  for (const value of [undefined, '', ' ', '1', ' 1 ', '01']) {
+  // 미설정(Railway 기본 2)이거나 API가 2로 읽는 값만 PASS다.
+  for (const value of [undefined, '', ' ', '2', ' 2 ', '02']) {
     assert.equal(trustProxyHopsStatus(value), 'PASS', String(value));
   }
-  // 형식은 맞아도 1이 아닌 홉 수(0, 2~10)와 API가 기동을 거부하는 값은 FAIL이다.
-  for (const value of ['0', '00', '2', '3', '10', '11', 'true', '-1', '1.5', 'loopback']) {
+  // 형식은 맞아도 2가 아닌 홉 수(0, 1, 3~10)와 API가 기동을 거부하는 값은 FAIL이다.
+  for (const value of ['0', '00', '1', '01', '3', '10', '11', 'true', '-1', '1.5', 'loopback']) {
     assert.equal(trustProxyHopsStatus(value), 'FAIL', value);
   }
 });
 
-test('형식은 맞지만 1이 아닌 TRUST_PROXY_HOPS(0·2 이상)는 FAIL이고 값은 출력하지 않는다', async () => {
-  for (const hops of ['0', '2', '10']) {
+test('형식은 맞지만 2가 아닌 TRUST_PROXY_HOPS(0·1·3 이상)는 FAIL이고 값은 출력하지 않는다', async () => {
+  for (const hops of ['0', '1', '3', '10']) {
     const { summary, out } = await runWith({
       railwayVars: { ...BASE_RAILWAY, TRUST_PROXY_HOPS: hops },
     });
