@@ -1,3 +1,4 @@
+import { REVIEW_PHOTO_MAX_BYTES, REVIEW_PHOTO_MAX_COUNT } from '@greenhub/shared';
 import {
   Body,
   Controller,
@@ -8,8 +9,11 @@ import {
   Param,
   Post,
   Put,
+  UploadedFiles,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { Throttle } from '@nestjs/throttler';
 import { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
@@ -20,12 +24,27 @@ import {
   CreatePartnerInquiryDto,
   CreateProductRequestDto,
   CreateReviewDto,
+  HideReviewDto,
+  UnhideReviewDto,
 } from './dto/engagement.dto';
 import { EngagementService } from './engagement.service';
-import { ReviewsService } from './reviews.service';
+import { type ReviewPhotoUpload, ReviewsService } from './reviews.service';
 
 // 공개 쓰기(찾는 상품 제안·입점 문의)는 기본 1분 100회보다 좁게 막는다.
 const PUBLIC_WRITE_THROTTLE = { default: { limit: 5, ttl: 60_000 } };
+
+/**
+ * 후기 사진 업로드는 사진 파일(`photos`)만 최대 REVIEW_PHOTO_MAX_COUNT개 받는다(배송 사진 업로드와 같은 방식).
+ * 텍스트 필드와 그 밖의 파트는 파싱 단계에서 거절한다.
+ */
+export const REVIEW_PHOTO_UPLOAD_LIMITS = {
+  fileSize: REVIEW_PHOTO_MAX_BYTES,
+  files: REVIEW_PHOTO_MAX_COUNT,
+  fields: 0,
+  parts: REVIEW_PHOTO_MAX_COUNT,
+  fieldNameSize: 64,
+  headerPairs: 20,
+};
 
 /** 로그인 없이 읽고 쓰는 경로. */
 @Controller()
@@ -86,6 +105,29 @@ export class MyEngagementController {
     return this.reviews.createReview(orderId, user.sub, dto);
   }
 
+  // 역할 가드는 multipart 파싱(FilesInterceptor)보다 먼저 실행된다. 쓴 사람 확인은 서비스가 한다.
+  @Post('reviews/:reviewId/photos')
+  @UseGuards(RolesGuard)
+  @Roles('consumer', 'admin')
+  @HttpCode(HttpStatus.OK)
+  @UseInterceptors(
+    FilesInterceptor('photos', REVIEW_PHOTO_MAX_COUNT, { limits: REVIEW_PHOTO_UPLOAD_LIMITS }),
+  )
+  addReviewPhotos(
+    @Param('reviewId') reviewId: string,
+    @CurrentUser() user: JwtPayload,
+    @UploadedFiles() photos?: ReviewPhotoUpload[],
+  ) {
+    return this.reviews.addReviewPhotos(reviewId, user.sub, photos ?? []);
+  }
+
+  @Delete('reviews/:reviewId')
+  @UseGuards(RolesGuard)
+  @Roles('consumer', 'admin')
+  deleteReview(@Param('reviewId') reviewId: string, @CurrentUser() user: JwtPayload) {
+    return this.reviews.deleteOwnReview(reviewId, user.sub);
+  }
+
   @Get('me/restock-subscriptions')
   myRestock(@CurrentUser() user: JwtPayload) {
     return this.engagement.listMyRestock(user.sub);
@@ -117,6 +159,21 @@ export class SellerEngagementController {
     return this.reviews.listStoreReviews(storeId, user.sub, user.role);
   }
 
+  @Post('reviews/:reviewId/hide')
+  @HttpCode(HttpStatus.OK)
+  hideReview(
+    @Param('reviewId') reviewId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: HideReviewDto,
+  ) {
+    return this.reviews.hideReview(
+      reviewId,
+      { userId: user.sub, role: user.role },
+      dto.reasonCode,
+      dto.note,
+    );
+  }
+
   @Get('stores/:storeId/restock-subscriptions/summary')
   restockSummary(@Param('storeId') storeId: string, @CurrentUser() user: JwtPayload) {
     return this.engagement.restockSummary(storeId, user.sub, user.role);
@@ -128,15 +185,34 @@ export class SellerEngagementController {
   }
 }
 
-/** 관리자 전용 입점 문의 목록. */
+/** 관리자 전용: 입점 문의 목록, 숨긴 후기 목록과 숨김 해제. */
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 export class AdminEngagementController {
-  constructor(private readonly engagement: EngagementService) {}
+  constructor(
+    private readonly engagement: EngagementService,
+    private readonly reviews: ReviewsService,
+  ) {}
 
   @Get('admin/partner-inquiries')
   partnerInquiries() {
     return this.engagement.listPartnerInquiries();
+  }
+
+  @Get('admin/reviews/hidden')
+  hiddenReviews() {
+    return this.reviews.listHiddenReviews();
+  }
+
+  // 판매자가 숨긴 후기도 관리자만 다시 공개한다(판매자 해제 불가).
+  @Post('admin/reviews/:reviewId/unhide')
+  @HttpCode(HttpStatus.OK)
+  unhideReview(
+    @Param('reviewId') reviewId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: UnhideReviewDto,
+  ) {
+    return this.reviews.unhideReview(reviewId, { userId: user.sub, role: user.role }, dto.reason);
   }
 }

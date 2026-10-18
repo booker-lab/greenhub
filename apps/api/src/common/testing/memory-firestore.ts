@@ -51,13 +51,15 @@ export function createMemoryFirestore(initial: Record<string, RecordData> = {}) 
   };
 
   const runTransaction = async <T>(callback: (tx: any) => Promise<T>): Promise<T> => {
-    const pending = new Map<string, RecordData>();
+    const pending = new Map<string, RecordData | undefined>();
     let wrote = false;
     const read = (path: string) => (pending.has(path) ? pending.get(path) : records.get(path));
     const tx = {
       get: async (ref: { path?: string; get: () => Promise<unknown> }) => {
         if (wrote) throw new Error('Firestore transactions require all reads before all writes');
-        return typeof ref.path === 'string' ? snap(lastSegment(ref.path), read(ref.path)) : ref.get();
+        return typeof ref.path === 'string'
+          ? snap(lastSegment(ref.path), read(ref.path))
+          : ref.get();
       },
       set: (ref: { path: string }, data: RecordData, options?: { merge?: boolean }) => {
         wrote = true;
@@ -70,11 +72,19 @@ export function createMemoryFirestore(initial: Record<string, RecordData> = {}) 
       },
       update: (ref: { path: string }, data: RecordData) => {
         wrote = true;
+        if (read(ref.path) === undefined) throw new Error(`update: 문서 없음 ${ref.path}`);
         pending.set(ref.path, { ...(read(ref.path) ?? {}), ...data });
+      },
+      delete: (ref: { path: string }) => {
+        wrote = true;
+        pending.set(ref.path, undefined);
       },
     };
     const value = await callback(tx);
-    for (const [path, data] of pending) records.set(path, data);
+    for (const [path, data] of pending) {
+      if (data === undefined) records.delete(path);
+      else records.set(path, data);
+    }
     return value;
   };
 

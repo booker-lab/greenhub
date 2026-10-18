@@ -1,99 +1,20 @@
 'use client';
 
-import { REVIEW_TEXT_MAX_LENGTH, type ReviewPublic } from '@greenhub/shared';
-import { Box, Button, Group, Paper, Stack, Text, Textarea } from '@mantine/core';
+import { Box, Button, Paper, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useCart } from '@/hooks/useCart';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
-import { BenchmarkApiError, createReview, fetchOrderReviews } from '@/lib/benchmark-api';
 import { isFeatureOn } from '@/lib/features';
 import { roundItemCartInput } from '@/lib/round-quick-add';
 import type { OrderBenchmarkExtras } from '@/app/mypage/orders/[id]/_detail';
+import OrderReviews from './OrderReviews';
 
 // MY 주문 상세의 벤치마킹 비교 기능: 옵션·선물 표시, 후기 쓰기, 다시 주문하기, 관리 안내.
 
 const REVIEWABLE = new Set(['DELIVERED', 'PICKED_UP', 'REVIEWED']);
-
-function ReviewForm({
-  orderId,
-  productId,
-  productName,
-  token,
-  onDone,
-}: {
-  orderId: string;
-  productId: string;
-  productName: string;
-  token: string;
-  onDone: (review: ReviewPublic) => void;
-}) {
-  const [rating, setRating] = useState(5);
-  const [text, setText] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [sending, setSending] = useState(false);
-  return (
-    <Stack gap={6} mt="xs">
-      <Group gap={2} role="group" aria-label={`${productName} 별점`}>
-        {[1, 2, 3, 4, 5].map((value) => (
-          <button
-            key={value}
-            type="button"
-            aria-pressed={rating === value}
-            aria-label={`${value}점`}
-            onClick={() => setRating(value)}
-            style={{
-              background: 'transparent',
-              border: 0,
-              color: value <= rating ? '#F5A524' : 'var(--color-border)',
-              cursor: 'pointer',
-              fontSize: 26,
-              height: 'var(--touch-target)',
-              padding: 0,
-              width: 36,
-            }}
-          >
-            ★
-          </button>
-        ))}
-      </Group>
-      <Textarea
-        aria-label={`${productName} 후기`}
-        placeholder="꽃 상태, 크기, 포장은 어땠나요?"
-        maxLength={REVIEW_TEXT_MAX_LENGTH}
-        autosize
-        minRows={3}
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-      />
-      {error && (
-        <Text role="alert" size="sm" c="var(--color-danger)">
-          {error}
-        </Text>
-      )}
-      <Button
-        radius="xl"
-        loading={sending}
-        disabled={text.trim().length < 5}
-        onClick={async () => {
-          setSending(true);
-          setError(null);
-          try {
-            onDone(await createReview(orderId, token, { productId, rating, text: text.trim() }));
-          } catch (e) {
-            setError(e instanceof BenchmarkApiError ? e.message : '후기를 남기지 못했어요.');
-          } finally {
-            setSending(false);
-          }
-        }}
-      >
-        후기 남기기
-      </Button>
-    </Stack>
-  );
-}
 
 export default function OrderDetailExtras({
   orderId,
@@ -117,25 +38,12 @@ export default function OrderDetailExtras({
   const reviewsOn = isFeatureOn('reviews') && REVIEWABLE.has(status);
   const reorderOn = isFeatureOn('reorder') && isRoundOrder;
   const { currentRound } = useSaleRounds(reorderOn ? storeId : null);
-  const [written, setWritten] = useState<Record<string, ReviewPublic>>({});
-  const [openForm, setOpenForm] = useState<string | null>(null);
   const [reorderMessage, setReorderMessage] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!reviewsOn || !token) return;
-    let active = true;
-    fetchOrderReviews(orderId, token)
-      .then((list) => {
-        if (active) setWritten(Object.fromEntries(list.map((review) => [review.productId, review])));
-      })
-      .catch(() => {});
-    return () => {
-      active = false;
-    };
-  }, [orderId, reviewsOn, token]);
-
   const nameOf = (id: string) => items.find((item) => item.id === id)?.productName ?? '상품';
-  const optionLines = isFeatureOn('option-sheet') ? extras.items.filter((item) => item.optionLabel) : [];
+  const optionLines = isFeatureOn('option-sheet')
+    ? extras.items.filter((item) => item.optionLabel)
+    : [];
   const showGift = isFeatureOn('gift') && extras.gift;
   const reorderable =
     reorderOn && currentRound?.status === 'OPEN'
@@ -143,7 +51,8 @@ export default function OrderDetailExtras({
           .map((item) => ({
             item,
             roundItem: currentRound.items.find(
-              (candidate) => candidate.productId === item.productId && candidate.status === 'ACTIVE',
+              (candidate) =>
+                candidate.productId === item.productId && candidate.status === 'ACTIVE',
             ),
           }))
           .filter((entry) => entry.roundItem)
@@ -175,9 +84,13 @@ export default function OrderDetailExtras({
                   선물
                 </Text>
                 <Text size="sm">받는 분 · {extras.gift.recipientName}</Text>
-                {extras.gift.recipientPhone && <Text size="sm">받는 분 연락처 · {extras.gift.recipientPhone}</Text>}
+                {extras.gift.recipientPhone && (
+                  <Text size="sm">받는 분 연락처 · {extras.gift.recipientPhone}</Text>
+                )}
                 <Text size="sm">보내는 분 · {extras.gift.senderName}</Text>
-                {extras.gift.cardMessage && <Text size="sm">카드 문구 · "{extras.gift.cardMessage}"</Text>}
+                {extras.gift.cardMessage && (
+                  <Text size="sm">카드 문구 · "{extras.gift.cardMessage}"</Text>
+                )}
               </Stack>
             )}
           </Stack>
@@ -185,55 +98,22 @@ export default function OrderDetailExtras({
       )}
 
       {reviewsOn && token && (
-        <Paper p="md" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
-          <Text fw={800} mb="xs">
-            후기
-          </Text>
-          <Stack gap="sm">
-            {extras.items.map((item) => {
-              const review = written[item.productId];
-              return (
-                <Box key={item.id}>
-                  <Group justify="space-between" wrap="nowrap">
-                    <Text size="sm" fw={700}>
-                      {nameOf(item.id)}
-                    </Text>
-                    {review ? (
-                      <Text size="sm" c="var(--color-primary-dark)" fw={700}>
-                        ★ {review.rating} 남김
-                      </Text>
-                    ) : (
-                      <Button
-                        size="compact-sm"
-                        variant="light"
-                        radius="xl"
-                        onClick={() => setOpenForm(openForm === item.productId ? null : item.productId)}
-                      >
-                        후기 쓰기
-                      </Button>
-                    )}
-                  </Group>
-                  {!review && openForm === item.productId && (
-                    <ReviewForm
-                      orderId={orderId}
-                      productId={item.productId}
-                      productName={nameOf(item.id)}
-                      token={token}
-                      onDone={(created) => {
-                        setWritten((current) => ({ ...current, [item.productId]: created }));
-                        setOpenForm(null);
-                      }}
-                    />
-                  )}
-                </Box>
-              );
-            })}
-          </Stack>
-        </Paper>
+        <OrderReviews
+          orderId={orderId}
+          token={token}
+          items={extras.items.map((item) => ({
+            id: item.id,
+            productId: item.productId,
+            productName: nameOf(item.id),
+          }))}
+        />
       )}
 
       {isFeatureOn('care-guide') && REVIEWABLE.has(status) && (
-        <Paper p="md" style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}>
+        <Paper
+          p="md"
+          style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
+        >
           <Text fw={800} size="sm" c="var(--color-primary-dark)">
             받은 꽃 관리 안내
           </Text>
