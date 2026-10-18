@@ -969,7 +969,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
         reason: '배송지 출입이 어려워 배송이 보류되었습니다.',
       },
       'order-1',
-      undefined,
+      'order-transition:order-1:PREPARING:DELIVERY_HELD:hold-1',
     );
     expect(notifications.sendToUser.mock.calls[0][2]).not.toHaveProperty(
       'reason',
@@ -994,7 +994,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       'ORDER_REDELIVERY_PAYMENT_REQUESTED',
       { orderId: 'order-1' },
       'order-1',
-      undefined,
+      'order-transition:order-1:DELIVERY_HELD:PREPARING:hold-1',
     );
   });
 
@@ -1107,7 +1107,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       'ORDER_CANCELLED',
       { orderId: 'order-cancel', reason: expected },
       'order-cancel',
-      undefined,
+      'order-transition:order-cancel:CANCELLED',
     );
   });
 
@@ -1117,6 +1117,12 @@ describe('MVP 회차 주문 흐름 계약', () => {
     ['제어문자 사유', '재고\t부족'],
     ['이메일 포함', 'buyer@example.com 요청'],
     ['전화번호 포함', '010-1234-5678 요청'],
+    ['대표번호 포함', '환불은 1588-1234로 문의'],
+    ['유선번호 포함', '고객센터 02-123-4567'],
+    ['인터넷전화 포함', '070 1234 5678 연락 바람'],
+    ['웹 주소 포함', '자세한 안내 https://example.test/refund'],
+    ['짧은 링크 포함', '환불 신청 bit.ly/abc'],
+    ['도메인 포함', '그린러브.kr 에서 확인'],
   ])('%s는 환불과 상태 저장 전에 거부한다', async (_name, reason) => {
     const { firestore, records } = makeFirestore(
       seedRoundRecords({

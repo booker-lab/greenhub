@@ -1,6 +1,7 @@
 import { Badge, Box, Container, Group, Text } from '@mantine/core';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { isFeatureOn } from '@/lib/features';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -59,6 +60,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 { href: '/admin/settlements', label: '정산' },
                 { href: '/admin/invite', label: '초대' },
                 { href: '/admin/banner', label: '배너' },
+                ...(isFeatureOn('partner-inquiry')
+                  ? [{ href: '/admin/partner-inquiries', label: '입점 문의' }]
+                  : []),
+                ...(isFeatureOn('reviews') ? [{ href: '/admin/reviews', label: '후기' }] : []),
               ].map((item) => (
                 <a
                   key={item.href}

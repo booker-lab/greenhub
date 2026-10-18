@@ -237,7 +237,7 @@ describe('legacy plain status write duplicate-submit 계약', () => {
       'ORDER_PREPARING',
       { orderId: 'order-1' },
       'order-1',
-      undefined,
+      'order-transition:order-1:ACCEPTED:PREPARING',
     );
     const updatedAtAfterSuccess = context.memory.read('orders/order-1')['updatedAt'];
 
@@ -295,7 +295,7 @@ describe('legacy plain status write duplicate-submit 계약', () => {
       'ORDER_DELIVERED',
       { orderId: 'order-1' },
       'order-1',
-      undefined,
+      'order-transition:order-1:PREPARING:DELIVERED',
     );
     const updatedAtAfterSuccess = winner.memory.read('orders/order-1')['updatedAt'];
 
@@ -356,8 +356,9 @@ describe('legacy plain status write duplicate-submit 계약', () => {
       'ORDER_DELIVERY_HELD',
       expect.objectContaining({ orderId: 'order-1' }),
       'order-1',
-      undefined,
+      'order-transition:order-1:PREPARING:DELIVERY_HELD:hold-1',
     );
+    expect(winner.memory.read('orders/order-1')).toMatchObject({ deliveryHoldCount: 1 });
     const heldAtAfterSuccess = winner.memory.read('orders/order-1')['deliveryHold']['heldAt'];
     const updatedAtAfterSuccess = winner.memory.read('orders/order-1')['updatedAt'];
 

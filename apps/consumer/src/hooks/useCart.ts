@@ -22,6 +22,15 @@ export interface CartItem {
   roundId?: string;
   roundItemId?: string;
   roundPrice?: number;
+  /**
+   * 옵션 시트(벤치마킹 비교 기능)로 고른 옵션. price = roundPrice + optionPriceDelta.
+   * 한 회차 상품은 한 가지 옵션 조합만 담는다(서버가 같은 회차 상품 중복 주문을 거부한다).
+   */
+  optionChoiceIds?: string[];
+  optionLabel?: string;
+  optionPriceDelta?: number;
+  /** 문구가 필요한 옵션(스티커 라벨·3D 토퍼)에 넣을 문구 */
+  optionText?: string;
 }
 
 export interface RoundCartItem extends CartItem {
@@ -99,21 +108,51 @@ function hasRoundMetadata(value: Record<string, unknown>) {
   return 'roundId' in value || 'roundItemId' in value || 'roundPrice' in value;
 }
 
+/** 옵션 필드가 함께 있으면 셋 다 형식이 맞아야 옵션으로 본다. 없으면 null(옵션 없음). */
+function readCartOptions(
+  value: Record<string, unknown>,
+): Pick<CartItem, 'optionChoiceIds' | 'optionLabel' | 'optionPriceDelta' | 'optionText'> | null | 'invalid' {
+  const hasAny =
+    'optionChoiceIds' in value || 'optionLabel' in value || 'optionPriceDelta' in value;
+  if (!hasAny) return null;
+  const ids = value.optionChoiceIds;
+  if (
+    !Array.isArray(ids) ||
+    ids.length === 0 ||
+    ids.length > 3 ||
+    !ids.every(isCartIdentifier) ||
+    typeof value.optionLabel !== 'string' ||
+    !isPrice(value.optionPriceDelta) ||
+    (value.optionText !== undefined && (typeof value.optionText !== 'string' || value.optionText.length > 40))
+  ) {
+    return 'invalid';
+  }
+  return {
+    optionChoiceIds: ids as string[],
+    optionLabel: value.optionLabel,
+    optionPriceDelta: value.optionPriceDelta,
+    ...(typeof value.optionText === 'string' && value.optionText ? { optionText: value.optionText } : {}),
+  };
+}
+
 function normalizeStoredCartItem(value: unknown): CartItem | null {
   const base = readBaseCartItem(value);
   if (!base || !isRecord(value)) return null;
+  const options = readCartOptions(value);
+  if (options === 'invalid') return null;
 
   if (
     isCartIdentifier(value.roundId) &&
     isCartIdentifier(value.roundItemId) &&
     isPrice(value.roundPrice) &&
-    value.roundPrice === base.price
+    value.roundPrice + (options?.optionPriceDelta ?? 0) === base.price
   ) {
     return {
       ...base,
       roundId: value.roundId,
       roundItemId: value.roundItemId,
       roundPrice: value.roundPrice,
+      ...(options ?? {}),
     };
   }
 
@@ -127,7 +166,7 @@ export function isRoundCartItem(item: CartItem | undefined): item is RoundCartIt
     isCartIdentifier(item.roundId) &&
     isCartIdentifier(item.roundItemId) &&
     isPrice(item.roundPrice) &&
-    item.roundPrice === item.price
+    item.roundPrice + (item.optionPriceDelta ?? 0) === item.price
   );
 }
 
@@ -193,10 +232,11 @@ export function addCartItem(currentValue: CartItem[], input: CartItemInput): Car
   if (!isQuantity(quantity)) {
     return { ok: false, reason: 'invalid_item', items: current };
   }
+  // 같은 회차 상품을 다른 옵션으로 다시 담으면 새 옵션으로 바꾸고 수량을 더한다.
   return {
     ok: true,
     items: current.map((currentItem) =>
-      isSameCartItem(currentItem, item) ? { ...currentItem, quantity } : currentItem,
+      isSameCartItem(currentItem, item) ? { ...item, quantity } : currentItem,
     ),
   };
 }

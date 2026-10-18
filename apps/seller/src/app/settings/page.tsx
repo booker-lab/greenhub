@@ -11,7 +11,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { apiJson } from '@/lib/api';
 import { getFirebaseAuth } from '@/lib/firebase';
-import { operationSettingsFor } from './settings-links';
+import { isFeatureOn } from '@/lib/features';
+import { benchmarkSettingsLinks, operationSettingsFor } from './settings-links';
 
 /** 설정 섹션 카드 — 작은 회색 라벨 헤더 + 행 목록. */
 function SectionCard({ label, children }: { label: string; children: ReactNode }) {
@@ -128,6 +129,14 @@ export default function SettingsPage() {
               ))}
             </SectionCard>
           ))}
+
+          {benchmarkSettingsLinks(isFeatureOn).length > 0 && (
+            <SectionCard label="고객 관리">
+              {benchmarkSettingsLinks(isFeatureOn).map((link, index) => (
+                <LinkRow key={link.href} {...link} borderTop={index > 0} />
+              ))}
+            </SectionCard>
+          )}
 
           <SectionCard label="정보">
             <Group justify="space-between" px="md" py="md">

@@ -164,7 +164,7 @@ describe('유료 재배송 서버 불변식', () => {
       'ORDER_REDELIVERY_SCHEDULED',
       { orderId: 'order-1' },
       'order-1',
-      undefined,
+      'order-transition:order-1:DELIVERY_HELD:DELIVERING:hold-1',
     );
 
     await expect(resume(context)).rejects.toBeInstanceOf(ForbiddenException);
@@ -197,7 +197,7 @@ describe('유료 재배송 서버 불변식', () => {
       'ORDER_REDELIVERY_PAYMENT_REQUESTED',
       { orderId: 'order-1' },
       'order-1',
-      undefined,
+      'order-transition:order-1:DELIVERY_HELD:PREPARING:hold-1',
     );
 
     const beforeOrder = context.memory.read('orders/order-1');
@@ -218,7 +218,7 @@ describe('유료 재배송 서버 불변식', () => {
       'ORDER_REDELIVERY_SCHEDULED',
       { orderId: 'order-1' },
       'order-1',
-      undefined,
+      'order-transition:order-1:PREPARING:DELIVERING:hold-1',
     );
   });
 
@@ -355,7 +355,7 @@ describe('재배송 준비(HELD → PREPARING) 결제 요청 알림', () => {
     'ORDER_REDELIVERY_PAYMENT_REQUESTED',
     { orderId: 'order-1' },
     'order-1',
-    undefined,
+    'order-transition:order-1:DELIVERY_HELD:PREPARING:hold-1',
   ] as const;
 
   function releaseHold(context: ReturnType<typeof makeContext>) {

@@ -92,12 +92,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      # 운영 비밀값을 쓰는 job이라 의존성 캐시를 쓰지 않는다.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
-      # production-deploy.yml의 Firebase 인증과 같은 방식으로 키를 RUNNER_TEMP에 600 권한으로 쓴다.
-      - name: Firebase 인증
+      # firebase-tools는 npx로 받지 않고 lockfile에 고정된 scripts devDependency만 설치한다(이 step에는 비밀값이 없다).
+      - name: Firebase CLI 설치(lockfile 고정)
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile --filter ./scripts --dev
+          scripts/node_modules/.bin/firebase --version
+
+      # 조회만 한다(datastore.indexes.list). 출력은 인덱스 모양뿐이라 파일로 받아 스크립트가 비교한다.
+      # 서비스 계정 키 파일은 이 step 안에서만 쓰고, 끝나면(실패·취소 포함) 지운다.
+      - name: 운영 인덱스 조회
         shell: bash
         env:
           FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
@@ -106,23 +118,18 @@ jobs:
           if [[ -z "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" ]]; then
             echo 'production Environment 비밀값이 없습니다: FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON' >&2; exit 1
           fi
-          key="$RUNNER_TEMP/firebase-deploy.json"
-          umask 077
-          printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key"
-          chmod 600 "$key"
+          key="$RUNNER_TEMP/firebase-index-drift.json"
+          trap 'rm -f "$key"' EXIT
+          trap 'exit 1' INT TERM
+          (umask 077 && printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key")
+          unset FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON
           project="$(jq -r .project_id "$key")"
           if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
             echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
           fi
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$key" >> "$GITHUB_ENV"
-
-      # 조회만 한다(datastore.indexes.list). 출력은 인덱스 모양뿐이라 파일로 받아 스크립트가 비교한다.
-      - name: 운영 인덱스 조회
-        shell: bash
-        run: |
-          set -uo pipefail
           status=0
-          npx -y firebase-tools@14.11.1 firestore:indexes --project "$FIREBASE_PROJECT" --json --non-interactive \
+          GOOGLE_APPLICATION_CREDENTIALS="$key" scripts/node_modules/.bin/firebase \
+            firestore:indexes --project "$FIREBASE_PROJECT" --json --non-interactive \
             > "$RUNNER_TEMP/prod-indexes.json" || status=$?
           if (( status != 0 )); then
             # --json 오류 응답이면 스크립트가 오류 메시지 한 줄만 출력한다.
@@ -136,7 +143,8 @@ jobs:
         shell: bash
         run: node scripts/release/firestore-index-drift.mjs --production="$RUNNER_TEMP/prod-indexes.json" --file=firestore.indexes.json
 
+      # 조회 step이 끝날 때 키를 지우지만, 취소 등으로 남았을 수 있는 파일을 한 번 더 지운다.
       - name: 서비스 계정 키 삭제
         if: always()
         shell: bash
-        run: rm -f "$RUNNER_TEMP/firebase-deploy.json" "$RUNNER_TEMP/prod-indexes.json"
+        run: rm -f "$RUNNER_TEMP/firebase-index-drift.json" "$RUNNER_TEMP/prod-indexes.json"
