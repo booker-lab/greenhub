@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
-import { getAllowedTransitions } from './orders.helpers';
+import { deliveryTransitionViolation, getAllowedTransitions } from './orders.helpers';
 import {
   throwDriverOrderAuthorityDenied,
   throwDriverOrderStateConflict,
@@ -373,7 +373,17 @@ export class DriverOrderScopeService {
       );
     }
 
-    if (input.order['driverId'] === input.requesterId) return;
+    if (input.order['driverId'] === input.requesterId) {
+      // 배정 기사라도 배송 방법으로 갈 수 없는 전이(직배송·회차 주문의 거점 도착, 거점 주문의 배송 완료)는
+      // 막는다. 배정 여부를 확인한 뒤에 판정해 다른 기사에게는 기존 권한 오류만 보인다.
+      const violation = deliveryTransitionViolation(
+        input.order['status'] as OrderStatus,
+        input.nextStatus as OrderStatus,
+        input.order,
+      );
+      if (violation) throwDriverOrderStateConflict(violation);
+      return;
+    }
     if (input.order['driverId'] != null) {
       if (inTransaction) {
         throwDriverOrderStateConflict('이미 다른 기사에게 배정된 주문입니다.', true);

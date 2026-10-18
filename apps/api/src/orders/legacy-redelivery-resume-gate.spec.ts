@@ -208,12 +208,13 @@ describe.each(variants)('legacy 판매자 경로 유료 재배송 결제 게이�
     });
     expect(heldOrderCount(context)).toBe(expectedHeldCount(variant, false));
     expect(context.notifications.sendToUser).toHaveBeenCalledTimes(1);
+    // 보류 회차 필드가 없던 주문은 보류 기록이 있으면 1회차로 본다.
     expect(context.notifications.sendToUser).toHaveBeenCalledWith(
       'consumer-1',
       'ORDER_REDELIVERY_PAYMENT_REQUESTED',
       { orderId: 'order-1' },
       'order-1',
-      undefined,
+      'order-transition:order-1:DELIVERY_HELD:PREPARING:hold-1',
     );
   });
 
@@ -285,7 +286,7 @@ describe.each(variants)('legacy 판매자 경로 유료 재배송 결제 게이�
         'ORDER_REDELIVERY_SCHEDULED',
         { orderId: 'order-1' },
         'order-1',
-        undefined,
+        'order-transition:order-1:PREPARING:DELIVERING:hold-1',
       );
       expect(context.notifications.sendToUser).toHaveBeenCalledTimes(2);
 
@@ -325,7 +326,7 @@ describe.each(variants)('legacy 판매자 경로 유료 재배송 결제 게이�
         'ORDER_REDELIVERY_SCHEDULED',
         { orderId: 'order-1' },
         'order-1',
-        undefined,
+        'order-transition:order-1:DELIVERY_HELD:DELIVERING:hold-1',
       );
 
       const afterResume = snapshot(context);
@@ -377,7 +378,7 @@ describe.each(variants)('legacy 판매자 경로 유료 재배송 결제 게이�
       'ORDER_DELIVERING',
       { orderId: 'order-1' },
       'order-1',
-      undefined,
+      'order-transition:order-1:PREPARING:DELIVERING:hold-1',
     );
   });
 });
