@@ -112,7 +112,6 @@ function toPublicContent(
 
 /** 팔도감 벤치마킹 비교용 상품 추가 정보(ProductExtras) — 공개해도 되는 필드만 옮긴다. */
 export const PUBLIC_PRODUCT_EXTRA_FIELDS = [
-  'listPrice',
   'size',
   'light',
   'placements',

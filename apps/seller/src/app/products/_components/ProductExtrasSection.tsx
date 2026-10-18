@@ -43,7 +43,6 @@ export function ProductExtrasSection({
   onChange: (next: ProductExtrasForm) => void;
 }) {
   const on = {
-    discount: isFeatureOn('card-discount'),
     size: isFeatureOn('size-info'),
     care: isFeatureOn('care-guide'),
     options: isFeatureOn('option-sheet'),
@@ -58,12 +57,6 @@ export function ProductExtrasSection({
 
   return (
     <Stack gap="sm">
-      {on.discount && (
-        <FieldCard label="정상가 (판매가보다 높을 때만 할인율로 보여요)">
-          {numberInput(extras.listPrice, (listPrice) => patch({ listPrice }), '정상가', '원')}
-        </FieldCard>
-      )}
-
       {on.size && (
         <FieldCard label="크기">
           <SimpleGrid cols={2} spacing="xs">

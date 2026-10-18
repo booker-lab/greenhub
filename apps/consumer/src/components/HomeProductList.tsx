@@ -297,8 +297,8 @@ function RoundProductCardLink({
           fontWeight: 'var(--fw-extrabold)',
         }}
       >
-        <CardDiscount item={item} />
         {item.roundPrice.toLocaleString()}원
+        <CardDiscount item={item} />
       </Text>
       <CardMeta item={item} isPast={isPast} />
       {tag && (

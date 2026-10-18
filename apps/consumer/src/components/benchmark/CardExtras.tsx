@@ -3,10 +3,11 @@
 import type { Product, ReviewSummary, SaleRoundItem, StorePublicProfile } from '@greenhub/shared';
 import { Heart } from 'lucide-react';
 import { createContext, type ReactNode, useContext } from 'react';
+import { priceDropFromPreviousRound, previousRoundDropLabel } from '@/lib/benchmark-format';
 import { isFeatureOn } from '@/lib/features';
-import { discountRate } from '@/lib/benchmark-format';
 
-// 회차 상품 카드에 붙는 벤치마킹 비교 기능(할인율·별점·판매자·보장·남은 수량·이번 회차 찜).
+// 회차 상품 카드에 붙는 벤치마킹 비교 기능(지난 회차 대비 가격·별점·판매자·보장·남은 수량·
+// 이번 회차 찜).
 // 크기 정보는 카드에 두지 않고 상품 상세에서만 보여 준다.
 // 홈·상품 탭이 Provider로 상품 원본과 통계를 넘기고, 카드는 기능 토글이 켜진 것만 그린다.
 
@@ -47,18 +48,15 @@ export function CardSellerLine() {
   );
 }
 
-/** 가격 앞 할인율과 정상가(card-discount). 가격 줄 안에 넣는다. */
+/** 가격 아래 "지난 회차보다 N원 내렸어요"(card-discount). 가격 줄 안 끝에 넣는다. */
 export function CardDiscount({ item }: { item: SaleRoundItem }) {
-  const ctx = useBenchmarkCard();
-  const product = ctx?.productsById.get(item.productId);
-  const rate = isFeatureOn('card-discount') ? discountRate(product?.listPrice, item.roundPrice) : null;
-  if (!rate || !product?.listPrice) return null;
+  const drop = isFeatureOn('card-discount')
+    ? priceDropFromPreviousRound(item.previousRoundPrice, item.roundPrice)
+    : null;
+  if (!drop) return null;
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'baseline', gap: 4, marginRight: 4 }}>
-      <span style={{ color: 'var(--color-primary-dark)', fontWeight: 'var(--fw-extrabold)' }}>{rate}%</span>
-      <s style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-xs)', fontWeight: 400 }}>
-        {product.listPrice.toLocaleString()}원
-      </s>
+    <span style={{ ...smallText, color: 'var(--color-primary-dark)', display: 'block' }}>
+      {previousRoundDropLabel(drop)}
     </span>
   );
 }

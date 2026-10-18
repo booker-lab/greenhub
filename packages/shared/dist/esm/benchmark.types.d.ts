@@ -39,8 +39,6 @@ export declare const PRODUCT_OPTION_PRICE_DELTA_MAX = 200000;
 /** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
 export declare const OPTION_TEXT_MAX_LENGTH = 20;
 export interface ProductExtras {
-    /** 정상가. 회차 가격보다 높을 때만 할인율을 보여준다. */
-    listPrice?: number;
     size?: ProductSize;
     light?: LightLevel;
     placements?: Placement[];

@@ -11,7 +11,7 @@ import {
   type ProductOptionGroup,
 } from '@greenhub/shared';
 
-// 상품 등록·수정의 팔도감 벤치마킹 추가 정보(정상가·크기·두는 곳·관리법·옵션 등).
+// 상품 등록·수정의 팔도감 벤치마킹 추가 정보(크기·두는 곳·관리법·옵션 등).
 // 화면 입력은 문자열로 받고, 제출할 때 API 계약(ProductExtras)으로 바꾼다.
 
 export const CARE_TEXT_MAX = 120;
@@ -33,7 +33,6 @@ export interface OptionGroupForm {
 }
 
 export interface ProductExtrasForm {
-  listPrice: string;
   heightCm: string;
   widthCm: string;
   potDiameterCm: string;
@@ -49,7 +48,6 @@ export interface ProductExtrasForm {
 
 export function defaultExtras(): ProductExtrasForm {
   return {
-    listPrice: '',
     heightCm: '',
     widthCm: '',
     potDiameterCm: '',
@@ -76,7 +74,6 @@ export function extrasFromProduct(data: Partial<ProductExtras> | null | undefine
   if (!data) return base;
   const options = Array.isArray(data.options) ? data.options : [];
   return {
-    listPrice: numText(data.listPrice),
     heightCm: numText(data.size?.heightCm),
     widthCm: numText(data.size?.widthCm),
     potDiameterCm: numText(data.size?.potDiameterCm),
@@ -121,14 +118,9 @@ export type ExtrasBodyResult = { ok: true; body: ProductExtras } | { ok: false; 
 
 /**
  * 입력 상태 → API 본문. 수정 화면에서 값을 지울 수 있도록 목록·관리법·여부 값은 항상 보낸다.
- * 정상가가 판매가 이하이면 할인처럼 보이지 않도록 막는다(price는 원 단위 정수).
  */
-export function extrasBody(form: ProductExtrasForm, price: number): ExtrasBodyResult {
+export function extrasBody(form: ProductExtrasForm): ExtrasBodyResult {
   try {
-    const listPrice = optionalInt(form.listPrice, '정상가', 0, 100_000_000);
-    if (listPrice !== undefined && listPrice > 0 && listPrice <= price) {
-      return { ok: false, error: '정상가는 판매가보다 높을 때만 입력해 주세요.' };
-    }
     const size = {
       heightCm: optionalInt(form.heightCm, '높이', 1, 500),
       widthCm: optionalInt(form.widthCm, '폭', 1, 500),
@@ -185,7 +177,6 @@ export function extrasBody(form: ProductExtrasForm, price: number): ExtrasBodyRe
       guaranteed: form.guaranteed,
       aliases,
     };
-    if (listPrice !== undefined) body.listPrice = listPrice;
     const definedSize = Object.fromEntries(Object.entries(size).filter(([, value]) => value !== undefined));
     if (Object.keys(definedSize).length > 0) body.size = definedSize;
     if (form.light) body.light = form.light;
