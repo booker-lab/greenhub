@@ -1,11 +1,14 @@
 import { test, expect } from '@playwright/test'
 import { spawnSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { resolve } from 'node:path'
 import { E2E_API_BASE_MISSING_REASON, resolveE2EApiBase } from './_helpers/target-url'
 
 // 운영 기본값 없음 — API_BASE가 없으면 건너뛰고, 운영 API를 지정하면 파일 로드 단계에서 중단한다.
 const API = resolveE2EApiBase()
 const CLEANUP_SCRIPT = resolve(__dirname, '../../../scripts/cleanup-spec-residue.mjs')
+// 가입 비밀번호는 실행마다 새로 만든다. 저장소에 공개된 고정 값으로 계정을 만들지 않는다.
+const REGISTER_PASSWORD = randomBytes(24).toString('base64url')
 
 /**
  * POST /auth/register — 초대 토큰 검증 (BUG-SEC)
@@ -37,7 +40,7 @@ test.describe('POST /auth/register — 초대 토큰 검증', () => {
     const res = await request.post(`${API}/auth/register`, {
       data: {
         email: `sec-test-${Date.now()}@example.com`,
-        password: 'password123',
+        password: REGISTER_PASSWORD,
         name: '테스트셀러',
         role: 'seller',
       },
@@ -51,7 +54,7 @@ test.describe('POST /auth/register — 초대 토큰 검증', () => {
     const res = await request.post(`${API}/auth/register`, {
       data: {
         email: `sec-test-${Date.now()}@example.com`,
-        password: 'password123',
+        password: REGISTER_PASSWORD,
         name: '테스트셀러',
         role: 'seller',
         inviteToken: 'INVALIDTOKEN0000',
@@ -68,7 +71,7 @@ test.describe('POST /auth/register — 초대 토큰 검증', () => {
     const email = `consumer-sec-${Date.now()}@example.com`
     registeredEmails.push(email)
     const res = await request.post(`${API}/auth/register`, {
-      data: { email, password: 'password123', name: '테스트소비자', role: 'consumer' },
+      data: { email, password: REGISTER_PASSWORD, name: '테스트소비자', role: 'consumer' },
     })
     expect(res.status()).toBe(201)
     const body = await res.json()
@@ -81,7 +84,7 @@ test.describe('POST /auth/register — 초대 토큰 검증', () => {
     const email = `driver-sec-${Date.now()}@example.com`
     registeredEmails.push(email)
     const res = await request.post(`${API}/auth/register`, {
-      data: { email, password: 'password123', name: '테스트드라이버', role: 'driver' },
+      data: { email, password: REGISTER_PASSWORD, name: '테스트드라이버', role: 'driver' },
     })
     expect(res.status()).toBe(201)
     const body = await res.json()
