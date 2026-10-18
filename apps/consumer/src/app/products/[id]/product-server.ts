@@ -1,5 +1,6 @@
 import { cache } from 'react';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { type StructuredRound, selectOrderableRound } from '@/lib/structured-data';
 
 export interface ProductLoadHint {
   id: string;
@@ -24,6 +25,42 @@ export const fetchCachedProduct = cache(
     }
   },
 );
+
+// 구조화 데이터의 가격·판매 상태용. 회차 상태는 시각에 따라 바뀌므로 상품보다 짧게 캐시한다.
+const ROUND_REVALIDATE_SECONDS = 60;
+
+async function fetchJson(url: string): Promise<unknown> {
+  try {
+    const response = await fetch(url, {
+      next: { revalidate: ROUND_REVALIDATE_SECONDS },
+      signal: AbortSignal.timeout(3000),
+    });
+    return response.ok ? ((await response.json()) as unknown) : null;
+  } catch {
+    return null;
+  }
+}
+
+function readItems(payload: unknown): unknown[] | null {
+  if (typeof payload !== 'object' || payload === null || !('items' in payload)) return null;
+  return Array.isArray(payload.items) ? payload.items : null;
+}
+
+/** 지금 주문할 수 있거나 곧 주문을 받는 공개 회차(품목 포함). 없거나 읽지 못하면 null. */
+export async function loadOrderableRound(
+  storeId: string,
+  now: Date = new Date(),
+): Promise<StructuredRound | null> {
+  const listUrl = `${getApiBaseUrl()}/stores/${encodeURIComponent(storeId)}/sale-rounds/public`;
+  const summaries = readItems(await fetchJson(listUrl)) as StructuredRound[] | null;
+  if (!summaries) return null;
+  const target = selectOrderableRound(summaries, now);
+  if (!target) return null;
+  const detail = await fetchJson(`${listUrl}/${encodeURIComponent(target.id)}`);
+  const items = readItems(detail);
+  if (!items || (detail as StructuredRound).id !== target.id) return null;
+  return detail as StructuredRound;
+}
 
 function optionalId(value: unknown): string | null {
   return typeof value === 'string' && value.length > 0 ? value : null;
