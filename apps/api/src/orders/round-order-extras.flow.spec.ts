@@ -148,10 +148,15 @@ function request(overrides: RecordData = {}) {
   };
 }
 
-function makeService(firestore: any) {
+// features가 undefined면 설정 없이 만든다(테스트·옛 생성부와 같은 기본값 = 모두 꺼짐).
+function makeService(firestore: any, features?: string) {
   const capacity = new OrderCapacityService(firestore);
   const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
-  return new RoundOrderCreateService(firestore, capacity, retention as never);
+  const config =
+    features === undefined
+      ? undefined
+      : { get: (key: string) => (key === 'GREENHUB_FEATURES' ? features : undefined) };
+  return new RoundOrderCreateService(firestore, capacity, retention as never, config as never);
 }
 
 describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () => {
@@ -159,7 +164,7 @@ describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () 
 
   it('옵션 금액을 단가에 더하고, 문구와 선물 정보를 주문서에 남긴다', async () => {
     const { firestore, records } = makeFirestore(seed());
-    const result = await makeService(firestore).create('store-round', 'user-1', request({ gift: GIFT }) as never);
+    const result = await makeService(firestore, 'gift').create('store-round', 'user-1', request({ gift: GIFT }) as never);
     const order = records.get(`orders/${(result as any).orderId}`)!;
     expect(order['orderItems'][0]).toMatchObject({
       unitPrice: 43000,
@@ -200,10 +205,10 @@ describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () 
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('선물 받는 분 연락처가 없으면 거부한다', async () => {
+  it('선물이 켜져 있을 때 받는 분 연락처가 없으면 거부한다', async () => {
     const { firestore } = makeFirestore(seed());
     await expect(
-      makeService(firestore).create(
+      makeService(firestore, 'gift').create(
         'store-round',
         'user-1',
         request({ gift: { ...GIFT, recipientPhone: '' } }) as never,
@@ -220,5 +225,46 @@ describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () 
         request({ roundItems: [{ roundItemId: 'round-item-1', quantity: 1, optionChoiceIds: ['gold', 'none'] }] }) as never,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('선물 정보 저장 토글(GREENHUB_FEATURES의 gift)', () => {
+  const GIFT = { recipientName: '박꽃님', recipientPhone: '01098765432', senderName: '김그린', cardMessage: '개업 축하해요' };
+
+  async function createWithGift(features: string | undefined, gift: RecordData = GIFT) {
+    const { firestore, records } = makeFirestore(seed());
+    const result = await makeService(firestore, features).create(
+      'store-round',
+      'user-1',
+      request({ gift }) as never,
+    );
+    return records.get(`orders/${(result as any).orderId}`)!;
+  }
+
+  it.each([
+    ['설정 없음', undefined],
+    ['빈 값', ''],
+    ['공백만', '   '],
+    ['다른 키만 켜짐', 'reviews,guest-cart'],
+  ])('%s이면 선물 정보를 버리고 주문은 만든다', async (_label, features) => {
+    const order = await createWithGift(features);
+    expect(order['status']).toBe('PENDING');
+    expect(order['totalAmount']).toBe(86000);
+    expect(order).not.toHaveProperty('gift');
+    expect(JSON.stringify(order)).not.toContain('박꽃님');
+  });
+
+  it('꺼져 있으면 형식이 틀린 선물 정보도 거부하지 않고 버린다(옛 앱 호환)', async () => {
+    const order = await createWithGift('', { ...GIFT, recipientPhone: '' });
+    expect(order).not.toHaveProperty('gift');
+  });
+
+  it.each([
+    ['gift', 'gift'],
+    ['all', 'all'],
+    ['쉼표 목록', 'reviews, gift'],
+  ])('%s이면 선물 정보를 저장한다', async (_label, features) => {
+    const order = await createWithGift(features);
+    expect(order['gift']).toEqual({ ...GIFT, recipientPhone: '010-9876-5432' });
   });
 });
