@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import { ColorSchemeScript } from '@mantine/core';
 import Providers from './providers';
 import BottomNav from '@/components/BottomNav';
+import { enabledFeatureKeys } from '@/lib/features';
 import {
   DEFAULT_SHARE_IMAGE,
   SITE_NAME,
@@ -52,6 +53,8 @@ export default async function RootLayout({
     <html lang="ko" suppressHydrationWarning>
       <head>
         <ColorSchemeScript nonce={nonce} />
+        {/* 빌드 때 켜진 기능 토글 키(쉼표 목록, 꺼짐이면 빈 값). E2E가 배포 빌드의 토글을 읽는다. */}
+        <meta name="greenhub-features" content={enabledFeatureKeys().join(',')} />
       </head>
       <body>
         <Providers>
