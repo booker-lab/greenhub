@@ -347,6 +347,10 @@ test('resolveAction은 남길 기록이 있으면 delete를 lock으로 낮추고
     resolveAction({ category: 'unclassified', keptTotal: 0, requested: 'delete' }),
     'keep',
   );
+  assert.equal(
+    resolveAction({ category: 'reference', keptTotal: 3, requested: 'delete-keep-records' }),
+    'delete-keep-records',
+  );
 });
 
 test('computePlanHash는 순서와 무관하고 대상·처리·프로젝트가 바뀌면 달라진다', () => {
@@ -619,6 +623,7 @@ test('apply는 확인된 계획의 uid만 지우거나 잠그고, 남길 기록�
     tool: 'retire-test-accounts.mjs',
     category: 'admin-test',
     role: 'admin',
+    keptRecords: {},
     removed: { refreshSessions: 2, firebaseAuthUser: true },
   });
   assert.equal(audits.find((a) => a.userId === U.specConsumer).detail.removed.emailIdentities, 1);
@@ -716,4 +721,58 @@ test('apply는 Firestore 삭제 뒤 남은 Firebase Auth 사용자를 다시 실
   out = h.output();
   assert.match(out, /adm1n000 .*→ deleted \(남은 연결 문서만 정리\)/);
   assert.ok(!h.fakeAuth.state[U.admin]);
+});
+
+test('delete-keep-records는 직접 고른 reference 계정만 지우고 주문·매장 기록은 남긴다', async () => {
+  const h = harness({
+    seed: baseSeed({ 'orders/o7': { userId: U.refConsumer, storeId: 'store-x' } }),
+  });
+  assert.equal(
+    await h.run([
+      'plan',
+      '--out',
+      PLAN_PATH,
+      '--include',
+      'refcons1=delete-keep-records',
+      '--include',
+      's3ller00=delete-keep-records',
+    ]),
+    0,
+  );
+  const plan = h.plan();
+  assert.deepEqual(
+    entryTuples(plan).filter(([, category]) => category === 'reference'),
+    [
+      [U.refConsumer, 'reference', 'delete-keep-records'],
+      [U.refSeller, 'reference', 'delete-keep-records'],
+    ],
+  );
+  assert.match(h.output(), /기록을 남긴 채 계정만 지울 것: 2건 \(남는 기록 3건\)/);
+  h.reset();
+
+  assert.equal(await quietly(() => h.run(applyArgs(plan.planHash, PRODUCTION_WRITE_FLAG))), 0);
+  assertNoRawIdentifiers(h.output());
+  const { docs } = h.fake;
+  assert.ok(!docs.has(`users/${U.refConsumer}`));
+  assert.ok(!docs.has(`users/${U.refSeller}`));
+  assert.ok(docs.has('orders/o7'));
+  assert.ok(docs.has('stores/store-1'));
+  assert.equal(docs.get('stores/store-1').ownerId, U.refSeller);
+  const audit = [...docs.values()].find(
+    (d) => d.action === DELETE_AUDIT_ACTION && d.userId === U.refSeller,
+  );
+  assert.deepEqual(audit.detail.keptRecords, { 'stores.ownerId': 1, 'users.storeId': 1 });
+  assert.equal(audit.detail.category, 'reference');
+});
+
+test('delete-keep-records는 --include로만 고를 수 있고 spec-temp에는 쓸 수 없다', async () => {
+  const h = harness();
+  assert.equal(
+    await h.run(['plan', '--out', PLAN_PATH, '--include', 'c0nsord0=delete-keep-records']),
+    1,
+  );
+  assert.match(h.output(), /reference 계정만/);
+  h.reset();
+  assert.equal(await h.run(['plan', '--out', PLAN_PATH, '--include', 'refcons1=delete-keep']), 1);
+  assert.match(h.output(), /형식/);
 });
