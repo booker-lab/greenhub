@@ -6,6 +6,8 @@ import { Box, Button, Container, Skeleton, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
 import { notFound, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import DetailExtras from '@/components/benchmark/DetailExtras';
+import PanelExtras from '@/components/benchmark/PanelExtras';
 import ProductTopBar from '@/components/ProductTopBar';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
@@ -330,7 +332,9 @@ function ProductDetailContent({ product, variety, roundProduct }: ProductDetailC
             isPurchasable={roundProduct.isPurchasable}
           />
         )}
+        {roundProduct && <PanelExtras product={product} item={roundProduct.item} />}
         <ProductInfo product={product} variety={variety} showSummary={!roundProduct} />
+        {roundProduct && <DetailExtras product={product} round={roundProduct.round} />}
         {roundProduct && <RoundPurchaseNotices />}
         {roundProduct ? (
           <ProductActions product={product} roundProduct={roundProduct} />

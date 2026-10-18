@@ -9,6 +9,7 @@ import { useEffect } from 'react';
 import A2HSButton from '@/components/A2HSButton';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { useOrders } from '@/hooks/useOrders';
+import { isFeatureOn } from '@/lib/features';
 
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   PENDING: '결제 확인 중',
@@ -375,6 +376,14 @@ export default function MyPageClient() {
           내 정보
         </Title>
         <Stack gap="xs">
+          {/* 벤치마킹 비교 기능: 이번 회차 찜(wishlist) */}
+          {isFeatureOn('wishlist') && (
+            <MenuLink label="이번 회차 찜" onClick={() => router.push('/mypage/wishlist')} />
+          )}
+          {/* 벤치마킹 비교 기능: 구매한 꽃(purchase-history) */}
+          {isFeatureOn('purchase-history') && (
+            <MenuLink label="구매한 꽃" onClick={() => router.push('/mypage/purchase-history')} />
+          )}
           <UnstyledButton
             onClick={() => router.push('/mypage/notifications')}
             style={{
@@ -436,5 +445,29 @@ export default function MyPageClient() {
         <A2HSButton />
       </Box>
     </Container>
+  );
+}
+
+function MenuLink({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <UnstyledButton
+      onClick={onClick}
+      style={{
+        alignItems: 'center',
+        background: 'var(--color-bg)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 'var(--radius)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        minHeight: 'var(--touch-target)',
+        padding: '14px 16px',
+        width: '100%',
+      }}
+    >
+      <Text style={{ color: 'var(--color-text)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>
+        {label}
+      </Text>
+      <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
+    </UnstyledButton>
   );
 }

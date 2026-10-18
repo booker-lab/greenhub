@@ -3,6 +3,7 @@
 import { Group, NumberInput, Stack, Text } from '@mantine/core';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
 import GroupConfigSection from '../GroupConfigSection';
+import { ProductExtrasSection } from '../ProductExtrasSection';
 import { DELIVERY_SIZES, type GroupConfigForm, type ProductFormData } from '../productForm.types';
 
 interface Step5PricingProps {
@@ -67,6 +68,7 @@ export function Step5Pricing({ form, set, setGroupConfig }: Step5PricingProps) {
           setGroupConfig={setGroupConfig}
         />
       </FieldCard>
+      <ProductExtrasSection extras={form.extras} onChange={(next) => set('extras', next)} />
     </Stack>
   );
 }

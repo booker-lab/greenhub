@@ -55,6 +55,9 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
   if (specifier === '@/lib/order-cancel-reason') return cancelReasonModule.exports;
   if (specifier === '@/hooks/useCart') return { useCart: () => ({ removeRoundItems: () => {} }) };
+  // 벤치마킹 비교 기능 모듈: 이 테스트에서는 꺼진 상태로 둔다.
+  if (specifier === '@/components/benchmark/OrderSuccessGuide') return { default: () => null };
+  if (specifier === '@/lib/features') return { isFeatureOn: () => false };
   if (specifier === 'react/jsx-runtime') {
     return { Fragment: Symbol('Fragment'), jsx: () => null, jsxs: () => null };
   }

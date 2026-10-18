@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { readConsumerFeatures } from './_helpers/consumer-features'
 
 const BASE = process.env['CONSUMER_BASE'] ?? 'https://greenlove.co.kr'
 
@@ -51,12 +52,21 @@ test.describe('Consumer — 인증 플로우', () => {
     ).toBeVisible({ timeout: 10_000 })
   })
 
-  test('/cart — 비로그인 시 /login으로 리디렉트', async ({ page }) => {
+  // 기대값은 배포된 빌드의 비회원 장바구니(guest-cart) 토글로 갈린다(홈의 greenhub-features meta로 판정).
+  test('/cart — 비로그인 시 토글에 맞게 로그인 또는 비회원 장바구니', async ({ page }) => {
+    const features = await readConsumerFeatures(page, BASE)
     await page.goto(`${BASE}/cart`)
     await page.waitForLoadState('networkidle')
 
-    await expect(page).toHaveURL(/\/login/)
-    await expect(page.getByText('Green Love')).toBeVisible()
+    if (features.isOn('guest-cart')) {
+      // 켜짐: 로그인 없이 장바구니가 열린다(주문할 때만 로그인).
+      await expect(page).toHaveURL(/\/cart$/)
+      await expect(page.getByText('장바구니가 비어있습니다.')).toBeVisible()
+      await expect(page.getByText('카카오로 시작하기')).toHaveCount(0)
+    } else {
+      await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fcart$/)
+      await expect(page.getByText('Green Love')).toBeVisible()
+    }
   })
 
   test('/checkout — 비로그인 시 /login으로 리디렉트', async ({ page }) => {
