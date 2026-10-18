@@ -53,9 +53,10 @@ test('판매 모드 확인 전에는 기존 내비게이션을 노출하지 않�
 test('인증되지 않았거나 세션을 확인하는 동안에는 장바구니 배지를 숨긴다', () => {
   assert.match(source, /useSession/);
   assert.match(source, /const \{ status: sessionStatus \} = useSession\(\);/);
+  // 비회원 장바구니(guest-cart) 기능 토글이 켜졌을 때만 로그인 전 배지를 보인다.
   assert.match(
     source,
-    /const visibleItemCount = sessionStatus === 'authenticated' \? itemCount : 0;/,
+    /const visibleItemCount =\s+sessionStatus === 'authenticated' \|\| \(isFeatureOn\('guest-cart'\) && sessionStatus !== 'loading'\)\s+\? itemCount\s+: 0;/,
   );
   assert.match(source, /tab\.showBadge && visibleItemCount > 0/);
 });

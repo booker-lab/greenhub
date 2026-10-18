@@ -1,4 +1,9 @@
-import { ORDER_REQUEST_NOTE_MAX_LENGTH } from '@greenhub/shared';
+import {
+  GIFT_MESSAGE_MAX_LENGTH,
+  OPTION_TEXT_MAX_LENGTH,
+  ORDER_REQUEST_NOTE_MAX_LENGTH,
+  PRODUCT_OPTION_GROUP_MAX,
+} from '@greenhub/shared';
 import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
@@ -65,6 +70,39 @@ class RoundOrderItemDto {
   @Min(1)
   @Max(ORDER_ITEM_MAX_QUANTITY)
   quantity: number;
+
+  // 옵션 시트(벤치마킹 비교 기능): 옵션 묶음마다 고른 선택지 id. 없으면 기존 주문과 같다.
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(PRODUCT_OPTION_GROUP_MAX)
+  @Matches(/^[A-Za-z0-9_-]{1,40}$/, { each: true, message: DOCUMENT_ID_MESSAGE })
+  optionChoiceIds?: string[];
+
+  // 문구가 필요한 옵션(스티커 라벨·3D 토퍼)에 넣을 문구. 줄바꿈 정리 뒤 길이는 서비스에서 다시 잰다.
+  @IsOptional()
+  @IsString()
+  @MaxLength(OPTION_TEXT_MAX_LENGTH * 2)
+  optionText?: string;
+}
+
+// 선물하기(벤치마킹 비교 기능)
+class GiftDto {
+  @IsString()
+  @MaxLength(20)
+  recipientName: string;
+
+  // 받는 분 휴대폰. 형식은 서비스(normalizeGift)가 확인한다.
+  @IsString()
+  @MaxLength(20)
+  recipientPhone: string;
+
+  @IsString()
+  @MaxLength(20)
+  senderName: string;
+
+  @IsString()
+  @MaxLength(GIFT_MESSAGE_MAX_LENGTH)
+  cardMessage: string;
 }
 
 class MarketingConsentDto {
@@ -184,4 +222,9 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => AcquisitionDto)
   acquisition?: AcquisitionDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GiftDto)
+  gift?: GiftDto;
 }

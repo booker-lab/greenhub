@@ -52,7 +52,7 @@ export interface GroupSummaryPublic {
     recruitDeadline: string | null;
 }
 /** Public product detail — explicit allowlist (drops sellerNote/sellerOverride/content.isEditedByUser/testOnly/raw internals). */
-export interface ProductPublic {
+export interface ProductPublic extends ProductExtras {
     id: string;
     storeId: string;
     name: string;
@@ -74,7 +74,8 @@ export interface ProductPublic {
     colors?: ColorOption[];
     groupConfig?: GroupConfigPublic;
 }
-export interface Product {
+import type { ProductExtras } from './benchmark.types.js';
+export interface Product extends ProductExtras {
     id: string;
     storeId: string;
     name: string;

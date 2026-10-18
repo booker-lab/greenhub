@@ -1,6 +1,6 @@
 'use client';
 
-import type { SalesMode, StorePublicProfile } from '@greenhub/shared';
+import type { SalesMode, StoreProfileExtras, StorePublicProfile } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { sharedRequest } from '@/lib/shared-request';
@@ -58,5 +58,29 @@ async function loadPublicStoreProfile(storeId: string): Promise<StorePublicProfi
     name: String(payload['name'] ?? ''),
     logoUrl: (payload['logoUrl'] as string | null) ?? null,
     salesMode,
+    ...readStoreProfileExtras(payload),
   };
+}
+
+/** 판매자 공개 소개(벤치마킹 비교 기능). 형식이 맞는 값만 옮긴다. */
+export function readStoreProfileExtras(payload: Record<string, unknown>): StoreProfileExtras {
+  const extras: StoreProfileExtras = {};
+  if (typeof payload['intro'] === 'string') extras.intro = payload['intro'];
+  if (typeof payload['story'] === 'string') extras.story = payload['story'];
+  if (typeof payload['region'] === 'string') extras.region = payload['region'];
+  if (typeof payload['sinceYear'] === 'number') extras.sinceYear = payload['sinceYear'];
+  if (typeof payload['showDemandSignals'] === 'boolean') {
+    extras.showDemandSignals = payload['showDemandSignals'];
+  }
+  const guarantee = payload['guarantee'] as Record<string, unknown> | null | undefined;
+  if (guarantee && typeof guarantee === 'object' && typeof guarantee['title'] === 'string') {
+    extras.guarantee = {
+      enabled: guarantee['enabled'] === true,
+      title: guarantee['title'],
+      terms: Array.isArray(guarantee['terms'])
+        ? guarantee['terms'].filter((term): term is string => typeof term === 'string')
+        : [],
+    };
+  }
+  return extras;
 }

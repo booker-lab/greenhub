@@ -35,6 +35,8 @@ const requireForTest = (specifier) => {
   ) {
     return {};
   }
+  // 벤치마킹 비교 기능 토글: 이 테스트에서는 꺼진 상태로 둔다.
+  if (specifier === '@/lib/features') return { isFeatureOn: () => false };
   throw new Error(`예상하지 못한 MY 주문 목록 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(

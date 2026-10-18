@@ -76,6 +76,12 @@ const requireForTest = (specifier) => {
       }),
     };
   }
+  // 벤치마킹 비교 기능 모듈: 이 테스트에서는 모두 꺼진 상태로 둔다.
+  if (specifier === '@/components/benchmark/GiftFields') {
+    return { EMPTY_GIFT: { enabled: false }, giftPayload: () => null };
+  }
+  if (specifier === '@/lib/features') return { isFeatureOn: () => false };
+  if (specifier === '@/lib/round-schedule-label') return { formatRoundTime: () => null };
   if (
     specifier === '@mantine/core' ||
     specifier === 'next/navigation' ||
