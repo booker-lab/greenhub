@@ -4,9 +4,10 @@
  *
  * 1) plan(읽기 전용, 아무것도 바꾸지 않음)
  *    GOOGLE_APPLICATION_CREDENTIALS=<서비스 계정 키> node scripts/ops/retire-test-accounts.mjs plan --out <계획 파일>
- *    email provider 계정을 아래 분류로 찾고 계정마다 연결 데이터 건수를 센 뒤, 처리 계획(delete | lock | keep)을
- *    마스킹해 출력하고 계획 파일에 쓴다. 계획 파일에는 uid 원문이 들어가므로 저장소 밖 경로에만 쓴다.
- *    reference 계정은 기본 keep이고 `--include <uid 앞 8자>=lock|delete`로 지정한 계정만 계획에 넣는다.
+ *    email provider 계정을 아래 분류로 찾고 계정마다 연결 데이터 건수를 센 뒤, 처리 계획
+ *    (delete | delete-keep-records | lock | keep)을 마스킹해 출력하고 계획 파일에 쓴다.
+ *    계획 파일에는 uid 원문이 들어가므로 저장소 밖 경로에만 쓴다. reference 계정은 기본 keep이고
+ *    `--include <uid 앞 8자>=lock|delete|delete-keep-records`로 지정한 계정만 계획에 넣는다.
  * 2) apply(쓰기)
  *    ... apply --plan <계획 파일> --plan-hash <plan이 출력한 값> --allow-production=green-e4fe3
  *    계획 파일의 uid만 처리한다. 계정마다 분류·연결 데이터를 다시 확인하고, 계획과 달라졌으면 그 계정은 건너뛴다.
@@ -21,6 +22,9 @@
  *   lock으로 바꾼다. users/{uid}, refreshTokens/{uid}(하위 sessions 포함), emailIdentities·kakaoIdentities 연결 문서,
  *   aiUsage를 한 batch로 지우면서 같은 batch에 감사 기록(account.deleted_by_owner_maintenance)을 쓰고,
  *   그다음 Firebase Auth 사용자를 지운다. 기존 auditLogs는 지우지 않는다.
+ * delete-keep-records: reference 계정을 --include로 직접 고른 경우에만 쓴다. 남길 기록이 있어도 lock으로
+ *   낮추지 않고 delete와 같은 방법으로 계정만 지운다. 주문·매장 등 남길 기록은 그대로 두며(그 기록의 사용자
+ *   참조는 지운 uid를 가리킨 채 남는다), 감사 기록에 남긴 기록 건수를 함께 적는다.
  * lock: lock-account.mjs와 같다(무작위 비밀번호 해시·정지·세션 폐기·Firebase Auth 폐기와 disabled·감사 기록).
  *
  * 출력에는 uid 앞 8자와 마스킹한 이메일만 남긴다. 비밀번호 해시·이름·전화번호는 출력하지 않는다.
@@ -50,7 +54,8 @@ export const PLAN_HASH_LENGTH = 16;
 export const CATEGORIES = Object.freeze(['spec-temp', 'admin-test', 'reference', 'unclassified']);
 export const TEST_EMAIL_DOMAINS = Object.freeze(['test.com', 'example.com', 'greenhub.dev']);
 const PLANNABLE_CATEGORIES = Object.freeze(['spec-temp', 'admin-test', 'reference']);
-const PLAN_ACTIONS = Object.freeze(['delete', 'lock']);
+const PLAN_ACTIONS = Object.freeze(['delete', 'delete-keep-records', 'lock']);
+const DELETE_ACTIONS = Object.freeze(['delete', 'delete-keep-records']);
 const RESULT_ORDER = Object.freeze(['deleted', 'locked', 'already-done', 'skipped', 'failed']);
 const SPEC_TEMP_EMAIL = /^(consumer|driver)-sec-\d+@example\.com$/;
 const REFRESH_SUBCOLLECTION = 'sessions';
@@ -58,7 +63,7 @@ const AUTH_LOOKUP_BATCH = 100;
 const NESTED_SCAN_DEPTH = 8;
 const REPO_ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const USAGE =
-  '사용법: retire-test-accounts.mjs plan --out <계획 파일> [--include <uid 앞 8자>=lock|delete] | ' +
+  '사용법: retire-test-accounts.mjs plan --out <계획 파일> [--include <uid 앞 8자>=lock|delete|delete-keep-records] | ' +
   'apply --plan <계획 파일> --plan-hash <값> [--allow-production=green-e4fe3]';
 
 // 계정을 지우지 않고 잠가야 하는 근거 기록: [컬렉션, 사용자 uid를 담는 필드].
@@ -134,6 +139,7 @@ export function classifyAccount(user) {
 }
 
 // 남겨야 할 기록이 있으면 delete를 lock으로 낮춘다. reference는 지정한 경우에만 처리한다.
+// delete-keep-records는 사람이 직접 고른 처리라 낮추지 않는다.
 export function resolveAction({ category, keptTotal, requested = null }) {
   if (category === 'unclassified') return 'keep';
   const defaultAction = category === 'spec-temp' || category === 'admin-test' ? 'delete' : 'keep';
@@ -417,8 +423,11 @@ async function collectReferences(db, uid, user, nestedHits) {
 function resolveIncludes(includes, accounts) {
   const requested = new Map();
   for (const spec of includes) {
-    const match = /^([^=]{8})=(lock|delete)$/.exec(spec);
-    if (!match) throw new RetireError(`--include 형식은 <uid 앞 8자>=lock|delete 입니다: ${spec}`);
+    const match = /^([^=]{8})=(lock|delete|delete-keep-records)$/.exec(spec);
+    if (!match)
+      throw new RetireError(
+        `--include 형식은 <uid 앞 8자>=lock|delete|delete-keep-records 입니다: ${spec}`,
+      );
     const [, prefix, action] = match;
     const hits = accounts.filter((account) => account.uid.startsWith(prefix));
     if (hits.length !== 1) {
@@ -530,7 +539,8 @@ async function planCommand({
   }
 
   const planned = accounts.filter((account) => PLAN_ACTIONS.includes(account.action));
-  const deletes = planned.filter((account) => account.action === 'delete');
+  const deletes = planned.filter((account) => DELETE_ACTIONS.includes(account.action));
+  const keepRecords = planned.filter((account) => account.action === 'delete-keep-records');
   const downgraded = accounts.filter(
     (account) => account.wanted === 'delete' && account.action === 'lock',
   );
@@ -550,6 +560,9 @@ async function planCommand({
   out(`계획: ${formatCounts(countBy(accounts, (a) => a.action, [...PLAN_ACTIONS, 'keep']))}`);
   out(`남길 기록이 있어 delete 대신 lock: ${downgraded.length}`);
   out(`delete로 지울 것: ${formatCounts(removal)}`);
+  out(
+    `기록을 남긴 채 계정만 지울 것: ${keepRecords.length}건 (남는 기록 ${keepRecords.reduce((t, a) => t + a.refs.keptTotal, 0)}건)`,
+  );
   out(
     `처리 대상 계정의 감사 기록(auditLogs, 지우지 않음): ${planned.reduce((t, a) => t + a.refs.auditCount, 0)}`,
   );
@@ -615,6 +628,7 @@ async function deleteAccount({ db, auth, Timestamp, entry, refs, authUser, now }
       tool: SCRIPT,
       category: entry.category,
       role: entry.role,
+      keptRecords: refs.kept,
       removed: {
         ...refs.identity,
         refreshSessions: refs.activeSessions,
@@ -682,7 +696,9 @@ async function applyEntry({ db, auth, Timestamp, entry, nestedHits, hashPassword
     getAuthUser(auth, uid),
   ]);
   if (!snap.exists) {
-    if (entry.action !== 'delete') return { status: 'skipped', detail: '사용자 문서 없음' };
+    if (!DELETE_ACTIONS.includes(entry.action)) {
+      return { status: 'skipped', detail: '사용자 문서 없음' };
+    }
     return finishLeftovers({ db, auth, uid, authUser });
   }
   const user = snap.data() ?? {};
@@ -696,7 +712,7 @@ async function applyEntry({ db, auth, Timestamp, entry, nestedHits, hashPassword
   const refs = await collectReferences(db, uid, user, nestedHits);
   const context = { db, auth, Timestamp, entry, user, refs, authUser, hashPassword, now };
   if (entry.action === 'lock') return lockAccount(context);
-  if (refs.keptTotal > 0)
+  if (entry.action === 'delete' && refs.keptTotal > 0)
     return { status: 'skipped', detail: `남길 기록 발견 ${formatCounts(refs.kept)}` };
   return deleteAccount(context);
 }
