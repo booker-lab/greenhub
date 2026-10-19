@@ -39,6 +39,56 @@ export const MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND = 3;
 const ACTIVE_CHECKOUT_HOLD_LIMIT_MESSAGE =
   '이전 결제 시도를 아직 처리하고 있어요. 잠시 후 다시 시도하거나 주문 내역을 확인해 주세요.';
 
+const ITEM_STATE_INVALID_MESSAGE = '회차 상품 수량 상태가 올바르지 않아 처리할 수 없습니다.';
+
+// 회차 품목 문서(saleRoundItems)의 선택 필드. 값이 있으면 기본 규칙 대신 이 값을 1인 상한으로 쓴다.
+const PER_CUSTOMER_ITEM_LIMIT_FIELD = 'maxQuantityPerCustomer';
+
+/**
+ * 같은 고객이 같은 회차의 한 품목을 결제 중(만료 전 HELD 예약)과 결제 완료(CONSUMED 예약)로
+ * 합쳐 가질 수 있는 최대 수량(1인 상한).
+ * - 품목 문서에 `maxQuantityPerCustomer`(1 이상 정수)가 있으면 그 값을 쓴다.
+ * - 없으면(undefined·null) 품목 판매 한도의 절반을 올림한 값을 쓴다(최소 1). 판매 한도 10개면 5개.
+ * - 값이 있는데 1 이상 정수가 아니거나 판매 한도를 읽을 수 없으면 null(설정 오류)을 돌려준다.
+ */
+export function resolvePerCustomerItemLimit(item: Record<string, unknown>): number | null {
+  const configured = item[PER_CUSTOMER_ITEM_LIMIT_FIELD];
+  if (configured !== undefined && configured !== null) {
+    return typeof configured === 'number' && Number.isSafeInteger(configured) && configured >= 1
+      ? configured
+      : null;
+  }
+  const saleLimit = item['saleLimitQuantity'];
+  if (typeof saleLimit !== 'number' || !Number.isFinite(saleLimit) || saleLimit < 1) return null;
+  return Math.max(1, Math.ceil(saleLimit / 2));
+}
+
+// 같은 고객이 같은 회차의 한 품목을 이미 가진 수량: 결제 중(만료 전 HELD)과 결제 완료(CONSUMED).
+type CustomerOwnedQuantity = { held: number; paid: number };
+
+function perCustomerItemLimitMessage(
+  productName: unknown,
+  limit: number,
+  owned: CustomerOwnedQuantity,
+): string {
+  const name =
+    typeof productName === 'string' && productName.trim() !== ''
+      ? `'${productName.trim()}' 상품은`
+      : '이 상품은';
+  const head = `${name} 이번 회차에 한 분당 ${limit}개까지 주문할 수 있어요.`;
+  const ownedTotal = owned.held + owned.paid;
+  if (ownedTotal <= 0) return `${head} 수량을 줄여 다시 시도해 주세요.`;
+  const remaining = limit - ownedTotal;
+  const status =
+    remaining > 0
+      ? `결제 중이거나 이미 주문한 수량(${ownedTotal}개)이 있어 ${remaining}개까지만 더 주문할 수 있어요.`
+      : `결제 중이거나 이미 주문한 수량(${ownedTotal}개)이 있어 더 주문할 수 없어요.`;
+  // 결제창을 닫고 다시 결제하면 이전 시도의 결제 전 예약이 남아 합산된다. 언제 풀리는지 알려 준다.
+  const heldHint =
+    owned.held > 0 ? ' 결제를 마치지 않은 이전 결제 시도는 15분 안에 자동으로 풀려요.' : '';
+  return `${head} ${status}${heldHint}`;
+}
+
 type RoundItemInput = {
   roundItemId: string;
   quantity: number;
@@ -124,15 +174,14 @@ export class OrderCapacityService {
     const reservationSnap = await tx.get(reservationRef);
     if (reservationSnap.exists) return reservationSnap.data() as ReservationRecord;
 
-    // 같은 고객의 같은 회차 HELD 예약은 회차 문서보다 먼저 읽는다(회차 문서를 여러 결제가
-    // 다투는 구간을 늘리지 않는다). 동등 조건만 써서 복합 색인이 필요 없다.
-    const userHeldSnap = await tx.get(
-      this.firestore
-        .collection('checkoutReservations')
-        .where('roundId', '==', input.roundId)
-        .where('userId', '==', input.userId)
-        .where('status', '==', 'HELD'),
-    );
+    // 같은 고객의 같은 회차 HELD·CONSUMED 예약은 회차 문서보다 먼저 읽는다(회차 문서를 여러
+    // 결제가 다투는 구간을 늘리지 않는다). 동등 조건만 써서 복합 색인이 필요 없다.
+    // 같은 회차의 예약은 모두 회차 문서를 읽고 쓰므로, 동시에 들어온 요청은 충돌 뒤 재시도에서
+    // 먼저 끝난 예약을 이 조회로 본다.
+    const [userHeldSnap, userConsumedSnap] = await Promise.all([
+      tx.get(this.customerRoundReservationsQuery(input, 'HELD')),
+      tx.get(this.customerRoundReservationsQuery(input, 'CONSUMED')),
+    ]);
 
     const roundRef = this.firestore.doc(`saleRounds/${input.roundId}`);
     const roundSnap = await tx.get(roundRef);
@@ -180,6 +229,15 @@ export class OrderCapacityService {
     itemRecords.forEach((item) => {
       this.assertItemCapacity(item.data, item.input.quantity);
     });
+    // 전체 한도(마감) 판정 뒤에 1인 상한을 본다. 기존 마감 안내는 그대로 두고, 남은 수량이
+    // 있을 때만 1인 상한 안내를 보여 준다.
+    this.assertPerCustomerItemLimits(
+      itemRecords,
+      [...userHeldSnap.docs, ...userConsumedSnap.docs],
+      input,
+      reservationId,
+      timestampMillis(now),
+    );
 
     const nowMillis = timestampMillis(now);
     if (!Number.isFinite(nowMillis)) {
@@ -262,6 +320,97 @@ export class OrderCapacityService {
       // moveReservationInTransaction과 같은 기준: 만료 시각 이하이면 만료다.
       return !(new Date(held.expiresAt ?? '').getTime() <= nowMillis);
     }).length;
+  }
+
+  private customerRoundReservationsQuery(
+    input: { roundId: string; userId: string },
+    status: Extract<ReservationStatus, 'HELD' | 'CONSUMED'>,
+  ) {
+    return this.firestore
+      .collection('checkoutReservations')
+      .where('roundId', '==', input.roundId)
+      .where('userId', '==', input.userId)
+      .where('status', '==', status);
+  }
+
+  /**
+   * 1인 상한: 같은 (가게, 회차, 고객)이 품목마다 이미 가진 수량에 이번 요청 수량을 더해
+   * `resolvePerCustomerItemLimit`를 넘으면 409로 거절한다. 읽은 결과만 쓰고 쓰지 않는다.
+   */
+  private assertPerCustomerItemLimits(
+    itemRecords: Array<{ input: RoundItemInput; data: Record<string, any> }>,
+    reservationDocs: Array<{ id: string; data(): unknown }>,
+    input: { storeId: string; idempotencyKey: string },
+    reservationId: string,
+    nowMillis: number,
+  ) {
+    const owned = this.customerOwnedItemQuantities(
+      reservationDocs,
+      input,
+      reservationId,
+      nowMillis,
+    );
+    for (const item of itemRecords) {
+      const limit = resolvePerCustomerItemLimit(item.data);
+      if (limit === null) throw new ConflictException(ITEM_STATE_INVALID_MESSAGE);
+      const alreadyOwned = owned.get(item.input.roundItemId) ?? { held: 0, paid: 0 };
+      if (alreadyOwned.held + alreadyOwned.paid + item.input.quantity > limit) {
+        throw new ConflictException(
+          perCustomerItemLimitMessage(item.data['productNameSnapshot'], limit, alreadyOwned),
+        );
+      }
+    }
+  }
+
+  /**
+   * 같은 (가게, 회차, 고객)이 품목별로 이미 가진 수량을 센다.
+   * - 합산: 만료 전 HELD(결제 중)와 CONSUMED(결제 완료). 결제 뒤 취소된 주문의 예약은
+   *   RELEASED로 바뀌므로 빠진다. 늦은 결제 재확보 예약(`late-payment:`)도 결제된 주문이라 합산한다.
+   * - 빼는 것: 만료 시각이 지난 HELD(만료 정리 작업 담당, 3건 제한과 같은 기준), RELEASED·EXPIRED,
+   *   다른 가게 예약, 지금 요청한 결제 시도 ID의 예약.
+   * - 합산 대상 예약의 품목 수량이 1 이상 정수가 아니면 상한을 판정할 수 없으므로 거절한다.
+   */
+  private customerOwnedItemQuantities(
+    reservationDocs: Array<{ id: string; data(): unknown }>,
+    input: { storeId: string; idempotencyKey: string },
+    reservationId: string,
+    nowMillis: number,
+  ): Map<string, CustomerOwnedQuantity> {
+    const owned = new Map<string, CustomerOwnedQuantity>();
+    for (const snap of reservationDocs) {
+      const reservation = snap.data() as Partial<ReservationRecord> | undefined;
+      if (!reservation || snap.id === reservationId) continue;
+      if (reservation.idempotencyKey === input.idempotencyKey) continue;
+      if (reservation.storeId !== input.storeId) continue;
+      if (reservation.status === 'HELD') {
+        // countActiveCheckoutHolds와 같은 기준: 만료 시각 이하이면 만료다.
+        if (new Date(reservation.expiresAt ?? '').getTime() <= nowMillis) continue;
+      } else if (reservation.status !== 'CONSUMED') {
+        continue;
+      }
+      if (!Array.isArray(reservation.items)) {
+        throw new ConflictException(ITEM_STATE_INVALID_MESSAGE);
+      }
+      for (const item of reservation.items) {
+        const quantity: unknown = item?.quantity;
+        if (
+          typeof item?.roundItemId !== 'string' ||
+          typeof quantity !== 'number' ||
+          !Number.isSafeInteger(quantity) ||
+          quantity < 1
+        ) {
+          throw new ConflictException(ITEM_STATE_INVALID_MESSAGE);
+        }
+        const current = owned.get(item.roundItemId) ?? { held: 0, paid: 0 };
+        owned.set(
+          item.roundItemId,
+          reservation.status === 'HELD'
+            ? { ...current, held: current.held + quantity }
+            : { ...current, paid: current.paid + quantity },
+        );
+      }
+    }
+    return owned;
   }
 
   async consumeReservation(input: {
@@ -531,6 +680,8 @@ export class OrderCapacityService {
    * - orphan HELD (same deterministic id): consume it (reserved->ordered)
    * - capacity full / missing / window / city => LatePaymentCapacityError
    *   (caller converges to late-payment refund policy, no orphan).
+   * - 1인 상한(resolvePerCustomerItemLimit)은 보지 않는다. 결제가 이미 확인된 주문을 1인 상한
+   *   때문에 환불하지 않기 위해서다. 상한은 결제 전 예약(reserveCheckoutInTransaction)에서만 막는다.
    */
   async reacquireAndConsumeLatePaymentInTransaction(
     tx: any,

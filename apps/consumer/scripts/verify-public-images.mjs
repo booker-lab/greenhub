@@ -1,7 +1,11 @@
-const API_BASE = (process.env.PUBLIC_API_BASE ?? 'https://api-production-13e7.up.railway.app').replace(
-  /\/$/,
-  '',
-)
+// 대상 API는 실행할 때마다 명시한다(운영 기본값 없음).
+// 실행: PUBLIC_API_BASE=<API 주소> node apps/consumer/scripts/verify-public-images.mjs
+const API_BASE = process.env.PUBLIC_API_BASE?.trim().replace(/\/$/, '')
+
+if (!API_BASE) {
+  console.error('PUBLIC_API_BASE(조회할 API 주소)를 지정하세요. 운영 기본값은 없습니다.')
+  process.exit(1)
+}
 
 async function fetchJson(path) {
   const response = await fetch(`${API_BASE}${path}`, {

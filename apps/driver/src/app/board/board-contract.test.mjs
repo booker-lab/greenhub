@@ -237,12 +237,40 @@ test('사진 화면은 heading과 촬영·최종 완료 버튼의 접근 가능�
 });
 
 test('직배송 사진 링크는 정확한 Pilot 경로로 분리하고 legacy 링크를 보존한다', () => {
-  assert.match(detailSource, /\/photo\/round-direct\?storeId=/);
+  assert.match(detailSource, /\/photo\/round-direct`\)/);
   assert.doesNotMatch(detailSource, /flow=round-direct/);
-  assert.match(detailSource, /\/photo\?storeId=/);
+  assert.match(detailSource, /\/photo`\)/);
+  // 사진 화면은 판매자 ID를 주문 조회 응답에서 읽으므로 링크 쿼리에 싣지 않는다.
+  assert.doesNotMatch(detailSource, /[?&]storeId=/);
   assert.match(pilotPhotoRouteSource, /mode="round-direct"/);
   assert.match(legacyPhotoRouteSource, /mode="legacy"/);
   assert.doesNotMatch(legacyPhotoRouteSource, /flow/);
+});
+
+test('사진 화면은 명령 경로의 판매자 ID를 주소창이 아니라 주문 조회 응답에서 읽는다', () => {
+  assert.doesNotMatch(photoCaptureSource, /useSearchParams|searchParams/);
+  assert.match(photoCaptureSource, /readDriverOrderStoreId\(await response\.json\(\), orderId\)/);
+  // 사진·명령을 보내기 전에 판매자 ID를 확인한다. 확인하지 못하면 아무 명령도 보내지 않는다.
+  const uploadAt = photoCaptureSource.indexOf('async function upload()');
+  const readAt = photoCaptureSource.indexOf('await readOrderStoreId(token)', uploadAt);
+  const legacyAt = photoCaptureSource.indexOf('uploadLegacyHubPhoto(orderId', uploadAt);
+  const roundDirectAt = photoCaptureSource.indexOf(
+    'uploadRoundDirect(token, blob, storeId)',
+    uploadAt,
+  );
+  assert.ok(uploadAt !== -1 && readAt > uploadAt, 'upload()가 판매자 ID를 먼저 읽어야 한다');
+  assert.ok(readAt < legacyAt && readAt < roundDirectAt, '판매자 ID 확인이 업로드보다 앞서야 한다');
+});
+
+test('기사 명령 경로의 ID 조각은 apiPathSegment로 검사·인코딩한다', () => {
+  for (const source of [detailSource, photoCaptureSource, holdModalSource]) {
+    const paths = [...source.matchAll(/`\/stores\/\$\{([^}]*)\}\/orders\/\$\{([^}]*)\}/g)];
+    assert.ok(paths.length > 0, '명령 경로가 있어야 한다');
+    for (const [path, storePart, orderPart] of paths) {
+      assert.match(storePart, /^apiPathSegment\(/, path);
+      assert.match(orderPart, /^apiPathSegment\(/, path);
+    }
+  }
 });
 
 test('Driver Permissions-Policy는 앱 전체에서 카메라만 자기 출처로 허용한다', () => {
@@ -256,7 +284,10 @@ test('Driver Permissions-Policy는 앱 전체에서 카메라만 자기 출처�
 });
 
 test('직배송 촬영 화면은 앱 안 이동으로 열어 세션·화면 준비를 유지한다', () => {
-  assert.match(detailSource, /router\.push\(`\/board\/\$\{orderId\}\/photo\/round-direct\?storeId=/);
+  assert.match(
+    detailSource,
+    /router\.push\(`\/board\/\$\{encodeURIComponent\(orderId\)\}\/photo\/round-direct`\)/,
+  );
   assert.doesNotMatch(detailSource, /window\.location\.assign/);
 });
 

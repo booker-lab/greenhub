@@ -2,10 +2,11 @@
 
 import { Button, Loader, Text, Title } from '@mantine/core';
 import Image from 'next/image';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { apiFetch, apiRead } from '@/lib/api';
+import { apiPathSegment, isSafeApiPathSegment, readRouteParam } from '@/lib/api-path';
 import { readDriverOrderCommandErrorCodeFromResponse } from '../../_lib/driver-order-detail';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
 import {
@@ -21,6 +22,7 @@ import {
   type PhotoUploadFailureKind,
   photoEncodeFailureMessage,
   readDriverOrderStatus,
+  readDriverOrderStoreId,
   resolvePhotoUploadFailure,
 } from './photo-upload-policy';
 
@@ -30,6 +32,12 @@ type PhotoCaptureProps = {
   orderId: string;
   mode: PhotoMode;
 };
+
+const INVALID_ORDER_ADDRESS_MESSAGE =
+  '주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해주세요.';
+// 명령을 보내기 전에 실패하므로 같은 사진으로 다시 시도해도 안전하다.
+const ORDER_STORE_UNKNOWN_MESSAGE =
+  '주문 정보를 확인하지 못해 사진을 올리지 않았습니다. 잠시 뒤 다시 시도하거나 주문 화면에서 확인해주세요.';
 
 function encodeErrorMessage(cause: unknown): string {
   return photoEncodeFailureMessage(
@@ -43,8 +51,42 @@ function stopMediaStream(mediaStream: MediaStream | null) {
   });
 }
 
-export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
-  const storeId = useSearchParams().get('storeId') ?? '';
+export default function PhotoCapture({ orderId: rawOrderId, mode }: PhotoCaptureProps) {
+  const router = useRouter();
+  // 경로 파라미터는 형식을 검사한 원래 ID로 읽는다. 맞지 않으면 촬영·업로드 화면을 열지 않는다.
+  const orderId = readRouteParam(rawOrderId);
+  if (!orderId) {
+    return (
+      <div
+        style={{
+          minHeight: '100dvh',
+          backgroundColor: '#000',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 16,
+          padding: 24,
+        }}
+      >
+        <Text style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }} ta="center">
+          {INVALID_ORDER_ADDRESS_MESSAGE}
+        </Text>
+        <Button
+          onClick={() => router.replace('/board')}
+          color="white"
+          style={{ color: 'var(--color-text)' }}
+          radius="md"
+        >
+          배송 목록으로
+        </Button>
+      </div>
+    );
+  }
+  return <PhotoCaptureScreen orderId={orderId} mode={mode} />;
+}
+
+function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
   const isRoundDirect = mode === 'round-direct';
   const { data: session } = useSession();
   // 새로고침·직접 진입 등으로 세션을 다시 받는 동안에는 완료 버튼을 막는다
@@ -246,6 +288,19 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
     startCamera();
   }
 
+  // 명령 경로의 판매자 ID는 주소창 쿼리가 아니라 기사 주문 조회 응답에서 읽는다.
+  // 같은 주문의 응답이 아니거나 형식이 맞지 않으면 null이고, 그때는 명령을 보내지 않는다.
+  async function readOrderStoreId(token: string): Promise<string | null> {
+    try {
+      const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+      if (!response.ok) return null;
+      const storeId = readDriverOrderStoreId(await response.json(), orderId);
+      return isSafeApiPathSegment(storeId) ? storeId : null;
+    } catch {
+      return null;
+    }
+  }
+
   async function readOrderStatus(token: string): Promise<string | null> {
     try {
       const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token);
@@ -258,12 +313,16 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
 
   // 사진은 연결됐는데 DELIVERED 전이만 빠진 경우의 서버 마무리 경로.
   // 서버는 사진이 연결된 DELIVERING 주문에서만 이 전이를 허용한다.
-  async function finishDelivery(token: string): Promise<boolean> {
+  async function finishDelivery(token: string, storeId: string): Promise<boolean> {
     try {
-      const response = await apiFetch(`/stores/${storeId}/orders/${orderId}/status`, token, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'DELIVERED' }),
-      });
+      const response = await apiFetch(
+        `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/status`,
+        token,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'DELIVERED' }),
+        },
+      );
       if (!response.ok) return false;
       const ack = (await response.json()) as { orderId?: unknown; status?: unknown };
       return ack.orderId === orderId && ack.status === 'DELIVERED';
@@ -276,6 +335,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
   async function recoverAfterUploadFailure(
     token: string,
     failure: PhotoUploadFailureKind,
+    storeId: string,
   ): Promise<boolean> {
     let resolution = resolvePhotoUploadFailure({
       failure,
@@ -283,7 +343,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
       finishAttempted: false,
     });
     if (resolution.action === 'finish-delivery') {
-      if (await finishDelivery(token)) return true;
+      if (await finishDelivery(token, storeId)) return true;
       resolution = resolvePhotoUploadFailure({
         failure,
         orderStatus: await readOrderStatus(token),
@@ -296,7 +356,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
   }
 
   // 회차 직배송 업로드. 완료(서버가 이미 완료한 경우 포함)면 true, 안내를 띄웠으면 false.
-  async function uploadRoundDirect(token: string, blob: Blob): Promise<boolean> {
+  async function uploadRoundDirect(token: string, blob: Blob, storeId: string): Promise<boolean> {
     const keyDecision = decideIdempotencyKey({
       hasKey: requestIdRef.current !== null,
       photoChanged: requestPhotoRef.current !== blob,
@@ -315,7 +375,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
       form.append('photo', blob, 'delivery.jpg');
       form.append('idempotencyKey', requestId);
       const response = await apiFetch(
-        `/stores/${storeId}/orders/${orderId}/delivery-photos`,
+        `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/delivery-photos`,
         token,
         { method: 'POST', body: form },
       );
@@ -342,7 +402,7 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
       failure = classifyPhotoUploadFailure({ kind: 'network' });
     }
     lastFailureRef.current = failure;
-    return recoverAfterUploadFailure(token, failure);
+    return recoverAfterUploadFailure(token, failure, storeId);
   }
 
   async function upload() {
@@ -353,14 +413,24 @@ export default function PhotoCapture({ orderId, mode }: PhotoCaptureProps) {
     setError('');
     const token = session.user.accessToken;
     try {
+      // 사진·명령을 보내기 전에 주문 응답에서 판매자 ID를 확인한다. 실패하면 아무 명령도 보내지 않는다.
+      const storeId = await readOrderStoreId(token);
+      if (!storeId) {
+        setError(ORDER_STORE_UNKNOWN_MESSAGE);
+        return;
+      }
       if (isRoundDirect) {
-        if (!(await uploadRoundDirect(token, blob))) return;
+        if (!(await uploadRoundDirect(token, blob, storeId))) return;
       } else {
         const photoUrl = await uploadLegacyHubPhoto(orderId, blob);
-        const response = await apiFetch(`/stores/${storeId}/orders/${orderId}/status`, token, {
-          method: 'PATCH',
-          body: JSON.stringify({ status: 'HUB_ARRIVED', photoUrl }),
-        });
+        const response = await apiFetch(
+          `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/status`,
+          token,
+          {
+            method: 'PATCH',
+            body: JSON.stringify({ status: 'HUB_ARRIVED', photoUrl }),
+          },
+        );
         if (!response.ok) throw new Error('거점 도착 전환 실패');
         let ack: { orderId?: unknown; status?: unknown };
         try {

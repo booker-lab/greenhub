@@ -78,6 +78,8 @@ test.describe('Consumer — 장바구니 (비인증)', () => {
     await page.waitForURL(/\/login\?/, { timeout: 10_000 })
     const callbackUrl = new URL(page.url()).searchParams.get('callbackUrl') ?? ''
     expect(new URL(callbackUrl, BASE).pathname).toBe('/cart')
+    // 복귀 주소가 절대 주소로 와도 로그인 화면이 왜 로그인하는지 알려 준다.
+    await expect(page.getByRole('status').filter({ hasText: '주문하려면 로그인이 필요해요' })).toBeVisible()
     // 담은 상품은 로그인 화면으로 넘어가도 그대로 남는다.
     const stored = await page.evaluate(() => localStorage.getItem('greenhub_cart'))
     expect(JSON.parse(stored ?? '[]')).toEqual([GUEST_ITEM])

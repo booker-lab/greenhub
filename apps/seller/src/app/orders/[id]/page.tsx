@@ -9,6 +9,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
+import { readRouteParam } from '@/lib/api-path';
 import { CancelOrderModal } from './_components/CancelOrderModal';
 import { DeliveryHoldModal } from './_components/DeliveryHoldModal';
 import { OrderInfoSection } from './_components/OrderInfoSection';
@@ -48,7 +49,37 @@ function DetailStatusBox({ children }: { children: ReactNode }) {
 export default function OrderDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const orderId = params.id as string;
+  // 경로 파라미터는 형식을 검사한 원래 ID로 읽는다. 맞지 않으면 주문 요청을 보내지 않는다.
+  const orderId = readRouteParam(params.id);
+
+  if (!orderId) {
+    return (
+      <DetailStatusBox>
+        <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>
+          주문 주소가 올바르지 않습니다.
+        </Text>
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          주문 목록에서 다시 선택해 주세요.
+        </Text>
+        <UnstyledButton
+          onClick={() => router.back()}
+          style={{
+            color: 'var(--color-primary-dark)',
+            textDecoration: 'underline',
+            fontSize: 'var(--font-size-sm)',
+          }}
+        >
+          돌아가기
+        </UnstyledButton>
+      </DetailStatusBox>
+    );
+  }
+
+  return <OrderDetailContent orderId={orderId} />;
+}
+
+function OrderDetailContent({ orderId }: { orderId: string }) {
+  const router = useRouter();
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
 

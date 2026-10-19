@@ -225,3 +225,17 @@ export function readDriverOrderStatus(payload: unknown, orderId: string): string
   if (order.id !== orderId || typeof order.status !== 'string') return null;
   return order.status;
 }
+
+/**
+ * 기사 주문 상세 응답에서 같은 주문의 판매자(store) ID만 읽는다.
+ * 사진 화면의 명령 경로(`/stores/:storeId/orders/:orderId/...`)는 주소창 쿼리가 아니라
+ * 서버가 돌려준 이 값을 쓴다. 경로에 넣기 전 형식 검사·인코딩은 호출 쪽 apiPathSegment가 맡는다.
+ */
+export function readDriverOrderStoreId(payload: unknown, orderId: string): string | null {
+  if (typeof payload !== 'object' || payload === null) return null;
+  const order = payload as { id?: unknown; storeId?: unknown };
+  if (order.id !== orderId || typeof order.storeId !== 'string' || order.storeId.length === 0) {
+    return null;
+  }
+  return order.storeId;
+}

@@ -10,6 +10,7 @@ import type { App } from 'supertest/types';
 import { AuthController } from '../../auth/auth.controller';
 import { AuthService } from '../../auth/auth.service';
 import { JWT_ALGORITHM, JWT_AUDIENCE, type TokenType } from '../../auth/token-claims';
+import { RAILWAY_TRUST_PROXY_HOPS } from '../../config/runtime-config';
 import {
   ClientThrottlerGuard,
   clientIp,
@@ -100,22 +101,44 @@ describe('ClientThrottlerGuard 집계 기준', () => {
     await app?.close();
   });
 
-  it('trust proxy 1홉이면 위조한 X-Forwarded-For 앞부분을 바꿔도 같은 IP 버킷을 쓴다', async () => {
-    app = await createApp(1);
+  it('Railway 2홉이면 중계 노드 주소와 위조한 앞부분이 바뀌어도 접속자 IP 버킷 하나를 쓴다', async () => {
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
+    const anyOctet = () => Math.floor(Math.random() * 250);
 
+    // Railway가 넘기는 형태: [클라이언트가 보낸 값…, 접속자 IP(엣지가 붙임), 중계 노드 IP(연결마다 다름)].
     const statuses = await hit(DEFAULT_LIMIT + 1, () =>
       request(server)
         .get('/probe')
-        // 클라이언트가 임의 값을 넣어도 신뢰 프록시가 덧붙인 마지막 값이 클라이언트 IP다.
-        .set('X-Forwarded-For', `10.0.${Math.floor(Math.random() * 250)}.1, 203.0.113.7`),
+        .set(
+          'X-Forwarded-For',
+          `10.0.${anyOctet()}.1, 203.0.113.7, 198.18.${anyOctet()}.${anyOctet()}`,
+        ),
     );
 
     expect(statuses.slice(0, DEFAULT_LIMIT).every((status) => status === 200)).toBe(true);
     expect(statuses[DEFAULT_LIMIT]).toBe(429);
 
-    const otherClient = await request(server).get('/probe').set('X-Forwarded-For', '203.0.113.8');
+    const otherClient = await request(server)
+      .get('/probe')
+      .set('X-Forwarded-For', '203.0.113.8, 198.18.0.1');
     expect(otherClient.status).toBe(200);
+  });
+
+  it('1홉이면 중계 노드 주소마다 버킷이 갈린다(2026-10-18 운영 증상 재현)', async () => {
+    app = await createApp(1);
+    const server = app.getHttpServer();
+
+    // 같은 접속자라도 중계 노드가 바뀌면 다른 버킷이라 한도에 닿지 않는다(반대로 노드를 나눠 쓰는 손님끼리는 묶인다).
+    let relay = 0;
+    const statuses = await hit(DEFAULT_LIMIT + 1, () => {
+      relay += 1;
+      return request(server)
+        .get('/probe')
+        .set('X-Forwarded-For', `203.0.113.7, 198.18.${relay % 4}.1`);
+    });
+
+    expect(statuses.every((status) => status === 200)).toBe(true);
   });
 
   it('trust proxy를 끄면 X-Forwarded-For를 무시하고 소켓 주소로 집계한다', async () => {
@@ -132,7 +155,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('서명 검증된 access token은 같은 IP를 공유해도 사용자별로 집계한다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     const shared = '203.0.113.20';
 
@@ -155,7 +178,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('서명이 맞지 않는 토큰은 sub를 바꿔도 IP 버킷으로 집계한다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     let counter = 0;
 
@@ -171,7 +194,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('refresh token을 access token 자리에 넣어도 사용자 키로 인정하지 않는다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     let counter = 0;
 
@@ -187,7 +210,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('access 서명이 맞아도 토큰 종류(typ)·수신자(aud)가 다르면 사용자 키로 인정하지 않는다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     let counter = 0;
 
@@ -210,7 +233,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('/auth/login은 같은 IP에서도 이메일별로 10회 한도를 따로 집계한다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     const shared = '203.0.113.40';
     const login = (email: string) =>
@@ -230,7 +253,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('/auth/login의 같은 이메일도 다른 클라이언트 IP면 따로 집계한다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     const login = (ip: string) =>
       request(server)
@@ -244,7 +267,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('/auth/login은 이메일을 바꿔도 같은 IP에서 IP 상한을 넘으면 막고 다른 IP·다른 경로는 그대로 둔다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     const shared = '203.0.113.42';
     let counter = 0;
@@ -280,7 +303,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('/auth/login IP 상한은 요청 본문과 무관하게 이메일이 없는 요청도 함께 센다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     const shared = '203.0.113.44';
     const withoutEmail = 5;
@@ -301,7 +324,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('/auth/refresh는 서명 검증된 refresh token의 sub별로 집계한다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     const shared = '203.0.113.60';
     const refresh = (token: string) =>
@@ -317,7 +340,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('/auth/refresh의 검증 실패 토큰(access token 포함)은 IP 버킷으로 집계한다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     let counter = 0;
 
@@ -333,7 +356,7 @@ describe('ClientThrottlerGuard 집계 기준', () => {
   });
 
   it('/auth/kakao-login은 클라이언트 IP 기준 120회 한도를 유지한다', async () => {
-    app = await createApp(1);
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
     const server = app.getHttpServer();
     let counter = 0;
     const kakaoLogin = (ip: string) => {
