@@ -13,6 +13,14 @@ export const PUBLIC_BUSINESS_INFO = {
   mailOrderRegistrationNumber: '' as string,
   supportHours: '09:00~18:00 (점심시간 12:00~13:00)',
   relationship: '그린러브는 디어 오키드가 운영하는 화훼 쇼핑몰입니다.',
+  // KB 발급 공개값. KB 원본 폼(GET)을 쿼리스트링으로 바꾼 확인 URL이고, 마크는 로컬 사본을 쓴다(http 핫링크 금지).
+  escrow: {
+    provider: '국민은행',
+    serviceName: 'KB에스크로이체',
+    verifyUrl:
+      'https://okbfex.kbstar.com/quics?page=C021590&cc=b034066:b035526&mHValue=da53475d2a0b3ac6d609b85c86745b67',
+    markImage: '/images/kb-escrow-mark.gif',
+  },
   kakaoChannel: {
     name: '그린러브',
     url: 'https://pf.kakao.com/_vGfjX',
