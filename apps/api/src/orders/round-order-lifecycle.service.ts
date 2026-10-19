@@ -31,6 +31,7 @@ import {
 import { OrderCapacityService } from './order-capacity.service';
 import { DriverOrderScopeService } from './driver-order-scope.service';
 import { isOrderCancellationInProgress } from './order-cancellation-state';
+import { readDeliveryHoldCount } from './order-transition-notice';
 import {
   assertPaidRedeliveryResume,
   isCurrentRedeliveryPaymentRequired,
@@ -624,6 +625,8 @@ export class RoundOrderLifecycleService {
         nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
         resolvedAt: null,
       };
+      // 보류 회차 번호. 보류·재개 알림의 멱등 키와 반복 상한(order-transition-notice)에 쓴다.
+      update['deliveryHoldCount'] = readDeliveryHoldCount(order) + 1;
     } else if (
       (dto.status === 'DELIVERING' && isCurrentRedeliveryPaymentRequired(order)) ||
       (order['status'] === 'DELIVERY_HELD' && !isCurrentRedeliveryPaymentRequired(order))

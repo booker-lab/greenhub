@@ -4,9 +4,9 @@ import { Alert, Button, Divider, PasswordInput, Stack, Text, TextInput } from '@
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { isFeatureOn } from '@/lib/features';
-import { safeCallbackPath } from './_callback-url';
+import { isOrderCallback, safeCallbackPath } from './_callback-url';
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const searchParams = useSearchParams();
@@ -41,9 +41,10 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   };
 
   // 비회원 장바구니(guest-cart): 주문하러 온 손님에게 왜 로그인하는지 알려 준다.
-  const forOrder =
-    isFeatureOn('guest-cart') &&
-    /^\/(cart|checkout)(\/|\?|$)/.test(rawCallbackUrl ?? '');
+  // 복귀 주소가 같은 출처 절대 주소로 오는 경우도 판정하려면 출처가 필요해, 마운트 뒤에 채운다.
+  const [origin, setOrigin] = useState<string>();
+  useEffect(() => setOrigin(window.location.origin), []);
+  const forOrder = isFeatureOn('guest-cart') && isOrderCallback(rawCallbackUrl, origin);
 
   return (
     <Stack gap="sm">

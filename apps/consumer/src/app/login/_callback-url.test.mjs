@@ -17,7 +17,7 @@ new Function('require', 'module', 'exports', compiled)(
   mod,
   mod.exports,
 );
-const { safeCallbackPath } = mod.exports;
+const { safeCallbackPath, isOrderCallback } = mod.exports;
 
 const ORIGIN = 'https://shop.example.test';
 
@@ -87,4 +87,23 @@ test('다른 출처·프로토콜 상대·역슬래시·스킴·제어 문자는
 test('같은 출처 절대 주소라도 역슬래시나 제어 문자가 섞이면 거부한다', () => {
   assert.equal(safeCallbackPath(`${ORIGIN}/\\evil.com`, ORIGIN), '/');
   assert.equal(safeCallbackPath(`${ORIGIN}/\t/evil.com`, ORIGIN), '/');
+});
+
+test('주문 흐름 판정: 상대 경로와 같은 출처 절대 주소의 장바구니·결제를 알아본다', () => {
+  for (const raw of ['/cart', '/checkout?from=cart', '/cart#top']) {
+    assert.equal(isOrderCallback(raw), true, raw);
+    assert.equal(isOrderCallback(raw, ORIGIN), true, raw);
+  }
+  for (const raw of [`${ORIGIN}/cart`, `${ORIGIN}/checkout?from=cart`]) {
+    assert.equal(isOrderCallback(raw, ORIGIN), true, raw);
+  }
+});
+
+test('주문 흐름 판정: 다른 경로·다른 출처·출처 모름은 주문으로 보지 않는다', () => {
+  for (const raw of ['/', '/mypage', '/cartoon', '/products/p1', null, undefined, '']) {
+    assert.equal(isOrderCallback(raw, ORIGIN), false, String(raw));
+  }
+  assert.equal(isOrderCallback('https://evil.example/cart', ORIGIN), false);
+  assert.equal(isOrderCallback(`${ORIGIN}/cart`), false);
+  assert.equal(isOrderCallback('//evil.example/cart', ORIGIN), false);
 });

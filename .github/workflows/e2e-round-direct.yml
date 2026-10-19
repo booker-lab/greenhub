@@ -101,8 +101,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     environment:
-      # 현재 private 저장소 plan에서는 native required reviewer를 사용할 수 없다.
-      # secret 범위는 Environment에 두고, 위 single-operator preflight가 fail-closed 승인 계약을 강제한다.
+      # 저장소가 공개라 Environment native required reviewer를 둘 수 있지만, 그 설정은 GitHub 저장소 설정이라
+      # 이 파일이 강제하지 않는다. secret 범위는 Environment에 두고, 위 single-operator preflight가
+      # fail-closed 승인 계약을 강제한다.
       name: round-direct-e2e
     permissions:
       contents: read
