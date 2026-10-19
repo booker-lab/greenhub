@@ -5,6 +5,7 @@ import { useSession } from 'next-auth/react';
 import { useCallback, useState } from 'react';
 import type { DeliveryHoldPayload } from '@/app/orders/[id]/delivery-hold-form';
 import { apiJson } from '@/lib/api';
+import { apiPathSegment } from '@/lib/api-path';
 
 export interface OrderStatusExtra {
   reason?: string;
@@ -14,31 +15,40 @@ export interface OrderStatusExtra {
 /**
  * 주문 하나의 상태 변경 PATCH 요청. 상세 화면 훅과 회차 "모두 준비 시작"이 같은 요청을 쓴다.
  * 실패하면 서버 메시지를 담은 `ApiError`를 던진다.
+ * ID 형식이 맞지 않으면 요청 없이 `InvalidApiPathSegmentError`로 거절한다.
  */
-export function requestOrderStatusChange(
+export async function requestOrderStatusChange(
   storeId: string,
   orderId: string,
   token: string,
   status: OrderStatus,
   extra?: OrderStatusExtra,
 ): Promise<unknown> {
-  return apiJson(`/stores/${storeId}/orders/${orderId}/status`, token, {
-    method: 'PATCH',
-    body: JSON.stringify({ status, ...extra }),
-  });
+  return apiJson(
+    `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/status`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ status, ...extra }),
+    },
+  );
 }
 
 /** 배송 보류 기록 PATCH(`→ DELIVERY_HELD`). 기사 앱과 같은 보류 엔드포인트를 쓴다. */
-export function requestDeliveryHold(
+export async function requestDeliveryHold(
   storeId: string,
   orderId: string,
   token: string,
   deliveryHold: DeliveryHoldPayload,
 ): Promise<unknown> {
-  return apiJson(`/stores/${storeId}/orders/${orderId}/delivery-hold`, token, {
-    method: 'PATCH',
-    body: JSON.stringify({ deliveryHold }),
-  });
+  return apiJson(
+    `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/delivery-hold`,
+    token,
+    {
+      method: 'PATCH',
+      body: JSON.stringify({ deliveryHold }),
+    },
+  );
 }
 
 /**

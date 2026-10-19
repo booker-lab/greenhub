@@ -15,6 +15,7 @@ import {
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
+import { apiPathSegment } from '@/lib/api-path';
 import {
   deliveryHoldResponsibilityFeeHint,
   parseRedeliveryFee,
@@ -197,10 +198,14 @@ export function DeliveryHoldModal({
     submittingRef.current = true;
     onLoading(true);
     try {
-      const response = await apiFetch(`/stores/${storeId}/orders/${orderId}/delivery-hold`, token, {
-        method: 'PATCH',
-        body: JSON.stringify({ deliveryHold }),
-      });
+      const response = await apiFetch(
+        `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/delivery-hold`,
+        token,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ deliveryHold }),
+        },
+      );
       if (!response.ok) {
         // 401은 envelope code와 무관하게 authority loss다. modal 내부 표시로
         // 끝나지 않고 parent clear + AUTH_ERROR + modal reset/close로 수렴한다.

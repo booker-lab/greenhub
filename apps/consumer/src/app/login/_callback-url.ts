@@ -50,3 +50,12 @@ export function safeCallbackPath(raw: string | null | undefined, origin?: string
 
   return isSafeRelativePath(candidate) ? candidate : DEFAULT_CALLBACK_PATH;
 }
+
+/**
+ * 복귀 주소가 주문 흐름(장바구니·결제)인지. 로그인 화면의 "주문하려면 로그인이 필요해요" 안내에만 쓴다.
+ * Auth.js는 복귀 주소를 같은 출처 절대 주소로 넘기므로 `safeCallbackPath`로 같은 출처 경로로 좁힌 뒤 판정한다.
+ * `origin`이 없으면(서버 렌더) 상대 경로만 판정한다.
+ */
+export function isOrderCallback(raw: string | null | undefined, origin?: string): boolean {
+  return /^\/(cart|checkout)(\/|\?|#|$)/.test(safeCallbackPath(raw, origin));
+}
