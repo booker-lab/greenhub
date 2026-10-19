@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -100,4 +100,38 @@ test('사업자 정보 다음에 공개 법적 고지 링크를 충분한 터치
   assert.match(source, />\s*이용약관\s*</);
   assert.match(source, /aria-label="법적 고지"/);
   assert.match(source, /minHeight: 'var\(--touch-target\)'/);
+});
+
+const escrowMarkPath = join(testDirectory, '..', '..', 'public', 'images', 'kb-escrow-mark.gif');
+
+test('KB에스크로이체 구매안전서비스 확인 링크 정본을 둔다', () => {
+  const businessInfoSource = loadBusinessInfoSource();
+
+  assert.match(businessInfoSource, /escrow: \{/);
+  assert.match(businessInfoSource, /okbfex\.kbstar\.com\/quics\?page=C021590/);
+  assert.match(businessInfoSource, /mHValue=da53475d2a0b3ac6d609b85c86745b67/);
+});
+
+test('구매안전서비스 마크는 새 탭 일반 링크로 열고 안내 문구를 함께 보인다', () => {
+  const componentSource = loadComponentSource();
+
+  assert.match(componentSource, /href=\{PUBLIC_BUSINESS_INFO\.escrow\.verifyUrl\}/);
+  assert.match(componentSource, /src=\{PUBLIC_BUSINESS_INFO\.escrow\.markImage\}/);
+  assert.match(componentSource, /target="_blank"/);
+  assert.match(componentSource, /rel="noopener noreferrer"/);
+  assert.match(componentSource, /alt="KB에스크로이체 인증마크"/);
+  assert.match(
+    componentSource,
+    /고객님은 안전거래를 위해 현금 등으로 결제 시 저희 쇼핑몰에서 가입한 KB국민은행의 구매안전서비스를 이용하실 수 있습니다\./,
+  );
+});
+
+test('구매안전서비스 마크는 서버 컴포넌트에서 로컬 이미지로만 그린다', () => {
+  const source = `${loadComponentSource()}\n${loadBusinessInfoSource()}`;
+
+  assert.doesNotMatch(source, /['"]use client['"]/);
+  assert.doesNotMatch(source, /window\.open/);
+  assert.doesNotMatch(source, /img\d*\.kbstar\.com/);
+  assert.match(loadBusinessInfoSource(), /markImage: '\/images\/kb-escrow-mark\.gif'/);
+  assert.ok(existsSync(escrowMarkPath), 'public/images/kb-escrow-mark.gif가 있어야 한다');
 });
