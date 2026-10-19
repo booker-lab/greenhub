@@ -199,6 +199,8 @@
 
 **연관**: [#CL-41] (seed 시드 정합성 — 동일 스크립트), `reference_e2e_preview_race`(B 별건).
 
+**후속 변경 (2026-09-05, `d1eab858`)**: 규칙 1의 ② 로컬 파일 폴백은 없어졌다. 지금 `seed-e2e-orders.mjs`·`cleanup-spec-residue.mjs`는 `FIREBASE_SERVICE_ACCOUNT_JSON` env만 받고, `check-round-direct-e2e-readiness.mjs`의 `evaluateFirebaseTarget`으로 비운영 Firebase 대상(운영 project·서비스 계정·bucket 거부, 허용 목록 일치)을 확인한 뒤에만 초기화한다. 로컬 파일 자격은 대상 identity를 입증하지 못하기 때문이다. 규칙 3의 `e2e.yml` seed step도 지금은 `round-direct-e2e-fixtures.mjs seed --project=generic`이 맡는다.
+
 ---
 
 ## [결정 #CL-43] sync-preview 배포 게이트 — SHA-매칭 deployments 폴링 (2026-05-22, 세션71)
