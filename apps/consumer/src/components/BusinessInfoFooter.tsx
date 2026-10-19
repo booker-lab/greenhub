@@ -1,3 +1,4 @@
+import Image from 'next/image';
 import Link from 'next/link';
 import { isFeatureOn } from '@/lib/features';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
@@ -43,6 +44,17 @@ const contactButtonStyle = {
   justifyContent: 'center',
   minHeight: 'var(--touch-target)',
   textDecoration: 'none',
+} as const;
+
+const ESCROW_NOTICE =
+  '고객님은 안전거래를 위해 현금 등으로 결제 시 저희 쇼핑몰에서 가입한 KB국민은행의 구매안전서비스를 이용하실 수 있습니다.';
+
+// 마크 링크는 그림 크기(60px)가 곧 터치 영역이라 --touch-target(44px)보다 크다.
+const escrowMarkLinkStyle = {
+  display: 'inline-flex',
+  flexShrink: 0,
+  minHeight: 'var(--touch-target)',
+  minWidth: 'var(--touch-target)',
 } as const;
 
 const legalLinkStyle = {
@@ -162,6 +174,26 @@ export default function BusinessInfoFooter() {
           <dd style={detailStyle}>{PUBLIC_BUSINESS_INFO.hostingProvider}</dd>
         </div>
       </dl>
+
+      {/* 구매안전서비스 가입 사실 표시. GIF는 최적화 이득이 없어 unoptimized로 원본을 그대로 내보낸다. */}
+      <div style={{ alignItems: 'center', display: 'flex', gap: 12, marginTop: 16 }}>
+        <a
+          href={PUBLIC_BUSINESS_INFO.escrow.verifyUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="KB에스크로이체 구매안전서비스 가입 사실 확인(새 창)"
+          style={escrowMarkLinkStyle}
+        >
+          <Image
+            src={PUBLIC_BUSINESS_INFO.escrow.markImage}
+            alt="KB에스크로이체 인증마크"
+            width={60}
+            height={60}
+            unoptimized
+          />
+        </a>
+        <p style={{ ...detailStyle, flex: 1 }}>{ESCROW_NOTICE}</p>
+      </div>
 
       <p
         style={{
