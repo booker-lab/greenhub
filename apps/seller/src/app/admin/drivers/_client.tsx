@@ -11,6 +11,7 @@ import { DriverList } from './_components/DriverList';
 import {
   ACTION_META,
   type DriverAction,
+  describeDriverConfirm,
   filterByTab,
   type PendingAction,
   STATUS_TABS,
@@ -55,7 +56,8 @@ export default function DriversClient() {
 
   const handleAction = (userId: string, action: DriverAction) => {
     setReason('');
-    setPending({ userId, action });
+    const driver = allDrivers.find((d) => d.id === userId);
+    setPending({ userId, name: driver?.name ?? '', email: driver?.email ?? null, action });
   };
 
   const pendingMeta = pending ? ACTION_META[pending.action] : null;
@@ -101,11 +103,13 @@ export default function DriversClient() {
         opened={pending !== null}
         title={pendingMeta?.title ?? ''}
         message={
-          pending?.action === 'approve' ? (
-            (pendingMeta?.message ?? '')
+          !pending ? (
+            ''
+          ) : pending.action === 'approve' ? (
+            describeDriverConfirm(pending)
           ) : (
             <SuspendReasonMessage
-              message={pendingMeta?.message ?? ''}
+              message={describeDriverConfirm(pending)}
               reason={reason}
               onReasonChange={setReason}
             />
