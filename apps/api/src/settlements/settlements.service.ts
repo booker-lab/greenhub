@@ -13,7 +13,7 @@ import { hasOpenProviderReversalInTransaction } from './_lib/provider-reversal-h
 import { aggregateSettlements } from './_lib/settlement-aggregator';
 
 // 정산 상태 타입 SSOT = @greenhub/shared (F-1/S4). DTO 등 기존 import 경로 유지를 위해 re-export + 로컬 사용.
-import type { SettlementStatus } from '@greenhub/shared';
+import type { SettlementRecoveryStatus, SettlementStatus } from '@greenhub/shared';
 export type { SettlementStatus } from '@greenhub/shared';
 
 /**
@@ -157,6 +157,8 @@ export class SettlementsService {
       totalPlatformFee: agg.totalPlatformFee,
       totalNetAmount: agg.totalNetAmount,
       byStatus: agg.byStatus,
+      recoveryPendingCount: agg.recoveryPendingCount,
+      recoveryPendingAmount: agg.recoveryPendingAmount,
     };
   }
 
@@ -238,9 +240,25 @@ export class SettlementsService {
       if (!snap.exists) return;
       const status = snap.data()?.['status'] as SettlementStatus;
       if (status === 'paid') {
-        // 환불 회계 별도 처리는 범위 외 — 최소 덮어쓰기 차단
+        // 지급 사실은 보존하고(paid 유지) 판매자에게서 돌려받을 돈을 회수 기록으로 붙인다.
+        // 이미 회수 기록이 있으면 멱등 no-op(재시도·중복 취소 대비). 배송 뒤 환불 계획서 §2.3.
+        const data = snap.data() ?? {};
+        if (data['recovery']) return;
+        const netAmount = data['netAmount'];
+        const amount = typeof netAmount === 'number' && Number.isFinite(netAmount) ? netAmount : 0;
+        const now = this.firestore.Timestamp.now();
+        t.update(ref, {
+          recovery: {
+            status: 'PENDING' satisfies SettlementRecoveryStatus,
+            amount,
+            createdAt: now,
+            recoveredAt: null,
+            recoveredBy: null,
+          },
+          updatedAt: now,
+        });
         this.logger.warn(
-          `[cancelSettlement] paid 정산 ${orderId} 취소 시도 — cancelled 미적용(역전이 가드)`,
+          `[cancelSettlement] paid 정산 ${orderId} 취소 — paid 유지, 회수 대기 기록(${amount}원)`,
         );
         return;
       }

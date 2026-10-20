@@ -33,4 +33,8 @@ export const STATUS_COLOR = {
     paid: 'gray',
     cancelled: 'red',
 };
+export const RECOVERY_STATUS_LABEL = {
+    PENDING: '돌려받을 돈',
+    RECOVERED: '회수 완료',
+};
 //# sourceMappingURL=settlement.types.js.map

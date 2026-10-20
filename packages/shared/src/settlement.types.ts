@@ -61,4 +61,27 @@ export interface Settlement {
   settledAt: unknown
   confirmedAt?: unknown | null
   paidAt?: unknown | null
+  /** 지급 완료 뒤 주문이 환불돼 판매자에게서 돌려받아야 하는 돈. 없으면 회수 대상 아님. */
+  recovery?: SettlementRecovery | null
+}
+
+/**
+ * 회수 기록 상태 — 배송 뒤 환불 계획서 §2.3.
+ * PENDING: 돌려받을 돈이 남음 / RECOVERED: 관리자가 계좌로 받은 뒤 "회수 완료"를 누름.
+ * 정산 status(paid)는 바꾸지 않고 이 칸만 붙인다(지급 사실은 그대로 남긴다).
+ */
+export type SettlementRecoveryStatus = 'PENDING' | 'RECOVERED'
+
+export interface SettlementRecovery {
+  status: SettlementRecoveryStatus
+  /** 돌려받을 금액 = 그 정산의 판매자 지급액(netAmount) */
+  amount: number
+  createdAt: unknown
+  recoveredAt: unknown | null
+  recoveredBy: string | null
+}
+
+export const RECOVERY_STATUS_LABEL: Record<SettlementRecoveryStatus, string> = {
+  PENDING: '돌려받을 돈',
+  RECOVERED: '회수 완료',
 }
