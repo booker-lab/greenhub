@@ -9,6 +9,7 @@
 
 | 알림 | 출처 | 수준 |
 |---|---|---|
+| 새 주문·공동구매 참여(결제 확정 시 한 주문에 한 번). 회차 이름·상품명과 수량·결제 금액만 싣는다 | API `PaymentFinalizationService` | 🟢 정보 |
 | 운영 확인 기록이 새로 열림(결제 조회 실패, 환불 실패, 고객 안내 실패, 배송 사진 확인 등) | API `OperationIssueWriterService` | 기록의 severity(긴급·주의) |
 | 알림톡 발송 막힘(잔액 부족, 허용 IP 아님, 인증 실패, 발신번호 미등록) | API `NotificationsService` | 긴급, 같은 사유는 1시간에 한 번 |
 | 아침 운영 요약 08:30 KST(열린 운영 기록, 20분 넘은 결제 대기, 배송 보류, 지급 대기 정산) | API `OpsDigestService` | 이상 없으면 🟢 |
