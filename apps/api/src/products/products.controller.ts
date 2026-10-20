@@ -169,6 +169,14 @@ export class DeliveryConfigController {
     return this.productsService.getDeliveryConfig(storeId);
   }
 
+  // 판매자 설정 화면용. 치운 가게의 판매자도 자기 배송비 설정을 볼 수 있게 소유자 확인 경로로 둔다.
+  @Get('owner')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('seller', 'admin')
+  getOwnerDeliveryConfig(@Param('storeId') storeId: string, @CurrentUser() user: JwtPayload) {
+    return this.productsService.getOwnerDeliveryConfig(storeId, user.sub, user.role);
+  }
+
   @Patch()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('seller', 'admin')

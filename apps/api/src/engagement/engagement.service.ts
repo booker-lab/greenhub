@@ -7,6 +7,7 @@ import { assertStoreOwnerOrAdmin } from '../common/store-ownership';
 import { FirestoreService } from '../firestore/firestore.service';
 import { toSingleLineText } from '../notifications/notification-templates';
 import { isPubliclyVisibleProduct } from '../products/product-visibility';
+import { isArchivedStore } from '../stores/store-availability';
 import type { CreatePartnerInquiryDto } from './dto/engagement.dto';
 
 // 팔도감 벤치마킹 비교용 다음 회차 알림 신청·찾는 상품 제안·입점 문의.
@@ -94,7 +95,10 @@ export class EngagementService {
   // ── 찾는 상품 제안 ──
   async createProductRequest(storeId: string, rawText: string): Promise<{ id: string }> {
     const store = await this.firestore.doc(`stores/${storeId}`).get();
-    if (!store.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    // 치운(archived) 가게는 손님 화면에서 숨기므로 요청도 없는 가게처럼 받지 않는다.
+    if (!store.exists || isArchivedStore(store.data())) {
+      throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    }
     const text = toSingleLineText(rawText, 60);
     const id = randomUUID();
     await this.firestore.doc(`productRequests/${id}`).set({
