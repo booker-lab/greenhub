@@ -11,7 +11,7 @@ const baseProps: Props = {
   orders: [],
   loading: false,
   error: null,
-  processingId: null,
+  processingIds: new Set<string>(),
   onRefund: () => {},
   onRetry: () => {},
 };
@@ -129,9 +129,30 @@ describe('Admin OrdersTable read state', () => {
     const processing = OrdersTable({
       ...baseProps,
       orders: [order('o1', 'ORD-1', 'ACCEPTED')],
-      processingId: 'o1',
+      processingIds: new Set(['o1']),
     });
     expect(textsOf(processing)).toContain('처리중…');
+  });
+
+  it('강제환불 버튼은 확인창용으로 주문 객체 전체를 넘긴다', () => {
+    const onRefund = vi.fn();
+    const target = order('o1', 'ORD-1', 'ACCEPTED');
+    const tree = OrdersTable({ ...baseProps, orders: [target], onRefund });
+    const handlers = handlersFor(tree, '강제환불');
+    expect(handlers.length).toBeGreaterThan(0);
+    handlers[0]();
+    expect(onRefund).toHaveBeenCalledWith(target);
+  });
+
+  it('처리 중 표시는 주문마다 따로 유지된다(한 건이 끝나도 다른 건은 잠김)', () => {
+    const tree = OrdersTable({
+      ...baseProps,
+      orders: [order('o1', 'ORD-1', 'ACCEPTED'), order('o2', 'ORD-2', 'ACCEPTED')],
+      processingIds: new Set(['o2']),
+    });
+    const texts = textsOf(tree);
+    expect(texts.filter((t) => t === '처리중…')).toHaveLength(2); // 카드 + 표 각 1
+    expect(texts.filter((t) => t === '강제환불')).toHaveLength(2);
   });
 });
 

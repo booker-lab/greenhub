@@ -73,3 +73,22 @@ export function buildStatusOptions(): { value: string; label: string }[] {
     ...Object.entries(STATUS_LABEL).map(([k, v]) => ({ value: k, label: v })),
   ];
 }
+
+// 강제환불 확인창 대상 표시 — 운영자가 어느 주문을 얼마 환불하는지 눈으로 확인하게 한다.
+// 주문번호가 없는 옛 주문은 목록처럼 줄이지 않고 전체 id를 보여 준다(오인 방지).
+export function describeRefundTarget(order: {
+  id: string;
+  orderNumber?: string;
+  totalAmount: number;
+}): { orderLabel: string; amountLabel: string } {
+  return {
+    orderLabel: order.orderNumber ?? order.id,
+    amountLabel: `₩${order.totalAmount.toLocaleString()}`,
+  };
+}
+
+// 환불 사유는 선택 입력 — 비우면 서버 기본 사유('관리자 강제 환불')를 쓰도록 보내지 않는다.
+export function normalizeRefundReason(input: string): string | undefined {
+  const reason = input.trim();
+  return reason ? reason : undefined;
+}
