@@ -373,13 +373,22 @@ test('기사 주문 조회는 apiRead를 쓰고 명령은 apiFetch로 한 번만
   );
   assert.match(mapSource, /apiRead\('\/driver\/orders', token, \{ signal: controller\.signal \}\)/);
   // 상세 조회·명령 뒤 확인 조회·사진 실패 뒤 상태 조회 모두 조회 경로다.
+  // 상세 조회(readDetail)는 화면 정리 때 취소할 수 있도록 signal을 함께 넘긴다.
   assert.equal(
     (
       detailSource.match(
         /apiRead\(`\/driver\/orders\/\$\{encodeURIComponent\(orderId\)\}`, token\)/g,
       ) ?? []
     ).length,
-    2,
+    1,
+  );
+  assert.equal(
+    (
+      detailSource.match(
+        /apiRead\(`\/driver\/orders\/\$\{encodeURIComponent\(orderId\)\}`, token, \{\s*signal,\s*\}\)/g,
+      ) ?? []
+    ).length,
+    1,
   );
   assert.match(
     photoCaptureSource,
