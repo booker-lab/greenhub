@@ -162,6 +162,20 @@ test('Board는 focus 복귀와 visible 복귀에 재조회하고 listener를 정
   assert.match(boardSource, /removeEventListener\(['"]visibilitychange['"]/);
 });
 
+test('Board는 복귀 한 번에 겹쳐 오는 focus·visibilitychange 재조회를 한 번으로 묶는다', () => {
+  assert.match(boardSource, /const REVALIDATE_COALESCE_MS = 1_500;/);
+  const at = boardSource.indexOf('const revalidate = () => {');
+  assert.ok(at !== -1);
+  const block = boardSource.slice(at, at + 300);
+  assert.match(block, /if \(now - lastRevalidateAt < REVALIDATE_COALESCE_MS\) return;/);
+  assert.ok(
+    block.indexOf('lastRevalidateAt = now;') < block.indexOf('setReloadKey((key) => key + 1)'),
+  );
+  // 두 리스너 모두 같은 묶음 함수를 거친다.
+  assert.match(boardSource, /addEventListener\('focus', revalidate\)/);
+  assert.match(boardSource, /if \(document\.visibilityState === 'visible'\) revalidate\(\);/);
+});
+
 test('Board는 usable token 없음을 auth-required로 표시하고 empty와 분리한다', () => {
   assert.match(boardSource, /authRequired/);
   assert.match(boardSource, /로그인이 필요합니다/);
