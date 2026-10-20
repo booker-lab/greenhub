@@ -7,6 +7,7 @@ import { type OrderGroup, STATUS_GROUP_MAP } from '@/app/orders/_constants';
 import { apiJson } from '@/lib/api';
 import {
   buildSellerOrdersPath,
+  buildSellerOrdersQueryString,
   buildSellerOrdersScopeKey,
   isSellerOrdersBackgroundRefresh,
   resolveSellerOrdersAuthState,
@@ -14,9 +15,11 @@ import {
   shouldIgnoreSellerOrdersResponse,
   shouldIgnoreSellerOrdersScopeResponse,
   shouldInvalidateSellerOrdersScope,
+  type SellerOrdersQuery,
 } from './useOrders.recovery';
 
 export {
+  ACTIVE_SELLER_ORDERS_QUERY,
   buildSellerOrdersPath,
   buildSellerOrdersScopeKey,
   isSellerOrdersBackgroundRefresh,
@@ -26,7 +29,7 @@ export {
   shouldIgnoreSellerOrdersScopeResponse,
   shouldInvalidateSellerOrdersScope,
 } from './useOrders.recovery';
-export type { SellerOrdersAuthState } from './useOrders.recovery';
+export type { SellerOrdersAuthState, SellerOrdersQuery } from './useOrders.recovery';
 export { resolveSellerOrdersInitialView } from './useOrders.recovery';
 
 interface UseOrdersResult {
@@ -38,10 +41,15 @@ interface UseOrdersResult {
   refresh: () => void;
 }
 
-export function useOrders(storeId: string | null): UseOrdersResult {
+/**
+ * 판매자 주문 목록. query로 범위를 좁힌다(진행 중 주문 전부 또는 한 회차의 주문 전부).
+ * query를 빼면 기존처럼 모든 기간의 주문을 받는다 — 주문이 쌓일수록 커지므로 새 화면은 쓰지 않는다.
+ */
+export function useOrders(storeId: string | null, query?: SellerOrdersQuery): UseOrdersResult {
   const { data: session, status: sessionStatus } = useSession();
   const token = session?.user.accessToken;
-  const scopeKey = buildSellerOrdersScopeKey(storeId, token);
+  const queryString = buildSellerOrdersQueryString(query);
+  const scopeKey = buildSellerOrdersScopeKey(storeId, token, queryString);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -105,7 +113,7 @@ export function useOrders(storeId: string | null): UseOrdersResult {
     const myId = requestIdRef.current + 1;
     requestIdRef.current = myId;
     let active = true;
-    apiJson<Order[]>(buildSellerOrdersPath(storeId as string), token as string)
+    apiJson<Order[]>(`${buildSellerOrdersPath(storeId as string)}${queryString}`, token as string)
       .then((payload) => {
         if (shouldIgnoreSellerOrdersResponse(active, requestIdRef.current, myId)) return;
         if (shouldIgnoreSellerOrdersScopeResponse(scopeRef.current, requestScopeKey)) return;
@@ -130,7 +138,7 @@ export function useOrders(storeId: string | null): UseOrdersResult {
     return () => {
       active = false;
     };
-  }, [token, sessionStatus, storeId, scopeKey, tick]);
+  }, [token, sessionStatus, storeId, scopeKey, queryString, tick]);
 
   useEffect(() => {
     const revalidate = () => {

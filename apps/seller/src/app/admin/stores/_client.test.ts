@@ -82,7 +82,9 @@ describe('AdminStoresClient read-error recovery wiring', () => {
     expect(source).toContain('parseStatusFilter');
     expect(source).toContain('parseSort');
     expect(source).toContain('router.push');
-    expect(source).toContain('onKeywordChange={(keyword) => updateView({ keyword })}');
+    expect(source).toContain(
+      'onKeywordChange={(keyword) => updateView({ keyword }, { debounceUrl: true })}',
+    );
     expect(source).toContain('onStatusChange={(status) => updateView({ status })}');
     expect(source).toContain('onSortChange={(sort) => updateView({ sort })}');
     // error 분기는 필터를 초기화하지 않는다.
@@ -98,6 +100,17 @@ describe('AdminStoresClient read-error recovery wiring', () => {
     expect(source).toContain('sortStores(filtered,');
     expect(source).toContain('getEmptyKind(stores, visible)');
     expect(source).toContain('onResetFilters={resetFilters}');
+  });
+
+  it('검색어는 debounce 후 replace로 URL에 반영하고 상태·정렬은 즉시 push한다', () => {
+    expect(source).toContain("import { useDebouncedCallback } from '@mantine/hooks'");
+    expect(source).toContain('const KEYWORD_URL_DEBOUNCE_MS = 300;');
+    expect(source).toMatch(/writeViewToUrl\(next, 'replace'\),\s*KEYWORD_URL_DEBOUNCE_MS/);
+    expect(source).toContain("if (mode === 'replace') router.replace(href, { scroll: false });");
+    // 상태·정렬 변경은 대기 중인 검색어 반영을 취소하고 최신 상태로 즉시 쓴다.
+    expect(source).toMatch(/writeKeywordToUrl\.cancel\(\);\s*writeViewToUrl\(next, 'push'\);/);
+    // 화면이 직접 쓴 쿼리가 되돌아와도 입력 중인 검색어를 덮지 않는다.
+    expect(source).toContain('searchParams.toString() === writtenQueryRef.current');
   });
 
   it('mutation controls 회귀가 없다', () => {

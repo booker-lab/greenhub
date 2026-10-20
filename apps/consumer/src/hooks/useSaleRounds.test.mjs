@@ -4,11 +4,31 @@ import test from 'node:test';
 import ts from 'typescript';
 
 const source = await readFile(new URL('./useSaleRounds.ts', import.meta.url), 'utf8');
+const sharedRequestSource = await readFile(
+  new URL('../lib/shared-request.ts', import.meta.url),
+  'utf8',
+);
+const sharedRequestCompiled = ts.transpileModule(sharedRequestSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  fileName: 'shared-request.ts',
+}).outputText;
+/** 호출할 때마다 공유 캐시가 비어 있는 shared-request 모듈을 새로 만든다(테스트끼리 섞이지 않게). */
+function freshSharedRequestModule() {
+  const module = { exports: {} };
+  new Function('require', 'module', 'exports', sharedRequestCompiled)(
+    () => {
+      throw new Error('shared-request는 다른 모듈을 쓰지 않는다');
+    },
+    module,
+    module.exports,
+  );
+  return module.exports;
+}
 const testableSource = `${source.replace(
   "import { getApiBaseUrl } from '@/lib/api-base-url';",
   "const getApiBaseUrl = () => 'https://api.example.test';",
 )}
-export { createLoadingSaleRoundsState, createEmptySaleRoundsState, createErrorSaleRoundsState, hasRecoverableSaleRoundsData, createRefreshingSaleRoundsState, createStaleSaleRoundsState, resolveSaleRoundsRefreshStart, resolveSaleRoundsRefreshResult, fetchPublicSaleRoundsState };`;
+export { createLoadingSaleRoundsState, createEmptySaleRoundsState, createErrorSaleRoundsState, hasRecoverableSaleRoundsData, createRefreshingSaleRoundsState, createStaleSaleRoundsState, resolveSaleRoundsRefreshStart, resolveSaleRoundsRefreshResult, fetchPublicSaleRoundsState, loadPublicSaleRoundsState, fetchPublicSaleRound };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -17,6 +37,7 @@ const compiled = ts.transpileModule(testableSource, {
   fileName: 'useSaleRounds.ts',
 }).outputText;
 const saleRoundsModule = { exports: {} };
+const topLevelSharedRequest = freshSharedRequestModule();
 const saleRoundsRequire = (specifier) => {
   if (specifier === 'react') {
     return {
@@ -26,6 +47,7 @@ const saleRoundsRequire = (specifier) => {
       useState: (initial) => [initial, () => {}],
     };
   }
+  if (specifier === '@/lib/shared-request') return topLevelSharedRequest;
   throw new Error(`예상하지 못한 회차 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(
@@ -41,6 +63,8 @@ const {
   resolveSaleRoundsRefreshStart,
   resolveSaleRoundsRefreshResult,
   fetchPublicSaleRoundsState,
+  loadPublicSaleRoundsState,
+  fetchPublicSaleRound,
 } = saleRoundsModule.exports;
 
 const originalFetch = globalThis.fetch;
@@ -97,15 +121,19 @@ function jsonResponse(body, status = 200) {
   });
 }
 
+/** 묶음 응답(`?include=items`)의 회차: 상품을 함께 싣는다. */
+function withItems(rounds) {
+  return rounds.map((item) => ({ ...item, items: [{ id: `${item.id}-item`, roundId: item.id }] }));
+}
+
+function isRoundsListUrl(url) {
+  return String(url).includes('/sale-rounds/public?');
+}
+
 function successFetcherFor(rounds) {
   return async (input) => {
-    const url = String(input);
-    if (url.endsWith('/public')) {
-      return jsonResponse({ items: rounds });
-    }
-    const id = url.split('/').at(-1);
-    const selected = rounds.find((item) => item.id === id);
-    return jsonResponse({ ...selected, items: [{ id: `${id}-item`, roundId: id }] });
+    if (isRoundsListUrl(input)) return jsonResponse({ items: withItems(rounds) });
+    return jsonResponse({}, 404);
   };
 }
 
@@ -121,6 +149,7 @@ function deferred() {
 
 function mountHook({ storeId = 'store-1', fetchImpl }) {
   globalThis.fetch = fetchImpl;
+  const sharedRequestModule = freshSharedRequestModule();
   let currentStoreId = storeId;
   const hookModule = { exports: {} };
   const stateSlots = [];
@@ -174,6 +203,7 @@ function mountHook({ storeId = 'store-1', fetchImpl }) {
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => 'https://api.example.test' };
     }
+    if (specifier === '@/lib/shared-request') return sharedRequestModule;
     throw new Error(`예상하지 못한 회차 모듈 요청: ${specifier}`);
   };
   new Function('require', 'module', 'exports', compiled)(
@@ -250,21 +280,15 @@ test('초기 상태는 회차 데이터 없이 loading이다', () => {
   });
 });
 
-test('1. initial success: 목록과 상세를 조회해 현재 회차와 최신순 지난 회차를 제공한다', async () => {
+test('1. initial success: 상품을 포함한 회차 묶음을 한 번만 조회해 현재 회차와 최신순 지난 회차를 제공한다', async () => {
   const open = round('round-open', 'OPEN', '2026-07-13T00:00:00.000Z');
   const closed = round('round-closed', 'CLOSED', '2026-07-06T00:00:00.000Z');
   const completed = round('round-completed', 'COMPLETED', '2026-06-29T00:00:00.000Z');
   const requests = [];
 
   const state = await fetchPublicSaleRoundsState('store-1', async (input) => {
-    const url = String(input);
-    requests.push(url);
-    if (url.endsWith('/public')) {
-      return jsonResponse({ items: [completed, open, closed] });
-    }
-    const id = url.split('/').at(-1);
-    const selected = [open, closed, completed].find((item) => item.id === id);
-    return jsonResponse({ ...selected, items: [{ id: `${id}-item`, roundId: id }] });
+    requests.push(String(input));
+    return jsonResponse({ items: withItems([completed, open, closed]) });
   });
 
   assert.equal(state.status, 'success');
@@ -283,8 +307,91 @@ test('1. initial success: 목록과 상세를 조회해 현재 회차와 최신�
     ['round-open', 'round-closed', 'round-completed'],
   );
   assert.equal(state.currentRound?.items[0]?.id, 'round-open-item');
-  assert.equal(requests.length, 4);
+  // 회차 수와 상관없이 요청은 한 번이고, 지난 회차는 화면 개수(2)+1개만 받는다.
+  assert.deepEqual(requests, [
+    'https://api.example.test/stores/store-1/sale-rounds/public?include=items&past=3',
+  ]);
   assert.ok(hasRecoverableSaleRoundsData(state));
+});
+
+test('지난 회차는 최신 2개만 보여 주고, 마감 회차가 지금 회차가 되어도 지난 회차 2개가 남는다', async () => {
+  const open = round('round-open', 'OPEN', '2026-07-13T00:00:00.000Z');
+  const past = [
+    round('past-1', 'CLOSED', '2026-07-06T00:00:00.000Z'),
+    round('past-2', 'COMPLETED', '2026-06-29T00:00:00.000Z'),
+    round('past-3', 'COMPLETED', '2026-06-22T00:00:00.000Z'),
+  ];
+
+  const withOpen = await fetchPublicSaleRoundsState('store-1', successFetcherFor([open, ...past]));
+  assert.equal(withOpen.currentRound?.id, 'round-open');
+  assert.deepEqual(
+    withOpen.pastRounds.map((item) => item.id),
+    ['past-1', 'past-2'],
+  );
+
+  const closedOnly = await fetchPublicSaleRoundsState('store-1', successFetcherFor(past));
+  assert.equal(closedOnly.currentRound?.id, 'past-1');
+  assert.deepEqual(
+    closedOnly.pastRounds.map((item) => item.id),
+    ['past-2', 'past-3'],
+  );
+});
+
+test('같은 매장 회차 조회는 화면 사이에서 공유하고, 실패는 공유하지 않으며 fresh는 새로 보낸다', async () => {
+  const open = round('round-open', 'OPEN', '2026-07-13T00:00:00.000Z');
+  let calls = 0;
+  let fail = true;
+  globalThis.fetch = async (input) => {
+    calls += 1;
+    if (fail) return jsonResponse({}, 503);
+    return successFetcherFor([open])(input);
+  };
+
+  const failed = await loadPublicSaleRoundsState('store-share');
+  assert.equal(failed.status, 'error');
+  fail = false;
+  const first = await loadPublicSaleRoundsState('store-share');
+  const second = await loadPublicSaleRoundsState('store-share');
+  assert.equal(first.status, 'success');
+  assert.equal(second, first);
+  assert.equal(calls, 2, '실패 뒤 한 번 더 보내고, 성공은 공유한다');
+
+  const fresh = await loadPublicSaleRoundsState('store-share', { fresh: true });
+  assert.equal(fresh.status, 'success');
+  assert.equal(calls, 3);
+  await loadPublicSaleRoundsState('store-other');
+  assert.equal(calls, 4, '다른 매장은 따로 보낸다');
+});
+
+test('목록 밖 회차 하나 조회: 같은 매장·같은 회차만 받고 실패는 null이다', async () => {
+  const old = round('round-old', 'COMPLETED', '2026-05-01T00:00:00.000Z');
+  const requests = [];
+  const found = await fetchPublicSaleRound('store-1', 'round-old', async (input) => {
+    requests.push(String(input));
+    return jsonResponse({ ...old, items: [] });
+  });
+  assert.equal(found?.id, 'round-old');
+  assert.deepEqual(requests, [
+    'https://api.example.test/stores/store-1/sale-rounds/public/round-old',
+  ]);
+
+  const otherStore = round('round-old', 'COMPLETED', '2026-05-01T00:00:00.000Z', 'store-2');
+  assert.equal(
+    await fetchPublicSaleRound('store-1', 'round-old', async () =>
+      jsonResponse({ ...otherStore, items: [] }),
+    ),
+    null,
+  );
+  assert.equal(
+    await fetchPublicSaleRound('store-1', 'round-old', async () => jsonResponse({}, 404)),
+    null,
+  );
+  assert.equal(
+    await fetchPublicSaleRound('store-1', 'round-old', async () => {
+      throw new Error('network');
+    }),
+    null,
+  );
 });
 
 test('2. authoritative empty: 공개 회차가 없으면 empty 상태를 제공한다', async () => {
@@ -327,12 +434,11 @@ test('malformed 응답은 정상 empty로 바꾸지 않고 error를 유지한다
   assert.equal(malformedList.isEmpty, false);
   assert.match(malformedList.error ?? '', /형식/);
 
+  // 상품이 빠진 회차가 섞이면 정상 결과로 보지 않는다.
   const open = round('round-open', 'OPEN', '2026-07-13T00:00:00.000Z');
-  const malformedDetail = await fetchPublicSaleRoundsState('store-1', async (input) => {
-    const url = String(input);
-    if (url.endsWith('/public')) return jsonResponse({ items: [open] });
-    return jsonResponse({ unexpected: true });
-  });
+  const malformedDetail = await fetchPublicSaleRoundsState('store-1', async () =>
+    jsonResponse({ items: [open] }),
+  );
   assert.equal(malformedDetail.status, 'error');
   assert.equal(malformedDetail.isEmpty, false);
 });
@@ -344,19 +450,7 @@ test('판매 중 회차가 없으면 현재 시각 이후 가장 가까운 예�
   const later = round('round-later', 'SCHEDULED', '2026-07-26T15:00:00.000Z');
   const rounds = [later, pastScheduled, nearest];
 
-  const state = await fetchPublicSaleRoundsState(
-    'store-1',
-    async (input) => {
-      const url = String(input);
-      if (url.endsWith('/public')) {
-        return jsonResponse({ items: rounds });
-      }
-      const id = url.split('/').at(-1);
-      const selected = rounds.find((item) => item.id === id);
-      return jsonResponse({ ...selected, items: [{ id: `${id}-item`, roundId: id }] });
-    },
-    now,
-  );
+  const state = await fetchPublicSaleRoundsState('store-1', successFetcherFor(rounds), now);
 
   assert.equal(state.status, 'success');
   assert.equal(state.currentRound?.id, 'round-nearest');
@@ -460,13 +554,9 @@ test('hook: success → refetch 시작은 데이터를 유지하고 refreshing�
   let listCalls = 0;
   const harness = mountHook({
     storeId: 'store-1',
-    fetchImpl: async (input) => {
-      const url = String(input);
-      if (!url.endsWith('/public')) {
-        return jsonResponse({ ...open, items: [{ id: 'round-open-item', roundId: 'round-open' }] });
-      }
+    fetchImpl: async () => {
       listCalls += 1;
-      if (listCalls === 1) return jsonResponse({ items: [open] });
+      if (listCalls === 1) return jsonResponse({ items: withItems([open]) });
       return gate.promise;
     },
   });
@@ -610,16 +700,10 @@ test('9. hook: 늦은 이전 요청은 새 scope/newer refresh를 덮지 않는�
   let listCalls = 0;
   const harness = mountHook({
     storeId: 'store-a',
-    fetchImpl: async (input) => {
-      const url = String(input);
-      if (url.endsWith('/public')) {
-        listCalls += 1;
-        if (listCalls === 1) return first.promise;
-        return second.promise;
-      }
-      const id = url.split('/').at(-1);
-      const selected = [openA, openB].find((item) => item.id === id);
-      return jsonResponse({ ...selected, items: [{ id: `${id}-item`, roundId: id }] });
+    fetchImpl: async () => {
+      listCalls += 1;
+      if (listCalls === 1) return first.promise;
+      return second.promise;
     },
   });
   await harness.settle(5);
@@ -627,14 +711,14 @@ test('9. hook: 늦은 이전 요청은 새 scope/newer refresh를 덮지 않는�
   harness.setStoreId('store-b');
   await harness.settle(5);
 
-  second.resolve(jsonResponse({ items: [openB] }));
+  second.resolve(jsonResponse({ items: withItems([openB]) }));
   await harness.settle();
   assert.deepEqual(
     harness.get().rounds.map((item) => item.id),
     ['round-b'],
   );
 
-  first.resolve(jsonResponse({ items: [openA] }));
+  first.resolve(jsonResponse({ items: withItems([openA]) }));
   await harness.settle();
 
   assert.deepEqual(
@@ -653,12 +737,6 @@ test('hook: stale refetch 응답은 더 최신 refetch 결과를 덮지 않는�
   const harness = mountHook({
     storeId: 'store-1',
     fetchImpl: async (input) => {
-      const url = String(input);
-      if (!url.endsWith('/public')) {
-        const id = url.split('/').at(-1);
-        const selected = [openA, openB].find((item) => item.id === id);
-        return jsonResponse({ ...selected, items: [{ id: `${id}-item`, roundId: id }] });
-      }
       n += 1;
       if (n === 1) return successFetcherFor([openA])(input);
       if (n === 2) return first.promise;
@@ -676,13 +754,10 @@ test('hook: stale refetch 응답은 더 최신 refetch 결과를 덮지 않는�
   harness.get().refetch();
   await harness.settle(5);
 
-  second.resolve(jsonResponse({ items: [openB] }));
-  await harness.settle();
-  // detail fetch는 즉시 성공하므로 최종은 round-b가 된다.
-  // (상세 fetch가 목록 resolve 이후 실행되기 때문에 settle로 모두 확정한다.)
+  second.resolve(jsonResponse({ items: withItems([openB]) }));
   await harness.settle();
 
-  first.resolve(jsonResponse({ items: [openA] }));
+  first.resolve(jsonResponse({ items: withItems([openA]) }));
   await harness.settle();
 
   assert.deepEqual(
@@ -786,11 +861,11 @@ function boundaryServer() {
   const server = { listCalls: 0 };
   const current = () => windowRound('round-open', Date.now() >= CLOSE_AT ? 'CLOSED' : 'OPEN');
   server.fetch = async (input) => {
-    if (String(input).endsWith('/public')) {
+    if (isRoundsListUrl(input)) {
       server.listCalls += 1;
-      return jsonResponse({ items: [current()] });
+      return jsonResponse({ items: [{ ...current(), items: [] }] });
     }
-    return jsonResponse({ ...current(), items: [] });
+    return jsonResponse({}, 404);
   };
   return server;
 }

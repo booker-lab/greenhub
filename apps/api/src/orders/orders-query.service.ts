@@ -7,6 +7,11 @@ import {
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { FirestoreService } from '../firestore/firestore.service';
 import { StorageService } from '../firestore/storage.service';
+import {
+  STORE_ORDER_ACTIVE_STATUSES,
+  STORE_ORDER_ARCHIVED_STATUSES,
+  STORE_ORDER_ID_PATTERN,
+} from './dto/query-orders.dto';
 import { projectDriverOrder } from './driver-order-read-model';
 import { DriverOrderScopeService } from './driver-order-scope.service';
 import {
@@ -22,6 +27,28 @@ import {
 
 type OrderRequester = Pick<JwtPayload, 'sub' | 'role'>;
 type OrderRequesterInput = OrderRequester | string;
+
+export interface StoreOrdersQuery {
+  userId?: string;
+  status?: string;
+  saleType?: string;
+  phone?: string;
+  scope?: string;
+  roundId?: string;
+  limit?: unknown;
+  cursor?: string;
+}
+
+export const STORE_ORDER_PAGE_DEFAULT_LIMIT = 50;
+export const STORE_ORDER_PAGE_MAX_LIMIT = 100;
+
+export function resolveStoreOrderPageLimit(raw: unknown): number {
+  const value = typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : raw;
+  if (typeof value !== 'number' || !Number.isFinite(value)) return STORE_ORDER_PAGE_DEFAULT_LIMIT;
+  return Math.min(Math.max(Math.floor(value), 1), STORE_ORDER_PAGE_MAX_LIMIT);
+}
+
+export type ArchivedOrderStatus = (typeof STORE_ORDER_ARCHIVED_STATUSES)[number];
 
 @Injectable()
 export class OrdersQueryService {
@@ -46,13 +73,13 @@ export class OrdersQueryService {
     return this.withReadModel(orderId, order, requester);
   }
 
-  async getOrders(
-    storeId: string,
-    requesterInput: OrderRequesterInput,
-    query: { userId?: string; status?: string; saleType?: string; phone?: string },
-  ) {
+  async getOrders(storeId: string, requesterInput: OrderRequesterInput, query: StoreOrdersQuery) {
     const requester = this.normalizeRequester(requesterInput);
     await this.assertStoreOrderReadAccess(storeId, requester);
+    this.assertOrderListQuery(query);
+    if (query.scope === 'archive') {
+      throw new BadRequestException('scope=archive는 끝난 주문 페이지 조회로 받습니다.');
+    }
 
     const VALID_STATUSES = [
       'PENDING',
@@ -91,7 +118,18 @@ export class OrdersQueryService {
     }
     if (query.status) ref = ref.where('status', '==', query.status);
     if (query.saleType) ref = ref.where('saleType', '==', query.saleType);
-    if (requester.role === 'seller' && !query.userId && !query.status && !query.saleType) {
+    // 회차 주문: storeId·roundId 같음 조건만 쓴다(정렬 없음 — 화면이 정렬한다).
+    if (query.roundId) ref = ref.where('roundId', '==', query.roundId);
+    if (query.scope === 'active') {
+      // 진행 중 주문만: 기존 (storeId, status, createdAt DESC) 색인을 쓴다.
+      ref = ref.where('status', 'in', STORE_ORDER_ACTIVE_STATUSES).orderBy('createdAt', 'desc');
+    } else if (
+      requester.role === 'seller' &&
+      !query.userId &&
+      !query.status &&
+      !query.saleType &&
+      !query.roundId
+    ) {
       ref = ref.orderBy('createdAt', 'desc');
     }
 
@@ -99,14 +137,98 @@ export class OrdersQueryService {
     const docs = phoneDigits
       ? snap.docs.filter((d: any) => matchesSellerPhoneSearch(d.data(), phoneDigits))
       : snap.docs;
+    return this.projectOrderList(docs, requester);
+  }
+
+  /**
+   * 끝난 주문(완료·취소)을 최신순으로 limit건씩 준다. 정산 목록과 같은 방식으로 앞 응답의 마지막 주문
+   * 문서 다음부터 이어 받아 createdAt이 같은 주문도 빠지거나 겹치지 않는다.
+   * 기존 (storeId, status, createdAt DESC) 색인을 쓴다.
+   */
+  async getArchivedOrders(
+    storeId: string,
+    requesterInput: OrderRequesterInput,
+    query: StoreOrdersQuery,
+  ) {
+    const requester = this.normalizeRequester(requesterInput);
+    await this.assertStoreOrderReadAccess(storeId, requester);
+    this.assertOrderListQuery(query);
+    if (query.scope !== 'archive') {
+      throw new BadRequestException('끝난 주문 페이지 조회는 scope=archive만 받습니다.');
+    }
+    let ref = this.firestore
+      .collection('orders')
+      .where('storeId', '==', storeId)
+      .where('status', 'in', STORE_ORDER_ARCHIVED_STATUSES)
+      .orderBy('createdAt', 'desc') as any;
+    if (query.cursor !== undefined) {
+      ref = ref.startAfter(await this.readOrderCursor(storeId, query.cursor));
+    }
+    const limit = resolveStoreOrderPageLimit(query.limit);
+    const snap = await ref.limit(limit + 1).get();
+    const docs = snap.docs.slice(0, limit);
+    const hasMore = snap.docs.length > limit;
+    return {
+      orders: await this.projectOrderList(docs, requester),
+      hasMore,
+      nextCursor: hasMore ? (docs[docs.length - 1].id as string) : null,
+    };
+  }
+
+  /**
+   * 끝난 주문(완료·취소) 상태별 건수. 목록을 내려받지 않고 Firestore 집계(count)로 센다.
+   * 상태마다 기존 (storeId, status) 색인을 쓴다. 진행 중 주문 건수는 scope=active 목록에서 센다.
+   */
+  async getArchivedOrderCounts(storeId: string, requesterInput: OrderRequesterInput) {
+    const requester = this.normalizeRequester(requesterInput);
+    await this.assertStoreOrderReadAccess(storeId, requester);
+    const entries = await Promise.all(
+      STORE_ORDER_ARCHIVED_STATUSES.map(async (status) => {
+        const snap = await this.firestore
+          .collection('orders')
+          .where('storeId', '==', storeId)
+          .where('status', '==', status)
+          .count()
+          .get();
+        const count = snap.data().count;
+        return [status, typeof count === 'number' ? count : 0] as const;
+      }),
+    );
+    return {
+      archivedStatusCounts: Object.fromEntries(entries) as Record<ArchivedOrderStatus, number>,
+    };
+  }
+
+  private assertOrderListQuery(query: StoreOrdersQuery) {
+    const narrowed = query.scope !== undefined || query.roundId !== undefined;
+    if (narrowed && (query.userId || query.status || query.saleType || query.phone !== undefined)) {
+      throw new BadRequestException('scope·roundId는 다른 조회 조건과 함께 쓸 수 없습니다.');
+    }
+    if (query.scope !== undefined && query.roundId !== undefined) {
+      throw new BadRequestException('scope와 roundId는 함께 쓸 수 없습니다.');
+    }
+    if ((query.limit !== undefined || query.cursor !== undefined) && query.scope !== 'archive') {
+      throw new BadRequestException('limit·cursor는 scope=archive에서만 쓸 수 있습니다.');
+    }
+  }
+
+  private async readOrderCursor(storeId: string, cursor: unknown) {
+    if (typeof cursor !== 'string' || !STORE_ORDER_ID_PATTERN.test(cursor)) {
+      throw new BadRequestException('cursor 값이 올바르지 않습니다.');
+    }
+    const cursorSnap = await this.firestore.doc(`orders/${cursor}`).get();
+    // 다른 매장 주문을 기준점으로 쓰지 못하게 같은 매장 주문만 받는다.
+    if (!cursorSnap.exists || cursorSnap.data()?.['storeId'] !== storeId) {
+      throw new BadRequestException('cursor 값이 올바르지 않습니다.');
+    }
+    return cursorSnap;
+  }
+
+  private async projectOrderList(docs: any, requester: OrderRequester) {
     if (requester.role === 'seller') {
       return docs.map((d: any) => projectSellerOrder({ id: d.id, ...d.data() }, 'list'));
     }
-
-    const orders = await Promise.all(
-      docs.map((d: any) => this.withRedeliveryPayment({ id: d.id, ...d.data() })),
-    );
-    return orders;
+    return Promise.all(docs.map((d: any) => this.withRedeliveryPayment({ id: d.id, ...d.data() })));
   }
 
   // ── Public (storeId-free) ─────────────────────────────────────────────────

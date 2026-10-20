@@ -168,7 +168,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
   const inFlightRef = useRef(false);
 
   const readDetail = useCallback(
-    async (token: string): Promise<DriverOrderReadback> => {
+    async (token: string, signal?: AbortSignal): Promise<DriverOrderReadback> => {
       readSeqRef.current += 1;
       const seq = readSeqRef.current;
       const isCurrent = () => seq === readSeqRef.current;
@@ -181,7 +181,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
       setReadError(null);
       let readback: DriverOrderReadback;
       try {
-        const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+        const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token, {
+          signal,
+        });
         if (!isCurrent()) return { kind: 'stale' };
         if (!response.ok) {
           const failure = toDriverOrderReadError(response.status);
@@ -207,7 +209,12 @@ function OrderDetail({ orderId }: { orderId: string }) {
           readback = { kind: 'order', status: payload.status };
         }
       } catch (cause: unknown) {
-        if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) {
+        // effect 정리로 취소된 조회(AbortError)는 사용자 오류로 표시하지 않는다.
+        if (
+          !isCurrent() ||
+          signal?.aborted ||
+          (cause instanceof DOMException && cause.name === 'AbortError')
+        ) {
           return { kind: 'stale' };
         }
         // 시간 초과(ApiTimeoutError)는 AbortError가 아니므로 여기서 FETCH_ERROR로 수렴한다.
@@ -274,7 +281,10 @@ function OrderDetail({ orderId }: { orderId: string }) {
       setReadLoading(true);
       setReadRefreshing(false);
     }
-    void readDetail(token);
+    // 화면을 떠나거나 orderId·세션이 바뀌면 진행 중인 조회를 취소한다. 순번 가드는 그대로 둔다.
+    const controller = new AbortController();
+    void readDetail(token, controller.signal);
+    return () => controller.abort();
   }, [
     orderId,
     session?.user.id,

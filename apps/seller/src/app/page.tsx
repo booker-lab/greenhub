@@ -12,7 +12,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
-import { useOrders } from '@/hooks/useOrders';
+import { useOrderSummary } from '@/hooks/useOrderSummary';
+import { ACTIVE_SELLER_ORDERS_QUERY, useOrders } from '@/hooks/useOrders';
 import { useStoreOperationIssues } from '@/hooks/useStoreOperationIssues';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { areStoreProductCountsTrustworthy } from '@/hooks/useStoreProducts.recovery';
@@ -22,7 +23,14 @@ export default function Home() {
   const router = useRouter();
   const storeId = session?.user.storeId ?? null;
   const firebaseReady = useFirebaseReady();
-  const { orders, loading, error, groupCounts } = useOrders(storeId);
+  // 홈은 진행 중 주문만 받고, 완료·취소는 건수만 받는다(끝난 주문 목록을 내려받지 않는다).
+  const { orders, loading, error, groupCounts } = useOrders(storeId, ACTIVE_SELLER_ORDERS_QUERY);
+  const archivedCounts = useOrderSummary(storeId);
+  const statusCounts = {
+    ...groupCounts,
+    DONE: archivedCounts?.DONE ?? null,
+    CANCELLED: archivedCounts?.CANCELLED ?? null,
+  };
   const {
     products,
     loading: productsLoading,
@@ -79,7 +87,7 @@ export default function Home() {
             productsTrustworthy={productsTrustworthy}
             openIssueCount={openIssues.length}
           />
-          <OrderStatusCard groupCounts={groupCounts} />
+          <OrderStatusCard groupCounts={statusCounts} />
           <SettlementCard
             summary={summary}
             loading={summaryLoading}

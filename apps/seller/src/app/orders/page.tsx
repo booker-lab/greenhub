@@ -22,7 +22,8 @@ import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useGroupConfigs } from '@/hooks/useGroupConfigs';
 import { useOrderPhoneSearch } from '@/hooks/useOrderPhoneSearch';
-import { useOrders } from '@/hooks/useOrders';
+import { useOrderArchive } from '@/hooks/useOrderArchive';
+import { ACTIVE_SELLER_ORDERS_QUERY, useOrders } from '@/hooks/useOrders';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { pickDeadlineRound } from '@/lib/round-deadline';
 import { DateSection } from './_components/DateSection';
@@ -44,6 +45,7 @@ import {
   buildOrdersScopedViewModel,
   deriveOrdersFetchInput,
   filterOrdersByRound,
+  mergeActiveAndArchivedOrders,
 } from './orders-view-model';
 
 function PriorityItem({
@@ -106,7 +108,6 @@ export default function OrdersPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
   const firebaseReady = useFirebaseReady();
-  const { orders, loading, refreshing, error, refresh } = useOrders(storeId);
   const { rounds } = useSaleRounds();
   const deadlineRound = useMemo(() => pickDeadlineRound(rounds), [rounds]);
   const [saleType, setSaleType] = useState<SaleType>('normal');
@@ -118,6 +119,27 @@ export default function OrdersPage() {
   const [customTo, setCustomTo] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [roundFilter, setRoundFilter] = useState<string | null>(null);
+  // 모든 기간의 주문을 통째로 받지 않는다. 회차 필터가 있으면 그 회차 주문 전부(완료·취소 포함)를,
+  // 없으면 진행 중 주문 전부를 받고, 끝난 주문(완료·취소)은 그 탭을 처음 열 때부터 50건씩 받는다.
+  const base = useOrders(
+    storeId,
+    roundFilter ? { roundId: roundFilter } : ACTIVE_SELLER_ORDERS_QUERY,
+  );
+  const archiveView = !roundFilter && isArchiveTab(activeTab);
+  const archive = useOrderArchive(storeId, archiveView);
+  const { loading, refreshing, error } = base;
+  const orders = useMemo(
+    () => (roundFilter ? base.orders : mergeActiveAndArchivedOrders(base.orders, archive.orders)),
+    [roundFilter, base.orders, archive.orders],
+  );
+  // 끝난 주문을 아직 다 받지 않았으면 완료·취소 탭 건수를 확정하지 않는다(받은 것만 세면 실제보다 적다).
+  const archiveCountsIncomplete = !roundFilter && (!archive.loaded || archive.hasMore);
+  // 완료·취소 탭의 첫 페이지를 받기 전에는 빈 목록 대신 불러오는 중으로 보인다.
+  const listLoading = loading || (archiveView && !archive.loaded && !archive.error);
+  const refresh = () => {
+    base.refresh();
+    if (!roundFilter && archive.loaded) archive.refresh();
+  };
   const phoneSearch = useOrderPhoneSearch(storeId, phoneSearchDigits(searchQuery));
   const { phoneMatchIds } = phoneSearch;
   const roundFilterName = roundFilter
@@ -418,7 +440,10 @@ export default function OrdersPage() {
         tabs={GROUP_TABS.map((tab) => ({
           key: tab.key,
           label: tab.label,
-          count: scopedGroupCounts[tab.key],
+          count:
+            archiveCountsIncomplete && isArchiveTab(tab.key)
+              ? undefined
+              : scopedGroupCounts[tab.key],
           badgeColor: tab.key === 'ACTION_REQUIRED' ? 'red' : 'gray',
         }))}
         value={activeTab}
@@ -508,7 +533,34 @@ export default function OrdersPage() {
       {/* 주문 목록 — 날짜 그룹 섹션 */}
       <Container size="sm" px="md" py="md">
         <Stack gap="lg">
-          {(loading || (saleType === 'group' && !firebaseReady)) && <LoadingState />}
+          {(listLoading || (saleType === 'group' && !firebaseReady)) && <LoadingState />}
+
+          {archiveView && archive.error && (
+            <Paper radius="lg" shadow="xs" p="md" role="alert">
+              <Group justify="space-between" gap="xs" wrap="nowrap">
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  {archive.loaded
+                    ? '끝난 주문을 더 불러오지 못했습니다.'
+                    : '끝난 주문을 불러오지 못했습니다.'}
+                </Text>
+                <UnstyledButton
+                  onClick={archive.loaded ? archive.loadMore : archive.refresh}
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 'var(--font-size-sm)',
+                    borderRadius: 99,
+                    backgroundColor: 'var(--color-primary)',
+                    color: 'var(--color-bg)',
+                    flexShrink: 0,
+                  }}
+                >
+                  다시 시도
+                </UnstyledButton>
+              </Group>
+            </Paper>
+          )}
 
           {!loading && error && orders.length === 0 && (
             <EmptyState
@@ -602,7 +654,8 @@ export default function OrdersPage() {
               </Text>
             )}
 
-          {!loading &&
+          {!listLoading &&
+            !(archiveView && archive.error && !archive.loaded) &&
             (saleType !== 'group' || firebaseReady) &&
             !(error && orders.length === 0) &&
             filteredOrders.length === 0 && (
@@ -628,7 +681,7 @@ export default function OrdersPage() {
               />
             )}
 
-          {!loading &&
+          {!listLoading &&
             (saleType !== 'group' || firebaseReady) &&
             !(error && orders.length === 0) &&
             groupedOrders.map((group) => (
@@ -638,6 +691,24 @@ export default function OrdersPage() {
                 orders={group.orders}
               />
             ))}
+
+          {archiveView && archive.loaded && archive.hasMore && (
+            <UnstyledButton
+              onClick={archive.loadMore}
+              disabled={archive.loading}
+              aria-busy={archive.loading}
+              style={{
+                alignSelf: 'center',
+                padding: '8px 18px',
+                fontSize: 'var(--font-size-sm)',
+                borderRadius: 99,
+                backgroundColor: 'var(--color-surface-muted)',
+                color: archive.loading ? 'var(--color-text-disabled)' : 'var(--color-text-secondary)',
+              }}
+            >
+              {archive.loading ? '불러오는 중...' : '지난 주문 더 보기'}
+            </UnstyledButton>
+          )}
         </Stack>
       </Container>
     </PageShell>
