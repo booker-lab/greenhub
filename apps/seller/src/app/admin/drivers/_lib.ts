@@ -4,10 +4,13 @@ export type DriverAction = 'approve' | 'suspend' | 'unsuspend';
 
 export interface PendingAction {
   userId: string;
+  /** 확인창에 보일 대상 — 다른 기사를 고르는 실수를 막는다. */
+  name: string;
+  email: string | null;
   action: DriverAction;
 }
 
-// 액션별 ConfirmModal 문구/색 — 승인·정지·해제.
+// 액션별 ConfirmModal 문구/색 — 승인·정지·정지 해제. 대상 표시는 describeDriverConfirm이 붙인다.
 export const ACTION_META: Record<
   DriverAction,
   { title: string; message: string; confirmLabel: string; confirmColor: string }
@@ -27,7 +30,7 @@ export const ACTION_META: Record<
   unsuspend: {
     title: '드라이버 정지 해제',
     message: '정지를 해제하시겠습니까?',
-    confirmLabel: '해제',
+    confirmLabel: '정지 해제',
     confirmColor: 'gray',
   },
 };
@@ -62,4 +65,15 @@ export function getAdminDriversReadState(args: {
   if (args.error !== null) return 'FETCH_ERROR';
   if (args.drivers.length === 0) return 'EMPTY';
   return 'HAS_RESULTS';
+}
+
+/** 확인창 본문 — 대상(이름·이메일) 줄 + 액션별 질문. 이름·이메일이 비면 자리표시자. */
+export function describeDriverConfirm(
+  pending: Pick<PendingAction, 'name' | 'email' | 'action'>,
+): string {
+  // 타입은 string이지만 옛 문서에 필드가 없을 수 있어 ?.로 방어한다.
+  const name = pending.name?.trim() || '이름 없음';
+  const email = pending.email?.trim();
+  const who = email ? `${name} (${email})` : name;
+  return `${who}\n${ACTION_META[pending.action].message}`;
 }

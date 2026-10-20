@@ -8,9 +8,12 @@ import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/Suspe
 import type { AdminUser } from '@/hooks/useAdmin';
 import { describeAdminCommandOutcome, useAdminUsers } from '@/hooks/useAdmin';
 import { UsersTable } from './_components/UsersTable';
+import { describeUserSuspendConfirm } from './_lib';
 
 interface PendingUserAction {
   userId: string;
+  name: string;
+  email: string;
   currentlySuspended: boolean;
 }
 
@@ -22,7 +25,7 @@ export default function AdminUsersClient() {
 
   const runPending = async () => {
     if (!pending) return;
-    const actionLabel = pending.currentlySuspended ? '정지 해제' : '정지';
+    const actionLabel = describeUserSuspendConfirm(pending).confirmLabel;
     setProcessingId(pending.userId);
     try {
       const outcome = await toggleSuspend(
@@ -46,8 +49,15 @@ export default function AdminUsersClient() {
 
   const handleToggle = (user: AdminUser) => {
     setReason('');
-    setPending({ userId: user.id, currentlySuspended: !!user.suspended });
+    setPending({
+      userId: user.id,
+      name: user.name,
+      email: user.email,
+      currentlySuspended: !!user.suspended,
+    });
   };
+
+  const confirm = pending ? describeUserSuspendConfirm(pending) : null;
 
   if (loading) {
     return (
@@ -109,20 +119,16 @@ export default function AdminUsersClient() {
 
       <ConfirmModal
         opened={pending !== null}
-        title={pending?.currentlySuspended ? '계정 정지 해제' : '계정 정지'}
+        title={confirm?.title ?? ''}
         message={
           <SuspendReasonMessage
-            message={
-              pending?.currentlySuspended
-                ? '계정 정지를 해제하시겠습니까?'
-                : '이 계정을 정지하시겠습니까?'
-            }
+            message={confirm?.message ?? ''}
             reason={reason}
             onReasonChange={setReason}
           />
         }
-        confirmLabel={pending?.currentlySuspended ? '해제' : '정지'}
-        confirmColor={pending?.currentlySuspended ? 'brand' : 'red'}
+        confirmLabel={confirm?.confirmLabel}
+        confirmColor={confirm?.confirmColor}
         loading={processingId !== null}
         onConfirm={runPending}
         onClose={() => {

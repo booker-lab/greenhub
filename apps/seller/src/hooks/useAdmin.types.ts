@@ -49,6 +49,8 @@ export interface AdminSettlement {
   id: string;
   storeId: string;
   orderId: string;
+  /** 판매자 주문번호. 이 필드 이전 정산·옛 주문은 null 또는 없음. */
+  orderNumber?: string | null;
   totalAmount: number;
   platformFee: number;
   netAmount: number;

@@ -52,9 +52,12 @@ describe('AdminSettlementsClient 조회 복구 배선', () => {
 
   it('기존 markAsPaid 확인·처리 경로를 유지한다', () => {
     expect(source).toContain('const runPay = async () =>');
-    expect(source).toContain('await markAsPaid(payTargetId)');
-    expect(source).toContain('setPayTargetId(null)');
-    expect(source).toContain('opened={payTargetId !== null}');
+    expect(source).toContain('await markAsPaid(payTarget.id)');
+    expect(source).toContain('setPayTarget(null)');
+    expect(source).toContain('opened={payTarget !== null}');
     expect(source).toContain('onConfirm={runPay}');
+    // 확인창은 대상(가게·주문·지급액)을 보인다.
+    expect(source).toContain('onPay={openPay}');
+    expect(source).toContain('describePayConfirm(payTarget)');
   });
 });
