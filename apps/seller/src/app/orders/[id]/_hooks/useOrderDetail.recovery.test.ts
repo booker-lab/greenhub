@@ -5,10 +5,12 @@ import {
   isOrderDetailAuthError,
   isOrderDetailBackgroundRefresh,
   isOrderDetailNotFoundError,
+  ORDER_DETAIL_REVALIDATE_DEDUPE_MS,
   resolveOrderDetailAuthState,
   resolveOrderDetailMutationOutcome,
   resolveOrderDetailView,
   SELLER_ORDER_DETAIL_AUTH_ERROR,
+  shouldDedupeOrderDetailRevalidation,
   shouldIgnoreOrderDetailResponse,
   shouldInvalidateOrderDetailScope,
   shouldInvalidateOrderDetailSupplementary,
@@ -182,6 +184,19 @@ describe('Seller 주문 상세 recovery — focus/visibility (D)', () => {
   it('visibility 복귀 시에만 재검증하고 hidden에서는 재검증하지 않는다', () => {
     expect(shouldRevalidateOrderDetailOnVisibilityChange(true)).toBe(false);
     expect(shouldRevalidateOrderDetailOnVisibilityChange(false)).toBe(true);
+  });
+
+  it('복귀 한 번의 focus·visibilitychange 중복은 짧은 간격 안에서 1회로 묶는다', () => {
+    expect(shouldDedupeOrderDetailRevalidation(null, 1_000)).toBe(false);
+    expect(shouldDedupeOrderDetailRevalidation(1_000, 1_000)).toBe(true);
+    expect(
+      shouldDedupeOrderDetailRevalidation(1_000, 1_000 + ORDER_DETAIL_REVALIDATE_DEDUPE_MS - 1),
+    ).toBe(true);
+    expect(
+      shouldDedupeOrderDetailRevalidation(1_000, 1_000 + ORDER_DETAIL_REVALIDATE_DEDUPE_MS),
+    ).toBe(false);
+    // 시계가 뒤로 가면 묶지 않고 재조회한다.
+    expect(shouldDedupeOrderDetailRevalidation(5_000, 4_000)).toBe(false);
   });
 });
 

@@ -5,6 +5,7 @@ import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { type AdminBanner, useAdminBanner } from '@/hooks/useAdmin';
+import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { getFirebaseStorage } from '@/lib/firebase';
 import { BannerCtaSection } from './_components/BannerCtaSection';
 import { BannerImageSection } from './_components/BannerImageSection';
@@ -29,6 +30,7 @@ export default function AdminBannerClient() {
   // 다만 완전 silent 실패는 복구 불가이므로 동일 UI 안에서 최소 오류 표면만 제공한다.
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const savedResetTimer = useResettableTimeout();
 
   // 서버 상태 hydrate는 banner 갱신(초기 로드·저장 후 reload) 시에만 1회 반영한다.
   // form을 deps에 넣으면 편집 입력이 서버 값으로 매번 덮어쓰여 실패 후 입력 보존이 깨진다.
@@ -65,7 +67,7 @@ export default function AdminBannerClient() {
     const ok = await save(form);
     if (ok) {
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      savedResetTimer.schedule(() => setSaved(false), 2000);
     }
     // 실패 시 form은 그대로 보존되고 saveError 블록이 실패 feedback을 제공한다.
     // "저장 완료" 표시는 ok confirmed success에서만 설정된다.

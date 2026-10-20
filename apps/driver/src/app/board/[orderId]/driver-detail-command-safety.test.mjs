@@ -385,7 +385,10 @@ test('T3. settleUncertainReadback은 재전송 없이 성공·목록 수렴·미
 });
 
 test('T4. readDetail은 수렴 판정용 결과를 돌려주고 시간 초과는 FETCH_ERROR로 끝낸다', () => {
-  assert.match(detailSource, /async \(token: string\): Promise<DriverOrderReadback> =>/);
+  assert.match(
+    detailSource,
+    /async \(token: string, signal\?: AbortSignal\): Promise<DriverOrderReadback> =>/,
+  );
   assert.match(detailSource, /readback = \{ kind: 'order', status: payload\.status \}/);
   assert.match(detailSource, /readback = \{ kind: 'error', errorKind: failure\.kind \}/);
   assert.match(detailSource, /return \{ kind: 'stale' \}/);
@@ -396,6 +399,26 @@ test('T4. readDetail은 수렴 판정용 결과를 돌려주고 시간 초과는
   const releaseCount = (detailSource.slice(fnAt).match(/inFlightRef\.current = false/g) ?? [])
     .length;
   assert.equal(releaseCount, 1);
+});
+
+test('T4b. 상세 조회 effect는 정리 때 진행 중인 조회를 취소하고 취소를 오류로 표시하지 않는다', () => {
+  // effect가 만든 신호만 조회에 넘기고 정리에서 abort한다. 명령 뒤 수렴 조회는 신호 없이 그대로다.
+  assert.match(
+    detailSource,
+    /const controller = new AbortController\(\);\s*void readDetail\(token, controller\.signal\);\s*return \(\) => controller\.abort\(\);/,
+  );
+  assert.match(
+    detailSource,
+    /apiRead\(`\/driver\/orders\/\$\{encodeURIComponent\(orderId\)\}`, token, \{\s*signal,\s*\}\)/,
+  );
+  // 취소된 조회는 오류 표시 전에 stale로 끝난다. 순번 가드도 그대로다.
+  const catchAt = detailSource.indexOf('} catch (cause: unknown) {');
+  assert.ok(catchAt !== -1);
+  const catchBlock = detailSource.slice(catchAt, catchAt + 700);
+  assert.match(catchBlock, /setReadError\(/);
+  assert.match(catchBlock, /signal\?\.aborted/);
+  assert.match(catchBlock, /!isCurrent\(\)/);
+  assert.ok(catchBlock.indexOf("return { kind: 'stale' }") < catchBlock.indexOf('setReadError('));
 });
 
 test('H6. STATUS uncertain keeps fail-closed and manual GET without synthesis', () => {

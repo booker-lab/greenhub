@@ -91,6 +91,7 @@ export const OPTIONAL_ENV_NAMES = Object.freeze([
   'NEXT_PUBLIC_PORTONE_STORE_ID',
   'NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY',
   'NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY',
+  'NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY',
 ]);
 const KNOWN_ENV_NAMES = new Set([
   ...REQUIRED_ENV_NAMES,
@@ -102,6 +103,7 @@ const PORTONE_PLACEHOLDERS = Object.freeze({
   NEXT_PUBLIC_PORTONE_STORE_ID: 'store-round-direct-local-e2e',
   NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY: 'channel-key-round-direct-local-e2e-kakaopay',
   NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY: 'channel-key-round-direct-local-e2e-naverpay',
+  NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: 'channel-key-round-direct-local-e2e-card',
 });
 const UNUSED_OAUTH_PLACEHOLDER = 'round-direct-local-e2e-unused';
 

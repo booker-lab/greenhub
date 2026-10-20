@@ -14,6 +14,7 @@ import {
   assertInviteTokenFormat,
   inviteConflict,
 } from '../auth/invite-conflict';
+import { AuditService, type AdminAuditEntry } from '../common/audit/audit.service';
 import { FirestoreService } from '../firestore/firestore.service';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 import type { OrderStatus } from '../orders/dto/update-status.dto';
@@ -43,6 +44,25 @@ const LEGACY_REFUND_CLAIM_MS = 5 * 60 * 1000;
 // 판매자 초대 토큰 유효 기간(발급 시점부터 72시간).
 export const INVITE_TTL_MS = 72 * 60 * 60 * 1000;
 
+// 관리자 목록 응답은 화면이 쓰는 필드만 내려준다(저장 배송지·세션·외부 로그인 식별자 등은 제외).
+const ADMIN_USER_LIST_FIELDS = ['id', 'email', 'name', 'phone', 'suspended', 'createdAt'] as const;
+const ADMIN_DRIVER_LIST_FIELDS = [
+  'id',
+  'name',
+  'email',
+  'driverApproved',
+  'suspended',
+  'createdAt',
+] as const;
+
+function pickListFields(data: Record<string, unknown>, fields: readonly string[]) {
+  const picked: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (data[field] !== undefined) picked[field] = data[field];
+  }
+  return picked;
+}
+
 type LegacyRefundClaimResult =
   | { kind: 'done' }
   | { kind: 'in_progress' }
@@ -57,7 +77,23 @@ export class AdminService {
     private readonly payments: PaymentsService,
     private readonly settlements: SettlementsService,
     private readonly roundLifecycle: RoundOrderLifecycleService,
+    private readonly audit: AuditService,
   ) {}
+
+  // 작업이 끝난 뒤 기록한다. 기록 실패로 이미 끝난 작업을 되돌리지 않으므로 오류 로그만 남긴다.
+  private async recordAdmin(entry: AdminAuditEntry) {
+    try {
+      await this.audit.logAdmin(entry);
+    } catch (error) {
+      this.logger.error(
+        `[AdminAudit] 기록 실패 action=${entry.action} error=${(error as Error)?.name ?? 'unknown'}`,
+      );
+    }
+  }
+
+  getAuditLogs() {
+    return this.audit.listAdmin();
+  }
 
   // ── Stores ──────────────────────────────────────────────────────
 
@@ -72,7 +108,7 @@ export class AdminService {
     };
   }
 
-  async setCommission(storeId: string, dto: SetCommissionDto) {
+  async setCommission(storeId: string, dto: SetCommissionDto, actorId: string) {
     const ref = this.firestore.doc(`stores/${storeId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
@@ -81,12 +117,20 @@ export class AdminService {
       commissionRate: dto.rate,
       updatedAt: this.firestore.Timestamp.now(),
     });
+    await this.recordAdmin({
+      action: 'admin.store.commission_changed',
+      actorId,
+      targetType: 'store',
+      targetId: storeId,
+      before: { commissionRate: snap.data()?.['commissionRate'] ?? null },
+      after: { commissionRate: dto.rate },
+    });
     return { storeId, commissionRate: dto.rate };
   }
 
   // 판매자 "치우기"(아카이브) — 영구 삭제 아님, status='archived' 표시.
   // 기록 가드: 주문·정산 기록이 하나라도 있으면 차단(법적 책임·이력 보존).
-  async archiveStore(storeId: string) {
+  async archiveStore(storeId: string, actorId: string) {
     const ref = this.firestore.doc(`stores/${storeId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
@@ -104,19 +148,38 @@ export class AdminService {
 
     const now = this.firestore.Timestamp.now();
     await ref.update({ status: 'archived', archivedAt: now, updatedAt: now });
+    await this.recordAdmin({
+      action: 'admin.store.archived',
+      actorId,
+      targetType: 'store',
+      targetId: storeId,
+      before: { status: snap.data()?.['status'] ?? null },
+      after: { status: 'archived' },
+    });
     return { storeId, status: 'archived' };
   }
 
-  // 아카이브 복구 — active 복원 + archivedAt 제거.
-  async restoreStore(storeId: string) {
+  // 아카이브 복구 — active 복원 + archivedAt 제거. 치운(archived) 판매자만 복구한다.
+  async restoreStore(storeId: string, actorId: string) {
     const ref = this.firestore.doc(`stores/${storeId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    if (snap.data()?.['status'] !== 'archived') {
+      throw new ConflictException('정리된 판매자만 복구할 수 있습니다.');
+    }
 
     await ref.update({
       status: 'active',
       archivedAt: this.firestore.FieldValue.delete(),
       updatedAt: this.firestore.Timestamp.now(),
+    });
+    await this.recordAdmin({
+      action: 'admin.store.restored',
+      actorId,
+      targetType: 'store',
+      targetId: storeId,
+      before: { status: snap.data()?.['status'] ?? null },
+      after: { status: 'active' },
     });
     return { storeId, status: 'active' };
   }
@@ -132,23 +195,38 @@ export class AdminService {
     ).get();
 
     return {
-      users: snap.docs.map((d: any) => {
-        const { passwordHash: _pw, ...user } = d.data();
-        return user;
-      }),
+      users: snap.docs.map((d: any) => pickListFields(d.data(), ADMIN_USER_LIST_FIELDS)),
       total: snap.size,
     };
   }
 
-  async suspendUser(userId: string, dto: SuspendUserDto) {
+  // 소비자 정지 — 소비자 계정만 대상. 판매자·기사·관리자 계정과 요청한 관리자 자신은 정지하지 않는다.
+  async suspendUser(userId: string, dto: SuspendUserDto, actorId: string) {
+    if (userId === actorId) {
+      throw new BadRequestException('자기 자신의 계정은 정지할 수 없습니다.');
+    }
     const ref = this.firestore.doc(`users/${userId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('사용자를 찾을 수 없습니다.');
+
+    const data = snap.data()!;
+    if (data['role'] !== 'consumer') {
+      throw new BadRequestException('소비자 계정이 아닙니다.');
+    }
 
     await ref.update(this.suspensionUpdate(dto.suspended));
     if (dto.suspended) {
       await this.revokeSuspendedUserSessions(userId);
     }
+    await this.recordAdmin({
+      action: dto.suspended ? 'admin.user.suspended' : 'admin.user.unsuspended',
+      actorId,
+      targetType: 'user',
+      targetId: userId,
+      before: { suspended: snap.data()?.['suspended'] === true },
+      after: { suspended: dto.suspended },
+      reason: dto.reason,
+    });
     return { userId, suspended: dto.suspended };
   }
 
@@ -194,7 +272,7 @@ export class AdminService {
     };
   }
 
-  async forceRefund(orderId: string, dto: ForceRefundDto) {
+  async forceRefund(orderId: string, dto: ForceRefundDto, actorId: string) {
     const orderRef = this.firestore.doc(`orders/${orderId}`);
     const orderSnap = await orderRef.get();
     if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
@@ -202,8 +280,9 @@ export class AdminService {
     const order = orderSnap.data()!;
     const reason = dto.reason ?? '관리자 강제 환불';
 
+    let result: unknown;
     if (order['schemaVersion'] === 2 && order['roundId']) {
-      const result = await this.roundLifecycle.cancelForRound({
+      result = await this.roundLifecycle.cancelForRound({
         storeId: order['storeId'],
         orderId,
         expectedStatus: order['status'],
@@ -211,10 +290,21 @@ export class AdminService {
         customerNotice: 'ADMIN_REFUND',
       });
       await this.settlements.cancelSettlement(orderId);
-      return result;
+    } else {
+      result = await this.forceLegacyRefund(orderId, reason);
     }
 
-    return this.forceLegacyRefund(orderId, reason);
+    // 환불이 실패해 예외가 나면 여기까지 오지 않으므로 성공한 환불만 기록된다.
+    await this.recordAdmin({
+      action: 'admin.order.force_refunded',
+      actorId,
+      targetType: 'order',
+      targetId: orderId,
+      before: { status: order['status'] ?? null },
+      after: { status: 'CANCELLED' },
+      reason,
+    });
+    return result;
   }
 
   private async forceLegacyRefund(orderId: string, reason: string) {
@@ -449,7 +539,7 @@ export class AdminService {
 
   // N1: 트랜잭션 내 status 재확인 후 paid 전이 — 더블클릭/동시 클릭 이중 paid 경합 차단.
   // 비트랜잭션이면 두 요청이 모두 confirmed를 읽고 둘 다 paid update → paidAt 갱신 경합.
-  async markAsPaid(settlementId: string) {
+  async markAsPaid(settlementId: string, actorId: string) {
     const ref = this.firestore.doc(`settlements/${settlementId}`);
 
     await this.firestore.runTransaction(async (t) => {
@@ -475,8 +565,21 @@ export class AdminService {
       t.update(ref, {
         status: 'paid',
         paidAt: now,
+        paidBy: actorId,
         updatedAt: now,
       });
+      // 지급 표시와 기록을 같은 트랜잭션에 넣어, 기록 없는 지급이 생기지 않게 한다.
+      await this.audit.logAdmin(
+        {
+          action: 'admin.settlement.paid',
+          actorId,
+          targetType: 'settlement',
+          targetId: settlementId,
+          before: { status: 'confirmed' },
+          after: { status: 'paid' },
+        },
+        t,
+      );
     });
 
     return { settlementId, status: 'paid' };
@@ -496,10 +599,9 @@ export class AdminService {
     ).get();
     const hasMore = snap.docs.length > ADMIN_DRIVER_SCAN_LIMIT;
 
-    let drivers = snap.docs.slice(0, ADMIN_DRIVER_SCAN_LIMIT).map((d: any) => {
-      const { passwordHash: _pw, ...user } = d.data();
-      return user;
-    });
+    let drivers = snap.docs
+      .slice(0, ADMIN_DRIVER_SCAN_LIMIT)
+      .map((d: any) => pickListFields(d.data(), ADMIN_DRIVER_LIST_FIELDS));
 
     if (dto.status === 'pending') {
       drivers = drivers.filter((d: any) => !d.driverApproved && !d.suspended);
@@ -514,7 +616,7 @@ export class AdminService {
     return { drivers, total: drivers.length, hasMore };
   }
 
-  async approveDriver(userId: string) {
+  async approveDriver(userId: string, actorId: string) {
     const ref = this.firestore.doc(`users/${userId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
@@ -528,10 +630,18 @@ export class AdminService {
       driverApproved: true,
       updatedAt: this.firestore.Timestamp.now(),
     });
+    await this.recordAdmin({
+      action: 'admin.driver.approved',
+      actorId,
+      targetType: 'driver',
+      targetId: userId,
+      before: { driverApproved: data['driverApproved'] === true },
+      after: { driverApproved: true },
+    });
     return { userId, driverApproved: true };
   }
 
-  async suspendDriver(userId: string, dto: SuspendUserDto) {
+  async suspendDriver(userId: string, dto: SuspendUserDto, actorId: string) {
     const ref = this.firestore.doc(`users/${userId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
@@ -545,6 +655,15 @@ export class AdminService {
     if (dto.suspended) {
       await this.revokeSuspendedUserSessions(userId);
     }
+    await this.recordAdmin({
+      action: dto.suspended ? 'admin.driver.suspended' : 'admin.driver.unsuspended',
+      actorId,
+      targetType: 'driver',
+      targetId: userId,
+      before: { suspended: data['suspended'] === true },
+      after: { suspended: dto.suspended },
+      reason: dto.reason,
+    });
     return { userId, suspended: dto.suspended };
   }
 
@@ -626,15 +745,26 @@ export class AdminService {
     return snap.exists ? snap.data() : null;
   }
 
-  async upsertBanner(dto: UpsertBannerDto) {
+  async upsertBanner(dto: UpsertBannerDto, actorId: string) {
     const {
       updatedAt: _u,
       createdAt: _c,
       ...fields
     } = dto as UpsertBannerDto & Record<string, unknown>;
     const ref = this.firestore.doc('banners/main_hero');
+    const previous = ((await ref.get()).data() ?? {}) as Record<string, unknown>;
     await ref.set({ ...fields, updatedAt: this.firestore.Timestamp.now() }, { merge: true });
     const snap = await ref.get();
+    // 바꾼 칸만 이전 값과 함께 남긴다.
+    const before = Object.fromEntries(Object.keys(fields).map((k) => [k, previous[k] ?? null]));
+    await this.recordAdmin({
+      action: 'admin.banner.updated',
+      actorId,
+      targetType: 'banner',
+      targetId: 'main_hero',
+      before,
+      after: fields,
+    });
     return snap.data();
   }
 }
