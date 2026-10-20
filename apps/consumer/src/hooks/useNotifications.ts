@@ -40,9 +40,14 @@ function getReadIdsFor(userId: string): Set<string> {
   }
 }
 
-function saveReadIdsFor(userId: string, ids: Set<string>) {
+/**
+ * 읽음 ID를 저장한다. 서버 목록(serverIds)을 이번 scope에서 한 번이라도 받았으면 그 목록에
+ * 있는 ID만 남겨 저장 목록이 끝없이 커지지 않게 한다. 아직 받지 못했으면(null) 지우지 않는다.
+ */
+function saveReadIdsFor(userId: string, ids: Set<string>, serverIds: Set<string> | null) {
+  const kept = serverIds ? [...ids].filter((id) => serverIds.has(id)) : [...ids];
   try {
-    localStorage.setItem(readKeyFor(userId), JSON.stringify([...ids]));
+    localStorage.setItem(readKeyFor(userId), JSON.stringify(kept));
   } catch {
     // ignore
   }
@@ -70,6 +75,8 @@ export function useNotifications(): UseNotificationsResult {
   // session/user scope: 이전 사용자의 protected notifications가 새 scope에 노출되지 않게 한다.
   // useOrders의 userId+token scope 격리와 동일한 계약이다.
   const prevScopeRef = useRef<string | null>(null);
+  // 현재 scope에서 마지막으로 성공한 서버 목록의 ID. 아직 성공한 적 없으면 null(저장 시 정리 안 함).
+  const serverIdsRef = useRef<Set<string> | null>(null);
 
   const refetch = useCallback(() => {
     setTick((t) => t + 1);
@@ -83,6 +90,7 @@ export function useNotifications(): UseNotificationsResult {
     const scopeKey = userId && token ? `${userId}\0${token}` : null;
     if (!userId || !token || !scopeKey) {
       prevScopeRef.current = null;
+      serverIdsRef.current = null;
       setNotifications([]);
       setReadIds(new Set());
       setError(null);
@@ -92,6 +100,7 @@ export function useNotifications(): UseNotificationsResult {
 
     if (prevScopeRef.current !== scopeKey) {
       prevScopeRef.current = scopeKey;
+      serverIdsRef.current = null;
       setNotifications([]);
       setError(null);
       setReadIds(getReadIdsFor(userId));
@@ -112,7 +121,9 @@ export function useNotifications(): UseNotificationsResult {
         const data = await res.json();
         if (cancelled || requestSequenceRef.current !== requestId) return;
         // 성공만 상태를 교체한다: error clear + 정상 empty([])도 성공으로 확정한다.
-        setNotifications(data.items ?? []);
+        const items: Notification[] = data.items ?? [];
+        serverIdsRef.current = new Set(items.map((item) => item.id));
+        setNotifications(items);
         setError(null);
         setLoading(false);
       } catch (e: unknown) {
@@ -137,7 +148,7 @@ export function useNotifications(): UseNotificationsResult {
       setReadIds((prev) => {
         const next = new Set(prev);
         next.add(id);
-        saveReadIdsFor(userId, next);
+        saveReadIdsFor(userId, next, serverIdsRef.current);
         return next;
       });
     },
@@ -152,7 +163,7 @@ export function useNotifications(): UseNotificationsResult {
       notifications.forEach((notification) => {
         next.add(notification.id);
       });
-      saveReadIdsFor(userId, next);
+      saveReadIdsFor(userId, next, serverIdsRef.current);
       return next;
     });
   }, [notifications, session?.user?.id]);
