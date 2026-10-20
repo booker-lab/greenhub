@@ -157,6 +157,21 @@ export function shouldRevalidateOrderDetailOnVisibilityChange(hidden: boolean): 
   return !hidden;
 }
 
+/**
+ * 화면 복귀 한 번에 focus와 visibilitychange가 함께 와도 재조회는 1회로 묶는 간격.
+ * 이 간격 안의 두 번째 복귀 신호는 건너뛴다.
+ */
+export const ORDER_DETAIL_REVALIDATE_DEDUPE_MS = 1_500;
+
+/** 직전 복귀 재조회(lastAt) 뒤 간격이 지났을 때만 다시 재조회한다. 처음(lastAt=null)은 항상 재조회한다. */
+export function shouldDedupeOrderDetailRevalidation(
+  lastAt: number | null,
+  now: number,
+  windowMs: number = ORDER_DETAIL_REVALIDATE_DEDUPE_MS,
+): boolean {
+  return lastAt !== null && now - lastAt >= 0 && now - lastAt < windowMs;
+}
+
 /** mutation 성공 후 authoritative detail reconciliation이 필요하다. 실패한 command는 재조회하지 않는다. */
 export function shouldReconcileOrderDetailAfterMutation(commandOk: boolean): boolean {
   return commandOk === true;
