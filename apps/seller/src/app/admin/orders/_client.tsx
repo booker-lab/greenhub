@@ -5,7 +5,7 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useRef, useState } from 'react';
 import { type AdminOrder, useAdminOrders } from '@/hooks/useAdmin';
-import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
+import { describeAdminCommandOutcome, describeRefundRecovery } from '@/hooks/useAdmin';
 import { OrdersFilters } from './_components/OrdersFilters';
 import { OrdersTable } from './_components/OrdersTable';
 import { RefundConfirmModal } from './_components/RefundConfirmModal';
@@ -43,6 +43,15 @@ export default function AdminOrdersClient() {
     setRefundTarget(null);
     try {
       const outcome = await forceRefund(target.id, normalizeRefundReason(refundReason));
+      if (outcome.recovery) {
+        // 이미 지급한 정산의 주문 — 판매자에게 돌려받을 금액은 닫을 때까지 남긴다.
+        notifications.show({
+          color: 'red',
+          autoClose: false,
+          title: '환불 완료 · 판매자 회수 필요',
+          message: `주문 ${describeRefundTarget(target).orderLabel} — ${describeRefundRecovery(outcome.recovery)}`,
+        });
+      }
       if (outcome.kind === 'confirmed' && outcome.reconciled) return;
       // stale은 완료+재조회 copy를 사용한다. rejected는 서버 reason 보존, unknown은 재확인 우선.
       const presentation = describeAdminCommandOutcome(outcome, '환불');

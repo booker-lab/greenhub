@@ -10,13 +10,16 @@ import { classifyAdminCommandError, describeAdminCommandOutcome, useAdminStores 
 import { StoresFilters } from './_components/StoresFilters';
 import { StoresTable } from './_components/StoresTable';
 import {
+  DEFAULT_COMMISSION_PERCENT,
   DEFAULT_SORT,
   DEFAULT_STATUS_FILTER,
   filterStores,
   getAdminStoresReadState,
   getEmptyKind,
+  describeCommissionSaved,
   parseRate,
   parseSort,
+  rateToInput,
   parseStatusFilter,
   type StoreSort,
   type StoreStatusFilter,
@@ -108,7 +111,7 @@ export default function AdminStoresClient() {
       notifications.show({
         color: 'yellow',
         title: '입력 값을 확인하세요',
-        message: '0~1 사이의 수수료율을 입력해야 합니다 (예: 0.05 = 5%).',
+        message: '0~100 사이의 수수료율(%)을 입력해야 합니다 (예: 5 = 5%).',
       });
       return;
     }
@@ -118,6 +121,12 @@ export default function AdminStoresClient() {
     if (outcome.kind === 'confirmed' && outcome.reconciled) {
       setEditId(null);
       setRateInput('');
+      const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
+      notifications.show({
+        color: 'brand',
+        title: '수수료율 저장',
+        message: describeCommissionSaved(storeName, parsed.rate),
+      });
       return;
     }
     if (outcome.kind === 'confirmed') {
@@ -139,7 +148,7 @@ export default function AdminStoresClient() {
 
   const handleStartEdit = (store: AdminStore) => {
     setEditId(store.id);
-    setRateInput(String(store.commissionRate ?? ''));
+    setRateInput(rateToInput(store.commissionRate));
   };
 
   const handleCancelEdit = () => {
@@ -226,13 +235,14 @@ export default function AdminStoresClient() {
         </Title>
       </Group>
 
-      {/* 가게별 수수료율은 저장만 되고, 정산은 서버 공통 수수료율(PLATFORM_FEE_RATE)로 계산한다.
-          파일럿은 가게가 하나라 그대로 둔다(BACKLOG STORE-COMMISSION-RATE-UNUSED). */}
+      {/* 가게별 수수료율은 정산을 만들 때 그 가게 요율로 계산한다(결정 ②, BACKLOG STORE-COMMISSION-RATE-UNUSED).
+          이미 만든 정산은 다시 계산하지 않는다. */}
       <Text
         mb="sm"
         style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
       >
-        수수료율은 저장만 됩니다. 정산은 지금 모든 가게에 공통 수수료율로 계산됩니다.
+        수수료율은 다음에 만들어지는 정산부터 적용됩니다. 설정하지 않은 가게는 기본{' '}
+        {DEFAULT_COMMISSION_PERCENT}%로 정산하며, 이미 만든 정산은 바뀌지 않습니다.
       </Text>
 
       <StoresFilters

@@ -1,7 +1,14 @@
 'use client';
 
 import type { AdminCommandOutcome } from './useAdmin.outcome';
-import { pick, runAdminCommand, useAdminList, withQuery } from './useAdmin.list';
+import {
+  pick,
+  runAdminCommand,
+  runAdminCommandWithBody,
+  useAdminList,
+  withQuery,
+} from './useAdmin.list';
+import { type RefundRecovery, readRefundRecovery } from './useAdmin.refund';
 import type { AdminOrder, AdminSettlement } from './useAdmin.types';
 
 // ── Orders ───────────────────────────────────────────────────────
@@ -20,8 +27,12 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
     [filters?.storeId, filters?.status],
   );
 
-  const forceRefund = async (orderId: string, reason?: string): Promise<AdminCommandOutcome> => {
-    return runAdminCommand(
+  // 지급 완료 정산의 주문이면 응답의 회수 정보(recovery)를 함께 돌려준다(결정 ④).
+  const forceRefund = async (
+    orderId: string,
+    reason?: string,
+  ): Promise<AdminCommandOutcome & { recovery: RefundRecovery | null }> => {
+    const { outcome, body } = await runAdminCommandWithBody(
       token,
       `/admin/orders/${orderId}/refund`,
       {
@@ -30,6 +41,7 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
       },
       reload,
     );
+    return { ...outcome, recovery: readRefundRecovery(body) };
   };
 
   return { orders, loading, error, reload, forceRefund };
