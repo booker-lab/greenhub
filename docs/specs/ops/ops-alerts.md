@@ -12,7 +12,8 @@
 | 운영 확인 기록이 새로 열림(결제 조회 실패, 환불 실패, 고객 안내 실패, 배송 사진 확인 등) | API `OperationIssueWriterService` | 기록의 severity(긴급·주의) |
 | 알림톡 발송 막힘(잔액 부족, 허용 IP 아님, 인증 실패, 발신번호 미등록) | API `NotificationsService` | 긴급, 같은 사유는 1시간에 한 번 |
 | 아침 운영 요약 08:30 KST(열린 운영 기록, 20분 넘은 결제 대기, 배송 보류, 지급 대기 정산) | API `OpsDigestService` | 이상 없으면 🟢 |
-| 서비스 응답 이상(API `/health`, 소비자 홈, 판매자·기사 로그인) | GitHub `uptime.yml`, 15분마다 | 긴급 |
+| 서버 오류(5xx 응답, 의도된 503 제외). 메서드·경로 패턴·오류 이름만 싣는다 | API `FirestoreRetryableErrorFilter` | 긴급, 같은 경로·오류는 30분에 한 번 |
+| 서비스 응답 이상(API `/health`(Firestore 읽기 확인 포함), 소비자 홈, 판매자·기사 로그인) | GitHub `uptime.yml`, 15분마다 | 긴급 |
 
 - 알림에는 고객 이름·전화·주소를 싣지 않는다. 처리는 판매자 앱 홈 "운영 확인"과 주문 화면에서 한다.
 - 같은 운영 기록이 매분 합쳐질 때는 다시 보내지 않는다. 해결 뒤 다시 열리면 보낸다.
