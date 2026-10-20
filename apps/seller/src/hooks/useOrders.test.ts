@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ACTIVE_SELLER_ORDERS_QUERY,
+  ARCHIVED_ORDERS_PAGE_SIZE,
+  buildArchivedOrdersPath,
+  buildOrderSummaryPath,
   buildSellerOrdersPath,
+  buildSellerOrdersQueryString,
   buildSellerOrdersScopeKey,
+  parseArchivedGroupCounts,
+  parseArchivedOrdersPage,
   isSellerOrdersBackgroundRefresh,
   resolveSellerOrdersAuthState,
   resolveSellerOrdersInitialView,
@@ -243,5 +250,77 @@ describe('Seller 주문 scope 전환 — missing store/token clear', () => {
     expect(resolveSellerOrdersInitialView(0, '주문 목록을 불러오지 못했습니다.')).toBe('error');
     expect(resolveSellerOrdersInitialView(0, null)).not.toBe('error');
     expect(resolveSellerOrdersInitialView(0, '주문 목록을 불러오지 못했습니다.')).not.toBe('empty');
+  });
+});
+
+describe('Seller 주문 목록 범위(전체 이력 대신 필요한 범위만)', () => {
+  it('진행 중·회차 범위는 쿼리로 붙고, 범위가 없으면 기존 경로 그대로다', () => {
+    expect(buildSellerOrdersPath('store-1', ACTIVE_SELLER_ORDERS_QUERY)).toBe(
+      '/stores/store-1/orders?scope=active',
+    );
+    expect(buildSellerOrdersPath('store-1', { roundId: 'round 1' })).toBe(
+      '/stores/store-1/orders?roundId=round%201',
+    );
+    expect(buildSellerOrdersPath('store-1')).toBe('/stores/store-1/orders');
+    expect(buildSellerOrdersQueryString()).toBe('');
+  });
+
+  it('범위가 바뀌면 다른 scope라 이전 범위 목록·건수를 재사용하지 않는다', () => {
+    const active = buildSellerOrdersScopeKey('store-1', 'token', '?scope=active');
+    const round = buildSellerOrdersScopeKey('store-1', 'token', '?roundId=round-1');
+    expect(active).not.toBe(round);
+    expect(shouldInvalidateSellerOrdersScope(active, round)).toBe(true);
+    // 범위가 없으면 기존 key 모양을 유지한다.
+    expect(buildSellerOrdersScopeKey('store-1', 'token', '')).toBe(
+      buildSellerOrdersScopeKey('store-1', 'token'),
+    );
+  });
+
+  it('끝난 주문은 50건씩 이어받기 위치와 함께 요청한다', () => {
+    expect(ARCHIVED_ORDERS_PAGE_SIZE).toBe(50);
+    expect(buildArchivedOrdersPath('store-1')).toBe(
+      '/stores/store-1/orders?scope=archive&limit=50',
+    );
+    expect(buildArchivedOrdersPath('store-1', 'order-9')).toBe(
+      '/stores/store-1/orders?scope=archive&limit=50&cursor=order-9',
+    );
+  });
+
+  it('끝난 주문 페이지 응답은 모양이 맞을 때만 받고, 아니면 빈 목록으로 속이지 않는다', () => {
+    expect(
+      parseArchivedOrdersPage({ orders: [{ id: 'a' }], hasMore: true, nextCursor: 'a' }),
+    ).toEqual({ orders: [{ id: 'a' }], hasMore: true, nextCursor: 'a' });
+    expect(parseArchivedOrdersPage({ orders: [], hasMore: false, nextCursor: null })).toEqual({
+      orders: [],
+      hasMore: false,
+      nextCursor: null,
+    });
+    for (const bad of [
+      [],
+      null,
+      { orders: 'x', hasMore: false, nextCursor: null },
+      { orders: [], hasMore: true, nextCursor: null },
+      { orders: [], hasMore: false, nextCursor: 'a' },
+      { orders: [], hasMore: true, nextCursor: '' },
+    ]) {
+      expect(() => parseArchivedOrdersPage(bad)).toThrow(/형식/);
+    }
+  });
+
+  it('끝난 주문 건수는 완료(배송 완료·픽업·구매 확정)와 취소로 묶고, 잘못된 응답은 0건으로 바꾸지 않는다', () => {
+    expect(buildOrderSummaryPath('store-1')).toBe('/stores/store-1/orders/summary');
+    expect(
+      parseArchivedGroupCounts({
+        archivedStatusCounts: { DELIVERED: 3, PICKED_UP: 1, REVIEWED: 2, CANCELLED: 4 },
+      }),
+    ).toEqual({ DONE: 6, CANCELLED: 4 });
+    for (const bad of [
+      {},
+      { archivedStatusCounts: { DELIVERED: 1, PICKED_UP: 0, REVIEWED: 0 } },
+      { archivedStatusCounts: { DELIVERED: -1, PICKED_UP: 0, REVIEWED: 0, CANCELLED: 0 } },
+      { archivedStatusCounts: { DELIVERED: '1', PICKED_UP: 0, REVIEWED: 0, CANCELLED: 0 } },
+    ]) {
+      expect(() => parseArchivedGroupCounts(bad)).toThrow(/형식/);
+    }
   });
 });
