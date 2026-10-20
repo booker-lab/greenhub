@@ -93,7 +93,10 @@ describe('AdminBanner read recovery wiring', () => {
 
 describe('AdminBanner save recovery wiring', () => {
   it('save success는 reload reconciliation 후 confirmed success를 반환한다', () => {
-    expect(bannerBlock).toContain('await load()');
+    // 저장 뒤 재조회는 화면 전체 "불러오는 중"으로 바꾸지 않는 배경 재조회다.
+    expect(bannerBlock).toContain('await fetchBanner(true)');
+    expect(bannerBlock).toContain('const load = useCallback(() => fetchBanner(false)');
+    expect(bannerBlock).toContain('if (!background) setLoading(false)');
     expect(bannerBlock).toContain('return true');
     expect(clientSource).toContain('const ok = await save(form)');
     expect(clientSource).toContain('if (ok)');
@@ -137,7 +140,7 @@ describe('AdminBanner save recovery wiring', () => {
 
   it('upload failure는 최소 recovery 표면을 가진다', () => {
     // Firebase upload 계약 자체는 재설계하지 않고 silent만 닫는다.
-    expect(clientSource).toContain('banners/main_hero/');
+    expect(clientSource).toMatch(/banners\/main_hero\/\$\{Date\.now\(\)\}\.jpg/);
     expect(clientSource).toContain('setUploadError(null)');
     expect(clientSource).toContain('이미지 업로드 중 오류 발생');
     expect(clientSource).toContain('{uploadError}');
@@ -154,6 +157,20 @@ describe('AdminBanner save recovery wiring', () => {
     // 실제 storage 성공(getDownloadURL) 전에는 URL을 변경하지 않는다.
     expect(uploadSrc.indexOf('getDownloadURL')).toBeGreaterThan(-1);
     expect(uploadSrc.indexOf('setForm')).toBeGreaterThan(uploadSrc.indexOf('getDownloadURL'));
+  });
+
+  it('배너 사진은 형식·용량을 검사하고 재인코딩한 JPEG만 원본 파일명 없이 올린다', () => {
+    const uploadSrc = clientSource.slice(
+      clientSource.indexOf('const handleImageUpload'),
+      clientSource.indexOf('const handleSave'),
+    );
+    expect(uploadSrc).toContain('imageFileRejection(file)');
+    expect(uploadSrc).toContain('reencodeImageToJpeg(file, PRODUCT_IMAGE_ENCODE)');
+    expect(uploadSrc).toContain("uploadBytes(r, jpeg, { contentType: 'image/jpeg' })");
+    expect(uploadSrc).not.toMatch(/uploadBytes\(r, file/);
+    expect(uploadSrc).not.toContain('file.name');
+    // 로그인 준비 전에는 조용히 끝내지 않고 사유를 알린다.
+    expect(uploadSrc).toContain('로그인 정보를 확인하는 중입니다.');
   });
 
   it('기존 CTA/text/image schema와 섹션 배선을 유지한다', () => {

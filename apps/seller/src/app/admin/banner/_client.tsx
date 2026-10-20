@@ -7,6 +7,13 @@ import { useEffect, useRef, useState } from 'react';
 import { type AdminBanner, useAdminBanner } from '@/hooks/useAdmin';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { getFirebaseStorage } from '@/lib/firebase';
+import {
+  ImageReencodeError,
+  imageFileRejection,
+  imageReencodeFailureMessage,
+  PRODUCT_IMAGE_ENCODE,
+  reencodeImageToJpeg,
+} from '../../products/_components/image-reencode';
 import { BannerCtaSection } from './_components/BannerCtaSection';
 import { BannerImageSection } from './_components/BannerImageSection';
 import { BannerTextSection } from './_components/BannerTextSection';
@@ -44,20 +51,37 @@ export default function AdminBannerClient() {
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !session?.user) return;
+    e.target.value = '';
+    if (!file) return;
+    // 거절 사유를 구체적으로 알린다 — 아무 반응 없이 끝나면 관리자는 왜 안 되는지 모른다.
+    if (!session?.user) {
+      setUploadError('로그인 정보를 확인하는 중입니다. 잠시 뒤 다시 시도해주세요.');
+      return;
+    }
+    const rejection = imageFileRejection(file);
+    if (rejection) {
+      setUploadError(rejection);
+      return;
+    }
     setUploading(true);
     setUploadError(null);
     try {
-      const r = storageRef(getFirebaseStorage(), `banners/main_hero/${Date.now()}_${file.name}`);
-      await uploadBytes(r, file);
+      // 배너 사진은 누구나 받을 수 있는 공개 사진이다. canvas로 다시 그려 EXIF(촬영 위치 등)를
+      // 지운 JPEG만 올리고, 원본 파일명도 경로에 쓰지 않는다.
+      const jpeg = await reencodeImageToJpeg(file, PRODUCT_IMAGE_ENCODE);
+      const r = storageRef(getFirebaseStorage(), `banners/main_hero/${Date.now()}.jpg`);
+      await uploadBytes(r, jpeg, { contentType: 'image/jpeg' });
       const url = await getDownloadURL(r);
       setForm((f) => ({ ...f, imageUrl: url }));
-    } catch {
+    } catch (err) {
       // 실패해도 기존 form 입력(imageUrl 포함)은 그대로 보존된다.
-      setUploadError('이미지 업로드 중 오류 발생');
+      setUploadError(
+        err instanceof ImageReencodeError
+          ? imageReencodeFailureMessage(err.reason)
+          : '이미지 업로드 중 오류 발생',
+      );
     } finally {
       setUploading(false);
-      e.target.value = '';
     }
   };
 
