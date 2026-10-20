@@ -328,7 +328,9 @@ POST /admin/invite/:token/revoke
 
 `POST /auth/register`(role `seller`)는 `inviteToken`이 필수다. 판정은 `docs/specs/api/auth.md`를 따른다.
 
-운영 런타임은 이메일 가입을 받지 않으므로(2026-10-18 결정, `docs/specs/api/auth.md` §7) 운영에서는 초대 토큰으로 가입할 수 없다. 초대 발급·목록·취소 API는 그대로 동작한다. 운영에서 새 판매자를 받는 방식은 정해지지 않았다(별도 결정).
+운영에서 새 판매자는 관리자가 보낸 초대 링크(`{판매자 앱}/invite/{token}`)를 열어 카카오로 로그인해 가입한다(2026-10-21 결정). `POST /auth/kakao-login`(`targetRole: seller`, 첫 로그인)이 `inviteToken`을 받아 이메일 가입과 같은 판정을 하고 사용자 생성과 함께 초대를 소모한다. 상세는 `docs/specs/api/auth.md` §7 카카오 판매자 초대 가입을 따른다. 운영 런타임은 이메일 가입을 받지 않으므로(2026-10-18 결정) 이메일 가입 경로로는 초대를 쓸 수 없다.
+
+관리자 초대 탭(`apps/seller/src/app/admin/invite`)은 토큰 대신 지금 판매자 앱 주소 기준 초대 링크를 복사하고(클립보드가 막히면 직접 복사 창), 발급·만료·사용 시각을 KST 날짜+시각으로, 사용한 초대는 가입한 계정 id를 함께 보여 준다.
 
 ## 9. Banner 관리
 
@@ -439,6 +441,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-21 | 운영 판매자 가입을 초대 링크 → 카카오 로그인으로 결정(`kakao-login` `inviteToken`), 초대 탭 링크 복사·발급/사용 시각·사용 계정 표시 |
 | 2026-10-21 | 어드민 행동 기록(`adminAuditLogs`, `GET /admin/audit-logs`, seller "기록" 탭), 정산 지급 `paidBy`, 정지 사유(`SuspendUserDto.reason`) 추가 |
 | 2026-10-18 | 운영 런타임의 이메일 가입 전면 거부로 운영에서는 초대 토큰 가입이 불가함을 명시(발급·목록·취소는 그대로) |
 | 2026-09-26 | admin force refund가 `RoundOrderLifecycleService.cancelForRound` + `SettlementsService.cancelSettlement`로 수렴하고 `admin.service.spec.ts`·`admin-legacy-refund-occ-retry.spec.ts`로 직접 증명되어 `ADMIN-FORCE-REFUND-CONSISTENCY` P0 불일치 서술을 proven 계약으로 대체 |

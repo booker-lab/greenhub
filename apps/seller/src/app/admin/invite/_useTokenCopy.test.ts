@@ -9,14 +9,15 @@ const source = readFileSync(new URL('./_useTokenCopy.ts', import.meta.url), 'utf
 describe('useTokenCopy 배선', () => {
   it('복사는 공용 copyText 헬퍼를 경유한다(클립보드 직접 호출 금지)', () => {
     expect(source).toContain("from './_clipboard'");
-    expect(source).toContain('await copyText(token)');
+    expect(source).toContain('const link = buildInviteLink(token, window.location.origin)');
+    expect(source).toContain('await copyText(link)');
     expect(source).not.toContain('navigator.clipboard');
   });
 
-  it('실패 시 빨간 알림을 띄우고 직접 복사 창용 토큰을 기록한다', () => {
+  it('실패 시 빨간 알림을 띄우고 직접 복사 창용 초대 링크를 기록한다', () => {
     const failed = source.slice(source.indexOf("if (result === 'failed')"));
     expect(failed).toContain("color: 'red'");
-    expect(failed).toContain('setManualToken(token)');
+    expect(failed).toContain('setManualLink(link)');
     expect(failed).toContain('setCopiedToken(null)');
   });
 
