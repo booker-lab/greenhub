@@ -2,6 +2,7 @@
 
 import type { AdminCommandOutcome } from './useAdmin.outcome';
 import { pick, runAdminCommand, useAdminList, withQuery } from './useAdmin.list';
+import { useAdminPagedList } from './useAdmin.paged';
 import type { AdminOrder, AdminSettlement } from './useAdmin.types';
 
 // ── Orders ───────────────────────────────────────────────────────
@@ -9,13 +10,22 @@ import type { AdminOrder, AdminSettlement } from './useAdmin.types';
 export function useAdminOrders(filters?: { storeId?: string; status?: string }) {
   const {
     items: orders,
+    hasMore,
     loading,
+    loadingMore,
     error,
+    moreError,
     reload,
+    loadMore,
     token,
-  } = useAdminList<AdminOrder>(
-    () => withQuery('/admin/orders', { storeId: filters?.storeId, status: filters?.status }),
-    pick<AdminOrder>('orders'),
+  } = useAdminPagedList<AdminOrder>(
+    (cursor) =>
+      withQuery('/admin/orders', {
+        storeId: filters?.storeId,
+        status: filters?.status,
+        cursor: cursor ?? undefined,
+      }),
+    'orders',
     '주문 목록',
     [filters?.storeId, filters?.status],
   );
@@ -32,7 +42,17 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
     );
   };
 
-  return { orders, loading, error, reload, forceRefund };
+  return {
+    orders,
+    hasMore,
+    loading,
+    loadingMore,
+    error,
+    moreError,
+    reload,
+    loadMore,
+    forceRefund,
+  };
 }
 
 // ── Settlements ──────────────────────────────────────────────────

@@ -4,6 +4,7 @@
 // 구현은 도메인별 파일이 소유한다(500라인 한도 대응 분할).
 // - useAdmin.types: 공통 타입
 // - useAdmin.list: 목록 공통 훅·command 실행
+// - useAdmin.paged / useAdmin.pager: "더 보기"(커서 이어받기) 목록 훅·순서 규칙
 // - useAdmin.accounts: 판매자·소비자·드라이버
 // - useAdmin.commerce: 주문·정산
 // - useAdmin.banner / useAdmin.invite: 배너·초대

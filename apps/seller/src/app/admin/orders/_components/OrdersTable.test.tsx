@@ -25,7 +25,6 @@ function order(
     id,
     orderNumber,
     storeId: 'store-abcdef12',
-    userId: 'user-1',
     status,
     totalAmount: 12000,
     deliveryMethod: 'DIRECT',

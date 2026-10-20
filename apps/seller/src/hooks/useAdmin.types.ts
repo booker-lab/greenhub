@@ -11,13 +11,17 @@ export interface AdminReconciliation {
 
 // ── Types ────────────────────────────────────────────────────────
 
+// 관리자 판매자 목록 응답(허용 필드만). 정산 계좌·소유자 id는 내려오지 않는다.
 export interface AdminStore {
   id: string;
   name: string;
-  ownerId: string;
   status: StoreStatus;
   commissionRate?: number;
+  /** 대표자 이름·연락처. 가입 전(초대 중) 판매자는 비어 있을 수 있다. */
+  ceoName?: string;
+  phone?: string;
   createdAt: unknown;
+  archivedAt?: unknown;
 }
 
 export interface AdminUser {
@@ -29,11 +33,18 @@ export interface AdminUser {
   createdAt: unknown;
 }
 
+// 관리자 주문 목록 한 줄. 고객은 이름만 내려오고 전화·주소는 내려오지 않는다.
 export interface AdminOrder {
   id: string;
-  orderNumber?: string;
+  orderNumber?: string | null;
   storeId: string;
-  userId: string;
+  /** 가게 이름. 가게 문서가 없거나 이름이 비어 있으면 null. */
+  storeName?: string | null;
+  buyerName?: string | null;
+  /** 첫 상품명 + "외 N개". */
+  productSummary?: string | null;
+  /** 취소 진행 상태(REFUNDING·REFUND_FAILED·LOCAL_PENDING·LOCAL_FAILED·COMPLETED). */
+  cancellationStatus?: string | null;
   status: OrderStatus;
   totalAmount: number;
   deliveryMethod: string;
@@ -96,6 +107,7 @@ export interface AdminDriver {
   id: string;
   name: string;
   email: string | null;
+  phone?: string | null;
   driverApproved: boolean;
   suspended?: boolean;
   createdAt: unknown;

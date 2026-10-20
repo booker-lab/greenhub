@@ -78,7 +78,7 @@ export function buildStatusOptions(): { value: string; label: string }[] {
 // 주문번호가 없는 옛 주문은 목록처럼 줄이지 않고 전체 id를 보여 준다(오인 방지).
 export function describeRefundTarget(order: {
   id: string;
-  orderNumber?: string;
+  orderNumber?: string | null;
   totalAmount: number;
 }): { orderLabel: string; amountLabel: string } {
   return {
