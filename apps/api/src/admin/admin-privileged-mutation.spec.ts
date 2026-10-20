@@ -84,6 +84,7 @@ function makeHttpHarness() {
     payments as never,
     settlements as never,
     roundLifecycle as never,
+    { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
   );
 
   const serviceBoundary = {
@@ -282,36 +283,40 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
 
     switch (name) {
       case 'refund':
-        expect(harness.serviceBoundary.forceRefund).toHaveBeenCalledWith('order-1', {
-          reason: '검증 환불',
-        });
+        expect(harness.serviceBoundary.forceRefund).toHaveBeenCalledWith(
+          'order-1',
+          { reason: '검증 환불' },
+          'admin-1',
+        );
         break;
       case 'pay':
-        expect(harness.serviceBoundary.markAsPaid).toHaveBeenCalledWith('settlement-1');
+        expect(harness.serviceBoundary.markAsPaid).toHaveBeenCalledWith('settlement-1', 'admin-1');
         break;
       case 'approveDriver':
-        expect(harness.serviceBoundary.approveDriver).toHaveBeenCalledWith('driver-1');
+        expect(harness.serviceBoundary.approveDriver).toHaveBeenCalledWith('driver-1', 'admin-1');
         break;
       case 'suspendDriver':
-        expect(harness.serviceBoundary.suspendDriver).toHaveBeenCalledWith('driver-1', {
-          suspended: true,
-        });
+        expect(harness.serviceBoundary.suspendDriver).toHaveBeenCalledWith(
+          'driver-1',
+          { suspended: true },
+          'admin-1',
+        );
         break;
       case 'setCommission':
-        expect(harness.serviceBoundary.setCommission).toHaveBeenCalledWith('store-1', {
-          rate: 0.1,
-        });
+        expect(harness.serviceBoundary.setCommission).toHaveBeenCalledWith('store-1', { rate: 0.1 }, 'admin-1');
         break;
       case 'archiveStore':
-        expect(harness.serviceBoundary.archiveStore).toHaveBeenCalledWith('store-1');
+        expect(harness.serviceBoundary.archiveStore).toHaveBeenCalledWith('store-1', 'admin-1');
         break;
       case 'restoreStore':
-        expect(harness.serviceBoundary.restoreStore).toHaveBeenCalledWith('store-1');
+        expect(harness.serviceBoundary.restoreStore).toHaveBeenCalledWith('store-1', 'admin-1');
         break;
       case 'suspendUser':
-        expect(harness.serviceBoundary.suspendUser).toHaveBeenCalledWith('consumer-1', {
-          suspended: true,
-        });
+        expect(harness.serviceBoundary.suspendUser).toHaveBeenCalledWith(
+          'consumer-1',
+          { suspended: true },
+          'admin-1',
+        );
         break;
       case 'generateInvite':
         expect(harness.serviceBoundary.generateInvite).toHaveBeenCalledWith('admin-1', {
@@ -325,9 +330,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         );
         break;
       case 'upsertBanner':
-        expect(harness.serviceBoundary.upsertBanner).toHaveBeenCalledWith({
-          headline: '검증 배너',
-        });
+        expect(harness.serviceBoundary.upsertBanner).toHaveBeenCalledWith({ headline: '검증 배너' }, 'admin-1');
         break;
     }
   });
@@ -413,14 +416,16 @@ function makeMarkAsPaidFixture(status?: string, issues: Data[] = []) {
     runTransaction,
     Timestamp: { now: jest.fn(() => 'transaction-now') },
   };
+  const audit = { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() };
   const service = new AdminService(
     firestore as never,
     {} as never,
     {} as never,
     {} as never,
+    audit as never,
   );
 
-  return { records, refs, runTransaction, service, transactionReads, transactionUpdates };
+  return { audit, records, refs, runTransaction, service, transactionReads, transactionUpdates };
 }
 
 describe('AdminService.markAsPaid 상태 계약', () => {
@@ -432,7 +437,7 @@ describe('AdminService.markAsPaid 상태 계약', () => {
   ] as const)('%s는 DENY하고 transaction write를 만들지 않는다', async (_label, status, message) => {
     const fixture = makeMarkAsPaidFixture(status);
 
-    await expect(fixture.service.markAsPaid('settlement-1')).rejects.toThrow(message);
+    await expect(fixture.service.markAsPaid('settlement-1', 'admin-1')).rejects.toThrow(message);
 
     expect(fixture.transactionReads).toEqual([SETTLEMENT_PATH]);
     expect(fixture.transactionUpdates).toHaveLength(0);
@@ -441,7 +446,7 @@ describe('AdminService.markAsPaid 상태 계약', () => {
   it('confirmed는 transaction fresh read 후 paid로 전이하고 paidAt·updatedAt을 설정한다', async () => {
     const fixture = makeMarkAsPaidFixture('confirmed');
 
-    await expect(fixture.service.markAsPaid('settlement-1')).resolves.toEqual({
+    await expect(fixture.service.markAsPaid('settlement-1', 'admin-1')).resolves.toEqual({
       settlementId: 'settlement-1',
       status: 'paid',
     });
@@ -453,6 +458,7 @@ describe('AdminService.markAsPaid 상태 계약', () => {
         data: {
           status: 'paid',
           paidAt: 'transaction-now',
+          paidBy: 'admin-1',
           updatedAt: 'transaction-now',
         },
       },
@@ -460,16 +466,30 @@ describe('AdminService.markAsPaid 상태 계약', () => {
     expect(fixture.records.get(SETTLEMENT_PATH)).toMatchObject({
       status: 'paid',
       paidAt: 'transaction-now',
+      paidBy: 'admin-1',
       updatedAt: 'transaction-now',
     });
+    // 지급 기록은 같은 트랜잭션 객체로 남겨 지급과 함께 커밋된다.
+    expect(fixture.audit.logAdmin).toHaveBeenCalledTimes(1);
+    expect(fixture.audit.logAdmin).toHaveBeenCalledWith(
+      {
+        action: 'admin.settlement.paid',
+        actorId: 'admin-1',
+        targetType: 'settlement',
+        targetId: 'settlement-1',
+        before: { status: 'confirmed' },
+        after: { status: 'paid' },
+      },
+      expect.objectContaining({ update: expect.any(Function) }),
+    );
   });
 
   it('동시 지급 race에서는 fresh status를 기준으로 confirmed→paid 성공이 한 번뿐이다', async () => {
     const fixture = makeMarkAsPaidFixture('confirmed');
 
     const results = await Promise.allSettled([
-      fixture.service.markAsPaid('settlement-1'),
-      fixture.service.markAsPaid('settlement-1'),
+      fixture.service.markAsPaid('settlement-1', 'admin-1'),
+      fixture.service.markAsPaid('settlement-1', 'admin-1'),
     ]);
     const successes = results.filter((result) => result.status === 'fulfilled');
     const failures = results.filter((result) => result.status === 'rejected');
@@ -503,7 +523,7 @@ describe('AdminService.markAsPaid 상태 계약', () => {
   it('결제사 취소·분쟁 기록이 OPEN이면 409로 거부하고 transaction write를 만들지 않는다', async () => {
     const fixture = makeMarkAsPaidFixture('confirmed', [reversalIssue('OPEN')]);
 
-    const error = await fixture.service.markAsPaid('settlement-1').catch((reason) => reason);
+    const error = await fixture.service.markAsPaid('settlement-1', 'admin-1').catch((reason) => reason);
 
     expect(error).toBeInstanceOf(ConflictException);
     expect(error.getStatus()).toBe(409);
@@ -524,7 +544,7 @@ describe('AdminService.markAsPaid 상태 계약', () => {
   ] as const)('%s은 지급을 막지 않는다', async (_label, issues) => {
     const fixture = makeMarkAsPaidFixture('confirmed', [...issues]);
 
-    await expect(fixture.service.markAsPaid('settlement-1')).resolves.toEqual({
+    await expect(fixture.service.markAsPaid('settlement-1', 'admin-1')).resolves.toEqual({
       settlementId: 'settlement-1',
       status: 'paid',
     });

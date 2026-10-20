@@ -37,6 +37,7 @@ function makeService(occ: Occ) {
     payments as never,
     settlements as never,
     roundLifecycle as never,
+    { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
   );
   return { service, payments, settlements, roundLifecycle };
 }
@@ -96,7 +97,9 @@ describe('Admin legacy refund OCC retry purity', () => {
     };
     arm();
 
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).resolves.toEqual({
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).resolves.toEqual({
       ok: true,
       orderId: ORDER_ID,
     });
@@ -145,7 +148,9 @@ describe('Admin legacy refund OCC retry purity', () => {
     };
     arm();
 
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).resolves.toEqual({
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).resolves.toEqual({
       ok: true,
       orderId: ORDER_ID,
     });
@@ -205,7 +210,9 @@ describe('Admin legacy refund OCC retry purity', () => {
     };
     arm();
 
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).resolves.toEqual({
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).resolves.toEqual({
       ok: true,
       orderId: ORDER_ID,
     });
@@ -249,9 +256,9 @@ describe('Admin legacy refund OCC retry purity', () => {
     };
     arm();
 
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).rejects.toThrow(
-      '주문 환불이 이미 처리 중입니다.',
-    );
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).rejects.toThrow('주문 환불이 이미 처리 중입니다.');
     occ.clearHooks();
 
     expect(commits).toHaveLength(2);
@@ -284,14 +291,14 @@ describe('Admin legacy refund OCC retry purity', () => {
       await providerReleasePromise;
     });
 
-    const first = service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' });
+    const first = service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1');
     await providerStartedPromise;
 
     // The winner holds REFUNDING while blocked in the provider; the loser
     // must observe in_progress and never reach the provider itself.
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).rejects.toThrow(
-      '주문 환불이 이미 처리 중입니다.',
-    );
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).rejects.toThrow('주문 환불이 이미 처리 중입니다.');
     expect(payments.processRefundByOrderId).toHaveBeenCalledTimes(1);
     expect(settlements.cancelSettlement).not.toHaveBeenCalled();
     expect(occ.getData(ORDER_PATH)).toMatchObject({
@@ -327,9 +334,9 @@ describe('Admin legacy refund OCC retry purity', () => {
     };
     rearm();
 
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).rejects.toThrow(
-      'transaction retry limit exceeded',
-    );
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).rejects.toThrow('transaction retry limit exceeded');
     occ.clearHooks();
 
     expect(bumps).toBe(2);
@@ -346,11 +353,15 @@ describe('Admin legacy refund OCC retry purity', () => {
     seedDone(occ);
     const { service, payments, settlements } = makeService(occ);
 
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).resolves.toEqual({
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).resolves.toEqual({
       ok: true,
       orderId: ORDER_ID,
     });
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).resolves.toEqual({
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).resolves.toEqual({
       ok: true,
       orderId: ORDER_ID,
     });
@@ -376,13 +387,13 @@ describe('Admin legacy refund OCC retry purity', () => {
     });
     const { service, payments, settlements } = makeService(occ);
 
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).rejects.toThrow(
-      '주문 환불이 이미 처리 중입니다.',
-    );
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).rejects.toThrow('주문 환불이 이미 처리 중입니다.');
     // Second attempt observes the same foreign claim deterministically.
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).rejects.toThrow(
-      '주문 환불이 이미 처리 중입니다.',
-    );
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).rejects.toThrow('주문 환불이 이미 처리 중입니다.');
 
     expect(payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(settlements.cancelSettlement).not.toHaveBeenCalled();
@@ -399,9 +410,9 @@ describe('Admin legacy refund OCC retry purity', () => {
     const { service, payments, settlements } = makeService(occ);
     payments.processRefundByOrderId.mockRejectedValueOnce(new Error('provider down'));
 
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).rejects.toThrow(
-      'provider down',
-    );
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).rejects.toThrow('provider down');
 
     expect(payments.processRefundByOrderId).toHaveBeenCalledTimes(1);
     expect(settlements.cancelSettlement).not.toHaveBeenCalled();
@@ -443,9 +454,9 @@ describe('Admin legacy refund OCC retry purity', () => {
     };
     arm();
 
-    await expect(service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' })).rejects.toThrow(
-      'provider down',
-    );
+    await expect(
+      service.forceRefund(ORDER_ID, { reason: '관리자 강제 환불' }, 'admin-1'),
+    ).rejects.toThrow('provider down');
     occ.clearHooks();
 
     expect(payments.processRefundByOrderId).toHaveBeenCalledTimes(1);

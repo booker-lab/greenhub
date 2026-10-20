@@ -33,6 +33,7 @@ describe('AdminService driver session 보강', () => {
         {} as never,
         settlements as never,
         roundLifecycle as never,
+        { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
       ),
       refreshTokenRef,
       userRef,
@@ -51,7 +52,7 @@ describe('AdminService driver session 보강', () => {
       role: 'driver',
     });
 
-    await expect(service.suspendDriver('driver-1', { suspended: true })).resolves.toEqual({
+    await expect(service.suspendDriver('driver-1', { suspended: true }, 'admin-1')).resolves.toEqual({
       userId: 'driver-1',
       suspended: true,
     });
@@ -68,7 +69,7 @@ describe('AdminService driver session 보강', () => {
   it('driver 정지 해제 시 refresh token 폐기를 다시 호출하지 않는다', async () => {
     const { refreshTokenRef, service, userRef } = makeService({ id: 'driver-1', role: 'driver' });
 
-    await service.suspendDriver('driver-1', { suspended: false });
+    await service.suspendDriver('driver-1', { suspended: false }, 'admin-1');
 
     expect(userRef.update).toHaveBeenCalledWith({ suspended: false, updatedAt: 'now' });
     expect(refreshTokenRef.delete).not.toHaveBeenCalled();
@@ -83,7 +84,7 @@ describe('AdminService driver session 보강', () => {
     });
 
     try {
-      await expect(service.suspendUser('consumer-1', { suspended: true })).resolves.toEqual({
+      await expect(service.suspendUser('consumer-1', { suspended: true }, 'admin-1')).resolves.toEqual({
         userId: 'consumer-1',
         suspended: true,
       });
@@ -107,7 +108,7 @@ describe('AdminService driver session 보강', () => {
     );
     const { refreshTokenRef, service } = makeService({ id: 'consumer-1', role: 'consumer' });
 
-    await expect(service.suspendUser('consumer-1', { suspended: true })).resolves.toEqual({
+    await expect(service.suspendUser('consumer-1', { suspended: true }, 'admin-1')).resolves.toEqual({
       userId: 'consumer-1',
       suspended: true,
     });
@@ -120,7 +121,7 @@ describe('AdminService driver session 보강', () => {
       role: 'consumer',
     });
 
-    await service.suspendUser('consumer-1', { suspended: false });
+    await service.suspendUser('consumer-1', { suspended: false }, 'admin-1');
 
     expect(userRef.update).toHaveBeenCalledWith({ suspended: false, updatedAt: 'now' });
     expect(refreshTokenRef.delete).not.toHaveBeenCalled();
@@ -148,7 +149,13 @@ describe('AdminService 기사 목록', () => {
       })),
     };
     const firestore = { collection: jest.fn().mockReturnValue(query) };
-    const service = new AdminService(firestore as never, {} as never, {} as never, {} as never);
+    const service = new AdminService(
+      firestore as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
+    );
     return { query, service };
   }
 
@@ -246,6 +253,7 @@ function makeLegacyForceRefundFixture(orderOverrides: Data = {}) {
     payments as never,
     settlements as never,
     roundLifecycle as never,
+    { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
   );
   return { records, firestore, payments, settlements, roundLifecycle, service };
 }
@@ -256,7 +264,7 @@ describe('AdminService 강제 환불 수렴', () => {
     async (status) => {
       const fixture = makeLegacyForceRefundFixture({ status });
 
-      await expect(fixture.service.forceRefund('order-1', {})).rejects.toThrow(
+      await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).rejects.toThrow(
         '현재 주문 상태에서는 관리자 환불을 처리할 수 없습니다.',
       );
 
@@ -273,8 +281,8 @@ describe('AdminService 강제 환불 수렴', () => {
   ])('legacy normal %s는 daily capacity를 한 번 반환한다', async (_name, overrides) => {
     const fixture = makeLegacyForceRefundFixture(overrides);
 
-    await fixture.service.forceRefund('order-1', {});
-    await fixture.service.forceRefund('order-1', {});
+    await fixture.service.forceRefund('order-1', {}, 'admin-1');
+    await fixture.service.forceRefund('order-1', {}, 'admin-1');
 
     expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(0);
     expect(fixture.records.get('orders/order-1')?.legacyDailyCapacity).toMatchObject({
@@ -292,7 +300,7 @@ describe('AdminService 강제 환불 수렴', () => {
   ])('%s는 legacy daily capacity를 변경하지 않는다', async (_name, overrides) => {
     const fixture = makeLegacyForceRefundFixture(overrides);
 
-    await fixture.service.forceRefund('order-1', {});
+    await fixture.service.forceRefund('order-1', {}, 'admin-1');
 
     expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(1);
     expect(fixture.records.get('orders/order-1')?.legacyDailyCapacity).toBeUndefined();
@@ -309,7 +317,7 @@ describe('AdminService 강제 환불 수렴', () => {
     });
     fixture.records.set('dailyCaps/store-1_2026-08-25', { totalCap: 10, usedSlots: 0 });
 
-    await fixture.service.forceRefund('order-1', {});
+    await fixture.service.forceRefund('order-1', {}, 'admin-1');
 
     expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(0);
   });
@@ -318,7 +326,7 @@ describe('AdminService 강제 환불 수렴', () => {
     const fixture = makeLegacyForceRefundFixture();
     fixture.payments.processRefundByOrderId.mockRejectedValueOnce(new Error('환불 실패'));
 
-    await expect(fixture.service.forceRefund('order-1', {})).rejects.toThrow('환불 실패');
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).rejects.toThrow('환불 실패');
 
     expect(fixture.records.get('orders/order-1')?.status).toBe('ACCEPTED');
     expect(fixture.records.get('orders/order-1')?.cancellation).toMatchObject({
@@ -343,10 +351,10 @@ describe('AdminService 강제 환불 수렴', () => {
       await providerReleasePromise;
     });
 
-    const first = fixture.service.forceRefund('order-1', {});
+    const first = fixture.service.forceRefund('order-1', {}, 'admin-1');
     await providerStartedPromise;
 
-    await expect(fixture.service.forceRefund('order-1', {})).rejects.toThrow(
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).rejects.toThrow(
       '주문 환불이 이미 처리 중입니다.',
     );
     expect(fixture.payments.processRefundByOrderId).toHaveBeenCalledTimes(1);
@@ -371,7 +379,7 @@ describe('AdminService 강제 환불 수렴', () => {
     });
     fixture.records.delete('dailyCaps/store-1_2026-08-25');
 
-    await expect(fixture.service.forceRefund('order-1', {})).rejects.toThrow(
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).rejects.toThrow(
       'legacy daily capacity 문서가 없습니다',
     );
     expect(providerRefund).toHaveBeenCalledTimes(1);
@@ -382,7 +390,7 @@ describe('AdminService 강제 환불 수렴', () => {
     expect(fixture.settlements.cancelSettlement).not.toHaveBeenCalled();
 
     fixture.records.set('dailyCaps/store-1_2026-08-25', { totalCap: 10, usedSlots: 1 });
-    await expect(fixture.service.forceRefund('order-1', {})).resolves.toEqual({
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
       ok: true,
       orderId: 'order-1',
     });
@@ -408,7 +416,7 @@ describe('AdminService 강제 환불 수렴', () => {
       status: 'CANCELLED',
     });
 
-    await expect(fixture.service.forceRefund('order-1', { reason: '관리자 사유' })).resolves.toEqual({
+    await expect(fixture.service.forceRefund('order-1', { reason: '관리자 사유' }, 'admin-1')).resolves.toEqual({
       orderId: 'order-1',
       status: 'CANCELLED',
     });
@@ -465,6 +473,7 @@ describe('AdminService 정산 KST 날짜 범위', () => {
       {} as never,
       {} as never,
       {} as never,
+      { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
     );
     return { calls, service };
   }

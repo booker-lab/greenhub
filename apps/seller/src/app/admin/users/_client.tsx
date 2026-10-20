@@ -4,6 +4,7 @@ import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
 import type { AdminUser } from '@/hooks/useAdmin';
 import { describeAdminCommandOutcome, useAdminUsers } from '@/hooks/useAdmin';
 import { UsersTable } from './_components/UsersTable';
@@ -17,13 +18,18 @@ export default function AdminUsersClient() {
   const { users, loading, error, reload, toggleSuspend } = useAdminUsers();
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingUserAction | null>(null);
+  const [reason, setReason] = useState('');
 
   const runPending = async () => {
     if (!pending) return;
     const actionLabel = pending.currentlySuspended ? '정지 해제' : '정지';
     setProcessingId(pending.userId);
     try {
-      const outcome = await toggleSuspend(pending.userId, !pending.currentlySuspended);
+      const outcome = await toggleSuspend(
+        pending.userId,
+        !pending.currentlySuspended,
+        normalizeSuspendReason(reason),
+      );
       setPending(null);
       if (outcome.kind === 'confirmed' && outcome.reconciled) return;
       // rejected는 서버 reason 보존, unknown/stale은 재확인 우선 + blind retry 금지.
@@ -38,8 +44,10 @@ export default function AdminUsersClient() {
     }
   };
 
-  const handleToggle = (user: AdminUser) =>
+  const handleToggle = (user: AdminUser) => {
+    setReason('');
     setPending({ userId: user.id, currentlySuspended: !!user.suspended });
+  };
 
   if (loading) {
     return (
@@ -103,9 +111,15 @@ export default function AdminUsersClient() {
         opened={pending !== null}
         title={pending?.currentlySuspended ? '계정 정지 해제' : '계정 정지'}
         message={
-          pending?.currentlySuspended
-            ? '계정 정지를 해제하시겠습니까?'
-            : '이 계정을 정지하시겠습니까?'
+          <SuspendReasonMessage
+            message={
+              pending?.currentlySuspended
+                ? '계정 정지를 해제하시겠습니까?'
+                : '이 계정을 정지하시겠습니까?'
+            }
+            reason={reason}
+            onReasonChange={setReason}
+          />
         }
         confirmLabel={pending?.currentlySuspended ? '해제' : '정지'}
         confirmColor={pending?.currentlySuspended ? 'brand' : 'red'}
