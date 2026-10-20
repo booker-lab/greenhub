@@ -320,6 +320,28 @@ test('Driver 서비스워커는 API·인증 요청을 캐시하지 않고 온라
   );
 });
 
+test('사진 화면은 화면이 숨으면 카메라를 끄고 리스너를 정리하며 언마운트 정지를 유지한다', () => {
+  const at = photoCaptureSource.indexOf('const handleVisibility = () => {');
+  assert.ok(at !== -1);
+  const block = photoCaptureSource.slice(at - 200, at + 500);
+  assert.match(block, /if \(!stream\) return;/);
+  assert.match(
+    block,
+    /if \(document\.visibilityState !== 'hidden' \|\| preparingRef\.current\) return;\s*stopStream\(\);/,
+  );
+  assert.match(block, /addEventListener\('visibilitychange', handleVisibility\)/);
+  assert.match(block, /removeEventListener\('visibilitychange', handleVisibility\)/);
+  assert.match(block, /\}, \[stream\]\);/);
+  // 복귀 때는 자동으로 켜지 않고 기존 촬영 시작 버튼 상태(!stream && !captured)로 돌아간다.
+  assert.doesNotMatch(block, /startCamera\(/);
+  assert.match(photoCaptureSource, /\{!stream && !captured && \(/);
+  // 언마운트 정지와 늦게 도착한 getUserMedia 정지는 그대로다.
+  assert.match(
+    photoCaptureSource,
+    /if \(cameraRequestRef\.current !== requestId\) \{\s*stopMediaStream\(nextStream\);/,
+  );
+});
+
 test('Pilot 사진 화면은 JPEG 파일 대체 경로와 기존 업로드 계약을 유지한다', () => {
   assert.match(photoCaptureSource, /navigator\.mediaDevices\.getUserMedia/);
   assert.match(photoCaptureSource, /카메라 촬영/);
