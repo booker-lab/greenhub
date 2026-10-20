@@ -1,7 +1,7 @@
 'use client';
 
 import { FEATURE_KEYS } from '@greenhub/shared';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { apiJson } from '@/lib/api';
 import { apiPathSegment } from '@/lib/api-path';
@@ -13,7 +13,12 @@ import {
   type ProductFormData,
   type ProductFormProps,
 } from './productForm.types';
-import { extrasBody } from './productExtras';
+import { extrasBody, fillNoticeDefaults, type NoticeStoreDefaults, noticeBody } from './productExtras';
+
+/** 상품정보제공고시의 빈 칸만 기본값(생산자=매장명, 상담 전화=사업자 프로필 연락처)으로 채운다. */
+function withNoticeDefaults(form: ProductFormData, defaults: NoticeStoreDefaults): ProductFormData {
+  return { ...form, extras: { ...form.extras, notice: fillNoticeDefaults(form.extras.notice, defaults) } };
+}
 
 /** ProductForm의 상태·검증·임시저장·제출 로직을 모두 담는 훅. */
 export function useProductForm({
@@ -25,6 +30,9 @@ export function useProductForm({
   onSuccess,
 }: ProductFormProps) {
   const draftKey = mode === 'create' ? 'product_draft_new' : `product_draft_${productId}`;
+
+  // 매장에서 읽은 고시 기본값. 폼을 새로 채울 때마다 빈 칸에만 넣는다.
+  const noticeDefaults = useRef<NoticeStoreDefaults>({ producer: '', csPhone: '' });
 
   const [form, setForm] = useState<ProductFormData>(() =>
     initialData ? { ...defaultForm(), ...initialData } : defaultForm(),
@@ -46,14 +54,23 @@ export function useProductForm({
       if (saved) {
         const p = JSON.parse(saved);
         const def = defaultForm();
-        setForm({
-          ...def,
-          ...p,
-          groupConfig: { ...def.groupConfig, ...(p.groupConfig ?? {}) },
-          selection: { ...def.selection, ...(p.selection ?? {}) },
-          content: { ...def.content, ...(p.content ?? {}) },
-          extras: { ...def.extras, ...(p.extras ?? {}) },
-        });
+        setForm(
+          withNoticeDefaults(
+            {
+              ...def,
+              ...p,
+              groupConfig: { ...def.groupConfig, ...(p.groupConfig ?? {}) },
+              selection: { ...def.selection, ...(p.selection ?? {}) },
+              content: { ...def.content, ...(p.content ?? {}) },
+              extras: {
+                ...def.extras,
+                ...(p.extras ?? {}),
+                notice: { ...def.extras.notice, ...(p.extras?.notice ?? {}) },
+              },
+            },
+            noticeDefaults.current,
+          ),
+        );
         if (p._step) setStep(p._step);
       }
     } catch {}
@@ -62,8 +79,27 @@ export function useProductForm({
 
   // 수정 모드: 비동기로 도착한 initialData 반영
   useEffect(() => {
-    if (initialData?.name) setForm({ ...defaultForm(), ...initialData });
+    if (initialData?.name) {
+      setForm(withNoticeDefaults({ ...defaultForm(), ...initialData }, noticeDefaults.current));
+    }
   }, [initialData?.name, initialData]);
+
+  // 매장 이름·연락처를 읽어 고시의 빈 생산자·상담 전화 칸을 채운다. 실패하면 빈 칸으로 두고 판매자가 직접 쓴다.
+  useEffect(() => {
+    if (!storeId || !token) return;
+    let active = true;
+    apiJson<{ name?: string; phone?: string }>(`/stores/${apiPathSegment(storeId)}`, token)
+      .then((store) => {
+        if (!active) return;
+        const defaults = { producer: store.name?.trim() ?? '', csPhone: store.phone?.trim() ?? '' };
+        noticeDefaults.current = defaults;
+        setForm((prev) => withNoticeDefaults(prev, defaults));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [storeId, token]);
 
   function set<K extends keyof ProductFormData>(key: K, value: ProductFormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -89,7 +125,7 @@ export function useProductForm({
     try {
       localStorage.removeItem(draftKey);
     } catch {}
-    setForm(defaultForm());
+    setForm(withNoticeDefaults(defaultForm(), noticeDefaults.current));
     setStep(1);
     setError(null);
   }
@@ -193,6 +229,14 @@ export function useProductForm({
       content: form.content,
       sellerOverride: form.sellerOverride,
     };
+    // 상품정보제공고시는 법정 표시라 기능 토글과 상관없이 항상 보낸다.
+    const notice = noticeBody(form.extras.notice);
+    if (!notice.ok) {
+      setError(notice.error);
+      setSubmitting(false);
+      return;
+    }
+    body.notice = notice.body;
     if (FEATURE_KEYS.some(isFeatureOn)) {
       const extras = extrasBody(form.extras);
       if (!extras.ok) {

@@ -6,13 +6,18 @@ import {
   PRODUCT_OPTION_CHOICE_MAX,
   PRODUCT_OPTION_GROUP_MAX,
   PRODUCT_OPTION_PRICE_DELTA_MAX,
+  PRODUCT_NOTICE_DEFAULT_CERTIFICATION,
+  PRODUCT_NOTICE_DEFAULT_ORIGIN,
+  PRODUCT_NOTICE_FIELDS,
   type Placement,
   type ProductExtras,
+  type ProductNotice,
   type ProductOptionGroup,
 } from '@greenhub/shared';
 
 // 상품 등록·수정의 팔도감 벤치마킹 추가 정보(크기·두는 곳·관리법·옵션 등).
 // 화면 입력은 문자열로 받고, 제출할 때 API 계약(ProductExtras)으로 바꾼다.
+// 상품정보제공고시(notice)만은 법정 표시라 기능 토글과 상관없이 항상 입력받고 보낸다.
 
 export const CARE_TEXT_MAX = 120;
 export const ALIAS_MAX = 10;
@@ -44,6 +49,13 @@ export interface ProductExtrasForm {
   guaranteed: boolean;
   /** 쉼표로 구분 */
   aliases: string;
+  notice: Required<ProductNotice>;
+}
+
+/** 매장 정보에서 오는 고시 기본값. 매장 조회 전이거나 실패하면 빈 값이다. */
+export interface NoticeStoreDefaults {
+  producer: string;
+  csPhone: string;
 }
 
 export function defaultExtras(): ProductExtrasForm {
@@ -58,7 +70,48 @@ export function defaultExtras(): ProductExtrasForm {
     options: [],
     guaranteed: false,
     aliases: '',
+    notice: {
+      itemName: '',
+      origin: PRODUCT_NOTICE_DEFAULT_ORIGIN,
+      producer: '',
+      certification: PRODUCT_NOTICE_DEFAULT_CERTIFICATION,
+      csPhone: '',
+    },
   };
+}
+
+/**
+ * 비어 있는 고시 칸만 기본값으로 미리 채운다(판매자가 쓴 값은 그대로 둔다).
+ * 품명은 상품 이름이 바뀔 수 있어 미리 채우지 않고, 비우면 손님 화면이 상품 이름을 보여준다.
+ */
+export function fillNoticeDefaults(
+  notice: Required<ProductNotice>,
+  store: NoticeStoreDefaults,
+): Required<ProductNotice> {
+  const fill = (value: string, fallback: string) => (value.trim() ? value : fallback);
+  return {
+    ...notice,
+    origin: fill(notice.origin, PRODUCT_NOTICE_DEFAULT_ORIGIN),
+    producer: fill(notice.producer, store.producer),
+    certification: fill(notice.certification, PRODUCT_NOTICE_DEFAULT_CERTIFICATION),
+    csPhone: fill(notice.csPhone, store.csPhone),
+  };
+}
+
+const text = (value: unknown) => (typeof value === 'string' ? value : '');
+
+/** 저장된 고시 값 → 입력 상태. 저장된 칸은 그대로, 빈 칸은 고정 기본값으로 둔다. */
+function noticeFromProduct(notice: ProductNotice | undefined): Required<ProductNotice> {
+  return fillNoticeDefaults(
+    {
+      itemName: text(notice?.itemName),
+      origin: text(notice?.origin),
+      producer: text(notice?.producer),
+      certification: text(notice?.certification),
+      csPhone: text(notice?.csPhone),
+    },
+    { producer: '', csPhone: '' },
+  );
 }
 
 const numText = (value: unknown) =>
@@ -93,6 +146,7 @@ export function extrasFromProduct(data: Partial<ProductExtras> | null | undefine
     })),
     guaranteed: data.guaranteed === true,
     aliases: Array.isArray(data.aliases) ? data.aliases.join(', ') : '',
+    notice: noticeFromProduct(data.notice),
   };
 }
 
@@ -115,9 +169,24 @@ function optionalInt(text: string, label: string, min: number, max: number): num
 }
 
 export type ExtrasBodyResult = { ok: true; body: ProductExtras } | { ok: false; error: string };
+export type NoticeBodyResult = { ok: true; body: ProductNotice } | { ok: false; error: string };
+
+/** 고시 입력 → API 본문. 앞뒤 공백을 걷고 빈 칸은 빼서 보낸다(손님 화면이 기본값으로 채운다). */
+export function noticeBody(notice: Required<ProductNotice>): NoticeBodyResult {
+  const body: ProductNotice = {};
+  for (const field of PRODUCT_NOTICE_FIELDS) {
+    const value = notice[field.key].trim();
+    if (value.length > field.maxLength) {
+      return { ok: false, error: `상품 정보 고시의 ${field.label}은(는) ${field.maxLength}자까지 쓸 수 있어요.` };
+    }
+    if (value) body[field.key] = value;
+  }
+  return { ok: true, body };
+}
 
 /**
  * 입력 상태 → API 본문. 수정 화면에서 값을 지울 수 있도록 목록·관리법·여부 값은 항상 보낸다.
+ * 고시(notice)는 토글과 상관없이 보내야 해서 따로 noticeBody로 만든다.
  */
 export function extrasBody(form: ProductExtrasForm): ExtrasBodyResult {
   try {

@@ -44,6 +44,13 @@ const extras = {
   ],
   guaranteed: true,
   aliases: ['팔레놉시스', 'phalaenopsis'],
+  notice: {
+    itemName: '호접란 빅립',
+    origin: '국내산(경기도 이천)',
+    producer: '디어 오키드',
+    certification: '해당 없음',
+    csPhone: '010-0000-0000',
+  },
 };
 
 describe('상품 추가 정보(벤치마킹 비교) 계약', () => {
@@ -65,8 +72,28 @@ describe('상품 추가 정보(벤치마킹 비교) 계약', () => {
     ['id 형식이 틀린 옵션', { options: [{ id: 'p o t', name: '화분', choices: [{ id: 'a', label: 'A', priceDelta: 0 }] }] }],
     ['0cm 키', { size: { heightCm: 0 } }],
     ['너무 긴 관리 안내', { careGuide: { ...extras.careGuide, watering: '가'.repeat(121) } }],
+    ['객체가 아닌 고시 정보', { notice: '국내산' }],
+    ['문자가 아닌 고시 항목', { notice: { origin: 82 } }],
+    ['너무 긴 품명', { notice: { itemName: '가'.repeat(61) } }],
+    ['너무 긴 원산지', { notice: { origin: '가'.repeat(41) } }],
+    ['너무 긴 생산자', { notice: { producer: '가'.repeat(41) } }],
+    ['너무 긴 인증·허가 사항', { notice: { certification: '가'.repeat(101) } }],
+    ['너무 긴 상담 전화', { notice: { csPhone: '0'.repeat(21) } }],
   ])('%s을 거부한다', async (_label, patch) => {
     expect(await validate(plainToInstance(UpdateProductDto, patch))).not.toHaveLength(0);
+  });
+
+  it('고시 정보는 일부 항목만 보내거나 비워 보내도 된다(빈 칸은 화면이 기본값으로 채운다)', async () => {
+    expect(await validate(plainToInstance(UpdateProductDto, { notice: { origin: '국내산' } }))).toHaveLength(0);
+    expect(await validate(plainToInstance(UpdateProductDto, { notice: {} }))).toHaveLength(0);
+  });
+
+  it('고시 정보 안의 모르는 항목은 실제 파이프 옵션(whitelist)에서 거부한다', async () => {
+    const errors = await validate(plainToInstance(UpdateProductDto, { notice: { maker: '누군가' } }), {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    });
+    expect(errors.map((error) => error.property)).toContain('notice');
   });
 
   it('정상가(listPrice)는 더 이상 받지 않는다 — 할인 표시는 지난 회차 가격으로 서버가 계산한다', async () => {
