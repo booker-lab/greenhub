@@ -96,6 +96,29 @@ export interface OrdersScopedView {
   groupedOrders: DateGroup[];
 }
 
+function updatedMillis(order: Order): number {
+  // 목록 투영에 updatedAt이 빠질 수 있어 없으면 0으로 본다.
+  const value = Date.parse(order.updatedAt ?? '');
+  return Number.isNaN(value) ? 0 : value;
+}
+
+/**
+ * 진행 중 주문 목록과 끝난 주문 페이지를 합친다. 두 목록을 받은 시각이 달라 같은 주문이
+ * 양쪽에 있을 수 있다(진행 중일 때 받고, 끝난 뒤 끝난 주문 페이지에도 들어옴). 같은 주문은 한 번만,
+ * 더 최근에 바뀐 쪽(updatedAt)으로 남긴다. 같으면 진행 중 목록 쪽을 쓴다. 순서는 진행 중 → 끝난 주문.
+ */
+export function mergeActiveAndArchivedOrders(active: Order[], archived: Order[]): Order[] {
+  if (archived.length === 0) return active;
+  const archivedById = new Map(archived.map((order) => [order.id, order]));
+  const merged = active.map((order) => {
+    const other = archivedById.get(order.id);
+    if (!other) return order;
+    archivedById.delete(order.id);
+    return updatedMillis(other) > updatedMillis(order) ? other : order;
+  });
+  return [...merged, ...archived.filter((order) => archivedById.has(order.id))];
+}
+
 /** 회차 필터(`?round=`) — 지정하면 그 회차 주문만 남긴다. 없으면 입력 그대로. */
 export function filterOrdersByRound(orders: Order[], roundId: string | null): Order[] {
   if (!roundId) return orders;

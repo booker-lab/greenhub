@@ -16,6 +16,7 @@ import {
 import { notifications } from '@mantine/notifications';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { ChevronLeft, Store } from 'lucide-react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -221,14 +222,16 @@ export default function OnboardingPage() {
                     justifyContent: 'center',
                     overflow: 'hidden',
                     backgroundColor: 'var(--color-surface-muted)',
+                    position: 'relative',
                   }}
                 >
                   {logoPreview ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <Image
+                      fill
                       src={logoPreview}
                       alt="로고 미리보기"
-                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      sizes="80px"
+                      style={{ objectFit: 'cover' }}
                     />
                   ) : (
                     <Store size={32} color="var(--color-text-disabled)" aria-hidden="true" />
