@@ -1,17 +1,11 @@
 import { ColorSchemeScript } from '@mantine/core';
 import '@mantine/notifications/styles.css';
 import type { Metadata, Viewport } from 'next';
-import { Geist } from 'next/font/google';
 import { headers } from 'next/headers';
 import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import Providers from './providers';
 import './globals.css';
-
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
 
 export const metadata: Metadata = {
   title: 'Green Love 판매자',
@@ -41,7 +35,7 @@ export default async function RootLayout({
   // proxy가 요청마다 만든 CSP nonce. 인라인 색상 모드 스크립트에 붙인다.
   const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
-    <html lang="ko" className={geistSans.variable} suppressHydrationWarning>
+    <html lang="ko" suppressHydrationWarning>
       <head>
         <ColorSchemeScript nonce={nonce} />
       </head>
