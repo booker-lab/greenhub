@@ -14,7 +14,7 @@ import {
 } from 'class-validator';
 import { IsLegacyDeliveryPhotoUrl } from '../delivery-photo-url';
 
-const ORDER_STATUSES = [
+export const ORDER_STATUSES = [
   'PENDING',
   'RECRUITING',
   'CONFIRMED',

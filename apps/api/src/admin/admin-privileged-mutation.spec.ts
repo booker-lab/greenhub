@@ -309,9 +309,11 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         expect(harness.serviceBoundary.restoreStore).toHaveBeenCalledWith('store-1');
         break;
       case 'suspendUser':
-        expect(harness.serviceBoundary.suspendUser).toHaveBeenCalledWith('consumer-1', {
-          suspended: true,
-        });
+        expect(harness.serviceBoundary.suspendUser).toHaveBeenCalledWith(
+          'consumer-1',
+          { suspended: true },
+          'admin-1',
+        );
         break;
       case 'generateInvite':
         expect(harness.serviceBoundary.generateInvite).toHaveBeenCalledWith('admin-1', {
