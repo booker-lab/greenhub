@@ -2,8 +2,9 @@
 
 import { Button, Divider, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
 import { useRouter } from 'next/navigation';
-import { signIn } from 'next-auth/react';
+import { getSession, signIn } from 'next-auth/react';
 import { useState } from 'react';
+import { postLoginPath } from '@/lib/admin-landing';
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const router = useRouter();
@@ -23,14 +24,16 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
       redirect: false,
     });
 
-    setLoading(false);
-
     if (result?.error) {
+      setLoading(false);
       setError('이메일 또는 비밀번호가 올바르지 않습니다.');
       return;
     }
 
-    router.push('/orders');
+    // 순수 관리자는 판매자 화면을 거치지 않고 관리자 콘솔로 간다(proxy도 같은 규칙으로 보낸다).
+    const session = await getSession();
+    setLoading(false);
+    router.push(postLoginPath(session?.user));
   }
 
   return (

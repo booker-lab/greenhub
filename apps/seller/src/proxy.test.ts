@@ -18,6 +18,7 @@ vi.mock('@/auth', () => ({
 }));
 // vitest에는 '@/' 별칭 설정이 없어 같은 모듈로 잇는다.
 vi.mock('@/lib/content-security-policy', () => import('./lib/content-security-policy'));
+vi.mock('@/lib/admin-landing', () => import('./lib/admin-landing'));
 
 const { config, proxy } = await import('./proxy');
 
@@ -58,6 +59,27 @@ describe('판매자 proxy 로그인 검사', () => {
     expect((await run('/onboarding')).headers.get('location')).toBe(
       'https://seller.example.test/admin/stores',
     );
+  });
+
+  it('순수 관리자는 판매자 경로에서 /admin/stores로 가고, 관리자 경로는 그대로 통과한다', async () => {
+    state.session = { user: { role: 'admin' } };
+    for (const path of ['/', '/orders', '/products', '/settings']) {
+      expect((await run(path)).headers.get('location')).toBe(
+        'https://seller.example.test/admin/stores',
+      );
+    }
+    for (const path of ['/admin', '/admin/stores', '/admin/partner-inquiries']) {
+      const response = await run(path);
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.headers.get('x-middleware-next')).toBe('1');
+    }
+  });
+
+  it('겸직 계정(관리자 + 가게)은 판매자 화면과 /onboarding을 그대로 쓴다', async () => {
+    state.session = { user: { role: 'admin', storeId: 'store-1' } };
+    for (const path of ['/orders', '/onboarding', '/admin/stores']) {
+      expect((await run(path)).headers.get('location')).toBeNull();
+    }
   });
 
   it('로그인한 판매자는 그대로 통과하며 CSP nonce가 요청 헤더로 넘어간다', async () => {
