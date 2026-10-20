@@ -1,9 +1,10 @@
 'use client';
 
 import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { useDebouncedCallback } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AdminStore } from '@/hooks/useAdmin';
 import { classifyAdminCommandError, describeAdminCommandOutcome, useAdminStores } from '@/hooks/useAdmin';
 import { StoresFilters } from './_components/StoresFilters';
@@ -28,6 +29,9 @@ interface StoreViewState {
   sort: StoreSort;
 }
 
+/** 검색어 입력을 URL에 반영하기까지 기다리는 시간. 글자마다 주소를 바꾸지 않는다. */
+const KEYWORD_URL_DEBOUNCE_MS = 300;
+
 export default function AdminStoresClient() {
   const { stores, loading, error, reload, setCommission, archiveStore, restoreStore } =
     useAdminStores();
@@ -43,7 +47,13 @@ export default function AdminStoresClient() {
   const [rateInput, setRateInput] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // 이 화면이 마지막으로 쓴 쿼리. 그 쿼리가 searchParams로 되돌아올 때는 입력 중인 화면 상태를
+  // 덮지 않는다. 다른 쿼리(뒤로·앞으로 가기 등)가 오면 기록을 지우고 URL 기준으로 맞춘다.
+  const writtenQueryRef = useRef<string | null>(null);
+
   useEffect(() => {
+    if (searchParams.toString() === writtenQueryRef.current) return;
+    writtenQueryRef.current = null;
     setView({
       keyword: searchParams.get('keyword') ?? '',
       status: parseStatusFilter(searchParams.get('status')),
@@ -51,8 +61,7 @@ export default function AdminStoresClient() {
     });
   }, [searchParams]);
 
-  const updateView = (patch: Partial<StoreViewState>) => {
-    const next = { ...view, ...patch };
+  const writeViewToUrl = (next: StoreViewState, mode: 'push' | 'replace') => {
     const params = new URLSearchParams(searchParams.toString());
     if (next.keyword.trim()) params.set('keyword', next.keyword);
     else params.delete('keyword');
@@ -63,9 +72,30 @@ export default function AdminStoresClient() {
     if (next.sort.direction === DEFAULT_SORT.direction) params.delete('dir');
     else params.set('dir', next.sort.direction);
 
-    setView(next);
     const query = params.toString();
-    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    if (query === searchParams.toString()) return;
+    writtenQueryRef.current = query;
+    const href = query ? `${pathname}?${query}` : pathname;
+    if (mode === 'replace') router.replace(href, { scroll: false });
+    else router.push(href, { scroll: false });
+  };
+
+  // 검색어는 입력이 멈춘 뒤 한 번만, 브라우저 기록을 쌓지 않도록 replace로 URL에 반영한다.
+  const writeKeywordToUrl = useDebouncedCallback(
+    (next: StoreViewState) => writeViewToUrl(next, 'replace'),
+    KEYWORD_URL_DEBOUNCE_MS,
+  );
+
+  const updateView = (patch: Partial<StoreViewState>, options?: { debounceUrl?: boolean }) => {
+    const next = { ...view, ...patch };
+    setView(next);
+    if (options?.debounceUrl) {
+      writeKeywordToUrl(next);
+      return;
+    }
+    // 상태·정렬 변경은 대기 중인 검색어 반영을 흡수해 바로 쓴다(next에 최신 검색어 포함).
+    writeKeywordToUrl.cancel();
+    writeViewToUrl(next, 'push');
   };
 
   const resetFilters = () => {
@@ -210,7 +240,7 @@ export default function AdminStoresClient() {
         status={view.status}
         sort={view.sort}
         loading={loading}
-        onKeywordChange={(keyword) => updateView({ keyword })}
+        onKeywordChange={(keyword) => updateView({ keyword }, { debounceUrl: true })}
         onStatusChange={(status) => updateView({ status })}
         onSortChange={(sort) => updateView({ sort })}
         onReload={reload}

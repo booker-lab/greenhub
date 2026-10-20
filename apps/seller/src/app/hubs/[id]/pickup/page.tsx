@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
+import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { ApiError, apiJson } from '@/lib/api';
 import { apiPathSegment, InvalidApiPathSegmentError, isSafeApiPathSegment } from '@/lib/api-path';
 
@@ -31,6 +32,7 @@ export default function HubPickupPage() {
   const [loading, setLoading] = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const stepResetTimer = useResettableTimeout();
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
@@ -86,7 +88,7 @@ export default function HubPickupPage() {
         setErrorMsg(e.message);
         setStep('error');
         setDigits(['', '', '', '', '', '']);
-        setTimeout(() => {
+        stepResetTimer.schedule(() => {
           setStep('input');
           inputRefs.current[0]?.focus();
         }, 2000);
@@ -95,7 +97,7 @@ export default function HubPickupPage() {
           e instanceof InvalidApiPathSegmentError ? e.message : '네트워크 오류가 발생했습니다',
         );
         setStep('error');
-        setTimeout(() => setStep('input'), 2000);
+        stepResetTimer.schedule(() => setStep('input'), 2000);
       }
     } finally {
       setLoading(false);

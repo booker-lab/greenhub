@@ -1,6 +1,12 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
-import { OrdersQueryService } from './orders-query.service';
+import { STORE_ORDER_ACTIVE_STATUSES, STORE_ORDER_ARCHIVED_STATUSES } from './dto/query-orders.dto';
+import {
+  OrdersQueryService,
+  resolveStoreOrderPageLimit,
+  STORE_ORDER_PAGE_DEFAULT_LIMIT,
+  STORE_ORDER_PAGE_MAX_LIMIT,
+} from './orders-query.service';
 
 type RecordMap = Record<string, Record<string, unknown>>;
 
@@ -615,5 +621,246 @@ describe('OrdersQueryService 조회 권한', () => {
     expect(Object.keys(result.redeliveryPayment).sort()).toEqual(
       ['required', 'holdAt', 'chargeId', 'status', 'canPay', 'paid', 'requiresRecovery'].sort(),
     );
+  });
+});
+
+// ── 주문 목록 범위 줄이기(scope·roundId·archive 이어받기·건수 요약) ──────────────
+
+type QueryCall = {
+  filters: Array<[string, string, unknown]>;
+  orderBy: Array<[string, string]>;
+  limit: number | null;
+  startAfterId: string | null;
+  counted: boolean;
+};
+
+/** where(==, in)·orderBy(createdAt)·startAfter·limit·count를 흉내 내고 조회 모양을 기록한다. */
+function makePagedFirestore(records: RecordMap) {
+  const calls: QueryCall[] = [];
+  const matches = (data: Record<string, unknown>, [field, op, value]: [string, string, unknown]) =>
+    op === 'in' ? (value as unknown[]).includes(data[field]) : data[field] === value;
+  const run = (call: QueryCall) => {
+    let docs = Object.entries(records)
+      .filter(([path]) => path.startsWith('orders/'))
+      .filter(([, data]) => call.filters.every((filter) => matches(data, filter)))
+      .map(([path, data]) => ({ id: path.split('/')[1], data: () => data }));
+    if (call.orderBy.length > 0) {
+      docs = docs.sort(
+        (a, b) =>
+          String(b.data()['createdAt']).localeCompare(String(a.data()['createdAt'])) ||
+          a.id.localeCompare(b.id),
+      );
+    }
+    if (call.startAfterId !== null) {
+      const index = docs.findIndex((doc) => doc.id === call.startAfterId);
+      docs = docs.slice(index + 1);
+    }
+    if (call.limit !== null) docs = docs.slice(0, call.limit);
+    return docs;
+  };
+  const makeQuery = (call: QueryCall): any => ({
+    where: (field: string, op: string, value: unknown) =>
+      makeQuery({ ...call, filters: [...call.filters, [field, op, value]] }),
+    orderBy: (field: string, direction: string) =>
+      makeQuery({ ...call, orderBy: [...call.orderBy, [field, direction]] }),
+    startAfter: (snap: { id: string }) => makeQuery({ ...call, startAfterId: snap.id }),
+    limit: (limit: number) => makeQuery({ ...call, limit }),
+    count: () => ({
+      get: async () => {
+        calls.push({ ...call, counted: true });
+        return { data: () => ({ count: run(call).length }) };
+      },
+    }),
+    get: async () => {
+      calls.push(call);
+      return { docs: run(call) };
+    },
+  });
+  return {
+    calls,
+    firestore: {
+      doc: jest.fn((path: string) => ({
+        get: jest.fn(async () => ({
+          id: path.split('/')[1],
+          exists: path in records,
+          data: () => records[path],
+        })),
+      })),
+      collection: jest.fn(() =>
+        makeQuery({ filters: [], orderBy: [], limit: null, startAfterId: null, counted: false }),
+      ),
+    },
+  };
+}
+
+describe('OrdersQueryService 주문 목록 범위 줄이기', () => {
+  const order = (
+    id: string,
+    status: string,
+    createdAt: string,
+    extra: Record<string, unknown> = {},
+  ) => ({
+    [`orders/${id}`]: {
+      id,
+      storeId: 'store-1',
+      userId: 'consumer-1',
+      productName: '호접란',
+      quantity: 1,
+      totalAmount: 10000,
+      saleType: 'normal',
+      status,
+      createdAt,
+      ...extra,
+    },
+  });
+  const records: RecordMap = {
+    'stores/store-1': { ownerId: 'seller-1' },
+    'stores/store-2': { ownerId: 'seller-2' },
+    ...order('active-old', 'ACCEPTED', '2026-01-01T00:00:00.000Z'),
+    ...order('active-new', 'DELIVERY_HELD', '2026-10-01T00:00:00.000Z', { roundId: 'round-1' }),
+    ...order('done-1', 'DELIVERED', '2026-10-05T00:00:00.000Z', { roundId: 'round-1' }),
+    ...order('done-2', 'REVIEWED', '2026-10-04T00:00:00.000Z'),
+    ...order('done-3', 'PICKED_UP', '2026-10-03T00:00:00.000Z'),
+    ...order('cancel-1', 'CANCELLED', '2026-10-03T00:00:00.000Z'),
+    ...order('cancel-2', 'CANCELLED', '2026-09-01T00:00:00.000Z', { roundId: 'round-2' }),
+    ...order('other-store', 'DELIVERED', '2026-10-06T00:00:00.000Z', { storeId: 'store-2' }),
+  };
+  const seller = requester('seller-1', 'seller');
+
+  it('scope=active는 기간과 상관없이 진행 중 주문만 최신순으로 기존 색인 모양(status in + createdAt)으로 읽는다', async () => {
+    const { firestore, calls } = makePagedFirestore(records);
+    const service = new OrdersQueryService(firestore as never);
+
+    const list = (await service.getOrders('store-1', seller, { scope: 'active' })) as Array<{
+      id: string;
+    }>;
+
+    expect(list.map((item) => item.id)).toEqual(['active-new', 'active-old']);
+    expect(calls[0]?.filters).toEqual([
+      ['storeId', '==', 'store-1'],
+      ['status', 'in', STORE_ORDER_ACTIVE_STATUSES],
+    ]);
+    expect(calls[0]?.orderBy).toEqual([['createdAt', 'desc']]);
+  });
+
+  it('roundId는 그 회차 주문만 같음 조건으로 읽고 정렬하지 않는다', async () => {
+    const { firestore, calls } = makePagedFirestore(records);
+    const service = new OrdersQueryService(firestore as never);
+
+    const list = (await service.getOrders('store-1', seller, { roundId: 'round-1' })) as Array<{
+      id: string;
+    }>;
+
+    expect(list.map((item) => item.id).sort()).toEqual(['active-new', 'done-1']);
+    expect(calls[0]?.filters).toEqual([
+      ['storeId', '==', 'store-1'],
+      ['roundId', '==', 'round-1'],
+    ]);
+    expect(calls[0]?.orderBy).toEqual([]);
+  });
+
+  it('scope=archive는 끝난 주문을 최신순으로 나눠 주고, 이어받기는 빠짐·겹침 없이 끝난다', async () => {
+    const { firestore, calls } = makePagedFirestore(records);
+    const service = new OrdersQueryService(firestore as never);
+
+    const first = await service.getArchivedOrders('store-1', seller, {
+      scope: 'archive',
+      limit: '2',
+    });
+    expect(first.orders.map((item: any) => item.id)).toEqual(['done-1', 'done-2']);
+    expect(first).toMatchObject({ hasMore: true, nextCursor: 'done-2' });
+    expect(first.orders[0]).not.toHaveProperty('userId');
+    expect(calls[0]?.filters).toEqual([
+      ['storeId', '==', 'store-1'],
+      ['status', 'in', STORE_ORDER_ARCHIVED_STATUSES],
+    ]);
+    expect(calls[0]?.orderBy).toEqual([['createdAt', 'desc']]);
+    expect(calls[0]?.limit).toBe(3);
+
+    const second = await service.getArchivedOrders('store-1', seller, {
+      scope: 'archive',
+      limit: 2,
+      cursor: first.nextCursor ?? undefined,
+    });
+    expect(second.orders.map((item: any) => item.id)).toEqual(['cancel-1', 'done-3']);
+    const third = await service.getArchivedOrders('store-1', seller, {
+      scope: 'archive',
+      limit: 2,
+      cursor: second.nextCursor ?? undefined,
+    });
+    expect(third).toMatchObject({ hasMore: false, nextCursor: null });
+    expect(third.orders.map((item: any) => item.id)).toEqual(['cancel-2']);
+  });
+
+  it('이어받기 위치는 같은 매장의 실제 주문만 받는다', async () => {
+    const { firestore } = makePagedFirestore(records);
+    const service = new OrdersQueryService(firestore as never);
+
+    for (const cursor of ['other-store', 'missing-order', 'orders/x']) {
+      await expect(
+        service.getArchivedOrders('store-1', seller, { scope: 'archive', cursor }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    }
+  });
+
+  it('한 번에 받는 건수는 기본 50, 상한 100이다', () => {
+    expect(resolveStoreOrderPageLimit(undefined)).toBe(STORE_ORDER_PAGE_DEFAULT_LIMIT);
+    expect(resolveStoreOrderPageLimit('20')).toBe(20);
+    expect(resolveStoreOrderPageLimit(1000)).toBe(STORE_ORDER_PAGE_MAX_LIMIT);
+    expect(STORE_ORDER_PAGE_DEFAULT_LIMIT).toBe(50);
+    expect(STORE_ORDER_PAGE_MAX_LIMIT).toBe(100);
+  });
+
+  it.each([
+    ['scope와 상태', { scope: 'active', status: 'PREPARING' }],
+    ['회차와 판매 방식', { roundId: 'round-1', saleType: 'normal' }],
+    ['scope와 회차', { scope: 'active', roundId: 'round-1' }],
+    ['회차와 전화', { roundId: 'round-1', phone: '5678' }],
+    ['archive가 아닌 limit', { scope: 'active', limit: 10 }],
+    ['범위 없는 cursor', { cursor: 'done-1' }],
+    ['배열 목록 경로의 archive', { scope: 'archive' }],
+  ])('%s 조합은 읽기 전에 400으로 거부한다', async (_label, query) => {
+    const { firestore, calls } = makePagedFirestore(records);
+    const service = new OrdersQueryService(firestore as never);
+
+    await expect(service.getOrders('store-1', seller, query)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(calls).toHaveLength(0);
+  });
+
+  it('끝난 주문 페이지 조회는 scope=archive만 받는다', async () => {
+    const { firestore } = makePagedFirestore(records);
+    const service = new OrdersQueryService(firestore as never);
+
+    await expect(service.getArchivedOrders('store-1', seller, {})).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+  });
+
+  it('끝난 주문 건수는 상태마다 집계(count)로만 세고 목록을 내려받지 않는다', async () => {
+    const { firestore, calls } = makePagedFirestore(records);
+    const service = new OrdersQueryService(firestore as never);
+
+    await expect(service.getArchivedOrderCounts('store-1', seller)).resolves.toEqual({
+      archivedStatusCounts: { DELIVERED: 1, PICKED_UP: 1, REVIEWED: 1, CANCELLED: 2 },
+    });
+    expect(calls).toHaveLength(STORE_ORDER_ARCHIVED_STATUSES.length);
+    expect(calls.every((call) => call.counted)).toBe(true);
+  });
+
+  it('다른 매장 판매자·소비자는 끝난 주문 페이지와 건수를 볼 수 없다', async () => {
+    const { firestore, calls } = makePagedFirestore(records);
+    const service = new OrdersQueryService(firestore as never);
+
+    for (const who of [requester('seller-2', 'seller'), requester('consumer-1', 'consumer')]) {
+      await expect(
+        service.getArchivedOrders('store-1', who, { scope: 'archive' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.getArchivedOrderCounts('store-1', who)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    }
+    expect(calls).toHaveLength(0);
   });
 });
