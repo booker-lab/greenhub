@@ -21,8 +21,12 @@ const API_URL = getApiBaseUrl();
 // Public-safe polling: Firestore 원문 onSnapshot 대신 public product detail API를
 // 사용한다. Rules convergence 후 익명 원문 read가 차단돼도 동작한다.
 // 구매 가능성·currentQuantity freshness를 위해 mount/retry/scope 변경 시 즉시
-// 조회하고 10초 간격으로 갱신한다.
+// 조회하고 10초 간격으로 갱신한다. 탭이 숨겨져 있는 동안은 갱신을 쉰다.
 const GROUP_CONFIG_POLL_INTERVAL_MS = 10_000;
+
+function isDocumentHidden(): boolean {
+  return globalThis.document?.visibilityState === 'hidden';
+}
 
 function toGroupConfig(productId: string, payload: unknown): GroupProductConfig | null {
   if (typeof payload !== 'object' || payload === null) return null;
@@ -120,14 +124,38 @@ export function useGroupProduct(productId: string | null): UseGroupProductResult
       }
     }
 
-    void fetchConfig();
-    const intervalId = setInterval(() => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    function startPolling() {
+      if (intervalId !== null) return;
+      intervalId = setInterval(() => {
+        void fetchConfig();
+      }, GROUP_CONFIG_POLL_INTERVAL_MS);
+    }
+    function stopPolling() {
+      if (intervalId === null) return;
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+
+    // 숨김 탭에서는 폴링을 멈추고, 다시 보이면 바로 한 번 조회한 뒤 폴링을 이어 간다.
+    function handleVisibilityChange() {
+      if (isDocumentHidden()) {
+        stopPolling();
+        return;
+      }
+      if (cancelled || intervalId !== null) return;
       void fetchConfig();
-    }, GROUP_CONFIG_POLL_INTERVAL_MS);
+      startPolling();
+    }
+
+    globalThis.document?.addEventListener('visibilitychange', handleVisibilityChange);
+    void fetchConfig();
+    if (!isDocumentHidden()) startPolling();
 
     return () => {
       cancelled = true;
-      clearInterval(intervalId);
+      globalThis.document?.removeEventListener('visibilitychange', handleVisibilityChange);
+      stopPolling();
     };
   }, [productId, attempt]);
 
