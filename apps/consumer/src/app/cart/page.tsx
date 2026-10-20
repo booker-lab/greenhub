@@ -17,6 +17,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { CartArrivalLine, CartUpsell, IcheonPrecheck } from '@/components/benchmark/CartExtras';
+import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { isFeatureOn } from '@/lib/features';
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
@@ -487,12 +488,16 @@ export default function CartPage() {
                     borderRadius: 12,
                     overflow: 'hidden',
                     display: 'block',
+                    position: 'relative',
                   }}
                 >
-                  <img
-                    src={item.image || '/images/product-placeholder.png'}
+                  <ResilientImage
+                    fill
+                    src={item.image || PRODUCT_IMAGE_FALLBACK}
+                    fallbackSrc={PRODUCT_IMAGE_FALLBACK}
                     alt={item.name}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    sizes="76px"
+                    style={{ objectFit: 'cover' }}
                   />
                 </Box>
                 <Box style={{ flex: 1, minWidth: 0 }}>

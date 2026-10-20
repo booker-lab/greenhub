@@ -36,9 +36,18 @@ describe('AdminSettlementsClient 조회 복구 배선', () => {
     expect(source).toContain('onStoreChange={setStoreFilter}');
     expect(source).toContain('onFromChange={setFromFilter}');
     expect(source).toContain('onToChange={setToFilter}');
-    expect(source).toContain('storeId: storeFilter || undefined');
+    expect(source).toContain('storeId: debouncedStoreFilter || undefined');
     expect(source).toContain('from: fromFilter || undefined');
     expect(source).toContain('to: toFilter || undefined');
+  });
+
+  it('스토어 ID 입력은 debounce된 값으로만 조회한다(글자마다 재조회 금지)', () => {
+    expect(source).toContain("import { useDebouncedValue } from '@mantine/hooks'");
+    expect(source).toContain('const STORE_FILTER_DEBOUNCE_MS = 300;');
+    expect(source).toContain(
+      'const [debouncedStoreFilter] = useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS);',
+    );
+    expect(source).not.toContain('storeId: storeFilter || undefined');
   });
 
   it('기존 markAsPaid 확인·처리 경로를 유지한다', () => {

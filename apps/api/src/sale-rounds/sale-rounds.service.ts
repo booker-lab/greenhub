@@ -1,5 +1,6 @@
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
@@ -247,6 +248,45 @@ export function withPreviousRoundPrices(
   };
 }
 
+/**
+ * 공개 회차 묶음 응답(`?include=items`)에 싣는 지난 회차(마감·완료) 개수. 생략하면 기본값을 쓰고,
+ * 숫자가 아니거나 상한을 넘으면 거부한다. 판매 예정·판매 중 회차는 개수와 상관없이 모두 싣는다.
+ */
+export const PUBLIC_PAST_ROUND_DEFAULT_LIMIT = 3;
+export const PUBLIC_PAST_ROUND_MAX_LIMIT = 10;
+
+export function resolvePublicPastRoundLimit(raw: unknown): number {
+  if (raw === undefined) return PUBLIC_PAST_ROUND_DEFAULT_LIMIT;
+  const value = typeof raw === 'string' && /^\d{1,3}$/.test(raw) ? Number(raw) : Number.NaN;
+  if (!Number.isInteger(value) || value > PUBLIC_PAST_ROUND_MAX_LIMIT) {
+    throw new BadRequestException(
+      `past는 0~${PUBLIC_PAST_ROUND_MAX_LIMIT} 사이의 정수여야 합니다.`,
+    );
+  }
+  return value;
+}
+
+/**
+ * 묶음 응답에 실을 회차를 최신순(schedule.orderOpenAt, 소비자 앱 sortLatestFirst와 같은 기준)으로 고른다.
+ * 마감·완료 회차는 최신 pastLimit개만 남기고, 그 밖의 공개 회차(판매 예정·판매 중)는 모두 남긴다.
+ * 회차가 쌓여도 응답 크기와 상품 조회 수가 늘지 않게 하는 경계다.
+ */
+export function selectPublicFeedRounds<T extends Pick<SaleRound, 'id' | 'status' | 'schedule'>>(
+  rounds: ReadonlyArray<T>,
+  pastLimit: number,
+): T[] {
+  const openMillis = (round: T) => isoMillis(round.schedule?.orderOpenAt) ?? 0;
+  const latestFirst = [...rounds].sort(
+    (a, b) => openMillis(b) - openMillis(a) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
+  );
+  let pastCount = 0;
+  return latestFirst.filter((round) => {
+    if (!PREVIOUS_ROUND_STATUSES.includes(round.status)) return true;
+    pastCount += 1;
+    return pastCount <= pastLimit;
+  });
+}
+
 function toPublicRoundItems(items: SaleRoundItem[]): PublicSaleRoundItem[] {
   // Preserve displayOrder sorting done by getRoundItems; HIDDEN filter first,
   // then explicit projection (same visibility predicate as before).
@@ -301,6 +341,56 @@ export class SaleRoundsService {
         : null;
     });
     return { items: rounds.filter((round): round is PublicSaleRound => round !== null) };
+  }
+  /**
+   * 공개 회차 묶음 응답: 판매 예정·판매 중 회차 전부와 최신 마감·완료 회차 pastLimit개를 상품까지 한 번에 준다.
+   * 회차마다 상세를 따로 부르던 소비자 앱의 N+1을 없앤다. 회차별 내용(숨김 상품 제외·수요 신호·지난 회차
+   * 대비 가격)은 getPublicRound와 같고, 회차 목록은 한 번만 읽어 직전 마감 회차 판정에도 함께 쓴다.
+   * 같은 회차의 상품은 한 번만 읽는다. READ-ONLY: 실효 상태는 저장하지 않고 계산만 한다.
+   */
+  async listPublicRoundsWithItems(
+    storeId: string,
+    pastLimit: number,
+  ): Promise<{ items: PublicSaleRoundWithItems[] }> {
+    const store = await this.assertPublicRoundStore(storeId);
+    const snap = await this.firestore
+      .collection('saleRounds')
+      .where('storeId', '==', storeId)
+      .where('status', 'in', PUBLIC_SALE_ROUND_STATUSES)
+      .get();
+    const nowMillis = timestampMillis(this.firestore.Timestamp.now());
+    const rounds = snap.docs.flatMap((doc: any) => {
+      const storedRound = doc.data() as SaleRound;
+      this.assertPublicRoundBoundary(storeId, storedRound as unknown as Record<string, any>);
+      const round = this.normalizeRound(this.applyEffectiveState(storedRound, nowMillis));
+      return round.storeId === storeId && isPublicSaleRoundStatus(round.status) ? [round] : [];
+    });
+
+    const itemReads = new Map<string, Promise<SaleRoundItem[]>>();
+    const readItems = (roundId: string) => {
+      let read = itemReads.get(roundId);
+      if (!read) {
+        read = this.getRoundItems(roundId, storeId);
+        itemReads.set(roundId, read);
+      }
+      return read;
+    };
+    const showDemandSignals = store['showDemandSignals'] === true;
+    const items = await Promise.all(
+      selectPublicFeedRounds(rounds, pastLimit).map(async (round) => {
+        const roundItems = await readItems(round.id);
+        const projected = { ...toPublicSaleRound(round), items: toPublicRoundItems(roundItems) };
+        const withDemand = showDemandSignals
+          ? withDemandSignals(projected, round, roundItems)
+          : projected;
+        if (withDemand.items.length === 0) return withDemand;
+        const previous = selectPreviousClosedRound(round, rounds);
+        return previous
+          ? withPreviousRoundPrices(withDemand, await readItems(previous.id))
+          : withDemand;
+      }),
+    );
+    return { items };
   }
   async getRound(
     storeId: string,
