@@ -30,18 +30,22 @@ export class AdminController {
   }
 
   @Patch('stores/:storeId/commission')
-  setCommission(@Param('storeId') storeId: string, @Body() dto: SetCommissionDto) {
-    return this.admin.setCommission(storeId, dto);
+  setCommission(
+    @Param('storeId') storeId: string,
+    @Body() dto: SetCommissionDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.admin.setCommission(storeId, dto, user.sub);
   }
 
   @Patch('stores/:storeId/archive')
-  archiveStore(@Param('storeId') storeId: string) {
-    return this.admin.archiveStore(storeId);
+  archiveStore(@Param('storeId') storeId: string, @CurrentUser() user: JwtPayload) {
+    return this.admin.archiveStore(storeId, user.sub);
   }
 
   @Patch('stores/:storeId/restore')
-  restoreStore(@Param('storeId') storeId: string) {
-    return this.admin.restoreStore(storeId);
+  restoreStore(@Param('storeId') storeId: string, @CurrentUser() user: JwtPayload) {
+    return this.admin.restoreStore(storeId, user.sub);
   }
 
   // ── Users ────────────────────────────────────────────────────────
@@ -68,8 +72,12 @@ export class AdminController {
   }
 
   @Post('orders/:orderId/refund')
-  forceRefund(@Param('orderId') orderId: string, @Body() dto: ForceRefundDto) {
-    return this.admin.forceRefund(orderId, dto);
+  forceRefund(
+    @Param('orderId') orderId: string,
+    @Body() dto: ForceRefundDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.admin.forceRefund(orderId, dto, user.sub);
   }
 
   // ── Settlements ──────────────────────────────────────────────────
@@ -80,8 +88,8 @@ export class AdminController {
   }
 
   @Patch('settlements/:settlementId/pay')
-  markAsPaid(@Param('settlementId') settlementId: string) {
-    return this.admin.markAsPaid(settlementId);
+  markAsPaid(@Param('settlementId') settlementId: string, @CurrentUser() user: JwtPayload) {
+    return this.admin.markAsPaid(settlementId, user.sub);
   }
 
   // ── Drivers ──────────────────────────────────────────────────────
@@ -92,13 +100,17 @@ export class AdminController {
   }
 
   @Patch('drivers/:userId/approve')
-  approveDriver(@Param('userId') userId: string) {
-    return this.admin.approveDriver(userId);
+  approveDriver(@Param('userId') userId: string, @CurrentUser() user: JwtPayload) {
+    return this.admin.approveDriver(userId, user.sub);
   }
 
   @Patch('drivers/:userId/suspend')
-  suspendDriver(@Param('userId') userId: string, @Body() dto: SuspendUserDto) {
-    return this.admin.suspendDriver(userId, dto);
+  suspendDriver(
+    @Param('userId') userId: string,
+    @Body() dto: SuspendUserDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.admin.suspendDriver(userId, dto, user.sub);
   }
 
   // ── Invite ───────────────────────────────────────────────────────
@@ -126,7 +138,14 @@ export class AdminController {
   }
 
   @Put('banner')
-  upsertBanner(@Body() dto: UpsertBannerDto) {
-    return this.admin.upsertBanner(dto);
+  upsertBanner(@Body() dto: UpsertBannerDto, @CurrentUser() user: JwtPayload) {
+    return this.admin.upsertBanner(dto, user.sub);
+  }
+
+  // ── Audit ────────────────────────────────────────────────────────
+
+  @Get('audit-logs')
+  getAuditLogs() {
+    return this.admin.getAuditLogs();
   }
 }
