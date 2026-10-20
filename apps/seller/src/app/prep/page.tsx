@@ -22,7 +22,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { RoundPurchaseListCard } from '@/components/RoundPurchaseListCard';
 import { EmptyState, LoadingState } from '@/components/StateViews';
-import { useOrders } from '@/hooks/useOrders';
+import { ACTIVE_SELLER_ORDERS_QUERY, useOrders } from '@/hooks/useOrders';
 import { readRoundDetail, type SellerSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { resolveStoreProductsView } from '@/hooks/useStoreProducts.recovery';
@@ -144,7 +144,8 @@ export default function PrepPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
   const firebaseReady = useFirebaseReady();
-  const { orders, loading, error } = useOrders(storeId);
+  // 준비 물량은 미발송(진행 중) 주문만 본다.
+  const { orders, loading, error } = useOrders(storeId, ACTIVE_SELLER_ORDERS_QUERY);
   const {
     products,
     loading: productsLoading,
