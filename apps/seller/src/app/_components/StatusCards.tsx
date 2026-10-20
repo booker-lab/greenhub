@@ -29,13 +29,18 @@ const PIPELINE: PipelineStep[] = [
   { group: 'DONE', label: '완료', href: '/orders?tab=DONE' },
 ];
 
-export function OrderStatusCard({ groupCounts }: { groupCounts: Record<OrderGroup, number> }) {
+/** 건수가 null이면 아직 받지 못했거나 받지 못한 것이다 — 0건으로 속이지 않고 '—'로 보인다. */
+export function OrderStatusCard({
+  groupCounts,
+}: {
+  groupCounts: Record<OrderGroup, number | null>;
+}) {
   return (
     <DashboardCard title="주문 처리 현황" moreHref="/orders">
       <Group gap={2} align="flex-start" wrap="nowrap">
         {PIPELINE.map((step, i) => {
           const count = groupCounts[step.group];
-          const accent = step.group === 'ACTION_REQUIRED' && count > 0;
+          const accent = step.group === 'ACTION_REQUIRED' && (count ?? 0) > 0;
           return (
             <Fragment key={step.group}>
               {i > 0 && (
@@ -55,7 +60,7 @@ export function OrderStatusCard({ groupCounts }: { groupCounts: Record<OrderGrou
                       color: accent ? 'var(--color-primary-dark)' : 'var(--color-text)',
                     }}
                   >
-                    {count}
+                    {count ?? '—'}
                   </Text>
                   <Text
                     style={{
@@ -79,7 +84,7 @@ export function OrderStatusCard({ groupCounts }: { groupCounts: Record<OrderGrou
           marginTop: 10,
         }}
       >
-        취소 {groupCounts.CANCELLED}건
+        취소 {groupCounts.CANCELLED ?? '—'}건
       </Text>
     </DashboardCard>
   );

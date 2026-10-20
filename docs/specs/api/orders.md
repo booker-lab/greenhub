@@ -140,6 +140,7 @@ GET   /orders/:orderId
 POST  /stores/:storeId/orders/validate-cart
 POST  /stores/:storeId/orders
 GET   /stores/:storeId/orders
+GET   /stores/:storeId/orders/summary
 GET   /stores/:storeId/orders/:orderId
 PATCH /stores/:storeId/orders/:orderId/status
 PATCH /stores/:storeId/orders/:orderId/cancel
@@ -150,6 +151,16 @@ PATCH /stores/:storeId/orders/:orderId/review
 PATCH /stores/:storeId/orders/:orderId/pickup-confirm
 PATCH /stores/:storeId/orders/:orderId/hub-confirm
 ```
+
+매장 주문 목록은 주문이 쌓여도 한 번에 받는 양이 늘지 않게 범위를 좁혀 받는다(판매자·관리자).
+
+- `?scope=active`: 진행 중 주문(처리 필요·대기·배송 중) 전부, 최신순 배열.
+- `?roundId=`: 그 회차의 주문 전부, 배열.
+- `?scope=archive&limit=&cursor=`: 끝난 주문(완료·취소)을 최신순 `limit`건씩(기본 50, 최대 100) `{ orders, hasMore, nextCursor }`로 준다. `cursor`는 앞 응답의 `nextCursor`이며 같은 매장 주문만 받는다.
+- `scope`·`roundId`는 다른 조건(`status`·`saleType`·`userId`·`phone`)이나 서로와 함께 쓸 수 없고, `limit`·`cursor`는 `scope=archive`에서만 받는다(400).
+- 범위 없이 부르면 기존처럼 모든 기간의 주문 배열이다(이전 화면 호환).
+- `GET /stores/:storeId/orders/summary`: 끝난 주문 상태별 건수 `{ archivedStatusCounts: { DELIVERED, PICKED_UP, REVIEWED, CANCELLED } }`. 목록 없이 Firestore 집계(count)로 센다.
+- 모두 기존 `(storeId, status, createdAt DESC)`·`(storeId, status)` 색인과 단일 필드 색인으로 읽는다.
 
 ## 7. 권한 검증 상태
 
