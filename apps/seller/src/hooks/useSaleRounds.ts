@@ -251,17 +251,24 @@ export function useSaleRounds(): UseSaleRoundsResult {
   const [operationError, setOperationError] = useState<string | null>(null);
   const listRequestId = useRef(0);
   const operationRef = useRef<SaleRoundOperation | null>(null);
+  // 토큰 문자열은 세션 유지(약 2분 확인)로 갱신될 때마다 바뀐다. 요청 함수가 토큰 값에 묶이면
+  // 그 함수를 effect 의존성으로 쓰는 회차 상세가 다시 조회되며 편집 중인 폼이 초기화된다.
+  // 그래서 토큰은 호출 시점에 ref로 읽고, 요청 함수는 스토어와 토큰 유무가 바뀔 때만 새로 만든다.
+  const accessTokenRef = useRef(accessToken);
+  accessTokenRef.current = accessToken;
+  const hasAccessToken = Boolean(accessToken);
 
   const getApiContext = useCallback((): ApiContext => {
-    if (!storeId || !accessToken) {
+    const currentAccessToken = accessTokenRef.current;
+    if (!storeId || !hasAccessToken || !currentAccessToken) {
       throw new Error('셀러 스토어 인증 정보를 확인할 수 없습니다.');
     }
     return {
       storeId,
-      accessToken,
+      accessToken: currentAccessToken,
       basePath: `/stores/${encodeURIComponent(storeId)}/sale-rounds`,
     };
-  }, [storeId, accessToken]);
+  }, [storeId, hasAccessToken]);
 
   const loadRounds = useCallback(async () => {
     const currentRequestId = ++listRequestId.current;
@@ -300,6 +307,9 @@ export function useSaleRounds(): UseSaleRoundsResult {
       listRequestId.current += 1;
     };
   }, [loadRounds]);
+  // 목록 재조회는 토큰·세션 상태마다 새 함수가 되므로 요청 함수 정체성에 섞지 않는다.
+  const loadRoundsRef = useRef(loadRounds);
+  loadRoundsRef.current = loadRounds;
 
   const runOperation = useCallback(
     async <T>(
@@ -320,7 +330,7 @@ export function useSaleRounds(): UseSaleRoundsResult {
         const result = await request(getApiContext());
         if (changedRound) {
           setRounds((current) => mergeRound(current, changedRound(result)));
-          await loadRounds();
+          await loadRoundsRef.current();
         }
         return result;
       } catch (requestError) {
@@ -331,7 +341,7 @@ export function useSaleRounds(): UseSaleRoundsResult {
         setPendingOperation(null);
       }
     },
-    [getApiContext, loadRounds],
+    [getApiContext],
   );
 
   const getRound = useCallback(

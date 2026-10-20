@@ -17,6 +17,7 @@ import {
   filterOrdersForView,
   groupFilteredOrdersByDate,
   isCustomRangeInvalid,
+  mergeActiveAndArchivedOrders,
   resolveOrdersDateRange,
   type InDeliverySubFilter,
 } from './orders-view-model';
@@ -669,5 +670,44 @@ describe('기본 날짜 필터(모든 날짜)와 회차 필터', () => {
     const legacy = makeOrder({ status: 'ACCEPTED' });
     expect(filterOrdersByRound([first, second, legacy], 'round-1')).toEqual([first]);
     expect(filterOrdersByRound([first, second, legacy], null)).toEqual([first, second, legacy]);
+  });
+});
+
+describe('mergeActiveAndArchivedOrders — 진행 중 목록 + 끝난 주문 페이지', () => {
+  it('같은 주문은 한 번만, 더 최근에 바뀐 쪽으로 남기고 진행 중 → 끝난 주문 순서를 지킨다', () => {
+    const activeA = makeOrder({
+      id: 'a',
+      status: 'DELIVERING',
+      updatedAt: '2026-10-01T00:00:00.000Z',
+    });
+    const activeB = makeOrder({
+      id: 'b',
+      status: 'PREPARING',
+      updatedAt: '2026-10-02T00:00:00.000Z',
+    });
+    const doneA = makeOrder({
+      id: 'a',
+      status: 'DELIVERED',
+      updatedAt: '2026-10-03T00:00:00.000Z',
+    });
+    const staleB = makeOrder({
+      id: 'b',
+      status: 'CANCELLED',
+      updatedAt: '2026-10-01T00:00:00.000Z',
+    });
+    const doneC = makeOrder({ id: 'c', status: 'REVIEWED' });
+
+    const merged = mergeActiveAndArchivedOrders([activeA, activeB], [doneA, staleB, doneC]);
+
+    expect(merged.map((order) => [order.id, order.status])).toEqual([
+      ['a', 'DELIVERED'],
+      ['b', 'PREPARING'],
+      ['c', 'REVIEWED'],
+    ]);
+  });
+
+  it('끝난 주문을 아직 받지 않았으면 진행 중 목록 그대로다', () => {
+    const active = [makeOrder({ status: 'ACCEPTED' })];
+    expect(mergeActiveAndArchivedOrders(active, [])).toBe(active);
   });
 });

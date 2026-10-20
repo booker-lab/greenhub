@@ -41,6 +41,8 @@ export default function OrderCard({
     <Card
       component={Link}
       href={`/board/${order.id}`}
+      // 상세는 화면에서 주문을 다시 조회하므로 카드마다 미리 받아 proxy 인증 확인을 늘리지 않는다.
+      prefetch={false}
       radius="xl"
       withBorder
       p="md"
