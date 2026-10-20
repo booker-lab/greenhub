@@ -30,6 +30,14 @@ function makeFixture(docs: Record<string, Record<string, unknown> | undefined>) 
   });
   const firestore = {
     doc,
+    // 치우기·복구는 트랜잭션으로 읽고 쓴다. 이 기록 검사에서는 같은 문서 참조로 바로 반영한다.
+    runTransaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        get: (target: { get: () => Promise<unknown> }) => target.get(),
+        update: (ref: { update: (patch: unknown) => Promise<void> }, patch: unknown) =>
+          ref.update(patch),
+      }),
+    ),
     Timestamp: { now: jest.fn(() => 'now'), fromMillis: jest.fn((ms: number) => ({ ms })) },
     FieldValue: { delete: jest.fn(() => 'DELETE') },
   };
