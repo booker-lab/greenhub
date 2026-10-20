@@ -123,6 +123,7 @@ describe('public product extras (benchmark compare)', () => {
     const detail = toPublicProductDetail(base);
     expect(detail).not.toHaveProperty('size');
     expect(detail).not.toHaveProperty('options');
+    expect(detail).not.toHaveProperty('notice');
     expect(toPublicProductSummary(base)).not.toHaveProperty('size');
   });
 
@@ -135,6 +136,7 @@ describe('public product extras (benchmark compare)', () => {
       placements: ['living'],
       guaranteed: true,
       options: [{ id: 'pot', name: '화분', choices: [{ id: 'basic', label: '기본', priceDelta: 0 }] }],
+      notice: { origin: '국내산(경기도 이천)', producer: '디어 오키드' },
       sellerNote: '내부 메모',
     };
     const detail = toPublicProductDetail(stored);
@@ -142,6 +144,8 @@ describe('public product extras (benchmark compare)', () => {
     // 걷어낸 정상가가 저장 문서에 남아 있어도 공개 응답에 옮기지 않는다.
     expect(detail).not.toHaveProperty('listPrice');
     expect(detail['options']).toEqual(stored.options);
+    // 상품정보제공고시는 법정 표시라 공개 상세에 그대로 싣는다.
+    expect(detail['notice']).toEqual(stored.notice);
     expect(detail).not.toHaveProperty('sellerNote');
     const summary = toPublicProductSummary(stored);
     expect(summary['guaranteed']).toBe(true);

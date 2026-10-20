@@ -3,7 +3,9 @@
 import {
   LIGHT_LABELS,
   PLACEMENT_LABELS,
+  PRODUCT_NOTICE_FIELDS,
   type Product,
+  resolveProductNotice,
   type SaleRoundItem,
 } from '@greenhub/shared';
 import { Box, Stack, Text } from '@mantine/core';
@@ -14,10 +16,12 @@ import { useProducts } from '@/hooks/useProducts';
 import type { PublicSaleRound } from '@/hooks/useSaleRounds';
 import { sizeRows } from '@/lib/benchmark-format';
 import { isFeatureOn } from '@/lib/features';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import { ReviewPhotoStrip } from './ReviewPhotos';
 
 // 상품 상세의 벤치마킹 비교 기능 묶음(품질 보장·크기·관리 안내·판매자 소개·후기·비슷한 꽃).
 // 각 칸은 기능 토글이 켜져 있고 보여줄 값이 있을 때만 그린다.
+// 상품정보제공고시만은 법정 표시라 토글과 상관없이 항상 그린다.
 
 const sectionTitle = {
   color: 'var(--color-text)',
@@ -126,6 +130,29 @@ export function ReviewsSection({ productId }: { productId: string }) {
   );
 }
 
+/** 상품정보제공고시("기타 재화"). 접힌 채로 그리고, 판매자가 비운 칸은 기본값으로 채운다. */
+export function ProductNoticeSection({ product, storeName }: { product: Product; storeName: string | null }) {
+  const notice = resolveProductNotice(product.notice, {
+    itemName: product.name,
+    producer: storeName?.trim() || PUBLIC_BUSINESS_INFO.businessName,
+    csPhone: PUBLIC_BUSINESS_INFO.phone,
+  });
+  return (
+    <Box component="section" aria-labelledby="notice-title" pt="lg" style={{ borderTop: 'var(--border)' }}>
+      <details>
+        <summary style={{ cursor: 'pointer', minHeight: 'var(--touch-target)' }}>
+          <h2 id="notice-title" style={{ ...sectionTitle, display: 'inline' }}>
+            상품 정보 고시
+          </h2>
+        </summary>
+        <Box mt="sm">
+          <Rows rows={PRODUCT_NOTICE_FIELDS.map((field) => [field.label, notice[field.key]])} />
+        </Box>
+      </details>
+    </Box>
+  );
+}
+
 function Recommendations({ product, round }: { product: Product; round: PublicSaleRound }) {
   const { products } = useProducts();
   const byId = new Map<string, Product>(products.map((p: Product) => [p.id, p]));
@@ -178,9 +205,10 @@ export default function DetailExtras({
   product: Product;
   round: PublicSaleRound | null;
 }) {
+  // 고시의 생산자 칸이 비어 있으면 매장명을 쓰려고 토글과 상관없이 매장 소개를 읽는다.
   const store = useStoreProfile(
     product.storeId,
-    isFeatureOn('seller-store') || isFeatureOn('quality-guarantee'),
+    isFeatureOn('seller-store') || isFeatureOn('quality-guarantee') || !product.notice?.producer?.trim(),
   );
   const guarantee =
     isFeatureOn('quality-guarantee') && product.guaranteed && store?.guarantee?.enabled
@@ -195,15 +223,7 @@ export default function DetailExtras({
   const care = isFeatureOn('care-guide') ? product.careGuide : undefined;
   const producer = isFeatureOn('seller-store') && store && (store.intro || store.story) ? store : null;
 
-  // 켜진 기능이 하나도 없으면 빈 칸(아래 여백)도 남기지 않는다. 운영 기본값(모두 꺼짐)에서 화면이 지금과 같아야 한다.
-  const anyOn =
-    isFeatureOn('quality-guarantee') ||
-    isFeatureOn('size-info') ||
-    isFeatureOn('care-guide') ||
-    isFeatureOn('seller-store') ||
-    isFeatureOn('reviews') ||
-    isFeatureOn('recommendations');
-  if (!anyOn) return null;
+  // 켜진 기능이 하나도 없어도 고시 칸은 항상 그리므로 묶음 전체를 숨기지 않는다.
 
   return (
     <Stack gap="lg" px="md" pb="lg">
@@ -292,6 +312,8 @@ export default function DetailExtras({
       <ReviewsSection productId={product.id} />
 
       {isFeatureOn('recommendations') && round && <Recommendations product={product} round={round} />}
+
+      <ProductNoticeSection product={product} storeName={store?.name ?? null} />
     </Stack>
   );
 }
