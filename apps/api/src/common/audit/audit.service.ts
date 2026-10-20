@@ -38,9 +38,18 @@ export type AdminAuditAction =
   | 'admin.driver.unsuspended'
   | 'admin.order.force_refunded'
   | 'admin.settlement.paid'
-  | 'admin.banner.updated';
+  | 'admin.banner.updated'
+  | 'admin.partner_inquiry.contacted'
+  | 'admin.partner_inquiry.deleted';
 
-export type AdminAuditTargetType = 'store' | 'user' | 'driver' | 'order' | 'settlement' | 'banner';
+export type AdminAuditTargetType =
+  | 'store'
+  | 'user'
+  | 'driver'
+  | 'order'
+  | 'settlement'
+  | 'banner'
+  | 'partner_inquiry';
 
 export interface AdminAuditEntry {
   action: AdminAuditAction;
