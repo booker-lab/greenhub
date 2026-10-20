@@ -87,8 +87,12 @@ export function describeRefundTarget(order: {
   };
 }
 
+// 환불 사유 최대 길이 — API ForceRefundDto(ADMIN_REFUND_REASON_MAX_LENGTH)와 같게 유지한다.
+// 넘으면 서버가 400으로 환불 자체를 거절하므로 입력 단계에서 막는다.
+export const REFUND_REASON_MAX_LENGTH = 500;
+
 // 환불 사유는 선택 입력 — 비우면 서버 기본 사유('관리자 강제 환불')를 쓰도록 보내지 않는다.
 export function normalizeRefundReason(input: string): string | undefined {
   const reason = input.trim();
-  return reason ? reason : undefined;
+  return reason ? reason.slice(0, REFUND_REASON_MAX_LENGTH) : undefined;
 }

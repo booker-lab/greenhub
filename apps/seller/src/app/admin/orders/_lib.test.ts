@@ -6,6 +6,7 @@ import {
   getStatusColor,
   isRefundable,
   normalizeRefundReason,
+  REFUND_REASON_MAX_LENGTH,
   STATUS_LABEL,
 } from './_lib';
 
@@ -125,5 +126,10 @@ describe('강제환불 확인창 대상 표시', () => {
     expect(normalizeRefundReason('')).toBeUndefined();
     expect(normalizeRefundReason('   ')).toBeUndefined();
     expect(normalizeRefundReason(' 고객 요청 ')).toBe('고객 요청');
+  });
+
+  it('사유는 서버 한도(500자)를 넘겨 보내지 않는다', () => {
+    expect(REFUND_REASON_MAX_LENGTH).toBe(500);
+    expect(normalizeRefundReason('가'.repeat(600))).toHaveLength(500);
   });
 });

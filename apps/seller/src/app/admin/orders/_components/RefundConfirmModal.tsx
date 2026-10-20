@@ -3,7 +3,7 @@
 import { Stack, Text, Textarea } from '@mantine/core';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import type { AdminOrder } from '@/hooks/useAdmin';
-import { describeRefundTarget } from '../_lib';
+import { describeRefundTarget, REFUND_REASON_MAX_LENGTH } from '../_lib';
 
 interface RefundConfirmModalProps {
   /** 환불할 주문. null이면 닫힌다. */
@@ -55,6 +55,7 @@ export function RefundConfirmModal({
           <Textarea
             label="환불 사유 (선택)"
             placeholder="비워 두면 '관리자 강제 환불'로 기록됩니다"
+            maxLength={REFUND_REASON_MAX_LENGTH}
             value={reason}
             onChange={(e) => onReasonChange(e.currentTarget.value)}
             autosize
