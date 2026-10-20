@@ -43,6 +43,25 @@ const LEGACY_REFUND_CLAIM_MS = 5 * 60 * 1000;
 // 판매자 초대 토큰 유효 기간(발급 시점부터 72시간).
 export const INVITE_TTL_MS = 72 * 60 * 60 * 1000;
 
+// 관리자 목록 응답은 화면이 쓰는 필드만 내려준다(저장 배송지·세션·외부 로그인 식별자 등은 제외).
+const ADMIN_USER_LIST_FIELDS = ['id', 'email', 'name', 'phone', 'suspended', 'createdAt'] as const;
+const ADMIN_DRIVER_LIST_FIELDS = [
+  'id',
+  'name',
+  'email',
+  'driverApproved',
+  'suspended',
+  'createdAt',
+] as const;
+
+function pickListFields(data: Record<string, unknown>, fields: readonly string[]) {
+  const picked: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (data[field] !== undefined) picked[field] = data[field];
+  }
+  return picked;
+}
+
 type LegacyRefundClaimResult =
   | { kind: 'done' }
   | { kind: 'in_progress' }
@@ -107,11 +126,14 @@ export class AdminService {
     return { storeId, status: 'archived' };
   }
 
-  // 아카이브 복구 — active 복원 + archivedAt 제거.
+  // 아카이브 복구 — active 복원 + archivedAt 제거. 치운(archived) 판매자만 복구한다.
   async restoreStore(storeId: string) {
     const ref = this.firestore.doc(`stores/${storeId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    if (snap.data()?.['status'] !== 'archived') {
+      throw new ConflictException('정리된 판매자만 복구할 수 있습니다.');
+    }
 
     await ref.update({
       status: 'active',
@@ -132,18 +154,24 @@ export class AdminService {
     ).get();
 
     return {
-      users: snap.docs.map((d: any) => {
-        const { passwordHash: _pw, ...user } = d.data();
-        return user;
-      }),
+      users: snap.docs.map((d: any) => pickListFields(d.data(), ADMIN_USER_LIST_FIELDS)),
       total: snap.size,
     };
   }
 
-  async suspendUser(userId: string, dto: SuspendUserDto) {
+  // 소비자 정지 — 소비자 계정만 대상. 판매자·기사·관리자 계정과 요청한 관리자 자신은 정지하지 않는다.
+  async suspendUser(userId: string, dto: SuspendUserDto, actorId: string) {
+    if (userId === actorId) {
+      throw new BadRequestException('자기 자신의 계정은 정지할 수 없습니다.');
+    }
     const ref = this.firestore.doc(`users/${userId}`);
     const snap = await ref.get();
     if (!snap.exists) throw new NotFoundException('사용자를 찾을 수 없습니다.');
+
+    const data = snap.data()!;
+    if (data['role'] !== 'consumer') {
+      throw new BadRequestException('소비자 계정이 아닙니다.');
+    }
 
     await ref.update(this.suspensionUpdate(dto.suspended));
     if (dto.suspended) {
@@ -496,10 +524,9 @@ export class AdminService {
     ).get();
     const hasMore = snap.docs.length > ADMIN_DRIVER_SCAN_LIMIT;
 
-    let drivers = snap.docs.slice(0, ADMIN_DRIVER_SCAN_LIMIT).map((d: any) => {
-      const { passwordHash: _pw, ...user } = d.data();
-      return user;
-    });
+    let drivers = snap.docs
+      .slice(0, ADMIN_DRIVER_SCAN_LIMIT)
+      .map((d: any) => pickListFields(d.data(), ADMIN_DRIVER_LIST_FIELDS));
 
     if (dto.status === 'pending') {
       drivers = drivers.filter((d: any) => !d.driverApproved && !d.suspended);
