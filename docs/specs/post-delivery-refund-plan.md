@@ -126,18 +126,18 @@
 
 | ID | 작업 | 바꾸는 곳 | 끝났다는 증거 | 먼저 끝나야 할 것 |
 | :--- | :--- | :--- | :--- | :--- |
-| **R0** | 임시 수동 절차를 운영 절차서에 추가 (§3 내용) | `docs/specs/ops/mvp-sales-round-runbook.md` §8에 "8.4 배송 뒤 환불(기능 전)" | 문서 PR | 없음 |
+| **R0** ✅ | 임시 수동 절차를 운영 절차서에 추가 (§3 내용) | `docs/specs/ops/mvp-sales-round-runbook.md` §8.4 "배송 뒤 환불(기능 전)" | #572 병합 완료(2026-10-21) | 없음 |
 | **R1** | 정산 지급 지연 7일: 코드 기본값 7 + 운영 값 7 적용 | `settlements.service.ts` 기본값·관련 테스트 / Railway `SETTLEMENT_CONFIRM_DELAY_DAYS` (**운영 변경 = 사용자 승인**) | 단위 테스트(6일차 미확정·7일차 확정), 운영 값 재조회 | 없음 |
 | **R2** | 공용 정의: 배송 후 환불 사유 코드·라벨·알림 고정 문구·기간 상수(7일) | `packages/shared` (타입·상수 SSOT) | shared 빌드·타입 검사 | 없음 |
 | **R3** | 정산 회수 기록: `paid` 정산 취소 시 경고 대신 회수 기록(`PENDING`) 생성 + "회수 완료" 처리 함수 | `settlements.service.ts`·정산 타입 | 단위 테스트(pending→cancelled 유지, paid→회수 PENDING, 회수 완료 멱등) | R2 |
 | **R4** | 판매자 배송 후 환불 API (2.1·2.2: 상태·7일·정산 미지급을 한 트랜잭션에서 확인, 전액 환불+재배송비, 주문 CANCELLED 기록, 정산 취소, 알림) | `apps/api/src/orders/` 회차 주문 수명주기·DTO·컨트롤러 | 단위 테스트(3일차 성공, 8일차 거부, paid 거부, 다른 매장 거부, 중복 요청 시 환불 1회, 사유·메모 누락 거부) | R2, R3 |
-| **R5** | 관리자 배송 후 환불 API (기간 무제한, paid면 회수 기록, PortOne 이미 취소된 결제는 추가 호출 없이 로컬 수렴) + 회수 완료 API | `apps/api/src/admin/` | 단위 테스트(10일차 성공·회수 PENDING, 원격 이미 취소 시 PortOne 취소 호출 0회, 회수 완료) | R3, R4(공통 환불 핵심 재사용) |
+| **R5** | 관리자 배송 후 환불 API (기간 무제한, paid면 회수 기록, PortOne 이미 취소된 결제는 추가 호출 없이 로컬 수렴) + 회수 완료 API. **#576(어드민 행동 기록) 이후 코드 기준**: 기존 `forceRefund(orderId, dto, actorId)`·`markAsPaid(settlementId, actorId)`처럼 `actorId`를 받고, 성공 시 행동 기록을 남긴다(예: `admin.order.post_delivery_refunded`, `admin.settlement.recovery_completed`). 회수 완료는 `markAsPaid`의 `paidBy`처럼 처리자를 남긴다 | `apps/api/src/admin/admin.service.ts`·`admin.controller.ts`·`dto/admin.dto.ts`, 기록 화면 라벨 `apps/seller/src/app/admin/audit/_lib.ts` | 단위 테스트(10일차 성공·회수 PENDING, 원격 이미 취소 시 PortOne 취소 호출 0회, 회수 완료, 행동 기록 1건씩) | R3, R4(공통 환불 핵심 재사용), **#576 병합** |
 | **R6** | 판매자 앱: 주문 상세 "배송 후 환불" 버튼·확인 창, 7일 뒤/지급 뒤 "관리자에게 문의", 반품 안내 문구 교체 | `apps/seller/src/app/orders/[id]/` | 타입·빌드, 로컬 육안(버튼 노출 조건 3가지) | R4 |
 | **R7** | 관리자 화면: 주문 "배송 후 환불" 버튼, 정산 "돌려받을 돈" 표시·"회수 완료" 버튼 | `apps/seller/src/app/admin/` | 타입·빌드, 로컬 육안 | R5 |
 | **R8** | 현행 계약 문서 갱신(배송 후 환불·회수 기록·지급 지연 7일) | `docs/specs/api/orders.md`·`settlements.md`·`payments.md`·`admin.md` | 문서가 R1~R7 구현과 일치 | R1, R3~R5 |
 | **R9** | 로컬 E2E 시나리오: 배송 완료 → 판매자 환불 → 주문·결제·정산·알림 확인 / 8일차 판매자 거부 → 관리자 환불 | `apps/e2e/tests/` | `pnpm test:e2e:local` 통과, 테스트 데이터 정리 확인 | R4~R7 |
 
-**동시에 진행할 수 있는 묶음:** R0 · R1 · R2는 서로 겹치지 않아 함께 진행할 수 있다. 그 뒤 R3 → R4 → R5 순서로 직렬로 진행한다(같은 환불·정산 코드를 만지기 때문). R6과 R7은 각각 R4, R5가 끝나면 진행할 수 있다.
+**동시에 진행할 수 있는 묶음:** R1 · R2는 서로 겹치지 않아 함께 진행할 수 있다(R0은 완료). 그 뒤 R3 → R4 → R5 순서로 직렬로 진행한다(같은 환불·정산 코드를 만지기 때문). R6과 R7은 각각 R4, R5가 끝나면 진행할 수 있다.
 
 **출시 순서:** R0은 이번 주 안에 끝낸다. R1의 운영 값은 R4가 운영에 나가기 전에 적용한다. R4~R7은 한 번에 배포한다(release train). 배포 뒤 임시 장부의 주문을 R5 버튼으로 맞춘다.
 
