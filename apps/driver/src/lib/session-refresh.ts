@@ -9,7 +9,7 @@
  *    명령(PATCH·POST)은 절대 다시 보내지 않는다. 명령은 응답이 불확실하면 상태를 다시 조회해
  *    수렴한다(#379).
  * 2) 앱을 켜 둔 동안 2분마다 세션을 다시 확인해 jwt callback이 토큰을 미리 갱신하게 한다.
- *    확인 실패는 무시하고(약한 전파에서 세션을 비로그인으로 바꾸지 않는다), 새 토큰을 받았을
+ *    화면이 숨어 있는 동안은 건너뛰고 다시 보이면 즉시 한 번 확인한다. 확인 실패는 무시하고(약한 전파에서 세션을 비로그인으로 바꾸지 않는다), 새 토큰을 받았을
  *    때만 화면 세션을 갱신한다.
  */
 
@@ -73,6 +73,10 @@ export function shouldSyncSessionAccessToken(
 /**
  * 주기적으로 세션을 다시 확인한다. 확인이 끝나기 전에는 다음 확인을 겹쳐 보내지 않고,
  * 실패·기한 초과·빈 토큰은 무시한다. 돌려준 함수를 부르면 멈춘다.
+ *
+ * 화면이 숨어 있으면(isHidden) 주기 확인을 건너뛰어 휴대폰을 깨우지 않는다. 다시 보이게 되면
+ * (subscribeVisible) 즉시 한 번 확인한다. 명령(PATCH)은 401을 다시 보내지 않으므로, 오래 숨어
+ * 있다 돌아온 직후 누르는 명령이 만료 토큰으로 나가지 않게 복귀 확인이 먼저 토큰을 갱신한다.
  */
 export function startSessionKeepAlive(args: {
   probeAccessToken: () => Promise<unknown>;
@@ -80,11 +84,15 @@ export function startSessionKeepAlive(args: {
   syncSession: () => void;
   intervalMs?: number;
   probeTimeoutMs?: number;
+  /** 화면이 숨어 있는지. 생략하면 항상 보이는 것으로 본다. */
+  isHidden?: () => boolean;
+  /** 화면이 다시 보일 때 부를 함수를 등록하고, 등록을 푸는 함수를 돌려준다. */
+  subscribeVisible?: (onVisible: () => void) => () => void;
 }): () => void {
   let probing = false;
   let stopped = false;
-  const timer = setInterval(() => {
-    if (probing) return;
+  const probe = () => {
+    if (stopped || probing) return;
     probing = true;
     void settleWithin(args.probeAccessToken, args.probeTimeoutMs ?? SESSION_REFRESH_TIMEOUT_MS)
       .then((probed) => {
@@ -96,9 +104,15 @@ export function startSessionKeepAlive(args: {
       .finally(() => {
         probing = false;
       });
+  };
+  const timer = setInterval(() => {
+    if (args.isHidden?.()) return;
+    probe();
   }, args.intervalMs ?? SESSION_KEEPALIVE_INTERVAL_MS);
+  const unsubscribeVisible = args.subscribeVisible?.(probe);
   return () => {
     stopped = true;
     clearInterval(timer);
+    unsubscribeVisible?.();
   };
 }

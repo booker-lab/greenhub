@@ -253,6 +253,108 @@ test('세션 유지: 멈춘 뒤 도착한 확인 결과로는 갱신하지 않�
   assert.equal(syncCalls, 0);
 });
 
+// 가짜 화면 보임 상태: hidden을 바꾸고 show()로 다시 보이게 한 것을 알린다.
+function fakeVisibility() {
+  const state = { hidden: false, listeners: 0 };
+  let listener = null;
+  return {
+    state,
+    isHidden: () => state.hidden,
+    subscribeVisible: (onVisible) => {
+      listener = onVisible;
+      state.listeners += 1;
+      return () => {
+        listener = null;
+        state.listeners -= 1;
+      };
+    },
+    show: () => {
+      state.hidden = false;
+      listener?.();
+    },
+  };
+}
+
+test('세션 유지: 화면이 숨어 있으면 주기 확인을 건너뛰고 다시 보이면 즉시 한 번 확인한다', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+  const visibility = fakeVisibility();
+  let probeCalls = 0;
+  let syncCalls = 0;
+  const stop = startSessionKeepAlive({
+    probeAccessToken: async () => {
+      probeCalls += 1;
+      return 'token-b';
+    },
+    currentAccessToken: () => 'token-a',
+    syncSession: () => {
+      syncCalls += 1;
+    },
+    isHidden: visibility.isHidden,
+    subscribeVisible: visibility.subscribeVisible,
+  });
+  assert.equal(visibility.state.listeners, 1);
+
+  // 숨은 동안은 몇 주기가 지나도 확인하지 않는다.
+  visibility.state.hidden = true;
+  t.mock.timers.tick(SESSION_KEEPALIVE_INTERVAL_MS * 3);
+  await flush();
+  assert.equal(probeCalls, 0);
+
+  // 다시 보이면 주기를 기다리지 않고 바로 확인하고, 새 토큰이면 갱신한다.
+  visibility.show();
+  await flush();
+  assert.equal(probeCalls, 1);
+  assert.equal(syncCalls, 1);
+
+  // 보이는 동안은 다시 주기대로 확인한다.
+  t.mock.timers.tick(SESSION_KEEPALIVE_INTERVAL_MS);
+  await flush();
+  assert.equal(probeCalls, 2);
+
+  // 멈추면 복귀 리스너도 풀리고, 이후 복귀·주기로는 확인하지 않는다.
+  stop();
+  assert.equal(visibility.state.listeners, 0);
+  visibility.show();
+  t.mock.timers.tick(SESSION_KEEPALIVE_INTERVAL_MS * 2);
+  await flush();
+  assert.equal(probeCalls, 2);
+});
+
+test('세션 유지: 복귀 확인도 끝나지 않은 확인과 겹쳐 보내지 않고 기한이 지나면 다시 확인한다', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval', 'setTimeout'] });
+  const visibility = fakeVisibility();
+  let probeCalls = 0;
+  const stop = startSessionKeepAlive({
+    probeAccessToken: () => {
+      probeCalls += 1;
+      return new Promise(() => {});
+    },
+    currentAccessToken: () => 'token-a',
+    syncSession: () => {},
+    intervalMs: 60_000,
+    probeTimeoutMs: 5_000,
+    isHidden: visibility.isHidden,
+    subscribeVisible: visibility.subscribeVisible,
+  });
+
+  visibility.show();
+  await flush();
+  assert.equal(probeCalls, 1);
+
+  // 첫 확인이 끝나지 않은 동안 복귀가 또 와도 새 확인을 보내지 않는다.
+  visibility.show();
+  await flush();
+  assert.equal(probeCalls, 1);
+
+  // 확인 기한(settleWithin)이 지나면 겹침 표시가 풀려 다음 복귀 때 다시 확인한다.
+  t.mock.timers.tick(5_000);
+  await flush();
+  visibility.show();
+  await flush();
+  assert.equal(probeCalls, 2);
+  stop();
+});
+
 test('apiRead는 GET으로 고정되고 세션을 다시 받아 401 조회를 한 번만 다시 보낸다', () => {
   const at = apiSource.indexOf('export function apiRead');
   assert.ok(at !== -1, 'apiRead가 있어야 한다');
@@ -314,4 +416,8 @@ test('세션 유지는 refetchInterval 대신 실패를 무시하는 확인으�
   assert.match(providersSource, /getSession\(\{ broadcast: false \}\)/);
   assert.match(providersSource, /void updateRef\.current\(\)/);
   assert.doesNotMatch(providersSource, /refetchInterval=/);
+  // 숨은 화면에서는 주기 확인을 건너뛰고, 다시 보이면 즉시 확인하며 리스너를 정리한다.
+  assert.match(providersSource, /isHidden: \(\) => document\.visibilityState === 'hidden'/);
+  assert.match(providersSource, /addEventListener\('visibilitychange', handleVisibility\)/);
+  assert.match(providersSource, /removeEventListener\('visibilitychange', handleVisibility\)/);
 });
