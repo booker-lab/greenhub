@@ -161,6 +161,19 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     return () => URL.revokeObjectURL(captured);
   }, [captured]);
 
+  // 화면이 숨으면(잠금·앱 전환) 카메라 미리보기를 끈다. 돌아오면 촬영 시작 버튼이 다시 보이고
+  // 사용자가 눌러 다시 켠다. 사진을 만드는 중(preparing)에는 프레임을 읽고 있으므로 끄지 않는다.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stopStream은 ref와 상태 setter만 쓰므로 매 렌더 새 함수여도 동작이 같다
+  useEffect(() => {
+    if (!stream) return;
+    const handleVisibility = () => {
+      if (document.visibilityState !== 'hidden' || preparingRef.current) return;
+      stopStream();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [stream]);
+
   useEffect(() => {
     return () => {
       cameraRequestRef.current += 1;

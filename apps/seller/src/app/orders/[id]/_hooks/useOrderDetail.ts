@@ -16,6 +16,7 @@ import {
   resolveOrderDetailView,
   SELLER_ORDER_DETAIL_AUTH_ERROR,
   SELLER_ORDER_DETAIL_READ_ERROR,
+  shouldDedupeOrderDetailRevalidation,
   shouldIgnoreOrderDetailResponse,
   shouldInvalidateOrderDetailScope,
   shouldInvalidateOrderDetailSupplementary,
@@ -207,11 +208,19 @@ export function useOrderDetail(orderId: string): UseOrderDetailResult {
   }, [orderId, sessionStatus, storeId, token, tick]);
 
   useEffect(() => {
+    // 화면 복귀 한 번에 focus·visibilitychange가 함께 오므로 짧은 간격 안 중복은 1회로 묶는다.
+    let lastRevalidateAt: number | null = null;
+    const revalidate = () => {
+      const now = Date.now();
+      if (shouldDedupeOrderDetailRevalidation(lastRevalidateAt, now)) return;
+      lastRevalidateAt = now;
+      refresh();
+    };
     const onFocus = () => {
-      if (shouldRevalidateOrderDetailOnWindowFocus()) refresh();
+      if (shouldRevalidateOrderDetailOnWindowFocus()) revalidate();
     };
     const onVisibilityChange = () => {
-      if (shouldRevalidateOrderDetailOnVisibilityChange(document.hidden)) refresh();
+      if (shouldRevalidateOrderDetailOnVisibilityChange(document.hidden)) revalidate();
     };
     window.addEventListener('focus', onFocus);
     document.addEventListener('visibilitychange', onVisibilityChange);

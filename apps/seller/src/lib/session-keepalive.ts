@@ -6,6 +6,7 @@
  * 세션을 다시 받지 않으면 만료된 토큰을 보내 상태 변경이 401로 실패한다.
  *
  * 앱을 켜 둔 동안 2분마다 세션을 다시 확인해 jwt callback이 토큰을 미리 갱신하게 한다.
+ * 탭이 숨겨져 있으면 주기 확인을 건너뛰고, 다시 보이게 되면 즉시 1회 확인한다.
  * 확인 실패는 무시하고(약한 전파에서 세션을 비로그인으로 바꾸지 않는다), 새 토큰을 받았을
  * 때만 화면 세션을 갱신한다. 기사 앱 lib/session-refresh.ts와 같은 규칙이다.
  */
@@ -47,18 +48,24 @@ export function shouldSyncSessionAccessToken(
 /**
  * 주기적으로 세션을 다시 확인한다. 확인이 끝나기 전에는 다음 확인을 겹쳐 보내지 않고,
  * 실패·기한 초과·빈 토큰은 무시한다. 돌려준 함수를 부르면 멈춘다.
+ *
+ * isHidden이 true를 돌려주는 동안(숨은 탭)은 주기 확인을 건너뛴다. subscribeVisibilityChange로
+ * 보이기 상태 변화를 알려 주면, 다시 보이게 된 순간 즉시 1회 확인한다.
  */
 export function startSessionKeepAlive(args: {
   probeAccessToken: () => Promise<unknown>;
   currentAccessToken: () => string | null | undefined;
   syncSession: () => void;
+  isHidden?: () => boolean;
+  subscribeVisibilityChange?: (onChange: () => void) => () => void;
   intervalMs?: number;
   probeTimeoutMs?: number;
 }): () => void {
   let probing = false;
   let stopped = false;
-  const timer = setInterval(() => {
-    if (probing) return;
+  const isHidden = () => args.isHidden?.() === true;
+  const probe = () => {
+    if (stopped || probing) return;
     probing = true;
     void settleWithin(args.probeAccessToken, args.probeTimeoutMs ?? SESSION_PROBE_TIMEOUT_MS)
       .then((probed) => {
@@ -70,9 +77,17 @@ export function startSessionKeepAlive(args: {
       .finally(() => {
         probing = false;
       });
+  };
+  const timer = setInterval(() => {
+    if (isHidden()) return;
+    probe();
   }, args.intervalMs ?? SESSION_KEEPALIVE_INTERVAL_MS);
+  const unsubscribe = args.subscribeVisibilityChange?.(() => {
+    if (!isHidden()) probe();
+  });
   return () => {
     stopped = true;
     clearInterval(timer);
+    unsubscribe?.();
   };
 }

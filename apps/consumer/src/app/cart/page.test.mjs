@@ -56,6 +56,9 @@ const requireForTest = (specifier) => {
   if (specifier === '@/components/benchmark/CartExtras') {
     return {};
   }
+  if (specifier === '@/components/ResilientImage') {
+    return { default: () => null, PRODUCT_IMAGE_FALLBACK: '/images/product-placeholder.png' };
+  }
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }
