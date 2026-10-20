@@ -23,7 +23,10 @@ import { PaymentsService } from '../payments/payments.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 import { releaseLegacyGroupQuantityInTransaction } from '../orders/_lib/legacy-group-quantity';
 import { hasOpenProviderReversalInTransaction } from '../settlements/_lib/provider-reversal-hold';
-import { SettlementsService } from '../settlements/settlements.service';
+import {
+  type CancelSettlementResult,
+  SettlementsService,
+} from '../settlements/settlements.service';
 import {
   SESSIONS_REVOKED_AT_FIELD,
   revokeFirebaseSessions,
@@ -280,19 +283,26 @@ export class AdminService {
     const order = orderSnap.data()!;
     const reason = dto.reason ?? '관리자 강제 환불';
 
-    let result: unknown;
+    let result: Record<string, unknown>;
     if (order['schemaVersion'] === 2 && order['roundId']) {
-      result = await this.roundLifecycle.cancelForRound({
+      const cancelled = await this.roundLifecycle.cancelForRound({
         storeId: order['storeId'],
         orderId,
         expectedStatus: order['status'],
         reason,
         customerNotice: 'ADMIN_REFUND',
       });
-      await this.settlements.cancelSettlement(orderId);
+      // 회차 취소가 이미 정산을 반영했어도 다시 불러 회수 필요 여부를 받는다(멱등).
+      const recovery = await this.settlements.cancelSettlement(orderId);
+      result = { ...cancelled, ...recovery };
     } else {
       result = await this.forceLegacyRefund(orderId, reason);
     }
+    // 이미 지급한 정산이면 화면이 "판매자에게 돌려받아야 할 금액"을 알리도록 응답과 기록에 싣는다.
+    const recoveryAfter =
+      result['recoveryRequired'] === true
+        ? { recoveryRequired: true, recoveryAmount: result['recoveryAmount'] }
+        : {};
 
     // 환불이 실패해 예외가 나면 여기까지 오지 않으므로 성공한 환불만 기록된다.
     await this.recordAdmin({
@@ -301,17 +311,20 @@ export class AdminService {
       targetType: 'order',
       targetId: orderId,
       before: { status: order['status'] ?? null },
-      after: { status: 'CANCELLED' },
+      after: { status: 'CANCELLED', ...recoveryAfter },
       reason,
     });
     return result;
   }
 
-  private async forceLegacyRefund(orderId: string, reason: string) {
+  private async forceLegacyRefund(
+    orderId: string,
+    reason: string,
+  ): Promise<{ ok: true; orderId: string } & CancelSettlementResult> {
     const claim = await this.claimLegacyRefund(orderId, reason);
     if (claim.kind === 'done') {
-      await this.settlements.cancelSettlement(orderId);
-      return { ok: true, orderId };
+      const recovery = await this.settlements.cancelSettlement(orderId);
+      return { ok: true, orderId, ...recovery };
     }
     if (claim.kind === 'in_progress') {
       throw new ConflictException('주문 환불이 이미 처리 중입니다.');
@@ -325,15 +338,16 @@ export class AdminService {
       throw error;
     }
 
+    let recovery: CancelSettlementResult;
     try {
       await this.applyLegacyLocalCancellation(orderId, claim.token, reason);
-      await this.settlements.cancelSettlement(orderId);
+      recovery = await this.settlements.cancelSettlement(orderId);
     } catch (error) {
       await this.recordLegacyRefundState(orderId, claim.token, 'LOCAL_FAILED', reason);
       throw error;
     }
 
-    return { ok: true, orderId };
+    return { ok: true, orderId, ...recovery };
   }
 
   private async claimLegacyRefund(

@@ -5,11 +5,17 @@ export const MANUAL_RESOLVE_MEMO_MAX_LENGTH = 200;
 
 /**
  * 관리자만 닫는 유형. 서버 `apps/api/src/operations/dto/resolve-operation-issue.dto.ts`의
- * `ADMIN_ONLY_MANUAL_RESOLVE_TYPES`와 같은 목록이다(정산 보류를 푸는 기록, 고객 환불이 확정되지 않은 기록).
+ * `ADMIN_ONLY_MANUAL_RESOLVE_TYPES`와 같은 목록이다(정산 보류를 푸는 기록, 고객 환불이 확정되지 않은 기록,
+ * 지급 뒤 환불로 판매자에게 돌려받을 돈이 남은 기록).
  */
 export const ADMIN_ONLY_MANUAL_RESOLVE_TYPES: ReadonlySet<OrderOperationIssue['type']> = new Set<
   OrderOperationIssue['type']
->(['PROVIDER_REVERSAL_DETECTED', 'AUTO_REFUND_FAILED', 'FINALIZATION_REFUND_FAILED']);
+>([
+  'PROVIDER_REVERSAL_DETECTED',
+  'AUTO_REFUND_FAILED',
+  'FINALIZATION_REFUND_FAILED',
+  'SETTLEMENT_RECOVERY_REQUIRED',
+]);
 
 const SAFE_IDENTIFIER_PATTERN = /^[A-Za-z0-9:_-]{1,160}$/;
 

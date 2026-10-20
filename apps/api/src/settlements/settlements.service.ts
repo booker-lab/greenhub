@@ -1,19 +1,26 @@
-import { BadRequestException, Injectable, ForbiddenException, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  ForbiddenException,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { dateRangeKST, todayKST } from '@greenhub/shared';
 import { FirestoreService } from '../firestore/firestore.service';
+import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import {
   QuerySettlementsDto,
   QuerySummaryDto,
   SETTLEMENT_CURSOR_PATTERN,
 } from './dto/query-settlements.dto';
-import { calcFee } from './_lib/fee-calculator';
+import { calcFee, resolveFeeRate } from './_lib/fee-calculator';
 import { hasOpenProviderReversalInTransaction } from './_lib/provider-reversal-hold';
 import { aggregateSettlements } from './_lib/settlement-aggregator';
 
 // 정산 상태 타입 SSOT = @greenhub/shared (F-1/S4). DTO 등 기존 import 경로 유지를 위해 re-export + 로컬 사용.
-import type { SettlementStatus } from '@greenhub/shared';
+import type { OperationIssueType, SettlementStatus } from '@greenhub/shared';
 export type { SettlementStatus } from '@greenhub/shared';
 
 /**
@@ -30,16 +37,36 @@ export function resolveSettlementListLimit(raw: unknown): number {
   return Math.min(Math.max(Math.floor(value), 1), SETTLEMENT_LIST_MAX_LIMIT);
 }
 
+/** 지급 뒤 환불로 판매자에게 돌려받아야 할 금액을 알리는 운영 기록 유형. */
+export const SETTLEMENT_RECOVERY_ISSUE_TYPE =
+  'SETTLEMENT_RECOVERY_REQUIRED' satisfies OperationIssueType;
+
+/**
+ * 정산 취소 반영 결과. 이미 지급한(paid) 정산의 주문이 환불되면 정산은 paid로 두고
+ * 판매자에게 돌려받을 금액(그 정산의 판매자 지급액)을 알린다.
+ */
+export type CancelSettlementResult = {
+  recoveryRequired: boolean;
+  recoveryAmount: number;
+};
+
+const NO_RECOVERY: CancelSettlementResult = { recoveryRequired: false, recoveryAmount: 0 };
+
 @Injectable()
 export class SettlementsService {
   private readonly logger = new Logger(SettlementsService.name);
   private readonly feeRate: number;
   private readonly confirmDelayDays: number;
+  private readonly issueWriter: OperationIssueWriterService;
 
   constructor(
     private readonly firestore: FirestoreService,
     private readonly config: ConfigService,
+    // 모듈은 OperationIssuesModule에서 주입한다. 직접 만든 서비스(테스트 등)도 같은 Firestore에
+    // 회수 기록을 남기도록, 주입이 없으면 같은 작성기를 만들어 쓴다(트랜잭션 안 기록은 알림을 보내지 않는다).
+    @Optional() issueWriter?: OperationIssueWriterService,
   ) {
+    this.issueWriter = issueWriter ?? new OperationIssueWriterService(firestore);
     this.feeRate = parseFloat(this.config.get<string>('PLATFORM_FEE_RATE') ?? '0.05');
     this.confirmDelayDays = parseInt(
       this.config.get<string>('SETTLEMENT_CONFIRM_DELAY_DAYS') ?? '1',
@@ -51,17 +78,30 @@ export class SettlementsService {
   // N6: 중복 확인(read)→생성(set)을 트랜잭션으로 묶어 동시 전이 경합 차단.
   // 같은 주문이 짧은 간격으로 두 전이(DELIVERED→REVIEWED 등)를 타거나 동시 호출 시
   // 비트랜잭션이면 둘 다 exists=false를 읽고 둘 다 set → 후자가 전자를 덮어써 settledAt 갱신.
+  // 수수료율: 같은 트랜잭션에서 가게 문서의 commissionRate(0~1)를 읽어 쓰고, 없으면 서버 기본값.
+  // 쓴 요율은 platformFeeRate로 정산에 남는다. 이미 만든 정산은 다시 계산하지 않는다.
   async createSettlement(order: Record<string, unknown>, completedStatus: string): Promise<void> {
     const orderId = order['id'] as string;
     const ref = this.firestore.doc(`settlements/${orderId}`);
+    const storeId = order['storeId'];
+    const storeRef =
+      typeof storeId === 'string' && storeId.length > 0
+        ? this.firestore.doc(`stores/${storeId}`)
+        : null;
 
     const totalAmount = (order['totalAmount'] as number) ?? 0;
-    const { platformFee, netAmount } = calcFee(totalAmount, this.feeRate);
 
     await this.firestore.runTransaction(async (t) => {
       // 트랜잭션 내 중복 재확인 — 동시 호출 중 한쪽만 set 통과
       const existing = await t.get(ref);
       if (existing.exists) return;
+
+      const storeSnap = storeRef ? await t.get(storeRef) : null;
+      const feeRate = resolveFeeRate(
+        storeSnap?.exists ? storeSnap.data()?.['commissionRate'] : undefined,
+        this.feeRate,
+      );
+      const { platformFee, netAmount } = calcFee(totalAmount, feeRate);
 
       const now = this.firestore.Timestamp.now();
       t.set(ref, {
@@ -72,7 +112,7 @@ export class SettlementsService {
         orderNumber: typeof order['orderNumber'] === 'string' ? order['orderNumber'] : null,
         roundId: typeof order['roundId'] === 'string' ? order['roundId'] : null,
         totalAmount,
-        platformFeeRate: this.feeRate,
+        platformFeeRate: feeRate,
         platformFee,
         netAmount,
         status: 'pending' as SettlementStatus,
@@ -231,24 +271,60 @@ export class SettlementsService {
   // B-6(N7): 이미 paid(지급 완료)된 정산은 cancelled로 덮어쓰지 않음(역전이 가드).
   //   비트랜잭션·무조건 update 시 지급 후 주문 취소 경로를 타면 paid→cancelled로 덮여 회계 손실.
   //   confirmDueSettlements의 "cancelled 미덮어씀"(GAP-1)과 대칭(paid 미덮어씀).
-  async cancelSettlement(orderId: string): Promise<void> {
+  // 지급 후 환불(결정 ④): paid는 그대로 두고, 같은 트랜잭션에서 정산에 회수 필요(recoveryRequired·
+  //   recoveryAmount=판매자 지급액·recoveryRequiredAt)를 남기고 관리자만 닫는 운영 기록을 연다.
+  //   이미 회수 표시가 된 정산은 다시 쓰지 않는다(관리자가 닫은 기록을 다시 열지 않음).
+  async cancelSettlement(orderId: string): Promise<CancelSettlementResult> {
     const ref = this.firestore.doc(`settlements/${orderId}`);
-    await this.firestore.runTransaction(async (t) => {
+    return this.firestore.runTransaction(async (t): Promise<CancelSettlementResult> => {
       const snap = await t.get(ref);
-      if (!snap.exists) return;
-      const status = snap.data()?.['status'] as SettlementStatus;
+      if (!snap.exists) return NO_RECOVERY;
+      const data = snap.data() ?? {};
+      const status = data['status'] as SettlementStatus;
       if (status === 'paid') {
-        // 환불 회계 별도 처리는 범위 외 — 최소 덮어쓰기 차단
-        this.logger.warn(
-          `[cancelSettlement] paid 정산 ${orderId} 취소 시도 — cancelled 미적용(역전이 가드)`,
+        const paidNet = typeof data['netAmount'] === 'number' ? data['netAmount'] : 0;
+        if (data['recoveryRequired'] === true) {
+          const recorded = data['recoveryAmount'];
+          return {
+            recoveryRequired: true,
+            recoveryAmount: typeof recorded === 'number' ? recorded : paidNet,
+          };
+        }
+        await this.issueWriter.createOrMergeIssue(
+          {
+            storeId: String(data['storeId'] ?? ''),
+            orderId,
+            paymentId: null,
+            type: SETTLEMENT_RECOVERY_ISSUE_TYPE,
+            severity: 'critical',
+            title: '지급 후 환불 — 판매자 회수 필요',
+            message: `이미 판매자에게 지급한 정산의 주문이 환불됐습니다. 지급액 ${paidNet.toLocaleString('ko-KR')}원을 판매자에게서 돌려받아야 합니다. 관리자가 회수를 확인한 뒤 닫습니다.`,
+            idempotencyKey: `settlement-recovery:${orderId}`,
+            latestSnapshot: {
+              settlementStatus: 'paid',
+              failureStage: 'settlement_recovery',
+            },
+          },
+          t,
         );
-        return;
+        const now = this.firestore.Timestamp.now();
+        t.update(ref, {
+          recoveryRequired: true,
+          recoveryAmount: paidNet,
+          recoveryRequiredAt: now,
+          updatedAt: now,
+        });
+        this.logger.warn(
+          `[cancelSettlement] paid 정산 ${orderId} 환불 — paid 유지, 판매자 회수 필요 ${paidNet}원 기록`,
+        );
+        return { recoveryRequired: true, recoveryAmount: paidNet };
       }
-      if (status === 'cancelled') return; // 멱등
+      if (status === 'cancelled') return NO_RECOVERY; // 멱등
       t.update(ref, {
         status: 'cancelled' as SettlementStatus,
         updatedAt: this.firestore.Timestamp.now(),
       });
+      return NO_RECOVERY;
     });
   }
 

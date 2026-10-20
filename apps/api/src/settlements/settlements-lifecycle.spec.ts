@@ -374,6 +374,112 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
       expect(settlement?.['updatedAt']).toEqual(FIXED_NOW);
     });
 
+    it('가게에 수수료율이 있으면 그 요율로 계산하고 platformFeeRate에 남긴다', async () => {
+      const { firestore, service } = makeSettlementsService({ PLATFORM_FEE_RATE: '0.05' });
+      firestore.seed('stores/store-1', { ownerId: 'seller-1', commissionRate: 0.1 });
+
+      await service.createSettlement(
+        { id: 'order-store-rate-1', storeId: 'store-1', status: 'DELIVERED', totalAmount: 12345 },
+        'DELIVERED',
+      );
+
+      expect(firestore.getData('settlements/order-store-rate-1')).toEqual(
+        expect.objectContaining({
+          totalAmount: 12345,
+          platformFeeRate: 0.1,
+          platformFee: 1234,
+          netAmount: 11111,
+        }),
+      );
+    });
+
+    it('가게 수수료율 0은 수수료 없이 전액을 판매자 지급액으로 남긴다', async () => {
+      const { firestore, service } = makeSettlementsService({ PLATFORM_FEE_RATE: '0.05' });
+      firestore.seed('stores/store-1', { ownerId: 'seller-1', commissionRate: 0 });
+
+      await service.createSettlement(
+        { id: 'order-store-rate-0', storeId: 'store-1', status: 'DELIVERED', totalAmount: 10000 },
+        'DELIVERED',
+      );
+
+      expect(firestore.getData('settlements/order-store-rate-0')).toEqual(
+        expect.objectContaining({ platformFeeRate: 0, platformFee: 0, netAmount: 10000 }),
+      );
+    });
+
+    it.each([
+      ['요율 미설정', {}],
+      ['범위를 벗어난 요율', { commissionRate: 1.5 }],
+      ['음수 요율', { commissionRate: -0.1 }],
+      ['문자열 요율', { commissionRate: '0.1' }],
+      ['null 요율', { commissionRate: null }],
+    ])('%s 가게는 서버 기본 수수료율로 계산한다', async (_label, store) => {
+      const { firestore, service } = makeSettlementsService({ PLATFORM_FEE_RATE: '0.075' });
+      firestore.seed('stores/store-1', { ownerId: 'seller-1', ...store });
+
+      await service.createSettlement(
+        { id: 'order-default-rate-1', storeId: 'store-1', status: 'DELIVERED', totalAmount: 10001 },
+        'DELIVERED',
+      );
+
+      expect(firestore.getData('settlements/order-default-rate-1')).toEqual(
+        expect.objectContaining({ platformFeeRate: 0.075, platformFee: 750, netAmount: 9251 }),
+      );
+    });
+
+    it('PLATFORM_FEE_RATE도 없고 가게 요율도 없으면 5%로 계산한다', async () => {
+      const { firestore, service } = makeSettlementsService();
+      firestore.seed('stores/store-1', { ownerId: 'seller-1' });
+
+      await service.createSettlement(
+        { id: 'order-default-5-1', storeId: 'store-1', status: 'DELIVERED', totalAmount: 20000 },
+        'DELIVERED',
+      );
+
+      expect(firestore.getData('settlements/order-default-5-1')).toEqual(
+        expect.objectContaining({ platformFeeRate: 0.05, platformFee: 1000, netAmount: 19000 }),
+      );
+    });
+
+    it('이미 만든 정산은 가게 수수료율이 바뀌어도 다시 계산하지 않는다', async () => {
+      const { firestore, service } = makeSettlementsService({ PLATFORM_FEE_RATE: '0.05' });
+      firestore.seed('stores/store-1', { ownerId: 'seller-1', commissionRate: 0.05 });
+      const order = {
+        id: 'order-rate-change-1',
+        storeId: 'store-1',
+        status: 'DELIVERED',
+        totalAmount: 10000,
+      };
+
+      await service.createSettlement(order, 'DELIVERED');
+      const first = firestore.getData('settlements/order-rate-change-1');
+      firestore.updateOutsideTransaction('stores/store-1', { commissionRate: 0.2 });
+      await service.createSettlement({ ...order, status: 'REVIEWED' }, 'REVIEWED');
+
+      expect(firestore.getData('settlements/order-rate-change-1')).toEqual(first);
+      expect(first).toEqual(
+        expect.objectContaining({ platformFeeRate: 0.05, platformFee: 500, netAmount: 9500 }),
+      );
+    });
+
+    it('정산을 만드는 사이 가게 수수료율이 바뀌면 트랜잭션을 다시 시도해 바뀐 요율을 쓴다', async () => {
+      const { firestore, service } = makeSettlementsService({ PLATFORM_FEE_RATE: '0.05' });
+      firestore.seed('stores/store-1', { ownerId: 'seller-1', commissionRate: 0.05 });
+      firestore.setBeforeCommit(({ readPaths }) => {
+        expect(readPaths).toContain('stores/store-1');
+        firestore.updateOutsideTransaction('stores/store-1', { commissionRate: 0.08 });
+      });
+
+      await service.createSettlement(
+        { id: 'order-rate-race-1', storeId: 'store-1', status: 'DELIVERED', totalAmount: 10000 },
+        'DELIVERED',
+      );
+
+      expect(firestore.getData('settlements/order-rate-race-1')).toEqual(
+        expect.objectContaining({ platformFeeRate: 0.08, platformFee: 800, netAmount: 9200 }),
+      );
+    });
+
     it('같은 주문의 중복 호출은 추가 생성이나 최초 snapshot 변경을 일으키지 않는다', async () => {
       const { firestore, service } = makeSettlementsService({ PLATFORM_FEE_RATE: '0.05' });
       const order = {
@@ -671,7 +777,10 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
     it('missing settlement는 no-op이다', async () => {
       const { firestore, service } = makeSettlementsService();
 
-      await expect(service.cancelSettlement('order-missing-1')).resolves.toBeUndefined();
+      await expect(service.cancelSettlement('order-missing-1')).resolves.toEqual({
+        recoveryRequired: false,
+        recoveryAmount: 0,
+      });
 
       expect(firestore.getData('settlements/order-missing-1')).toBeUndefined();
       expect(firestore.transactionUpdates).toHaveLength(0);
@@ -703,19 +812,112 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
       expect(firestore.transactionUpdates).toHaveLength(0);
     });
 
-    it('paid는 cancellation/reversal을 거부하고 paid를 보존한다', async () => {
+    it.each(['pending', 'confirmed'] as const)(
+      '%s 취소는 회수 필요가 아니라고 돌려준다',
+      async (status) => {
+        const { firestore, service } = makeSettlementsService();
+        const orderId = `order-${status}-no-recovery-1`;
+        firestore.seed(`settlements/${orderId}`, makeSettlement(orderId, status));
+
+        await expect(service.cancelSettlement(orderId)).resolves.toEqual({
+          recoveryRequired: false,
+          recoveryAmount: 0,
+        });
+        expect(firestore.listData('operationIssues/')).toHaveLength(0);
+      },
+    );
+
+    it('paid는 cancelled로 바꾸지 않고, 회수 필요와 금액을 남기고 관리자 운영 기록을 연다', async () => {
       const { firestore, service } = makeSettlementsService();
       const orderId = 'order-paid-cancel-1';
       const original = makeSettlement(orderId, 'paid', {
         paidAt: new Date('2026-08-26T01:00:00.000Z'),
         updatedAt: new Date('2026-08-26T01:00:00.000Z'),
+        netAmount: 9500,
       });
       firestore.seed(`settlements/${orderId}`, original);
 
+      await expect(service.cancelSettlement(orderId)).resolves.toEqual({
+        recoveryRequired: true,
+        recoveryAmount: 9500,
+      });
+
+      expect(firestore.getData(`settlements/${orderId}`)).toEqual({
+        ...original,
+        recoveryRequired: true,
+        recoveryAmount: 9500,
+        recoveryRequiredAt: FIXED_NOW,
+        updatedAt: FIXED_NOW,
+      });
+      const issues = firestore.listData('operationIssues/');
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toEqual(
+        expect.objectContaining({
+          storeId: 'store-1',
+          orderId,
+          paymentId: null,
+          type: 'SETTLEMENT_RECOVERY_REQUIRED',
+          severity: 'critical',
+          status: 'OPEN',
+          idempotencyKey: `settlement-recovery:${orderId}`,
+        }),
+      );
+      expect(String(issues[0]['message'])).toContain('9,500원');
+      // 정산 갱신과 운영 기록 생성이 한 트랜잭션에서 함께 커밋된다.
+      expect(firestore.transactionUpdates.map((write) => write.path)).toEqual([
+        `settlements/${orderId}`,
+      ]);
+      expect(firestore.transactionSets).toEqual([
+        expect.stringMatching(/^operationIssues\//),
+      ]);
+    });
+
+    it('이미 회수 표시된 paid 정산은 다시 쓰지 않고, 관리자가 닫은 기록을 다시 열지 않는다', async () => {
+      const { firestore, service } = makeSettlementsService();
+      const orderId = 'order-paid-recovery-again-1';
+      firestore.seed(`settlements/${orderId}`, makeSettlement(orderId, 'paid'));
+
       await service.cancelSettlement(orderId);
+      const [issuePath] = firestore.transactionSets;
+      firestore.updateOutsideTransaction(issuePath, { status: 'RESOLVED' });
+      const settled = firestore.getData(`settlements/${orderId}`);
+      const writesBefore =
+        firestore.transactionSets.length + firestore.transactionUpdates.length;
+
+      await expect(service.cancelSettlement(orderId)).resolves.toEqual({
+        recoveryRequired: true,
+        recoveryAmount: 9500,
+      });
+
+      expect(firestore.transactionSets.length + firestore.transactionUpdates.length).toBe(
+        writesBefore,
+      );
+      expect(firestore.getData(`settlements/${orderId}`)).toEqual(settled);
+      expect(firestore.getData(issuePath)?.['status']).toBe('RESOLVED');
+    });
+
+    it('회수 기록 쓰기가 실패하면 정산도 바뀌지 않는다(같은 트랜잭션)', async () => {
+      const firestore = new FakeFirestore();
+      const configService = { get: jest.fn(() => undefined) };
+      const issueWriter = {
+        createOrMergeIssue: jest.fn().mockRejectedValue(new Error('운영 기록 실패')),
+      };
+      const service = new SettlementsService(
+        firestore as never,
+        configService as never,
+        issueWriter as never,
+      );
+      const orderId = 'order-paid-issue-fail-1';
+      const original = makeSettlement(orderId, 'paid');
+      firestore.seed(`settlements/${orderId}`, original);
+
+      await expect(service.cancelSettlement(orderId)).rejects.toThrow('운영 기록 실패');
 
       expect(firestore.getData(`settlements/${orderId}`)).toEqual(original);
-      expect(firestore.transactionUpdates).toHaveLength(0);
+      expect(issueWriter.createOrMergeIssue).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'SETTLEMENT_RECOVERY_REQUIRED' }),
+        expect.anything(),
+      );
     });
 
     it('confirm과 cancel이 동시에 실행되어도 최종 상태는 cancelled이다', async () => {

@@ -197,13 +197,61 @@ describe('canonical harness high-risk regression proofs', () => {
       occ.firestore as never,
       configService({ PLATFORM_FEE_RATE: '0.05' }) as never,
     );
+    occ.seed('stores/store-1', { ownerId: 'seller-1', commissionRate: 0.08 });
     const order = { id: 'order-race-1', storeId: 'store-1', status: 'DELIVERED', totalAmount: 30000 };
 
     await Promise.all(Array.from({ length: 8 }, () => settlements.createSettlement(order, 'DELIVERED')));
 
     expect(occ.listData('settlements/')).toHaveLength(1);
     expect(occ.getData('settlements/order-race-1')).toEqual(
-      expect.objectContaining({ status: 'pending', totalAmount: 30000 }),
+      expect.objectContaining({
+        status: 'pending',
+        totalAmount: 30000,
+        platformFeeRate: 0.08,
+        platformFee: 2400,
+        netAmount: 27600,
+      }),
+    );
+  });
+
+  it('R1b. createSettlement without a store commission falls back to PLATFORM_FEE_RATE', async () => {
+    const occ = createOccFirestore();
+    const settlements = new SettlementsService(
+      occ.firestore as never,
+      configService({ PLATFORM_FEE_RATE: '0.05' }) as never,
+    );
+    occ.seed('stores/store-1', { ownerId: 'seller-1' });
+
+    await settlements.createSettlement(
+      { id: 'order-default-1', storeId: 'store-1', status: 'DELIVERED', totalAmount: 30000 },
+      'DELIVERED',
+    );
+
+    expect(occ.getData('settlements/order-default-1')).toEqual(
+      expect.objectContaining({ platformFeeRate: 0.05, platformFee: 1500, netAmount: 28500 }),
+    );
+  });
+
+  it('R1c. a store commission change committed mid-transaction is re-read on retry', async () => {
+    const occ = createOccFirestore();
+    const settlements = new SettlementsService(
+      occ.firestore as never,
+      configService({ PLATFORM_FEE_RATE: '0.05' }) as never,
+    );
+    occ.seed('stores/store-1', { ownerId: 'seller-1', commissionRate: 0.05 });
+    occ.setBeforeCommit(async () => {
+      await occ.firestore.runTransaction(async (tx) => {
+        tx.update(occ.firestore.doc('stores/store-1'), { commissionRate: 0.1 });
+      });
+    });
+
+    await settlements.createSettlement(
+      { id: 'order-rate-race-1', storeId: 'store-1', status: 'DELIVERED', totalAmount: 30000 },
+      'DELIVERED',
+    );
+
+    expect(occ.getData('settlements/order-rate-race-1')).toEqual(
+      expect.objectContaining({ platformFeeRate: 0.1, platformFee: 3000, netAmount: 27000 }),
     );
   });
 

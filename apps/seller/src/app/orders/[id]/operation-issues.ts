@@ -16,6 +16,8 @@ const ISSUE_TYPES = new Set<OperationIssueType>([
   'DELIVERY_PHOTO_RECONCILIATION_REQUIRED',
   // 결제 확정 뒤 PortOne 쪽에서 취소·분쟁이 생긴 critical 기록. 운영 알림이 이 화면을 가리킨다.
   'PROVIDER_REVERSAL_DETECTED',
+  // 지급한 정산의 주문이 환불돼 판매자에게 돌려받을 돈이 있는 critical 기록. 관리자만 닫는다.
+  'SETTLEMENT_RECOVERY_REQUIRED',
 ]);
 
 export const ISSUE_LABELS: Record<OperationIssueType, string> = {
@@ -27,6 +29,7 @@ export const ISSUE_LABELS: Record<OperationIssueType, string> = {
   FINALIZATION_REFUND_FAILED: '환불 결과 확인',
   DELIVERY_PHOTO_RECONCILIATION_REQUIRED: '배송 사진 확인',
   PROVIDER_REVERSAL_DETECTED: '결제사 취소·분쟁 확인',
+  SETTLEMENT_RECOVERY_REQUIRED: '정산 회수 필요',
 };
 
 export const ISSUE_DESCRIPTIONS: Record<OperationIssueType, string> = {
@@ -41,6 +44,8 @@ export const ISSUE_DESCRIPTIONS: Record<OperationIssueType, string> = {
     '배송 사진 저장 결과를 자동으로 확정하지 못했습니다. 사진과 주문 배송 상태를 확인하세요.',
   PROVIDER_REVERSAL_DETECTED:
     '주문을 받은 뒤 PortOne에서 결제가 취소되거나 분쟁이 접수됐습니다. PortOne 콘솔에서 결제를 확인하고, 정산 지급과 배송 진행 여부를 점검하세요.',
+  SETTLEMENT_RECOVERY_REQUIRED:
+    '이미 판매자에게 지급한 정산의 주문이 환불됐습니다. 지급한 금액을 판매자에게서 돌려받아야 하며, 관리자가 회수를 확인한 뒤 닫습니다.',
 };
 const ISSUE_STATUSES = new Set<OperationIssueStatus>(['OPEN', 'RESOLVED', 'DISMISSED']);
 const ISSUE_SEVERITIES = new Set<OperationIssueSeverity>(['info', 'warning', 'critical']);
