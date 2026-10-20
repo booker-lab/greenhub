@@ -16,7 +16,17 @@ function apiError(status: number, message: string) {
   return error;
 }
 
-const useAdminSource = readFileSync(new URL('./useAdmin.ts', import.meta.url), 'utf8');
+// useAdmin.ts는 도메인별 파일로 분할된 진입점이다. 목록 공통 훅(list)을 맨 앞에 둬
+// 'const load = useCallback' 첫 등장이 useAdminList를 가리키게 한다.
+const useAdminSource = [
+  'useAdmin.list.ts',
+  'useAdmin.accounts.ts',
+  'useAdmin.commerce.ts',
+  'useAdmin.banner.ts',
+  'useAdmin.invite.ts',
+]
+  .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), 'utf8'))
+  .join('\n');
 const ordersClient = readFileSync(new URL('../app/admin/orders/_client.tsx', import.meta.url), 'utf8');
 const settlementsClient = readFileSync(
   new URL('../app/admin/settlements/_client.tsx', import.meta.url),
