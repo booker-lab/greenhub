@@ -32,18 +32,30 @@ const {
   takePendingOrderPayment,
 } = redirectModule.exports;
 
+// 결제수단별 채널·결제창 파라미터는 실제 portone-config 모듈로 만든다.
+const portoneConfigModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(await readFile(new URL('../lib/portone-config.ts', import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(portoneConfigModule, portoneConfigModule.exports);
+
 const originalFetch = globalThis.fetch;
 const originalEnvironment = {
   apiUrl: process.env.NEXT_PUBLIC_API_URL,
   storeId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID,
   kakaoChannel: process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY,
   naverChannel: process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY,
+  cardChannel: process.env.NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY,
 };
 
 process.env.NEXT_PUBLIC_API_URL = 'https://api.example.test';
 process.env.NEXT_PUBLIC_PORTONE_STORE_ID = 'portone-store';
 process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY = 'kakao-channel';
 process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY = 'naver-channel';
+process.env.NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY = 'card-channel';
 
 test.after(() => {
   globalThis.fetch = originalFetch;
@@ -52,6 +64,7 @@ test.after(() => {
     NEXT_PUBLIC_PORTONE_STORE_ID: originalEnvironment.storeId,
     NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY: originalEnvironment.kakaoChannel,
     NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY: originalEnvironment.naverChannel,
+    NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: originalEnvironment.cardChannel,
   })) {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
@@ -86,18 +99,7 @@ function loadHook({ paymentResponses = [], onPayment } = {}) {
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => process.env.NEXT_PUBLIC_API_URL };
     }
-    if (specifier === '@/lib/portone-config') {
-      return {
-        readPortonePaymentConfiguration: (paymentMethod) => ({
-          portoneStoreId: process.env.NEXT_PUBLIC_PORTONE_STORE_ID,
-          channelKey:
-            paymentMethod === 'naverpay'
-              ? process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY
-              : process.env.NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY,
-          easyPayProvider: paymentMethod === 'naverpay' ? 'NAVERPAY' : 'KAKAOPAY',
-        }),
-      };
-    }
+    if (specifier === '@/lib/portone-config') return portoneConfigModule.exports;
     if (specifier === '@portone/browser-sdk/v2') {
       return {
         requestPayment: async (parameters) => {
@@ -450,6 +452,33 @@ test('기존 단일 상품 usePayment 요청 계약을 보존한다', async () =
   assert.equal(loaded.paymentCalls.length, 1);
   assert.equal(loaded.paymentCalls[0].paymentId, 'legacy-order');
   assert.equal(loaded.paymentCalls[0].channelKey, 'naver-channel');
+  assert.equal(loaded.paymentCalls[0].payMethod, 'EASY_PAY');
+  assert.deepEqual(loaded.paymentCalls[0].easyPay, { easyPayProvider: 'NAVERPAY' });
+  assert.equal('customer' in loaded.paymentCalls[0], false);
+});
+
+test('카드 결제는 카드 채널로 CARD 결제창을 열고 구매자 이름·전화를 넘긴다', async () => {
+  globalThis.fetch = async () => jsonResponse(successfulRoundResponse);
+  const loaded = loadHook();
+  const result = loaded.usePayment({
+    storeId: 'store-1',
+    orderRequest: deliveryRequest,
+    roundItems: [firstRoundItem, secondRoundItem],
+    accessToken: 'access-token',
+    paymentMethod: 'card',
+    buyer: { name: '김그린', phone: deliveryRequest.deliveryPhone },
+  });
+
+  await result.requestPayment();
+
+  assert.equal(loaded.paymentCalls.length, 1);
+  const call = loaded.paymentCalls[0];
+  assert.equal(call.channelKey, 'card-channel');
+  assert.equal(call.payMethod, 'CARD');
+  assert.equal('easyPay' in call, false);
+  assert.deepEqual(call.customer, { fullName: '김그린', phoneNumber: '01012345678' });
+  assert.equal(call.paymentId, 'order-1');
+  assert.equal(call.totalAmount, 69000);
 });
 
 function installBrowser() {

@@ -1048,3 +1048,13 @@ test('재배송비 결제는 모바일 리다이렉트로 이 주문 상세에 �
   );
   assert.match(source, /resolveRedeliveryPaymentReturn\(redeliveryRedirect, redeliveryPaid\)/);
 });
+
+test('재배송비 결제는 고른 결제수단(카드 포함)으로 결제창을 열고 카카오페이를 고정하지 않는다', () => {
+  const handler = source.slice(source.indexOf('async function handleRedeliveryPayment'));
+  assert.match(handler, /readPortonePaymentConfiguration\(redeliveryMethod\)/);
+  assert.match(handler, /\.\.\.buildPortonePayMethodRequest\(configuration\.paymentMethod, \{/);
+  assert.doesNotMatch(source, /readPortonePaymentConfiguration\('kakaopay'\)/);
+  assert.doesNotMatch(source, /payMethod: 'EASY_PAY'/);
+  // 선택지가 둘 이상일 때만 결제수단 선택을 보여 준다(채널 키 없는 수단은 숨김).
+  assert.match(source, /PAYMENT_METHOD_OPTIONS\.length > 1 &&/);
+});
