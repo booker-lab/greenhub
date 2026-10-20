@@ -4,6 +4,7 @@ import { Box, Group, Title, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
 import { type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
 import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
 import { DriverList } from './_components/DriverList';
@@ -19,6 +20,7 @@ export default function DriversClient() {
   const [tab, setTab] = useState<DriverStatus>('pending');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
+  const [reason, setReason] = useState('');
   const { drivers: allDrivers, loading, error, reload, approve, toggleSuspend } = useAdminDrivers();
 
   const drivers = useMemo(() => filterByTab(allDrivers, tab), [allDrivers, tab]);
@@ -32,7 +34,11 @@ export default function DriversClient() {
       const outcome =
         pending.action === 'approve'
           ? await approve(pending.userId)
-          : await toggleSuspend(pending.userId, pending.action === 'suspend');
+          : await toggleSuspend(
+              pending.userId,
+              pending.action === 'suspend',
+              normalizeSuspendReason(reason),
+            );
       setPending(null);
       if (outcome.kind === 'confirmed' && outcome.reconciled) return;
       // rejected는 서버 reason 보존, unknown/stale은 재확인 우선 + blind retry 금지.
@@ -47,7 +53,10 @@ export default function DriversClient() {
     }
   };
 
-  const handleAction = (userId: string, action: DriverAction) => setPending({ userId, action });
+  const handleAction = (userId: string, action: DriverAction) => {
+    setReason('');
+    setPending({ userId, action });
+  };
 
   const pendingMeta = pending ? ACTION_META[pending.action] : null;
 
@@ -91,7 +100,17 @@ export default function DriversClient() {
       <ConfirmModal
         opened={pending !== null}
         title={pendingMeta?.title ?? ''}
-        message={pendingMeta?.message ?? ''}
+        message={
+          pending?.action === 'approve' ? (
+            (pendingMeta?.message ?? '')
+          ) : (
+            <SuspendReasonMessage
+              message={pendingMeta?.message ?? ''}
+              reason={reason}
+              onReasonChange={setReason}
+            />
+          )
+        }
         confirmLabel={pendingMeta?.confirmLabel}
         confirmColor={pendingMeta?.confirmColor}
         loading={processingId !== null}

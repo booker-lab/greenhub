@@ -57,6 +57,47 @@ function StoreInitialAvatar({ name }: { name: string }) {
   );
 }
 
+// 매초 바뀌는 카운트다운 state를 이 작은 컴포넌트에만 두어 상품 영역 전체가 매초 다시 그려지지 않게 한다.
+function GroupCountdownBadge({ deadline }: { deadline: string | undefined }) {
+  const [countdown, setCountdown] = useState('');
+
+  useEffect(() => {
+    if (!deadline) return;
+    let id: ReturnType<typeof setInterval> | undefined;
+    // 남은 시간이 있으면 true. 마감되면 '마감'으로 고정하고 더 세지 않는다.
+    const tick = () => {
+      const diff = new Date(deadline).getTime() - Date.now();
+      if (diff <= 0) {
+        setCountdown('마감');
+        if (id !== undefined) clearInterval(id);
+        return false;
+      }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setCountdown(
+        `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`,
+      );
+      return true;
+    };
+    if (!tick()) return;
+    id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [deadline]);
+
+  if (!countdown) return null;
+  return (
+    <Badge
+      color="red"
+      variant="filled"
+      radius="xl"
+      style={{ fontFamily: 'monospace', fontSize: 13 }}
+    >
+      {countdown}
+    </Badge>
+  );
+}
+
 export default function LegacyProductActions({ product }: Props) {
   const router = useRouter();
   const { data: session } = useSession();
@@ -72,29 +113,7 @@ export default function LegacyProductActions({ product }: Props) {
   const [quantity, setQuantity] = useState(1);
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('direct');
   const [groupConsent, setGroupConsent] = useState(false);
-  const [countdown, setCountdown] = useState('');
   const [deliveryDate, setDeliveryDate] = useState<string | null>(null);
-
-  useEffect(() => {
-    const deadline = groupConfig?.recruitDeadline;
-    if (!deadline) return;
-    const tick = () => {
-      const diff = new Date(deadline).getTime() - Date.now();
-      if (diff <= 0) {
-        setCountdown('마감');
-        return;
-      }
-      const h = Math.floor(diff / 3600000);
-      const m = Math.floor((diff % 3600000) / 60000);
-      const s = Math.floor((diff % 60000) / 1000);
-      setCountdown(
-        `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`,
-      );
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [groupConfig?.recruitDeadline]);
 
   const isGroup = product.saleType === 'group';
   // read failure는 missing과 구분되는 fail-closed 상태다. 이전 config가 표시용으로
@@ -190,16 +209,7 @@ export default function LegacyProductActions({ product }: Props) {
                 {unavailableLabel}
               </Badge>
             ) : (
-              countdown && (
-                <Badge
-                  color="red"
-                  variant="filled"
-                  radius="xl"
-                  style={{ fontFamily: 'monospace', fontSize: 13 }}
-                >
-                  {countdown}
-                </Badge>
-              )
+              <GroupCountdownBadge deadline={groupConfig?.recruitDeadline} />
             )}
           </Group>
 

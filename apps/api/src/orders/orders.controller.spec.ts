@@ -24,6 +24,7 @@ describe('판매자 매장 주문 조회 권한', () => {
   it('목록·상세·전화 검색은 인증 후 판매자 또는 관리자 역할만 통과한다', () => {
     for (const handler of [
       OrdersController.prototype.getOrders,
+      OrdersController.prototype.getOrderSummary,
       OrdersController.prototype.getOrder,
       OrdersController.prototype.searchOrdersByPhone,
     ]) {
@@ -56,6 +57,9 @@ describe('매장 주문 HTTP 입력 검증', () => {
   let app: INestApplication;
   const ordersService = {
     getOrders: jest.fn(),
+    getOrder: jest.fn(),
+    getArchivedOrders: jest.fn(),
+    getArchivedOrderCounts: jest.fn(),
     createOrder: jest.fn(),
     cancelOrder: jest.fn(),
     confirmPickup: jest.fn(),
@@ -65,6 +69,14 @@ describe('매장 주문 HTTP 입력 검증', () => {
 
   beforeEach(async () => {
     ordersService.getOrders.mockResolvedValue([{ id: 'order-1' }]);
+    ordersService.getArchivedOrders.mockResolvedValue({
+      orders: [{ id: 'order-9' }],
+      hasMore: true,
+      nextCursor: 'order-9',
+    });
+    ordersService.getArchivedOrderCounts.mockResolvedValue({
+      archivedStatusCounts: { DELIVERED: 1, PICKED_UP: 0, REVIEWED: 2, CANCELLED: 3 },
+    });
     ordersService.cancelOrder.mockResolvedValue({ orderId: 'order-1', status: 'CANCELLED' });
     ordersService.confirmPickup.mockResolvedValue({ orderId: 'order-1', status: 'PICKED_UP' });
     ordersService.hubConfirmPickup.mockResolvedValue({ orderId: 'order-1', status: 'PICKED_UP' });
@@ -182,10 +194,56 @@ describe('매장 주문 HTTP 입력 검증', () => {
       ['문자가 섞인 전화', '?phone=abc1234'],
       ['너무 긴 전화', `?phone=${'1'.repeat(33)}`],
       ['너무 긴 고객 id', `?userId=${'u'.repeat(129)}`],
-      ['알 수 없는 쿼리', '?limit=10'],
+      ['알 수 없는 쿼리', '?page=2'],
+      ['알 수 없는 범위', '?scope=all'],
+      ['경로 구분자가 든 회차', '?roundId=round%2F1'],
+      ['경로 구분자가 든 이어받기 위치', '?scope=archive&cursor=orders%2Fx'],
+      ['0건', '?scope=archive&limit=0'],
+      ['숫자가 아닌 건수', '?scope=archive&limit=abc'],
     ])('%s는 400이고 서비스에 닿지 않는다', async (_label, query) => {
       await http().get(`/stores/store-1/orders${query}`).expect(400);
       expect(ordersService.getOrders).not.toHaveBeenCalled();
+      expect(ordersService.getArchivedOrders).not.toHaveBeenCalled();
+    });
+
+    it('진행 중 주문(scope=active)과 회차 주문(roundId)은 기존처럼 배열 목록으로 넘긴다', async () => {
+      await http().get('/stores/store-1/orders?scope=active').expect(200);
+      expect(ordersService.getOrders).toHaveBeenLastCalledWith('store-1', user, {
+        scope: 'active',
+      });
+      await http().get('/stores/store-1/orders?roundId=round-1').expect(200);
+      expect(ordersService.getOrders).toHaveBeenLastCalledWith('store-1', user, {
+        roundId: 'round-1',
+      });
+      expect(ordersService.getArchivedOrders).not.toHaveBeenCalled();
+    });
+
+    it('끝난 주문(scope=archive)은 이어받기 페이지 조회로 넘기고 응답을 그대로 준다', async () => {
+      const response = await http()
+        .get('/stores/store-1/orders?scope=archive&limit=20&cursor=order-8')
+        .expect(200);
+      expect(response.body).toEqual({
+        orders: [{ id: 'order-9' }],
+        hasMore: true,
+        nextCursor: 'order-9',
+      });
+      expect(ordersService.getArchivedOrders).toHaveBeenCalledWith('store-1', user, {
+        scope: 'archive',
+        limit: 20,
+        cursor: 'order-8',
+      });
+      expect(ordersService.getOrders).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET summary', () => {
+    it('끝난 주문 상태별 건수를 주고, 주문 상세(:orderId)로 잡히지 않는다', async () => {
+      const response = await http().get('/stores/store-1/orders/summary').expect(200);
+      expect(response.body).toEqual({
+        archivedStatusCounts: { DELIVERED: 1, PICKED_UP: 0, REVIEWED: 2, CANCELLED: 3 },
+      });
+      expect(ordersService.getArchivedOrderCounts).toHaveBeenCalledWith('store-1', user);
+      expect(ordersService.getOrder).not.toHaveBeenCalled();
     });
   });
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { defaultExtras, extrasBody, extrasFromProduct, nextOptionId } from './productExtras';
+import {
+  defaultExtras,
+  extrasBody,
+  extrasFromProduct,
+  fillNoticeDefaults,
+  nextOptionId,
+  noticeBody,
+} from './productExtras';
 
 describe('productExtras', () => {
   it('기본 입력은 빈 목록과 꺼진 여부 값만 보낸다', () => {
@@ -72,6 +79,39 @@ describe('productExtras', () => {
     expect(form.options[0].choices[0].priceDelta).toBe('3000');
     expect(form.options[0].choices[0].needsText).toBe(true);
     expect(form.aliases).toBe('a, b');
+  });
+
+  it('고시 기본 입력은 원산지·인증 사항을 미리 채우고, 매장 정보로 생산자·상담 전화를 채운다', () => {
+    const notice = fillNoticeDefaults(defaultExtras().notice, { producer: '디어 오키드', csPhone: '010-0000-0000' });
+    expect(notice).toEqual({
+      itemName: '',
+      origin: '국내산(경기도 이천)',
+      producer: '디어 오키드',
+      certification: '해당 없음',
+      csPhone: '010-0000-0000',
+    });
+  });
+
+  it('판매자가 쓴 고시 값은 매장 기본값으로 덮지 않는다', () => {
+    const form = extrasFromProduct({ notice: { producer: '이천 난농원', csPhone: '031-000-0000' } });
+    const notice = fillNoticeDefaults(form.notice, { producer: '디어 오키드', csPhone: '010-0000-0000' });
+    expect(notice.producer).toBe('이천 난농원');
+    expect(notice.csPhone).toBe('031-000-0000');
+    expect(notice.origin).toBe('국내산(경기도 이천)');
+  });
+
+  it('고시는 추가 정보 본문과 따로 만들고, 공백을 걷고 빈 칸은 뺀다', () => {
+    const extras = extrasBody(defaultExtras());
+    expect(extras.ok && extras.body).not.toHaveProperty('notice');
+    expect(
+      noticeBody({ itemName: '  ', origin: ' 국내산 ', producer: '디어 오키드', certification: '', csPhone: '' }),
+    ).toEqual({ ok: true, body: { origin: '국내산', producer: '디어 오키드' } });
+  });
+
+  it('고시 항목이 너무 길면 오류로 돌려준다', () => {
+    const result = noticeBody({ ...defaultExtras().notice, itemName: '가'.repeat(61) });
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error).toContain('품명');
   });
 
   it('새 옵션 id는 겹치지 않는다', () => {

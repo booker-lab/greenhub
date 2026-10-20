@@ -15,6 +15,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { ApiError, apiJson } from '@/lib/api';
 
 interface DeliveryConfig {
@@ -44,6 +45,7 @@ export default function DeliverySettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const savedResetTimer = useResettableTimeout();
   const [error, setError] = useState('');
 
   const storeId = session?.user.storeId;
@@ -76,7 +78,7 @@ export default function DeliverySettingsPage() {
         body: JSON.stringify(config),
       });
       setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      savedResetTimer.schedule(() => setSaved(false), 2000);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '저장에 실패했습니다');
     } finally {

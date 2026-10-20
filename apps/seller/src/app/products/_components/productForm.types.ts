@@ -43,7 +43,10 @@ export interface ProductFormData {
   sellerNote: string;
   content: ContentForm;
   sellerOverride: boolean;
-  /** 팔도감 벤치마킹 비교용 추가 정보(기능 토글이 켜졌을 때만 화면에 보이고 제출된다) */
+  /**
+   * 팔도감 벤치마킹 비교용 추가 정보(기능 토글이 켜졌을 때만 화면에 보이고 제출된다).
+   * 단, 상품정보제공고시(extras.notice)는 법정 표시라 토글과 상관없이 항상 보이고 제출된다.
+   */
   extras: ProductExtrasForm;
 }
 

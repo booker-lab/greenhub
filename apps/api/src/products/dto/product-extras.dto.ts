@@ -1,9 +1,11 @@
 import {
   LIGHT_LEVELS,
   PLACEMENTS,
+  PRODUCT_NOTICE_FIELDS,
   PRODUCT_OPTION_CHOICE_MAX,
   PRODUCT_OPTION_GROUP_MAX,
   PRODUCT_OPTION_PRICE_DELTA_MAX,
+  type ProductNotice,
 } from '@greenhub/shared';
 import { Type } from 'class-transformer';
 import {
@@ -29,6 +31,9 @@ import {
 const OPTION_ID_PATTERN = /^[A-Za-z0-9_-]{1,40}$/;
 const CARE_TEXT_MAX = 120;
 const ALIAS_MAX_LENGTH = 30;
+const NOTICE_MAX_LENGTH = Object.fromEntries(
+  PRODUCT_NOTICE_FIELDS.map((field) => [field.key, field.maxLength]),
+) as Record<keyof ProductNotice, number>;
 
 export class ProductSizeDto {
   @IsOptional()
@@ -111,6 +116,34 @@ export class ProductOptionGroupDto {
   choices: ProductOptionChoiceDto[];
 }
 
+/** 상품정보제공고시. 빈 칸은 화면이 기본값으로 채우므로 모두 선택이다. */
+export class ProductNoticeDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(NOTICE_MAX_LENGTH.itemName)
+  itemName?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(NOTICE_MAX_LENGTH.origin)
+  origin?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(NOTICE_MAX_LENGTH.producer)
+  producer?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(NOTICE_MAX_LENGTH.certification)
+  certification?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(NOTICE_MAX_LENGTH.csPhone)
+  csPhone?: string;
+}
+
 /** Create/UpdateProductDto가 상속한다. */
 export class ProductExtrasDto {
   @IsOptional()
@@ -150,6 +183,11 @@ export class ProductExtrasDto {
   @IsString({ each: true })
   @MaxLength(ALIAS_MAX_LENGTH, { each: true })
   aliases?: string[];
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProductNoticeDto)
+  notice?: ProductNoticeDto;
 }
 
 /** 옵션 묶음·선택지 id가 상품 안에서 겹치지 않는지 확인한다. 문제가 있으면 메시지를 돌려준다. */

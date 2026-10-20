@@ -210,7 +210,7 @@ describe('9. user/driver command consumers preserve reason', () => {
     expect(usersClient).toContain('describeAdminCommandOutcome(outcome,');
     expect(usersClient).toContain('notifications.show');
     // 기존 ConfirmModal + reload 배선 유지
-    expect(usersClient).toContain('await toggleSuspend(pending.userId, !pending.currentlySuspended)');
+    expect(usersClient).toMatch(/await toggleSuspend\(\s*pending\.userId,\s*!pending\.currentlySuspended,/);
     expect(usersClient).toContain('onConfirm={runPending}');
   });
 
@@ -218,7 +218,7 @@ describe('9. user/driver command consumers preserve reason', () => {
     expect(driversClient).toContain('describeAdminCommandOutcome(outcome,');
     expect(driversClient).toContain('notifications.show');
     expect(driversClient).toContain('approve(pending.userId)');
-    expect(driversClient).toContain('toggleSuspend(pending.userId');
+    expect(driversClient).toMatch(/toggleSuspend\(\s*pending\.userId,/);
   });
 
   it('stores commission도 서버 reason을 버리지 않는다', () => {
@@ -248,6 +248,17 @@ describe('10. existing admin list error/reload behavior regression', () => {
     expect(loadBlock).toContain('setItems(extract(data))');
     expect(loadBlock).toContain('setError(readError)');
     expect(loadBlock).not.toContain('setItems([])');
+  });
+
+  it('늦게 온 이전 조회 응답은 최신 결과를 덮지 않는다 (마지막 요청만 반영)', () => {
+    const loadBlock = useAdminSource.slice(
+      useAdminSource.indexOf('const load = useCallback'),
+      useAdminSource.indexOf('}, [token'),
+    );
+    expect(loadBlock).toContain('const requestId = ++requestIdRef.current');
+    expect(loadBlock).toMatch(/if \(isLatest\(\)\) \{\s+setItems\(extract\(data\)\);/);
+    expect(loadBlock).toContain('if (isLatest()) setError(readError)');
+    expect(loadBlock).toContain('if (isLatest()) setLoading(false)');
   });
 
   it('command 성공 뒤 reload를 호출하고 outcome 단일 소유자를 사용한다', () => {

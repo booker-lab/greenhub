@@ -13,11 +13,14 @@ function useCountdown(deadline: string | undefined) {
 
   useEffect(() => {
     if (!deadline) return;
+    let id: ReturnType<typeof setInterval> | undefined;
+    // 남은 시간이 있으면 true. 마감되면 '마감'으로 고정하고 더 세지 않는다.
     const tick = () => {
       const diff = new Date(deadline).getTime() - Date.now();
       if (diff <= 0) {
         setLabel('마감');
-        return;
+        if (id !== undefined) clearInterval(id);
+        return false;
       }
       const h = Math.floor(diff / 3600000);
       const m = Math.floor((diff % 3600000) / 60000);
@@ -25,9 +28,10 @@ function useCountdown(deadline: string | undefined) {
       setLabel(
         `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`,
       );
+      return true;
     };
-    tick();
-    const id = setInterval(tick, 1000);
+    if (!tick()) return;
+    id = setInterval(tick, 1000);
     return () => clearInterval(id);
   }, [deadline]);
 

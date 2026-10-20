@@ -2,7 +2,7 @@
 
 import type { OrderStatus, SettlementStatus, StoreStatus } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
-import { type DependencyList, useCallback, useEffect, useState } from 'react';
+import { type DependencyList, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch, apiJson } from '@/lib/api';
 import {
   type AdminCommandOutcome,
@@ -143,22 +143,28 @@ function useAdminList<T>(
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 필터를 빠르게 바꾸면 늦게 온 이전 응답이 최신 결과를 덮을 수 있다 — 마지막 요청 응답만 반영한다.
+  const requestIdRef = useRef(0);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: buildPath/extract/errLabel은 매 렌더 재생성되는 안정 클로저 — reload는 token·필터(deps) 변화로만 트리거한다
   const load = useCallback(async (): Promise<string | null> => {
+    const requestId = ++requestIdRef.current;
+    const isLatest = () => requestId === requestIdRef.current;
     if (!token) return '인증 토큰이 없습니다. 다시 로그인해 주세요.';
     setLoading(true);
     try {
       const data = await apiJson(buildPath(), token);
-      setItems(extract(data));
-      setError(null);
+      if (isLatest()) {
+        setItems(extract(data));
+        setError(null);
+      }
       return null;
     } catch {
       const readError = `${errLabel} 조회 중 오류 발생`;
-      setError(readError);
+      if (isLatest()) setError(readError);
       return readError;
     } finally {
-      setLoading(false);
+      if (isLatest()) setLoading(false);
     }
   }, [token, ...deps]);
 
@@ -262,13 +268,14 @@ export function useAdminUsers() {
   const toggleSuspend = async (
     userId: string,
     suspended: boolean,
+    reason?: string,
   ): Promise<AdminCommandOutcome> => {
     return runAdminCommand(
       token,
       `/admin/users/${userId}/status`,
       {
         method: 'PATCH',
-        body: JSON.stringify({ suspended }),
+        body: JSON.stringify({ suspended, ...(reason ? { reason } : {}) }),
       },
       reload,
     );
@@ -358,13 +365,14 @@ export function useAdminDrivers() {
   const toggleSuspend = async (
     userId: string,
     suspended: boolean,
+    reason?: string,
   ): Promise<AdminCommandOutcome> => {
     return runAdminCommand(
       token,
       `/admin/drivers/${userId}/suspend`,
       {
         method: 'PATCH',
-        body: JSON.stringify({ suspended }),
+        body: JSON.stringify({ suspended, ...(reason ? { reason } : {}) }),
       },
       reload,
     );
