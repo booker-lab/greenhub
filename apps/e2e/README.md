@@ -26,7 +26,7 @@
 | `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` | 필수 | E2E 프로젝트 웹 앱 설정 |
 | `NEXT_PUBLIC_FIREBASE_APP_ID` | 필수 | E2E 프로젝트 웹 앱 설정 |
 | `ROUND_DIRECT_E2E_RUN_ID` | 선택 | 실행 ID 고정(기본 `local-<sha 8자리>-<시각>`) |
-| `NEXT_PUBLIC_PORTONE_STORE_ID`, `NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY`, `NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY` | 선택 | 결제 SDK는 테스트가 stub으로 바꾸므로 비우면 자리값을 쓴다 |
+| `NEXT_PUBLIC_PORTONE_STORE_ID`, `NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY`, `NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY`, `NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY` | 선택 | 결제 SDK는 테스트가 stub으로 바꾸므로 비우면 자리값을 쓴다 |
 
 실행기가 직접 정하는 값(env 파일로 바꿀 수 없음):
 
