@@ -8,6 +8,7 @@ import {
   EXPECTED_PROJECT_ID,
   FIELD_ALLOWLIST,
   KEY_ENV,
+  keyFileName,
   loadReadonlyCredentials,
   OpsCheckStop,
   run,
@@ -343,6 +344,12 @@ describe('열쇠 차단 장치(§4-2)', () => {
       (error) => error.code === 'admin-key-path',
     );
     assert.deepEqual(reads, []);
+  });
+
+  test('파일 이름 판정은 OS와 관계없이 / 와 \\ 를 모두 구분자로 본다', () => {
+    assert.equal(keyFileName('C:\\repo\\apps\\api\\Firebase-AdminSDK.json'), ADMIN_KEY_BASENAME);
+    assert.equal(keyFileName('/repo/apps/api/firebase-adminsdk.json'), ADMIN_KEY_BASENAME);
+    assert.equal(keyFileName('C:/mixed\\dir/readonly-key.json'), 'readonly-key.json');
   });
 
   test('열쇠의 client_email이 config 이메일과 다르면 멈추고, 메시지에 이메일을 넣지 않는다', async () => {

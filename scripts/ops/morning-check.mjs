@@ -19,7 +19,7 @@
  */
 import { readdir, readFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { basename, join } from 'node:path';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { recordReport } from './morning-check-history.mjs';
 import {
@@ -102,6 +102,11 @@ export class OpsCheckStop extends Error {
 
 // ── 차단 장치(§4-2) ──────────────────────────────────────────────────────────
 
+/** 경로의 파일 이름(소문자). OS와 관계없이 '/'와 '\'를 모두 구분자로 본다(Linux의 path.basename은 '\'를 나누지 않는다). */
+export function keyFileName(path) {
+  return String(path).split(/[\\/]/).pop().toLowerCase();
+}
+
 /**
  * 점검 전용 열쇠를 읽고 검사한다. 통과하면 { key, keyCreatedAt }.
  * env·readText를 주입받는다(spec이 가짜 파일로 검사). 다른 열쇠 경로로 넘어가는 분기가 없다.
@@ -111,7 +116,7 @@ export async function loadReadonlyCredentials({ env, readText, configPath = CONF
   if (!keyPath) {
     throw new OpsCheckStop('key-path-missing', `열쇠 경로 환경 변수 ${KEY_ENV}가 없어 멈춥니다(다른 열쇠로 넘어가지 않음).`);
   }
-  if (basename(keyPath).toLowerCase() === ADMIN_KEY_BASENAME) {
+  if (keyFileName(keyPath) === ADMIN_KEY_BASENAME) {
     throw new OpsCheckStop('admin-key-path', '운영 Admin 키 파일 이름이라 멈춥니다. 점검 전용 열쇠만 씁니다.');
   }
 
