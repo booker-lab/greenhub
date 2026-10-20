@@ -95,7 +95,18 @@ export class OrdersController {
     @CurrentUser() user: JwtPayload,
     @Query() query: QueryStoreOrdersDto,
   ) {
+    // scope=archive는 끝난 주문을 limit건씩 { orders, hasMore, nextCursor }로 준다. 그 밖은 기존처럼 배열이다.
+    if (query.scope === 'archive')
+      return this.ordersService.getArchivedOrders(storeId, user, query);
     return this.ordersService.getOrders(storeId, user, query);
+  }
+
+  /** 끝난 주문(완료·취소) 상태별 건수. `:orderId`보다 먼저 선언해야 'summary'가 주문 id로 잡히지 않는다. */
+  @Get('summary')
+  @UseGuards(RolesGuard)
+  @Roles('seller', 'admin')
+  getOrderSummary(@Param('storeId') storeId: string, @CurrentUser() user: JwtPayload) {
+    return this.ordersService.getArchivedOrderCounts(storeId, user);
   }
 
   @Get(':orderId')

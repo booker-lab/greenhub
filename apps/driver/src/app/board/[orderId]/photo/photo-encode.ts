@@ -22,11 +22,46 @@ export type DecodedPhoto = {
   release: () => void;
 };
 
+/** 디코드 없이 머리 정보만 읽어 사진 크기를 얻는다. 읽지 못하면 null. */
+async function readImageSize(file: Blob): Promise<{ width: number; height: number } | null> {
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('IMAGE_SIZE_UNREADABLE'));
+      image.src = url;
+    });
+    return { width: image.naturalWidth, height: image.naturalHeight };
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/**
+ * 원본 해상도로 디코드하지 않도록 긴 변을 첫 인코딩 단계 크기로 줄여 디코드할 옵션.
+ * 한 변만 지정해 비율은 브라우저가 유지한다. 두 변이 모두 목표보다 클 때만 줄이므로
+ * 방향(EXIF) 적용 순서가 브라우저마다 달라도 확대되거나 찌그러지지 않는다.
+ */
+async function decodeResizeOptions(file: Blob): Promise<ImageBitmapOptions> {
+  const maxEdge = JPEG_ENCODE_STEPS[0].maxEdge;
+  const size = await readImageSize(file);
+  if (!size || Math.min(size.width, size.height) <= maxEdge) return {};
+  return size.width >= size.height
+    ? { resizeWidth: maxEdge, resizeQuality: 'high' }
+    : { resizeHeight: maxEdge, resizeQuality: 'high' };
+}
+
 /** 파일 선택 사진을 그릴 수 있는 형태로 연다. 촬영 방향(EXIF)을 반영한다. */
 export async function loadImageSource(file: Blob): Promise<DecodedPhoto> {
   if (typeof createImageBitmap === 'function') {
     try {
-      const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+      const bitmap = await createImageBitmap(file, {
+        imageOrientation: 'from-image',
+        ...(await decodeResizeOptions(file)),
+      });
       return {
         source: bitmap,
         width: bitmap.width,

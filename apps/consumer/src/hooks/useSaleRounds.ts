@@ -3,8 +3,19 @@
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { sharedRequest } from '@/lib/shared-request';
 
 const API_URL = getApiBaseUrl();
+
+/** 홈·카테고리에 보이는 지난 회차(마감·완료) 개수. 회차가 쌓여도 화면과 응답이 커지지 않게 한다. */
+export const PAST_ROUND_DISPLAY_LIMIT = 2;
+/**
+ * 서버에서 받는 지난 회차 개수. 판매 중·예정 회차가 없으면 가장 최근 마감 회차가 "지금 회차"가 되므로,
+ * 그때도 지난 회차가 PAST_ROUND_DISPLAY_LIMIT개 남도록 하나 더 받는다.
+ */
+const PAST_ROUND_FETCH_LIMIT = PAST_ROUND_DISPLAY_LIMIT + 1;
+/** 홈·상품 상세·장바구니·결제가 같은 매장 회차를 잇달아 부를 때 한 번만 보내도록 공유하는 시간. */
+const SALE_ROUNDS_SHARE_TTL_MS = 30_000;
 
 export type PublicSaleRound = SaleRound & { items: SaleRoundItem[] };
 export type SaleRoundsRequestStatus =
@@ -102,10 +113,13 @@ function selectCurrentRound(rounds: PublicSaleRound[], now: Date) {
 function createSuccessSaleRoundsState(rounds: PublicSaleRound[], now: Date): SaleRoundsState {
   const sortedRounds = sortLatestFirst(rounds);
   const currentRound = selectCurrentRound(sortedRounds, now);
-  const pastRounds = sortedRounds.filter(
-    (round) =>
-      round.id !== currentRound?.id && (round.status === 'CLOSED' || round.status === 'COMPLETED'),
-  );
+  const pastRounds = sortedRounds
+    .filter(
+      (round) =>
+        round.id !== currentRound?.id &&
+        (round.status === 'CLOSED' || round.status === 'COMPLETED'),
+    )
+    .slice(0, PAST_ROUND_DISPLAY_LIMIT);
 
   return {
     rounds: sortedRounds,
@@ -178,7 +192,7 @@ export function resolveSaleRoundsRefreshResult(
   return next;
 }
 
-function readRoundSummaries(payload: unknown): SaleRound[] {
+function readRoundsWithItems(payload: unknown): PublicSaleRound[] {
   if (
     typeof payload !== 'object' ||
     payload === null ||
@@ -187,7 +201,7 @@ function readRoundSummaries(payload: unknown): SaleRound[] {
   ) {
     throw new Error('회차 목록 응답 형식이 올바르지 않습니다.');
   }
-  return payload.items as SaleRound[];
+  return payload.items.map(readRoundDetail);
 }
 
 function readRoundDetail(payload: unknown): PublicSaleRound {
@@ -208,31 +222,93 @@ export async function fetchPublicSaleRoundsState(
   fetcher: FetchPublicSaleRounds = fetch,
   now: Date = new Date(),
 ): Promise<SaleRoundsState> {
-  const publicRoundsUrl = `${API_URL}/stores/${encodeURIComponent(storeId)}/sale-rounds/public`;
+  // 판매 중·예정 회차 전부와 최근 지난 회차만 상품까지 한 번에 받는다(회차마다 상세를 따로 부르지 않는다).
+  const roundsUrl = `${publicRoundsUrl(storeId)}?include=items&past=${PAST_ROUND_FETCH_LIMIT}`;
 
   try {
-    const listResponse = await fetcher(publicRoundsUrl);
-    if (!listResponse.ok) {
-      throw new Error(`회차 조회 오류: ${listResponse.status}`);
+    const response = await fetcher(roundsUrl);
+    if (!response.ok) {
+      throw new Error(`회차 조회 오류: ${response.status}`);
     }
 
-    const summaries = readRoundSummaries(await listResponse.json());
-    if (summaries.length === 0) return createEmptySaleRoundsState();
-
-    const rounds = await Promise.all(
-      summaries.map(async (round) => {
-        const detailResponse = await fetcher(`${publicRoundsUrl}/${encodeURIComponent(round.id)}`);
-        if (!detailResponse.ok) {
-          throw new Error(`회차 상세 조회 오류: ${detailResponse.status}`);
-        }
-        return readRoundDetail(await detailResponse.json());
-      }),
-    );
-
+    const rounds = readRoundsWithItems(await response.json());
+    if (rounds.length === 0) return createEmptySaleRoundsState();
     return createSuccessSaleRoundsState(rounds, now);
   } catch (error: unknown) {
     return createErrorSaleRoundsState(error);
   }
+}
+
+function publicRoundsUrl(storeId: string) {
+  return `${API_URL}/stores/${encodeURIComponent(storeId)}/sale-rounds/public`;
+}
+
+/**
+ * 같은 매장 회차 조회를 화면 사이에서 잠깐 공유한다(lib/shared-request).
+ * 실패는 공유하지 않고, fresh(다시 불러오기·주문 시작/마감 경계 다시 조회)는 공유된 결과를 쓰지 않는다.
+ */
+export function loadPublicSaleRoundsState(
+  storeId: string,
+  options: { fresh?: boolean } = {},
+): Promise<SaleRoundsState> {
+  return sharedRequest(
+    `sale-rounds:${storeId}`,
+    async () => {
+      const state = await fetchPublicSaleRoundsState(storeId);
+      if (state.status === 'error') throw new Error(readErrorMessage(state.error));
+      return state;
+    },
+    { ttlMs: SALE_ROUNDS_SHARE_TTL_MS, fresh: options.fresh },
+  ).catch((error: unknown) => createErrorSaleRoundsState(error));
+}
+
+/** 공개 회차 하나(상품 포함). 없거나 공개되지 않은 회차·읽기 실패는 null. */
+export async function fetchPublicSaleRound(
+  storeId: string,
+  roundId: string,
+  fetcher: FetchPublicSaleRounds = fetch,
+): Promise<PublicSaleRound | null> {
+  try {
+    const response = await fetcher(`${publicRoundsUrl(storeId)}/${encodeURIComponent(roundId)}`);
+    if (!response.ok) return null;
+    const round = readRoundDetail(await response.json());
+    return round.id === roundId && round.storeId === storeId ? round : null;
+  } catch {
+    return null;
+  }
+}
+
+export type PublicSaleRoundLookup =
+  | { status: 'idle' | 'loading' | 'missing'; round: null }
+  | { status: 'ready'; round: PublicSaleRound };
+
+/**
+ * 목록에 없는 오래된 지난 회차를 하나만 따로 읽는다. 목록은 최근 지난 회차만 담으므로
+ * 예전에 공유된 상품 링크(`?round=`)가 깨지지 않게 하는 보조 조회다. roundId가 null이면 부르지 않는다.
+ */
+export function usePublicSaleRound(
+  storeId: string | null,
+  roundId: string | null,
+): PublicSaleRoundLookup {
+  const [lookup, setLookup] = useState<{ key: string; round: PublicSaleRound | null } | null>(null);
+  const key = storeId && roundId ? `${storeId}/${roundId}` : null;
+
+  useEffect(() => {
+    if (!storeId || !roundId || !key) return;
+    let active = true;
+    void fetchPublicSaleRound(storeId, roundId).then((round) => {
+      if (active) setLookup({ key, round });
+    });
+    return () => {
+      active = false;
+    };
+  }, [storeId, roundId, key]);
+
+  if (!key) return { status: 'idle', round: null };
+  if (lookup?.key !== key) return { status: 'loading', round: null };
+  return lookup.round
+    ? { status: 'ready', round: lookup.round }
+    : { status: 'missing', round: null };
 }
 
 const ROUND_BOUNDARY_REFETCH_WINDOW_MS = 24 * 60 * 60 * 1000;
@@ -312,7 +388,7 @@ export function useSaleRounds(storeId: string | null): UseSaleRoundsResult {
     setState(createLoadingSaleRoundsState());
     lastFetchStartedAt.current = Date.now();
     void (async () => {
-      const nextState = await fetchPublicSaleRoundsState(target);
+      const nextState = await loadPublicSaleRoundsState(target);
       if (requestId.current === currentRequestId && scopeRef.current === target) {
         setState(nextState);
       }
@@ -344,7 +420,7 @@ export function useSaleRounds(storeId: string | null): UseSaleRoundsResult {
     );
     lastFetchStartedAt.current = Date.now();
     void (async () => {
-      const nextState = await fetchPublicSaleRoundsState(target);
+      const nextState = await loadPublicSaleRoundsState(target, { fresh: true });
       if (requestId.current !== currentRequestId || scopeRef.current !== target) return;
       if (nextState.status === 'error' && canRecover) {
         setState(createStaleSaleRoundsState(snapshot, nextState.error));

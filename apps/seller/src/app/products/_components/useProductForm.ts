@@ -2,6 +2,7 @@
 
 import { FEATURE_KEYS } from '@greenhub/shared';
 import { useEffect, useRef, useState } from 'react';
+import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { apiJson } from '@/lib/api';
 import { apiPathSegment } from '@/lib/api-path';
 import { isFeatureOn } from '@/lib/features';
@@ -43,6 +44,7 @@ export function useProductForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
+  const draftSavedResetTimer = useResettableTimeout();
 
   // 신규 등록 시에만 localStorage 임시저장 복원
   useEffect(() => {
@@ -115,7 +117,7 @@ export function useProductForm({
     try {
       localStorage.setItem(draftKey, JSON.stringify(form));
       setDraftSaved(true);
-      setTimeout(() => setDraftSaved(false), 2000);
+      draftSavedResetTimer.schedule(() => setDraftSaved(false), 2000);
     } catch {}
   }
 

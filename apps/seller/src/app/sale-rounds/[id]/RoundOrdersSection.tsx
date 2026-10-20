@@ -39,7 +39,8 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
   const storeId = session?.user.storeId ?? null;
   const accessToken = session?.user.accessToken ?? null;
   const tokenRef = useRef<string | null>(accessToken);
-  const { orders, loading, error, refresh } = useOrders(storeId);
+  // 이 회차의 주문만 받는다(가게 전체 주문 이력을 받지 않는다).
+  const { orders, loading, error, refresh } = useOrders(storeId, { roundId: round.id });
 
   const [confirming, setConfirming] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);

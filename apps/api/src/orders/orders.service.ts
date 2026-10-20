@@ -3,7 +3,7 @@ import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
 import { OrdersCreateService } from './orders-create.service';
-import { OrdersQueryService } from './orders-query.service';
+import { OrdersQueryService, type StoreOrdersQuery } from './orders-query.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
 
 @Injectable()
@@ -26,12 +26,16 @@ export class OrdersService {
     return this.query.getOrder(storeId, orderId, requester);
   }
 
-  getOrders(
-    storeId: string,
-    requester: JwtPayload,
-    query: { userId?: string; status?: string; saleType?: string; phone?: string },
-  ) {
+  getOrders(storeId: string, requester: JwtPayload, query: StoreOrdersQuery) {
     return this.query.getOrders(storeId, requester, query);
+  }
+
+  getArchivedOrders(storeId: string, requester: JwtPayload, query: StoreOrdersQuery) {
+    return this.query.getArchivedOrders(storeId, requester, query);
+  }
+
+  getArchivedOrderCounts(storeId: string, requester: JwtPayload) {
+    return this.query.getArchivedOrderCounts(storeId, requester);
   }
 
   updateStatus(

@@ -250,6 +250,17 @@ describe('10. existing admin list error/reload behavior regression', () => {
     expect(loadBlock).not.toContain('setItems([])');
   });
 
+  it('늦게 온 이전 조회 응답은 최신 결과를 덮지 않는다 (마지막 요청만 반영)', () => {
+    const loadBlock = useAdminSource.slice(
+      useAdminSource.indexOf('const load = useCallback'),
+      useAdminSource.indexOf('}, [token'),
+    );
+    expect(loadBlock).toContain('const requestId = ++requestIdRef.current');
+    expect(loadBlock).toMatch(/if \(isLatest\(\)\) \{\s+setItems\(extract\(data\)\);/);
+    expect(loadBlock).toContain('if (isLatest()) setError(readError)');
+    expect(loadBlock).toContain('if (isLatest()) setLoading(false)');
+  });
+
   it('command 성공 뒤 reload를 호출하고 outcome 단일 소유자를 사용한다', () => {
     expect(useAdminSource).toContain('executeAdminCommand');
     expect(useAdminSource).toContain('runAdminCommand');

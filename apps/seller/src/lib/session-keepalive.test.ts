@@ -97,11 +97,84 @@ describe('판매자 세션 유지', () => {
     expect(sync).not.toHaveBeenCalled();
   });
 
+  it('숨은 탭에서는 주기 확인을 건너뛰고 다시 보이면 즉시 1회 확인한다', async () => {
+    let hidden = true;
+    const listeners = new Set<() => void>();
+    const emit = () => {
+      for (const listener of listeners) listener();
+    };
+    const probe = vi.fn(async () => 'token-new');
+    const sync = vi.fn();
+    const stop = startSessionKeepAlive({
+      probeAccessToken: probe,
+      currentAccessToken: () => 'token-old',
+      syncSession: sync,
+      isHidden: () => hidden,
+      subscribeVisibilityChange: (onChange) => {
+        listeners.add(onChange);
+        return () => listeners.delete(onChange);
+      },
+    });
+
+    // 숨은 동안에는 여러 주기가 지나도 확인하지 않는다.
+    await vi.advanceTimersByTimeAsync(SESSION_KEEPALIVE_INTERVAL_MS * 3);
+    expect(probe).not.toHaveBeenCalled();
+
+    // 숨김으로 바뀌는 신호에는 확인하지 않는다.
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(probe).not.toHaveBeenCalled();
+
+    // 다시 보이면 주기를 기다리지 않고 즉시 1회 확인한다.
+    hidden = false;
+    emit();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(probe).toHaveBeenCalledTimes(1);
+    expect(sync).toHaveBeenCalledTimes(1);
+
+    // 보이는 동안은 주기 확인을 이어 간다.
+    await vi.advanceTimersByTimeAsync(SESSION_KEEPALIVE_INTERVAL_MS);
+    expect(probe).toHaveBeenCalledTimes(2);
+
+    // 멈추면 보이기 리스너를 해제한다.
+    stop();
+    expect(listeners.size).toBe(0);
+  });
+
+  it('보이게 된 순간 확인이 진행 중이면 겹쳐 보내지 않는다', async () => {
+    let hidden = false;
+    let onVisibilityChange: () => void = () => undefined;
+    const probe = vi.fn(() => new Promise<unknown>(() => undefined));
+    const stop = startSessionKeepAlive({
+      probeAccessToken: probe,
+      currentAccessToken: () => 'token-old',
+      syncSession: vi.fn(),
+      isHidden: () => hidden,
+      subscribeVisibilityChange: (onChange) => {
+        onVisibilityChange = onChange;
+        return () => undefined;
+      },
+    });
+
+    await vi.advanceTimersByTimeAsync(SESSION_KEEPALIVE_INTERVAL_MS);
+    expect(probe).toHaveBeenCalledTimes(1);
+    hidden = true;
+    onVisibilityChange();
+    hidden = false;
+    onVisibilityChange();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(probe).toHaveBeenCalledTimes(1);
+    stop();
+  });
+
   it('Providers가 인증 세션 동안 세션 유지를 켜고 refetchInterval은 쓰지 않는다', () => {
     const source = readFileSync(new URL('../app/providers.tsx', import.meta.url), 'utf8');
     expect(source).toMatch(/<SessionKeepAlive \/>/);
     expect(source).toMatch(/startSessionKeepAlive\(/);
     expect(source).toMatch(/status !== 'authenticated'/);
     expect(source).not.toMatch(/refetchInterval=/);
+    expect(source).toMatch(/isHidden: \(\) => document\.visibilityState === 'hidden'/);
+    expect(source).toMatch(/addEventListener\('visibilitychange'/);
+    expect(source).toMatch(/removeEventListener\('visibilitychange'/);
   });
 });
