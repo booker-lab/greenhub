@@ -210,7 +210,7 @@ describe('9. user/driver command consumers preserve reason', () => {
     expect(usersClient).toContain('describeAdminCommandOutcome(outcome,');
     expect(usersClient).toContain('notifications.show');
     // 기존 ConfirmModal + reload 배선 유지
-    expect(usersClient).toContain('await toggleSuspend(pending.userId, !pending.currentlySuspended)');
+    expect(usersClient).toMatch(/await toggleSuspend\(\s*pending\.userId,\s*!pending\.currentlySuspended,/);
     expect(usersClient).toContain('onConfirm={runPending}');
   });
 
@@ -218,7 +218,7 @@ describe('9. user/driver command consumers preserve reason', () => {
     expect(driversClient).toContain('describeAdminCommandOutcome(outcome,');
     expect(driversClient).toContain('notifications.show');
     expect(driversClient).toContain('approve(pending.userId)');
-    expect(driversClient).toContain('toggleSuspend(pending.userId');
+    expect(driversClient).toMatch(/toggleSuspend\(\s*pending\.userId,/);
   });
 
   it('stores commission도 서버 reason을 버리지 않는다', () => {

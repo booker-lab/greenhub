@@ -210,7 +210,8 @@ PATCH /admin/settlements/:settlementId/pay
 - 이미 `paid`면 거부
 - `confirmed` 외 상태 거부
 - transaction 안에서 status 재확인
-- `paidAt`, `updatedAt` 기록
+- `paidAt`, `paidBy`(처리한 어드민 ID), `updatedAt` 기록
+- 같은 transaction에 `adminAuditLogs` 기록(`admin.settlement.paid`)을 함께 쓴다. 기록 없는 지급은 생기지 않는다.
 
 ### 검증 상태 — `IMPLEMENTATION_PROVEN`
 
@@ -369,7 +370,32 @@ admin upsert는 client가 되돌려 보낸 `updatedAt/createdAt`을 제거하고
 
 Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다. 과거 문서의 “인증 사용자 누구나 banner 경로 write” 설명을 현재 보안 계약으로 자동 적용하지 않는다.
 
-## 10. 현재 알려진 구조적 제한
+## 10. 어드민 행동 기록
+
+어드민이 운영 데이터를 바꾸면 `adminAuditLogs/{id}`에 1건을 남긴다. 보안 사건 기록(`auditLogs`)과 섞지 않는다. 쓰기는 `AuditService.logAdmin`이 소유한다.
+
+| action | 대상 | before → after | 사유 |
+|---|---|---|---|
+| `admin.store.commission_changed` | store | `commissionRate` | - |
+| `admin.store.archived` / `admin.store.restored` | store | `status` | - |
+| `admin.user.suspended` / `admin.user.unsuspended` | user | `suspended` | `SuspendUserDto.reason`(선택, 200자) |
+| `admin.driver.approved` | driver | `driverApproved` | - |
+| `admin.driver.suspended` / `admin.driver.unsuspended` | driver | `suspended` | `SuspendUserDto.reason` |
+| `admin.order.force_refunded` | order | `status` → `CANCELLED` | `ForceRefundDto.reason`(200자) |
+| `admin.settlement.paid` | settlement | `status` | - |
+| `admin.banner.updated` | banner `main_hero` | 바꾼 칸만 | - |
+
+문서 필드: `id`, `action`, `actorId`, `targetType`, `targetId`, `before`, `after`, `reason`, `createdAt`.
+
+- 고객 이름·전화·주소는 넣지 않는다. 대상은 ID로만 가리킨다.
+- 정산 지급만 같은 transaction에 기록한다. 나머지는 작업이 성공한 뒤 기록하고, 기록이 실패하면 error 로그만 남긴다(이미 끝난 작업을 되돌리지 않는다).
+- 실패한 작업(없는 대상, 환불 실패 등)은 기록하지 않는다.
+- 초대 발급·취소(`createdBy`·`revokedBy`), 후기 복구(`moderationLog`), legal hold(`legalHoldUpdatedBy`)는 각 문서에 이미 처리자를 남기므로 이 기록 대상이 아니다.
+- 조회: `GET /admin/audit-logs`는 `createdAt` 내림차순 최근 100건을 돌려준다. 단일 필드 정렬이라 복합 인덱스가 필요 없다. seller 앱 `/admin/audit`("기록" 탭)이 읽기 전용으로 보여 준다.
+- 보관 기간은 아직 정하지 않았다(파기 cron 대상 아님).
+- 직접 증거: `apps/api/src/admin/admin-audit.spec.ts`, `apps/api/src/common/audit/audit.service.spec.ts`, `admin-privileged-mutation.spec.ts`의 지급 transaction 기록 검사
+
+## 11. 현재 알려진 구조적 제한
 
 - admin 주문 목록: 최대 200건, pagination 없음
 - admin 정산 목록: 최대 500건, pagination 없음
@@ -380,11 +406,11 @@ Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다
 - store 수수료 설정과 settlement 생성의 `PLATFORM_FEE_RATE` 관계는 단일 정책으로 완전히 통합돼 있지 않을 수 있으므로 변경 전 코드 재검증 필요
 - driver 관리자 승인 게이트는 `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION` 해결 전 `VERIFIED`가 아님
 - 사용자/driver `suspended` flag의 기존 세션 enforcement는 같은 auth P0 해결 전 `VERIFIED`가 아님
-- admin actions의 통합 감사 로그 범위는 operation/audit 구현을 확인해야 하며 단순 endpoint 존재만으로 완전한 감사 추적을 보장하지 않는다.
+- 어드민 행동 기록은 10절 표의 작업만 다룬다. 판매자 겸용 엔드포인트(상품·회차·주문 상태 변경)에서 admin이 한 행동과 품종 등록·수정은 기록하지 않는다.
 
 이 제한을 해소할 필요가 생기면 `docs/BACKLOG.md`에 현재 작업으로 승격한 뒤 별도 설계를 수행한다.
 
-## 11. 검증 원칙
+## 12. 검증 원칙
 
 admin 변경 시 최소 확인:
 
@@ -413,6 +439,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-21 | 어드민 행동 기록(`adminAuditLogs`, `GET /admin/audit-logs`, seller "기록" 탭), 정산 지급 `paidBy`, 정지 사유(`SuspendUserDto.reason`) 추가 |
 | 2026-10-18 | 운영 런타임의 이메일 가입 전면 거부로 운영에서는 초대 토큰 가입이 불가함을 명시(발급·목록·취소는 그대로) |
 | 2026-09-26 | admin force refund가 `RoundOrderLifecycleService.cancelForRound` + `SettlementsService.cancelSettlement`로 수렴하고 `admin.service.spec.ts`·`admin-legacy-refund-occ-retry.spec.ts`로 직접 증명되어 `ADMIN-FORCE-REFUND-CONSISTENCY` P0 불일치 서술을 proven 계약으로 대체 |
 | 2026-09-26 | privileged mutation HTTP authorization과 `markAsPaid` 지급 전이를 `admin-privileged-mutation.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`에 동기화하고, 회차 취소 OCC retry purity를 `round-cancellation-occ-retry.spec.ts`에 연결 |

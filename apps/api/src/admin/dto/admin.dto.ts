@@ -105,6 +105,12 @@ export class QueryAdminOrdersDto {
 export class SuspendUserDto {
   @IsBoolean()
   suspended: boolean;
+
+  // 어드민 행동 기록에 남길 사유(선택). 고객 개인정보를 적지 않도록 화면에서 안내한다.
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  reason?: string;
 }
 
 export class SetCommissionDto {
