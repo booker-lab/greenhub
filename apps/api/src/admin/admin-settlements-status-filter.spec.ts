@@ -127,4 +127,17 @@ describe('GET /admin/settlements status 필터', () => {
 
     expect(response.body.statusCode).toBe(400);
   });
+
+  it.each([
+    ['from', '2026/08/25'],
+    ['from', '2026-8-25'],
+    ['from', '20260825'],
+    ['from', '2026-02-30'],
+    ['to', '2026-13-01'],
+    ['to', 'yesterday'],
+  ])('기간 필터 %s=%p처럼 YYYY-MM-DD 달력 날짜가 아니면 500이 아니라 400으로 거부한다', async (key, value) => {
+    const response = await list({ [key]: value }).expect(400);
+
+    expect(response.body.statusCode).toBe(400);
+  });
 });

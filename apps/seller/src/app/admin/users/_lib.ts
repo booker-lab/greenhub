@@ -26,3 +26,32 @@ export function formatPhone(phone: string | null | undefined): string {
   const trimmed = phone?.trim();
   return trimmed ? trimmed : EMPTY_FIELD;
 }
+
+/** 정지 버튼·확인창 라벨 — 표·카드·확인창 모두 '정지' / '정지 해제'로 맞춘다. */
+export function suspendActionLabel(currentlySuspended: boolean): string {
+  return currentlySuspended ? '정지 해제' : '정지';
+}
+
+/** 정지·정지 해제 확인창 — 대상(이름·이메일)을 보여 줘 다른 계정을 고르는 실수를 막는다. */
+export function describeUserSuspendConfirm(target: {
+  name: string;
+  email: string;
+  currentlySuspended: boolean;
+}): { title: string; message: string; confirmLabel: string; confirmColor: string } {
+  // 타입은 string이지만 옛 문서에 필드가 없을 수 있어 ?.로 방어한다.
+  const who = `${target.name?.trim() || EMPTY_FIELD} (${target.email?.trim() || EMPTY_FIELD})`;
+  if (target.currentlySuspended) {
+    return {
+      title: '계정 정지 해제',
+      message: `${who}\n이 계정의 정지를 해제하시겠습니까?`,
+      confirmLabel: suspendActionLabel(true),
+      confirmColor: 'brand',
+    };
+  }
+  return {
+    title: '계정 정지',
+    message: `${who}\n이 계정을 정지하시겠습니까?`,
+    confirmLabel: suspendActionLabel(false),
+    confirmColor: 'red',
+  };
+}

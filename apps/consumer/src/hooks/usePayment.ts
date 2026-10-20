@@ -12,6 +12,8 @@ import {
   savePendingOrderPayment,
 } from '@/lib/payment-redirect';
 import {
+  buildPortonePayMethodRequest,
+  type PortoneBuyer,
   type PortonePaymentMethod,
   readPortonePaymentConfiguration,
 } from '@/lib/portone-config';
@@ -23,6 +25,8 @@ interface BasePaymentOptions {
   storeId: string;
   accessToken: string;
   paymentMethod: PaymentMethod;
+  /** 카드 결제창에 기본값으로 넘길 구매자 이름·전화. */
+  buyer?: PortoneBuyer;
 }
 
 export type RoundPaymentOrderRequest = Pick<
@@ -302,8 +306,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
           totalAmount: payment.amount,
           currency: 'KRW' as const,
           channelKey: configuration.channelKey,
-          payMethod: 'EASY_PAY',
-          easyPay: { easyPayProvider: configuration.easyPayProvider },
+          ...buildPortonePayMethodRequest(configuration.paymentMethod, options.buyer),
           ...(redirectUrl ? { redirectUrl } : {}),
         });
       } finally {

@@ -59,6 +59,56 @@ export const PRODUCT_OPTION_PRICE_DELTA_MAX = 200_000
 /** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
 export const OPTION_TEXT_MAX_LENGTH = 20
 
+/**
+ * 상품정보제공고시("기타 재화" 품목). 기능 토글과 상관없이 항상 받고 보여준다.
+ * 빈 칸은 화면이 기본값으로 채운다(resolveProductNotice).
+ */
+export interface ProductNotice {
+  /** 품명. 비우면 상품 이름 */
+  itemName?: string
+  origin?: string
+  /** 생산자. 비우면 매장명 */
+  producer?: string
+  /** 인증·허가 사항 */
+  certification?: string
+  /** 소비자 상담 전화. 비우면 사업자 대표 번호 */
+  csPhone?: string
+}
+
+/** 고시 항목의 표시 순서·이름·최대 길이(글자). API 검증과 판매자 입력이 같이 쓴다. */
+export const PRODUCT_NOTICE_FIELDS = [
+  { key: 'itemName', label: '품명', maxLength: 60 },
+  { key: 'origin', label: '원산지', maxLength: 40 },
+  { key: 'producer', label: '생산자', maxLength: 40 },
+  { key: 'certification', label: '인증·허가 사항', maxLength: 100 },
+  { key: 'csPhone', label: '소비자 상담 전화', maxLength: 20 },
+] as const satisfies ReadonlyArray<{ key: keyof ProductNotice; label: string; maxLength: number }>
+
+export const PRODUCT_NOTICE_DEFAULT_ORIGIN = '국내산(경기도 이천)'
+export const PRODUCT_NOTICE_DEFAULT_CERTIFICATION = '해당 없음'
+
+/** 상품·매장·사업자 정보에서 오는 기본값 */
+export interface ProductNoticeFallback {
+  itemName: string
+  producer: string
+  csPhone: string
+}
+
+/** 빈 칸(공백만 있는 칸 포함)을 기본값으로 채운 표시용 고시 값 */
+export function resolveProductNotice(
+  notice: ProductNotice | undefined,
+  fallback: ProductNoticeFallback,
+): Required<ProductNotice> {
+  const pick = (value: string | undefined, alt: string) => value?.trim() || alt
+  return {
+    itemName: pick(notice?.itemName, fallback.itemName),
+    origin: pick(notice?.origin, PRODUCT_NOTICE_DEFAULT_ORIGIN),
+    producer: pick(notice?.producer, fallback.producer),
+    certification: pick(notice?.certification, PRODUCT_NOTICE_DEFAULT_CERTIFICATION),
+    csPhone: pick(notice?.csPhone, fallback.csPhone),
+  }
+}
+
 export interface ProductExtras {
   size?: ProductSize
   light?: LightLevel
@@ -69,6 +119,8 @@ export interface ProductExtras {
   guaranteed?: boolean
   /** 검색용 다른 이름(학명·별칭) */
   aliases?: string[]
+  /** 상품정보제공고시 */
+  notice?: ProductNotice
 }
 
 /** 고른 옵션 스냅샷(주문·장바구니) */

@@ -232,6 +232,7 @@ function makeAdminContext(options: { order?: Data; gc?: Data | null } = {}) {
     payments as never,
     settlements as never,
     roundLifecycle as never,
+    { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
   );
   return { service, memory, payments, settlements, roundLifecycle };
 }
@@ -390,7 +391,7 @@ describe('admin CONFIRMED group forceRefund restoration', () => {
   it('restores exactly Q once with a single provider refund', async () => {
     const context = makeAdminContext();
 
-    await expect(context.service.forceRefund('order-1', {})).resolves.toEqual({
+    await expect(context.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
       ok: true,
       orderId: 'order-1',
     });
@@ -411,11 +412,11 @@ describe('admin CONFIRMED group forceRefund restoration', () => {
   it('retry after success adds zero provider/quantity effects', async () => {
     const context = makeAdminContext();
 
-    await expect(context.service.forceRefund('order-1', {})).resolves.toEqual({
+    await expect(context.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
       ok: true,
       orderId: 'order-1',
     });
-    await expect(context.service.forceRefund('order-1', {})).resolves.toEqual({
+    await expect(context.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
       ok: true,
       orderId: 'order-1',
     });
@@ -440,7 +441,7 @@ describe('admin CONFIRMED group forceRefund restoration', () => {
     // The seller path already refunded at the provider before this admin retry.
     context.payments.__markProviderDone();
 
-    await expect(context.service.forceRefund('order-1', {})).resolves.toEqual({
+    await expect(context.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
       ok: true,
       orderId: 'order-1',
     });
@@ -473,7 +474,7 @@ describe('admin CONFIRMED group forceRefund restoration', () => {
       },
     );
 
-    await expect(context.service.forceRefund('order-1', {})).rejects.toThrow('local infra down');
+    await expect(context.service.forceRefund('order-1', {}, 'admin-1')).rejects.toThrow('local infra down');
     expect(context.memory.read('orders/order-1')).toMatchObject({
       status: 'CONFIRMED',
       cancellation: expect.objectContaining({ status: 'LOCAL_FAILED' }),
@@ -483,7 +484,7 @@ describe('admin CONFIRMED group forceRefund restoration', () => {
     });
     expect(context.memory.groupWrites()).toHaveLength(0);
 
-    await expect(context.service.forceRefund('order-1', {})).resolves.toEqual({
+    await expect(context.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
       ok: true,
       orderId: 'order-1',
     });
@@ -498,7 +499,7 @@ describe('admin CONFIRMED group forceRefund restoration', () => {
   it('underflow fails closed without clamping the counter', async () => {
     const context = makeAdminContext({ gc: { currentQuantity: 1 } });
 
-    await expect(context.service.forceRefund('order-1', {})).rejects.toBeInstanceOf(
+    await expect(context.service.forceRefund('order-1', {}, 'admin-1')).rejects.toBeInstanceOf(
       ConflictException,
     );
     expect(context.memory.read('orders/order-1')).toMatchObject({
@@ -516,7 +517,7 @@ describe('admin CONFIRMED group forceRefund restoration', () => {
       order: { schemaVersion: 2, roundId: 'round-1', reservationId: 'reservation-1' },
     });
 
-    await expect(context.service.forceRefund('order-1', { reason: '관리자 사유' })).resolves.toEqual({
+    await expect(context.service.forceRefund('order-1', { reason: '관리자 사유' }, 'admin-1')).resolves.toEqual({
       orderId: 'order-1',
       status: 'CANCELLED',
     });

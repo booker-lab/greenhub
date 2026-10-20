@@ -44,10 +44,20 @@ describe('AdminOrdersClient read recovery wiring', () => {
     expect(source).not.toContain('불러오지 못했습니다');
   });
 
-  it('기존 refund callback을 유지한다', () => {
-    expect(source).toContain('forceRefund(orderId');
-    expect(source).toContain('onRefund={handleRefund}');
-    expect(source).toContain('processingId={processingId}');
+  it('강제환불은 브라우저 prompt 대신 대상이 보이는 확인창을 거친다', () => {
+    expect(source).not.toContain('prompt(');
+    expect(source).toContain('onRefund={openRefund}');
+    expect(source).toContain('<RefundConfirmModal');
+    expect(source).toContain('target={refundTarget}');
+    expect(source).toContain('onConfirm={runRefund}');
+    expect(source).toContain('forceRefund(target.id, normalizeRefundReason(refundReason))');
+  });
+
+  it('처리 중 잠금은 주문 id 묶음이라 여러 건을 이어서 처리해도 각자 유지된다', () => {
+    expect(source).toContain('processingIds={processingIds}');
+    expect(source).toContain('inFlightRef.current.has(target.id)');
+    expect(source).toContain('inFlightRef.current.delete(target.id)');
+    expect(source).not.toContain('setProcessingId(null)');
   });
 
   it('기존 filter 배선을 변경하지 않는다', () => {
@@ -56,5 +66,8 @@ describe('AdminOrdersClient read recovery wiring', () => {
     expect(source).toContain('statusFilter={statusFilter}');
     expect(source).toContain('onStoreChange={setStoreFilter}');
     expect(source).toContain('onStatusChange={setStatusFilter}');
+    // 가게 ID는 입력이 멈춘 뒤의 값으로만 조회한다(글자마다 요청하지 않음).
+    expect(source).toContain('useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS)');
+    expect(source).toContain('storeId: debouncedStoreFilter || undefined');
   });
 });

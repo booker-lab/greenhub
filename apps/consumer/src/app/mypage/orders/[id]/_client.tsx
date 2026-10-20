@@ -10,6 +10,7 @@ import {
   Group,
   Image,
   Paper,
+  SegmentedControl,
   Stack,
   Stepper,
   Text,
@@ -35,7 +36,12 @@ import {
   resolveRedeliveryPaymentReturn,
   shouldRecheckRedeliveryPayment,
 } from '@/lib/payment-redirect';
-import { readPortonePaymentConfiguration } from '@/lib/portone-config';
+import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
+import {
+  buildPortonePayMethodRequest,
+  type PortonePaymentMethod,
+  readPortonePaymentConfiguration,
+} from '@/lib/portone-config';
 import {
   type CommandOutcome,
   classifyCommandFailure,
@@ -96,6 +102,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const [cancelOutcome, setCancelOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   const [reviewOutcome, setReviewOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   const [redeliveryOutcome, setRedeliveryOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
+  // 재배송비도 주문 결제와 같은 결제수단 중에서 고른다(카카오페이가 없는 손님도 카드로 낼 수 있게).
+  const [redeliveryMethod, setRedeliveryMethod] = useState<PortonePaymentMethod>('kakaopay');
   const [retrying, setRetrying] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const detail = orderId ? readOrderDetail(order, orderId) : null;
@@ -282,7 +290,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
       }
       if (payment.status === 'PENDING') {
-        const configuration = readPortonePaymentConfiguration('kakaopay');
+        const configuration = readPortonePaymentConfiguration(redeliveryMethod);
         const PortOne = await import('@portone/browser-sdk/v2');
         const browser = readBrowserPaymentContext();
         const redirectUrl = browser
@@ -295,8 +303,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           totalAmount: payment.amount,
           currency: 'KRW',
           channelKey: configuration.channelKey,
-          payMethod: 'EASY_PAY',
-          easyPay: { easyPayProvider: configuration.easyPayProvider },
+          ...buildPortonePayMethodRequest(configuration.paymentMethod, {
+            name: session.user.name,
+          }),
           ...(redirectUrl ? { redirectUrl } : {}),
         });
         if (result && 'code' in result) {
@@ -825,19 +834,35 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 {!paymentIsDone &&
                   !detail.redeliveryPayment.requiresRecovery &&
                   detail.redeliveryPayment.canPay && (
-                    <Button
-                      mt="xs"
-                      color="red"
-                      loading={redeliveryBusy}
-                      disabled={redeliveryBusy || isStaleRead}
-                      onClick={handleRedeliveryPayment}
-                    >
-                      {redeliveryOutcome.kind === 'reconciling'
-                        ? '서버 확인 중...'
-                        : detail.redeliveryPayment.status === 'PENDING'
-                          ? '재배송비 결제 계속하기'
-                          : '재배송비 결제'}
-                    </Button>
+                    <>
+                      {PAYMENT_METHOD_OPTIONS.length > 1 && (
+                        <SegmentedControl
+                          mt="xs"
+                          fullWidth
+                          aria-label="재배송비 결제 수단"
+                          value={redeliveryMethod}
+                          onChange={(value) => setRedeliveryMethod(value as PortonePaymentMethod)}
+                          disabled={redeliveryBusy || isStaleRead}
+                          data={PAYMENT_METHOD_OPTIONS.map(({ method, label }) => ({
+                            value: method,
+                            label,
+                          }))}
+                        />
+                      )}
+                      <Button
+                        mt="xs"
+                        color="red"
+                        loading={redeliveryBusy}
+                        disabled={redeliveryBusy || isStaleRead}
+                        onClick={handleRedeliveryPayment}
+                      >
+                        {redeliveryOutcome.kind === 'reconciling'
+                          ? '서버 확인 중...'
+                          : detail.redeliveryPayment.status === 'PENDING'
+                            ? '재배송비 결제 계속하기'
+                            : '재배송비 결제'}
+                      </Button>
+                    </>
                   )}
               </Stack>
             )}

@@ -50,3 +50,19 @@ export function sumPayable(settlements: AdminSettlement[]) {
       { totalFee: 0, totalNet: 0 },
     );
 }
+
+/**
+ * 지급 확인창 문구 — 어느 가게·주문에 얼마를 지급 완료로 표시하는지 보여 준다.
+ * 정산 문서에는 가게 이름이 없어 가게 ID 전체를 보이고, 주문번호가 없는 옛 정산은 주문 ID를 보인다.
+ */
+export function describePayConfirm(
+  s: Pick<AdminSettlement, 'storeId' | 'orderId' | 'orderNumber' | 'netAmount'>,
+): string {
+  return [
+    `가게 ID: ${s.storeId}`,
+    s.orderNumber ? `주문번호: ${s.orderNumber}` : `주문 ID: ${s.orderId}`,
+    `지급액: ${toKRW(s.netAmount)}`,
+    '',
+    '이 정산을 지급 완료 처리하시겠습니까?',
+  ].join('\n');
+}

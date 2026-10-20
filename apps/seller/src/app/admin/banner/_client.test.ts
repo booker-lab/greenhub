@@ -7,16 +7,24 @@ import { describe, expect, it } from 'vitest';
 // 반환하고 조회 실패만 non-2xx throw이므로, null + error null이 genuine unset의 전부다
 // (404 의미를 새로 정의하지 않는다).
 const clientSource = readFileSync(new URL('./_client.tsx', import.meta.url), 'utf8');
-const hookSource = readFileSync(new URL('../../../hooks/useAdmin.ts', import.meta.url), 'utf8');
+const readHook = (file: string) =>
+  readFileSync(new URL(`../../../hooks/${file}`, import.meta.url), 'utf8');
 
-const bannerBlock = hookSource.slice(
-  hookSource.indexOf('export function useAdminBanner()'),
-  hookSource.indexOf('export function useAdminInvite()'),
-);
-const beforeBannerBlock = hookSource.slice(
-  0,
-  hookSource.indexOf('export function useAdminBanner()'),
-);
+// useAdminBanner는 useAdmin.banner.ts가 단독 소유한다(useAdmin.ts는 진입점).
+const bannerSource = readHook('useAdmin.banner.ts');
+const bannerBlock = bannerSource.slice(bannerSource.indexOf('export function useAdminBanner()'));
+// 배너 외 관리자 훅 파일 — banner 상태가 스며들지 않았는지 본다.
+const beforeBannerBlock = [
+  'useAdmin.ts',
+  'useAdmin.types.ts',
+  'useAdmin.list.ts',
+  'useAdmin.accounts.ts',
+  'useAdmin.commerce.ts',
+  'useAdmin.invite.ts',
+]
+  .map(readHook)
+  .join('\n');
+const hookSource = `${beforeBannerBlock}\n${bannerSource}`;
 
 describe('AdminBanner read recovery wiring', () => {
   it('loading 상태를 표시한다', () => {
