@@ -20,6 +20,7 @@ function TokenErrorGuard({ children }: { children: React.ReactNode }) {
 }
 
 // 앱을 켜 둔 동안 2분마다 세션을 다시 확인해 jwt callback이 API 토큰을 만료 전에 갱신하게 한다.
+// 화면이 숨어 있는 동안(잠금·앱 전환)은 확인을 건너뛰고, 다시 보이면 즉시 한 번 확인한다.
 // SessionProvider의 refetchInterval은 확인이 한 번만 실패해도(약한 전파) 세션을 비로그인으로 바꾸고
 // 그 뒤 다시 확인하지 않아 쓰지 않는다. 실패는 무시하고, 새 토큰을 받았을 때만 화면 세션을
 // update()로 바꾼다(update는 실패하면 기존 세션을 그대로 둔다).
@@ -37,6 +38,14 @@ function SessionKeepAlive() {
       currentAccessToken: () => accessTokenRef.current,
       syncSession: () => {
         void updateRef.current();
+      },
+      isHidden: () => document.visibilityState === 'hidden',
+      subscribeVisible: (onVisible) => {
+        const handleVisibility = () => {
+          if (document.visibilityState === 'visible') onVisible();
+        };
+        document.addEventListener('visibilitychange', handleVisibility);
+        return () => document.removeEventListener('visibilitychange', handleVisibility);
       },
     });
   }, [status]);

@@ -201,6 +201,8 @@ test('Map nearestNeighbor implementation is preserved', () => {
   assert.match(mapSource, /Math\.hypot\(o\.lat - current\.lat, o\.lng - current\.lng\)/);
   assert.match(mapSource, /visited\.has\(o\.id\)/);
   assert.match(mapSource, /if \(!o\.lat \|\| !o\.lng \|\| !current\.lat \|\| !current\.lng\)/);
+  // O(n²) 정렬은 렌더마다가 아니라 목록이 바뀔 때만 계산한다.
+  assert.match(mapSource, /const sorted = useMemo\(\(\) => nearestNeighbor\(orders\), \[orders\]\);/);
 });
 
 // 11b. nearestNeighbor: empty and single inputs are identity.
