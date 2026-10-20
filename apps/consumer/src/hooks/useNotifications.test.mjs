@@ -369,6 +369,32 @@ test('10. readIds 저장소는 계정별로 격리되고 기존 공통 key를 �
   assert.ok(!harness.get().readIds.has('notif-a1'));
 });
 
+// 11. 저장할 때 서버 목록에 없는 옛 읽음 ID는 정리한다
+test('11. 서버 목록을 받은 뒤 저장하면 목록에 없는 옛 읽음 ID는 지운다', async () => {
+  const harness = mountHook({ fetchImpl: async () => okItems([notifA1, notifA2]) });
+  harness.storage().setItem('gh_read_notifications:user-a', JSON.stringify(['old-1', 'notif-a1']));
+  await harness.settle();
+  assert.ok(harness.get().readIds.has('old-1'));
+
+  harness.get().markRead('notif-a2');
+  await harness.settle();
+  const saved = JSON.parse(harness.storage().__store.get('gh_read_notifications:user-a'));
+  assert.deepEqual(saved, ['notif-a1', 'notif-a2']);
+});
+
+// 12. 서버 목록을 아직 못 받았으면(실패) 저장해도 지우지 않는다
+test('12. 서버 목록 조회가 실패한 동안 저장하면 기존 읽음 ID를 지우지 않는다', async () => {
+  const harness = mountHook({ fetchImpl: async () => errorResponse(500) });
+  harness.storage().setItem('gh_read_notifications:user-a', JSON.stringify(['old-1']));
+  await harness.settle();
+  assert.notEqual(harness.get().error, null);
+
+  harness.get().markRead('notif-a1');
+  await harness.settle();
+  const saved = JSON.parse(harness.storage().__store.get('gh_read_notifications:user-a'));
+  assert.deepEqual(saved, ['old-1', 'notif-a1']);
+});
+
 test('hook은 userId+token scope·sequence race guard·tick refetch 계약을 가진다', () => {
   assert.match(hookSource, /session\?\.user\?\.id/);
   assert.match(hookSource, /requestSequenceRef/);

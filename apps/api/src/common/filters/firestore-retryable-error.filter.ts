@@ -1,5 +1,14 @@
-import { type ArgumentsHost, Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
+import {
+  type ArgumentsHost,
+  Catch,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Logger,
+  Optional,
+} from '@nestjs/common';
 import { BaseExceptionFilter } from '@nestjs/core';
+import { OpsAlertService } from '../../ops-alerts/ops-alert.service';
 
 /**
  * Firestore가 "잠시 뒤 다시 하면 될 수 있다"는 뜻으로 돌려주는 gRPC 상태 코드.
@@ -30,6 +39,30 @@ export function retryableFirestoreCode(error: unknown): number | null {
 }
 
 /**
+ * 기본 처리가 돌려줄 HTTP 상태. HttpException이 아니어도 body-parser 오류처럼
+ * statusCode를 가진 오류는 그 상태(400·413 등)로 응답되므로 그대로 따른다.
+ */
+function responseStatus(exception: unknown): number {
+  if (exception instanceof HttpException) return exception.getStatus();
+  if (exception && typeof exception === 'object') {
+    const { statusCode, message } = exception as { statusCode?: unknown; message?: unknown };
+    if (typeof statusCode === 'number' && typeof message === 'string') return statusCode;
+  }
+  return HttpStatus.INTERNAL_SERVER_ERROR;
+}
+
+/** 알림에 싣는 오류 이름. 클래스 이름 형태만 쓰고 그 밖은 버린다(메시지·ID가 섞이지 않게). */
+function errorName(exception: unknown): string {
+  const name =
+    exception && typeof exception === 'object'
+      ? ((exception as { name?: unknown }).name ?? exception.constructor?.name)
+      : typeof exception;
+  return typeof name === 'string' && /^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(name)
+    ? name
+    : 'UnknownError';
+}
+
+/**
  * 오픈 직후처럼 결제가 몰려 Firestore 트랜잭션이 재시도 끝에 실패하면 지금까지는
  * 손님 화면에 영어 "Internal server error"(500)가 떴다. 이런 일시 실패만 503과
  * 다시 시도하라는 안내로 바꾼다. 소비자 결제는 5xx면 같은 결제 시도 ID로 다시 보내므로
@@ -39,9 +72,14 @@ export function retryableFirestoreCode(error: unknown): number | null {
 export class FirestoreRetryableErrorFilter extends BaseExceptionFilter {
   private readonly logger = new Logger(FirestoreRetryableErrorFilter.name);
 
+  constructor(@Optional() @Inject(OpsAlertService) private readonly opsAlert?: OpsAlertService) {
+    super();
+  }
+
   catch(exception: unknown, host: ArgumentsHost) {
     const code = host.getType() === 'http' ? retryableFirestoreCode(exception) : null;
     if (code === null) {
+      if (host.getType() === 'http') this.alertServerError(exception, host);
       super.catch(exception, host);
       return;
     }
@@ -60,5 +98,28 @@ export class FirestoreRetryableErrorFilter extends BaseExceptionFilter {
         message: RETRYABLE_FIRESTORE_MESSAGE,
         retryable: true,
       });
+  }
+
+  /**
+   * 5xx로 끝나는 예외를 운영 텔레그램으로 알린다. 503은 뜻을 담아 일부러 돌려주는 응답
+   * (Firestore 일시 오류, 재배송비 환불 미완료로 웹훅 재전송 유도 등)이라 알리지 않는다.
+   * 메서드와 경로 패턴, 오류 이름만 싣는다. 실제 주소(주문 ID)·오류 메시지는 싣지 않는다.
+   * 전송을 기다리지 않는다(응답을 늦추지 않음, 실패해도 throw하지 않는 서비스).
+   */
+  private alertServerError(exception: unknown, host: ArgumentsHost) {
+    if (!this.opsAlert?.enabled) return;
+    const status = responseStatus(exception);
+    if (status < 500 || status === (HttpStatus.SERVICE_UNAVAILABLE as number)) return;
+    const request = host
+      .switchToHttp()
+      .getRequest<{ method?: string; route?: { path?: string } }>();
+    const route = `${request.method ?? '-'} ${request.route?.path ?? '-'}`;
+    const name = errorName(exception);
+    void this.opsAlert.send({
+      level: 'critical',
+      title: `서버 오류 ${status}`,
+      lines: [`요청: ${route}`, `오류: ${name}`],
+      dedupeKey: `server-error:${route}:${name}`,
+    });
   }
 }

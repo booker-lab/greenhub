@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { apiRead } from '@/lib/api';
 import {
@@ -182,7 +182,8 @@ export default function MapPage() {
     };
   }, [session?.user.id, session?.user.role, session?.user.accessToken, sessionStatus, reloadKey]);
 
-  const sorted = nearestNeighbor(orders);
+  // O(n²) 정렬이라 목록이 바뀔 때만 다시 계산한다.
+  const sorted = useMemo(() => nearestNeighbor(orders), [orders]);
   // 주문에는 배송지 좌표가 없으므로 여러 곳 경유 길안내 대신
   // 다음 배송지 1곳만 연다. 유효 좌표가 없으면 주소 검색 링크로 연다.
   // 다음 배송지는 이미 수거해 배송 중인 내 주문에서만 고른다.

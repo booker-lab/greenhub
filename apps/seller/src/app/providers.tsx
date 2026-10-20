@@ -29,6 +29,7 @@ function TokenErrorGuard({ children }: { children: React.ReactNode }) {
 // 주문·준비 화면을 켜 둔 동안 2분마다 세션을 다시 확인해 jwt callback이 API 토큰을 만료 전에
 // 갱신하게 한다. SessionProvider의 refetchInterval은 확인이 한 번만 실패해도(약한 전파) 세션을
 // 비로그인으로 바꾸므로 쓰지 않는다. 실패는 무시하고, 새 토큰을 받았을 때만 update()로 바꾼다.
+// 숨은 탭에서는 주기 확인을 건너뛰고, 다시 보이게 되면 즉시 1회 확인한다.
 function SessionKeepAlive() {
   const { data: session, status, update } = useSession();
   const accessTokenRef = useRef(session?.user?.accessToken);
@@ -43,6 +44,11 @@ function SessionKeepAlive() {
       currentAccessToken: () => accessTokenRef.current,
       syncSession: () => {
         void updateRef.current();
+      },
+      isHidden: () => document.visibilityState === 'hidden',
+      subscribeVisibilityChange: (onChange) => {
+        document.addEventListener('visibilitychange', onChange);
+        return () => document.removeEventListener('visibilitychange', onChange);
       },
     });
   }, [status]);
