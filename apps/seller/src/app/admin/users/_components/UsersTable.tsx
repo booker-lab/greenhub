@@ -2,7 +2,7 @@
 
 import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminUser } from '@/hooks/useAdmin';
-import { formatJoinedDate, formatPhone } from '../_lib';
+import { formatJoinedDate, formatPhone, suspendActionLabel } from '../_lib';
 
 interface UsersTableProps {
   users: AdminUser[];
@@ -34,7 +34,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
 
   return (
     <>
-      {/* 모바일(<sm): 카드 리스트 — 상태·정지/복구 버튼 잘림 방지 */}
+      {/* 모바일(<sm): 카드 리스트 — 상태·정지/정지 해제 버튼 잘림 방지 */}
       <Stack gap="sm" hiddenFrom="sm">
         {users.map((user) => (
           <Paper
@@ -81,7 +81,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                 color={user.suspended ? 'brand' : 'red'}
                 radius="md"
               >
-                {processingId === user.id ? '처리중…' : user.suspended ? '복구' : '정지'}
+                {processingId === user.id ? '처리중…' : suspendActionLabel(!!user.suspended)}
               </Button>
             </Group>
           </Paper>
@@ -174,7 +174,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
                     color={user.suspended ? 'brand' : 'red'}
                     radius="md"
                   >
-                    {processingId === user.id ? '처리중…' : user.suspended ? '복구' : '정지'}
+                    {processingId === user.id ? '처리중…' : suspendActionLabel(!!user.suspended)}
                   </Button>
                 </Box>
               </Box>

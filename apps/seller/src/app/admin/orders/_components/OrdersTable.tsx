@@ -9,8 +9,10 @@ interface OrdersTableProps {
   loading: boolean;
   /** useAdminOrders 조회 실패 메시지. null이면 마지막 조회가 실패하지 않았음. */
   error: string | null;
-  processingId: string | null;
-  onRefund: (orderId: string) => void;
+  /** 강제환불 처리 중인 주문 id 묶음 — 여러 건을 이어서 처리해도 각자 잠긴다. */
+  processingIds: ReadonlySet<string>;
+  /** 확인창을 띄울 대상 주문을 넘긴다(주문번호·금액 표시용). */
+  onRefund: (order: AdminOrder) => void;
   /** 조회 실패 시 재시도 — hook의 reload()에 연결된다. */
   onRetry: () => void;
 }
@@ -42,7 +44,14 @@ const thBase = {
   color: 'var(--color-text-secondary)',
 };
 
-export function OrdersTable({ orders, loading, error, processingId, onRefund, onRetry }: OrdersTableProps) {
+export function OrdersTable({
+  orders,
+  loading,
+  error,
+  processingIds,
+  onRefund,
+  onRetry,
+}: OrdersTableProps) {
   const readState = getAdminOrdersReadState({ loading, error, orders });
 
   if (readState === 'LOADING') {
@@ -137,14 +146,14 @@ export function OrdersTable({ orders, loading, error, processingId, onRefund, on
               </Text>
               {isRefundable(order) && (
                 <Button
-                  onClick={() => onRefund(order.id)}
-                  disabled={processingId === order.id}
+                  onClick={() => onRefund(order)}
+                  disabled={processingIds.has(order.id)}
                   size="xs"
                   variant="outline"
                   color="red"
                   radius="md"
                 >
-                  {processingId === order.id ? '처리중…' : '강제환불'}
+                  {processingIds.has(order.id) ? '처리중…' : '강제환불'}
                 </Button>
               )}
             </Group>
@@ -234,14 +243,14 @@ export function OrdersTable({ orders, loading, error, processingId, onRefund, on
                 <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
                   {isRefundable(order) && (
                     <Button
-                      onClick={() => onRefund(order.id)}
-                      disabled={processingId === order.id}
+                      onClick={() => onRefund(order)}
+                      disabled={processingIds.has(order.id)}
                       size="xs"
                       variant="outline"
                       color="red"
                       radius="md"
                     >
-                      {processingId === order.id ? '처리중…' : '강제환불'}
+                      {processingIds.has(order.id) ? '처리중…' : '강제환불'}
                     </Button>
                   )}
                 </Box>

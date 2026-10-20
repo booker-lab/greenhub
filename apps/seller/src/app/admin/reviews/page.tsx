@@ -4,10 +4,11 @@ import type { AdminHiddenReview } from '@greenhub/shared';
 import { Stack, Text, Title } from '@mantine/core';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
+import { AdminFetchError } from '../_components/AdminFetchError';
 import { HiddenReviewCard } from './_components/HiddenReviewCard';
 
 // 판매자·관리자가 숨긴 후기 목록. 숨김 해제는 관리자만 이 화면에서 한다.
@@ -19,11 +20,23 @@ export default function AdminReviewsPage() {
   const [items, setItems] = useState<AdminHiddenReview[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // 조회 실패는 빈 목록("숨긴 후기가 없어요")과 구분해 실패 화면 + 다시 조회로 보여 준다.
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!token) return;
+    setItems(null);
+    setLoadFailed(false);
+    try {
+      setItems(await apiJson<AdminHiddenReview[]>('/admin/reviews/hidden', token));
+    } catch {
+      setLoadFailed(true);
+    }
+  }, [token]);
 
   useEffect(() => {
-    if (!token) return;
-    apiJson<AdminHiddenReview[]>('/admin/reviews/hidden', token).then(setItems, () => setItems([]));
-  }, [token]);
+    load();
+  }, [load]);
 
   const unhide = async (review: AdminHiddenReview) => {
     if (!token) return;
@@ -52,7 +65,13 @@ export default function AdminReviewsPage() {
         숨긴 후기는 고객 화면과 별점에서 빠져 있어요. 사유에 맞지 않게 숨긴 후기는 다시 보이게 해
         주세요.
       </Text>
-      {items === null ? (
+      {loadFailed ? (
+        <AdminFetchError
+          title="숨긴 후기를 불러오지 못했습니다."
+          detail="숨긴 후기 조회 중 오류 발생"
+          onRetry={load}
+        />
+      ) : items === null ? (
         <LoadingState />
       ) : items.length === 0 ? (
         <EmptyState text="숨긴 후기가 없어요" />

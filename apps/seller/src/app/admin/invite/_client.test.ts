@@ -7,7 +7,10 @@ import { describe, expect, it } from 'vitest';
 // 실제 상태 분기는 _lib 순수 함수와 각 컴포넌트 focused test가 소유한다.
 
 const source = readFileSync(new URL('./_client.tsx', import.meta.url), 'utf8');
-const hookSource = readFileSync(new URL('../../../hooks/useAdmin.ts', import.meta.url), 'utf8');
+const hookSource = readFileSync(
+  new URL('../../../hooks/useAdmin.invite.ts', import.meta.url),
+  'utf8',
+);
 
 // useAdminInvite 블록만 추출 — shared hook 회귀 검증은 이 블록 범위로 한정한다.
 function inviteBlock(): string {
