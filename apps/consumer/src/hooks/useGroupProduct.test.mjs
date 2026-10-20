@@ -393,6 +393,87 @@ test('이전 valid config 이후 polling failure가 오면 최신 error를 무�
   assert.match(actionsSource, /if \(isGroupUnavailable \|\| isGroupLoading \|\| isGroupReadError\) return;/);
 });
 
+// 9-1. 숨김 탭에서는 폴링을 멈추고, 다시 보이면 즉시 1회 조회 후 폴링을 재개한다
+test('숨김 탭에서는 폴링을 멈추고 복귀 시 즉시 조회한 뒤 다시 폴링한다', async () => {
+  const originalDocument = globalThis.document;
+  const listeners = new Set();
+  const doc = {
+    visibilityState: 'visible',
+    addEventListener: (type, fn) => {
+      if (type === 'visibilitychange') listeners.add(fn);
+    },
+    removeEventListener: (type, fn) => {
+      if (type === 'visibilitychange') listeners.delete(fn);
+    },
+  };
+  const fire = (state) => {
+    doc.visibilityState = state;
+    for (const fn of [...listeners]) fn();
+  };
+  globalThis.document = doc;
+  try {
+    const network = createNetworkMock();
+    const harness = mountHook({ network, initialArgs: ['p1'] });
+    await harness.settle();
+    network.calls[0].resolve(successResponse(baseConfig));
+    await harness.settle();
+    assert.equal(network.intervals.length, 1);
+    assert.equal(listeners.size, 1);
+
+    fire('hidden');
+    assert.equal(network.intervals[0].cleared, true);
+    assert.equal(network.calls.length, 1);
+
+    fire('visible');
+    assert.equal(network.calls.length, 2);
+    assert.equal(network.calls[1].productId, 'p1');
+    assert.equal(network.intervals.length, 2);
+    assert.equal(network.intervals[1].cleared, false);
+
+    // 이미 보이는 상태에서 다시 visible 이벤트가 와도 중복 조회·중복 폴링을 만들지 않는다.
+    fire('visible');
+    assert.equal(network.calls.length, 2);
+    assert.equal(network.intervals.length, 2);
+
+    // scope 해제 시 리스너와 폴링이 모두 정리된다.
+    harness.setArgs([null]);
+    await harness.settle();
+    assert.equal(listeners.size, 0);
+    assert.equal(network.intervals[1].cleared, true);
+  } finally {
+    globalThis.document = originalDocument;
+  }
+});
+
+test('숨김 상태로 진입하면 첫 조회만 하고 폴링은 보일 때 시작한다', async () => {
+  const originalDocument = globalThis.document;
+  const listeners = new Set();
+  const doc = {
+    visibilityState: 'hidden',
+    addEventListener: (_type, fn) => listeners.add(fn),
+    removeEventListener: (_type, fn) => listeners.delete(fn),
+  };
+  globalThis.document = doc;
+  try {
+    const network = createNetworkMock();
+    const harness = mountHook({ network, initialArgs: ['p1'] });
+    await harness.settle();
+    assert.equal(network.calls.length, 1);
+    assert.equal(network.intervals.length, 0);
+
+    doc.visibilityState = 'visible';
+    for (const fn of [...listeners]) fn();
+    assert.equal(network.calls.length, 2);
+    assert.equal(network.intervals.length, 1);
+
+    harness.setArgs([null]);
+    await harness.settle();
+    assert.equal(listeners.size, 0);
+  } finally {
+    globalThis.document = originalDocument;
+  }
+});
+
 // 10. 기존 group quantity/deadline behavior 회귀 없음
 test('기존 group quantity/deadline 판정 계약이 유지된다', () => {
   // status/countdown/quantity 계산이 그대로 groupConfig 기준이다.
