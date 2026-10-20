@@ -72,7 +72,11 @@ const requireForTest = (specifier) => {
       readPortonePaymentConfiguration: () => ({
         portoneStoreId: 'portone-store',
         channelKey: 'kakao-channel',
-        easyPayProvider: 'KAKAOPAY',
+        paymentMethod: 'kakaopay',
+      }),
+      buildPortonePayMethodRequest: () => ({
+        payMethod: 'EASY_PAY',
+        easyPay: { easyPayProvider: 'KAKAOPAY' },
       }),
     };
   }
@@ -332,6 +336,26 @@ test('legacy checkout도 모바일 리다이렉트 복귀 URL과 남은 미결�
   const save = legacyCheckoutSource.indexOf('savePendingOrderPayment(');
   const sdkCall = legacyCheckoutSource.indexOf('PortOne.requestPayment(');
   assert.ok(save >= 0 && save < sdkCall);
+});
+
+test('결제창 호출은 고른 결제수단으로 파라미터를 만들고 간편결제를 고정하지 않는다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+
+  assert.match(legacyCheckoutSource, /readPortonePaymentConfiguration\(paymentMethod\)/);
+  assert.match(
+    legacyCheckoutSource,
+    /\.\.\.buildPortonePayMethodRequest\(configuration\.paymentMethod, \{/,
+  );
+  assert.match(legacyCheckoutSource, /phone: deliveryPhone\.trim\(\)/);
+  assert.doesNotMatch(source, /payMethod: 'EASY_PAY'/);
+  // usePayment를 쓰는 단건·회차 결제도 구매자 정보를 넘긴다.
+  assert.equal(
+    source.match(/buyer: \{ name: session\?\.user\?\.name, phone: deliveryPhone\.trim\(\) \}/g)
+      ?.length,
+    2,
+  );
 });
 
 function CheckoutFormStub() {

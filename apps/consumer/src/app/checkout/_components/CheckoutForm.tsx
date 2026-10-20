@@ -21,22 +21,14 @@ import {
 import { useEffect, useState } from 'react';
 import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
+import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';
 import GiftFields, { type GiftState } from '@/components/benchmark/GiftFields';
-
-const NAVERPAY_ENABLED = !!process.env.NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY;
 
 const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
   hub: '거점 픽업',
   parcel: '택배',
 };
-
-const PAYMENT_OPTIONS: { method: PaymentMethod; label: string; dot: string }[] = [
-  { method: 'kakaopay', label: '카카오페이', dot: '#FEE500' },
-  ...(NAVERPAY_ENABLED
-    ? [{ method: 'naverpay' as PaymentMethod, label: '네이버페이', dot: '#03C75A' }]
-    : []),
-];
 
 export interface CheckoutFormProps {
   items: CartItem[];
@@ -144,11 +136,7 @@ export default function CheckoutForm({
     }).open();
   }
 
-  const buttonLabel = isLoading
-    ? '처리 중...'
-    : paymentMethod === 'naverpay'
-      ? '네이버페이로 결제하기'
-      : '카카오페이로 결제하기';
+  const buttonLabel = isLoading ? '처리 중...' : paymentButtonLabel(paymentMethod);
 
   return (
     <Container size="sm" px="md" py="lg">
@@ -443,7 +431,7 @@ export default function CheckoutForm({
         <Text style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}>
           결제 수단
         </Text>
-        {PAYMENT_OPTIONS.map(({ method, label, dot }) => {
+        {PAYMENT_METHOD_OPTIONS.map(({ method, label, dot }) => {
           const isSelected = paymentMethod === method;
           return (
             <Paper
