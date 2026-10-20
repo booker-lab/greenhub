@@ -119,6 +119,7 @@ export const PUBLIC_PRODUCT_EXTRA_FIELDS = [
   'options',
   'guaranteed',
   'aliases',
+  'notice',
 ] as const;
 
 export function pickPublicProductExtras(p: Record<string, unknown>): Record<string, unknown> {

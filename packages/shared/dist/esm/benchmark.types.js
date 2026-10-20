@@ -18,6 +18,27 @@ export const PRODUCT_OPTION_CHOICE_MAX = 6;
 export const PRODUCT_OPTION_PRICE_DELTA_MAX = 200_000;
 /** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
 export const OPTION_TEXT_MAX_LENGTH = 20;
+/** 고시 항목의 표시 순서·이름·최대 길이(글자). API 검증과 판매자 입력이 같이 쓴다. */
+export const PRODUCT_NOTICE_FIELDS = [
+    { key: 'itemName', label: '품명', maxLength: 60 },
+    { key: 'origin', label: '원산지', maxLength: 40 },
+    { key: 'producer', label: '생산자', maxLength: 40 },
+    { key: 'certification', label: '인증·허가 사항', maxLength: 100 },
+    { key: 'csPhone', label: '소비자 상담 전화', maxLength: 20 },
+];
+export const PRODUCT_NOTICE_DEFAULT_ORIGIN = '국내산(경기도 이천)';
+export const PRODUCT_NOTICE_DEFAULT_CERTIFICATION = '해당 없음';
+/** 빈 칸(공백만 있는 칸 포함)을 기본값으로 채운 표시용 고시 값 */
+export function resolveProductNotice(notice, fallback) {
+    const pick = (value, alt) => value?.trim() || alt;
+    return {
+        itemName: pick(notice?.itemName, fallback.itemName),
+        origin: pick(notice?.origin, PRODUCT_NOTICE_DEFAULT_ORIGIN),
+        producer: pick(notice?.producer, fallback.producer),
+        certification: pick(notice?.certification, PRODUCT_NOTICE_DEFAULT_CERTIFICATION),
+        csPhone: pick(notice?.csPhone, fallback.csPhone),
+    };
+}
 // ── 후기 ───────────────────────────────────────────────────────
 export const REVIEW_TEXT_MAX_LENGTH = 500;
 /** 후기 하나에 붙일 수 있는 사진 수 */

@@ -5,6 +5,7 @@ import {
   LIGHT_LEVELS,
   PLACEMENT_LABELS,
   PLACEMENTS,
+  PRODUCT_NOTICE_FIELDS,
   PRODUCT_OPTION_CHOICE_MAX,
   PRODUCT_OPTION_GROUP_MAX,
 } from '@greenhub/shared';
@@ -14,6 +15,7 @@ import { FieldCard } from './FormPrimitives';
 import { CARE_TEXT_MAX, nextOptionId, type OptionGroupForm, type ProductExtrasForm } from './productExtras';
 
 // 상품 등록·수정 마지막 단계의 추가 정보. 기능 토글이 꺼진 칸은 그리지 않는다.
+// 상품정보제공고시 칸은 법정 표시라 토글과 상관없이 항상 그린다.
 
 const CARE_FIELDS = [
   { key: 'watering', label: '물 주기' },
@@ -49,7 +51,6 @@ export function ProductExtrasSection({
     guarantee: isFeatureOn('quality-guarantee'),
     search: isFeatureOn('plant-search'),
   };
-  if (!Object.values(on).some(Boolean)) return null;
 
   const patch = (next: Partial<ProductExtrasForm>) => onChange({ ...extras, ...next });
   const setGroups = (options: OptionGroupForm[]) => patch({ options });
@@ -263,6 +264,24 @@ export function ProductExtrasSection({
           />
         </FieldCard>
       )}
+
+      <FieldCard label="상품 정보 고시 (손님 상품 화면에 항상 보여요)">
+        <Stack gap="xs">
+          {PRODUCT_NOTICE_FIELDS.map((field) => (
+            <TextInput
+              key={field.key}
+              label={field.label}
+              placeholder={field.key === 'itemName' ? '비우면 상품 이름을 보여줘요' : undefined}
+              maxLength={field.maxLength}
+              value={extras.notice[field.key]}
+              onChange={(event) =>
+                patch({ notice: { ...extras.notice, [field.key]: event.currentTarget.value } })
+              }
+              radius="md"
+            />
+          ))}
+        </Stack>
+      </FieldCard>
     </Stack>
   );
 }

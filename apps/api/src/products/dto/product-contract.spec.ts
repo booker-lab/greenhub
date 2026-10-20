@@ -104,6 +104,20 @@ describe('상품 PATCH 계약', () => {
     expect(errors).not.toHaveLength(0);
   });
 
+  it('상품정보제공고시를 실제 파이프 옵션(whitelist)으로 등록·수정에서 허용한다', async () => {
+    const notice = {
+      itemName: '테스트 상품',
+      origin: '국내산(경기도 이천)',
+      producer: '테스트 매장',
+      certification: '해당 없음',
+      csPhone: '010-0000-0000',
+    };
+    const options = { whitelist: true, forbidNonWhitelisted: true };
+
+    expect(await validate(plainToInstance(CreateProductDto, { ...validProduct, notice }), options)).toHaveLength(0);
+    expect(await validate(plainToInstance(UpdateProductDto, { notice }), options)).toHaveLength(0);
+  });
+
   it.each(['normal', 'group'])('%s 판매 방식을 허용한다', async (saleType) => {
     const errors = await validate(plainToInstance(UpdateProductDto, { saleType }));
 
