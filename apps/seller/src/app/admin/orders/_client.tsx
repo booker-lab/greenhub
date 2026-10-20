@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Group, Text, Title } from '@mantine/core';
+import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { useAdminOrders } from '@/hooks/useAdmin';
@@ -8,11 +9,16 @@ import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
 import { OrdersFilters } from './_components/OrdersFilters';
 import { OrdersTable } from './_components/OrdersTable';
 
+/** 스토어 ID 입력이 멈춘 뒤 조회하기까지 기다리는 시간. 글자마다 재조회하지 않는다(정산 탭과 같은 값). */
+const STORE_FILTER_DEBOUNCE_MS = 300;
+
 export default function AdminOrdersClient() {
   const [storeFilter, setStoreFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  // 가게 ID는 글자마다 조회하지 않고 입력이 멈춘 뒤 조회한다(겹친 응답은 훅이 최신만 반영).
+  const [debouncedStoreFilter] = useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS);
   const { orders, loading, error, reload, forceRefund } = useAdminOrders({
-    storeId: storeFilter || undefined,
+    storeId: debouncedStoreFilter || undefined,
     status: statusFilter || undefined,
   });
   const [processingId, setProcessingId] = useState<string | null>(null);

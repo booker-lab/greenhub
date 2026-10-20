@@ -1,8 +1,9 @@
 'use client';
 
 import { useSession } from 'next-auth/react';
-import { type DependencyList, useCallback, useEffect, useRef, useState } from 'react';
+import { type DependencyList, useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
+import { createAdminListLoader } from './useAdmin.loader';
 import { type AdminCommandOutcome, executeAdminCommand } from './useAdmin.outcome';
 
 // ── Core ─────────────────────────────────────────────────────────
@@ -10,6 +11,8 @@ import { type AdminCommandOutcome, executeAdminCommand } from './useAdmin.outcom
 /**
  * 관리자 목록 리소스 공통 훅 — data/loading/error 상태 + 토큰 가드 + 자동 로드.
  * `buildPath`/`extract`는 매 렌더 재생성되므로 deps에 넣지 않는다(필터값만 deps로).
+ * 응답 순서·토큰 없음 처리는 순수 로더(`useAdmin.loader`)가 소유한다:
+ * 늦게 온 옛 응답은 최신 결과를 덮지 않고, 세션 확인이 끝났는데 토큰이 없으면 로딩을 끝낸다.
  */
 export function useAdminList<T>(
   buildPath: () => string,
@@ -17,35 +20,24 @@ export function useAdminList<T>(
   errLabel: string,
   deps: DependencyList = [],
 ) {
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const token = session?.user.accessToken;
+  const sessionPending = status === 'loading';
   const [items, setItems] = useState<T[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // 필터를 빠르게 바꾸면 늦게 온 이전 응답이 최신 결과를 덮을 수 있다 — 마지막 요청 응답만 반영한다.
-  const requestIdRef = useRef(0);
+  // useState setter는 안정 참조라 로더를 한 번만 만든다(요청 순번이 렌더 사이에 유지된다).
+  const [runLoad] = useState(() => createAdminListLoader<T>({ setItems, setError, setLoading }));
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: buildPath/extract/errLabel은 매 렌더 재생성되는 안정 클로저 — reload는 token·필터(deps) 변화로만 트리거한다
-  const load = useCallback(async (): Promise<string | null> => {
-    const requestId = ++requestIdRef.current;
-    const isLatest = () => requestId === requestIdRef.current;
-    if (!token) return '인증 토큰이 없습니다. 다시 로그인해 주세요.';
-    setLoading(true);
-    try {
-      const data = await apiJson(buildPath(), token);
-      if (isLatest()) {
-        setItems(extract(data));
-        setError(null);
-      }
-      return null;
-    } catch {
-      const readError = `${errLabel} 조회 중 오류 발생`;
-      if (isLatest()) setError(readError);
-      return readError;
-    } finally {
-      if (isLatest()) setLoading(false);
-    }
-  }, [token, ...deps]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: buildPath/extract/errLabel은 매 렌더 재생성되는 안정 클로저 — reload는 token·세션 상태·필터(deps) 변화로만 트리거한다
+  const load = useCallback((): Promise<string | null> => {
+    if (!token) return runLoad({ kind: sessionPending ? 'session-pending' : 'missing-token' });
+    return runLoad({
+      kind: 'fetch',
+      fetch: async () => extract(await apiJson(buildPath(), token)),
+      errLabel,
+    });
+  }, [token, sessionPending, runLoad, ...deps]);
 
   useEffect(() => {
     load();

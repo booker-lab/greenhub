@@ -56,5 +56,8 @@ describe('AdminOrdersClient read recovery wiring', () => {
     expect(source).toContain('statusFilter={statusFilter}');
     expect(source).toContain('onStoreChange={setStoreFilter}');
     expect(source).toContain('onStatusChange={setStatusFilter}');
+    // 가게 ID는 입력이 멈춘 뒤의 값으로만 조회한다(글자마다 요청하지 않음).
+    expect(source).toContain('useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS)');
+    expect(source).toContain('storeId: debouncedStoreFilter || undefined');
   });
 });
