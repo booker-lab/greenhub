@@ -5,7 +5,8 @@
 // - useAdmin.types: 공통 타입
 // - useAdmin.list: 목록 공통 훅·command 실행
 // - useAdmin.accounts: 판매자·소비자·드라이버
-// - useAdmin.commerce: 주문·정산
+// - useAdmin.commerce: 주문
+// - useAdmin.settlements: 정산(더 보기·서버 합계)
 // - useAdmin.banner / useAdmin.invite: 배너·초대
 
 export type { AdminCommandOutcome } from './useAdmin.outcome';
@@ -14,6 +15,8 @@ export type { RefundRecovery } from './useAdmin.refund';
 export { describeRefundRecovery } from './useAdmin.refund';
 export * from './useAdmin.types';
 export { useAdminDrivers, useAdminStores, useAdminUsers } from './useAdmin.accounts';
-export { useAdminOrders, useAdminSettlements } from './useAdmin.commerce';
+export { useAdminOrders } from './useAdmin.commerce';
+export type { AdminSettlementFilters } from './useAdmin.settlements';
+export { useAdminSettlements } from './useAdmin.settlements';
 export { useAdminBanner } from './useAdmin.banner';
 export { useAdminInvite } from './useAdmin.invite';

@@ -15,6 +15,14 @@ export interface SettlementAggregate {
   totalPlatformFee: number;
   totalNetAmount: number;
   byStatus: Record<SettlementStatus, number>;
+  /** 상태별 판매자 지급액(netAmount) 합계. 관리자 화면의 지급 대기(confirmed)·지급 완료(paid) 합계에 쓴다. */
+  netByStatus: Record<SettlementStatus, number>;
+  /** 상태별 플랫폼 수수료(platformFee) 합계. */
+  feeByStatus: Record<SettlementStatus, number>;
+}
+
+function emptyByStatus(): Record<SettlementStatus, number> {
+  return { pending: 0, confirmed: 0, paid: 0, cancelled: 0 };
 }
 
 /**
@@ -24,22 +32,25 @@ export interface SettlementAggregate {
 export function aggregateSettlements(
   settlements: Record<string, unknown>[],
 ): SettlementAggregate {
-  const byStatus: Record<SettlementStatus, number> = {
-    pending: 0,
-    confirmed: 0,
-    paid: 0,
-    cancelled: 0,
-  };
+  const byStatus = emptyByStatus();
+  const netByStatus = emptyByStatus();
+  const feeByStatus = emptyByStatus();
   let totalAmount = 0;
   let totalPlatformFee = 0;
   let totalNetAmount = 0;
 
   for (const s of settlements) {
     const status = s['status'] as SettlementStatus;
-    if (SETTLEMENT_STATUSES.includes(status)) byStatus[status]++;
+    const fee = (s['platformFee'] as number) ?? 0;
+    const net = (s['netAmount'] as number) ?? 0;
+    if (SETTLEMENT_STATUSES.includes(status)) {
+      byStatus[status]++;
+      netByStatus[status] += net;
+      feeByStatus[status] += fee;
+    }
     totalAmount += (s['totalAmount'] as number) ?? 0;
-    totalPlatformFee += (s['platformFee'] as number) ?? 0;
-    totalNetAmount += (s['netAmount'] as number) ?? 0;
+    totalPlatformFee += fee;
+    totalNetAmount += net;
   }
 
   return {
@@ -48,5 +59,7 @@ export function aggregateSettlements(
     totalPlatformFee,
     totalNetAmount,
     byStatus,
+    netByStatus,
+    feeByStatus,
   };
 }

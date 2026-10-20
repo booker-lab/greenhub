@@ -9,7 +9,7 @@ import {
   withQuery,
 } from './useAdmin.list';
 import { type RefundRecovery, readRefundRecovery } from './useAdmin.refund';
-import type { AdminOrder, AdminSettlement } from './useAdmin.types';
+import type { AdminOrder } from './useAdmin.types';
 
 // ── Orders ───────────────────────────────────────────────────────
 
@@ -47,35 +47,4 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
   return { orders, loading, error, reload, forceRefund };
 }
 
-// ── Settlements ──────────────────────────────────────────────────
-
-export function useAdminSettlements(filters?: { storeId?: string; from?: string; to?: string }) {
-  const {
-    items: settlements,
-    loading,
-    error,
-    reload,
-    token,
-  } = useAdminList<AdminSettlement>(
-    () =>
-      withQuery('/admin/settlements', {
-        storeId: filters?.storeId,
-        from: filters?.from,
-        to: filters?.to,
-      }),
-    pick<AdminSettlement>('settlements'),
-    '정산 목록',
-    [filters?.storeId, filters?.from, filters?.to],
-  );
-
-  const markAsPaid = async (settlementId: string): Promise<AdminCommandOutcome> => {
-    return runAdminCommand(
-      token,
-      `/admin/settlements/${settlementId}/pay`,
-      { method: 'PATCH' },
-      reload,
-    );
-  };
-
-  return { settlements, loading, error, reload, markAsPaid };
-}
+// 정산 훅은 useAdmin.settlements(더 보기·서버 합계)가 소유한다.

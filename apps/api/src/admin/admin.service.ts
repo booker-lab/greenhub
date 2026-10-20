@@ -6,7 +6,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { dateRangeKST } from '@greenhub/shared';
 import type * as admin from 'firebase-admin';
 import { normalizeEmail } from '../auth/email-identity';
 import {
@@ -32,7 +31,9 @@ import {
   revokeFirebaseSessions,
   sessionsRevokedAtMillis,
 } from '../auth/session-revocation';
+import { listAdminSettlements, summarizeAdminSettlements } from './_lib/admin-settlements-query';
 import {
+  AdminSettlementFilterDto,
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
   QueryAdminDriversDto,
@@ -524,31 +525,14 @@ export class AdminService {
 
   // ── Settlements ──────────────────────────────────────────────────
 
-  async getSettlements(dto: QueryAdminSettlementsDto) {
-    let query = this.firestore.collection('settlements') as any;
+  // 목록은 "더 보기"로 이어 받고(hasMore·nextCursor), 행에 가게 이름·주문번호·보류 사유·회수 필드,
+  // 지급 대상(confirmed) 행에는 정산 계좌를 붙인다. 합계는 getSettlementsSummary가 같은 조건 전체로 계산한다.
+  getSettlements(dto: QueryAdminSettlementsDto) {
+    return listAdminSettlements(this.firestore, dto);
+  }
 
-    if (dto.storeId) {
-      query = query.where('storeId', '==', dto.storeId);
-    }
-    if (dto.status) {
-      query = query.where('status', '==', dto.status);
-    }
-    if (dto.from) {
-      const { start } = dateRangeKST(dto.from);
-      query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(start));
-    }
-    if (dto.to) {
-      const { endExclusive } = dateRangeKST(dto.to);
-      query = query.where('settledAt', '<', this.firestore.Timestamp.fromDate(endExclusive));
-    }
-
-    query = query.orderBy('settledAt', 'desc').limit(500);
-    const snap = await query.get();
-
-    return {
-      settlements: snap.docs.map((d: any) => d.data()),
-      total: snap.size,
-    };
+  getSettlementsSummary(dto: AdminSettlementFilterDto) {
+    return summarizeAdminSettlements(this.firestore, dto);
   }
 
   // N1: 트랜잭션 내 status 재확인 후 paid 전이 — 더블클릭/동시 클릭 이중 paid 경합 차단.
