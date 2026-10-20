@@ -1,3 +1,6 @@
+import { BadRequestException } from '@nestjs/common';
+import type { FirestoreService } from '../firestore/firestore.service';
+
 // 관리자 목록 응답(판매자·주문·기사)의 허용 필드와 이어받기(커서) 규칙.
 // 저장 문서를 통째로 내려주지 않고 화면이 쓰는 필드만 고른다(배송지·세션·정산 계좌 등 제외).
 
@@ -89,4 +92,38 @@ export function toAdminOrderRow(
     cancellationStatus:
       typeof cancellation?.['status'] === 'string' ? cancellation['status'] : null,
   };
+}
+
+/** 커서 문서가 없거나 형식이 틀리면 같은 400으로 거절한다(문서 존재 여부를 드러내지 않음). */
+export async function readAdminListCursor(
+  firestore: FirestoreService,
+  collection: 'orders' | 'users',
+  cursor: unknown,
+  belongs: (data: Record<string, unknown>) => boolean = () => true,
+) {
+  if (typeof cursor !== 'string' || !ADMIN_LIST_CURSOR_PATTERN.test(cursor)) {
+    throw new BadRequestException(ADMIN_LIST_CURSOR_MESSAGE);
+  }
+  const cursorSnap = await firestore.doc(`${collection}/${cursor}`).get();
+  if (!cursorSnap.exists || !belongs(cursorSnap.data() ?? {})) {
+    throw new BadRequestException(ADMIN_LIST_CURSOR_MESSAGE);
+  }
+  return cursorSnap;
+}
+
+/** 목록 한 쪽에 나온 가게만 가게마다 한 번씩 읽어 이름을 붙인다. */
+export async function readStoreNames(
+  firestore: FirestoreService,
+  storeIds: unknown[],
+): Promise<Map<string, string>> {
+  const unique = [
+    ...new Set(storeIds.filter((id): id is string => typeof id === 'string' && id !== '')),
+  ];
+  const snaps = await Promise.all(unique.map((id) => firestore.doc(`stores/${id}`).get()));
+  const names = new Map<string, string>();
+  snaps.forEach((snap, index) => {
+    const name = snap.exists ? snap.data()?.['name'] : undefined;
+    if (typeof name === 'string' && name.trim() !== '') names.set(unique[index], name);
+  });
+  return names;
 }

@@ -43,12 +43,12 @@ import {
   ADMIN_DRIVER_LIST_DEFAULT_LIMIT,
   ADMIN_DRIVER_LIST_FIELDS,
   ADMIN_DRIVER_LIST_MAX_LIMIT,
-  ADMIN_LIST_CURSOR_MESSAGE,
-  ADMIN_LIST_CURSOR_PATTERN,
   ADMIN_ORDER_LIST_DEFAULT_LIMIT,
   ADMIN_ORDER_LIST_MAX_LIMIT,
   ADMIN_STORE_LIST_FIELDS,
   pickListFields,
+  readAdminListCursor,
+  readStoreNames,
   resolveAdminListLimit,
   toAdminOrderRow,
 } from './admin-lists';
@@ -292,7 +292,7 @@ export class AdminService {
     // 최신순. (storeId|status, createdAt DESC) 인덱스를 쓰고, 이어받기는 앞 응답 마지막 문서 다음부터.
     query = query.orderBy('createdAt', 'desc');
     if (dto.cursor !== undefined) {
-      query = query.startAfter(await this.readListCursor('orders', dto.cursor));
+      query = query.startAfter(await readAdminListCursor(this.firestore, 'orders', dto.cursor));
     }
 
     const limit = resolveAdminListLimit(
@@ -304,7 +304,7 @@ export class AdminService {
     const docs = snap.docs.slice(0, limit);
     const hasMore = snap.docs.length > limit;
     const records = docs.map((d: any) => ({ id: d.id, ...d.data() }) as Record<string, unknown>);
-    const storeNames = await this.readStoreNames(records.map((order) => order['storeId']));
+    const storeNames = await readStoreNames(this.firestore, records.map((order) => order['storeId']));
     const orders = records.map((order) => toAdminOrderRow(order, storeNames));
 
     // total = 이번 응답에 담긴 건수. hasMore/nextCursor로 다음 쪽을 이어 받는다.
@@ -314,38 +314,6 @@ export class AdminService {
       hasMore,
       nextCursor: hasMore ? (docs[docs.length - 1].id as string) : null,
     };
-  }
-
-  // 목록 한 쪽에 나온 가게만 가게마다 한 번씩 읽어 이름을 붙인다.
-  private async readStoreNames(storeIds: unknown[]): Promise<Map<string, string>> {
-    const unique = [
-      ...new Set(storeIds.filter((id): id is string => typeof id === 'string' && id !== '')),
-    ];
-    const snaps = await Promise.all(
-      unique.map((id) => this.firestore.doc(`stores/${id}`).get()),
-    );
-    const names = new Map<string, string>();
-    snaps.forEach((snap, index) => {
-      const name = snap.exists ? snap.data()?.['name'] : undefined;
-      if (typeof name === 'string' && name.trim() !== '') names.set(unique[index], name);
-    });
-    return names;
-  }
-
-  // 커서 문서가 없거나 형식이 틀리면 같은 400으로 거절한다(문서 존재 여부를 드러내지 않음).
-  private async readListCursor(
-    collection: 'orders' | 'users',
-    cursor: unknown,
-    belongs: (data: Record<string, unknown>) => boolean = () => true,
-  ) {
-    if (typeof cursor !== 'string' || !ADMIN_LIST_CURSOR_PATTERN.test(cursor)) {
-      throw new BadRequestException(ADMIN_LIST_CURSOR_MESSAGE);
-    }
-    const cursorSnap = await this.firestore.doc(`${collection}/${cursor}`).get();
-    if (!cursorSnap.exists || !belongs(cursorSnap.data() ?? {})) {
-      throw new BadRequestException(ADMIN_LIST_CURSOR_MESSAGE);
-    }
-    return cursorSnap;
   }
 
   async forceRefund(orderId: string, dto: ForceRefundDto, actorId: string) {
@@ -672,7 +640,12 @@ export class AdminService {
       .orderBy('createdAt', 'desc') as any;
     if (dto.cursor !== undefined) {
       query = query.startAfter(
-        await this.readListCursor('users', dto.cursor, (data) => data['role'] === 'driver'),
+        await readAdminListCursor(
+          this.firestore,
+          'users',
+          dto.cursor,
+          (data) => data['role'] === 'driver',
+        ),
       );
     }
 
