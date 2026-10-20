@@ -105,9 +105,13 @@ function makeFinalization(overrides: Data = {}) {
     totalAmount: 100000,
     ...overrides,
   };
-  const { firestore, records } = makeFirestore({ 'orders/order-1': order });
+  const { firestore, records } = makeFirestore({
+    'orders/order-1': order,
+    'saleRounds/round-1': { name: '10월 4주 금요 회차' },
+  });
   const portone = { refund: jest.fn(), getPayment: jest.fn() };
   const notifications = { sendToUser: jest.fn() };
+  const opsAlert = { enabled: true, send: jest.fn().mockResolvedValue(true) };
   const audit = { log: jest.fn() };
   const capacity = {
     reserveCheckout: jest.fn().mockResolvedValue({ id: 'late-reservation-1' }),
@@ -129,6 +133,7 @@ function makeFinalization(overrides: Data = {}) {
     issueWriter as never,
     retention as never,
     refunds as never,
+    opsAlert as never,
   );
   return {
     service,
@@ -136,6 +141,7 @@ function makeFinalization(overrides: Data = {}) {
     records,
     portone,
     notifications,
+    opsAlert,
     capacity,
     issueWriter,
     retention,
@@ -913,5 +919,154 @@ describe('PENDING 정리 cron 동시성', () => {
 
     await fixture.settle(fixture.service.cleanupPendingOrders());
     expect(fixture.portone.getPayment).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe('새 주문 운영 알림', () => {
+  const flush = () => new Promise((resolve) => setImmediate(resolve));
+  const roundOrder = {
+    orderNumber: '20261101-000007',
+    buyerName: '홍길동',
+    buyerPhone: '010-1234-5678',
+    deliveryPhone: '010-1234-5678',
+    address: '경기도 이천시 중리천로 1 101호',
+    requestNote: '문 앞에 두세요',
+    orderItems: [
+      {
+        roundItemId: 'round-item-1',
+        productId: 'product-1',
+        productName: '동양란 춘란',
+        quantity: 2,
+        selectedOptions: [{ name: '메시지 카드', value: '사랑하는 엄마에게' }],
+      },
+      { roundItemId: 'round-item-2', productId: 'product-2', productName: '호접란', quantity: 1 },
+    ],
+  };
+
+  it('결제가 확정된 회차 주문은 회차 이름·상품·금액만 담아 1회 알린다', async () => {
+    const fixture = makeFinalization(roundOrder);
+
+    await expect(fixture.service.finalizePaidOrder('order-1', paymentData)).resolves.toEqual({
+      ok: true,
+      status: 'ACCEPTED',
+    });
+    await flush();
+
+    expect(fixture.opsAlert.send).toHaveBeenCalledTimes(1);
+    expect(fixture.opsAlert.send).toHaveBeenCalledWith({
+      level: 'info',
+      title: '새 주문',
+      lines: [
+        '회차: 10월 4주 금요 회차',
+        '· 동양란 춘란 × 2',
+        '· 호접란 × 1',
+        '결제 금액: 100,000원',
+      ],
+    });
+    const sent = JSON.stringify(fixture.opsAlert.send.mock.calls);
+    for (const forbidden of [
+      'order-1',
+      'store-1',
+      'user-1',
+      'round-1',
+      'product-1',
+      '20261101-000007',
+      '홍길동',
+      '010-1234-5678',
+      '중리천로',
+      '문 앞에',
+      '사랑하는 엄마에게',
+      '메시지 카드',
+      'tx-1',
+    ]) {
+      expect(sent).not.toContain(forbidden);
+    }
+  });
+
+  it('이미 처리된 결제의 웹훅 재전송은 다시 알리지 않는다', async () => {
+    const fixture = makeFinalization(roundOrder);
+
+    await fixture.service.finalizePaidOrder('order-1', paymentData);
+    await expect(fixture.service.finalizePaidOrder('order-1', paymentData)).resolves.toEqual({
+      ok: true,
+      reason: 'already_processed',
+    });
+    await flush();
+
+    expect(fixture.opsAlert.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('공동구매 참여는 문구를 나누고 옛 단일 상품 필드를 쓴다', async () => {
+    const fixture = makeFinalization({
+      saleType: 'group',
+      schemaVersion: undefined,
+      roundId: undefined,
+      reservationId: undefined,
+      orderItems: undefined,
+      productName: '심비디움 공동구매',
+      quantity: 3,
+    });
+
+    await fixture.service.finalizePaidOrder('order-1', paymentData);
+    await flush();
+
+    expect(fixture.opsAlert.send).toHaveBeenCalledWith({
+      level: 'info',
+      title: '공동구매 참여',
+      lines: ['· 심비디움 공동구매 × 3', '결제 금액: 100,000원'],
+    });
+  });
+
+  it.each([
+    ['결제 전 상태', paymentDataWithStatus('PENDING')],
+    ['금액 불일치', paymentDataWithStatus('PAID', { amount: { total: 99999 } })],
+  ])('%s이면 알리지 않는다', async (_name, data) => {
+    const fixture = makeFinalization(roundOrder);
+
+    await fixture.service.finalizePaidOrder('order-1', data);
+    await flush();
+
+    expect(fixture.opsAlert.send).not.toHaveBeenCalled();
+  });
+
+  it('알림 전송을 기다리지 않아 손님 알림이 늦어지지 않는다', async () => {
+    const fixture = makeFinalization(roundOrder);
+    fixture.opsAlert.send.mockReturnValue(new Promise(() => undefined));
+
+    await expect(fixture.service.finalizePaidOrder('order-1', paymentData)).resolves.toEqual({
+      ok: true,
+      status: 'ACCEPTED',
+    });
+    expect(fixture.notifications.sendToUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('회차 이름을 읽지 못하면 이름 줄만 빼고 알리고 결제 확정은 그대로 끝난다', async () => {
+    const fixture = makeFinalization(roundOrder);
+    fixture.firestore.doc('saleRounds/round-1')?.get.mockRejectedValue(new Error('UNAVAILABLE'));
+
+    await expect(fixture.service.finalizePaidOrder('order-1', paymentData)).resolves.toEqual({
+      ok: true,
+      status: 'ACCEPTED',
+    });
+    await flush();
+
+    expect(fixture.opsAlert.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: '새 주문',
+        lines: ['· 동양란 춘란 × 2', '· 호접란 × 1', '결제 금액: 100,000원'],
+      }),
+    );
+    expect(fixture.notifications.sendToUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('운영 알림이 꺼져 있으면 회차 문서도 읽지 않는다', async () => {
+    const fixture = makeFinalization(roundOrder);
+    fixture.opsAlert.enabled = false;
+
+    await fixture.service.finalizePaidOrder('order-1', paymentData);
+    await flush();
+
+    expect(fixture.opsAlert.send).not.toHaveBeenCalled();
+    expect(fixture.firestore.doc).not.toHaveBeenCalledWith('saleRounds/round-1');
   });
 });
