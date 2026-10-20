@@ -66,6 +66,44 @@ describe('AuditService', () => {
     expect(set.mock.calls[1][0]).toMatchObject({ userId: 'user-1', ip: null, detail: null });
   });
 
+  it('어드민 기록은 adminAuditLogs에 쓰고, 빈 사유는 null로 바꾼다', async () => {
+    const { set, service } = makeService('unit-test-secret');
+    await service.logAdmin({
+      action: 'admin.store.archived',
+      actorId: 'admin-1',
+      targetType: 'store',
+      targetId: 'store-1',
+      reason: '   ',
+    });
+    expect(set.mock.calls[0][0]).toMatchObject({
+      action: 'admin.store.archived',
+      actorId: 'admin-1',
+      targetType: 'store',
+      targetId: 'store-1',
+      before: null,
+      after: null,
+      reason: null,
+      createdAt: 'now',
+    });
+  });
+
+  it('트랜잭션을 주면 바로 쓰지 않고 그 트랜잭션에 넣는다', async () => {
+    const { set, service } = makeService('unit-test-secret');
+    const tx = { set: jest.fn() };
+    await service.logAdmin(
+      {
+        action: 'admin.settlement.paid',
+        actorId: 'admin-1',
+        targetType: 'settlement',
+        targetId: 'settlement-1',
+      },
+      tx as never,
+    );
+    expect(set).not.toHaveBeenCalled();
+    expect(tx.set).toHaveBeenCalledTimes(1);
+    expect(tx.set.mock.calls[0][1]).toMatchObject({ action: 'admin.settlement.paid' });
+  });
+
   it('minimizeAuditDetail은 입력 객체를 바꾸지 않는다', () => {
     const detail = { email: 'a@example.com', reason: 'x' };
     minimizeAuditDetail(detail, { emailHmacKey: Buffer.from('k') });

@@ -69,7 +69,7 @@ describe('DriversClient read recovery wiring', () => {
 
   it('approve/suspend wiring을 유지한다', () => {
     expect(source).toContain('approve(pending.userId)');
-    expect(source).toContain('toggleSuspend(pending.userId');
+    expect(source).toMatch(/toggleSuspend\(\s*pending\.userId,/);
     expect(source).toContain('onAction={handleAction}');
     expect(source).toContain('processingId={processingId}');
     expect(source).toContain('<ConfirmModal');

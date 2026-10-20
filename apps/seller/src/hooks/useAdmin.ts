@@ -268,13 +268,14 @@ export function useAdminUsers() {
   const toggleSuspend = async (
     userId: string,
     suspended: boolean,
+    reason?: string,
   ): Promise<AdminCommandOutcome> => {
     return runAdminCommand(
       token,
       `/admin/users/${userId}/status`,
       {
         method: 'PATCH',
-        body: JSON.stringify({ suspended }),
+        body: JSON.stringify({ suspended, ...(reason ? { reason } : {}) }),
       },
       reload,
     );
@@ -364,13 +365,14 @@ export function useAdminDrivers() {
   const toggleSuspend = async (
     userId: string,
     suspended: boolean,
+    reason?: string,
   ): Promise<AdminCommandOutcome> => {
     return runAdminCommand(
       token,
       `/admin/drivers/${userId}/suspend`,
       {
         method: 'PATCH',
-        body: JSON.stringify({ suspended }),
+        body: JSON.stringify({ suspended, ...(reason ? { reason } : {}) }),
       },
       reload,
     );
