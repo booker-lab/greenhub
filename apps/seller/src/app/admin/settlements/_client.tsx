@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -11,12 +12,17 @@ import { SettlementTable } from './_components/SettlementTable';
 import { SummaryCards } from './_components/SummaryCards';
 import { sumPayable } from './_lib';
 
+/** 스토어 ID 입력이 멈춘 뒤 조회하기까지 기다리는 시간. 글자마다 재조회하지 않는다. */
+const STORE_FILTER_DEBOUNCE_MS = 300;
+
 export default function AdminSettlementsClient() {
   const [storeFilter, setStoreFilter] = useState('');
   const [fromFilter, setFromFilter] = useState('');
   const [toFilter, setToFilter] = useState('');
+  // 입력창은 storeFilter를 바로 보여 주고, 조회는 입력이 멈춘 뒤의 값으로만 한다.
+  const [debouncedStoreFilter] = useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS);
   const { settlements, loading, error, reload, markAsPaid } = useAdminSettlements({
-    storeId: storeFilter || undefined,
+    storeId: debouncedStoreFilter || undefined,
     from: fromFilter || undefined,
     to: toFilter || undefined,
   });
