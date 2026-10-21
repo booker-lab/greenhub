@@ -131,6 +131,8 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 
 결제사 취소·분쟁 보류: 같은 주문(`orderId`)에 `operationIssues`의 `type == PROVIDER_REVERSAL_DETECTED`, `status == OPEN` 기록이 있으면 자동 확정은 그 정산을 `pending`으로 둔 채 건너뛰고(warn 로그만 남기며 새 운영 기록은 만들지 않음), admin 지급(`markAsPaid`)은 `confirmed`여도 409로 거부한다. 판정은 각 transaction 안에서 동등 조건 조회(`orderId`·`type`·`status`, `limit 1`)로 하므로 복합 인덱스가 필요 없고, `RESOLVED`·`DISMISSED` 기록은 막지 않아 처리 후 다음 배치에서 확정·지급된다. 직접 증거: `settlements-lifecycle.spec.ts`(confirm 보류), `admin-privileged-mutation.spec.ts`(지급 409).
 
+주문 상태 보류: 같은 transaction에서 `orders/{orderId}`를 읽어, 주문이 `CANCELLED`이거나 `cancellation.status`가 `REFUNDING`·`REFUND_FAILED`·`LOCAL_PENDING`·`LOCAL_FAILED`(취소·환불 진행 중)이면 자동 확정은 그 정산을 `pending`으로 둔 채 건너뛰고(warn 로그만, 정산 취소·새 운영 기록 없음), admin 지급은 `confirmed`여도 409로 거부한다. 주문 문서가 없으면 판단 근거가 없으므로 같은 방식으로 막는다(fail closed). 판정은 `isOrderCancelledOrCancelling`(`orders/order-cancellation-state.ts`)을 그대로 쓴다. 환불이 중간에 멈춘 주문이나 주문 취소 뒤 정산 취소가 실패한 주문의 정산이 그대로 확정·지급되는 것을 막는 안전장치이고, 그런 정산을 `cancelled`로 수렴시키는 일은 이 보류가 하지 않는다. 직접 증거: `settlements-lifecycle.spec.ts`(주문 상태 보류·주문 없음·재시도 경합), `admin-privileged-mutation.spec.ts`(취소·진행 중·주문 없음 지급 409).
+
 ## 7. 취소 반영
 
 `cancelSettlement(orderId)`는 연결 settlement가 있으면 취소를 반영한다.
@@ -292,6 +294,7 @@ PATCH /admin/settlements/:settlementId/pay
 - settlement 없음 → not found
 - 이미 `paid` → 거부
 - `confirmed`가 아니면 거부
+- 열린 결제사 취소·분쟁 기록, 취소됐거나 취소·환불이 진행 중인 주문, 주문 문서 없음 → 409(§6 보류)
 - transaction에서 status 재확인 후 `paid`
 - `paidAt`, `updatedAt` 기록
 
@@ -307,6 +310,7 @@ PATCH /admin/settlements/:settlementId/pay
 - `pending|cancelled|paid` 거부와 transaction write 0
 - `confirmed → paid` 정상 성공, transaction fresh read, `paidAt`·`updatedAt` 기록
 - 동시 지급 요청이 fresh status 기준으로 한 번만 수렴
+- 취소됐거나 취소·환불이 진행 중인 주문, 주문 문서 없음의 정산은 409와 transaction write 0
 
 증거: `apps/api/src/admin/admin-privileged-mutation.spec.ts`, `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
 
@@ -375,6 +379,7 @@ admin 지급 상태 전이는 코드의 transaction 존재만으로 `VERIFIED` �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-21 | 주문 상태 보류(§6): 취소됐거나 취소·환불이 진행 중인 주문, 주문 문서 없음의 정산은 자동 확정하지 않고 admin 지급은 409 |
 | 2026-10-21 | 결정 ②④⑤⑦: 가게별 수수료율 반영, 지급 뒤 환불 회수 필요(`SETTLEMENT_RECOVERY_REQUIRED`), 판매자 정산 계좌 API, 관리자 정산 목록 이어받기·행 보강·서버 합계 |
 | 2026-10-10 | seller 정산 API에 `RolesGuard`(seller, admin)를 적용하고, 목록에 `limit`(기본·상한 500)·`cursor` 페이지네이션과 `hasMore`·`nextCursor` 응답 필드를 추가 |
 | 2026-09-26 | admin 강제 환불이 `cancelSettlement()`로 pending/confirmed를 cancelled로 수렴하고 paid를 역전하지 않는 계약을 `admin.service.spec.ts`·`admin-legacy-refund-occ-retry.spec.ts` proof로 `ADMIN-FORCE-REFUND-CONSISTENCY` `IMPLEMENTATION_PROVEN`에 동기화 |
