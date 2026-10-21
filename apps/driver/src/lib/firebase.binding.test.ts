@@ -105,8 +105,8 @@ describe('Driver Firebase local binding (FE-PILOT-DRIVER-FIREBASE-BINDING-PROOF-
 
     firebase.getFirebaseAuth();
     firebase.getFirebaseAuth();
-    firebase.getFirebaseStorage();
-    firebase.getFirebaseStorage();
+    // 동시에 불러도 Storage 인스턴스·emulator 연결은 한 번만 만든다.
+    await Promise.all([firebase.getFirebaseStorage(), firebase.getFirebaseStorage()]);
 
     expect(firebaseMocks.connectAuthEmulator).toHaveBeenCalledTimes(1);
     expect(firebaseMocks.connectAuthEmulator).toHaveBeenCalledWith(
@@ -139,7 +139,7 @@ describe('Driver Firebase local binding (FE-PILOT-DRIVER-FIREBASE-BINDING-PROOF-
     const firebase = await import('./firebase');
 
     firebase.getFirebaseAuth();
-    firebase.getFirebaseStorage();
+    await firebase.getFirebaseStorage();
 
     expect(firebaseMocks.connectAuthEmulator).not.toHaveBeenCalled();
     expect(firebaseMocks.connectFirestoreEmulator).not.toHaveBeenCalled();
@@ -184,16 +184,19 @@ describe('Driver Firebase local binding (FE-PILOT-DRIVER-FIREBASE-BINDING-PROOF-
     expect(firebaseMocks.connectStorageEmulator).not.toHaveBeenCalled();
   });
 
-  it('driver consumer export(firebaseAuth/storage/getter)를 유지하고 Firestore db는 내보내지 않는다', async () => {
+  it('driver consumer export(firebaseAuth/getter)를 유지하고 Firestore db·Storage는 미리 만들지 않는다', async () => {
     setEnvironment(localEnvironment);
     const firebase = await import('./firebase');
 
     expect('db' in firebase).toBe(false);
+    // Storage는 업로드할 때만 만든다(모듈을 읽는 것만으로 만들지 않는다).
+    expect('storage' in firebase).toBe(false);
+    expect(firebaseMocks.getStorage).not.toHaveBeenCalled();
     expect(firebase.firebaseAuth).toBeDefined();
-    expect(firebase.storage).toBeDefined();
     expect(typeof firebase.getFirebaseAuth).toBe('function');
     expect(typeof firebase.getFirebaseStorage).toBe('function');
     expect(firebase.getFirebaseAuth()).toBe(firebase.firebaseAuth);
-    expect(firebase.getFirebaseStorage()).toBe(firebase.storage);
+    const storage = await firebase.getFirebaseStorage();
+    expect(storage).toBe(await firebase.getFirebaseStorage());
   });
 });
