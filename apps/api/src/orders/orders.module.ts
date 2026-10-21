@@ -13,6 +13,8 @@ import { OrdersService } from './orders.service';
 import { OrdersCreateService } from './orders-create.service';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { OrdersQueryService } from './orders-query.service';
+import { PostDeliveryRefundController } from './post-delivery-refund.controller';
+import { PostDeliveryRefundService } from './post-delivery-refund.service';
 import { RoundOrderCreateService } from './round-order-create.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { DriverOrderScopeService } from './driver-order-scope.service';
@@ -26,7 +28,12 @@ import { DriverOrderScopeService } from './driver-order-scope.service';
     OperationIssuesModule,
     RetentionModule,
   ],
-  controllers: [OrdersPublicController, OrdersController, DeliveryPhotosController],
+  controllers: [
+    OrdersPublicController,
+    OrdersController,
+    DeliveryPhotosController,
+    PostDeliveryRefundController,
+  ],
   providers: [
     OrdersService,
     OrdersCreateService,
@@ -37,12 +44,14 @@ import { DriverOrderScopeService } from './driver-order-scope.service';
     DriverOrderScopeService,
     OrderChargesService,
     DeliveryPhotosService,
+    PostDeliveryRefundService,
   ],
   exports: [
     OrdersService,
     OrdersQueryService,
     RoundOrderLifecycleService,
     DriverOrderScopeService,
+    PostDeliveryRefundService,
   ],
 })
 export class OrdersModule {}
