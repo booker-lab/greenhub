@@ -3,9 +3,9 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { SettlementsService } from '../settlements/settlements.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type TestRecord = Record<string, unknown>;
 type TransactionCallback = (transaction: TestTransaction) => Promise<unknown>;
@@ -223,7 +223,7 @@ function makeContext(options: {
     settlements as never,
     capacity as never,
   );
-  const lifecycle = new OrdersLifecycleService(
+  const lifecycle = createSettledOrdersLifecycle(
     firestore as never,
     notifications as never,
     payments as never,

@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, any>;
 type Write = { operation: 'set' | 'update'; path: string; data: Data };
@@ -184,7 +184,7 @@ function makeContext(options: {
     settlements as never,
     capacity as never,
   );
-  const lifecycle = new OrdersLifecycleService(
+  const lifecycle = createSettledOrdersLifecycle(
     memory.firestore as never,
     notifications as never,
     payments as never,

@@ -3,7 +3,7 @@
 // REFUND_FAILED를 남겨 재시도·운영 확인 대상으로 만든다.
 
 import { ConflictException } from '@nestjs/common';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, any>;
 
@@ -122,7 +122,7 @@ function makeContext(orderOverrides: Data = {}) {
     assertMutationEligibilityInTransaction: jest.fn().mockResolvedValue(undefined),
     assertFirstClaimEligibilityInTransaction: jest.fn().mockResolvedValue(undefined),
   };
-  const lifecycle = new OrdersLifecycleService(
+  const lifecycle = createSettledOrdersLifecycle(
     memory.firestore as never,
     notifications as never,
     payments as never,

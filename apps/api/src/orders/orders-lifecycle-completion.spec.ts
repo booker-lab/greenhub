@@ -1,4 +1,12 @@
+import { OrderNoticeDispatcher } from './order-notice-dispatcher';
 import { OrdersLifecycleService } from './orders-lifecycle.service';
+
+// 재시도 대기만 없앤 알림 실행기. 알림 처리 완료는 각 시험이 drain()으로 기다린다.
+class ImmediateRetryNoticeDispatcher extends OrderNoticeDispatcher {
+  protected override sleep(): Promise<void> {
+    return Promise.resolve();
+  }
+}
 
 type Data = Record<string, unknown>;
 
@@ -37,6 +45,7 @@ function makeService(overrides: Data = {}) {
       return { orderId: 'order-safe', status: 'DELIVERED' };
     }),
   };
+  const notices = new ImmediateRetryNoticeDispatcher();
   const service = new OrdersLifecycleService(
     firestore as never,
     notifications as never,
@@ -44,9 +53,11 @@ function makeService(overrides: Data = {}) {
     settlements as never,
     {} as never,
     roundLifecycle as never,
+    undefined,
+    notices,
   );
 
-  return { notifications, order: () => order, service, settlements };
+  return { notices, notifications, order: () => order, service, settlements };
 }
 
 describe('배송 완료 후속효과 복구 계약', () => {
@@ -56,6 +67,7 @@ describe('배송 완료 후속효과 복구 계약', () => {
     await expect(
       (context.service as any).reconcileDeliveryCompletion('store-safe', 'order-safe'),
     ).resolves.toEqual({ orderId: 'order-safe', status: 'DELIVERED' });
+    await context.notices.drain();
 
     expect(context.settlements.createSettlement).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'order-safe', status: 'DELIVERED' }),
@@ -82,12 +94,13 @@ describe('배송 완료 후속효과 복구 계약', () => {
     await expect(
       (context.service as any).reconcileDeliveryCompletion('store-safe', 'order-safe'),
     ).resolves.toMatchObject({ status: 'DELIVERED' });
+    await context.notices.drain();
 
     expect(context.settlements.createSettlement).toHaveBeenCalledTimes(2);
     expect(context.notifications.sendToUser).toHaveBeenCalledTimes(1);
   });
 
-  it('알림 실패 뒤 재조정은 멱등 정산을 재확인하고 완료 알림을 복구한다', async () => {
+  it('알림 예외는 재조정 결과를 바꾸지 않고 같은 멱등 키로 다시 시도해 완료 알림을 보낸다', async () => {
     const context = makeService();
     context.notifications.sendToUser
       .mockRejectedValueOnce(new Error('완료 알림 실패'))
@@ -95,12 +108,35 @@ describe('배송 완료 후속효과 복구 계약', () => {
 
     await expect(
       (context.service as any).reconcileDeliveryCompletion('store-safe', 'order-safe'),
-    ).rejects.toThrow('완료 알림 실패');
+    ).resolves.toMatchObject({ status: 'DELIVERED' });
+    await context.notices.drain();
+
+    expect(context.settlements.createSettlement).toHaveBeenCalledTimes(1);
+    expect(context.notifications.sendToUser).toHaveBeenCalledTimes(2);
+    expect(context.notifications.sendToUser.mock.calls[1]).toEqual(
+      context.notifications.sendToUser.mock.calls[0],
+    );
+  });
+
+  it('응답은 완료 알림 발송이 끝나기를 기다리지 않는다', async () => {
+    const context = makeService();
+    let releaseNotice!: () => void;
+    context.notifications.sendToUser.mockImplementationOnce(
+      () => new Promise<void>((resolve) => (releaseNotice = resolve)),
+    );
+
     await expect(
       (context.service as any).reconcileDeliveryCompletion('store-safe', 'order-safe'),
-    ).resolves.toMatchObject({ status: 'DELIVERED' });
+    ).resolves.toEqual({ orderId: 'order-safe', status: 'DELIVERED' });
+    // 응답이 돌아온 시점에 알림은 아직 끝나지 않았다.
+    let settled = false;
+    const drained = context.notices.drain().then(() => (settled = true));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(context.notifications.sendToUser).toHaveBeenCalledTimes(1);
+    expect(settled).toBe(false);
 
-    expect(context.settlements.createSettlement).toHaveBeenCalledTimes(2);
-    expect(context.notifications.sendToUser).toHaveBeenCalledTimes(2);
+    releaseNotice();
+    await drained;
+    expect(settled).toBe(true);
   });
 });

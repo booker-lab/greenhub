@@ -12,6 +12,7 @@
 | 새 주문·공동구매 참여(결제 확정 시 한 주문에 한 번). 회차 이름·상품명과 수량·결제 금액만 싣는다 | API `PaymentFinalizationService` | 🟢 정보 |
 | 운영 확인 기록이 새로 열림(결제 조회 실패, 환불 실패, 고객 안내 실패, 배송 사진 확인 등) | API `OperationIssueWriterService` | 기록의 severity(긴급·주의) |
 | 알림톡 발송 막힘(잔액 부족, 허용 IP 아님, 인증 실패, 발신번호 미등록) | API `NotificationsService` | 긴급, 같은 사유는 1시간에 한 번 |
+| 고객 상태 알림 발송 예외(주문 상태 변경은 끝났고 응답 뒤 알림 처리가 다시 시도해도 예외로 끝남). 주문 id·전이·오류 종류만 싣는다 | API `OrderNoticeDispatcher` | 주의, 같은 주문·전이는 30분에 한 번 |
 | 아침 운영 요약 08:30 KST(열린 운영 기록, 20분 넘은 결제 대기, 배송 보류, 지급 대기 정산) | API `OpsDigestService` | 이상 없으면 🟢 |
 | 서버 오류(5xx 응답, 의도된 503 제외). 메서드·경로 패턴·오류 이름만 싣는다 | API `FirestoreRetryableErrorFilter` | 긴급, 같은 경로·오류는 30분에 한 번 |
 | 서비스 응답 이상(API `/health`(Firestore 읽기 확인 포함), 소비자 홈, 판매자·기사 로그인) | GitHub `uptime.yml`, 15분마다 | 긴급 |

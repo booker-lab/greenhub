@@ -14,8 +14,8 @@
 
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { createOccFirestore } from '../../test/helpers/firestore-occ-fake';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import type { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Occ = ReturnType<typeof createOccFirestore>;
 
@@ -31,7 +31,7 @@ function makeService(occ: Occ) {
   const roundLifecycle = {
     cancelByConsumer: jest.fn(),
   };
-  const service = new OrdersLifecycleService(
+  const service = createSettledOrdersLifecycle(
     occ.firestore as never,
     notifications as never,
     payments as never,

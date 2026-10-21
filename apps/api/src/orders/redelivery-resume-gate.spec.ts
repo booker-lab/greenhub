@@ -1,10 +1,10 @@
 import { ConflictException, ForbiddenException, Logger } from '@nestjs/common';
 import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
 import { OrderChargesService } from './order-charges.service';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { OrdersQueryService } from './orders-query.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
 import { createInMemoryFirestore } from '../../test/helpers/in-memory-firestore';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, any>;
 
@@ -94,7 +94,7 @@ function makeContext(options: {
     settlements as never,
     capacity as never,
   );
-  const lifecycle = new OrdersLifecycleService(
+  const lifecycle = createSettledOrdersLifecycle(
     firestore,
     notifications as never,
     payments as never,

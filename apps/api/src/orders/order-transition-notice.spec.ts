@@ -15,8 +15,8 @@ import {
   readDeliveryHoldCount,
   transitionHoldCycle,
 } from './order-transition-notice';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, any>;
 
@@ -80,7 +80,7 @@ function makeLifecycle(memory: ReturnType<typeof createInMemoryFirestore>, notif
     capacity,
     driverScope,
   );
-  return new OrdersLifecycleService(
+  return createSettledOrdersLifecycle(
     firestore,
     notifications as never,
     payments as never,

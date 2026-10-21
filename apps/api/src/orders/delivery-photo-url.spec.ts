@@ -8,8 +8,8 @@ import {
 } from './delivery-photo-url';
 import { DriverOrderScopeService } from './driver-order-scope.service';
 import { AttachDeliveryPhotoDto, UpdateStatusDto } from './dto/update-status.dto';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, unknown>;
 
@@ -213,7 +213,7 @@ function makeService(firestore: unknown) {
     capacity as never,
     driverScope,
   );
-  return new OrdersLifecycleService(
+  return createSettledOrdersLifecycle(
     firestore as never,
     notifications as never,
     payments as never,
