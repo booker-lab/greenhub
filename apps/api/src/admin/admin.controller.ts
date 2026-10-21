@@ -52,8 +52,12 @@ export class AdminController {
   }
 
   @Patch('users/:userId/status')
-  suspendUser(@Param('userId') userId: string, @Body() dto: SuspendUserDto) {
-    return this.admin.suspendUser(userId, dto);
+  suspendUser(
+    @Param('userId') userId: string,
+    @Body() dto: SuspendUserDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.admin.suspendUser(userId, dto, user.sub);
   }
 
   // ── Orders ───────────────────────────────────────────────────────

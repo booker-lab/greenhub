@@ -32,6 +32,8 @@ const DETAIL_FIELDS = [
   'hubId',
   'cancelReason',
   'requestNote',
+  // 벤치마킹 비교 기능: 선물 정보(없으면 응답에 키가 없다).
+  'gift',
 ] as const;
 
 const DELIVERY_HOLD_FIELDS = [
@@ -62,6 +64,8 @@ const ORDER_ITEM_DETAIL_FIELDS = [
   'unitPrice',
   'quantity',
   'subtotalAmount',
+  // 벤치마킹 비교 기능: 고른 옵션 스냅샷
+  'selectedOptions',
 ] as const;
 
 // 목록 카드의 "첫 상품 외 N종" 표시용 — 상품 이름과 수량만 싣는다. 가격·사진은 상세에서만 준다.

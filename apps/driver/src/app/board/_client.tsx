@@ -14,6 +14,9 @@ import {
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
 
+/** 복귀 재조회 묶음 간격. focus·visibilitychange가 이 간격 안에 겹치면 목록을 한 번만 다시 조회한다. */
+const REVALIDATE_COALESCE_MS = 1_500;
+
 export default function BoardClient() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -35,8 +38,15 @@ export default function BoardClient() {
   const listScopeRef = useRef<string | null>(null);
 
   // focus 복귀·visibility 복귀 시 새 read를 수행한다. listener 누적 방지를 위해 cleanup한다.
+  // 앱 복귀 한 번에 focus와 visibilitychange가 함께 오므로 짧은 간격 안의 중복은 한 번으로 묶는다.
   useEffect(() => {
-    const revalidate = () => setReloadKey((key) => key + 1);
+    let lastRevalidateAt = Number.NEGATIVE_INFINITY;
+    const revalidate = () => {
+      const now = Date.now();
+      if (now - lastRevalidateAt < REVALIDATE_COALESCE_MS) return;
+      lastRevalidateAt = now;
+      setReloadKey((key) => key + 1);
+    };
     const handleVisibility = () => {
       if (document.visibilityState === 'visible') revalidate();
     };

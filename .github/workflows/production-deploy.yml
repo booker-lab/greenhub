@@ -1,8 +1,9 @@
 name: Production deploy
 
 # 운영 배포. 사용자가 채팅에서 "<SHA> 운영 배포해"라고 명시적으로 승인한 뒤에만 실행한다(AGENTS.md 승인 경계).
-# 이 저장소 plan은 Environment required reviewer를 쓸 수 없으므로, 승인은 dispatch 입력(approval)과
-# 실행자=저장소 owner 확인으로 강제한다(e2e-round-direct.yml과 같은 방식).
+# 이 파일은 승인을 dispatch 입력(approval)·실행자=저장소 owner·실행 ref=main 확인으로 강제한다
+# (e2e-round-direct.yml과 같은 방식). 저장소가 공개라 production Environment에 required reviewer를 둘 수 있지만,
+# 그 설정은 GitHub 저장소 설정이라 이 파일이 대신하지 않는다.
 #
 # 순서(docs/memory.md 운영 배포 순서와 같다):
 #   같은 SHA 원격 회차 E2E 통과 확인 → Firestore 인덱스(READY까지 대기) → API(Railway, /health commit 확인)
@@ -61,24 +62,29 @@ jobs:
       contents: read
       actions: read
     steps:
-      - name: dispatch·실행자·승인·SHA 형식 확인
+      - name: dispatch·실행자·ref·승인·SHA 형식 확인
         shell: bash
         env:
           EVENT_NAME: ${{ github.event_name }}
           ACTOR: ${{ github.actor }}
           TRIGGERING_ACTOR: ${{ github.triggering_actor }}
           REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
           APPROVAL: ${{ inputs.approval }}
           SHA: ${{ inputs.sha }}
           SCOPE: ${{ inputs.scope }}
         run: |
           set -euo pipefail
-          printf 'sha=%s scope=%s actor=%s\n' "$SHA" "$SCOPE" "$ACTOR"
+          printf 'sha=%s scope=%s actor=%s ref=%s\n' "$SHA" "$SCOPE" "$ACTOR" "$REF"
           if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
             echo 'workflow_dispatch로만 운영 배포를 실행합니다.' >&2; exit 1
           fi
           if [[ "$ACTOR" != "$REPOSITORY_OWNER" || "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
             echo '실행자가 저장소 owner가 아니어서 차단합니다.' >&2; exit 1
+          fi
+          # 다른 브랜치에서 실행하면 그 브랜치의 workflow·배포 도구가 쓰인다. main에서만 받는다.
+          if [[ "$REF" != 'refs/heads/main' ]]; then
+            echo 'main에서만 운영 배포를 실행합니다.' >&2; exit 1
           fi
           if [[ "$APPROVAL" != 'PRODUCTION_DEPLOY_APPROVED' ]]; then
             echo '운영 배포 승인이 없어 차단합니다.' >&2; exit 1
@@ -128,10 +134,14 @@ jobs:
       SHA: ${{ inputs.sha }}
       SCOPE: ${{ inputs.scope }}
       FIREBASE_PROJECT: green-e4fe3
+    # 비밀값은 job env에 두지 않고 그 값을 쓰는 step의 env에만 둔다. Firebase 서비스 계정 키 파일은 Firebase를 쓰는
+    # step 안에서만 만들고 그 step이 끝날 때 지운다(GITHUB_ENV로 다음 step에 넘기지 않는다).
     steps:
+      # 배포 스크립트는 실행 ref와 상관없이 main에서 가져온다(gate도 main 실행만 통과시킨다).
       - name: 배포 도구 checkout(main)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
           persist-credentials: false
 
       - name: 배포 대상 SHA checkout(규칙·인덱스 원본)
@@ -141,21 +151,25 @@ jobs:
           path: target
           persist-credentials: false
 
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      # 운영 비밀값을 쓰는 job이라 의존성 캐시를 쓰지 않는다.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '22'
 
       - name: 범위별 비밀값 확인(배포 전에 멈춤)
         shell: bash
+        # 값은 넘기지 않고 설정 여부(true/false)만 넘긴다.
         env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-          RAILWAY_API_SERVICE_ID: ${{ secrets.RAILWAY_API_SERVICE_ID }}
-          VERCEL_PRODUCTION_TOKEN: ${{ secrets.VERCEL_PRODUCTION_TOKEN }}
-          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
+          HAS_RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN != '' }}
+          HAS_RAILWAY_API_SERVICE_ID: ${{ secrets.RAILWAY_API_SERVICE_ID != '' }}
+          HAS_VERCEL_PRODUCTION_TOKEN: ${{ secrets.VERCEL_PRODUCTION_TOKEN != '' }}
+          HAS_FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON != '' }}
         run: |
           set -euo pipefail
           missing=()
-          need() { [[ -n "${!1:-}" ]] || missing+=("$1"); }
+          need() { local flag="HAS_$1"; [[ "${!flag:-false}" == 'true' ]] || missing+=("$1"); }
           case "$SCOPE" in
             all) need RAILWAY_TOKEN; need RAILWAY_API_SERVICE_ID; need VERCEL_PRODUCTION_TOKEN; need FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON ;;
             indexes|rules) need FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON ;;
@@ -171,36 +185,40 @@ jobs:
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Firebase 인증
+      # firebase-tools는 npx로 받지 않고 lockfile에 고정된 scripts devDependency만 설치한다.
+      # 이 step에는 비밀값이 없다. pnpm은 허용 목록(onlyBuiltDependencies) 밖 패키지의 설치 스크립트를 실행하지 않는다.
+      - name: Firebase CLI 설치(lockfile 고정)
         if: inputs.scope == 'all' || inputs.scope == 'indexes' || inputs.scope == 'rules'
         shell: bash
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile --filter ./scripts --dev
+          scripts/node_modules/.bin/firebase --version
+
+      # 인덱스를 배포하고 모두 READY가 될 때까지 기다린다. 키 파일과 gcloud 설정 폴더는 이 step 안에서만 쓰고,
+      # 끝나면(실패·취소 포함) 지운다. 키 내용은 firebase·gcloud 프로세스 env에 넘기지 않는다.
+      - name: Firestore 인덱스 배포·READY 대기
+        if: inputs.scope == 'all' || inputs.scope == 'indexes'
+        shell: bash
+        working-directory: target
         env:
           FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
-          key="$RUNNER_TEMP/firebase-deploy.json"
-          umask 077
-          printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key"
+          key="$RUNNER_TEMP/firebase-indexes.json"
+          export CLOUDSDK_CONFIG="$RUNNER_TEMP/gcloud-indexes"
+          export CLOUDSDK_CORE_DISABLE_PROMPTS=1
+          trap 'rm -rf "$key" "$CLOUDSDK_CONFIG"' EXIT
+          trap 'exit 1' INT TERM
+          (umask 077 && printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key")
+          unset FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON
           project="$(jq -r .project_id "$key")"
           if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
             echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
           fi
+          GOOGLE_APPLICATION_CREDENTIALS="$key" "$GITHUB_WORKSPACE/scripts/node_modules/.bin/firebase" \
+            deploy --only firestore:indexes --project "$FIREBASE_PROJECT" --non-interactive
           gcloud auth activate-service-account --key-file="$key" --quiet
-          echo "GOOGLE_APPLICATION_CREDENTIALS=$key" >> "$GITHUB_ENV"
-
-      - name: Firestore 인덱스 배포
-        if: inputs.scope == 'all' || inputs.scope == 'indexes'
-        shell: bash
-        working-directory: target
-        run: |
-          set -euo pipefail
-          npx -y firebase-tools@14.11.1 deploy --only firestore:indexes --project "$FIREBASE_PROJECT" --non-interactive
-
-      - name: Firestore 인덱스 READY 대기
-        if: inputs.scope == 'all' || inputs.scope == 'indexes'
-        shell: bash
-        run: |
-          set -euo pipefail
           deadline=$(( $(date +%s) + 45 * 60 ))
           while :; do
             pending="$(gcloud firestore indexes composite list --project="$FIREBASE_PROJECT" --format=json \
@@ -251,13 +269,26 @@ jobs:
             echo "- $app(Vercel): \`$result\`" >> "$GITHUB_STEP_SUMMARY"
           done
 
+      # 키 파일은 이 step 안에서만 쓰고, 끝나면(실패·취소 포함) 지운다.
       - name: Firestore·Storage 규칙 배포
         if: inputs.scope == 'all' || inputs.scope == 'rules'
         shell: bash
         working-directory: target
+        env:
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
         run: |
           set -euo pipefail
-          npx -y firebase-tools@14.11.1 deploy --only firestore:rules,storage --project "$FIREBASE_PROJECT" --non-interactive
+          key="$RUNNER_TEMP/firebase-rules.json"
+          trap 'rm -f "$key"' EXIT
+          trap 'exit 1' INT TERM
+          (umask 077 && printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key")
+          unset FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON
+          project="$(jq -r .project_id "$key")"
+          if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
+            echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
+          fi
+          GOOGLE_APPLICATION_CREDENTIALS="$key" "$GITHUB_WORKSPACE/scripts/node_modules/.bin/firebase" \
+            deploy --only firestore:rules,storage --project "$FIREBASE_PROJECT" --non-interactive
           echo "- Firestore·Storage 규칙: 배포됨" >> "$GITHUB_STEP_SUMMARY"
 
       - name: 배포 뒤 확인(post-deploy-smoke)
@@ -279,7 +310,8 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           exit "$status"
 
+      # 각 step이 끝날 때 지우지만, 취소 등으로 남았을 수 있는 키·gcloud 설정을 한 번 더 지운다.
       - name: 서비스 계정 키 삭제
         if: always()
         shell: bash
-        run: rm -f "$RUNNER_TEMP/firebase-deploy.json"
+        run: rm -rf "$RUNNER_TEMP/firebase-indexes.json" "$RUNNER_TEMP/firebase-rules.json" "$RUNNER_TEMP/gcloud-indexes"

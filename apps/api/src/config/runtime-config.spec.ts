@@ -276,9 +276,9 @@ describe('비운영 기본 자격 증명(ADC) project 가드', () => {
 });
 
 describe('trust proxy 홉 수 구성', () => {
-  it('명시값이 없으면 Railway 런타임은 1홉, 로컬은 0홉이다', () => {
-    expect(resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'production' })).toBe(1);
-    expect(resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'staging' })).toBe(1);
+  it('명시값이 없으면 Railway 런타임은 2홉, 로컬은 0홉이다', () => {
+    expect(resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'production' })).toBe(2);
+    expect(resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'staging' })).toBe(2);
     expect(resolveTrustProxyHops({ NODE_ENV: 'development' })).toBe(0);
   });
 
@@ -286,7 +286,7 @@ describe('trust proxy 홉 수 구성', () => {
     expect(
       resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'production', TRUST_PROXY_HOPS: '0' }),
     ).toBe(0);
-    expect(resolveTrustProxyHops({ TRUST_PROXY_HOPS: '2' })).toBe(2);
+    expect(resolveTrustProxyHops({ TRUST_PROXY_HOPS: '1' })).toBe(1);
   });
 
   it.each([

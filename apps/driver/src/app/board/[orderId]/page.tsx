@@ -14,10 +14,12 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { apiFetch, apiRead } from '@/lib/api';
+import { apiPathSegment, readRouteParam } from '@/lib/api-path';
 import { isApiTimeoutError } from '@/lib/api-timeout';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
 import { buildOrderMapLink } from '../../map/_lib/map-navigation-link';
@@ -98,7 +100,39 @@ const STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE =
   '주문이 진행 목록에서 빠졌습니다. 목록에서 결과를 확인해 주세요.';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
-  const { orderId } = use(params);
+  const { orderId: rawOrderId } = use(params);
+  // 경로 파라미터는 형식을 검사한 원래 ID로 읽는다. 맞지 않으면 주문 요청을 보내지 않는다.
+  const orderId = readRouteParam(rawOrderId);
+  if (!orderId) {
+    return (
+      <Box
+        style={{
+          minHeight: '100dvh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Stack align="center" gap="sm" px="md">
+          <Text style={{ color: 'var(--color-text-disabled)' }} ta="center">
+            주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해 주세요.
+          </Text>
+          <Anchor
+            component={Link}
+            href="/board"
+            replace
+            style={{ color: 'var(--color-primary-dark)', fontSize: 'var(--font-size-sm)' }}
+          >
+            배송 목록으로
+          </Anchor>
+        </Stack>
+      </Box>
+    );
+  }
+  return <OrderDetail orderId={orderId} />;
+}
+
+function OrderDetail({ orderId }: { orderId: string }) {
   const { data: session, status: sessionStatus } = useSession();
   const router = useRouter();
   const [order, setOrder] = useState<Order | null>(null);
@@ -134,7 +168,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const inFlightRef = useRef(false);
 
   const readDetail = useCallback(
-    async (token: string): Promise<DriverOrderReadback> => {
+    async (token: string, signal?: AbortSignal): Promise<DriverOrderReadback> => {
       readSeqRef.current += 1;
       const seq = readSeqRef.current;
       const isCurrent = () => seq === readSeqRef.current;
@@ -147,7 +181,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       setReadError(null);
       let readback: DriverOrderReadback;
       try {
-        const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token);
+        const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token, {
+          signal,
+        });
         if (!isCurrent()) return { kind: 'stale' };
         if (!response.ok) {
           const failure = toDriverOrderReadError(response.status);
@@ -173,7 +209,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           readback = { kind: 'order', status: payload.status };
         }
       } catch (cause: unknown) {
-        if (!isCurrent() || (cause instanceof DOMException && cause.name === 'AbortError')) {
+        // effect 정리로 취소된 조회(AbortError)는 사용자 오류로 표시하지 않는다.
+        if (
+          !isCurrent() ||
+          signal?.aborted ||
+          (cause instanceof DOMException && cause.name === 'AbortError')
+        ) {
           return { kind: 'stale' };
         }
         // 시간 초과(ApiTimeoutError)는 AbortError가 아니므로 여기서 FETCH_ERROR로 수렴한다.
@@ -240,7 +281,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       setReadLoading(true);
       setReadRefreshing(false);
     }
-    void readDetail(token);
+    // 화면을 떠나거나 orderId·세션이 바뀌면 진행 중인 조회를 취소한다. 순번 가드는 그대로 둔다.
+    const controller = new AbortController();
+    void readDetail(token, controller.signal);
+    return () => controller.abort();
   }, [
     orderId,
     session?.user.id,
@@ -317,7 +361,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
     setReadbackWarning(null);
     try {
       const res = await apiFetch(
-        `/stores/${order.storeId}/orders/${orderId}/status`,
+        `/stores/${apiPathSegment(order.storeId)}/orders/${apiPathSegment(orderId)}/status`,
         token,
         { method: 'PATCH', body: JSON.stringify({ status }) },
       );
@@ -866,7 +910,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
                 loading={loading}
                 disabled={!commandsAllowed}
                 onClick={() =>
-                  router.push(`/board/${orderId}/photo/round-direct?storeId=${order.storeId}`)
+                  router.push(`/board/${encodeURIComponent(orderId)}/photo/round-direct`)
                 }
               >
                 배송 완료 사진 촬영
@@ -927,7 +971,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
             color="brand"
             loading={loading}
             disabled={!commandsAllowed}
-            onClick={() => router.push(`/board/${orderId}/photo?storeId=${order.storeId}`)}
+            onClick={() => router.push(`/board/${encodeURIComponent(orderId)}/photo`)}
           >
             거점 도착
           </Button>

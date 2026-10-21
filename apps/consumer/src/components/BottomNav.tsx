@@ -11,6 +11,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
 import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import { isFeatureOn } from '@/lib/features';
 
 const ROUND_DIRECT_TABS = [
   { href: '/', label: '홈', Icon: Home, showBadge: false },
@@ -83,16 +84,26 @@ function useStoreMode(storeId: string | null, productsLoading: boolean): StoreMo
   return state;
 }
 
+// 숨기는 경로(결제·주문 완료·상품 상세)에서는 상품 목록·매장 프로필 조회가 필요 없으므로
+// 경로부터 판정하고, 보일 때만 조회하는 하위 컴포넌트를 마운트한다.
 export default function BottomNav() {
   const pathname = usePathname();
+  if (HIDDEN_PATHS.some((path) => pathname.startsWith(path))) return null;
+  return <VisibleBottomNav pathname={pathname} />;
+}
+
+function VisibleBottomNav({ pathname }: { pathname: string }) {
   const { status: sessionStatus } = useSession();
   const { itemCount } = useCart();
-  const visibleItemCount = sessionStatus === 'authenticated' ? itemCount : 0;
+  // 비회원 장바구니(guest-cart, 벤치마킹 비교 기능)가 켜지면 로그인 전에도 담은 수를 보여준다.
+  const visibleItemCount =
+    sessionStatus === 'authenticated' || (isFeatureOn('guest-cart') && sessionStatus !== 'loading')
+      ? itemCount
+      : 0;
   const { products, loading: productsLoading, error: productsError } = useProducts();
   const storeId = useMemo(() => findSingleStoreId(products), [products]);
   const storeMode = useStoreMode(storeId, productsLoading);
 
-  if (HIDDEN_PATHS.some((path) => pathname.startsWith(path))) return null;
   if (productsError || storeMode.status !== 'ready') return null;
 
   const tabs = storeMode.salesMode === 'round_direct' ? ROUND_DIRECT_TABS : LEGACY_TABS;

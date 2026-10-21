@@ -29,6 +29,8 @@ test('공개 회차 정본으로 상품과 스토어 관계를 모두 검증한�
   assert.match(source, /useSaleRounds\(/);
   assert.match(source, /currentRound/);
   assert.match(source, /pastRounds/);
+  // 목록은 최근 지난 회차만 담으므로, 주소의 회차가 목록에 없으면 그 회차만 따로 읽는다.
+  assert.match(source, /usePublicSaleRound\(product\.storeId, unlistedRoundId\)/);
   assert.match(source, /round\.storeId !== product\.storeId/);
   assert.match(source, /item\.roundId === round\.id/);
   assert.match(source, /item\.storeId === product\.storeId/);

@@ -162,6 +162,20 @@ test('Board는 focus 복귀와 visible 복귀에 재조회하고 listener를 정
   assert.match(boardSource, /removeEventListener\(['"]visibilitychange['"]/);
 });
 
+test('Board는 복귀 한 번에 겹쳐 오는 focus·visibilitychange 재조회를 한 번으로 묶는다', () => {
+  assert.match(boardSource, /const REVALIDATE_COALESCE_MS = 1_500;/);
+  const at = boardSource.indexOf('const revalidate = () => {');
+  assert.ok(at !== -1);
+  const block = boardSource.slice(at, at + 300);
+  assert.match(block, /if \(now - lastRevalidateAt < REVALIDATE_COALESCE_MS\) return;/);
+  assert.ok(
+    block.indexOf('lastRevalidateAt = now;') < block.indexOf('setReloadKey((key) => key + 1)'),
+  );
+  // 두 리스너 모두 같은 묶음 함수를 거친다.
+  assert.match(boardSource, /addEventListener\('focus', revalidate\)/);
+  assert.match(boardSource, /if \(document\.visibilityState === 'visible'\) revalidate\(\);/);
+});
+
 test('Board는 usable token 없음을 auth-required로 표시하고 empty와 분리한다', () => {
   assert.match(boardSource, /authRequired/);
   assert.match(boardSource, /로그인이 필요합니다/);
@@ -237,12 +251,40 @@ test('사진 화면은 heading과 촬영·최종 완료 버튼의 접근 가능�
 });
 
 test('직배송 사진 링크는 정확한 Pilot 경로로 분리하고 legacy 링크를 보존한다', () => {
-  assert.match(detailSource, /\/photo\/round-direct\?storeId=/);
+  assert.match(detailSource, /\/photo\/round-direct`\)/);
   assert.doesNotMatch(detailSource, /flow=round-direct/);
-  assert.match(detailSource, /\/photo\?storeId=/);
+  assert.match(detailSource, /\/photo`\)/);
+  // 사진 화면은 판매자 ID를 주문 조회 응답에서 읽으므로 링크 쿼리에 싣지 않는다.
+  assert.doesNotMatch(detailSource, /[?&]storeId=/);
   assert.match(pilotPhotoRouteSource, /mode="round-direct"/);
   assert.match(legacyPhotoRouteSource, /mode="legacy"/);
   assert.doesNotMatch(legacyPhotoRouteSource, /flow/);
+});
+
+test('사진 화면은 명령 경로의 판매자 ID를 주소창이 아니라 주문 조회 응답에서 읽는다', () => {
+  assert.doesNotMatch(photoCaptureSource, /useSearchParams|searchParams/);
+  assert.match(photoCaptureSource, /readDriverOrderStoreId\(await response\.json\(\), orderId\)/);
+  // 사진·명령을 보내기 전에 판매자 ID를 확인한다. 확인하지 못하면 아무 명령도 보내지 않는다.
+  const uploadAt = photoCaptureSource.indexOf('async function upload()');
+  const readAt = photoCaptureSource.indexOf('await readOrderStoreId(token)', uploadAt);
+  const legacyAt = photoCaptureSource.indexOf('uploadLegacyHubPhoto(orderId', uploadAt);
+  const roundDirectAt = photoCaptureSource.indexOf(
+    'uploadRoundDirect(token, blob, storeId)',
+    uploadAt,
+  );
+  assert.ok(uploadAt !== -1 && readAt > uploadAt, 'upload()가 판매자 ID를 먼저 읽어야 한다');
+  assert.ok(readAt < legacyAt && readAt < roundDirectAt, '판매자 ID 확인이 업로드보다 앞서야 한다');
+});
+
+test('기사 명령 경로의 ID 조각은 apiPathSegment로 검사·인코딩한다', () => {
+  for (const source of [detailSource, photoCaptureSource, holdModalSource]) {
+    const paths = [...source.matchAll(/`\/stores\/\$\{([^}]*)\}\/orders\/\$\{([^}]*)\}/g)];
+    assert.ok(paths.length > 0, '명령 경로가 있어야 한다');
+    for (const [path, storePart, orderPart] of paths) {
+      assert.match(storePart, /^apiPathSegment\(/, path);
+      assert.match(orderPart, /^apiPathSegment\(/, path);
+    }
+  }
 });
 
 test('Driver Permissions-Policy는 앱 전체에서 카메라만 자기 출처로 허용한다', () => {
@@ -256,7 +298,10 @@ test('Driver Permissions-Policy는 앱 전체에서 카메라만 자기 출처�
 });
 
 test('직배송 촬영 화면은 앱 안 이동으로 열어 세션·화면 준비를 유지한다', () => {
-  assert.match(detailSource, /router\.push\(`\/board\/\$\{orderId\}\/photo\/round-direct\?storeId=/);
+  assert.match(
+    detailSource,
+    /router\.push\(`\/board\/\$\{encodeURIComponent\(orderId\)\}\/photo\/round-direct`\)/,
+  );
   assert.doesNotMatch(detailSource, /window\.location\.assign/);
 });
 
@@ -272,6 +317,28 @@ test('Driver 서비스워커는 API·인증 요청을 캐시하지 않고 온라
   assert.match(
     driverConfigSource,
     /url\.pathname\.startsWith\('\/api\/'\),\s*handler:\s*'NetworkOnly'/,
+  );
+});
+
+test('사진 화면은 화면이 숨으면 카메라를 끄고 리스너를 정리하며 언마운트 정지를 유지한다', () => {
+  const at = photoCaptureSource.indexOf('const handleVisibility = () => {');
+  assert.ok(at !== -1);
+  const block = photoCaptureSource.slice(at - 200, at + 500);
+  assert.match(block, /if \(!stream\) return;/);
+  assert.match(
+    block,
+    /if \(document\.visibilityState !== 'hidden' \|\| preparingRef\.current\) return;\s*stopStream\(\);/,
+  );
+  assert.match(block, /addEventListener\('visibilitychange', handleVisibility\)/);
+  assert.match(block, /removeEventListener\('visibilitychange', handleVisibility\)/);
+  assert.match(block, /\}, \[stream\]\);/);
+  // 복귀 때는 자동으로 켜지 않고 기존 촬영 시작 버튼 상태(!stream && !captured)로 돌아간다.
+  assert.doesNotMatch(block, /startCamera\(/);
+  assert.match(photoCaptureSource, /\{!stream && !captured && \(/);
+  // 언마운트 정지와 늦게 도착한 getUserMedia 정지는 그대로다.
+  assert.match(
+    photoCaptureSource,
+    /if \(cameraRequestRef\.current !== requestId\) \{\s*stopMediaStream\(nextStream\);/,
   );
 });
 

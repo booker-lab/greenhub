@@ -6,8 +6,10 @@ import { Box, Button, Container, Skeleton, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
 import { notFound, usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import DetailExtras from '@/components/benchmark/DetailExtras';
+import PanelExtras from '@/components/benchmark/PanelExtras';
 import ProductTopBar from '@/components/ProductTopBar';
-import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
+import { type PublicSaleRound, usePublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
@@ -330,7 +332,9 @@ function ProductDetailContent({ product, variety, roundProduct }: ProductDetailC
             isPurchasable={roundProduct.isPurchasable}
           />
         )}
+        {roundProduct && <PanelExtras product={product} item={roundProduct.item} />}
         <ProductInfo product={product} variety={variety} showSummary={!roundProduct} />
+        {roundProduct && <DetailExtras product={product} round={roundProduct.round} />}
         {roundProduct && <RoundPurchaseNotices />}
         {roundProduct ? (
           <ProductActions product={product} roundProduct={roundProduct} />
@@ -359,6 +363,15 @@ function RoundDirectProductDetail({
     !roundId && roundsSettled
       ? findCurrentRoundIdForProduct(product, saleRounds.currentRound)
       : null;
+  // 회차 목록은 최근 지난 회차만 담는다. 주소의 회차가 목록에 없으면(예전에 공유된 링크) 그 회차만 따로 읽는다.
+  const unlistedRoundId =
+    roundId &&
+    roundsSettled &&
+    saleRounds.currentRound?.id !== roundId &&
+    !saleRounds.pastRounds.some((round) => round.id === roundId)
+      ? roundId
+      : null;
+  const unlistedRound = usePublicSaleRound(product.storeId, unlistedRoundId);
 
   // 연결한 회차를 주소에도 남겨 공유·새로고침 때 같은 회차가 열리게 한다(당근 유입 값 등 다른 쿼리는 보존).
   useEffect(() => {
@@ -368,7 +381,7 @@ function RoundDirectProductDetail({
     router.replace(`${pathname}?${query.toString()}`, { scroll: false });
   }, [linkedRoundId, pathname, router]);
 
-  if (saleRounds.status === 'loading') {
+  if (saleRounds.status === 'loading' || unlistedRound.status === 'loading') {
     return <DetailStateFrame label="판매 회차 불러오는 중" />;
   }
   if (saleRounds.status === 'error') {
@@ -415,7 +428,7 @@ function RoundDirectProductDetail({
     product,
     effectiveRoundId,
     saleRounds.currentRound,
-    saleRounds.pastRounds,
+    unlistedRound.round ? [...saleRounds.pastRounds, unlistedRound.round] : saleRounds.pastRounds,
   );
   if (!roundProduct) {
     if (saleRounds.isStale) {

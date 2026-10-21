@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { forwardRef, Inject, Injectable, Logger } from '@nestjs/common';
+import { forwardRef, Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AuditService } from '../common/audit/audit.service';
 import { FirestoreService } from '../firestore/firestore.service';
@@ -9,6 +9,7 @@ import {
   refundNoticeIdempotencyKey,
 } from '../notifications/refund-notice-reasons';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
+import { OpsAlertService } from '../ops-alerts/ops-alert.service';
 import {
   LatePaymentCapacityError,
   OrderCapacityService,
@@ -32,6 +33,8 @@ import { customerOrderLabel } from '../notifications/customer-order-label';
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 const LATE_PAYMENT_REFUND_REASON = '결제 만료 후 회차 한도 마감';
 const LEGACY_LATE_PAYMENT_REFUND_REASON = '결제 만료 후 일일 배송 용량 재확보 실패';
+// 새 주문 알림에 상품 줄을 이만큼까지만 싣는다(나머지는 "외 N개").
+const NEW_ORDER_ALERT_MAX_ITEMS = 10;
 
 // Payment-finalization-owned refund ownership (local to this service).
 // A direct provider cancel is authorized only by a persisted claim written
@@ -89,6 +92,7 @@ export class PaymentFinalizationService {
     private readonly issueWriter: OperationIssueWriterService,
     private readonly retention: RetentionService,
     private readonly refunds: PaymentRefundService,
+    @Optional() @Inject(OpsAlertService) private readonly opsAlert?: OpsAlertService,
     // Nest DI는 전역 ConfigService를 항상 주입한다. 직접 생성하는 테스트만 process.env를 쓴다.
     @Inject(ConfigService) config?: ConfigService,
   ) {
@@ -313,6 +317,8 @@ export class PaymentFinalizationService {
     }
     if (decision.kind !== 'applied') return { ok: true, reason: 'already_processed' };
 
+    // 결제가 확정된 주문 한 건에 한 번만 오는 자리. 손님 알림을 늦추지 않게 기다리지 않는다.
+    void this.sendNewOrderAlert(order, paymentData, newStatus);
     await this.notifications.sendToUser(
       order['userId'],
       newStatus === 'ACCEPTED' ? 'ORDER_ACCEPTED' : 'GROUP_JOINED',
@@ -325,6 +331,72 @@ export class PaymentFinalizationService {
       orderId,
     );
     return { ok: true, status: newStatus };
+  }
+
+  /**
+   * 운영자 텔레그램에 새 주문을 알린다. 회차 이름·상품명과 수량·결제 금액만 싣는다.
+   * 주문·결제 ID, storeId, 주문번호, 손님 이름·전화·주소, 요청사항, 옵션은 싣지 않는다.
+   * 알림 실패는 결제 확정 결과를 바꾸지 않는다(절대 throw하지 않음).
+   */
+  private async sendNewOrderAlert(
+    order: Record<string, any>,
+    paymentData: PaymentData,
+    status: 'ACCEPTED' | 'RECRUITING',
+  ) {
+    if (!this.opsAlert?.enabled) return;
+    try {
+      const lines: string[] = [];
+      const roundName = await this.readRoundName(order['roundId']);
+      if (roundName) lines.push(`회차: ${roundName}`);
+      const items = this.newOrderAlertItems(order);
+      for (const item of items.slice(0, NEW_ORDER_ALERT_MAX_ITEMS)) {
+        lines.push(`· ${item.name} × ${item.quantity}`);
+      }
+      if (items.length > NEW_ORDER_ALERT_MAX_ITEMS) {
+        lines.push(`· 외 ${items.length - NEW_ORDER_ALERT_MAX_ITEMS}개`);
+      }
+      const amount = paymentData.amount.total;
+      if (typeof amount === 'number') lines.push(`결제 금액: ${amount.toLocaleString('ko-KR')}원`);
+      await this.opsAlert.send({
+        level: 'info',
+        title: status === 'RECRUITING' ? '공동구매 참여' : '새 주문',
+        lines,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `[NewOrderAlert] 알림 준비 실패: ${error instanceof Error ? error.name : 'unknown'}`,
+      );
+    }
+  }
+
+  // 회차 이름을 읽지 못하면 이름 줄만 빼고 알린다.
+  private async readRoundName(roundId: unknown): Promise<string | null> {
+    if (typeof roundId !== 'string' || !roundId) return null;
+    try {
+      const snap = await this.firestore.doc(`saleRounds/${roundId}`).get();
+      const name = snap.exists ? snap.data()?.['name'] : null;
+      return typeof name === 'string' && name.trim() ? name.trim() : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // 회차 주문은 orderItems, 옛 단일 상품 주문(공동구매 포함)은 productName·quantity를 쓴다.
+  // 옵션(selectedOptions)은 손님이 고른 값이 섞일 수 있어 싣지 않는다.
+  private newOrderAlertItems(
+    order: Record<string, any>,
+  ): Array<{ name: string; quantity: number }> {
+    const source: Array<Record<string, any>> =
+      Array.isArray(order['orderItems']) && order['orderItems'].length > 0
+        ? order['orderItems']
+        : [{ productName: order['productName'], quantity: order['quantity'] }];
+    return source.map((item) => ({
+      name:
+        typeof item['productName'] === 'string' && item['productName'].trim()
+          ? item['productName'].trim()
+          : '상품',
+      quantity: typeof item['quantity'] === 'number' ? item['quantity'] : 1,
+    }));
   }
 
   // 결제는 됐지만 회차 한도가 없어 자동 환불한 주문. 고객은 접수 알림을 받지 못했으므로

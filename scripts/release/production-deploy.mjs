@@ -24,6 +24,9 @@ export const REPO_ORG = 'booker-lab';
 export const REPO_NAME = 'greenhub';
 export const E2E_WORKFLOW_PATH = '.github/workflows/e2e-round-direct.yml';
 export const E2E_GATE_JOB_NAME = '비운영 E2E 승인 사전 검증';
+/** 통과 증거로 받는 E2E run은 main에서 수동 실행(workflow_dispatch)한 것뿐이다. */
+export const E2E_REQUIRED_BRANCH = 'main';
+export const E2E_REQUIRED_EVENT = 'workflow_dispatch';
 export const RAILWAY_GRAPHQL_URL = 'https://backboard.railway.com/graphql/v2';
 export const FRONTEND_APPS = Object.freeze(['consumer', 'seller', 'driver']);
 
@@ -62,7 +65,8 @@ async function readJson(res, label) {
 
 /**
  * 같은 SHA로 원격 회차 E2E가 통과했는지 GitHub에서 직접 확인한다.
- * run의 workflow 파일·결과, 그리고 승인 사전 검증 로그의 `expected_sha=<sha>` 줄을 본다.
+ * run의 workflow 파일·실행 브랜치(main)·이벤트(workflow_dispatch)·결과, 그리고 승인 사전 검증 로그의
+ * `expected_sha=<sha>` 줄을 본다. 다른 브랜치에서 실행한 run은 그 브랜치의 workflow 파일로 돌았으므로 받지 않는다.
  */
 export async function verifyE2eRun({ sha, runId, token, fetchImpl = fetch }) {
   assertSha(sha);
@@ -77,6 +81,11 @@ export async function verifyE2eRun({ sha, runId, token, fetchImpl = fetch }) {
   const run = await readJson(await fetchImpl(`${api}/runs/${runId}`, { headers }), 'E2E run 조회');
   if (run.path !== E2E_WORKFLOW_PATH) {
     throw new Error(`run ${runId}은(는) 회차 E2E가 아닙니다(${run.path}).`);
+  }
+  if (run.head_branch !== E2E_REQUIRED_BRANCH || run.event !== E2E_REQUIRED_EVENT) {
+    throw new Error(
+      `run ${runId}은(는) main에서 수동 실행한 회차 E2E가 아닙니다(${run.event}/${run.head_branch}).`,
+    );
   }
   if (run.status !== 'completed' || run.conclusion !== 'success') {
     throw new Error(`run ${runId}이(가) 통과하지 않았습니다(${run.status}/${run.conclusion}).`);

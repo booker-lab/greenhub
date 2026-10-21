@@ -2,6 +2,11 @@
  * Exact-preview provisioning helper (PILOT-AUTH-EXACT-REF-PREVIEW-PROVISIONING-CAPABILITY-42A
  * + PILOT-AUTH-DRIVER-EXACT-PREVIEW-CAPABILITY-43A).
  *
+ * 현황: ref를 push하던 `.github/workflows/provision-exact-preview.yml`은 지웠다. 앱 vercel.json이 Git 배포를
+ * 꺼서 ref push로는 Preview가 생기지 않는다(42C 확인). exact Preview는 Vercel API로 만들고
+ * (`create-exact-preview-deployment.mjs`, docs/specs/ops/mvp-sales-round-e2e-environment.md §2.1),
+ * 이 모듈은 그 도구가 쓰는 SHA·app·ref 검증 함수(`commitExists` 등)를 제공한다. 아래 Mechanism은 당시 설계 기록이다.
+ *
  * Minimal diagnostic/runtime-proof capability: preserve an arbitrary approved
  * exact Git commit SHA as the source identity of a Consumer / Seller / Driver
  * Vercel Preview deployment.

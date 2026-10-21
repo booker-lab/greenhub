@@ -70,3 +70,5 @@ apps/*/public/swe-worker-*.js
 
 # Claude Code 로컬 설정·스케줄러 락 (머신·사용자 한정)
 .claude/
+# 세션 인계용 로컬 묶음(git bundle·node_modules 압축 등). 공개 저장소에 올리지 않는다.
+.claude-handoff/

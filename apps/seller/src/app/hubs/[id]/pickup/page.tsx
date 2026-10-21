@@ -6,9 +6,14 @@ import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
+import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { ApiError, apiJson } from '@/lib/api';
+import { apiPathSegment, InvalidApiPathSegmentError, isSafeApiPathSegment } from '@/lib/api-path';
 
 type Step = 'input' | 'success' | 'error';
+
+const INVALID_ORDER_ADDRESS_MESSAGE =
+  '주문 주소가 올바르지 않습니다. 거점 화면에서 주문을 다시 선택해 주세요.';
 
 export default function HubPickupPage() {
   const { data: session } = useSession();
@@ -17,7 +22,9 @@ export default function HubPickupPage() {
   const searchParams = useSearchParams();
 
   const hubId = params.id as string;
-  const orderId = searchParams.get('orderId') ?? '';
+  // 주소창 쿼리 값은 형식을 검사한 뒤에만 API 경로에 쓴다. 맞지 않으면 요청하지 않는다.
+  const rawOrderId = searchParams.get('orderId');
+  const orderId = isSafeApiPathSegment(rawOrderId) ? rawOrderId : null;
 
   const [digits, setDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [step, setStep] = useState<Step>('input');
@@ -25,6 +32,7 @@ export default function HubPickupPage() {
   const [loading, setLoading] = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const stepResetTimer = useResettableTimeout();
 
   useEffect(() => {
     inputRefs.current[0]?.focus();
@@ -66,24 +74,30 @@ export default function HubPickupPage() {
     setLoading(true);
     setErrorMsg('');
     try {
-      await apiJson(`/stores/${storeId}/orders/${orderId}/hub-confirm`, token, {
-        method: 'PATCH',
-        body: JSON.stringify({ pickupCode }),
-      });
+      await apiJson(
+        `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/hub-confirm`,
+        token,
+        {
+          method: 'PATCH',
+          body: JSON.stringify({ pickupCode }),
+        },
+      );
       setStep('success');
     } catch (e) {
       if (e instanceof ApiError) {
         setErrorMsg(e.message);
         setStep('error');
         setDigits(['', '', '', '', '', '']);
-        setTimeout(() => {
+        stepResetTimer.schedule(() => {
           setStep('input');
           inputRefs.current[0]?.focus();
         }, 2000);
       } else {
-        setErrorMsg('네트워크 오류가 발생했습니다');
+        setErrorMsg(
+          e instanceof InvalidApiPathSegmentError ? e.message : '네트워크 오류가 발생했습니다',
+        );
         setStep('error');
-        setTimeout(() => setStep('input'), 2000);
+        stepResetTimer.schedule(() => setStep('input'), 2000);
       }
     } finally {
       setLoading(false);
@@ -136,6 +150,23 @@ export default function HubPickupPage() {
                 radius="xl"
                 mt="md"
                 style={{ backgroundColor: 'var(--color-primary)' }}
+              >
+                거점으로 돌아가기
+              </Button>
+            </Stack>
+          ) : !orderId ? (
+            <Stack align="center" gap="md" py={40}>
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+                ta="center"
+              >
+                {INVALID_ORDER_ADDRESS_MESSAGE}
+              </Text>
+              <Button
+                onClick={() => router.push(`/hubs/${hubId}`)}
+                size="md"
+                radius="xl"
+                variant="light"
               >
                 거점으로 돌아가기
               </Button>

@@ -3,7 +3,10 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { parseFeatureFlags } from '@greenhub/shared';
 import { createHash } from 'crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import {
@@ -14,6 +17,7 @@ import { RetentionService } from '../retention/retention.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { normalizeKoreanMobilePhone } from './_lib/korean-mobile-phone';
+import { normalizeGift, resolveSelectedOptions } from './_lib/round-order-extras';
 
 @Injectable()
 export class RoundOrderCreateService {
@@ -21,6 +25,8 @@ export class RoundOrderCreateService {
     private readonly firestore: FirestoreService,
     private readonly capacity: OrderCapacityService,
     private readonly retention: RetentionService,
+    // 설정이 없으면(테스트 생성 등) 비교 기능은 모두 꺼진 것으로 본다.
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   async create(storeId: string, userId: string, dto: CreateOrderDto) {
@@ -34,6 +40,9 @@ export class RoundOrderCreateService {
     const requestId = dto.clientOrderRequestId!;
     const orderId = this.stableId(storeId, userId, requestId);
     const payloadHash = this.payloadHash(storeId, userId, dto);
+    // 선물(받는 분 이름·휴대폰 등 개인정보)은 GREENHUB_FEATURES에 gift가 켜졌을 때만 저장한다.
+    // 꺼져 있으면 옛 앱 호환을 위해 거부하지 않고 조용히 버린다.
+    const gift = this.isGiftEnabled() ? normalizeGift(dto.gift) : null;
     const orderRef = this.firestore.doc(`orders/${orderId}`);
     let result: Record<string, unknown> | null = null;
 
@@ -63,6 +72,8 @@ export class RoundOrderCreateService {
         ...counter,
         seq: (counterSnap.exists ? counterSnap.data()?.['seq'] : 0) + 1,
       };
+      // 옵션 확인은 읽기 단계에서 끝낸다(예약이 쓰기를 시작하면 더 읽을 수 없다).
+      const optionPricing = await this.readOptionPricing(tx, storeId, dto);
       const reservation = await this.capacity.reserveCheckoutInTransaction(tx, {
         storeId,
         roundId: dto.roundId!,
@@ -71,15 +82,20 @@ export class RoundOrderCreateService {
         deliveryAddress: dto.deliveryAddress,
         items: dto.roundItems!,
       });
-      const roundItems = reservation.items.map((item) => ({
-        roundItemId: item.roundItemId,
-        productId: item.productId,
-        productName: item.productName,
-        productImageUrl: item.productImageUrl,
-        unitPrice: item.unitPrice,
-        quantity: item.quantity,
-        subtotalAmount: item.unitPrice * item.quantity,
-      }));
+      const roundItems = reservation.items.map((item) => {
+        const option = optionPricing.byRoundItemId.get(item.roundItemId);
+        const unitPrice = item.unitPrice + (option?.priceDelta ?? 0);
+        return {
+          roundItemId: item.roundItemId,
+          productId: item.productId,
+          productName: item.productName,
+          productImageUrl: item.productImageUrl,
+          unitPrice,
+          quantity: item.quantity,
+          subtotalAmount: unitPrice * item.quantity,
+          ...(option && option.selected.length > 0 ? { selectedOptions: option.selected } : {}),
+        };
+      });
 
       const now = this.firestore.Timestamp.now();
       const orderNumber = `${orderCounter.yyyymmdd}-${String(orderCounter.seq).padStart(6, '0')}`;
@@ -117,6 +133,7 @@ export class RoundOrderCreateService {
         orderItems: roundItems,
         acquisition: dto.acquisition ?? null,
         totalAmount,
+        ...(gift ? { gift } : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -142,6 +159,10 @@ export class RoundOrderCreateService {
     return result!;
   }
 
+  private isGiftEnabled(): boolean {
+    return parseFeatureFlags(this.config?.get<string>('GREENHUB_FEATURES')).has('gift');
+  }
+
   private assertRequest(dto: CreateOrderDto) {
     if (!dto.clientOrderRequestId) {
       throw new BadRequestException('회차 주문 결제 시도 ID가 필요합니다.');
@@ -159,6 +180,45 @@ export class RoundOrderCreateService {
     if (new Set(itemIds).size !== itemIds.length) {
       throw new BadRequestException('같은 회차 상품을 중복으로 주문할 수 없습니다.');
     }
+  }
+
+  /**
+   * 옵션을 고른 회차 상품의 상품 문서를 읽어 옵션 금액과 스냅샷을 만든다.
+   * 회차 상품·상품 문서는 예약 단계에서 다시 읽지만, 같은 트랜잭션 안이라 값이 같다.
+   */
+  private async readOptionPricing(tx: any, storeId: string, dto: CreateOrderDto) {
+    const byRoundItemId = new Map<string, ReturnType<typeof resolveSelectedOptions>>();
+    const needsItems = dto.roundItems!.some((item) => item.optionChoiceIds?.length);
+    if (!needsItems) return { byRoundItemId };
+    const itemSnaps = await Promise.all(
+      dto.roundItems!.map((item) => tx.get(this.firestore.doc(`saleRoundItems/${item.roundItemId}`))),
+    );
+    const roundItems = itemSnaps.map((snap: any) => {
+      const data = snap.exists ? (snap.data() as Record<string, any>) : null;
+      if (!data || data['storeId'] !== storeId || data['roundId'] !== dto.roundId) {
+        throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
+      }
+      return data;
+    });
+    const productSnaps = await Promise.all(
+      roundItems.map((item, index) =>
+        dto.roundItems![index].optionChoiceIds?.length
+          ? tx.get(this.firestore.doc(`products/${item['productId']}`))
+          : Promise.resolve(null),
+      ),
+    );
+    dto.roundItems!.forEach((input, index) => {
+      const productSnap = productSnaps[index] as { exists: boolean; data: () => any } | null;
+      const option = productSnap
+        ? resolveSelectedOptions(
+            productSnap.exists ? productSnap.data()?.['options'] : undefined,
+            input.optionChoiceIds,
+            input.optionText,
+          )
+        : { selected: [], priceDelta: 0 };
+      byRoundItemId.set(input.roundItemId, option);
+    });
+    return { byRoundItemId };
   }
 
   private response(order: Record<string, any>) {
@@ -203,6 +263,8 @@ export class RoundOrderCreateService {
           acquisition: dto.acquisition ?? null,
           // 요청사항이 없으면 필드 자체를 빼서 기존 결제 시도의 해시를 유지한다.
           ...(requestNote !== null ? { requestNote } : {}),
+          // 선물도 쓸 때만 넣어 기존 해시를 바꾸지 않는다.
+          ...(dto.gift ? { gift: dto.gift } : {}),
         }),
       )
       .digest('hex');

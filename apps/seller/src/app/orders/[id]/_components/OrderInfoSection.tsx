@@ -5,6 +5,7 @@ import { Badge, Box, Group, Paper, Stack, Text } from '@mantine/core';
 import { DELIVERY_LABEL, STATUS_COLOR, STATUS_LABEL } from '../../_constants';
 import { formatDeadlineCountdown, resolveOrderItemLines, toDate } from '../_lib';
 import { CustomerInfoSection } from './CustomerInfoSection';
+import { OrderBenchmarkSection } from './OrderBenchmarkSection';
 import { Row } from './OrderRow';
 
 interface OrderInfoSectionProps {
@@ -119,6 +120,8 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           </Box>
         </Stack>
       </Paper>
+
+      <OrderBenchmarkSection order={order} />
 
       {order.saleType === 'group' && groupConfig && (
         <Paper radius="lg" shadow="xs" p="md">

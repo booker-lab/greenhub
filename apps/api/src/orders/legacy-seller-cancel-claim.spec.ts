@@ -91,6 +91,8 @@ function makeFirestore(initial: Record<string, Data>) {
 function makeContext(orderOverrides: Data = {}) {
   const memory = makeFirestore({
     'stores/store-1': { id: 'store-1', ownerId: 'seller-1' },
+    // 직배송 legacy 주문은 배송일 슬롯을 점유하고, 판매자 취소가 그 슬롯을 반환한다.
+    'dailyCaps/store-1_2026-10-10': { totalCap: 10, usedSlots: 1 },
     'orders/order-1': {
       id: 'order-1',
       storeId: 'store-1',
@@ -99,7 +101,9 @@ function makeContext(orderOverrides: Data = {}) {
       quantity: 1,
       status: 'PREPARING',
       saleType: 'normal',
-      deliveryMethod: 'parcel',
+      // 기사가 배송을 시작하는 경로를 함께 보므로 기사 배송 주문(직배송)이다.
+      deliveryMethod: 'direct',
+      requestedDeliveryDate: '2026-10-10',
       totalAmount: 30000,
       ...orderOverrides,
     },

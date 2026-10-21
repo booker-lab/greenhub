@@ -1,7 +1,11 @@
 'use client';
 
+import { FEATURE_KEYS } from '@greenhub/shared';
 import { useEffect, useState } from 'react';
+import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { apiJson } from '@/lib/api';
+import { apiPathSegment } from '@/lib/api-path';
+import { isFeatureOn } from '@/lib/features';
 import type { ConflictWarning } from './AIPreviewPanel';
 import {
   defaultForm,
@@ -9,6 +13,7 @@ import {
   type ProductFormData,
   type ProductFormProps,
 } from './productForm.types';
+import { extrasBody } from './productExtras';
 
 /** ProductForm의 상태·검증·임시저장·제출 로직을 모두 담는 훅. */
 export function useProductForm({
@@ -31,6 +36,7 @@ export function useProductForm({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
+  const draftSavedResetTimer = useResettableTimeout();
 
   // 신규 등록 시에만 localStorage 임시저장 복원
   useEffect(() => {
@@ -46,6 +52,7 @@ export function useProductForm({
           groupConfig: { ...def.groupConfig, ...(p.groupConfig ?? {}) },
           selection: { ...def.selection, ...(p.selection ?? {}) },
           content: { ...def.content, ...(p.content ?? {}) },
+          extras: { ...def.extras, ...(p.extras ?? {}) },
         });
         if (p._step) setStep(p._step);
       }
@@ -74,7 +81,7 @@ export function useProductForm({
     try {
       localStorage.setItem(draftKey, JSON.stringify(form));
       setDraftSaved(true);
-      setTimeout(() => setDraftSaved(false), 2000);
+      draftSavedResetTimer.schedule(() => setDraftSaved(false), 2000);
     } catch {}
   }
 
@@ -186,6 +193,15 @@ export function useProductForm({
       content: form.content,
       sellerOverride: form.sellerOverride,
     };
+    if (FEATURE_KEYS.some(isFeatureOn)) {
+      const extras = extrasBody(form.extras);
+      if (!extras.ok) {
+        setError(extras.error);
+        setSubmitting(false);
+        return;
+      }
+      Object.assign(body, extras.body);
+    }
     if (form.saleType === 'group') {
       body.groupConfig = {
         minQuantity: Number(form.groupConfig.minQuantity),
@@ -200,8 +216,8 @@ export function useProductForm({
     try {
       const url =
         mode === 'create'
-          ? `/stores/${storeId}/products`
-          : `/stores/${storeId}/products/${productId}`;
+          ? `/stores/${apiPathSegment(storeId)}/products`
+          : `/stores/${apiPathSegment(storeId)}/products/${apiPathSegment(productId)}`;
       await apiJson(url, token, {
         method: mode === 'create' ? 'POST' : 'PATCH',
         body: JSON.stringify(body),
