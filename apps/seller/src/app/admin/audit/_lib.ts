@@ -22,8 +22,11 @@ export const ACTION_LABEL: Record<string, string> = {
   'admin.driver.suspended': '기사 정지',
   'admin.driver.unsuspended': '기사 정지 해제',
   'admin.order.force_refunded': '강제 환불',
+  'admin.order.post_delivery_refunded': '배송 후 환불',
   'admin.settlement.paid': '정산 지급',
   'admin.banner.updated': '배너 수정',
+  'admin.partner_inquiry.contacted': '입점 문의 연락 표시',
+  'admin.partner_inquiry.deleted': '입점 문의 삭제',
   'store.payout_account.updated': '정산 계좌 변경',
 };
 
@@ -34,6 +37,7 @@ const TARGET_LABEL: Record<string, string> = {
   order: '주문',
   settlement: '정산',
   banner: '배너',
+  partner_inquiry: '입점 문의',
 };
 
 export function actionLabel(action: string): string {

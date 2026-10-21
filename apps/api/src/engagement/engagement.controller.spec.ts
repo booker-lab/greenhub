@@ -25,6 +25,10 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
     unhideReview: jest.fn(),
     listHiddenReviews: jest.fn(),
   };
+  const engagement = {
+    setPartnerInquiryContacted: jest.fn(),
+    deletePartnerInquiry: jest.fn(),
+  };
 
   beforeEach(async () => {
     reviews.addReviewPhotos.mockResolvedValue({ id: 'order-1_product-1', hidden: false });
@@ -32,11 +36,13 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
     reviews.hideReview.mockResolvedValue({ id: 'order-1_product-1', hidden: true });
     reviews.unhideReview.mockResolvedValue({ id: 'order-1_product-1', hidden: false });
     reviews.listHiddenReviews.mockResolvedValue([]);
+    engagement.setPartnerInquiryContacted.mockResolvedValue({ id: 'inq-1', contactedAt: null });
+    engagement.deletePartnerInquiry.mockResolvedValue({ id: 'inq-1' });
     const module = await Test.createTestingModule({
       controllers: [MyEngagementController, SellerEngagementController, AdminEngagementController],
       providers: [
         { provide: ReviewsService, useValue: reviews },
-        { provide: EngagementService, useValue: {} },
+        { provide: EngagementService, useValue: engagement },
         RolesGuard,
       ],
     })
@@ -181,5 +187,27 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
       .set('x-test-role', 'admin');
     expect(adminList.status).toBe(200);
     expect(reviews.listHiddenReviews).toHaveBeenCalledTimes(1);
+  });
+
+  it('입점 문의 연락함 표시·삭제는 관리자만, 연락함 값은 true/false만 받는다', async () => {
+    const contactedPath = '/admin/partner-inquiries/inq-1/contacted';
+    const put = (role: string) => request(app.getHttpServer()).put(contactedPath).set('x-test-role', role);
+    const remove = (role: string) =>
+      request(app.getHttpServer()).delete('/admin/partner-inquiries/inq-1').set('x-test-role', role);
+
+    for (const role of ['seller', 'consumer', 'driver']) {
+      expect((await put(role).send({ contacted: true })).status).toBe(403);
+      expect((await remove(role)).status).toBe(403);
+    }
+    expect(engagement.setPartnerInquiryContacted).not.toHaveBeenCalled();
+    expect(engagement.deletePartnerInquiry).not.toHaveBeenCalled();
+
+    for (const body of [{}, { contacted: 'yes' }, { contacted: true, note: 'x' }]) {
+      expect((await put('admin').send(body)).status).toBe(400);
+    }
+    expect((await put('admin').send({ contacted: true })).status).toBe(200);
+    expect(engagement.setPartnerInquiryContacted).toHaveBeenCalledWith('inq-1', true, 'admin-1');
+    expect((await remove('admin')).status).toBe(200);
+    expect(engagement.deletePartnerInquiry).toHaveBeenCalledWith('inq-1', 'admin-1');
   });
 });

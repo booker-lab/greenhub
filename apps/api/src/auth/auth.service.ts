@@ -7,6 +7,7 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -16,6 +17,17 @@ import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { AuditService } from '../common/audit/audit.service';
+import { OpsAlertService } from '../ops-alerts/ops-alert.service';
+import {
+  WITHDRAWAL_ACTIVE_ORDER_MESSAGE,
+  WITHDRAWAL_CLEANUP_REFERENCES,
+  WITHDRAWAL_ERASED_USER_FIELDS,
+  WITHDRAWN_ACCOUNT_MESSAGE,
+  WITHDRAWN_AT_FIELD,
+  isActiveCheckoutReservation,
+  isWithdrawalBlockingOrder,
+  isWithdrawnUser,
+} from './account-withdrawal';
 import {
   INVITE_KAKAO_ACCOUNT_IN_USE_MESSAGE,
   INVITE_RECIPIENT_MISMATCH_MESSAGE,
@@ -183,6 +195,7 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly kakaoClient: KakaoClient,
     private readonly audit: AuditService,
+    @Optional() private readonly opsAlert?: OpsAlertService,
   ) {}
 
   // 초대 가입 사전 검사(이메일 가입·카카오 가입 공용). 트랜잭션 전에 형식·존재·상태를 거르고,
@@ -769,6 +782,122 @@ export class AuthService {
     await this.audit.log('auth.logout', { userId, detail: { sessionId } });
   }
 
+  // 소비자 회원 탈퇴. 진행 중인 주문·결제 예약이 있으면 409로 막는다. 사용자 문서는 주문·결제가 uid로
+  // 참조하므로 지우지 않고 개인정보 필드만 지우며, 세션 폐기·카카오/이메일 연결 문서 삭제와 한 트랜잭션에서 한다.
+  // 연결 문서가 사라지므로 같은 카카오 계정으로 다시 로그인하면 새 계정이 만들어진다.
+  // 주문 문서의 이름·전화·주소 스냅샷과 결제·후기·법정 보관 기록은 전자상거래법 보관 대상이라 남긴다.
+  async withdraw(user: JwtPayload): Promise<void> {
+    if (user.role !== 'consumer') {
+      throw new ForbiddenException('소비자 계정만 탈퇴할 수 있습니다.');
+    }
+    const userId = user.sub;
+    const userRef = this.firestore.doc(`users/${userId}`);
+    const tokenRef = this.firestore.doc(`refreshTokens/${userId}`);
+    const ordersQuery = this.firestore.collection('orders').where('userId', '==', userId);
+    const reservationsQuery = this.firestore
+      .collection('checkoutReservations')
+      .where('userId', '==', userId);
+
+    const kakaoId = await this.firestore.runTransaction(async (tx) => {
+      const userSnap = await tx.get(userRef);
+      const data = userSnap.exists ? userSnap.data() : undefined;
+      if (!data || isWithdrawnUser(data)) {
+        throw new UnauthorizedException(WITHDRAWN_ACCOUNT_MESSAGE);
+      }
+      if (data['role'] !== 'consumer') {
+        throw new ForbiddenException('소비자 계정만 탈퇴할 수 있습니다.');
+      }
+
+      const [ordersSnap, reservationsSnap] = await Promise.all([
+        tx.get(ordersQuery),
+        tx.get(reservationsQuery),
+      ]);
+      const nowMillis = Date.now();
+      if (
+        ordersSnap.docs.some((d) => isWithdrawalBlockingOrder(d.data())) ||
+        reservationsSnap.docs.some((d) => isActiveCheckoutReservation(d.data(), nowMillis))
+      ) {
+        throw new ConflictException(WITHDRAWAL_ACTIVE_ORDER_MESSAGE);
+      }
+
+      // 연결 문서는 이 사용자에게 연결된 것만 지운다(트랜잭션의 읽기는 쓰기보다 먼저 한다).
+      const linkedKakaoId =
+        typeof data['kakaoId'] === 'string' && KAKAO_IDENTITY_ID_PATTERN.test(data['kakaoId'])
+          ? data['kakaoId']
+          : null;
+      const kakaoIdentityRef = linkedKakaoId
+        ? this.firestore.doc(`kakaoIdentities/${linkedKakaoId}`)
+        : null;
+      const emailIdentityRef =
+        typeof data['email'] === 'string' && data['email'].trim()
+          ? this.firestore.doc(`emailIdentities/${emailIdentityKey(normalizeEmail(data['email']))}`)
+          : null;
+      const [kakaoIdentitySnap, emailIdentitySnap] = await Promise.all([
+        kakaoIdentityRef ? tx.get(kakaoIdentityRef) : null,
+        emailIdentityRef ? tx.get(emailIdentityRef) : null,
+      ]);
+
+      this.revokeAllSessionsInTransaction(tx, tokenRef, userRef);
+      const now = this.firestore.Timestamp.now();
+      tx.update(userRef, {
+        ...Object.fromEntries(
+          WITHDRAWAL_ERASED_USER_FIELDS.map((field) => [field, this.firestore.FieldValue.delete()]),
+        ),
+        [WITHDRAWN_AT_FIELD]: now,
+        updatedAt: now,
+      });
+      if (kakaoIdentityRef && kakaoIdentitySnap?.data()?.['userId'] === userId) {
+        tx.delete(kakaoIdentityRef);
+      }
+      if (emailIdentityRef && emailIdentitySnap?.data()?.['userId'] === userId) {
+        tx.delete(emailIdentityRef);
+      }
+      return linkedKakaoId;
+    });
+
+    await this.cleanUpWithdrawnUserRecords(userId);
+    const kakaoUnlink = kakaoId ? await this.kakaoClient.unlinkUser(kakaoId) : 'not_linked';
+    if (kakaoUnlink === 'failed' || kakaoUnlink === 'not_configured') {
+      // 사용자 식별자는 싣지 않는다. 어느 탈퇴인지는 auditLogs의 auth.withdrawn 기록으로 확인한다.
+      void this.opsAlert?.send({
+        level: 'warning',
+        title: '회원 탈퇴 카카오 연결 끊기 실패',
+        lines: [
+          kakaoUnlink === 'not_configured'
+            ? 'KAKAO_ADMIN_KEY가 없어 연결 끊기를 건너뛰었습니다. 탈퇴 처리는 끝났습니다.'
+            : '카카오 API 호출이 실패했습니다. 탈퇴 처리는 끝났습니다.',
+        ],
+        dedupeKey: `auth.withdraw.kakao_unlink.${kakaoUnlink}`,
+      });
+    }
+
+    try {
+      await this.audit.log('auth.withdrawn', { userId, detail: { kakaoUnlink } });
+    } catch (error) {
+      this.logger.error(
+        `auth.withdraw.audit_failed userId=${userId} error=${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    this.logger.log(`auth.withdraw.success userId=${userId} kakaoUnlink=${kakaoUnlink}`);
+  }
+
+  // 탈퇴 트랜잭션 뒤 그 사용자의 재입고 구독·알림 내역·AI 사용량 문서를 지운다.
+  // 실패해도 탈퇴는 되돌리지 않고 기록만 남긴다.
+  private async cleanUpWithdrawnUserRecords(userId: string): Promise<void> {
+    await Promise.all(
+      WITHDRAWAL_CLEANUP_REFERENCES.map(async ([collection, field]) => {
+        try {
+          const snap = await this.firestore.collection(collection).where(field, '==', userId).get();
+          await Promise.all(snap.docs.map((d) => d.ref.delete()));
+        } catch (error) {
+          this.logger.error(
+            `auth.withdraw.cleanup_failed userId=${userId} collection=${collection} error=${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }),
+    );
+  }
+
   async updateFcmToken(userId: string, fcmToken: string | null) {
     await this.firestore.doc(`users/${userId}`).update({
       fcmToken,
@@ -793,6 +922,9 @@ export class AuthService {
     }
 
     const user = userSnap.data()!;
+    if (isWithdrawnUser(user)) {
+      throw new UnauthorizedException(WITHDRAWN_ACCOUNT_MESSAGE);
+    }
     if (user['suspended'] === true) {
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
     }
@@ -889,7 +1021,7 @@ export class AuthService {
     tx.update(userRef, { [ACTIVE_SESSION_IDS_FIELD]: sessionIds });
   }
 
-  // 모든 세션 폐기(재사용 감지·`sid` 없는 이전 토큰의 로그아웃). 사용자 단위 폐기 시각은 이 경로와
+  // 모든 세션 폐기(재사용 감지·`sid` 없는 이전 토큰의 로그아웃·회원 탈퇴). 사용자 단위 폐기 시각은 이 경로와
   // 관리자 정지에서만 기록해, `sid` 없는 이전 발급 access token까지 다음 요청부터 거부되게 한다.
   private revokeAllSessionsInTransaction(
     tx: admin.firestore.Transaction,

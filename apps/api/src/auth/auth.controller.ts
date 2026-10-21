@@ -87,6 +87,16 @@ export class AuthController {
     return this.authService.updateMe(user.sub, dto);
   }
 
+  // 소비자 회원 탈퇴. 진행 중인 주문이 있으면 409.
+  @Delete('me')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('consumer')
+  @Throttle(AUTH_THROTTLE)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  withdraw(@CurrentUser() user: JwtPayload) {
+    return this.authService.withdraw(user);
+  }
+
   @Post('me/addresses')
   @UseGuards(JwtAuthGuard)
   addAddress(@CurrentUser() user: JwtPayload, @Body() dto: AddressDto) {

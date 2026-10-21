@@ -133,9 +133,10 @@ export class PostDeliveryRefundService {
       throw error;
     }
     // 주문은 이미 CANCELLED다. 정산 취소가 실패해도 같은 요청을 다시 보내면 이 단계부터 이어 간다.
-    await this.settlements.cancelSettlement(input.orderId);
+    // 지급 완료 정산이면 paid를 유지하고 판매자 회수 필요(관리자만 닫는 운영 기록)를 남긴다.
+    const recovery = await this.settlements.cancelSettlement(input.orderId);
     await this.sendNotice(input.orderId, claim.reasonCode);
-    return { orderId: input.orderId, status: 'CANCELLED' as const };
+    return { orderId: input.orderId, status: 'CANCELLED' as const, ...recovery };
   }
 
   private async claim(

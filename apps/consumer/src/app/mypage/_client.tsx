@@ -434,6 +434,7 @@ export default function MyPageClient() {
             </Text>
             <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
           </UnstyledButton>
+          <MenuLink label="회원 탈퇴" onClick={() => router.push('/mypage/withdraw')} />
         </Stack>
       </Box>
 

@@ -1,13 +1,8 @@
 'use client';
 
 import type { AdminCommandOutcome } from './useAdmin.outcome';
-import {
-  pick,
-  runAdminCommand,
-  runAdminCommandWithBody,
-  useAdminList,
-  withQuery,
-} from './useAdmin.list';
+import { runAdminCommandWithBody, withQuery } from './useAdmin.list';
+import { useAdminPagedList } from './useAdmin.paged';
 import { type RefundRecovery, readRefundRecovery } from './useAdmin.refund';
 import type { AdminOrder } from './useAdmin.types';
 
@@ -16,13 +11,22 @@ import type { AdminOrder } from './useAdmin.types';
 export function useAdminOrders(filters?: { storeId?: string; status?: string }) {
   const {
     items: orders,
+    hasMore,
     loading,
+    loadingMore,
     error,
+    moreError,
     reload,
+    loadMore,
     token,
-  } = useAdminList<AdminOrder>(
-    () => withQuery('/admin/orders', { storeId: filters?.storeId, status: filters?.status }),
-    pick<AdminOrder>('orders'),
+  } = useAdminPagedList<AdminOrder>(
+    (cursor) =>
+      withQuery('/admin/orders', {
+        storeId: filters?.storeId,
+        status: filters?.status,
+        cursor: cursor ?? undefined,
+      }),
+    'orders',
     '주문 목록',
     [filters?.storeId, filters?.status],
   );
@@ -44,7 +48,17 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
     return { ...outcome, recovery: readRefundRecovery(body) };
   };
 
-  return { orders, loading, error, reload, forceRefund };
+  return {
+    orders,
+    hasMore,
+    loading,
+    loadingMore,
+    error,
+    moreError,
+    reload,
+    loadMore,
+    forceRefund,
+  };
 }
 
 // 정산 훅은 useAdmin.settlements(더 보기·서버 합계)가 소유한다.
