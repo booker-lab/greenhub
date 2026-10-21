@@ -128,25 +128,33 @@ export function createInMemoryFirestore(initial: Record<string, Data> = {}) {
     filters: Filter[] = [],
     order?: { field: string; direction: 'asc' | 'desc' },
     maximum?: number,
+    after?: DocumentSnapshot,
   ): any => ({
     where: (field: string, operator: string, value: unknown) =>
-      query(collectionPath, [...filters, { field, operator, value }], order, maximum),
+      query(collectionPath, [...filters, { field, operator, value }], order, maximum, after),
     orderBy: (field: string, direction: 'asc' | 'desc' = 'asc') =>
-      query(collectionPath, filters, { field, direction }, maximum),
-    limit: (value: number) => query(collectionPath, filters, order, value),
+      query(collectionPath, filters, { field, direction }, maximum, after),
+    limit: (value: number) => query(collectionPath, filters, order, value, after),
+    // 정렬된 결과에서 cursor 문서 다음부터 돌려준다(cursor 문서가 결과에 없으면 정렬 값으로 위치를 찾는다).
+    startAfter: (cursor: DocumentSnapshot) => query(collectionPath, filters, order, maximum, cursor),
     get: async () => {
       const prefix = `${collectionPath}/`;
       let docs = [...records.entries()]
         .filter(([path]) => path.startsWith(prefix) && !path.slice(prefix.length).includes('/'))
         .map(([path, data]) => ({ ref: doc(path), data }))
         .filter(({ data }) => filters.every((filter) => matches(data, filter)));
-      if (order) {
-        docs.sort((left, right) => {
-          const a = comparable(fieldValue(left.data, order.field));
-          const b = comparable(fieldValue(right.data, order.field));
-          const result = a === b ? 0 : (a as number) < (b as number) ? -1 : 1;
-          return order.direction === 'desc' ? -result : result;
-        });
+      const compare = (left: Data, right: Data) => {
+        if (!order) return 0;
+        const a = comparable(fieldValue(left, order.field));
+        const b = comparable(fieldValue(right, order.field));
+        const result = a === b ? 0 : (a as number) < (b as number) ? -1 : 1;
+        return order.direction === 'desc' ? -result : result;
+      };
+      if (order) docs.sort((left, right) => compare(left.data, right.data));
+      if (after) {
+        const index = docs.findIndex(({ ref }) => ref.path === after.ref.path);
+        const cursorData = after.data() ?? {};
+        docs = index >= 0 ? docs.slice(index + 1) : docs.filter(({ data }) => compare(data, cursorData) > 0);
       }
       if (maximum !== undefined) docs = docs.slice(0, maximum);
       const snapshots = docs.map(({ ref }) => snapshot(ref));

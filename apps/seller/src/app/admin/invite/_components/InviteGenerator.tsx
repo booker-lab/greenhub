@@ -2,11 +2,13 @@
 
 import { Box, Button, Group, Paper, Text, TextInput } from '@mantine/core';
 import type { IssuedInvite } from '@/hooks/useAdmin';
-import { formatExpiryLong, INVITE_RECIPIENT_EMAIL_MAX_LENGTH } from '../_lib';
+import { formatKstDateTime, INVITE_RECIPIENT_EMAIL_MAX_LENGTH } from '../_lib';
 
 interface InviteGeneratorProps {
   generating: boolean;
   lastToken: IssuedInvite | null;
+  /** 발급 직후 초대의 링크(/invite/[token]). lastToken이 있을 때만 값이 있다. */
+  lastLink: string | null;
   copied: boolean;
   /** useAdminInvite 발급 command 실패 메시지. null이면 마지막 발급이 실패하지 않았음. */
   generateError: string | null;
@@ -22,6 +24,7 @@ interface InviteGeneratorProps {
 export function InviteGenerator({
   generating,
   lastToken,
+  lastLink,
   copied,
   generateError,
   recipientEmail,
@@ -45,13 +48,14 @@ export function InviteGenerator({
         style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
         mb="md"
       >
-        판매자 초대 토큰을 생성합니다. 토큰은 발급 후 <strong>72시간</strong> 유효합니다.
+        판매자 초대 링크를 만듭니다. 링크는 발급 후 <strong>72시간</strong> 동안 한 번만 쓸 수 있고,
+        받는 분이 링크를 열어 카카오로 로그인하면 판매자로 가입돼요.
       </Text>
 
       <TextInput
         type="email"
         label="받는 사람 이메일"
-        description="이 이메일로만 가입할 수 있어요."
+        description="카카오 계정 이메일이 있으면 이 이메일과 같아야 가입할 수 있어요."
         required
         placeholder="seller@example.com"
         value={recipientEmail}
@@ -70,7 +74,7 @@ export function InviteGenerator({
         radius="xl"
         style={{ backgroundColor: 'var(--color-primary)' }}
       >
-        {generating ? '생성중…' : '새 토큰 생성'}
+        {generating ? '만드는 중…' : '새 초대 링크 만들기'}
       </Button>
 
       {/* 발급 command 실패는 성공과 구분해 사용자에게 알린다. 성공한 경우에만 lastToken이 갱신되므로 이 블록은 이전 성공 토큰을 덮어쓰지 않는다. */}
@@ -91,7 +95,7 @@ export function InviteGenerator({
             }}
             mb={4}
           >
-            토큰 발급에 실패했습니다.
+            초대 링크 발급에 실패했습니다.
           </Text>
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
             {generateError}
@@ -117,31 +121,32 @@ export function InviteGenerator({
             }}
             mb="xs"
           >
-            생성된 초대 토큰
+            생성된 초대 링크
           </Text>
-          <Group gap="sm">
+          <Group gap="sm" wrap="nowrap" align="flex-start">
             <Text
               component="code"
               ff="monospace"
               style={{
                 flex: 1,
-                letterSpacing: '0.15em',
-                fontSize: 'var(--font-size-lg)',
+                minWidth: 0,
+                wordBreak: 'break-all',
+                fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
                 color: 'var(--color-primary-dark)',
               }}
             >
-              {lastToken.token}
+              {lastLink ?? lastToken.token}
             </Text>
             <Button onClick={onCopy} size="xs" variant="outline" color="brand" radius="md">
-              {copied ? '복사됨!' : '복사'}
+              {copied ? '복사됨!' : '링크 복사'}
             </Button>
           </Group>
           <Text
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
             mt="xs"
           >
-            만료: {formatExpiryLong(lastToken.expiresAt)}
+            만료: {formatKstDateTime(lastToken.expiresAt)}
           </Text>
           {lastToken.recipientEmail && (
             <Text

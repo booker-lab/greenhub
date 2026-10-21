@@ -221,6 +221,37 @@ describe('AuthService', () => {
       expect(jwt.sign).not.toHaveBeenCalled();
     });
 
+    it('초대 토큰이 있어도 이미 손님인 카카오 계정은 판매자로 바꾸지 않고 409로 거부하며 초대를 읽지 않는다', async () => {
+      const { firestore, jwt, service, userRef } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
+      });
+
+      await expect(
+        service.kakaoLogin({
+          kakaoAccessToken: 'token',
+          targetRole: 'seller',
+          inviteToken: 'INVITETOKEN00001',
+        }),
+      ).rejects.toMatchObject({
+        status: 409,
+        response: expect.objectContaining({ reason: 'kakao_account_in_use' }),
+      });
+      expect(firestore.doc).not.toHaveBeenCalledWith('invites/INVITETOKEN00001');
+      expect(firestore.runTransaction).not.toHaveBeenCalled();
+      expect(userRef.update).not.toHaveBeenCalled();
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('초대 토큰이 없는 다른 역할 거부는 지금처럼 403이다', async () => {
+      const { service } = makeKakaoLoginService({
+        user: { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false },
+      });
+
+      await expect(
+        service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'seller' }),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+
     it('요청 targetRole과 기존 사용자 role이 맞지 않으면 차단한다', async () => {
       const { audit, jwt, service } = makeKakaoLoginService({
         user: { id: 'seller-1', role: 'seller', storeId: 'store-1', suspended: false },

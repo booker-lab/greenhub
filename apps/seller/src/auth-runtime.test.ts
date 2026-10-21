@@ -125,6 +125,13 @@ describe('seller auth.ts 계약', () => {
     expect(authSource).toMatch(/storeId: authority\.storeId/);
   });
 
+  it('초대 쿠키는 카카오 로그인에서 한 번 읽어 kakao-login 요청에 싣고 바로 지운다', () => {
+    expect(authSource).toMatch(/cookieStore\.get\(SELLER_INVITE_COOKIE\)/);
+    expect(authSource).toMatch(/cookieStore\.delete\(SELLER_INVITE_COOKIE\)/);
+    expect(authSource).toMatch(/targetRole: 'seller',\s*inviteToken,/);
+    expect(authSource).toMatch(/error: SIGN_IN_ERROR_PATH/);
+  });
+
   it('로그아웃 이벤트에서 API 세션을 폐기하고, 서버 쪽 API 호출은 시간 제한을 쓴다', () => {
     expect(authSource).toMatch(/async signOut\(message\)/);
     expect(authSource).toMatch(/revokeApiSession\(\{\s*apiBaseUrl: API,/);

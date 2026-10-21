@@ -39,6 +39,8 @@ const SERVER_ONLY_COLLECTIONS = [
   'orderCharges',
   'orderCounters',
   'settlements',
+  // 판매자 정산 계좌(은행·예금주·계좌번호). API만 판매자 본인·관리자에게 내준다.
+  'storePayoutAccounts',
   'auditLogs',
   'aiUsage',
   'hubs',
