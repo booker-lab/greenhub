@@ -34,7 +34,16 @@ export class PaymentRefundService {
     private readonly retention: RetentionService,
   ) {}
 
-  async refundByOrderId(orderId: string, reason: string): Promise<void> {
+  /**
+   * @param options.verifyProviderFirst true면 첫 환불 POST 전에도 PortOne 상태를 먼저 읽는다.
+   *   이미 취소된 결제(콘솔 수동 환불 등)는 추가 POST 없이 로컬만 맞추고, 결제 상태가 PAID·금액 일치가
+   *   아니면 POST 없이 중단한다(fail closed). 배송 후 환불처럼 수동 환불과 겹칠 수 있는 경로가 쓴다.
+   */
+  async refundByOrderId(
+    orderId: string,
+    reason: string,
+    options: { verifyProviderFirst?: boolean } = {},
+  ): Promise<void> {
     const paymentSnap = await this.firestore
       .collection('payments')
       .where('orderId', '==', orderId)
@@ -138,7 +147,7 @@ export class PaymentRefundService {
     const payment = claimResult.payload;
     const claimToken = claimResult.token;
     const providerKey = claimResult.providerKey;
-    if (claimResult.outcome === 'claimed_retry') {
+    if (claimResult.outcome === 'claimed_retry' || options.verifyProviderFirst) {
       const reconciled = await this.reconcileUncertainRefund(
         paymentRef,
         orderId,

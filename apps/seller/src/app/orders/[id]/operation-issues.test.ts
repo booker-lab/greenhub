@@ -151,6 +151,39 @@ describe('가게 전체 운영 기록 목록', () => {
     }
   });
 
+  it('정산 회수 필요 기록을 읽어 이름·설명을 붙이고 정산 상태만 보존한다', () => {
+    const issues = readStoreOperationIssueList(
+      {
+        items: [
+          {
+            ...baseIssue,
+            id: 'recovery',
+            type: 'SETTLEMENT_RECOVERY_REQUIRED',
+            severity: 'critical',
+            latestSnapshot: {
+              settlementStatus: 'paid',
+              failureStage: 'settlement_recovery',
+              accountNumber: '110-123-456789',
+            },
+          },
+        ],
+      },
+      'store-1',
+    );
+
+    expect(issues.map((issue) => issue.type)).toEqual(['SETTLEMENT_RECOVERY_REQUIRED']);
+    expect(ISSUE_LABELS.SETTLEMENT_RECOVERY_REQUIRED).toBe('정산 회수 필요');
+    expect(ISSUE_DESCRIPTIONS.SETTLEMENT_RECOVERY_REQUIRED).toContain('돌려받아야');
+    expect(issues[0]?.latestSnapshot).toMatchObject({
+      settlementStatus: 'paid',
+      failureStage: 'settlement_recovery',
+    });
+    expect(issues[0]?.latestSnapshot).not.toHaveProperty('accountNumber');
+    const [recovery] = issues;
+    expect(recovery).toBeDefined();
+    if (recovery) expect(getAllowedOperationAction(recovery)).toBeNull();
+  });
+
   it('결제사 취소·분쟁 기록을 읽어 이름을 붙이고 결제사·정산 상태만 보존한다', () => {
     const issues = readStoreOperationIssueList(
       {

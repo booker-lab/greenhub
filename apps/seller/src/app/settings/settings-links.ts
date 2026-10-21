@@ -3,7 +3,10 @@ import type { FeatureKey, SalesMode } from '@greenhub/shared';
 export const SELLER_OPERATION_SETTINGS = [
   {
     label: '정산',
-    links: [{ href: '/settlements', label: '정산 관리' }],
+    links: [
+      { href: '/settlements', label: '정산 관리' },
+      { href: '/settings/payout-account', label: '정산 계좌' },
+    ],
   },
   {
     label: '배송',
