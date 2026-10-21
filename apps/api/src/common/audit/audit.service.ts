@@ -38,6 +38,7 @@ export type AdminAuditAction =
   | 'admin.driver.suspended'
   | 'admin.driver.unsuspended'
   | 'admin.order.force_refunded'
+  | 'admin.order.post_delivery_refunded'
   | 'admin.settlement.paid'
   | 'admin.banner.updated'
   | 'admin.partner_inquiry.contacted'

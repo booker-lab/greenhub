@@ -5,6 +5,7 @@ describe('actionLabel', () => {
   it('아는 기록 종류는 한국어 이름을 보여 준다', () => {
     expect(actionLabel('admin.settlement.paid')).toBe('정산 지급');
     expect(actionLabel('admin.order.force_refunded')).toBe('강제 환불');
+    expect(actionLabel('admin.order.post_delivery_refunded')).toBe('배송 후 환불');
     expect(actionLabel('admin.partner_inquiry.deleted')).toBe('입점 문의 삭제');
   });
 
