@@ -3,6 +3,7 @@
 import type { Order } from '@greenhub/shared';
 import { Alert, Badge, Button, Group, Paper, Text } from '@mantine/core';
 import { useRouter } from 'next/navigation';
+import { memo } from 'react';
 import {
   ACCENT_BORDER,
   DELIVERY_LABEL,
@@ -12,7 +13,8 @@ import {
 } from '../_constants';
 import { displayBuyerName, summarizeOrderProducts } from '../[id]/_lib';
 
-export function OrderCard({ order }: { order: Order }) {
+// 검색·필터로 목록이 다시 계산돼도 같은 주문 객체의 카드는 다시 그리지 않는다.
+export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
   const router = useRouter();
 
   const canPrepare = order.status === 'ACCEPTED' || order.status === 'CONFIRMED';
@@ -149,4 +151,4 @@ export function OrderCard({ order }: { order: Order }) {
       )}
     </Paper>
   );
-}
+});
