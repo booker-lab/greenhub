@@ -4,7 +4,7 @@ import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 // 정산 라벨/색 SSOT = @greenhub/shared (F-1/S4).
 import { STATUS_COLOR, STATUS_LABEL } from '@greenhub/shared';
 import type { AdminSettlement } from '@/hooks/useAdmin';
-import { toDateStr } from '../_lib';
+import { HOLD_REASON_LABEL, orderLabel, storeLabel, toDateStr, toKRW } from '../_lib';
 
 interface SettlementTableProps {
   settlements: AdminSettlement[];
@@ -18,6 +18,53 @@ const thBase = {
   fontWeight: 500,
   color: 'var(--color-text-secondary)',
 };
+const tdBase = { padding: '12px 16px' };
+const muted = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' };
+
+/** 상태 배지 + 회수 필요·지급 보류 배지 — 테이블·카드 공용. */
+function StatusBadges({ s }: { s: AdminSettlement }) {
+  return (
+    <Group gap={4} wrap="wrap">
+      <Badge color={STATUS_COLOR[s.status] ?? 'gray'} variant="light" radius="xl">
+        {STATUS_LABEL[s.status] ?? s.status}
+      </Badge>
+      {s.recoveryRequired && (
+        <Badge color="red" variant="filled" radius="xl">
+          회수 필요 {toKRW(s.recoveryAmount ?? s.netAmount)}
+        </Badge>
+      )}
+      {s.holdReason && (
+        <Badge color="orange" variant="light" radius="xl">
+          {HOLD_REASON_LABEL[s.holdReason] ?? s.holdReason}
+        </Badge>
+      )}
+    </Group>
+  );
+}
+
+/** 지급처리 버튼 — 확정(confirmed)만. 보류 사유가 있으면 서버가 거절하므로 누르지 못하게 둔다. */
+function PayButton({
+  s,
+  processingId,
+  onPay,
+}: {
+  s: AdminSettlement;
+  processingId: string | null;
+  onPay: (id: string) => void;
+}) {
+  if (s.status !== 'confirmed') return null;
+  return (
+    <Button
+      onClick={() => onPay(s.id)}
+      disabled={processingId === s.id || Boolean(s.holdReason)}
+      size="xs"
+      variant="outline"
+      radius="md"
+    >
+      {processingId === s.id ? '처리중…' : '지급처리'}
+    </Button>
+  );
+}
 
 export function SettlementTable({
   settlements,
@@ -25,7 +72,7 @@ export function SettlementTable({
   processingId,
   onPay,
 }: SettlementTableProps) {
-  if (loading) {
+  if (loading && settlements.length === 0) {
     return (
       <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
         불러오는 중...
@@ -60,55 +107,33 @@ export function SettlementTable({
             shadow="xs"
             style={{ border: '1px solid var(--color-border)' }}
           >
-            <Group justify="space-between" mb="xs">
-              <Text
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-disabled)',
-                }}
-                ff="monospace"
-              >
-                {s.storeId.slice(0, 8)}…
-              </Text>
-              <Badge color={STATUS_COLOR[s.status] ?? 'gray'} variant="light" radius="xl">
-                {STATUS_LABEL[s.status] ?? s.status}
-              </Badge>
+            <Group justify="space-between" mb="xs" align="flex-start" wrap="nowrap">
+              <Box>
+                <Text style={{ fontWeight: 500 }}>{storeLabel(s)}</Text>
+                <Text style={{ ...muted, color: 'var(--color-text-disabled)' }} ff="monospace">
+                  {orderLabel(s)}
+                </Text>
+              </Box>
+              <StatusBadges s={s} />
             </Group>
-            <Text
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-              mb={4}
-            >
+            <Text style={muted} mb={4}>
               {toDateStr(s.settledAt)}
             </Text>
             <Group justify="space-between" gap="xs">
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                거래 ₩{s.totalAmount.toLocaleString()}
-              </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-                수수료 ₩{s.platformFee.toLocaleString()}
-              </Text>
+              <Text style={muted}>거래 {toKRW(s.totalAmount)}</Text>
+              <Text style={muted}>수수료 {toKRW(s.platformFee)}</Text>
             </Group>
             <Group justify="space-between" align="center" mt="xs">
               <Text style={{ fontWeight: 500, color: 'var(--color-primary-dark)' }}>
-                지급액 ₩{s.netAmount.toLocaleString()}
+                지급액 {toKRW(s.netAmount)}
               </Text>
-              {s.status === 'confirmed' && (
-                <Button
-                  onClick={() => onPay(s.id)}
-                  disabled={processingId === s.id}
-                  size="xs"
-                  variant="outline"
-                  radius="md"
-                >
-                  {processingId === s.id ? '처리중…' : '지급처리'}
-                </Button>
-              )}
+              <PayButton s={s} processingId={processingId} onPay={onPay} />
             </Group>
           </Paper>
         ))}
       </Stack>
 
-      {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
+      {/* 데스크톱(≥sm): 테이블 */}
       <Paper
         radius="lg"
         shadow="xs"
@@ -128,9 +153,12 @@ export function SettlementTable({
           >
             <tr>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                스토어
+                가게
               </Box>
-              {/* N10: 정산일시 컬럼 추가(셀러 화면과 동형) */}
+              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
+                주문번호
+              </Box>
+              {/* N10: 정산일시 컬럼(셀러 화면과 동형) */}
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
                 정산일시
               </Box>
@@ -146,77 +174,51 @@ export function SettlementTable({
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
                 상태
               </Box>
-              <Box component="th" style={{ padding: '12px 16px' }} />
+              <Box component="th" style={tdBase} />
             </tr>
           </Box>
           <Box component="tbody">
             {settlements.map((s) => (
               <Box component="tr" key={s.id} style={{ borderTop: '1px solid var(--color-border)' }}>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-disabled)',
-                    }}
-                    ff="monospace"
-                  >
-                    {s.storeId.slice(0, 8)}…
+                <Box component="td" style={tdBase}>
+                  {storeLabel(s)}
+                </Box>
+                <Box component="td" style={{ ...tdBase, color: 'var(--color-text-secondary)' }}>
+                  <Text ff="monospace" style={{ fontSize: 'var(--font-size-sm)' }}>
+                    {orderLabel(s)}
                   </Text>
                 </Box>
-                <Box
-                  component="td"
-                  style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
-                >
+                <Box component="td" style={{ ...tdBase, color: 'var(--color-text-secondary)' }}>
                   {toDateStr(s.settledAt)}
                 </Box>
                 <Box
                   component="td"
-                  style={{
-                    padding: '12px 16px',
-                    textAlign: 'right',
-                    color: 'var(--color-text-secondary)',
-                  }}
+                  style={{ ...tdBase, textAlign: 'right', color: 'var(--color-text-secondary)' }}
                 >
-                  ₩{s.totalAmount.toLocaleString()}
+                  {toKRW(s.totalAmount)}
+                </Box>
+                <Box
+                  component="td"
+                  style={{ ...tdBase, textAlign: 'right', color: 'var(--color-text-secondary)' }}
+                >
+                  {toKRW(s.platformFee)}
                 </Box>
                 <Box
                   component="td"
                   style={{
-                    padding: '12px 16px',
-                    textAlign: 'right',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  ₩{s.platformFee.toLocaleString()}
-                </Box>
-                <Box
-                  component="td"
-                  style={{
-                    padding: '12px 16px',
+                    ...tdBase,
                     textAlign: 'right',
                     fontWeight: 500,
                     color: 'var(--color-primary-dark)',
                   }}
                 >
-                  ₩{s.netAmount.toLocaleString()}
+                  {toKRW(s.netAmount)}
                 </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Badge color={STATUS_COLOR[s.status] ?? 'gray'} variant="light" radius="xl">
-                    {STATUS_LABEL[s.status] ?? s.status}
-                  </Badge>
+                <Box component="td" style={tdBase}>
+                  <StatusBadges s={s} />
                 </Box>
-                <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
-                  {s.status === 'confirmed' && (
-                    <Button
-                      onClick={() => onPay(s.id)}
-                      disabled={processingId === s.id}
-                      size="xs"
-                      variant="outline"
-                          radius="md"
-                    >
-                      {processingId === s.id ? '처리중…' : '지급처리'}
-                    </Button>
-                  )}
+                <Box component="td" style={{ ...tdBase, textAlign: 'right' }}>
+                  <PayButton s={s} processingId={processingId} onPay={onPay} />
                 </Box>
               </Box>
             ))}

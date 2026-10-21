@@ -75,14 +75,20 @@ backend는 타입을, seller/admin UI는 공통 라벨·색 상수를 사용한�
 - 초기 상태는 `pending`.
 - `completedStatus`를 함께 저장한다.
 
-현재 기본 수수료율:
+수수료율(2026-10-21 결정 ②):
+
+1. 같은 transaction에서 `stores/{storeId}`를 읽어 `commissionRate`가 0~1 사이 숫자면 그 값을 쓴다
+   (어드민 판매자 탭 `PATCH /admin/stores/:storeId/commission`이 저장).
+2. 없거나 형식이 맞지 않으면 서버 기본값을 쓴다.
 
 ```text
 PLATFORM_FEE_RATE env
 미설정 fallback = 0.05
 ```
 
-fallback 5%는 코드 기본값이지 특정 운영 store에 실제 적용 중인 수수료를 문서만으로 보장하는 값은 아니다. admin의 store commission 설정과 settlement 생성 시 사용되는 전역 env를 혼동하지 않는다.
+쓴 요율은 `platformFeeRate`로 정산에 남는다. 가게 문서를 transaction에서 읽으므로 생성 도중 요율이 바뀌면
+재시도해 바뀐 요율을 쓴다. 이미 만든 정산은 요율이 바뀌어도 다시 계산하지 않는다.
+선택 순수 함수: `_lib/fee-calculator.ts`의 `resolveFeeRate`. 직접 증거: `settlements-lifecycle.spec.ts`(가게 요율·0·형식 오류·미설정·재계산 없음·경합 재시도), `firestore-occ-contract.spec.ts`(R1·R1b·R1c).
 
 ## 5. 수수료 계산
 
@@ -134,9 +140,18 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 - settlement 없음 → no-op
 - `cancelled` → 멱등 no-op
 - `pending|confirmed` → `cancelled`
-- `paid` → **`cancelled`로 역전하지 않음**
+- `paid` → **`cancelled`로 역전하지 않음**. 대신 판매자 회수 필요를 남긴다(2026-10-21 결정 ④)
 
-지급 완료 후 주문 취소·환불의 회계 처리는 단순 status 역전으로 해결하지 않는다. 현재 service는 warning을 남기고 paid settlement를 보존한다. 후속 회계 조정이 필요하면 별도 설계가 필요하다.
+지급 뒤 환불(`paid`)은 같은 transaction에서 다음을 쓴다.
+
+- 정산 문서: `recoveryRequired: true`, `recoveryAmount`(그 정산의 `netAmount`), `recoveryRequiredAt`
+- 운영 기록: `type: SETTLEMENT_RECOVERY_REQUIRED`, `severity: critical`, idempotencyKey `settlement-recovery:${orderId}`.
+  관리자만 닫는다(`ADMIN_ONLY_MANUAL_RESOLVE_TYPES`, 판매자 앱 `operations/manual-resolve.ts`). 호출자 transaction 안의
+  기록이라 텔레그램 알림은 보내지 않는다.
+
+정산 상태(`SettlementStatus`)는 늘리지 않는다. 이미 `recoveryRequired`인 정산은 다시 쓰지 않아 관리자가 닫은 기록을 다시 열지 않는다.
+`cancelSettlement()`는 `{ recoveryRequired, recoveryAmount }`를 돌려주고, 어드민 강제 환불 응답과 행동 기록(`after`)에 같은 값이 실린다.
+실제 돈을 돌려받는 절차(계좌 이체·상계)는 앱 밖 운영이다.
 
 ### Core lifecycle 검증 상태 — `IMPLEMENTATION_PROVEN`
 
@@ -151,7 +166,7 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 - 이미 confirmed인 settlement는 다시 쓰지 않고, query가 stale해도 transaction fresh status가 우선함
 - confirm commit 직전 cancel 경합에서도 cancelled가 confirmed로 되살아나지 않음
 - missing settlement는 no-op, pending/confirmed는 cancelled로 수렴, cancelled는 멱등 no-op
-- paid settlement가 cancellation으로 역전되지 않고 보존됨
+- paid settlement가 cancellation으로 역전되지 않고 보존되며, 회수 필요 필드와 운영 기록이 한 transaction으로 남고 두 번째 호출은 다시 쓰지 않음
 - 실제 주문 완료 경로(`DELIVERED`)가 settlement 1건을 만들고 후속 `REVIEWED`가 중복 생성하지 않음
 - 정상 order cancellation이 pending/confirmed settlement를 cancelled로 수렴시킴
 
@@ -242,10 +257,29 @@ admin controller 전체에는 `JwtAuthGuard + RolesGuard + @Roles('admin')` 구�
 ### 목록
 
 ```text
-GET /admin/settlements
+GET /admin/settlements?storeId&status&from&to&limit&cursor
+GET /admin/settlements/summary?storeId&status&from&to
 ```
 
-store/date filter를 지원하며 `settledAt DESC`, 최대 500건을 조회한다.
+- 목록: `settledAt DESC`, `limit` 기본 100·상한 500, `cursor`(앞 응답 `nextCursor` = 마지막 정산 문서 id)로 이어 받는다.
+  응답 `{ settlements, total, hasMore, nextCursor }`(`total`은 이번 응답 건수).
+- 행 보강: `storeName`, `orderNumber`(정산에 없으면 주문 문서), `recoveryRequired`·`recoveryAmount`,
+  `holdReason`(지급 전 정산에 열린 `PROVIDER_REVERSAL_DETECTED`가 있으면 `PROVIDER_REVERSAL`),
+  `payoutAccount`(지급 대상 `confirmed` 행에만, 가게 정산 계좌 전체 번호).
+- 합계: 같은 조건의 전체(최대 20,000건, 넘으면 `truncated`)로 `payable`(confirmed)·`paid`·`platformFee`(confirmed+paid)·`recovery`를 서버가 계산한다.
+- 구현: `apps/api/src/admin/_lib/admin-settlements-query.ts`. 직접 증거: `admin-settlements-list.spec.ts`, `admin-settlements-status-filter.spec.ts`.
+
+### 판매자 정산 계좌
+
+```text
+GET  /stores/:storeId/payout-account        // 판매자 본인·관리자, 끝 4자리 외 가림
+PUT  /stores/:storeId/payout-account        // 판매자 본인·관리자, { bankName, accountHolder, accountNumber }
+GET  /admin/stores/:storeId/payout-account  // 관리자, 전체 번호
+```
+
+`storePayoutAccounts/{storeId}`(`bankName`·`accountHolder`·`accountNumber`·`updatedAt`·`updatedBy`). 클라이언트 직접 접근은
+`firestore.rules` 기본 거부(규칙 테스트 `storePayoutAccounts`). 저장은 행동 기록 `store.payout_account.updated`와 같은 transaction이며
+기록에는 은행과 끝 4자리만 남긴다. 직접 증거: `apps/api/src/payout-accounts/payout-accounts.spec.ts`.
 
 ### 지급 처리
 
@@ -294,7 +328,7 @@ status + settledAt        // confirm batch
 
 seller/admin UI는 공통 `SettlementStatus`, `STATUS_LABEL`, `STATUS_COLOR`를 사용한다.
 
-관리자 요약에서 실제 지급 대상 성격의 합계를 계산할 때 `pending`·`cancelled` 포함 여부는 현재 frontend aggregator/UI 구현을 확인한다. 과거 UI 계획 문서를 API domain contract로 사용하지 않는다.
+관리자 정산 화면 합계 카드는 서버 합계(`/admin/settlements/summary`)를 쓴다: 지급 대기(confirmed)·지급 완료(paid)·플랫폼 수수료(confirmed+paid)·판매자 회수 필요. 목록 "더 보기"로 불러온 범위와 무관하게 조건 전체 기준이다.
 
 ## 12. 회차 직배송과 정산
 
@@ -341,6 +375,7 @@ admin 지급 상태 전이는 코드의 transaction 존재만으로 `VERIFIED` �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-21 | 결정 ②④⑤⑦: 가게별 수수료율 반영, 지급 뒤 환불 회수 필요(`SETTLEMENT_RECOVERY_REQUIRED`), 판매자 정산 계좌 API, 관리자 정산 목록 이어받기·행 보강·서버 합계 |
 | 2026-10-10 | seller 정산 API에 `RolesGuard`(seller, admin)를 적용하고, 목록에 `limit`(기본·상한 500)·`cursor` 페이지네이션과 `hasMore`·`nextCursor` 응답 필드를 추가 |
 | 2026-09-26 | admin 강제 환불이 `cancelSettlement()`로 pending/confirmed를 cancelled로 수렴하고 paid를 역전하지 않는 계약을 `admin.service.spec.ts`·`admin-legacy-refund-occ-retry.spec.ts` proof로 `ADMIN-FORCE-REFUND-CONSISTENCY` `IMPLEMENTATION_PROVEN`에 동기화 |
 | 2026-09-26 | admin privileged mutation authorization과 `markAsPaid` 지급 전이가 `admin-privileged-mutation.spec.ts` 직접 proof로 `IMPLEMENTATION_PROVEN`임을 §9·§12에 동기화 |

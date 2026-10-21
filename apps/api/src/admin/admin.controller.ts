@@ -6,6 +6,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import {
+  AdminSettlementFilterDto,
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
   QueryAdminDriversDto,
@@ -81,6 +82,12 @@ export class AdminController {
   }
 
   // ── Settlements ──────────────────────────────────────────────────
+
+  // 같은 조건 전체의 지급 대기·지급 완료·수수료·회수 필요 합계. 목록(더 보기)과 따로 받는다.
+  @Get('settlements/summary')
+  getSettlementsSummary(@Query() dto: AdminSettlementFilterDto) {
+    return this.admin.getSettlementsSummary(dto);
+  }
 
   @Get('settlements')
   getSettlements(@Query() dto: QueryAdminSettlementsDto) {

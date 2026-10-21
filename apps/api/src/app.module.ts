@@ -20,6 +20,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { OperationsModule } from './operations/operations.module';
 import { OpsAlertModule } from './ops-alerts/ops-alert.module';
 import { OrdersModule } from './orders/orders.module';
+import { PayoutAccountsModule } from './payout-accounts/payout-accounts.module';
 import { PaymentsModule } from './payments/payments.module';
 import { ProductsModule } from './products/products.module';
 import { RetentionModule } from './retention/retention.module';
@@ -68,6 +69,7 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
     NotificationsModule,
     StoresModule,
     SettlementsModule,
+    PayoutAccountsModule,
     HubsModule,
     AdminModule,
     DriverModule,

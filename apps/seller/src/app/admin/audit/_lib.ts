@@ -24,6 +24,7 @@ export const ACTION_LABEL: Record<string, string> = {
   'admin.order.force_refunded': '강제 환불',
   'admin.settlement.paid': '정산 지급',
   'admin.banner.updated': '배너 수정',
+  'store.payout_account.updated': '정산 계좌 변경',
 };
 
 const TARGET_LABEL: Record<string, string> = {
