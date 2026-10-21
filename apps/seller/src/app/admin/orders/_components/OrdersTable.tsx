@@ -2,7 +2,13 @@
 
 import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminOrder } from '@/hooks/useAdmin';
-import { getAdminOrdersReadState, getStatusColor, isRefundable, STATUS_LABEL } from '../_lib';
+import {
+  getAdminOrdersReadState,
+  getStatusColor,
+  isPostDeliveryRefundable,
+  isRefundable,
+  STATUS_LABEL,
+} from '../_lib';
 
 interface OrdersTableProps {
   orders: AdminOrder[];
@@ -13,6 +19,8 @@ interface OrdersTableProps {
   processingIds: ReadonlySet<string>;
   /** 확인창을 띄울 대상 주문을 넘긴다(주문번호·금액 표시용). */
   onRefund: (order: AdminOrder) => void;
+  /** 배송 완료 회차 주문의 배송 후 환불 확인창을 띄운다. 없으면 버튼을 숨긴다. */
+  onPostDeliveryRefund?: (order: AdminOrder) => void;
   /** 조회 실패 시 재시도 — hook의 reload()에 연결된다. */
   onRetry: () => void;
 }
@@ -50,6 +58,7 @@ export function OrdersTable({
   error,
   processingIds,
   onRefund,
+  onPostDeliveryRefund,
   onRetry,
 }: OrdersTableProps) {
   const readState = getAdminOrdersReadState({ loading, error, orders });
@@ -156,6 +165,18 @@ export function OrdersTable({
                   {processingIds.has(order.id) ? '처리중…' : '강제환불'}
                 </Button>
               )}
+              {onPostDeliveryRefund && isPostDeliveryRefundable(order) && (
+                <Button
+                  onClick={() => onPostDeliveryRefund(order)}
+                  disabled={processingIds.has(order.id)}
+                  size="xs"
+                  variant="outline"
+                  color="red"
+                  radius="md"
+                >
+                  {processingIds.has(order.id) ? '처리중…' : '배송 후 환불'}
+                </Button>
+              )}
             </Group>
           </Paper>
         ))}
@@ -251,6 +272,18 @@ export function OrdersTable({
                       radius="md"
                     >
                       {processingIds.has(order.id) ? '처리중…' : '강제환불'}
+                    </Button>
+                  )}
+                  {onPostDeliveryRefund && isPostDeliveryRefundable(order) && (
+                    <Button
+                      onClick={() => onPostDeliveryRefund(order)}
+                      disabled={processingIds.has(order.id)}
+                      size="xs"
+                      variant="outline"
+                      color="red"
+                      radius="md"
+                    >
+                      {processingIds.has(order.id) ? '처리중…' : '배송 후 환불'}
                     </Button>
                   )}
                 </Box>

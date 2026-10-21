@@ -1,4 +1,4 @@
-import type { OrderStatus } from '@greenhub/shared';
+import { type OrderStatus, POST_DELIVERY_REFUNDABLE_STATUSES } from '@greenhub/shared';
 
 // 주문 상태 라벨/색 — orders 탭 표현 SSOT(테이블·카드·필터 공용).
 // Record<OrderStatus>라 공유 상태가 늘면 라벨 누락을 컴파일 단계에서 잡는다.
@@ -47,6 +47,21 @@ export function isRefundable(order: {
 }): boolean {
   const allowed = isRoundOrder(order) ? ROUND_REFUNDABLE : LEGACY_REFUNDABLE;
   return allowed.includes(order.status);
+}
+
+// 배송 후 환불 버튼 노출 — 배송 완료로 표시된 회차 주문(서버 PostDeliveryRefundService와 같은 상태).
+// 관리자는 기간·정산 조건 없이 환불할 수 있다(지급 완료 정산이면 회수 대기로 표시됨).
+export function isPostDeliveryRefundable(order: {
+  status: OrderStatus;
+  schemaVersion?: number;
+  roundId?: string | null;
+  postDeliveryRefund?: unknown;
+}): boolean {
+  return (
+    isRoundOrder(order) &&
+    !order.postDeliveryRefund &&
+    POST_DELIVERY_REFUNDABLE_STATUSES.includes(order.status)
+  );
 }
 
 // Admin 주문 목록 read state — 조회 실패와 성공-empty의 구조적 구분.

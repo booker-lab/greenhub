@@ -15,7 +15,9 @@ const FETCH_ERROR_MESSAGE = '주문 목록 조회 중 오류 발생';
 describe('AdminOrdersClient read recovery wiring', () => {
   it('useAdminOrders의 error/reload를 소비한다', () => {
     expect(source).toContain('useAdminOrders({');
-    expect(source).toMatch(/const\s*\{\s*orders,\s*loading,\s*error,\s*reload,\s*forceRefund\s*\}/);
+    expect(source).toMatch(
+      /const\s*\{\s*orders,\s*loading,\s*error,\s*reload,\s*forceRefund(,\s*postDeliveryRefund)?\s*\}/,
+    );
   });
 
   it('error가 존재할 때 empty-only UI로 collapse되지 않는다', () => {
@@ -50,7 +52,15 @@ describe('AdminOrdersClient read recovery wiring', () => {
     expect(source).toContain('<RefundConfirmModal');
     expect(source).toContain('target={refundTarget}');
     expect(source).toContain('onConfirm={runRefund}');
-    expect(source).toContain('forceRefund(target.id, normalizeRefundReason(refundReason))');
+    expect(source).toContain('forceRefund(order.id, normalizeRefundReason(refundReason))');
+  });
+
+  it('배송 후 환불은 사유·메모 확인창을 거쳐 같은 처리 중 잠금으로 보낸다', () => {
+    expect(source).toContain('onPostDeliveryRefund={openDeliveredRefund}');
+    expect(source).toContain('<PostDeliveryRefundModal');
+    expect(source).toContain('target={deliveredTarget}');
+    expect(source).toContain('onConfirm={runDeliveredRefund}');
+    expect(source).toContain('postDeliveryRefund(order.id, reasonCode, deliveredMemo.trim())');
   });
 
   it('처리 중 잠금은 주문 id 묶음이라 여러 건을 이어서 처리해도 각자 유지된다', () => {
