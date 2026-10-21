@@ -1,4 +1,10 @@
-import type { OrderStatus, SettlementStatus, StoreStatus } from '@greenhub/shared';
+import type {
+  OrderStatus,
+  PostDeliveryRefundRecord,
+  SettlementRecovery,
+  SettlementStatus,
+  StoreStatus,
+} from '@greenhub/shared';
 import type { AdminCommandOutcome } from './useAdmin.outcome';
 
 // 관리자 화면 공통 타입 — 도메인별 훅 파일과 화면이 함께 쓴다.
@@ -43,6 +49,8 @@ export interface AdminOrder {
   roundId?: string | null;
   // 소비자 요청사항(회차 주문만)
   requestNote?: string | null;
+  // 배송 후 환불 기록(환불한 주문만)
+  postDeliveryRefund?: PostDeliveryRefundRecord | null;
 }
 
 export interface AdminSettlement {
@@ -58,6 +66,8 @@ export interface AdminSettlement {
   settledAt: unknown;
   confirmedAt?: unknown | null; // N8: B-1 confirm 배치 신규 필드(어드민도 표시 대비)
   paidAt: unknown | null;
+  /** 지급 뒤 주문이 환불돼 판매자에게서 돌려받을 돈. 없으면 회수 대상 아님. */
+  recovery?: SettlementRecovery | null;
 }
 
 export interface InviteToken {

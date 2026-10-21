@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toDateStr } from './_lib';
+import { describeRecoveryConfirm, isRecoveryPending, sumRecoveryPending, toDateStr } from './_lib';
 
 // 오전/오후 표기는 ICU 버전에 따라 'AM'·'오전'으로 달라질 수 있으므로
 // 월·일과 시:분 숫자만 검증한다. 포매터가 timeZone을 고정하므로 실행 환경 시간대와 무관하다.
@@ -33,5 +33,49 @@ describe('toDateStr (정산일시 KST 표기)', () => {
     expect(toDateStr(null)).toBe('-');
     expect(toDateStr(undefined)).toBe('-');
     expect(toDateStr(12345)).toBe('-');
+  });
+});
+
+describe('회수 대기 정산', () => {
+  const base = {
+    id: 's1',
+    storeId: 'store-1',
+    orderId: 'order-1',
+    orderNumber: '20261101-000001',
+    totalAmount: 30000,
+    platformFee: 1500,
+    netAmount: 28500,
+    status: 'paid' as const,
+    settledAt: null,
+    paidAt: null,
+  };
+  const pending = {
+    ...base,
+    recovery: {
+      status: 'PENDING' as const,
+      amount: 28500,
+      createdAt: null,
+      recoveredAt: null,
+      recoveredBy: null,
+    },
+  };
+  const recovered = {
+    ...base,
+    id: 's2',
+    recovery: { ...pending.recovery, status: 'RECOVERED' as const },
+  };
+
+  it('회수 대기만 돌려받을 돈으로 센다', () => {
+    expect(isRecoveryPending(pending)).toBe(true);
+    expect(isRecoveryPending(recovered)).toBe(false);
+    expect(isRecoveryPending({ ...base, recovery: null })).toBe(false);
+    expect(sumRecoveryPending([pending, recovered, base])).toEqual({ count: 1, amount: 28500 });
+  });
+
+  it('회수 완료 확인창은 가게·주문번호·금액을 보여 준다', () => {
+    const message = describeRecoveryConfirm(pending);
+    expect(message).toContain('가게 ID: store-1');
+    expect(message).toContain('주문번호: 20261101-000001');
+    expect(message).toContain('돌려받을 돈: ₩28,500');
   });
 });

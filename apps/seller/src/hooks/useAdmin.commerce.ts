@@ -1,5 +1,6 @@
 'use client';
 
+import type { PostDeliveryRefundReasonCode } from '@greenhub/shared';
 import type { AdminCommandOutcome } from './useAdmin.outcome';
 import { pick, runAdminCommand, useAdminList, withQuery } from './useAdmin.list';
 import type { AdminOrder, AdminSettlement } from './useAdmin.types';
@@ -32,7 +33,21 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
     );
   };
 
-  return { orders, loading, error, reload, forceRefund };
+  // 배송 후 환불(기한 없음) — 사유 코드·메모 필수. 지급 완료 정산이면 서버가 회수 대기로 표시한다.
+  const postDeliveryRefund = async (
+    orderId: string,
+    reasonCode: PostDeliveryRefundReasonCode,
+    memo: string,
+  ): Promise<AdminCommandOutcome> => {
+    return runAdminCommand(
+      token,
+      `/admin/orders/${orderId}/post-delivery-refund`,
+      { method: 'POST', body: JSON.stringify({ reasonCode, memo }) },
+      reload,
+    );
+  };
+
+  return { orders, loading, error, reload, forceRefund, postDeliveryRefund };
 }
 
 // ── Settlements ──────────────────────────────────────────────────
@@ -65,5 +80,15 @@ export function useAdminSettlements(filters?: { storeId?: string; from?: string;
     );
   };
 
-  return { settlements, loading, error, reload, markAsPaid };
+  // 판매자에게서 돌려받을 돈을 계좌로 받은 뒤 "회수 완료"로 표시한다.
+  const completeRecovery = async (settlementId: string): Promise<AdminCommandOutcome> => {
+    return runAdminCommand(
+      token,
+      `/admin/settlements/${settlementId}/recovery-complete`,
+      { method: 'PATCH' },
+      reload,
+    );
+  };
+
+  return { settlements, loading, error, reload, markAsPaid, completeRecovery };
 }

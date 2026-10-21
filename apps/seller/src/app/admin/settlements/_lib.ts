@@ -66,3 +66,33 @@ export function describePayConfirm(
     '이 정산을 지급 완료 처리하시겠습니까?',
   ].join('\n');
 }
+
+/** 지급 뒤 환불돼 판매자에게서 돌려받을 돈이 남은 정산인지(회수 대기). */
+export function isRecoveryPending(s: Pick<AdminSettlement, 'recovery'>): boolean {
+  return s.recovery?.status === 'PENDING';
+}
+
+/** 화면에 보이는 정산 중 돌려받을 돈의 건수·합계. */
+export function sumRecoveryPending(settlements: AdminSettlement[]) {
+  return settlements.filter(isRecoveryPending).reduce(
+    (acc, s) => {
+      acc.count += 1;
+      acc.amount += s.recovery?.amount ?? 0;
+      return acc;
+    },
+    { count: 0, amount: 0 },
+  );
+}
+
+/** 회수 완료 확인창 문구 — 어느 가게·주문에서 얼마를 받았는지 확인하게 한다. */
+export function describeRecoveryConfirm(
+  s: Pick<AdminSettlement, 'storeId' | 'orderId' | 'orderNumber' | 'recovery'>,
+): string {
+  return [
+    `가게 ID: ${s.storeId}`,
+    s.orderNumber ? `주문번호: ${s.orderNumber}` : `주문 ID: ${s.orderId}`,
+    `돌려받을 돈: ${toKRW(s.recovery?.amount ?? 0)}`,
+    '',
+    '판매자에게서 이 금액을 계좌로 받았다면 회수 완료로 표시합니다.',
+  ].join('\n');
+}

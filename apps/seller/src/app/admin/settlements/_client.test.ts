@@ -9,7 +9,7 @@ describe('AdminSettlementsClient 조회 복구 배선', () => {
   it('useAdminSettlements의 error/reload를 소비한다', () => {
     expect(source).toContain('useAdminSettlements({');
     expect(source).toMatch(
-      /const\s*\{\s*settlements,\s*loading,\s*error,\s*reload,\s*markAsPaid\s*\}/,
+      /const\s*\{\s*settlements,\s*loading,\s*error,\s*reload,\s*markAsPaid(,\s*completeRecovery)?\s*\}/,
     );
   });
 

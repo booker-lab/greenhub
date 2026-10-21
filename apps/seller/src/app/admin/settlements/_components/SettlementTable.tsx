@@ -2,15 +2,57 @@
 
 import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 // 정산 라벨/색 SSOT = @greenhub/shared (F-1/S4).
-import { STATUS_COLOR, STATUS_LABEL } from '@greenhub/shared';
+import { RECOVERY_STATUS_LABEL, STATUS_COLOR, STATUS_LABEL } from '@greenhub/shared';
 import type { AdminSettlement } from '@/hooks/useAdmin';
-import { toDateStr } from '../_lib';
+import { toDateStr, toKRW } from '../_lib';
 
 interface SettlementTableProps {
   settlements: AdminSettlement[];
   loading: boolean;
   processingId: string | null;
   onPay: (id: string) => void;
+  /** 돌려받을 돈을 받은 뒤 회수 완료로 표시한다. 없으면 버튼을 숨긴다. */
+  onCompleteRecovery?: (id: string) => void;
+}
+
+// 지급 뒤 환불된 정산: 돌려받을 돈 표시와 회수 완료 버튼(회수 대기), 또는 회수 완료 표시.
+function RecoveryAction({
+  settlement,
+  processing,
+  onComplete,
+}: {
+  settlement: AdminSettlement;
+  processing: boolean;
+  onComplete?: (id: string) => void;
+}) {
+  const recovery = settlement.recovery;
+  if (!recovery) return null;
+  if (recovery.status === 'RECOVERED') {
+    return (
+      <Badge color="gray" variant="light" radius="xl">
+        {RECOVERY_STATUS_LABEL.RECOVERED}
+      </Badge>
+    );
+  }
+  return (
+    <Group gap={6} justify="flex-end" wrap="nowrap">
+      <Badge color="red" variant="light" radius="xl">
+        {RECOVERY_STATUS_LABEL.PENDING} {toKRW(recovery.amount)}
+      </Badge>
+      {onComplete && (
+        <Button
+          onClick={() => onComplete(settlement.id)}
+          disabled={processing}
+          size="xs"
+          variant="outline"
+          color="red"
+          radius="md"
+        >
+          {processing ? '처리중…' : '회수 완료'}
+        </Button>
+      )}
+    </Group>
+  );
 }
 
 const thBase = {
@@ -24,6 +66,7 @@ export function SettlementTable({
   loading,
   processingId,
   onPay,
+  onCompleteRecovery,
 }: SettlementTableProps) {
   if (loading) {
     return (
@@ -103,6 +146,11 @@ export function SettlementTable({
                   {processingId === s.id ? '처리중…' : '지급처리'}
                 </Button>
               )}
+              <RecoveryAction
+                settlement={s}
+                processing={processingId === s.id}
+                onComplete={onCompleteRecovery}
+              />
             </Group>
           </Paper>
         ))}
@@ -217,6 +265,11 @@ export function SettlementTable({
                       {processingId === s.id ? '처리중…' : '지급처리'}
                     </Button>
                   )}
+                  <RecoveryAction
+                    settlement={s}
+                    processing={processingId === s.id}
+                    onComplete={onCompleteRecovery}
+                  />
                 </Box>
               </Box>
             ))}

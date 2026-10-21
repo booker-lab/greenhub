@@ -10,7 +10,13 @@ import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
 import { SettlementFilters } from './_components/SettlementFilters';
 import { SettlementTable } from './_components/SettlementTable';
 import { SummaryCards } from './_components/SummaryCards';
-import { describePayConfirm, sumPayable } from './_lib';
+import {
+  describePayConfirm,
+  describeRecoveryConfirm,
+  sumPayable,
+  sumRecoveryPending,
+  toKRW,
+} from './_lib';
 
 /** 스토어 ID 입력이 멈춘 뒤 조회하기까지 기다리는 시간. 글자마다 재조회하지 않는다. */
 const STORE_FILTER_DEBOUNCE_MS = 300;
@@ -21,14 +27,16 @@ export default function AdminSettlementsClient() {
   const [toFilter, setToFilter] = useState('');
   // 입력창은 storeFilter를 바로 보여 주고, 조회는 입력이 멈춘 뒤의 값으로만 한다.
   const [debouncedStoreFilter] = useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS);
-  const { settlements, loading, error, reload, markAsPaid } = useAdminSettlements({
+  const settlementsQuery = useAdminSettlements({
     storeId: debouncedStoreFilter || undefined,
     from: fromFilter || undefined,
     to: toFilter || undefined,
   });
+  const { settlements, loading, error, reload, markAsPaid, completeRecovery } = settlementsQuery;
   const [processingId, setProcessingId] = useState<string | null>(null);
   // 확인창이 대상(가게·주문·지급액)을 보이도록 id가 아닌 정산 문서를 잡아 둔다.
   const [payTarget, setPayTarget] = useState<AdminSettlement | null>(null);
+  const [recoveryTarget, setRecoveryTarget] = useState<AdminSettlement | null>(null);
 
   const openPay = (settlementId: string) =>
     setPayTarget(settlements.find((s) => s.id === settlementId) ?? null);
@@ -51,6 +59,29 @@ export default function AdminSettlementsClient() {
       setProcessingId(null);
     }
   };
+
+  const openRecovery = (settlementId: string) =>
+    setRecoveryTarget(settlements.find((s) => s.id === settlementId) ?? null);
+
+  const runRecovery = async () => {
+    if (!recoveryTarget) return;
+    setProcessingId(recoveryTarget.id);
+    try {
+      const outcome = await completeRecovery(recoveryTarget.id);
+      setRecoveryTarget(null);
+      if (outcome.kind === 'confirmed' && outcome.reconciled) return;
+      const presentation = describeAdminCommandOutcome(outcome, '회수 완료');
+      notifications.show({
+        color: outcome.kind === 'rejected' ? 'red' : 'yellow',
+        title: presentation.title,
+        message: presentation.message,
+      });
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  const recoveryPending = sumRecoveryPending(settlements);
 
   // N11: 합계는 confirmed + paid 한정(실제 지급 대상). pending·cancelled 제외.
   const { totalFee, totalNet } = sumPayable(settlements);
@@ -104,12 +135,19 @@ export default function AdminSettlementsClient() {
       ) : (
         <>
           {settlements.length > 0 && <SummaryCards totalFee={totalFee} totalNet={totalNet} />}
+          {recoveryPending.count > 0 && (
+            <Text mb="md" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              판매자에게서 돌려받을 돈 {recoveryPending.count}건 · {toKRW(recoveryPending.amount)} —
+              계좌로 받은 뒤 &quot;회수 완료&quot;를 눌러 주세요.
+            </Text>
+          )}
 
           <SettlementTable
             settlements={settlements}
             loading={loading}
             processingId={processingId}
             onPay={openPay}
+            onCompleteRecovery={openRecovery}
           />
         </>
       )}
@@ -124,6 +162,19 @@ export default function AdminSettlementsClient() {
         onConfirm={runPay}
         onClose={() => {
           if (processingId === null) setPayTarget(null);
+        }}
+      />
+
+      <ConfirmModal
+        opened={recoveryTarget !== null}
+        title="정산 회수 완료"
+        message={recoveryTarget ? describeRecoveryConfirm(recoveryTarget) : ''}
+        confirmLabel="회수 완료"
+        confirmColor="red"
+        loading={processingId !== null}
+        onConfirm={runRecovery}
+        onClose={() => {
+          if (processingId === null) setRecoveryTarget(null);
         }}
       />
     </Box>
