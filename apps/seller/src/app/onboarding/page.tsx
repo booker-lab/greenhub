@@ -14,7 +14,6 @@ import {
   Title,
 } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import { ChevronLeft, Store } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -93,10 +92,12 @@ export default function OnboardingPage() {
     setLogoUploading(true);
     setError('');
     try {
-      const storageRef = ref(
+      // Storage SDK는 올릴 때만 불러온다.
+      const [{ getDownloadURL, ref, uploadBytes }, storage] = await Promise.all([
+        import('firebase/storage'),
         getFirebaseStorage(),
-        `logos/${session?.user.id ?? 'unknown'}_${Date.now()}`,
-      );
+      ]);
+      const storageRef = ref(storage, `logos/${session?.user.id ?? 'unknown'}_${Date.now()}`);
       // canvas로 다시 그려 EXIF(촬영 위치 등)를 지운 JPEG만 올린다.
       const jpeg = await reencodeImageToJpeg(file, LOGO_IMAGE_ENCODE);
       await uploadBytes(storageRef, jpeg, { contentType: 'image/jpeg' });

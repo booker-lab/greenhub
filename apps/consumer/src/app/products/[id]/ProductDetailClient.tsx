@@ -9,7 +9,12 @@ import { useEffect, useState } from 'react';
 import DetailExtras from '@/components/benchmark/DetailExtras';
 import PanelExtras from '@/components/benchmark/PanelExtras';
 import ProductTopBar from '@/components/ProductTopBar';
-import { type PublicSaleRound, usePublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
+import {
+  loadPublicSaleRoundsState,
+  type PublicSaleRound,
+  usePublicSaleRound,
+  useSaleRounds,
+} from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { classifyStoreProfileFailure, fetchPublicStoreProfile } from '@/lib/public-store-profile';
@@ -527,10 +532,17 @@ export default function ProductDetailClient({ id, roundQuery, hint }: ProductDet
   const readyProduct = detail.status === 'ready' ? detail.product : null;
   // 매장 판매 방식도 서버 단서로 상품 조회와 함께 읽는다. 아래에서 최신 상품의 매장과 같은지 다시 확인한다.
   const storeMode = useStoreMode(readyProduct?.storeId ?? validHint?.storeId ?? null);
+  const hintStoreId = validHint?.storeId ?? null;
 
   useEffect(() => {
     captureAcquisition();
   }, []);
+
+  // 상품·판매 방식 조회가 끝나기를 기다리지 않고 서버 단서의 매장으로 회차 조회를 함께 시작한다.
+  // 같은 매장 회차 조회는 잠깐 공유되므로(lib/shared-request) 회차 화면의 useSaleRounds가 이 요청을 그대로 받는다.
+  useEffect(() => {
+    if (hintStoreId) void loadPublicSaleRoundsState(hintStoreId);
+  }, [hintStoreId]);
 
   if (detail.status === 'not_found') notFound();
   if (detail.status === 'error') {

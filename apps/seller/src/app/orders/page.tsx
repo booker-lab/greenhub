@@ -12,7 +12,7 @@ import {
   UnstyledButton,
 } from '@mantine/core';
 import { useSession } from 'next-auth/react';
-import { useEffect, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useFirebaseReady } from '@/app/providers';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { PageHeader } from '@/components/PageHeader';
@@ -118,6 +118,8 @@ export default function OrdersPage() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  // 입력창은 글자마다 바로 바뀌고, 목록 다시 계산·카드 렌더는 입력이 멈출 때 따라온다.
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [roundFilter, setRoundFilter] = useState<string | null>(null);
   // 모든 기간의 주문을 통째로 받지 않는다. 회차 필터가 있으면 그 회차 주문 전부(완료·취소 포함)를,
   // 없으면 진행 중 주문 전부를 받고, 끝난 주문(완료·취소)은 그 탭을 처음 열 때부터 50건씩 받는다.
@@ -189,7 +191,7 @@ export default function OrdersPage() {
         customFrom,
         customTo,
         groupConfigMap,
-        search: { query: searchQuery, phoneMatchIds },
+        search: { query: deferredSearchQuery, phoneMatchIds },
       }),
     [
       fetchInput,
@@ -201,7 +203,7 @@ export default function OrdersPage() {
       customFrom,
       customTo,
       groupConfigMap,
-      searchQuery,
+      deferredSearchQuery,
       phoneMatchIds,
     ],
   );
@@ -676,7 +678,9 @@ export default function OrdersPage() {
                   </svg>
                 }
                 text={
-                  searchQuery.trim() ? '검색어와 맞는 주문이 없습니다' : '현재 해당 주문이 없습니다'
+                  deferredSearchQuery.trim()
+                    ? '검색어와 맞는 주문이 없습니다'
+                    : '현재 해당 주문이 없습니다'
                 }
               />
             )}
