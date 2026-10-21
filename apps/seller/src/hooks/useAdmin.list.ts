@@ -67,6 +67,28 @@ export async function runAdminCommand(
   });
 }
 
+/**
+ * runAdminCommand와 같은 판정에 2xx 응답 본문을 함께 돌려준다(본문이 화면 안내에 필요한 명령용).
+ * 실패·불확정이면 body는 null이다.
+ */
+export async function runAdminCommandWithBody(
+  token: string | undefined,
+  path: string,
+  options: RequestInit,
+  reload: () => Promise<string | null>,
+): Promise<{ outcome: AdminCommandOutcome; body: unknown }> {
+  let body: unknown = null;
+  const outcome = await executeAdminCommand({
+    missingToken: !token,
+    invoke: () =>
+      apiJson(path, token as string, options).then((response) => {
+        body = response;
+      }),
+    reload,
+  });
+  return { outcome, body: outcome.kind === 'confirmed' ? body : null };
+}
+
 export function withQuery(base: string, params: Record<string, string | undefined>): string {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

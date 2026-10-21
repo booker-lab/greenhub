@@ -26,6 +26,7 @@ export const ACTION_LABEL: Record<string, string> = {
   'admin.banner.updated': '배너 수정',
   'admin.partner_inquiry.contacted': '입점 문의 연락 표시',
   'admin.partner_inquiry.deleted': '입점 문의 삭제',
+  'store.payout_account.updated': '정산 계좌 변경',
 };
 
 const TARGET_LABEL: Record<string, string> = {

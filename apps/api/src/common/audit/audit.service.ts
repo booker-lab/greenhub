@@ -40,7 +40,9 @@ export type AdminAuditAction =
   | 'admin.settlement.paid'
   | 'admin.banner.updated'
   | 'admin.partner_inquiry.contacted'
-  | 'admin.partner_inquiry.deleted';
+  | 'admin.partner_inquiry.deleted'
+  // 판매자(또는 관리자)가 정산 계좌를 저장. 계좌번호는 끝 4자리만 남긴다.
+  | 'store.payout_account.updated';
 
 export type AdminAuditTargetType =
   | 'store'

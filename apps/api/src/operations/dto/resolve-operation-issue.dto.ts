@@ -9,12 +9,15 @@ export const OPERATION_ISSUE_RESOLVE_MEMO_MAX_LENGTH = 200;
  *   `provider-reversal-hold`). 정산을 받는 판매자가 스스로 풀 수 없게 한다.
  * - AUTO_REFUND_FAILED, FINALIZATION_REFUND_FAILED: 고객 환불이 끝났는지 확정되지 않은 기록이다.
  *   닫으면 돌려줘야 할 돈이 운영 화면에서 사라지므로 관리자가 환불 여부를 확인한 뒤 닫는다.
+ * - SETTLEMENT_RECOVERY_REQUIRED: 이미 지급한 정산의 주문이 환불돼 판매자에게 돌려받을 돈이 있다.
+ *   돈을 돌려줄 판매자가 스스로 닫지 못하게, 관리자가 회수를 확인한 뒤 닫는다.
  */
 export const ADMIN_ONLY_MANUAL_RESOLVE_TYPES: ReadonlySet<OperationIssueType> =
   new Set<OperationIssueType>([
     'PROVIDER_REVERSAL_DETECTED',
     'AUTO_REFUND_FAILED',
     'FINALIZATION_REFUND_FAILED',
+    'SETTLEMENT_RECOVERY_REQUIRED',
   ]);
 
 /**

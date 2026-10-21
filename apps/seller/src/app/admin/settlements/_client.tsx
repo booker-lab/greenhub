@@ -1,33 +1,54 @@
 'use client';
 
 import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
-import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { type AdminSettlement, useAdminSettlements } from '@/hooks/useAdmin';
-import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
+import {
+  type AdminSettlement,
+  describeAdminCommandOutcome,
+  useAdminSettlements,
+  useAdminStores,
+} from '@/hooks/useAdmin';
+import { LoadMoreButton } from './_components/LoadMoreButton';
 import { SettlementFilters } from './_components/SettlementFilters';
 import { SettlementTable } from './_components/SettlementTable';
 import { SummaryCards } from './_components/SummaryCards';
-import { describePayConfirm, sumPayable } from './_lib';
-
-/** 스토어 ID 입력이 멈춘 뒤 조회하기까지 기다리는 시간. 글자마다 재조회하지 않는다. */
-const STORE_FILTER_DEBOUNCE_MS = 300;
+import {
+  ADMIN_SETTLEMENT_FILTER_TABS,
+  type AdminSettlementFilterKey,
+  describePayConfirm,
+  toStoreOptions,
+} from './_lib';
 
 export default function AdminSettlementsClient() {
+  const [statusFilter, setStatusFilter] = useState<AdminSettlementFilterKey>('all');
   const [storeFilter, setStoreFilter] = useState('');
   const [fromFilter, setFromFilter] = useState('');
   const [toFilter, setToFilter] = useState('');
-  // 입력창은 storeFilter를 바로 보여 주고, 조회는 입력이 멈춘 뒤의 값으로만 한다.
-  const [debouncedStoreFilter] = useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS);
-  const { settlements, loading, error, reload, markAsPaid } = useAdminSettlements({
-    storeId: debouncedStoreFilter || undefined,
+  const { stores, loading: storesLoading } = useAdminStores();
+  const {
+    settlements,
+    loading,
+    error,
+    reload,
+    markAsPaid,
+    summary,
+    summaryLoading,
+    summaryError,
+    hasMore,
+    loadMore,
+    loadingMore,
+    loadMoreError,
+  } = useAdminSettlements({
+    storeId: storeFilter || undefined,
+    status: statusFilter === 'all' ? undefined : statusFilter,
     from: fromFilter || undefined,
     to: toFilter || undefined,
   });
   const [processingId, setProcessingId] = useState<string | null>(null);
-  // 확인창이 대상(가게·주문·지급액)을 보이도록 id가 아닌 정산 문서를 잡아 둔다.
+  // 확인창이 대상(가게·주문·지급액·계좌)을 보이도록 id가 아닌 정산 문서를 잡아 둔다.
   const [payTarget, setPayTarget] = useState<AdminSettlement | null>(null);
 
   const openPay = (settlementId: string) =>
@@ -52,27 +73,35 @@ export default function AdminSettlementsClient() {
     }
   };
 
-  // N11: 합계는 confirmed + paid 한정(실제 지급 대상). pending·cancelled 제외.
-  const { totalFee, totalNet } = sumPayable(settlements);
-
   return (
     <Box>
       <Group justify="space-between" mb="md">
         <Title order={4}>
           정산 목록{' '}
-          {!loading && error === null && (
+          {!loading && error === null && summary && (
             <Text
               component="span"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
-              ({settlements.length})
+              ({summary.count})
             </Text>
           )}
         </Title>
       </Group>
 
+      <Box mb="sm">
+        <SegmentedTabs<AdminSettlementFilterKey>
+          tabs={ADMIN_SETTLEMENT_FILTER_TABS}
+          value={statusFilter}
+          onChange={setStatusFilter}
+          layout="scroll"
+        />
+      </Box>
+
       <SettlementFilters
         storeFilter={storeFilter}
+        storeOptions={toStoreOptions(stores)}
+        storesLoading={storesLoading}
         fromFilter={fromFilter}
         toFilter={toFilter}
         onStoreChange={setStoreFilter}
@@ -103,7 +132,7 @@ export default function AdminSettlementsClient() {
         </Paper>
       ) : (
         <>
-          {settlements.length > 0 && <SummaryCards totalFee={totalFee} totalNet={totalNet} />}
+          <SummaryCards summary={summary} loading={summaryLoading} error={summaryError} />
 
           <SettlementTable
             settlements={settlements}
@@ -111,6 +140,14 @@ export default function AdminSettlementsClient() {
             processingId={processingId}
             onPay={openPay}
           />
+          {hasMore && (
+            <LoadMoreButton
+              loadedCount={settlements.length}
+              loadingMore={loadingMore}
+              error={loadMoreError}
+              onLoadMore={loadMore}
+            />
+          )}
         </>
       )}
 

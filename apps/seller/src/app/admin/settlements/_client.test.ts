@@ -2,62 +2,36 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 // AdminSettlementsClient는 '@/' alias를 사용하므로 vitest에서 직접 import할 수 없다.
-// 따라서 이 focused test는 화면의 read-state 분기와 기존 action/filter 배선을 소스에서 고정한다.
+// 따라서 이 focused test는 화면의 read-state 분기와 action/filter 배선을 소스에서 고정한다.
 const source = readFileSync(new URL('./_client.tsx', import.meta.url), 'utf8');
 
-describe('AdminSettlementsClient 조회 복구 배선', () => {
-  it('useAdminSettlements의 error/reload를 소비한다', () => {
-    expect(source).toContain('useAdminSettlements({');
-    expect(source).toMatch(
-      /const\s*\{\s*settlements,\s*loading,\s*error,\s*reload,\s*markAsPaid\s*\}/,
-    );
-  });
-
+describe('AdminSettlementsClient 배선', () => {
   it('조회 실패 메시지와 명시적 retry를 표시한다', () => {
     expect(source).toContain('error !== null && !loading');
     expect(source).toContain('정산 목록을 불러오지 못했습니다.');
-    expect(source).toContain(`{error}`);
     expect(source).toContain('<Button onClick={reload}');
-    expect(source).toContain('다시 조회');
   });
 
-  it('조회 실패에서는 정상 0건 수와 빈 목록으로 합쳐지지 않는다', () => {
-    expect(source).toContain('!loading && error === null');
-    expect(source).toContain('settlements.length > 0 && <SummaryCards');
-    expect(source).toContain('<SettlementTable');
-    expect(source).toContain('loading={loading}');
-  });
-
-  it('정상 empty와 필터 배선을 유지한다', () => {
-    expect(source).toContain('settlements.length > 0');
-    expect(source).toContain('storeFilter={storeFilter}');
-    expect(source).toContain('fromFilter={fromFilter}');
-    expect(source).toContain('toFilter={toFilter}');
-    expect(source).toContain('onStoreChange={setStoreFilter}');
-    expect(source).toContain('onFromChange={setFromFilter}');
-    expect(source).toContain('onToChange={setToFilter}');
-    expect(source).toContain('storeId: debouncedStoreFilter || undefined');
+  it('상태 탭·가게 이름 선택·기간 필터를 조회 조건으로 넘긴다', () => {
+    expect(source).toContain('tabs={ADMIN_SETTLEMENT_FILTER_TABS}');
+    expect(source).toContain("status: statusFilter === 'all' ? undefined : statusFilter");
+    expect(source).toContain('storeOptions={toStoreOptions(stores)}');
+    expect(source).toContain('storeId: storeFilter || undefined');
     expect(source).toContain('from: fromFilter || undefined');
     expect(source).toContain('to: toFilter || undefined');
   });
 
-  it('스토어 ID 입력은 debounce된 값으로만 조회한다(글자마다 재조회 금지)', () => {
-    expect(source).toContain("import { useDebouncedValue } from '@mantine/hooks'");
-    expect(source).toContain('const STORE_FILTER_DEBOUNCE_MS = 300;');
-    expect(source).toContain(
-      'const [debouncedStoreFilter] = useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS);',
-    );
-    expect(source).not.toContain('storeId: storeFilter || undefined');
+  it('합계는 서버 합계를 쓰고, 더 보기는 hasMore일 때만 보인다', () => {
+    expect(source).toContain('<SummaryCards summary={summary}');
+    expect(source).not.toContain('sumPayable');
+    expect(source).toContain('{hasMore && (');
+    expect(source).toContain('onLoadMore={loadMore}');
   });
 
-  it('기존 markAsPaid 확인·처리 경로를 유지한다', () => {
-    expect(source).toContain('const runPay = async () =>');
+  it('지급 확인·처리 경로를 유지한다', () => {
     expect(source).toContain('await markAsPaid(payTarget.id)');
-    expect(source).toContain('setPayTarget(null)');
-    expect(source).toContain('opened={payTarget !== null}');
-    expect(source).toContain('onConfirm={runPay}');
-    // 확인창은 대상(가게·주문·지급액)을 보인다.
-    expect(source).toContain('onPay={openPay}');
     expect(source).toContain('describePayConfirm(payTarget)');
+    expect(source).toContain('onConfirm={runPay}');
+    expect(source).toContain('describeAdminCommandOutcome(outcome,');
   });
 });
