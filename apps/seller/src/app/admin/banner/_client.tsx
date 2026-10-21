@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, Button, Group, Paper, Stack, Switch, Text, Title } from '@mantine/core';
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { type AdminBanner, useAdminBanner } from '@/hooks/useAdmin';
@@ -48,7 +47,12 @@ export default function AdminBannerClient() {
     setUploading(true);
     setUploadError(null);
     try {
-      const r = storageRef(getFirebaseStorage(), `banners/main_hero/${Date.now()}_${file.name}`);
+      // Storage SDK는 올릴 때만 불러온다.
+      const [{ getDownloadURL, ref: storageRef, uploadBytes }, storage] = await Promise.all([
+        import('firebase/storage'),
+        getFirebaseStorage(),
+      ]);
+      const r = storageRef(storage, `banners/main_hero/${Date.now()}_${file.name}`);
       await uploadBytes(r, file);
       const url = await getDownloadURL(r);
       setForm((f) => ({ ...f, imageUrl: url }));

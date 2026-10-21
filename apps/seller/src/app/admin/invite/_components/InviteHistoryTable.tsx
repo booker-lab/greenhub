@@ -2,7 +2,7 @@
 
 import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { InviteToken } from '@/hooks/useAdmin';
-import { formatExpiry, getAdminInviteReadState, inviteStatus } from '../_lib';
+import { formatKstDateTime, getAdminInviteReadState, inviteStatus } from '../_lib';
 
 interface InviteHistoryTableProps {
   invites: InviteToken[];
@@ -13,13 +13,19 @@ interface InviteHistoryTableProps {
   onRetry: () => void;
   /** 방금 복사에 성공한 토큰(2초간). 해당 행 버튼만 '복사됨!'으로 바뀐다. */
   copiedToken: string | null;
-  /** 행별 토큰 복사 — 모든 상태(유효·사용됨·만료·취소됨)에 노출한다(계획서 결정10). */
+  /** 행별 초대 링크 복사 — 모든 상태(유효·사용됨·만료·취소됨)에 노출한다(계획서 결정10). */
   onCopy: (token: string) => void;
   /** 취소 처리 중인 토큰. 처리 중에는 모든 행의 취소 버튼을 잠근다. */
   revokingToken: string | null;
   /** 행별 초대 취소 요청 — 유효 상태 행에만 노출하며, 확인 창은 호출자가 띄운다. */
   onRevoke: (token: string) => void;
 }
+
+const dateCell = {
+  padding: '12px 16px',
+  color: 'var(--color-text-disabled)',
+  fontSize: 'var(--font-size-sm)',
+};
 
 const thBase = {
   textAlign: 'left' as const,
@@ -44,9 +50,9 @@ function CopyTokenButton({
       variant="outline"
       color="brand"
       radius="md"
-      aria-label={`토큰 ${token} 복사`}
+      aria-label={`토큰 ${token} 초대 링크 복사`}
     >
-      {copied ? '복사됨!' : '복사'}
+      {copied ? '복사됨!' : '링크 복사'}
     </Button>
   );
 }
@@ -74,6 +80,15 @@ function RevokeInviteButton({
       취소
     </Button>
   );
+}
+
+const mutedSm = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' };
+
+/** 사용한 초대만 사용 시각(KST)과 가입한 계정 id를 보여 준다. 쓰지 않은 초대는 '-'. */
+function usageText(inv: InviteToken): string {
+  if (!inv.usedAt) return '-';
+  const usedAt = formatKstDateTime(inv.usedAt);
+  return inv.usedBy ? `${usedAt} · 계정 ${inv.usedBy}` : usedAt;
 }
 
 /** 받는 사람을 지정한 초대만 이메일을 보여 준다. 지정하지 않은 초대는 아무것도 그리지 않는다. */
@@ -147,7 +162,7 @@ export function InviteHistoryTable({
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
       >
         <Text ta="center" py={48} style={{ color: 'var(--color-text-disabled)' }}>
-          발급된 토큰이 없습니다.
+          발급된 초대 링크가 없습니다.
         </Text>
       </Paper>
     );
@@ -155,7 +170,7 @@ export function InviteHistoryTable({
 
   return (
     <>
-      {/* 모바일(<sm): 카드 리스트 — 만료일 컬럼 잘림 방지 */}
+      {/* 모바일(<sm): 카드 리스트 — 날짜 컬럼 잘림 방지 */}
       <Stack gap="sm" hiddenFrom="sm">
         {invites.map((inv) => {
           const { label, color, expDate, revocable } = inviteStatus(inv);
@@ -196,14 +211,11 @@ export function InviteHistoryTable({
                   )}
                 </Group>
               </Group>
-              <Text
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-disabled)',
-                }}
-              >
-                만료 {formatExpiry(expDate)}
-              </Text>
+              <Text style={mutedSm}>발급 {formatKstDateTime(inv.createdAt)}</Text>
+              <Text style={mutedSm}>만료 {formatKstDateTime(expDate)}</Text>
+              {inv.usedAt && (
+                <Text style={{ ...mutedSm, wordBreak: 'break-all' }}>사용 {usageText(inv)}</Text>
+              )}
               {recipientEmailText(inv.recipientEmail)}
             </Paper>
           );
@@ -236,7 +248,13 @@ export function InviteHistoryTable({
                 상태
               </Box>
               <Box component="th" style={thBase}>
-                만료일
+                발급
+              </Box>
+              <Box component="th" style={thBase}>
+                만료
+              </Box>
+              <Box component="th" style={thBase}>
+                사용
               </Box>
             </tr>
           </Box>
@@ -280,15 +298,14 @@ export function InviteHistoryTable({
                       )}
                     </Group>
                   </Box>
-                  <Box
-                    component="td"
-                    style={{
-                      padding: '12px 16px',
-                      color: 'var(--color-text-disabled)',
-                      fontSize: 'var(--font-size-sm)',
-                    }}
-                  >
-                    {formatExpiry(expDate)}
+                  <Box component="td" style={dateCell}>
+                    {formatKstDateTime(inv.createdAt)}
+                  </Box>
+                  <Box component="td" style={dateCell}>
+                    {formatKstDateTime(expDate)}
+                  </Box>
+                  <Box component="td" style={{ ...dateCell, wordBreak: 'break-all' }}>
+                    {usageText(inv)}
                   </Box>
                 </Box>
               );

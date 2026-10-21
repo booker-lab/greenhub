@@ -1,3 +1,4 @@
+import { cookies } from 'next/headers';
 import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
@@ -9,6 +10,13 @@ import {
   testSecretsMatch,
 } from '@/auth-runtime';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import {
+  inviteSignInError,
+  isInviteTokenFormat,
+  SELLER_INVITE_COOKIE,
+  SIGN_IN_ERROR_PATH,
+  signInErrorPath,
+} from '@/lib/seller-invite';
 
 const API = getApiBaseUrl();
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
@@ -215,6 +223,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (account?.provider !== 'kakao') return true;
       if (!account.access_token) return false;
 
+      // 초대 링크(/invite/[token])로 들어왔으면 쿠키의 초대 토큰을 함께 보낸다(판매자 첫 가입).
+      // 쿠키는 결과와 무관하게 이번 한 번만 쓰고 지운다. 형식이 틀린 값은 보내지 않는다.
+      const cookieStore = await cookies();
+      const storedInvite = cookieStore.get(SELLER_INVITE_COOKIE)?.value;
+      if (storedInvite !== undefined) cookieStore.delete(SELLER_INVITE_COOKIE);
+      const inviteToken = isInviteTokenFormat(storedInvite) ? storedInvite : undefined;
+
       // API 응답이 없거나 늦으면(시간 제한 초과 포함) 세션을 만들지 않는다.
       let data: {
         accessToken: string;
@@ -228,10 +243,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           body: JSON.stringify({
             kakaoAccessToken: account.access_token,
             targetRole: 'seller',
+            inviteToken,
           }),
           signal: authUpstreamSignal(),
         });
-        if (!res.ok) return false;
+        if (!res.ok) {
+          // 초대 가입 실패는 사유별 안내 화면으로 보낸다. 그 밖의 거절은 AccessDenied 안내로 끝난다.
+          if (!inviteToken) return false;
+          const reason = inviteSignInError(res.status, await res.json().catch(() => null));
+          return reason ? signInErrorPath(reason) : false;
+        }
         data = await res.json();
       } catch {
         return false;
@@ -304,5 +325,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: '/login',
+    // 로그인 거절(AccessDenied 등)을 한국어 안내 화면으로 보인다. 초대 실패 사유도 같은 화면이 받는다.
+    error: SIGN_IN_ERROR_PATH,
   },
 });

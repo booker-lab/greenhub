@@ -9,6 +9,7 @@ const GENERATE_ERROR_MESSAGE = '초대 토큰 발급 중 오류 발생';
 const baseProps: Props = {
   generating: false,
   lastToken: null,
+  lastLink: null,
   copied: false,
   generateError: null,
   recipientEmail: '',
@@ -71,9 +72,9 @@ describe('InviteGenerator command state', () => {
   it('대기 상태에서는 생성 버튼을 표시하고 실패 UI를 노출하지 않는다', () => {
     const tree = InviteGenerator({ ...baseProps });
     const texts = textsOf(tree);
-    expect(texts).toContain('새 토큰 생성');
-    expect(texts).not.toContain('토큰 발급에 실패했습니다.');
-    expect(texts).not.toContain('생성된 초대 토큰');
+    expect(texts).toContain('새 초대 링크 만들기');
+    expect(texts).not.toContain('초대 링크 발급에 실패했습니다.');
+    expect(texts).not.toContain('생성된 초대 링크');
   });
 
   it('토큰 유효 기간을 서버와 같은 72시간으로 안내한다', () => {
@@ -84,13 +85,13 @@ describe('InviteGenerator command state', () => {
 
   it('생성 중에는 진행 copy를 표시한다', () => {
     const tree = InviteGenerator({ ...baseProps, generating: true });
-    expect(textsOf(tree)).toContain('생성중…');
+    expect(textsOf(tree)).toContain('만드는 중…');
   });
 
   it('발급 실패는 성공과 구분되는 실패 UI로 알린다', () => {
     const tree = InviteGenerator({ ...baseProps, generateError: GENERATE_ERROR_MESSAGE });
     const texts = textsOf(tree);
-    expect(texts).toContain('토큰 발급에 실패했습니다.');
+    expect(texts).toContain('초대 링크 발급에 실패했습니다.');
     expect(texts).toContain(GENERATE_ERROR_MESSAGE);
   });
 
@@ -102,8 +103,8 @@ describe('InviteGenerator command state', () => {
       lastToken: { token: 'test-issued-aaa', expiresAt: '2026-12-31T00:00:00.000Z' },
     });
     const texts = textsOf(tree);
-    expect(texts).toContain('토큰 발급에 실패했습니다.');
-    expect(texts).toContain('생성된 초대 토큰');
+    expect(texts).toContain('초대 링크 발급에 실패했습니다.');
+    expect(texts).toContain('생성된 초대 링크');
     expect(texts).toContain('test-issued-aaa');
   });
 
@@ -113,20 +114,33 @@ describe('InviteGenerator command state', () => {
       lastToken: { token: 'test-issued-aaa', expiresAt: '2026-12-31T00:00:00.000Z' },
     });
     const texts = textsOf(tree);
-    expect(texts).toContain('생성된 초대 토큰');
+    expect(texts).toContain('생성된 초대 링크');
     expect(texts).toContain('test-issued-aaa');
-    expect(texts).toContain('복사');
+    expect(texts).toContain('링크 복사');
     expect(texts.some((t) => t.includes('만료'))).toBe(true);
-    expect(texts).not.toContain('토큰 발급에 실패했습니다.');
+    expect(texts).not.toContain('초대 링크 발급에 실패했습니다.');
   });
 
-  it('copy feedback 계약을 보존한다(복사/복사됨!)', () => {
+  it('초대 링크가 있으면 토큰 대신 링크를 보여 준다', () => {
+    const tree = InviteGenerator({
+      ...baseProps,
+      lastToken: { token: 'test-issued-aaa', expiresAt: '2026-12-31T00:00:00.000Z' },
+      lastLink: 'https://seller.example.test/invite/test-issued-aaa',
+    });
+    const texts = textsOf(tree);
+    expect(texts).toContain('https://seller.example.test/invite/test-issued-aaa');
+    expect(texts).not.toContain('test-issued-aaa');
+    // 만료는 KST 날짜+시각으로 보여 준다(2026-12-31T00:00Z = KST 09:00).
+    expect(texts.some((t) => t.includes('2026. 12. 31. 09:00'))).toBe(true);
+  });
+
+  it('copy feedback 계약을 보존한다(링크 복사/복사됨!)', () => {
     const idleTree = InviteGenerator({
       ...baseProps,
       lastToken: { token: 'test-issued-aaa', expiresAt: '2026-12-31T00:00:00.000Z' },
       copied: false,
     });
-    expect(textsOf(idleTree)).toContain('복사');
+    expect(textsOf(idleTree)).toContain('링크 복사');
     const copiedTree = InviteGenerator({
       ...baseProps,
       copied: true,
@@ -137,13 +151,13 @@ describe('InviteGenerator command state', () => {
 
   it('lastToken이 없으면 복사 버튼을 노출하지 않는다', () => {
     const tree = InviteGenerator({ ...baseProps });
-    expect(handlersFor(tree, '복사')).toHaveLength(0);
+    expect(handlersFor(tree, '링크 복사')).toHaveLength(0);
   });
 
   it('생성 버튼은 onGenerate에, 복사 버튼은 onCopy에 연결된다', () => {
     const onGenerate = vi.fn();
     const genTree = InviteGenerator({ ...baseProps, onGenerate });
-    const genHandlers = handlersFor(genTree, '새 토큰 생성');
+    const genHandlers = handlersFor(genTree, '새 초대 링크 만들기');
     expect(genHandlers.length).toBeGreaterThan(0);
     genHandlers[0]();
     expect(onGenerate).toHaveBeenCalledTimes(1);
@@ -154,7 +168,7 @@ describe('InviteGenerator command state', () => {
       onCopy,
       lastToken: { token: 'test-issued-aaa', expiresAt: '2026-12-31T00:00:00.000Z' },
     });
-    const copyHandlers = handlersFor(copyTree, '복사');
+    const copyHandlers = handlersFor(copyTree, '링크 복사');
     expect(copyHandlers.length).toBeGreaterThan(0);
     copyHandlers[0]();
     expect(onCopy).toHaveBeenCalledTimes(1);
@@ -224,13 +238,13 @@ describe('InviteGenerator 받는 사람 이메일', () => {
     '   ',
   ])('받는 사람 이메일이 비어 있으면(%p) 생성 버튼을 막는다', (recipientEmail) => {
     const tree = InviteGenerator({ ...baseProps, recipientEmail });
-    expect(disabledFor(tree, '새 토큰 생성')).toBe(true);
+    expect(disabledFor(tree, '새 초대 링크 만들기')).toBe(true);
   });
 
   it('받는 사람 이메일을 입력하면 생성 버튼을 누를 수 있고, 생성 중에는 막는다', () => {
     const filled = { ...baseProps, recipientEmail: 'seller@example.com' };
-    expect(disabledFor(InviteGenerator(filled), '새 토큰 생성')).toBe(false);
-    expect(disabledFor(InviteGenerator({ ...filled, generating: true }), '생성중…')).toBe(true);
+    expect(disabledFor(InviteGenerator(filled), '새 초대 링크 만들기')).toBe(false);
+    expect(disabledFor(InviteGenerator({ ...filled, generating: true }), '만드는 중…')).toBe(true);
   });
 
   it('입력란에 현재 값과 오류를 전달한다', () => {

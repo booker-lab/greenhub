@@ -158,3 +158,11 @@ test('서버 단서로 상품·매장·품종 조회를 함께 시작하되, 화
   // 상품 본문은 여전히 브라우저가 새로 읽은 상품으로만 그린다.
   assert.match(source, /fetchProduct\(id, controller\.signal\)/);
 });
+
+test('서버 단서의 매장으로 회차 조회를 상품·판매 방식 조회와 함께 시작한다', () => {
+  const start = source.indexOf('export default function ProductDetailClient');
+  const pageSource = source.slice(start);
+  assert.match(pageSource, /if \(hintStoreId\) void loadPublicSaleRoundsState\(hintStoreId\);/);
+  // 회차 화면은 같은 공유 요청(loadPublicSaleRoundsState)을 쓰는 useSaleRounds로 읽는다.
+  assert.match(source, /const saleRounds = useSaleRounds\(product\.storeId\);/);
+});

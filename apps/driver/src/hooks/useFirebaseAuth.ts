@@ -2,9 +2,16 @@
 
 import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { signInWithCustomToken, signOut as firebaseSignOut } from 'firebase/auth';
-import { firebaseAuth } from '@/lib/firebase';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+
+// Firebase는 거점 사진 업로드에만 쓰므로 첫 화면 번들에 싣지 않고 로그인할 때 불러온다.
+async function loadFirebaseAuth() {
+  const [{ signInWithCustomToken, signOut }, { firebaseAuth }] = await Promise.all([
+    import('firebase/auth'),
+    import('@/lib/firebase'),
+  ]);
+  return { firebaseAuth, signInWithCustomToken, signOut };
+}
 
 // 앱 세션에 맞춰 Firebase Auth에 로그인·로그아웃한다.
 // 로그인 완료 여부를 화면에 돌려주지 않는다(쓰는 곳이 없어 onAuthStateChanged 구독은 재렌더만 만들었다).
@@ -23,7 +30,9 @@ export function useFirebaseAuth(): void {
           if (!res.ok) throw new Error(`firebase-token fetch failed: ${res.status}`);
           return res.text();
         })
-        .then((token: string) => {
+        .then(async (token: string) => {
+          if (cancelled) return;
+          const { firebaseAuth, signInWithCustomToken } = await loadFirebaseAuth();
           if (cancelled) return;
           return signInWithCustomToken(firebaseAuth, token);
         })
@@ -34,7 +43,9 @@ export function useFirebaseAuth(): void {
     }
 
     if (status === 'unauthenticated') {
-      firebaseSignOut(firebaseAuth).catch(() => {});
+      loadFirebaseAuth()
+        .then(({ firebaseAuth, signOut }) => signOut(firebaseAuth))
+        .catch(() => {});
     }
 
     return () => {

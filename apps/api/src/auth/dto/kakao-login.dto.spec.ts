@@ -14,6 +14,26 @@ describe('KakaoLoginDto', () => {
     await expect(validate(dto, options)).resolves.toHaveLength(0);
   });
 
+  it('판매자 초대 토큰은 영숫자 1~64자만 받는다', async () => {
+    const valid = plainToInstance(KakaoLoginDto, {
+      kakaoAccessToken: 'access-token',
+      targetRole: 'seller',
+      inviteToken: 'ABCDEF0123456789',
+    });
+    await expect(validate(valid, options)).resolves.toHaveLength(0);
+
+    for (const inviteToken of ['', 'A/B', '../X', 'BAD-TOKEN', 'A'.repeat(65), 1234]) {
+      const dto = plainToInstance(KakaoLoginDto, {
+        kakaoAccessToken: 'access-token',
+        targetRole: 'seller',
+        inviteToken,
+      });
+      await expect(validate(dto, options)).resolves.toEqual([
+        expect.objectContaining({ property: 'inviteToken' }),
+      ]);
+    }
+  });
+
   it('kakaoAccessToken이 없으면 실패한다', async () => {
     const dto = plainToInstance(KakaoLoginDto, { targetRole: 'consumer' });
 
