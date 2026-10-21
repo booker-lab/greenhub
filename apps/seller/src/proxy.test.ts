@@ -18,6 +18,7 @@ vi.mock('@/auth', () => ({
 }));
 // vitest에는 '@/' 별칭 설정이 없어 같은 모듈로 잇는다.
 vi.mock('@/lib/content-security-policy', () => import('./lib/content-security-policy'));
+vi.mock('@/lib/admin-landing', () => import('./lib/admin-landing'));
 
 const { config, proxy } = await import('./proxy');
 
@@ -60,6 +61,27 @@ describe('판매자 proxy 로그인 검사', () => {
     );
   });
 
+  it('순수 관리자는 판매자 경로에서 /admin/stores로 가고, 관리자 경로는 그대로 통과한다', async () => {
+    state.session = { user: { role: 'admin' } };
+    for (const path of ['/', '/orders', '/products', '/settings']) {
+      expect((await run(path)).headers.get('location')).toBe(
+        'https://seller.example.test/admin/stores',
+      );
+    }
+    for (const path of ['/admin', '/admin/stores', '/admin/partner-inquiries']) {
+      const response = await run(path);
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.headers.get('x-middleware-next')).toBe('1');
+    }
+  });
+
+  it('겸직 계정(관리자 + 가게)은 판매자 화면과 /onboarding을 그대로 쓴다', async () => {
+    state.session = { user: { role: 'admin', storeId: 'store-1' } };
+    for (const path of ['/orders', '/onboarding', '/admin/stores']) {
+      expect((await run(path)).headers.get('location')).toBeNull();
+    }
+  });
+
   it('로그인한 판매자는 그대로 통과하며 CSP nonce가 요청 헤더로 넘어간다', async () => {
     state.session = { user: { role: 'seller', storeId: 'store-1' } };
     const response = await run('/orders');
@@ -70,6 +92,19 @@ describe('판매자 proxy 로그인 검사', () => {
     expect(response.headers.get('x-middleware-request-content-security-policy')).toContain(
       `'nonce-${nonce}'`,
     );
+  });
+
+  it('판매자 초대 링크는 로그인 전에도 세션을 읽지 않고 리다이렉트하지 않는다', async () => {
+    const response = await run('/invite/ABCDEF0123456789');
+    expect(response.headers.get('location')).toBeNull();
+    expect(response.headers.get('x-middleware-next')).toBe('1');
+    expect(state.authPaths).toEqual([]);
+  });
+
+  it('초대 링크와 이름만 비슷한 경로는 그대로 로그인 검사를 한다', async () => {
+    const response = await run('/invites');
+    expect(response.headers.get('location')).toBe('https://seller.example.test/login');
+    expect(state.authPaths).toEqual(['/invites']);
   });
 
   it('로그인 화면은 세션을 읽지 않고 리다이렉트하지 않는다', async () => {
@@ -98,7 +133,15 @@ describe('판매자 proxy matcher', () => {
     unstable_doesMiddlewareMatch({ config, url, headers });
 
   it('보호 경로와 로그인 화면을 포함한 페이지에서 실행된다', () => {
-    for (const path of ['/', '/orders', '/admin/stores', '/onboarding', '/login']) {
+    for (const path of [
+      '/',
+      '/orders',
+      '/admin/stores',
+      '/onboarding',
+      '/login',
+      '/login/error',
+      '/invite/ABCDEF0123456789',
+    ]) {
       expect(matches(path)).toBe(true);
     }
   });
@@ -107,6 +150,7 @@ describe('판매자 proxy matcher', () => {
     expect(matches('/orders', { 'next-router-prefetch': '1' })).toBe(true);
     // 보호 경로가 아닌 페이지의 프리페치에는 nonce를 만들지 않는다.
     expect(matches('/login', { 'next-router-prefetch': '1' })).toBe(false);
+    expect(matches('/invite/ABCDEF0123456789', { 'next-router-prefetch': '1' })).toBe(false);
   });
 
   it('API, Next 정적 파일, 서비스워커, 매니페스트, 아이콘에서는 실행되지 않는다', () => {

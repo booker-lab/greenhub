@@ -10,6 +10,7 @@ export type AuditAction =
   | 'auth.logout'
   | 'auth.token.stolen' // refresh token 재사용 감지
   | 'auth.kakao.forbidden'
+  | 'auth.withdrawn' // 소비자 회원 탈퇴(개인정보 익명화·세션 폐기)
   | 'payment.amount_tampered' // 금액 위변조 감지
   | 'payment.context_mismatch' // 결제 상점·통화·채널 불일치(운영 TEST 채널 포함)
   | 'payment.webhook.invalid_sig'; // 서명 검증 실패
@@ -38,10 +39,22 @@ export type AdminAuditAction =
   | 'admin.driver.suspended'
   | 'admin.driver.unsuspended'
   | 'admin.order.force_refunded'
+  | 'admin.order.post_delivery_refunded'
   | 'admin.settlement.paid'
-  | 'admin.banner.updated';
+  | 'admin.banner.updated'
+  | 'admin.partner_inquiry.contacted'
+  | 'admin.partner_inquiry.deleted'
+  // 판매자(또는 관리자)가 정산 계좌를 저장. 계좌번호는 끝 4자리만 남긴다.
+  | 'store.payout_account.updated';
 
-export type AdminAuditTargetType = 'store' | 'user' | 'driver' | 'order' | 'settlement' | 'banner';
+export type AdminAuditTargetType =
+  | 'store'
+  | 'user'
+  | 'driver'
+  | 'order'
+  | 'settlement'
+  | 'banner'
+  | 'partner_inquiry';
 
 export interface AdminAuditEntry {
   action: AdminAuditAction;

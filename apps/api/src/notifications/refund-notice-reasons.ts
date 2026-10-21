@@ -5,6 +5,11 @@ export const REFUND_NOTICE_REASONS = {
   ROUND_CANCELLED: '판매자 사정으로 이번 회차가 취소되어 전액 환불했습니다',
   ADMIN_REFUND: '운영 확인 후 전액 환불했습니다',
   LATE_PAYMENT: '결제 확인이 늦어 주문을 받을 수 없어 전액 환불했습니다',
+  // 배송 후 환불(사유 코드별). 판매자 메모는 알림에 넣지 않는다.
+  POST_DELIVERY_QUALITY_DAMAGED: '꽃 상태 문제로 전액 환불했습니다',
+  POST_DELIVERY_BROKEN: '상품 파손으로 전액 환불했습니다',
+  POST_DELIVERY_WRONG_DELIVERY: '잘못 배송되어 전액 환불했습니다',
+  POST_DELIVERY_OTHER: '판매자 확인 후 전액 환불했습니다',
 } as const;
 
 export type RefundNoticeKind = keyof typeof REFUND_NOTICE_REASONS;

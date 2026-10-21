@@ -53,7 +53,8 @@ export default function DeliverySettingsPage() {
 
   useEffect(() => {
     if (!storeId || !token) return;
-    apiJson<Partial<DeliveryConfig>>(`/stores/${storeId}/delivery-config`, token)
+    // 소유자 확인 경로: 관리자가 가게를 치워 손님 화면에서 숨겨도 판매자 본인은 설정을 본다.
+    apiJson<Partial<DeliveryConfig>>(`/stores/${storeId}/delivery-config/owner`, token)
       .then((data) => {
         setConfig({ ...DEFAULTS, ...data });
       })

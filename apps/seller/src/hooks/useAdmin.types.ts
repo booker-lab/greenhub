@@ -11,13 +11,17 @@ export interface AdminReconciliation {
 
 // ── Types ────────────────────────────────────────────────────────
 
+// 관리자 판매자 목록 응답(허용 필드만). 정산 계좌·소유자 id는 내려오지 않는다.
 export interface AdminStore {
   id: string;
   name: string;
-  ownerId: string;
   status: StoreStatus;
   commissionRate?: number;
+  /** 대표자 이름·연락처. 가입 전(초대 중) 판매자는 비어 있을 수 있다. */
+  ceoName?: string;
+  phone?: string;
   createdAt: unknown;
+  archivedAt?: unknown;
 }
 
 export interface AdminUser {
@@ -29,11 +33,18 @@ export interface AdminUser {
   createdAt: unknown;
 }
 
+// 관리자 주문 목록 한 줄. 고객은 이름만 내려오고 전화·주소는 내려오지 않는다.
 export interface AdminOrder {
   id: string;
-  orderNumber?: string;
+  orderNumber?: string | null;
   storeId: string;
-  userId: string;
+  /** 가게 이름. 가게 문서가 없거나 이름이 비어 있으면 null. */
+  storeName?: string | null;
+  buyerName?: string | null;
+  /** 첫 상품명 + "외 N개". */
+  productSummary?: string | null;
+  /** 취소 진행 상태(REFUNDING·REFUND_FAILED·LOCAL_PENDING·LOCAL_FAILED·COMPLETED). */
+  cancellationStatus?: string | null;
   status: OrderStatus;
   totalAmount: number;
   deliveryMethod: string;
@@ -45,19 +56,48 @@ export interface AdminOrder {
   requestNote?: string | null;
 }
 
+/** 관리자 정산 지급용 판매자 계좌(지급 대상 confirmed 행에만 온다). */
+export interface AdminPayoutAccount {
+  bankName: string;
+  accountHolder: string;
+  accountNumber: string;
+}
+
+/** 확정·지급을 막는 사유. PROVIDER_REVERSAL = 결제사 취소·분쟁 운영 기록이 열려 있음. */
+export type AdminSettlementHoldReason = 'PROVIDER_REVERSAL';
+
 export interface AdminSettlement {
   id: string;
   storeId: string;
+  /** 가게 이름(서버가 붙인다). 이름이 없거나 가게 문서가 없으면 null. */
+  storeName?: string | null;
   orderId: string;
-  /** 판매자 주문번호. 이 필드 이전 정산·옛 주문은 null 또는 없음. */
+  /** 판매자 주문번호. 정산에 없으면 서버가 주문 문서에서 읽는다. 끝내 없으면 null. */
   orderNumber?: string | null;
   totalAmount: number;
+  /** 정산을 만들 때 쓴 수수료율(0~1). */
+  platformFeeRate?: number;
   platformFee: number;
   netAmount: number;
   status: SettlementStatus; // N3: string → 공유 SettlementStatus(SSOT)
   settledAt: unknown;
   confirmedAt?: unknown | null; // N8: B-1 confirm 배치 신규 필드(어드민도 표시 대비)
   paidAt: unknown | null;
+  /** 지급 뒤 주문이 환불돼 판매자에게 돌려받아야 하는지(결정 ④). */
+  recoveryRequired?: boolean;
+  recoveryAmount?: number | null;
+  holdReason?: AdminSettlementHoldReason | null;
+  payoutAccount?: AdminPayoutAccount | null;
+}
+
+/** GET /admin/settlements/summary — 같은 조건 전체 합계(서버 계산). */
+export interface AdminSettlementsSummary {
+  count: number;
+  payable: { count: number; netAmount: number };
+  paid: { count: number; netAmount: number };
+  platformFee: number;
+  recovery: { count: number; amount: number };
+  truncated: boolean;
 }
 
 export interface InviteToken {
@@ -96,6 +136,7 @@ export interface AdminDriver {
   id: string;
   name: string;
   email: string | null;
+  phone?: string | null;
   driverApproved: boolean;
   suspended?: boolean;
   createdAt: unknown;

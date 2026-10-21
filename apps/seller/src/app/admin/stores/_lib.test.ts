@@ -1,41 +1,82 @@
 import { describe, expect, it } from 'vitest';
-import { getAdminStoresReadState, parseRate } from './_lib';
+import type { AdminStore } from '@/hooks/useAdmin';
+import {
+  describeArchiveConfirm,
+  describeCommissionSaved,
+  filterStores,
+  formatRate,
+  formatStoreContact,
+  getAdminStoresReadState,
+  parseRate,
+  rateToInput,
+} from './_lib';
 
-describe('parseRate', () => {
-  it('소수 수수료율을 정상 값으로 변환한다', () => {
-    expect(parseRate('0.05')).toEqual({ ok: true, rate: 0.05 });
+describe('parseRate (% 단위 입력 → 0~1 저장값)', () => {
+  it('% 숫자를 0~1 수수료율로 바꾼다(5 → 0.05)', () => {
+    expect(parseRate('5')).toEqual({ ok: true, rate: 0.05 });
+    expect(parseRate('7.5')).toEqual({ ok: true, rate: 0.075 });
+    expect(parseRate('12.34')).toEqual({ ok: true, rate: 0.1234 });
   });
 
-  it('하한 0을 허용한다', () => {
+  it('하한 0%와 상한 100%를 허용한다', () => {
     expect(parseRate('0')).toEqual({ ok: true, rate: 0 });
+    expect(parseRate('100')).toEqual({ ok: true, rate: 1 });
   });
 
-  it('상한 1을 허용한다', () => {
-    expect(parseRate('1')).toEqual({ ok: true, rate: 1 });
+  it('끝의 % 기호와 앞뒤 공백을 무시한다', () => {
+    expect(parseRate(' 5% ')).toEqual({ ok: true, rate: 0.05 });
+    expect(parseRate(' 3 ')).toEqual({ ok: true, rate: 0.03 });
   });
 
-  it('빈 입력은 EMPTY 오류로 반환한다', () => {
+  it('소수 셋째 자리 이하는 둘째 자리로 반올림해 부동소수 오차를 남기지 않는다', () => {
+    expect(parseRate('5.555')).toEqual({ ok: true, rate: 0.0556 });
+    expect(parseRate('0.1')).toEqual({ ok: true, rate: 0.001 });
+  });
+
+  it('빈 입력·공백만 있는 입력은 EMPTY', () => {
     expect(parseRate('')).toEqual({ ok: false, errorCode: 'EMPTY' });
-  });
-
-  it('공백만 있는 입력은 EMPTY 오류로 반환한다', () => {
     expect(parseRate('  ')).toEqual({ ok: false, errorCode: 'EMPTY' });
+    expect(parseRate('%')).toEqual({ ok: false, errorCode: 'EMPTY' });
   });
 
-  it('숫자로 해석되지 않는 입력은 NOT_NUMBER 오류로 반환한다', () => {
+  it('숫자가 아니면 NOT_NUMBER(뒤에 글자가 붙은 값도 거절)', () => {
     expect(parseRate('abc')).toEqual({ ok: false, errorCode: 'NOT_NUMBER' });
+    expect(parseRate('5abc')).toEqual({ ok: false, errorCode: 'NOT_NUMBER' });
   });
 
-  it('하한보다 작은 값은 OUT_OF_RANGE 오류로 반환한다', () => {
+  it('0% 미만·100% 초과는 OUT_OF_RANGE', () => {
     expect(parseRate('-0.1')).toEqual({ ok: false, errorCode: 'OUT_OF_RANGE' });
+    expect(parseRate('100.5')).toEqual({ ok: false, errorCode: 'OUT_OF_RANGE' });
+  });
+});
+
+describe('수수료율 표시', () => {
+  it('저장값을 % 숫자로 보이고 미설정은 기본 5%로 보인다', () => {
+    expect(formatRate(0.05)).toBe('5%');
+    expect(formatRate(0.075)).toBe('7.5%');
+    expect(formatRate(0)).toBe('0%');
+    expect(formatRate(undefined)).toBe('기본 5%');
   });
 
-  it('상한보다 큰 값은 OUT_OF_RANGE 오류로 반환한다', () => {
-    expect(parseRate('1.5')).toEqual({ ok: false, errorCode: 'OUT_OF_RANGE' });
+  it('편집칸 초기값은 % 숫자, 미설정이면 빈칸이다', () => {
+    expect(rateToInput(0.05)).toBe('5');
+    expect(rateToInput(0.1234)).toBe('12.34');
+    expect(rateToInput(undefined)).toBe('');
   });
 
-  it('앞뒤 공백을 제거한 값으로 변환한다', () => {
-    expect(parseRate(' 0.5 ')).toEqual({ ok: true, rate: 0.5 });
+  it('입력 → 저장 → 다시 편집이 같은 값으로 돌아온다', () => {
+    for (const input of ['0', '3', '5', '7.5', '12.34', '100']) {
+      const parsed = parseRate(input);
+      expect(parsed.ok).toBe(true);
+      if (parsed.ok) expect(rateToInput(parsed.rate)).toBe(input);
+    }
+  });
+
+  it('저장 안내는 다음 정산부터 적용·이미 만든 정산 불변을 알린다', () => {
+    const message = describeCommissionSaved('난플렉스', 0.08);
+    expect(message).toContain('난플렉스 수수료율 8%');
+    expect(message).toContain('다음에 만들어지는 정산부터');
+    expect(message).toContain('이미 만든 정산은 그대로');
   });
 });
 
@@ -131,5 +172,37 @@ describe('getAdminStoresReadState', () => {
         visible: [store('s1')],
       }),
     ).toBe('HAS_RESULTS');
+  });
+});
+
+describe('판매자 검색·연락처·치우기 안내', () => {
+  const stores = [
+    { id: 's-1', name: '난플렉스', status: 'active', ceoName: '김대표', phone: '010-1234-5678' },
+    { id: 's-2', name: '하늘정원', status: 'invited' },
+  ] as AdminStore[];
+  const search = (keyword: string) =>
+    filterStores(stores, { keyword, status: 'all' }).map((store) => store.id);
+
+  it('상호·대표자 이름·전화번호(하이픈 없이도)로 찾는다', () => {
+    expect(search('난플')).toEqual(['s-1']);
+    expect(search('김대표')).toEqual(['s-1']);
+    expect(search('010-1234')).toEqual(['s-1']);
+    expect(search('01012345678')).toEqual(['s-1']);
+    expect(search('하늘')).toEqual(['s-2']);
+    expect(search('9999')).toEqual([]);
+  });
+
+  it('대표자·연락처 한 줄, 둘 다 없으면 자리표시자', () => {
+    expect(formatStoreContact(stores[0])).toBe('김대표 · 010-1234-5678');
+    expect(formatStoreContact(stores[1])).toBe('—');
+  });
+
+  it('치우기 확인창은 실제 동작(숨김·주문 차단·로그인 유지·기록 있으면 불가)을 알린다', () => {
+    const message = describeArchiveConfirm({ name: '난플렉스' });
+    expect(message).toContain('난플렉스 판매자를 치울까요?');
+    expect(message).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다');
+    expect(message).toContain('계속 로그인할 수 있고');
+    expect(message).toContain('기록이 하나라도 있는 판매자는 치울 수 없습니다');
+    expect(message).not.toContain('보존됩니다');
   });
 });

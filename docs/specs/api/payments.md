@@ -251,6 +251,8 @@ legacy 비택배 주문은 취소 시 daily cap을 반환하고, `schemaVersion:
 
 이미 `CANCELLED`, `refundedAt` 존재, 다른 유효 claim이 존재하는 경우 외부 환불을 중복 호출하지 않는다.
 
+선택 `verifyProviderFirst: true`(배송 후 환불이 사용)는 첫 요청 전에도 7번의 PortOne 재조회를 먼저 한다. PortOne에서 이미 `CANCELLED`(예: 콘솔 수동 환불)면 추가 요청 없이 로컬만 `CANCELLED`로 맞추고, `PAID`·금액 일치일 때만 요청하며, 그 밖에는 요청 없이 실패로 닫는다. 직접 증거: `payment-refund-provider-ambiguity.spec.ts`의 `verifyProviderFirst` suite.
+
 실제 사용자 취소·판매자 취소·공동구매 취소의 상태 허용 범위는 orders lifecycle이 소유한다.
 
 ## 10. 재배송비 결제
@@ -444,6 +446,7 @@ export interface Payment {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-21 | 본 결제 환불에 `verifyProviderFirst` 선택(첫 요청 전 PortOne 재조회) 추가 — 배송 후 환불이 콘솔 수동 환불과 중복되지 않게 함 |
 | 2026-10-21 | 소비자 앱에 토스페이먼츠 카드 결제(`NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY`, `payMethod: 'CARD'`)를 추가하고 결제수단별 채널 키와 #540 병합 뒤 운영 카드 채널 LIVE·같은 상점 조건을 명시 |
 | 2026-10-18 | 본 결제 확정과 재배송비 결제 확정에 PortOne 상점·통화·채널 검증을 반영(운영은 LIVE·KRW 필수, 본 결제 불일치는 금액 불일치와 같은 환불·취소, 재배송비는 `400`) |
 | 2026-10-10 | 웹훅 거절 로그 집계, 결제사 취소·분쟁 운영 기록, PENDING 정리 cron 동시성, PortOne 시간 상한, 환불 `UNKNOWN` claim·`Idempotency-Key`, 확정 환불 소유 표시, `RETRY_REFUND` 확인 조건, 재배송비 취소 주문 환불을 current source에 맞춰 정합화하고, 상점·통화·채널 미확인(#426 미병합)과 재배송비 환불 운영 기록 라우팅 제약을 명시 |

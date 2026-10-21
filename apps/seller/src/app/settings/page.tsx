@@ -2,16 +2,15 @@
 
 import type { SalesMode } from '@greenhub/shared';
 import { Box, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
-import { signOut as firebaseSignOut } from 'firebase/auth';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
-import { signOut, useSession } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 import { type ReactNode, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { apiJson } from '@/lib/api';
-import { getFirebaseAuth } from '@/lib/firebase';
 import { isFeatureOn } from '@/lib/features';
+import { logout } from '@/lib/logout';
 import { benchmarkSettingsLinks, operationSettingsFor } from './settings-links';
 
 /** 설정 섹션 카드 — 작은 회색 라벨 헤더 + 행 목록. */
@@ -32,19 +31,6 @@ function SectionCard({ label, children }: { label: string; children: ReactNode }
       {children}
     </Paper>
   );
-}
-
-/**
- * 로그아웃: 이 탭의 Firebase 로그인 상태를 먼저 지운 뒤 NextAuth 세션을 끝낸다.
- * API refresh token 폐기는 NextAuth signOut 이벤트(auth.ts)가 맡는다.
- */
-async function handleLogout() {
-  try {
-    await firebaseSignOut(getFirebaseAuth());
-  } catch {
-    // Firebase 정리에 실패해도 로그아웃은 계속한다. 다음 화면의 useFirebaseAuth가 다시 정리한다.
-  }
-  await signOut({ callbackUrl: '/login' });
 }
 
 const rowStyle = (borderTop: boolean) => ({
@@ -107,7 +93,7 @@ export default function SettingsPage() {
         <Stack gap="sm">
           <SectionCard label="계정">
             <LinkRow href="/onboarding" label="사업자 프로필 수정" />
-            <UnstyledButton onClick={() => void handleLogout()} style={rowStyle(true)}>
+            <UnstyledButton onClick={() => void logout()} style={rowStyle(true)}>
               <Text
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >

@@ -8,9 +8,14 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
-import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import {
+  classifyStoreProfileFailure,
+  fetchPublicStoreProfile,
+  type StoreProfileFailure,
+  storeProfileFailureMessage,
+} from '@/lib/public-store-profile';
 
-type StoreModeStatus = 'loading' | 'ready' | 'error';
+type StoreModeStatus = 'loading' | 'ready' | StoreProfileFailure;
 
 interface StoreModeState {
   salesMode: SalesMode;
@@ -52,8 +57,8 @@ function useStoreMode(storeId: string | null, productsLoading: boolean): StoreMo
         }
         setState({ salesMode: normalizeSalesMode(value), status: 'ready' });
       })
-      .catch(() => {
-        if (active) setState({ salesMode: 'legacy', status: 'error' });
+      .catch((error: unknown) => {
+        if (active) setState({ salesMode: 'legacy', status: classifyStoreProfileFailure(error) });
       });
 
     return () => {
@@ -92,12 +97,14 @@ export default function GroupBuyPage() {
     }
   }, [router, storeMode.salesMode, storeMode.status]);
 
-  if (discoveryError || storeMode.status === 'error') {
+  const storeFailure =
+    storeMode.status === 'error' || storeMode.status === 'unavailable' ? storeMode.status : null;
+  if (discoveryError || storeFailure) {
     return (
       <Container size="sm" px="md" pt="lg" pb={80}>
         <Stack align="center" py={48} gap="sm" role="alert">
           <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+            {storeProfileFailureMessage(!discoveryError && storeFailure ? storeFailure : 'error')}
           </Text>
           {discoveryError && (
             <Button variant="light" onClick={refetchDiscovery} data-testid="products-retry">

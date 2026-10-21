@@ -18,6 +18,7 @@ import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { normalizeKoreanMobilePhone } from './_lib/korean-mobile-phone';
 import { normalizeGift, resolveSelectedOptions } from './_lib/round-order-extras';
+import { assertStoreAcceptsOrders } from '../stores/store-availability';
 
 @Injectable()
 export class RoundOrderCreateService {
@@ -67,6 +68,8 @@ export class RoundOrderCreateService {
       if (!storeSnap.exists || storeSnap.data()?.['salesMode'] !== 'round_direct') {
         throw new NotFoundException('회차 주문 스토어를 찾을 수 없습니다.');
       }
+      // 트랜잭션 안에서 다시 확인해, 주문 도중 가게가 치워져도 새 주문이 들어가지 않게 한다.
+      assertStoreAcceptsOrders(storeSnap.data());
 
       const orderCounter = {
         ...counter,

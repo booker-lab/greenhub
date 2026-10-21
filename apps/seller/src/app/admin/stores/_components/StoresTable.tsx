@@ -14,6 +14,7 @@ import {
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
   formatRate,
+  formatStoreContact,
   STATUS_COLOR,
   STATUS_LABEL,
   type StoreEmptyKind,
@@ -74,6 +75,25 @@ function SortHeader({ label, sortKey, sort, onSortChange }: SortHeaderProps) {
   );
 }
 
+// 대표자·연락처 — 테이블·카드 공용. 연락처는 전화 걸기 링크로 둔다.
+function StoreContact({ store }: { store: AdminStore }) {
+  const phone = store.phone?.trim();
+  return (
+    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+      {phone ? (
+        <>
+          {store.ceoName?.trim() ? `${store.ceoName.trim()} · ` : ''}
+          <a href={`tel:${phone}`} style={{ color: 'inherit' }}>
+            {phone}
+          </a>
+        </>
+      ) : (
+        formatStoreContact(store)
+      )}
+    </Text>
+  );
+}
+
 export function StoresTable({
   stores,
   loading,
@@ -120,16 +140,19 @@ export function StoresTable({
   const renderRate = (store: AdminStore) =>
     editId === store.id ? (
       <Group gap="xs">
+        {/* % 단위 입력(예: 5 = 5%). 저장할 때 0~1 값으로 바꾼다(_lib parseRate). */}
         <NumberInput
           min={0}
-          max={1}
-          step={0.01}
+          max={100}
+          step={0.5}
           decimalScale={2}
           clampBehavior="strict"
           inputMode="decimal"
           value={rateInput}
           onChange={(value) => onRateInput(String(value))}
-          placeholder="0.05"
+          placeholder="5"
+          rightSection="%"
+          aria-label="수수료율(%)"
           size="xs"
           radius="sm"
           w={104}
@@ -190,6 +213,7 @@ export function StoresTable({
             <Group justify="space-between" mb="xs" align="flex-start">
               <Box>
                 <Text style={{ fontWeight: 'var(--fw-medium)' }}>{store.name || '(미설정)'}</Text>
+                <StoreContact store={store} />
                 <Text
                   style={{
                     fontSize: 'var(--font-size-sm)',
@@ -238,6 +262,9 @@ export function StoresTable({
                 <SortHeader label="상호" sortKey="name" sort={sort} onSortChange={onSortChange} />
               </Box>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
+                대표자·연락처
+              </Box>
+              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
                 <SortHeader label="상태" sortKey="status" sort={sort} onSortChange={onSortChange} />
               </Box>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
@@ -269,6 +296,9 @@ export function StoresTable({
                   >
                     {store.id.slice(0, 8)}…
                   </Text>
+                </Box>
+                <Box component="td" style={{ padding: '12px 16px' }}>
+                  <StoreContact store={store} />
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px' }}>
                   <Badge color={STATUS_COLOR[store.status] ?? 'gray'} variant="light" radius="xl">

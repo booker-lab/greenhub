@@ -7,6 +7,7 @@ import {
   NotFoundException,
   ForbiddenException,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -16,7 +17,19 @@ import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { AuditService } from '../common/audit/audit.service';
+import { OpsAlertService } from '../ops-alerts/ops-alert.service';
 import {
+  WITHDRAWAL_ACTIVE_ORDER_MESSAGE,
+  WITHDRAWAL_CLEANUP_REFERENCES,
+  WITHDRAWAL_ERASED_USER_FIELDS,
+  WITHDRAWN_ACCOUNT_MESSAGE,
+  WITHDRAWN_AT_FIELD,
+  isActiveCheckoutReservation,
+  isWithdrawalBlockingOrder,
+  isWithdrawnUser,
+} from './account-withdrawal';
+import {
+  INVITE_KAKAO_ACCOUNT_IN_USE_MESSAGE,
   INVITE_RECIPIENT_MISMATCH_MESSAGE,
   INVITE_REVOKED_MESSAGE,
   assertInviteTokenFormat,
@@ -28,7 +41,7 @@ import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 import type { UpdateMeDto } from './dto/update-me.dto';
 import { emailIdentityKey, normalizeEmail } from './email-identity';
-import { KakaoClient } from './kakao.client';
+import { KakaoClient, type KakaoProfile } from './kakao.client';
 import {
   hashRefreshToken,
   isHashedRefreshTokenRecord,
@@ -88,9 +101,11 @@ function rethrowEmailIdentityConflict(error: unknown): never {
 // 새 초대는 받는 사람 이메일(recipientEmail)을 반드시 저장하고, 값이 있으면 정규화 이메일이 같아야 한다.
 // 필수화 전에 저장된 초대(값이 null이거나 없음)는 만료나 취소 전까지 이메일 제한 없이 받는다(데이터는 옮기지 않는다).
 // 문자열이 아닌 값은 제한 없음으로 보지 않고 recipient_mismatch로 거부한다.
+// 가입자 이메일이 null이면(카카오 이메일이 없거나 인증되지 않음) 받는 사람 대조를 하지 않는다.
+// 관리자가 직접 전달하는 1회용·72시간 링크라 대조 없이 받기로 했다(2026-10-21 결정).
 function assertInviteRedeemable(
   invite: admin.firestore.DocumentData,
-  normalizedEmail: string,
+  normalizedEmail: string | null,
   nowMillis: number,
 ): void {
   if (invite['revokedAt'] != null) {
@@ -104,11 +119,17 @@ function assertInviteRedeemable(
   }
   const recipientEmail = invite['recipientEmail'];
   if (
+    normalizedEmail !== null &&
     recipientEmail != null &&
     (typeof recipientEmail !== 'string' || normalizeEmail(recipientEmail) !== normalizedEmail)
   ) {
     throw inviteConflict('recipient_mismatch', INVITE_RECIPIENT_MISMATCH_MESSAGE);
   }
+}
+
+// 초대 받는 사람과 대조할 카카오 이메일. 카카오가 유효·인증으로 확인한 이메일만 쓰고, 아니면 대조하지 않는다.
+function kakaoInviteEmail(profile: KakaoProfile): string | null {
+  return profile.email && profile.emailVerified ? normalizeEmail(profile.email) : null;
 }
 
 // 카카오 사용자 id(숫자)를 Firestore 문서 id로 쓸 수 있는지 확인한다.
@@ -174,7 +195,39 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly kakaoClient: KakaoClient,
     private readonly audit: AuditService,
+    @Optional() private readonly opsAlert?: OpsAlertService,
   ) {}
+
+  // 초대 가입 사전 검사(이메일 가입·카카오 가입 공용). 트랜잭션 전에 형식·존재·상태를 거르고,
+  // 트랜잭션 안에서는 readRedeemableInvite로 같은 순서를 다시 판정한다.
+  private async assertInviteUsable(
+    inviteToken: string,
+    normalizedEmail: string | null,
+  ): Promise<void> {
+    // 문서 경로에 쓰기 전에 관리자 취소 경로와 같은 형식 규칙으로 거른다(경로 구분자 등은 404).
+    assertInviteTokenFormat(inviteToken);
+    const inviteSnap = await this.firestore.doc(`invites/${inviteToken}`).get();
+    if (!inviteSnap.exists) {
+      throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
+    }
+    assertInviteRedeemable(inviteSnap.data()!, normalizedEmail, Date.now());
+  }
+
+  // 가입 트랜잭션 안의 초대 재판정 — 사전 검사 뒤 관리자 취소·다른 가입·만료가 먼저 일어났으면
+  // 여기서 거부된다. 통과하면 초대 문서 ref를 돌려주고, 호출자가 모든 읽기 뒤 usedAt·usedBy를 기록한다.
+  private async readRedeemableInvite(
+    tx: admin.firestore.Transaction,
+    inviteToken: string,
+    normalizedEmail: string | null,
+  ): Promise<admin.firestore.DocumentReference> {
+    const inviteRef = this.firestore.doc(`invites/${inviteToken}`);
+    const inviteDoc = await tx.get(inviteRef);
+    if (!inviteDoc.exists) {
+      throw new ConflictException('이미 사용된 초대 토큰입니다.');
+    }
+    assertInviteRedeemable(inviteDoc.data()!, normalizedEmail, Date.now());
+    return inviteRef;
+  }
 
   async register(dto: RegisterDto) {
     // 운영 화면은 카카오 로그인만 쓴다. 운영 런타임의 이메일 가입은 판매자 초대를 포함해 모두 막는다
@@ -189,16 +242,7 @@ export class AuthService {
       if (!dto.inviteToken) {
         throw new ForbiddenException('판매자 계정은 초대 토큰이 필요합니다.');
       }
-      // 문서 경로에 쓰기 전에 관리자 취소 경로와 같은 형식 규칙으로 거른다(경로 구분자 등은 404).
-      assertInviteTokenFormat(dto.inviteToken);
-
-      const inviteSnap = await this.firestore.doc(`invites/${dto.inviteToken}`).get();
-
-      if (!inviteSnap.exists) {
-        throw new ForbiddenException('유효하지 않은 초대 토큰입니다.');
-      }
-
-      assertInviteRedeemable(inviteSnap.data()!, normalizeEmail(dto.email), Date.now());
+      await this.assertInviteUsable(dto.inviteToken, normalizeEmail(dto.email));
     }
 
     // 연결 문서가 없는 기존 계정은 이메일 조회로 막는다.
@@ -252,16 +296,8 @@ export class AuthService {
     let registration: Promise<void>;
     if (dto.role === 'seller' && dto.inviteToken) {
       registration = this.firestore.runTransaction(async (tx) => {
-        const inviteRef = this.firestore.doc(`invites/${dto.inviteToken!}`);
-        const inviteDoc = await tx.get(inviteRef);
+        const inviteRef = await this.readRedeemableInvite(tx, dto.inviteToken!, normalizedEmail);
         const emailIdentitySnap = await tx.get(emailIdentityRef);
-
-        // 트랜잭션 내 재검증 — 동시 요청으로 인한 경쟁 조건 방지
-        // (사전 검사 뒤 관리자 취소가 먼저 커밋됐거나 그사이 만료된 경우도 여기서 거부된다)
-        if (!inviteDoc.exists) {
-          throw new ConflictException('이미 사용된 초대 토큰입니다.');
-        }
-        assertInviteRedeemable(inviteDoc.data()!, normalizedEmail, Date.now());
         claimEmailIdentity(tx, emailIdentitySnap);
 
         tx.set(this.firestore.doc(`users/${userId}`), userDoc);
@@ -461,6 +497,8 @@ export class AuthService {
   }
 
   async kakaoLogin(dto: KakaoLoginDto) {
+    // 초대 토큰은 판매자 앱 로그인에서만 쓴다. 다른 앱 요청에 실려 와도 무시한다.
+    const inviteToken = dto.targetRole === 'seller' ? dto.inviteToken : undefined;
     const kakaoProfile = await this.kakaoClient.getUser(dto.kakaoAccessToken);
     const snap = await this.firestore
       .collection('users')
@@ -474,9 +512,15 @@ export class AuthService {
       userData = snap.docs[0].data();
     } else {
       if (dto.targetRole === 'seller') {
-        throw new ForbiddenException('판매자 계정은 관리자 초대로만 가입할 수 있습니다.');
+        // 판매자는 관리자 초대 링크로만 가입한다(2026-10-21 결정). 초대 없는 첫 로그인은 거부한다.
+        if (!inviteToken) {
+          throw new ForbiddenException('판매자 계정은 관리자 초대로만 가입할 수 있습니다.');
+        }
+        await this.assertInviteUsable(inviteToken, kakaoInviteEmail(kakaoProfile));
+        userData = await this.createKakaoUser(kakaoProfile, 'seller', inviteToken);
+      } else {
+        userData = await this.createKakaoUser(kakaoProfile, dto.targetRole ?? 'consumer');
       }
-      userData = await this.createKakaoUser(kakaoProfile, dto.targetRole ?? 'consumer');
     }
 
     const role = userData['role'] as string;
@@ -499,6 +543,11 @@ export class AuthService {
         userId: userData['id'] as string,
         detail: { actualRole: role, targetRole: dto.targetRole },
       });
+      // 초대 링크로 들어온 카카오 계정이 이미 손님 등 다른 역할이면 판매자로 바꾸지 않는다.
+      // 초대는 소모하지 않고, 다른 카카오 계정으로 가입하도록 사유를 알린다.
+      if (inviteToken) {
+        throw inviteConflict('kakao_account_in_use', INVITE_KAKAO_ACCOUNT_IN_USE_MESSAGE);
+      }
       // 기사 앱이 일반 거절(승인 대기·다른 역할)과 구분해 "기사 계정으로 로그인" 안내를 보이도록
       // 관리자 거절에만 기계 판독용 code를 붙인다. statusCode·message·error 형태는 그대로다.
       if (dto.targetRole === 'driver' && role === 'admin') {
@@ -531,9 +580,12 @@ export class AuthService {
   // 카카오 첫 로그인의 사용자 생성. 같은 카카오 계정의 동시 요청(콜백 중복 등)이 사용자 문서를
   // 둘 만들지 않도록 `kakaoIdentities/{kakaoId}`를 트랜잭션 안에서 함께 써서 하나로 모은다.
   // 먼저 커밋한 요청이 만든 사용자를 나중 요청은 그대로 받는다.
+  // inviteToken이 있으면(판매자 초대 가입) 같은 트랜잭션에서 초대를 다시 판정하고 usedAt·usedBy를 기록한다.
+  // 이미 연결된 사용자를 돌려주는 경우에는 초대를 소모하지 않는다.
   private async createKakaoUser(
-    kakaoProfile: Awaited<ReturnType<KakaoClient['getUser']>>,
+    kakaoProfile: KakaoProfile,
     newRole: NonNullable<KakaoLoginDto['targetRole']>,
+    inviteToken?: string,
   ): Promise<Record<string, unknown>> {
     if (!KAKAO_IDENTITY_ID_PATTERN.test(kakaoProfile.kakaoId)) {
       throw new UnauthorizedException('카카오 사용자 정보를 확인할 수 없습니다.');
@@ -547,6 +599,9 @@ export class AuthService {
         const linkedUserSnap = await tx.get(this.firestore.doc(`users/${linkedUserId}`));
         if (linkedUserSnap.exists) return linkedUserSnap.data() as Record<string, unknown>;
       }
+      const inviteRef = inviteToken
+        ? await this.readRedeemableInvite(tx, inviteToken, kakaoInviteEmail(kakaoProfile))
+        : null;
 
       const userId = randomUUID();
       const now = this.firestore.Timestamp.now();
@@ -567,6 +622,7 @@ export class AuthService {
       };
       tx.set(identityRef, { userId, createdAt: now });
       tx.set(this.firestore.doc(`users/${userId}`), userData);
+      if (inviteRef) tx.update(inviteRef, { usedAt: now, usedBy: userId });
       return userData;
     });
   }
@@ -726,6 +782,122 @@ export class AuthService {
     await this.audit.log('auth.logout', { userId, detail: { sessionId } });
   }
 
+  // 소비자 회원 탈퇴. 진행 중인 주문·결제 예약이 있으면 409로 막는다. 사용자 문서는 주문·결제가 uid로
+  // 참조하므로 지우지 않고 개인정보 필드만 지우며, 세션 폐기·카카오/이메일 연결 문서 삭제와 한 트랜잭션에서 한다.
+  // 연결 문서가 사라지므로 같은 카카오 계정으로 다시 로그인하면 새 계정이 만들어진다.
+  // 주문 문서의 이름·전화·주소 스냅샷과 결제·후기·법정 보관 기록은 전자상거래법 보관 대상이라 남긴다.
+  async withdraw(user: JwtPayload): Promise<void> {
+    if (user.role !== 'consumer') {
+      throw new ForbiddenException('소비자 계정만 탈퇴할 수 있습니다.');
+    }
+    const userId = user.sub;
+    const userRef = this.firestore.doc(`users/${userId}`);
+    const tokenRef = this.firestore.doc(`refreshTokens/${userId}`);
+    const ordersQuery = this.firestore.collection('orders').where('userId', '==', userId);
+    const reservationsQuery = this.firestore
+      .collection('checkoutReservations')
+      .where('userId', '==', userId);
+
+    const kakaoId = await this.firestore.runTransaction(async (tx) => {
+      const userSnap = await tx.get(userRef);
+      const data = userSnap.exists ? userSnap.data() : undefined;
+      if (!data || isWithdrawnUser(data)) {
+        throw new UnauthorizedException(WITHDRAWN_ACCOUNT_MESSAGE);
+      }
+      if (data['role'] !== 'consumer') {
+        throw new ForbiddenException('소비자 계정만 탈퇴할 수 있습니다.');
+      }
+
+      const [ordersSnap, reservationsSnap] = await Promise.all([
+        tx.get(ordersQuery),
+        tx.get(reservationsQuery),
+      ]);
+      const nowMillis = Date.now();
+      if (
+        ordersSnap.docs.some((d) => isWithdrawalBlockingOrder(d.data())) ||
+        reservationsSnap.docs.some((d) => isActiveCheckoutReservation(d.data(), nowMillis))
+      ) {
+        throw new ConflictException(WITHDRAWAL_ACTIVE_ORDER_MESSAGE);
+      }
+
+      // 연결 문서는 이 사용자에게 연결된 것만 지운다(트랜잭션의 읽기는 쓰기보다 먼저 한다).
+      const linkedKakaoId =
+        typeof data['kakaoId'] === 'string' && KAKAO_IDENTITY_ID_PATTERN.test(data['kakaoId'])
+          ? data['kakaoId']
+          : null;
+      const kakaoIdentityRef = linkedKakaoId
+        ? this.firestore.doc(`kakaoIdentities/${linkedKakaoId}`)
+        : null;
+      const emailIdentityRef =
+        typeof data['email'] === 'string' && data['email'].trim()
+          ? this.firestore.doc(`emailIdentities/${emailIdentityKey(normalizeEmail(data['email']))}`)
+          : null;
+      const [kakaoIdentitySnap, emailIdentitySnap] = await Promise.all([
+        kakaoIdentityRef ? tx.get(kakaoIdentityRef) : null,
+        emailIdentityRef ? tx.get(emailIdentityRef) : null,
+      ]);
+
+      this.revokeAllSessionsInTransaction(tx, tokenRef, userRef);
+      const now = this.firestore.Timestamp.now();
+      tx.update(userRef, {
+        ...Object.fromEntries(
+          WITHDRAWAL_ERASED_USER_FIELDS.map((field) => [field, this.firestore.FieldValue.delete()]),
+        ),
+        [WITHDRAWN_AT_FIELD]: now,
+        updatedAt: now,
+      });
+      if (kakaoIdentityRef && kakaoIdentitySnap?.data()?.['userId'] === userId) {
+        tx.delete(kakaoIdentityRef);
+      }
+      if (emailIdentityRef && emailIdentitySnap?.data()?.['userId'] === userId) {
+        tx.delete(emailIdentityRef);
+      }
+      return linkedKakaoId;
+    });
+
+    await this.cleanUpWithdrawnUserRecords(userId);
+    const kakaoUnlink = kakaoId ? await this.kakaoClient.unlinkUser(kakaoId) : 'not_linked';
+    if (kakaoUnlink === 'failed' || kakaoUnlink === 'not_configured') {
+      // 사용자 식별자는 싣지 않는다. 어느 탈퇴인지는 auditLogs의 auth.withdrawn 기록으로 확인한다.
+      void this.opsAlert?.send({
+        level: 'warning',
+        title: '회원 탈퇴 카카오 연결 끊기 실패',
+        lines: [
+          kakaoUnlink === 'not_configured'
+            ? 'KAKAO_ADMIN_KEY가 없어 연결 끊기를 건너뛰었습니다. 탈퇴 처리는 끝났습니다.'
+            : '카카오 API 호출이 실패했습니다. 탈퇴 처리는 끝났습니다.',
+        ],
+        dedupeKey: `auth.withdraw.kakao_unlink.${kakaoUnlink}`,
+      });
+    }
+
+    try {
+      await this.audit.log('auth.withdrawn', { userId, detail: { kakaoUnlink } });
+    } catch (error) {
+      this.logger.error(
+        `auth.withdraw.audit_failed userId=${userId} error=${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+    this.logger.log(`auth.withdraw.success userId=${userId} kakaoUnlink=${kakaoUnlink}`);
+  }
+
+  // 탈퇴 트랜잭션 뒤 그 사용자의 재입고 구독·알림 내역·AI 사용량 문서를 지운다.
+  // 실패해도 탈퇴는 되돌리지 않고 기록만 남긴다.
+  private async cleanUpWithdrawnUserRecords(userId: string): Promise<void> {
+    await Promise.all(
+      WITHDRAWAL_CLEANUP_REFERENCES.map(async ([collection, field]) => {
+        try {
+          const snap = await this.firestore.collection(collection).where(field, '==', userId).get();
+          await Promise.all(snap.docs.map((d) => d.ref.delete()));
+        } catch (error) {
+          this.logger.error(
+            `auth.withdraw.cleanup_failed userId=${userId} collection=${collection} error=${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+      }),
+    );
+  }
+
   async updateFcmToken(userId: string, fcmToken: string | null) {
     await this.firestore.doc(`users/${userId}`).update({
       fcmToken,
@@ -750,6 +922,9 @@ export class AuthService {
     }
 
     const user = userSnap.data()!;
+    if (isWithdrawnUser(user)) {
+      throw new UnauthorizedException(WITHDRAWN_ACCOUNT_MESSAGE);
+    }
     if (user['suspended'] === true) {
       throw new UnauthorizedException('정지된 계정입니다. 고객센터에 문의해주세요.');
     }
@@ -846,7 +1021,7 @@ export class AuthService {
     tx.update(userRef, { [ACTIVE_SESSION_IDS_FIELD]: sessionIds });
   }
 
-  // 모든 세션 폐기(재사용 감지·`sid` 없는 이전 토큰의 로그아웃). 사용자 단위 폐기 시각은 이 경로와
+  // 모든 세션 폐기(재사용 감지·`sid` 없는 이전 토큰의 로그아웃·회원 탈퇴). 사용자 단위 폐기 시각은 이 경로와
   // 관리자 정지에서만 기록해, `sid` 없는 이전 발급 access token까지 다음 요청부터 거부되게 한다.
   private revokeAllSessionsInTransaction(
     tx: admin.firestore.Transaction,

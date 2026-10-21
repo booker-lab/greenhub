@@ -10,13 +10,18 @@ import { classifyAdminCommandError, describeAdminCommandOutcome, useAdminStores 
 import { StoresFilters } from './_components/StoresFilters';
 import { StoresTable } from './_components/StoresTable';
 import {
+  DEFAULT_COMMISSION_PERCENT,
   DEFAULT_SORT,
   DEFAULT_STATUS_FILTER,
+  describeArchiveConfirm,
+  describeRestoreConfirm,
   filterStores,
   getAdminStoresReadState,
   getEmptyKind,
+  describeCommissionSaved,
   parseRate,
   parseSort,
+  rateToInput,
   parseStatusFilter,
   type StoreSort,
   type StoreStatusFilter,
@@ -108,7 +113,7 @@ export default function AdminStoresClient() {
       notifications.show({
         color: 'yellow',
         title: '입력 값을 확인하세요',
-        message: '0~1 사이의 수수료율을 입력해야 합니다 (예: 0.05 = 5%).',
+        message: '0~100 사이의 수수료율(%)을 입력해야 합니다 (예: 5 = 5%).',
       });
       return;
     }
@@ -118,6 +123,12 @@ export default function AdminStoresClient() {
     if (outcome.kind === 'confirmed' && outcome.reconciled) {
       setEditId(null);
       setRateInput('');
+      const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
+      notifications.show({
+        color: 'brand',
+        title: '수수료율 저장',
+        message: describeCommissionSaved(storeName, parsed.rate),
+      });
       return;
     }
     if (outcome.kind === 'confirmed') {
@@ -139,7 +150,7 @@ export default function AdminStoresClient() {
 
   const handleStartEdit = (store: AdminStore) => {
     setEditId(store.id);
-    setRateInput(String(store.commissionRate ?? ''));
+    setRateInput(rateToInput(store.commissionRate));
   };
 
   const handleCancelEdit = () => {
@@ -148,35 +159,41 @@ export default function AdminStoresClient() {
   };
 
   const handleArchive = async (store: AdminStore) => {
-    const label = store.name || '(미설정)';
-    if (!window.confirm(`${label} 판매자를 정리할까요? 주문·정산 기록은 보존됩니다.`)) return;
+    if (!window.confirm(describeArchiveConfirm(store))) return;
     try {
       const reconciliation = await archiveStore(store.id);
       if (!reconciliation.reconciled) {
         // COMMAND CONFIRMED + RECONCILIATION FAILED — 실패로 표현하지 않고 중복 실행을 유도하지 않는다.
         notifications.show({
           color: 'yellow',
-          title: '정리 처리는 완료됐으나 목록 확인 실패',
+          title: '치우기는 완료됐으나 목록 확인 실패',
           message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
         });
+        return;
       }
+      notifications.show({
+        color: 'brand',
+        title: '판매자를 치웠습니다',
+        message: `${store.name || '(미설정)'} — 손님 화면에서 숨고 새 주문을 받지 않습니다.`,
+      });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
-        const presentation = describeAdminCommandOutcome(classified, '정리');
+        const presentation = describeAdminCommandOutcome(classified, '치우기');
         notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
         return;
       }
       // 기록 가드(400) 등 차단 사유를 서버 메시지 그대로 안내
       notifications.show({
         color: 'red',
-        title: '정리할 수 없습니다',
-        message: e instanceof Error ? e.message : '판매자 정리 중 오류가 발생했습니다.',
+        title: '치울 수 없습니다',
+        message: e instanceof Error ? e.message : '판매자를 치우는 중 오류가 발생했습니다.',
       });
     }
   };
 
   const handleRestore = async (store: AdminStore) => {
+    if (!window.confirm(describeRestoreConfirm(store))) return;
     try {
       const reconciliation = await restoreStore(store.id);
       if (!reconciliation.reconciled) {
@@ -185,7 +202,13 @@ export default function AdminStoresClient() {
           title: '복구 처리는 완료됐으나 목록 확인 실패',
           message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
         });
+        return;
       }
+      notifications.show({
+        color: 'brand',
+        title: '판매자를 복구했습니다',
+        message: `${store.name || '(미설정)'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
+      });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
@@ -226,13 +249,14 @@ export default function AdminStoresClient() {
         </Title>
       </Group>
 
-      {/* 가게별 수수료율은 저장만 되고, 정산은 서버 공통 수수료율(PLATFORM_FEE_RATE)로 계산한다.
-          파일럿은 가게가 하나라 그대로 둔다(BACKLOG STORE-COMMISSION-RATE-UNUSED). */}
+      {/* 가게별 수수료율은 정산을 만들 때 그 가게 요율로 계산한다(결정 ②, BACKLOG STORE-COMMISSION-RATE-UNUSED).
+          이미 만든 정산은 다시 계산하지 않는다. */}
       <Text
         mb="sm"
         style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
       >
-        수수료율은 저장만 됩니다. 정산은 지금 모든 가게에 공통 수수료율로 계산됩니다.
+        수수료율은 다음에 만들어지는 정산부터 적용됩니다. 설정하지 않은 가게는 기본{' '}
+        {DEFAULT_COMMISSION_PERCENT}%로 정산하며, 이미 만든 정산은 바뀌지 않습니다.
       </Text>
 
       <StoresFilters

@@ -59,7 +59,7 @@ describe('관리자 숨긴 후기 카드', () => {
     for (const expected of [
       '초록농원',
       '호접란 빅립',
-      '★',
+      '★1/5',
       '연락 주세요 010-0000-0000',
       '사유: 개인정보 노출',
       '설명: 전화번호 노출',
@@ -67,6 +67,24 @@ describe('관리자 숨긴 후기 카드', () => {
     ]) {
       expect(joined).toContain(expected);
     }
+  });
+
+  it('후기 사진이 있으면 썸네일로 보여주고, 없으면 사진 영역을 그리지 않는다', () => {
+    const urls = ['https://example.test/a.jpg', 'https://example.test/b.jpg'];
+    const withPhotos = walk(
+      HiddenReviewCard({
+        review: hidden({ photoUrls: urls }),
+        busy: false,
+        error: null,
+        onUnhide: () => {},
+      }),
+    );
+    const images = withPhotos.elements.filter((element) => element.type === 'img');
+    expect(images.map((image) => (image.props as { src?: string }).src)).toEqual(urls);
+    const without = walk(
+      HiddenReviewCard({ review: hidden(), busy: false, error: null, onUnhide: () => {} }),
+    );
+    expect(without.elements.some((element) => element.type === 'img')).toBe(false);
   });
 
   it('숨김 해제 버튼이 있고, 이름을 모르면 가게 id·삭제된 상품으로 보여준다', () => {

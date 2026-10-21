@@ -5,6 +5,7 @@ import {
   IsString,
   IsBoolean,
   IsNumber,
+  IsInt,
   Matches,
   MaxLength,
   Min,
@@ -17,6 +18,8 @@ import {
 import { Type } from 'class-transformer';
 import { SETTLEMENT_STATUSES, type SettlementStatus } from '@greenhub/shared';
 import { ORDER_STATUSES, type OrderStatus } from '../../orders/dto/update-status.dto';
+import { SETTLEMENT_CURSOR_PATTERN } from '../../settlements/dto/query-settlements.dto';
+import { ADMIN_LIST_CURSOR_PATTERN } from '../admin-lists';
 
 // 기간 필터는 KST 달력 날짜(YYYY-MM-DD)만 받는다. 형식·날짜가 틀리면 400으로 거부한다.
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -69,7 +72,8 @@ function IsBannerHref(validationOptions?: ValidationOptions): PropertyDecorator 
   );
 }
 
-export class QueryAdminSettlementsDto {
+/** 관리자 정산 목록·합계가 함께 쓰는 조건. 합계는 같은 조건의 전체를 계산한다. */
+export class AdminSettlementFilterDto {
   @IsOptional()
   @IsString()
   @Matches(DATE_ONLY_PATTERN, { message: DATE_ONLY_MESSAGE })
@@ -92,7 +96,36 @@ export class QueryAdminSettlementsDto {
   status?: SettlementStatus;
 }
 
-export class QueryAdminOrdersDto {
+export class QueryAdminSettlementsDto extends AdminSettlementFilterDto {
+  /** 한 번에 받을 건수. 생략하면 기본값, 상한을 넘으면 상한으로 줄인다(서비스에서 처리). */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number;
+
+  /** 앞 응답의 nextCursor(마지막 정산 문서 id). 그 다음 정산부터 이어서 받는다. */
+  @IsOptional()
+  @IsString()
+  @Matches(SETTLEMENT_CURSOR_PATTERN)
+  cursor?: string;
+}
+
+// 관리자 목록 이어받기 공통 칸. 한 번에 받을 건수(생략 시 기본값, 상한은 서비스에서 줄임)와 앞 응답의 nextCursor.
+class AdminListPageQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  limit?: number;
+
+  @IsOptional()
+  @IsString()
+  @Matches(ADMIN_LIST_CURSOR_PATTERN)
+  cursor?: string;
+}
+
+export class QueryAdminOrdersDto extends AdminListPageQuery {
   @IsOptional()
   @IsString()
   storeId?: string;
@@ -128,7 +161,7 @@ export class ForceRefundDto {
   reason?: string;
 }
 
-export class QueryAdminDriversDto {
+export class QueryAdminDriversDto extends AdminListPageQuery {
   @IsOptional()
   @IsIn(ADMIN_DRIVER_STATUS_FILTERS)
   status?: (typeof ADMIN_DRIVER_STATUS_FILTERS)[number];

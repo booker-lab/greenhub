@@ -170,46 +170,6 @@ describe('AdminService 소비자 정지 대상 검사', () => {
   });
 });
 
-describe('AdminService 판매자 복구 상태 검사', () => {
-  function makeService(store: Record<string, unknown>) {
-    const storeRef = {
-      get: jest.fn().mockResolvedValue({ exists: true, data: () => store }),
-      update: jest.fn().mockResolvedValue(undefined),
-    };
-    const firestore = {
-      doc: jest.fn(() => storeRef),
-      Timestamp: { now: jest.fn(() => 'now') },
-      FieldValue: { delete: jest.fn(() => 'delete') },
-    };
-    const service = new AdminService(firestore as never, {} as never, {} as never, {} as never);
-    return { service, storeRef };
-  }
-
-  it.each(['active', 'pending', undefined])(
-    '정리(archived) 상태가 아닌 판매자(status=%p)는 409로 거부하고 바꾸지 않는다',
-    async (status) => {
-      const { service, storeRef } = makeService({ id: 'store-1', status });
-
-      await expect(service.restoreStore('store-1')).rejects.toMatchObject({ status: 409 });
-      expect(storeRef.update).not.toHaveBeenCalled();
-    },
-  );
-
-  it('정리된 판매자는 active로 복구하고 archivedAt을 지운다', async () => {
-    const { service, storeRef } = makeService({ id: 'store-1', status: 'archived' });
-
-    await expect(service.restoreStore('store-1')).resolves.toEqual({
-      storeId: 'store-1',
-      status: 'active',
-    });
-    expect(storeRef.update).toHaveBeenCalledWith({
-      status: 'active',
-      archivedAt: 'delete',
-      updatedAt: 'now',
-    });
-  });
-});
-
 // 저장 문서에는 있지만 관리자 목록 화면이 쓰지 않는 필드(응답에서 빠져야 함).
 const NON_LIST_USER_FIELDS = {
   passwordHash: 'hash',
@@ -261,100 +221,24 @@ describe('AdminService 소비자 목록 응답 최소화', () => {
       total: 1,
     });
   });
-});
 
-describe('AdminService 기사 목록', () => {
-  function makeDriversService(count: number) {
-    const docs = Array.from({ length: count }, (_, i) => ({
-      data: () => ({
-        id: `driver-${i}`,
-        role: 'driver',
-        // 앞쪽 문서일수록 오래된 가입. 승인 대기는 짝수 번째만.
-        driverApproved: i % 2 === 1,
-        suspended: false,
-        createdAt: { _seconds: 1_700_000_000 + i },
-        passwordHash: 'hash',
-      }),
-    }));
-    const query = {
-      where: jest.fn().mockReturnThis(),
-      limit: jest.fn((n: number) => ({
-        get: jest.fn().mockResolvedValue({ docs: docs.slice(0, n) }),
-      })),
-    };
-    const firestore = { collection: jest.fn().mockReturnValue(query) };
-    const service = new AdminService(
-      firestore as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
-    );
-    return { query, service };
-  }
-
-  it('100명을 넘는 기사도 상태 필터·최신순 정렬 전에 빠지지 않는다', async () => {
-    const { query, service } = makeDriversService(150);
-
-    const result = await service.getDrivers({ status: 'pending' } as never);
-
-    expect(query.where).toHaveBeenCalledWith('role', '==', 'driver');
-    expect(query.limit).toHaveBeenCalledWith(501);
-    expect(result.total).toBe(75);
-    expect(result.hasMore).toBe(false);
-    expect(result.drivers[0]).toEqual(expect.objectContaining({ id: 'driver-148' }));
-    expect(result.drivers.at(-1)).toEqual(expect.objectContaining({ id: 'driver-0' }));
-    expect(result.drivers[0]).not.toHaveProperty('passwordHash');
-  });
-
-  it('화면이 쓰는 필드(id·name·email·driverApproved·suspended·createdAt)만 돌려준다', async () => {
-    const createdAt = { _seconds: 1_700_000_000 };
+  it('탈퇴한 소비자(withdrawnAt 있음)는 목록과 개수에서 뺀다', async () => {
     const docs = [
-      {
-        data: () => ({
-          id: 'driver-1',
-          name: '기사',
-          email: 'd1@example.com',
-          driverApproved: true,
-          suspended: false,
-          createdAt,
-          ...NON_LIST_USER_FIELDS,
-          role: 'driver',
-        }),
-      },
+      { data: () => ({ id: 'consumer-1', role: 'consumer', name: '소비자' }) },
+      { data: () => ({ id: 'consumer-2', role: 'consumer', withdrawnAt: { _seconds: 1 } }) },
     ];
     const query = {
       where: jest.fn().mockReturnThis(),
-      limit: jest.fn(() => ({ get: jest.fn().mockResolvedValue({ docs }) })),
+      orderBy: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ docs, size: docs.length }),
     };
     const firestore = { collection: jest.fn().mockReturnValue(query) };
     const service = new AdminService(firestore as never, {} as never, {} as never, {} as never);
 
-    const result = await service.getDrivers({} as never);
-
-    expect(result).toEqual({
-      drivers: [
-        {
-          id: 'driver-1',
-          name: '기사',
-          email: 'd1@example.com',
-          driverApproved: true,
-          suspended: false,
-          createdAt,
-        },
-      ],
+    await expect(service.getUsers()).resolves.toEqual({
+      users: [{ id: 'consumer-1', name: '소비자' }],
       total: 1,
-      hasMore: false,
     });
-  });
-
-  it('읽기 한도(500)를 넘는 기사가 더 있으면 hasMore를 알린다', async () => {
-    const { service } = makeDriversService(501);
-
-    const result = await service.getDrivers({} as never);
-
-    expect(result.total).toBe(500);
-    expect(result.hasMore).toBe(true);
   });
 });
 
@@ -605,6 +489,55 @@ describe('AdminService 강제 환불 수렴', () => {
     });
     expect(fixture.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(1);
+  });
+
+  it('지급 완료된 정산의 legacy 주문을 환불하면 회수 필요 금액을 응답에 싣는다', async () => {
+    const fixture = makeLegacyForceRefundFixture();
+    fixture.settlements.cancelSettlement.mockResolvedValue({
+      recoveryRequired: true,
+      recoveryAmount: 9500,
+    });
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
+      ok: true,
+      orderId: 'order-1',
+      recoveryRequired: true,
+      recoveryAmount: 9500,
+    });
+  });
+
+  it('지급 완료된 정산의 회차 주문을 환불하면 회수 필요 금액을 응답에 싣는다', async () => {
+    const fixture = makeLegacyForceRefundFixture({ schemaVersion: 2, roundId: 'round-1' });
+    fixture.roundLifecycle.cancelForRound.mockResolvedValue({
+      orderId: 'order-1',
+      status: 'CANCELLED',
+    });
+    fixture.settlements.cancelSettlement.mockResolvedValue({
+      recoveryRequired: true,
+      recoveryAmount: 12000,
+    });
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
+      orderId: 'order-1',
+      status: 'CANCELLED',
+      recoveryRequired: true,
+      recoveryAmount: 12000,
+    });
+  });
+
+  it('지급 전 정산이면 회수 필요 없음으로 응답한다', async () => {
+    const fixture = makeLegacyForceRefundFixture();
+    fixture.settlements.cancelSettlement.mockResolvedValue({
+      recoveryRequired: false,
+      recoveryAmount: 0,
+    });
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
+      ok: true,
+      orderId: 'order-1',
+      recoveryRequired: false,
+      recoveryAmount: 0,
+    });
   });
 });
 

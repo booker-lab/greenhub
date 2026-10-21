@@ -57,6 +57,7 @@ describe('KakaoClient', () => {
     await expect(makeClient().getUser('access-token')).resolves.toEqual({
       kakaoId: '12345',
       email: 'kakao@example.com',
+      emailVerified: false,
       name: '카카오사용자',
     });
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -72,6 +73,22 @@ describe('KakaoClient', () => {
         'Bearer access-token',
       );
     }
+  });
+
+  it.each([
+    [{ is_email_valid: true, is_email_verified: true }, true],
+    [{ is_email_valid: true, is_email_verified: false }, false],
+    [{ is_email_valid: false, is_email_verified: true }, false],
+    [{}, false],
+  ])('이메일 유효·인증 응답 %p는 emailVerified=%p로 옮긴다', async (flags, expected) => {
+    mockKakao(
+      { id: 12345, app_id: 777, expires_in: 3600 },
+      { ...userBody, kakao_account: { ...userBody.kakao_account, ...flags } },
+    );
+
+    await expect(makeClient().getUser('access-token')).resolves.toMatchObject({
+      emailVerified: expected,
+    });
   });
 
   it('카카오 401 응답은 인증 실패로 변환한다', async () => {
@@ -144,7 +161,7 @@ describe('KakaoClient', () => {
 
     it('운영에서 KAKAO_APP_ID가 없으면 경고를 한 번 남기고 로그인은 허용한다', async () => {
       mockKakao({ id: 12345, app_id: 999 });
-      const client = makeClient({ NODE_ENV: 'production' });
+      const client = makeClient({ NODE_ENV: 'production', KAKAO_ADMIN_KEY: 'admin-key' });
 
       await client.getUser('access-token');
       await client.getUser('access-token');
@@ -175,5 +192,44 @@ describe('KakaoClient', () => {
     const error = await pending;
     expect(error).toBeInstanceOf(UnauthorizedException);
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  describe('회원 탈퇴 연결 끊기(unlinkUser)', () => {
+    it('Admin Key로 사용자 id 기준 연결 끊기를 요청한다', async () => {
+      fetchSpy.mockResolvedValue(response(true, { id: 12345 }));
+
+      await expect(makeClient({ KAKAO_ADMIN_KEY: 'admin-key' }).unlinkUser('12345')).resolves.toBe(
+        'unlinked',
+      );
+      const [url, init] = fetchSpy.mock.calls[0];
+      expect(url).toBe('https://kapi.kakao.com/v1/user/unlink');
+      expect(init).toMatchObject({ method: 'POST', signal: expect.any(AbortSignal) });
+      expect((init?.headers as Record<string, string>).Authorization).toBe('KakaoAK admin-key');
+      expect(String(init?.body)).toBe('target_id_type=user_id&target_id=12345');
+    });
+
+    it('키가 없으면 호출하지 않고 not_configured를 돌려준다', async () => {
+      await expect(makeClient().unlinkUser('12345')).resolves.toBe('not_configured');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('운영에서 키가 없으면 시작할 때 경고를 남긴다', () => {
+      makeClient({ NODE_ENV: 'production', KAKAO_APP_ID: '777' });
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(String(warnSpy.mock.calls[0]?.[0])).toContain('KAKAO_ADMIN_KEY');
+    });
+
+    it('비정상 응답·네트워크 오류는 throw하지 않고 failed를 돌려준다', async () => {
+      const client = makeClient({ KAKAO_ADMIN_KEY: 'admin-key' });
+      fetchSpy.mockResolvedValueOnce({ ok: false, status: 401 } as Response);
+      await expect(client.unlinkUser('12345')).resolves.toBe('failed');
+
+      fetchSpy.mockRejectedValueOnce(new TypeError('network'));
+      await expect(client.unlinkUser('12345')).resolves.toBe('failed');
+      for (const [message] of warnSpy.mock.calls) {
+        expect(String(message)).not.toContain('12345');
+      }
+    });
   });
 });

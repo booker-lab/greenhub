@@ -7,7 +7,7 @@ import type { AdminStore } from '@/hooks/useAdmin';
 export const STATUS_LABEL: Record<StoreStatus, string> = {
   active: '운영중',
   invited: '초대됨',
-  archived: '정리됨',
+  archived: '치움',
 };
 
 export const STATUS_COLOR: Record<StoreStatus, string> = {
@@ -75,6 +75,18 @@ export function parseSortValue(value: string | null): StoreSort {
   return parseSort(key ?? null, direction ?? null);
 }
 
+// 검색어가 상호·대표자 이름·전화번호 중 하나에 들어 있으면 맞는 것으로 본다.
+// 전화번호는 하이픈·공백을 빼고 숫자끼리도 비교한다(010-1234 / 0101234 모두 찾음).
+function matchesKeyword(store: AdminStore, keyword: string): boolean {
+  if (!keyword) return true;
+  const texts = [store.name, store.ceoName, store.phone].map((value) =>
+    (value ?? '').toLowerCase(),
+  );
+  if (texts.some((text) => text.includes(keyword))) return true;
+  const digits = keyword.replace(/\D/g, '');
+  return digits.length > 0 && (store.phone ?? '').replace(/\D/g, '').includes(digits);
+}
+
 export function filterStores(stores: AdminStore[], filters: StoreFilters): AdminStore[] {
   const keyword = filters.keyword.trim().toLowerCase();
   return stores.filter((store) => {
@@ -83,9 +95,30 @@ export function filterStores(stores: AdminStore[], filters: StoreFilters): Admin
       (filters.status === 'current'
         ? store.status !== 'archived'
         : store.status === filters.status);
-    const keywordMatches = !keyword || (store.name || '').toLowerCase().includes(keyword);
-    return statusMatches && keywordMatches;
+    return statusMatches && matchesKeyword(store, keyword);
   });
+}
+
+/** 대표자·연락처 한 줄. 둘 다 없으면 자리표시자. */
+export function formatStoreContact(store: Pick<AdminStore, 'ceoName' | 'phone'>): string {
+  const parts = [store.ceoName?.trim(), store.phone?.trim()].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : '—';
+}
+
+/** 치우기 확인창 — 실제 동작(기록 있으면 못 치움, 손님 화면 숨김·새 주문 차단, 로그인 유지)을 알린다. */
+export function describeArchiveConfirm(store: Pick<AdminStore, 'name'>): string {
+  const label = store.name?.trim() || '(미설정)';
+  return [
+    `${label} 판매자를 치울까요?`,
+    '치우면 손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다. 판매자는 계속 로그인할 수 있고, 복구하면 치우기 전 상태로 돌아갑니다.',
+    '주문·정산 기록이 하나라도 있는 판매자는 치울 수 없습니다.',
+  ].join('\n');
+}
+
+/** 복구 확인창 — 복구하면 손님 화면에 다시 보이고 주문을 받는다. */
+export function describeRestoreConfirm(store: Pick<AdminStore, 'name'>): string {
+  const label = store.name?.trim() || '(미설정)';
+  return `${label} 판매자를 복구할까요?\n복구하면 손님 화면에 다시 보이고 새 주문을 받습니다.`;
 }
 
 export function sortStores(stores: AdminStore[], sort: StoreSort): AdminStore[] {
@@ -137,16 +170,38 @@ export function getAdminStoresReadState(args: {
   return 'HAS_RESULTS';
 }
 
+/** 수수료율을 설정하지 않은 가게에 정산이 쓰는 기본 수수료율(서버 PLATFORM_FEE_RATE 기본값, 결정 ②). */
+export const DEFAULT_COMMISSION_PERCENT = 5;
+
+/**
+ * 화면은 수수료율을 % 단위로 받는다(예: "5" → 0.05 저장). 0~100%, 소수 둘째 자리까지 반올림한다.
+ * 저장값(0~1)은 소수 넷째 자리까지로 맞춰 부동소수 오차가 남지 않게 한다.
+ */
 export function parseRate(input: string): ParseRateResult {
-  const trimmed = input.trim();
+  const trimmed = input.trim().replace(/%$/, '').trim();
   if (trimmed === '') return { ok: false, errorCode: 'EMPTY' };
-  const rate = Number.parseFloat(trimmed);
-  if (Number.isNaN(rate)) return { ok: false, errorCode: 'NOT_NUMBER' };
-  if (rate < 0 || rate > 1) return { ok: false, errorCode: 'OUT_OF_RANGE' };
-  return { ok: true, rate };
+  const percent = Number(trimmed);
+  if (!Number.isFinite(percent)) return { ok: false, errorCode: 'NOT_NUMBER' };
+  if (percent < 0 || percent > 100) return { ok: false, errorCode: 'OUT_OF_RANGE' };
+  return { ok: true, rate: Math.round(percent * 100) / 10000 };
 }
 
-// 수수료율 표시 문자열 — 미설정 시 '기본'.
+/** 저장된 수수료율(0~1)을 % 숫자로 바꾼다(소수 둘째 자리까지). */
+export function rateToPercent(rate: number): number {
+  return Math.round(rate * 10000) / 100;
+}
+
+/** 편집칸 초기값 — 설정된 요율은 % 숫자, 미설정이면 빈칸. */
+export function rateToInput(rate: number | undefined): string {
+  return rate === undefined ? '' : String(rateToPercent(rate));
+}
+
+// 수수료율 표시 문자열 — 미설정 시 기본 수수료율로 정산됨을 함께 보인다.
 export function formatRate(rate: number | undefined): string {
-  return rate !== undefined ? `${(rate * 100).toFixed(1)}%` : '기본';
+  return rate !== undefined ? `${rateToPercent(rate)}%` : `기본 ${DEFAULT_COMMISSION_PERCENT}%`;
+}
+
+/** 수수료율 저장 성공 안내 — 다음 정산부터 적용되고 이미 만든 정산은 바뀌지 않는다. */
+export function describeCommissionSaved(storeName: string, rate: number): string {
+  return `${storeName || '(미설정)'} 수수료율 ${rateToPercent(rate)}%는 다음에 만들어지는 정산부터 적용됩니다. 이미 만든 정산은 그대로입니다.`;
 }
