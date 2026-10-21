@@ -6,7 +6,7 @@ import {
   setPersistence,
   type Auth,
 } from 'firebase/auth';
-import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'firebase/storage';
+import type { FirebaseStorage } from 'firebase/storage';
 
 const LOCAL_FIREBASE_PROJECT_ID = 'greenhub-local';
 const LOCAL_FIREBASE_STORAGE_BUCKET = 'greenhub-local.appspot.com';
@@ -253,7 +253,9 @@ export function getFirebaseAuth(): Auth {
   return auth;
 }
 
-export function getFirebaseStorage(): FirebaseStorage {
+// Storage SDK는 업로드할 때만 불러온다. 루트 providers가 이 모듈을 읽어도 모든 화면 번들에 실리지 않는다.
+export async function getFirebaseStorage(): Promise<FirebaseStorage> {
+  const { connectStorageEmulator, getStorage } = await import('firebase/storage');
   const registry = getServiceRegistry(app);
   if (registry.storage) return registry.storage;
   const storage = getStorage(app);
@@ -275,6 +277,5 @@ export function getFirebaseStorage(): FirebaseStorage {
 
 // 기사 앱은 Firestore를 직접 읽지 않는다(주문은 API로만 조회). Firestore SDK를 번들에
 // 넣지 않도록 Firestore 인스턴스를 만들지 않는다. 로그인과 거점 사진 Storage만 쓴다.
-// 기존 import 경로 유지: 기본 인스턴스를 같은 이름으로 노출한다.
+// 이 모듈 자체도 로그인 훅과 거점 사진 업로드가 import()로만 불러온다(첫 화면 번들에서 Firebase 제외).
 export const firebaseAuth = getFirebaseAuth();
-export const storage = getFirebaseStorage();

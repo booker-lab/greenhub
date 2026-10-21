@@ -11,6 +11,7 @@ export {
   resolveRoundCartBatchValidation,
   resolveRoundCartValidation,
   selectCheckoutItems,
+  validateRoundCartItems,
 };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
@@ -28,6 +29,7 @@ const requireForTest = (specifier) => {
     return {
       useEffect: () => {},
       useMemo: (factory) => factory(),
+      useRef: (current) => ({ current }),
       useState: (initial) => [initial, () => {}],
     };
   }
@@ -88,6 +90,7 @@ const {
   resolveRoundCartBatchValidation,
   resolveRoundCartValidation,
   selectCheckoutItems,
+  validateRoundCartItems,
 } = pageModule.exports;
 
 const roundItem = {
@@ -291,4 +294,102 @@ test('legacy 필수 정보가 없으면 현재 장바구니 화면에서 수정 
     source,
     /if \(checkoutItems\.length === 0 \|\| isChecking \|\| hasLegacyValidationIssues\) return;/,
   );
+});
+
+function stubFetch(handler) {
+  const original = globalThis.fetch;
+  const requests = [];
+  globalThis.fetch = async (_url, init) => {
+    const body = JSON.parse(init.body);
+    requests.push(body);
+    const { status, json } = handler(body);
+    return { ok: status < 400, json: async () => json };
+  };
+  return { requests, restore: () => (globalThis.fetch = original) };
+}
+
+const secondRoundItem = {
+  ...roundItem,
+  productId: 'product-2',
+  roundItemId: 'round-item-2',
+  quantity: 1,
+};
+const serverItemFor = (item) => ({
+  roundItemId: item.roundItemId,
+  productId: item.productId,
+  productName: item.name,
+  unitPrice: item.price,
+  quantity: item.quantity,
+  subtotalAmount: item.price * item.quantity,
+});
+const okResponseFor = (items) => ({
+  ok: true,
+  salesMode: 'round_direct',
+  roundId: 'round-1',
+  itemQuantityTotal: items.reduce((sum, item) => sum + item.quantity, 0),
+  totalAmount: items.reduce((sum, item) => sum + item.price * item.quantity, 0),
+  items: items.map(serverItemFor),
+});
+
+test('묶음 검증이 통과하면 상품별 검증 없이 요청 1회로 끝낸다', async () => {
+  const items = [roundItem, secondRoundItem];
+  const stub = stubFetch(() => ({ status: 201, json: okResponseFor(items) }));
+  try {
+    const resolved = await validateRoundCartItems(items, 'token', new AbortController().signal);
+    assert.equal(stub.requests.length, 1);
+    assert.equal(stub.requests[0].roundItems.length, 2);
+    assert.deepEqual(resolved, {
+      [cartItemKey(roundItem)]: { status: 'eligible', currentUnitPrice: 23000 },
+      [cartItemKey(secondRoundItem)]: { status: 'eligible', currentUnitPrice: 23000 },
+    });
+  } finally {
+    stub.restore();
+  }
+});
+
+test('묶음 검증이 실패하면 상품별로 다시 확인해 안 되는 상품만 제외한다', async () => {
+  const items = [roundItem, secondRoundItem];
+  const stub = stubFetch((body) => {
+    const ids = body.roundItems.map((item) => item.roundItemId);
+    if (ids.includes('round-item-2')) {
+      return { status: 409, json: { message: '회차 상품 수량이 마감되었습니다.' } };
+    }
+    return { status: 201, json: okResponseFor([roundItem]) };
+  });
+  try {
+    const resolved = await validateRoundCartItems(items, 'token', new AbortController().signal);
+    // 묶음 1회 + 상품별 2회. 통과한 상품이 1개라 다시 묶어 보내지 않는다.
+    assert.equal(stub.requests.length, 3);
+    assert.deepEqual(resolved, {
+      [cartItemKey(roundItem)]: { status: 'eligible', currentUnitPrice: 23000 },
+      [cartItemKey(secondRoundItem)]: {
+        status: 'unavailable',
+        reason: '요청한 수량을 구매할 수 없습니다.',
+      },
+    });
+  } finally {
+    stub.restore();
+  }
+});
+
+test('상품이 1개면 실패해도 같은 요청을 다시 보내지 않는다', async () => {
+  const stub = stubFetch(() => ({ status: 400, json: { message: '주문 마감된 회차입니다.' } }));
+  try {
+    const resolved = await validateRoundCartItems(
+      [roundItem],
+      'token',
+      new AbortController().signal,
+    );
+    assert.equal(stub.requests.length, 1);
+    assert.deepEqual(resolved, {
+      [cartItemKey(roundItem)]: { status: 'unavailable', reason: '판매가 마감되었습니다.' },
+    });
+  } finally {
+    stub.restore();
+  }
+});
+
+test('수량 변경은 마지막 수량만 검증하도록 요청을 잠시 미룬다', () => {
+  assert.match(source, /VALIDATION_DEBOUNCE_MS = 300/);
+  assert.match(source, /clearTimeout\(timer\)/);
 });
