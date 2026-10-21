@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, Group, Loader, Paper, Text } from '@mantine/core';
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import Image from 'next/image';
 import { useRef, useState } from 'react';
 import { getFirebaseStorage } from '@/lib/firebase';
@@ -39,12 +38,17 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
     setUploading(true);
     try {
       const batchId = Date.now();
+      // Storage SDK는 올릴 때만 불러온다.
+      const [{ getDownloadURL, ref: storageRef, uploadBytes }, storage] = await Promise.all([
+        import('firebase/storage'),
+        getFirebaseStorage(),
+      ]);
       // 사진을 한 장씩 처리한다. 동시에 디코드하면 휴대폰에서 원본 비트맵이 한꺼번에 메모리에 올라간다.
       const urls: string[] = [];
       for (const [index, file] of toUpload.entries()) {
         // canvas로 다시 그려 EXIF(촬영 위치 등)를 지운 JPEG만 올린다. 원본 파일명도 쓰지 않는다.
         const jpeg = await reencodeImageToJpeg(file, PRODUCT_IMAGE_ENCODE);
-        const r = storageRef(getFirebaseStorage(), `products/${storeId}/${batchId}_${index}.jpg`);
+        const r = storageRef(storage, `products/${storeId}/${batchId}_${index}.jpg`);
         await uploadBytes(r, jpeg, { contentType: 'image/jpeg' });
         urls.push(await getDownloadURL(r));
       }

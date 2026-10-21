@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, Button, Group, Paper, Stack, Switch, Text, Title } from '@mantine/core';
-import { getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { type AdminBanner, useAdminBanner } from '@/hooks/useAdmin';
@@ -67,9 +66,13 @@ export default function AdminBannerClient() {
     setUploadError(null);
     try {
       // 배너 사진은 누구나 받을 수 있는 공개 사진이다. canvas로 다시 그려 EXIF(촬영 위치 등)를
-      // 지운 JPEG만 올리고, 원본 파일명도 경로에 쓰지 않는다.
+      // 지운 JPEG만 올리고, 원본 파일명도 경로에 쓰지 않는다. Storage SDK는 올릴 때만 불러온다.
       const jpeg = await reencodeImageToJpeg(file, PRODUCT_IMAGE_ENCODE);
-      const r = storageRef(getFirebaseStorage(), `banners/main_hero/${Date.now()}.jpg`);
+      const [{ getDownloadURL, ref: storageRef, uploadBytes }, storage] = await Promise.all([
+        import('firebase/storage'),
+        getFirebaseStorage(),
+      ]);
+      const r = storageRef(storage, `banners/main_hero/${Date.now()}.jpg`);
       await uploadBytes(r, jpeg, { contentType: 'image/jpeg' });
       const url = await getDownloadURL(r);
       setForm((f) => ({ ...f, imageUrl: url }));

@@ -13,7 +13,7 @@ import {
   memoryLocalCache,
   type Firestore,
 } from 'firebase/firestore';
-import { connectStorageEmulator, getStorage, type FirebaseStorage } from 'firebase/storage';
+import type { FirebaseStorage } from 'firebase/storage';
 
 const LOCAL_FIREBASE_PROJECT_ID = 'greenhub-local';
 const LOCAL_FIREBASE_STORAGE_BUCKET = 'greenhub-local.appspot.com';
@@ -299,7 +299,9 @@ export function getFirebaseAuth(): Auth {
   return auth;
 }
 
-export function getFirebaseStorage(): FirebaseStorage {
+// Storage SDK는 업로드할 때만 불러온다. 루트 providers가 이 모듈을 읽어도 모든 화면 번들에 실리지 않는다.
+export async function getFirebaseStorage(): Promise<FirebaseStorage> {
+  const { connectStorageEmulator, getStorage } = await import('firebase/storage');
   const registry = getServiceRegistry(app);
   if (registry.storage) return registry.storage;
   const storage = getStorage(app);
@@ -323,5 +325,5 @@ export const db = getFirestoreInstance();
 
 if (localRuntime && typeof window !== 'undefined') {
   getFirebaseAuth();
-  getFirebaseStorage();
+  void getFirebaseStorage();
 }
