@@ -2,6 +2,7 @@ import type { PartnerInquiryItem, ProductRequestItem, RestockSummaryItem } from 
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { randomUUID } from 'node:crypto';
+import { AuditService } from '../common/audit/audit.service';
 import { acquireJobLease, completeJobLease, seoulDailySlotKey } from '../common/job-lease';
 import { assertStoreOwnerOrAdmin } from '../common/store-ownership';
 import { FirestoreService } from '../firestore/firestore.service';
@@ -38,11 +39,20 @@ function toIso(value: unknown): string {
   return v && typeof v.toDate === 'function' ? v.toDate().toISOString() : '';
 }
 
+/** 경로 구분자가 든 ID로 다른 문서를 가리키지 못하게 한다. */
+function partnerInquiryDocId(id: string): string {
+  if (!id || id.includes('/')) throw new NotFoundException('입점 문의를 찾을 수 없습니다.');
+  return id;
+}
+
 @Injectable()
 export class EngagementService {
   private readonly logger = new Logger(EngagementService.name);
 
-  constructor(private readonly firestore: FirestoreService) {}
+  constructor(
+    private readonly firestore: FirestoreService,
+    private readonly audit: AuditService,
+  ) {}
 
   // ── 다음 회차 알림 신청 ──
   async listMyRestock(userId: string): Promise<string[]> {
@@ -152,9 +162,64 @@ export class EngagementService {
           contact: data['contact'],
           message: data['message'],
           createdAt: toIso(data['createdAt']),
+          contactedAt: data['contactedAt'] ? toIso(data['contactedAt']) || null : null,
         };
       })
       .sort((a: PartnerInquiryItem, b: PartnerInquiryItem) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  /**
+   * 관리자가 입점 문의를 "연락함"으로 표시하거나 되돌린다. 행동 기록에는 문의 ID와 상태만 남긴다
+   * (연락처·내용은 넣지 않는다).
+   */
+  async setPartnerInquiryContacted(
+    id: string,
+    contacted: boolean,
+    actorId: string,
+  ): Promise<{ id: string; contactedAt: string | null }> {
+    const ref = this.firestore.doc(`partnerInquiries/${partnerInquiryDocId(id)}`);
+    return this.firestore.runTransaction(async (tx: any) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException('입점 문의를 찾을 수 없습니다.');
+      const wasContacted = Boolean(snap.data()?.['contactedAt']);
+      const now = this.firestore.Timestamp.now();
+      tx.update(ref, { contactedAt: contacted ? now : null, contactedBy: contacted ? actorId : null });
+      await this.audit.logAdmin(
+        {
+          action: 'admin.partner_inquiry.contacted',
+          actorId,
+          targetType: 'partner_inquiry',
+          targetId: id,
+          before: { contacted: wasContacted },
+          after: { contacted },
+        },
+        tx,
+      );
+      return { id, contactedAt: contacted ? toIso(now) || null : null };
+    });
+  }
+
+  /**
+   * 관리자가 입점 문의를 지운다(문의한 사람의 파기 요청 대응). 문서 삭제와 행동 기록을 같은 트랜잭션에
+   * 넣어 기록 없는 삭제가 생기지 않게 한다. 기록에는 문의 ID만 남기고 연락처·내용은 넣지 않는다.
+   */
+  async deletePartnerInquiry(id: string, actorId: string): Promise<{ id: string }> {
+    const ref = this.firestore.doc(`partnerInquiries/${partnerInquiryDocId(id)}`);
+    await this.firestore.runTransaction(async (tx: any) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException('입점 문의를 찾을 수 없습니다.');
+      tx.delete(ref);
+      await this.audit.logAdmin(
+        {
+          action: 'admin.partner_inquiry.deleted',
+          actorId,
+          targetType: 'partner_inquiry',
+          targetId: id,
+        },
+        tx,
+      );
+    });
+    return { id };
   }
 
   /**

@@ -276,6 +276,13 @@ export interface PartnerInquiryRequest {
 export interface PartnerInquiryItem extends Omit<PartnerInquiryRequest, 'privacyConsent'> {
   id: string
   createdAt: string
+  /** 관리자가 "연락함"으로 표시한 시각. 아직 연락하지 않았으면 null. */
+  contactedAt: string | null
+}
+
+/** 관리자가 입점 문의 처리 상태("연락함")를 바꿀 때 */
+export interface PartnerInquiryContactedRequest {
+  contacted: boolean
 }
 
 export interface RestockSummaryItem {
