@@ -2,6 +2,7 @@ import { Badge, Box, Container, Group, Text } from '@mantine/core';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { isFeatureOn } from '@/lib/features';
+import { AdminLogoutButton } from './_components/AdminLogoutButton';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -46,6 +47,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Badge color="red" variant="light" style={{ fontWeight: 'var(--fw-medium)' }}>
                 ADMIN
               </Badge>
+              <AdminLogoutButton />
             </Group>
           </Group>
         </Container>
