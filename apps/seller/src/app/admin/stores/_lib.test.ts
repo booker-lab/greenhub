@@ -1,41 +1,78 @@
 import { describe, expect, it } from 'vitest';
-import { getAdminStoresReadState, parseRate } from './_lib';
+import {
+  describeCommissionSaved,
+  formatRate,
+  getAdminStoresReadState,
+  parseRate,
+  rateToInput,
+} from './_lib';
 
-describe('parseRate', () => {
-  it('소수 수수료율을 정상 값으로 변환한다', () => {
-    expect(parseRate('0.05')).toEqual({ ok: true, rate: 0.05 });
+describe('parseRate (% 단위 입력 → 0~1 저장값)', () => {
+  it('% 숫자를 0~1 수수료율로 바꾼다(5 → 0.05)', () => {
+    expect(parseRate('5')).toEqual({ ok: true, rate: 0.05 });
+    expect(parseRate('7.5')).toEqual({ ok: true, rate: 0.075 });
+    expect(parseRate('12.34')).toEqual({ ok: true, rate: 0.1234 });
   });
 
-  it('하한 0을 허용한다', () => {
+  it('하한 0%와 상한 100%를 허용한다', () => {
     expect(parseRate('0')).toEqual({ ok: true, rate: 0 });
+    expect(parseRate('100')).toEqual({ ok: true, rate: 1 });
   });
 
-  it('상한 1을 허용한다', () => {
-    expect(parseRate('1')).toEqual({ ok: true, rate: 1 });
+  it('끝의 % 기호와 앞뒤 공백을 무시한다', () => {
+    expect(parseRate(' 5% ')).toEqual({ ok: true, rate: 0.05 });
+    expect(parseRate(' 3 ')).toEqual({ ok: true, rate: 0.03 });
   });
 
-  it('빈 입력은 EMPTY 오류로 반환한다', () => {
+  it('소수 셋째 자리 이하는 둘째 자리로 반올림해 부동소수 오차를 남기지 않는다', () => {
+    expect(parseRate('5.555')).toEqual({ ok: true, rate: 0.0556 });
+    expect(parseRate('0.1')).toEqual({ ok: true, rate: 0.001 });
+  });
+
+  it('빈 입력·공백만 있는 입력은 EMPTY', () => {
     expect(parseRate('')).toEqual({ ok: false, errorCode: 'EMPTY' });
-  });
-
-  it('공백만 있는 입력은 EMPTY 오류로 반환한다', () => {
     expect(parseRate('  ')).toEqual({ ok: false, errorCode: 'EMPTY' });
+    expect(parseRate('%')).toEqual({ ok: false, errorCode: 'EMPTY' });
   });
 
-  it('숫자로 해석되지 않는 입력은 NOT_NUMBER 오류로 반환한다', () => {
+  it('숫자가 아니면 NOT_NUMBER(뒤에 글자가 붙은 값도 거절)', () => {
     expect(parseRate('abc')).toEqual({ ok: false, errorCode: 'NOT_NUMBER' });
+    expect(parseRate('5abc')).toEqual({ ok: false, errorCode: 'NOT_NUMBER' });
   });
 
-  it('하한보다 작은 값은 OUT_OF_RANGE 오류로 반환한다', () => {
+  it('0% 미만·100% 초과는 OUT_OF_RANGE', () => {
     expect(parseRate('-0.1')).toEqual({ ok: false, errorCode: 'OUT_OF_RANGE' });
+    expect(parseRate('100.5')).toEqual({ ok: false, errorCode: 'OUT_OF_RANGE' });
+  });
+});
+
+describe('수수료율 표시', () => {
+  it('저장값을 % 숫자로 보이고 미설정은 기본 5%로 보인다', () => {
+    expect(formatRate(0.05)).toBe('5%');
+    expect(formatRate(0.075)).toBe('7.5%');
+    expect(formatRate(0)).toBe('0%');
+    expect(formatRate(undefined)).toBe('기본 5%');
   });
 
-  it('상한보다 큰 값은 OUT_OF_RANGE 오류로 반환한다', () => {
-    expect(parseRate('1.5')).toEqual({ ok: false, errorCode: 'OUT_OF_RANGE' });
+  it('편집칸 초기값은 % 숫자, 미설정이면 빈칸이다', () => {
+    expect(rateToInput(0.05)).toBe('5');
+    expect(rateToInput(0.1234)).toBe('12.34');
+    expect(rateToInput(undefined)).toBe('');
   });
 
-  it('앞뒤 공백을 제거한 값으로 변환한다', () => {
-    expect(parseRate(' 0.5 ')).toEqual({ ok: true, rate: 0.5 });
+  it('입력 → 저장 → 다시 편집이 같은 값으로 돌아온다', () => {
+    for (const input of ['0', '3', '5', '7.5', '12.34', '100']) {
+      const parsed = parseRate(input);
+      expect(parsed.ok).toBe(true);
+      if (parsed.ok) expect(rateToInput(parsed.rate)).toBe(input);
+    }
+  });
+
+  it('저장 안내는 다음 정산부터 적용·이미 만든 정산 불변을 알린다', () => {
+    const message = describeCommissionSaved('난플렉스', 0.08);
+    expect(message).toContain('난플렉스 수수료율 8%');
+    expect(message).toContain('다음에 만들어지는 정산부터');
+    expect(message).toContain('이미 만든 정산은 그대로');
   });
 });
 

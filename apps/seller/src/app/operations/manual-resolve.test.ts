@@ -114,6 +114,7 @@ describe('운영 기록 수동 닫기 화면 계약', () => {
     'PROVIDER_REVERSAL_DETECTED',
     'AUTO_REFUND_FAILED',
     'FINALIZATION_REFUND_FAILED',
+    'SETTLEMENT_RECOVERY_REQUIRED',
   ])('%s 기록은 관리자에게만 닫기 버튼을 보인다', (type) => {
     const [issue] = parse({ items: [{ ...baseItem, type }] });
 

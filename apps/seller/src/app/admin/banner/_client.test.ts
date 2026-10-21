@@ -20,6 +20,7 @@ const beforeBannerBlock = [
   'useAdmin.list.ts',
   'useAdmin.accounts.ts',
   'useAdmin.commerce.ts',
+  'useAdmin.settlements.ts',
   'useAdmin.invite.ts',
 ]
   .map(readHook)
