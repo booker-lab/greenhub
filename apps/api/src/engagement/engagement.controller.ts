@@ -25,6 +25,7 @@ import {
   CreateProductRequestDto,
   CreateReviewDto,
   HideReviewDto,
+  PartnerInquiryContactedDto,
   UnhideReviewDto,
 } from './dto/engagement.dto';
 import { EngagementService } from './engagement.service';
@@ -185,7 +186,7 @@ export class SellerEngagementController {
   }
 }
 
-/** 관리자 전용: 입점 문의 목록, 숨긴 후기 목록과 숨김 해제. */
+/** 관리자 전용: 입점 문의 목록·연락함 표시·삭제, 숨긴 후기 목록과 숨김 해제. */
 @Controller()
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
@@ -198,6 +199,21 @@ export class AdminEngagementController {
   @Get('admin/partner-inquiries')
   partnerInquiries() {
     return this.engagement.listPartnerInquiries();
+  }
+
+  @Put('admin/partner-inquiries/:inquiryId/contacted')
+  setPartnerInquiryContacted(
+    @Param('inquiryId') inquiryId: string,
+    @CurrentUser() user: JwtPayload,
+    @Body() dto: PartnerInquiryContactedDto,
+  ) {
+    return this.engagement.setPartnerInquiryContacted(inquiryId, dto.contacted, user.sub);
+  }
+
+  // 문의한 사람의 파기 요청에 대응해 관리자가 바로 지운다(1년 자동 파기와 별개).
+  @Delete('admin/partner-inquiries/:inquiryId')
+  deletePartnerInquiry(@Param('inquiryId') inquiryId: string, @CurrentUser() user: JwtPayload) {
+    return this.engagement.deletePartnerInquiry(inquiryId, user.sub);
   }
 
   @Get('admin/reviews/hidden')
