@@ -37,6 +37,7 @@ export type AdminAuditAction =
   | 'admin.driver.suspended'
   | 'admin.driver.unsuspended'
   | 'admin.order.force_refunded'
+  | 'admin.order.post_delivery_refunded'
   | 'admin.settlement.paid'
   | 'admin.banner.updated'
   // 판매자(또는 관리자)가 정산 계좌를 저장. 계좌번호는 끝 4자리만 남긴다.
