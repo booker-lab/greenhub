@@ -54,6 +54,13 @@ backend는 타입을, seller/admin UI는 공통 라벨·색 상수를 사용한�
   settledAt: Timestamp
   confirmedAt: Timestamp | null
   paidAt: Timestamp | null
+  recovery?: {               // 지급 완료 뒤 주문이 환불됐을 때만 존재(§7)
+    status: 'PENDING' | 'RECOVERED'
+    amount: number            // 돌려받을 금액 = netAmount
+    createdAt: Timestamp
+    recoveredAt: Timestamp | null
+    recoveredBy: string | null
+  }
   createdAt: Timestamp
   updatedAt: Timestamp
 }
@@ -132,9 +139,11 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 - settlement 없음 → no-op
 - `cancelled` → 멱등 no-op
 - `pending|confirmed` → `cancelled`
-- `paid` → **`cancelled`로 역전하지 않음**
+- `paid` → **`cancelled`로 역전하지 않음**. `status: paid`와 `paidAt`은 그대로 두고 회수 기록 `recovery`(`status: PENDING`, `amount: netAmount`)를 붙인다. 이미 `recovery`가 있으면(PENDING·RECOVERED 모두) 멱등 no-op이다.
 
-지급 완료 후 주문 취소·환불의 회계 처리는 단순 status 역전으로 해결하지 않는다. 현재 service는 warning을 남기고 paid settlement를 보존한다. 후속 회계 조정이 필요하면 별도 설계가 필요하다.
+지급 완료 후 주문 환불의 회계 처리는 status 역전이 아니라 회수 기록으로 남긴다. 실제 돈은 관리자가 판매자에게서 계좌로 받고 "회수 완료"(`recovery.status: RECOVERED`, `recoveredAt`·`recoveredBy`)로 표시한다. 다음 정산에서 자동으로 빼지 않는다. 결정 배경: `docs/specs/post-delivery-refund-plan.md` §2.3.
+
+`getSummary` 응답은 회수 대기(`recovery.status == PENDING`) 건수·합계를 `recoveryPendingCount`·`recoveryPendingAmount`로 함께 준다. 지급 합계(`totalNetAmount`)는 소급해 바꾸지 않는다.
 
 ### Core lifecycle 검증 상태 — `IMPLEMENTATION_PROVEN`
 
@@ -149,7 +158,7 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 - 이미 confirmed인 settlement는 다시 쓰지 않고, query가 stale해도 transaction fresh status가 우선함
 - confirm commit 직전 cancel 경합에서도 cancelled가 confirmed로 되살아나지 않음
 - missing settlement는 no-op, pending/confirmed는 cancelled로 수렴, cancelled는 멱등 no-op
-- paid settlement가 cancellation으로 역전되지 않고 보존됨
+- paid settlement가 cancellation으로 역전되지 않고 보존되며 회수 대기 기록이 한 번만 붙음(재취소·회수 완료 뒤 재취소는 no-op)
 - 실제 주문 완료 경로(`DELIVERED`)가 settlement 1건을 만들고 후속 `REVIEWED`가 중복 생성하지 않음
 - 정상 order cancellation이 pending/confirmed settlement를 cancelled로 수렴시킴
 
@@ -166,9 +175,7 @@ SETTLEMENT_CONFIRM_DELAY_DAYS env
 - settlement 없음 → no-op
 - `pending|confirmed` settlement → `cancelled`
 - `cancelled` → 멱등 no-op
-- `paid` settlement → 역전하지 않고 보존
-
-`paid` settlement 이후 환불의 회계 처리는 단순 status 역전으로 해결하지 않고 별도 회계 조정/운영 이슈/승인 흐름을 따른다.
+- `paid` settlement → 역전하지 않고 보존, 회수 대기 기록(`recovery`)을 붙임(§7)
 
 직접 증거: `apps/api/src/admin/admin.service.spec.ts`와 `apps/api/src/admin/admin-legacy-refund-occ-retry.spec.ts`가 실제 `AdminService.forceRefund()`를 구동해 legacy `done`/확정 경로의 `cancelSettlement()` 수렴, conflict·provider 실패·local 선행 실패 시 미호출, 회차 경로의 `cancelForRound()` 위임을 직접 고정한다. `cancelSettlement()` 자체의 pending/confirmed → cancelled, paid 보존, 멱등성 계약은 core lifecycle proof(`apps/api/src/settlements/settlements-lifecycle.spec.ts`)가 소유한다.
 

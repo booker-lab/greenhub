@@ -703,7 +703,7 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
       expect(firestore.transactionUpdates).toHaveLength(0);
     });
 
-    it('paid는 cancellation/reversal을 거부하고 paid를 보존한다', async () => {
+    it('paid는 cancelled로 바꾸지 않고 paid를 보존한 채 회수 대기 기록(판매자 지급액)을 붙인다', async () => {
       const { firestore, service } = makeSettlementsService();
       const orderId = 'order-paid-cancel-1';
       const original = makeSettlement(orderId, 'paid', {
@@ -712,6 +712,39 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
       });
       firestore.seed(`settlements/${orderId}`, original);
 
+      await service.cancelSettlement(orderId);
+
+      const after = firestore.getData(`settlements/${orderId}`);
+      expect(after).toEqual(
+        expect.objectContaining({
+          status: 'paid',
+          paidAt: original['paidAt'],
+          netAmount: 9500,
+          recovery: expect.objectContaining({
+            status: 'PENDING',
+            amount: 9500,
+            recoveredAt: null,
+            recoveredBy: null,
+          }),
+        }),
+      );
+      expect(firestore.transactionUpdates).toHaveLength(1);
+    });
+
+    it('paid 회수 기록은 멱등이다: 두 번 취소해도 기록을 다시 쓰지 않고 회수 완료도 덮지 않는다', async () => {
+      const { firestore, service } = makeSettlementsService();
+      const orderId = 'order-paid-cancel-2';
+      const recovered = {
+        status: 'RECOVERED',
+        amount: 9500,
+        createdAt: new Date('2026-08-27T00:00:00.000Z'),
+        recoveredAt: new Date('2026-08-28T00:00:00.000Z'),
+        recoveredBy: 'admin-1',
+      };
+      const original = makeSettlement(orderId, 'paid', { recovery: recovered });
+      firestore.seed(`settlements/${orderId}`, original);
+
+      await service.cancelSettlement(orderId);
       await service.cancelSettlement(orderId);
 
       expect(firestore.getData(`settlements/${orderId}`)).toEqual(original);

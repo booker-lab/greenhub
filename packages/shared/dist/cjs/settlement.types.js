@@ -11,7 +11,7 @@
  * 타입만 사용하고 라벨/색은 프론트만 import한다.
  */
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.STATUS_COLOR = exports.STATUS_LABEL = exports.SETTLEMENT_STATUSES = void 0;
+exports.RECOVERY_STATUS_LABEL = exports.STATUS_COLOR = exports.STATUS_LABEL = exports.SETTLEMENT_STATUSES = void 0;
 /** 4상태 배열 — DTO 검증(@IsIn)·집계 루프 등에서 재사용 */
 exports.SETTLEMENT_STATUSES = [
     'pending',
@@ -35,4 +35,8 @@ exports.STATUS_COLOR = {
     confirmed: 'brand',
     paid: 'gray',
     cancelled: 'red',
+};
+exports.RECOVERY_STATUS_LABEL = {
+    PENDING: '돌려받을 돈',
+    RECOVERED: '회수 완료',
 };

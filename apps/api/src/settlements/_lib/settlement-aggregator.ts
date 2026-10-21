@@ -15,6 +15,9 @@ export interface SettlementAggregate {
   totalPlatformFee: number;
   totalNetAmount: number;
   byStatus: Record<SettlementStatus, number>;
+  /** 지급 뒤 환불돼 판매자에게서 돌려받을 돈(회수 대기 PENDING)의 건수·합계 */
+  recoveryPendingCount: number;
+  recoveryPendingAmount: number;
 }
 
 /**
@@ -33,6 +36,8 @@ export function aggregateSettlements(
   let totalAmount = 0;
   let totalPlatformFee = 0;
   let totalNetAmount = 0;
+  let recoveryPendingCount = 0;
+  let recoveryPendingAmount = 0;
 
   for (const s of settlements) {
     const status = s['status'] as SettlementStatus;
@@ -40,6 +45,11 @@ export function aggregateSettlements(
     totalAmount += (s['totalAmount'] as number) ?? 0;
     totalPlatformFee += (s['platformFee'] as number) ?? 0;
     totalNetAmount += (s['netAmount'] as number) ?? 0;
+    const recovery = s['recovery'] as { status?: unknown; amount?: unknown } | null | undefined;
+    if (recovery?.status === 'PENDING') {
+      recoveryPendingCount++;
+      recoveryPendingAmount += typeof recovery.amount === 'number' ? recovery.amount : 0;
+    }
   }
 
   return {
@@ -48,5 +58,7 @@ export function aggregateSettlements(
     totalPlatformFee,
     totalNetAmount,
     byStatus,
+    recoveryPendingCount,
+    recoveryPendingAmount,
   };
 }

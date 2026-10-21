@@ -174,7 +174,7 @@ admin 환불의 주문·결제·정산·회차 capacity 후속효과 수렴은 `
 직접 proof가 고정하는 계약:
 
 - 회차 주문(`schemaVersion === 2 && roundId`)은 `RoundOrderLifecycleService.cancelForRound({ storeId, orderId, expectedStatus, reason })`로 위임하므로 정상 회차 취소의 본 결제 환불·reservation/counter 반환·round item quantity 반환·held counter 감소·주문 `CANCELLED` 확정 불변식을 재사용한다.
-- `forceRefund()`는 회차 경로와 legacy 경로 모두에서 `SettlementsService.cancelSettlement(orderId)`를 호출해 pending/confirmed settlement를 `cancelled`로 수렴시킨다. `paid` settlement는 역전하지 않고 보존한다.
+- `forceRefund()`는 회차 경로와 legacy 경로 모두에서 `SettlementsService.cancelSettlement(orderId)`를 호출해 pending/confirmed settlement를 `cancelled`로 수렴시킨다. `paid` settlement는 역전하지 않고 보존하며 회수 대기 기록(`recovery.status: PENDING`)을 붙인다(`settlements.md` §7).
 - legacy 경로 `forceLegacyRefund()`는 claim/orchestration과 OCC retry purity를 유지하고, `done`/`in_progress`, provider 실패(`REFUND_FAILED`), local 실패(`LOCAL_FAILED`) 재시도 경계를 보존한다.
 - conflict·provider 실패·local 실패 경로에서는 settlement 취소가 수행되지 않고, provider 환불 성공 전에는 local cancellation과 settlement 취소가 진행되지 않는다.
 - legacy 환불은 `CANCELLED` 외 허용 상태(`PENDING`·`DELIVERING`·`HUB_ARRIVED`·`PICKED_UP`·`DELIVERED`·`REVIEWED` 등)를 거부하고 모든 부수효과를 차단한다.
