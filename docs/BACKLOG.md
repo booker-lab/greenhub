@@ -706,7 +706,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다. 2026-10-09 CI 추가(#417) 뒤 PR마다 통과한다. 남은 일은 branch protection 필수 검사 지정(사용자)이다.
 
 ### STORE-COMMISSION-RATE-UNUSED
-- [ ] 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
+- [x] **2026-10-21 결정 ②로 반영(미배포)**: 정산 생성이 같은 transaction에서 가게 `commissionRate`(0~1)를 쓰고, 없으면 `PLATFORM_FEE_RATE`(기본 5%)를 쓴다. 이미 만든 정산은 다시 계산하지 않는다. 어드민 판매자 탭은 % 단위로 받고 "다음 정산부터 적용"을 안내한다. 이전 기록: 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
 
 ### SILENT-REFUND-CUSTOMER-NOTICE
 - [x] **2026-10-15 사용자 결정: 현재 문구로 확정**(`apps/api/src/notifications/refund-notice-reasons.ts`의 `ROUND_CANCELLED`·`ADMIN_REFUND`·`LATE_PAYMENT`, 코드 변경 없음). 이전 기록: 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다. 2026-10-09 코드 반영(#420, 운영 반영). 남은 일은 `apps/api/src/notifications/refund-notice-reasons.ts` 문구 확정이다.

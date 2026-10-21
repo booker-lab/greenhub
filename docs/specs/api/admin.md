@@ -81,7 +81,7 @@ GET /admin/stores
 PATCH /admin/stores/:storeId/commission
 ```
 
-body의 정확한 검증 범위는 `SetCommissionDto`를 따른다. 이 값과 settlement service의 전역 `PLATFORM_FEE_RATE` 사용 범위를 동일한 것으로 가정하지 않는다. 실제 수수료 모델 변경은 두 경로를 함께 점검한다.
+body `{ rate }`(0~1, `SetCommissionDto`). 저장한 요율은 그 가게의 다음 정산부터 쓰이고(미설정이면 `PLATFORM_FEE_RATE`, 기본 5%), 이미 만든 정산은 바뀌지 않는다(`docs/specs/api/settlements.md` §4). 화면은 % 단위로 받아(5 → 0.05) 저장한다.
 
 ### Store archive / restore
 
@@ -174,7 +174,7 @@ admin 환불의 주문·결제·정산·회차 capacity 후속효과 수렴은 `
 직접 proof가 고정하는 계약:
 
 - 회차 주문(`schemaVersion === 2 && roundId`)은 `RoundOrderLifecycleService.cancelForRound({ storeId, orderId, expectedStatus, reason })`로 위임하므로 정상 회차 취소의 본 결제 환불·reservation/counter 반환·round item quantity 반환·held counter 감소·주문 `CANCELLED` 확정 불변식을 재사용한다.
-- `forceRefund()`는 회차 경로와 legacy 경로 모두에서 `SettlementsService.cancelSettlement(orderId)`를 호출해 pending/confirmed settlement를 `cancelled`로 수렴시킨다. `paid` settlement는 역전하지 않고 보존한다.
+- `forceRefund()`는 회차 경로와 legacy 경로 모두에서 `SettlementsService.cancelSettlement(orderId)`를 호출해 pending/confirmed settlement를 `cancelled`로 수렴시킨다. `paid` settlement는 역전하지 않고 보존하며, 회수 필요를 기록하고 응답에 `recoveryRequired`·`recoveryAmount`를 싣는다(화면은 "판매자에게 ○○원 돌려받아야 합니다" 알림).
 - legacy 경로 `forceLegacyRefund()`는 claim/orchestration과 OCC retry purity를 유지하고, `done`/`in_progress`, provider 실패(`REFUND_FAILED`), local 실패(`LOCAL_FAILED`) 재시도 경계를 보존한다.
 - conflict·provider 실패·local 실패 경로에서는 settlement 취소가 수행되지 않고, provider 환불 성공 전에는 local cancellation과 settlement 취소가 진행되지 않는다.
 - legacy 환불은 `CANCELLED` 외 허용 상태(`PENDING`·`DELIVERING`·`HUB_ARRIVED`·`PICKED_UP`·`DELIVERED`·`REVIEWED` 등)를 거부하고 모든 부수효과를 차단한다.
@@ -190,13 +190,14 @@ admin 환불의 주문·결제·정산·회차 capacity 후속효과 수렴은 `
 ### 목록
 
 ```text
-GET /admin/settlements?storeId=<storeId>&from=<date>&to=<date>&status=<status>
+GET /admin/settlements?storeId=<storeId>&from=<date>&to=<date>&status=<status>&limit=<n>&cursor=<id>
+GET /admin/settlements/summary?storeId=<storeId>&from=<date>&to=<date>&status=<status>
 ```
 
-- `settledAt DESC`
-- 최대 500건
+- `settledAt DESC`, `limit` 기본 100·상한 500, `cursor`로 이어 받기(`hasMore`·`nextCursor`)
+- 행에 가게 이름·주문번호·회수 필드·보류 사유·지급 대상 행의 정산 계좌를 붙인다. 합계는 summary가 조건 전체로 계산한다(`docs/specs/api/settlements.md` §9)
 - `status`(선택)는 shared `SETTLEMENT_STATUSES`(`pending`·`confirmed`·`paid`·`cancelled`)만 허용하고, 다른 값은 400. 지정하지 않으면 모든 상태를 돌려준다. 사용하는 복합 인덱스: `status+settledAt DESC`, `storeId+status+settledAt DESC`(`firestore.indexes.json`, 계약 `firestore-indexes.spec.ts`). 직접 증거: `apps/api/src/admin/admin-settlements-status-filter.spec.ts`
-- `{ settlements, total }`
+- `{ settlements, total, hasMore, nextCursor }`
 
 ### 지급 처리
 
@@ -384,11 +385,12 @@ Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다
 | `admin.order.force_refunded` | order | `status` → `CANCELLED` | `ForceRefundDto.reason`(200자) |
 | `admin.settlement.paid` | settlement | `status` | - |
 | `admin.banner.updated` | banner `main_hero` | 바꾼 칸만 | - |
+| `store.payout_account.updated` | store | `bankName`·`accountNumberLast4`(예금주·전체 번호 없음) | - |
 
 문서 필드: `id`, `action`, `actorId`, `targetType`, `targetId`, `before`, `after`, `reason`, `createdAt`.
 
 - 고객 이름·전화·주소는 넣지 않는다. 대상은 ID로만 가리킨다.
-- 정산 지급만 같은 transaction에 기록한다. 나머지는 작업이 성공한 뒤 기록하고, 기록이 실패하면 error 로그만 남긴다(이미 끝난 작업을 되돌리지 않는다).
+- 정산 지급과 정산 계좌 저장(판매자도 남긴다)만 같은 transaction에 기록한다. 나머지는 작업이 성공한 뒤 기록하고, 기록이 실패하면 error 로그만 남긴다(이미 끝난 작업을 되돌리지 않는다).
 - 실패한 작업(없는 대상, 환불 실패 등)은 기록하지 않는다.
 - 초대 발급·취소(`createdBy`·`revokedBy`), 후기 복구(`moderationLog`), legal hold(`legalHoldUpdatedBy`)는 각 문서에 이미 처리자를 남기므로 이 기록 대상이 아니다.
 - 조회: `GET /admin/audit-logs`는 `createdAt` 내림차순 최근 100건을 돌려준다. 단일 필드 정렬이라 복합 인덱스가 필요 없다. seller 앱 `/admin/audit`("기록" 탭)이 읽기 전용으로 보여 준다.
@@ -398,12 +400,12 @@ Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다
 ## 11. 현재 알려진 구조적 제한
 
 - admin 주문 목록: 최대 200건, pagination 없음
-- admin 정산 목록: 최대 500건, pagination 없음
+- admin 정산 목록: 커서 이어받기(기본 100·상한 500), 합계는 summary(최대 20,000건 스캔)
 - driver 목록: 최대 100건 read 후 메모리 필터
 - admin privileged mutation의 서버 authorization + side-effect 0은 `apps/api/src/admin/admin-privileged-mutation.spec.ts`로 `IMPLEMENTATION_PROVEN`
 - admin settlement 지급 전이는 `apps/api/src/admin/admin-privileged-mutation.spec.ts`로 `IMPLEMENTATION_PROVEN`
 - admin 강제 환불은 `apps/api/src/admin/admin.service.spec.ts`·`apps/api/src/admin/admin-legacy-refund-occ-retry.spec.ts` 직접 proof로 `ADMIN-FORCE-REFUND-CONSISTENCY`가 `IMPLEMENTATION_PROVEN`
-- store 수수료 설정과 settlement 생성의 `PLATFORM_FEE_RATE` 관계는 단일 정책으로 완전히 통합돼 있지 않을 수 있으므로 변경 전 코드 재검증 필요
+- store 수수료 설정은 settlement 생성에 반영된다(가게 요율 우선, 없으면 `PLATFORM_FEE_RATE`, 2026-10-21)
 - driver 관리자 승인 게이트는 `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION` 해결 전 `VERIFIED`가 아님
 - 사용자/driver `suspended` flag의 기존 세션 enforcement는 같은 auth P0 해결 전 `VERIFIED`가 아님
 - 어드민 행동 기록은 10절 표의 작업만 다룬다. 판매자 겸용 엔드포인트(상품·회차·주문 상태 변경)에서 admin이 한 행동과 품종 등록·수정은 기록하지 않는다.
