@@ -22,6 +22,7 @@ import {
 } from '../sale-rounds/sale-round-state.contract';
 
 import { resolveSelectedOptions } from './_lib/round-order-extras';
+import { assertStoreAcceptsOrders } from '../stores/store-availability';
 @Injectable()
 export class OrdersCreateService {
   constructor(
@@ -63,6 +64,8 @@ export class OrdersCreateService {
       dto.hubId ? this.firestore.doc(`hubs/${dto.hubId}`).get() : Promise.resolve(null),
     ]);
     if (!storeSnap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    // 치운(archived) 가게는 회차·일반 주문 모두 받지 않는다(회차 분기보다 먼저 막는다).
+    assertStoreAcceptsOrders(storeSnap.data());
     if (storeSnap.data()?.['salesMode'] === 'round_direct') {
       return this.roundCreate.create(storeId, userId, dto);
     }
@@ -237,6 +240,7 @@ export class OrdersCreateService {
   async validateCart(storeId: string, userId: string, dto: CreateOrderDto) {
     const storeSnap = await this.firestore.doc(`stores/${storeId}`).get();
     if (!storeSnap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+    assertStoreAcceptsOrders(storeSnap.data());
     if (storeSnap.data()?.['salesMode'] !== 'round_direct') {
       return { ok: true, salesMode: storeSnap.data()?.['salesMode'] ?? 'legacy' };
     }

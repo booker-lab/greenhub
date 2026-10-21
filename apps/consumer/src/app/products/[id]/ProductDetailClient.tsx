@@ -17,7 +17,7 @@ import {
 } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
-import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import { classifyStoreProfileFailure, fetchPublicStoreProfile } from '@/lib/public-store-profile';
 import ProductActions from './_components/ProductActions';
 import ProductImages from './_components/ProductImages';
 import ProductInfo from './_components/ProductInfo';
@@ -37,7 +37,7 @@ type DetailState =
 type StoreModeState =
   | { status: 'loading'; storeId: string | null; salesMode: 'legacy' }
   | { status: 'ready'; storeId: string; salesMode: SalesMode }
-  | { status: 'error'; storeId: string | null; salesMode: 'legacy' };
+  | { status: 'error' | 'unavailable'; storeId: string | null; salesMode: 'legacy' };
 
 interface RoundProduct {
   round: PublicSaleRound;
@@ -162,8 +162,9 @@ function useStoreMode(storeId: string | null): StoreModeState {
           salesMode: normalizeSalesMode(value),
         });
       })
-      .catch(() => {
-        if (active) setStoreMode({ status: 'error', storeId, salesMode: 'legacy' });
+      .catch((error: unknown) => {
+        const status = classifyStoreProfileFailure(error);
+        if (active) setStoreMode({ status, storeId, salesMode: 'legacy' });
       });
 
     return () => {
@@ -568,6 +569,8 @@ export default function ProductDetailClient({ id, roundQuery, hint }: ProductDet
     );
   }
   if (storeMode.status !== 'ready' || storeMode.storeId !== product.storeId) {
+    // 관리자가 치운 가게의 상품은 없는 상품과 같게 보여 준다(다시 시도해도 같다).
+    if (storeMode.status === 'unavailable' && storeMode.storeId === product.storeId) notFound();
     if (storeMode.status === 'error') {
       return (
         <DetailStateFrame

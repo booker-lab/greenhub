@@ -173,3 +173,23 @@ export async function reencodeImageToJpeg(file: Blob, options: ReencodeOptions):
     decoded.release();
   }
 }
+
+/** 상품 사진·배너 사진에서 고를 수 있는 원본 형식. */
+export const UPLOAD_IMAGE_TYPES: readonly string[] = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+];
+
+/** 상품 사진·배너 사진 원본 용량 한도(Storage 규칙과 같은 5MB). */
+export const UPLOAD_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+
+/** 고른 파일을 받을 수 없으면 사람이 읽을 거절 사유, 받을 수 있으면 null. */
+export function imageFileRejection(file: { type: string; size: number }): string | null {
+  if (!UPLOAD_IMAGE_TYPES.includes(file.type)) {
+    return 'JPG, PNG, WebP, GIF 파일만 업로드 가능합니다.';
+  }
+  if (file.size > UPLOAD_IMAGE_MAX_BYTES) return '파일 크기는 5MB 이하만 가능합니다.';
+  return null;
+}

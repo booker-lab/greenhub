@@ -16,7 +16,7 @@ describe('DriversClient read recovery wiring', () => {
   it('useAdminDrivers의 error/reload를 소비한다', () => {
     expect(source).toContain('useAdminDrivers()');
     expect(source).toMatch(
-      /const\s*\{\s*drivers:\s*allDrivers,\s*loading,\s*error,\s*reload,\s*approve,\s*toggleSuspend\s*\}/,
+      /const\s*\{\s*drivers:\s*allDrivers,\s*hasMore,\s*loading,\s*loadingMore,\s*error,\s*moreError,\s*reload,\s*loadMore,\s*approve,\s*toggleSuspend,?\s*\}/,
     );
   });
 

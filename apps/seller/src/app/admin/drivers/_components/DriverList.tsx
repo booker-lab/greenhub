@@ -2,6 +2,7 @@
 
 import { Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminDriver } from '@/hooks/useAdmin';
+import { formatJoinedDate, formatPhone } from '../../users/_lib';
 import { type AdminDriversReadState, type DriverAction, getAdminDriversReadState } from '../_lib';
 import { DriverBadge } from './DriverBadge';
 
@@ -88,6 +89,19 @@ export function DriverList({
                 truncate
               >
                 {driver.email ?? '이메일 없음'}
+              </Text>
+              <Text
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                truncate
+              >
+                {driver.phone?.trim() ? (
+                  <a href={`tel:${driver.phone.trim()}`} style={{ color: 'inherit' }}>
+                    {formatPhone(driver.phone)}
+                  </a>
+                ) : (
+                  formatPhone(driver.phone)
+                )}{' '}
+                · 가입일 {formatJoinedDate(driver.createdAt)}
               </Text>
             </Box>
 
