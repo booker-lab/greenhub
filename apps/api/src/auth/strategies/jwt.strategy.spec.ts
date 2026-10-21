@@ -125,6 +125,14 @@ describe('JwtStrategy 세션 폐기 시각(sessionsRevokedAt)', () => {
     return { id: 'consumer-1', role: 'consumer', storeId: null, suspended: false, ...extra };
   }
 
+  it('탈퇴한 사용자 문서의 access token은 폐기 기록과 관계없이 401로 거부한다', async () => {
+    const { strategy } = makeStrategy(consumer({ withdrawnAt: revokedAt(1_000) }));
+
+    await expect(
+      strategy.validate({ sub: 'consumer-1', role: 'consumer', iat: 2_000 }),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
   it('폐기 기록이 없으면 iat와 관계없이 통과한다', async () => {
     const { strategy } = makeStrategy(consumer());
 

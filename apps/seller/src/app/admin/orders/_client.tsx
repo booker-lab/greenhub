@@ -2,29 +2,42 @@
 
 import type { PostDeliveryRefundReasonCode } from '@greenhub/shared';
 import { Box, Group, Text, Title } from '@mantine/core';
-import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useRef, useState } from 'react';
-import { type AdminOrder, useAdminOrders } from '@/hooks/useAdmin';
-import { describeAdminCommandOutcome, describeRefundRecovery } from '@/hooks/useAdmin';
+import {
+  type AdminOrder,
+  describeAdminCommandOutcome,
+  describeRefundRecovery,
+  useAdminOrders,
+  useAdminStores,
+} from '@/hooks/useAdmin';
+import { LoadMoreFooter } from '../_components/LoadMoreFooter';
 import { OrdersFilters } from './_components/OrdersFilters';
 import { OrdersTable } from './_components/OrdersTable';
 import { PostDeliveryRefundModal } from './_components/PostDeliveryRefundModal';
 import { RefundConfirmModal } from './_components/RefundConfirmModal';
-import { describeRefundTarget, normalizeRefundReason } from './_lib';
-
-/** 스토어 ID 입력이 멈춘 뒤 조회하기까지 기다리는 시간. 글자마다 재조회하지 않는다(정산 탭과 같은 값). */
-const STORE_FILTER_DEBOUNCE_MS = 300;
+import { buildStoreOptions, describeRefundTarget, normalizeRefundReason } from './_lib';
 
 export default function AdminOrdersClient() {
   const [storeFilter, setStoreFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  // 가게 ID는 글자마다 조회하지 않고 입력이 멈춘 뒤 조회한다(겹친 응답은 훅이 최신만 반영).
-  const [debouncedStoreFilter] = useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS);
-  const { orders, loading, error, reload, forceRefund, postDeliveryRefund } = useAdminOrders({
-    storeId: debouncedStoreFilter || undefined,
-    status: statusFilter || undefined,
-  });
+  // 가게는 판매자 목록에서 이름으로 고른다(겹친 응답은 훅이 최신만 반영).
+  const { stores } = useAdminStores();
+  const {
+    orders,
+    hasMore,
+    loading,
+    loadingMore,
+    error,
+    moreError,
+    reload,
+    loadMore,
+    forceRefund,
+    postDeliveryRefund,
+  } = useAdminOrders({
+      storeId: storeFilter || undefined,
+      status: statusFilter || undefined,
+    });
   const [refundTarget, setRefundTarget] = useState<AdminOrder | null>(null);
   const [refundReason, setRefundReason] = useState('');
   const [deliveredTarget, setDeliveredTarget] = useState<AdminOrder | null>(null);
@@ -104,7 +117,8 @@ export default function AdminOrdersClient() {
             component="span"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
-            ({orders.length})
+            ({orders.length}
+            {hasMore ? '+' : ''})
           </Text>
         </Title>
       </Group>
@@ -112,6 +126,7 @@ export default function AdminOrdersClient() {
       <OrdersFilters
         storeFilter={storeFilter}
         statusFilter={statusFilter}
+        storeOptions={buildStoreOptions(stores)}
         onStoreChange={setStoreFilter}
         onStatusChange={setStatusFilter}
       />
@@ -125,6 +140,15 @@ export default function AdminOrdersClient() {
         onPostDeliveryRefund={openDeliveredRefund}
         onRetry={reload}
       />
+
+      {error === null && !loading && (
+        <LoadMoreFooter
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          moreError={moreError}
+          onLoadMore={loadMore}
+        />
+      )}
 
       <RefundConfirmModal
         target={refundTarget}

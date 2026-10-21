@@ -112,11 +112,11 @@ test.describe('Admin - 판매자 검색·필터·정렬·수수료 회귀', () =
     await expect(page.getByText('초대 농원')).toHaveCount(0);
   });
 
-  test('정리됨 필터는 archived 판매자와 URL을 복원한다', async ({ page }) => {
+  test('치움 필터는 archived 판매자와 URL을 복원한다', async ({ page }) => {
     await openStores(page);
 
     await statusSelect(page).click();
-    await page.getByRole('option', { name: '정리됨', exact: true }).click();
+    await page.getByRole('option', { name: '치움', exact: true }).click();
 
     await expect(page).toHaveURL(/status=archived/);
     await expect(page.getByText('정리된 정원')).toHaveCount(2);

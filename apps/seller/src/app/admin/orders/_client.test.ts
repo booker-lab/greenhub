@@ -16,7 +16,7 @@ describe('AdminOrdersClient read recovery wiring', () => {
   it('useAdminOrders의 error/reload를 소비한다', () => {
     expect(source).toContain('useAdminOrders({');
     expect(source).toMatch(
-      /const\s*\{\s*orders,\s*loading,\s*error,\s*reload,\s*forceRefund(,\s*postDeliveryRefund)?\s*\}/,
+      /const\s*\{\s*orders,\s*hasMore,\s*loading,\s*loadingMore,\s*error,\s*moreError,\s*reload,\s*loadMore,\s*forceRefund,\s*postDeliveryRefund,?\s*\}/,
     );
   });
 
@@ -76,8 +76,15 @@ describe('AdminOrdersClient read recovery wiring', () => {
     expect(source).toContain('statusFilter={statusFilter}');
     expect(source).toContain('onStoreChange={setStoreFilter}');
     expect(source).toContain('onStatusChange={setStatusFilter}');
-    // 가게 ID는 입력이 멈춘 뒤의 값으로만 조회한다(글자마다 요청하지 않음).
-    expect(source).toContain('useDebouncedValue(storeFilter, STORE_FILTER_DEBOUNCE_MS)');
-    expect(source).toContain('storeId: debouncedStoreFilter || undefined');
+    // 가게는 ID 입력 대신 판매자 목록 이름으로 고른다.
+    expect(source).toContain('storeOptions={buildStoreOptions(stores)}');
+    expect(source).toContain('storeId: storeFilter || undefined');
+  });
+
+  it('서버가 더 있다고 알리면 더 보기로 이어 받는다(조회 실패 중에는 감춘다)', () => {
+    expect(source).toContain('<LoadMoreFooter');
+    expect(source).toContain('onLoadMore={loadMore}');
+    expect(source).toContain('moreError={moreError}');
+    expect(source).toContain('error === null && !loading');
   });
 });

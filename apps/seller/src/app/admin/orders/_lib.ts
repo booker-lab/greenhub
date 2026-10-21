@@ -93,7 +93,7 @@ export function buildStatusOptions(): { value: string; label: string }[] {
 // 주문번호가 없는 옛 주문은 목록처럼 줄이지 않고 전체 id를 보여 준다(오인 방지).
 export function describeRefundTarget(order: {
   id: string;
-  orderNumber?: string;
+  orderNumber?: string | null;
   totalAmount: number;
 }): { orderLabel: string; amountLabel: string } {
   return {
@@ -110,4 +110,56 @@ export const REFUND_REASON_MAX_LENGTH = 500;
 export function normalizeRefundReason(input: string): string | undefined {
   const reason = input.trim();
   return reason ? reason.slice(0, REFUND_REASON_MAX_LENGTH) : undefined;
+}
+
+// 주문일시 표기(KST, YYYY-MM-DD HH:mm). API는 ISO 문자열을, 옛 응답은 `{ _seconds }`를 줄 수 있다.
+export function formatOrderedAt(createdAt: unknown): string {
+  let millis: number | null = null;
+  if (typeof createdAt === 'string' && createdAt.trim() !== '') {
+    millis = new Date(createdAt).getTime();
+  } else if (createdAt && typeof createdAt === 'object' && '_seconds' in createdAt) {
+    const seconds = (createdAt as { _seconds: unknown })._seconds;
+    if (typeof seconds === 'number') millis = seconds * 1000;
+  }
+  if (millis === null || Number.isNaN(millis)) return '—';
+  const kst = new Date(millis + 9 * 60 * 60 * 1000);
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())} ${pad(
+    kst.getUTCHours(),
+  )}:${pad(kst.getUTCMinutes())}`;
+}
+
+// 취소 진행 상태 배지 — 환불이 진행 중이거나 실패해 사람이 봐야 하는 주문만 표시한다.
+// COMPLETED(취소 끝)와 값 없음은 배지를 그리지 않는다(상태 배지 '취소됨'으로 충분).
+const CANCELLATION_BADGE: Record<string, { label: string; color: string }> = {
+  REFUNDING: { label: '환불 진행 중', color: 'yellow' },
+  REFUND_FAILED: { label: '환불 실패', color: 'red' },
+  LOCAL_PENDING: { label: '취소 처리 중', color: 'yellow' },
+  LOCAL_FAILED: { label: '취소 마무리 실패', color: 'red' },
+};
+
+export function cancellationBadge(
+  status: string | null | undefined,
+): { label: string; color: string } | null {
+  return status ? (CANCELLATION_BADGE[status] ?? null) : null;
+}
+
+/** 가게 이름 — 이름이 없으면 id 앞자리로 대신한다. */
+export function storeLabel(order: { storeId: string; storeName?: string | null }): string {
+  return order.storeName?.trim() || `${order.storeId.slice(0, 8)}…`;
+}
+
+// 가게 선택 옵션 — '전체 가게' + 이름순. 치운 가게는 이름 뒤에 표시해 구분한다.
+export function buildStoreOptions(
+  stores: ReadonlyArray<{ id: string; name: string; status: string }>,
+): { value: string; label: string }[] {
+  const options = stores
+    .map((store) => ({
+      value: store.id,
+      label: `${store.name?.trim() || `(미설정) ${store.id.slice(0, 8)}`}${
+        store.status === 'archived' ? ' (치움)' : ''
+      }`,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
+  return [{ value: '', label: '전체 가게' }, ...options];
 }

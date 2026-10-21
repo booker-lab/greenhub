@@ -3,6 +3,7 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { FirestoreService } from '../../firestore/firestore.service';
+import { WITHDRAWN_ACCOUNT_MESSAGE, isWithdrawnUser } from '../account-withdrawal';
 import { ACTIVE_SESSION_IDS_FIELD } from '../refresh-sessions';
 import {
   isActiveAccessSession,
@@ -63,6 +64,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       (currentRole === 'driver' && user?.['driverApproved'] !== true)
     ) {
       throw new ForbiddenException('현재 사용자 권한과 일치하지 않는 인증 토큰입니다.');
+    }
+
+    // 탈퇴한 사용자 문서의 토큰은 세션 폐기 기록과 별개로 거부한다.
+    if (isWithdrawnUser(user)) {
+      throw new UnauthorizedException(WITHDRAWN_ACCOUNT_MESSAGE);
     }
 
     // 로그아웃·정지로 세션을 폐기한 시각 이전에 발급된 토큰은 만료 전이어도 받지 않는다.
