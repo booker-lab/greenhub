@@ -139,7 +139,7 @@ async function enrichRows(firestore: Firestore, rows: Row[]) {
       storeName: storeId ? (storeNames.get(storeId) ?? null) : null,
       recoveryRequired: row['recoveryRequired'] === true,
       recoveryAmount: typeof row['recoveryAmount'] === 'number' ? row['recoveryAmount'] : null,
-      holdReason: (held ? 'PROVIDER_REVERSAL' : null) as SettlementHoldReason | null,
+      holdReason: held ? ('PROVIDER_REVERSAL' satisfies SettlementHoldReason) : null,
       payoutAccount,
     };
   });

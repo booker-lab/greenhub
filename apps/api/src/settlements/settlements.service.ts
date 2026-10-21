@@ -298,7 +298,8 @@ export class SettlementsService {
             type: SETTLEMENT_RECOVERY_ISSUE_TYPE,
             severity: 'critical',
             title: '지급 후 환불 — 판매자 회수 필요',
-            message: `이미 판매자에게 지급한 정산의 주문이 환불됐습니다. 지급액 ${paidNet.toLocaleString('ko-KR')}원을 판매자에게서 돌려받아야 합니다. 관리자가 회수를 확인한 뒤 닫습니다.`,
+            message:
+              '이미 판매자에게 지급한 정산의 주문이 환불됐습니다. 지급한 금액(정산 화면의 회수 필요 금액)을 판매자에게서 돌려받아야 합니다. 관리자가 회수를 확인한 뒤 닫습니다.',
             idempotencyKey: `settlement-recovery:${orderId}`,
             latestSnapshot: {
               settlementStatus: 'paid',

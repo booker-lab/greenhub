@@ -862,7 +862,7 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
           idempotencyKey: `settlement-recovery:${orderId}`,
         }),
       );
-      expect(String(issues[0]['message'])).toContain('9,500원');
+      expect(String(issues[0]['message'])).toContain('돌려받아야');
       // 정산 갱신과 운영 기록 생성이 한 트랜잭션에서 함께 커밋된다.
       expect(firestore.transactionUpdates.map((write) => write.path)).toEqual([
         `settlements/${orderId}`,

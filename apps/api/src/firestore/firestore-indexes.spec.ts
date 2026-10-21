@@ -149,10 +149,10 @@ const QUERY_CONTRACTS: QueryContract[] = [
   },
   {
     id: 'admin-settlements-by-status-date-desc',
-    sourceFile: 'apps/api/src/admin/admin.service.ts',
+    sourceFile: 'apps/api/src/admin/_lib/admin-settlements-query.ts',
     sourcePatterns: [
-      'async getSettlements(dto: QueryAdminSettlementsDto)',
-      "query.where('status', '==', dto.status)",
+      'function filteredQuery(',
+      "query.where('status', '==', filter.status)",
       "query.orderBy('settledAt', 'desc')",
     ],
     collectionGroup: 'settlements',
@@ -164,11 +164,11 @@ const QUERY_CONTRACTS: QueryContract[] = [
   },
   {
     id: 'admin-settlements-by-store-status-date-desc',
-    sourceFile: 'apps/api/src/admin/admin.service.ts',
+    sourceFile: 'apps/api/src/admin/_lib/admin-settlements-query.ts',
     sourcePatterns: [
-      'async getSettlements(dto: QueryAdminSettlementsDto)',
-      "query.where('storeId', '==', dto.storeId)",
-      "query.where('status', '==', dto.status)",
+      'function filteredQuery(',
+      "query.where('storeId', '==', filter.storeId)",
+      "query.where('status', '==', filter.status)",
       "query.orderBy('settledAt', 'desc')",
     ],
     collectionGroup: 'settlements',
