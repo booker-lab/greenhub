@@ -11,6 +11,8 @@ interface ConfirmModalProps {
   cancelLabel?: string;
   confirmColor?: string;
   loading?: boolean;
+  /** 확인 버튼만 잠근다(필수 입력 전 등). 처리 중 표시는 loading이 담당한다. */
+  confirmDisabled?: boolean;
   onConfirm: () => void | Promise<void>;
   onClose: () => void;
 }
@@ -23,6 +25,7 @@ export function ConfirmModal({
   cancelLabel = '취소',
   confirmColor = 'red',
   loading = false,
+  confirmDisabled = false,
   onConfirm,
   onClose,
 }: ConfirmModalProps) {
@@ -51,7 +54,7 @@ export function ConfirmModal({
         <Group gap="xs">
           <Button
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || confirmDisabled}
             flex={1}
             color={confirmColor}
             radius="xl"
