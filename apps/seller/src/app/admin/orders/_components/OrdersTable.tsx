@@ -2,7 +2,15 @@
 
 import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 import type { AdminOrder } from '@/hooks/useAdmin';
-import { getAdminOrdersReadState, getStatusColor, isRefundable, STATUS_LABEL } from '../_lib';
+import {
+  cancellationBadge,
+  formatOrderedAt,
+  getAdminOrdersReadState,
+  getStatusColor,
+  isRefundable,
+  STATUS_LABEL,
+  storeLabel,
+} from '../_lib';
 
 interface OrdersTableProps {
   orders: AdminOrder[];
@@ -34,6 +42,37 @@ export function RequestNote({ note }: { note?: string | null }) {
       }}
     >
       요청: {text}
+    </Text>
+  );
+}
+
+const metaText = {
+  fontSize: 'var(--font-size-sm)',
+  color: 'var(--color-text-secondary)',
+};
+
+// 상태 배지 + 취소 진행 배지(환불 진행 중·실패) — 표·카드 공용.
+export function StatusBadges({ order }: { order: AdminOrder }) {
+  const cancel = cancellationBadge(order.cancellationStatus);
+  return (
+    <Group gap={4} wrap="wrap">
+      <Badge color={getStatusColor(order.status)} variant="light" radius="xl">
+        {STATUS_LABEL[order.status] ?? order.status}
+      </Badge>
+      {cancel && (
+        <Badge color={cancel.color} variant="outline" radius="xl">
+          {cancel.label}
+        </Badge>
+      )}
+    </Group>
+  );
+}
+
+// 고객 이름 · 상품 요약 — 표·카드 공용. 고객 전화·주소는 목록에 싣지 않는다.
+export function BuyerAndProduct({ order }: { order: AdminOrder }) {
+  return (
+    <Text style={metaText}>
+      {order.buyerName?.trim() || '—'} · {order.productSummary?.trim() || '—'}
     </Text>
   );
 }
@@ -125,20 +164,12 @@ export function OrdersTable({
               >
                 {order.orderNumber ?? `${order.id.slice(0, 12)}…`}
               </Text>
-              <Badge color={getStatusColor(order.status)} variant="light" radius="xl">
-                {STATUS_LABEL[order.status] ?? order.status}
-              </Badge>
+              <StatusBadges order={order} />
             </Group>
-            <Text
-              style={{
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-text-disabled)',
-              }}
-              ff="monospace"
-              mb={4}
-            >
-              스토어 {order.storeId.slice(0, 8)}…
+            <Text style={metaText} mb={2}>
+              {formatOrderedAt(order.createdAt)} · {storeLabel(order)}
             </Text>
+            <BuyerAndProduct order={order} />
             <RequestNote note={order.requestNote} />
             <Group justify="space-between" align="center" mt="xs">
               <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
@@ -181,10 +212,16 @@ export function OrdersTable({
           >
             <tr>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                주문ID
+                주문일시
               </Box>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                스토어
+                주문번호
+              </Box>
+              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
+                고객 · 상품
+              </Box>
+              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
+                가게
               </Box>
               <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
                 상태
@@ -202,6 +239,9 @@ export function OrdersTable({
                 key={order.id}
                 style={{ borderTop: '1px solid var(--color-border)' }}
               >
+                <Box component="td" style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                  <Text style={metaText}>{formatOrderedAt(order.createdAt)}</Text>
+                </Box>
                 <Box component="td" style={{ padding: '12px 16px' }}>
                   <Text
                     style={{
@@ -215,20 +255,13 @@ export function OrdersTable({
                   <RequestNote note={order.requestNote} />
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-disabled)',
-                    }}
-                    ff="monospace"
-                  >
-                    {order.storeId.slice(0, 8)}…
-                  </Text>
+                  <BuyerAndProduct order={order} />
                 </Box>
                 <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Badge color={getStatusColor(order.status)} variant="light" radius="xl">
-                    {STATUS_LABEL[order.status] ?? order.status}
-                  </Badge>
+                  <Text style={metaText}>{storeLabel(order)}</Text>
+                </Box>
+                <Box component="td" style={{ padding: '12px 16px' }}>
+                  <StatusBadges order={order} />
                 </Box>
                 <Box
                   component="td"

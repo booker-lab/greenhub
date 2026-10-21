@@ -2,7 +2,8 @@
 
 import { apiJson } from '@/lib/api';
 import type { AdminCommandOutcome } from './useAdmin.outcome';
-import { pick, runAdminCommand, useAdminList } from './useAdmin.list';
+import { pick, runAdminCommand, useAdminList, withQuery } from './useAdmin.list';
+import { useAdminPagedList } from './useAdmin.paged';
 import type { AdminDriver, AdminReconciliation, AdminStore, AdminUser } from './useAdmin.types';
 
 // ── Stores ───────────────────────────────────────────────────────
@@ -85,13 +86,17 @@ export function useAdminUsers() {
 export function useAdminDrivers() {
   const {
     items: drivers,
+    hasMore,
     loading,
+    loadingMore,
     error,
+    moreError,
     reload,
+    loadMore,
     token,
-  } = useAdminList<AdminDriver>(
-    () => '/admin/drivers',
-    pick<AdminDriver>('drivers'),
+  } = useAdminPagedList<AdminDriver>(
+    (cursor) => withQuery('/admin/drivers', { cursor: cursor ?? undefined }),
+    'drivers',
     '드라이버 목록',
   );
 
@@ -115,5 +120,16 @@ export function useAdminDrivers() {
     );
   };
 
-  return { drivers, loading, error, reload, approve, toggleSuspend };
+  return {
+    drivers,
+    hasMore,
+    loading,
+    loadingMore,
+    error,
+    moreError,
+    reload,
+    loadMore,
+    approve,
+    toggleSuspend,
+  };
 }

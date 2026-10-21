@@ -10,6 +10,7 @@ import { ApiError, apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import { AdminFetchError } from '../_components/AdminFetchError';
 import { HiddenReviewCard } from './_components/HiddenReviewCard';
+import { UnhideConfirmModal } from './_components/UnhideConfirmModal';
 
 // 판매자·관리자가 숨긴 후기 목록. 숨김 해제는 관리자만 이 화면에서 한다.
 
@@ -20,6 +21,9 @@ export default function AdminReviewsPage() {
   const [items, setItems] = useState<AdminHiddenReview[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  // 숨김 해제 확인창 대상과 선택 사유.
+  const [confirmTarget, setConfirmTarget] = useState<AdminHiddenReview | null>(null);
+  const [unhideReason, setUnhideReason] = useState('');
   // 조회 실패는 빈 목록("숨긴 후기가 없어요")과 구분해 실패 화면 + 다시 조회로 보여 준다.
   const [loadFailed, setLoadFailed] = useState(false);
 
@@ -38,15 +42,21 @@ export default function AdminReviewsPage() {
     load();
   }, [load]);
 
-  const unhide = async (review: AdminHiddenReview) => {
-    if (!token) return;
-    if (!window.confirm('이 후기를 다시 고객에게 보이고 별점에 넣을까요?')) return;
+  const askUnhide = (review: AdminHiddenReview) => {
+    setUnhideReason('');
+    setConfirmTarget(review);
+  };
+
+  const unhide = async () => {
+    const review = confirmTarget;
+    if (!token || !review) return;
     setBusyId(review.id);
     setErrors(({ [review.id]: _old, ...rest }) => rest);
+    const reason = unhideReason.trim();
     try {
       await apiJson(`/admin/reviews/${encodeURIComponent(review.id)}/unhide`, token, {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify(reason ? { reason } : {}),
       });
       setItems((current) => (current ? current.filter((item) => item.id !== review.id) : current));
     } catch (failure) {
@@ -55,6 +65,7 @@ export default function AdminReviewsPage() {
       setErrors((current) => ({ ...current, [review.id]: message }));
     } finally {
       setBusyId(null);
+      setConfirmTarget(null);
     }
   };
 
@@ -82,10 +93,20 @@ export default function AdminReviewsPage() {
             review={review}
             busy={busyId === review.id}
             error={errors[review.id] ?? null}
-            onUnhide={() => unhide(review)}
+            onUnhide={() => askUnhide(review)}
           />
         ))
       )}
+      <UnhideConfirmModal
+        target={confirmTarget}
+        reason={unhideReason}
+        onReasonChange={setUnhideReason}
+        busy={busyId !== null}
+        onConfirm={unhide}
+        onClose={() => {
+          if (busyId === null) setConfirmTarget(null);
+        }}
+      />
     </Stack>
   );
 }

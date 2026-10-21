@@ -16,7 +16,7 @@
 //
 // Deliberately NOT a full Firestore reimplementation: queries support the
 // operators production code uses (==, <, <=, >, >=, in), FieldValue supports
-// the increment sentinel shapes used in tests, and transaction.get supports
+// the increment/delete sentinel shapes used in tests, and transaction.get supports
 // document refs (primary production shape) plus collection queries.
 //
 // Concurrent runTransaction calls are NOT globally serialized: that is the
@@ -99,6 +99,13 @@ function incrementOf(value: unknown): number | null {
   return null;
 }
 
+// FieldValue.delete() sentinel: update/merge-set에서 해당 필드를 지운다.
+function isDeleteField(value: unknown): boolean {
+  return (
+    !!value && typeof value === 'object' && (value as Record<string, unknown>)['__op'] === 'delete'
+  );
+}
+
 function applyPatch(current: OccData, patch: OccData): OccData {
   const next = clone(current);
   for (const [path, rawValue] of Object.entries(patch)) {
@@ -109,6 +116,10 @@ function applyPatch(current: OccData, patch: OccData): OccData {
       const child = target[key];
       target[key] = child && typeof child === 'object' ? clone(child as OccData) : {};
       target = target[key] as OccData;
+    }
+    if (isDeleteField(rawValue)) {
+      delete target[leaf];
+      continue;
     }
     const increment = incrementOf(rawValue);
     target[leaf] =
@@ -347,9 +358,11 @@ export function createOccFirestore(options: { maxAttempts?: number } = {}) {
     Timestamp: {
       now: () => new Date(),
       fromDate: (value: Date) => new Date(value.getTime()),
+      fromMillis: (value: number) => new Date(value),
     },
     FieldValue: {
       increment: (value: number) => ({ __op: 'increment', value }),
+      delete: () => ({ __op: 'delete' }),
     },
   };
 

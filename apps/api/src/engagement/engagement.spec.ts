@@ -81,10 +81,24 @@ describe('후기(벤치마킹 비교 기능)', () => {
   });
 });
 
+/** 실제 AuditService.logAdmin과 같은 경로(adminAuditLogs)에 같은 트랜잭션으로 쓰는 테스트용 기록기. */
+function auditOf(firestore: { doc: (path: string) => unknown }) {
+  let seq = 0;
+  return {
+    logAdmin: jest.fn(async (entry: Record<string, unknown>, tx?: { set: (ref: unknown, data: unknown) => void }) => {
+      seq += 1;
+      const ref = firestore.doc(`adminAuditLogs/log-${seq}`);
+      const record = { before: null, after: null, ...entry };
+      if (tx) tx.set(ref, record);
+      else await (ref as { set: (data: unknown) => Promise<void> }).set(record);
+    }),
+  };
+}
+
 describe('다음 회차 알림·찾는 상품·입점 문의(벤치마킹 비교 기능)', () => {
   it('공개 상품만 알림 신청하며, 판매자는 신청 수를 모아 본다', async () => {
     const { firestore } = createMemoryFirestore(BASE);
-    const service = new EngagementService(firestore as never);
+    const service = new EngagementService(firestore as never, auditOf(firestore) as never);
     await expect(service.subscribeRestock('user-1', 'product-hidden')).rejects.toBeInstanceOf(NotFoundException);
 
     await service.subscribeRestock('user-1', 'product-1');
@@ -100,7 +114,7 @@ describe('다음 회차 알림·찾는 상품·입점 문의(벤치마킹 비교
 
   it('찾는 상품은 이름 한 줄만, 입점 문의는 파기 예정 시각과 함께 저장한다', async () => {
     const { firestore, records } = createMemoryFirestore(BASE);
-    const service = new EngagementService(firestore as never);
+    const service = new EngagementService(firestore as never, auditOf(firestore) as never);
     await service.createProductRequest('store-1', ' 덴드로비움\n 흰색 ');
     const requests = await service.listProductRequests('store-1', 'seller-1', 'seller');
     expect(requests.map((r) => r.text)).toEqual(['덴드로비움 흰색']);
@@ -123,7 +137,7 @@ describe('다음 회차 알림·찾는 상품·입점 문의(벤치마킹 비교
       'partnerInquiries/fresh': { id: 'fresh', deleteAfter: new Date('2027-12-31T00:00:00Z') },
       'partnerInquiries/unknown': { id: 'unknown' },
     });
-    const service = new EngagementService(firestore as never);
+    const service = new EngagementService(firestore as never, auditOf(firestore) as never);
     expect(await service.purgeExpiredPartnerInquiries(new Date('2026-10-17T00:00:00Z'))).toEqual({
       deleted: 1,
       skipped: 1,
@@ -131,5 +145,66 @@ describe('다음 회차 알림·찾는 상품·입점 문의(벤치마킹 비교
     expect(records.has('partnerInquiries/old')).toBe(false);
     expect(records.has('partnerInquiries/fresh')).toBe(true);
     expect(records.has('partnerInquiries/unknown')).toBe(true);
+  });
+
+  it('관리자 연락함 표시는 상태만 바꾸고, 행동 기록에 연락처·내용을 넣지 않는다', async () => {
+    const { firestore, records } = createMemoryFirestore({
+      'partnerInquiries/inq-1': {
+        id: 'inq-1',
+        farmName: '초록농원',
+        region: '경기 용인',
+        contact: '010-1234-5678',
+        message: '호접란을 함께 팔고 싶어요.',
+        createdAt: '2026-10-01T00:00:00.000Z',
+      },
+    });
+    const service = new EngagementService(firestore as never, auditOf(firestore) as never);
+    expect((await service.listPartnerInquiries())[0].contactedAt).toBeNull();
+
+    const marked = await service.setPartnerInquiryContacted('inq-1', true, 'admin-1');
+    expect(marked.contactedAt).toEqual(expect.any(String));
+    expect((await service.listPartnerInquiries())[0].contactedAt).toBe(marked.contactedAt);
+    expect(records.get('partnerInquiries/inq-1')).toMatchObject({ contactedBy: 'admin-1', contact: '010-1234-5678' });
+
+    await service.setPartnerInquiryContacted('inq-1', false, 'admin-1');
+    expect((await service.listPartnerInquiries())[0].contactedAt).toBeNull();
+
+    const logs = Array.from(records.entries()).filter(([path]) => path.startsWith('adminAuditLogs/'));
+    expect(logs.map(([, log]) => [log['action'], log['before'], log['after']])).toEqual([
+      ['admin.partner_inquiry.contacted', { contacted: false }, { contacted: true }],
+      ['admin.partner_inquiry.contacted', { contacted: true }, { contacted: false }],
+    ]);
+    expect(JSON.stringify(logs)).not.toContain('010-1234-5678');
+    expect(JSON.stringify(logs)).not.toContain('호접란');
+
+    await expect(service.setPartnerInquiryContacted('missing', true, 'admin-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('관리자 삭제는 문서를 지우고 ID만 기록하며, 없는 문의·경로 ID는 404이고 기록을 남기지 않는다', async () => {
+    const { firestore, records } = createMemoryFirestore({
+      'partnerInquiries/inq-1': { id: 'inq-1', contact: 'farm@example.test', message: '연락 주세요' },
+    });
+    const audit = auditOf(firestore);
+    const service = new EngagementService(firestore as never, audit as never);
+
+    expect(await service.deletePartnerInquiry('inq-1', 'admin-1')).toEqual({ id: 'inq-1' });
+    expect(records.has('partnerInquiries/inq-1')).toBe(false);
+    const logs = Array.from(records.entries()).filter(([path]) => path.startsWith('adminAuditLogs/'));
+    expect(logs).toHaveLength(1);
+    expect(logs[0][1]).toMatchObject({
+      action: 'admin.partner_inquiry.deleted',
+      actorId: 'admin-1',
+      targetType: 'partner_inquiry',
+      targetId: 'inq-1',
+      before: null,
+      after: null,
+    });
+    expect(JSON.stringify(logs)).not.toContain('farm@example.test');
+
+    await expect(service.deletePartnerInquiry('inq-1', 'admin-1')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.deletePartnerInquiry('a/b', 'admin-1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(audit.logAdmin).toHaveBeenCalledTimes(1);
   });
 });
