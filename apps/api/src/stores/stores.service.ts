@@ -19,6 +19,7 @@ import {
   STORE_PROFILE_EXTRA_FIELDS,
 } from './dto/store-profile-extras.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
+import { isArchivedStore } from './store-availability';
 import { isAllowedStoreLogoUrl, type StoreLogoUrlPolicy } from './store-logo-url';
 
 const STORE_LOGO_URL_MESSAGE = 'logoUrl은 판매자 앱에서 올린 로고 이미지 주소만 사용할 수 있습니다';
@@ -72,7 +73,10 @@ export class StoresService {
    */
   async getPublicProfile(storeId: string) {
     const snap = await this.firestore.doc(`stores/${storeId}`).get();
-    if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다');
+    // 치운(archived) 가게는 없는 가게와 같은 404로 숨긴다(상태 값은 드러내지 않음).
+    if (!snap.exists || isArchivedStore(snap.data())) {
+      throw new NotFoundException('스토어를 찾을 수 없습니다');
+    }
     const data = snap.data()!;
     const salesMode = normalizeSalesMode(
       data.salesMode === 'round_direct' ? 'round_direct' : undefined,

@@ -14,6 +14,22 @@ export class PublicStoreProfileNotFoundError extends Error {
   }
 }
 
+/**
+ * 가게 프로필을 못 받은 이유. 404(관리자가 치운 가게·없는 가게)는 다시 시도해도 같으므로
+ * 일시 오류('error')와 나눠 '지금은 둘러볼 수 없는 가게'로 안내한다.
+ */
+export type StoreProfileFailure = 'error' | 'unavailable';
+
+export function classifyStoreProfileFailure(error: unknown): StoreProfileFailure {
+  return error instanceof PublicStoreProfileNotFoundError ? 'unavailable' : 'error';
+}
+
+export function storeProfileFailureMessage(failure: StoreProfileFailure): string {
+  return failure === 'unavailable'
+    ? '지금은 둘러볼 수 없는 가게예요.'
+    : '판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
 // 판매 방식·이름·로고는 자주 바뀌지 않는다. 한 화면 안의 하단 메뉴·목록·상품 화면이 같은
 // 프로필을 함께 쓰도록 잠깐 공유한다.
 const PROFILE_SHARE_MS = 60_000;

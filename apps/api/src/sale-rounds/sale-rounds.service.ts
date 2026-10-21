@@ -20,6 +20,7 @@ import {
   timestampMillis,
 } from './sale-round-state.contract';
 import { SaleRoundStateService } from './sale-round-state.service';
+import { isArchivedStore } from '../stores/store-availability';
 
 type RoundWithItems = SaleRound & { items: SaleRoundItem[] };
 
@@ -628,7 +629,12 @@ export class SaleRoundsService {
   }
   private async assertPublicRoundStore(storeId: string): Promise<Record<string, unknown>> {
     const snap = await this.firestore.doc(`stores/${storeId}`).get();
-    if (!snap.exists || snap.data()?.['salesMode'] !== 'round_direct') {
+    // 치운(archived) 가게의 회차도 손님에게 보이지 않는다.
+    if (
+      !snap.exists ||
+      snap.data()?.['salesMode'] !== 'round_direct' ||
+      isArchivedStore(snap.data())
+    ) {
       throw new NotFoundException('공개 회차를 찾을 수 없습니다.');
     }
     return snap.data() ?? {};

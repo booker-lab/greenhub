@@ -345,9 +345,23 @@ PATCH  /auth/me/addresses/:addressId/default
 PATCH  /auth/me/fcm-token
 GET    /auth/firebase-token
 POST   /auth/logout
+DELETE /auth/me
 ```
 
 모두 `JwtAuthGuard`가 적용된다. `firebase-token`은 JWT 인증이 필요하고, 서명 검증된 access token의 사용자(`sub`) 단위로 1분 60회 throttle이 걸린다(`FIREBASE_TOKEN_THROTTLE`, `apps/api/src/auth/auth.controller.ts`, #488). 또 Firebase 클라이언트를 쓰는 `seller`·`driver`·`admin`만 받는다(`consumer`는 403).
+
+### 소비자 회원 탈퇴 (`DELETE /auth/me`)
+
+2026-10-20 사용자 결정: 진행 중인 주문이 있으면 탈퇴를 막고, 탈퇴하면 개인정보를 바로 지우며 같은 카카오 계정으로 바로 다시 가입할 수 있다. 판정 목록은 `apps/api/src/auth/account-withdrawal.ts`가 소유한다.
+
+- `consumer`만 받는다(`RolesGuard`·서비스 양쪽에서 `seller`·`driver`·`admin`은 403). 1분 10회 throttle. 성공은 204.
+- 409(진행 중 주문): `orders.where('userId','==',uid)`·`checkoutReservations.where('userId','==',uid)`를 트랜잭션 안에서 읽어 메모리에서 거른다(단일 필드 동등 조건이라 새 인덱스 없음). 막는 조건은 상태 `CANCELLABLE_ORDER_STATUSES`(PENDING·ACCEPTED·RECRUITING·CONFIRMED·PREPARING·DELIVERY_HELD) + DELIVERING·HUB_ARRIVED, 취소 진행 중(`isOrderCancellationInProgress`), 재배송비 미결제(`isCurrentRedeliveryPaymentRequired`), 만료 전 `HELD` 결제 예약이다.
+- 한 트랜잭션: `revokeAllSessionsInTransaction`(refresh 문서 삭제·`activeSessionIds` 비움·`sessionsRevokedAt`), 사용자 문서의 `name`·`phone`·`email`·`savedAddresses`·`fcmToken`·`kakaoId`·`passwordHash`·`notificationPreferences` 필드 삭제와 `withdrawnAt` 기록(주문·결제가 uid를 참조하므로 문서는 남김), 이 사용자에게 연결된 `kakaoIdentities/{kakaoId}`·`emailIdentities/{key}` 삭제. 연결 문서와 `kakaoId`가 없으므로 같은 카카오로 다시 로그인하면 새 사용자 문서가 만들어진다.
+- 트랜잭션 뒤: 그 사용자의 `restockSubscriptions`·`notifications`·`aiUsage` 문서 삭제(실패해도 탈퇴는 되돌리지 않고 error 로그). 주문(이름·전화·주소 스냅샷 포함)·결제·후기(작성 시 가려진 이름)·법정 보관 기록은 전자상거래법 보관 대상이라 남긴다.
+- 카카오 연결 끊기: `KakaoClient.unlinkUser`가 Admin Key(`KAKAO_ADMIN_KEY`, 선택·운영에서 없으면 시작 시 경고)로 `POST /v1/user/unlink`(`target_id_type=user_id`)를 부른다. 키가 없거나 실패해도 탈퇴는 성공하고, 사용자 식별자 없는 고정 문구 운영 알림(`OpsAlertService`, 30분 중복 억제)만 보낸다.
+- 감사 기록: `auditLogs`에 `auth.withdrawn`(`detail.kakaoUnlink` = `unlinked`·`not_configured`·`failed`·`not_linked`).
+- 탈퇴한 문서(`withdrawnAt` 있음)는 `JwtStrategy`(401)·`getAuthoritativeUser`(refresh·session·firebase-token, 401)가 거부하고, 이메일·카카오 조회 필드가 지워져 로그인으로도 찾을 수 없다. 어드민 소비자 목록(`GET /admin/users`)에서는 빠진다.
+- 직접 근거: `apps/api/src/auth/auth.withdraw.spec.ts`, `apps/api/src/auth/kakao.client.spec.ts` `회원 탈퇴 연결 끊기`, `apps/api/src/auth/strategies/jwt.strategy.spec.ts`, `apps/api/src/admin/admin.service.spec.ts` `소비자 목록`.
 
 ## 8. 사용자 프로필 공통 타입
 
@@ -464,6 +478,7 @@ interface SavedAddress {
 | 날짜 | 내용 |
 |---|---|
 | 2026-10-21 | 운영의 새 판매자 가입을 "관리자 초대 링크 → 카카오 로그인"으로 결정: `kakao-login`의 `inviteToken`, 사용자 생성 트랜잭션 안 초대 재판정·소모, 인증된 카카오 이메일만 받는 사람 대조, 다른 역할 기존 계정 409 `kakao_account_in_use`, 판매자 앱 `/invite/[token]`·`/login/error` |
+| 2026-10-21 | 소비자 회원 탈퇴 `DELETE /auth/me`(W5): 진행 중 주문·결제 예약 409, 세션 폐기·개인정보 필드 삭제·`withdrawnAt`·연결 문서 삭제 한 트랜잭션, 부속 기록 정리, 카카오 Admin Key 연결 끊기(실패해도 성공·운영 알림), `auth.withdrawn` 감사, 탈퇴 문서의 토큰·refresh 거부 |
 | 2026-10-18 | 운영 런타임의 이메일 `login`·`register`를 모두 403으로 거부(계정·초대 조회 전, 판매자 초대 가입만 받던 2026-10-10 결정을 대체). 운영이 아닌 런타임은 그대로 |
 | 2026-10-15 | 기기별 refresh 세션(#526): 로그인마다 `sid`, `refreshTokens/{sub}.sessions`·`users.activeSessionIds`(최대 10개, LRU 축출), 세션별 회전·유예, 재사용 감지 시 전 세션 폐기, `sid` 로그아웃은 그 세션만 폐기, `JwtStrategy`의 `activeSessionIds` 확인, `sid` 없는 이전 refresh 401. 단일 문서 다기기 한계 해소 |
 | 2026-10-12 | logout·관리자 정지의 `sessionsRevokedAt` 기록과 access token `iat` 비교, 정지 시 refresh 기록·Firebase 세션 폐기, refresh token 해시 저장(원문 기록 자동 전환), 운영 이메일 가입을 판매자 초대로 제한, `emailIdentities` 이메일 가입 단일화, fcm-token·배송지 입력 상한과 배송지 트랜잭션 반영 |

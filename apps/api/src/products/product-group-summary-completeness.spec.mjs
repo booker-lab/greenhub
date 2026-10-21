@@ -14,7 +14,7 @@ function loadSource(name) {
     .replace(/^export\s+/gm, '');
 }
 const ProductsService = new Function(
-  `${loadSource('./product-visibility.ts')}\n${loadSource('./products.service.ts')}\nreturn ProductsService;`,
+  `${loadSource('../stores/store-availability.ts')}\n${loadSource('./product-visibility.ts')}\n${loadSource('./products.service.ts')}\nreturn ProductsService;`,
 )();
 
 function fakeFirestore(products, configs) {
@@ -44,6 +44,11 @@ function fakeFirestore(products, configs) {
     collection(name) {
       assert.ok(Object.hasOwn(collections, name), `unexpected collection: ${name}`);
       return query(name);
+    },
+    // 치운 가게 확인용 가게 문서 읽기. 이 검사의 가게는 모두 운영 중으로 둔다.
+    doc(path) {
+      assert.ok(path.startsWith('stores/'), `unexpected doc: ${path}`);
+      return { async get() { return { exists: true, data: () => ({ status: 'active' }) }; } };
     },
   };
 }
