@@ -14,6 +14,7 @@ import { CancelOrderModal } from './_components/CancelOrderModal';
 import { DeliveryHoldModal } from './_components/DeliveryHoldModal';
 import { OrderInfoSection } from './_components/OrderInfoSection';
 import { OrderOperationsSection } from './_components/OrderOperationsSection';
+import { PostDeliveryRefundSection } from './_components/PostDeliveryRefundSection';
 import { PrepareForm } from './_components/PrepareForm';
 import { useOrderDetail } from './_hooks/useOrderDetail';
 import { useOrderDetailActions } from './_hooks/useOrderDetailActions';
@@ -343,13 +344,12 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
           )}
 
           {isReadonly && order.status !== 'CANCELLED' && (
-            <Text
-              ta="center"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              py="xs"
-            >
-              발송 이후 단계입니다. 취소가 필요한 경우 소비자 반품 신청을 통해 처리됩니다.
-            </Text>
+            <PostDeliveryRefundSection
+              storeId={storeId}
+              orderId={orderId}
+              status={order.status}
+              onRefunded={handleReconciled}
+            />
           )}
         </Stack>
       </Container>
