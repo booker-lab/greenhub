@@ -1,5 +1,15 @@
 type OrderRecord = Record<string, unknown>;
 
+// 판매자·소비자·회차 취소가 시작될 수 있는 주문 상태. 로컬 취소 확정도 같은 상태에서만 한다.
+export const CANCELLABLE_ORDER_STATUSES: readonly string[] = [
+  'PENDING',
+  'ACCEPTED',
+  'RECRUITING',
+  'CONFIRMED',
+  'PREPARING',
+  'DELIVERY_HELD',
+];
+
 /**
  * 주문 취소가 시작됐지만 아직 COMPLETED로 끝나지 않은 `cancellation.status` 값.
  * 이 상태의 주문은 취소 orchestration이 상태·환불·재고를 소유하므로 배송 전이나

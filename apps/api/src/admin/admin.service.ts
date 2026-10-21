@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type * as admin from 'firebase-admin';
+import { isWithdrawnUser } from '../auth/account-withdrawal';
 import { normalizeEmail } from '../auth/email-identity';
 import {
   INVITE_NOT_FOUND_MESSAGE,
@@ -224,9 +225,11 @@ export class AdminService {
         .orderBy('createdAt', 'desc') as any
     ).get();
 
+    // 탈퇴한 소비자(개인정보를 지운 문서)는 목록에서 뺀다. 문서는 주문·결제 참조 때문에 남아 있다.
+    const active = snap.docs.filter((d: any) => !isWithdrawnUser(d.data()));
     return {
-      users: snap.docs.map((d: any) => pickListFields(d.data(), ADMIN_USER_LIST_FIELDS)),
-      total: snap.size,
+      users: active.map((d: any) => pickListFields(d.data(), ADMIN_USER_LIST_FIELDS)),
+      total: active.length,
     };
   }
 
