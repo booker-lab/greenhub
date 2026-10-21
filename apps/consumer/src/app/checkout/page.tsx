@@ -34,7 +34,10 @@ import {
   readBrowserPaymentContext,
   savePendingOrderPayment,
 } from '@/lib/payment-redirect';
-import { readPortonePaymentConfiguration } from '@/lib/portone-config';
+import {
+  buildPortonePayMethodRequest,
+  readPortonePaymentConfiguration,
+} from '@/lib/portone-config';
 import CheckoutForm from './_components/CheckoutForm';
 import { EMPTY_GIFT, type GiftState, giftPayload } from '@/components/benchmark/GiftFields';
 import { isFeatureOn } from '@/lib/features';
@@ -256,6 +259,7 @@ function SingleCheckoutContent() {
     orderRequest,
     accessToken: session?.user?.accessToken ?? '',
     paymentMethod,
+    buyer: { name: session?.user?.name, phone: deliveryPhone.trim() },
   });
 
   if (state === 'done' && orderId) {
@@ -407,8 +411,10 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
           totalAmount: portonePaymentParams.amount,
           currency: 'KRW' as const,
           channelKey: configuration.channelKey,
-          payMethod: 'EASY_PAY',
-          easyPay: { easyPayProvider: configuration.easyPayProvider },
+          ...buildPortonePayMethodRequest(configuration.paymentMethod, {
+            name: session?.user?.name,
+            phone: deliveryPhone.trim(),
+          }),
           ...(redirectUrl ? { redirectUrl } : {}),
         });
       } finally {
@@ -504,6 +510,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     roundItems: cartItems,
     accessToken: session?.user?.accessToken ?? '',
     paymentMethod,
+    buyer: { name: session?.user?.name, phone: deliveryPhone.trim() },
   });
 
   useEffect(() => {

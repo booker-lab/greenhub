@@ -35,6 +35,18 @@
 
 client channel/store 설정은 각 frontend 환경의 현재 코드를 따른다. 실제 결제 수단의 계약·심사·활성화 상태는 외부 상태이므로 이 spec에 “현재 승인됨/대기 중”으로 고정하지 않는다. 결제 수단을 변경하는 작업은 PortOne 콘솔과 대상 환경을 직접 재조회한다.
 
+소비자 앱 결제수단과 채널 키(공개값):
+
+| 결제수단 | 공개 채널 키 env | 결제창 파라미터 |
+|---|---|---|
+| 카카오페이 | `NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY` | `payMethod: 'EASY_PAY'`, `easyPayProvider: 'KAKAOPAY'` |
+| 네이버페이 | `NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY` | `payMethod: 'EASY_PAY'`, `easyPayProvider: 'NAVERPAY'` |
+| 카드(토스페이먼츠) | `NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY` | `payMethod: 'CARD'`, 구매자 이름·전화(`customer`) |
+
+키가 비어 있는 결제수단은 결제 화면과 재배송비 결제에서 선택지로 보이지 않는다(카카오페이는 기본 결제수단). 모든 채널은 `NEXT_PUBLIC_PORTONE_STORE_ID`와 같은 PortOne 상점에 있어야 한다. 서버는 결제수단을 검증하지 않고 PortOne 재조회 결과의 상태·금액으로 확정한다.
+
+열린 PR #540(결제 확정 시 채널 유형·통화 검증)이 병합되면 운영 카드 채널도 LIVE 채널이고 같은 상점이어야 한다. TEST 채널 키가 운영에 남아 있으면 그 카드 결제는 확정되지 않는다.
+
 비밀값 원문은 문서·로그·Git에 기록하지 않는다.
 
 ## 3. 본 결제 식별자와 기록
@@ -432,6 +444,7 @@ export interface Payment {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-21 | 소비자 앱에 토스페이먼츠 카드 결제(`NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY`, `payMethod: 'CARD'`)를 추가하고 결제수단별 채널 키와 #540 병합 뒤 운영 카드 채널 LIVE·같은 상점 조건을 명시 |
 | 2026-10-18 | 본 결제 확정과 재배송비 결제 확정에 PortOne 상점·통화·채널 검증을 반영(운영은 LIVE·KRW 필수, 본 결제 불일치는 금액 불일치와 같은 환불·취소, 재배송비는 `400`) |
 | 2026-10-10 | 웹훅 거절 로그 집계, 결제사 취소·분쟁 운영 기록, PENDING 정리 cron 동시성, PortOne 시간 상한, 환불 `UNKNOWN` claim·`Idempotency-Key`, 확정 환불 소유 표시, `RETRY_REFUND` 확인 조건, 재배송비 취소 주문 환불을 current source에 맞춰 정합화하고, 상점·통화·채널 미확인(#426 미병합)과 재배송비 환불 운영 기록 라우팅 제약을 명시 |
 | 2026-09-25 | `PAYMENT-FINALIZATION-PAID-GUARD`와 `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`를 직접 회귀 증거와 함께 `IMPLEMENTED / PROVEN`으로 정합화하고 stale 최종 회귀 요구 표현 제거 |

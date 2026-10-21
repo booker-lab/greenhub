@@ -16,7 +16,17 @@ function apiError(status: number, message: string) {
   return error;
 }
 
-const useAdminSource = readFileSync(new URL('./useAdmin.ts', import.meta.url), 'utf8');
+// useAdmin.ts는 도메인별 파일로 분할된 진입점이다. 목록 조회 순서는 순수 로더(loader)가 소유한다.
+const useAdminSource = [
+  'useAdmin.loader.ts',
+  'useAdmin.list.ts',
+  'useAdmin.accounts.ts',
+  'useAdmin.commerce.ts',
+  'useAdmin.banner.ts',
+  'useAdmin.invite.ts',
+]
+  .map((file) => readFileSync(new URL(`./${file}`, import.meta.url), 'utf8'))
+  .join('\n');
 const ordersClient = readFileSync(new URL('../app/admin/orders/_client.tsx', import.meta.url), 'utf8');
 const settlementsClient = readFileSync(
   new URL('../app/admin/settlements/_client.tsx', import.meta.url),
@@ -210,7 +220,7 @@ describe('9. user/driver command consumers preserve reason', () => {
     expect(usersClient).toContain('describeAdminCommandOutcome(outcome,');
     expect(usersClient).toContain('notifications.show');
     // 기존 ConfirmModal + reload 배선 유지
-    expect(usersClient).toContain('await toggleSuspend(pending.userId, !pending.currentlySuspended)');
+    expect(usersClient).toMatch(/await toggleSuspend\(\s*pending\.userId,\s*!pending\.currentlySuspended,/);
     expect(usersClient).toContain('onConfirm={runPending}');
   });
 
@@ -218,7 +228,7 @@ describe('9. user/driver command consumers preserve reason', () => {
     expect(driversClient).toContain('describeAdminCommandOutcome(outcome,');
     expect(driversClient).toContain('notifications.show');
     expect(driversClient).toContain('approve(pending.userId)');
-    expect(driversClient).toContain('toggleSuspend(pending.userId');
+    expect(driversClient).toMatch(/toggleSuspend\(\s*pending\.userId,/);
   });
 
   it('stores commission도 서버 reason을 버리지 않는다', () => {
@@ -240,25 +250,25 @@ describe('10. existing admin list error/reload behavior regression', () => {
   });
 
   it('reload 실패가 이전 items를 비우지 않는다 (stale 보존)', () => {
-    // catch 분기는 setItems를 호출하지 않고 error만 설정한다.
+    // catch 분기는 setItems를 호출하지 않고 error만 설정한다(동작 증명은 useAdmin.loader.test).
     const loadBlock = useAdminSource.slice(
-      useAdminSource.indexOf('const load = useCallback'),
-      useAdminSource.indexOf('}, [token'),
+      useAdminSource.indexOf('const run = async'),
+      useAdminSource.indexOf('return (request'),
     );
-    expect(loadBlock).toContain('setItems(extract(data))');
-    expect(loadBlock).toContain('setError(readError)');
+    expect(loadBlock).toContain('sink.setItems(items)');
+    expect(loadBlock).toContain('sink.setError(readError)');
     expect(loadBlock).not.toContain('setItems([])');
   });
 
   it('늦게 온 이전 조회 응답은 최신 결과를 덮지 않는다 (마지막 요청만 반영)', () => {
+    // 순번 가드는 순수 로더가 소유한다(응답 역순 도착 동작 증명은 useAdmin.loader.test).
     const loadBlock = useAdminSource.slice(
-      useAdminSource.indexOf('const load = useCallback'),
-      useAdminSource.indexOf('}, [token'),
+      useAdminSource.indexOf('const run = async'),
+      useAdminSource.indexOf('return (request'),
     );
-    expect(loadBlock).toContain('const requestId = ++requestIdRef.current');
-    expect(loadBlock).toMatch(/if \(isLatest\(\)\) \{\s+setItems\(extract\(data\)\);/);
-    expect(loadBlock).toContain('if (isLatest()) setError(readError)');
-    expect(loadBlock).toContain('if (isLatest()) setLoading(false)');
+    expect(loadBlock).toContain('if (seq !== latestSeq) return latestLoad');
+    expect(loadBlock).toContain('if (seq === latestSeq) sink.setLoading(false)');
+    expect(useAdminSource).toContain('createAdminListLoader<T>(');
   });
 
   it('command 성공 뒤 reload를 호출하고 outcome 단일 소유자를 사용한다', () => {

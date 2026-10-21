@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildStatusOptions,
+  describeRefundTarget,
   getAdminOrdersReadState,
   getStatusColor,
   isRefundable,
+  normalizeRefundReason,
+  REFUND_REASON_MAX_LENGTH,
   STATUS_LABEL,
 } from './_lib';
 
@@ -103,5 +106,30 @@ describe('주문 상태 라벨·필터 옵션', () => {
     expect(STATUS_LABEL.DELIVERY_HELD).toBe('배송 보류');
     expect(getStatusColor('DELIVERY_HELD')).toBe('red');
     expect(buildStatusOptions()).toContainEqual({ value: 'DELIVERY_HELD', label: '배송 보류' });
+  });
+});
+
+describe('강제환불 확인창 대상 표시', () => {
+  it('주문번호와 금액을 보여 준다', () => {
+    expect(describeRefundTarget({ id: 'o1', orderNumber: 'ORD-1', totalAmount: 12000 })).toEqual({
+      orderLabel: 'ORD-1',
+      amountLabel: '₩12,000',
+    });
+  });
+
+  it('주문번호가 없는 옛 주문은 줄이지 않은 전체 id를 보여 준다', () => {
+    const id = 'legacy-order-id-0123456789';
+    expect(describeRefundTarget({ id, totalAmount: 500 }).orderLabel).toBe(id);
+  });
+
+  it('빈 사유·공백 사유는 보내지 않고, 사유는 앞뒤 공백을 지운다', () => {
+    expect(normalizeRefundReason('')).toBeUndefined();
+    expect(normalizeRefundReason('   ')).toBeUndefined();
+    expect(normalizeRefundReason(' 고객 요청 ')).toBe('고객 요청');
+  });
+
+  it('사유는 서버 한도(500자)를 넘겨 보내지 않는다', () => {
+    expect(REFUND_REASON_MAX_LENGTH).toBe(500);
+    expect(normalizeRefundReason('가'.repeat(600))).toHaveLength(500);
   });
 });

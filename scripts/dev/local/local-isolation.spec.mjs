@@ -174,10 +174,17 @@ test('Driver Firebase binding은 Seller와 같은 local/emulator 계약이다 (U
   assert.match(binding, /connectAuthEmulator/);
   assert.match(binding, /connectStorageEmulator/);
   assert.match(binding, /non-local 브라우저 설정에는 Firebase emulator host를 둘 수 없습니다/);
-  // 기존 import 경로 유지 (호출자 수정 없음)
   assert.match(binding, /export const firebaseAuth/);
-  assert.match(binding, /export const storage/);
   assert.doesNotMatch(binding, /export const db/);
+  // Storage는 업로드할 때만 불러오는 getter로 만든다(같은 emulator 연결 계약을 getter 안에서 지킨다).
+  // 모듈을 읽는 것만으로 Storage 인스턴스를 만드는 export는 두지 않는다.
+  assert.match(binding, /export async function getFirebaseStorage\(\): Promise<FirebaseStorage>/);
+  assert.match(binding, /await import\('firebase\/storage'\)/);
+  assert.doesNotMatch(binding, /export const storage/);
+  // 거점 사진 업로드(유일한 Storage 호출자)는 같은 binding의 getter를 거친다.
+  const legacyPhoto = readRepo('apps/driver/src/app/board/[orderId]/photo/legacy-hub-photo.ts');
+  assert.match(legacyPhoto, /import\('@\/lib\/firebase'\)/);
+  assert.match(legacyPhoto, /await getFirebaseStorage\(\)/);
 });
 
 test('Seller local auth는 launcher marker에서 E2E 헤더 없이 진입한다 (fail-closed)', () => {

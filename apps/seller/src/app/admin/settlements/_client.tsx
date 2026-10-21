@@ -5,12 +5,12 @@ import { useDebouncedValue } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { useAdminSettlements } from '@/hooks/useAdmin';
+import { type AdminSettlement, useAdminSettlements } from '@/hooks/useAdmin';
 import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
 import { SettlementFilters } from './_components/SettlementFilters';
 import { SettlementTable } from './_components/SettlementTable';
 import { SummaryCards } from './_components/SummaryCards';
-import { sumPayable } from './_lib';
+import { describePayConfirm, sumPayable } from './_lib';
 
 /** 스토어 ID 입력이 멈춘 뒤 조회하기까지 기다리는 시간. 글자마다 재조회하지 않는다. */
 const STORE_FILTER_DEBOUNCE_MS = 300;
@@ -27,14 +27,18 @@ export default function AdminSettlementsClient() {
     to: toFilter || undefined,
   });
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [payTargetId, setPayTargetId] = useState<string | null>(null);
+  // 확인창이 대상(가게·주문·지급액)을 보이도록 id가 아닌 정산 문서를 잡아 둔다.
+  const [payTarget, setPayTarget] = useState<AdminSettlement | null>(null);
+
+  const openPay = (settlementId: string) =>
+    setPayTarget(settlements.find((s) => s.id === settlementId) ?? null);
 
   const runPay = async () => {
-    if (!payTargetId) return;
-    setProcessingId(payTargetId);
+    if (!payTarget) return;
+    setProcessingId(payTarget.id);
     try {
-      const outcome = await markAsPaid(payTargetId);
-      setPayTargetId(null);
+      const outcome = await markAsPaid(payTarget.id);
+      setPayTarget(null);
       if (outcome.kind === 'confirmed' && outcome.reconciled) return;
       // stale은 완료+재조회 copy를 사용한다. rejected는 서버 reason 보존, unknown은 재확인 우선.
       const presentation = describeAdminCommandOutcome(outcome, '지급');
@@ -105,21 +109,21 @@ export default function AdminSettlementsClient() {
             settlements={settlements}
             loading={loading}
             processingId={processingId}
-            onPay={setPayTargetId}
+            onPay={openPay}
           />
         </>
       )}
 
       <ConfirmModal
-        opened={payTargetId !== null}
+        opened={payTarget !== null}
         title="정산 지급 처리"
-        message="이 정산을 지급 완료 처리하시겠습니까?"
+        message={payTarget ? describePayConfirm(payTarget) : ''}
         confirmLabel="지급 완료"
         confirmColor="brand"
         loading={processingId !== null}
         onConfirm={runPay}
         onClose={() => {
-          if (processingId === null) setPayTargetId(null);
+          if (processingId === null) setPayTarget(null);
         }}
       />
     </Box>

@@ -64,6 +64,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                   ? [{ href: '/admin/partner-inquiries', label: '입점 문의' }]
                   : []),
                 ...(isFeatureOn('reviews') ? [{ href: '/admin/reviews', label: '후기' }] : []),
+                { href: '/admin/audit', label: '기록' },
               ].map((item) => (
                 <a
                   key={item.href}

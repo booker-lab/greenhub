@@ -15,6 +15,35 @@ const compiled = ts.transpileModule(formSource, {
   fileName: 'CheckoutForm.tsx',
 }).outputText;
 
+const optionsSource = await readFile(
+  new URL('../../../lib/payment-method-options.ts', import.meta.url),
+  'utf8',
+);
+const compiledOptions = ts.transpileModule(optionsSource, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  fileName: 'payment-method-options.ts',
+}).outputText;
+
+/** 채널 키 환경변수를 바꿔 가며 결제수단 선택지 모듈을 새로 평가한다. */
+function loadPaymentMethodOptions(environment) {
+  const keys = ['NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY', 'NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY'];
+  const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (const key of keys) {
+      if (environment[key] === undefined) delete process.env[key];
+      else process.env[key] = environment[key];
+    }
+    const optionsModule = { exports: {} };
+    new Function('module', 'exports', compiledOptions)(optionsModule, optionsModule.exports);
+    return optionsModule.exports;
+  } finally {
+    for (const key of keys) {
+      if (saved[key] === undefined) delete process.env[key];
+      else process.env[key] = saved[key];
+    }
+  }
+}
+
 const formModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -39,6 +68,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@greenhub/shared') return { ORDER_REQUEST_NOTE_MAX_LENGTH: 200 };
   // 벤치마킹 비교 기능(선물하기) 칸은 이 테스트에서 그리지 않는다.
   if (specifier === '@/components/benchmark/GiftFields') return { default: () => null };
+  if (specifier === '@/lib/payment-method-options') return loadPaymentMethodOptions({});
   throw new Error(`예상하지 못한 결제 폼 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(
@@ -112,4 +142,38 @@ test('연락처 형식 오류는 칸을 벗어난 뒤에만 보여 준다', () =
     formSource,
     /error=\{deliveryPhoneTouched && deliveryPhoneError \? deliveryPhoneError : undefined\}/,
   );
+});
+
+test('카드 채널 키가 없으면 카드 선택지를 숨기고, 있으면 카드 결제를 보여 준다', () => {
+  const withoutCard = loadPaymentMethodOptions({});
+  assert.deepEqual(
+    withoutCard.PAYMENT_METHOD_OPTIONS.map((option) => option.method),
+    ['kakaopay'],
+  );
+
+  const withCard = loadPaymentMethodOptions({
+    NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: 'card-channel',
+  });
+  assert.deepEqual(
+    withCard.PAYMENT_METHOD_OPTIONS.map((option) => option.method),
+    ['kakaopay', 'card'],
+  );
+
+  const withAll = loadPaymentMethodOptions({
+    NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY: 'naver-channel',
+    NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: 'card-channel',
+  });
+  assert.deepEqual(
+    withAll.PAYMENT_METHOD_OPTIONS.map((option) => option.method),
+    ['kakaopay', 'naverpay', 'card'],
+  );
+});
+
+test('결제 버튼 문구는 고른 결제수단을 따른다', () => {
+  const { paymentButtonLabel } = loadPaymentMethodOptions({});
+  assert.equal(paymentButtonLabel('kakaopay'), '카카오페이로 결제하기');
+  assert.equal(paymentButtonLabel('naverpay'), '네이버페이로 결제하기');
+  assert.equal(paymentButtonLabel('card'), '카드로 결제하기');
+  assert.match(formSource, /PAYMENT_METHOD_OPTIONS\.map/);
+  assert.match(formSource, /paymentButtonLabel\(paymentMethod\)/);
 });
