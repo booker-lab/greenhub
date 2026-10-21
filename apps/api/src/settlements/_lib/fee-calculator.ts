@@ -23,3 +23,19 @@ export function calcFee(totalAmount: number, feeRate: number): FeeBreakdown {
     netAmount: totalAmount - platformFee,
   };
 }
+
+/**
+ * 정산에 쓸 수수료율을 고른다. 가게 문서의 `commissionRate`가 0~1 사이 숫자면 그 값을,
+ * 없거나 형식이 맞지 않으면 서버 기본 수수료율(`PLATFORM_FEE_RATE`, 미설정 시 5%)을 쓴다.
+ */
+export function resolveFeeRate(storeCommissionRate: unknown, fallbackRate: number): number {
+  if (
+    typeof storeCommissionRate === 'number' &&
+    Number.isFinite(storeCommissionRate) &&
+    storeCommissionRate >= 0 &&
+    storeCommissionRate <= 1
+  ) {
+    return storeCommissionRate;
+  }
+  return fallbackRate;
+}

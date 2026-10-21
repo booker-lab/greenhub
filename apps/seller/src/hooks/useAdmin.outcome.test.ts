@@ -22,6 +22,7 @@ const useAdminSource = [
   'useAdmin.list.ts',
   'useAdmin.accounts.ts',
   'useAdmin.commerce.ts',
+  'useAdmin.settlements.ts',
   'useAdmin.banner.ts',
   'useAdmin.invite.ts',
 ]

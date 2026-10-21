@@ -43,7 +43,7 @@ function makeFixture(docs: Record<string, Record<string, unknown> | undefined>) 
     roundLifecycle as never,
     audit as never,
   );
-  return { audit, roundLifecycle, service };
+  return { audit, roundLifecycle, settlements, service };
 }
 
 describe('AdminService 어드민 행동 기록', () => {
@@ -110,6 +110,24 @@ describe('AdminService 어드민 행동 기록', () => {
     failed.roundLifecycle.cancelForRound.mockRejectedValue(new Error('환불 실패'));
     await expect(failed.service.forceRefund('order-1', {}, 'admin-1')).rejects.toThrow('환불 실패');
     expect(failed.audit.logAdmin).not.toHaveBeenCalled();
+  });
+
+  it('지급 뒤 환불은 회수 필요 금액을 강제 환불 기록에 함께 남긴다', async () => {
+    const order = { schemaVersion: 2, roundId: 'round-1', storeId: 'store-1', status: 'DELIVERED' };
+    const fixture = makeFixture({ 'orders/order-1': order });
+    fixture.settlements.cancelSettlement.mockResolvedValue({
+      recoveryRequired: true,
+      recoveryAmount: 9500,
+    });
+
+    await fixture.service.forceRefund('order-1', { reason: '배송 뒤 하자' }, 'admin-1');
+
+    expect(fixture.audit.logAdmin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin.order.force_refunded',
+        after: { status: 'CANCELLED', recoveryRequired: true, recoveryAmount: 9500 },
+      }),
+    );
   });
 
   it('배너 수정은 바꾼 칸만 이전 값과 함께 남긴다', async () => {
