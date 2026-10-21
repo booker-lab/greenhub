@@ -136,7 +136,7 @@ describe('InviteHistoryTable read state', () => {
   it('조회 실패 + 0건은 empty copy 대신 error UI와 retry를 표시한다', () => {
     const tree = InviteHistoryTable({ ...baseProps, error: FETCH_ERROR_MESSAGE });
     const texts = textsOf(tree);
-    expect(texts).not.toContain('발급된 토큰이 없습니다.');
+    expect(texts).not.toContain('발급된 초대 링크가 없습니다.');
     expect(texts).toContain('발급 내역을 불러오지 못했습니다.');
     expect(texts).toContain(FETCH_ERROR_MESSAGE);
     expect(handlersFor(tree, '다시 조회').length).toBeGreaterThan(0);
@@ -144,7 +144,7 @@ describe('InviteHistoryTable read state', () => {
 
   it('성공 + 0건은 기존 empty copy를 표시하고 retry를 노출하지 않는다', () => {
     const tree = InviteHistoryTable({ ...baseProps });
-    expect(textsOf(tree)).toContain('발급된 토큰이 없습니다.');
+    expect(textsOf(tree)).toContain('발급된 초대 링크가 없습니다.');
     expect(handlersFor(tree, '다시 조회')).toHaveLength(0);
   });
 
@@ -152,7 +152,7 @@ describe('InviteHistoryTable read state', () => {
     const tree = InviteHistoryTable({ ...baseProps, invites: [invite('test-invite-aaa')] });
     const texts = textsOf(tree);
     expect(texts).toContain('test-invite-aaa');
-    expect(texts).not.toContain('발급된 토큰이 없습니다.');
+    expect(texts).not.toContain('발급된 초대 링크가 없습니다.');
     expect(handlersFor(tree, '다시 조회')).toHaveLength(0);
   });
 
@@ -202,7 +202,7 @@ describe('InviteHistoryTable 행별 토큰 복사', () => {
       invites: [invite('test-invite-aaa'), invite('test-invite-bbb')],
     });
     for (const button of copyButtonsOf(tree)) {
-      const handlers = handlersFor(expand(button), '복사');
+      const handlers = handlersFor(expand(button), '링크 복사');
       expect(handlers).toHaveLength(1);
       handlers[0]();
     }
@@ -235,10 +235,22 @@ describe('InviteHistoryTable 행별 토큰 복사', () => {
       if (button.props.token === 'test-invite-bbb') {
         expect(texts).toContain('복사됨!');
       } else {
-        expect(texts).toContain('복사');
+        expect(texts).toContain('링크 복사');
         expect(texts).not.toContain('복사됨!');
       }
     }
+  });
+
+  it('발급·만료를 KST 날짜+시각으로, 사용한 초대는 사용 시각과 계정을 보여 준다', () => {
+    const used = {
+      ...invite('test-invite-used'),
+      usedAt: '2026-09-02T06:30:00.000Z',
+      usedBy: 'seller-test',
+    };
+    const texts = textsOf(InviteHistoryTable({ ...baseProps, invites: [used] })).join('\n');
+    // 2026-09-01T00:00Z = KST 09:00, 2026-09-02T06:30Z = KST 15:30
+    expect(texts).toContain('2026. 9. 1. 09:00');
+    expect(texts).toContain('2026. 9. 2. 15:30 · 계정 seller-test');
   });
 
   it('loading·조회 실패·빈 결과에서는 행 복사 버튼이 없다', () => {

@@ -57,6 +57,7 @@ describe('KakaoClient', () => {
     await expect(makeClient().getUser('access-token')).resolves.toEqual({
       kakaoId: '12345',
       email: 'kakao@example.com',
+      emailVerified: false,
       name: '카카오사용자',
     });
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -72,6 +73,22 @@ describe('KakaoClient', () => {
         'Bearer access-token',
       );
     }
+  });
+
+  it.each([
+    [{ is_email_valid: true, is_email_verified: true }, true],
+    [{ is_email_valid: true, is_email_verified: false }, false],
+    [{ is_email_valid: false, is_email_verified: true }, false],
+    [{}, false],
+  ])('이메일 유효·인증 응답 %p는 emailVerified=%p로 옮긴다', async (flags, expected) => {
+    mockKakao(
+      { id: 12345, app_id: 777, expires_in: 3600 },
+      { ...userBody, kakao_account: { ...userBody.kakao_account, ...flags } },
+    );
+
+    await expect(makeClient().getUser('access-token')).resolves.toMatchObject({
+      emailVerified: expected,
+    });
   });
 
   it('카카오 401 응답은 인증 실패로 변환한다', async () => {

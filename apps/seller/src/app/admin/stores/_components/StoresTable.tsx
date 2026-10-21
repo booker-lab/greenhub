@@ -140,16 +140,19 @@ export function StoresTable({
   const renderRate = (store: AdminStore) =>
     editId === store.id ? (
       <Group gap="xs">
+        {/* % 단위 입력(예: 5 = 5%). 저장할 때 0~1 값으로 바꾼다(_lib parseRate). */}
         <NumberInput
           min={0}
-          max={1}
-          step={0.01}
+          max={100}
+          step={0.5}
           decimalScale={2}
           clampBehavior="strict"
           inputMode="decimal"
           value={rateInput}
           onChange={(value) => onRateInput(String(value))}
-          placeholder="0.05"
+          placeholder="5"
+          rightSection="%"
+          aria-label="수수료율(%)"
           size="xs"
           radius="sm"
           w={104}

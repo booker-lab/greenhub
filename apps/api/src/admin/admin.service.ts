@@ -6,7 +6,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { dateRangeKST } from '@greenhub/shared';
 import type * as admin from 'firebase-admin';
 import { normalizeEmail } from '../auth/email-identity';
 import {
@@ -23,13 +22,18 @@ import { PaymentsService } from '../payments/payments.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 import { releaseLegacyGroupQuantityInTransaction } from '../orders/_lib/legacy-group-quantity';
 import { hasOpenProviderReversalInTransaction } from '../settlements/_lib/provider-reversal-hold';
-import { SettlementsService } from '../settlements/settlements.service';
+import {
+  type CancelSettlementResult,
+  SettlementsService,
+} from '../settlements/settlements.service';
 import {
   SESSIONS_REVOKED_AT_FIELD,
   revokeFirebaseSessions,
   sessionsRevokedAtMillis,
 } from '../auth/session-revocation';
+import { listAdminSettlements, summarizeAdminSettlements } from './_lib/admin-settlements-query';
 import {
+  AdminSettlementFilterDto,
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
   QueryAdminDriversDto,
@@ -324,19 +328,26 @@ export class AdminService {
     const order = orderSnap.data()!;
     const reason = dto.reason ?? '관리자 강제 환불';
 
-    let result: unknown;
+    let result: Record<string, unknown>;
     if (order['schemaVersion'] === 2 && order['roundId']) {
-      result = await this.roundLifecycle.cancelForRound({
+      const cancelled = await this.roundLifecycle.cancelForRound({
         storeId: order['storeId'],
         orderId,
         expectedStatus: order['status'],
         reason,
         customerNotice: 'ADMIN_REFUND',
       });
-      await this.settlements.cancelSettlement(orderId);
+      // 회차 취소가 이미 정산을 반영했어도 다시 불러 회수 필요 여부를 받는다(멱등).
+      const recovery = await this.settlements.cancelSettlement(orderId);
+      result = { ...cancelled, ...recovery };
     } else {
       result = await this.forceLegacyRefund(orderId, reason);
     }
+    // 이미 지급한 정산이면 화면이 "판매자에게 돌려받아야 할 금액"을 알리도록 응답과 기록에 싣는다.
+    const recoveryAfter =
+      result['recoveryRequired'] === true
+        ? { recoveryRequired: true, recoveryAmount: result['recoveryAmount'] }
+        : {};
 
     // 환불이 실패해 예외가 나면 여기까지 오지 않으므로 성공한 환불만 기록된다.
     await this.recordAdmin({
@@ -345,17 +356,20 @@ export class AdminService {
       targetType: 'order',
       targetId: orderId,
       before: { status: order['status'] ?? null },
-      after: { status: 'CANCELLED' },
+      after: { status: 'CANCELLED', ...recoveryAfter },
       reason,
     });
     return result;
   }
 
-  private async forceLegacyRefund(orderId: string, reason: string) {
+  private async forceLegacyRefund(
+    orderId: string,
+    reason: string,
+  ): Promise<{ ok: true; orderId: string } & CancelSettlementResult> {
     const claim = await this.claimLegacyRefund(orderId, reason);
     if (claim.kind === 'done') {
-      await this.settlements.cancelSettlement(orderId);
-      return { ok: true, orderId };
+      const recovery = await this.settlements.cancelSettlement(orderId);
+      return { ok: true, orderId, ...recovery };
     }
     if (claim.kind === 'in_progress') {
       throw new ConflictException('주문 환불이 이미 처리 중입니다.');
@@ -369,15 +383,16 @@ export class AdminService {
       throw error;
     }
 
+    let recovery: CancelSettlementResult;
     try {
       await this.applyLegacyLocalCancellation(orderId, claim.token, reason);
-      await this.settlements.cancelSettlement(orderId);
+      recovery = await this.settlements.cancelSettlement(orderId);
     } catch (error) {
       await this.recordLegacyRefundState(orderId, claim.token, 'LOCAL_FAILED', reason);
       throw error;
     }
 
-    return { ok: true, orderId };
+    return { ok: true, orderId, ...recovery };
   }
 
   private async claimLegacyRefund(
@@ -554,31 +569,14 @@ export class AdminService {
 
   // ── Settlements ──────────────────────────────────────────────────
 
-  async getSettlements(dto: QueryAdminSettlementsDto) {
-    let query = this.firestore.collection('settlements') as any;
+  // 목록은 "더 보기"로 이어 받고(hasMore·nextCursor), 행에 가게 이름·주문번호·보류 사유·회수 필드,
+  // 지급 대상(confirmed) 행에는 정산 계좌를 붙인다. 합계는 getSettlementsSummary가 같은 조건 전체로 계산한다.
+  getSettlements(dto: QueryAdminSettlementsDto) {
+    return listAdminSettlements(this.firestore, dto);
+  }
 
-    if (dto.storeId) {
-      query = query.where('storeId', '==', dto.storeId);
-    }
-    if (dto.status) {
-      query = query.where('status', '==', dto.status);
-    }
-    if (dto.from) {
-      const { start } = dateRangeKST(dto.from);
-      query = query.where('settledAt', '>=', this.firestore.Timestamp.fromDate(start));
-    }
-    if (dto.to) {
-      const { endExclusive } = dateRangeKST(dto.to);
-      query = query.where('settledAt', '<', this.firestore.Timestamp.fromDate(endExclusive));
-    }
-
-    query = query.orderBy('settledAt', 'desc').limit(500);
-    const snap = await query.get();
-
-    return {
-      settlements: snap.docs.map((d: any) => d.data()),
-      total: snap.size,
-    };
+  getSettlementsSummary(dto: AdminSettlementFilterDto) {
+    return summarizeAdminSettlements(this.firestore, dto);
   }
 
   // N1: 트랜잭션 내 status 재확인 후 paid 전이 — 더블클릭/동시 클릭 이중 paid 경합 차단.

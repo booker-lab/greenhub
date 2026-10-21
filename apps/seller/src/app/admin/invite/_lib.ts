@@ -90,9 +90,27 @@ export function describeInviteRevokeOutcome(
   };
 }
 
-// 만료일 짧은 표기(ko-KR) — 내역 행 공용.
-export function formatExpiry(expDate: Date | null): string {
-  return expDate ? expDate.toLocaleDateString('ko-KR') : '-';
+// 초대 링크 — 받는 사람이 열면 카카오 로그인으로 판매자 가입을 시작한다(/invite/[token]).
+// origin은 지금 보고 있는 판매자 앱 주소(window.location.origin)를 넘긴다.
+export function buildInviteLink(token: string, origin: string): string {
+  return `${origin.replace(/\/+$/, '')}/invite/${encodeURIComponent(token)}`;
+}
+
+// 발급·만료·사용 시각 표기 — 보는 기기 시간대와 무관하게 한국 시간(KST) 날짜+시각으로 보여 준다.
+const KST_DATE_TIME = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+export function formatKstDateTime(value: Date | string | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '-';
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : KST_DATE_TIME.format(date);
 }
 
 // 초대 이력 read state — 조회 실패와 성공-empty의 구조적 구분.
@@ -129,13 +147,4 @@ export function parseInviteRecipientEmail(input: string): InviteRecipientEmailIn
     return { ok: false, error: '이메일 형식이 올바르지 않아요.' };
   }
   return { ok: true, value };
-}
-
-// 발급 직후 만료일 긴 표기(년 월 일).
-export function formatExpiryLong(expiresAt: string): string {
-  return new Date(expiresAt).toLocaleDateString('ko-KR', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  });
 }

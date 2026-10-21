@@ -471,6 +471,55 @@ describe('AdminService 강제 환불 수렴', () => {
     expect(fixture.payments.processRefundByOrderId).not.toHaveBeenCalled();
     expect(fixture.records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(1);
   });
+
+  it('지급 완료된 정산의 legacy 주문을 환불하면 회수 필요 금액을 응답에 싣는다', async () => {
+    const fixture = makeLegacyForceRefundFixture();
+    fixture.settlements.cancelSettlement.mockResolvedValue({
+      recoveryRequired: true,
+      recoveryAmount: 9500,
+    });
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
+      ok: true,
+      orderId: 'order-1',
+      recoveryRequired: true,
+      recoveryAmount: 9500,
+    });
+  });
+
+  it('지급 완료된 정산의 회차 주문을 환불하면 회수 필요 금액을 응답에 싣는다', async () => {
+    const fixture = makeLegacyForceRefundFixture({ schemaVersion: 2, roundId: 'round-1' });
+    fixture.roundLifecycle.cancelForRound.mockResolvedValue({
+      orderId: 'order-1',
+      status: 'CANCELLED',
+    });
+    fixture.settlements.cancelSettlement.mockResolvedValue({
+      recoveryRequired: true,
+      recoveryAmount: 12000,
+    });
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
+      orderId: 'order-1',
+      status: 'CANCELLED',
+      recoveryRequired: true,
+      recoveryAmount: 12000,
+    });
+  });
+
+  it('지급 전 정산이면 회수 필요 없음으로 응답한다', async () => {
+    const fixture = makeLegacyForceRefundFixture();
+    fixture.settlements.cancelSettlement.mockResolvedValue({
+      recoveryRequired: false,
+      recoveryAmount: 0,
+    });
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
+      ok: true,
+      orderId: 'order-1',
+      recoveryRequired: false,
+      recoveryAmount: 0,
+    });
+  });
 });
 
 describe('AdminService 정산 KST 날짜 범위', () => {

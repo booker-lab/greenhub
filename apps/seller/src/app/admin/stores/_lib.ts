@@ -170,16 +170,38 @@ export function getAdminStoresReadState(args: {
   return 'HAS_RESULTS';
 }
 
+/** 수수료율을 설정하지 않은 가게에 정산이 쓰는 기본 수수료율(서버 PLATFORM_FEE_RATE 기본값, 결정 ②). */
+export const DEFAULT_COMMISSION_PERCENT = 5;
+
+/**
+ * 화면은 수수료율을 % 단위로 받는다(예: "5" → 0.05 저장). 0~100%, 소수 둘째 자리까지 반올림한다.
+ * 저장값(0~1)은 소수 넷째 자리까지로 맞춰 부동소수 오차가 남지 않게 한다.
+ */
 export function parseRate(input: string): ParseRateResult {
-  const trimmed = input.trim();
+  const trimmed = input.trim().replace(/%$/, '').trim();
   if (trimmed === '') return { ok: false, errorCode: 'EMPTY' };
-  const rate = Number.parseFloat(trimmed);
-  if (Number.isNaN(rate)) return { ok: false, errorCode: 'NOT_NUMBER' };
-  if (rate < 0 || rate > 1) return { ok: false, errorCode: 'OUT_OF_RANGE' };
-  return { ok: true, rate };
+  const percent = Number(trimmed);
+  if (!Number.isFinite(percent)) return { ok: false, errorCode: 'NOT_NUMBER' };
+  if (percent < 0 || percent > 100) return { ok: false, errorCode: 'OUT_OF_RANGE' };
+  return { ok: true, rate: Math.round(percent * 100) / 10000 };
 }
 
-// 수수료율 표시 문자열 — 미설정 시 '기본'.
+/** 저장된 수수료율(0~1)을 % 숫자로 바꾼다(소수 둘째 자리까지). */
+export function rateToPercent(rate: number): number {
+  return Math.round(rate * 10000) / 100;
+}
+
+/** 편집칸 초기값 — 설정된 요율은 % 숫자, 미설정이면 빈칸. */
+export function rateToInput(rate: number | undefined): string {
+  return rate === undefined ? '' : String(rateToPercent(rate));
+}
+
+// 수수료율 표시 문자열 — 미설정 시 기본 수수료율로 정산됨을 함께 보인다.
 export function formatRate(rate: number | undefined): string {
-  return rate !== undefined ? `${(rate * 100).toFixed(1)}%` : '기본';
+  return rate !== undefined ? `${rateToPercent(rate)}%` : `기본 ${DEFAULT_COMMISSION_PERCENT}%`;
+}
+
+/** 수수료율 저장 성공 안내 — 다음 정산부터 적용되고 이미 만든 정산은 바뀌지 않는다. */
+export function describeCommissionSaved(storeName: string, rate: number): string {
+  return `${storeName || '(미설정)'} 수수료율 ${rateToPercent(rate)}%는 다음에 만들어지는 정산부터 적용됩니다. 이미 만든 정산은 그대로입니다.`;
 }
