@@ -1,4 +1,5 @@
 import { expect, test as base } from '@playwright/test';
+import { orderCommandsSettleTimeout } from './_helpers/order-command-timeout';
 import {
   installPortOneBrowserStub,
   roundDirectFixture,
@@ -166,7 +167,10 @@ test.describe('Seller 회차 운영 화면 계약', () => {
     await page.getByRole('button', { name: '결제 완료 2건 모두 준비 시작' }).click();
     await page.getByRole('button', { name: '2건 준비 시작', exact: true }).click();
 
-    await expect(page.getByText('준비 시작을 마쳤어요')).toBeVisible();
+    // 준비 시작 PATCH 2건(건마다 알림톡 멱등 기록·발송 포함)이 차례로 끝나야 완료 안내가 뜬다.
+    await expect(page.getByText('준비 시작을 마쳤어요')).toBeVisible({
+      timeout: orderCommandsSettleTimeout(2),
+    });
     await expect(page.getByRole('link', { name: '준비 중 2건 주문 보기' })).toBeVisible();
     await expect(page.getByRole('link', { name: '결제 완료 0건 주문 보기' })).toBeVisible();
     await expect(page.getByText('기사 화면에 아직 안 보여요')).toHaveCount(0);
