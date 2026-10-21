@@ -1,4 +1,5 @@
 import type { GiftInfo, SelectedProductOption } from './benchmark.types.js'
+import type { PostDeliveryRefundRecord } from './post-delivery-refund.js'
 import type { ClientOrderRequestId } from './sale-round.types.js'
 
 export type OrderStatus =
@@ -127,6 +128,7 @@ export interface Order {
   requestNote?: string | null        // 소비자 요청사항 — 회차 주문만, 없으면 null
   deliveryPhotoIds?: string[]
   gift?: GiftInfo | null
+  postDeliveryRefund?: PostDeliveryRefundRecord | null // 배송 후 환불 기록 — 환불한 주문만 존재
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
   // Denormalized fields — 드라이버 앱 실시간 표시용
