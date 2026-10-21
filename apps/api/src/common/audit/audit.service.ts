@@ -37,7 +37,9 @@ export type AdminAuditAction =
   | 'admin.driver.suspended'
   | 'admin.driver.unsuspended'
   | 'admin.order.force_refunded'
+  | 'admin.order.post_delivery_refunded'
   | 'admin.settlement.paid'
+  | 'admin.settlement.recovery_completed'
   | 'admin.banner.updated';
 
 export type AdminAuditTargetType = 'store' | 'user' | 'driver' | 'order' | 'settlement' | 'banner';

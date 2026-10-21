@@ -22,7 +22,9 @@ export const ACTION_LABEL: Record<string, string> = {
   'admin.driver.suspended': '기사 정지',
   'admin.driver.unsuspended': '기사 정지 해제',
   'admin.order.force_refunded': '강제 환불',
+  'admin.order.post_delivery_refunded': '배송 후 환불',
   'admin.settlement.paid': '정산 지급',
+  'admin.settlement.recovery_completed': '정산 회수 완료',
   'admin.banner.updated': '배너 수정',
 };
 
