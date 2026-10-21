@@ -105,8 +105,8 @@ describe('Seller Firebase local binding (FE-PILOT-L02-S, seller-only)', () => {
 
     firebase.getFirebaseAuth();
     firebase.getFirebaseAuth();
-    firebase.getFirebaseStorage();
-    firebase.getFirebaseStorage();
+    // 동시에 불러도 Storage 인스턴스·emulator 연결은 한 번만 만든다.
+    await Promise.all([firebase.getFirebaseStorage(), firebase.getFirebaseStorage()]);
 
     expect(firebaseMocks.connectAuthEmulator).toHaveBeenCalledTimes(1);
     expect(firebaseMocks.connectAuthEmulator).toHaveBeenCalledWith(
@@ -141,7 +141,7 @@ describe('Seller Firebase local binding (FE-PILOT-L02-S, seller-only)', () => {
     const firebase = await import('./firebase');
 
     firebase.getFirebaseAuth();
-    firebase.getFirebaseStorage();
+    await firebase.getFirebaseStorage();
 
     expect(firebaseMocks.connectAuthEmulator).not.toHaveBeenCalled();
     expect(firebaseMocks.connectFirestoreEmulator).not.toHaveBeenCalled();

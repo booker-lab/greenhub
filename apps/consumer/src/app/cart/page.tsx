@@ -19,7 +19,7 @@ import { signIn, useSession } from 'next-auth/react';
 import { CartArrivalLine, CartUpsell, IcheonPrecheck } from '@/components/benchmark/CartExtras';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { isFeatureOn } from '@/lib/features';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { getApiBaseUrl } from '@/lib/api-base-url';
@@ -206,12 +206,49 @@ async function postRoundCartValidation(
     return { ok: false, message: undefined } as const;
   }
 }
+const VALIDATION_DEBOUNCE_MS = 300;
+// 서버는 상품마다 따로(재고·회차·배송 지역) 판정하므로 묶음 검증이 통과하면 상품별 검증도 모두 통과한다.
+// 그래서 묶음 1회를 먼저 보내고, 실패했을 때만 상품별로 보내 어느 상품이 왜 안 되는지 찾는다.
+async function validateRoundCartItems(
+  roundItems: RoundCartItem[],
+  accessToken: string,
+  signal: AbortSignal,
+): Promise<ValidationByKey> {
+  const batch = await postRoundCartValidation(roundItems, accessToken, signal);
+  if (batch.ok) return resolveRoundCartBatchValidation(roundItems, batch.body);
+  if (roundItems.length === 1) return unavailableValidations(roundItems, batch.message);
+
+  const results = await Promise.all(
+    roundItems.map(async (item) => {
+      const response = await postRoundCartValidation([item], accessToken, signal);
+      const result = response.ok
+        ? resolveRoundCartValidation(item, response.body)
+        : resolveRoundCartValidation(item, null, response.message);
+      return [cartItemKey(item), result] as const;
+    }),
+  );
+  let resolved = Object.fromEntries(results) as ValidationByKey;
+  const candidates = roundItems.filter(
+    (item) => resolved[cartItemKey(item)]?.status === 'eligible',
+  );
+  if (candidates.length > 1) {
+    const response = await postRoundCartValidation(candidates, accessToken, signal);
+    resolved = {
+      ...resolved,
+      ...(response.ok
+        ? resolveRoundCartBatchValidation(candidates, response.body)
+        : unavailableValidations(candidates, response.message)),
+    };
+  }
+  return resolved;
+}
 function useRoundCartValidation(
   items: CartItem[],
   accessToken: string | undefined,
   sessionStatus: 'authenticated' | 'loading' | 'unauthenticated',
 ) {
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle', items: {} });
+  const validatedOnceRef = useRef(false);
   useEffect(() => {
     const roundItems = items.filter(isRoundCartItem);
     if (roundItems.length === 0) {
@@ -238,46 +275,27 @@ function useRoundCartValidation(
     const controller = new AbortController();
     let active = true;
     setValidation({ status: 'loading', items: {} });
-    void Promise.all(
-      roundItems.map(async (item) => {
-        const response = await postRoundCartValidation([item], accessToken, controller.signal);
-        const result = response.ok
-          ? resolveRoundCartValidation(item, response.body)
-          : resolveRoundCartValidation(item, null, response.message);
-        return [cartItemKey(item), result] as const;
-      }),
-    )
-      .then(async (results) => {
-        let resolved = Object.fromEntries(results) as ValidationByKey;
-        const candidates = roundItems.filter(
-          (item) => resolved[cartItemKey(item)]?.status === 'eligible',
-        );
-        if (candidates.length > 1) {
-          const response = await postRoundCartValidation(
-            candidates,
-            accessToken,
-            controller.signal,
-          );
-          resolved = {
-            ...resolved,
-            ...(response.ok
-              ? resolveRoundCartBatchValidation(candidates, response.body)
-              : unavailableValidations(candidates, response.message)),
-          };
-        }
-        if (active) setValidation({ status: 'ready', items: resolved });
-      })
-      .catch((error: unknown) => {
-        if (active && !(error instanceof Error && error.name === 'AbortError')) {
-          setValidation({
-            status: 'ready',
-            items: unavailableValidations(roundItems, '서버 검증 실패'),
-          });
-        }
-      });
+    // 수량 +/−를 연달아 누르는 동안은 요청을 보내지 않고 마지막 수량만 검증한다(첫 검증은 바로).
+    const delay = validatedOnceRef.current ? VALIDATION_DEBOUNCE_MS : 0;
+    validatedOnceRef.current = true;
+    const timer = setTimeout(() => {
+      void validateRoundCartItems(roundItems, accessToken, controller.signal)
+        .then((resolved) => {
+          if (active) setValidation({ status: 'ready', items: resolved });
+        })
+        .catch((error: unknown) => {
+          if (active && !(error instanceof Error && error.name === 'AbortError')) {
+            setValidation({
+              status: 'ready',
+              items: unavailableValidations(roundItems, '서버 검증 실패'),
+            });
+          }
+        });
+    }, delay);
 
     return () => {
       active = false;
+      clearTimeout(timer);
       controller.abort();
     };
   }, [accessToken, items, sessionStatus]);
