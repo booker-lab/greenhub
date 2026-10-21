@@ -8,16 +8,18 @@ import { type IssuedInvite, useAdminInvite } from '@/hooks/useAdmin';
 import { InviteGenerator } from './_components/InviteGenerator';
 import { InviteHistoryTable } from './_components/InviteHistoryTable';
 import { ManualCopyModal } from './_components/ManualCopyModal';
-import { describeInviteRevokeOutcome, parseInviteRecipientEmail } from './_lib';
+import { buildInviteLink, describeInviteRevokeOutcome, parseInviteRecipientEmail } from './_lib';
 import { useTokenCopy } from './_useTokenCopy';
 
 export default function AdminInviteClient() {
   const { invites, loading, error, reload, generating, generateError, generate, revoke } =
     useAdminInvite();
   const [lastToken, setLastToken] = useState<IssuedInvite | null>(null);
-  // 복사 로직 SSOT — 발급 직후 토큰과 발급 내역 행별 복사가 공유한다(성공 피드백·실패 폴백 포함).
-  const { copiedToken, manualToken, copy, closeManual } = useTokenCopy();
+  // 복사 로직 SSOT — 발급 직후 초대와 발급 내역 행별 복사가 공유한다(성공 피드백·실패 폴백 포함).
+  const { copiedToken, manualLink, copy, closeManual } = useTokenCopy();
   const copied = lastToken !== null && copiedToken === lastToken.token;
+  // 발급 직후 보여 줄 초대 링크. lastToken은 발급 버튼을 누른 뒤(브라우저)에만 생겨 window를 읽을 수 있다.
+  const lastLink = lastToken ? buildInviteLink(lastToken.token, window.location.origin) : null;
 
   // 받는 사람 이메일(필수) — 비었거나 형식이 틀리면 요청하지 않고 입력란에 오류를 보여 준다.
   const [recipientEmail, setRecipientEmail] = useState('');
@@ -69,12 +71,13 @@ export default function AdminInviteClient() {
   return (
     <Box>
       <Group justify="space-between" mb="md">
-        <Title order={4}>초대 토큰 발급</Title>
+        <Title order={4}>판매자 초대 링크</Title>
       </Group>
 
       <InviteGenerator
         generating={generating}
         lastToken={lastToken}
+        lastLink={lastLink}
         copied={copied}
         generateError={generateError}
         recipientEmail={recipientEmail}
@@ -104,11 +107,11 @@ export default function AdminInviteClient() {
         revokingToken={revokingToken}
         onRevoke={setPendingRevoke}
       />
-      <ManualCopyModal token={manualToken} onClose={closeManual} />
+      <ManualCopyModal link={manualLink} onClose={closeManual} />
       <ConfirmModal
         opened={pendingRevoke !== null}
         title="초대 취소"
-        message={`토큰 ${pendingRevoke ?? ''} 초대를 취소할까요?\n취소한 토큰으로는 가입할 수 없고, 되돌릴 수 없어요.`}
+        message={`토큰 ${pendingRevoke ?? ''} 초대를 취소할까요?\n취소한 초대 링크로는 가입할 수 없고, 되돌릴 수 없어요.`}
         confirmLabel="초대 취소"
         cancelLabel="닫기"
         confirmColor="red"

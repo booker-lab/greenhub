@@ -56,7 +56,7 @@ describe('AdminInviteClient recovery wiring', () => {
     expect(source).not.toContain('setLastToken(null)');
   });
 
-  it('발급 직후 토큰과 행별 복사가 공용 복사 훅(useTokenCopy)을 공유한다', () => {
+  it('발급 직후 초대와 행별 복사가 공용 복사 훅(useTokenCopy)을 공유한다', () => {
     expect(source).toContain('useTokenCopy()');
     // 클립보드 직접 호출 금지 — 폴백 포함 복사 로직은 _clipboard/_useTokenCopy가 소유한다.
     expect(source).not.toContain('navigator.clipboard');
@@ -71,13 +71,16 @@ describe('AdminInviteClient recovery wiring', () => {
   });
 
   it('복사 실패 시 직접 복사 창(ManualCopyModal)을 배선한다', () => {
-    expect(source).toContain('<ManualCopyModal token={manualToken} onClose={closeManual} />');
+    expect(source).toContain('<ManualCopyModal link={manualLink} onClose={closeManual} />');
   });
 
   it('기존 generate/copy 컴포넌트 배선을 유지한다', () => {
     expect(source).toContain('<InviteGenerator');
     expect(source).toContain('generating={generating}');
     expect(source).toContain('lastToken={lastToken}');
+    // 발급 직후 보여 줄 값은 토큰이 아니라 판매자 앱 주소 기준 초대 링크다.
+    expect(source).toContain('buildInviteLink(lastToken.token, window.location.origin)');
+    expect(source).toContain('lastLink={lastLink}');
     expect(source).toContain('copied={copied}');
     expect(source).toContain('onGenerate={handleGenerate}');
     expect(source).toContain('<InviteHistoryTable');
