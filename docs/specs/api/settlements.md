@@ -114,8 +114,10 @@ PLATFORM_FEE_RATE env
 
 ```text
 SETTLEMENT_CONFIRM_DELAY_DAYS env
-미설정 fallback = 1일
+미설정 fallback = 7일
 ```
+
+기본 7일은 판매자 배송 후 환불 기간(배송 완료 7일)과 맞춘 값이다. 이 기간 안에는 정산이 `confirmed`가 되지 않으므로 지급(`paid`)도 일어나지 않는다. 결정 배경: `docs/specs/post-delivery-refund-plan.md` §2.3.
 
 처리:
 

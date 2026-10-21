@@ -117,8 +117,12 @@ export class PaymentsService {
     return { ok: true };
   }
 
-  async processRefundByOrderId(orderId: string, reason: string): Promise<void> {
-    await this.refunds.refundByOrderId(orderId, reason);
+  async processRefundByOrderId(
+    orderId: string,
+    reason: string,
+    options?: { verifyProviderFirst?: boolean },
+  ): Promise<void> {
+    await this.refunds.refundByOrderId(orderId, reason, options);
   }
 
   async refundOrderChargesByOrderId(orderId: string, reason: string): Promise<void> {

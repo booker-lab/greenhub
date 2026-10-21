@@ -581,6 +581,29 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
       expect(firestore.transactionUpdates).toHaveLength(1);
     });
 
+    it('지연 일수 미설정 시 기본 7일: 6일 지난 pending은 유지하고 7일 지난 pending만 확정한다', async () => {
+      const { firestore, service } = makeSettlementsService({});
+      firestore.seed(
+        'settlements/order-default-6d',
+        makeSettlement('order-default-6d', 'pending', {
+          settledAt: new Date('2026-08-21T00:00:00.000Z'),
+        }),
+      );
+      firestore.seed(
+        'settlements/order-default-7d',
+        makeSettlement('order-default-7d', 'pending', {
+          settledAt: new Date('2026-08-19T23:59:59.999Z'),
+        }),
+      );
+
+      await withFixedClock(() => service.confirmDueSettlements());
+
+      expect(firestore.getData('settlements/order-default-6d')?.['status']).toBe('pending');
+      expect(firestore.getData('settlements/order-default-7d')).toEqual(
+        expect.objectContaining({ status: 'confirmed', confirmedAt: FIXED_NOW }),
+      );
+    });
+
     it('이미 confirmed인 settlement는 다시 쓰지 않는다', async () => {
       const { firestore, service } = makeSettlementsService({
         SETTLEMENT_CONFIRM_DELAY_DAYS: '1',

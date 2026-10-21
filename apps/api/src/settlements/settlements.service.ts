@@ -68,8 +68,9 @@ export class SettlementsService {
   ) {
     this.issueWriter = issueWriter ?? new OperationIssueWriterService(firestore);
     this.feeRate = parseFloat(this.config.get<string>('PLATFORM_FEE_RATE') ?? '0.05');
+    // 기본 7일: 판매자 배송 후 환불 기간(배송 완료 7일)이 끝나기 전에는 지급되지 않게 한다.
     this.confirmDelayDays = parseInt(
-      this.config.get<string>('SETTLEMENT_CONFIRM_DELAY_DAYS') ?? '1',
+      this.config.get<string>('SETTLEMENT_CONFIRM_DELAY_DAYS') ?? '7',
       10,
     );
   }
