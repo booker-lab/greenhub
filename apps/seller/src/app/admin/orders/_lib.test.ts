@@ -4,6 +4,7 @@ import {
   describeRefundTarget,
   getAdminOrdersReadState,
   getStatusColor,
+  isPostDeliveryRefundable,
   isRefundable,
   normalizeRefundReason,
   REFUND_REASON_MAX_LENGTH,
@@ -131,5 +132,23 @@ describe('강제환불 확인창 대상 표시', () => {
   it('사유는 서버 한도(500자)를 넘겨 보내지 않는다', () => {
     expect(REFUND_REASON_MAX_LENGTH).toBe(500);
     expect(normalizeRefundReason('가'.repeat(600))).toHaveLength(500);
+  });
+});
+
+describe('isPostDeliveryRefundable', () => {
+  const round = { schemaVersion: 2, roundId: 'round-1' };
+  it('배송 완료로 표시된 회차 주문만 배송 후 환불 버튼을 보여 준다', () => {
+    expect(isPostDeliveryRefundable({ ...round, status: 'DELIVERED' })).toBe(true);
+    expect(isPostDeliveryRefundable({ ...round, status: 'PICKED_UP' })).toBe(true);
+    expect(isPostDeliveryRefundable({ ...round, status: 'REVIEWED' })).toBe(true);
+    expect(isPostDeliveryRefundable({ ...round, status: 'PREPARING' })).toBe(false);
+    expect(isPostDeliveryRefundable({ ...round, status: 'CANCELLED' })).toBe(false);
+  });
+
+  it('옛 일반 주문과 이미 배송 후 환불한 주문은 숨긴다', () => {
+    expect(isPostDeliveryRefundable({ status: 'DELIVERED', schemaVersion: 1 })).toBe(false);
+    expect(
+      isPostDeliveryRefundable({ ...round, status: 'DELIVERED', postDeliveryRefund: { memo: 'x' } }),
+    ).toBe(false);
   });
 });

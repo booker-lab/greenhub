@@ -1,5 +1,6 @@
 'use client';
 
+import type { PostDeliveryRefundReasonCode } from '@greenhub/shared';
 import type { AdminCommandOutcome } from './useAdmin.outcome';
 import {
   pick,
@@ -44,7 +45,22 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
     return { ...outcome, recovery: readRefundRecovery(body) };
   };
 
-  return { orders, loading, error, reload, forceRefund };
+  // 배송 후 환불(기한 없음) — 사유 코드·메모 필수. 지급 완료 정산이면 강제 환불처럼 회수 정보가 온다.
+  const postDeliveryRefund = async (
+    orderId: string,
+    reasonCode: PostDeliveryRefundReasonCode,
+    memo: string,
+  ): Promise<AdminCommandOutcome & { recovery: RefundRecovery | null }> => {
+    const { outcome, body } = await runAdminCommandWithBody(
+      token,
+      `/admin/orders/${orderId}/post-delivery-refund`,
+      { method: 'POST', body: JSON.stringify({ reasonCode, memo }) },
+      reload,
+    );
+    return { ...outcome, recovery: readRefundRecovery(body) };
+  };
+
+  return { orders, loading, error, reload, forceRefund, postDeliveryRefund };
 }
 
 // 정산 훅은 useAdmin.settlements(더 보기·서버 합계)가 소유한다.
