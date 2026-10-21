@@ -124,7 +124,7 @@ describe('AdminStoresClient read-error recovery wiring', () => {
     expect(source).toContain('restoreStore(store.id)');
     expect(source).toContain('onArchive={handleArchive}');
     expect(source).toContain('onRestore={handleRestore}');
-    expect(source).toContain('정리할 수 없습니다');
+    expect(source).toContain('치울 수 없습니다');
     expect(source).toContain('복구할 수 없습니다');
     // 성공 분기의 테이블 배선을 가로채지 않는다.
     expect(source).toContain('stores={visible}');

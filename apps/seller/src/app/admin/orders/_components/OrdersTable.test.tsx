@@ -1,7 +1,7 @@
 import type { OrderStatus } from '@greenhub/shared';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { OrdersTable, RequestNote } from './OrdersTable';
+import { BuyerAndProduct, OrdersTable, RequestNote, StatusBadges } from './OrdersTable';
 
 type Props = ComponentProps<typeof OrdersTable>;
 
@@ -25,7 +25,6 @@ function order(
     id,
     orderNumber,
     storeId: 'store-abcdef12',
-    userId: 'user-1',
     status,
     totalAmount: 12000,
     deliveryMethod: 'DIRECT',
@@ -187,5 +186,53 @@ describe('Admin OrdersTable 요청사항', () => {
     expect(RequestNote({ note: '   ' })).toBeNull();
     expect(RequestNote({ note: null })).toBeNull();
     expect(RequestNote({})).toBeNull();
+  });
+});
+
+describe('Admin OrdersTable 주문 칸', () => {
+  // 함수 컴포넌트는 렌더하지 않고 props로 받은 주문을 직접 그려 텍스트를 모은다.
+  function renderedTexts(tree: ReactNode): string[] {
+    const nested = [
+      ...propsOf<{ order: Props['orders'][number] }>(tree, StatusBadges).map((p) =>
+        StatusBadges(p),
+      ),
+      ...propsOf<{ order: Props['orders'][number] }>(tree, BuyerAndProduct).map((p) =>
+        BuyerAndProduct(p),
+      ),
+    ];
+    return [...textsOf(tree), ...nested.flatMap((node) => textsOf(node))];
+  }
+
+  it('주문일시·고객 이름·상품 요약·가게 이름을 카드와 표 모두에 보여 준다', () => {
+    const tree = OrdersTable({
+      ...baseProps,
+      orders: [
+        {
+          ...order('o1', 'ORD-1'),
+          createdAt: '2026-10-20T15:05:00.000Z',
+          buyerName: '김손님',
+          productSummary: '호접란 외 1개',
+          storeName: '난플렉스',
+        },
+      ],
+    });
+    const texts = renderedTexts(tree);
+    expect(texts.filter((t) => t === '2026-10-21 00:05')).toHaveLength(2);
+    expect(texts.filter((t) => t === '김손님')).toHaveLength(2);
+    expect(texts.filter((t) => t === '호접란 외 1개')).toHaveLength(2);
+    expect(texts.filter((t) => t === '난플렉스')).toHaveLength(2);
+  });
+
+  it('환불 진행 중·실패는 상태 옆 배지로 보여 준다', () => {
+    const tree = OrdersTable({
+      ...baseProps,
+      orders: [
+        { ...order('o1', 'ORD-1', 'CANCELLED'), cancellationStatus: 'REFUND_FAILED' },
+        { ...order('o2', 'ORD-2', 'CANCELLED'), cancellationStatus: 'COMPLETED' },
+      ],
+    });
+    const texts = renderedTexts(tree);
+    expect(texts.filter((t) => t === '환불 실패')).toHaveLength(2);
+    expect(texts).not.toContain('환불 진행 중');
   });
 });
