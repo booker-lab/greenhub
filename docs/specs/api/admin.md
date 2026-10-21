@@ -185,6 +185,17 @@ admin 환불의 주문·결제·정산·회차 capacity 후속효과 수렴은 `
 
 추적: `docs/BACKLOG.md`의 `ADMIN-FORCE-REFUND-CONSISTENCY`; 직접 증거: `apps/api/src/admin/admin.service.spec.ts`, `apps/api/src/admin/admin-legacy-refund-occ-retry.spec.ts`.
 
+### 배송 후 환불
+
+```text
+POST /admin/orders/:orderId/post-delivery-refund   { reasonCode, memo }
+```
+
+- 배송 완료로 표시된 회차 주문을 기간·정산 조건 없이 전액 환불한다. 흐름과 거부 조건은 `orders.md` §8D가 정본이다.
+- 정산이 이미 `paid`면 정산은 그대로 두고 회수 대기 기록(`recovery.status: PENDING`)이 붙는다.
+- 성공한 환불만 `admin.order.post_delivery_refunded` 행동 기록을 남긴다(사유 칸 = 메모).
+- 기존 `AdminService`와 분리된 `AdminPostDeliveryRefundService`·`AdminPostDeliveryRefundController`가 소유한다. 직접 증거: `apps/api/src/admin/admin-post-delivery-refund.service.spec.ts`.
+
 ## 6. 정산 관리
 
 ### 목록
@@ -212,6 +223,17 @@ PATCH /admin/settlements/:settlementId/pay
 - transaction 안에서 status 재확인
 - `paidAt`, `paidBy`(처리한 어드민 ID), `updatedAt` 기록
 - 같은 transaction에 `adminAuditLogs` 기록(`admin.settlement.paid`)을 함께 쓴다. 기록 없는 지급은 생기지 않는다.
+
+### 회수 완료
+
+```text
+PATCH /admin/settlements/:settlementId/recovery-complete
+```
+
+- 지급 뒤 환불돼 `recovery.status == PENDING`인 정산만 `RECOVERED`로 바꾸고 `recoveredAt`·`recoveredBy`를 남긴다. 정산 `status: paid`는 그대로다.
+- 회수 기록이 없거나 이미 `RECOVERED`면 400.
+- 같은 transaction에 `admin.settlement.recovery_completed` 행동 기록을 쓴다.
+- 실제 돈은 관리자가 판매자에게서 계좌로 받는다. 다음 정산에서 자동으로 빼지 않는다.
 
 ### 검증 상태 — `IMPLEMENTATION_PROVEN`
 
@@ -382,13 +404,15 @@ Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다
 | `admin.driver.approved` | driver | `driverApproved` | - |
 | `admin.driver.suspended` / `admin.driver.unsuspended` | driver | `suspended` | `SuspendUserDto.reason` |
 | `admin.order.force_refunded` | order | `status` → `CANCELLED` | `ForceRefundDto.reason`(200자) |
+| `admin.order.post_delivery_refunded` | order | `status` → `CANCELLED`, `reasonCode` | 환불 메모(200자) |
 | `admin.settlement.paid` | settlement | `status` | - |
+| `admin.settlement.recovery_completed` | settlement | `recoveryStatus`(`PENDING` → `RECOVERED`), `amount` | - |
 | `admin.banner.updated` | banner `main_hero` | 바꾼 칸만 | - |
 
 문서 필드: `id`, `action`, `actorId`, `targetType`, `targetId`, `before`, `after`, `reason`, `createdAt`.
 
 - 고객 이름·전화·주소는 넣지 않는다. 대상은 ID로만 가리킨다.
-- 정산 지급만 같은 transaction에 기록한다. 나머지는 작업이 성공한 뒤 기록하고, 기록이 실패하면 error 로그만 남긴다(이미 끝난 작업을 되돌리지 않는다).
+- 정산 지급과 회수 완료만 같은 transaction에 기록한다. 나머지는 작업이 성공한 뒤 기록하고, 기록이 실패하면 error 로그만 남긴다(이미 끝난 작업을 되돌리지 않는다).
 - 실패한 작업(없는 대상, 환불 실패 등)은 기록하지 않는다.
 - 초대 발급·취소(`createdBy`·`revokedBy`), 후기 복구(`moderationLog`), legal hold(`legalHoldUpdatedBy`)는 각 문서에 이미 처리자를 남기므로 이 기록 대상이 아니다.
 - 조회: `GET /admin/audit-logs`는 `createdAt` 내림차순 최근 100건을 돌려준다. 단일 필드 정렬이라 복합 인덱스가 필요 없다. seller 앱 `/admin/audit`("기록" 탭)이 읽기 전용으로 보여 준다.
@@ -439,6 +463,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-21 | 배송 후 환불(§5)·정산 회수 완료(§6) endpoint와 행동 기록 2종 추가 |
 | 2026-10-21 | 어드민 행동 기록(`adminAuditLogs`, `GET /admin/audit-logs`, seller "기록" 탭), 정산 지급 `paidBy`, 정지 사유(`SuspendUserDto.reason`) 추가 |
 | 2026-10-18 | 운영 런타임의 이메일 가입 전면 거부로 운영에서는 초대 토큰 가입이 불가함을 명시(발급·목록·취소는 그대로) |
 | 2026-09-26 | admin force refund가 `RoundOrderLifecycleService.cancelForRound` + `SettlementsService.cancelSettlement`로 수렴하고 `admin.service.spec.ts`·`admin-legacy-refund-occ-retry.spec.ts`로 직접 증명되어 `ADMIN-FORCE-REFUND-CONSISTENCY` P0 불일치 서술을 proven 계약으로 대체 |
