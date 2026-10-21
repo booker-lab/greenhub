@@ -1,8 +1,8 @@
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { createInMemoryFirestore } from '../../test/helpers/in-memory-firestore';
 import { OrderCapacityService } from './order-capacity.service';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 // legacy 주문(schemaVersion 2 + roundId가 아닌 주문)은 RoundOrderLifecycleService로 위임되지 않고
 // OrdersLifecycleService.updateStatus의 legacy 분기에서 전이된다. 이 spec은 그 분기에서
@@ -131,7 +131,7 @@ function makeContext(variant: Variant, options: ContextOptions = {}) {
     capacity as never,
   );
   const roundUpdateStatus = jest.spyOn(roundLifecycle, 'updateStatus');
-  const lifecycle = new OrdersLifecycleService(
+  const lifecycle = createSettledOrdersLifecycle(
     firestore,
     notifications as never,
     payments as never,

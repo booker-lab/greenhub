@@ -2,8 +2,8 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 import { createInMemoryFirestore } from '../../test/helpers/in-memory-firestore';
 import { OrderCapacityService } from './order-capacity.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { PaymentFinalizationService } from '../payments/payment-finalization.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, any>;
 
@@ -830,7 +830,7 @@ describe('CAPACITY single-owner remediation proof', () => {
       settlements as never,
       capacity as never,
     );
-    const lifecycle = new OrdersLifecycleService(
+    const lifecycle = createSettledOrdersLifecycle(
       firestore,
       notifications as never,
       payments as never,
@@ -870,7 +870,7 @@ describe('CAPACITY single-owner remediation proof', () => {
       settlements as never,
       corruptCapacity as never,
     );
-    const corruptLifecycle = new OrdersLifecycleService(
+    const corruptLifecycle = createSettledOrdersLifecycle(
       corruptMemory.firestore as never,
       notifications as never,
       payments as never,

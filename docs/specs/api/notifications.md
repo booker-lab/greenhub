@@ -252,6 +252,17 @@ provider 응답은 `classifyAlimtalkProviderError()`/`classifySmsProviderError()
 - idempotency key가 주어진 알림은 `notificationDeliveries`를 사용해 `PROCESSING`/`SENT` 중복 전달을 차단한다.
 - 실패한 전달은 `FAILED`로 닫히며 후속 운영 처리 대상이 될 수 있다.
 
+### 주문 상태 전이 알림은 응답 뒤에 보낸다
+
+`OrdersLifecycleService.updateStatus()`(판매자 준비 시작·취소, 기사 배송 시작·재개·완료·보류 등)와 `reconcileDeliveryCompletion()`은 주문 상태와 정산 후속효과를 커밋한 뒤 응답하고, 상태 전이 고객 알림은 `OrderNoticeDispatcher`(`apps/api/src/orders/order-notice-dispatcher.ts`)에 맡겨 응답 뒤에 보낸다(2026-10-21). 알림톡 발송·멱등 기록의 Firestore 왕복과 알리고 재시도를 판매자·기사가 기다리지 않게 하려는 것이다.
+
+- 같은 주문의 알림은 맡긴 순서대로 하나씩 보낸다. 다른 주문끼리는 서로 기다리지 않는다.
+- 알림 작업이 예외로 끝나면(Firestore 일시 오류 등) 1초·4초 뒤 같은 멱등 키로 최대 2번 더 시도한다. `notificationDeliveries`가 `SENT`·`NEEDS_VERIFY`·접수 확인(`lastOutcome=ACCEPTED`) 상태면 다시 보내지 않으므로 재시도로 중복 발송되지 않는다. 알리고 거절·연락처 없음은 예외가 아니라 위 최종 실패 처리(운영 이슈)로 간다.
+- 끝까지 예외면 주문 id·전이·오류 종류만 오류 로그로 남기고 운영 알림(`docs/specs/ops/ops-alerts.md`)을 보낸다. 상태 변경 요청의 결과는 바뀌지 않는다(예전에는 알림 예외가 상태 변경 뒤 500 응답으로 번졌다).
+- 서버 종료 신호(`enableShutdownHooks`)를 받으면 남은 알림을 최대 30초 기다리고, 그 뒤에 끝나는 요청은 알림을 응답 전에 보낸다(Nest는 진행 중 요청을 마무리한 다음 Firestore 연결을 닫는다). 그 사이 프로세스가 강제 종료되면 응답 전 동기 발송 때와 같이 그 알림은 보내지 못할 수 있다(`PROCESSING` 발송 기록이 남는다).
+- 소비자 직접 취소(`cancelOrder`)와 결제·환불 경로의 알림은 이번 변경 대상이 아니며 기존처럼 응답 전에 보낸다.
+- 직접 근거: `apps/api/src/orders/order-notice-dispatcher.spec.ts`(순서·재시도·운영 알림·종료 대기), `apps/api/src/orders/orders-lifecycle-completion.spec.ts`(응답이 알림을 기다리지 않음, 예외 뒤 같은 키로 재시도). 상태 전이 알림 내용을 단언하는 주문 스펙은 `apps/api/test/helpers/settled-orders-lifecycle.ts`로 명령 뒤 알림 처리 완료를 기다린 다음 단언한다.
+
 운영 이슈에서 명시적으로 SMS 재발송하는 경로는 기존 실패 알림 기록의 전화번호·template code·variables를 사용해 `AligoClient.sendSms()`를 호출한다.
 
 ## 9. 사용자 API와 선택 마케팅 동의
@@ -401,6 +412,7 @@ state → withdrawal → retention evidence → sender gating의 lifecycle을 �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-21 | 주문 상태 전이 고객 알림을 응답 뒤 발송(`OrderNoticeDispatcher`: 주문별 순서, 예외 재시도 2회, 최종 예외 운영 알림, 종료 시 30초 대기)으로 변경 |
 | 2026-10-09 | 알림 본문 변수 한 줄 정리·변수별 길이 상한(이름 링크 차단), 수신번호 단일 휴대폰 형식 강제, legacy 공동구매 처리 lease·알림 멱등 키 반영 |
 | 2026-09-28 | 선택 설정 `ALIGO_OUTBOUND_PROXY_URL`(고정 IP 프록시 경유)과 형식 오류 fail-closed 계약 추가 |
 | 2026-09-28 | 소비자 회차 직접 취소 `ORDER_CANCELLED` 발송 정책 결정과 구현 반영(고정 사유 `고객 요청`, PENDING·기취소 제외, 멱등 키) |

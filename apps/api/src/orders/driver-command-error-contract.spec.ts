@@ -1,11 +1,11 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { DriverService } from '../driver/driver.service';
 import { DriverOrderScopeService } from './driver-order-scope.service';
 import { OrdersQueryService } from './orders-query.service';
 import { DeliveryPhotosService } from './delivery-photos.service';
 import { readHttpExceptionBody } from './driver-order-error';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, any>;
 
@@ -150,7 +150,7 @@ function makeLifecycle(
     settlements as never,
     capacity as never,
   );
-  const lifecycle = new OrdersLifecycleService(
+  const lifecycle = createSettledOrdersLifecycle(
     memory.firestore as never,
     notifications as never,
     payments as never,

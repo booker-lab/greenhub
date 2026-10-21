@@ -1,10 +1,11 @@
 import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { getAllowedTransitions, NOTIFICATION_MAP } from './orders.helpers';
 import { OrdersCreateService } from './orders-create.service';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { OrdersQueryService } from './orders-query.service';
 import { RoundOrderCreateService } from './round-order-create.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
+import { OrderNoticeDispatcher } from './order-notice-dispatcher';
 
 type RecordData = Record<string, unknown>;
 function makeSnap(data: RecordData | null) {
@@ -362,7 +363,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       settlements as never,
       realCapacity as never,
     );
-    const lifecycle = new OrdersLifecycleService(
+    const lifecycle = createSettledOrdersLifecycle(
       firestore as never,
       notifications as never,
       payments as never,
@@ -1151,7 +1152,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     expect(records.get('orders/order-invalid-cancel')?.['status']).toBe('ACCEPTED');
   });
 
-  it('취소 저장 뒤 알림 실패가 나도 확정 상태와 사유를 유지한다', async () => {
+  it('취소 저장 뒤 알림 예외가 나도 요청은 성공하고 상태·사유를 유지하며 알림을 다시 시도한다', async () => {
     const { firestore, records } = makeFirestore(
       seedRoundRecords({
         'orders/order-notice-failure': {
@@ -1165,6 +1166,10 @@ describe('MVP 회차 주문 흐름 계약', () => {
       }),
     );
     notifications.sendToUser.mockRejectedValueOnce(new Error('알림 운영 예외'));
+    // 알림은 응답 뒤에 보내고 예외는 짧게 다시 시도한다(OrderNoticeDispatcher). 대기만 없앤다.
+    const sleep = jest
+      .spyOn(OrderNoticeDispatcher.prototype as never, 'sleep')
+      .mockResolvedValue(undefined as never);
     const service = makeLifecycle(firestore);
 
     await expect(
@@ -1175,11 +1180,15 @@ describe('MVP 회차 주문 흐름 계약', () => {
         { status: 'CANCELLED', reason: '재고 부족' } as never,
         'seller',
       ),
-    ).rejects.toThrow('알림 운영 예외');
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+    // 같은 멱등 키로 다시 시도해 고객 취소 안내가 나간다.
+    expect(notifications.sendToUser).toHaveBeenCalledTimes(2);
+    expect(notifications.sendToUser.mock.calls[1]).toEqual(notifications.sendToUser.mock.calls[0]);
     expect(records.get('orders/order-notice-failure')).toMatchObject({
       status: 'CANCELLED',
       cancelReason: '재고 부족',
     });
+    sleep.mockRestore();
   });
 
   it.each([

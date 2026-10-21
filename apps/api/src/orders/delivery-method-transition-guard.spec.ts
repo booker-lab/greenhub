@@ -10,8 +10,8 @@ import { DriverOrderScopeService } from './driver-order-scope.service';
 import type { OrderStatus } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { deliveryTransitionViolation } from './orders.helpers';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, any>;
 
@@ -82,7 +82,7 @@ function makeContext(order: Data) {
     capacity,
     driverScope,
   );
-  const lifecycle = new OrdersLifecycleService(
+  const lifecycle = createSettledOrdersLifecycle(
     firestore,
     notifications as never,
     payments as never,
