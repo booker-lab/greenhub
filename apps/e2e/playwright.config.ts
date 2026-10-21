@@ -2,6 +2,10 @@ import { defineConfig, devices } from '@playwright/test'
 import { config } from 'dotenv'
 import { resolve } from 'path'
 import { BYPASS_STATE_PATH } from './tests/_helpers/auth'
+import {
+  E2E_TEST_TIMEOUT_MS,
+  LOCAL_TARGET_EXPECT_TIMEOUT_MS,
+} from './tests/_helpers/order-command-timeout'
 
 config({ path: resolve(__dirname, '.env') })
 
@@ -11,8 +15,8 @@ const isLocalTargetMode = process.env.ROUND_DIRECT_E2E_TARGET_MODE === 'local'
 
 export default defineConfig({
   testDir: './tests',
-  timeout: 30_000,
-  ...(isLocalTargetMode ? { expect: { timeout: 15_000 } } : {}),
+  timeout: E2E_TEST_TIMEOUT_MS,
+  ...(isLocalTargetMode ? { expect: { timeout: LOCAL_TARGET_EXPECT_TIMEOUT_MS } } : {}),
   retries: 1,
   reporter: [['html', { open: 'never' }], ['list']],
   // globalSetup이 Preview 배포의 Vercel SSO 우회 쿠키(_vercel_jwt)를 발급해

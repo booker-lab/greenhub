@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { expect, test as base, type Page } from '@playwright/test';
+import { orderCommandsSettleTimeout } from './_helpers/order-command-timeout';
 import {
   installPortOneBrowserStub,
   roundDirectFixture,
@@ -258,7 +259,10 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await expect(page.getByText('재배송비 결제 완료')).toBeVisible();
     await page.getByRole('button', { name: '배송 재개' }).click();
 
-    await expect(page.getByRole('banner').getByText('배송 중', { exact: true })).toBeVisible();
+    // 재개 PATCH(재배송 알림톡 멱등 기록·발송 포함)와 상세 재조회가 끝나야 배송 중으로 바뀐다.
+    await expect(page.getByRole('banner').getByText('배송 중', { exact: true })).toBeVisible({
+      timeout: orderCommandsSettleTimeout(1),
+    });
     await expect(page.getByRole('button', { name: '배송 완료 사진 촬영' })).toBeVisible();
   });
 
