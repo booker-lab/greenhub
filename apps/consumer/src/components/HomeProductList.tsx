@@ -25,7 +25,12 @@ import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
-import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import {
+  type StoreProfileFailure,
+  classifyStoreProfileFailure,
+  fetchPublicStoreProfile,
+  storeProfileFailureMessage,
+} from '@/lib/public-store-profile';
 import { deliveryDayTag } from '@/lib/round-countdown';
 import { canQuickAdd, cartAddFailureMessage, roundItemCartInput } from '@/lib/round-quick-add';
 import {
@@ -46,7 +51,7 @@ import KakaoChannelCta from './benchmark/KakaoChannelCta';
 import { useReviewStats, useRoundWishlist, useStoreProfile } from '@/hooks/useBenchmark';
 import { isFeatureOn } from '@/lib/features';
 
-type StoreModeStatus = 'loading' | 'ready' | 'error';
+type StoreModeStatus = 'loading' | 'ready' | StoreProfileFailure;
 
 interface StoreModeState {
   storeId: string | null;
@@ -96,8 +101,10 @@ function useStoreMode(storeId: string | null, productsLoading: boolean): StoreMo
           status: 'ready',
         });
       })
-      .catch(() => {
-        if (active) setState({ storeId, salesMode: 'legacy', status: 'error' });
+      .catch((error: unknown) => {
+        if (active) {
+          setState({ storeId, salesMode: 'legacy', status: classifyStoreProfileFailure(error) });
+        }
       });
 
     return () => {
@@ -751,11 +758,11 @@ export default function HomeProductList({ banner }: { banner?: ReactNode }) {
         ))}
       </SimpleGrid>
     );
-  } else if (storeMode.status === 'error') {
+  } else if (storeMode.status !== 'ready') {
     content = (
       <Stack align="center" py={48} role="alert">
         <Text size="sm" c="var(--color-text-secondary)">
-          판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+          {storeProfileFailureMessage(storeMode.status)}
         </Text>
       </Stack>
     );

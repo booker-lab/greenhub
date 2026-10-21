@@ -21,7 +21,12 @@ import { useEffect, useState } from 'react';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
-import { fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import {
+  type StoreProfileFailure,
+  classifyStoreProfileFailure,
+  fetchPublicStoreProfile,
+  storeProfileFailureMessage,
+} from '@/lib/public-store-profile';
 import { CardDiscount, CardMeta, CardSellerLine, BenchmarkCardProvider } from '@/components/benchmark/CardExtras';
 import ProductRequestBox from '@/components/benchmark/ProductRequestBox';
 import { useHomeCardContext } from '@/components/HomeProductList';
@@ -53,7 +58,7 @@ const COLOR_CHIPS: { label: string; value: ColorOption; hex: string }[] = [
 ];
 const SKELETON_KEYS = ['first', 'second', 'third', 'fourth'];
 
-type StoreModeStatus = 'loading' | 'ready' | 'error';
+type StoreModeStatus = 'loading' | 'ready' | StoreProfileFailure;
 
 interface StoreModeState {
   storeId: string | null;
@@ -97,8 +102,10 @@ function useStoreMode(storeId: string | null, discoveryPending: boolean): StoreM
         }
         setState({ storeId, salesMode: normalizeSalesMode(value), status: 'ready' });
       })
-      .catch(() => {
-        if (active) setState({ storeId, salesMode: 'legacy', status: 'error' });
+      .catch((error: unknown) => {
+        if (active) {
+          setState({ storeId, salesMode: 'legacy', status: classifyStoreProfileFailure(error) });
+        }
       });
 
     return () => {
@@ -531,11 +538,11 @@ export default function CategoryPage() {
         ))}
       </SimpleGrid>
     );
-  } else if (storeMode.status === 'error') {
+  } else if (storeMode.status !== 'ready') {
     content = (
       <Stack align="center" py={48} role="alert">
         <Text size="sm" c="var(--color-text-secondary)">
-          판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+          {storeProfileFailureMessage(storeMode.status)}
         </Text>
       </Stack>
     );

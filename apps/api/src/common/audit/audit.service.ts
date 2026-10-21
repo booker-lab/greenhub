@@ -10,6 +10,7 @@ export type AuditAction =
   | 'auth.logout'
   | 'auth.token.stolen' // refresh token 재사용 감지
   | 'auth.kakao.forbidden'
+  | 'auth.withdrawn' // 소비자 회원 탈퇴(개인정보 익명화·세션 폐기)
   | 'payment.amount_tampered' // 금액 위변조 감지
   | 'payment.webhook.invalid_sig'; // 서명 검증 실패
 

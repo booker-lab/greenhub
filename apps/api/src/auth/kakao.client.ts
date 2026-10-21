@@ -37,11 +37,54 @@ export class KakaoClient {
   private readonly logger = new Logger(KakaoClient.name);
   /** 비어 있으면 토큰 발급 앱 비교만 건너뛴다. 운영 로그인을 막지 않도록 경고만 남긴다. */
   private readonly appId: string;
+  /** 회원 탈퇴의 카카오 연결 끊기용 Admin Key. 비어 있으면 연결 끊기를 건너뛴다(탈퇴는 그대로 끝난다). */
+  private readonly adminKey: string;
 
   constructor(@Inject(ConfigService) private readonly config: ConfigService) {
     this.appId = (this.config.get<string>('KAKAO_APP_ID') ?? '').trim();
-    if (!this.appId && isProductionRuntime(getConfigValues(this.config))) {
+    this.adminKey = (this.config.get<string>('KAKAO_ADMIN_KEY') ?? '').trim();
+    const production = isProductionRuntime(getConfigValues(this.config));
+    if (!this.appId && production) {
       this.logger.warn('KAKAO_APP_ID가 설정되지 않아 카카오 토큰 발급 앱 확인을 건너뜁니다.');
+    }
+    if (!this.adminKey && production) {
+      this.logger.warn('KAKAO_ADMIN_KEY가 설정되지 않아 회원 탈퇴 때 카카오 연결 끊기를 건너뜁니다.');
+    }
+  }
+
+  /**
+   * 카카오 사용자와 우리 앱의 연결을 끊는다(Admin Key 방식). 성공하면 'unlinked',
+   * 키가 없으면 'not_configured', 시간 초과·네트워크 오류·비정상 응답은 'failed'를 돌려준다.
+   * 절대 throw하지 않는다. 로그에는 카카오 사용자 id를 남기지 않는다.
+   */
+  async unlinkUser(kakaoId: string): Promise<'unlinked' | 'not_configured' | 'failed'> {
+    if (!this.adminKey) return 'not_configured';
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), KAKAO_REQUEST_TIMEOUT_MS);
+    try {
+      const response = await fetch(`${this.baseUrl}/v1/user/unlink`, {
+        method: 'POST',
+        headers: {
+          Authorization: `KakaoAK ${this.adminKey}`,
+          'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8',
+        },
+        body: new URLSearchParams({ target_id_type: 'user_id', target_id: kakaoId }).toString(),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        this.logger.warn(`카카오 연결 끊기 응답 status=${response.status}`);
+        return 'failed';
+      }
+      return 'unlinked';
+    } catch {
+      this.logger.warn(
+        controller.signal.aborted
+          ? `카카오 연결 끊기 시간 초과 timeoutMs=${KAKAO_REQUEST_TIMEOUT_MS}`
+          : '카카오 연결 끊기 요청 실패',
+      );
+      return 'failed';
+    } finally {
+      clearTimeout(timer);
     }
   }
 
