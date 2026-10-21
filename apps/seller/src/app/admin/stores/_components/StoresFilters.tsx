@@ -35,7 +35,7 @@ export function StoresFilters({
     <Group gap="sm" mb="md" align="end" wrap="wrap">
       <TextInput
         label="판매자 검색"
-        placeholder="상호명 입력"
+        placeholder="상호·대표자·전화번호"
         value={keyword}
         onChange={(event) => onKeywordChange(event.currentTarget.value)}
         style={{ flex: 1, minWidth: 180 }}

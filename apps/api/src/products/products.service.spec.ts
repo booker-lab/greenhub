@@ -145,7 +145,10 @@ describe('store-scoped anonymous product API 우회 차단', () => {
     const query = makeChainable(docs);
     const firestore = {
       collection: jest.fn().mockReturnValue(query),
-      doc: jest.fn(),
+      // 가게 단위 공개 목록은 먼저 가게가 치워졌는지 본다(여기서는 운영 중인 가게).
+      doc: jest.fn(() => ({
+        get: jest.fn().mockResolvedValue({ exists: true, data: () => ({ status: 'active' }) }),
+      })),
     };
     const service = new ProductsService(firestore as never);
 

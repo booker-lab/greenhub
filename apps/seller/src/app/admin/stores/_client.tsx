@@ -13,6 +13,8 @@ import {
   DEFAULT_COMMISSION_PERCENT,
   DEFAULT_SORT,
   DEFAULT_STATUS_FILTER,
+  describeArchiveConfirm,
+  describeRestoreConfirm,
   filterStores,
   getAdminStoresReadState,
   getEmptyKind,
@@ -157,35 +159,41 @@ export default function AdminStoresClient() {
   };
 
   const handleArchive = async (store: AdminStore) => {
-    const label = store.name || '(미설정)';
-    if (!window.confirm(`${label} 판매자를 정리할까요? 주문·정산 기록은 보존됩니다.`)) return;
+    if (!window.confirm(describeArchiveConfirm(store))) return;
     try {
       const reconciliation = await archiveStore(store.id);
       if (!reconciliation.reconciled) {
         // COMMAND CONFIRMED + RECONCILIATION FAILED — 실패로 표현하지 않고 중복 실행을 유도하지 않는다.
         notifications.show({
           color: 'yellow',
-          title: '정리 처리는 완료됐으나 목록 확인 실패',
+          title: '치우기는 완료됐으나 목록 확인 실패',
           message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
         });
+        return;
       }
+      notifications.show({
+        color: 'brand',
+        title: '판매자를 치웠습니다',
+        message: `${store.name || '(미설정)'} — 손님 화면에서 숨고 새 주문을 받지 않습니다.`,
+      });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
-        const presentation = describeAdminCommandOutcome(classified, '정리');
+        const presentation = describeAdminCommandOutcome(classified, '치우기');
         notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
         return;
       }
       // 기록 가드(400) 등 차단 사유를 서버 메시지 그대로 안내
       notifications.show({
         color: 'red',
-        title: '정리할 수 없습니다',
-        message: e instanceof Error ? e.message : '판매자 정리 중 오류가 발생했습니다.',
+        title: '치울 수 없습니다',
+        message: e instanceof Error ? e.message : '판매자를 치우는 중 오류가 발생했습니다.',
       });
     }
   };
 
   const handleRestore = async (store: AdminStore) => {
+    if (!window.confirm(describeRestoreConfirm(store))) return;
     try {
       const reconciliation = await restoreStore(store.id);
       if (!reconciliation.reconciled) {
@@ -194,7 +202,13 @@ export default function AdminStoresClient() {
           title: '복구 처리는 완료됐으나 목록 확인 실패',
           message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
         });
+        return;
       }
+      notifications.show({
+        color: 'brand',
+        title: '판매자를 복구했습니다',
+        message: `${store.name || '(미설정)'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
+      });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
