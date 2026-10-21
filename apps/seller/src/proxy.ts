@@ -1,5 +1,6 @@
 import { type NextFetchEvent, type NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { ADMIN_HOME_PATH, isAdminPath, isPureAdmin } from '@/lib/admin-landing';
 import { buildContentSecurityPolicy, createCspNonce } from '@/lib/content-security-policy';
 
 // 요청마다 nonce를 만들어 요청 헤더로 넘긴다. Next는 요청의 CSP 헤더에서 nonce를 읽어
@@ -51,6 +52,12 @@ const authGate = auth((request) => {
   }
 
   // storeId 있어도 /onboarding 재접근 허용 — 설정 > 사업자 정보 수정 경로
+
+  // 순수 어드민이 판매자 화면(/orders 등)에 들어오면 관리자 콘솔로 보낸다. 가게가 없어
+  // 판매자 화면은 빈 화면·오류만 보인다. 겸직 계정은 판매자 화면을 그대로 쓴다.
+  if (isPureAdmin(session.user) && !isAdminPath(pathname)) {
+    return NextResponse.redirect(new URL(ADMIN_HOME_PATH, request.url));
+  }
 
   return continueWithCsp(request);
 });

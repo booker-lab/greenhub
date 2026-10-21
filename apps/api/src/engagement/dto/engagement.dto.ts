@@ -50,6 +50,12 @@ export class HideReviewDto {
   note?: string;
 }
 
+/** 관리자가 입점 문의를 "연락함"으로 표시하거나 되돌린다. */
+export class PartnerInquiryContactedDto {
+  @IsBoolean()
+  contacted: boolean;
+}
+
 /** 숨김 해제 사유는 선택이다. */
 export class UnhideReviewDto {
   @IsOptional()
