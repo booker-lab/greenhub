@@ -8,6 +8,8 @@ import {
 import { Test } from '@nestjs/testing';
 import { AdminController } from '../../src/admin/admin.controller';
 import { AdminService } from '../../src/admin/admin.service';
+import { AdminPostDeliveryRefundController } from '../../src/admin/admin-post-delivery-refund.controller';
+import { AdminPostDeliveryRefundService } from '../../src/admin/admin-post-delivery-refund.service';
 import { AuditService } from '../../src/common/audit/audit.service';
 import { JwtAuthGuard } from '../../src/common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../src/common/guards/roles.guard';
@@ -24,6 +26,8 @@ import { OrdersService } from '../../src/orders/orders.service';
 import { OrdersCreateService } from '../../src/orders/orders-create.service';
 import { OrdersLifecycleService } from '../../src/orders/orders-lifecycle.service';
 import { OrdersQueryService } from '../../src/orders/orders-query.service';
+import { PostDeliveryRefundController } from '../../src/orders/post-delivery-refund.controller';
+import { PostDeliveryRefundService } from '../../src/orders/post-delivery-refund.service';
 import { RoundOrderCreateService } from '../../src/orders/round-order-create.service';
 import { RoundOrderLifecycleService } from '../../src/orders/round-order-lifecycle.service';
 import { OrderChargePaymentService } from '../../src/payments/order-charge-payment.service';
@@ -126,7 +130,10 @@ export async function createMvpSalesRoundFixture() {
     sendToGroupParticipants: jest.fn().mockResolvedValue(undefined),
     processGroupBuyEarlyConfirm: jest.fn().mockResolvedValue(undefined),
   };
-  const audit = { log: jest.fn().mockResolvedValue(undefined) };
+  const audit = {
+    log: jest.fn().mockResolvedValue(undefined),
+    logAdmin: jest.fn().mockResolvedValue(undefined),
+  };
   const portone = {
     verifyWebhookSignature: jest.fn(),
     getPayment: jest.fn(async (paymentId: string) => {
@@ -175,6 +182,12 @@ export async function createMvpSalesRoundFixture() {
     roundLifecycle,
   );
   const driverScope = new DriverOrderScopeService(firestore);
+  const postDeliveryRefunds = new PostDeliveryRefundService(
+    firestore,
+    payments,
+    settlements,
+    notifications as never,
+  );
   const roundState = new SaleRoundStateService(firestore, roundLifecycle);
   const saleRounds = new SaleRoundsService(firestore, roundState);
   const roundCreate = new RoundOrderCreateService(firestore, capacity, retention);
@@ -201,6 +214,8 @@ export async function createMvpSalesRoundFixture() {
       PaymentsController,
       RefundController,
       DeliveryPhotosController,
+      PostDeliveryRefundController,
+      AdminPostDeliveryRefundController,
     ],
     providers: [
       RolesGuard,
@@ -215,6 +230,8 @@ export async function createMvpSalesRoundFixture() {
       { provide: PortoneClient, useValue: portone },
       { provide: AuditService, useValue: audit },
       { provide: DeliveryPhotosService, useValue: deliveryPhotos },
+      { provide: PostDeliveryRefundService, useValue: postDeliveryRefunds },
+      AdminPostDeliveryRefundService,
     ],
   })
     .overrideGuard(JwtAuthGuard)
@@ -239,6 +256,7 @@ export async function createMvpSalesRoundFixture() {
     finalization,
     portone,
     notifications,
+    audit,
     deliveredNotificationKeys,
     reset() {
       memory.records.clear();
