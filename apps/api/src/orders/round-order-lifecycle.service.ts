@@ -30,7 +30,10 @@ import {
 } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { DriverOrderScopeService } from './driver-order-scope.service';
-import { isOrderCancellationInProgress } from './order-cancellation-state';
+import {
+  CANCELLABLE_ORDER_STATUSES,
+  isOrderCancellationInProgress,
+} from './order-cancellation-state';
 import { readDeliveryHoldCount } from './order-transition-notice';
 import {
   assertPaidRedeliveryResume,
@@ -44,16 +47,6 @@ import {
 import { customerOrderLabel } from '../notifications/customer-order-label';
 
 type OrderRecord = Record<string, any>;
-
-// 판매자·소비자·회차 취소가 시작될 수 있는 주문 상태. 로컬 취소 확정도 같은 상태에서만 한다.
-const CANCELLABLE_ORDER_STATUSES = [
-  'PENDING',
-  'ACCEPTED',
-  'RECRUITING',
-  'CONFIRMED',
-  'PREPARING',
-  'DELIVERY_HELD',
-];
 
 @Injectable()
 export class RoundOrderLifecycleService {

@@ -261,6 +261,25 @@ describe('AdminService 소비자 목록 응답 최소화', () => {
       total: 1,
     });
   });
+
+  it('탈퇴한 소비자(withdrawnAt 있음)는 목록과 개수에서 뺀다', async () => {
+    const docs = [
+      { data: () => ({ id: 'consumer-1', role: 'consumer', name: '소비자' }) },
+      { data: () => ({ id: 'consumer-2', role: 'consumer', withdrawnAt: { _seconds: 1 } }) },
+    ];
+    const query = {
+      where: jest.fn().mockReturnThis(),
+      orderBy: jest.fn().mockReturnThis(),
+      get: jest.fn().mockResolvedValue({ docs, size: docs.length }),
+    };
+    const firestore = { collection: jest.fn().mockReturnValue(query) };
+    const service = new AdminService(firestore as never, {} as never, {} as never, {} as never);
+
+    await expect(service.getUsers()).resolves.toEqual({
+      users: [{ id: 'consumer-1', name: '소비자' }],
+      total: 1,
+    });
+  });
 });
 
 describe('AdminService 기사 목록', () => {
