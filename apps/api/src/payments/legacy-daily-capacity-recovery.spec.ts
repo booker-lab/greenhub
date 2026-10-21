@@ -1,10 +1,10 @@
-import { OrdersLifecycleService } from '../orders/orders-lifecycle.service';
 import {
   isLegacyDailyCapacityEligible,
   legacyDailyCapacityDateKey,
 } from './_lib/legacy-daily-capacity';
 import { PaymentFinalizationService } from './payment-finalization.service';
 import { PaymentsService } from './payments.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, any>;
 
@@ -286,7 +286,7 @@ describe('legacy seller cancellation recovery', () => {
       });
       const payments = { processRefundByOrderId: jest.fn().mockResolvedValue(undefined) };
       const settlements = { cancelSettlement: jest.fn().mockResolvedValue(undefined) };
-      const service = new OrdersLifecycleService(
+      const service = createSettledOrdersLifecycle(
         firestore as never,
         { sendToUser: jest.fn(), sendToGroupParticipants: jest.fn() } as never,
         payments as never,

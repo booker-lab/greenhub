@@ -1,5 +1,5 @@
-import { OrdersLifecycleService } from '../orders/orders-lifecycle.service';
 import { SettlementsService } from './settlements.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type TestRecord = Record<string, unknown>;
 type TransactionCallback = (transaction: TestTransaction) => Promise<unknown>;
@@ -303,7 +303,7 @@ function makeOrderLifecycleService(
     releaseReservationInTransaction: jest.fn().mockResolvedValue(undefined),
   };
   const roundLifecycle = { updateStatus: jest.fn() };
-  const service = new OrdersLifecycleService(
+  const service = createSettledOrdersLifecycle(
     firestore as never,
     notifications as never,
     payments as never,

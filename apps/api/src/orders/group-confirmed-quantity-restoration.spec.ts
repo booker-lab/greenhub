@@ -14,8 +14,8 @@
 
 import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { AdminService } from '../admin/admin.service';
-import { OrdersLifecycleService } from './orders-lifecycle.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
 type Data = Record<string, any>;
 type Write = { operation: 'set' | 'update'; path: string; data: Data };
@@ -196,7 +196,7 @@ function makeSellerContext(options: { order?: Data; gc?: Data | null } = {}) {
     updateStatus: jest.fn().mockResolvedValue({ orderId: 'order-1', status: 'CANCELLED' }),
     cancelByConsumer: jest.fn(),
   };
-  const lifecycle = new OrdersLifecycleService(
+  const lifecycle = createSettledOrdersLifecycle(
     memory.firestore as never,
     notifications as never,
     payments as never,

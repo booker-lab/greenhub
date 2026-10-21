@@ -8,6 +8,7 @@ import { DeliveryPhotosController } from './delivery-photos.controller';
 import { DeliveryPhotosService } from './delivery-photos.service';
 import { OrderCapacityModule } from './order-capacity.module';
 import { OrderChargesService } from './order-charges.service';
+import { OrderNoticeDispatcher } from './order-notice-dispatcher';
 import { OrdersController, OrdersPublicController } from './orders.controller';
 import { OrdersService } from './orders.service';
 import { OrdersCreateService } from './orders-create.service';
@@ -42,6 +43,7 @@ import { DriverOrderScopeService } from './driver-order-scope.service';
     OrdersLifecycleService,
     RoundOrderLifecycleService,
     DriverOrderScopeService,
+    OrderNoticeDispatcher,
     OrderChargesService,
     DeliveryPhotosService,
     PostDeliveryRefundService,

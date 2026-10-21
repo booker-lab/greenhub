@@ -17,6 +17,7 @@ import {
 } from './delivery-photo-url';
 import type { OrderStatus, UpdateStatusDto } from './dto/update-status.dto';
 import { OrderCapacityService } from './order-capacity.service';
+import { OrderNoticeDispatcher } from './order-notice-dispatcher';
 import { DriverOrderScopeService } from './driver-order-scope.service';
 import {
   deliveryTransitionViolation,
@@ -79,6 +80,7 @@ export const DELIVERY_HOLD_CUSTOMER_REASONS: Readonly<Record<string, string>> = 
 export class OrdersLifecycleService {
   private readonly logger = new Logger(OrdersLifecycleService.name);
   private readonly driverScope: DriverOrderScopeService;
+  private readonly noticeDispatcher: OrderNoticeDispatcher;
 
   constructor(
     private readonly firestore: FirestoreService,
@@ -88,8 +90,10 @@ export class OrdersLifecycleService {
     private readonly capacity: OrderCapacityService,
     private readonly roundLifecycle: RoundOrderLifecycleService,
     driverScope?: DriverOrderScopeService,
+    noticeDispatcher?: OrderNoticeDispatcher,
   ) {
     this.driverScope = driverScope ?? new DriverOrderScopeService(firestore);
+    this.noticeDispatcher = noticeDispatcher ?? new OrderNoticeDispatcher();
   }
 
   async updateStatus(
@@ -144,14 +148,7 @@ export class OrdersLifecycleService {
       if (outcome === 'alreadyReviewed') {
         throw new ForbiddenException(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
       }
-      await this.sendTransitionNotification(
-        order,
-        currentStatus,
-        nextStatus as OrderStatus,
-        orderId,
-        undefined,
-        {},
-      );
+      await this.notifyTransitionAfterCommit(order, currentStatus, nextStatus as OrderStatus, orderId);
       return { orderId, status: nextStatus };
     }
 
@@ -196,7 +193,7 @@ export class OrdersLifecycleService {
       if (nextStatus === 'DELIVERED') {
         await this.reconcileDeliveryCompletion(storeId, orderId);
       } else {
-        await this.sendTransitionNotification(
+        await this.notifyTransitionAfterCommit(
           order,
           currentStatus,
           nextStatus as OrderStatus,
@@ -424,8 +421,8 @@ export class OrdersLifecycleService {
       await this.settlements.createSettlement(order, 'DELIVERED');
     }
 
-    // 알림 발송
-    await this.sendTransitionNotification(
+    // 알림 발송(응답 뒤)
+    await this.notifyTransitionAfterCommit(
       order,
       currentStatus,
       nextStatus as OrderStatus,
@@ -448,7 +445,7 @@ export class OrdersLifecycleService {
     }
 
     await this.settlements.createSettlement(order, 'DELIVERED');
-    await this.sendTransitionNotification(
+    await this.notifyTransitionAfterCommit(
       order,
       'DELIVERING',
       'DELIVERED',
@@ -1201,6 +1198,22 @@ export class OrdersLifecycleService {
       return (value as { toDate: () => Date }).toDate().toISOString();
     }
     return new Date(value as string | number).toISOString();
+  }
+
+  // 상태 변경이 커밋된 뒤 고객 알림을 응답과 분리해 보낸다. 같은 주문은 순서대로, 예외는 짧게 다시
+  // 시도한 뒤 운영 알림으로 남긴다(OrderNoticeDispatcher). 알림은 멱등 키로 한 번만 나간다.
+  // 서버 종료 중에만 알림이 끝날 때까지 기다린다. 알림 예외로 reject하지 않는다.
+  private notifyTransitionAfterCommit(
+    order: Record<string, unknown>,
+    from: OrderStatus,
+    to: OrderStatus,
+    orderId: string,
+    idempotencyKey?: string,
+    extraVariables: Record<string, string> = {},
+  ): Promise<void> {
+    return this.noticeDispatcher.dispatch(orderId, `${from}→${to}`, () =>
+      this.sendTransitionNotification(order, from, to, orderId, idempotencyKey, extraVariables),
+    );
   }
 
   private async sendTransitionNotification(
