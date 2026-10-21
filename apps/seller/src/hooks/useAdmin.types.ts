@@ -1,4 +1,9 @@
-import type { OrderStatus, SettlementStatus, StoreStatus } from '@greenhub/shared';
+import type {
+  OrderStatus,
+  PostDeliveryRefundRecord,
+  SettlementStatus,
+  StoreStatus,
+} from '@greenhub/shared';
 import type { AdminCommandOutcome } from './useAdmin.outcome';
 
 // 관리자 화면 공통 타입 — 도메인별 훅 파일과 화면이 함께 쓴다.
@@ -54,6 +59,8 @@ export interface AdminOrder {
   roundId?: string | null;
   // 소비자 요청사항(회차 주문만)
   requestNote?: string | null;
+  // 배송 후 환불 기록(환불한 주문만)
+  postDeliveryRefund?: PostDeliveryRefundRecord | null;
 }
 
 /** 관리자 정산 지급용 판매자 계좌(지급 대상 confirmed 행에만 온다). */

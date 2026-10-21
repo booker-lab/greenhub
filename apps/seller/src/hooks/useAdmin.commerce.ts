@@ -1,5 +1,6 @@
 'use client';
 
+import type { PostDeliveryRefundReasonCode } from '@greenhub/shared';
 import type { AdminCommandOutcome } from './useAdmin.outcome';
 import { runAdminCommandWithBody, withQuery } from './useAdmin.list';
 import { useAdminPagedList } from './useAdmin.paged';
@@ -48,6 +49,21 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
     return { ...outcome, recovery: readRefundRecovery(body) };
   };
 
+  // 배송 후 환불(기한 없음) — 사유 코드·메모 필수. 지급 완료 정산이면 강제 환불처럼 회수 정보가 온다.
+  const postDeliveryRefund = async (
+    orderId: string,
+    reasonCode: PostDeliveryRefundReasonCode,
+    memo: string,
+  ): Promise<AdminCommandOutcome & { recovery: RefundRecovery | null }> => {
+    const { outcome, body } = await runAdminCommandWithBody(
+      token,
+      `/admin/orders/${orderId}/post-delivery-refund`,
+      { method: 'POST', body: JSON.stringify({ reasonCode, memo }) },
+      reload,
+    );
+    return { ...outcome, recovery: readRefundRecovery(body) };
+  };
+
   return {
     orders,
     hasMore,
@@ -58,6 +74,7 @@ export function useAdminOrders(filters?: { storeId?: string; status?: string }) 
     reload,
     loadMore,
     forceRefund,
+    postDeliveryRefund,
   };
 }
 
