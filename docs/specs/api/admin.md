@@ -185,6 +185,17 @@ admin 환불의 주문·결제·정산·회차 capacity 후속효과 수렴은 `
 
 추적: `docs/BACKLOG.md`의 `ADMIN-FORCE-REFUND-CONSISTENCY`; 직접 증거: `apps/api/src/admin/admin.service.spec.ts`, `apps/api/src/admin/admin-legacy-refund-occ-retry.spec.ts`.
 
+### 배송 후 환불
+
+```text
+POST /admin/orders/:orderId/post-delivery-refund   { reasonCode, memo }
+```
+
+- 배송 완료로 표시된 회차 주문을 기간·정산 조건 없이 전액 환불한다. 흐름과 거부 조건은 `orders.md` §8D가 정본이다.
+- 정산이 이미 `paid`면 정산은 그대로 두고 회수 필요(`recoveryRequired`·`recoveryAmount`)와 관리자만 닫는 운영 기록이 남는다(`settlements.md` §7). 응답에도 `recoveryRequired`·`recoveryAmount`가 실려 화면이 강제 환불처럼 "환불 완료 · 판매자 회수 필요"를 알린다.
+- 성공한 환불만 `admin.order.post_delivery_refunded` 행동 기록을 남긴다(사유 칸 = 메모).
+- 기존 `AdminService`와 분리된 `AdminPostDeliveryRefundService`·`AdminPostDeliveryRefundController`가 소유한다. 직접 증거: `apps/api/src/admin/admin-post-delivery-refund.service.spec.ts`.
+
 ## 6. 정산 관리
 
 ### 목록
@@ -213,6 +224,10 @@ PATCH /admin/settlements/:settlementId/pay
 - transaction 안에서 status 재확인
 - `paidAt`, `paidBy`(처리한 어드민 ID), `updatedAt` 기록
 - 같은 transaction에 `adminAuditLogs` 기록(`admin.settlement.paid`)을 함께 쓴다. 기록 없는 지급은 생기지 않는다.
+
+### 회수 완료
+
+전용 endpoint는 없다. 지급 뒤 환불로 정산에 `recoveryRequired`가 붙으면 함께 열리는 운영 기록 `SETTLEMENT_RECOVERY_REQUIRED`(관리자만 닫기, `settlements.md` §7)를, 관리자가 판매자에게서 계좌로 돌려받은 뒤 메모와 함께 닫는다. 정산 `status: paid`와 회수 필요 표시는 그대로 남는다. 다음 정산에서 자동으로 빼지 않는다.
 
 ### 검증 상태 — `IMPLEMENTATION_PROVEN`
 
@@ -385,6 +400,7 @@ Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다
 | `admin.driver.approved` | driver | `driverApproved` | - |
 | `admin.driver.suspended` / `admin.driver.unsuspended` | driver | `suspended` | `SuspendUserDto.reason` |
 | `admin.order.force_refunded` | order | `status` → `CANCELLED` | `ForceRefundDto.reason`(200자) |
+| `admin.order.post_delivery_refunded` | order | `status` → `CANCELLED`, `reasonCode`(지급 완료 정산이면 `recoveryRequired`·`recoveryAmount`) | 환불 메모(200자) |
 | `admin.settlement.paid` | settlement | `status` | - |
 | `admin.banner.updated` | banner `main_hero` | 바꾼 칸만 | - |
 | `store.payout_account.updated` | store | `bankName`·`accountNumberLast4`(예금주·전체 번호 없음) | - |
@@ -443,6 +459,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-21 | 관리자 배송 후 환불(§5) endpoint와 행동 기록 `admin.order.post_delivery_refunded` 추가. 지급 뒤 환불의 회수 완료는 운영 기록(`SETTLEMENT_RECOVERY_REQUIRED`) 닫기로 처리 |
 | 2026-10-21 | 운영 판매자 가입을 초대 링크 → 카카오 로그인으로 결정(`kakao-login` `inviteToken`), 초대 탭 링크 복사·발급/사용 시각·사용 계정 표시 |
 | 2026-10-21 | 어드민 행동 기록(`adminAuditLogs`, `GET /admin/audit-logs`, seller "기록" 탭), 정산 지급 `paidBy`, 정지 사유(`SuspendUserDto.reason`) 추가 |
 | 2026-10-18 | 운영 런타임의 이메일 가입 전면 거부로 운영에서는 초대 토큰 가입이 불가함을 명시(발급·목록·취소는 그대로) |
