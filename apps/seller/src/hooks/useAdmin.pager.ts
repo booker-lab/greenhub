@@ -39,10 +39,13 @@ export type AdminPagedRequest<T> =
 
 /** 서버 응답에서 한 쪽을 읽는다. hasMore·nextCursor가 없으면(옛 응답) 더 없음으로 본다. */
 export function readAdminPage<T>(data: unknown, key: string): AdminPage<T> {
-  const body = (data ?? {}) as Record<string, unknown>;
+  const body = (data ?? {}) as { hasMore?: unknown; nextCursor?: unknown } & Record<
+    string,
+    unknown
+  >;
   const items = Array.isArray(body[key]) ? (body[key] as T[]) : [];
-  const nextCursor = typeof body['nextCursor'] === 'string' ? body['nextCursor'] : null;
-  return { items, hasMore: body['hasMore'] === true && nextCursor !== null, nextCursor };
+  const nextCursor = typeof body.nextCursor === 'string' ? body.nextCursor : null;
+  return { items, hasMore: body.hasMore === true && nextCursor !== null, nextCursor };
 }
 
 export function createAdminPagedLoader<T>(sink: AdminPagedSink<T>) {

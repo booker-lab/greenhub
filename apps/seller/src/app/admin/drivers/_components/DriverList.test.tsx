@@ -133,3 +133,19 @@ describe('Admin DriverList read state', () => {
     expect(textsOf(processingTree)).toContain('처리중…');
   });
 });
+
+describe('Admin DriverList 연락처·가입일', () => {
+  it('전화번호와 가입일(KST)을 보여 주고, 전화가 없으면 자리표시자', () => {
+    const tree = DriverList({
+      ...baseProps,
+      drivers: [
+        driver('d1', { phone: '010-1234-5678', createdAt: '2026-09-30T16:00:00.000Z' }),
+        driver('d2', { phone: null }),
+      ],
+    });
+    const texts = textsOf(tree);
+    expect(texts).toContain('010-1234-5678');
+    expect(texts).toContain('2026-10-01');
+    expect(texts).toContain('—');
+  });
+});

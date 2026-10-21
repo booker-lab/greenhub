@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { getAdminStoresReadState, parseRate } from './_lib';
+import type { AdminStore } from '@/hooks/useAdmin';
+import {
+  describeArchiveConfirm,
+  filterStores,
+  formatStoreContact,
+  getAdminStoresReadState,
+  parseRate,
+} from './_lib';
 
 describe('parseRate', () => {
   it('소수 수수료율을 정상 값으로 변환한다', () => {
@@ -131,5 +138,37 @@ describe('getAdminStoresReadState', () => {
         visible: [store('s1')],
       }),
     ).toBe('HAS_RESULTS');
+  });
+});
+
+describe('판매자 검색·연락처·치우기 안내', () => {
+  const stores = [
+    { id: 's-1', name: '난플렉스', status: 'active', ceoName: '김대표', phone: '010-1234-5678' },
+    { id: 's-2', name: '하늘정원', status: 'invited' },
+  ] as AdminStore[];
+  const search = (keyword: string) =>
+    filterStores(stores, { keyword, status: 'all' }).map((store) => store.id);
+
+  it('상호·대표자 이름·전화번호(하이픈 없이도)로 찾는다', () => {
+    expect(search('난플')).toEqual(['s-1']);
+    expect(search('김대표')).toEqual(['s-1']);
+    expect(search('010-1234')).toEqual(['s-1']);
+    expect(search('01012345678')).toEqual(['s-1']);
+    expect(search('하늘')).toEqual(['s-2']);
+    expect(search('9999')).toEqual([]);
+  });
+
+  it('대표자·연락처 한 줄, 둘 다 없으면 자리표시자', () => {
+    expect(formatStoreContact(stores[0])).toBe('김대표 · 010-1234-5678');
+    expect(formatStoreContact(stores[1])).toBe('—');
+  });
+
+  it('치우기 확인창은 실제 동작(숨김·주문 차단·로그인 유지·기록 있으면 불가)을 알린다', () => {
+    const message = describeArchiveConfirm({ name: '난플렉스' });
+    expect(message).toContain('난플렉스 판매자를 치울까요?');
+    expect(message).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다');
+    expect(message).toContain('계속 로그인할 수 있고');
+    expect(message).toContain('기록이 하나라도 있는 판매자는 치울 수 없습니다');
+    expect(message).not.toContain('보존됩니다');
   });
 });

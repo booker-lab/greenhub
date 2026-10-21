@@ -79,7 +79,9 @@ export function parseSortValue(value: string | null): StoreSort {
 // 전화번호는 하이픈·공백을 빼고 숫자끼리도 비교한다(010-1234 / 0101234 모두 찾음).
 function matchesKeyword(store: AdminStore, keyword: string): boolean {
   if (!keyword) return true;
-  const texts = [store.name, store.ceoName, store.phone].map((value) => (value ?? '').toLowerCase());
+  const texts = [store.name, store.ceoName, store.phone].map((value) =>
+    (value ?? '').toLowerCase(),
+  );
   if (texts.some((text) => text.includes(keyword))) return true;
   const digits = keyword.replace(/\D/g, '');
   return digits.length > 0 && (store.phone ?? '').replace(/\D/g, '').includes(digits);

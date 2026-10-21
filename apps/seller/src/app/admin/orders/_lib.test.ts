@@ -1,13 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildStatusOptions,
+  buildStoreOptions,
+  cancellationBadge,
   describeRefundTarget,
+  formatOrderedAt,
   getAdminOrdersReadState,
   getStatusColor,
   isRefundable,
   normalizeRefundReason,
   REFUND_REASON_MAX_LENGTH,
   STATUS_LABEL,
+  storeLabel,
 } from './_lib';
 
 const FETCH_ERROR_MESSAGE = '주문 목록 조회 중 오류 발생';
@@ -32,15 +36,15 @@ describe('getAdminOrdersReadState', () => {
   });
 
   it('성공 + 1건 이상은 HAS_RESULTS를 반환한다', () => {
-    expect(
-      getAdminOrdersReadState({ loading: false, error: null, orders: [order('o1')] }),
-    ).toBe('HAS_RESULTS');
+    expect(getAdminOrdersReadState({ loading: false, error: null, orders: [order('o1')] })).toBe(
+      'HAS_RESULTS',
+    );
   });
 
   it('loading + error는 LOADING을 우선한다', () => {
-    expect(
-      getAdminOrdersReadState({ loading: true, error: FETCH_ERROR_MESSAGE, orders: [] }),
-    ).toBe('LOADING');
+    expect(getAdminOrdersReadState({ loading: true, error: FETCH_ERROR_MESSAGE, orders: [] })).toBe(
+      'LOADING',
+    );
   });
 
   it('error는 결과 유무보다 우선한다', () => {
@@ -131,5 +135,39 @@ describe('강제환불 확인창 대상 표시', () => {
   it('사유는 서버 한도(500자)를 넘겨 보내지 않는다', () => {
     expect(REFUND_REASON_MAX_LENGTH).toBe(500);
     expect(normalizeRefundReason('가'.repeat(600))).toHaveLength(500);
+  });
+});
+
+describe('주문 목록 칸 표시', () => {
+  it('주문일시는 KST로 보여 주고, 읽을 수 없으면 자리표시자', () => {
+    expect(formatOrderedAt('2026-10-20T15:05:00.000Z')).toBe('2026-10-21 00:05');
+    expect(formatOrderedAt({ _seconds: 0 })).toBe('1970-01-01 09:00');
+    expect(formatOrderedAt(undefined)).toBe('—');
+    expect(formatOrderedAt('not-a-date')).toBe('—');
+  });
+
+  it('환불 진행·실패만 배지를 그린다', () => {
+    expect(cancellationBadge('REFUNDING')).toEqual({ label: '환불 진행 중', color: 'yellow' });
+    expect(cancellationBadge('REFUND_FAILED')).toEqual({ label: '환불 실패', color: 'red' });
+    expect(cancellationBadge('COMPLETED')).toBeNull();
+    expect(cancellationBadge(null)).toBeNull();
+  });
+
+  it('가게 이름이 없으면 id 앞자리로 대신한다', () => {
+    expect(storeLabel({ storeId: 'store-abcdef12', storeName: '난플렉스' })).toBe('난플렉스');
+    expect(storeLabel({ storeId: 'store-abcdef12', storeName: null })).toBe('store-ab…');
+  });
+
+  it('가게 선택은 전체 가게 + 이름순이고 치운 가게를 표시한다', () => {
+    expect(
+      buildStoreOptions([
+        { id: 's-2', name: '하늘', status: 'archived' },
+        { id: 's-1', name: '가람', status: 'active' },
+      ]),
+    ).toEqual([
+      { value: '', label: '전체 가게' },
+      { value: 's-1', label: '가람' },
+      { value: 's-2', label: '하늘 (치움)' },
+    ]);
   });
 });

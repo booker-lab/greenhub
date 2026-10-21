@@ -107,7 +107,8 @@ describe('관리자 목록 더 보기 로더', () => {
     const more = deferred<AdminPage<string>>();
     await pager.load({
       kind: 'fetch',
-      fetchPage: (cursor) => (cursor === null ? Promise.resolve(page(['옛1'], 'c1')) : more.promise),
+      fetchPage: (cursor) =>
+        cursor === null ? Promise.resolve(page(['옛1'], 'c1')) : more.promise,
       errLabel: '주문 목록',
     });
     const pendingMore = pager.loadMore();
@@ -170,7 +171,11 @@ describe('관리자 목록 더 보기 로더', () => {
   it('늦게 도착한 옛 첫 쪽은 최신 결과를 덮지 않는다', async () => {
     const { state, pager } = setup();
     const old = deferred<AdminPage<string>>();
-    const first = pager.load({ kind: 'fetch', fetchPage: () => old.promise, errLabel: '주문 목록' });
+    const first = pager.load({
+      kind: 'fetch',
+      fetchPage: () => old.promise,
+      errLabel: '주문 목록',
+    });
     const second = pager.load({
       kind: 'fetch',
       fetchPage: async () => page(['최신'], null),
@@ -192,9 +197,9 @@ describe('readAdminPage', () => {
       hasMore: false,
       nextCursor: null,
     });
-    expect(readAdminPage<string>({ orders: ['a'], hasMore: true, nextCursor: 'a' }, 'orders')).toEqual(
-      { items: ['a'], hasMore: true, nextCursor: 'a' },
-    );
+    expect(
+      readAdminPage<string>({ orders: ['a'], hasMore: true, nextCursor: 'a' }, 'orders'),
+    ).toEqual({ items: ['a'], hasMore: true, nextCursor: 'a' });
     expect(readAdminPage<string>(null, 'orders').items).toEqual([]);
   });
 });

@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
 import { type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
+import { LoadMoreFooter } from '../_components/LoadMoreFooter';
 import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
 import { DriverList } from './_components/DriverList';
 import {
@@ -22,7 +23,18 @@ export default function DriversClient() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [reason, setReason] = useState('');
-  const { drivers: allDrivers, loading, error, reload, approve, toggleSuspend } = useAdminDrivers();
+  const {
+    drivers: allDrivers,
+    hasMore,
+    loading,
+    loadingMore,
+    error,
+    moreError,
+    reload,
+    loadMore,
+    approve,
+    toggleSuspend,
+  } = useAdminDrivers();
 
   const drivers = useMemo(() => filterByTab(allDrivers, tab), [allDrivers, tab]);
 
@@ -98,6 +110,16 @@ export default function DriversClient() {
         onAction={handleAction}
         onRetry={reload}
       />
+
+      {/* 탭은 받은 기사 안에서 거르므로, 서버에 더 있으면 탭과 상관없이 더 보기로 이어 받는다. */}
+      {error === null && !loading && (
+        <LoadMoreFooter
+          hasMore={hasMore}
+          loadingMore={loadingMore}
+          moreError={moreError}
+          onLoadMore={loadMore}
+        />
+      )}
 
       <ConfirmModal
         opened={pending !== null}

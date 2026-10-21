@@ -11,12 +11,20 @@ interface LoadMoreFooterProps {
 }
 
 // 관리자 목록 공통 "더 보기" — 서버가 더 있다고 알릴 때만 보인다(주문·기사 탭 공용).
-export function LoadMoreFooter({ hasMore, loadingMore, moreError, onLoadMore }: LoadMoreFooterProps) {
+export function LoadMoreFooter({
+  hasMore,
+  loadingMore,
+  moreError,
+  onLoadMore,
+}: LoadMoreFooterProps) {
   if (!hasMore) return null;
   return (
     <Stack align="center" gap={4} mt="md">
       {moreError && (
-        <Text role="alert" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+        <Text
+          role="alert"
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+        >
           {moreError}
         </Text>
       )}
