@@ -5,6 +5,8 @@ import { getConfigValues, isProductionRuntime } from '../config/runtime-config';
 export type KakaoProfile = {
   kakaoId: string;
   email: string | null;
+  /** 카카오가 이메일을 유효(is_email_valid)하고 인증됨(is_email_verified)으로 둘 다 확인했는지. */
+  emailVerified: boolean;
   name: string;
 };
 
@@ -12,6 +14,8 @@ type KakaoUserResponse = {
   id?: number | string;
   kakao_account?: {
     email?: string;
+    is_email_valid?: boolean;
+    is_email_verified?: boolean;
     name?: string;
     profile?: {
       nickname?: string;
@@ -66,6 +70,7 @@ export class KakaoClient {
     return {
       kakaoId: String(kakaoId),
       email: account?.email ?? null,
+      emailVerified: account?.is_email_valid === true && account?.is_email_verified === true,
       name,
     };
   }

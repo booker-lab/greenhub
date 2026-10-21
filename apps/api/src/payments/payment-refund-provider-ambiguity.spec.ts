@@ -369,3 +369,37 @@ describe('PaymentRefund provider ambiguity 28A (R1-R7)', () => {
     });
   });
 });
+
+describe('verifyProviderFirst (배송 후 환불)', () => {
+  it('PortOne에서 이미 취소된 결제는 환불 POST 없이 로컬만 CANCELLED로 맞춘다', async () => {
+    const occ = createOccFirestore();
+    seedPaid(occ, 'payments/pay-v1', 'order-v1');
+    const portone = {
+      refund: jest.fn(),
+      getPayment: jest.fn().mockResolvedValue(cancelledReadback('portone-order-v1')),
+    };
+    const { service } = makeService(occ, portone);
+
+    await service.refundByOrderId('order-v1', '배송 후 환불(꽃 상함)', { verifyProviderFirst: true });
+
+    expect(portone.getPayment).toHaveBeenCalledTimes(1);
+    expect(portone.refund).not.toHaveBeenCalled();
+    expect(occ.getData('payments/pay-v1')).toMatchObject({ status: 'CANCELLED', refundClaim: null });
+  });
+
+  it('PortOne이 PAID·금액 일치면 먼저 읽은 뒤 한 번만 환불한다', async () => {
+    const occ = createOccFirestore();
+    seedPaid(occ, 'payments/pay-v2', 'order-v2');
+    const portone = {
+      refund: jest.fn().mockResolvedValue(undefined),
+      getPayment: jest.fn().mockResolvedValue(paidReadback('portone-order-v2')),
+    };
+    const { service } = makeService(occ, portone);
+
+    await service.refundByOrderId('order-v2', '배송 후 환불(파손)', { verifyProviderFirst: true });
+
+    expect(portone.getPayment).toHaveBeenCalledTimes(1);
+    expect(portone.refund).toHaveBeenCalledTimes(1);
+    expect(occ.getData('payments/pay-v2')).toMatchObject({ status: 'CANCELLED' });
+  });
+});
