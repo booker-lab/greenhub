@@ -14,6 +14,7 @@ export type { AdminCommandOutcome } from './useAdmin.outcome';
 export { classifyAdminCommandError, describeAdminCommandOutcome } from './useAdmin.outcome';
 export type { RefundRecovery } from './useAdmin.refund';
 export { describeRefundRecovery } from './useAdmin.refund';
+export { describeActiveDeliveryWarning } from './useAdmin.driverSuspend';
 export * from './useAdmin.types';
 export { useAdminDrivers, useAdminStores, useAdminUsers } from './useAdmin.accounts';
 export { useAdminOrders } from './useAdmin.commerce';

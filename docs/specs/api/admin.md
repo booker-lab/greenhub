@@ -290,6 +290,8 @@ PATCH /admin/drivers/:userId/suspend
 { suspended: boolean }
 ```
 
+정지(`suspended: true`) 응답은 `activeDeliveryCount`(그 기사의 `driverId`로 배정된 `DELIVERING` 주문 수, 조회 실패면 `null`)를 함께 싣는다. 정지는 막지 않으며, 관리자 기사 탭은 건수가 있으면 "판매자가 배송 보류로 바꿔야 한다"는 안내창을 띄운다. 해제 응답에는 이 필드가 없다.
+
 Driver 신규 로그인은 `suspended`를 확인하지만 기존 access/refresh/Firebase claims의 revocation 시점은 현재 명확한 계약으로 고정돼 있지 않다. 정지 write만으로 기존 driver의 주문/API/Firestore 접근이 즉시 종료됐다고 가정하지 않는다.
 
 Preview E2E credentials는 별도 allowlist/secret gate를 사용하므로 admin 승인·정지와 E2E gate를 혼동하지 않는다.

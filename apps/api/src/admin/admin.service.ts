@@ -767,6 +767,8 @@ export class AdminService {
     if (dto.suspended) {
       await this.revokeSuspendedUserSessions(userId);
     }
+    // 정지는 막지 않는다. 배송 중인 배정 주문은 판매자가 배송 보류로 바꿔야 하므로 건수를 알려 준다.
+    const activeDeliveryCount = dto.suspended ? await this.countActiveDeliveries(userId) : 0;
     await this.recordAdmin({
       action: dto.suspended ? 'admin.driver.suspended' : 'admin.driver.unsuspended',
       actorId,
@@ -776,7 +778,27 @@ export class AdminService {
       after: { suspended: dto.suspended },
       reason: dto.reason,
     });
-    return { userId, suspended: dto.suspended };
+    return dto.suspended
+      ? { userId, suspended: true, activeDeliveryCount }
+      : { userId, suspended: false };
+  }
+
+  // 조회가 실패해도 이미 끝난 정지를 실패로 돌리지 않는다. null이면 화면이 "확인하지 못함"으로 안내한다.
+  private async countActiveDeliveries(driverId: string): Promise<number | null> {
+    try {
+      const snap = await (
+        this.firestore
+          .collection('orders')
+          .where('driverId', '==', driverId)
+          .where('status', '==', 'DELIVERING') as any
+      ).get();
+      return snap.size as number;
+    } catch (error) {
+      this.logger.error(
+        `[AdminDriver] 배송 중 주문 조회 실패 driver=${driverId} error=${(error as Error)?.name ?? 'unknown'}`,
+      );
+      return null;
+    }
   }
 
   // ── Invite ───────────────────────────────────────────────────────

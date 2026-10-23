@@ -16,7 +16,14 @@ describe('AdminService driver session 보강', () => {
       update: jest.fn().mockResolvedValue(undefined),
     };
     const refreshTokenRef = { delete: jest.fn().mockResolvedValue(undefined) };
+    // 배송 중 배정 주문 조회(where 두 번 → get). 테스트가 건수·실패를 바꿔 끼운다.
+    const deliveringQuery = {
+      where: jest.fn(),
+      get: jest.fn().mockResolvedValue({ size: 0 }),
+    };
+    deliveringQuery.where.mockReturnValue(deliveringQuery);
     const firestore = {
+      collection: jest.fn(() => deliveringQuery),
       doc: jest.fn((path: string) =>
         path.startsWith('refreshTokens/') ? refreshTokenRef : userRef,
       ),
@@ -38,6 +45,7 @@ describe('AdminService driver session 보강', () => {
       ),
       refreshTokenRef,
       userRef,
+      deliveringQuery,
     };
   }
 
@@ -56,6 +64,7 @@ describe('AdminService driver session 보강', () => {
     await expect(service.suspendDriver('driver-1', { suspended: true }, 'admin-1')).resolves.toEqual({
       userId: 'driver-1',
       suspended: true,
+      activeDeliveryCount: 0,
     });
     expect(userRef.update).toHaveBeenCalledWith({
       suspended: true,
@@ -65,6 +74,46 @@ describe('AdminService driver session 보강', () => {
     expect(firestore.doc).toHaveBeenCalledWith('refreshTokens/driver-1');
     expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
     expect(firebaseAuth.revokeRefreshTokens).toHaveBeenCalledWith('driver-1');
+  });
+
+  it('driver 정지 응답에 배송 중인 배정 주문 수를 담는다(정지는 막지 않는다)', async () => {
+    const { firestore, service, userRef, deliveringQuery } = makeService({
+      id: 'driver-1',
+      role: 'driver',
+    });
+    deliveringQuery.get.mockResolvedValue({ size: 2 });
+
+    await expect(service.suspendDriver('driver-1', { suspended: true }, 'admin-1')).resolves.toEqual({
+      userId: 'driver-1',
+      suspended: true,
+      activeDeliveryCount: 2,
+    });
+    expect(firestore.collection).toHaveBeenCalledWith('orders');
+    expect(deliveringQuery.where).toHaveBeenCalledWith('driverId', '==', 'driver-1');
+    expect(deliveringQuery.where).toHaveBeenCalledWith('status', '==', 'DELIVERING');
+    expect(userRef.update).toHaveBeenCalledWith(expect.objectContaining({ suspended: true }));
+  });
+
+  it('배송 중 주문 조회가 실패해도 정지는 성공하고 건수를 모름(null)으로 알린다', async () => {
+    const { service, userRef, deliveringQuery } = makeService({ id: 'driver-1', role: 'driver' });
+    deliveringQuery.get.mockRejectedValue(new Error('firestore unavailable'));
+
+    await expect(service.suspendDriver('driver-1', { suspended: true }, 'admin-1')).resolves.toEqual({
+      userId: 'driver-1',
+      suspended: true,
+      activeDeliveryCount: null,
+    });
+    expect(userRef.update).toHaveBeenCalledWith(expect.objectContaining({ suspended: true }));
+  });
+
+  it('driver 정지 해제는 배송 중 주문을 세지 않는다', async () => {
+    const { firestore, service } = makeService({ id: 'driver-1', role: 'driver', suspended: true });
+
+    await expect(service.suspendDriver('driver-1', { suspended: false }, 'admin-1')).resolves.toEqual({
+      userId: 'driver-1',
+      suspended: false,
+    });
+    expect(firestore.collection).not.toHaveBeenCalled();
   });
 
   it.each([
