@@ -5,7 +5,7 @@
  *
  *   node scripts/release/production-deploy.mjs verify-e2e --sha=<40자리> --run-id=<E2E run ID>
  *   node scripts/release/production-deploy.mjs railway    --sha=<40자리>
- *   node scripts/release/production-deploy.mjs cloudrun   --sha=<40자리> [--api-base=<운영 API 주소>]
+ *   node scripts/release/production-deploy.mjs cloudrun   --sha=<40자리> --api-base=<운영 API 주소>
  *   node scripts/release/production-deploy.mjs health     --sha=<40자리> [--api-base=<운영 API 주소>]
  *   node scripts/release/production-deploy.mjs vercel     --sha=<40자리> --app=consumer|seller|driver [--require-build=true]
  *
@@ -470,11 +470,14 @@ export async function main(
         sleep,
       });
     case 'cloudrun':
+      // 확인 주소는 workflow의 CLOUD_RUN_API_BASE 하나만 정한다. 기본값을 두면 전환 뒤(run.app 직접 접속 차단)
+      // 빠뜨렸을 때 run.app을 확인하다 정상 배포를 되돌리므로, 빠지면 배포 전에 멈춘다.
+      if (!options['api-base']) {
+        throw new Error('cloudrun은 --api-base가 필요합니다(workflow의 CLOUD_RUN_API_BASE).');
+      }
       return deployCloudRun({
         sha,
-        apiBase: resolveProductionApiBase(
-          options['api-base'] || `https://${CLOUD_RUN_PRODUCTION_API_HOST}`,
-        ),
+        apiBase: resolveProductionApiBase(options['api-base']),
         gcloud,
         fetchImpl,
         sleep,
