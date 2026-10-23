@@ -67,6 +67,14 @@ type OrderStatus =
 - `DELIVERING → DELIVERY_HELD`
 - `DELIVERY_HELD → DELIVERING`
 
+### 배송 방법 제약 (모든 역할 공통, #549)
+
+역할·상태표로 허용된 전이도 주문의 배송 방법에 맞지 않으면 거부한다(`apps/api/src/orders/orders.helpers.ts` `deliveryTransitionViolation`, 회귀 `delivery-method-transition-guard.spec.ts`).
+
+- `HUB_ARRIVED`: 픽업 코드가 있는 legacy 거점(`hub`) 주문만. 회차 주문(`roundId` 또는 `schemaVersion: 2`)은 배송 방법과 무관하게 금지
+- `DELIVERED`: `PREPARING`에서 바로 완료는 택배(`parcel`)만. 거점 주문은 고객 픽업 확인(`HUB_ARRIVED → PICKED_UP`)으로만 끝나고, 배송 방법을 알 수 없으면 거부
+- `DELIVERING`: 기사가 나르는 직배송(`direct`)·거점(`hub`) 주문만
+
 ### Consumer
 
 - `DELIVERED → REVIEWED`
@@ -443,6 +451,7 @@ POST /admin/orders/:orderId/post-delivery-refund             # 관리자 환불(
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-24 | 코드 대조: Driver 전이의 배송 방법 제약(`deliveryTransitionViolation`, #549) 추가 |
 | 2026-10-21 | 배송 후 환불(Section 8D): 판매자 7일·관리자 무기한 전액 환불 endpoint, `postDeliveryRefund` 기록, 수량 미반환, 고정 사유 알림 |
 | 2026-10-09 | legacy 판매자 취소의 환불 전 `REFUNDING` claim과 claim 중 legacy 상태 전이 거절(Section 8A-2), 주문 `buyerName` 한 줄 정리·20자 상한, 요청사항 제어문자 제거 반영 |
 | 2026-09-11 | Generic consumer `REVIEWED`와 specialized `reviewOrder`를 single semantic owner(`executeConsumerReviewedConvergence`)로 수렴 + settlement failure/retry convergence 회귀 9건 추가 |

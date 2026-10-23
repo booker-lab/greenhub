@@ -13,6 +13,7 @@ import {
   LatePaymentCapacityError,
   OrderCapacityService,
 } from '../orders/order-capacity.service';
+import { collectOptionStockLines } from '../orders/_lib/round-order-extras';
 import { RetentionService } from '../retention/retention.service';
 import { PortoneClient } from './portone.client';
 import { PaymentRefundService } from './payment-refund.service';
@@ -197,6 +198,13 @@ export class PaymentFinalizationService {
                 paymentId: orderId,
                 deliveryAddress: freshOrder['deliveryAddress'],
                 items: lateItems,
+                // 주문 스냅샷의 옵션 재고를 다시 잡는다(부족하면 회차 한도처럼 늦은 결제 환불).
+                optionStock: collectOptionStockLines(
+                  (freshOrder['orderItems'] as Array<Record<string, any>>).map((item) => ({
+                    quantity: item['quantity'],
+                    selectedOptions: item['selectedOptions'],
+                  })),
+                ),
               });
             reservationId = reacquired.id;
           } else {
