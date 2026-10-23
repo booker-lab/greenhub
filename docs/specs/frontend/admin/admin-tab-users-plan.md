@@ -7,6 +7,12 @@
 >
 > **사용자 확정(세션92 grill-me 종결) = 4축 전부 작업, 단 R1·R2·F3·F5는 별도 SDD.**
 > 셀러앱 손님 정보(구 §E-11)는 본 문서에서 제거, 상위 인덱스에 한 줄 링크로 위임.
+>
+> **현재 상태(2026-10-23, main `e4d781db` 코드 대조 — 이 절이 아래 진행 서술보다 우선):**
+> - **완료:** S1 D1 정지 계정 세션 차단(회귀 `apps/api/src/auth/auth.service.spec.ts`) · S2 T1 가입일·전화 + T2 새로고침(#317) · F5 변경 기록(#576 `adminAuditLogs`, 정지 사유 선택 입력 200자) · 목록 응답을 화면이 쓰는 6개 필드로 축소·탈퇴 소비자 제외(#578·#594) · 정지 대상은 소비자만·자기 자신 금지(`admin.service.ts` `suspendUser`) · 목록 정렬 `createdAt` 최신순(인덱스 `role+createdAt`).
+> - **남은 것(IMPLEMENTATION_GAP):** S3 검색·상태 필터(T3) · S4 목록 건수 상한 또는 커서 "더 보기"(어드민 목록 중 users만 전량 로드) · S5 관리자 users e2e(`apps/e2e/tests/`에 없음) · F3 소비자→주문 드릴다운 · R1·R2.
+> - **사람 결정(SEMANTIC_CONFLICT):** S4를 고정 상한으로 할지, 기사 탭처럼 커서 "더 보기"(`useAdmin.paged.ts`)로 할지.
+> - 관리자 화면은 `apps/seller/src/app/admin/users/`다(별도 `apps/admin` 앱은 없다). 아래 E-1~E-10은 2026-05 진단 기록이며 줄 번호는 당시 값이다.
 
 ## 0. 공통 정합성 검토 기준 (모든 어드민 탭 공통)
 
@@ -22,15 +28,16 @@
 
 ---
 
-## E-1. 진단 대상 파일 (현 상태)
+## E-1. 대상 파일 (2026-10-23 실측)
 | 파일 | 라인 | 역할 |
 |------|------|------|
 | `users/page.tsx` | 8 | dynamic ssr:false 래퍼 |
-| `users/_client.tsx` | 76 | 상태(processingId·pending)·toggleSuspend 핸들러·ConfirmModal |
-| `_components/UsersTable.tsx` | 160 | 모바일 카드 / 데스크톱 테이블 (반응형 세션88) |
+| `users/_client.tsx` | 140 | 상태·정지/복구 핸들러·확인창·새로고침·조회 실패 표시 |
+| `users/_lib.ts` | 57 | 가입일·전화 포맷(T1, #317) |
+| `_components/UsersTable.tsx` | 187 | 모바일 카드 / 데스크톱 테이블 |
 
-→ 모두 500 한도 내. `_lib` 없음(순수함수 부재). T3에서 `filterUsers` 도입으로 `_lib.ts` 신설.
-hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(`admin.service.ts:86-113`).
+→ 모두 500 한도 내. T3는 `_lib.ts`에 `filterUsers`를 추가한다.
+hook = `useAdminUsers`(`apps/seller/src/hooks/useAdmin.accounts.ts`), 타입 = `useAdmin.types.ts`, 백엔드 = `getUsers`/`suspendUser`(`apps/api/src/admin/admin.service.ts`).
 
 ## E-2. 정합성 진단 — 🔴 검색·필터 전무 (7개 탭 중 가장 비어 있음)
 
@@ -39,38 +46,22 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 | 검색(이름·이메일·전화) | ❌ 없음 | drivers·orders 모두 검색 부재(공통 부채)이나 **소비자는 증가 속도 1위 집단** |
 | 상태 필터(정상/정지) | ❌ 전체만 | drivers는 `STATUS_TABS`(대기/승인/정지) 보유 — 비대칭 |
 | 정렬·페이지네이션 | ❌ 없음 | — |
-| **백엔드 limit** | ❌ **없음**(`getUsers`가 limit 없는 전량 `.get()`) | orders는 `limit(200)`, drivers `limit(100)`, settlements `limit(500)` — **users만 무제한** |
+| **백엔드 limit** | ❌ **없음**(`getUsers`는 최신순 정렬만 있고 전량 `.get()`) | orders·drivers·settlements는 커서 "더 보기"(#592·#593) — **users만 전량 로드** |
 
 → **소비자는 판매자·드라이버와 달리 수가 빠르게 늘어나는 집단인데 검색·필터·정렬·페이지가 전무.**
 운영 규모가 커지면 특정 소비자를 찾을 방법이 없고, 백엔드 `getUsers`도 limit 없는 전량 로드라 **확장성 결함**(타 탭 대비 유일하게 하드캡조차 없음).
 
-## E-3. 정합성 진단 — 🔴 정지(suspended) 효과 결함 (grill-me 조사 결과)
+## E-3. 정지(suspended) 효과 — ✅ 해소
 
-| 레이어 | suspended 체크 | 위치 |
-|--------|---------------|------|
-| 비번 로그인 | `userData.suspended===true` → 401 차단 | `auth.service.ts:133` |
-| 카카오 로그인 | `userData.suspended===true` → 401 차단 | `auth.service.ts:304` |
-| **refresh 토큰 교환** | ❌ **체크 없음** | `auth.service.ts:329 refresh()` |
-| 이미 발급된 access JWT | ❌ 체크 없음 | (가드·주문 경로에 suspended 검사 부재) |
-
-**세션92 조사 결과 (실측):**
-- access token = **1시간** (`JWT_EXPIRES_IN=1h`, `auth.module.ts:16`)
-- refresh token = **30일** (`JWT_REFRESH_EXPIRES_IN=30d`, `auth.service.ts:379`)
-- refresh 경로에 suspended 검사 부재 → **정지 후 최대 30일간 새 access 계속 발급 가능**
-
-→ 정지는 로그인 시점만 차단되고, 로그인된 세션은 refresh로 30일간 우회 가능 = **실질 무력화**.
-판매자 "치우기"(#CL-53)처럼 기록 가드도 없음.
-
-→ **사용자 확정(D1) = `refresh()`에 suspended 한 줄 추가.** 차단 지연 최대 1시간(access 자연 만료)
-  수용, JwtAuthGuard 매요청 DB read 회피로 비용 0. 가장 작은 변경·가장 큰 효과.
+2026-05 진단 때는 정지가 로그인 시점에만 걸렸다. 지금은 토큰 갱신 경로도 정지 계정을 거부하고(S1 D1), 정지할 때 기존 세션도 함께 끊는다. 직접 증거는 `apps/api/src/auth/auth.service.spec.ts`와 `apps/api/src/admin/admin.service.spec.ts`이며, 계약 정본은 [`../../api/admin.md`](../../api/admin.md) §4·[`../../api/auth.md`](../../api/auth.md)다.
 
 ## E-4. 기능 부재 (표시 정보)
 
-- **F1. 가입일 미표시** — `AdminUser.createdAt`(`useAdmin.ts:25`) 수신하나 화면에 없음. 가입 시점은 소비자 식별·CS에 유용. → **T1에 포함.**
-- **F2. 전화번호 미표시** — `AdminUser.phone`(`useAdmin.ts:23`) 옵셔널 수신하나 화면에 없음. CS 시 연락 수단. → **T1에 포함.** 근거 = 셀러·드라이버 앱이 이미 buyerPhone 사용 중(`OrderCard.tsx` 등), 어드민이 더 강한 권한이라 마스킹 없이 전체 표시. 노출 정책 변경 0.
+- **F1. 가입일 미표시** — ✅ #317. `AdminUser.createdAt`(`useAdmin.ts:25`) 수신하나 화면에 없음. 가입 시점은 소비자 식별·CS에 유용. → **T1에 포함.**
+- **F2. 전화번호 미표시** — ✅ #317. `AdminUser.phone`(`useAdmin.ts:23`) 옵셔널 수신하나 화면에 없음. CS 시 연락 수단. → **T1에 포함.** 근거 = 셀러·드라이버 앱이 이미 buyerPhone 사용 중(`OrderCard.tsx` 등), 어드민이 더 강한 권한이라 마스킹 없이 전체 표시. 노출 정책 변경 0.
 - **F3. 소비자→주문 이력 연결 없음** — 소비자 클릭 시 해당 유저 주문 보기 동선 부재. orders 백엔드에 `userId` 필터 신설 필요. → **별도 SDD**(stores F7·orders F3과 묶어 어드민 교차 필터 일괄).
-- **F4. 새로고침 버튼 없음** — hook `reload` 있으나 UI 미노출. → **T2에 포함**, 헤더 우측 `IconRefresh` 표준 위치 = 후속 6탭 선례.
-- **F5. 감사 로그 부재** — 누가 언제 정지/복구했는지 기록 없음. drivers·stores 정지에도 동일 결함. → **별도 SDD**(adminAuditLogs 컬렉션 신설 어드민 전역).
+- **F4. 새로고침 버튼 없음** — ✅ #317. hook `reload` 있으나 UI 미노출. → **T2에 포함**, 헤더 우측 `IconRefresh` 표준 위치 = 후속 6탭 선례.
+- **F5. 감사 로그 부재** — ✅ #576 `adminAuditLogs`(정지·복구와 사유 기록, "기록" 탭). 누가 언제 정지/복구했는지 기록 없음. drivers·stores 정지에도 동일 결함. → **별도 SDD**(adminAuditLogs 컬렉션 신설 어드민 전역).
 
 ## E-5. 표현 레이어 — 소소한 정리 (본 범위 제외)
 
@@ -104,7 +95,7 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 
 #### **T2. 새로고침 버튼 (F4)**
 - **상태(2026-10-04):** 구현·병합 완료(#317 `e2ed2983`), 육안 미확인. stores `StoresFilters` 새로고침 버튼 형태(`Button variant="light" color="gray"`)를 따름 — `ActionIcon` 대신 텍스트 버튼.
-- **변경:** `users/_client.tsx`에 `useAdminUsers().reload` 노출. 제목 헤더 우측에 `<ActionIcon><IconRefresh/></ActionIcon>`. 로딩 중 `loading` prop.
+- **변경(실제):** `users/_client.tsx` 제목 헤더 우측 `Button variant="light" color="gray"` "새로고침"이 `useAdminUsers().reload`를 부른다. 로딩 중 `loading` prop.
 - **표준 위치 약속:** 후속 6개 탭(stores·orders·drivers·settlements·invite·banner)도 동일 위치 따라감(SDD 부채 기록).
 - **선행 = 없음.** T1과 묶음 커밋.
 - **위험:** 0.
@@ -114,7 +105,7 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 #### **T3. 검색·상태 필터 (E-2)**
 - **신설 파일:**
   - `_components/UsersFilters.tsx` — `<TextInput placeholder="이름·이메일·전화">` + `<SegmentedTabs items=[전체,정상,정지] layout="scroll">`. 기본 탭 = '전체'.
-  - `_lib.ts` — `filterUsers(users, {keyword, status})` 순수함수 신설(세션91 미생성 → 필터 도입으로 정당화).
+  - `_lib.ts`(이미 있음) — `filterUsers(users, {keyword, status})` 순수함수 추가.
   - `_lib.test.ts` — vitest 동반(세션85 선례). 5케이스: 공백·대소문자·하이픈 제거·빈 필드·정상+정지 분기.
 - **변경:** `users/_client.tsx`에서 Mantine `useDebouncedValue(keyword, 200)` 적용 → `filterUsers(users, {debouncedKeyword, status})` → `<UsersTable>`.
 - **검색 정규화:**
@@ -130,7 +121,8 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 - **위험:** C6 가드 누락 시 필터 사라짐 회귀. tsc·biome·build 통과 + 육안 검증.
 
 #### **T4. getUsers 백엔드 limit·정렬 (E-2 한도)**
-- **변경:** `apps/api/src/admin/admin.service.ts:86 getUsers()`에 `.orderBy('createdAt','desc').limit(N)` 추가.
+- **상태(2026-10-23):** `orderBy('createdAt','desc')`와 인덱스는 이미 있다. 남은 것은 건수 상한 또는 커서 "더 보기"다(사람 결정).
+- **변경(원안):** `getUsers()`에 `.limit(N)` 추가.
 - **limit 값:** **사용자가 현 운영 user 수 확인 후 결정.**
   - <100 = 보류(BACKLOG에만 기록)
   - 100~1,000 = `limit(5000)` (T3 클라이언트 필터와 모순 없는 큰 캡)
@@ -140,7 +132,7 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 
 ### 별도 SDD — 본 범위 제외 (E-7 제외군)
 - **F3** 소비자→주문 드릴다운 — orders 백엔드 `userId` 필터 + stores F7·orders F3과 어드민 교차 필터 일괄 SDD
-- **F5** 감사 로그 — `adminAuditLogs` 컬렉션 신설, drivers·stores 정지도 일괄
+- ~~F5 감사 로그~~ — ✅ #576
 - **R1** thBase 공통화 — 어드민 공통 컴포넌트 SDD
 - **R2** AdminTable 추출 — 어드민 공통 컴포넌트 SDD
 
@@ -154,9 +146,9 @@ hook = `useAdminUsers`(`useAdmin.ts:194`), 백엔드 = `getUsers`/`suspendUser`(
 |------|------|--------|--------|------|
 | **S1** ✅ | D1 단독 (완료 — `auth.service.ts` `refresh()`가 `getAuthoritativeUser()`로 정지 계정 401, 회귀 `auth.service.spec.ts`) | `auth.service.ts` refresh()에 suspended 차단 + vitest | C1~C3 (백엔드 only) | 정지 결함 30일→1시간 단축. 가장 시급 |
 | **S2** ✅ | T1+T2 묶음 (완료 — #317, 육안 미확인) | `UsersTable.tsx` 가입일·전화 표시 + `_client.tsx` 새로고침 버튼 | C1~C5, C7 | 저위험. 모바일 카드 높이 회귀 의도적 |
-| **S3** ⬜ | T3 단독 | `UsersFilters.tsx`·`_lib.ts`·`_lib.test.ts` 신설 + `_client.tsx` 통합 | C1~C7 전부 | 본 범위 핵심. vitest 첫 통과 후 PR |
-| **S4** ⬜ | T4 단독 (limit 값은 사용자 결정) | `admin.service.ts:getUsers` limit·orderBy + 인덱스 배포 | C1~C3, 인덱스 확인 | user 수 확인 후 limit 값 확정 |
-| **S5** | e2e | §E-9 시나리오 4건 라이브 수행 | playwright 0 fail | S1~S4 코드 머지 후 |
+| **S3** ⬜ IMPLEMENTATION_GAP | T3 단독 | `UsersFilters.tsx`·`_lib.ts`·`_lib.test.ts` 신설 + `_client.tsx` 통합 | C1~C7 전부 | 본 범위 핵심. vitest 첫 통과 후 PR |
+| **S4** ⬜ 사람 결정 | T4 단독 (상한 vs 커서 "더 보기") | `admin.service.ts:getUsers` (orderBy·인덱스는 완료) | C1~C3, 인덱스 확인 | user 수 확인 후 limit 값 확정 |
+| **S5** ⬜ | e2e | §E-9 시나리오 4건 라이브 수행 | playwright 0 fail | S1~S4 코드 머지 후 |
 | **S6** | 육안 종결 | `pending-visual-verify.md` §추가 항목 전수 통과 | 사용자 확정 | 운영 배포 후 |
 
 ### 세션 간 의존
@@ -189,24 +181,12 @@ S4 (T4 limit)            ─┘
 
 각 세션 커밋 직전 아래를 빠짐없이 통과한다. **하나라도 실패하면 커밋 금지.**
 
-### S1 (D1 백엔드) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/api && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — `npm run lint --workspace=apps/api` 신규 경고 0
-- [ ] **C3 build 0** — `cd apps/api && npm run build` 0
-- [ ] **vitest** — `auth.service.test.ts`에 refresh-suspended 케이스 추가, 통과
-- [ ] **회귀 0** — 기존 로그인·refresh 정상 경로 테스트 통과
-- [ ] **수동 확인** — 정지된 사용자로 refresh API 호출 → 401 응답
-
-### S2 (T1+T2) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/admin && npx tsc --noEmit` 0
-- [ ] **C2 biome 0** — `npm run lint --workspace=apps/admin` 신규 경고 0
-- [ ] **C3 build 0** — `cd apps/admin && npm run build` 0(⚠️ `npx next build` 금지)
-- [ ] **C4 500라인** — `UsersTable.tsx` 라인 측정 (현 160 + 가입일·전화 컬럼·카드 줄 → ~200 예상, 한도 내)
-- [ ] **C5 SSOT** — 색·라벨 하드코딩 0, `toDateStrKST` 재사용
-- [ ] **C7 시각 회귀** — 데스크톱 테이블 컬럼 너비 회귀 0(기존 컬럼 유지), 모바일 카드 높이 증가는 의도
+### S1 (D1 백엔드)·S2 (T1+T2) 체크리스트
+- [x] S1 완료 — 회귀 `apps/api/src/auth/auth.service.spec.ts`(원안의 `auth.service.test.ts` 아님).
+- [x] S2 완료 — #317. 검증은 지금 PR CI(tsc·biome·build·test)가 대신한다.
 
 ### S3 (T3 검색·필터) 체크리스트
-- [ ] **C1 tsc 0** — `cd apps/admin && npx tsc --noEmit` 0
+- [ ] **C1 tsc 0** — `pnpm --filter seller exec tsc --noEmit` 0
 - [ ] **C2 biome 0** — 신규 경고 0
 - [ ] **C3 build 0** — `npm run build` 0
 - [ ] **C4 500라인** — `_client.tsx`·`UsersFilters.tsx`·`_lib.ts` 모두 한도 내
@@ -231,7 +211,7 @@ S4 (T4 limit)            ─┘
 
 ## E-9. e2e 작업 플랜 (세션 S5)
 
-**전제:** S1~S4 모든 코드가 머지·운영 배포 완료 + 어드민 e2e 인프라(세션90 신설, 8/8 통과) 재사용.
+**전제:** S3·S4 코드 머지 후 + 어드민 e2e 인프라(세션90 신설) 재사용. **E2E-1(정지 계정 토큰 갱신 거부)은 API 단위 테스트가 이미 보장하므로 e2e에서 빼는 것을 검토한다.** E2E-2·E2E-3은 이미 병합된 기능의 회귀 확인이다.
 
 **환경:**
 - 운영 단일 Firestore(green-e4fe3) + 카카오 로그인만 가능(`reference_visual_verify_env`)
@@ -279,15 +259,11 @@ S4 (T4 limit)            ─┘
 
 ### e2e 파일 구조
 ```
-apps/admin/e2e/
-  users-suspend-refresh.spec.ts      # E2E-1
-  users-display-fields.spec.ts       # E2E-2 (가입일·전화)
-  users-reload.spec.ts               # E2E-3
-  users-search-filter.spec.ts        # E2E-4
-  fixtures/
-    seed-users-search.ts             # E2E-4용 시드
-    seed-suspended-user.ts           # E2E-1용 시드
+apps/e2e/tests/
+  admin-users-display.spec.ts        # E2E-2·E2E-3 (가입일·전화·새로고침)
+  admin-users-search-filter.spec.ts  # E2E-4
 ```
+(세션90 어드민 스펙처럼 `page.route()` fixture로 응답을 고정하면 운영 시드가 필요 없다.)
 
 ### e2e 정합성 가드
 - [ ] **세션 격리** — 각 spec은 새 BrowserContext(세션90 함정)
@@ -298,27 +274,23 @@ apps/admin/e2e/
 
 ---
 
-## E-10. 차기 진입점 (세션별 인계)
+## E-10. 차기 진입점 (2026-10-23 갱신)
 
-| 다음 세션 | 진입 명령 | 산출물 위치 |
-|----------|----------|------------|
-| S1 시작 | `apps/api/src/auth/auth.service.ts:329 refresh()` 메서드 열기 | `auth.service.ts` + `auth.service.test.ts`(또는 신설) |
-| S2 시작 | `apps/admin/src/app/(authed)/admin/_components/UsersTable.tsx` 열기 | UsersTable + `_client.tsx` |
-| S3 시작 | S2 머지 확인 후 `_components/UsersFilters.tsx` 신설 | UsersFilters·`_lib.ts`·`_lib.test.ts`·`_client.tsx` |
-| S4 시작 | 사용자에게 운영 user 수 재확인, limit 값 확정 후 `admin.service.ts:86` | `admin.service.ts` + `firestore.indexes.json`(필요 시) |
-| S5 시작 | S1~S4 운영 배포 확인 후 `apps/admin/e2e/` 4 spec 신설 | 시나리오 §E-9 |
-| S6 시작 | 운영 환경에서 `pending-visual-verify.md` §추가 항목 사용자 직접 확인 | 통합 육안 문서 |
+| 다음 | 진입 | 산출물 위치 |
+|------|------|------------|
+| S3 | `apps/seller/src/app/admin/users/_client.tsx`·`_lib.ts` | `_components/UsersFilters.tsx` 신설·`filterUsers`·vitest |
+| S4 | 사람 결정(상한 vs 커서) 뒤 `apps/api/src/admin/admin.service.ts` `getUsers` | 서비스·DTO·hook |
+| S5 | S3 병합 뒤 | `apps/e2e/tests/admin-users-*.spec.ts` |
 
 ---
 
 ## 참고 문서
 
 ### 본 탭이 직접 참조하는 외부 문서
-- **육안 검증 (S6용)** — [`../pending-visual-verify.md`](../pending-visual-verify.md) — D1·T1·T2·T3·T4 신규 요소 + 회귀 0.
+- **육안 검증** — [`../pending-visual-verify.md`](../pending-visual-verify.md)는 이제 역사 기록이다. S3 육안 항목은 필요할 때 새 확인 목록으로 만든다.
 - **연계 작업 SDD (셀러앱 손님 정보·검색·전화)** — [`../seller-orders-customer-info-plan.md`](../seller-orders-customer-info-plan.md) (본 문서와 독립, 상위 인덱스에서 추적)
 - **별도 SDD 후보 (이번 범위 제외)**
   - **F3** 소비자→주문 드릴다운 — stores F7·orders F3과 어드민 교차 필터 일괄 SDD
-  - **F5** 감사 로그 — `adminAuditLogs` 컬렉션 신설, 어드민 전역
   - **R1** thBase 공통화 — 어드민 7탭 공통 컴포넌트 SDD
   - **R2** AdminTable 추출 — 어드민 7탭 공통 컴포넌트 SDD(우선순위 최하)
 

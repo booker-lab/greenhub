@@ -15,7 +15,7 @@ import {
   MyEngagementController,
   SellerEngagementController,
 } from './engagement.controller';
-import { adjustReviewStats, ReviewsService } from './reviews.service';
+import { ADMIN_HIDDEN_REVIEW_LIMIT, adjustReviewStats, ReviewsService } from './reviews.service';
 
 // 8x8 JPEG (Pillow) + EXIF APP1(기기·GPS) + COM. jpeg-metadata.spec.ts와 같은 표본.
 const GPS_EXIF_JPEG = Buffer.from(
@@ -506,7 +506,8 @@ describe('판매자·관리자 숨기기와 관리자 숨김 해제', () => {
     await service.hideReview('order-other_product-1', SELLER, 'abuse', '욕설');
     await service.hideReview('order-picked_product-1', ADMIN, 'privacy');
 
-    const list = await service.listHiddenReviews();
+    const { reviews: list, hasMore, limit } = await service.listHiddenReviews();
+    expect({ hasMore, limit }).toEqual({ hasMore: false, limit: 200 });
     expect(list.map((review) => review.id)).toEqual([
       'order-picked_product-1',
       'order-other_product-1',
@@ -522,6 +523,36 @@ describe('판매자·관리자 숨기기와 관리자 숨김 해제', () => {
       text: '꽃이 다 졌어요',
     });
     expect(list[0]).toMatchObject({ hiddenReasonCode: 'privacy', hiddenByRole: 'admin' });
+  });
+
+  it('숨긴 후기가 상한보다 많으면 최근 상한 건만 주고 hasMore로 알린다', async () => {
+    const hidden: Record<string, Record<string, unknown>> = {};
+    for (let i = 0; i <= ADMIN_HIDDEN_REVIEW_LIMIT; i += 1) {
+      const id = `order-h${String(i).padStart(3, '0')}_product-1`;
+      hidden[`reviews/${id}`] = {
+        id,
+        orderId: `order-h${i}`,
+        productId: 'product-1',
+        storeId: 'store-1',
+        userId: 'user-1',
+        rating: 3,
+        text: '숨긴 후기',
+        hidden: true,
+        hiddenReasonCode: 'abuse',
+        hiddenByRole: 'admin',
+        hiddenAt: new Date(Date.UTC(2026, 9, 1, 0, 0, i)).toISOString(),
+        createdAt: new Date(Date.UTC(2026, 8, 1)).toISOString(),
+      };
+    }
+    const { service } = setup({ ...BASE, ...hidden });
+
+    const { reviews: list, hasMore, limit } = await service.listHiddenReviews();
+
+    expect(limit).toBe(ADMIN_HIDDEN_REVIEW_LIMIT);
+    expect(hasMore).toBe(true);
+    expect(list).toHaveLength(ADMIN_HIDDEN_REVIEW_LIMIT);
+    // 가장 오래 전에 숨긴 한 건(i=0)만 빠진다.
+    expect(list.map((review) => review.id)).not.toContain('order-h000_product-1');
   });
 
   it('통계 조정은 0 아래로 내려가지 않는다', () => {

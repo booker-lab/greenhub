@@ -4,7 +4,7 @@ import { Box, Group, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { type IssuedInvite, useAdminInvite } from '@/hooks/useAdmin';
+import { describeListCap, type IssuedInvite, useAdminInvite } from '@/hooks/useAdmin';
 import { InviteGenerator } from './_components/InviteGenerator';
 import { InviteHistoryTable } from './_components/InviteHistoryTable';
 import { ManualCopyModal } from './_components/ManualCopyModal';
@@ -12,7 +12,7 @@ import { buildInviteLink, describeInviteRevokeOutcome, parseInviteRecipientEmail
 import { useTokenCopy } from './_useTokenCopy';
 
 export default function AdminInviteClient() {
-  const { invites, loading, error, reload, generating, generateError, generate, revoke } =
+  const { invites, cap, loading, error, reload, generating, generateError, generate, revoke } =
     useAdminInvite();
   const [lastToken, setLastToken] = useState<IssuedInvite | null>(null);
   // 복사 로직 SSOT — 발급 직후 초대와 발급 내역 행별 복사가 공유한다(성공 피드백·실패 폴백 포함).
@@ -107,6 +107,11 @@ export default function AdminInviteClient() {
         revokingToken={revokingToken}
         onRevoke={setPendingRevoke}
       />
+      {cap !== null && !loading && error === null && (
+        <Text size="xs" mt="xs" style={{ color: 'var(--color-text-secondary)' }}>
+          {describeListCap(cap)}
+        </Text>
+      )}
       <ManualCopyModal link={manualLink} onClose={closeManual} />
       <ConfirmModal
         opened={pendingRevoke !== null}

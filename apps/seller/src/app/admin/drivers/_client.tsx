@@ -5,9 +5,15 @@ import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
-import { type DriverStatus, useAdminDrivers } from '@/hooks/useAdmin';
+import {
+  type AdminCommandOutcome,
+  type DriverStatus,
+  describeActiveDeliveryWarning,
+  useAdminDrivers,
+} from '@/hooks/useAdmin';
 import { LoadMoreFooter } from '../_components/LoadMoreFooter';
 import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
+import { ActiveDeliveryNotice } from './_components/ActiveDeliveryNotice';
 import { DriverList } from './_components/DriverList';
 import {
   ACTION_META,
@@ -23,6 +29,8 @@ export default function DriversClient() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [reason, setReason] = useState('');
+  // 정지 뒤 배송 중 배정 주문 안내(정지는 막지 않는다). null이면 안내창이 닫혀 있다.
+  const [deliveryWarning, setDeliveryWarning] = useState<string | null>(null);
   const {
     drivers: allDrivers,
     hasMore,
@@ -44,14 +52,20 @@ export default function DriversClient() {
       pending.action === 'approve' ? '승인' : pending.action === 'suspend' ? '정지' : '정지 해제';
     setProcessingId(pending.userId);
     try {
-      const outcome =
-        pending.action === 'approve'
-          ? await approve(pending.userId)
-          : await toggleSuspend(
-              pending.userId,
-              pending.action === 'suspend',
-              normalizeSuspendReason(reason),
-            );
+      let outcome: AdminCommandOutcome;
+      if (pending.action === 'approve') {
+        outcome = await approve(pending.userId);
+      } else {
+        const result = await toggleSuspend(
+          pending.userId,
+          pending.action === 'suspend',
+          normalizeSuspendReason(reason),
+        );
+        outcome = result;
+        if (result.kind === 'confirmed' && pending.action === 'suspend') {
+          setDeliveryWarning(describeActiveDeliveryWarning(result.activeDeliveryCount));
+        }
+      }
       setPending(null);
       if (outcome.kind === 'confirmed' && outcome.reconciled) return;
       // rejected는 서버 reason 보존, unknown/stale은 재확인 우선 + blind retry 금지.
@@ -145,6 +159,8 @@ export default function DriversClient() {
           if (processingId === null) setPending(null);
         }}
       />
+
+      <ActiveDeliveryNotice message={deliveryWarning} onClose={() => setDeliveryWarning(null)} />
     </Box>
   );
 }
