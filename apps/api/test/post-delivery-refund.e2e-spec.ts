@@ -261,7 +261,7 @@ describe('배송 후 환불 HTTP 통합 회귀', () => {
     });
     const issues = [...fixture.records.entries()]
       .filter(([path]) => path.startsWith('operationIssues/'))
-      .map(([, data]) => data as Data);
+      .map(([, data]) => data);
     expect(issues).toEqual([
       expect.objectContaining({
         type: 'SETTLEMENT_RECOVERY_REQUIRED',

@@ -174,7 +174,7 @@ describe('늦은 결제 자동 환불 안내', () => {
       { refund: jest.fn().mockResolvedValue(undefined), getPayment: jest.fn() } as never,
       notifications as never,
       { log: jest.fn() } as never,
-      new OrderCapacityService(memory.firestore as never) as never,
+      new OrderCapacityService(memory.firestore as never),
       { createOrMergeIssue: jest.fn() } as never,
       { saveRecord: jest.fn().mockResolvedValue({}) } as never,
       { refundByOrderId: jest.fn() } as never,

@@ -39,13 +39,13 @@ export class ProductsService {
     await this.assertPublicStore(storeId);
     let ref = this.firestore.collection('products').where('storeId', '==', storeId);
 
-    ref = ref.where('isActive', '==', true) as any;
+    ref = ref.where('isActive', '==', true);
 
     if (query.category) {
-      ref = ref.where('category', '==', query.category) as any;
+      ref = ref.where('category', '==', query.category);
     }
     if (query.saleType) {
-      ref = ref.where('saleType', '==', query.saleType) as any;
+      ref = ref.where('saleType', '==', query.saleType);
     }
 
     const snap = await ref.get();
@@ -92,7 +92,7 @@ export class ProductsService {
     const items = products.map((p) => {
       const gc = groupConfigMap.get(p['id'] as string);
       const summary = toPublicProductSummary(
-        p as Record<string, unknown>,
+        p,
         gc ?? null,
       );
       // Backfill groupSummary for group products when the helper omitted it

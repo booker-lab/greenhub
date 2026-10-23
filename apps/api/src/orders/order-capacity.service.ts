@@ -665,7 +665,7 @@ export class OrderCapacityService {
       });
     });
     return {
-      reservation: { ...reservation, ...update } as ReservationRecord,
+      reservation: { ...reservation, ...update },
       counters: nextCounters,
     };
   }
@@ -987,7 +987,7 @@ export class OrderCapacityService {
       });
     });
 
-    return { ...reservation, ...update } as ReservationRecord;
+    return { ...reservation, ...update };
   }
 
   // 공개 조회와 같은 자동 상태 계산으로 판정한다. 저장값이 아직 SCHEDULED여도

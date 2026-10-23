@@ -128,7 +128,7 @@ function makeContext(variant: Variant, options: ContextOptions = {}) {
     firestore,
     payments as never,
     settlements as never,
-    capacity as never,
+    capacity,
   );
   const roundUpdateStatus = jest.spyOn(roundLifecycle, 'updateStatus');
   const lifecycle = createSettledOrdersLifecycle(
@@ -136,7 +136,7 @@ function makeContext(variant: Variant, options: ContextOptions = {}) {
     notifications as never,
     payments as never,
     settlements as never,
-    capacity as never,
+    capacity,
     roundLifecycle,
   );
 
@@ -154,7 +154,7 @@ function transition(
     'store-1',
     'order-1',
     requester.id,
-    { status } as never,
+    { status },
     requester.role,
   );
 }

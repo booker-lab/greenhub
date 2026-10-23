@@ -382,7 +382,7 @@ export class RetentionService {
     if (typeof firestore.batch === 'function') {
       return firestore.batch();
     }
-    return firestore.db.batch() as unknown as RetentionBatch;
+    return firestore.db.batch();
   }
 
   private assertRecordId(id: string): void {

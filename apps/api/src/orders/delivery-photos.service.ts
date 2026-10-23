@@ -285,7 +285,7 @@ export class DeliveryPhotosService {
     if (!snapshot.exists) {
       throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
     }
-    const round = snapshot.data() as OrderRecord | undefined;
+    const round = snapshot.data();
     if (round?.['id'] !== order['roundId'] || round?.['storeId'] !== order['storeId']) {
       throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
     }

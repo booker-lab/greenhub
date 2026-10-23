@@ -271,7 +271,7 @@ describe('알리고 계정 수준 실패 알림', () => {
   // NotificationsService의 다른 의존성은 이 경로에서 쓰지 않는다.
   function makeService(alerts: unknown) {
     const { NotificationsService } = require('../notifications/notifications.service');
-    return new NotificationsService({} as never, {} as never, {} as never, {} as never, alerts);
+    return new NotificationsService({}, {}, {}, {}, alerts);
   }
 
   it.each([

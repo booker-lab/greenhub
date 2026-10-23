@@ -401,7 +401,7 @@ describe('CAPACITY single-owner remediation proof', () => {
       firestore,
       payments as never,
       settlements as never,
-      capacity as never,
+      capacity,
     );
 
     // Claim first (LOCAL_PENDING) then apply cancellation via cancelForRound path.
@@ -432,7 +432,7 @@ describe('CAPACITY single-owner remediation proof', () => {
     const second = await roundLifecycle.cancelForRound({
       storeId: 'store-1',
       orderId: 'order-held-1',
-      expectedStatus: 'CANCELLED' as never,
+      expectedStatus: 'CANCELLED',
       reason: 'test cancel',
     });
     expect(second).toMatchObject({ orderId: 'order-held-1', status: 'CANCELLED' });
@@ -514,7 +514,7 @@ describe('CAPACITY single-owner remediation proof', () => {
           refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
         } as never,
         { cancelSettlement: jest.fn().mockResolvedValue(undefined) } as never,
-        new OrderCapacityService(firestore) as never,
+        new OrderCapacityService(firestore),
       );
     }
 
@@ -556,7 +556,7 @@ describe('CAPACITY single-owner remediation proof', () => {
       await roundLifecycle.cancelForRound({
         storeId: 'store-1',
         orderId: 'order-released-hold',
-        expectedStatus: 'CANCELLED' as never,
+        expectedStatus: 'CANCELLED',
         reason: 'test cancel',
       });
       expect(memory.read('saleRounds/round-1')?.counters).toMatchObject({ heldOrderCount: 0 });
@@ -645,7 +645,7 @@ describe('CAPACITY single-owner remediation proof', () => {
       portone as never,
       { sendToUser: jest.fn() } as never,
       { log: jest.fn() } as never,
-      capacity as never,
+      capacity,
       { createOrMergeIssue: jest.fn() } as never,
       { saveRecord: jest.fn().mockResolvedValue({}) } as never,
       { refundByOrderId: jest.fn() } as never,
@@ -698,7 +698,7 @@ describe('CAPACITY single-owner remediation proof', () => {
       fullPortone as never,
       { sendToUser: jest.fn() } as never,
       { log: jest.fn() } as never,
-      fullCapacity as never,
+      fullCapacity,
       { createOrMergeIssue: jest.fn() } as never,
       { saveRecord: jest.fn().mockResolvedValue({}) } as never,
       { refundByOrderId: jest.fn() } as never,
@@ -828,14 +828,14 @@ describe('CAPACITY single-owner remediation proof', () => {
       firestore,
       payments as never,
       settlements as never,
-      capacity as never,
+      capacity,
     );
     const lifecycle = createSettledOrdersLifecycle(
       firestore,
       notifications as never,
       payments as never,
       settlements as never,
-      capacity as never,
+      capacity,
       roundLifecycle,
     );
 
@@ -868,14 +868,14 @@ describe('CAPACITY single-owner remediation proof', () => {
       corruptMemory.firestore as never,
       payments as never,
       settlements as never,
-      corruptCapacity as never,
+      corruptCapacity,
     );
     const corruptLifecycle = createSettledOrdersLifecycle(
       corruptMemory.firestore as never,
       notifications as never,
       payments as never,
       settlements as never,
-      corruptCapacity as never,
+      corruptCapacity,
       corruptRound,
     );
     await expect(
