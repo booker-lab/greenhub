@@ -14,7 +14,7 @@ import {
   Title,
 } from '@mantine/core';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import DeadlineSection from '@/components/DeadlineSection';
 import ProductCard from '@/components/ProductCard';
@@ -32,7 +32,13 @@ import {
   storeProfileFailureMessage,
 } from '@/lib/public-store-profile';
 import { deliveryDayTag } from '@/lib/round-countdown';
-import { canQuickAdd, cartAddFailureMessage, roundItemCartInput } from '@/lib/round-quick-add';
+import {
+  canQuickAdd,
+  cartAddFailureMessage,
+  roundItemCartInput,
+  roundProductHref,
+} from '@/lib/round-quick-add';
+import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
 import {
   formatOrderCloseLabel,
   formatOrderOpenLabel,
@@ -384,18 +390,26 @@ function RoundDirectHome({
   card,
 }: ReturnType<typeof useSaleRounds> & { storeId: string | null; card: CardContextValue }) {
   const { addItem } = useCart();
+  const router = useRouter();
   const [toast, setToast] = useState<QuickAddToastState | null>(null);
   const closeToast = useCallback(() => setToast(null), []);
   const handleQuickAdd = useCallback(
     (item: SaleRoundItem) => {
-      const result = addItem(roundItemCartInput(item));
-      setToast({
-        id: Date.now(),
-        tone: result.ok ? 'success' : 'error',
-        message: result.ok ? '장바구니에 담았어요' : cartAddFailureMessage(result.reason),
-      });
+      void (async () => {
+        // 옵션(화분 등)을 골라야 하는 상품은 담지 않고 상품 화면의 옵션 시트로 보낸다.
+        if (await fetchNeedsOptionChoice(item.productId)) {
+          router.push(roundProductHref(item));
+          return;
+        }
+        const result = addItem(roundItemCartInput(item));
+        setToast({
+          id: Date.now(),
+          tone: result.ok ? 'success' : 'error',
+          message: result.ok ? '장바구니에 담았어요' : cartAddFailureMessage(result.reason),
+        });
+      })();
     },
-    [addItem],
+    [addItem, router],
   );
 
   if (loading) {
