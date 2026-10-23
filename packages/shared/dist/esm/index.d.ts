@@ -16,6 +16,7 @@ export * from './benchmark.types.js';
 export * from './api-base-url.js';
 export * from './api-path.js';
 export * from './auth-runtime.js';
+export * from './session-authority.js';
 export * from './content-security-policy.js';
 export * from './csp-report.js';
 //# sourceMappingURL=index.d.ts.map
