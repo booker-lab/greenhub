@@ -269,6 +269,7 @@ PATCH /admin/drivers/:userId/approve
 
 - 사용자 존재 확인
 - `role === driver` 확인
+- 승인 대기(목록 `pending`과 같은 `!driverApproved && !suspended`)만 승인한다. 정지된 기사·이미 승인된 기사는 409(정지된 기사는 먼저 정지를 풀어야 한다)
 - `driverApproved: true`
 
 이 endpoint가 관리자 승인 경로라는 계약은 유지되며, 2026-08-24 감사에서 확인한 다음 우회는 현재 구현에서 닫혔다.
@@ -288,6 +289,8 @@ PATCH /admin/drivers/:userId/suspend
 ```ts
 { suspended: boolean }
 ```
+
+정지(`suspended: true`) 응답은 `activeDeliveryCount`(그 기사의 `driverId`로 배정된 `DELIVERING` 주문 수, 조회 실패면 `null`)를 함께 싣는다. 정지는 막지 않으며, 관리자 기사 탭은 건수가 있으면 "판매자가 배송 보류로 바꿔야 한다"는 안내창을 띄운다. 해제 응답에는 이 필드가 없다.
 
 Driver 신규 로그인은 `suspended`를 확인하지만 기존 access/refresh/Firebase claims의 revocation 시점은 현재 명확한 계약으로 고정돼 있지 않다. 정지 write만으로 기존 driver의 주문/API/Firestore 접근이 즉시 종료됐다고 가정하지 않는다.
 
@@ -328,7 +331,7 @@ GET /admin/invite
 ```
 
 - `createdAt DESC`
-- 최대 50건
+- 최대 50건. 응답은 `{ invites, hasMore, limit: 50 }`이고, 50건보다 많으면 `hasMore: true`라 초대 탭이 "최근 50건만 보여요"를 안내한다(관리자 숨긴 후기 `GET /admin/reviews/hidden`도 같은 모양 `{ reviews, hasMore, limit: 200 }`)
 
 ### 취소
 
