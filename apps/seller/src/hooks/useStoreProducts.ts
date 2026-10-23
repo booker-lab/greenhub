@@ -2,13 +2,15 @@
 
 import type { Product } from '@greenhub/shared';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import { useFirebaseReady } from '@/app/providers';
 import { db } from '@/lib/firebase';
 import {
-  isStoreProductsBackgroundRefresh,
-  shouldIgnoreStoreProductsCallback,
-} from './useStoreProducts.recovery';
+  createStoreProductsHub,
+  INITIAL_STORE_PRODUCTS_SNAPSHOT,
+  type ListenStoreProducts,
+  type StoreProductsSnapshot,
+} from './useStoreProducts.hub';
 
 interface UseStoreProductsResult {
   products: Product[];
@@ -21,99 +23,73 @@ interface UseStoreProductsResult {
   isStale: boolean;
 }
 
-export function useStoreProducts(storeId: string | null): UseStoreProductsResult {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const [retryKey, setRetryKey] = useState(0);
-  // products 규칙은 Firebase에 로그인한 소유 판매자만 읽게 한다. 첫 로그인 직후 custom token
-  // 로그인이 끝나기 전에 구독하면 권한 오류로 listener가 끝나므로, 로그인된 뒤에 구독한다.
-  const firebaseReady = useFirebaseReady();
-  const [scope, setScope] = useState(storeId);
-  const scopeRef = useRef(storeId);
-  const hasLoadedRef = useRef(false);
+// 화면 전환에서 이전 화면 정리와 새 화면 구독 사이 틈, 짧은 왕복 이동은 같은 구독으로 받는다.
+const RELEASE_DELAY_MS = 60_000;
 
-  // Scope 변경(A→B, A→null, null→A)이면 이전 store 데이터를
-  // 새 scope의 authoritative data처럼 노출하지 않도록 렌더 단계에서 무효화한다.
-  if (scope !== storeId) {
-    scopeRef.current = storeId;
-    hasLoadedRef.current = false;
-    setScope(storeId);
-    setProducts([]);
-    setError(null);
-    setHasLoaded(false);
-    setLoading(true);
-  }
+const NO_STORE_SNAPSHOT: StoreProductsSnapshot = Object.freeze({
+  products: [],
+  loading: false,
+  error: null,
+  hasLoaded: false,
+}) as StoreProductsSnapshot;
+
+const listenStoreProducts: ListenStoreProducts = (storeId, onNext, onError) =>
+  onSnapshot(
+    query(collection(db, 'products'), where('storeId', '==', storeId)),
+    (snap) => {
+      const items = snap.docs
+        .map((d) => {
+          const data = d.data();
+          if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate().toISOString();
+          if (data.updatedAt?.toDate) data.updatedAt = data.updatedAt.toDate().toISOString();
+          return { id: d.id, ...data } as Product;
+        })
+        .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+      onNext(items);
+    },
+    (err) => {
+      onError(err instanceof Error ? err.message : '상품을 불러오지 못했습니다.');
+    },
+  );
+
+// 같은 매장 상품 구독은 화면들이 하나를 나눠 쓴다.
+const storeProductsHub = createStoreProductsHub({
+  listen: listenStoreProducts,
+  releaseDelayMs: RELEASE_DELAY_MS,
+});
+
+export function useStoreProducts(storeId: string | null): UseStoreProductsResult {
+  // products 규칙은 Firebase에 로그인한 소유 판매자만 읽게 한다. 첫 로그인 직후 custom token
+  // 로그인이 끝나기 전에 구독하면 권한 오류로 listener가 끝나므로, 로그인된 뒤에만 구독을 붙잡는다.
+  // 로그인 전에는 현재 상태(첫 로딩 또는 이전 데이터)를 그대로 지켜본다.
+  const firebaseReady = useFirebaseReady();
+
+  const subscribe = useCallback(
+    (onChange: () => void) => {
+      if (!storeId) return () => {};
+      return storeProductsHub.subscribe(storeId, onChange, firebaseReady);
+    },
+    [storeId, firebaseReady],
+  );
+  // 데이터는 storeId별로만 읽어 매장이 바뀌면(A→B, A→null, null→A) 이전 매장 데이터를 새 scope의
+  // authoritative data처럼 노출하지 않는다.
+  const getSnapshot = useCallback(
+    () => (storeId ? storeProductsHub.getSnapshot(storeId) : NO_STORE_SNAPSHOT),
+    [storeId],
+  );
+  const getServerSnapshot = useCallback(
+    () => (storeId ? INITIAL_STORE_PRODUCTS_SNAPSHOT : NO_STORE_SNAPSHOT),
+    [storeId],
+  );
+  const { products, loading, error, hasLoaded } = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+    getServerSnapshot,
+  );
 
   const retry = useCallback(() => {
-    setRetryKey((key) => key + 1);
-  }, []);
-
-  useEffect(() => {
-    void retryKey;
-    const subscribedStoreId = scope;
-    scopeRef.current = subscribedStoreId;
-
-    if (!subscribedStoreId) {
-      setLoading(false);
-      return;
-    }
-    // Firebase 로그인 전에는 구독하지 않고 현재 상태(첫 로딩 또는 이전 데이터)를 그대로 둔다.
-    if (!firebaseReady) return;
-
-    if (isStoreProductsBackgroundRefresh(hasLoadedRef.current)) {
-      // stale 유지 중 재구독은 initial loading으로 되돌리지 않고
-      // 이전 오류를 성공 snapshot까지 유지해 fresh처럼 보이지 않게 한다.
-      setLoading(false);
-    } else {
-      setLoading(true);
-      setError(null);
-    }
-
-    const q = query(collection(db, 'products'), where('storeId', '==', subscribedStoreId));
-
-    let active = true;
-    const unsubscribe = onSnapshot(
-      q,
-      (snap) => {
-        if (shouldIgnoreStoreProductsCallback(active, subscribedStoreId, scopeRef.current)) {
-          return;
-        }
-        const items = snap.docs
-          .map((d) => {
-            const data = d.data();
-            if (data.createdAt?.toDate) data.createdAt = data.createdAt.toDate().toISOString();
-            if (data.updatedAt?.toDate) data.updatedAt = data.updatedAt.toDate().toISOString();
-            return { id: d.id, ...data } as Product;
-          })
-          .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-        hasLoadedRef.current = true;
-        setProducts(items);
-        setHasLoaded(true);
-        setLoading(false);
-        setError(null);
-      },
-      (err) => {
-        if (shouldIgnoreStoreProductsCallback(active, subscribedStoreId, scopeRef.current)) {
-          return;
-        }
-        // 첫 조회 실패는 []를 성공 empty로 승격하지 않도록 hasLoaded=false를 유지한다.
-        // 이전 정상 snapshot이 있으면 stale 데이터를 지우지 않고 오류만 기록한다.
-        setError(err instanceof Error ? err.message : '상품을 불러오지 못했습니다.');
-        setLoading(false);
-        if (!hasLoadedRef.current) {
-          setProducts([]);
-          setHasLoaded(false);
-        }
-      },
-    );
-
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [scope, retryKey, firebaseReady]);
+    if (storeId) storeProductsHub.retry(storeId);
+  }, [storeId]);
 
   const isStale = hasLoaded && error !== null;
   return { products, loading, error, retry, hasLoaded, isStale };
