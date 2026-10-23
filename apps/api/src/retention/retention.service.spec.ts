@@ -13,6 +13,7 @@ interface RetentionServiceContract {
     metadata?: Data;
   }): Promise<Data>;
   purgeExpiredRecords(input: { now: Date }): Promise<Data>;
+  purgeExpiredNotifications(input: { now: Date }): Promise<number>;
   runScheduledPurge(): Promise<Data>;
 }
 
@@ -83,10 +84,15 @@ function makeService(initial: Record<string, Data> = {}) {
   });
   const collection = (name: string) => {
     const filters: Array<[string, string, unknown]> = [];
+    let limitCount = Number.POSITIVE_INFINITY;
     const query = {
       where(field: string, op: string, value: unknown) {
         filters.push([field, op, value]);
         queries.push({ collection: name, field, op, value });
+        return query;
+      },
+      limit(count: number) {
+        limitCount = count;
         return query;
       },
       async get() {
@@ -109,7 +115,8 @@ function makeService(initial: Record<string, Data> = {}) {
               }
               return actual === value;
             }),
-          );
+          )
+          .slice(0, limitCount);
         return { docs, empty: docs.length === 0, size: docs.length };
       },
     };
@@ -510,6 +517,46 @@ describe('보관 기간과 파기 계약', () => {
     expect(JSON.stringify(issueWriter.createOrMergeIssue.mock.calls[0][0])).not.toMatch(
       /authorization|bearer|secret/i,
     );
+  });
+
+  describe('알림 발송 기록 90일 보관', () => {
+    it('생성 90일이 지난 알림 기록만 지우고, 발송 중복 방지 기록은 남긴다', async () => {
+      jest.useFakeTimers().setSystemTime(now);
+      const { records, service } = makeService({
+        'notifications/old': { createdAt: timestamp('2026-04-17T00:59:59.000Z'), phone: '01000000000' },
+        'notifications/boundary': { createdAt: timestamp('2026-04-18T01:00:00.000Z') },
+        'notifications/recent': { createdAt: timestamp('2026-07-01T00:00:00.000Z') },
+        'notificationDeliveries/old': { createdAt: timestamp('2026-01-01T00:00:00.000Z') },
+      });
+
+      try {
+        await expect(service.runScheduledPurge()).resolves.toMatchObject({
+          notificationsDeletedCount: 2,
+        });
+        expect(records.has('notifications/old')).toBe(false);
+        expect(records.has('notifications/boundary')).toBe(false);
+        expect(records.has('notifications/recent')).toBe(true);
+        expect(records.has('notificationDeliveries/old')).toBe(true);
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('450건씩 나눠 지운다', async () => {
+      const initial: Record<string, Data> = {};
+      for (let index = 0; index < 451; index += 1) {
+        initial[`notifications/n${index}`] = { createdAt: timestamp('2026-01-01T00:00:00.000Z') };
+      }
+      const { commits, records, service } = makeService(initial);
+
+      await expect(
+        service.purgeExpiredNotifications({ now: new Date('2026-07-17T01:00:00.000Z') }),
+      ).resolves.toBe(451);
+      expect(commits.map((paths) => paths.length)).toEqual([450, 1]);
+      expect(Array.from(records.keys()).some((path) => path.startsWith('notifications/'))).toBe(
+        false,
+      );
+    });
   });
 
   describe('Storage 객체 삭제 결과 구분', () => {
