@@ -10,14 +10,18 @@ import {
   gcloudCommandLine,
   inspectSecretValue,
   PLAIN_KEYS,
+  planFromRailway,
   readHidden,
+  readRailwayApiVariables,
   renderEnvYaml,
   resolveProject,
   runEnv,
+  runFromRailway,
   runSecrets,
   SECRET_KEYS,
   secretArgs,
   selectSecretKeys,
+  versionNumber,
 } from './cloud-run-env.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -130,34 +134,94 @@ describe('gcloud 호출', () => {
   it('비밀값은 인자에 들어가지 않고 표준 입력으로만 넘긴다', () => {
     assert.deepEqual(
       secretArgs({ action: 'add-version', name: 'JWT_SECRET', project: 'green-e4fe3' }),
-      ['secrets', 'versions', 'add', 'JWT_SECRET', '--project=green-e4fe3', '--data-file=-'],
+      [
+        'secrets',
+        'versions',
+        'add',
+        'JWT_SECRET',
+        '--project=green-e4fe3',
+        '--data-file=-',
+        '--format=value(name)',
+      ],
     );
     assert.deepEqual(
       secretArgs({ action: 'create', name: 'JWT_SECRET', project: 'green-e4fe3' }).slice(-2),
       ['--replication-policy=user-managed', '--locations=asia-northeast3'],
     );
+    assert.deepEqual(
+      secretArgs({
+        action: 'disable-version',
+        name: 'JWT_SECRET',
+        project: 'green-e4fe3',
+        version: '1',
+      }),
+      ['secrets', 'versions', 'disable', '1', '--secret=JWT_SECRET', '--project=green-e4fe3'],
+    );
     assert.throws(
       () => secretArgs({ action: 'describe', name: 'bad name; rm', project: 'p' }),
       /형식/,
     );
+    assert.throws(
+      () =>
+        secretArgs({
+          action: 'disable-version',
+          name: 'JWT_SECRET',
+          project: 'p',
+          version: 'latest',
+        }),
+      /버전/,
+    );
   });
 
+  it('버전 경로나 번호에서 번호만 뽑는다', () => {
+    assert.equal(versionNumber('projects/988412563635/secrets/JWT_SECRET/versions/12\n'), '12');
+    assert.equal(versionNumber('3'), '3');
+    assert.equal(versionNumber(''), null);
+  });
+
+  /** existing: 이름 → 켜진 버전 번호 목록. 새 버전 번호는 가장 큰 번호 + 1이다. */
   function fakeGcloud(existing = {}) {
     const calls = [];
+    const versions = Object.fromEntries(
+      Object.entries(existing).map(([name, list]) => [name, [...list]]),
+    );
     const impl = async (args, options = {}) => {
       calls.push({ args, stdin: options.stdin });
-      const [, sub, name] = args;
-      if (sub === 'describe') return { code: name in existing ? 0 : 1, stdout: '', stderr: '' };
-      if (sub === 'versions' && args[2] === 'list') {
+      const [, sub, third, fourth] = args;
+      if (sub === 'describe') return { code: third in versions ? 0 : 1, stdout: '', stderr: '' };
+      if (sub === 'create') {
+        versions[third] = [];
+        return { code: 0, stdout: '', stderr: '' };
+      }
+      if (sub === 'versions' && third === 'add') {
+        const list = versions[fourth] ?? [];
+        const next = String(Math.max(0, ...list.map(Number)) + 1);
+        versions[fourth] = [...list, next];
         return {
           code: 0,
-          stdout: existing[args[3]] ? 'projects/p/secrets/x/versions/1\n' : '',
+          stdout: `projects/988412563635/secrets/${fourth}/versions/${next}\n`,
           stderr: '',
         };
       }
+      if (sub === 'versions' && third === 'list') {
+        const list = versions[fourth] ?? [];
+        const shown = args.includes('--limit=1') ? list.slice(-1) : list;
+        return {
+          code: 0,
+          stdout: shown
+            .map((v) => `projects/988412563635/secrets/${fourth}/versions/${v}\n`)
+            .join(''),
+          stderr: '',
+        };
+      }
+      if (sub === 'versions' && third === 'disable') {
+        const name = args.find((arg) => arg.startsWith('--secret=')).slice('--secret='.length);
+        versions[name] = versions[name].filter((v) => v !== fourth);
+        return { code: 0, stdout: '', stderr: '' };
+      }
       return { code: 0, stdout: '', stderr: '' };
     };
-    return { calls, impl };
+    return { calls, impl, versions };
   }
 
   it('없는 비밀값은 만들고 값을 넣고 런타임 계정에 읽기 권한을 준다', async () => {
@@ -180,6 +244,7 @@ describe('gcloud 호출', () => {
       'secrets create JWT_SECRET',
       'secrets versions add',
       'secrets add-iam-policy-binding JWT_SECRET',
+      'secrets versions list',
     ]);
     assert.equal(gcloud.calls[2].stdin, 'y'.repeat(40));
     assert.ok(gcloud.calls.every((call) => !call.args.some((arg) => arg.includes('yyyy'))));
@@ -195,7 +260,7 @@ describe('gcloud 호출', () => {
   });
 
   it('이미 값이 있으면 기본으로 건너뛰고, 비운 입력도 건너뛴다', async () => {
-    const gcloud = fakeGcloud({ JWT_SECRET: true });
+    const gcloud = fakeGcloud({ JWT_SECRET: ['1'] });
     const summary = await runSecrets({
       project: 'green-e4fe3',
       keys: selectSecretKeys('JWT_SECRET,PORTONE_V2_SECRET'),
@@ -206,6 +271,179 @@ describe('gcloud 호출', () => {
     });
     assert.deepEqual(summary, { stored: [], skipped: ['JWT_SECRET', 'PORTONE_V2_SECRET'] });
     assert.ok(!gcloud.calls.some((call) => call.args[1] === 'create' || call.args[2] === 'add'));
+  });
+
+  it('새 값으로 바꾸면 새 버전만 켜 두고 이전 버전은 끈다(삭제하지 않음)', async () => {
+    const gcloud = fakeGcloud({ JWT_SECRET: ['1'] });
+    const logs = [];
+    await runSecrets({
+      project: 'green-e4fe3',
+      keys: selectSecretKeys('JWT_SECRET'),
+      gcloud: gcloud.impl,
+      hidden: async () => 'n'.repeat(40),
+      visible: async () => 'y',
+      log: (line) => logs.push(line),
+    });
+    assert.deepEqual(gcloud.versions.JWT_SECRET, ['2']);
+    assert.ok(!gcloud.calls.some((call) => call.args.includes('destroy')));
+    assert.ok(logs.some((line) => line.includes('버전 2') && line.includes('이전 버전 1 끔')));
+  });
+
+  describe('교체가 끝난 Railway에서 옮기기', () => {
+    const ROTATED = {
+      JWT_SECRET: 'j'.repeat(64),
+      JWT_REFRESH_SECRET: 'r'.repeat(64),
+      PORTONE_V2_SECRET: 'portone-new-secret',
+      KAKAO_APP_ID: '123456',
+      CORS_ORIGIN: 'https://greenlove.co.kr',
+      FIREBASE_PROJECT_ID: 'green-e4fe3',
+      FIREBASE_STORAGE_BUCKET: 'green-e4fe3.firebasestorage.app',
+      TRUST_PROXY_HOPS: '2',
+      RAILWAY_ENVIRONMENT_NAME: 'production',
+    };
+
+    function railwayFetch({
+      environment = 'production',
+      services,
+      shared = {},
+      own = ROTATED,
+    } = {}) {
+      const requests = [];
+      const impl = async (url, init) => {
+        const body = JSON.parse(init.body);
+        requests.push({ url, token: init.headers['Project-Access-Token'], body });
+        let data;
+        if (body.query.includes('projectToken')) {
+          data = { projectToken: { projectId: 'p1', environmentId: 'e1' } };
+        } else if (body.query.includes('project(id')) {
+          data = {
+            project: {
+              services: {
+                edges: (
+                  services ?? [
+                    { id: 's-api', name: 'api' },
+                    { id: 's-db', name: 'redis' },
+                  ]
+                ).map((node) => ({ node })),
+              },
+              environments: { edges: [{ node: { id: 'e1', name: environment } }] },
+            },
+          };
+        } else {
+          data = { variables: body.variables.serviceId ? own : shared };
+        }
+        return new Response(JSON.stringify({ data }), { status: 200 });
+      };
+      return { impl, requests };
+    }
+
+    it('새 값을 Secret Manager로, 일반 값을 YAML로 옮기고 값은 로그에 남기지 않는다', async () => {
+      const gcloud = fakeGcloud({ JWT_SECRET: ['1'] });
+      const railway = railwayFetch({ shared: { CORS_ORIGIN: 'https://old.example' } });
+      const written = {};
+      const logs = [];
+      const summary = await runFromRailway({
+        project: 'green-e4fe3',
+        out: 'C:/tmp/out.yaml',
+        fetchImpl: railway.impl,
+        gcloud: gcloud.impl,
+        hidden: async () => 'railway-token',
+        visible: async () => 'green-e4fe3',
+        write: (file, text) => {
+          written[file] = text;
+        },
+        log: (line) => logs.push(line),
+      });
+      assert.deepEqual(summary.stored, ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'PORTONE_V2_SECRET']);
+      assert.ok(railway.requests.every((request) => request.token === 'railway-token'));
+      assert.deepEqual(gcloud.versions.JWT_SECRET, ['2'], '옛 JWT 버전은 꺼진다');
+      const stdins = gcloud.calls
+        .filter((call) => call.stdin !== undefined)
+        .map((call) => call.stdin);
+      assert.deepEqual(stdins, [
+        ROTATED.JWT_SECRET,
+        ROTATED.JWT_REFRESH_SECRET,
+        ROTATED.PORTONE_V2_SECRET,
+      ]);
+      const yaml = written['C:/tmp/out.yaml'];
+      assert.match(
+        yaml,
+        /^CORS_ORIGIN: "https:\/\/greenlove\.co\.kr"$/m,
+        '서비스 변수가 공유 변수보다 우선',
+      );
+      assert.match(yaml, /^GREENHUB_ENVIRONMENT_NAME: "production"$/m);
+      assert.match(yaml, /^GREENHUB_SCHEDULES_ENABLED: "false"$/m);
+      assert.doesNotMatch(yaml, /TRUST_PROXY_HOPS|RAILWAY_|JWT_SECRET|PORTONE_V2_SECRET/);
+      const allLogs = logs.join('\n');
+      for (const value of [ROTATED.JWT_SECRET, ROTATED.PORTONE_V2_SECRET, 'railway-token']) {
+        assert.ok(!allLogs.includes(value), '로그에 값이 남지 않는다');
+      }
+      assert.match(allLogs, /비어 있는 필수 일반 값.*TRUST_PROXY_HOPS/);
+    });
+
+    it('프로젝트 이름을 다르게 입력하면 아무것도 쓰지 않는다', async () => {
+      const gcloud = fakeGcloud();
+      let wrote = false;
+      const summary = await runFromRailway({
+        project: 'green-e4fe3',
+        fetchImpl: railwayFetch().impl,
+        gcloud: gcloud.impl,
+        hidden: async () => 'railway-token',
+        visible: async () => 'y',
+        write: () => {
+          wrote = true;
+        },
+        log: () => {},
+      });
+      assert.equal(summary.stored.length, 0);
+      assert.equal(wrote, false);
+      assert.deepEqual(gcloud.calls, []);
+    });
+
+    it('토큰 환경이 프로젝트와 다르면(운영 프로젝트에 staging 토큰) 멈춘다', async () => {
+      await assert.rejects(
+        runFromRailway({
+          project: 'green-e4fe3',
+          fetchImpl: railwayFetch({ environment: 'staging' }).impl,
+          gcloud: fakeGcloud().impl,
+          hidden: async () => 'railway-token',
+          visible: async () => 'green-e4fe3',
+          write: () => {},
+          log: () => {},
+        }),
+        /"staging" 환경용/,
+      );
+    });
+
+    it('API 서비스가 하나로 정해지지 않으면 번호로 고르게 한다', async () => {
+      const read = await readRailwayApiVariables({
+        token: 't',
+        expectedEnvironment: 'production',
+        chooseService: async (services) => services.find((entry) => entry.name === 'backend'),
+        fetchImpl: railwayFetch({
+          services: [
+            { id: 's1', name: 'backend' },
+            { id: 's2', name: 'worker' },
+          ],
+        }).impl,
+      });
+      assert.equal(read.service.id, 's1');
+      assert.equal(read.variables.KAKAO_APP_ID, '123456');
+    });
+
+    it('옮길 계획: 없는 비밀값과 비어 있는 필수 일반 값을 따로 알려 준다', () => {
+      const plan = planFromRailway(
+        { JWT_SECRET: 'x'.repeat(40), CORS_ORIGIN: '' },
+        resolveProject(),
+      );
+      assert.deepEqual(
+        plan.secrets.map((entry) => entry.key),
+        ['JWT_SECRET'],
+      );
+      assert.ok(plan.missingSecrets.includes('PORTONE_V2_SECRET'));
+      assert.ok(plan.missingPlain.includes('CORS_ORIGIN'));
+      assert.ok(plan.missingPlain.includes('TRUST_PROXY_HOPS'));
+    });
   });
 });
 
@@ -221,7 +459,14 @@ describe('Windows gcloud 명령 줄', () => {
   });
 
   it('도구가 만드는 모든 gcloud 인자는 허용 글자 검사를 통과한다', () => {
-    for (const action of ['describe', 'enabled-version', 'create', 'add-version', 'grant']) {
+    for (const action of [
+      'describe',
+      'enabled-version',
+      'enabled-versions',
+      'create',
+      'add-version',
+      'grant',
+    ]) {
       for (const entry of SECRET_KEYS) {
         gcloudCommandLine(
           secretArgs({
