@@ -8,6 +8,7 @@
 - `preview-auth-url-policy.md` — Preview/Kakao OAuth URL 정책
 - `ops-alerts.md` — 운영자 휴대폰 알림(텔레그램)과 가동 확인
 - `morning-ops-check.md` — 아침 운영 점검 보고(읽기 전용 점검 열쇠·판정 기준표·권한 경계, 어드민 운영 자동화 1단계)
+- `platform-modernization-plan.md` — 개발 환경 현대화와 API Cloud Run 이전 결정·단계(2026-10-23 확정)
 
 현재 외부 상태와 출시 순서는 `docs/memory.md`와 활성 HANDOFF·PLAN이 우선한다.
 
