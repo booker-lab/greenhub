@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { isProductionApiHost, PRODUCTION_API_HOSTS } from './release/api-hosts.mjs';
+
 export const PRODUCTION_FIREBASE_PROJECT = 'green-e4fe3';
 export const PRODUCTION_STORE_ID = '80189070-2c3d-45f2-bc11-68a870b13951';
-export const PRODUCTION_API_HOSTS = ['api-production-13e7.up.railway.app'];
+export { PRODUCTION_API_HOSTS };
 export const PROVIDER_HOSTS = ['api.portone.io', 'kakaoapi.aligo.in', 'apis.aligo.in'];
 const MAX_JPEG_BYTES = 5 * 1024 * 1024;
 const SHA_PATTERN = /^[0-9a-f]{40}$/;
@@ -124,7 +126,7 @@ function isProductionApiOrigin(origin) {
   if (isProductionOrigin(origin)) return true;
   try {
     const hostname = new URL(origin).hostname.toLowerCase();
-    return PRODUCTION_API_HOSTS.includes(hostname) || hostname.startsWith('api-production-');
+    return isProductionApiHost(hostname) || hostname.startsWith('api-production-');
   } catch {
     return true;
   }

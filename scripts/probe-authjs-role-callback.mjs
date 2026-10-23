@@ -89,6 +89,8 @@
 
 import { createHash as nodeCreateHash } from 'node:crypto';
 
+import { isProductionApiHost } from './release/api-hosts.mjs';
+
 export const APPROVAL_VALUE = 'NON_PRODUCTION_AUTH_PROBE_APPROVED';
 
 export const ROLES = Object.freeze(['seller', 'driver']);
@@ -389,7 +391,7 @@ export function isProductionHostname(hostname) {
   if (!host) return true;
   if (host === 'greenlove.co.kr' || host.endsWith('.greenlove.co.kr')) return true;
   if (host.startsWith('api-production-')) return true;
-  if (host === 'api-production-13e7.up.railway.app') return true;
+  if (isProductionApiHost(host)) return true;
   return false;
 }
 

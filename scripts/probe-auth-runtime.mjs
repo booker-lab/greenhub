@@ -52,10 +52,12 @@
  * Binding evidence missing/mismatch fails with RUNTIME_NOT_BOUND.
  */
 
+import { isProductionApiHost, PRODUCTION_API_HOSTS } from './release/api-hosts.mjs';
+
 export const APPROVAL_VALUE = 'NON_PRODUCTION_AUTH_PROBE_APPROVED';
 
 export const PRODUCTION_FIREBASE_PROJECT = 'green-e4fe3';
-export const PRODUCTION_API_HOSTS = Object.freeze(['api-production-13e7.up.railway.app']);
+export { PRODUCTION_API_HOSTS };
 export const PROVIDER_HOSTS = Object.freeze([
   'api.portone.io',
   'kakaoapi.aligo.in',
@@ -120,7 +122,7 @@ export function isProductionHostname(hostname) {
   const host = String(hostname ?? '').toLowerCase();
   if (!host) return true; // unparseable -> fail closed as production-like
   if (host === 'greenlove.co.kr' || host.endsWith('.greenlove.co.kr')) return true;
-  if (PRODUCTION_API_HOSTS.includes(host)) return true;
+  if (isProductionApiHost(host)) return true;
   if (host.startsWith('api-production-')) return true;
   return false;
 }

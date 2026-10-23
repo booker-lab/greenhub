@@ -51,7 +51,11 @@ export const LOCAL_APPS = Object.freeze(
 );
 
 // 빌드 산출물에 나타나면 운영 설정이 섞였다는 뜻인 문자열.
-export const FORBIDDEN_BUILD_MARKERS = Object.freeze(['green-e4fe3', 'api-production-13e7']);
+export const FORBIDDEN_BUILD_MARKERS = Object.freeze([
+  'green-e4fe3',
+  'api-production-13e7',
+  'greenhub-api-988412563635',
+]);
 // seller·driver의 운영 Firebase 차단 가드가 소스에 직접 쓰는 리터럴. `new Set([...])` 원소일 때만 허용한다.
 const GUARD_LITERALS = new Set([
   'green-e4fe3',

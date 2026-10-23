@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   buildVercelProductionBody,
+  deployCloudRun,
   deployRailway,
   deployVercel,
   main,
+  resolveProductionApiBase,
   verifyE2eRun,
   waitHealthCommit,
 } from './production-deploy.mjs';
@@ -256,6 +258,18 @@ test('vercel: 빌드 생략(CANCELED)은 skipped, ERROR·SHA 불일치·비운�
     sleep: noSleep,
   });
   assert.equal(skipped.status, 'skipped');
+  // 환경 변수만 바꾼 같은 SHA 재배포는 빌드가 생략되면 새 값이 반영되지 않으므로 실패로 본다.
+  await assert.rejects(
+    deployVercel({
+      app: 'driver',
+      sha: SHA,
+      token: 't',
+      requireBuild: true,
+      fetchImpl: vercelFetch(['CANCELED']).impl,
+      sleep: noSleep,
+    }),
+    /빌드가 생략됐습니다/,
+  );
   await assert.rejects(
     deployVercel({
       app: 'driver',
@@ -299,4 +313,192 @@ test('main: 자격 증명이 없거나 인자가 틀리면 요청 전에 멈춘�
   );
   await assert.rejects(main(['railway', '--sha=bd159830'], { env: {}, fetchImpl }), /40자리/);
   await assert.rejects(main(['deploy-all', `--sha=${SHA}`], { env: {}, fetchImpl }), /명령은/);
+});
+
+const DIGEST = `sha256:${'a'.repeat(64)}`;
+const RUN_BASE = 'https://greenhub-api-988412563635.asia-northeast3.run.app';
+const IMAGE_REPO = 'asia-northeast3-docker.pkg.dev/green-e4fe3/greenhub/api';
+
+function fakeGcloud({
+  digest = DIGEST,
+  before = { revision: 'greenhub-api-00041-old' },
+  created = 'greenhub-api-00042-new',
+  ready = created,
+} = {}) {
+  const calls = [];
+  let describes = 0;
+  const impl = async (args) => {
+    calls.push(args);
+    const [group, sub, verb] = args;
+    if (group === 'artifacts') return `${digest}\n`;
+    if (group === 'run' && sub === 'services' && verb === 'describe') {
+      describes += 1;
+      const traffic = before.revision ? [{ revisionName: before.revision, percent: 100 }] : [];
+      return JSON.stringify({
+        status:
+          describes === 1
+            ? { latestCreatedRevisionName: before.revision, traffic }
+            : { latestCreatedRevisionName: created, latestReadyRevisionName: ready, traffic },
+      });
+    }
+    return '';
+  };
+  return { calls, impl };
+}
+
+const trafficCalls = (calls) =>
+  calls.filter((args) => args[2] === 'update-traffic').map((args) => args.at(-2));
+
+test('cloudrun: 시작 검사를 통과한 새 리비전에만 트래픽을 옮기고 공개 /health로 SHA를 확인한다', async () => {
+  const gcloud = fakeGcloud();
+  const healthUrls = [];
+  const commits = [OTHER, SHA];
+  let i = 0;
+  const fetchImpl = async (url) => {
+    healthUrls.push(url);
+    return json({ status: 'ok', commit: commits[i++] });
+  };
+  const result = await deployCloudRun({ sha: SHA, gcloud: gcloud.impl, fetchImpl, sleep: noSleep });
+
+  assert.deepEqual(result, {
+    service: 'greenhub-api',
+    revision: 'greenhub-api-00042-new',
+    previous: 'greenhub-api-00041-old',
+    image: `${IMAGE_REPO}@${DIGEST}`,
+  });
+  assert.deepEqual(healthUrls, [`${RUN_BASE}/health`, `${RUN_BASE}/health`]);
+  assert.deepEqual(gcloud.calls[0].slice(0, 5), [
+    'artifacts',
+    'docker',
+    'images',
+    'describe',
+    `${IMAGE_REPO}:${SHA}`,
+  ]);
+  assert.deepEqual(gcloud.calls[2], [
+    'run',
+    'deploy',
+    'greenhub-api',
+    '--project=green-e4fe3',
+    '--region=asia-northeast3',
+    `--image=${IMAGE_REPO}@${DIGEST}`,
+    '--no-traffic',
+    `--update-env-vars=GREENHUB_COMMIT_SHA=${SHA}`,
+    '--quiet',
+  ]);
+  assert.deepEqual(trafficCalls(gcloud.calls), ['--to-revisions=greenhub-api-00042-new=100']);
+});
+
+test('cloudrun: 공개 /health가 끝내 SHA가 아니면 이전 리비전으로 되돌리고 실패한다', async () => {
+  const gcloud = fakeGcloud();
+  const fetchImpl = async () => json({ status: 'ok', commit: OTHER });
+  await assert.rejects(
+    deployCloudRun({
+      sha: SHA,
+      gcloud: gcloud.impl,
+      fetchImpl,
+      sleep: noSleep,
+      healthTimeoutMs: -1,
+    }),
+    /이전 리비전 greenhub-api-00041-old/,
+  );
+  assert.deepEqual(trafficCalls(gcloud.calls), [
+    '--to-revisions=greenhub-api-00042-new=100',
+    '--to-revisions=greenhub-api-00041-old=100',
+  ]);
+});
+
+test('cloudrun: digest를 못 읽거나 새 리비전이 없거나 Ready가 아니면 트래픽을 옮기지 않는다', async () => {
+  const fetchImpl = async () => {
+    throw new Error('요청하면 안 됨');
+  };
+  const noDigest = fakeGcloud({ digest: '' });
+  await assert.rejects(
+    deployCloudRun({ sha: SHA, gcloud: noDigest.impl, fetchImpl, sleep: noSleep }),
+    /digest/,
+  );
+  assert.equal(noDigest.calls.length, 1);
+
+  const notCreated = fakeGcloud({ created: 'greenhub-api-00041-old' });
+  await assert.rejects(
+    deployCloudRun({ sha: SHA, gcloud: notCreated.impl, fetchImpl, sleep: noSleep }),
+    /새 리비전을 만들지 않았습니다/,
+  );
+  const notReady = fakeGcloud({ ready: 'greenhub-api-00041-old' });
+  await assert.rejects(
+    deployCloudRun({ sha: SHA, gcloud: notReady.impl, fetchImpl, sleep: noSleep }),
+    /Ready가 아닙니다/,
+  );
+  assert.deepEqual(trafficCalls([...notCreated.calls, ...notReady.calls]), []);
+});
+
+test('cloudrun: 첫 배포처럼 되돌릴 리비전이 없으면 되돌리지 않고 실패만 한다', async () => {
+  const gcloud = fakeGcloud({ before: { revision: null } });
+  const fetchImpl = async () => json({ status: 'ok', commit: OTHER });
+  await assert.rejects(
+    deployCloudRun({
+      sha: SHA,
+      gcloud: gcloud.impl,
+      fetchImpl,
+      sleep: noSleep,
+      healthTimeoutMs: -1,
+    }),
+    new RegExp(OTHER),
+  );
+  assert.deepEqual(trafficCalls(gcloud.calls), ['--to-revisions=greenhub-api-00042-new=100']);
+});
+
+test('health --api-base: 운영 API origin만 받는다', () => {
+  assert.equal(resolveProductionApiBase(undefined), 'https://api-production-13e7.up.railway.app');
+  assert.equal(
+    resolveProductionApiBase('https://greenhub-api-988412563635.asia-northeast3.run.app'),
+    'https://greenhub-api-988412563635.asia-northeast3.run.app',
+  );
+  assert.equal(
+    resolveProductionApiBase('https://api.greenlove.co.kr'),
+    'https://api.greenlove.co.kr',
+  );
+  for (const value of [
+    'https://api-staging-94af.up.railway.app',
+    'http://api.greenlove.co.kr',
+    'https://api.greenlove.co.kr/health',
+    'https://api.greenlove.co.kr/',
+    'not a url',
+  ]) {
+    assert.throws(() => resolveProductionApiBase(value), /--api-base/, value);
+  }
+});
+
+test('main: cloudrun은 주입한 gcloud로 배포하고 health는 --api-base 주소를 본다', async () => {
+  const gcloud = fakeGcloud();
+  const deployUrls = [];
+  const fetchImpl = async (url) => {
+    deployUrls.push(url);
+    return json({ status: 'ok', commit: SHA });
+  };
+  const deployed = await main(
+    ['cloudrun', `--sha=${SHA}`, '--api-base=https://api.greenlove.co.kr'],
+    { env: {}, fetchImpl, sleep: noSleep, gcloud: gcloud.impl },
+  );
+  assert.equal(deployed.revision, 'greenhub-api-00042-new');
+  assert.deepEqual(deployUrls, ['https://api.greenlove.co.kr/health']);
+  await assert.rejects(
+    main(['cloudrun', `--sha=${SHA}`, '--api-base=https://api.example.test'], {
+      env: {},
+      fetchImpl,
+      sleep: noSleep,
+      gcloud: fakeGcloud().impl,
+    }),
+    /--api-base/,
+  );
+
+  const urls = [];
+  await main(['health', `--sha=${SHA}`, '--api-base=https://api.greenlove.co.kr'], {
+    env: {},
+    sleep: noSleep,
+    fetchImpl: async (url) => {
+      urls.push(url);
+      return json({ status: 'ok', commit: SHA });
+    },
+  });
+  assert.deepEqual(urls, ['https://api.greenlove.co.kr/health']);
 });

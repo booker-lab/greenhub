@@ -8,7 +8,7 @@
 - `preview-auth-url-policy.md` — Preview/Kakao OAuth URL 정책
 - `ops-alerts.md` — 운영자 휴대폰 알림(텔레그램)과 가동 확인
 - `morning-ops-check.md` — 아침 운영 점검 보고(읽기 전용 점검 열쇠·판정 기준표·권한 경계, 어드민 운영 자동화 1단계)
-- `platform-modernization-plan.md` — 개발 환경 현대화와 API Cloud Run 이전 결정·단계(2026-10-23 확정)
+- `platform-modernization-plan.md` — 개발 환경 현대화(의존성·런타임 버전) 결정·단계(2026-10-23 확정). API 이전은 아래 Cloud Run 계획서
 
 현재 외부 상태와 출시 순서는 `docs/memory.md`와 활성 HANDOFF·PLAN이 우선한다.
 
@@ -27,6 +27,8 @@
 ## 진행 중 계획
 
 - `api-hosting-cloud-run-plan.md` — 운영 API를 Railway에서 Cloud Run 서울로 옮기는 단계(C1~C8)와 2026-10-28 전환 판단 조건
+- `api-cloud-run-runbook.md` — 위 계획의 실행 명령(R0~R11: GCP API·서비스 계정·키 없는 배포 인증·비밀값·고정 IP·운영 서비스·`api.greenlove.co.kr` 부하분산기·전환)
+- `railway-outage-failover.md` — 전환 전 Railway 장애 때 Cloud Run 예비 서버로 30분 안에 대피하는 순서·판단 기준·평소 준비(예비 서버 준비 뒤 사용)
 
 ## 조건부 후속 계획
 

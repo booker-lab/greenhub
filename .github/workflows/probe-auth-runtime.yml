@@ -491,7 +491,7 @@ jobs:
           esac
           api_host="$(printf '%s' "$api_origin" | sed -e 's#^https://##' -e 's#/.*$##' -e 's#:.*$##' | tr '[:upper:]' '[:lower:]')"
           case "$api_host" in
-            greenlove.co.kr|*.greenlove.co.kr|api-production-*)
+            greenlove.co.kr|*.greenlove.co.kr|api-production-*|greenhub-api-988412563635.asia-northeast3.run.app|*---greenhub-api-988412563635.asia-northeast3.run.app|greenhub-api-*-du.a.run.app|*---greenhub-api-*-du.a.run.app)
               echo '운영 API origin이므로 실행을 차단합니다.' >&2
               exit 1
               ;;
@@ -823,7 +823,7 @@ jobs:
           esac
           consumer_host="$(printf '%s' "$consumer_url" | sed -e 's#^https://##' -e 's#/.*$##' -e 's#:.*$##' | tr '[:upper:]' '[:lower:]')"
           case "$consumer_host" in
-            greenlove.co.kr|*.greenlove.co.kr|api-production-*)
+            greenlove.co.kr|*.greenlove.co.kr|api-production-*|greenhub-api-988412563635.asia-northeast3.run.app|*---greenhub-api-988412563635.asia-northeast3.run.app|greenhub-api-*-du.a.run.app|*---greenhub-api-*-du.a.run.app)
               echo '운영 consumer origin이므로 실행을 차단합니다.' >&2
               exit 1
               ;;
@@ -1168,7 +1168,7 @@ jobs:
           esac
           target_host="$(printf '%s' "$target_url" | sed -e 's#^https://##' -e 's#/.*$##' -e 's#:.*$##' | tr '[:upper:]' '[:lower:]')"
           case "$target_host" in
-            greenlove.co.kr|*.greenlove.co.kr|api-production-*)
+            greenlove.co.kr|*.greenlove.co.kr|api-production-*|greenhub-api-988412563635.asia-northeast3.run.app|*---greenhub-api-988412563635.asia-northeast3.run.app|greenhub-api-*-du.a.run.app|*---greenhub-api-*-du.a.run.app)
               echo '운영 driver origin이므로 실행을 차단합니다.' >&2
               exit 1
               ;;
