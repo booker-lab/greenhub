@@ -44,10 +44,11 @@ test.describe('Admin — 판매자 치우기 UI (인증)', () => {
   test('판매자 상태 필터 노출 + 기본값 활성', async ({ page }) => {
     await page.goto(`${BASE}/admin/stores`, { waitUntil: 'domcontentloaded' });
 
-    // PR-B에서 기존 Switch를 상태 Select로 흡수 — 노출과 기본값만 읽기 전용 확인
-    const statusFilter = page.getByLabel('상태');
+    // PR-B에서 기존 Switch를 상태 Select로 흡수 — 노출과 기본값만 읽기 전용 확인.
+    // Mantine Select는 옵션 목록(listbox)도 같은 이름을 가져 combobox로 집고, 입력란에는 라벨('활성')이 보인다.
+    const statusFilter = page.getByRole('combobox', { name: '상태', exact: true });
     await expect(statusFilter).toBeVisible({ timeout: 15_000 });
-    await expect(statusFilter).toHaveValue('current');
+    await expect(statusFilter).toHaveValue('활성');
   });
 
   test('판매자 행이 1개 이상이면 수수료 설정 버튼 노출', async ({ page }) => {
