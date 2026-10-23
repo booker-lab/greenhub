@@ -430,3 +430,39 @@ test('세션 유지는 refetchInterval 대신 실패를 무시하는 확인으�
   assert.match(providersSource, /addEventListener\('visibilitychange', handleVisibility\)/);
   assert.match(providersSource, /removeEventListener\('visibilitychange', handleVisibility\)/);
 });
+
+test('첫 화면 세션은 proxy가 확인한 값을 쓰고 세션 유지·토큰 오류 로그아웃은 그대로다', async () => {
+  const layoutSource = await read('../app/layout.tsx');
+  const proxySource = await read('../proxy.ts');
+  // layout은 auth()를 다시 부르지 않는다(이미 회전된 refresh token 재사용 위험·API 왕복 추가).
+  assert.doesNotMatch(layoutSource, /from '@\/auth'|\bauth\(\)/);
+  assert.match(
+    layoutSource,
+    /decodeInitialSession\(requestHeaders\.get\(INITIAL_SESSION_HEADER\)\)/,
+  );
+  assert.match(layoutSource, /<Providers session=\{initialSession\}>/);
+  // proxy는 브라우저가 보낸 헤더를 지우고, 기사 역할을 확인한 뒤에만 세션을 싣는다.
+  assert.match(proxySource, /requestHeaders\.delete\(INITIAL_SESSION_HEADER\);/);
+  const gate = proxySource.slice(proxySource.indexOf('const authGate = auth('));
+  assert.ok(
+    gate.indexOf("session.user.role !== 'driver'") <
+      gate.indexOf('continueWithCsp(request, session)'),
+  );
+  // Providers는 받은 세션을 SessionProvider 첫 값으로만 넘긴다. 주기 조회는 여전히 쓰지 않는다.
+  assert.match(providersSource, /<SessionProvider session=\{session\}>/);
+  assert.doesNotMatch(providersSource, /refetchInterval=|refetchOnWindowFocus=/);
+  assert.match(
+    providersSource,
+    /if \(session\?\.user\?\.tokenError\) \{\s*signOut\(\{ callbackUrl: '\/login' \}\);/,
+  );
+  assert.match(
+    providersSource,
+    /if \(status !== 'authenticated'\) return;\s*return startSessionKeepAlive/,
+  );
+  // next-auth SessionProvider는 session prop이 있으면 첫 조회를 건너뛴다(undefined만 직접 조회).
+  // 판올림으로 이 규칙이 바뀌면 첫 화면이 다시 /api/auth/session을 기다리므로 여기서 잡는다.
+  const nextAuthReact = await readFile(new URL(import.meta.resolve('next-auth/react')), 'utf8');
+  assert.match(nextAuthReact, /const hasInitialSession = props\.session !== undefined;/);
+  assert.match(nextAuthReact, /React\.useState\(!hasInitialSession\)/);
+  assert.match(nextAuthReact, /if \(storageEvent \|\| __NEXTAUTH\._session === undefined\)/);
+});

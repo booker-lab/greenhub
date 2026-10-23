@@ -1,12 +1,17 @@
 import { type NextFetchEvent, type NextRequest, NextResponse } from 'next/server';
+import type { Session } from 'next-auth';
 import { DRIVER_ADMIN_ACCOUNT_ERROR } from '@/app/login/login-notice';
 import { auth } from '@/auth';
 import { buildContentSecurityPolicy, createCspNonce } from '@/lib/content-security-policy';
+import { encodeInitialSession, INITIAL_SESSION_HEADER } from '@/lib/initial-session';
 
 // 요청마다 nonce를 만들어 요청 헤더로 넘긴다. Next는 요청의 CSP 헤더에서 nonce를 읽어
 // 자기 스크립트에 붙이고, 루트 layout은 x-nonce를 읽어 인라인 스크립트에 붙인다.
 // 응답에는 같은 정책을 Report-Only로만 보낸다(차단하지 않고 /api/csp-report로 보고만 받는다).
-function continueWithCsp(request: NextRequest): NextResponse {
+// 기사 세션을 확인한 보호 경로는 그 세션을 요청 헤더로 넘겨 루트 layout이 SessionProvider의
+// 첫 값으로 쓰게 한다(화면이 /api/auth/session을 한 번 더 기다리지 않는다). 브라우저가 보낸 같은
+// 이름의 헤더는 언제나 지운다.
+function continueWithCsp(request: NextRequest, session?: Session): NextResponse {
   const nonce = createCspNonce();
   const policy = buildContentSecurityPolicy({
     nonce,
@@ -16,6 +21,8 @@ function continueWithCsp(request: NextRequest): NextResponse {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('x-nonce', nonce);
   requestHeaders.set('Content-Security-Policy', policy);
+  requestHeaders.delete(INITIAL_SESSION_HEADER);
+  if (session) requestHeaders.set(INITIAL_SESSION_HEADER, encodeInitialSession(session));
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set('Content-Security-Policy-Report-Only', policy);
   return response;
@@ -51,7 +58,7 @@ const authGate = auth((request) => {
     return NextResponse.redirect(url);
   }
 
-  return continueWithCsp(request);
+  return continueWithCsp(request, session);
 });
 
 type AuthGateContext = Parameters<typeof authGate>[1];

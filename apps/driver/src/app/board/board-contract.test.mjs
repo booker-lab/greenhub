@@ -3,6 +3,8 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const boardSource = await readFile(new URL('./_client.tsx', import.meta.url), 'utf8');
+const boardPageSource = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
+const proxySource = await readFile(new URL('../../proxy.ts', import.meta.url), 'utf8');
 const cardSource = await readFile(
   new URL('../../components/OrderCard.tsx', import.meta.url),
   'utf8',
@@ -318,6 +320,38 @@ test('Driver 서비스워커는 API·인증 요청을 캐시하지 않고 온라
     driverConfigSource,
     /url\.pathname\.startsWith\('\/api\/'\),\s*handler:\s*'NetworkOnly'/,
   );
+});
+
+test('Driver 서비스워커는 세션이 실린 로그인 검사 화면 문서를 캐시하지 않는다', () => {
+  const rule = driverConfigSource.match(
+    /sameOrigin && (\/\^.*?\/)\.test\(url\.pathname\),\s*handler:\s*'NetworkOnly'/,
+  );
+  assert.ok(rule, '보호 화면 NetworkOnly 규칙이 있어야 한다');
+  const pattern = new RegExp(rule[1].slice(1, -1));
+  for (const path of ['/board', '/board/order-1', '/board/order-1/photo', '/map', '/profile']) {
+    assert.ok(pattern.test(path), path);
+  }
+  for (const path of ['/', '/login', '/boards', '/mapx', '/_next/static/chunks/a.js']) {
+    assert.ok(!pattern.test(path), path);
+  }
+  // proxy의 로그인 검사 경로와 같아야 한다.
+  assert.match(proxySource, /const AUTH_PATH_PREFIXES = \['\/board', '\/map', '\/profile'\];/);
+  // 기본 pages·pages-rsc 규칙보다 앞서도록 사용자 규칙 배열 안에 둔다.
+  const list = driverConfigSource.slice(
+    driverConfigSource.indexOf('const networkOnlyRuntimeCaching = ['),
+    driverConfigSource.indexOf('];', driverConfigSource.indexOf('const networkOnlyRuntimeCaching = [')),
+  );
+  assert.match(list, /driver-protected-pages-network-only/);
+});
+
+test('목록 화면은 서버에서도 그리고 날짜는 서버·휴대폰이 같은 한국 시간으로 그린다', () => {
+  assert.doesNotMatch(boardPageSource, /ssr:\s*false|next\/dynamic|'use client'/);
+  assert.match(boardPageSource, /import BoardClient from '\.\/_client';/);
+  assert.match(boardPageSource, /<Suspense[\s\S]*<BoardClient \/>/);
+  assert.match(boardSource, /toLocaleDateString\('ko-KR', \{[^}]*timeZone: 'Asia\/Seoul'/);
+  // 브라우저 API는 렌더 중이 아니라 effect 안에서만 쓴다.
+  const render = boardSource.slice(boardSource.indexOf('const orders = tab ==='));
+  assert.doesNotMatch(render, /window\.|document\.|localStorage|navigator\./);
 });
 
 test('사진 화면은 화면이 숨으면 카메라를 끄고 리스너를 정리하며 언마운트 정지를 유지한다', () => {
