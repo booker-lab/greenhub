@@ -730,6 +730,13 @@ export class AdminService {
     if (data['role'] !== 'driver') {
       throw new BadRequestException('드라이버 계정이 아닙니다.');
     }
+    // 승인 대기(목록의 pending 판정과 같은 기준)만 승인한다. 정지된 기사를 승인으로 되살리지 않는다.
+    if (data['suspended'] === true) {
+      throw new ConflictException('정지된 기사는 승인할 수 없습니다. 먼저 정지를 풀어 주세요.');
+    }
+    if (data['driverApproved'] === true) {
+      throw new ConflictException('이미 승인된 기사입니다.');
+    }
 
     await ref.update({
       driverApproved: true,

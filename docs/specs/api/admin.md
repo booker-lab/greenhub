@@ -269,6 +269,7 @@ PATCH /admin/drivers/:userId/approve
 
 - 사용자 존재 확인
 - `role === driver` 확인
+- 승인 대기(목록 `pending`과 같은 `!driverApproved && !suspended`)만 승인한다. 정지된 기사·이미 승인된 기사는 409(정지된 기사는 먼저 정지를 풀어야 한다)
 - `driverApproved: true`
 
 이 endpoint가 관리자 승인 경로라는 계약은 유지되며, 2026-08-24 감사에서 확인한 다음 우회는 현재 구현에서 닫혔다.

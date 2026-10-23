@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import type { FirestoreService } from '../firestore/firestore.service';
 import * as admin from 'firebase-admin';
 import { AdminService } from './admin.service';
@@ -64,6 +65,33 @@ describe('AdminService driver session 보강', () => {
     expect(firestore.doc).toHaveBeenCalledWith('refreshTokens/driver-1');
     expect(refreshTokenRef.delete).toHaveBeenCalledTimes(1);
     expect(firebaseAuth.revokeRefreshTokens).toHaveBeenCalledWith('driver-1');
+  });
+
+  it.each([
+    ['정지된 기사', { suspended: true, driverApproved: false }, '정지된 기사는 승인할 수 없습니다'],
+    ['정지된 승인 기사', { suspended: true, driverApproved: true }, '정지된 기사는 승인할 수 없습니다'],
+    ['이미 승인된 기사', { driverApproved: true }, '이미 승인된 기사입니다'],
+  ])('%s는 승인하지 않고 409로 거부한다', async (_name, state, message) => {
+    const { service, userRef } = makeService({ id: 'driver-1', role: 'driver', ...state });
+
+    const attempt = service.approveDriver('driver-1', 'admin-1');
+    await expect(attempt).rejects.toBeInstanceOf(ConflictException);
+    await expect(attempt).rejects.toThrow(message);
+    expect(userRef.update).not.toHaveBeenCalled();
+  });
+
+  it('승인 대기 기사만 승인한다', async () => {
+    const { service, userRef } = makeService({
+      id: 'driver-1',
+      role: 'driver',
+      driverApproved: false,
+    });
+
+    await expect(service.approveDriver('driver-1', 'admin-1')).resolves.toEqual({
+      userId: 'driver-1',
+      driverApproved: true,
+    });
+    expect(userRef.update).toHaveBeenCalledWith({ driverApproved: true, updatedAt: 'now' });
   });
 
   it('driver 정지 해제 시 refresh token 폐기를 다시 호출하지 않는다', async () => {
