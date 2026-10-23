@@ -78,5 +78,32 @@ describe('AppController', () => {
         else process.env.RAILWAY_GIT_COMMIT_SHA = previous;
       }
     });
+
+    it('이미지에 새긴 GREENHUB_COMMIT_SHA를 Railway 값보다 먼저 쓴다', async () => {
+      const previous = {
+        image: process.env.GREENHUB_COMMIT_SHA,
+        railway: process.env.RAILWAY_GIT_COMMIT_SHA,
+      };
+      try {
+        process.env.RAILWAY_GIT_COMMIT_SHA = '0bcceaea1234567890abcdef1234567890abcdef';
+        process.env.GREENHUB_COMMIT_SHA = 'abcdef1234567890abcdef1234567890abcdef12';
+        expect((await appController.health()).commit).toBe(
+          'abcdef1234567890abcdef1234567890abcdef12',
+        );
+        // 빈 값(Railway처럼 빌드 인자를 넘기지 않은 이미지)은 Railway 값으로 돌아간다.
+        process.env.GREENHUB_COMMIT_SHA = '';
+        expect((await appController.health()).commit).toBe(
+          '0bcceaea1234567890abcdef1234567890abcdef',
+        );
+      } finally {
+        for (const [key, value] of [
+          ['GREENHUB_COMMIT_SHA', previous.image],
+          ['RAILWAY_GIT_COMMIT_SHA', previous.railway],
+        ] as const) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }
+    });
   });
 });

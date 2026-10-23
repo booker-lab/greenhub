@@ -53,9 +53,27 @@ function readString(values: RuntimeConfigValues, key: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * 명시된 배포 환경 표식. 플랫폼 중립 표식(GREENHUB_DEPLOY_ENVIRONMENT, Cloud Run 등)과
+ * Railway가 넣는 RAILWAY_ENVIRONMENT_NAME을 함께 본다. 빈 값은 뺀다.
+ */
+export function deployEnvironmentMarkers(values: RuntimeConfigValues): string[] {
+  return [
+    readString(values, 'GREENHUB_DEPLOY_ENVIRONMENT'),
+    readString(values, 'RAILWAY_ENVIRONMENT_NAME'),
+  ].filter(Boolean);
+}
+
+/** 표시용 배포 환경 이름. 표식 중 하나라도 production이면 production, 없으면 ''. */
+export function resolveDeployEnvironment(values: RuntimeConfigValues): string {
+  const markers = deployEnvironmentMarkers(values);
+  return markers.includes('production') ? 'production' : (markers[0] ?? '');
+}
+
 export function isProductionRuntime(values: RuntimeConfigValues): boolean {
-  const railwayEnvironment = readString(values, 'RAILWAY_ENVIRONMENT_NAME');
-  if (railwayEnvironment) return railwayEnvironment === 'production';
+  // 표식이 서로 달라도 하나라도 production이면 운영으로 본다(운영 보호를 풀지 않는 쪽).
+  const markers = deployEnvironmentMarkers(values);
+  if (markers.length > 0) return markers.includes('production');
 
   const vercelEnvironment = readString(values, 'VERCEL_ENV');
   if (vercelEnvironment) return vercelEnvironment === 'production';
@@ -258,14 +276,22 @@ export function resolveFirebaseAdminSettings(
 
 /**
  * Express `trust proxy` 홉 수. 명시값(TRUST_PROXY_HOPS)이 없으면 Railway 런타임은
- * 2홉, 그 밖(로컬 등)은 0(프록시 헤더 미신뢰)이다. Railway는 엣지 뒤에 중계 노드가 한 번 더
+ * 2홉, Cloud Run(K_SERVICE)은 기동 거부, 그 밖(로컬 등)은 0(프록시 헤더 미신뢰)이다.
+ * Cloud Run은 앞단(부하분산기 유무)에 따라 홉 수가 달라 기본값을 두지 않는다. 0으로 두면
+ * 모든 접속자가 앞단 IP 하나로 묶여 요청 한도가 손님 전체에 한꺼번에 걸린다. Railway는 엣지 뒤에 중계 노드가 한 번 더
  * 붙는다: 2026-10-18 운영·스테이징 실측에서 1홉은 연결마다 바뀌는 중계 노드 IP를 접속자로
  * 잡았고, 2홉은 접속자마다 한 버킷이면서 클라이언트가 보낸 X-Forwarded-For를 무시했다.
  * `true` 같은 무제한 신뢰는 X-Forwarded-For를 그대로 믿게 되므로 정수만 허용한다.
  */
 export function resolveTrustProxyHops(values: RuntimeConfigValues = process.env): number {
   const raw = readString(values, 'TRUST_PROXY_HOPS');
-  if (!raw) return readString(values, 'RAILWAY_ENVIRONMENT_NAME') ? RAILWAY_TRUST_PROXY_HOPS : 0;
+  if (!raw) {
+    if (readString(values, 'RAILWAY_ENVIRONMENT_NAME')) return RAILWAY_TRUST_PROXY_HOPS;
+    if (readString(values, 'K_SERVICE')) {
+      throw new RuntimeConfigurationError('Cloud Run 런타임은 TRUST_PROXY_HOPS를 명시해야 합니다.');
+    }
+    return 0;
+  }
   if (!/^\d+$/.test(raw) || Number(raw) > MAX_TRUST_PROXY_HOPS) {
     throw new RuntimeConfigurationError(
       `TRUST_PROXY_HOPS는 0~${MAX_TRUST_PROXY_HOPS} 사이의 정수여야 합니다.`,
@@ -321,6 +347,7 @@ export function validateRuntimeConfig(values: RuntimeConfigValues): RuntimeConfi
 export function getConfigValues(config: ConfigService): RuntimeConfigValues {
   return {
     NODE_ENV: config.get<string>('NODE_ENV'),
+    GREENHUB_DEPLOY_ENVIRONMENT: config.get<string>('GREENHUB_DEPLOY_ENVIRONMENT'),
     RAILWAY_ENVIRONMENT_NAME: config.get<string>('RAILWAY_ENVIRONMENT_NAME'),
     VERCEL_ENV: config.get<string>('VERCEL_ENV'),
     JWT_SECRET: config.get<string>('JWT_SECRET'),

@@ -50,6 +50,16 @@ describe('OpsAlertService', () => {
     expect(body.text).toBe('🔴 그린러브 [staging] · 알리고 잔액 부족\n충전하세요.');
   });
 
+  it('플랫폼 중립 배포 표식(GREENHUB_DEPLOY_ENVIRONMENT)으로도 환경 이름을 붙인다', async () => {
+    const fetchImpl = okFetch();
+    const service = new OpsAlertService(
+      config({ ...configured, GREENHUB_DEPLOY_ENVIRONMENT: 'staging' }),
+      fetchImpl as never,
+    );
+    await service.send({ level: 'info', title: '확인' });
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).text).toContain('그린러브 [staging] · 확인');
+  });
+
   it('같은 dedupeKey는 창 안에서 한 번만 보내고 창이 지나면 다시 보낸다', async () => {
     const fetchImpl = okFetch();
     let now = 1_000_000;

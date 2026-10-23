@@ -1,4 +1,5 @@
 import { ConfigService } from '@nestjs/config';
+import { deployEnvironmentMarkers } from '../config/runtime-config';
 
 const PRODUCTION_FIREBASE_PROJECT = 'green-e4fe3';
 const RUN_ID_PATTERN = /^[a-z0-9][a-z0-9-]{6,46}[a-z0-9]$/;
@@ -40,13 +41,16 @@ export function resolveE2EProviderMode(config: ConfigService): E2EProviderMode {
   }
 
   const nodeEnvironment = config.get<string>('NODE_ENV', '');
-  const railwayEnvironment = config.get<string>('RAILWAY_ENVIRONMENT_NAME', '');
+  const deployEnvironments = deployEnvironmentMarkers({
+    GREENHUB_DEPLOY_ENVIRONMENT: config.get<string>('GREENHUB_DEPLOY_ENVIRONMENT', ''),
+    RAILWAY_ENVIRONMENT_NAME: config.get<string>('RAILWAY_ENVIRONMENT_NAME', ''),
+  });
   const vercelEnvironment = config.get<string>('VERCEL_ENV', '');
   // 배포 플랫폼 표식이 있으면 실제 환경 경계를 우선하고, 일반 실행은 NODE_ENV로 차단한다.
   if (
-    railwayEnvironment === 'production' ||
+    deployEnvironments.includes('production') ||
     vercelEnvironment === 'production' ||
-    (nodeEnvironment === 'production' && !railwayEnvironment && !vercelEnvironment)
+    (nodeEnvironment === 'production' && deployEnvironments.length === 0 && !vercelEnvironment)
   ) {
     throw new E2EProviderModeError('운영 환경에서는 회차 E2E provider 대역을 사용할 수 없습니다.');
   }

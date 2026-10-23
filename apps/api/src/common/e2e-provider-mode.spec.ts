@@ -37,6 +37,11 @@ describe('회차 E2E provider mode 보안 계약', () => {
       { NODE_ENV: 'production', RAILWAY_ENVIRONMENT_NAME: '' },
     ],
     ['Railway 운영', { RAILWAY_ENVIRONMENT_NAME: 'production' }],
+    ['플랫폼 중립 표식 운영', { GREENHUB_DEPLOY_ENVIRONMENT: 'production' }],
+    [
+      '표식이 엇갈린 운영',
+      { GREENHUB_DEPLOY_ENVIRONMENT: 'staging', RAILWAY_ENVIRONMENT_NAME: 'production' },
+    ],
     ['운영 Firebase', { FIREBASE_PROJECT_ID: 'green-e4fe3' }],
   ])('%s 환경의 대역 활성화를 거부한다', (_name, override) => {
     expect(() => resolveE2EProviderMode(config({ ...valid, ...override }))).toThrow(
@@ -46,6 +51,24 @@ describe('회차 E2E provider mode 보안 계약', () => {
 
   it('Railway staging은 빌드용 NODE_ENV가 production이어도 대역을 허용한다', () => {
     expect(resolveE2EProviderMode(config({ ...valid, NODE_ENV: 'production' }))).toEqual({
+      enabled: true,
+      mode: 'stub',
+      runId: 'task-6-7-run-001',
+      firebaseProjectId: 'green-staging-74557',
+    });
+  });
+
+  it('Cloud Run 스테이징(플랫폼 중립 표식)은 빌드용 NODE_ENV가 production이어도 대역을 허용한다', () => {
+    expect(
+      resolveE2EProviderMode(
+        config({
+          ...valid,
+          NODE_ENV: 'production',
+          RAILWAY_ENVIRONMENT_NAME: undefined,
+          GREENHUB_DEPLOY_ENVIRONMENT: 'staging',
+        }),
+      ),
+    ).toEqual({
       enabled: true,
       mode: 'stub',
       runId: 'task-6-7-run-001',

@@ -40,6 +40,11 @@ COPY --from=build /out/package.json ./apps/api/package.json
 COPY --from=build /out/node_modules ./apps/api/node_modules
 COPY --from=build /out/dist ./apps/api/dist
 
+# /health commit에 실을 빌드 커밋. Cloud Run 배포는 --build-arg로 넘기고,
+# Railway GitHub 배포는 넘기지 않아 비어 있으면 RAILWAY_GIT_COMMIT_SHA를 쓴다.
+ARG GREENHUB_COMMIT_SHA=
+ENV GREENHUB_COMMIT_SHA=${GREENHUB_COMMIT_SHA}
+
 USER node
 
 EXPOSE 3000

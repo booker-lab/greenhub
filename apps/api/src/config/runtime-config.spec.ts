@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import {
   isProductionRuntime,
+  resolveDeployEnvironment,
   RuntimeConfigurationError,
   resolveAdcProjectIds,
   resolveFirebaseAdminSettings,
@@ -103,6 +104,28 @@ describe('API 런타임 구성 fail-closed 계약', () => {
     expect(() =>
       validateRuntimeConfig({ NODE_ENV: 'production', RAILWAY_ENVIRONMENT_NAME: 'staging' }),
     ).not.toThrow();
+  });
+
+  it('플랫폼 중립 배포 표식(GREENHUB_DEPLOY_ENVIRONMENT)으로 운영 여부를 판정한다', () => {
+    expect(
+      isProductionRuntime({ NODE_ENV: 'production', GREENHUB_DEPLOY_ENVIRONMENT: 'staging' }),
+    ).toBe(false);
+    expect(isProductionRuntime({ GREENHUB_DEPLOY_ENVIRONMENT: 'production' })).toBe(true);
+    expect(resolveDeployEnvironment({ GREENHUB_DEPLOY_ENVIRONMENT: 'staging' })).toBe('staging');
+    expect(resolveDeployEnvironment({ RAILWAY_ENVIRONMENT_NAME: 'staging' })).toBe('staging');
+    expect(resolveDeployEnvironment({ NODE_ENV: 'production' })).toBe('');
+  });
+
+  it('배포 표식이 서로 다르면 하나라도 production인 쪽으로 판정한다', () => {
+    const mixed = { GREENHUB_DEPLOY_ENVIRONMENT: 'staging', RAILWAY_ENVIRONMENT_NAME: 'production' };
+    expect(isProductionRuntime(mixed)).toBe(true);
+    expect(resolveDeployEnvironment(mixed)).toBe('production');
+    expect(
+      isProductionRuntime({
+        GREENHUB_DEPLOY_ENVIRONMENT: 'production',
+        RAILWAY_ENVIRONMENT_NAME: 'staging',
+      }),
+    ).toBe(true);
   });
 
   it('local runtime은 loopback emulator와 scheduler 비활성화가 모두 있어야 통과한다', () => {
@@ -287,6 +310,16 @@ describe('trust proxy 홉 수 구성', () => {
       resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'production', TRUST_PROXY_HOPS: '0' }),
     ).toBe(0);
     expect(resolveTrustProxyHops({ TRUST_PROXY_HOPS: '1' })).toBe(1);
+    expect(resolveTrustProxyHops({ K_SERVICE: 'greenhub-api', TRUST_PROXY_HOPS: '2' })).toBe(2);
+  });
+
+  it('Cloud Run 런타임(K_SERVICE)은 홉 수를 명시하지 않으면 기동을 거부한다', () => {
+    expect(() => resolveTrustProxyHops({ K_SERVICE: 'greenhub-api' })).toThrow(
+      'Cloud Run 런타임은 TRUST_PROXY_HOPS를 명시해야 합니다.',
+    );
+    expect(() =>
+      validateRuntimeConfig({ NODE_ENV: 'development', K_SERVICE: 'greenhub-api' }),
+    ).toThrow(RuntimeConfigurationError);
   });
 
   it.each([
