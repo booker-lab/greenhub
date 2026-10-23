@@ -29,6 +29,10 @@ interface RetentionQuerySnapshot {
   empty: boolean;
 }
 
+interface NotificationPurgeQuery {
+  limit(count: number): { get(): Promise<RetentionQuerySnapshot> };
+}
+
 interface RetentionBatch {
   delete(ref: unknown): RetentionBatch;
   commit(): Promise<unknown>;
@@ -56,6 +60,10 @@ const RETENTION_BATCH_SIZE = 450;
 const RETENTION_PURGE_JOB_NAME = 'retention-scheduled-purge';
 const RETENTION_PURGE_LEASE_TTL_MS = 2 * 60 * 60 * 1000;
 const STORAGE_DELETE_ATTEMPTS = 3;
+/** 알림 발송 기록(`notifications`, 받는 사람 전화·본문 포함) 보관 기간. 생성 시각 기준. */
+export const NOTIFICATION_RETENTION_DAYS = 90;
+/** 한 번의 정기 파기에서 지우는 알림 기록 상한. 남으면 다음 날 이어서 지운다. */
+const NOTIFICATION_PURGE_MAX_BATCHES = 20;
 const SAFE_RECORD_ID_PATTERN = /^[A-Za-z0-9:_-]{1,160}$/;
 const SAFE_ERROR_TOKEN_PATTERN = /^[A-Za-z0-9_.-]{1,64}$/;
 const SAFE_ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
@@ -275,6 +283,32 @@ export class RetentionService {
   }
 
   /**
+   * 생성된 지 90일이 지난 알림 발송 기록을 지운다. 알림 기록은 법정 보관 대상이 아니고
+   * 받는 사람 전화번호와 본문을 담으므로 보관 기록(만료일 문서)과 달리 생성 시각으로 판단한다.
+   * 한 번에 450건씩 최대 20번 지우고, 남은 것은 다음 정기 파기에서 이어서 지운다.
+   * 발송 중복 방지 기록(`notificationDeliveries`)은 전화·본문이 없어 지우지 않는다.
+   */
+  async purgeExpiredNotifications(input: { now: Date }): Promise<number> {
+    const cutoff = this.firestore.Timestamp.fromDate(
+      addUtcDays(input.now, -NOTIFICATION_RETENTION_DAYS),
+    );
+    let deleted = 0;
+    for (let round = 0; round < NOTIFICATION_PURGE_MAX_BATCHES; round += 1) {
+      const query = this.firestore
+        .collection('notifications')
+        .where('createdAt', '<=', cutoff) as unknown as NotificationPurgeQuery;
+      const snapshot = await query.limit(RETENTION_BATCH_SIZE).get();
+      if (snapshot.empty) break;
+      const batch = this.createBatch();
+      for (const document of snapshot.docs) batch.delete(document.ref);
+      await batch.commit();
+      deleted += snapshot.docs.length;
+      if (snapshot.docs.length < RETENTION_BATCH_SIZE) break;
+    }
+    return deleted;
+  }
+
+  /**
    * 주문에 연결된 보관 기록(배송 사진·계약/결제·환불/분쟁)의 보존 보류를 설정하거나 해제한다.
    * 보류가 설정된 기록은 만료일이 지나도 파기하지 않는다(canPurge).
    */
@@ -350,7 +384,9 @@ export class RetentionService {
       return { skipped: true, reason: acquired.status };
     }
     try {
-      const result = await this.purgeExpiredRecords({ now });
+      const records = await this.purgeExpiredRecords({ now });
+      const notificationsDeletedCount = await this.purgeExpiredNotifications({ now });
+      const result = { ...records, notificationsDeletedCount };
       // 무엇을 몇 건 지웠는지 남긴다(문서 내용·경로는 남기지 않는다).
       this.retentionLogger.log(`[RetentionScheduler] ${JSON.stringify(result)}`);
       await completeJobLease(this.firestore, acquired.lease, {
