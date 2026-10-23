@@ -774,7 +774,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 2026-10-23 사용자 결정: 화분은 사용자가 직접 출력해 수량을 갱신하는 방식으로 재고를 관리한다. 같은 화분을 여러 식물 상품의 옵션으로 붙이므로 재고는 매장 단위 품목(`optionStocks/{id}`, `OptionStock` in `packages/shared/src/benchmark.types.ts`)에 두고 옵션 선택지가 `stockId`로 가리킨다. 수량은 회차 상품처럼 넣은 수량·결제 중·결제 완료로 센다(남은 수량 = `stockQuantity - reservedQuantity - orderedQuantity`).
 
 - [x] API(2026-10-23): 판매자 재고 품목 목록·추가·수량 조정(`apps/api/src/option-stocks/`, 새로 출력한 개수 더하기 `addQuantity` 또는 실제 남은 개수 맞추기 `remainingQuantity`, 행동 기록 `store.option_stock.*`). 상품 저장 때 같은 매장 품목만 연결. 회차 주문 예약이 옵션 재고를 회차 한도와 같은 트랜잭션에서 잡고(`apps/api/src/orders/order-capacity.service.ts`), 결제 확정·결제 전 만료·취소·환불·늦은 결제 재확보 전이를 회차 품목 카운터와 똑같이 따른다. 부족하면 남은 개수를 알려 주며 거절하고, 늦은 결제는 회차 한도처럼 환불로 간다. 근거: `apps/api/src/orders/option-stock-reservation.flow.spec.ts`, `apps/api/src/option-stocks/option-stocks.spec.ts`.
-- [ ] 판매자 화면: 재고 품목 목록·추가·수량 조정 화면, 상품 옵션 선택지에 재고 품목을 고르는 칸.
+- [x] 판매자 화면(2026-10-23): 설정 → 옵션 재고(`apps/seller/src/app/settings/option-stocks/`, `option-sheet`가 켜졌을 때 메뉴에 보임)에서 품목 추가·새로 출력한 개수 더하기·실제 남은 개수 맞추기. 상품 등록·수정 옵션 선택지마다 "재고 연결" 칸(`ProductExtrasSection.tsx`). 실제 판매자 로그인 화면에서의 확인은 아직 하지 않았다(단위 테스트·운영 빌드만).
 - [ ] 소비자 화면: 옵션 시트에 남은 수량·품절 표시(지금은 서버가 주문을 거절하며 안내 문구만 보여 준다).
 
 ### SUPPLIES-ALWAYS-ON-SALES

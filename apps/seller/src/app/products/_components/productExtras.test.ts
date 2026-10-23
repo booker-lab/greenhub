@@ -6,6 +6,7 @@ import {
   fillNoticeDefaults,
   nextOptionId,
   noticeBody,
+  optionStockSelectData,
 } from './productExtras';
 
 describe('productExtras', () => {
@@ -34,9 +35,10 @@ describe('productExtras', () => {
           id: 'g1',
           name: '화분',
           choices: [
-            { id: 'c1', label: '기본', priceDelta: '', needsText: false },
-            { id: 'c2', label: '3D 토퍼', priceDelta: '5000', needsText: true },
-            { id: 'c3', label: ' ', priceDelta: '', needsText: false },
+            { id: 'c1', label: '기본', priceDelta: '', needsText: false, stockId: '' },
+            { id: 'c2', label: '3D 토퍼', priceDelta: '5000', needsText: true, stockId: '' },
+            { id: 'c3', label: ' ', priceDelta: '', needsText: false, stockId: '' },
+            { id: 'c4', label: '출력 화분', priceDelta: '7000', needsText: false, stockId: 'stock-pot' },
           ],
         },
       ],
@@ -56,6 +58,7 @@ describe('productExtras', () => {
             choices: [
               { id: 'c1', label: '기본', priceDelta: 0 },
               { id: 'c2', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+              { id: 'c4', label: '출력 화분', priceDelta: 7000, stockId: 'stock-pot' },
             ],
           },
         ],
@@ -72,12 +75,23 @@ describe('productExtras', () => {
   it('API 응답을 입력 상태로 되돌리고 모르는 값은 버린다', () => {
     const form = extrasFromProduct({
       placements: ['living', 'garden' as never],
-      options: [{ id: 'g1', name: '크기', choices: [{ id: 'c1', label: '대', priceDelta: 3000, needsText: true }] }],
+      options: [
+        {
+          id: 'g1',
+          name: '크기',
+          choices: [
+            { id: 'c1', label: '대', priceDelta: 3000, needsText: true },
+            { id: 'c2', label: '출력 화분', priceDelta: 0, stockId: 'stock-pot' },
+          ],
+        },
+      ],
       aliases: ['a', 'b'],
     });
     expect(form.placements).toEqual(['living']);
     expect(form.options[0].choices[0].priceDelta).toBe('3000');
     expect(form.options[0].choices[0].needsText).toBe(true);
+    expect(form.options[0].choices[0].stockId).toBe('');
+    expect(form.options[0].choices[1].stockId).toBe('stock-pot');
     expect(form.aliases).toBe('a, b');
   });
 
@@ -117,5 +131,25 @@ describe('productExtras', () => {
   it('새 옵션 id는 겹치지 않는다', () => {
     expect(nextOptionId('g', ['g1', 'g2'])).toBe('g3');
     expect(nextOptionId('c', [])).toBe('c1');
+  });
+
+  it('재고 연결 목록은 연결 안 함을 먼저 두고, 목록에 없는 저장값은 지우지 않는다', () => {
+    const stock = {
+      id: 'stock-pot',
+      storeId: 'store-1',
+      name: '흰색 출력 화분',
+      stockQuantity: 10,
+      reservedQuantity: 1,
+      orderedQuantity: 2,
+      remainingQuantity: 7,
+    };
+    expect(optionStockSelectData([stock], '')).toEqual([
+      { value: '', label: '연결 안 함 (수량 제한 없음)' },
+      { value: 'stock-pot', label: '흰색 출력 화분 (남은 7개)' },
+    ]);
+    expect(optionStockSelectData([], 'stock-gone').at(-1)).toEqual({
+      value: 'stock-gone',
+      label: '연결된 재고 (목록에서 찾지 못함)',
+    });
   });
 });

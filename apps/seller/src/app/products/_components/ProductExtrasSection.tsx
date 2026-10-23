@@ -8,11 +8,28 @@ import {
   PRODUCT_NOTICE_FIELDS,
   PRODUCT_OPTION_CHOICE_MAX,
   PRODUCT_OPTION_GROUP_MAX,
+  type OptionStock,
 } from '@greenhub/shared';
-import { Button, Checkbox, Chip, Group, SimpleGrid, Stack, Text, TextInput } from '@mantine/core';
+import {
+  Button,
+  Checkbox,
+  Chip,
+  Group,
+  NativeSelect,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+} from '@mantine/core';
 import { isFeatureOn } from '@/lib/features';
 import { FieldCard } from './FormPrimitives';
-import { CARE_TEXT_MAX, nextOptionId, type OptionGroupForm, type ProductExtrasForm } from './productExtras';
+import {
+  CARE_TEXT_MAX,
+  nextOptionId,
+  type OptionGroupForm,
+  optionStockSelectData,
+  type ProductExtrasForm,
+} from './productExtras';
 
 // 상품 등록·수정 마지막 단계의 추가 정보. 기능 토글이 꺼진 칸은 그리지 않는다.
 // 상품정보제공고시 칸은 법정 표시라 토글과 상관없이 항상 그린다.
@@ -40,9 +57,14 @@ function numberInput(value: string, onChange: (value: string) => void, label: st
 export function ProductExtrasSection({
   extras,
   onChange,
+  optionStocks = [],
+  optionStocksError = null,
 }: {
   extras: ProductExtrasForm;
   onChange: (next: ProductExtrasForm) => void;
+  /** 선택지에 연결할 매장 옵션 재고(직접 출력한 화분 등) */
+  optionStocks?: readonly OptionStock[];
+  optionStocksError?: string | null;
 }) {
   const on = {
     size: isFeatureOn('size-info'),
@@ -182,6 +204,20 @@ export function ProductExtrasSection({
                       w={110}
                     />
                   </Group>
+                  {/* 직접 출력한 화분처럼 개수가 정해진 선택지: 주문마다 재고가 줄고 모자라면 주문을 받지 않는다 */}
+                  <NativeSelect
+                    size="xs"
+                    label="재고 연결"
+                    data={optionStockSelectData(optionStocks, choice.stockId)}
+                    value={choice.stockId}
+                    onChange={(event) => {
+                      const choices = [...group.choices];
+                      choices[choiceIndex] = { ...choice, stockId: event.currentTarget.value };
+                      const next = [...extras.options];
+                      next[groupIndex] = { ...group, choices };
+                      setGroups(next);
+                    }}
+                  />
                   {/* 스티커 라벨·3D 토퍼처럼 손님이 문구를 써야 하는 선택지 */}
                   <Checkbox
                     color="green"
@@ -209,7 +245,7 @@ export function ProductExtrasSection({
                         ...group,
                         choices: [
                           ...group.choices,
-                          { id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', needsText: false },
+                          { id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', needsText: false, stockId: '' },
                         ],
                       };
                       setGroups(next);
@@ -220,6 +256,11 @@ export function ProductExtrasSection({
                 )}
               </Stack>
             ))}
+            {optionStocksError && (
+              <Text role="alert" size="sm" c="var(--color-danger)">
+                {optionStocksError}
+              </Text>
+            )}
             {extras.options.length < PRODUCT_OPTION_GROUP_MAX && (
               <Button
                 variant="outline"
@@ -231,7 +272,7 @@ export function ProductExtrasSection({
                     {
                       id: nextOptionId('g', extras.options.map((group) => group.id)),
                       name: '',
-                      choices: [{ id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', needsText: false }],
+                      choices: [{ id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', needsText: false, stockId: '' }],
                     },
                   ])
                 }
