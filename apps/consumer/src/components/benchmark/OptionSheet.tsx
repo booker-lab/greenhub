@@ -3,10 +3,19 @@
 import { OPTION_TEXT_MAX_LENGTH, type ProductOptionGroup } from '@greenhub/shared';
 import { ActionIcon, Box, Button, Drawer, Group, Stack, Text, TextInput } from '@mantine/core';
 import { useEffect, useState } from 'react';
+import {
+  choiceRemaining,
+  choiceStockLabel,
+  firstAvailableChoiceId,
+  isChoiceSoldOut,
+  maxQuantityFor,
+  type OptionAvailabilityMap,
+} from '@/lib/option-availability';
 
 // 옵션 시트(option-sheet). 하단 고정 바의 장바구니·바로 구매를 누르면 아래에서 올라온다.
 // 옵션 묶음마다 하나씩 고르고, 고른 조합의 가격과 수량을 보여준 뒤 담거나 바로 산다.
 // 스티커 라벨·3D 토퍼처럼 문구가 필요한 선택지를 고르면 문구 칸이 열리고, 문구를 써야 담을 수 있다.
+// 직접 출력한 화분처럼 재고에 연결된 선택지는 품절이면 고를 수 없고, 남은 수량보다 많이 담을 수 없다.
 
 export interface OptionSelection {
   choiceIds: string[];
@@ -51,6 +60,7 @@ export default function OptionSheet({
   initialQuantity,
   intent,
   onConfirm,
+  availability = null,
 }: {
   opened: boolean;
   onClose: () => void;
@@ -59,6 +69,8 @@ export default function OptionSheet({
   initialQuantity: number;
   intent: 'cart' | 'buy';
   onConfirm: (selection: OptionSelection, quantity: number, intent: 'cart' | 'buy') => void;
+  /** 선택지별 남은 수량. 모르면 null(제한 없이 그리고 서버가 주문 때 막는다). */
+  availability?: OptionAvailabilityMap | null;
 }) {
   // 첫 선택지(보통 기본 화분 같은 0원 선택지)를 미리 골라 두어 한 번에 담을 수 있게 한다.
   const [picked, setPicked] = useState<Record<string, string>>({});
@@ -70,8 +82,23 @@ export default function OptionSheet({
     setQuantity(initialQuantity);
     setText('');
   }, [groups, initialQuantity, opened]);
+  // 남은 수량은 시트가 열린 뒤 도착한다. 품절인 선택지를 골라 둔 묶음만 다른 선택지로 바꾼다.
+  useEffect(() => {
+    if (!opened || !availability) return;
+    setPicked((current) =>
+      Object.fromEntries(
+        groups.map((g) => {
+          const choiceId = current[g.id] ?? '';
+          return [g.id, isChoiceSoldOut(availability, choiceId) ? firstAvailableChoiceId(g.choices, availability) : choiceId];
+        }),
+      ),
+    );
+  }, [availability, groups, opened]);
 
-  const selection = describeSelection(groups, picked, text);
+  const pickedChoiceIds = groups.map((group) => picked[group.id] ?? '');
+  const maxQuantity = maxQuantityFor(availability, pickedChoiceIds);
+  const overStock = quantity > maxQuantity;
+  const selection = overStock ? null : describeSelection(groups, picked, text);
   const textChoice = groups
     .map((group) => group.choices.find((c) => c.id === picked[group.id]))
     .find((choice) => choice?.needsText);
@@ -100,21 +127,25 @@ export default function OptionSheet({
             <Stack gap={6}>
               {group.choices.map((choice) => {
                 const selected = picked[group.id] === choice.id;
+                const soldOut = isChoiceSoldOut(availability, choice.id);
+                const stockLabel = choiceStockLabel(choiceRemaining(availability, choice.id));
                 return (
                   <button
                     key={choice.id}
                     type="button"
                     aria-pressed={selected}
+                    disabled={soldOut}
                     onClick={() => setPicked((current) => ({ ...current, [group.id]: choice.id }))}
                     style={{
                       alignItems: 'center',
                       background: selected ? 'var(--color-primary-surface)' : 'var(--color-bg)',
                       border: selected ? '2px solid var(--color-primary)' : 'var(--border)',
                       borderRadius: 'var(--radius-sm)',
-                      color: 'var(--color-text)',
-                      cursor: 'pointer',
+                      color: soldOut ? 'var(--color-text-disabled)' : 'var(--color-text)',
+                      cursor: soldOut ? 'not-allowed' : 'pointer',
                       display: 'flex',
                       fontSize: 'var(--font-size-sm)',
+                      gap: 8,
                       fontWeight: selected ? 800 : 400,
                       justifyContent: 'space-between',
                       minHeight: 'var(--touch-target)',
@@ -122,7 +153,21 @@ export default function OptionSheet({
                       textAlign: 'left',
                     }}
                   >
-                    <span>{choice.label}</span>
+                    <span>
+                      {choice.label}
+                      {stockLabel && (
+                        <span
+                          style={{
+                            color: soldOut ? 'var(--color-text-disabled)' : 'var(--color-danger)',
+                            fontSize: 'var(--font-size-xs)',
+                            fontWeight: 700,
+                            marginLeft: 6,
+                          }}
+                        >
+                          {stockLabel}
+                        </span>
+                      )}
+                    </span>
                     <span style={{ fontVariantNumeric: 'tabular-nums' }}>
                       {choice.priceDelta > 0 ? `+${choice.priceDelta.toLocaleString()}원` : '추가 금액 없음'}
                     </span>
@@ -161,7 +206,7 @@ export default function OptionSheet({
             <Text w={32} ta="center" fw={800} aria-live="polite" style={{ fontVariantNumeric: 'tabular-nums' }}>
               {quantity}
             </Text>
-            <ActionIcon size={40} variant="subtle" color="dark" radius="xl" aria-label="수량 늘리기" onClick={() => setQuantity((q) => Math.min(99, q + 1))}>
+            <ActionIcon size={40} variant="subtle" color="dark" radius="xl" aria-label="수량 늘리기" disabled={quantity >= maxQuantity} onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}>
               +
             </ActionIcon>
           </Group>
@@ -169,7 +214,11 @@ export default function OptionSheet({
 
         <Group justify="space-between">
           <Text size="sm" c="var(--color-text-secondary)">
-            {selection?.label ?? (textChoice ? '문구를 적어 주세요' : '옵션을 골라 주세요')}
+            {overStock
+              ? maxQuantity > 0
+                ? `고른 옵션은 ${maxQuantity}개까지 담을 수 있어요`
+                : '고른 옵션이 품절이에요'
+              : (selection?.label ?? (textChoice ? '문구를 적어 주세요' : '옵션을 골라 주세요'))}
           </Text>
           <Text fw={800} size="lg" style={{ fontVariantNumeric: 'tabular-nums' }}>
             {(unitPrice * quantity).toLocaleString()}원

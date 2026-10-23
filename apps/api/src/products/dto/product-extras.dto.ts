@@ -24,6 +24,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { OPTION_STOCK_ID_PATTERN } from '../../option-stocks/option-stock.fields';
 
 // 팔도감 벤치마킹 비교용 상품 추가 정보(packages/shared benchmark.types.ts ProductExtras).
 // 모두 선택이며, 없으면 기존 상품과 같다.
@@ -97,6 +98,11 @@ export class ProductOptionChoiceDto {
   @IsOptional()
   @IsBoolean()
   needsText?: boolean;
+
+  /** 이 선택지가 쓰는 매장 옵션 재고 품목 id(직접 출력한 화분 등). 없으면 수량 제한이 없다. */
+  @IsOptional()
+  @Matches(OPTION_STOCK_ID_PATTERN, { message: '옵션 재고 품목 id 형식이 올바르지 않습니다.' })
+  stockId?: string;
 }
 
 export class ProductOptionGroupDto {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { operationSettingsFor, SELLER_OPERATION_SETTINGS } from './settings-links';
+import { benchmarkSettingsLinks, operationSettingsFor, SELLER_OPERATION_SETTINGS } from './settings-links';
 
 const links = (sections: readonly { links: readonly { href: string; label: string }[] }[]) =>
   sections.flatMap((section) => section.links.map(({ href, label }) => ({ href, label })));
@@ -31,5 +31,17 @@ describe('셀러 설정 운영 메뉴', () => {
       { href: '/settlements', label: '정산 관리' },
       { href: '/settings/payout-account', label: '정산 계좌' },
     ]);
+  });
+});
+
+describe('셀러 설정 비교 기능 메뉴', () => {
+  it('옵션 시트가 켜지면 옵션 재고 메뉴를 보인다', () => {
+    expect(benchmarkSettingsLinks((key) => key === 'option-sheet')).toEqual([
+      { href: '/settings/option-stocks', label: '옵션 재고 (직접 출력한 화분 등)' },
+    ]);
+  });
+
+  it('기능이 모두 꺼지면 비교 기능 메뉴를 숨긴다', () => {
+    expect(benchmarkSettingsLinks(() => false)).toEqual([]);
   });
 });

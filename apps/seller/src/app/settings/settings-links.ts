@@ -42,6 +42,11 @@ const BENCHMARK_LINKS: ReadonlyArray<{ href: string; label: string; features: Fe
     features: ['seller-store', 'quality-guarantee', 'demand-signals'],
   },
   {
+    href: '/settings/option-stocks',
+    label: '옵션 재고 (직접 출력한 화분 등)',
+    features: ['option-sheet'],
+  },
+  {
     href: '/reactions',
     label: '고객 반응 (후기·알림 신청·찾는 상품)',
     features: ['reviews', 'restock-alert', 'product-request'],

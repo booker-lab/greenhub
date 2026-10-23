@@ -16,6 +16,8 @@ import {
   throwDriverOrderNotFound,
   throwDriverOrderStateConflict,
 } from './driver-order-error';
+import { optionStockPath } from '../option-stocks/option-stock.fields';
+import type { OptionStockLine } from './_lib/round-order-extras';
 
 // Late-payment reacquisition failed in a way that must converge to the current
 // late-payment refund policy without leaving an orphan reservation.
@@ -40,6 +42,22 @@ const ACTIVE_CHECKOUT_HOLD_LIMIT_MESSAGE =
   '이전 결제 시도를 아직 처리하고 있어요. 잠시 후 다시 시도하거나 주문 내역을 확인해 주세요.';
 
 const ITEM_STATE_INVALID_MESSAGE = '회차 상품 수량 상태가 올바르지 않아 처리할 수 없습니다.';
+
+const OPTION_STOCK_STATE_INVALID_MESSAGE = '옵션 재고 수량 상태가 올바르지 않아 처리할 수 없습니다.';
+const OPTION_STOCK_NOT_FOUND_MESSAGE = '옵션 재고 품목을 찾을 수 없습니다.';
+
+function optionStockShortageMessage(name: unknown, remaining: number): string {
+  const label =
+    typeof name === 'string' && name.trim() !== '' ? `'${name.trim()}' 옵션은` : '고른 옵션은';
+  return remaining > 0
+    ? `${label} ${remaining}개만 남았어요. 수량을 줄이거나 다른 옵션을 골라 주세요.`
+    : `${label} 다 팔렸어요. 다른 옵션을 골라 주세요.`;
+}
+
+// 옵션 재고(optionStocks) 카운터가 예약 상태 전이에서 움직이는 방향. 회차 품목 카운터와 같다.
+type OptionStockMove = 'reserve' | 'consume' | 'releaseHeld' | 'releaseConsumed' | 'orderFresh';
+
+type OptionStockRecord = { line: OptionStockLine; data: Record<string, any> };
 
 // 회차 품목 문서(saleRoundItems)의 선택 필드. 값이 있으면 기본 규칙 대신 이 값을 1인 상한으로 쓴다.
 const PER_CUSTOMER_ITEM_LIMIT_FIELD = 'maxQuantityPerCustomer';
@@ -129,6 +147,8 @@ type ReservationRecord = {
     quantity: number;
     unitPrice: number;
   }>;
+  /** 이 예약이 잡은 옵션 재고(품목 id별 수량). 옵션 재고가 없는 예약에는 없다. */
+  optionStock?: OptionStockLine[];
   idempotencyKey: string;
   expiresAt: string;
   consumedAt: string | null;
@@ -148,6 +168,7 @@ export class OrderCapacityService {
     idempotencyKey: string;
     deliveryAddress: DeliveryAddressInput;
     items: RoundItemInput[];
+    optionStock?: OptionStockLine[];
   }): Promise<ReservationRecord> {
     let result: ReservationRecord | null = null;
 
@@ -167,6 +188,8 @@ export class OrderCapacityService {
       idempotencyKey: string;
       deliveryAddress: DeliveryAddressInput;
       items: RoundItemInput[];
+      /** 고른 옵션이 쓰는 재고(품목 id별 수량). 회차 한도와 함께 잡고 같은 전이로 돌려준다. */
+      optionStock?: OptionStockLine[];
     },
   ): Promise<ReservationRecord> {
     const reservationId = this.reservationId(input.storeId, input.roundId, input.idempotencyKey);
@@ -238,6 +261,13 @@ export class OrderCapacityService {
       reservationId,
       timestampMillis(now),
     );
+    // 옵션 재고는 회차 한도·1인 상한 뒤에 본다(기존 마감 안내를 먼저 보여 준다).
+    const optionStockLines = this.normalizeOptionStockLines(input.optionStock ?? []);
+    const optionStockRecords = await this.readOptionStocks(tx, input.storeId, optionStockLines, () => {
+      throw new ConflictException(OPTION_STOCK_NOT_FOUND_MESSAGE);
+    });
+    optionStockRecords.forEach((record) => this.assertOptionStockAvailable(record));
+    const nextOptionStockCounters = this.nextOptionStockCounters(optionStockRecords, 'reserve');
 
     const nowMillis = timestampMillis(now);
     if (!Number.isFinite(nowMillis)) {
@@ -263,6 +293,7 @@ export class OrderCapacityService {
         quantity: item.input.quantity,
         unitPrice: item.data['roundPrice'],
       })),
+      ...(optionStockLines.length > 0 ? { optionStock: optionStockLines } : {}),
       idempotencyKey: input.idempotencyKey,
       expiresAt: new Date(nowMillis + 15 * 60_000).toISOString(),
       consumedAt: null,
@@ -295,6 +326,7 @@ export class OrderCapacityService {
         updatedAt: nowIso,
       });
     });
+    this.writeOptionStocks(tx, optionStockRecords, nextOptionStockCounters, nowIso);
     return reservation;
   }
 
@@ -615,6 +647,19 @@ export class OrderCapacityService {
       throw new ConflictException('이미 닫힌 결제 예약입니다.');
     }
     const wasConsumed = reservation.status === 'CONSUMED';
+    // 읽기 단계(쓰기 전): 이 예약이 잡은 옵션 재고.
+    const optionStockRecords = await this.readOptionStocks(
+      tx,
+      reservation.storeId,
+      this.normalizeOptionStockLines(reservation.optionStock ?? []),
+      () => {
+        throw new NotFoundException(OPTION_STOCK_NOT_FOUND_MESSAGE);
+      },
+    );
+    const nextOptionStockCounters = this.nextOptionStockCounters(
+      optionStockRecords,
+      wasConsumed ? 'releaseConsumed' : 'releaseHeld',
+    );
     const roundDelta: Partial<CapacityCounters> = {
       reservedDeliveryAddresses: wasConsumed ? 0 : -1,
       reservedItemQuantity: wasConsumed ? 0 : -reservation.itemQuantityTotal,
@@ -664,6 +709,7 @@ export class OrderCapacityService {
         updatedAt: nowIso,
       });
     });
+    this.writeOptionStocks(tx, optionStockRecords, nextOptionStockCounters, nowIso);
     return {
       reservation: { ...reservation, ...update },
       counters: nextCounters,
@@ -693,6 +739,8 @@ export class OrderCapacityService {
       paymentId: string;
       deliveryAddress: DeliveryAddressInput;
       items: RoundItemInput[];
+      /** 주문 스냅샷의 옵션 재고(품목 id별 수량). 부족하면 회차 한도와 같이 늦은 결제 환불로 간다. */
+      optionStock?: OptionStockLine[];
       idempotencyKey?: string;
     },
   ): Promise<ReservationRecord> {
@@ -791,6 +839,26 @@ export class OrderCapacityService {
       this.assertFiniteCounter(item.data['reservedQuantity'], 'item');
       this.assertFiniteCounter(item.data['orderedQuantity'], 'item');
     });
+    let optionStockLines: OptionStockLine[];
+    try {
+      optionStockLines = this.normalizeOptionStockLines(input.optionStock ?? []);
+    } catch {
+      throw new LatePaymentCapacityError('결제 만료 후 회차 한도 마감');
+    }
+    const optionStockRecords = await this.readOptionStocks(
+      tx,
+      input.storeId,
+      optionStockLines,
+      () => {
+        throw new LatePaymentCapacityError('결제 만료 후 회차 한도 마감');
+      },
+    );
+    try {
+      optionStockRecords.forEach((record) => this.assertOptionStockAvailable(record));
+    } catch {
+      throw new LatePaymentCapacityError('결제 만료 후 회차 한도 마감');
+    }
+    const nextOptionStockCounters = this.nextOptionStockCounters(optionStockRecords, 'orderFresh');
 
     // Write phase: create CONSUMED directly (no intermediate HELD) + ordered only.
     const nowIso = this.toDate(now).toISOString();
@@ -813,6 +881,7 @@ export class OrderCapacityService {
         quantity: item.input.quantity,
         unitPrice: item.data['roundPrice'],
       })),
+      ...(optionStockLines.length > 0 ? { optionStock: optionStockLines } : {}),
       idempotencyKey,
       expiresAt: new Date(nowMillis + 15 * 60_000).toISOString(),
       consumedAt: nowIso,
@@ -833,6 +902,7 @@ export class OrderCapacityService {
         updatedAt: nowIso,
       });
     });
+    this.writeOptionStocks(tx, optionStockRecords, nextOptionStockCounters, nowIso);
     return reservation;
   }
 
@@ -934,9 +1004,21 @@ export class OrderCapacityService {
       }
       return { expected, data };
     });
+    const optionStockRecords = await this.readOptionStocks(
+      tx,
+      reservation.storeId,
+      this.normalizeOptionStockLines(reservation.optionStock ?? []),
+      () => {
+        throw new NotFoundException(OPTION_STOCK_NOT_FOUND_MESSAGE);
+      },
+    );
     const now = this.toDate(this.firestore.Timestamp.now()).toISOString();
     const consumed = nextStatus === 'CONSUMED';
     const wasConsumed = reservation.status === 'CONSUMED';
+    const nextOptionStockCounters = this.nextOptionStockCounters(
+      optionStockRecords,
+      consumed ? 'consume' : wasConsumed ? 'releaseConsumed' : 'releaseHeld',
+    );
     const update: Partial<ReservationRecord> = {
       status: nextStatus,
       orderId: patch.orderId ?? reservation.orderId,
@@ -986,6 +1068,7 @@ export class OrderCapacityService {
         updatedAt: now,
       });
     });
+    this.writeOptionStocks(tx, optionStockRecords, nextOptionStockCounters, now);
 
     return { ...reservation, ...update };
   }
@@ -1111,6 +1194,106 @@ export class OrderCapacityService {
       throw new ConflictException('회차 예약 상태가 올바르지 않아 처리할 수 없습니다.');
     }
     return next;
+  }
+
+  /**
+   * 옵션 재고 줄을 검사한다. 품목 id가 비었거나 수량이 1 이상 정수가 아니거나 같은 품목이 두 번
+   * 나오면 저장 상태를 믿을 수 없으므로 거절한다(입력은 collectOptionStockLines가 모아 보낸다).
+   */
+  private normalizeOptionStockLines(lines: unknown): OptionStockLine[] {
+    if (!Array.isArray(lines)) throw new ConflictException(OPTION_STOCK_STATE_INVALID_MESSAGE);
+    const seen = new Set<string>();
+    return lines.map((line) => {
+      const stockId: unknown = line?.stockId;
+      const quantity: unknown = line?.quantity;
+      if (
+        typeof stockId !== 'string' ||
+        stockId === '' ||
+        seen.has(stockId) ||
+        typeof quantity !== 'number' ||
+        !Number.isSafeInteger(quantity) ||
+        quantity < 1
+      ) {
+        throw new ConflictException(OPTION_STOCK_STATE_INVALID_MESSAGE);
+      }
+      seen.add(stockId);
+      return { stockId, quantity };
+    });
+  }
+
+  /** 옵션 재고 문서를 읽는다(쓰기 전 읽기 단계에서만 부른다). 없거나 다른 매장 것이면 onMissing. */
+  private async readOptionStocks(
+    tx: any,
+    storeId: string,
+    lines: OptionStockLine[],
+    onMissing: () => never,
+  ): Promise<OptionStockRecord[]> {
+    if (lines.length === 0) return [];
+    const snaps = await Promise.all(
+      lines.map((line) => tx.get(this.firestore.doc(optionStockPath(line.stockId)))),
+    );
+    return snaps.map((snap: any, index) => {
+      const data = snap.exists ? (snap.data() as Record<string, any> | undefined) : undefined;
+      if (!data || data['storeId'] !== storeId) onMissing();
+      return { line: lines[index], data };
+    });
+  }
+
+  private assertOptionStockAvailable(record: OptionStockRecord) {
+    const stock = this.assertFiniteOptionStockCounter(record.data['stockQuantity']);
+    const reserved = this.assertFiniteOptionStockCounter(record.data['reservedQuantity']);
+    const ordered = this.assertFiniteOptionStockCounter(record.data['orderedQuantity']);
+    const remaining = stock - reserved - ordered;
+    if (record.line.quantity > remaining) {
+      throw new ConflictException(
+        optionStockShortageMessage(record.data['name'], Math.max(0, remaining)),
+      );
+    }
+  }
+
+  /** 예약 전이에 맞춰 옵션 재고 카운터의 다음 값을 계산한다. 0 아래로 내려가면 쓰기 전에 막는다. */
+  private nextOptionStockCounters(records: OptionStockRecord[], move: OptionStockMove) {
+    return records.map(({ line, data }) => {
+      const reserved = this.assertFiniteOptionStockCounter(data['reservedQuantity']);
+      const ordered = this.assertFiniteOptionStockCounter(data['orderedQuantity']);
+      const q = line.quantity;
+      const next =
+        move === 'reserve'
+          ? { reservedQuantity: reserved + q, orderedQuantity: ordered }
+          : move === 'consume'
+            ? { reservedQuantity: reserved - q, orderedQuantity: ordered + q }
+            : move === 'releaseHeld'
+              ? { reservedQuantity: reserved - q, orderedQuantity: ordered }
+              : move === 'releaseConsumed'
+                ? { reservedQuantity: reserved, orderedQuantity: ordered - q }
+                : { reservedQuantity: reserved, orderedQuantity: ordered + q };
+      if (next.reservedQuantity < 0 || next.orderedQuantity < 0) {
+        throw new ConflictException(OPTION_STOCK_STATE_INVALID_MESSAGE);
+      }
+      return next;
+    });
+  }
+
+  private writeOptionStocks(
+    tx: any,
+    records: OptionStockRecord[],
+    next: Array<{ reservedQuantity: number; orderedQuantity: number }>,
+    nowIso: string,
+  ) {
+    records.forEach(({ line }, index) => {
+      tx.update(this.firestore.doc(optionStockPath(line.stockId)), {
+        ...next[index],
+        updatedAt: nowIso,
+      });
+    });
+  }
+
+  private assertFiniteOptionStockCounter(value: unknown): number {
+    const numeric = (value ?? 0) as unknown;
+    if (typeof numeric !== 'number' || !Number.isFinite(numeric)) {
+      throw new ConflictException(OPTION_STOCK_STATE_INVALID_MESSAGE);
+    }
+    return numeric;
   }
 
   private reservationId(storeId: string, roundId: string, idempotencyKey: string) {

@@ -1,4 +1,4 @@
-import { todayKST } from '@greenhub/shared';
+import { optionStockRemaining, type ProductOptionAvailability, todayKST } from '@greenhub/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -21,11 +21,16 @@ import {
   toPublicProductSummary,
 } from './product-visibility';
 import { isArchivedStore } from '../stores/store-availability';
+import { assertOptionStocksBelongToStore } from '../option-stocks/option-stocks.service';
+import { optionStockPath } from '../option-stocks/option-stock.fields';
 
 function assertProductOptionIds(options: CreateProductDto['options']): void {
   const conflict = findProductOptionIdConflict(options);
   if (conflict) throw new BadRequestException(conflict);
 }
+
+/** 공개 옵션 남은 수량의 상한(손님 옵션 시트가 한 번에 담을 수 있는 최대 수량). */
+const PUBLIC_OPTION_REMAINING_CAP = 99;
 
 @Injectable()
 export class ProductsService {
@@ -154,6 +159,7 @@ export class ProductsService {
   async createProduct(storeId: string, sellerId: string, dto: CreateProductDto, role?: string) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
     assertProductOptionIds(dto.options);
+    await assertOptionStocksBelongToStore(this.firestore, storeId, dto.options);
 
     const productId = randomUUID();
     const now = this.firestore.Timestamp.now();
@@ -191,6 +197,7 @@ export class ProductsService {
   ) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
     assertProductOptionIds(dto.options);
+    await assertOptionStocksBelongToStore(this.firestore, storeId, dto.options);
     const snap = await this.firestore.doc(`products/${productId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException();
@@ -407,6 +414,57 @@ export class ProductsService {
   }
 
   async getPublicProduct(productId: string) {
+    const product = await this.loadPublicProduct(productId);
+    if (product['saleType'] === 'group') {
+      const gc = await this.firestore.doc(`groupProductConfig/${productId}`).get();
+      const groupConfig = gc.exists ? (gc.data() as Record<string, unknown>) : null;
+      return toPublicProductDetail(product, groupConfig);
+    }
+    return toPublicProductDetail(product, null);
+  }
+
+  /**
+   * 공개 상품의 옵션 선택지별 남은 수량. 손님 옵션 시트가 열릴 때 부른다(상품 상세는 캐시될 수 있어 따로 둔다).
+   * 재고 품목에 연결된 선택지만 돌려주고, 다른 매장 품목을 가리키면 0개로 본다(주문도 막힌다).
+   * 실제 재고 수는 공개하지 않도록 옵션 시트가 한 번에 담을 수 있는 수(99)까지만 알려 준다.
+   */
+  async getOptionAvailability(productId: string): Promise<ProductOptionAvailability> {
+    const product = await this.loadPublicProduct(productId);
+    const groups = Array.isArray(product['options'])
+      ? (product['options'] as Array<{ choices?: Array<{ id?: unknown; stockId?: unknown }> }>)
+      : [];
+    const linked = groups
+      .flatMap((group) => (Array.isArray(group.choices) ? group.choices : []))
+      .filter(
+        (choice): choice is { id: string; stockId: string } =>
+          typeof choice.id === 'string' && typeof choice.stockId === 'string' && choice.stockId !== '',
+      );
+    const stockIds = [...new Set(linked.map((choice) => choice.stockId))];
+    const snaps = await Promise.all(
+      stockIds.map((id) => this.firestore.doc(optionStockPath(id)).get()),
+    );
+    const remainingByStock = new Map(
+      stockIds.map((id, index) => {
+        const data = snaps[index].exists ? snaps[index].data() : undefined;
+        return [
+          id,
+          data && data['storeId'] === product['storeId'] ? optionStockRemaining(data) : 0,
+        ] as const;
+      }),
+    );
+    return {
+      choices: linked.map((choice) => ({
+        choiceId: choice.id,
+        remainingQuantity: Math.min(
+          remainingByStock.get(choice.stockId) ?? 0,
+          PUBLIC_OPTION_REMAINING_CAP,
+        ),
+      })),
+    };
+  }
+
+  /** 공개해도 되는 상품만 읽는다(숨김·테스트 상품, 치운 가게 상품은 없는 상품과 같게 404). */
+  private async loadPublicProduct(productId: string): Promise<Record<string, unknown>> {
     const snap = await this.firestore.doc(`products/${productId}`).get();
     if (!snap.exists) throw new NotFoundException('상품을 찾을 수 없습니다.');
     const product = snap.data()! as Record<string, unknown>;
@@ -416,12 +474,7 @@ export class ProductsService {
     ) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
-    if (product['saleType'] === 'group') {
-      const gc = await this.firestore.doc(`groupProductConfig/${productId}`).get();
-      const groupConfig = gc.exists ? (gc.data() as Record<string, unknown>) : null;
-      return toPublicProductDetail(product, groupConfig);
-    }
-    return toPublicProductDetail(product, null);
+    return product;
   }
 
   private async isArchivedStoreId(storeId: string): Promise<boolean> {
