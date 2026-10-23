@@ -2,7 +2,8 @@
 // 팔도감 벤치마킹 비교용 기능의 공개 계약. 모든 필드는 선택이라 기존 데이터·응답과 호환된다.
 // 기능 토글은 features.ts를 따른다.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PRODUCT_REQUEST_MAX_LENGTH = exports.GIFT_MESSAGE_MAX_LENGTH = exports.REVIEW_HIDE_REASON_LABELS = exports.REVIEW_HIDE_REASONS = exports.REVIEW_HIDE_REASON_MAX_LENGTH = exports.REVIEW_PHOTO_CONTENT_TYPES = exports.REVIEW_PHOTO_MAX_BYTES = exports.REVIEW_PHOTO_MAX_COUNT = exports.REVIEW_TEXT_MAX_LENGTH = exports.PRODUCT_NOTICE_DEFAULT_CERTIFICATION = exports.PRODUCT_NOTICE_DEFAULT_ORIGIN = exports.PRODUCT_NOTICE_FIELDS = exports.OPTION_TEXT_MAX_LENGTH = exports.PRODUCT_OPTION_PRICE_DELTA_MAX = exports.PRODUCT_OPTION_CHOICE_MAX = exports.PRODUCT_OPTION_GROUP_MAX = exports.PLACEMENT_LABELS = exports.PLACEMENTS = exports.LIGHT_LABELS = exports.LIGHT_LEVELS = void 0;
+exports.PRODUCT_REQUEST_MAX_LENGTH = exports.GIFT_MESSAGE_MAX_LENGTH = exports.REVIEW_HIDE_REASON_LABELS = exports.REVIEW_HIDE_REASONS = exports.REVIEW_HIDE_REASON_MAX_LENGTH = exports.REVIEW_PHOTO_CONTENT_TYPES = exports.REVIEW_PHOTO_MAX_BYTES = exports.REVIEW_PHOTO_MAX_COUNT = exports.REVIEW_TEXT_MAX_LENGTH = exports.PRODUCT_NOTICE_DEFAULT_CERTIFICATION = exports.PRODUCT_NOTICE_DEFAULT_ORIGIN = exports.PRODUCT_NOTICE_FIELDS = exports.OPTION_STOCK_QUANTITY_MAX = exports.OPTION_STOCK_NAME_MAX_LENGTH = exports.OPTION_TEXT_MAX_LENGTH = exports.PRODUCT_OPTION_PRICE_DELTA_MAX = exports.PRODUCT_OPTION_CHOICE_MAX = exports.PRODUCT_OPTION_GROUP_MAX = exports.PLACEMENT_LABELS = exports.PLACEMENTS = exports.LIGHT_LABELS = exports.LIGHT_LEVELS = void 0;
+exports.optionStockRemaining = optionStockRemaining;
 exports.resolveProductNotice = resolveProductNotice;
 exports.LIGHT_LEVELS = ['bright', 'medium', 'low'];
 exports.LIGHT_LABELS = {
@@ -22,6 +23,14 @@ exports.PRODUCT_OPTION_CHOICE_MAX = 6;
 exports.PRODUCT_OPTION_PRICE_DELTA_MAX = 200_000;
 /** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
 exports.OPTION_TEXT_MAX_LENGTH = 20;
+exports.OPTION_STOCK_NAME_MAX_LENGTH = 30;
+/** 한 번에 넣거나 맞출 수 있는 최대 수량 */
+exports.OPTION_STOCK_QUANTITY_MAX = 10_000;
+/** 저장된 재고 품목의 남은 수량. 값이 숫자가 아니면 0으로 본다(판매 쪽은 서버가 따로 막는다). */
+function optionStockRemaining(stock) {
+    const count = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+    return Math.max(0, count(stock.stockQuantity) - count(stock.reservedQuantity) - count(stock.orderedQuantity));
+}
 /** 고시 항목의 표시 순서·이름·최대 길이(글자). API 검증과 판매자 입력이 같이 쓴다. */
 exports.PRODUCT_NOTICE_FIELDS = [
     { key: 'itemName', label: '품명', maxLength: 60 },

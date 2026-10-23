@@ -3,6 +3,7 @@ import {
   PRODUCT_NOTICE_DEFAULT_CERTIFICATION,
   PRODUCT_NOTICE_DEFAULT_ORIGIN,
   PRODUCT_NOTICE_FIELDS,
+  optionStockRemaining,
   resolveProductNotice,
 } from './benchmark.types.js';
 
@@ -34,5 +35,17 @@ describe('상품정보제공고시 공통 계약', () => {
     const resolved = resolveProductNotice({ origin: ' 국내산(경기도 여주) ', producer: '   ' }, fallback);
     expect(resolved.origin).toBe('국내산(경기도 여주)');
     expect(resolved.producer).toBe('디어 오키드');
+  });
+});
+
+describe('옵션 재고 남은 수량', () => {
+  it('넣은 수량에서 결제 중·결제 완료 수량을 뺀다', () => {
+    expect(optionStockRemaining({ stockQuantity: 10, reservedQuantity: 2, orderedQuantity: 3 })).toBe(5);
+  });
+
+  it('숫자가 아닌 값은 0으로 보고 음수는 0으로 둔다', () => {
+    expect(optionStockRemaining({ stockQuantity: 4 })).toBe(4);
+    expect(optionStockRemaining({ stockQuantity: '4', reservedQuantity: 1 })).toBe(0);
+    expect(optionStockRemaining({ stockQuantity: 1, orderedQuantity: 3 })).toBe(0);
   });
 });

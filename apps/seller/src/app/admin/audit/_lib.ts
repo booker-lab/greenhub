@@ -28,6 +28,8 @@ export const ACTION_LABEL: Record<string, string> = {
   'admin.partner_inquiry.contacted': '입점 문의 연락 표시',
   'admin.partner_inquiry.deleted': '입점 문의 삭제',
   'store.payout_account.updated': '정산 계좌 변경',
+  'store.option_stock.created': '옵션 재고 추가',
+  'store.option_stock.updated': '옵션 재고 변경',
 };
 
 const TARGET_LABEL: Record<string, string> = {

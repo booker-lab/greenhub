@@ -17,7 +17,11 @@ import { RetentionService } from '../retention/retention.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { normalizeKoreanMobilePhone } from './_lib/korean-mobile-phone';
-import { normalizeGift, resolveSelectedOptions } from './_lib/round-order-extras';
+import {
+  collectOptionStockLines,
+  normalizeGift,
+  resolveSelectedOptions,
+} from './_lib/round-order-extras';
 import { assertStoreAcceptsOrders } from '../stores/store-availability';
 
 @Injectable()
@@ -84,6 +88,13 @@ export class RoundOrderCreateService {
         idempotencyKey: `checkout:${requestId}`,
         deliveryAddress: dto.deliveryAddress,
         items: dto.roundItems!,
+        // 재고 품목에 연결된 옵션은 회차 한도와 같은 예약으로 잡는다.
+        optionStock: collectOptionStockLines(
+          dto.roundItems!.map((item) => ({
+            quantity: item.quantity,
+            selectedOptions: optionPricing.byRoundItemId.get(item.roundItemId)?.selected,
+          })),
+        ),
       });
       const roundItems = reservation.items.map((item) => {
         const option = optionPricing.byRoundItemId.get(item.roundItemId);
