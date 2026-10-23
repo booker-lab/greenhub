@@ -3,7 +3,14 @@
 > **출처:** `admin-tabs-improve-plan.md` §C (세션93 진단, 세션95 `/further` 확정).
 > SDD 분리·반응형(카드형)은 세션91에 끝남(`drivers`, `124768a`).
 > 본 진단은 그 위의 **백엔드 필터 배선·타입 안전·기능 부재** 정리.
-> **사용자 확정 = T1+T2 묶음.** 진행(2026-10-04 코드 대조): T1(S1 서버 status 필터)은 사람 결정 대기: `suspended` 필드는 정지할 때만 기록돼 대부분 문서에 없어, 서버 쿼리(`==false`·`!=`)로 바꾸면 기사가 목록에서 빠진다. 필드 채우기 마이그레이션 또는 F5 범위 결정이 선결이다. T2(S2)·S3 e2e·T3~T5·R1·R2는 미착수. 조회 실패 시 "다시 조회"는 계획 밖 #99로 있음.
+> **사용자 확정 = T1+T2 묶음(2026-05).**
+>
+> **현재 상태(2026-10-23, main `e4d781db` 코드 대조 — 이 절이 아래 진행 서술보다 우선):**
+> - **완료:** 커서 "더 보기"(기본 100·상한 200, #593 — `limit(100)` 누락 위험 해소) · F3 가입일 표시(#593) · F4 중 전화(`tel:` 링크, #593, 차량 정보는 없음) · 목록 응답 필드 축소(#578·#593) · 승인·정지·복구 변경 기록(#576) · 조회 실패 "다시 조회".
+> - **T1 막힘 이유 갱신:** 2026-10-04의 "`suspended` 필드 없는 문서가 쿼리에서 빠진다"는 더 이상 맞지 않다. 서버는 `role+createdAt` 최신순으로 한 쪽을 읽은 뒤 그 쪽 안에서 status를 메모리로 거른다(필드가 없어도 정상, `apps/api/src/admin/admin-lists.spec.ts`). 화면은 여전히 status를 보내지 않고 받은 기사 안에서 `filterByTab`으로 거른다.
+> - **남은 것(IMPLEMENTATION_GAP):** T2 서버 `any` 정리 · T4 검색 · T5 화면 위 새로고침 버튼 · S3 관리자 기사 e2e(`apps/e2e/tests/`에 없음) · F5 정렬 · F6·R1·R2(저우선).
+> - **사람 결정(SEMANTIC_CONFLICT):** T1을 계속할지 — (a) 지금 클라이언트 필터 유지(T1 폐기) (b) 서버 필터 연결 + "이 쪽에는 없음·더 보기" 안내(서버는 걸러진 결과가 0명이어도 `hasMore`를 보냄) (c) 필드 채우기 마이그레이션 뒤 Firestore 쿼리 필터. 2026-05의 "서버 필터로 배선" 확정(C-0)은 이 결정 전까지 보류로 읽는다.
+> - 관리자 화면은 `apps/seller/src/app/admin/drivers/`, hook은 `apps/seller/src/hooks/useAdmin.accounts.ts`(`useAdminPagedList`), 계약은 [`../../api/admin.md`](../../api/admin.md) §7. 아래 C-0~C-9는 2026-05 진단 기록이다.
 
 ## 0. 공통 정합성 검토 기준 (모든 어드민 탭 공통)
 
@@ -23,18 +30,18 @@
 - **필터 방식 = 서버 필터로 배선**(C-1의 T1). 백엔드 status 분기가 이미 완비라 죽은 코드 활성화 + limit(100) 누락 위험 해소. 정산 탭(세션86) 선례와 동일.
 - **이번 세션 = 진단·문서화만**(코드 변경 0). 구현은 별도 착수.
 
-## C-1. 진단 대상 파일 (현 상태)
+## C-1. 대상 파일 (2026-10-23 실측)
 | 파일 | 라인 | 역할 |
 |------|------|------|
 | `drivers/page.tsx` | 9 | dynamic ssr:false 래퍼 |
-| `drivers/_client.tsx` | 92 | 탭 상태·ConfirmModal·approve/toggleSuspend 핸들러 |
-| `drivers/_lib.ts` | 48 | ACTION_META·STATUS_TABS·filterByTab(클라 필터) |
-| `_components/DriverList.tsx` | 102 | 카드 리스트 + 액션 버튼 분기(로딩·빈결과 가드 포함) |
+| `drivers/_client.tsx` | 150 | 탭 상태·확인창·approve/toggleSuspend 핸들러·더 보기 |
+| `drivers/_lib.ts` | 79 | ACTION_META·STATUS_TABS·filterByTab(클라 필터) |
+| `_components/DriverList.tsx` | 149 | 카드 리스트(전화·가입일) + 액션 버튼 분기 |
 | `_components/DriverBadge.tsx` | 24 | 상태 뱃지(정지/승인완료/승인대기) |
 
 → 모두 500 한도 내. **분할(과분할) 불필요** — 세션91 users/banner 전례.
 
-## C-2. 정합성 진단 — 🔴 백엔드 status 필터가 프론트에 미배선 (반쪽 기능)
+## C-2. 정합성 진단 — 백엔드 status 필터가 프론트에 미배선 (2026-05 기록, 현재는 머리말 사람 결정)
 
 | 레이어 | status 필터 | 위치 |
 |--------|------------|------|
@@ -44,7 +51,7 @@
 | 프론트 필터 | `filterByTab`로 **클라이언트에서만** 필터 | `_lib.ts:43-48` |
 
 → **백엔드 status 분기 = 완전한 죽은 코드.** 세션86 정산 탭과 동형 결함(백·hook은 status 지원, UI/배선 한 겹만 비어 있음).
-추가로 `getDrivers`는 `.limit(100)`(`admin.service.ts:216`) → 드라이버 100명 초과 시 일부 탭 누락 가능.
+~~추가로 `getDrivers`는 `.limit(100)` → 100명 초과 시 누락 가능~~ — #593 커서 "더 보기"로 해소.
 **사용자 확정 = 서버 필터로 배선**(C-0).
 
 ## C-3. 정합성 진단 — 타입 안전(any) + 도메인 타입 부재
@@ -53,7 +60,7 @@
 |------|------|------|
 | `getDrivers` service | `d.data()` → `any[]`, `driverApproved`·`suspended` 타입 미보증 | `admin.service.ts:219-229` |
 | `AdminDriver.suspended` | `boolean` **옵셔널** vs 백엔드 필터는 boolean 가정 | `useAdmin.ts:68` |
-| `AdminDriver.createdAt` | `unknown` — 화면 미표시(사실상 미사용) | `useAdmin.ts:69` |
+| `AdminDriver.createdAt` | ✅ 가입일 표시(#593) | `DriverList.tsx` |
 
 → stores의 `StoreStatus` SSOT 불일치와 같은 계열. 단 drivers는 **상태 enum이 아니라 boolean 2개(`driverApproved`·`suspended`) 조합**이라 union 교정 대상은 아님. `DriverStatus`(`all\|pending\|approved\|suspended`)는 **UI 탭 키**일 뿐 도메인 필드와 1:1 아님(파생값).
 
@@ -61,9 +68,9 @@
 
 - **F1. 검색 없음** — 이름·이메일 텍스트 검색 부재. orders 탭 `TextInput` 패턴 재사용 가능. (stores T6·orders F1과 대칭)
 - **F2. 새로고침 버튼 없음** — hook에 `reload` 있으나 UI 미노출. approve/suspend 후 자동 reload만 존재, 외부 변경 수동 갱신 불가. (stores T9·orders F2와 동일)
-- **F3. 가입일 미표시** — `createdAt` 수신하나 화면에 없음. 승인 판단에 가입 시점 유용. 카드에 표시만 추가(저위험).
-- **F4. 드라이버 상세 정보 부재** — 이름·이메일만. 전화번호·차량 등 운영 정보 없음. (백엔드 데이터모델 의존 → 필드 존재 여부 선확인 필요, 별도 SDD 가능성)
-- **F5. 정렬·페이지네이션 없음** — 가입일 desc 고정, `limit(100)`. (현 규모 미달이나 부채 기록)
+- **F3. 가입일 미표시** — ✅ #593. `createdAt` 수신하나 화면에 없음. 승인 판단에 가입 시점 유용. 카드에 표시만 추가(저위험).
+- **F4. 드라이버 상세 정보 부재** — 전화 ✅ #593, 차량 정보만 남음. 이름·이메일만. 전화번호·차량 등 운영 정보 없음. (백엔드 데이터모델 의존 → 필드 존재 여부 선확인 필요, 별도 SDD 가능성)
+- **F5. 정렬·페이지네이션 없음** — 페이지네이션 ✅ #593(커서 "더 보기"). 정렬은 가입일 최신순 고정(부채).
 - **F6. 액션 후 카드 사라짐 UX 보강** — approve/suspend 후 reload가 같은 탭만 갱신하므로, 방금 누른 카드는 현재 탭 모수에서 즉시 빠짐(승인대기→승인완료, 승인완료→정지). 어드민 입장에서 "방금 누른 카드가 사라졌네?" 의외성 가능. 옵션 = (a) 토스트 강화로 추적 보장 (b) 자동 탭 이동(승인 후 승인완료로 점프) (c) 현 동작 유지. (저우선, 별도 SDD)
 
 ## C-5. 표현 레이어 — 소소한 정리
@@ -75,11 +82,11 @@
 
 ### 그룹 A — 핵심 배선 (이번 범위)
 - **T1 (C-2). status 서버 필터 배선** — `useAdminDrivers`가 status를 쿼리로 전달(`/admin/drivers?status=...`), 탭 전환 시 재조회. `filterByTab`(클라 필터)은 백엔드 위임으로 축소/제거. 로딩·빈결과에서도 탭 유지(세션86 C6). **사용자 확정 = 서버 필터.** (백엔드 무변경 — 이미 완비)
-  - 정합성: 'all' 탭은 status 미전달(전체). limit(100) 누락은 별도(T5).
+  - 정합성: 'all' 탭은 status 미전달(전체). (2026-10: 서버가 쪽 단위 메모리 필터라 빈 쪽 안내가 필요 — 머리말 사람 결정)
 
 ### 그룹 B — 타입·기능 (저위험)
 - **T2 (C-3). 타입 정리** — service `any` → 최소 인터페이스, `AdminDriver.suspended` 기본값 정합(undefined→false 일관). (독립)
-- **T3 (F3). 가입일 표시** — 카드에 `createdAt` 표기(KST 포맷, `todayKST` util 계열 재사용). (독립, 저위험)
+- **T3 (F3). 가입일 표시** — ✅ #593. 카드에 `createdAt` 표기(KST 포맷, `todayKST` util 계열 재사용). (독립, 저위험)
 - **T4 (F1). 검색** — 이름·이메일 `TextInput` 필터. 클라이언트 필터(백엔드 무변경). 로딩·빈결과에서 유지(C6). (의존: 없음)
 - **T5 (F2). 새로고침 버튼** — `_client.tsx`에 reload 노출. (독립)
 
@@ -96,13 +103,15 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 세션91 패턴(탭별 한 커밋)에서 세션92 이후 **태스크별 한 세션** 패턴으로 강화됨.
 
 ## C-8. 차기 진입점
+
+> **2026-10-23 갱신:** T1은 머리말 (a)~(c) 사람 결정 뒤 착수(테스트 `_client.test.ts`·`_lib.test.ts`의 `filterByTab` 고정도 함께 수정). 결정 없이 가능한 일 = T2·T4·T5·S3. 아래는 2026-05 기록이다.
 - 구현 착수 = **S1(T1 — status 서버 배선)부터.** 본 문서 §C-9 세션 S1 체크리스트(10항목) 그대로 따른다.
 - S1 통과 → S2(T2 타입 정합) → S3(e2e) 순서. 각 세션 사이 운영 배포·육안 통과 대기 필수.
 - 정산 탭(세션86) 육안 선례 = 탭별 재조회·전체복귀 회귀 확인 필요 → 본 문서 §C-9 S1-7(육안 §5 신설)에 흡수.
 
 ## C-9. 해야 할 작업 — 세션95 `/further` + grill-me 확정 (착수 대기)
 
-> 출처: 2026-05-26 세션95 `/further` 4-결정 + grill-me 12-결정. 상세 계획서 = [`../../plans/admin-drivers-T1-T2-plan.md`](../../../plans/admin-drivers-T1-T2-plan.md).
+> 출처: 2026-05-26 세션95 `/further` 4-결정 + grill-me 12-결정. 상세 계획서 = [`docs/plans/admin-drivers-T1-T2-plan.md`](../../../plans/admin-drivers-T1-T2-plan.md).
 > 본 항목은 구현 착수 시점에 §C 진단을 그대로 따른다(중복 본문 금지 — 결정·범위만 기록).
 
 ### 사용자 확정 (12결정 — `/further` 4 + grill-me 8 통합)
@@ -114,9 +123,9 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 
 ### grill-me 추가 확정 (세부 설계)
 1. **시그니처** = `useAdminDrivers({ status }: { status: DriverStatus })` — 타 탭 선례(orders/settlements) 동형. `status === 'all'`이면 hook 내부에서 쿼리 미전달. (SSOT — 호출부는 탭 키 그대로 전달)
-2. **캐싱** = 신규 인프라 없이 기존 `useAdminList` deps 메커니즘 그대로. `withQuery('/admin/drivers', { status })` + `deps=[filters?.status]`. 탭 전환 시 매번 fetch(로딩 깜빡임 허용).
+2. **캐싱** = 신규 인프라 없이 기존 deps 메커니즘 그대로(2026-10: 기사 hook은 `useAdminPagedList`). `withQuery('/admin/drivers', { status })` + `deps=[filters?.status]`. 탭 전환 시 매번 fetch(로딩 깜빡임 허용).
 3. **`filterByTab` 함수** = 재사용처 0 확인 후 **완전 제거**(`_lib.ts`).
-4. **`limit(100)` 한도** = T1 범위 밖, F5 부채로 묶어 보존.
+4. **`limit(100)` 한도** = T1 범위 밖, F5 부채로 묶어 보존. (2026-10: #593 커서로 해소)
 5. **service `any` 교정 범위** = `getDrivers` 내부 **로컬 `DriverRow` 인터페이스만** 신설. shared 도메인 타입 건드림 안 함.
 6. **`!!driver.suspended` 정규화 범위** = `DriverBadge` + `DriverList` **둘에만**. `AdminDriver.suspended`는 옵셔널 유지(데이터 진실에 가깝다).
 7. **승인/정지 액션 후 UX** = 카드가 다른 탭으로 사라지는 동작 그대로 — **F6**으로 §C-4에 신설하고 본 범위 밖.
@@ -138,7 +147,7 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
   - C1 tsc 0 (admin·seller·consumer)
   - C2 biome 0 (신규 경고 0)
   - C3 `npm run build` 0 (⚠️ `npx next build` 금지)
-  - C4 500라인 한도 (현 최대 102 → 변동 없음)
+  - C4 500라인 한도 (2026-10 현재 최대 150)
   - C5 SSOT 토큰 (status 라벨은 기존 `_lib` STATUS_TABS 재사용)
   - C6 가드 유지 (로딩·빈결과에서 탭 표시)
   - C7 시각 회귀 0 (DOM 동일)
@@ -175,7 +184,7 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 
 #### S3 체크리스트
 - [ ] **S3-1.** 세션 90 어드민 e2e 인프라(`tests/admin/*.spec.ts` 또는 동등) 위치·진입점 확인. `project_admin_store_archive.md` 함정 3건(세션격리·networkidle·dotenv#) 미리 확인.
-- [ ] **S3-2.** 신규 스펙 `tests/admin/drivers-status-filter.spec.ts` 작성 — 시나리오 4건:
+- [ ] **S3-2.** 신규 스펙 `apps/e2e/tests/admin-drivers-status-filter.spec.ts` 작성 — 시나리오 4건:
   - **사례 A**: '승인대기' 탭 진입 → `GET /admin/drivers?status=pending` 호출 관측 → 응답 명단 = 화면 카드 명단(이름·id 1:1 비교).
   - **사례 B**: '승인완료' 탭 진입 → `?status=approved` 관측 → 명단 일치.
   - **사례 C**: '정지' 탭 진입 → `?status=suspended` 관측 → 명단 일치.
@@ -187,7 +196,7 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 - [ ] **S3-7.** **CI 통과 후 #CL-55 §C 종결 선언** — 세션 메모리 `project_admin_tabs_improve.md` 갱신.
 
 ### 제외(별도 세션 — §C-4·§C-5 보존)
-- **F1** 검색(이름·이메일) / **F2** 새로고침 버튼 / **F3** 가입일 표시 / **F4** 드라이버 상세(전화·차량, 데이터모델 선확인 필요) / **F5** 정렬·페이지네이션·`limit(100)` 한도 / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R1** 액션 버튼 메타화 / **R2** 공통 `SegmentedTabs` 통일.
+- **F1** 검색(이름·이메일) / **F2** 새로고침 버튼 / ~~F3 가입일 표시~~(✅ #593) / **F4** 드라이버 상세(전화 ✅ #593, 차량만 남음) / **F5** 정렬(페이지네이션은 ✅ #593) / **F6** 승인/정지 후 카드 자동 이동 vs 토스트 강화 (grill-me Q2-c 신설) / **R1** 액션 버튼 메타화 / **R2** 공통 `SegmentedTabs` 통일.
 
 ### 차기 진입점(C-8 보강)
 - **S1(T1) → 운영 배포·육안 → S2(T2) → 운영 배포·육안 → S3(e2e) → CI 통과 → 종결**.
@@ -199,13 +208,12 @@ T1 / T2 / T3 / T4 / T5 / (R1·R2 선택).
 ## 참고 문서
 
 ### 본 탭이 직접 참조하는 외부 문서
-- **세션95 `/further` 확정 상세 계획서** — [`../../plans/admin-drivers-T1-T2-plan.md`](../../../plans/admin-drivers-T1-T2-plan.md)
-  - T1+T2 한 묶음 착수 시 본 계획서를 따른다. 4-결정·체크리스트 출처.
-- **육안 검증 (코드 완료 후 §5 신설 예정)** — [`../pending-visual-verify.md`](../pending-visual-verify.md)
-  - 4탭 재조회·전체복귀·승인·정지 후 시각·기능 회귀 0.
+- **세션95 `/further` 확정 상세 계획서** — [`docs/plans/admin-drivers-T1-T2-plan.md`](../../../plans/admin-drivers-T1-T2-plan.md)
+  - 4-결정·체크리스트 출처. T1은 머리말 사람 결정 뒤에 따른다.
+- **육안 검증** — [`../pending-visual-verify.md`](../pending-visual-verify.md)는 이제 역사 기록이다. T1 착수 시 육안 항목은 새 확인 목록으로 만든다.
 - **선결 결정·별도 SDD 후보 (이번 범위 제외)**
-  - **F4 드라이버 상세 정보** — 데이터모델(전화·차량 등) 필드 선확인 → 없으면 백엔드 신설.
-  - **F5 정렬·페이지네이션** — 백엔드 쿼리·커서 변경. 현 규모 미달 부채.
+  - **F4 드라이버 상세 정보** — 전화는 #593, 차량 정보만 남음(데이터모델 선확인).
+  - **F5 정렬** — 페이지네이션은 #593, 정렬만 부채.
 
 ### 상위 인덱스 · 로드맵
 - 통합 인덱스: [`../admin-tabs-improve-plan.md`](../admin-tabs-improve-plan.md)

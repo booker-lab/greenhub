@@ -4,6 +4,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type * as admin from 'firebase-admin';
@@ -16,6 +17,12 @@ import {
 } from '../auth/invite-conflict';
 import { AuditService, type AdminAuditEntry } from '../common/audit/audit.service';
 import { FirestoreService } from '../firestore/firestore.service';
+import { customerOrderLabel } from '../notifications/customer-order-label';
+import { NotificationsService } from '../notifications/notifications.service';
+import {
+  REFUND_NOTICE_REASONS,
+  refundNoticeIdempotencyKey,
+} from '../notifications/refund-notice-reasons';
 import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.service';
 import type { OrderStatus } from '../orders/dto/update-status.dto';
 import { getAllowedTransitions } from '../orders/orders.helpers';
@@ -62,6 +69,8 @@ import {
 const LEGACY_REFUND_CLAIM_MS = 5 * 60 * 1000;
 // 판매자 초대 토큰 유효 기간(발급 시점부터 72시간).
 export const INVITE_TTL_MS = 72 * 60 * 60 * 1000;
+// 관리자 초대 내역 목록 상한(최근 발급순).
+export const INVITE_LIST_LIMIT = 50;
 
 // 관리자 목록 응답은 화면이 쓰는 필드만 내려준다(저장 배송지·세션·외부 로그인 식별자 등은 제외).
 const ADMIN_USER_LIST_FIELDS = ['id', 'email', 'name', 'phone', 'suspended', 'createdAt'] as const;
@@ -86,6 +95,7 @@ export class AdminService {
     private readonly settlements: SettlementsService,
     private readonly roundLifecycle: RoundOrderLifecycleService,
     private readonly audit: AuditService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   // 작업이 끝난 뒤 기록한다. 기록 실패로 이미 끝난 작업을 되돌리지 않으므로 오류 로그만 남긴다.
@@ -345,7 +355,7 @@ export class AdminService {
       const recovery = await this.settlements.cancelSettlement(orderId);
       result = { ...cancelled, ...recovery };
     } else {
-      result = await this.forceLegacyRefund(orderId, reason);
+      result = await this.forceLegacyRefund(orderId, reason, order);
     }
     // 이미 지급한 정산이면 화면이 "판매자에게 돌려받아야 할 금액"을 알리도록 응답과 기록에 싣는다.
     const recoveryAfter =
@@ -369,6 +379,7 @@ export class AdminService {
   private async forceLegacyRefund(
     orderId: string,
     reason: string,
+    before: Record<string, any>,
   ): Promise<{ ok: true; orderId: string } & CancelSettlementResult> {
     const claim = await this.claimLegacyRefund(orderId, reason);
     if (claim.kind === 'done') {
@@ -396,7 +407,40 @@ export class AdminService {
       throw error;
     }
 
+    // 회차 주문(cancelForRound customerNotice)과 같은 안내를 환불이 끝까지 확정된 뒤에만 보낸다.
+    if (this.wasPaidBeforeLegacyRefund(before)) {
+      await this.sendAdminRefundNotice(before, orderId);
+    }
     return { ok: true, orderId, ...recovery };
+  }
+
+  // 이미 취소가 끝났던 주문(상태 기록 없는 취소 포함)은 안내하지 않는다. 실패한 환불을 다시
+  // 처리하는 경우는 안내가 안 갔을 수 있어 보내고, 멱등 키로 중복을 막는다(회차 주문과 같은 기준).
+  private wasPaidBeforeLegacyRefund(order: Record<string, any>): boolean {
+    if (order['status'] === 'PENDING') return false;
+    if (order['status'] === 'CANCELLED') {
+      const cancellationStatus = order['cancellation']?.['status'];
+      return cancellationStatus != null && cancellationStatus !== 'COMPLETED';
+    }
+    return true;
+  }
+
+  private async sendAdminRefundNotice(order: Record<string, any>, orderId: string) {
+    if (!this.notifications || typeof order['userId'] !== 'string') return;
+    try {
+      await this.notifications.sendToUser(
+        order['userId'],
+        'ORDER_CANCELLED',
+        {
+          orderId: customerOrderLabel(order, orderId),
+          reason: REFUND_NOTICE_REASONS.ADMIN_REFUND,
+        },
+        orderId,
+        refundNoticeIdempotencyKey('ADMIN_REFUND', orderId),
+      );
+    } catch {
+      // 안내 실패가 이미 끝난 환불을 되돌리지 않는다. 발송 실패는 알림 서비스가 운영 이슈로 남긴다.
+    }
   }
 
   private async claimLegacyRefund(
@@ -699,6 +743,13 @@ export class AdminService {
     if (data['role'] !== 'driver') {
       throw new BadRequestException('드라이버 계정이 아닙니다.');
     }
+    // 승인 대기(목록의 pending 판정과 같은 기준)만 승인한다. 정지된 기사를 승인으로 되살리지 않는다.
+    if (data['suspended'] === true) {
+      throw new ConflictException('정지된 기사는 승인할 수 없습니다. 먼저 정지를 풀어 주세요.');
+    }
+    if (data['driverApproved'] === true) {
+      throw new ConflictException('이미 승인된 기사입니다.');
+    }
 
     await ref.update({
       driverApproved: true,
@@ -729,6 +780,8 @@ export class AdminService {
     if (dto.suspended) {
       await this.revokeSuspendedUserSessions(userId);
     }
+    // 정지는 막지 않는다. 배송 중인 배정 주문은 판매자가 배송 보류로 바꿔야 하므로 건수를 알려 준다.
+    const activeDeliveryCount = dto.suspended ? await this.countActiveDeliveries(userId) : 0;
     await this.recordAdmin({
       action: dto.suspended ? 'admin.driver.suspended' : 'admin.driver.unsuspended',
       actorId,
@@ -738,7 +791,27 @@ export class AdminService {
       after: { suspended: dto.suspended },
       reason: dto.reason,
     });
-    return { userId, suspended: dto.suspended };
+    return dto.suspended
+      ? { userId, suspended: true, activeDeliveryCount }
+      : { userId, suspended: false };
+  }
+
+  // 조회가 실패해도 이미 끝난 정지를 실패로 돌리지 않는다. null이면 화면이 "확인하지 못함"으로 안내한다.
+  private async countActiveDeliveries(driverId: string): Promise<number | null> {
+    try {
+      const snap = await (
+        this.firestore
+          .collection('orders')
+          .where('driverId', '==', driverId)
+          .where('status', '==', 'DELIVERING') as any
+      ).get();
+      return snap.size as number;
+    } catch (error) {
+      this.logger.error(
+        `[AdminDriver] 배송 중 주문 조회 실패 driver=${driverId} error=${(error as Error)?.name ?? 'unknown'}`,
+      );
+      return null;
+    }
   }
 
   // ── Invite ───────────────────────────────────────────────────────
@@ -770,12 +843,20 @@ export class AdminService {
     };
   }
 
+  // 최근 INVITE_LIST_LIMIT건만 준다. 한 건 더 읽어 더 있는지(hasMore)를 알려 화면이 상한을 안내한다.
   async getInvites() {
     const snap = await (
-      this.firestore.collection('invites').orderBy('createdAt', 'desc').limit(50) as any
+      this.firestore
+        .collection('invites')
+        .orderBy('createdAt', 'desc')
+        .limit(INVITE_LIST_LIMIT + 1) as any
     ).get();
 
-    return snap.docs.map((d: any) => d.data());
+    return {
+      invites: snap.docs.slice(0, INVITE_LIST_LIMIT).map((d: any) => d.data()),
+      hasMore: snap.docs.length > INVITE_LIST_LIMIT,
+      limit: INVITE_LIST_LIMIT,
+    };
   }
 
   /**
