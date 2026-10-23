@@ -87,6 +87,18 @@ test.describe('어드민 로컬 — 정산', () => {
       },
       { path: `storePayoutAccounts/${storeId}`, data: { storeId, ...fx.account } },
       settlement(fx.payId, fx.payOrderNumber, 'confirmed', PAY, 1),
+      // 지급은 정산의 주문이 있고 취소·환불 중이 아닐 때만 된다(#603) — 지급 대상만 배송 완료 주문을 둔다.
+      {
+        path: `orders/${fx.payId}-order`,
+        data: {
+          id: `${fx.payId}-order`,
+          storeId,
+          orderNumber: fx.payOrderNumber,
+          status: 'DELIVERED',
+          totalAmount: PAY.net + PAY.fee,
+          createdAt: new Date(now - 60 * 60_000),
+        },
+      },
       settlement(`e2e-adm-${runId}-paid`, fx.paidOrderNumber, 'paid', PAID, 2),
       ...Array.from({ length: FILLER_COUNT }, (_, i) => {
         const n = String(i + 1).padStart(3, '0');

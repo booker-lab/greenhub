@@ -116,6 +116,7 @@ test.describe('어드민 로컬 — 판매자 치우기·복구', () => {
     await loginLocalAdmin(page, admin as LocalAdmin);
   });
 
+  // 치우기·복구 뒤 목록 재조회는 병렬 실행(next dev) 부하에서 기본 5초를 넘길 수 있어 15초까지 기다린다.
   // 손님(비로그인)이 부르는 공개 API — 가게 소개·회차 목록·회차 상세·가게 상품 목록·상품 상세(가게·전체).
   const publicPaths = () => [
     `/stores/${fx.storeId}/public-profile`,
@@ -175,16 +176,16 @@ test.describe('어드민 로컬 — 판매자 치우기·복구', () => {
     expect(archiveMessage).toContain(`${fx.storeName} 판매자를 치울까요?`);
     expect(archiveMessage).toContain('주문·정산 기록이 하나라도 있는 판매자는 치울 수 없습니다.');
     // 기본 보기(활성)에서는 치운 판매자가 빠진다.
-    await expect(page.getByText('조건에 맞는 판매자가 없습니다.')).toBeVisible();
+    await expect(page.getByText('조건에 맞는 판매자가 없습니다.')).toBeVisible({ timeout: 15_000 });
     expect((await readDoc(`stores/${fx.storeId}`))?.status).toBe('archived');
     expect(await publicStatuses()).toEqual(allStatuses(404));
 
     // 상태를 '전체'로 바꾸면 '치움'으로 보이고 복구할 수 있다.
     await pickSelectOption(page, page.getByRole('combobox', { name: '상태', exact: true }), '전체');
-    await expect(storeRow(page)).toContainText('치움');
+    await expect(storeRow(page)).toContainText('치움', { timeout: 15_000 });
     const restoreMessage = await confirmRowAction(page, '복구', 'restore');
     expect(restoreMessage).toContain(`${fx.storeName} 판매자를 복구할까요?`);
-    await expect(storeRow(page)).toContainText('운영중');
+    await expect(storeRow(page)).toContainText('운영중', { timeout: 15_000 });
     const restored = await readDoc(`stores/${fx.storeId}`);
     expect(restored?.status).toBe('active');
     expect(restored?.archivedAt).toBeUndefined();
