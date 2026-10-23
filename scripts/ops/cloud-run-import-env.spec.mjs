@@ -11,7 +11,7 @@ import {
 } from './cloud-run-import-env.mjs';
 
 const SECRET_VALUE = 'jwt-secret-value-should-not-leak';
-const PROXY_VALUE = 'http://fixie:proxy-password@proxy.example.test:80';
+const PROXY_VALUE = 'http://fixie:proxy-password@proxy.example.test:80'; // trufflehog:ignore
 
 const railway = {
   JWT_SECRET: SECRET_VALUE,
