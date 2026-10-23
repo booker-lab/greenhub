@@ -172,10 +172,12 @@ export default function BoardClient() {
   }, [session?.user.id, session?.user.role, session?.user.accessToken, sessionStatus, reloadKey]);
 
   const orders = tab === 'preparing' ? preparing : delivering;
+  // 서버(UTC)와 휴대폰이 같은 날짜를 그리도록 한국 시간으로 고정한다(오전 9시 전 하루 밀림 방지).
   const today = new Date().toLocaleDateString('ko-KR', {
     month: 'long',
     day: 'numeric',
     weekday: 'short',
+    timeZone: 'Asia/Seoul',
   });
 
   return (

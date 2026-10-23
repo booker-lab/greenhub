@@ -19,13 +19,20 @@ vi.mock('@/auth', () => ({
 // vitest에는 '@/' 별칭 설정이 없어 같은 모듈로 잇는다.
 vi.mock('@/lib/content-security-policy', () => import('./lib/content-security-policy'));
 vi.mock('@/app/login/login-notice', () => import('./app/login/login-notice'));
+vi.mock('@/lib/initial-session', () => import('./lib/initial-session'));
 
 const { config, proxy } = await import('./proxy');
+const { decodeInitialSession, encodeInitialSession, INITIAL_SESSION_HEADER } = await import(
+  './lib/initial-session'
+);
 
 const event = {} as NextFetchEvent;
 
-async function run(path: string): Promise<Response> {
-  const response = await proxy(new NextRequest(`https://driver.example.test${path}`), event);
+async function run(path: string, headers?: Record<string, string>): Promise<Response> {
+  const response = await proxy(
+    new NextRequest(`https://driver.example.test${path}`, { headers }),
+    event,
+  );
   if (!response) throw new Error('proxy returned no response');
   return response;
 }
@@ -77,6 +84,46 @@ describe('기사 proxy 로그인 검사', () => {
       expect(response.headers.get('x-middleware-next')).toBe('1');
     }
     expect(state.authPaths).toEqual([]);
+  });
+});
+
+describe('기사 proxy 첫 화면 세션 전달', () => {
+  const driverSession = {
+    user: { id: 'driver-1', name: '김기사', role: 'driver', accessToken: 'access-1' },
+    expires: '2099-01-01T00:00:00.000Z',
+  };
+  const forged = encodeInitialSession({
+    user: { id: 'other', role: 'driver', accessToken: 'forged' },
+    expires: '2099-01-01T00:00:00.000Z',
+  } as never);
+  const passedSession = (response: Response) =>
+    response.headers.get(`x-middleware-request-${INITIAL_SESSION_HEADER}`);
+
+  it('보호 경로에서 확인한 기사 세션을 그대로 layout에 넘긴다(브라우저가 보낸 값은 덮어쓴다)', async () => {
+    state.session = driverSession;
+    for (const path of ['/board', '/board/order-1', '/map', '/profile']) {
+      const response = await run(path, { [INITIAL_SESSION_HEADER]: forged });
+      expect(decodeInitialSession(passedSession(response))).toEqual(driverSession);
+    }
+  });
+
+  it('공개 경로에서는 세션을 넘기지 않고 브라우저가 보낸 같은 이름의 헤더도 지운다', async () => {
+    state.session = driverSession;
+    for (const path of ['/', '/login']) {
+      const response = await run(path, { [INITIAL_SESSION_HEADER]: forged });
+      expect(passedSession(response)).toBeNull();
+      expect(response.headers.get('x-middleware-override-headers')).not.toContain(
+        INITIAL_SESSION_HEADER,
+      );
+    }
+    expect(state.authPaths).toEqual([]);
+  });
+
+  it('로그인 안내로 보내는 경우에는 세션을 넘기지 않는다', async () => {
+    state.session = { user: { role: 'admin' } };
+    const response = await run('/board', { [INITIAL_SESSION_HEADER]: forged });
+    expect(response.status).toBe(307);
+    expect(passedSession(response)).toBeNull();
   });
 });
 

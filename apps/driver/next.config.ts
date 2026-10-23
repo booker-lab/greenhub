@@ -94,6 +94,15 @@ const networkOnlyRuntimeCaching = [
     handler: 'NetworkOnly' as const,
     options: { cacheName: 'apis' },
   },
+  // 로그인 검사 화면(/board·/map·/profile)의 문서·RSC 응답에는 루트 layout이 넘긴 세션(API 토큰
+  // 포함)이 실린다. 기본 "pages"·"pages-rsc" NetworkFirst 규칙이 이를 기기에 남기지 않게 한다.
+  // 이 화면은 API 조회 없이는 쓸 수 없어 오프라인 캐시로 얻는 것이 없다.
+  {
+    urlPattern: ({ sameOrigin, url }: { sameOrigin: boolean; url: URL }) =>
+      sameOrigin && /^\/(?:board|map|profile)(?:\/|$)/.test(url.pathname),
+    handler: 'NetworkOnly' as const,
+    options: { cacheName: 'driver-protected-pages-network-only' },
+  },
 ];
 
 // next-pwa 기본 precache 제외 규칙에 Pretendard 글자 범위 조각(92개, 약 3MB)을 더한다.
