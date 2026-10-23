@@ -700,13 +700,13 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### ROUND-PAYMENT-RETRY-DOUBLE-HOLD
 - [ ] 소비자가 결제창을 닫고 새 결제 시도 ID로 다시 결제하면(#328), 이전 시도의 `PENDING` 주문·`HELD` 예약이 결제 실패 웹훅 또는 15분 만료 정리(1분 주기)까지 최대 약 16분 동안 회차 배송지·수량·상품 한도를 함께 차지한다. **2026-10-04 결정: 파일럿 동안 유지한다.** 즉시 해제하려면 늦게 도착한 이전 결제(늦은 결제 재확보·자동 환불) 흐름까지 다시 맞춰야 해서 위험이 이득보다 크다. 주문 오픈 날 '한도 마감'이 비정상적으로 빨리 나오면 우선 대응한다.
-- 2026-10-10 결정: 이전 예약 유지는 그대로 두고, 같은 회차에서 고객 한 명이 동시에 가질 수 있는 만료 전 결제 예약을 3건으로 제한한다(4번째 시도는 409 안내). 구현: `OrderCapacityService` `MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND`.
+- 2026-10-10 결정: 이전 예약 유지는 그대로 두고, 같은 회차에서 고객 한 명이 동시에 가질 수 있는 만료 전 결제 예약을 3건으로 제한한다(4번째 시도는 409 안내). 구현: `OrderCapacityService` `MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND`. 2026-10-24 코드 대조: #546의 품목별 1인 상한도 만료 전 `HELD` 예약을 합산하므로, 재시도 수량이 상한에 걸리면 이전 예약이 만료(15분)될 때까지 409를 받을 수 있다.
 
 ### CI-REQUIRED-CHECK
 - [ ] **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다. 2026-10-09 CI 추가(#417) 뒤 PR마다 통과한다. 남은 일은 branch protection 필수 검사 지정(사용자)이다.
 
 ### STORE-COMMISSION-RATE-UNUSED
-- [x] **2026-10-21 결정 ②로 반영(미배포)**: 정산 생성이 같은 transaction에서 가게 `commissionRate`(0~1)를 쓰고, 없으면 `PLATFORM_FEE_RATE`(기본 5%)를 쓴다. 이미 만든 정산은 다시 계산하지 않는다. 어드민 판매자 탭은 % 단위로 받고 "다음 정산부터 적용"을 안내한다. 이전 기록: 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
+- [x] **2026-10-21 결정 ②로 반영(2026-10-23 `951044f2` 운영 반영)**: 정산 생성이 같은 transaction에서 가게 `commissionRate`(0~1)를 쓰고, 없으면 `PLATFORM_FEE_RATE`(기본 5%)를 쓴다. 이미 만든 정산은 다시 계산하지 않는다. 어드민 판매자 탭은 % 단위로 받고 "다음 정산부터 적용"을 안내한다. 이전 기록: 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
 
 ### SILENT-REFUND-CUSTOMER-NOTICE
 - [x] **2026-10-15 사용자 결정: 현재 문구로 확정**(`apps/api/src/notifications/refund-notice-reasons.ts`의 `ROUND_CANCELLED`·`ADMIN_REFUND`·`LATE_PAYMENT`, 코드 변경 없음). 이전 기록: 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다. 2026-10-09 코드 반영(#420, 운영 반영). 남은 일은 `apps/api/src/notifications/refund-notice-reasons.ts` 문구 확정이다.
@@ -718,7 +718,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] **2026-10-15 사용자 콘솔 확인: 켜져 있다.** 운영 `green-e4fe3` `(default)` 재해 복구 화면: PITR 사용 설정, 보관 7일, 가장 이른 버전 2026-10-08 23:46 KST. 예약 백업 일일, 보관 14일(주간 백업 없음). 같은 날 Google Cloud 콘솔 백업 목록 확인: 2026-10-09부터 10-15까지 매일 새벽(약 00:30~01:20 KST) 백업 7개가 생성돼 있고 각각 14일 뒤 만료된다. 남은 일: 비운영 프로젝트(또는 새 데이터베이스)로 복구 연습 1회. 이전 기록: 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이었다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
 
 ### ROUND-HOLD-ABUSE-LIMITS
-- [x] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. **2026-10-12 구현 완료(2026-10-13 운영 반영)**: 주문 요청 수량·회차 품목 수 입력 상한(#422), 같은 고객의 같은 회차 활성 결제 예약 최대 3건(#427, `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`의 이전 예약 유지는 그대로, `checkout-hold-per-user.spec.ts`), 운영에서 판매자 초대 가입 외 `POST /auth/register` 403(#474, `auth.service.ts` `register`). **2026-10-18 결정으로 운영은 판매자 초대 가입을 포함한 이메일 가입과 이메일 로그인을 모두 403으로 거부하도록 바뀌었다**(`docs/specs/api/auth.md` §7, 운영 반영은 다음 배포 묶음). 운영 외 환경의 register·login은 그대로 열려 있다.
+- [x] **2026-10-10 결정**: 결제 없이 자리를 묶어 두지 못하게 상한을 건다. **2026-10-12 구현 완료(2026-10-13 운영 반영)**: 주문 요청 수량·회차 품목 수 입력 상한(#422), 같은 고객의 같은 회차 활성 결제 예약 최대 3건(#427, `ROUND-PAYMENT-RETRY-DOUBLE-HOLD`의 이전 예약 유지는 그대로, `checkout-hold-per-user.spec.ts`), 운영에서 판매자 초대 가입 외 `POST /auth/register` 403(#474, `auth.service.ts` `register`). **2026-10-18 결정으로 운영은 판매자 초대 가입을 포함한 이메일 가입과 이메일 로그인을 모두 403으로 거부하도록 바뀌었다**(`docs/specs/api/auth.md` §7, 2026-10-20 `71085566` 운영 반영). 운영 외 환경의 register·login은 그대로 열려 있다.
 
 ### OPERATION-ISSUE-MANUAL-RESOLVE
 - [x] **2026-10-13 #510 구현(2026-10-13 `098affbc` 운영 반영)**: 판매자·관리자가 메모와 함께 운영 기록을 `RESOLVED`로 닫는다. 정산 보류·환불 미확정 유형 3종은 관리자만 닫는다(판매자 운영 화면 `ResolveIssueModal`, 계약은 `docs/specs/mvp-sales-round-direct-delivery.md` `operationIssues`). 이전 기록: 환불 재시도·문자 재발송 외의 운영 기록은 닫을 방법이 없어 홈 경고와 아침 텔레그램 요약에 계속 남는다. **2026-10-10 결정**: 판매자·관리자가 메모를 남기고 닫는다. 운영 기록 API를 고치는 병행 PR #436 병합 뒤 구현한다.

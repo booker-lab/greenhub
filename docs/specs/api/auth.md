@@ -320,7 +320,7 @@ POST /auth/kakao-login
 POST /auth/refresh
 ```
 
-`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `login`은 클라이언트 IP+정규화한 이메일 단위로 세고, 이메일과 무관한 클라이언트 IP 단위 1분 60회 상한을 함께 둔다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다(`apps/api/src/auth/auth.controller.ts`). `refresh`는 서명 검증된 refresh token의 사용자 단위로 세고(검증 실패 시 IP 단위), 그 밖의 인증 요청은 서명 검증된 access token의 사용자 단위, 없으면 클라이언트 IP 단위로 센다. 집계 기준은 `ClientThrottlerGuard`가 정하고, 클라이언트 IP는 `trust proxy` 홉 수(`TRUST_PROXY_HOPS`, 미설정 시 Railway 런타임 2·그 밖 0)로 해석한 Express `req.ip`다. 이 한도와 집계 기준은 `apps/api/src/common/guards/client-throttler.guard.spec.ts`가 검증한다.
+`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `login`은 클라이언트 IP+정규화한 이메일 단위로 세고, 이메일과 무관한 클라이언트 IP 단위 1분 60회 상한을 함께 둔다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다(`apps/api/src/auth/auth.controller.ts`). `refresh`는 서명 검증된 refresh token의 사용자 단위로 세고(검증 실패 시 IP 단위), 그 밖의 인증 요청은 서명 검증된 access token의 사용자 단위, 없으면 클라이언트 IP 단위로 센다. 집계 기준은 `ClientThrottlerGuard`가 정하고, 클라이언트 IP는 `trust proxy` 홉 수(`TRUST_PROXY_HOPS`, 미설정 시 Railway 런타임 2·그 밖 0, 단 Railway 밖 배포 환경(`GREENHUB_ENVIRONMENT_NAME` 있음)은 미설정이면 기동을 거부한다, `apps/api/src/config/runtime-config.ts` `resolveTrustProxyHops`, #605)로 해석한 Express `req.ip`다. 이 한도와 집계 기준은 `apps/api/src/common/guards/client-throttler.guard.spec.ts`가 검증한다.
 
 주의:
 
@@ -481,6 +481,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-24 | 코드 대조: Railway 밖 배포 환경의 `TRUST_PROXY_HOPS` 필수(#605) 반영 |
 | 2026-10-23 | 세 앱 `jwt` callback의 `GET /auth/session` 검증 성공을 같은 access token에 한해 60초 재사용(#627). revocation window를 API 데이터 요청 즉시·앱 세션 최대 60초로 조정(사용자 결정), `auth-session-lifecycle.spec.ts` 정지·철회 시험을 60초 뒤 끊김 확인으로 변경 |
 | 2026-10-21 | 운영의 새 판매자 가입을 "관리자 초대 링크 → 카카오 로그인"으로 결정: `kakao-login`의 `inviteToken`, 사용자 생성 트랜잭션 안 초대 재판정·소모, 인증된 카카오 이메일만 받는 사람 대조, 다른 역할 기존 계정 409 `kakao_account_in_use`, 판매자 앱 `/invite/[token]`·`/login/error` |
 | 2026-10-21 | 소비자 회원 탈퇴 `DELETE /auth/me`(W5): 진행 중 주문·결제 예약 409, 세션 폐기·개인정보 필드 삭제·`withdrawnAt`·연결 문서 삭제 한 트랜잭션, 부속 기록 정리, 카카오 Admin Key 연결 끊기(실패해도 성공·운영 알림), `auth.withdrawn` 감사, 탈퇴 문서의 토큰·refresh 거부 |

@@ -139,7 +139,7 @@ GET /stores/:storeId/products
 GET /stores/:storeId/products/:productId
 ```
 
-현재 store-scoped GET에는 controller-level JWT guard가 없다. 기본 목록은 `isActive !== false`이면 활성 상품만 조회한다.
+현재 store-scoped GET에는 controller-level JWT guard가 없다. 목록은 익명 공개 조회라 `query.isActive`와 무관하게 `isActive === true`이고 `testOnly !== true`인 상품만 돌려주며, 치운 가게면 404다(`products.service.ts` `getProducts`).
 
 query:
 
@@ -165,7 +165,7 @@ GET /products
 GET /products/:productId
 ```
 
-public 목록/상세는 `isActive === true` 상품만 노출하며 `testOnly === true` 상품을 제외한다.
+public 목록/상세는 `isActive === true` 상품만 노출하며 `testOnly === true` 상품을 제외한다. 치운(`archived`) 가게의 상품은 목록에서 빼고 상세는 404로 숨긴다(#593, `products.service.ts`, `apps/api/src/stores/store-availability.ts`). store-scoped 공개 조회와 배송비 공개 조회도 치운 가게면 404다.
 
 이 경로는 다중 store 상품을 함께 반환할 수 있으므로 public summary에 `storeId`가 포함될 수 있다.
 
@@ -193,8 +193,11 @@ DELETE /stores/:storeId/products/:productId
 
 ```text
 GET   /stores/:storeId/delivery-config
+GET   /stores/:storeId/delivery-config/owner
 PATCH /stores/:storeId/delivery-config
 ```
+
+`/owner`는 판매자 설정 화면용이다(JWT + `seller`·`admin`, 소유자 확인). 치운 가게의 판매자도 자기 배송비 설정을 볼 수 있게 공개 조회와 나눴다(#593).
 
 현재 공개 타입:
 
@@ -277,6 +280,7 @@ legacy 주문의 기본 계산 helper는 현재 orders domain에 있다.
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-24 | 코드 대조: 치운 가게 상품·배송비 공개 조회 숨김과 판매자용 `delivery-config/owner` 경로(#593) 반영 |
 | 2026-08-23 | AI selection/content 필드, public API, 실제 색상 필터·정렬, ownership, legacy/회차 경계에 맞춰 전면 정합화 |
 | 2026-04-23 | legacy 공동구매 수량 기반 계약 반영 |
 | 2026-03-26 | 초기 products 설계 초안 |
