@@ -19,7 +19,7 @@
 - API `JwtStrategy`와 Firebase custom-token 경계가 현재 Firestore user의 role, `driverApproved`, `suspended`를 확인하며, stale/suspended/role-mismatch/missing-user/cross-driver 경계가 기존 candidate Rules/API 회귀로 확인됐다.
 - 직접 근거: `apps/api/src/auth/auth.controller.spec.ts`, `apps/api/src/auth/auth.service.spec.ts`, `apps/api/src/auth/strategies/jwt.strategy.spec.ts`.
 
-`AUTH-SESSION-CLAIM-REVOCATION`의 static/refresh 경계는 `IMPLEMENTED / PROVEN`이다. `AuthService.refresh()`는 rotation record 검증 뒤 authoritative user를 재조회해 `suspended`/`role`/`storeId`/`driverApproved` 불일치를 token/session write 없이 거부하고, `GET /auth/session`과 세 앱 `jwt` callback이 same-deployment session authority를 재검증한다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts`의 `refresh current authority`, `getSession same-deployment authority`. revocation window는 2026-09-28 결정(D2)으로 **즉시(다음 요청)**로 확정했고, Preview 브라우저 증거는 원격 회차 E2E run `36341189483`의 `auth-session-lifecycle.spec.ts` 12건이다(2026-10-10 변경 이전 source 기준). 로그아웃 시 서버 refresh token 폐기는 세 앱 Auth.js `events.signOut`에서 수행한다(§6).
+`AUTH-SESSION-CLAIM-REVOCATION`의 static/refresh 경계는 `IMPLEMENTED / PROVEN`이다. `AuthService.refresh()`는 rotation record 검증 뒤 authoritative user를 재조회해 `suspended`/`role`/`storeId`/`driverApproved` 불일치를 token/session write 없이 거부하고, `GET /auth/session`과 세 앱 `jwt` callback이 same-deployment session authority를 재검증한다. 직접 근거: `apps/api/src/auth/auth.service.spec.ts`의 `refresh current authority`, `getSession same-deployment authority`. revocation window는 2026-09-28 결정(D2)으로 **즉시(다음 요청)**로 확정했고, 2026-10-23 결정으로 API 데이터 요청은 즉시, 세 앱 Auth.js 세션은 최대 60초(같은 access token의 검증 성공 재사용, #627)로 나눴다(§6). Preview 브라우저 증거는 원격 회차 E2E run `36341189483`의 `auth-session-lifecycle.spec.ts` 12건이다(2026-10-10 변경 이전 source 기준, API 거절 즉시 끊김 시험은 다음 회차 E2E에서 확인). 로그아웃 시 서버 refresh token 폐기는 세 앱 Auth.js `events.signOut`에서 수행한다(§6).
 
 ## 1. 인증 계층
 
@@ -255,7 +255,7 @@ rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/s
 문서의 `suspended/role/storeId/driverApproved`를 재검증한다
 (`apps/api/src/auth/strategies/jwt.strategy.spec.ts`).
 
-관리자가 계정을 정지하거나 role/store 연결·기사 승인을 바꾼 뒤 **API 데이터 요청의 revocation window는 즉시(다음 요청)**다(2026-09-28 결정 D2). 웹 앱 화면 세션은 API 거절 즉시 또는 최대 60초 안에 끝난다(2026-10-24 결정, 아래 48A). 이미 발급된 API access token도 `JwtStrategy.validate()`가 요청마다 authoritative user를 재조회해 `suspended`·role 불일치·`driverApproved` 철회를 403으로 거부하고(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`), Firestore Rules는 `get(users/{uid})`로 `suspended`·role·storeId를 실시간 확인한다. 다만 refresh 경로는 더 이상 stale claims를 재발급하지 않는다: `AuthService.refresh()`가 authoritative user를 재조회해 불일치를 거부하고(`refresh current authority`), `GET /auth/session`이 `JwtAuthGuard` 재검증 + authoritative user 재조회 + access token `sid` 세션 존재 검사로 same-deployment session authority를 확인하며(`getSession same-deployment authority`), 세 앱 `jwt` callback이 이를 확인한다(같은 access token의 성공은 60초 재사용, 48A).
+관리자가 계정을 정지하거나 role/store 연결·기사 승인을 바꾼 뒤 기존 세션의 **revocation window는 API 데이터 요청은 즉시(다음 요청), 세 앱의 Auth.js 세션은 최대 60초**다(2026-09-28 결정 D2를 2026-10-23 사용자 결정으로 조정, #627). 이미 발급된 API access token도 `JwtStrategy.validate()`가 요청마다 authoritative user를 재조회해 `suspended`·role 불일치·`driverApproved` 철회를 403으로 거부하고(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`), Firestore Rules는 `get(users/{uid})`로 `suspended`·role·storeId를 실시간 확인한다. 다만 refresh 경로는 더 이상 stale claims를 재발급하지 않는다: `AuthService.refresh()`가 authoritative user를 재조회해 불일치를 거부하고(`refresh current authority`), `GET /auth/session`이 `JwtAuthGuard` 재검증 + authoritative user 재조회 + access token `sid` 세션 존재 검사로 same-deployment session authority를 확인하며(`getSession same-deployment authority`), 세 앱 `jwt` callback이 이를 확인한다. 같은 access token의 검증 성공은 60초(`SESSION_AUTHORITY_REUSE_MS`, `packages/shared/src/session-authority.ts`) 동안 재사용한다. 그래서 정지·철회 뒤 앱 세션은 화면의 API 요청이 거절(401/403)되면 그 자리에서 다시 검증해 끊기고(2026-10-24 보강, 아래 48A), API 요청이 없으면 그 구간이 끝난 다음 호출에서 끊긴다. 그동안 화면 틀은 보일 수 있지만 데이터 요청은 `JwtStrategy`가 즉시 거부한다.
 
 판정:
 
@@ -281,15 +281,16 @@ gap을 다음 최소 authority로 닫는다.
   read-only endpoint이며, `{ sub, role, storeId? }` projection만 반환한다
   (토큰·비밀값 반환 없음, write/rotation/deletion 없음).
 - 세 앱 `src/auth.ts`의 `jwt` callback은 `accessTokenExpires` TTL과 무관하게
-  `GET /auth/session`으로 권위를 확인한다(공통 구현 `packages/shared/src/session-authority.ts`
-  `revalidateSessionToken`). 같은 access token의 확인 성공은 `SESSION_AUTHORITY_REUSE_MS`(60초)
-  동안 재사용해 화면 이동마다 왕복하지 않는다(2026-10-24 결정, #627). access token이 바뀌거나
-  `update()` 요청(trigger `update`)이면 재사용하지 않는다. `401/403`은 명시적 폐기
+  `GET /auth/session`으로 권위를 확인한다(공용 `revalidateSessionToken`,
+  `packages/shared/src/session-authority.ts`). 2026-10-23(#627)부터 검증 성공 시각과
+  그 access token의 SHA-256 지문을 토큰에 적고, 같은 access token이면 60초 동안 API
+  확인을 건너뛴다. access token이 바뀌면(refresh·재로그인) 지문이 달라 바로 다시
+  확인하고, 화면의 `update()` 요청(판매자 가게 등록 직후 등)은 재사용하지 않는다. `401/403`은 명시적 폐기
   (logout·`suspended`·role/store mismatch·`driverApproved` 철회·앱 허용 role 밖)로
   fail-closed (`jwt`가 `null` 반환 → Auth.js cookie 삭제, `auth()`는 `null`).
   네트워크 throw·timeout·5xx·429는 transient으로 보존하고 다음 호출에 재시도하며
   전역 로그아웃으로 오인하지 않는다.
-- revocation window(2026-10-24 결정): API 데이터 요청은 `JwtStrategy`가 요청마다 검사하므로
+- revocation window(2026-10-23 결정, 2026-10-24 보강): API 데이터 요청은 `JwtStrategy`가 요청마다 검사하므로
   즉시(다음 요청) 거부된다. 웹 앱 화면 세션은 **화면의 API 요청이 `401/403`으로 거절되면 즉시**
   끝난다. 세 앱 `Providers`의 `SessionAuthorityRecheck`가 `watchApiAuthorityRejections`로 API
   origin의 Bearer 요청 거절을 보고 `update({})`(POST, trigger `update`)로 세션을 다시 받아
@@ -486,6 +487,8 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-24 | 화면의 API 요청이 401/403으로 거절되면 세 앱 `Providers`가 `update({})`로 세션을 재사용 없이 다시 검증해 그 자리에서 끊는다(`watchApiAuthorityRejections`). `auth-session-lifecycle.spec.ts` 정지·철회 시험을 "폐기 뒤 화면 API 거절 → 즉시 세션 종료" 확인으로 변경 |
+| 2026-10-23 | 세 앱 `jwt` callback의 `GET /auth/session` 검증 성공을 같은 access token에 한해 60초 재사용(#627). revocation window를 API 데이터 요청 즉시·앱 세션 최대 60초로 조정(사용자 결정), `auth-session-lifecycle.spec.ts` 정지·철회 시험을 60초 뒤 끊김 확인으로 변경 |
 | 2026-10-21 | 운영의 새 판매자 가입을 "관리자 초대 링크 → 카카오 로그인"으로 결정: `kakao-login`의 `inviteToken`, 사용자 생성 트랜잭션 안 초대 재판정·소모, 인증된 카카오 이메일만 받는 사람 대조, 다른 역할 기존 계정 409 `kakao_account_in_use`, 판매자 앱 `/invite/[token]`·`/login/error` |
 | 2026-10-21 | 소비자 회원 탈퇴 `DELETE /auth/me`(W5): 진행 중 주문·결제 예약 409, 세션 폐기·개인정보 필드 삭제·`withdrawnAt`·연결 문서 삭제 한 트랜잭션, 부속 기록 정리, 카카오 Admin Key 연결 끊기(실패해도 성공·운영 알림), `auth.withdrawn` 감사, 탈퇴 문서의 토큰·refresh 거부 |
 | 2026-10-18 | 운영 런타임의 이메일 `login`·`register`를 모두 403으로 거부(계정·초대 조회 전, 판매자 초대 가입만 받던 2026-10-10 결정을 대체). 운영이 아닌 런타임은 그대로 |
