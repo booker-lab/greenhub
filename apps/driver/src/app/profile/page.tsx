@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Image from 'next/image';
 import { Box, Stack, Card, Group, Text, Title, Button, Divider } from '@mantine/core';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { profileImageSrc } from '@/lib/profile-image';
 
 const LOGOUT_REVOKE_TIMEOUT_MS = 5_000;
 
@@ -30,6 +31,7 @@ export default async function ProfilePage() {
   if (!session) redirect('/login');
 
   const { user } = session;
+  const imageSrc = profileImageSrc(user.image);
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -42,12 +44,14 @@ export default async function ProfilePage() {
           {/* 프로필 */}
           <Card radius="xl" withBorder p="lg">
             <Group gap="md" align="center">
-              {user.image ? (
+              {imageSrc ? (
+                // 카카오 CDN 사진은 이미지 최적화 허용 대상이 아니라 브라우저가 바로 받는다.
                 <Image
-                  src={user.image}
+                  src={imageSrc}
                   alt="프로필"
                   width={60}
                   height={60}
+                  unoptimized
                   style={{ borderRadius: '50%' }}
                 />
               ) : (
