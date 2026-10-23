@@ -46,7 +46,7 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com secret
 ```
 
 - 확인: `gcloud services list --enabled --project=green-e4fe3`에 7개가 보인다. `gcloud compute networks list --project=green-e4fe3`로 `default` VPC와 `asia-northeast3` 서브넷을 확인한다(없으면 R7 전에 만든다).
-- 실행 기록(2026-10-23, 사용자 Cloud Shell): `run`·`artifactregistry`·`secretmanager`·`compute` 4개만 켰다. `iamcredentials`·`sts`·`cloudbuild`는 아직이다(위 명령을 다시 실행하면 나머지가 켜진다). VPC 확인도 아직이다.
+- 실행 기록(2026-10-23 완료, 사용자 Cloud Shell): 7개를 모두 켰다. `default` VPC에 `asia-northeast3` 서브넷 `default`(`10.178.0.0/20`)가 있다.
 - 비용: 켜는 것만으로는 들지 않는다.
 - 되돌리기: `gcloud services disable <API> --project=green-e4fe3`
 
@@ -58,7 +58,7 @@ gcloud artifacts repositories create greenhub --repository-format=docker --locat
 
 오래된 이미지는 최근 20개만 남긴다(정리 정책 파일은 이 단계에서 같이 만든다).
 
-- 실행 기록(2026-10-23): 저장소 `greenhub`를 만들었다(설명·정리 정책 없이). 정리 정책은 아직이다.
+- 실행 기록(2026-10-23 완료): 저장소 `greenhub`를 만들었다(설명 없이). 정리 정책은 아직이다.
 
 ## R3. 런타임 서비스 계정 — 승인 필요
 
@@ -76,7 +76,7 @@ gcloud iam service-accounts add-iam-policy-binding $SA --project=green-e4fe3 --m
 
 - 지금 Railway는 `FIREBASE_SERVICE_ACCOUNT_JSON`(키 파일)을 쓴다. Cloud Run은 이 키를 옮기지 않고 런타임 서비스 계정(ADC)으로 접속한다. 코드는 키가 없으면 ADC를 쓰므로 바꿀 것이 없다.
 - 버킷 이름은 Railway 운영 변수 `FIREBASE_STORAGE_BUCKET` 값이다(비밀값 아님).
-- 실행 기록(2026-10-23): 서비스 계정만 만들었다. 역할 4개는 아직이다.
+- 실행 기록(2026-10-23 완료): 서비스 계정과 역할 4개. 버킷 역할은 Railway `FIREBASE_STORAGE_BUCKET` 버킷에 줬다. 프로젝트·런타임 계정 역할은 읽기 확인(`get-iam-policy`)으로 확인했다.
 
 ## R4. 배포 서비스 계정 — 승인 필요
 
@@ -87,6 +87,8 @@ gcloud projects add-iam-policy-binding green-e4fe3 --member="serviceAccount:$D" 
 gcloud artifacts repositories add-iam-policy-binding greenhub --location=asia-northeast3 --project=green-e4fe3 --member="serviceAccount:$D" --role=roles/artifactregistry.writer
 gcloud iam service-accounts add-iam-policy-binding greenhub-api-runtime@green-e4fe3.iam.gserviceaccount.com --project=green-e4fe3 --member="serviceAccount:$D" --role=roles/iam.serviceAccountUser
 ```
+
+- 실행 기록(2026-10-23 완료): 배포 계정은 이미 있었다(앞선 실행). 역할은 `run.developer`(프로젝트)·`artifactregistry.writer`(저장소)·런타임 계정 `serviceAccountUser`뿐이고 사용자 관리 키 파일은 없다(읽기 확인).
 
 ## R5. GitHub Actions 키 없는 인증(Workload Identity Federation) — 승인 필요
 
@@ -103,7 +105,9 @@ gcloud iam service-accounts add-iam-policy-binding greenhub-api-deployer@green-e
   --member="principalSet://iam.googleapis.com/projects/988412563635/locations/global/workloadIdentityPools/github/attribute.repository/booker-lab/greenhub"
 ```
 
-GitHub `production` Environment 변수(비밀값 아님)를 넣는다. GitHub 설정 변경이라 따로 승인받는다.
+- 실행 기록(2026-10-23 완료): 풀 `github`·공급자 `greenhub-deploy`는 이미 있었다(앞선 실행). 실제 조건은 위 명령과 한 군데 다르다: `assertion.environment in ['production','Production']`. 대소문자만 다른 이름을 함께 받는 것이라, 저장소에 `Production` 환경을 따로 두지 않는 한 범위는 같다. 배포 계정의 `workloadIdentityUser` 바인딩을 확인했다.
+
+GitHub `production` Environment 변수(비밀값 아님)를 넣는다. GitHub 설정 변경이라 따로 승인받는다. **R9에서 운영 서비스를 만든 뒤에 넣는다.** 먼저 넣으면 Railway 운영 배포 때마다 아직 없는 서비스로 예비 배포를 시도해 실패 표시가 남는다(운영 배포는 막지 않는다).
 
 ```bash
 gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER --env production --body "projects/988412563635/locations/global/workloadIdentityPools/github/providers/greenhub-deploy"
@@ -112,21 +116,28 @@ gh variable set GCP_DEPLOY_SERVICE_ACCOUNT --env production --body "greenhub-api
 
 ## R6. 비밀값 옮기기 — 사용자가 직접, 승인 필요
 
-Railway 운영 변수를 둘로 나눈다.
+Railway 운영 변수를 `scripts/ops/cloud-run-import-env.mjs`로 나눈다. 분류는 그 파일의 목록이 정본이다.
 
-- **비밀값 → Secret Manager**: `JWT_SECRET`, `JWT_REFRESH_SECRET`, `PORTONE_V2_SECRET`, `PORTONE_WEBHOOK_SECRET`, SMS·알림톡(ALIGO) 키, 텔레그램 토큰, Kakao·Gemini 등 외부 API 키, `ROUND_DIRECT_E2E_SHARED_SECRET`(운영에 있으면).
-- **일반 값 → Cloud Run 환경 변수**(R9): `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET`, `CORS_ORIGIN`, `PORTONE_STORE_ID`, 기능 토글 등.
-- **옮기지 않는 값**: `RAILWAY_*`, `PORT`(Cloud Run이 넣음), `FIREBASE_SERVICE_ACCOUNT_JSON`(R3의 ADC로 대체), `ALIGO_OUTBOUND_PROXY_URL`(R7 고정 IP를 ALIGO가 받아들인 뒤 C8에서 정리. 그 전에는 일반 값으로 그대로 옮긴다).
+- **비밀값 → Secret Manager**(라벨 `greenhub-api=env`, 런타임 계정 읽기 권한): `JWT_SECRET`, `JWT_REFRESH_SECRET`, `PORTONE_V2_SECRET`, `PORTONE_WEBHOOK_SECRET`, `ALIGO_API_KEY`, `ALIGO_SENDER_KEY`, `ALIGO_OUTBOUND_PROXY_URL`(Fixie 주소에 접속 비밀번호가 들어 있다), `OPS_TELEGRAM_BOT_TOKEN`, `KAKAO_ADMIN_KEY`, `GEMINI_API_KEY`
+- **일반 값 → YAML 파일**(R9 `--env-vars-file`): `FIREBASE_PROJECT_ID`, `FIREBASE_STORAGE_BUCKET`, `CORS_ORIGIN`, `PORTONE_STORE_ID`, `ALIGO_USER_ID`·`ALIGO_SENDER_PHONE`·`ALIGO_TEMPLATE_CODES_JSON`, `OPS_TELEGRAM_CHAT_ID`, `KAKAO_APP_ID`, 수수료·정산·기능 토글 등
+- **옮기지 않음**: `RAILWAY_*`, `PORT`(Cloud Run이 넣음), `NODE_ENV`·`GREENHUB_ENVIRONMENT_NAME`·`GREENHUB_COMMIT_SHA`·`TRUST_PROXY_HOPS`·`GREENHUB_SCHEDULES_ENABLED`(R9 배포 명령이 넣음), `FIREBASE_SERVICE_ACCOUNT_JSON`(R3의 ADC로 대체)
+- 운영에 회차 E2E 값(`ROUND_DIRECT_E2E_*`)이 있으면 옮기지 않고 경고한다. 목록에 없는 키는 옮기지 않고 이름만 알린다. 분류를 정해 스크립트 목록에 더한 뒤 다시 실행한다.
 
-사용자가 자기 터미널에서 한 개씩 넣는다(값은 화면·기록에 남기지 않는다).
+사용자가 Cloud Shell에서 실행한다. 값은 화면·기록·채팅에 남기지 않는다.
+
+1. Railway 운영 API 서비스 → Variables → Raw Editor에서 JSON 형식으로 전체를 복사한다.
+2. Cloud Shell에서 실행한다. 붙여 넣는 동안 화면에 아무것도 보이지 않는 것이 정상이다(`stty -echo`).
 
 ```bash
-gcloud secrets create JWT_SECRET --project=green-e4fe3 --replication-policy=user-managed --locations=asia-northeast3 --data-file=-
-# 값을 붙여넣고 Enter, Ctrl+Z(Windows) 또는 Ctrl+D(맥·리눅스)로 끝낸다.
-gcloud secrets add-iam-policy-binding JWT_SECRET --project=green-e4fe3 --member="serviceAccount:greenhub-api-runtime@green-e4fe3.iam.gserviceaccount.com" --role=roles/secretmanager.secretAccessor
+curl -fsSL https://raw.githubusercontent.com/booker-lab/greenhub/main/scripts/ops/cloud-run-import-env.mjs -o ~/cloud-run-import-env.mjs
+stty -echo; cat > ~/railway-prod.json; stty echo   # 붙여 넣고 Enter, Ctrl+D
+node ~/cloud-run-import-env.mjs --project=green-e4fe3 --source=$HOME/railway-prod.json --out=$HOME/greenhub-api-env.yaml
+shred -u ~/railway-prod.json
 ```
 
-- 확인(Claude, 값 없이 이름만): `gcloud secrets list --project=green-e4fe3 --format="value(name)"`
+- 보고에는 키 이름만 나온다. 다시 실행하면 비밀값마다 새 버전이 더해진다(이전 버전은 남는다).
+- `~/greenhub-api-env.yaml`(일반 값)은 R9에서 쓴다.
+- 확인(Claude, 값 없이 이름만): `gcloud secrets list --project=green-e4fe3 --filter="labels.greenhub-api=env" --format="value(name)"`
 
 ## R7. 고정 송신 IP(Cloud NAT) — 승인 필요
 
@@ -155,7 +166,7 @@ gcloud compute addresses describe greenhub-api-egress --region=asia-northeast3 -
   - 런타임 서비스 계정 `greenhub-api-runtime`(역할 없음)
   - 배포 서비스 계정 `greenhub-api-deployer`: 프로젝트 역할 `run.admin`·`artifactregistry.writer`·`secretmanager.viewer`, 런타임 계정에 대한 `serviceAccountUser`
   - Workload Identity 풀 `github`과 공급자 `greenhub`: 조건은 `main`의 `cloud-run-deploy.yml`인데, 이 workflow는 저장소에 없다.
-  - 위 배포 방법에 따라 공급자 `greenhub`와 배포 서비스 계정은 쓰지 않으므로 지운다(아래 정리 명령, 사용자 실행). 빈 풀 `github`은 남겨 둔다(아무 권한도 주지 않는다).
+  - 위 배포 방법에 따라 공급자 `greenhub`와 배포 서비스 계정은 쓰지 않으므로 지운다(아래 정리 명령). 빈 풀 `github`은 남겨 둔다(아무 권한도 주지 않는다). **2026-10-23 정리 완료**(공급자·배포 계정 없음을 읽기로 확인).
 
 ```bash
 P=greenhub-round-direct-e2e
@@ -187,8 +198,22 @@ gcloud run deploy greenhub-api --project=green-e4fe3 --region=asia-northeast3 \
   --min-instances=1 --max-instances=1 --no-cpu-throttling --cpu=1 --memory=1Gi --concurrency=80 --timeout=60 \
   --network=default --subnet=default --vpc-egress=all-traffic \
   --startup-probe=httpGet.path=/health,periodSeconds=5,timeoutSeconds=5,failureThreshold=12 \
-  --set-env-vars=NODE_ENV=production,GREENHUB_ENVIRONMENT_NAME=production,GREENHUB_SCHEDULES_ENABLED=false,TRUST_PROXY_HOPS=<R8 실측값>,GREENHUB_COMMIT_SHA=$SHA,<R6 일반 값> \
-  --set-secrets=JWT_SECRET=JWT_SECRET:latest,<R6 비밀값 이름=이름:latest ...>
+  --env-vars-file="$ENV_FILE" --set-secrets="$SECRETS"
+```
+
+`ENV_FILE`·`SECRETS`는 위 배포 명령 전에 만든다. 일반 값에는 쉼표가 든 값(`CORS_ORIGIN`·JSON)이 있어 `--set-env-vars` 대신 파일로 넘긴다(두 옵션은 함께 쓸 수 없다).
+
+```bash
+ENV_FILE=$(mktemp --suffix=.yaml)
+cp ~/greenhub-api-env.yaml "$ENV_FILE"   # R6가 만든 일반 값
+cat >> "$ENV_FILE" <<END
+NODE_ENV: "production"
+GREENHUB_ENVIRONMENT_NAME: "production"
+GREENHUB_SCHEDULES_ENABLED: "false"
+TRUST_PROXY_HOPS: "<R8 실측값>"
+GREENHUB_COMMIT_SHA: "$SHA"
+END
+SECRETS=$(gcloud secrets list --project=green-e4fe3 --filter="labels.greenhub-api=env" --format="value(name)" | awk '{printf "%s%s=%s:latest", (NR>1?",":""), $1, $1}')
 ```
 
 - **정기 작업은 끈 채로**(`GREENHUB_SCHEDULES_ENABLED=false`) 둔다. 두 서버가 함께 매분 작업을 돌리지 않게 한다.
