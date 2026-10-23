@@ -97,7 +97,7 @@ describe('SaleRoundsService', () => {
   function makeService(extra: Record<string, Data> = {}, round = makeRound()) {
     const records = new Map<string, Data>([
       ['stores/store-1', { id: 'store-1', ownerId: 'seller-1', salesMode: 'round_direct' }],
-      ['saleRounds/round-1', round as unknown as Data],
+      ['saleRounds/round-1', round],
       ...Object.entries(extra),
     ]);
     const writes: Array<{ path: string; data: Data }> = [];
@@ -1433,7 +1433,7 @@ describe('SaleRoundsService', () => {
         closeReason: 'SCHEDULE_ENDED',
         schedule: { ...makeRound().schedule, orderOpenAt, orderCloseAt },
         ...overrides,
-      }) as unknown as Data;
+      });
     }
 
     function currentItems(): Record<string, Data> {
@@ -1623,12 +1623,12 @@ describe('SaleRoundsService', () => {
             orderOpenAt: '2026-07-20T00:00:00.000+09:00',
             orderCloseAt: '2026-07-27T00:00:00.000+09:00',
           },
-        }) as unknown as Data,
+        }),
         'saleRounds/past-1': closedRound('past-1', '2026-07-06T00:00:00.000+09:00'),
         'saleRounds/past-2': closedRound('past-2', '2026-06-29T00:00:00.000+09:00', 'COMPLETED'),
         'saleRounds/past-3': closedRound('past-3', '2026-06-22T00:00:00.000+09:00'),
         'saleRounds/past-4': closedRound('past-4', '2026-06-15T00:00:00.000+09:00'),
-        'saleRounds/round-draft': makeRound({ id: 'round-draft', status: 'DRAFT' }) as unknown as Data,
+        'saleRounds/round-draft': makeRound({ id: 'round-draft', status: 'DRAFT' }),
         'saleRoundItems/item-1': makeItem({ id: 'item-1', productId: 'product-1', roundPrice: 10000 }),
         'saleRoundItems/item-hidden': makeItem({ id: 'item-hidden', status: 'HIDDEN' }),
         'saleRoundItems/past-1-a': makeItem({

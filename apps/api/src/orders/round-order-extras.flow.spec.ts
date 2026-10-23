@@ -164,7 +164,7 @@ describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () 
 
   it('옵션 금액을 단가에 더하고, 문구와 선물 정보를 주문서에 남긴다', async () => {
     const { firestore, records } = makeFirestore(seed());
-    const result = await makeService(firestore, 'gift').create('store-round', 'user-1', request({ gift: GIFT }) as never);
+    const result = await makeService(firestore, 'gift').create('store-round', 'user-1', request({ gift: GIFT }));
     const order = records.get(`orders/${(result as any).orderId}`)!;
     expect(order['orderItems'][0]).toMatchObject({
       unitPrice: 43000,
@@ -184,7 +184,7 @@ describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () 
     const result = await makeService(firestore).create(
       'store-round',
       'user-1',
-      request({ roundItems: [{ roundItemId: 'round-item-1', quantity: 1 }] }) as never,
+      request({ roundItems: [{ roundItemId: 'round-item-1', quantity: 1 }] }),
     );
     const order = records.get(`orders/${(result as any).orderId}`)!;
     expect(order['totalAmount']).toBe(30000);
@@ -236,7 +236,7 @@ describe('선물 정보 저장 토글(GREENHUB_FEATURES의 gift)', () => {
     const result = await makeService(firestore, features).create(
       'store-round',
       'user-1',
-      request({ gift }) as never,
+      request({ gift }),
     );
     return records.get(`orders/${(result as any).orderId}`)!;
   }

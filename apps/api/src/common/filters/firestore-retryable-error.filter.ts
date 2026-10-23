@@ -109,7 +109,7 @@ export class FirestoreRetryableErrorFilter extends BaseExceptionFilter {
   private alertServerError(exception: unknown, host: ArgumentsHost) {
     if (!this.opsAlert?.enabled) return;
     const status = responseStatus(exception);
-    if (status < 500 || status === (HttpStatus.SERVICE_UNAVAILABLE as number)) return;
+    if (status < 500 || status === Number(HttpStatus.SERVICE_UNAVAILABLE)) return;
     const request = host
       .switchToHttp()
       .getRequest<{ method?: string; route?: { path?: string } }>();

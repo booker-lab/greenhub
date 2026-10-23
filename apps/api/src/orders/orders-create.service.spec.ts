@@ -140,7 +140,7 @@ describe('legacy daily capacity 주문 예약', () => {
       ...(deliveryMethod === 'hub' ? { hubId: 'hub-1' } : {}),
     });
 
-    await service.createOrder('store-1', 'user-1', request as never);
+    await service.createOrder('store-1', 'user-1', request);
 
     expect(records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(5);
   });
@@ -174,7 +174,7 @@ describe('legacy daily capacity 주문 예약', () => {
         : {}),
     });
 
-    await service.createOrder('store-1', 'user-1', request as never);
+    await service.createOrder('store-1', 'user-1', request);
 
     expect(records.get('dailyCaps/store-1_2026-08-25')?.usedSlots).toBe(2);
   });

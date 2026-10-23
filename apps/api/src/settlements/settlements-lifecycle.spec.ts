@@ -237,7 +237,7 @@ class FakeFirestore {
         update: (reference, data) => {
           writes.push({ kind: 'update', path: reference.path, data: copyRecord(data) });
         },
-      } as TestTransaction;
+      };
 
       const result = await callback(transaction);
       await new Promise<void>((resolve) => setImmediate(resolve));
@@ -307,7 +307,7 @@ function makeOrderLifecycleService(
     firestore as never,
     notifications as never,
     payments as never,
-    settlements as never,
+    settlements,
     capacity as never,
     roundLifecycle as never,
   );

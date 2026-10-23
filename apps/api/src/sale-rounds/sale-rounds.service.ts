@@ -335,7 +335,7 @@ export class SaleRoundsService {
     const nowMillis = timestampMillis(this.firestore.Timestamp.now());
     const rounds = snap.docs.map((doc: any) => {
       const storedRound = doc.data() as SaleRound;
-      this.assertPublicRoundBoundary(storeId, storedRound as unknown as Record<string, any>);
+      this.assertPublicRoundBoundary(storeId, storedRound);
       const round = this.normalizeRound(this.applyEffectiveState(storedRound, nowMillis));
       return round.storeId === storeId && isPublicSaleRoundStatus(round.status)
         ? toPublicSaleRound(round)
@@ -362,7 +362,7 @@ export class SaleRoundsService {
     const nowMillis = timestampMillis(this.firestore.Timestamp.now());
     const rounds = snap.docs.flatMap((doc: any) => {
       const storedRound = doc.data() as SaleRound;
-      this.assertPublicRoundBoundary(storeId, storedRound as unknown as Record<string, any>);
+      this.assertPublicRoundBoundary(storeId, storedRound);
       const round = this.normalizeRound(this.applyEffectiveState(storedRound, nowMillis));
       return round.storeId === storeId && isPublicSaleRoundStatus(round.status) ? [round] : [];
     });
@@ -545,7 +545,7 @@ export class SaleRoundsService {
         ...round,
         ...update,
         items: nextItems ?? currentItems,
-      } as RoundWithItems);
+      });
     });
 
     return result!;
@@ -684,10 +684,10 @@ export class SaleRoundsService {
     // Preserves the full SaleRound response contract; only status/closeReason
     // are overlaid with the effective values.
     const next = resolveAutomaticState(
-      stored as unknown as Parameters<typeof resolveAutomaticState>[0],
+      stored,
       nowMillis,
     );
-    return { ...stored, status: next.status, closeReason: next.closeReason } as SaleRound;
+    return { ...stored, status: next.status, closeReason: next.closeReason };
   }
   private normalizeRound(round: SaleRound): SaleRound {
     const normalized = { ...round } as unknown as Record<string, any>;
