@@ -3,7 +3,12 @@
 > **출처:** `admin-tabs-improve-plan.md` §B (세션93 진단) + §B-8 (셀러앱 주문 화면 연계).
 > SDD 분리는 세션91에 끝남(`_client`→`page`+`_client`+`_lib`+`_components/`, `83998d0`).
 > 본 진단은 그 위의 **타입 안전·SSOT·기능 부재** 정리 + 셀러앱 주문 화면 연계 작업 누적.
-> **진행(2026-10-04 코드 대조):** T1 완료(#315 `dad0c138` — `OrderStatus` 타입 지정, `isRefundable`이 REFUNDABLE 배열 대체), 환불 버튼 노출을 서버 규칙에 맞춤(#318 `399b2014`, B-2 재결정), 조회 실패 표시(`b350b57c`). T2·T3(그룹 B 백엔드 두 단계 가드)은 B-2의 2026-09-28 재결정으로 폐기. 미완료: T4 스토어 Select, T5 새로고침·폴링, T6 `prompt` → 모달(단순 모달로 축소), T7 e2e(폐기된 시나리오 제외 후 재정의).
+> **현재 상태(2026-10-23, main `e4d781db` 코드 대조 — 이 절이 아래 진행 서술보다 우선):**
+> - **완료:** T1 `OrderStatus` 타입(#315) · 환불 버튼을 서버 규칙에 맞춤(#318) · 조회 실패 표시 · T4 가게 이름 Select(#593, 치운 가게는 "(치움)" 표기, 토글 없음) · T6 `prompt()` → 단순 환불 확인창 `RefundConfirmModal`(#583, 사유 선택 입력) · F5 커서 "더 보기"(기본 50·상한 100, #593) · 목록 칸 보강(주문번호·주문일시·고객·상품·요청사항·가게 이름, 환불 진행·실패 배지, #593) · 회차 주문 배송 후 환불 버튼·확인창 `PostDeliveryRefundModal`(R7 #598, 사유 코드·메모 필수, 서버 R5) · 강제환불·배송 후 환불 변경 기록(#576).
+> - **폐기:** T2·T3 두 단계 백엔드 가드(B-2 2026-09-28 재결정), T4 "치운 가게 포함" 토글, T6 위험 단계 분기.
+> - **남은 것(IMPLEMENTATION_GAP):** T5 화면 위 새로고침·자동 폴링(지금은 조회 실패 때 "다시 조회"만) · T7 관리자 주문 e2e(`apps/e2e/tests/`에 없음, 단위 테스트만 있음 — 시나리오 재정의 필요) · F3 행 클릭 주문 상세 · F5 정렬(최신순 고정) · 환불 가능 상태 목록이 서버 목록을 손으로 복제(값은 일치, shared 일원화는 후속).
+> - **사람 결정(SEMANTIC_CONFLICT):** ① 취소됐지만 환불 실패한 일반 주문의 재환불 버튼을 화면에 노출할지(서버는 허용, 화면은 배지만) ② 일반(회차 아닌) 주문의 배송 후 환불을 계속 막을지(서버·화면 모두 회차 주문만 허용).
+> - 계약 정본은 [`../../api/admin.md`](../../api/admin.md) §5다. 아래 B-0~B-7은 2026-05 진단 기록이다.
 
 ## 0. 공통 정합성 검토 기준 (모든 어드민 탭 공통)
 
@@ -19,18 +24,22 @@
 
 ---
 
-## B-0. 진단 대상 파일 (현 상태)
+## B-0. 대상 파일 (2026-10-23 실측)
 | 파일 | 라인 | 역할 |
 |------|------|------|
 | `orders/page.tsx` | 8 | dynamic ssr:false 래퍼 |
-| `orders/_client.tsx` | 63 | 상태·핸들러(필터 2종·forceRefund) |
-| `orders/_lib.ts` | 31 | STATUS_LABEL·getStatusColor·REFUNDABLE·buildStatusOptions |
-| `_components/OrdersFilters.tsx` | 39 | 스토어 ID TextInput + 상태 Select |
-| `_components/OrdersTable.tsx` | 200 | 모바일 카드 / 데스크톱 테이블 (반응형 세션88) |
+| `orders/_client.tsx` | 172 | 상태·필터·환불 핸들러·더 보기·조회 실패 표시 |
+| `orders/_lib.ts` | 165 | 상태 라벨·색·환불 가능 판정·배송 후 환불 판정·가게 Select 옵션 |
+| `_components/OrdersFilters.tsx` | 46 | 가게 이름 Select + 상태 Select |
+| `_components/OrdersTable.tsx` | 325 | 모바일 카드 / 데스크톱 테이블 |
+| `_components/RefundConfirmModal.tsx` | 74 | 강제환불 확인창(#583) |
+| `_components/PostDeliveryRefundModal.tsx` | 112 | 배송 후 환불 확인창(#598) |
 
-→ 모두 500 한도 내. **분할(과분할) 불필요** — 세션91 users/banner 전례.
+→ 모두 500 한도 내. 타입은 `apps/seller/src/hooks/useAdmin.types.ts`.
 
-## B-1. 정합성 진단 — order status SSOT 미사용 (stores T1과 동형)
+## B-1. 정합성 진단 — order status SSOT 미사용 (stores T1과 동형) — ✅ T1로 해소
+
+> 2026-10-23: `OrderStatus`는 `DELIVERY_HELD`를 포함해 12개다. `_lib.ts` 라벨은 `Record<OrderStatus,string>`, `AdminOrder.status`는 `OrderStatus`(`useAdmin.types.ts`). 주문 라벨 맵은 지금 5곳(소비자 주문 상세 추가)이고 어드민만 `픽업완료`로 붙여 쓴다(C-out, 별도 과제). 아래 표는 진단 당시 기록이다.
 
 | 출처 | 정의 | 비고 |
 |------|------|------|
@@ -55,14 +64,11 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
 
 > **2026-09-28 재결정 (이 절의 아래 표·"두 단계 정책"을 대체):** 아래 진단의 전제("백엔드는 CANCELLED만 거부")는 stale이다. 현재 백엔드는 배달 시작 이후 환불을 이미 차단한다 — 회차 주문(`schemaVersion 2`+`roundId`)은 `round-order-lifecycle.service.ts` `claimCancellation`의 PENDING·ACCEPTED·RECRUITING·CONFIRMED·PREPARING·DELIVERY_HELD, 일반 주문은 `orders.helpers.ts` `getAllowedTransitions('admin')`의 ACCEPTED·CONFIRMED·PREPARING. **사용자 결정: 새 정책(배달 후 사유 필수 환불)을 만들지 않고, 프론트 버튼 노출을 현재 서버 규칙에 맞춘다.** 구현은 `admin/orders/_lib.ts` `isRefundable`. 그룹 B(백엔드 두 단계 가드)·위험 단계 모달은 폐기. 취소 주문의 환불 재시도(서버는 `cancellation` 상태에 따라 허용)는 버튼에 포함하지 않았다 — 필요 시 별도 결정.
 
-| 레이어 | 환불 허용 조건 | 위치 |
-|--------|---------------|------|
-| 프론트 (버튼 노출) | `REFUNDABLE = [ACCEPTED, RECRUITING, CONFIRMED, PREPARING]` 4개만 | `_lib.ts:23` |
-| 백엔드 (실제 차단) | `status==='CANCELLED'`만 거부, **그 외 전부 허용** | `admin.service.ts:141` |
+> **2026-10 추가:** 회차 주문의 배송 뒤(DELIVERED·PICKED_UP·REVIEWED) 환불은 별도 경로로 생겼다(R5 서버 `admin-post-delivery-refund.service.ts`, R7 화면 #598, 사유 코드·메모 필수). 일반 주문은 배송 뒤 환불 경로가 없다(사람 결정, 머리말).
+>
+> **현행 버튼 기준:** 회차 주문 PENDING·ACCEPTED·RECRUITING·CONFIRMED·PREPARING·DELIVERY_HELD / 일반 주문 ACCEPTED·CONFIRMED·PREPARING(`_lib.ts` `isRefundable`, 서버 `order-cancellation-state.ts`와 값 일치).
 
-→ **프론트가 백엔드보다 더 좁게 막음.** DELIVERING·HUB_ARRIVED·DELIVERED 주문은 백엔드론 환불 가능하나 어드민 UI엔 버튼이 안 뜸.
-
-### D1 확정 — **두 단계 정책 (세션92 grill-me)**
+### D1 — 두 단계 정책 (세션92 grill-me, **2026-09-28 폐기** — 기록)
 
 | 단계 | 대상 상태 | UI 동선 | 사유 입력 | 백엔드 가드 |
 |------|-----------|---------|-----------|------------|
@@ -76,11 +82,11 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
 
 ## B-3. 기능 부재 (UX)
 
-- **F1. 스토어 필터가 raw ID 텍스트 입력** — `OrdersFilters.tsx:21` UUID를 어드민이 외워 입력해야 함. stores 목록을 받아 **Select(이름→ID)** 로 교체 가능(useAdminStores 재사용). stores §A T6과 대칭.
-- **F2. 새로고침 버튼 없음** — forceRefund 후 자동 reload만 있고 수동 reload UI 없음. 환불·상태변경이 외부에서 일어나면 수동 갱신 불가. stores T9와 동일.
-- **F3. 주문 상세 드릴다운 없음** — 행 클릭 시 상품·수량·배달지·타임라인 없음. ID 12자·스토어 8자만 노출. (stores T7과 대칭, **백엔드 신설 → 별도 SDD**)
-- **F4. native `prompt()` 사용** — `_client.tsx:20` 환불 사유를 `window.prompt`로 받음. Mantine modal로 교체 시 일관성↑(취소/확인 버튼·검증). 단 시각 변화 → 별도 커밋.
-- **F5. 정렬·페이지네이션 없음** — 백엔드 `limit(200)` 고정, 프론트 정렬 불가. 200건 초과 시 누락(현 규모 미달이나 기록).
+- **F1. 스토어 필터가 raw ID 텍스트 입력** — ✅ #593 가게 이름 Select. `OrdersFilters.tsx:21` UUID를 어드민이 외워 입력해야 함. stores 목록을 받아 **Select(이름→ID)** 로 교체 가능(useAdminStores 재사용). stores §A T6과 대칭.
+- **F2. 새로고침 버튼 없음** — ⬜ T5. forceRefund 후 자동 reload만 있고 수동 reload UI 없음. 환불·상태변경이 외부에서 일어나면 수동 갱신 불가. stores T9와 동일.
+- **F3. 주문 상세 드릴다운 없음** — ⬜(목록 칸은 #593으로 보강, 행 클릭 상세만 남음). 행 클릭 시 상품·수량·배달지·타임라인 없음. ID 12자·스토어 8자만 노출. (stores T7과 대칭, **백엔드 신설 → 별도 SDD**)
+- **F4. native `prompt()` 사용** — ✅ #583 `RefundConfirmModal`. `_client.tsx:20` 환불 사유를 `window.prompt`로 받음. Mantine modal로 교체 시 일관성↑(취소/확인 버튼·검증). 단 시각 변화 → 별도 커밋.
+- **F5. 정렬·페이지네이션 없음** — 페이지네이션 ✅ #593(커서 "더 보기", 기본 50·상한 100). 정렬은 최신순 고정(부채).
 
 ## B-4. 아토믹 태스크 (의존순·확정안)
 
@@ -97,7 +103,7 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
   - **정합성**: 3앱 tsc 0. 값 정합이라 런타임 무영향, 컴파일 안전만 추가.
 
 ### 그룹 B — D1 정책 백엔드 가드 (안전망 선행)
-- **T2. `admin.forceRefund` 두 단계 가드**
+- **T2. `admin.forceRefund` 두 단계 가드** — 폐기(B-2 2026-09-28)
   - `apps/api/src/admin/admin.service.ts:136` `forceRefund` 보강:
     1. `status==='CANCELLED'` → 400 "이미 취소" (현행 유지)
     2. **위험 상태**(`DELIVERING·HUB_ARRIVED·PICKED_UP·DELIVERED·REVIEWED`)이고 `reason` 누락·`length<5` → 400 "배달 후 환불은 사유(5자 이상)가 필수입니다"
@@ -106,7 +112,7 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
   - **의존**: T1 (어드민 라우트는 백엔드 응답을 그대로 받지만 union 정합이 먼저 닫혀야 컴파일 안전)
   - **정합성**: API 단위테스트 추가(상태×사유 매트릭스), 셀러앱 tsc/build 0.
 
-- **T3. 다른 취소 경로 전수 조사·동일 가드 적용**
+- **T3. 다른 취소 경로 전수 조사·동일 가드 적용** — 폐기(B-2 2026-09-28)
   - **조사 대상**:
     - `apps/api/src/orders/*` — `/orders/cancel`, `/orders/:id/cancel`, `processCancel` 등 status를 `CANCELLED`로 전이시키는 모든 경로
     - `apps/api/src/payments/*` — 환불 콜백·웹훅 경유 취소
@@ -117,7 +123,7 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
   - **정합성**: 조사 결과 보강 경로 N개 = 그만큼 추가 API 단위테스트.
 
 ### 그룹 C — UX 기능 추가 (시각 변경·격리)
-- **T4. 스토어 Select 필터** (F1)
+- **T4. 스토어 Select 필터** (F1) — ✅ #593(토글 없이 전체 표시·"(치움)" 표기)
   - `OrdersFilters.tsx` TextInput → `Select` + `Switch` "치운 스토어 포함"(기본 off)
   - `useAdminStores` 결과 → `{ value: store.id, label: store.name + (status==='archived' ? ' (치운)' : '') }`
   - 토글 off 시 `status==='active'`만, on 시 전체
@@ -125,7 +131,7 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
   - **의존**: T1
   - **정합성**: 백엔드 무변경(`storeId` 쿼리 그대로), 시각 회귀 단독 격리.
 
-- **T5. 새로고침 + 자동 폴링 토글** (F2)
+- **T5. 새로고침 + 자동 폴링 토글** (F2) — ⬜
   - `_client.tsx`에 `useAdminOrders.reload` 노출
   - 헤더 우측에 `ActionIcon`(수동) + `Switch` "자동 새로고침(30초)"
   - 토글 on 시 `setInterval(reload, 30_000)`, off/언마운트 시 `clearInterval` (cleanup 필수)
@@ -134,7 +140,7 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
   - **정합성**: Firestore 읽기 비용 옵트인. 시각 변경 적음.
 
 ### 그룹 D — 환불 모달 (시각·동선 변경·단독)
-- **T6. `prompt` → Mantine modal + 두 단계 분기** (F4)
+- **T6. `prompt` → Mantine modal + 두 단계 분기** (F4) — ✅ 단순 확인창으로 #583(두 단계 분기는 폐기)
   - `_client.tsx` `handleRefund`에서 `prompt` 제거
   - 새 컴포넌트 `_components/RefundModal.tsx`:
     - props: `order: AdminOrder | null`, `onConfirm(reason)`, `onClose()`
@@ -146,8 +152,9 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
   - **정합성**: ⚠️ 시각·동선 변경 → **단독 커밋·육안 검증**(`pending-visual-verify.md`에 항목 추가).
 
 ### 그룹 E — e2e (해피패스·안전망)
-- **T7. 어드민 orders e2e 스펙**
-  - 위치: `tests/e2e/admin/orders.spec.ts`(세션90 어드민 e2e 인프라 재사용)
+- **T7. 어드민 orders e2e 스펙** — ⬜ 재정의 필요
+  - 위치: `apps/e2e/tests/admin-orders.spec.ts`(세션90 어드민 e2e 인프라 재사용)
+  - **2026-10-23 재정의 방향:** 가게 Select·상태 필터·더 보기·강제환불 확인창·배송 후 환불 확인창. 아래 2(토글)·5(폴링, T5 뒤)·7·8(두 단계 정책)은 폐기된 원안이다.
   - 스펙 8건(해피패스 6 + 안전망 2):
     1. 스토어 Select 필터 — 옵션 로드·선택·결과 좁힘
     2. 치운 스토어 토글 — off/on 시 옵션 차이
@@ -162,14 +169,14 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
   - **정합성**: 8/8 통과 + 세션90 함정 3건(세션격리·networkidle·dotenv#) 회피.
 
 ### 선결 결정 (확정 완료)
-- ✅ **D1**: 두 단계 정책 — B-2 표 참조 (세션92 grill-me).
+- ✅ **D1**: 2026-09-28 재결정 — 버튼을 서버 규칙에 맞춤(B-2). 두 단계 정책은 폐기.
 
 ### 제외 (별도 SDD / 범위 밖)
 - **F3 주문 상세 드릴다운** — 집계·조회 API + 라우트 신설 (stores T7과 동일 사유).
-- **F5 정렬·페이지네이션** — 백엔드 쿼리·커서 변경 (현 규모 미달, 부채 기록만).
+- **F5 정렬** — 페이지네이션은 #593으로 해소, 정렬만 부채.
 - **C-out 라벨 4앱 통일** — 주문 라벨 표현 SSOT는 어드민 단독 범위 밖(셀러·소비자 동시 변경).
 
-## B-5. 커밋·세션 분할 (4세션 — 세션92 확정)
+## B-5. 커밋·세션 분할 (4세션 — 세션92 확정, 2026-10 기준 역사 기록)
 
 > 한 세션 = 그룹 단위. 세션 끝마다 push·정합성 통과 보장. 중간 종료 시 후속 세션이 단독 진입 가능하도록 각 세션 산출물을 자기완결로 설계.
 
@@ -227,17 +234,16 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
   - [ ] T3: 조사 문서에 경로 표(트리거·현 가드·필요 가드) + git grep 명령 기록 — 폐기(B-2 2026-09-28 재결정)
   - [ ] T3: 가드 보강된 경로마다 단위테스트 1건 이상 — 폐기(B-2 2026-09-28 재결정)
 - **세션γ 추가**:
-  - [ ] T4: `useAdminStores` reload 호출은 최초 1회만(렌더 루프 없음)
-  - [ ] T4: 치운 스토어 토글 off → 라벨 `(치운)` 미노출
+  - [x] T4: 가게 Select — #593(토글은 두지 않기로 함)
   - [ ] T5: 토글 off + 언마운트 → `clearInterval` 호출(메모리 누수 없음)
   - [ ] T5: 폴링 중 사용자 액션(필터 변경) → 즉시 재호출 + 폴링 유지
 - **세션δ 추가**:
-  - [ ] T6: 위험 단계 모달에 빨강 경고 배너 노출, 사유 5자 미만 confirm disabled
-  - [ ] T6: 일반 단계 모달은 경고 없음, 사유 빈 채 confirm 가능
-  - [ ] T6: 모달 ESC·외부 클릭으로 닫기 → 환불 미실행(processingId 정리)
+  - [x] T6: 단순 환불 확인창 — #583(위험 단계 분기 항목은 폐기)
   - [ ] T7 e2e: 8/8 통과 + 세션90 함정 3건 회피(세션격리·networkidle·dotenv#)
 
-## B-7. 차기 진입점 (세션 종료 시 다음 세션 안내)
+## B-7. 차기 진입점
+
+> **2026-10-23 갱신:** 다음 = T5 새로고침(폴링은 선택) → T7 e2e(재정의 시나리오). 사람 결정 2건은 머리말. 아래는 2026-05 세션 안내 기록이다.
 
 - **세션α 후**: T1 union·T2 백엔드 가드 머지·운영 배포. UI 변화 0이므로 육안 생략. **다음 = 세션β(취소 경로 조사).**
 - **세션β 후**: 조사 문서 + 가드 동기화 머지. **다음 = 세션γ(필터·새로고침 UX).**
@@ -309,11 +315,11 @@ stores의 T0(값 교정)는 **불필요**, T1(union 적용)만 해당.
 - **연계 작업 SDD (셀러앱 주문 화면 발송·추적 보강)** — [`../seller-orders-improve-plan.md`](../seller-orders-improve-plan.md)
   - B-8 부속 항이 위임하는 세부 계획서. Further 1차 종결, grill-me 대기.
 - **육안 검증 (코드 완료 후 §추가)** — [`../pending-visual-verify.md`](../pending-visual-verify.md)
-  - T4(prompt → Mantine modal) 시각 회귀 별도 육안.
+  - 이 문서는 이제 역사 기록이다. T6 확인창 육안은 필요할 때 새 확인 목록으로 만든다.
 - **선결 결정·별도 SDD 후보 (이번 범위 제외)**
-  - **D1 환불 허용 정책** — 프론트/백엔드 불일치 SSOT 일원화 결정. grill-me 대기.
+  - **D1 환불 허용 정책** — ✅ 2026-09-28 결정(B-2).
   - **F3 주문 상세 드릴다운** — 집계·조회 API+라우트 신설. SDD 미작성.
-  - **F5 정렬·페이지네이션** — 백엔드 쿼리·커서 변경. 부채 기록만.
+  - **F5 정렬** — 페이지네이션은 #593으로 해소, 정렬만 부채.
   - **C-out 라벨 4앱 통일** — 어드민·셀러·소비자 동시 변경. 별도 과제.
 
 ### 상위 인덱스 · 로드맵
