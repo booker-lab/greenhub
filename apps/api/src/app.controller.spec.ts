@@ -64,7 +64,9 @@ describe('AppController', () => {
 
     it('배포 커밋 SHA를 알 때만 commit에 싣는다', async () => {
       const previous = process.env.RAILWAY_GIT_COMMIT_SHA;
+      const previousGeneric = process.env.GREENHUB_COMMIT_SHA;
       try {
+        delete process.env.GREENHUB_COMMIT_SHA;
         process.env.RAILWAY_GIT_COMMIT_SHA = '0bcceaea1234567890abcdef1234567890abcdef';
         expect((await appController.health()).commit).toBe(
           '0bcceaea1234567890abcdef1234567890abcdef',
@@ -73,9 +75,15 @@ describe('AppController', () => {
         expect((await appController.health()).commit).toBeNull();
         delete process.env.RAILWAY_GIT_COMMIT_SHA;
         expect((await appController.health()).commit).toBeNull();
+        process.env.GREENHUB_COMMIT_SHA = 'e4d781d0123456789abcdef0123456789abcdef0';
+        expect((await appController.health()).commit).toBe(
+          'e4d781d0123456789abcdef0123456789abcdef0',
+        );
       } finally {
         if (previous === undefined) delete process.env.RAILWAY_GIT_COMMIT_SHA;
         else process.env.RAILWAY_GIT_COMMIT_SHA = previous;
+        if (previousGeneric === undefined) delete process.env.GREENHUB_COMMIT_SHA;
+        else process.env.GREENHUB_COMMIT_SHA = previousGeneric;
       }
     });
   });
