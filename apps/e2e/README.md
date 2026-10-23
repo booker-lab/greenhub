@@ -70,3 +70,26 @@ Windows(Git Bash·PowerShell)에서도 같다. 포트 3101~3103이 이미 쓰이
 | Vercel 보호 우회 secret | 대상이 `.vercel.app`이 아니라 필요 없음 |
 
 운영 Firebase·운영 서비스 계정·운영 bucket·운영 API·운영 store 거부, 실행 ID 범위의 fixture·manifest 경계, provider stub 모드 요구는 원격과 같은 코드로 그대로 적용된다.
+
+## 어드민 로컬 E2E
+
+어드민 화면(셀러앱 `/admin/*`)을 `pnpm dev:local` 스택(실제 API `localhost:3000` + Firestore·Auth 에뮬레이터 + 셀러/어드민 `localhost:3002`)에서 검증한다. 운영·스테이징·원격 Preview에는 붙지 않는다(주소는 `tests/_helpers/admin-local.ts`에 고정, env로 바꿀 수 없음).
+
+```bash
+pnpm dev:local                          # 다른 터미널에서 먼저 띄운다(Firebase CLI·Java 21 필요, scripts/dev/local/README.md)
+ADMIN_LOCAL_E2E=1 SELLER_BASE=http://localhost:3002 CONSUMER_BASE=http://localhost:3001 DRIVER_BASE=http://localhost:3003   pnpm --filter e2e exec playwright test admin-local-
+```
+
+- `ADMIN_LOCAL_E2E=1`이 없으면 `admin-local-*.spec.ts`는 모두 건너뛴다(일반·회차 원격 E2E에서도 건너뜀).
+- 각 spec이 전용 관리자(에뮬레이터에 직접 생성, 로그인은 API 실경로)와 시드 문서를 만들고, afterAll에서 그 문서와 그 관리자가 남긴 기록(`adminAuditLogs` 등)을 지운다. 다른 문서는 건드리지 않는다.
+- chromium(데스크톱 표)과 mobile(카드)을 함께 돈다. 실행마다 id·이름·전화번호가 달라 동시에 돌아도 섞이지 않는다.
+
+| spec | 확인하는 것 |
+| --- | --- |
+| `admin-local-settlements` | 상태 필터, 지급 대기·지급 완료·수수료 합계 카드, 100건 뒤 더 보기, 지급 확인창(가게·주문번호·금액·계좌) → 지급 뒤 합계 이동 |
+| `admin-local-orders` | 가게 이름 Select, 50건 뒤 더 보기, 목록 칸(주문일시·주문번호·고객·상품·가게·금액), 강제환불 확인창(주문번호·금액·되돌릴 수 없음) → 취소 시 환불 요청 없음 |
+| `admin-local-invite` | 발급 직후·발급 내역 복사 값이 `/invite/<토큰>` 링크, 내역의 발급 일시(KST) |
+| `admin-local-store-archive` | 기록 없는 가게 치우기 → 손님 공개 API(가게 소개·회차·상품) 404, 복구 → 200 |
+| `admin-local-contacts` | 기사 탭 전화(전화 걸기 링크)·가입일, 판매자 탭 대표자·연락처 |
+
+카카오 로그인으로 초대를 받아 가입하는 흐름은 실제 카카오가 필요해 로컬 E2E로 열 수 없다. API HTTP 통합 테스트(`apps/api/src/admin/admin-invite-revoke.spec.ts`의 "카카오 초대 가입")와 셀러앱 단위 테스트(`src/proxy.test.ts`·`src/lib/seller-invite.test.ts`)가 덮는다.

@@ -37,6 +37,8 @@ const JWT_SECRET = 'admin-privileged-mutation-test-secret';
 const SETTLEMENT_PATH = 'settlements/settlement-1';
 const REVERSAL_QUERY_READ =
   'operationIssues?orderId==order-1&type==PROVIDER_REVERSAL_DETECTED&status==OPEN&limit=1';
+const ORDER_PATH = 'orders/order-1';
+const DELIVERED_ORDER: Data = { id: 'order-1', status: 'DELIVERED' };
 
 function makeHttpHarness() {
   const users = new Map<string, Data>([
@@ -342,11 +344,16 @@ type IssueQuery = {
   maximum?: number;
 };
 
-function makeMarkAsPaidFixture(status?: string, issues: Data[] = []) {
+function makeMarkAsPaidFixture(
+  status?: string,
+  issues: Data[] = [],
+  order: Data | null = DELIVERED_ORDER,
+) {
   const records = new Map<string, Data>();
   if (status !== undefined) {
     records.set(SETTLEMENT_PATH, { id: 'settlement-1', orderId: 'order-1', status });
   }
+  if (order) records.set(ORDER_PATH, order);
   for (const issue of issues) records.set(`operationIssues/${issue['id']}`, issue);
 
   const refs = new Map<string, Data>();
@@ -451,7 +458,7 @@ describe('AdminService.markAsPaid 상태 계약', () => {
       status: 'paid',
     });
 
-    expect(fixture.transactionReads).toEqual([SETTLEMENT_PATH, REVERSAL_QUERY_READ]);
+    expect(fixture.transactionReads).toEqual([SETTLEMENT_PATH, REVERSAL_QUERY_READ, ORDER_PATH]);
     expect(fixture.transactionUpdates).toEqual([
       {
         path: SETTLEMENT_PATH,
@@ -503,6 +510,7 @@ describe('AdminService.markAsPaid 상태 계약', () => {
     expect(fixture.transactionReads).toEqual([
       SETTLEMENT_PATH,
       REVERSAL_QUERY_READ,
+      ORDER_PATH,
       SETTLEMENT_PATH,
     ]);
     expect(fixture.transactionUpdates).toHaveLength(1);
@@ -549,5 +557,59 @@ describe('AdminService.markAsPaid 상태 계약', () => {
       status: 'paid',
     });
     expect(fixture.transactionUpdates).toHaveLength(1);
+  });
+
+  it.each([
+    ['취소된 주문', { id: 'order-1', status: 'CANCELLED', cancellation: { status: 'COMPLETED' } }],
+    ['환불 중인 주문', { id: 'order-1', status: 'DELIVERED', cancellation: { status: 'REFUNDING' } }],
+    [
+      '환불 실패로 멈춘 주문',
+      { id: 'order-1', status: 'DELIVERED', cancellation: { status: 'REFUND_FAILED' } },
+    ],
+    [
+      '마무리 대기 주문',
+      { id: 'order-1', status: 'PREPARING', cancellation: { status: 'LOCAL_PENDING' } },
+    ],
+    [
+      '마무리 실패 주문',
+      { id: 'order-1', status: 'DELIVERED', cancellation: { status: 'LOCAL_FAILED' } },
+    ],
+  ] as const)('%s의 정산은 confirmed여도 409로 거부하고 write를 만들지 않는다', async (_label, order) => {
+    const fixture = makeMarkAsPaidFixture('confirmed', [], { ...order });
+
+    const error = await fixture.service.markAsPaid('settlement-1', 'admin-1').catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error.message).toBe(
+      '취소됐거나 환불이 진행 중인 주문의 정산이라 지급할 수 없습니다. 주문 상태를 먼저 확인하세요.',
+    );
+    expect(fixture.transactionReads).toEqual([SETTLEMENT_PATH, REVERSAL_QUERY_READ, ORDER_PATH]);
+    expect(fixture.transactionUpdates).toHaveLength(0);
+    expect(fixture.audit.logAdmin).not.toHaveBeenCalled();
+    expect(fixture.records.get(SETTLEMENT_PATH)).toMatchObject({ status: 'confirmed' });
+  });
+
+  it('주문 문서가 없는 정산은 판단 근거가 없으므로 409로 거부한다', async () => {
+    const fixture = makeMarkAsPaidFixture('confirmed', [], null);
+
+    const error = await fixture.service.markAsPaid('settlement-1', 'admin-1').catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error.message).toBe('주문을 확인할 수 없는 정산이라 지급할 수 없습니다.');
+    expect(fixture.transactionUpdates).toHaveLength(0);
+    expect(fixture.records.get(SETTLEMENT_PATH)).toMatchObject({ status: 'confirmed' });
+  });
+
+  it('취소 기록이 없는 리뷰 완료 주문의 정산은 지급된다', async () => {
+    const fixture = makeMarkAsPaidFixture('confirmed', [], {
+      id: 'order-1',
+      status: 'REVIEWED',
+      cancellation: null,
+    });
+
+    await expect(fixture.service.markAsPaid('settlement-1', 'admin-1')).resolves.toEqual({
+      settlementId: 'settlement-1',
+      status: 'paid',
+    });
   });
 });

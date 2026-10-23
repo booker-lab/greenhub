@@ -11,6 +11,13 @@
 > - T4 착수 전 **`consumeInvite`/`signup` 경로 코드 확인** 선결 추가
 > - **e2e 강제** (취소 동작 + 거부 가드) — C8 격상
 > - 16건 결정 모두 본문에 반영
+>
+> **현재 상태(2026-10-23, main `e4d781db` 코드 대조 — 이 절이 아래 진행 서술보다 우선):**
+> - **완료:** T0 소비 경로 확인(판정은 `apps/api/src/auth/auth.service.ts` `assertInviteRedeemable` 하나를 이메일 가입·카카오 가입 두 경로가 함께 씀) · T1 행별 복사·T3 클립보드 폴백(#319) · T2 발급·만료·사용 시각 열(#589, shared `toDateTimeStrKST` 대신 `invite/_lib.ts` `formatKstDateTime`, 형식은 날짜+시각 — 결정13 `MM-DD HH:mm` 폐기) · T4 취소 API·가입 거부(#390을 #501로 재적용) · T5~T7 취소 hook·'취소됨' 상태(유효 색 `brand`)·공용 확인창(#502) · T11의 핵심(취소 토큰 가입 거부)은 API 통합 테스트 `apps/api/src/admin/admin-invite-revoke.spec.ts`가 자동 확인.
+> - **#589 이후 바뀐 전제:** 운영 새 판매자는 **초대 링크 → 카카오 로그인**으로 가입한다(2026-10-21 결정). 그래서 F1은 토큰이 아니라 **초대 링크**(`/invite/{token}`)를 복사하고, 이메일 가입 화면으로 토큰을 넣는 흐름(T11 원안)은 운영에 없다. 받는 사람 이메일 필수(#518)·만료 72시간(`INVITE_TTL_MS`, #512)·조회 실패 구분(#583)·사용 계정 id 표시도 들어갔다.
+> - **가입 거부 응답(현행):** 취소 409 `already_revoked` / 만료 410 / 사용됨 409(사유 없음) / 받는 사람 불일치 409 `recipient_mismatch`. 취소 API 자체는 409 `already_revoked`·`already_used`·`expired`.
+> - **남은 것(IMPLEMENTATION_GAP):** T8'·T9' 토큰 검색(지금 목록은 최신 50건 고정이라 성공 기준 "앞 4자 검색"이 아직 성립 안 함) · T10 관리자 초대 취소 화면 e2e · T12 검색 e2e · `formatKstDateTime` 단위 테스트 · F6 "더 보기"·F7 만료기간 지정(별도 SDD).
+> - 관리자 화면은 `apps/seller/src/app/admin/invite/`다(별도 `apps/admin` 앱은 없다). 계약 정본은 [`../../api/admin.md`](../../api/admin.md) §8·[`../../api/auth.md`](../../api/auth.md). 아래 본문은 2026-05 기록이며 줄 수·결정 일부는 위 상태로 읽는다.
 
 ## 0. 공통 정합성 검토 기준 (모든 어드민 탭 공통)
 
@@ -47,7 +54,7 @@
 ### 이번에 안 하는 것 (별도 SDD 또는 추후)
 - **이미 가입한 판매자 되돌리기** — 판매자 정지/삭제 정책 선결 필요(§E-6 D1과 동일 계열). 초대 탭 단독 범위 밖.
 - **F6. "더 보기" 페이지네이션** — grill-me Q3 결과 보류. CS 동선이 아니라 전수 열람용. 발급량 100건 도달 시 검색과 함께 묶어 별도 SDD.
-- **F7. 만료기간 7일 외 다른 값** — `generateInvite` 파라미터화. 저우선.
+- **F7. 만료기간 72시간(2026-10 현재) 외 다른 값** — `generateInvite` 파라미터화. 저우선.
 - **F8. clipboard 폴백** — T3로 별도 커밋 유지(한 태스크·한 커밋 원칙).
 - **사용된·만료 토큰 취소** — F-0 결정상 명시 제외.
 
@@ -60,7 +67,7 @@
 ## F-1. 정합성 진단 — 표현 레이어는 양호, 기능이 빈약
 
 표현 레이어 자체는 정상이다(세션91 SDD 분리 완료):
-- `_client.tsx`(61줄)·`InviteHistoryTable.tsx`(154줄)·`InviteGenerator.tsx`(91줄)·`_lib.ts`(34줄) — 전부 500라인 여유.
+- 2026-10-23 실측: `_client.tsx` 126줄·`InviteHistoryTable.tsx` 318줄·`InviteGenerator.tsx` 163줄·`_lib.ts` 150줄 — 전부 500라인 이하.
 - `inviteStatus`/`formatExpiry`/`formatExpiryLong` 순수함수가 `_lib.ts` SSOT로 추출돼 테이블·카드 공용. 모바일 카드형(`hiddenFrom`/`visibleFrom`)도 적용됨.
 
 남은 타입·SSOT 미세 이슈(저시급):
@@ -71,7 +78,9 @@
 
 ## F-2. 기능 부재 진단 (이 탭의 본질)
 
-데이터는 이미 다 오는데 UI가 버리고 있다. `InviteToken`(`useAdmin.ts:52-59`)에 `createdBy`·`usedBy`·`usedAt`·`createdAt`이 들어오나 테이블은 3컬럼(토큰/상태/만료일)만 그린다.
+> 2026-10-23: F1·F2·F3·F4·F8은 해소됐다(머리말). `InviteToken` 타입은 `useAdmin.types.ts`로 옮겨졌고 표는 토큰·상태·발급·만료·사용 + 받는 사람·사용 계정을 보여 준다. 아래 표의 줄 번호는 진단 당시 값이다.
+
+데이터는 이미 다 오는데 UI가 버리고 있다(2026-05 진단). `InviteToken`에 `createdBy`·`usedBy`·`usedAt`·`createdAt`이 들어오나 테이블은 3컬럼(토큰/상태/만료일)만 그린다.
 
 | # | 기능 부재 | 근거(코드 위치) | 심각도 | 백엔드 | 세션98 범위 |
 |---|-----------|------------------|--------|--------|--------|
@@ -81,7 +90,7 @@
 | **F2** | **토큰 취소(revoke) 불가** — generate/get만 존재 | `admin.service.ts:271-302`(DELETE 없음) | **중→상**(세션98 격상) | **신설**(POST `/admin/invite/:token/revoke`) | ✅ 포함 (T4~T7) |
 | **F5** | **토큰 검색 없음 — CS 응대 시 토큰을 직접 못 찾음** | `getInvites`에 쿼리 파라미터 없음 | **중→상**(세션98 grill-me 격상) | **변경**(`q?: string` prefix where 추가) | ✅ 포함 (T8'·T9') |
 | F6 | **페이지네이션 없음 — 51건째부터 영영 안 보임** | `admin.service.ts:298` limit(50) 하드코딩 | 알려진 한계 | 변경 | ❌ 별도 SDD (전수 열람용, CS 동선 아님) |
-| F7 | **만료기간 7일 고정** — 어드민 조절 불가 | `admin.service.ts:278-279` 하드코딩 | 낮음 | 변경 | ❌ 별도 SDD |
+| F7 | **만료기간 고정**(2026-10 현재 72시간, `INVITE_TTL_MS`) — 어드민 조절 불가 | `admin.service.ts` 상수 | 낮음 | 변경 | ❌ 별도 SDD |
 | F8 | **clipboard 실패 무처리** — try/catch·폴백 없음(HTTPS 아님/권한거부 시 조용히 실패) | `_client.tsx:27` | 낮음 | 무변경 | ✅ 포함 (T3, 별도 커밋) |
 
 > **`InviteStatus` 라벨 확장** — 세션98 F2 도입으로 현 `_lib.ts:6` 유니언
@@ -179,14 +188,14 @@
 
 ### 그룹 D — e2e 검증 (C8 격상, 결정15)
 
-- **T10 (F2 e2e). 취소 동작 e2e** —
-  - `apps/admin/e2e/invite-revoke.spec.ts` 신설(세션90 어드민 e2e 인프라 활용).
+- **T10 (F2 e2e). 취소 동작 e2e** — ⬜
+  - `apps/e2e/tests/admin-invite-revoke.spec.ts` 신설(세션90 어드민 e2e 인프라 활용).
   - 시나리오: 어드민 로그인 → 초대 발급 → 발급 내역에서 취소 버튼 클릭 → 확인창 확인 → 상태가 `'취소됨'`(orange 배지)로 바뀜 → 새로고침 후도 유지.
   - 셀렉터: `getByRole('button', { name: '취소' })`, `getByText('취소됨')`.
   - (의존: T7)
 
-- **T11 (F2 e2e). 거부 가드 e2e — C8 핵심** —
-  - `apps/admin/e2e/invite-revoke-guard.spec.ts` 또는 위 스펙에 추가 it.
+- **T11 (F2 e2e). 거부 가드 e2e — C8 핵심** — ✅ API 통합 테스트로 충족(머리말)
+  - (원안) 위 스펙에 추가 it.
   - 시나리오: 어드민이 토큰 발급 → 취소 → **셀러 회원가입 흐름에서 동일 토큰 입력 → 409 + reason='already_revoked' 거부 확인**.
   - 셀러 회원가입 경로는 기존 e2e 인프라(`apps/seller/e2e`) 활용 또는 API 직접 호출(가능하면 UI 경유).
   - (의존: T7, T10)
@@ -207,6 +216,8 @@
 
 ## F-4. 세션별 진행 계획 (한 세션 = 한 그룹 완결 + 정합성 검토)
 
+> **2026-10-23:** 진행 방식이 세션 단위에서 PR 단위로 바뀌었고 C1~C5는 PR CI가 대신한다. 아래 세션 종료 절차의 미체크 항목(memory·MEMORY·육안 문서 갱신)은 역사 기록이며 현재 할 일이 아니다. 진행 판정은 각 태스크 줄의 표시를 따른다.
+
 > **원칙:**
 > 1. **한 세션에 한 그룹**(A·B·C·D) 완결 후 종결 — 세션91 어드민 SDD 분리 패턴.
 > 2. **각 태스크 커밋 직전 C1~C8 통과 확인** — 그룹 단위 아닌 태스크 단위로 정합성 검토.
@@ -216,12 +227,12 @@
 ### 세션 S-A (선결 + 그룹 A) — 보기 개선
 
 **선결 작업 (커밋 0):**
-- [ ] **T0** — `consumeInvite`·`signup` 경로 grep, 분기 표 작성 → 본 문서 T4 명세 보완. — 🔄 PR #390(T4와 함께). 참고: `consumeInvite` 함수는 없고 실제 소비 경로는 `apps/api/src/auth/auth.service.ts` 한 곳
+- [x] **T0** — 소비 경로 확인 완료. `consumeInvite` 함수는 없고 판정은 `auth.service.ts` `assertInviteRedeemable` 하나를 이메일 가입·카카오 가입이 함께 쓴다.
 
 **아토믹 태스크 (커밋 3):**
 - [x] **T1** — 행별 토큰 복사 버튼 (모든 상태 노출) — 2026-09-28 코드 완료(#319 `f4388862`, T3와 한 커밋·육안 미확인: `visual-verify-2026-09-28.md` §7)
   - 정합성 검토 (커밋 직전):
-    - [ ] C1 tsc 0 (admin 앱)
+    - [ ] C1 tsc 0 (seller 앱 `/admin`)
     - [ ] C2 biome 0 (신규 0)
     - [ ] C3 `npm run build` 0
     - [ ] C4 `InviteHistoryTable.tsx` 500라인 이하
@@ -230,9 +241,9 @@
     - [ ] C7 시각 회귀 — 버튼 추가 외 변경 0
   - 커밋: `feat(admin): #CL-55 invite 행별 토큰 복사 (T1)`
 
-- [ ] **T2** — 발급일·사용일 컬럼 + `toDateTimeStrKST` util + vitest
+- [x] **T2** — 발급·만료·사용 시각 열(#589). `toDateTimeStrKST` 대신 `invite/_lib.ts` `formatKstDateTime`(날짜+시각). ⬜ 남음: 이 함수 단위 테스트
   - 정합성 검토:
-    - [ ] C1 tsc 0 (admin·shared 양쪽)
+    - [ ] C1 tsc 0 (seller·shared 양쪽)
     - [ ] C2 biome 0
     - [ ] C3 build 0
     - [ ] C4 500라인 이하
@@ -263,9 +274,9 @@
 - [ ] T0 산출 표 재확인 — T4 거부 가드 위치 확정 (1곳/2곳)
 
 **아토믹 태스크 (커밋 4):**
-- [ ] **T4** — 백엔드 revoke 엔드포인트 + 거부 가드 (한 커밋 강제) — 🔄 PR #390
+- [x] **T4** — 백엔드 revoke 엔드포인트 + 거부 가드 — #501(#390 재적용)
   - 정합성 검토:
-    - [ ] C1 tsc 0 (api·admin·seller 3앱 — `InviteToken` 타입 변경 영향)
+    - [ ] C1 tsc 0 (api·seller — `InviteToken` 타입 변경 영향)
     - [ ] C2 biome 0 (api)
     - [ ] C3 `npm run build` 0 (api)
     - [ ] C4 500라인 이하 (`admin.service.ts`·`admin.controller.ts`)
@@ -273,23 +284,23 @@
     - [ ] C8 — 거부 가드 위치 (T0 산출) 양쪽 다 적용 확인 (T11에서 자동 검증)
   - 커밋: `feat(api): #CL-55 invite revoke 엔드포인트 + 거부 가드 (T4)`
 
-- [ ] **T5** — 프론트 hook revoke + 타입 확장
+- [x] **T5** — 프론트 hook revoke + 타입 확장 — #502(`InviteRevokeOutcome` 3분기 반환)
   - 정합성 검토:
-    - [ ] C1 tsc 0 (admin)
+    - [ ] C1 tsc 0 (seller)
     - [ ] C2 biome 0
     - [ ] C3 build 0
     - [ ] C4 500라인 이하
     - [ ] C6 호출 후 목록 갱신 동작
   - 커밋: `feat(admin): #CL-55 invite revoke hook + revokedAt 타입 (T5)`
 
-- [ ] **T6** — `_lib.ts` inviteStatus '취소됨' 추가
+- [x] **T6** — `_lib.ts` inviteStatus '취소됨' 추가 — #502(유효 색 `brand`, `revocable` 필드)
   - 정합성 검토:
     - [ ] C1·C2·C3·C4 통과
     - [ ] C5 — `'orange'` 부채 명시 (`_lib.ts` 주석 + 본 문서 §F-6 부채 표)
     - [ ] C7 — 기존 토큰 상태 표시 회귀 0 (revokedAt 없는 토큰은 분기 미진입)
   - 커밋: `feat(admin): #CL-55 invite '취소됨' 상태 + 우선순위 (T6)`
 
-- [ ] **T7** — UI 취소 버튼 + 확인창 + reason별 notification
+- [x] **T7** — UI 취소 버튼 + 확인창 + reason별 안내 — #502(공용 `ConfirmModal`)
   - 정합성 검토:
     - [ ] C1·C2·C3·C4 통과
     - [ ] C5 라벨 SSOT
@@ -310,7 +321,7 @@
 ### 세션 S-C (그룹 C) — 토큰 검색
 
 **아토믹 태스크 (커밋 2):**
-- [ ] **T8'** — 백엔드 getInvites q? prefix 쿼리
+- [ ] **T8'** — 백엔드 getInvites q? prefix 쿼리 — ⬜ IMPLEMENTATION_GAP
   - 정합성 검토:
     - [ ] C1 tsc 0 (api)
     - [ ] C2 biome 0
@@ -320,7 +331,7 @@
     - [ ] 읽기 보호 — 4자 미만 q는 백엔드에서 무시 (단위 테스트 또는 수동 확인)
   - 커밋: `feat(api): #CL-55 invite getInvites prefix 검색 (T8')`
 
-- [ ] **T9'** — 프론트 검색박스 + debounce 300ms
+- [ ] **T9'** — 프론트 검색박스 + debounce 300ms — ⬜ IMPLEMENTATION_GAP
   - 정합성 검토:
     - [ ] C1·C2·C3·C4 통과
     - [ ] C5 라벨 SSOT
@@ -339,14 +350,14 @@
 ### 세션 S-D (그룹 D) — e2e 검증 (마무리, C8 강제)
 
 **아토믹 태스크 (커밋 2~3):**
-- [ ] **T10** — `apps/admin/e2e/invite-revoke.spec.ts` 신설
+- [ ] **T10** — `apps/e2e/tests/admin-invite-revoke.spec.ts` 신설 — ⬜
   - 정합성 검토:
     - [ ] e2e 그린 (취소 동작 시나리오)
     - [ ] 세션 격리·networkidle·dotenv# 함정 (세션90 선례) 회피
     - [ ] 셀렉터 안정성 — role 기반 우선
   - 커밋: `test(admin): #CL-55 invite revoke e2e (T10)`
 
-- [ ] **T11** — 거부 가드 e2e (C8 핵심)
+- [x] **T11** — 거부 가드 (C8 핵심) — API 통합 테스트 `apps/api/src/admin/admin-invite-revoke.spec.ts`로 충족. 운영 가입은 카카오 로그인이라 이메일 가입 화면 e2e는 대상이 아님
   - 정합성 검토:
     - [ ] e2e 그린 (어드민 취소 → 셀러 가입 시도 → 409 거부)
     - [ ] reason 코드 검증 (`already_revoked`)
@@ -369,6 +380,9 @@
 ---
 
 ## F-5. 차기 진입점 / 핸드오프
+
+> **2026-10-23 갱신:** 다음 = T8'(검색 백엔드) → T9'(검색창) → T10·T12 e2e. `formatKstDateTime` 단위 테스트는 언제든 가능. 아래는 2026-05 기록이다.
+
 
 - **착수 = 세션 S-A T0 (코드 확인) → T1 (행별 복사).** T2를 같이 잡으면 "한 행에 발급일·사용일·상태" 잠금이 가장 먼저 충족돼 성공 기준에 가까워짐.
 - **세션 S-B 진입 전 T0 산출 재확인** — 거부 가드 위치 미확정 상태로 T4 들어가면 안 됨.
@@ -416,11 +430,11 @@
 ## 참고 문서
 
 ### 본 탭이 직접 참조하는 외부 문서
-- **육안 검증 (코드 완료 후 §추가)** — [`../pending-visual-verify.md`](../pending-visual-verify.md) — F-5 7개 항목.
+- **육안 검증** — [`../pending-visual-verify.md`](../pending-visual-verify.md)는 이제 역사 기록이다(초대 항목 없음). 초대 링크 가입 육안은 배포 뒤 확인 후보.
 - **선결 결정·별도 SDD 후보 (이번 범위 제외)**
   - **F6 페이지네이션 + F5 고도화** — 발급량 100건 도달 시 묶어 별도 SDD.
   - **F7 만료기간 지정** — `generateInvite(days?: number)` 파라미터화 + UI Select.
-  - **이미 가입한 판매자 되돌리기** — [`./admin-tab-users-plan.md`](./admin-tab-users-plan.md) E-6 D1(어드민 전역 정지/삭제 정책)과 동일 계열. 선결 결정 필요.
+  - **이미 가입한 판매자 되돌리기** — 판매자 '치움'(#593, 숨김·주문 차단)으로 일부 대체되는지는 [stores 머리말](./admin-tab-stores-plan.md)의 "판매자 정지" 사람 결정과 함께 정한다.
 
 ### 상위 인덱스 · 로드맵
 - 통합 인덱스: [`../admin-tabs-improve-plan.md`](../admin-tabs-improve-plan.md)
