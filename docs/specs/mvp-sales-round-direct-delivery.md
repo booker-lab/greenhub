@@ -66,7 +66,7 @@ proof나 production deployment·activation·first live round를 의미하지 않
 ### `orders`
 
 - 신규 회차 주문은 `schemaVersion: 2`, `roundId`, 주문 상품 스냅샷 배열, 유입 스냅샷, 배송 연락용 전화번호를 가진다.
-- 상품 옵션(화분 등, 2026-10-23 운영 켜짐 `POT-OPTION-SHEET-PROD-ENABLE`): 요청 품목에 `optionChoiceIds`가 있으면 상품 `options`의 묶음마다 하나씩 골라야 하고(아니면 400), 고른 선택지의 `priceDelta`를 회차 단가에 더해 주문 상품 스냅샷 `selectedOptions`(묶음·선택지·금액, 문구 선택지면 `text`)와 `unitPrice`·`subtotalAmount`에 남긴다. `optionChoiceIds`를 보내지 않으면 서버는 옵션 없이 회차 단가로 받는다(`apps/api/src/orders/_lib/round-order-extras.ts` `resolveSelectedOptions`, `round-order-create.service.ts`).
+- 상품 옵션(화분 등, 2026-10-23 운영 켜짐 `POT-OPTION-SHEET-PROD-ENABLE`): 요청 품목에 `optionChoiceIds`가 있으면 상품 `options`의 묶음마다 하나씩 골라야 하고(아니면 400), 고른 선택지의 `priceDelta`를 회차 단가에 더해 주문 상품 스냅샷 `selectedOptions`(묶음·선택지·금액, 문구 선택지면 `text`)와 `unitPrice`·`subtotalAmount`에 남긴다. `optionChoiceIds`를 보내지 않으면 서버는 옵션 없이 회차 단가로 받는다(`apps/api/src/orders/_lib/round-order-extras.ts` `resolveSelectedOptions`, `round-order-create.service.ts`). 재고 품목(`optionStocks`)에 연결된 선택지는 스냅샷에 `stockId`를 남기고, 결제 예약이 회차 한도·1인 상한 확인 뒤 옵션 재고도 같은 `HELD`/`CONSUMED` 전이로 잡고 돌려준다. 부족하면 409, 늦은 결제에서 부족하면 회차 한도 마감과 같이 환불한다(#636, `order-capacity.service.ts`, BACKLOG `POT-OPTION-STOCK`).
 - 주문 전체는 하나의 배송 상태로 관리하며 `DELIVERY_HELD`는 `PREPARING` 또는 `DELIVERING`에서 진입한다.
 - 배송 보류에는 발생 시각, 사유, 고객 책임 여부, 재배송비, 다음 안내 예정일, 연락 이력을 기록한다.
 - 스토어 소유자 또는 담당 기사만 배송 보류를 만들 수 있다. 보류 진입과 `PREPARING`·`DELIVERING`·`CANCELLED` 해소는 주문 변경과 같은 트랜잭션에서 `heldOrderCount`를 증감한다.
