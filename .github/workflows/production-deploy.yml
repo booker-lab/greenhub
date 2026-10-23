@@ -100,7 +100,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: SHA가 main 이력에 있는지 확인
         shell: bash
@@ -156,7 +156,7 @@ jobs:
       # 운영 비밀값을 쓰는 job이라 의존성 캐시를 쓰지 않는다.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: 범위별 비밀값 확인(배포 전에 멈춤)
         shell: bash
