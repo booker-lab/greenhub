@@ -4,7 +4,8 @@
  * 실제 Preview의 Auth.js 세션을 역할별로 검증한다.
  * - Credentials 로그인 후 세션 쿠키가 발급되고 같은 브라우저 컨텍스트에서 유지된다.
  * - Auth.js 로그아웃 후 세션 쿠키와 세션이 사라진다.
- * - 계정 정지·기사 승인 철회 뒤 다음 세션 조회에서 세션이 끊긴다(48A same-deployment authority).
+ * - 계정 정지·기사 승인 철회 뒤 세션 확인 재사용 구간(60초)이 지나면 다음 세션 조회에서 세션이
+ *   끊긴다(48A same-deployment authority, 2026-10-23 결정). API 데이터 요청은 JwtStrategy가 즉시 거부한다.
  *
  * 로그아웃·정지는 같은 계정의 다른 세션에도 영향을 줄 수 있으므로, 이 스펙은 회차 E2E
  * 64건이 끝난 뒤 별도 단계에서만 실행한다. 사용자 상태 변경은 비운영 fixture 가드를
@@ -29,6 +30,11 @@ type UserStateModule = {
 const USER_STATE_MODULE = pathToFileURL(
   resolve(__dirname, '../../../scripts/round-direct-e2e-user-state.mjs'),
 ).href;
+
+// packages/shared/src/session-authority.ts SESSION_AUTHORITY_REUSE_MS와 같아야 한다.
+const SESSION_AUTHORITY_REUSE_MS = 60_000;
+// 재사용 구간이 끝난 뒤 다음 조회가 API 재검증·refresh 거절까지 마칠 여유.
+const REVOCATION_SETTLE_MS = 20_000;
 
 const REVOCATIONS: Array<{ role: Role; label: string; patch: UserStatePatch }> = [
   { role: 'consumer', label: '계정 정지', patch: { suspended: true } },
@@ -100,14 +106,21 @@ test.describe('회차 직배송 세션 수명주기 계약', () => {
   }
 
   for (const { role, label, patch } of REVOCATIONS) {
-    test(`${role} ${label} 뒤 다음 세션 조회에서 세션이 끊긴다`, async ({ page }, testInfo) => {
+    test(`${role} ${label} 뒤 재사용 구간이 지나면 세션이 끊긴다`, async ({ page }, testInfo) => {
+      test.setTimeout(testInfo.timeout + SESSION_AUTHORITY_REUSE_MS + REVOCATION_SETTLE_MS);
       const project = roundDirectProject(testInfo);
       const base = await login(page, role, project);
       expect(await readSessionRole(page, base)).toBe(role);
 
       const { withRoundDirectUserState } = await loadUserStateModule();
       await withRoundDirectUserState({ project, role, patch }, async () => {
-        expect(await readSessionRole(page, base)).toBeNull();
+        // 직전 검증 성공은 같은 access token에 한해 60초 동안 재사용되므로 그 뒤 조회에서 끊긴다.
+        await expect
+          .poll(() => readSessionRole(page, base), {
+            timeout: SESSION_AUTHORITY_REUSE_MS + REVOCATION_SETTLE_MS,
+            intervals: [5_000],
+          })
+          .toBeNull();
         expect(await hasSessionCookie(page, base)).toBe(false);
       });
 
