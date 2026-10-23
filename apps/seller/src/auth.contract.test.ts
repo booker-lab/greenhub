@@ -19,7 +19,10 @@ describe('seller auth.ts 계약', () => {
   it('update()의 클라이언트 storeId를 토큰에 넣지 않고 /auth/session 응답으로 묶는다', () => {
     expect(authSource).not.toMatch(/trigger === 'update'/);
     expect(authSource).not.toMatch(/session\?\.storeId/);
-    expect(authSource).toMatch(/storeId: authority\.storeId/);
+    expect(authSource).toMatch(/claims: \{ storeId: typeof data\?\.storeId === 'string'/);
+    expect(authSource).toMatch(/revalidateSessionToken\(token, \{\s*verify: verifySessionAuthority,/);
+    // 가게 등록 직후 update()는 60초 재사용을 건너뛰고 /auth/session으로 storeId를 다시 받는다.
+    expect(authSource).toMatch(/reuseVerified: trigger !== 'update'/);
   });
 
   it('초대 쿠키는 카카오 로그인에서 한 번 읽어 kakao-login 요청에 싣고 바로 지운다', () => {
