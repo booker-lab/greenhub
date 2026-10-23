@@ -109,17 +109,17 @@ API와 consumer는 포트를 따로 지정하지 않으면 둘 다 3000을 사�
 
 ### 여러 컴퓨터에서 같은 환경 쓰기
 
-패키지 버전은 `pnpm-lock.yaml`, pnpm 버전은 `packageManager`, Node 버전은 `.nvmrc`가 정합니다. 컴퓨터마다 처음 한 번 Node 버전 관리자를 설치합니다(Windows 예시).
+패키지 버전은 `pnpm-lock.yaml`, pnpm 버전은 `packageManager`, Node 버전은 `.nvmrc`가 정합니다. Windows 컴퓨터마다 처음 한 번 저장소 루트의 `setup.bat`을 실행합니다(더블클릭 가능, 다시 실행해도 안전).
 
-```powershell
-winget install Schniz.fnm
-# PowerShell 프로필($PROFILE)에 추가: 저장소 폴더에 들어가면 .nvmrc 버전으로 바뀐다
-fnm env --use-on-cd --corepack-enabled --shell powershell | Out-String | Invoke-Expression
-# 터미널을 다시 열고 저장소 폴더에서 .nvmrc 버전을 설치한다
-fnm install
-```
+`setup.bat`(`scripts/dev/setup-windows.ps1`)이 하는 일:
 
-Git Bash에서도 작업하면 `~/.bashrc`에 `eval "$(fnm env --use-on-cd --corepack-enabled --shell bash)"`를 추가합니다.
+1. fnm(Node 버전 관리자)이 없으면 winget으로 설치
+2. PowerShell(5.1·7)과 Git Bash 프로필에 fnm 자동 전환 추가. 저장소 폴더에 들어가면 `.nvmrc` 버전으로 바뀝니다. 프로필이 실행되도록 현재 사용자 실행 정책이 `Restricted`면 `RemoteSigned`로 바꿉니다.
+3. `.nvmrc`의 Node 설치와 corepack(pnpm) 활성화
+4. `pnpm install --frozen-lockfile`, Playwright chromium 설치(`setup.bat -SkipBrowsers`로 건너뜀)
+5. `pnpm dev:check`
+
+fnm은 터미널 안에서만 Node를 바꿉니다. 탐색기에서 `.bat`을 더블클릭하면 시스템에 따로 설치된 Node가 쓰일 수 있으며, 버전이 다르면 `setup.bat`이 경고합니다.
 
 작업을 시작할 때마다 다음 순서로 실행합니다.
 

@@ -174,7 +174,7 @@ function checkMachine(report) {
     report.pass(`Node ${currentNode} — .nvmrc와 같다`);
   } else {
     report.fail(
-      `Node ${currentNode} — .nvmrc는 ${pinnedNode ?? '정확한 버전이 아님'}. 저장소 폴더에서 \`fnm install\` 후 터미널을 다시 연다`,
+      `Node ${currentNode} — .nvmrc는 ${pinnedNode ?? '정확한 버전이 아님'}. Windows는 저장소 루트의 setup.bat을 실행한다(fnm이 있으면 \`fnm install\` 후 터미널을 다시 연다)`,
     );
   }
 
