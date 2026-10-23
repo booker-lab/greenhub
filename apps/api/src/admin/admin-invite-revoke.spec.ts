@@ -209,9 +209,13 @@ describe('관리자 초대 토큰 취소(POST /admin/invite/:token/revoke)와 �
       .get('/admin/invite')
       .set('Authorization', bearer('admin'))
       .expect(200);
-    expect(list.body).toEqual([
-      expect.objectContaining({ token, revokedAt: revoked.body.revokedAt, revokedBy: 'admin-1' }),
-    ]);
+    expect(list.body).toEqual({
+      invites: [
+        expect.objectContaining({ token, revokedAt: revoked.body.revokedAt, revokedBy: 'admin-1' }),
+      ],
+      hasMore: false,
+      limit: 50,
+    });
 
     const rejected = await registerSeller(token).expect(409);
     expect(rejected.body).toMatchObject({ statusCode: 409, reason: 'already_revoked' });

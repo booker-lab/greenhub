@@ -119,7 +119,7 @@ describe('useAdminInvite hook recovery wiring', () => {
     const block = inviteBlock();
     expect(block).toContain('error,');
     expect(block).toContain(
-      'return { invites, loading, error, generating, generateError, generate, revoke, reload }',
+      'return { invites, cap, loading, error, generating, generateError, generate, revoke, reload }',
     );
   });
 

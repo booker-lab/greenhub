@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { isFeatureOn } from '@/lib/features';
 import { AdminLogoutButton } from './_components/AdminLogoutButton';
+import { AdminNav } from './_components/AdminNav';
+import { buildAdminNavItems } from './_components/navItems';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -53,38 +55,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </Container>
         <Box style={{ overflowX: 'auto' }}>
           <Container size="lg" px="md" pb="xs">
-            <Group gap={4} style={{ flexWrap: 'nowrap' }}>
-              {[
-                { href: '/admin/stores', label: '판매자' },
-                { href: '/admin/users', label: '소비자' },
-                { href: '/admin/drivers', label: '드라이버' },
-                { href: '/admin/orders', label: '주문' },
-                { href: '/admin/settlements', label: '정산' },
-                { href: '/admin/invite', label: '초대' },
-                { href: '/admin/banner', label: '배너' },
-                ...(isFeatureOn('partner-inquiry')
-                  ? [{ href: '/admin/partner-inquiries', label: '입점 문의' }]
-                  : []),
-                ...(isFeatureOn('reviews') ? [{ href: '/admin/reviews', label: '후기' }] : []),
-                { href: '/admin/audit', label: '기록' },
-              ].map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  style={{
-                    flexShrink: 0,
-                    padding: '6px 12px',
-                    borderRadius: 6,
-                    fontSize: 'var(--font-size-sm)',
-                    fontWeight: 500,
-                    color: 'var(--color-text-secondary)',
-                    textDecoration: 'none',
-                  }}
-                >
-                  {item.label}
-                </a>
-              ))}
-            </Group>
+            <AdminNav
+              items={buildAdminNavItems({
+                partnerInquiry: isFeatureOn('partner-inquiry'),
+                reviews: isFeatureOn('reviews'),
+              })}
+            />
           </Container>
         </Box>
       </Box>

@@ -2,14 +2,16 @@
 
 > **출처:** `admin-tab-banner-plan.md` §G-11 (운영 모델·확정·작업 목록).
 > 본 SDD는 §G-11.1~G-11.8을 옮기지 않고 **링크로 참조**하며, **세션별 실행 플랜**(작업 순서·아토믹 분해·정합성·e2e)만 누적한다.
-> **진행(2026-10-04 코드 대조):** S1의 T3·S2의 T1 완료(`21b93153`), S1의 T2와 S4~S7(다중 배너 U1~U9·데이터 이전) 미착수.
+> **현재 상태(2026-10-23, main `e4d781db` 코드 대조):** S1-T3·S2-T1 완료(`21b93153`) · S2-T5a 완료(#590 — JPG·PNG·WebP·GIF, 원본 5MB, JPEG 재인코딩으로 EXIF 제거, 인라인 오류). 남은 것 = S1-T2 CTA 짝 검증 · S2-T6 CTA 1열 · S4~S7 다중 배너 전부(코드 0건).
+> **사람 결정(SEMANTIC_CONFLICT):** S4 이후 착수 여부와 2026-05 결정(Q1~Q13) 재확인, Q5 `isActive` 제거(운영 배너를 이 스위치로 꺼 둔 상태). 착수 시 변경 기록(#576 `adminAuditLogs`)·DTO 검증(#578) 패턴을 CRUD에 재사용한다.
+> 경로 주의: 별도 `apps/admin` 앱은 없다(어드민은 `apps/seller/src/app/admin/`). e2e는 `apps/e2e/tests/`에 둔다. 배너 필드명은 `tagText`·`subText`다.
 
 ## 1. 목적·범위
 
 단일 `banners/main_hero` 한 장 운영 → **다중 배너 + 기간(start/end) + 기본 배너 1장 보장**으로 확장.
 
 - **운영 모델·확정 결과:** [`admin-tab-banner-plan.md §G-11.1~G-11.8`](./admin-tab-banner-plan.md#g-11-further-확정--다중-배너기간-운영-모델-세션92-further-2026-05-26)
-- **결함 진단(T1·T2·T3)·기능 부재(T4·T5·T6):** [`§G-2~G-7`](./admin-tab-banner-plan.md#g-2-정합성-진단----useeffect-잘못된-의존성-입력-덮어쓰기--루프-구조)
+- **결함 진단(T1·T2·T3)·기능 부재(T4·T5·T6):** [`§G-2~G-7`](./admin-tab-banner-plan.md#g-2-정합성-진단---useeffect-잘못된-의존성-입력-덮어쓰기--루프-구조)
 - **확정 표 Q1~Q13:** [`§G-11.8`](./admin-tab-banner-plan.md#g-118-grill-me-확정-2026-05-26-13건)
 
 ## 2. 정합성 기준
@@ -49,8 +51,8 @@
 | 태스크 | 파일 | 변경 요지 |
 |--------|------|-----------|
 | **S1-T2** | `_components/BannerCtaSection.tsx`, `_client.tsx handleSave` | CTA label↔href 둘 중 하나만 채운 비대칭 입력 → 저장 차단 + 인라인 안내("URL 또는 라벨 중 하나만 비울 수 없습니다"). 기본 hrefs 빈 문자열 허용 단, 둘 다 비면 통과(섹션 전체 미사용). |
-| **S1-T3a** | `useAdmin.ts useAdminBanner` | `save` catch 안에서 에러 사유를 throw 대신 반환값으로 전파(예: `{ ok: false, reason: string }`). hook 인터페이스 변경 시 호출부 동시 수정. |
-| **S1-T3b** | `_client.tsx handleSave`, `handleImageUpload` | 실패 시 `notifications.show({ color: 'red', message })` (Mantine notifications). 성공 메시지는 기존 유지. |
+| **S1-T3a** ✅(hook 상태 `saveError`·`error`, `useAdmin.banner.ts`) | `useAdmin.ts useAdminBanner` | `save` catch 안에서 에러 사유를 throw 대신 반환값으로 전파(예: `{ ok: false, reason: string }`). hook 인터페이스 변경 시 호출부 동시 수정. |
+| **S1-T3b** ✅(인라인 Paper, 토스트 아님) | `_client.tsx handleSave`, `handleImageUpload` | 실패 시 `notifications.show({ color: 'red', message })` (Mantine notifications). 성공 메시지는 기존 유지. |
 
 **커밋:** 3건. 각 태스크당 1커밋(`fix(admin/banner): #CL-55 ...`).
 
@@ -76,8 +78,8 @@
 
 | 태스크 | 파일 | 변경 요지 |
 |--------|------|-----------|
-| **S2-T1** (조건부) | `_client.tsx:29-32` | `useEffect` deps `[banner]`로 좁힘 + `{...defaultForm, ...banner}` 또는 `useRef` 가드("최초 1회 + banner 갱신 시만 hydrate"). `eslint-disable` 제거. |
-| **S2-T5a** | `_client.tsx handleImageUpload` | 업로드 전 가드: ① 파일 형식 화이트리스트(`image/png`·`image/jpeg`·`image/webp`) ② 용량 상한(예: 2MB) ③ 위반 시 inline 메시지 + 토스트. orphan cleanup은 T5b(Phase 3 U2)에 위임. |
+| **S2-T1** (조건부) ✅ | `_client.tsx:29-32` | `useEffect` deps `[banner]`로 좁힘 + `{...defaultForm, ...banner}` 또는 `useRef` 가드("최초 1회 + banner 갱신 시만 hydrate"). `eslint-disable` 제거. |
+| **S2-T5a** ✅ #590(4형식·5MB·EXIF 제거) | `_client.tsx handleImageUpload` | (원안) 업로드 전 가드: ① 파일 형식 화이트리스트(`image/png`·`image/jpeg`·`image/webp`) ② 용량 상한(예: 2MB) ③ 위반 시 inline 메시지 + 토스트. orphan cleanup은 T5b(Phase 3 U2)에 위임. |
 | **S2-T6** | `_components/BannerCtaSection.tsx` | `Group grow` → `<SimpleGrid cols={{ base: 1, sm: 2 }}>` 또는 `Group wrap="wrap"`. 모바일에서 1열, sm 이상에서 2열. 시각 미세 변경(C7 의도적). |
 
 **커밋:** 2~3건(T1 흡수 결정에 따라).
@@ -114,8 +116,8 @@
 
 | 태스크 | 파일 | 변경 요지 |
 |--------|------|-----------|
-| **S4-U1a** (모델) | shared `types/banner.ts` 또는 admin 도메인 | `Banner` 타입: `id`, `kind: 'default' \| 'scheduled'`, `imageUrl`, `tag`, `headline`, `subtext`, `cta1?`, `cta2?`, `startDate?`(YYYY-MM-DD), `endDate?`, `createdAt`. `isActive` 제거(Q5). |
-| **S4-U1b** (마이그레이션 스크립트) | `apps/admin/scripts/migrate-banners-kind.ts` (일회용) | 기존 `banners/main_hero` 1건에 `kind:'default'` 필드 add(merge). 멱등성: 이미 `kind` 있으면 skip. 실행 후 로그로 결과 확인. **PR 머지 후 다음 세션에 스크립트 삭제 커밋**. |
+| **S4-U1a** (모델) | shared `types/banner.ts` 또는 admin 도메인 | `Banner` 타입: `id`, `kind: 'default' \| 'scheduled'`, `imageUrl`, `tagText`, `headline`, `subText`, `cta1?`, `cta2?`, `startDate?`(YYYY-MM-DD), `endDate?`, `createdAt`. `isActive` 제거(Q5). |
+| **S4-U1b** (마이그레이션 스크립트) | `scripts/migrate-banners-kind.mjs` (일회용) | 기존 `banners/main_hero` 1건에 `kind:'default'` 필드 add(merge). 멱등성: 이미 `kind` 있으면 skip. 실행 후 로그로 결과 확인. **PR 머지 후 다음 세션에 스크립트 삭제 커밋**. |
 | **S4-U2a** (CRUD) | `api/src/admin/admin.service.ts`, `admin.controller.ts` | `GET /admin/banners` 목록 / `POST` 생성 / `PUT /:id` 수정 / `DELETE /:id` 삭제. 입력 검증: `kind === 'scheduled'`이면 `startDate`·`endDate` 필수 + `endDate >= startDate`. **`kind === 'default'` DELETE 차단(422)**. CTA 비대칭 검증 동반(S1-T2 백엔드판). |
 | **S4-U2b** (T5b orphan cleanup) | `admin.service.ts DELETE 핸들러` | 배너 삭제 시 `imageUrl`이 Firebase Storage 경로면 동반 삭제. PUT으로 이미지 교체 시 옛 파일도 삭제(옛 imageUrl이 있고 새 imageUrl과 다르면). |
 | **S4-U3** (손님 조회) | `api/src/app.controller.ts` | 기존 `GET /banner`(단건) → `GET /banners/active` 신설(현 단건 엔드포인트는 deprecate 표시·1세션 유지 후 다음 PR에서 제거). 응답: `{ scheduled: Banner[], default: Banner }`. 정렬 = `createdAt desc`. 서버사이드 today 필터(Q6·Q12): `kind:'scheduled' && startDate <= todayKST() && endDate >= todayKST()`. `revalidate: 60` 유지. |
@@ -179,7 +181,7 @@
 - C5 SSOT — 캐러셀 인디케이터 색 토큰.
 - C6 가드 — 손님 빈배열은 절대 발생 안 함(기본 1장 보장), 그러나 방어 코드 1줄(빈배열이면 null 반환) 권고.
 
-**e2e:** 본 세션 부분 — `consumer/__tests__/e2e/hero-banner-carousel.spec.ts` 신설은 Phase 6.
+**e2e:** 본 세션 부분 — `apps/e2e/tests/consumer-hero-carousel.spec.ts` 신설은 Phase 6.
 
 ---
 
@@ -189,7 +191,7 @@
 
 #### 3.7.1 e2e 시나리오 (어드민)
 
-**파일:** `apps/admin/__tests__/e2e/banner-multi.spec.ts` (세션90 어드민 e2e 인프라 활용)
+**파일:** `apps/e2e/tests/admin-banner-multi.spec.ts` (세션90 어드민 e2e 인프라 활용)
 
 | 시나리오 | 검증 |
 |---------|------|
@@ -199,11 +201,11 @@
 | **E-A4** CTA 비대칭 차단 | label만 입력 → 저장 차단 + 인라인 메시지. |
 | **E-A5** 기본 배너 삭제 불가 | 기본 배너 행에 삭제 버튼 미노출. 직접 API 호출 시 422. |
 | **E-A6** 기간 배너 삭제 + orphan cleanup | 삭제 → 목록에서 제거 + (가능 시) Storage 객체 부재 확인. |
-| **E-A7** 이미지 가드 | 3MB 파일 업로드 시도 → 차단 메시지. PDF 업로드 → 차단. |
+| **E-A7** 이미지 가드 | 6MB 파일 업로드 시도 → 차단 메시지(상한 5MB). PDF 업로드 → 차단. |
 
 #### 3.7.2 e2e 시나리오 (소비자)
 
-**파일:** `apps/consumer/__tests__/e2e/hero-banner-carousel.spec.ts`
+**파일:** `apps/e2e/tests/consumer-hero-carousel.spec.ts`
 
 | 시나리오 | 검증 |
 |---------|------|
@@ -226,7 +228,7 @@
 
 #### 3.7.4 육안 검증 (사용자 위임)
 
-`docs/specs/frontend/pending-visual-verify.md`에 본 PR 항목 추가:
+새 육안 확인 목록에 본 PR 항목 추가(`docs/specs/frontend/pending-visual-verify.md`는 이제 역사 기록):
 - 어드민 목록 화면 데스크톱·모바일 폭.
 - 어드민 편집 폼 라이브 미리보기 동기화.
 - 손님 첫 화면 기본 배너만 / 기본+기간 / 캐러셀 자동·수동 넘김.
@@ -279,7 +281,7 @@
 
 ## 5. 차기 진입점
 
-- **즉시 시작 = 세션 S1** (T2·T3 결함 해소, G-11과 무관, 가벼움).
+- **2026-10-23 갱신:** 다음 = S1-T2(CTA 짝 검증)·S2-T6(CTA 1열), 이어서 다중 배너 착수 여부 사람 결정(D-G1 재확인 포함). (원안: 즉시 시작 = 세션 S1, T3은 완료.)
 - **본 SDD 갱신 트리거** — Q7 재고 결과(S2 착수 직전), 캐러셀 마크업 SSOT 결정(S5/S6 사이) 등 새 결정 발생 시 본 문서 §3 해당 절 직접 수정.
 
 ## 6. 참고 문서
