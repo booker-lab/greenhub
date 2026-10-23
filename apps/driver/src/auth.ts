@@ -3,7 +3,9 @@ import {
   authUpstreamSignal,
   isLoopbackApiUrl,
   isTestCredentialsProviderEnabled,
+  revalidateSessionToken,
   revokeApiSession,
+  type SessionAuthorityResult,
 } from '@greenhub/shared';
 import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
@@ -188,7 +190,7 @@ function isExplicitSessionRevocationStatus(status: unknown): boolean {
 
 async function verifySessionAuthority(
   accessToken: string,
-): Promise<{ kind: 'ok' } | { kind: 'revoked' } | { kind: 'transient' }> {
+): Promise<SessionAuthorityResult> {
   try {
     const res = await fetch(`${API}/auth/session`, {
       method: 'GET',
@@ -413,7 +415,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       user.role = data.user.role;
       return true;
     },
-    jwt: async ({ token, user, account }) => {
+    jwt: async ({ token, user, account, trigger }) => {
       if (user) {
         return {
           ...token,
@@ -432,32 +434,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       if (token.role !== DRIVER_APP_ROLE) {
         return null;
       }
-      const accessToken = token.accessToken;
-      const refreshToken = token.refreshToken;
-      if (
-        typeof accessToken !== 'string' ||
-        !accessToken ||
-        typeof refreshToken !== 'string' ||
-        !refreshToken
-      ) {
-        return token;
-      }
-      const authority = await verifySessionAuthority(accessToken as string);
-      if (authority.kind === 'revoked') {
-        return refreshAccessToken(token as unknown as Record<string, unknown>);
-      }
-      if (authority.kind === 'ok') {
-        if (Date.now() < (token.accessTokenExpires as number)) {
-          const { error: _revokedError, ...rest } = token as unknown as Record<string, unknown>;
-          void _revokedError;
-          return rest;
-        }
-        return refreshAccessToken(token as unknown as Record<string, unknown>);
-      }
-      if (Date.now() < (token.accessTokenExpires as number)) {
-        return token;
-      }
-      return refreshAccessToken(token as unknown as Record<string, unknown>);
+      // 같은 access token의 검증 성공은 SESSION_AUTHORITY_REUSE_MS 동안 재사용한다(@greenhub/shared).
+      // 화면이 update()로 세션을 다시 받을 때는 재사용하지 않고 API로 다시 검증한다.
+      return revalidateSessionToken(token, {
+        verify: verifySessionAuthority,
+        refresh: refreshAccessToken,
+        reuseVerified: trigger !== 'update',
+      });
     },
     session({ session, token }) {
       session.user.id = token.sub as string;
