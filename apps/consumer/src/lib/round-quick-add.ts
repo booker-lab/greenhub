@@ -50,3 +50,18 @@ export function cartAddFailureMessage(reason: CartAddFailureReason): string {
   }
   return '회차 상품 정보를 확인할 수 없어 장바구니에 담지 못했습니다.';
 }
+
+/** 회차 상품의 상품 화면 주소. 옵션을 골라야 하는 상품은 바로 담지 않고 이 화면으로 보낸다. */
+export function roundProductHref(item: Pick<SaleRoundItem, 'productId' | 'roundId'>): string {
+  return `/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(item.roundId)}`;
+}
+
+/**
+ * 공개 상품 응답에 골라야 하는 옵션 묶음(화분 등)이 있는지. 서버는 옵션 묶음이 있는 상품을 옵션 없이
+ * 주문하면 거부하므로(2026-10-24), 이런 상품은 바로 담지 않고 상품 화면의 옵션 시트로 보낸다.
+ */
+export function productNeedsOptionChoice(product: unknown): boolean {
+  if (typeof product !== 'object' || product === null) return false;
+  const options = (product as { options?: unknown }).options;
+  return Array.isArray(options) && options.length > 0;
+}

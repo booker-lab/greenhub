@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import { OrderCapacityService } from './order-capacity.service';
+import { OrdersCreateService } from './orders-create.service';
 import { RoundOrderCreateService } from './round-order-create.service';
 
 // 팔도감 벤치마킹 비교 기능(옵션·문구·선물)을 실은 회차 주문 흐름.
@@ -180,7 +181,9 @@ describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () 
   });
 
   it('옵션·선물이 없으면 주문서에 새 필드를 만들지 않는다', async () => {
-    const { firestore, records } = makeFirestore(seed());
+    const { firestore, records } = makeFirestore(
+      seed({ 'products/product-1': { id: 'product-1', storeId: 'store-round', name: '호접란', price: 30000 } }),
+    );
     const result = await makeService(firestore).create(
       'store-round',
       'user-1',
@@ -212,6 +215,30 @@ describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () 
         'store-round',
         'user-1',
         request({ gift: { ...GIFT, recipientPhone: '' } }) as never,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('옵션이 있는 상품을 옵션 없이 주문하면 거부하고 아무것도 쓰지 않는다(화분 옵션 필수)', async () => {
+    const { firestore, records } = makeFirestore(seed());
+    const before = new Map(records);
+    await expect(
+      makeService(firestore).create(
+        'store-round',
+        'user-1',
+        request({ roundItems: [{ roundItemId: 'round-item-1', quantity: 1 }] }) as never,
+      ),
+    ).rejects.toThrow('옵션을 묶음마다 하나씩 골라 주세요.');
+    expect(records).toEqual(before);
+  });
+
+  it('옵션 묶음 일부만 고르면 거부한다', async () => {
+    const { firestore } = makeFirestore(seed());
+    await expect(
+      makeService(firestore).create(
+        'store-round',
+        'user-1',
+        request({ roundItems: [{ roundItemId: 'round-item-1', quantity: 1, optionChoiceIds: ['basic'] }] }) as never,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
@@ -266,5 +293,41 @@ describe('선물 정보 저장 토글(GREENHUB_FEATURES의 gift)', () => {
   ])('%s이면 선물 정보를 저장한다', async (_label, features) => {
     const order = await createWithGift(features);
     expect(order['gift']).toEqual({ ...GIFT, recipientPhone: '010-9876-5432' });
+  });
+});
+
+describe('장바구니 확인도 옵션 필수를 같은 판정으로 막는다', () => {
+  function makeCartService(firestore: any) {
+    const capacity = new OrderCapacityService(firestore);
+    const roundCreate = makeService(firestore);
+    return new OrdersCreateService(firestore, {} as never, capacity, roundCreate);
+  }
+  const cart = (roundItems: RecordData[]) =>
+    ({
+      productId: 'product-1',
+      quantity: 1,
+      saleType: 'normal',
+      deliveryMethod: 'direct',
+      roundId: 'round-1',
+      roundItems,
+      deliveryAddress: { address: '경기도 이천시 중리천로 1', addressDetail: '201호', zipCode: '17373' },
+    }) as never;
+
+  it('옵션이 있는 상품을 옵션 없이 담았으면 거부한다', async () => {
+    const { firestore } = makeFirestore(seed());
+    await expect(
+      makeCartService(firestore).validateCart('store-round', 'user-1', cart([{ roundItemId: 'round-item-1', quantity: 1 }])),
+    ).rejects.toThrow('옵션을 묶음마다 하나씩 골라 주세요.');
+  });
+
+  it('옵션을 묶음마다 골랐으면 통과한다', async () => {
+    const { firestore } = makeFirestore(seed());
+    await expect(
+      makeCartService(firestore).validateCart(
+        'store-round',
+        'user-1',
+        cart([{ roundItemId: 'round-item-1', quantity: 1, optionChoiceIds: ['basic', 'none'] }]),
+      ),
+    ).resolves.toMatchObject({ ok: true });
   });
 });
