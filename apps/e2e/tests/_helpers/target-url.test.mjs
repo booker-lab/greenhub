@@ -212,6 +212,10 @@ describe('API 직접 호출 spec의 API_BASE 계약', () => {
     const candidates = [
       ...PRODUCTION_API_HOSTS.map((host) => `https://${host}`),
       'https://api-production-0000.up.railway.app',
+      'https://c-0bcceaea1234---greenhub-api-988412563635.asia-northeast3.run.app',
+      'https://greenhub-api-abc123xyz0-du.a.run.app',
+      'https://greenhub-api-staging-abc123xyz0-du.a.run.app',
+      'https://greenhub-api-staging-111111111111.asia-northeast3.run.app',
       'https://greenlove.co.kr',
       'https://api.greenlove.co.kr',
       'https://api-staging-94af.up.railway.app',
