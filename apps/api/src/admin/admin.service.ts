@@ -68,6 +68,8 @@ import {
 const LEGACY_REFUND_CLAIM_MS = 5 * 60 * 1000;
 // 판매자 초대 토큰 유효 기간(발급 시점부터 72시간).
 export const INVITE_TTL_MS = 72 * 60 * 60 * 1000;
+// 관리자 초대 내역 목록 상한(최근 발급순).
+export const INVITE_LIST_LIMIT = 50;
 
 // 관리자 목록 응답은 화면이 쓰는 필드만 내려준다(저장 배송지·세션·외부 로그인 식별자 등은 제외).
 const ADMIN_USER_LIST_FIELDS = ['id', 'email', 'name', 'phone', 'suspended', 'createdAt'] as const;
@@ -830,12 +832,20 @@ export class AdminService {
     };
   }
 
+  // 최근 INVITE_LIST_LIMIT건만 준다. 한 건 더 읽어 더 있는지(hasMore)를 알려 화면이 상한을 안내한다.
   async getInvites() {
     const snap = await (
-      this.firestore.collection('invites').orderBy('createdAt', 'desc').limit(50) as any
+      this.firestore
+        .collection('invites')
+        .orderBy('createdAt', 'desc')
+        .limit(INVITE_LIST_LIMIT + 1) as any
     ).get();
 
-    return snap.docs.map((d: any) => d.data());
+    return {
+      invites: snap.docs.slice(0, INVITE_LIST_LIMIT).map((d: any) => d.data()),
+      hasMore: snap.docs.length > INVITE_LIST_LIMIT,
+      limit: INVITE_LIST_LIMIT,
+    };
   }
 
   /**

@@ -331,7 +331,7 @@ GET /admin/invite
 ```
 
 - `createdAt DESC`
-- 최대 50건
+- 최대 50건. 응답은 `{ invites, hasMore, limit: 50 }`이고, 50건보다 많으면 `hasMore: true`라 초대 탭이 "최근 50건만 보여요"를 안내한다(관리자 숨긴 후기 `GET /admin/reviews/hidden`도 같은 모양 `{ reviews, hasMore, limit: 200 }`)
 
 ### 취소
 

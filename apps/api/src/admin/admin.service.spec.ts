@@ -687,6 +687,49 @@ describe('AdminService 일반 주문 강제 환불 고객 안내', () => {
   });
 });
 
+describe('AdminService 초대 내역 상한 신호', () => {
+  function makeInviteService(count: number) {
+    const docs = Array.from({ length: count }, (_, i) => ({ data: () => ({ token: `T${i}` }) }));
+    const query = {
+      orderBy: jest.fn(),
+      limit: jest.fn(),
+      get: jest.fn(async () => ({ docs: docs.slice(0, query.limit.mock.calls[0]?.[0] ?? count) })),
+    };
+    query.orderBy.mockReturnValue(query);
+    query.limit.mockReturnValue(query);
+    const firestore = { collection: jest.fn(() => query) };
+    const service = new AdminService(
+      firestore as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { logAdmin: jest.fn(), listAdmin: jest.fn() } as never,
+    );
+    return { query, service };
+  }
+
+  it('상한보다 많으면 최근 50건만 주고 hasMore로 알린다', async () => {
+    const { query, service } = makeInviteService(60);
+
+    const result = await service.getInvites();
+
+    expect(query.orderBy).toHaveBeenCalledWith('createdAt', 'desc');
+    expect(query.limit).toHaveBeenCalledWith(51);
+    expect(result.invites).toHaveLength(50);
+    expect(result.invites[49]).toEqual({ token: 'T49' });
+    expect(result).toMatchObject({ hasMore: true, limit: 50 });
+  });
+
+  it('정확히 50건이면 더 없음으로 알린다', async () => {
+    const { service } = makeInviteService(50);
+
+    const result = await service.getInvites();
+
+    expect(result.invites).toHaveLength(50);
+    expect(result.hasMore).toBe(false);
+  });
+});
+
 describe('AdminService 정산 KST 날짜 범위', () => {
   function makeSettlementService(records: Data[] = []) {
     const calls: unknown[][] = [];

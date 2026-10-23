@@ -7,12 +7,15 @@ import {
   missingTokenOutcome,
   resolveConfirmedOutcome,
 } from './useAdmin.outcome';
+import { readCappedList } from './useAdmin.listCap';
 import { useAdminList } from './useAdmin.list';
 import type { InviteRevokeOutcome, InviteToken, IssuedInvite } from './useAdmin.types';
 
 // ── Invite ───────────────────────────────────────────────────────
 
 export function useAdminInvite() {
+  // 서버 상한(최근 N건)에 닿았으면 그 건수. 조회 경로가 하나뿐이라 겹친 응답도 같은 목록이다.
+  const [cap, setCap] = useState<number | null>(null);
   const {
     items: invites,
     loading,
@@ -21,7 +24,11 @@ export function useAdminInvite() {
     token,
   } = useAdminList<InviteToken>(
     () => '/admin/invite',
-    (data) => (Array.isArray(data) ? (data as InviteToken[]) : []),
+    (data) => {
+      const list = readCappedList<InviteToken>(data, 'invites');
+      setCap(list.cap);
+      return list.items;
+    },
     '초대 토큰',
   );
   const [generating, setGenerating] = useState(false);
@@ -74,5 +81,5 @@ export function useAdminInvite() {
     return resolveConfirmedOutcome(await reload());
   };
 
-  return { invites, loading, error, generating, generateError, generate, revoke, reload };
+  return { invites, cap, loading, error, generating, generateError, generate, revoke, reload };
 }
