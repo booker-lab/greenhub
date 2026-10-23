@@ -767,6 +767,30 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### DEAR-ORCHID-OWNER-PHONE
 - [ ] 2026-10-15 발견(보안 세션 check): 디어 오키드 소유자 계정(uid `6c176cb5…`)의 `users.phone`이 비어 있다. 판매자 앱에는 본인 전화번호 입력 화면이 없다(API `PATCH /auth/me`는 `phone`을 받는다). 해결 방식은 사용자에게 묻는 중. **영향 범위(2026-10-15 코드 대조)**: 소유자 `users.phone`을 쓰는 곳은 `NotificationsService.sendToStoreOwner` → `sendToUser`(`resolveRecipientPhone`)뿐이고, 호출처는 legacy 공동구매의 `SELLER_GROUP_CONFIRMED`·`SELLER_GROUP_CANCELLED_LACK` 두 곳이다(`apps/api/src/notifications/notifications.service.ts`). 회차 직접 판매(파일럿 `round_direct`) 흐름에는 판매자 알림톡·문자 호출이 없고(`SELLER_ORDER_BATCH`는 registry에만 있고 호출처 없음), 회차 주문의 기사용 판매자 연락처는 매장 문서 `stores.phone`에서 가져온다(`apps/api/src/orders/round-order-create.service.ts`). 따라서 현재 코드에서 이 빈 값은 파일럿 회차 흐름의 알림을 막지 않는다. 회차 파일럿에서 판매자가 신규 주문 알림을 받아야 하는지는 정해진 계약이 없다(지금은 판매자 앱 주문 화면으로 확인한다). 매장 문서 `stores.phone` 값은 이번에 확인하지 않았다. 필요하면 별도 제품 결정으로 다룬다.
 
+### POT-OPTION-SHEET-PROD-ENABLE
+- [ ] 2026-10-23 사용자 결정: 파일럿 동안 화분을 회차 상품의 옵션으로 판다. 운영 consumer·seller 빌드의 `NEXT_PUBLIC_GREENHUB_FEATURES`에 `option-sheet`가 있는지 확인하고, 없으면 기존 값에 덧붙여 두 앱을 다시 빌드·배포한다(사용자 승인 2026-10-23). 판매자 옵션 입력(`apps/seller/src/app/products/_components/ProductExtrasSection.tsx`)과 소비자 옵션 시트(`apps/consumer/src/app/products/[id]/_components/RoundDirectProductActions.tsx`)가 이 토글 뒤에 있다. API 옵션 가격 계산(`apps/api/src/orders/_lib/round-order-extras.ts`)은 토글과 무관하다. 값이 빌드 때 굳으므로 env만 바꾸면 반영되지 않는다. 운영 값 확인은 consumer 페이지의 `<meta name="greenhub-features">`로 한다(seller는 이 meta가 없다). `apps/e2e`에 옵션 시트 E2E가 없으므로 켜기 전에 로컬 운영 빌드로 옵션 담기 → 결제 준비 → 판매자 주문 상세 옵션 표시를 확인한다. **막힘(2026-10-23)**: 클라우드 세션에 Vercel 권한이 없고 운영 도메인 접속이 네트워크 정책으로 막혀 확인·배포를 하지 못했다. 옵션 등록 자체(상품당 묶음 3개·선택지 6개, 추가 금액 20만 원 이하)는 코드 변경 없이 판매자 앱에서 한다.
+
+### POT-OPTION-STOCK
+- [ ] 2026-10-23 사용자 결정: 화분은 사용자가 직접 출력해 수량을 갱신하는 방식으로 재고를 관리한다. 현재 옵션 선택지(`ProductOptionChoice`, `packages/shared/src/benchmark.types.ts`)에는 재고가 없어 다 떨어져도 계속 팔린다. 필요한 것: 판매자가 출력한 수량을 더하고 고치는 화면, 회차 주문 예약 트랜잭션에서 차감(`apps/api/src/orders/round-order-create.service.ts`, 회차 용량과 같은 트랜잭션), 결제 전 취소·예약 만료·환불 때 반환, 0이면 소비자 옵션 시트에 품절 표시, 서버가 품절 선택지를 거부. 설계 질문: 같은 화분을 여러 식물 상품의 옵션으로 붙이면 재고를 공유해야 한다. 재고를 상품별 선택지가 아니라 매장 단위 화분 품목 하나에 두고 선택지가 그 품목을 가리키게 하는 안을 먼저 검토한다. 이 품목은 `SUPPLIES-ALWAYS-ON-SALES`의 자재 상품 재고와 이어질 수 있다. 이 기능 전에 화분 옵션을 팔면 품절은 판매자가 선택지를 지워 처리한다.
+
+### SUPPLIES-ALWAYS-ON-SALES
+2026-10-23 사용자 결정: 파일럿(회차 식물 판매) 뒤 화분 자재를 상시 택배로 판다. 예전 상시 판매 흐름(`salesMode=legacy`: 택배·거점·날짜 지정 직배송·공동구매, `docs/discussions/DISCUSS_mvp_sales_focus.md`에서 숨김)을 다시 쓴다. 판매 방식은 매장마다 하나라서(`packages/shared/src/store.types.ts`, `apps/api/src/orders/orders-create.service.ts`의 `round_direct` 분기) 자재는 별도 `legacy` 매장에 두고, **판매자 한 명이 두 매장을 함께 관리**한다(사용자 결정: 별도 판매자 계정 아님). 순서: 2-B·2-F 결정과 택배사 계약 → 2-A·2-C·2-D·2-E → 2-G.
+
+- [ ] 2-A 소비자 앱 다중 매장: 홈·분류 화면은 노출 상품의 매장이 하나일 때만 그 매장의 판매 방식을 쓰고, 둘 이상이면 `storeId=null`로 `legacy` 화면이 된다(`apps/consumer/src/app/category/page.tsx` `findSingleStoreId`, `apps/consumer/src/components/home-store-selection.ts`). 자재 매장 상품을 공개하는 순간 디어 오키드 회차 화면이 무너질 수 있으므로 공개 전에 매장(판매 방식)별 진입·구역을 나눈다. 장바구니·결제도 매장별로 나눈다(`apps/consumer/src/lib/cartValidation.ts`).
+- [ ] 2-B 판매자 한 명의 다중 매장: 지금은 계정당 매장 1개다(`users.storeId` 하나, 기존 매장이 있으면 생성 409 `apps/api/src/stores/stores.service.ts`, 토큰 `storeId` 클레임 `apps/api/src/auth/auth.service.ts`, `firestore.rules`·`storage.rules`도 토큰 `storeId`로 판정). 권장안: 판매자 앱 매장 전환. 전환하면 그 매장 `storeId`로 토큰을 다시 발급하고 소유는 `stores.ownerId`로 확인한다. 기존 매장 단위 권한 경계(주문·상품·회차·정산·Rules)를 그대로 둘 수 있다. 대안(한 매장에서 상품별 판매 방식)은 주문 분기·장바구니·화면이 섞여 비권장. 설계 확정 필요.
+- [ ] 2-C 자재 상품 분류: `Category`가 `cut_flower`·`orchid`·`foliage`뿐이다(`packages/shared/src/product.types.ts`). 자재 분류, 판매자 등록 화면, 자재용 상품 정보(크기·재질·색)를 추가한다. 상품정보제공고시 원산지 기본값 "국내산(경기도 이천)"(`benchmark.types.ts` `PRODUCT_NOTICE_DEFAULT_ORIGIN`)은 자재에 맞지 않는다.
+- [ ] 2-D 택배 발송: 주문에 송장번호·택배사 칸이 없다(`packages/shared/src/order.types.ts`). 송장 입력(판매자), 배송 조회(소비자), 발송 알림이 필요하다. 알림톡 템플릿을 추가하면 ALIGO 심사가 필요하다.
+- [ ] 2-E legacy 흐름 재검증: `LEGACY-E2E-WORKFLOW-VARS`를 해결하고 택배 주문 → 결제 → 발송 → 취소·환불을 현재 코드로 확인한다. 자재 매장 택배 배송비(`deliveryFeeConfig/{storeId}`)를 정한다.
+- [ ] 2-F 법적 문서. 2026-10-23 공개 `/terms`·`/privacy` 코드 대조 결과 바꿀 곳:
+  - 이용약관 제3조(현재 제공 서비스)·제7조가 이천시 회차 직배송만 적는다 → 상시 택배 판매를 범위에 넣는다.
+  - 제8조 소비자 취소가 "회차 주문 마감 전" 기준이다 → 상시 주문의 취소 기준(예: 발송 전)을 둔다.
+  - 제8조 청약철회는 강행규정을 따른다고만 하고 제한 예시는 신선화훼뿐이다 → 자재의 반품 방법·반품 배송비 부담·반품 주소를 약관과 거래 화면에 둔다(법적 판단은 사람 확인).
+  - 제9조는 직배송 보류·재배송만 다룬다 → 택배 배송기간·배송비·분실·파손 처리를 넣는다.
+  - 개인정보처리방침 3절은 외부 배송 수행자를 "실제 도입 전에" 제공받는 자·목적·항목·보유기간과 함께 안내한다고 이미 약속했고, 4절 처리위탁 목록에 배송업체가 없다. `docs/specs/legal/README.md`는 존재하지 않는 배송업체를 현재 사실로 적지 않게 한다 → 택배사 계약 뒤에 쓴다.
+  - 통신판매업 신고번호(`docs/specs/legal/README.md` `DECISION REQUIRED`)는 전국 택배 상시 판매 전에 결정한다.
+  - **막힘(2026-10-23)**: 택배사 계약 없음. 계약 뒤 고지 문구·시행일을 정하고 출시 묶음과 함께 배포한다.
+- [ ] 2-G 출시: 자재 매장 생성(`salesMode=legacy`)·상품 등록, 묶음 최종 `main` SHA로 원격 E2E 1회, 운영 배포(사용자 승인).
+
 ---
 
 ## STALE_OR_SUPERSEDED
