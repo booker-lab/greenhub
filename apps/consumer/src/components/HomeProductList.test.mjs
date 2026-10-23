@@ -47,3 +47,18 @@ test('legacy 스토어는 기존 홈 상품 흐름으로 분기한다', () => {
   assert.match(source, /진행 중 공동구매/);
   assert.match(source, /전체 상품/);
 });
+
+test('매장을 알게 되는 즉시 판매 방식·회차 조회를 함께 시작하고 화면 판정 순서는 그대로 둔다', () => {
+  const prefetchPosition = source.indexOf(
+    'useHomeStorePrefetch(homePrefetchStoreId(storeId, requestedStoreId));',
+  );
+  const storeModePosition = source.indexOf('const storeMode = useStoreMode(storeId, loading || groupLoading);');
+  assert.ok(prefetchPosition >= 0);
+  assert.ok(storeModePosition > prefetchPosition);
+  // 화면에 보일 매장·판매 방식 판정과 회차 조회 대상은 바뀌지 않는다.
+  assert.match(source, /resolveHomeStoreId\(\[\.\.\.products, \.\.\.groupProducts\], requestedStoreId\)/);
+  assert.match(
+    source,
+    /useSaleRounds\(\s*storeMode\.salesMode === 'round_direct' \? storeMode\.storeId : null,\s*\)/,
+  );
+});
