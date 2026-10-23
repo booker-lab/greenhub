@@ -74,7 +74,7 @@ workspace 범위는 `pnpm-workspace.yaml`의 `apps/*`, `packages/*`, `scripts`�
 
 ## 로컬 개발과 검증
 
-요구사항: Node.js ≥ 20, pnpm ≥ 9
+요구사항: Node.js는 `.nvmrc`의 정확한 버전(CI·운영 API Docker 이미지와 같음), pnpm은 `package.json`의 `packageManager` 버전, Firebase 에뮬레이터를 쓸 때 Java 21 이상.
 
 ```bash
 pnpm install
@@ -106,6 +106,30 @@ API와 consumer는 포트를 따로 지정하지 않으면 둘 다 3000을 사�
 `pnpm lint`는 workspace별 lint를 재귀 실행하며 API lint는 수정형(`--fix`)이므로 읽기 전용 검증 용도로 사용하기 전에 실제 스크립트를 확인해야 합니다.
 
 환경 변수는 저장소에 비밀값을 기록하지 않고 각 실행 환경에서 관리합니다.
+
+### 여러 컴퓨터에서 같은 환경 쓰기
+
+패키지 버전은 `pnpm-lock.yaml`, pnpm 버전은 `packageManager`, Node 버전은 `.nvmrc`가 정합니다. 컴퓨터마다 처음 한 번 Node 버전 관리자를 설치합니다(Windows 예시).
+
+```powershell
+winget install Schniz.fnm
+# PowerShell 프로필($PROFILE)에 추가: 저장소 폴더에 들어가면 .nvmrc 버전으로 바뀐다
+fnm env --use-on-cd --corepack-enabled --shell powershell | Out-String | Invoke-Expression
+# 터미널을 다시 열고 저장소 폴더에서 .nvmrc 버전을 설치한다
+fnm install
+```
+
+Git Bash에서도 작업하면 `~/.bashrc`에 `eval "$(fnm env --use-on-cd --corepack-enabled --shell bash)"`를 추가합니다.
+
+작업을 시작할 때마다 다음 순서로 실행합니다.
+
+```bash
+git pull
+pnpm install --frozen-lockfile
+pnpm dev:check
+```
+
+`pnpm dev:check`는 Node·pnpm 버전, 설치된 의존성과 lockfile 일치, Java, Playwright 브라우저, env 파일의 키 이름(값은 보지 않음)을 확인하고 `[실패]`·`[주의]` 항목마다 고치는 방법을 보여 줍니다. `.env` 파일은 비밀값이라 GitHub에 올리지 않고 컴퓨터 사이에 직접 옮깁니다. Node 버전을 올릴 때는 `.nvmrc`와 `Dockerfile`의 `NODE_IMAGE`를 같은 PR에서 함께 바꿉니다(CI가 확인합니다).
 
 ## 문서 SSOT
 

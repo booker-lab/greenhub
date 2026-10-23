@@ -71,7 +71,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: run allowlist bridge spec (mock/local only)
         run: node --test scripts/vercel/driver-preview-allowlist-reprobe.spec.mjs
@@ -97,7 +97,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: owner + dispatch + confirm preflight (fail-closed)
         shell: bash
