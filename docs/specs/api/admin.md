@@ -92,9 +92,10 @@ PATCH /admin/stores/:storeId/restore
 
 현재 archive는 물리 삭제가 아니다.
 
-- 주문 또는 settlement가 하나라도 존재하면 archive 거부
-- 허용되면 `status: archived`, `archivedAt` 기록
-- restore는 `status: active`로 복구하고 `archivedAt` 제거
+- 주문 또는 settlement가 하나라도 존재하면 archive 거부, 이미 치운 판매자면 409
+- 허용되면 `status: archived`, `archivedAt`, 치우기 전 상태 `archivedFromStatus` 기록
+- restore는 치운 판매자만 받고(아니면 409) `archivedFromStatus`(없으면 `active`)로 되돌린 뒤 `archivedAt`·`archivedFromStatus` 제거
+- 치운 판매자는 손님 공개 화면(가게·상품·회차)에서 숨고 새 주문이 막힌다. 판매자 로그인은 허용한다(2026-10-21 결정, `apps/api/src/stores/store-availability.ts`)
 
 기록이 있는 판매자를 강제로 삭제하는 도구로 사용하지 않는다.
 
@@ -134,8 +135,7 @@ GET /admin/orders?storeId=<storeId>&status=<OrderStatus>
 
 - 선택적 store/status filter
 - `createdAt DESC`
-- 최대 200건
-- pagination 없음
+- `limit` 기본 50·상한 100, `cursor`로 이어 받기(`hasMore`·`nextCursor`, `apps/api/src/admin/admin-lists.ts`)
 
 ### 관리자 환불
 
@@ -250,10 +250,10 @@ PATCH /admin/settlements/:settlementId/pay
 ### 목록
 
 ```text
-GET /admin/drivers?status=pending|approved|suspended
+GET /admin/drivers?status=pending|approved|suspended&limit=<n>&cursor=<id>
 ```
 
-현재 구현은 Firestore에서 `role == driver` 최대 100건을 읽은 뒤 status를 service 메모리에서 필터·정렬한다.
+현재 구현은 Firestore에서 `role == driver`를 `createdAt DESC`로 한 쪽(`limit` 기본 100·상한 200) 읽은 뒤, status는 그 쪽 안에서 service 메모리로 거른다. 걸러진 결과가 비어도 다음 쪽이 있으면 `hasMore`·`nextCursor`를 돌려준다. seller 관리자 화면은 지금 status를 보내지 않고 받은 쪽 안에서 탭을 거른다.
 
 status 판정:
 
@@ -420,9 +420,10 @@ Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다
 
 ## 11. 현재 알려진 구조적 제한
 
-- admin 주문 목록: 최대 200건, pagination 없음
+- admin 주문 목록: 커서 이어받기(기본 50·상한 100), 정렬은 최신순 고정
 - admin 정산 목록: 커서 이어받기(기본 100·상한 500), 합계는 summary(최대 20,000건 스캔)
-- driver 목록: 최대 100건 read 후 메모리 필터
+- driver 목록: 커서 이어받기(기본 100·상한 200), status는 읽은 쪽 안에서 메모리 필터
+- consumer 목록: 건수 상한·이어받기 없이 전량 read(최신순)
 - admin privileged mutation의 서버 authorization + side-effect 0은 `apps/api/src/admin/admin-privileged-mutation.spec.ts`로 `IMPLEMENTATION_PROVEN`
 - admin settlement 지급 전이는 `apps/api/src/admin/admin-privileged-mutation.spec.ts`로 `IMPLEMENTATION_PROVEN`
 - admin 강제 환불은 `apps/api/src/admin/admin.service.spec.ts`·`apps/api/src/admin/admin-legacy-refund-occ-retry.spec.ts` 직접 proof로 `ADMIN-FORCE-REFUND-CONSISTENCY`가 `IMPLEMENTATION_PROVEN`
@@ -462,6 +463,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-23 | 주문·기사 목록 커서 이어받기, 치운 판매자 숨김·주문 차단과 복구 상태(#593)를 §3·§5·§7·§11에 반영 |
 | 2026-10-21 | 관리자 배송 후 환불(§5) endpoint와 행동 기록 `admin.order.post_delivery_refunded` 추가. 지급 뒤 환불의 회수 완료는 운영 기록(`SETTLEMENT_RECOVERY_REQUIRED`) 닫기로 처리 |
 | 2026-10-21 | 운영 판매자 가입을 초대 링크 → 카카오 로그인으로 결정(`kakao-login` `inviteToken`), 초대 탭 링크 복사·발급/사용 시각·사용 계정 표시 |
 | 2026-10-21 | 어드민 행동 기록(`adminAuditLogs`, `GET /admin/audit-logs`, seller "기록" 탭), 정산 지급 `paidBy`, 정지 사유(`SuspendUserDto.reason`) 추가 |
