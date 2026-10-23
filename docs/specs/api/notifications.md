@@ -81,6 +81,8 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 
 외부 API 응답에서는 `TimestampInterceptor`에 의해 timestamp가 ISO 문자열로 변환될 수 있다. 클라이언트는 Firestore 내부 객체 형태를 공개 API 계약으로 가정하지 않는다.
 
+보관: 알림 기록은 `createdAt` 기준 90일이 지나면 매일 03:00(KST) 정기 파기(`RetentionService.runScheduledPurge`)에서 지운다. 한 번에 450건씩 최대 20번(9,000건)까지 지우고 남은 것은 다음 날 이어서 지운다. 지운 기록은 운영 이슈의 SMS 재발송(`resendSms`)에서 "재발송할 알림 기록을 찾을 수 없습니다"로 거절된다. 발송 중복 방지 기록(`notificationDeliveries`)은 전화·본문이 없어 지우지 않는다.
+
 ## 4. 본문 registry와 변수 검증
 
 본문 정본은 `apps/api/src/notifications/notification-templates.ts`의 `NOTIFICATION_TEMPLATES`다.
