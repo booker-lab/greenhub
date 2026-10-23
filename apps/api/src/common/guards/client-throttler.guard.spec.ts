@@ -83,7 +83,7 @@ async function createApp(trustProxyHops: number | false): Promise<INestApplicati
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   app.set('trust proxy', trustProxyHops);
   await app.init();
-  return app as unknown as INestApplication<App>;
+  return app;
 }
 
 async function hit(times: number, send: () => request.Test): Promise<number[]> {

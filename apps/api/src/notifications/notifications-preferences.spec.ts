@@ -61,7 +61,7 @@ describe('알림 마케팅 동의 설정 계약', () => {
       },
     };
     const update = jest.fn(async (data: Record<string, unknown>) => {
-      user = { ...user, ...data } as typeof user;
+      user = { ...user, ...data };
     });
     const firestore = {
       doc: jest.fn(() => ({

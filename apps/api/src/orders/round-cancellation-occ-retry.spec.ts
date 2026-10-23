@@ -114,7 +114,7 @@ describe('round cancellation OCC retry purity', () => {
       service.cancelForRound({
         storeId: 'store-1',
         orderId: ORDER_ID,
-        expectedStatus: 'ACCEPTED' as never,
+        expectedStatus: 'ACCEPTED',
         reason: '소비자 취소',
       }),
     ).resolves.toEqual({ orderId: ORDER_ID, status: 'CANCELLED' });
@@ -168,7 +168,7 @@ describe('round cancellation OCC retry purity', () => {
       service.cancelForRound({
         storeId: 'store-1',
         orderId: ORDER_ID,
-        expectedStatus: 'ACCEPTED' as never,
+        expectedStatus: 'ACCEPTED',
         reason: '소비자 취소',
       }),
     ).resolves.toEqual({ orderId: ORDER_ID, status: 'CANCELLED' });
@@ -201,7 +201,7 @@ describe('round cancellation OCC retry purity', () => {
       service.cancelForRound({
         storeId: 'store-1',
         orderId: ORDER_ID,
-        expectedStatus: 'ACCEPTED' as never,
+        expectedStatus: 'ACCEPTED',
         reason: '소비자 취소',
       }),
     ).resolves.toEqual({ orderId: ORDER_ID, status: 'CANCELLED' });
@@ -223,7 +223,7 @@ describe('round cancellation OCC retry purity', () => {
       service.cancelForRound({
         storeId: 'store-1',
         orderId: ORDER_ID,
-        expectedStatus: 'PENDING' as never,
+        expectedStatus: 'PENDING',
         reason: '소비자 취소',
       }),
     ).resolves.toEqual({ orderId: ORDER_ID, status: 'CANCELLED' });
@@ -250,7 +250,7 @@ describe('round cancellation OCC retry purity', () => {
       service.cancelForRound({
         storeId: 'store-1',
         orderId: ORDER_ID,
-        expectedStatus: 'ACCEPTED' as never,
+        expectedStatus: 'ACCEPTED',
         reason: '소비자 취소',
       }),
     ).resolves.toEqual({ orderId: ORDER_ID, status: 'CANCELLED' });

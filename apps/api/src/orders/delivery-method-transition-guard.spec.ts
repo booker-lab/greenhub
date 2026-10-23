@@ -96,7 +96,7 @@ function makeContext(order: Data) {
       String(order['storeId']),
       'order-1',
       requesterId,
-      { status } as never,
+      { status },
       role,
     );
   return { memory, notifications, settlements, lifecycle, update };

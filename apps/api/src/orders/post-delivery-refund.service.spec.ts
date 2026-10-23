@@ -149,7 +149,7 @@ describe('PostDeliveryRefundService', () => {
     ['아직 배송 전(PREPARING)', { status: 'PREPARING' }, '배송이 완료된 주문만'],
   ])('판매자는 %s 주문을 환불할 수 없고 결제·주문은 그대로다', async (_label, options, message) => {
     const occ = createOccFirestore();
-    seed(occ, options as never);
+    seed(occ, options);
     const before = occ.getData(ORDER_PATH);
     const { service, payments, notifications } = makeService(occ);
 
@@ -278,7 +278,7 @@ describe('PostDeliveryRefundService', () => {
       [{ status: 'CANCELLED' }, 'ALREADY_REFUNDED'],
     ])('%o 이면 %s', async (options, reason) => {
       const occ = createOccFirestore();
-      seed(occ, options as never);
+      seed(occ, options);
       const { service } = makeService(occ);
 
       await expect(service.getSellerEligibility('store-1', ORDER_ID)).resolves.toMatchObject({

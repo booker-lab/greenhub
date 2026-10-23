@@ -42,7 +42,7 @@
     "night": "node scripts/agent/run-night.mjs"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.14",
+    "@biomejs/biome": "^2.6.2",
     "@firebase/rules-unit-testing": "^5.0.1",
     "dotenv": "^17.4.2",
     "firebase": "^12.11.0",

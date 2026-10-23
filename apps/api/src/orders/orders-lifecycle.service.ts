@@ -148,7 +148,7 @@ export class OrdersLifecycleService {
       if (outcome === 'alreadyReviewed') {
         throw new ForbiddenException(`${currentStatus} → ${nextStatus} 전환은 허용되지 않습니다.`);
       }
-      await this.notifyTransitionAfterCommit(order, currentStatus, nextStatus as OrderStatus, orderId);
+      await this.notifyTransitionAfterCommit(order, currentStatus, nextStatus, orderId);
       return { orderId, status: nextStatus };
     }
 

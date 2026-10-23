@@ -121,7 +121,7 @@ describe('배송 사진 보관 파기 실패의 store-scoped routing', () => {
       deleteObject: jest.fn().mockRejectedValue(new Error('authorization=Bearer secret')),
     };
     const issueWriter = new OperationIssueWriterService(firestore as never);
-    const retention = new RetentionService(firestore as never, storage as never, issueWriter as never);
+    const retention = new RetentionService(firestore as never, storage, issueWriter);
 
     await expect(retention.purgeExpiredRecords({ now })).resolves.toMatchObject({
       deletedCount: 0,
@@ -148,7 +148,7 @@ describe('배송 사진 보관 파기 실패의 store-scoped routing', () => {
       firestore as never,
       {} as never,
       {} as never,
-      issueWriter as never,
+      issueWriter,
     );
     const { items } = await operations.listIssuesForStore('store-safe', 'seller-1', 'seller');
     expect(items).toHaveLength(1);
@@ -163,7 +163,7 @@ describe('배송 사진 보관 파기 실패의 store-scoped routing', () => {
     const { firestore } = makeFirestore({});
     const storage = { deleteObject: jest.fn().mockResolvedValue(undefined) };
     const issueWriter = { createOrMergeIssue: jest.fn().mockResolvedValue({ id: 'issue-safe' }) };
-    const retention = new RetentionService(firestore as never, storage as never, issueWriter as never);
+    const retention = new RetentionService(firestore as never, storage, issueWriter as never);
 
     await expect(
       retention.saveRecord({

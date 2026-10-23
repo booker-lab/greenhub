@@ -601,7 +601,7 @@ export class NotificationsService {
     // snapshot 사전 필터 + transaction fresh 재확인으로 race loser overwrite를 차단한다.
     await Promise.all(
       ordersSnap.docs.map(async (d) => {
-        if (this.isLegacyCancellationOwned(d.data() as Record<string, unknown>)) return;
+        if (this.isLegacyCancellationOwned(d.data())) return;
         await this.firestore.runTransaction(async (tx) => {
           const fresh = await tx.get(d.ref);
           if (!fresh.exists) return;

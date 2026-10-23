@@ -261,7 +261,7 @@ export class PostDeliveryRefundService {
   private async sendNotice(orderId: string, reasonCode: PostDeliveryRefundReasonCode) {
     if (!this.notifications) return;
     const snap = await this.firestore.doc(`orders/${orderId}`).get();
-    const order = snap.data() as OrderRecord | undefined;
+    const order = snap.data();
     if (!order || typeof order['userId'] !== 'string') return;
     const kind = NOTICE_KIND[reasonCode];
     try {

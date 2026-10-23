@@ -200,14 +200,14 @@ function makeContext(options: { order?: TestRecord } = {}) {
   const roundLifecycle = new RoundOrderLifecycleService(
     firestore as never,
     payments as never,
-    settlements as never,
+    settlements,
     capacity as never,
   );
   const lifecycle = createSettledOrdersLifecycle(
     firestore as never,
     notifications as never,
     payments as never,
-    settlements as never,
+    settlements,
     capacity as never,
     roundLifecycle,
   );

@@ -141,7 +141,7 @@ function makeContext(options: ContextOptions = {}) {
     storage as never,
     retention as never,
     lifecycle as never,
-    driverScope as never,
+    driverScope,
     issueWriter as never,
   );
 
