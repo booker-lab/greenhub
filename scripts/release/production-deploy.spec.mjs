@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import {
   buildVercelProductionBody,
   deployCloudRun,
@@ -501,4 +503,56 @@ test('main: cloudrun은 주입한 gcloud로 배포하고 health는 --api-base �
     },
   });
   assert.deepEqual(urls, ['https://api.greenlove.co.kr/health']);
+});
+
+// 전환 뒤에는 ingress를 부하분산기만 허용으로 바꿔 인터넷에서 run.app에 직접 닿지 않는다(404).
+const blockedRunAppFetch = (urls) => async (url) => {
+  urls.push(url);
+  if (new URL(url).hostname.endsWith('.run.app')) return new Response('Not Found', { status: 404 });
+  return json({ status: 'ok', commit: SHA });
+};
+
+test('cloudrun: run.app 직접 접속이 막혀도 고정 주소로 확인하면 되돌리지 않는다', async () => {
+  const gcloud = fakeGcloud();
+  const urls = [];
+  const result = await deployCloudRun({
+    sha: SHA,
+    apiBase: 'https://api.greenlove.co.kr',
+    gcloud: gcloud.impl,
+    fetchImpl: blockedRunAppFetch(urls),
+    sleep: noSleep,
+    healthTimeoutMs: -1,
+  });
+  assert.equal(result.revision, 'greenhub-api-00042-new');
+  assert.deepEqual(urls, ['https://api.greenlove.co.kr/health']);
+  assert.deepEqual(trafficCalls(gcloud.calls), ['--to-revisions=greenhub-api-00042-new=100']);
+});
+
+test('main: cloudrun은 --api-base가 없으면 배포 전에 멈춘다(run.app으로 몰래 확인하지 않는다)', async () => {
+  const gcloud = fakeGcloud();
+  const urls = [];
+  await assert.rejects(
+    main(['cloudrun', `--sha=${SHA}`], {
+      env: {},
+      fetchImpl: blockedRunAppFetch(urls),
+      sleep: noSleep,
+      gcloud: gcloud.impl,
+    }),
+    /--api-base/,
+  );
+  assert.deepEqual(gcloud.calls, []);
+  assert.deepEqual(urls, []);
+});
+
+test('workflow: Cloud Run 배포 명령은 CLOUD_RUN_API_BASE로 확인한다', () => {
+  const source = readFileSync(
+    fileURLToPath(new URL('../../.github/workflows/production-deploy.yml', import.meta.url)),
+    'utf8',
+  );
+  assert.match(source, /^\s+CLOUD_RUN_API_BASE: https:\/\/\S+$/m);
+  const calls = source
+    .split('\n')
+    .filter((line) => line.includes('production-deploy.mjs cloudrun'));
+  assert.ok(calls.length > 0, 'workflow에 cloudrun 배포 명령이 있어야 한다');
+  for (const line of calls) assert.ok(line.includes('--api-base="$CLOUD_RUN_API_BASE"'), line);
 });

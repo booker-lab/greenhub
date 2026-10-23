@@ -148,7 +148,7 @@ ALIGO 고정 IP는 Fixie로 어디서든 해결되므로 선택을 가르지 않
 | ~5분 | 예비 서버를 **정기 작업 끈 채로**(`GREENHUB_SCHEDULES_ENABLED=false`) 최소 1대로 켠다 | Claude(명령)·사용자(GCP 승인) | 예비 서버 `/health` 200, `commit`이 마지막 운영 SHA |
 | ~8분 | 예비 서버 CORS preflight를 세 앱 주소로 확인 | Claude | 세 주소 모두 허용 헤더 |
 | ~10분 | 세 앱 Vercel production `NEXT_PUBLIC_API_URL`을 예비 서버 주소로 바꾼다 | 사용자(또는 승인 뒤 Claude) | Vercel 화면에서 값 확인 |
-| ~20분 | 세 앱을 같은 SHA로 **빌드 생략 없이** 다시 배포한다(위 "함정") | 사용자(또는 승인 뒤 Claude) | 세 배포 모두 READY. CANCELED·skipped면 실패로 본다 |
+| ~20분 | 세 앱을 같은 SHA로 **빌드 생략 없이** 다시 배포한다(위 "함정"). 배포 도구로 할 때는 `production-deploy.mjs vercel --require-build=true`를 쓴다(C4에서 추가, CANCELED를 실패로 본다) | 사용자(또는 승인 뒤 Claude) | 세 배포 모두 READY. CANCELED·skipped면 실패로 본다 |
 | ~22분 | PortOne 콘솔 결제 웹훅 주소를 예비 서버 주소로 바꾼다 | 사용자 | 콘솔 저장 화면 |
 | ~25분 | 운영 확인: `post-deploy-smoke`를 예비 서버 대상으로, 세 앱 로그인·상품·장바구니 화면, 비인증 API 401 | Claude | 전부 통과 |
 | ~30분 | 텔레그램·채팅으로 "대피 완료, 정기 작업은 꺼짐" 기록 | Claude | `docs/memory.md` 기록은 장애 종료 뒤 |
@@ -198,7 +198,7 @@ ALIGO 고정 IP는 Fixie로 어디서든 해결되므로 선택을 가르지 않
 | # | 할 일 | 맡는 곳 | 상태 |
 |---|---|---|---|
 | P1 | 운영 예비 서버(Cloud Run 서울, 정기 작업 꺼짐)와 운영 비밀값(Secret Manager) | 이전 계획 C2·C5(사용자 승인) | 미착수 |
-| P2 | 운영 배포 때마다 예비 서버에도 같은 SHA를 꺼진 채로 배포(트래픽 없음, 최소 0대). 운영 Railway 배포 성공 뒤에 한다 | 이전 계획 C4(`production-deploy.mjs`·`.yml`) | 미착수. 이 결정을 C4 담당 세션에 전달함 |
+| P2 | 운영 배포 때마다 예비 서버에도 같은 SHA를 꺼진 채로 배포(트래픽 없음, 최소 0대). 운영 Railway 배포 성공 뒤에 한다 | 이전 계획 C4(`production-deploy.mjs`·`.yml`) | C4 PR에서 구현 중(Railway 배포 뒤 같은 SHA로 예비 서버 배포, 실패해도 운영 배포는 계속) |
 | P3 | **Railway 운영 변수를 바꿀 때 예비 서버 비밀값도 같이 바꾼다**(텔레그램·ALIGO·PortOne 등). 어긋나면 대피 때 알림·결제가 깨진다 | 사용자(운영 변수 변경 절차) | 규칙 |
 | P4 | ALIGO 호출: 예비 서버에도 Fixie 값(`ALIGO_OUTBOUND_PROXY_URL`)을 넣어 둔다. Cloud NAT IP를 ALIGO에 추가하면 그 경로도 쓸 수 있다 | 이전 계획 C5 | 미착수 |
 | P5 | **리허설 1회**(시험 환경): 시험용 Cloud Run 대상으로 Preview 세 앱 주소를 바꿔 다시 배포하고 로그인·주문 화면 확인. Vercel "Ignored Build Step 끄고 Redeploy"가 실제로 빌드하는지 함께 확인 | 이전 계획 C3에 묶어서 | 미착수 |
