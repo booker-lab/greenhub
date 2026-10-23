@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  AUTHORITY_RECHECK_COOLDOWN_MS,
   revalidateSessionToken,
   SESSION_AUTHORITY_REUSE_MS,
   type SessionAuthorityResult,
+  watchApiAuthorityRejections,
 } from './session-authority.js';
 
 const T0 = 1_700_000_000_000;
@@ -201,5 +203,87 @@ describe('세션 검증 판정별 처리', () => {
     const token = baseToken({ refreshToken: '' });
     expect(await revalidateSessionToken(token, h.deps)).toBe(token);
     expect(h.verifyCalls).toHaveLength(0);
+  });
+});
+
+describe('watchApiAuthorityRejections', () => {
+  const API = 'https://api.example.test';
+
+  function setup(statuses: Record<string, number> = {}) {
+    let clock = T0;
+    const requests: string[] = [];
+    const target = {
+      fetch: async (input: RequestInfo | URL, _init?: RequestInit) => {
+        const url = input instanceof Request ? input.url : String(input);
+        requests.push(url);
+        return new Response('{}', { status: statuses[url] ?? 200 });
+      },
+    };
+    const original = target.fetch;
+    let rejected = 0;
+    const stop = watchApiAuthorityRejections({
+      target,
+      apiOrigin: API,
+      onRejected: () => {
+        rejected += 1;
+      },
+      now: () => clock,
+    });
+    const bearer = (token: string) => ({ headers: { Authorization: `Bearer ${token}` } });
+    return {
+      target,
+      original,
+      stop,
+      bearer,
+      requests,
+      rejected: () => rejected,
+      advance: (ms: number) => {
+        clock += ms;
+      },
+    };
+  }
+
+  it('API의 Bearer 요청이 401·403이면 알리고 응답은 그대로 돌려준다', async () => {
+    const h = setup({ [`${API}/orders`]: 403, [`${API}/me`]: 401 });
+    const forbidden = await h.target.fetch(`${API}/orders`, h.bearer('access-1'));
+    expect(forbidden.status).toBe(403);
+    expect(h.rejected()).toBe(1);
+
+    // Request 객체에 실린 헤더도 본다. 다른 토큰이면 쉬는 시간과 무관하게 다시 알린다.
+    const request = new Request(`${API}/me`, h.bearer('access-2'));
+    expect((await h.target.fetch(request)).status).toBe(401);
+    expect(h.rejected()).toBe(2);
+    expect(h.requests).toEqual([`${API}/orders`, `${API}/me`]);
+  });
+
+  it('성공 응답·다른 출처·토큰 없는 요청은 알리지 않는다', async () => {
+    const h = setup({
+      [`${API}/public`]: 401,
+      'https://other.example.test/x': 401,
+      [`${API}/ok`]: 200,
+    });
+    await h.target.fetch(`${API}/ok`, h.bearer('access-1'));
+    await h.target.fetch(`${API}/public`);
+    await h.target.fetch('https://other.example.test/x', h.bearer('access-1'));
+    await h.target.fetch('/api/auth/session', h.bearer('access-1'));
+    expect(h.rejected()).toBe(0);
+  });
+
+  it('같은 토큰의 거절은 쉬는 시간 안에 한 번만 알린다', async () => {
+    const h = setup({ [`${API}/orders`]: 403 });
+    await h.target.fetch(`${API}/orders`, h.bearer('access-1'));
+    h.advance(AUTHORITY_RECHECK_COOLDOWN_MS - 1);
+    await h.target.fetch(`${API}/orders`, h.bearer('access-1'));
+    expect(h.rejected()).toBe(1);
+    h.advance(1);
+    await h.target.fetch(`${API}/orders`, h.bearer('access-1'));
+    expect(h.rejected()).toBe(2);
+  });
+
+  it('멈추면 원래 fetch로 되돌린다', () => {
+    const h = setup();
+    expect(h.target.fetch).not.toBe(h.original);
+    h.stop();
+    expect(h.target.fetch).toBe(h.original);
   });
 });
