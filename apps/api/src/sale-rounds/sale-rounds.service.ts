@@ -467,7 +467,6 @@ export class SaleRoundsService {
     this.assertScheduleOrder(dto.schedule);
     const now = this.firestore.Timestamp.now();
     const roundId = randomUUID();
-    const itemDocs = await this.buildItemDocs(storeId, roundId, dto.items, now);
     const round: SaleRound = {
       id: roundId,
       storeId,
@@ -486,7 +485,11 @@ export class SaleRoundsService {
       updatedAt: now,
     } as unknown as SaleRound;
 
-    await this.writeTransaction(async (tx) => {
+    // 상품 존재·소유권은 저장과 같은 transaction에서 읽는다. 밖에서 읽으면 그 사이 끝난 상품 삭제를
+    // 놓쳐(삭제는 회차 상품 참조를 transaction 안에서 확인) 지워진 상품을 가리키는 회차 상품이 생긴다.
+    let itemDocs: SaleRoundItem[] = [];
+    await this.firestore.runTransaction(async (tx: any) => {
+      itemDocs = await this.buildItemDocsInTransaction(tx, storeId, roundId, dto.items, now);
       tx.set(this.firestore.doc(`saleRounds/${roundId}`), round);
       for (const item of itemDocs) {
         tx.set(this.firestore.doc(`saleRoundItems/${item.id}`), item);
@@ -735,44 +738,6 @@ export class SaleRoundsService {
   private dateMillis(value: unknown) {
     const normalized = this.toIsoOrNull(value);
     return normalized ? new Date(normalized).getTime() : 0;
-  }
-
-  private async buildItemDocs(
-    storeId: string,
-    roundId: string,
-    items: Array<{
-      productId: string;
-      roundPrice: number;
-      saleLimitQuantity: number;
-      displayOrder: number;
-    }>,
-    now: unknown,
-  ): Promise<SaleRoundItem[]> {
-    const docs: SaleRoundItem[] = [];
-    for (const item of items) {
-      const snap = await this.firestore.doc(`products/${item.productId}`).get();
-      if (!snap.exists || snap.data()?.['storeId'] !== storeId) {
-        throw new NotFoundException('회차 상품을 찾을 수 없습니다.');
-      }
-      const product = snap.data()!;
-      docs.push({
-        id: randomUUID(),
-        roundId,
-        storeId,
-        productId: item.productId,
-        productNameSnapshot: product['name'],
-        productImageUrlSnapshot: Array.isArray(product['images']) ? product['images'][0] : null,
-        roundPrice: item.roundPrice,
-        saleLimitQuantity: item.saleLimitQuantity,
-        reservedQuantity: 0,
-        orderedQuantity: 0,
-        displayOrder: item.displayOrder,
-        status: 'ACTIVE',
-        createdAt: now,
-        updatedAt: now,
-      } as unknown as SaleRoundItem);
-    }
-    return docs;
   }
 
   private async buildItemDocsInTransaction(
