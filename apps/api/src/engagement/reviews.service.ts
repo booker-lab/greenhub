@@ -39,9 +39,16 @@ import type { CreateReviewDto } from './dto/engagement.dto';
 export const REVIEWABLE_ORDER_STATUSES = ['DELIVERED', 'PICKED_UP', 'REVIEWED'] as const;
 const PUBLIC_REVIEW_LIMIT = 50;
 const MODERATION_LOG_LIMIT = 20;
-const ADMIN_HIDDEN_REVIEW_LIMIT = 200;
+export const ADMIN_HIDDEN_REVIEW_LIMIT = 200;
 // {orderId}_{productId}: 각 식별자는 DOCUMENT_ID_PATTERN(128자)을 따른다.
 const REVIEW_ID_PATTERN = /^[A-Za-z0-9_-]{1,257}$/;
+
+export interface AdminHiddenReviewList {
+  reviews: AdminHiddenReview[];
+  /** 숨긴 후기가 limit건보다 많아 일부만 담았는지. */
+  hasMore: boolean;
+  limit: number;
+}
 
 export interface ReviewPhotoUpload {
   buffer: Buffer;
@@ -278,10 +285,14 @@ export class ReviewsService {
     });
   }
 
-  /** 관리자 콘솔: 숨긴 후기 전체(가게·상품 이름 포함), 숨긴 시각 최신순. */
-  async listHiddenReviews(): Promise<AdminHiddenReview[]> {
+  /**
+   * 관리자 콘솔: 숨긴 후기(가게·상품 이름 포함), 숨긴 시각 최신순 최대 limit건.
+   * 더 있으면 hasMore로 알려 화면이 "최근 N건만 보여요"를 안내한다.
+   */
+  async listHiddenReviews(): Promise<AdminHiddenReviewList> {
     // 단일 필드 같음 조건이라 새 복합 색인이 필요 없다.
     const snap = await this.firestore.collection('reviews').where('hidden', '==', true).get();
+    const hasMore = snap.docs.length > ADMIN_HIDDEN_REVIEW_LIMIT;
     const recent = snap.docs
       .map((doc: any) => doc.data() as ReviewRecord)
       .sort((a: ReviewRecord, b: ReviewRecord) =>
@@ -298,7 +309,7 @@ export class ReviewsService {
         recent.map((data: ReviewRecord) => data['productId']),
       ),
     ]);
-    return Promise.all(
+    const reviews = await Promise.all(
       recent.map(async (data: ReviewRecord) => ({
         ...(await this.toManaged(data)),
         storeId: data['storeId'],
@@ -306,6 +317,7 @@ export class ReviewsService {
         productName: products.get(data['productId']) ?? null,
       })),
     );
+    return { reviews, hasMore, limit: ADMIN_HIDDEN_REVIEW_LIMIT };
   }
 
   async getProductReviews(productId: string): Promise<ProductReviewsResponse> {

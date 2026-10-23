@@ -2,7 +2,14 @@
 
 import { apiJson } from '@/lib/api';
 import type { AdminCommandOutcome } from './useAdmin.outcome';
-import { pick, runAdminCommand, useAdminList, withQuery } from './useAdmin.list';
+import { readActiveDeliveryCount } from './useAdmin.driverSuspend';
+import {
+  pick,
+  runAdminCommand,
+  runAdminCommandWithBody,
+  useAdminList,
+  withQuery,
+} from './useAdmin.list';
 import { useAdminPagedList } from './useAdmin.paged';
 import type { AdminDriver, AdminReconciliation, AdminStore, AdminUser } from './useAdmin.types';
 
@@ -104,12 +111,13 @@ export function useAdminDrivers() {
     return runAdminCommand(token, `/admin/drivers/${userId}/approve`, { method: 'PATCH' }, reload);
   };
 
+  // 정지 응답의 배송 중 배정 주문 수(세지 못했으면 null)를 함께 돌려준다. 정지 해제·실패는 0.
   const toggleSuspend = async (
     userId: string,
     suspended: boolean,
     reason?: string,
-  ): Promise<AdminCommandOutcome> => {
-    return runAdminCommand(
+  ): Promise<AdminCommandOutcome & { activeDeliveryCount: number | null }> => {
+    const { outcome, body } = await runAdminCommandWithBody(
       token,
       `/admin/drivers/${userId}/suspend`,
       {
@@ -118,6 +126,7 @@ export function useAdminDrivers() {
       },
       reload,
     );
+    return { ...outcome, activeDeliveryCount: readActiveDeliveryCount(body) };
   };
 
   return {
