@@ -305,7 +305,7 @@ export function evaluateM2(input) {
   return makeItem(ITEM_DEFS.M2, {
     entries,
     failedSources: input.failedSources,
-    extra: entries.length > 0 ? { summary: `${entries.length}곳 · 정책 결정 대기` } : {},
+    extra: entries.length > 0 ? { summary: `${entries.length}곳 · 요율 변경 시점 확인` } : {},
   });
 }
 

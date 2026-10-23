@@ -4,6 +4,8 @@
 //   API 왕복을 하지 않는다. 데이터 요청은 API JwtStrategy가 매번 사용자 문서·역할·
 //   sessionsRevokedAt·activeSessionIds를 검사하므로, 강제 로그아웃된 사용자는 최대 이 시간 동안
 //   화면 틀만 볼 수 있다.
+// - 화면의 API 요청이 거절(401/403)되면 watchApiAuthorityRejections가 세션을 update()로 다시
+//   받게 해 재사용 없이 바로 검증한다. 폐기된 세션은 그 자리에서 끝난다.
 // - access token이 바뀌면(갱신·재로그인) 재사용하지 않고 바로 다시 검증한다.
 // - 화면이 update()로 세션을 다시 받을 때(판매자 가게 등록 직후 등)도 재사용하지 않는다.
 // - revoked(401/403·허용되지 않은 역할)는 refresh를 한 번 시도해 만료와 폐기를 가린다
@@ -69,5 +71,55 @@ export async function revalidateSessionToken(token, { verify, refresh, now = Dat
     if (accessTokenValid)
         return token;
     return refresh(token);
+}
+/** 같은 access token의 거절로 강제 재검증을 다시 요청하기까지 쉬는 시간(거절이 이어질 때 요청 폭주 방지). */
+export const AUTHORITY_RECHECK_COOLDOWN_MS = 10_000;
+function requestUrl(input) {
+    try {
+        if (input instanceof URL)
+            return input;
+        if (typeof input === 'string')
+            return new URL(input);
+        return new URL(input.url);
+    }
+    catch {
+        return null;
+    }
+}
+function bearerToken(input, init) {
+    const fromRequest = typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined;
+    const headers = new Headers(init?.headers ?? fromRequest);
+    return /^Bearer (.+)$/.exec(headers.get('Authorization') ?? '')?.[1] ?? null;
+}
+/**
+ * 화면의 API 요청이 401/403으로 거절되면 onRejected를 부른다. 호출부는 세션을 update()로
+ * 다시 받아(jwt 콜백 trigger 'update') 재사용 구간이어도 API로 다시 검증하게 한다.
+ * - apiOrigin으로 가는 Bearer 요청만 본다. 응답은 손대지 않고 그대로 돌려준다.
+ * - 정지·기사 승인 철회는 403, 세션 폐기·탈퇴는 401이라 둘 다 본다.
+ * - 같은 access token은 cooldownMs 안에 한 번만 알린다(거절이 이어지는 화면의 요청 폭주 방지).
+ * 돌려준 함수를 부르면 원래 fetch로 되돌린다.
+ */
+export function watchApiAuthorityRejections({ target, apiOrigin, onRejected, now = Date.now, cooldownMs = AUTHORITY_RECHECK_COOLDOWN_MS, }) {
+    const original = target.fetch;
+    let last = null;
+    const watched = async (input, init) => {
+        const response = await original.call(target, input, init);
+        if (response.status === 401 || response.status === 403) {
+            const token = bearerToken(input, init);
+            if (token && requestUrl(input)?.origin === apiOrigin) {
+                const at = now();
+                if (!last || last.token !== token || at - last.at >= cooldownMs) {
+                    last = { token, at };
+                    onRejected();
+                }
+            }
+        }
+        return response;
+    };
+    target.fetch = watched;
+    return () => {
+        if (target.fetch === watched)
+            target.fetch = original;
+    };
 }
 //# sourceMappingURL=session-authority.js.map
