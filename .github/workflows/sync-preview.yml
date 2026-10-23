@@ -74,7 +74,7 @@ jobs:
       # npm 의존성 없음(child_process + gh CLI 빌트인만) → cache/install 불필요.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: Preview commit status diagnostic (non-blocking)
         env:

@@ -29,7 +29,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # 프런트·패키지는 Biome 오류 0을 유지한다(경고·포맷 부채는 별도 정리 대상).
@@ -62,6 +62,10 @@ jobs:
             echo "$stray"
             exit 1
           fi
+      # 노트북·데스크탑·CI·운영 API 이미지가 같은 Node를 쓰도록 .nvmrc 한 곳에서 버전을 정한다.
+      # Dependabot이 Dockerfile의 Node 이미지를 올리면 같은 PR에서 .nvmrc도 맞춰야 통과한다.
+      - name: Node version pin
+        run: node scripts/dev/check-setup.mjs --repo
       # 운영 의존성(dependencies)에 high·critical 공개 권고가 있으면 실패한다. 빌드 전용 도구는 devDependencies에 둔다.
       # 권고 DB는 npm registry에서 조회하므로 코드 변경 없이도 새 권고가 나오면 실패할 수 있다.
       - name: Production dependency advisories (high+)
@@ -101,7 +105,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: API (jest)
@@ -128,7 +132,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # 실제 하위 프로세스 겹침을 재는 spec이 있어 파일을 하나씩 실행한다.
@@ -149,7 +153,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: pnpm
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
@@ -190,7 +194,7 @@ jobs:
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - name: Build shared, API, consumer, seller, driver

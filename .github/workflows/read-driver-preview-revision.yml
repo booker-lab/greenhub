@@ -55,7 +55,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: run revision reader spec (mock/local only)
         run: node --test scripts/vercel/read-driver-preview-revision.spec.mjs
@@ -79,7 +79,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: owner + dispatch preflight (fail-closed)
         shell: bash

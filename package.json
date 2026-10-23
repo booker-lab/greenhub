@@ -5,6 +5,7 @@
   "scripts": {
     "dev:local": "node scripts/dev/local/launcher.mjs",
     "dev:local:stop": "node scripts/dev/local/stop.mjs",
+    "dev:check": "node scripts/dev/check-setup.mjs",
     "dev:consumer": "pnpm --filter consumer dev",
     "dev:api": "pnpm --filter api start:dev",
     "test:local-launcher": "node --test scripts/dev/local/launcher.spec.mjs",

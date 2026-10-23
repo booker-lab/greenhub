@@ -65,7 +65,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: 운영 설정 점검
         shell: bash
@@ -97,7 +97,7 @@ jobs:
       # 운영 비밀값을 쓰는 job이라 의존성 캐시를 쓰지 않는다.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       # firebase-tools는 npx로 받지 않고 lockfile에 고정된 scripts devDependency만 설치한다(이 step에는 비밀값이 없다).
       - name: Firebase CLI 설치(lockfile 고정)
