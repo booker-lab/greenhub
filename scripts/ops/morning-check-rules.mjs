@@ -595,7 +595,37 @@ export function evaluateAll(collected) {
     date: kstDate(now),
     generatedAt: new Date(now).toISOString(),
     ...summarize(items),
+    ...(collected.excludedStoreCount > 0 ? { excludedStores: collected.excludedStoreCount } : {}),
     items,
+  };
+}
+
+/**
+ * 점검에서 뺄 가게(로컬 config.json의 excludeStoreIds)의 기록을 수집 결과에서 덜어낸다.
+ * E2E 고정 데이터가 사는 테스트 가게가 매일 같은 이상으로 뜨지 않게 한다. 가게와 묶이지 않은 기사·초대·
+ * 행동 기록은 그대로 둔다. 보고에는 뺀 가게 수만 남기고 가게 id는 넣지 않는다.
+ */
+export function excludeStores(collected, storeIds) {
+  const excluded = new Set(list(storeIds));
+  if (excluded.size === 0) return collected;
+  const keep = (item) => !excluded.has(item?.storeId);
+  const paidSettlements = list(collected.paidSettlements).filter(keep);
+  const keptSettlementIds = new Set(paidSettlements.map((settlement) => settlement.id));
+  const pickKept = (byId) =>
+    Object.fromEntries(Object.entries(byId ?? {}).filter(([id]) => keptSettlementIds.has(id)));
+  return {
+    ...collected,
+    stores: list(collected.stores).filter((store) => !excluded.has(store?.id)),
+    paidSettlements,
+    ordersById: pickKept(collected.ordersById),
+    paymentsById: pickKept(collected.paymentsById),
+    recentSettlements: list(collected.recentSettlements).filter(keep),
+    rounds: list(collected.rounds).filter(keep),
+    roundOrders: list(collected.roundOrders).filter(keep),
+    openOrdersWithoutRound: list(collected.openOrdersWithoutRound).filter(keep),
+    heldOrders: list(collected.heldOrders).filter(keep),
+    operationIssues: list(collected.operationIssues).filter(keep),
+    excludedStoreCount: excluded.size,
   };
 }
 

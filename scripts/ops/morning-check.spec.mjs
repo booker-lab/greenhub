@@ -371,6 +371,16 @@ describe('열쇠 차단 장치(§4-2)', () => {
     );
   });
 
+  test('excludeStoreIds가 없으면 빈 목록, 있으면 그대로, 모양이 틀리면 멈춘다', async () => {
+    const load = (config) =>
+      loadReadonlyCredentials({ env: { [KEY_ENV]: KEY_PATH }, readText: fakeReader({ ...files, [CONFIG_PATH]: config }).readText, configPath: CONFIG_PATH });
+    assert.deepEqual((await load(validConfig())).excludeStoreIds, []);
+    assert.deepEqual((await load(validConfig({ excludeStoreIds: ['store-b', 'test_store-1'] }))).excludeStoreIds, ['store-b', 'test_store-1']);
+    for (const bad of ['store-b', [''], [42], ['a/b'], ['x'.repeat(129)]]) {
+      await assert.rejects(load(validConfig({ excludeStoreIds: bad })), (error) => error.code === 'config-exclude-invalid');
+    }
+  });
+
   test('운영이 아닌 프로젝트 열쇠나 서비스 계정이 아닌 파일은 멈춘다', async () => {
     await assert.rejects(
       loadReadonlyCredentials({ env: { [KEY_ENV]: KEY_PATH }, readText: fakeReader({ ...files, [KEY_PATH]: validKey({ project_id: 'other-project' }) }).readText, configPath: CONFIG_PATH }),
@@ -491,6 +501,28 @@ describe('수집기(가짜 Firestore)', () => {
     // stdout JSON과 저장 파일이 같은 보고다.
     assert.deepEqual(JSON.parse(lines.join('\n')), report);
     assert.deepEqual(JSON.parse(fs.files['/reports/2026-10-22.json']), report);
+  });
+
+  test('config의 excludeStoreIds 가게 기록은 보고에서 빠지고, 보고에는 뺀 가게 수만 남는다', async () => {
+    const lines = [];
+    const { report } = await run({
+      env: { [KEY_ENV]: KEY_PATH },
+      now: NOW,
+      readText: fakeReader({ [KEY_PATH]: validKey(), [CONFIG_PATH]: validConfig({ excludeStoreIds: ['store-b'] }) }).readText,
+      openFirestore: async () => createFakeDb(seedData()),
+      fs: createMemoryFs(),
+      reportsDir: '/reports',
+      configPath: CONFIG_PATH,
+      emit: (text) => lines.push(text),
+    });
+    const item = (id) => report.items.find((entry) => entry.id === id);
+    // store-b의 회차 지연·희망일 지남·배송 보류 주문이 빠진다. store-a 기록은 그대로다.
+    assert.equal(item('O1').level, '🟢');
+    assert.equal(item('O4').level, '🟢');
+    assert.equal(item('M1').level, '🔴');
+    assert.equal(item('S3').level, '🔴');
+    assert.equal(report.excludedStores, 1);
+    assert.ok(!lines.join('\n').includes('store-b'));
   });
 
   test('한 출처 읽기가 실패해도 나머지는 읽고, 실패는 S0 🔴과 확인 못 함으로 남긴다(오류 원문 없음)', async () => {
