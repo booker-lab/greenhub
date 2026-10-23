@@ -454,6 +454,72 @@ describe('SaleRoundsService', () => {
     expect(copied.items[0]).toMatchObject({ storeId: 'store-1', productId: 'product-1' });
   });
 
+  it('회차 생성은 transaction 진입 전에 끝난 상품 삭제를 놓치지 않고 거부한다', async () => {
+    const { service, records, firestore } = makeService({
+      'products/product-1': { storeId: 'store-1', name: '공개 상품', images: [] },
+    });
+    const originalRunTransaction = firestore.runTransaction;
+    firestore.runTransaction = jest.fn(async (callback) => {
+      // 상품 삭제 transaction이 회차 생성 transaction보다 먼저 커밋된 상황
+      records.delete('products/product-1');
+      return originalRunTransaction(callback);
+    });
+
+    await expect(
+      (service as any).createRound('store-1', 'seller-1', 'seller', {
+        name: '삭제 경합 회차',
+        schedule: makeRound().schedule,
+        deliveryRegion: makeRound().deliveryRegion,
+        limits: makeRound().limits,
+        items: [
+          { productId: 'product-1', roundPrice: 12000, saleLimitQuantity: 2, displayOrder: 0 },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    const created = Array.from(records.keys()).filter(
+      (path) =>
+        path.startsWith('saleRoundItems/') ||
+        (path.startsWith('saleRounds/') && path !== 'saleRounds/round-1'),
+    );
+    expect(created).toEqual([]);
+  });
+
+  it('회차 생성은 다른 가게 상품을 transaction 안에서 거부하고 정상 상품은 저장한다', async () => {
+    const { service, records } = makeService({
+      'products/product-1': { storeId: 'store-1', name: '공개 상품', images: ['a.jpg'] },
+      'products/product-foreign': { storeId: 'store-2', name: '남의 상품', images: [] },
+    });
+    const input = (productId: string) => ({
+      name: '새 회차',
+      schedule: makeRound().schedule,
+      deliveryRegion: makeRound().deliveryRegion,
+      limits: makeRound().limits,
+      items: [{ productId, roundPrice: 12000, saleLimitQuantity: 2, displayOrder: 0 }],
+    });
+
+    await expect(
+      (service as any).createRound('store-1', 'seller-1', 'seller', input('product-foreign')),
+    ).rejects.toBeInstanceOf(NotFoundException);
+
+    const created = await (service as any).createRound(
+      'store-1',
+      'seller-1',
+      'seller',
+      input('product-1'),
+    );
+    expect(created.items).toHaveLength(1);
+    expect(created.items[0]).toMatchObject({
+      productId: 'product-1',
+      productNameSnapshot: '공개 상품',
+      productImageUrlSnapshot: 'a.jpg',
+    });
+    expect(records.get(`saleRounds/${created.id}`)).toMatchObject({ status: 'DRAFT' });
+    expect(records.get(`saleRoundItems/${created.items[0].id}`)).toMatchObject({
+      roundId: created.id,
+      productId: 'product-1',
+    });
+  });
+
   it('주문 시작·마감·한도 도달 상태를 순서대로 자동 전환한다', async () => {
     const opened = makeService();
     await expect(opened.service.refreshRoundStatus('store-1', 'round-1')).resolves.toMatchObject({
