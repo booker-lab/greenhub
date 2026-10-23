@@ -1,7 +1,7 @@
 # 어드민 드라이버 탭 — status 서버 필터 배선 + 타입 정합 (T1+T2)
 
 > 작성: 2026-05-26 (세션95) · 출처: `/further` 확정안
-> 상태: 계획 수립 완료. 2026-10-04 기준 T1 서버 필터는 사람 결정 대기(`suspended` 필드 없는 문서가 쿼리에서 빠짐 — 마이그레이션 또는 F5 결정 선결), T2는 미착수(코드 대조).
+> 상태: 계획 수립 완료. 2026-10-23 코드 대조: 서버는 #593부터 한 쪽을 읽고 그 안에서 status를 메모리로 걸러 `suspended` 필드가 없는 문서도 빠지지 않는다. 대신 걸러진 쪽이 비어도 "더 보기"가 남으므로, T1(화면 배선)을 할지·어떻게 할지는 사람 결정이다(현행 상태는 [`admin-tab-drivers-plan.md`](../specs/frontend/admin/admin-tab-drivers-plan.md) 머리말). T2는 미착수.
 > 누적 진단: [`docs/specs/frontend/admin-tabs-improve-plan.md`](../specs/frontend/admin-tabs-improve-plan.md) §C
 
 ---

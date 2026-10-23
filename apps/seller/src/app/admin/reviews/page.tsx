@@ -6,6 +6,7 @@ import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
 import { EmptyState, LoadingState } from '@/components/StateViews';
+import { describeListCap, readCappedList } from '@/hooks/useAdmin';
 import { ApiError, apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import { AdminFetchError } from '../_components/AdminFetchError';
@@ -19,6 +20,8 @@ export default function AdminReviewsPage() {
   const { data: session } = useSession();
   const token = session?.user.accessToken;
   const [items, setItems] = useState<AdminHiddenReview[] | null>(null);
+  // 서버 상한(최근 N건)에 닿았으면 그 건수 — "최근 N건만 보여요" 안내.
+  const [cap, setCap] = useState<number | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   // 숨김 해제 확인창 대상과 선택 사유.
@@ -32,7 +35,12 @@ export default function AdminReviewsPage() {
     setItems(null);
     setLoadFailed(false);
     try {
-      setItems(await apiJson<AdminHiddenReview[]>('/admin/reviews/hidden', token));
+      const list = readCappedList<AdminHiddenReview>(
+        await apiJson<unknown>('/admin/reviews/hidden', token),
+        'reviews',
+      );
+      setItems(list.items);
+      setCap(list.cap);
     } catch {
       setLoadFailed(true);
     }
@@ -87,15 +95,22 @@ export default function AdminReviewsPage() {
       ) : items.length === 0 ? (
         <EmptyState text="숨긴 후기가 없어요" />
       ) : (
-        items.map((review) => (
-          <HiddenReviewCard
-            key={review.id}
-            review={review}
-            busy={busyId === review.id}
-            error={errors[review.id] ?? null}
-            onUnhide={() => askUnhide(review)}
-          />
-        ))
+        <>
+          {cap !== null && (
+            <Text size="xs" style={{ color: 'var(--color-text-secondary)' }}>
+              {describeListCap(cap)}
+            </Text>
+          )}
+          {items.map((review) => (
+            <HiddenReviewCard
+              key={review.id}
+              review={review}
+              busy={busyId === review.id}
+              error={errors[review.id] ?? null}
+              onUnhide={() => askUnhide(review)}
+            />
+          ))}
+        </>
       )}
       <UnhideConfirmModal
         target={confirmTarget}
