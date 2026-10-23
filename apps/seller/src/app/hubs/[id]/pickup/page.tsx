@@ -1,5 +1,6 @@
 'use client';
 
+import { apiPathSegment, InvalidApiPathSegmentError, isSafeApiPathSegment } from '@greenhub/shared';
 import { Box, Button, Container, Group, Stack, Text, Title } from '@mantine/core';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -8,7 +9,6 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { ApiError, apiJson } from '@/lib/api';
-import { apiPathSegment, InvalidApiPathSegmentError, isSafeApiPathSegment } from '@/lib/api-path';
 
 type Step = 'input' | 'success' | 'error';
 

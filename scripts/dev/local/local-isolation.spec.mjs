@@ -156,7 +156,12 @@ test('Seller /orders는 보호된 store 경유 + Bearer 호출이다 (UX 수정 
   const controller = readRepo('apps/api/src/orders/orders.controller.ts');
   assert.match(controller, /stores\/:storeId\/orders/);
   assert.match(controller, /Roles\('seller', 'admin'\)/);
-  const apiBase = readRepo('apps/seller/src/lib/api-base-url.ts');
+  // 판매자 앱 getApiBaseUrl은 공유 검사 규칙(packages/shared/src/api-base-url.ts)에 값을 넘긴다.
+  assert.match(
+    readRepo('apps/seller/src/lib/api-base-url.ts'),
+    /import \{ resolveApiBaseUrl \} from '@greenhub\/shared';/,
+  );
+  const apiBase = readRepo('packages/shared/src/api-base-url.ts');
   assert.match(apiBase, /http:\/\/localhost:3000/);
   assert.match(apiBase, /Production API URL은 localhost를 사용할 수 없습니다/);
 });

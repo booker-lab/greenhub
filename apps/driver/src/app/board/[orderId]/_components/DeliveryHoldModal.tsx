@@ -1,5 +1,6 @@
 'use client';
 
+import { apiPathSegment } from '@greenhub/shared';
 import {
   Button,
   Checkbox,
@@ -15,7 +16,6 @@ import {
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { apiFetch } from '@/lib/api';
-import { apiPathSegment } from '@/lib/api-path';
 import {
   deliveryHoldResponsibilityFeeHint,
   parseRedeliveryFee,

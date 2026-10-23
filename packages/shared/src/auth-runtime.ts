@@ -2,7 +2,17 @@
 // - 서버 쪽 fetch는 시간 제한을 둔다. 제한을 넘기면 각 호출자의 기존 일시 실패 경로로 처리한다.
 // - 로그아웃하면 API의 refresh token도 폐기한다.
 // - 테스트 전용 Credentials provider는 운영 런타임에 등록하지 않는다.
-// 이 파일은 외부 모듈을 import하지 않는다(node:test에서 그대로 변환해 검증한다).
+// 소비자·판매자·기사 앱의 auth.ts가 함께 쓴다. 외부 모듈을 import하지 않는다(next-auth 없이 검증한다).
+
+/** local runtime 진입은 API가 이 기기(loopback)에 있을 때만 허용한다. */
+export function isLoopbackApiUrl(value: string): boolean {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase();
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+  } catch {
+    return false;
+  }
+}
 
 /** 로그인·세션 확인·갱신 요청의 시간 제한. */
 export const AUTH_UPSTREAM_TIMEOUT_MS = 10_000;
@@ -21,9 +31,10 @@ type RuntimeEnv = Record<string, string | undefined>;
  * - 운영 표식(`VERCEL_ENV`·`RAILWAY_ENVIRONMENT_NAME`이 production)이 있으면 등록하지 않는다.
  * - Vercel Preview(`VERCEL_ENV=preview`, 로컬 E2E 실행기도 같은 값을 쓴다)에서는 등록한다.
  * - 그 밖에는 개발 서버(`NODE_ENV !== 'production'`)에서만 등록한다.
- * 등록돼도 authorize의 기존 게이트(E2E secret 헤더 또는 local runtime)를 그대로 통과해야 한다.
+ * 등록돼도 authorize의 기존 게이트(E2E secret 헤더·Preview E2E 게이트 또는 local runtime)를
+ * 그대로 통과해야 한다. 호출하는 앱이 서버 런타임의 `process.env`를 넘긴다.
  */
-export function isTestCredentialsProviderEnabled(env: RuntimeEnv = process.env): boolean {
+export function isTestCredentialsProviderEnabled(env: RuntimeEnv): boolean {
   if (env.VERCEL_ENV === 'production') return false;
   if (env.RAILWAY_ENVIRONMENT_NAME === 'production') return false;
   if (env.VERCEL_ENV === 'preview') return true;
