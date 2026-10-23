@@ -22,10 +22,7 @@ describe('공개 상품 API', () => {
     };
     const service = new ProductsService(firestore as never);
 
-    const result = (await service.getPublicProducts({ isActive: false })) as {
-      items: Array<Record<string, unknown>>;
-      total: number;
-    };
+    const result = (await service.getPublicProducts({ isActive: false }));
 
     expect(where).toHaveBeenCalledWith('isActive', '==', true);
     expect(result.items.map((item) => item['id'])).toEqual(['public-001']);
@@ -153,7 +150,7 @@ describe('store-scoped anonymous product API 우회 차단', () => {
     const service = new ProductsService(firestore as never);
 
     // isActive=false를 요청해도 공개 predicate를 우회하지 못한다.
-    const result = (await service.getProducts('s-1', { isActive: false } as never)) as {
+    const result = (await service.getProducts('s-1', { isActive: false })) as {
       items: Array<Record<string, unknown>>;
     };
     expect(query.where).toHaveBeenCalledWith('isActive', '==', true);

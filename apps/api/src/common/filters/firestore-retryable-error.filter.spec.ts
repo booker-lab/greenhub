@@ -95,7 +95,7 @@ describe('FirestoreRetryableErrorFilter 서버 오류 알림', () => {
       OPS_TELEGRAM_BOT_TOKEN: 'bot-token',
       OPS_TELEGRAM_CHAT_ID: '12345',
     });
-    const alert = new OpsAlertService(config, fetchImpl as unknown as typeof fetch);
+    const alert = new OpsAlertService(config, fetchImpl);
     const send = jest.spyOn(alert, 'send');
     return { alert, send, fetchImpl };
   }

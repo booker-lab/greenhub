@@ -8,6 +8,7 @@
 - `preview-auth-url-policy.md` — Preview/Kakao OAuth URL 정책
 - `ops-alerts.md` — 운영자 휴대폰 알림(텔레그램)과 가동 확인
 - `morning-ops-check.md` — 아침 운영 점검 보고(읽기 전용 점검 열쇠·판정 기준표·권한 경계, 어드민 운영 자동화 1단계)
+- `platform-modernization-plan.md` — 개발 환경 현대화와 API Cloud Run 이전 결정·단계(2026-10-23 확정)
 
 현재 외부 상태와 출시 순서는 `docs/memory.md`와 활성 HANDOFF·PLAN이 우선한다.
 
@@ -22,6 +23,11 @@
 런북의 판매 모드 전환 조건을 읽을 때는 `docs/memory.md`의 현재 상태가 우선한다. `PLAN_mvp_round_direct_launch_blockers.md`는 2026-09-05 snapshot인 역사 자료다.
 
 또한 `main` merge는 production 배포 승인이 아니다. production 배포는 활성 deployment safety PLAN이 요구하는 exact release SHA 검증과 별도 승인 경계를 따른다.
+
+## 진행 중 계획
+
+- `api-hosting-cloud-run-plan.md` — 운영 API를 Railway에서 Cloud Run 서울로 옮기는 단계(C1~C8)와 2026-10-28 전환 판단 조건
+- `railway-outage-failover.md` — 전환 전 Railway 장애 때 Cloud Run 예비 서버로 30분 안에 대피하는 순서·판단 기준·평소 준비(예비 서버 준비 뒤 사용)
 
 ## 조건부 후속 계획
 

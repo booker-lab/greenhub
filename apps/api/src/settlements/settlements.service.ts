@@ -242,7 +242,7 @@ export class SettlementsService {
           if (orderHold) return orderHold;
           const now = this.firestore.Timestamp.now();
           t.update(doc.ref, {
-            status: 'confirmed' as SettlementStatus,
+            status: 'confirmed',
             confirmedAt: now,
             updatedAt: now,
           });
@@ -347,7 +347,7 @@ export class SettlementsService {
       }
       if (status === 'cancelled') return NO_RECOVERY; // 멱등
       t.update(ref, {
-        status: 'cancelled' as SettlementStatus,
+        status: 'cancelled',
         updatedAt: this.firestore.Timestamp.now(),
       });
       return NO_RECOVERY;

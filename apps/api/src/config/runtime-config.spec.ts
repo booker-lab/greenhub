@@ -3,6 +3,7 @@ import {
   isProductionRuntime,
   RuntimeConfigurationError,
   resolveAdcProjectIds,
+  resolveDeployedCommitSha,
   resolveFirebaseAdminSettings,
   resolveTrustProxyHops,
   shouldEnableScheduledJobs,
@@ -103,6 +104,38 @@ describe('API 런타임 구성 fail-closed 계약', () => {
     expect(() =>
       validateRuntimeConfig({ NODE_ENV: 'production', RAILWAY_ENVIRONMENT_NAME: 'staging' }),
     ).not.toThrow();
+  });
+
+  it('호스팅과 무관한 GREENHUB_ENVIRONMENT_NAME으로도 운영·비운영을 판정한다', () => {
+    expect(isProductionRuntime({ GREENHUB_ENVIRONMENT_NAME: 'production' })).toBe(true);
+    expect(
+      isProductionRuntime({ NODE_ENV: 'production', GREENHUB_ENVIRONMENT_NAME: 'staging' }),
+    ).toBe(false);
+    expect(
+      isProductionRuntime({
+        GREENHUB_ENVIRONMENT_NAME: 'production',
+        RAILWAY_ENVIRONMENT_NAME: 'production',
+      }),
+    ).toBe(true);
+    expect(() =>
+      validateRuntimeConfig({
+        ...validProductionConfig,
+        GREENHUB_ENVIRONMENT_NAME: 'production',
+        TRUST_PROXY_HOPS: '1',
+      }),
+    ).not.toThrow();
+  });
+
+  it('GREENHUB_ENVIRONMENT_NAME과 RAILWAY_ENVIRONMENT_NAME이 다르면 기동을 거부한다', () => {
+    const conflicting = {
+      NODE_ENV: 'production',
+      GREENHUB_ENVIRONMENT_NAME: 'staging',
+      RAILWAY_ENVIRONMENT_NAME: 'production',
+    };
+    expect(() => isProductionRuntime(conflicting)).toThrow(RuntimeConfigurationError);
+    expect(() => validateRuntimeConfig({ ...conflicting, TRUST_PROXY_HOPS: '1' })).toThrow(
+      RuntimeConfigurationError,
+    );
   });
 
   it('local runtime은 loopback emulator와 scheduler 비활성화가 모두 있어야 통과한다', () => {
@@ -282,6 +315,24 @@ describe('trust proxy 홉 수 구성', () => {
     expect(resolveTrustProxyHops({ NODE_ENV: 'development' })).toBe(0);
   });
 
+  it('Railway 밖 배포 환경은 홉 수를 명시하지 않으면 기동을 거부한다', () => {
+    expect(() => resolveTrustProxyHops({ GREENHUB_ENVIRONMENT_NAME: 'production' })).toThrow(
+      RuntimeConfigurationError,
+    );
+    expect(() =>
+      validateRuntimeConfig({ ...validProductionConfig, GREENHUB_ENVIRONMENT_NAME: 'production' }),
+    ).toThrow('TRUST_PROXY_HOPS');
+    expect(
+      resolveTrustProxyHops({ GREENHUB_ENVIRONMENT_NAME: 'production', TRUST_PROXY_HOPS: '1' }),
+    ).toBe(1);
+    expect(
+      resolveTrustProxyHops({
+        GREENHUB_ENVIRONMENT_NAME: 'production',
+        RAILWAY_ENVIRONMENT_NAME: 'production',
+      }),
+    ).toBe(2);
+  });
+
   it('명시한 정수 홉 수를 따른다', () => {
     expect(
       resolveTrustProxyHops({ RAILWAY_ENVIRONMENT_NAME: 'production', TRUST_PROXY_HOPS: '0' }),
@@ -302,5 +353,25 @@ describe('trust proxy 홉 수 구성', () => {
     expect(() =>
       validateRuntimeConfig({ NODE_ENV: 'development', TRUST_PROXY_HOPS: value }),
     ).toThrow(RuntimeConfigurationError);
+  });
+});
+
+describe('배포 커밋 SHA', () => {
+  const sha = '0bcceaea1234567890abcdef1234567890abcdef';
+
+  it('배포 도구 값이나 Railway 값을 쓴다', () => {
+    expect(resolveDeployedCommitSha({ GREENHUB_COMMIT_SHA: sha })).toBe(sha);
+    expect(resolveDeployedCommitSha({ RAILWAY_GIT_COMMIT_SHA: sha })).toBe(sha);
+    expect(
+      resolveDeployedCommitSha({ GREENHUB_COMMIT_SHA: sha, RAILWAY_GIT_COMMIT_SHA: sha }),
+    ).toBe(sha);
+  });
+
+  it('두 값이 다르거나 형식이 틀리거나 없으면 null이다', () => {
+    expect(
+      resolveDeployedCommitSha({ GREENHUB_COMMIT_SHA: sha, RAILWAY_GIT_COMMIT_SHA: 'abcdef1' }),
+    ).toBeNull();
+    expect(resolveDeployedCommitSha({ GREENHUB_COMMIT_SHA: 'not a sha' })).toBeNull();
+    expect(resolveDeployedCommitSha({})).toBeNull();
   });
 });

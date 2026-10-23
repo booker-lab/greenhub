@@ -182,7 +182,7 @@ describe('AdminService 주문 목록 이어받기', () => {
     });
     const service = makeService(firestore);
 
-    const first = await service.getOrders({ limit: 2 } as never);
+    const first = await service.getOrders({ limit: 2 });
     expect(first.orders.map((o) => o['id'])).toEqual(['o-004', 'o-003']);
     expect(first).toMatchObject({ total: 2, hasMore: true, nextCursor: 'o-003' });
     expect(first.orders[0]).toMatchObject({ storeName: '첫 가게', buyerName: '손님4' });
@@ -216,7 +216,7 @@ describe('AdminService 주문 목록 이어받기', () => {
   it.each(['../stores/s-1', 'missing-order'])('잘못된 cursor(%p)는 400으로 거절한다', async (cursor) => {
     const { firestore } = makeListFirestore({ orders: seedOrders(2), stores: [] });
 
-    await expect(makeService(firestore).getOrders({ cursor } as never)).rejects.toBeInstanceOf(
+    await expect(makeService(firestore).getOrders({ cursor })).rejects.toBeInstanceOf(
       BadRequestException,
     );
   });
@@ -242,7 +242,7 @@ describe('AdminService 기사 목록 이어받기', () => {
     const { firestore } = makeListFirestore({ users: seedUsers(3) });
     const service = makeService(firestore);
 
-    const first = await service.getDrivers({ limit: 2 } as never);
+    const first = await service.getDrivers({ limit: 2 });
     expect(first.drivers).toEqual([
       {
         id: 'd-002',
@@ -277,7 +277,7 @@ describe('AdminService 기사 목록 이어받기', () => {
     const { firestore } = makeListFirestore({ users: seedUsers(2) });
 
     await expect(
-      makeService(firestore).getDrivers({ cursor: 'c-1' } as never),
+      makeService(firestore).getDrivers({ cursor: 'c-1' }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

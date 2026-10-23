@@ -32,13 +32,13 @@ const SECRET_VALUE_FIXTURE = 'secret-value-must-never-appear-34a';
 const SECRET_TARGET_FIXTURE = 'secret-target-must-never-appear-34a';
 
 function emailIsEmailError(emailMessage = 'email must be an email'): ValidationError {
-  return { property: 'email', constraints: { isEmail: emailMessage } } as ValidationError;
+  return { property: 'email', constraints: { isEmail: emailMessage } };
 }
 
 function passwordIsStringError(
   message = 'password must be a string',
 ): ValidationError {
-  return { property: 'password', constraints: { isString: message } } as ValidationError;
+  return { property: 'password', constraints: { isString: message } };
 }
 
 describe('sanitized validation projection (34A observability only)', () => {
