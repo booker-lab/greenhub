@@ -2,7 +2,9 @@ import {
   authUpstreamSignal,
   isLoopbackApiUrl,
   isTestCredentialsProviderEnabled,
+  revalidateSessionToken,
   revokeApiSession,
+  type SessionAuthorityResult,
   testSecretsMatch,
 } from '@greenhub/shared';
 import { cookies } from 'next/headers';
@@ -64,7 +66,7 @@ function isExplicitSessionRevocationStatus(status: unknown): boolean {
 // 세션의 storeId는 이 응답(현재 사용자 문서 기준)만 반영한다. 클라이언트 update() 값은 쓰지 않는다.
 async function verifySessionAuthority(
   accessToken: string,
-): Promise<{ kind: 'ok'; storeId: string | null } | { kind: 'revoked' } | { kind: 'transient' }> {
+): Promise<SessionAuthorityResult> {
   try {
     const res = await fetch(`${API}/auth/session`, {
       method: 'GET',
@@ -81,7 +83,10 @@ async function verifySessionAuthority(
       if (!SESSION_ALLOWED_ROLES.includes(data?.role as string)) {
         return { kind: 'revoked' };
       }
-      return { kind: 'ok', storeId: typeof data?.storeId === 'string' ? data.storeId : null };
+      return {
+        kind: 'ok',
+        claims: { storeId: typeof data?.storeId === 'string' ? data.storeId : null },
+      };
     }
     if (isExplicitSessionRevocationStatus(res.status)) return { kind: 'revoked' };
     return { kind: 'transient' };
@@ -268,7 +273,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
     // update() 요청(trigger 'update')의 클라이언트 값은 토큰에 넣지 않는다.
     // storeId는 로그인 응답과 /auth/session 응답만 반영한다.
-    jwt: async ({ token, user }) => {
+    jwt: async ({ token, user, trigger }) => {
       if (user) {
         return {
           ...token,
@@ -280,33 +285,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           error: undefined,
         };
       }
-      const accessToken = token.accessToken;
-      const refreshToken = token.refreshToken;
-      if (
-        typeof accessToken !== 'string' ||
-        !accessToken ||
-        typeof refreshToken !== 'string' ||
-        !refreshToken
-      ) {
-        return token;
-      }
-      const authority = await verifySessionAuthority(accessToken as string);
-      if (authority.kind === 'revoked') {
-        return refreshAccessToken(token as unknown as Record<string, unknown>);
-      }
-      if (authority.kind === 'ok') {
-        const bound = { ...token, storeId: authority.storeId };
-        if (Date.now() < (token.accessTokenExpires as number)) {
-          const { error: _revokedError, ...rest } = bound as unknown as Record<string, unknown>;
-          void _revokedError;
-          return rest;
-        }
-        return refreshAccessToken(bound as unknown as Record<string, unknown>);
-      }
-      if (Date.now() < (token.accessTokenExpires as number)) {
-        return token;
-      }
-      return refreshAccessToken(token as unknown as Record<string, unknown>);
+      // 같은 access token의 검증 성공은 SESSION_AUTHORITY_REUSE_MS 동안 재사용한다(@greenhub/shared).
+      // 화면이 update()로 세션을 다시 받을 때는 재사용하지 않고 API로 다시 검증한다.
+      return revalidateSessionToken(token, {
+        verify: verifySessionAuthority,
+        refresh: refreshAccessToken,
+        reuseVerified: trigger !== 'update',
+      });
     },
     session({ session, token }) {
       session.user.accessToken = token.accessToken as string;
