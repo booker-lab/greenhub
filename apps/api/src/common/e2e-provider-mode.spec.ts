@@ -37,6 +37,10 @@ describe('회차 E2E provider mode 보안 계약', () => {
       { NODE_ENV: 'production', RAILWAY_ENVIRONMENT_NAME: '' },
     ],
     ['Railway 운영', { RAILWAY_ENVIRONMENT_NAME: 'production' }],
+    [
+      'Railway 밖 배포 운영',
+      { RAILWAY_ENVIRONMENT_NAME: '', GREENHUB_ENVIRONMENT_NAME: 'production' },
+    ],
     ['운영 Firebase', { FIREBASE_PROJECT_ID: 'green-e4fe3' }],
   ])('%s 환경의 대역 활성화를 거부한다', (_name, override) => {
     expect(() => resolveE2EProviderMode(config({ ...valid, ...override }))).toThrow(
@@ -51,6 +55,31 @@ describe('회차 E2E provider mode 보안 계약', () => {
       runId: 'task-6-7-run-001',
       firebaseProjectId: 'green-staging-74557',
     });
+  });
+
+  it('Railway 밖 배포 staging도 빌드용 NODE_ENV가 production이어도 대역을 허용한다', () => {
+    expect(
+      resolveE2EProviderMode(
+        config({
+          ...valid,
+          NODE_ENV: 'production',
+          RAILWAY_ENVIRONMENT_NAME: '',
+          GREENHUB_ENVIRONMENT_NAME: 'staging',
+        }),
+      ).enabled,
+    ).toBe(true);
+  });
+
+  it('배포 환경 이름이 서로 다르면 대역을 켜지 않는다', () => {
+    expect(() =>
+      resolveE2EProviderMode(
+        config({
+          ...valid,
+          RAILWAY_ENVIRONMENT_NAME: 'production',
+          GREENHUB_ENVIRONMENT_NAME: 'staging',
+        }),
+      ),
+    ).toThrow();
   });
 
   it('비운영 회차 E2E의 실제 provider 연결을 거부한다', () => {

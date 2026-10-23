@@ -654,7 +654,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [ ] Kakao Maps·밀크런 preview 재평가, 플랫폼형 전 GPS 보류
 
 ### 인프라/확장
-- [ ] Railway contingency, 다중 판매자, hub_staff, 외부 driver 정산, 결제수단 확장
+- [ ] Railway contingency(2026-10-23 결정: Cloud Run 서울 이전 진행, `docs/specs/ops/api-hosting-cloud-run-plan.md`), 다중 판매자, hub_staff, 외부 driver 정산, 결제수단 확장
 
 ### AUTH-LOGOUT-SERVER-REVOCATION
 - [ ] 세 앱 Auth.js 로그아웃 시 API `POST /auth/logout`도 호출해 서버 refresh token을 폐기한다. **2026-10-10 재대조: 구현됨**(#415·#429·#431 병합, 세 앱 `events.signOut` → `revokeApiSession`, 단위 테스트 있음). **2026-10-12 갱신**: #474가 로그아웃·관리자 정지에 `users/{uid}.sessionsRevokedAt`을 기록해 그 이전 `iat`의 access token을 `JwtStrategy`가 401로 거부하고, 로그아웃 때 Firebase refresh token도 폐기한다(`jwt.strategy.spec.ts`, `auth.service.spec.ts`). 남은 일: 배포 전 회차 E2E로 런타임 확인, 다른 기기 동시 로그아웃은 2026-10-15 #526의 기기별 세션으로 해결(`AUTH-MULTI-DEVICE-SESSION`). 이전 기록: 쿠키만 삭제되어 로그아웃 전에 복사된 쿠키가 refresh 만료(30일)까지 재사용될 수 있다. `refreshTokens/{sub}`가 사용자당 1개라 같은 계정의 다른 기기도 함께 로그아웃되는 영향을 설계에 포함한다. 2026-09-28 결정(D2)으로 출시 후 과제. **2026-10-10 결정: 지금 한다**(아래 `AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE`의 경쟁 상태 확인).
