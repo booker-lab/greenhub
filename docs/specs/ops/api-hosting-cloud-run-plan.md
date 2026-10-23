@@ -2,7 +2,7 @@
 
 # 운영 API를 Railway에서 Cloud Run(서울)으로 옮기기 — 계획서
 
-> 작성: 2026-10-23 · 상태: **C1 진행 중** · 결정: 사용자 확정(2026-10-23 채팅, "Cloud Run을 지금부터 구축, 단계별 진행")
+> 작성: 2026-10-23 · 상태: **C1 완료(#605), C2는 절차서 R1~R3 일부 실행(2026-10-23, 절차서 실행 기록 참고)** · 결정: 사용자 확정(2026-10-23 채팅, "Cloud Run을 지금부터 구축, 단계별 진행")
 > 실행 명령은 [`api-cloud-run-runbook.md`](api-cloud-run-runbook.md)(R0~R11)가 소유한다.
 > 이 문서는 계획(`*-plan.md`)이다. 전환이 끝나면 현행 사실은 `docs/memory.md`·`docs/URLS.md`·배포 문서로 옮기고, 이 문서는 결정 배경으로만 남긴다.
 > 운영 전환·외부 서비스 설정·처리방침 변경은 단계마다 따로 승인받는다. 이 문서의 단계 완료 표시는 운영 승인이 아니다.
@@ -93,8 +93,8 @@
 - 결제 계정 연결을 확인하고, Cloud Run·Artifact Registry·Secret Manager·Compute Engine(Cloud NAT) API를 켠다.
 - Artifact Registry 저장소(`asia-northeast3`)를 만든다.
 - 서비스 계정 두 개를 만든다.
-  - 런타임용: Secret Manager 읽기만
-  - 배포용: GitHub OIDC로 이 저장소의 지정 workflow만 쓸 수 있게
+  - 런타임용: Firestore·Storage·Firebase 인증과 Secret Manager 읽기(명령은 절차서 R3)
+  - 배포용: GitHub OIDC로 이 저장소의 지정 workflow만 쓸 수 있게(절차서 R4·R5)
 - `asia-northeast3`에서 Direct VPC egress·Cloud NAT를 쓸 수 있는지 확인한다.
 - **확인**: 읽기 명령으로 구성을 확인하고, 예상 월 비용을 이 문서에 적는다.
 

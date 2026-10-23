@@ -46,6 +46,7 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com secret
 ```
 
 - 확인: `gcloud services list --enabled --project=green-e4fe3`에 7개가 보인다. `gcloud compute networks list --project=green-e4fe3`로 `default` VPC와 `asia-northeast3` 서브넷을 확인한다(없으면 R7 전에 만든다).
+- 실행 기록(2026-10-23, 사용자 Cloud Shell): `run`·`artifactregistry`·`secretmanager`·`compute` 4개만 켰다. `iamcredentials`·`sts`·`cloudbuild`는 아직이다(위 명령을 다시 실행하면 나머지가 켜진다). VPC 확인도 아직이다.
 - 비용: 켜는 것만으로는 들지 않는다.
 - 되돌리기: `gcloud services disable <API> --project=green-e4fe3`
 
@@ -56,6 +57,8 @@ gcloud artifacts repositories create greenhub --repository-format=docker --locat
 ```
 
 오래된 이미지는 최근 20개만 남긴다(정리 정책 파일은 이 단계에서 같이 만든다).
+
+- 실행 기록(2026-10-23): 저장소 `greenhub`를 만들었다(설명·정리 정책 없이). 정리 정책은 아직이다.
 
 ## R3. 런타임 서비스 계정 — 승인 필요
 
@@ -73,6 +76,7 @@ gcloud iam service-accounts add-iam-policy-binding $SA --project=green-e4fe3 --m
 
 - 지금 Railway는 `FIREBASE_SERVICE_ACCOUNT_JSON`(키 파일)을 쓴다. Cloud Run은 이 키를 옮기지 않고 런타임 서비스 계정(ADC)으로 접속한다. 코드는 키가 없으면 ADC를 쓰므로 바꿀 것이 없다.
 - 버킷 이름은 Railway 운영 변수 `FIREBASE_STORAGE_BUCKET` 값이다(비밀값 아님).
+- 실행 기록(2026-10-23): 서비스 계정만 만들었다. 역할 4개는 아직이다.
 
 ## R4. 배포 서비스 계정 — 승인 필요
 
@@ -144,6 +148,26 @@ gcloud compute addresses describe greenhub-api-egress --region=asia-northeast3 -
 
 - **프록시 홉 수 실측**: 2026-10-18 Railway 실측과 같은 기준(접속자마다 다른 요청 한도 버킷, 클라이언트가 보낸 `X-Forwarded-For` 무시). **부하분산기 경유와 run.app 직접은 홉 수가 다를 수 있다.** 운영은 부하분산기 경유 값을 쓴다.
 - 회차 E2E 1회(회차 64 + 세션 12), 원격 E2E 예산 규칙(`development-authority.md` §4.1)을 따른다.
+- **배포 방법**: 시험 서비스는 R9처럼 Cloud Shell에서 Cloud Build로 수동 배포한다. 시험용 배포 workflow나 Workload Identity Federation은 두지 않는다(배포가 드물고, 운영 공급자 R5는 `production-deploy.yml`·`production` Environment 전용이다).
+- **실행 기록(2026-10-23, 이 절차서가 `main`에 오르기 전 다른 세션 안내로 만든 것)**: 시험 프로젝트에 다음이 이미 있다.
+  - 켠 API: `run`·`artifactregistry`·`secretmanager`·`compute`·`iamcredentials`·`sts`
+  - 저장소 `greenhub`(`asia-northeast3`)
+  - 런타임 서비스 계정 `greenhub-api-runtime`(역할 없음)
+  - 배포 서비스 계정 `greenhub-api-deployer`: 프로젝트 역할 `run.admin`·`artifactregistry.writer`·`secretmanager.viewer`, 런타임 계정에 대한 `serviceAccountUser`
+  - Workload Identity 풀 `github`과 공급자 `greenhub`: 조건은 `main`의 `cloud-run-deploy.yml`인데, 이 workflow는 저장소에 없다.
+  - 위 배포 방법에 따라 공급자 `greenhub`와 배포 서비스 계정은 쓰지 않으므로 지운다(아래 정리 명령, 사용자 실행). 빈 풀 `github`은 남겨 둔다(아무 권한도 주지 않는다).
+
+```bash
+P=greenhub-round-direct-e2e
+D=greenhub-api-deployer@$P.iam.gserviceaccount.com
+gcloud iam workload-identity-pools providers delete greenhub --location=global --workload-identity-pool=github --project=$P --quiet
+for R in roles/run.admin roles/artifactregistry.writer roles/secretmanager.viewer; do
+  gcloud projects remove-iam-policy-binding $P --member="serviceAccount:$D" --role=$R --condition=None --quiet >/dev/null && echo "removed $R"
+done
+gcloud iam service-accounts remove-iam-policy-binding greenhub-api-runtime@$P.iam.gserviceaccount.com --project=$P \
+  --member="serviceAccount:$D" --role=roles/iam.serviceAccountUser --quiet >/dev/null && echo "removed serviceAccountUser"
+gcloud iam service-accounts delete $D --project=$P --quiet
+```
 
 ## R9. 운영 서비스 만들기(트래픽 없음, 계획서 C5) — 승인 필요
 
