@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { ProductsService } from './products.service';
 
 describe('공개 상품 API', () => {
@@ -351,6 +351,7 @@ describe('판매자 상품·배송비 쓰기 경로', () => {
   function makeFirestore(initial: Record<string, Data>) {
     const records = new Map(Object.entries(initial));
     const doc = jest.fn((path: string) => ({
+      path,
       get: jest.fn(async () => ({ exists: records.has(path), data: () => records.get(path) })),
       set: jest.fn(async (data: Data, options?: { merge?: boolean }) => {
         records.set(path, options?.merge ? { ...(records.get(path) ?? {}), ...data } : data);
@@ -362,7 +363,30 @@ describe('판매자 상품·배송비 쓰기 경로', () => {
         records.delete(path);
       }),
     }));
-    const firestore = { doc, Timestamp: { now: () => NOW } };
+    // 참조 확인용 where(필드 == 값).limit(n) 쿼리만 흉내 낸다.
+    const collection = jest.fn((name: string) => ({
+      where: (field: string, _op: '==', value: unknown) => ({
+        limit: (count: number) => ({
+          matches: () =>
+            [...records]
+              .filter(([key, data]) => key.startsWith(`${name}/`) && data[field] === value)
+              .slice(0, count),
+        }),
+      }),
+    }));
+    const runTransaction = jest.fn(async (callback: (tx: Data) => Promise<unknown>) => {
+      const deletes: string[] = [];
+      const tx = {
+        get: jest.fn(async (query: { matches: () => unknown[] }) => ({
+          empty: query.matches().length === 0,
+        })),
+        delete: jest.fn((ref: { path: string }) => deletes.push(ref.path)),
+      };
+      const result = await callback(tx);
+      for (const path of deletes) records.delete(path);
+      return result;
+    });
+    const firestore = { doc, collection, runTransaction, Timestamp: { now: () => NOW } };
     return { firestore, records };
   }
 
@@ -455,6 +479,42 @@ describe('판매자 상품·배송비 쓰기 경로', () => {
 
     expect(records.has('products/p-1')).toBe(false);
     expect(records.has('products/p-2')).toBe(true);
+  });
+
+  it.each([
+    ['주문', { 'orders/o-1': { id: 'o-1', storeId: 'store-1', productId: 'p-1' } }],
+    [
+      '회차 상품',
+      { 'saleRoundItems/ri-1': { id: 'ri-1', storeId: 'store-1', productId: 'p-1' } },
+    ],
+  ])('%s이 참조하는 상품은 지우지 않고 409로 판매 중지를 안내한다', async (_label, refs) => {
+    const { firestore, records } = makeFirestore({
+      ...ownedStore,
+      'products/p-1': { id: 'p-1', storeId: 'store-1' },
+      ...refs,
+    });
+    const service = new ProductsService(firestore as never);
+
+    const error = await service.deleteProduct('store-1', 'p-1', 'seller-1').catch((e) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error.getStatus()).toBe(409);
+    expect(error.message).toContain('판매 중지');
+    expect(records.has('products/p-1')).toBe(true);
+  });
+
+  it('다른 상품을 가리키는 주문·회차 상품은 삭제를 막지 않는다', async () => {
+    const { firestore, records } = makeFirestore({
+      ...ownedStore,
+      'products/p-1': { id: 'p-1', storeId: 'store-1' },
+      'orders/o-1': { id: 'o-1', storeId: 'store-1', productId: 'p-9' },
+      'saleRoundItems/ri-1': { id: 'ri-1', storeId: 'store-1', productId: 'p-9' },
+    });
+    const service = new ProductsService(firestore as never);
+
+    await service.deleteProduct('store-1', 'p-1', 'seller-1');
+
+    expect(records.has('products/p-1')).toBe(false);
   });
 
   it('소유하지 않은 판매자의 상품 삭제를 거부한다', async () => {

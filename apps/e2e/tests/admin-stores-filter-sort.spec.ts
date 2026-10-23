@@ -182,9 +182,10 @@ test.describe('Admin - 판매자 검색·필터·정렬·수수료 회귀', () =
     const state = await openStores(page);
 
     await page.getByRole('button', { name: '수수료 설정' }).first().click({ force: true });
-    const input = page.getByPlaceholder('0.05').first();
-    await input.fill('1.5', { force: true });
-    await expect(input).not.toHaveValue('1.5');
+    // #592부터 % 단위 입력(0~100) — 150%는 입력란이 받지 않고, 저장해도 1.5(=150%)를 보내지 않는다.
+    const input = page.getByLabel('수수료율(%)').first();
+    await input.fill('150', { force: true });
+    await expect(input).not.toHaveValue('150');
     await page.getByRole('button', { name: '저장' }).first().click({ force: true });
 
     await expect.poll(() => state.commissionRates.includes(1.5)).toBe(false);

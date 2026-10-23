@@ -545,6 +545,11 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
       return callback().finally(() => dateNow.mockRestore());
     }
 
+    // 확정은 주문 문서를 읽어 판단하므로, 확정을 기대하는 정산에는 배송 완료 주문을 함께 둔다.
+    function seedDeliveredOrder(firestore: FakeFirestore, orderId: string) {
+      firestore.seed(`orders/${orderId}`, { id: orderId, storeId: 'store-1', status: 'DELIVERED' });
+    }
+
     it('cutoff 이전이 아닌 pending은 그대로 유지한다', async () => {
       const { firestore, service } = makeSettlementsService({
         SETTLEMENT_CONFIRM_DELAY_DAYS: '1',
@@ -572,6 +577,7 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
           settledAt: new Date('2026-08-25T23:59:59.999Z'),
         }),
       );
+      seedDeliveredOrder(firestore, 'order-due-1');
 
       await withFixedClock(() => service.confirmDueSettlements());
 
@@ -595,6 +601,8 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
           settledAt: new Date('2026-08-19T23:59:59.999Z'),
         }),
       );
+      seedDeliveredOrder(firestore, 'order-default-6d');
+      seedDeliveredOrder(firestore, 'order-default-7d');
 
       await withFixedClock(() => service.confirmDueSettlements());
 
@@ -641,6 +649,7 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
             settledAt: new Date('2026-08-25T00:00:00.000Z'),
           }),
         );
+        seedDeliveredOrder(firestore, orderId);
       }
       firestore.runTransaction.mockImplementationOnce(() =>
         Promise.reject(new Error('transaction contention')),
@@ -664,6 +673,7 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
           settledAt: new Date('2026-08-25T00:00:00.000Z'),
         }),
       );
+      seedDeliveredOrder(firestore, 'order-fresh-1');
       firestore.setBeforeTransactionAttempt(() => {
         firestore.updateOutsideTransaction('settlements/order-fresh-1', {
           status: 'confirmed',
@@ -687,6 +697,7 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
           settledAt: new Date('2026-08-25T00:00:00.000Z'),
         }),
       );
+      seedDeliveredOrder(firestore, orderId);
       firestore.setBeforeCommit(async () => {
         await service.cancelSettlement(orderId);
       });
@@ -721,6 +732,7 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
             settledAt: new Date('2026-08-25T00:00:00.000Z'),
           }),
         );
+        seedDeliveredOrder(firestore, orderId);
       }
 
       it('OPEN 기록이 있는 주문은 확정하지 않고 pending으로 두며 나머지는 확정한다', async () => {
@@ -785,6 +797,87 @@ describe('SettlementsService 정산 lifecycle 회귀', () => {
           seedReversalIssue(firestore, 'issue-race-1', orderId, 'OPEN');
           firestore.updateOutsideTransaction(`settlements/${orderId}`, {
             updatedAt: new Date('2026-08-26T12:00:00.000Z'),
+          });
+        });
+
+        await withFixedClock(() => service.confirmDueSettlements());
+
+        expect(firestore.getData(`settlements/${orderId}`)?.['status']).toBe('pending');
+        expect(firestore.transactionUpdates).toHaveLength(0);
+      });
+    });
+
+    describe('주문 상태 보류', () => {
+      function seedDue(firestore: FakeFirestore, orderId: string, order: Record<string, unknown> | null) {
+        firestore.seed(
+          `settlements/${orderId}`,
+          makeSettlement(orderId, 'pending', {
+            settledAt: new Date('2026-08-25T00:00:00.000Z'),
+          }),
+        );
+        if (order) firestore.seed(`orders/${orderId}`, { id: orderId, storeId: 'store-1', ...order });
+      }
+
+      function spyWarn(service: SettlementsService) {
+        return jest
+          .spyOn((service as unknown as { logger: { warn: () => void } }).logger, 'warn')
+          .mockImplementation(() => undefined);
+      }
+
+      it.each([
+        ['취소된 주문', { status: 'CANCELLED', cancellation: { status: 'COMPLETED' } }],
+        ['환불 중인 주문', { status: 'DELIVERED', cancellation: { status: 'REFUNDING' } }],
+        ['환불 실패로 멈춘 주문', { status: 'DELIVERED', cancellation: { status: 'REFUND_FAILED' } }],
+        ['마무리 대기 주문', { status: 'DELIVERED', cancellation: { status: 'LOCAL_PENDING' } }],
+        ['마무리 실패 주문', { status: 'CANCELLED', cancellation: { status: 'LOCAL_FAILED' } }],
+      ] as const)('%s의 정산은 확정하지 않고 pending으로 두며 나머지는 확정한다', async (_label, order) => {
+        const { firestore, service } = makeSettlementsService({
+          SETTLEMENT_CONFIRM_DELAY_DAYS: '1',
+        });
+        seedDue(firestore, 'order-hold-1', { ...order });
+        seedDue(firestore, 'order-clean-2', { status: 'REVIEWED' });
+        const warn = spyWarn(service);
+
+        await withFixedClock(() => service.confirmDueSettlements());
+
+        expect(firestore.getData('settlements/order-hold-1')?.['status']).toBe('pending');
+        expect(firestore.getData('settlements/order-clean-2')?.['status']).toBe('confirmed');
+        expect(firestore.transactionUpdates.map((update) => update.path)).toEqual([
+          'settlements/order-clean-2',
+        ]);
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('취소·환불이 진행 중이라 확정 보류한 정산: order-hold-1'),
+        );
+        // 정산 취소나 새 운영 기록은 이 배치가 만들지 않는다.
+        expect(firestore.listData('operationIssues/')).toHaveLength(0);
+      });
+
+      it('주문 문서가 없는 정산은 판단 근거가 없으므로 확정하지 않는다', async () => {
+        const { firestore, service } = makeSettlementsService({
+          SETTLEMENT_CONFIRM_DELAY_DAYS: '1',
+        });
+        seedDue(firestore, 'order-missing-2', null);
+        const warn = spyWarn(service);
+
+        await withFixedClock(() => service.confirmDueSettlements());
+
+        expect(firestore.getData('settlements/order-missing-2')?.['status']).toBe('pending');
+        expect(firestore.transactionUpdates).toHaveLength(0);
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('주문 문서가 없어 확정 보류한 정산: order-missing-2'),
+        );
+      });
+
+      it('확정 트랜잭션 재시도에서 새로 시작된 환불을 다시 읽어 확정하지 않는다', async () => {
+        const { firestore, service } = makeSettlementsService({
+          SETTLEMENT_CONFIRM_DELAY_DAYS: '1',
+        });
+        const orderId = 'order-hold-race-1';
+        seedDue(firestore, orderId, { status: 'DELIVERED' });
+        // 첫 시도 commit 직전에 배송 후 환불이 시작돼 주문 문서가 바뀌고 트랜잭션이 재시도된다.
+        firestore.setBeforeCommit(() => {
+          firestore.updateOutsideTransaction(`orders/${orderId}`, {
+            cancellation: { status: 'REFUNDING' },
           });
         });
 
