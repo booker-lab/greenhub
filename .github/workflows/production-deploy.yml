@@ -310,7 +310,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          result="$(node scripts/release/production-deploy.mjs cloudrun --sha="$SHA")"
+          result="$(node scripts/release/production-deploy.mjs cloudrun --sha="$SHA" --api-base="$CLOUD_RUN_API_BASE")"
           echo "$result"
           label='API(Cloud Run)'
           if [[ "$API_PLATFORM" == 'railway' ]]; then label='Cloud Run 예비 서버'; fi
