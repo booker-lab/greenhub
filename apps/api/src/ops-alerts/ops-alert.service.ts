@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { resolveDeploymentEnvironmentName } from '../config/runtime-config';
 
 // 운영자 휴대폰 알림(텔레그램 봇). 알리고(고객 알림톡)와 다른 경로라 알리고 잔액·IP 문제도 알릴 수 있다.
 // OPS_TELEGRAM_BOT_TOKEN·OPS_TELEGRAM_CHAT_ID가 둘 다 있을 때만 보내고, 없으면 아무것도 하지 않는다.
@@ -46,7 +47,10 @@ export class OpsAlertService {
           : e2e
             ? 'e2e_runtime'
             : null;
-    const environment = config.get<string>('RAILWAY_ENVIRONMENT_NAME', '')?.trim();
+    const environment = resolveDeploymentEnvironmentName({
+      GREENHUB_ENVIRONMENT_NAME: config.get<string>('GREENHUB_ENVIRONMENT_NAME', ''),
+      RAILWAY_ENVIRONMENT_NAME: config.get<string>('RAILWAY_ENVIRONMENT_NAME', ''),
+    });
     this.environmentLabel = environment && environment !== 'production' ? ` [${environment}]` : '';
   }
 

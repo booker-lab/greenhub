@@ -50,6 +50,24 @@ describe('OpsAlertService', () => {
     expect(body.text).toBe('🔴 그린러브 [staging] · 알리고 잔액 부족\n충전하세요.');
   });
 
+  it('Railway 밖 배포 환경 이름도 제목에 붙이고 운영은 붙이지 않는다', async () => {
+    const stagingFetch = okFetch();
+    await new OpsAlertService(
+      config({ ...configured, GREENHUB_ENVIRONMENT_NAME: 'staging' }),
+      stagingFetch as never,
+    ).send({ level: 'info', title: '확인' });
+    expect(JSON.parse(stagingFetch.mock.calls[0][1].body).text).toBe(
+      '🟢 그린러브 [staging] · 확인',
+    );
+
+    const productionFetch = okFetch();
+    await new OpsAlertService(
+      config({ ...configured, GREENHUB_ENVIRONMENT_NAME: 'production' }),
+      productionFetch as never,
+    ).send({ level: 'info', title: '확인' });
+    expect(JSON.parse(productionFetch.mock.calls[0][1].body).text).toBe('🟢 그린러브 · 확인');
+  });
+
   it('같은 dedupeKey는 창 안에서 한 번만 보내고 창이 지나면 다시 보낸다', async () => {
     const fetchImpl = okFetch();
     let now = 1_000_000;
