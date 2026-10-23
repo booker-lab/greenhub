@@ -255,7 +255,7 @@ rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/s
 문서의 `suspended/role/storeId/driverApproved`를 재검증한다
 (`apps/api/src/auth/strategies/jwt.strategy.spec.ts`).
 
-관리자가 계정을 정지하거나 role/store 연결·기사 승인을 바꾼 뒤 기존 세션의 **revocation window는 즉시(다음 요청)**다(2026-09-28 결정 D2). 이미 발급된 API access token도 `JwtStrategy.validate()`가 요청마다 authoritative user를 재조회해 `suspended`·role 불일치·`driverApproved` 철회를 403으로 거부하고(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`), Firestore Rules는 `get(users/{uid})`로 `suspended`·role·storeId를 실시간 확인한다. 다만 refresh 경로는 더 이상 stale claims를 재발급하지 않는다: `AuthService.refresh()`가 authoritative user를 재조회해 불일치를 거부하고(`refresh current authority`), `GET /auth/session`이 `JwtAuthGuard` 재검증 + authoritative user 재조회 + access token `sid` 세션 존재 검사로 same-deployment session authority를 확인하며(`getSession same-deployment authority`), 세 앱 `jwt` callback이 매 호출마다 이를 확인한다.
+관리자가 계정을 정지하거나 role/store 연결·기사 승인을 바꾼 뒤 **API 데이터 요청의 revocation window는 즉시(다음 요청)**다(2026-09-28 결정 D2). 웹 앱 화면 세션은 API 거절 즉시 또는 최대 60초 안에 끝난다(2026-10-24 결정, 아래 48A). 이미 발급된 API access token도 `JwtStrategy.validate()`가 요청마다 authoritative user를 재조회해 `suspended`·role 불일치·`driverApproved` 철회를 403으로 거부하고(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`), Firestore Rules는 `get(users/{uid})`로 `suspended`·role·storeId를 실시간 확인한다. 다만 refresh 경로는 더 이상 stale claims를 재발급하지 않는다: `AuthService.refresh()`가 authoritative user를 재조회해 불일치를 거부하고(`refresh current authority`), `GET /auth/session`이 `JwtAuthGuard` 재검증 + authoritative user 재조회 + access token `sid` 세션 존재 검사로 same-deployment session authority를 확인하며(`getSession same-deployment authority`), 세 앱 `jwt` callback이 이를 확인한다(같은 access token의 성공은 60초 재사용, 48A).
 
 판정:
 
@@ -281,11 +281,20 @@ gap을 다음 최소 authority로 닫는다.
   read-only endpoint이며, `{ sub, role, storeId? }` projection만 반환한다
   (토큰·비밀값 반환 없음, write/rotation/deletion 없음).
 - 세 앱 `src/auth.ts`의 `jwt` callback은 `accessTokenExpires` TTL과 무관하게
-  매 호출마다 `GET /auth/session`으로 권위를 확인한다. `401/403`은 명시적 폐기
+  `GET /auth/session`으로 권위를 확인한다(공통 구현 `packages/shared/src/session-authority.ts`
+  `revalidateSessionToken`). 같은 access token의 확인 성공은 `SESSION_AUTHORITY_REUSE_MS`(60초)
+  동안 재사용해 화면 이동마다 왕복하지 않는다(2026-10-24 결정, #627). access token이 바뀌거나
+  `update()` 요청(trigger `update`)이면 재사용하지 않는다. `401/403`은 명시적 폐기
   (logout·`suspended`·role/store mismatch·`driverApproved` 철회·앱 허용 role 밖)로
   fail-closed (`jwt`가 `null` 반환 → Auth.js cookie 삭제, `auth()`는 `null`).
   네트워크 throw·timeout·5xx·429는 transient으로 보존하고 다음 호출에 재시도하며
   전역 로그아웃으로 오인하지 않는다.
+- revocation window(2026-10-24 결정): API 데이터 요청은 `JwtStrategy`가 요청마다 검사하므로
+  즉시(다음 요청) 거부된다. 웹 앱 화면 세션은 **화면의 API 요청이 `401/403`으로 거절되면 즉시**
+  끝난다. 세 앱 `Providers`의 `SessionAuthorityRecheck`가 `watchApiAuthorityRejections`로 API
+  origin의 Bearer 요청 거절을 보고 `update({})`(POST, trigger `update`)로 세션을 다시 받아
+  재사용 없이 검증한다(같은 access token은 10초에 한 번). API 요청이 없는 화면 이동만 이어지면
+  최대 60초 동안 화면 틀(데이터 없음)이 남을 수 있다.
 - TTL 만료 단독은 폐기로 단정하지 않는다. verify가 `401/403`이어도
   `POST /auth/refresh`를 한 번 시도해 access 만료(refresh 성공, 새 토큰)인가
   실제 폐기(refresh도 명시적 거부, `null`)인가를 구분한다.
@@ -303,7 +312,7 @@ gap을 다음 최소 authority로 닫는다.
 - logout/refresh-token rotation 동작 유지
 - suspended/role-changed/store-changed/driver-approval-changed 시나리오 직접 회귀
 
-현재 상태: authoritative refresh 재조회, stale claim 재발급 차단, `suspended`/`role`/`store`/`driverApproved` 회귀, logout/rotation 유지는 `IMPLEMENTED / PROVEN`이다(`apps/api/src/auth/auth.service.spec.ts`). revocation window는 즉시(다음 요청)로 결정됐고(2026-09-28 D2), Preview 브라우저 증거는 run `36341189483`의 세션 수명주기 12건이다.
+현재 상태: authoritative refresh 재조회, stale claim 재발급 차단, `suspended`/`role`/`store`/`driverApproved` 회귀, logout/rotation 유지는 `IMPLEMENTED / PROVEN`이다(`apps/api/src/auth/auth.service.spec.ts`). revocation window는 즉시(다음 요청)로 결정됐고(2026-09-28 D2), 2026-10-24에 화면 세션만 "API 거절 즉시 또는 최대 60초"로 조정됐다(48A). Preview 브라우저 증거는 run `36341189483`의 세션 수명주기 12건(조정 전 기준)이며, 조정 뒤 기준은 `apps/e2e/tests/auth-session-lifecycle.spec.ts`가 정한다(폐기 뒤 API 요청 즉시 거부 → 화면 세션 종료).
 
 ## 7. 현재 Auth API
 
