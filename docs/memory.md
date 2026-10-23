@@ -127,7 +127,7 @@ run `36341189483`에서 consumer·seller·driver × chromium·mobile로 다음�
 - Auth.js 로그아웃 후 쿠키·세션 소멸
 - 계정 정지(consumer·seller)·기사 승인 철회(driver) 뒤 다음 세션 조회에서 세션 종료, 복원 후 재로그인
 
-revocation window 결정(D2, 2026-09-28)은 `docs/specs/api/auth.md`를 따른다. 로그아웃 시 서버 refresh token 폐기는 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`으로 다룬다.
+revocation window 결정(D2, 2026-09-28, 2026-10-23 조정: API 데이터 요청 즉시·앱 Auth.js 세션 최대 60초, 2026-10-24 보강: 화면의 API 요청이 거절되면 즉시)은 `docs/specs/api/auth.md`를 따른다. 로그아웃 시 서버 refresh token 폐기는 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`으로 다룬다.
 
 ### 4. ALIGO provider metadata
 

@@ -63,7 +63,15 @@ export default function ProductForm(props: ProductFormProps) {
           />
         );
       case 5:
-        return <Step5Pricing form={f.form} set={f.set} setGroupConfig={f.setGroupConfig} />;
+        return (
+          <Step5Pricing
+            storeId={storeId}
+            token={token}
+            form={f.form}
+            set={f.set}
+            setGroupConfig={f.setGroupConfig}
+          />
+        );
     }
   }
 

@@ -1,18 +1,23 @@
 'use client';
 
 import { Group, NumberInput, Stack, Text } from '@mantine/core';
+import { useOptionStocks } from '@/hooks/useOptionStocks';
+import { isFeatureOn } from '@/lib/features';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
 import GroupConfigSection from '../GroupConfigSection';
 import { ProductExtrasSection } from '../ProductExtrasSection';
 import { DELIVERY_SIZES, type GroupConfigForm, type ProductFormData } from '../productForm.types';
 
 interface Step5PricingProps {
+  storeId: string;
+  token: string;
   form: ProductFormData;
   set: <K extends keyof ProductFormData>(key: K, value: ProductFormData[K]) => void;
   setGroupConfig: <K extends keyof GroupConfigForm>(key: K, value: GroupConfigForm[K]) => void;
 }
 
-export function Step5Pricing({ form, set, setGroupConfig }: Step5PricingProps) {
+export function Step5Pricing({ storeId, token, form, set, setGroupConfig }: Step5PricingProps) {
+  const optionStocks = useOptionStocks(storeId, token, isFeatureOn('option-sheet'));
   return (
     <Stack gap="sm">
       <NumberInput
@@ -68,7 +73,12 @@ export function Step5Pricing({ form, set, setGroupConfig }: Step5PricingProps) {
           setGroupConfig={setGroupConfig}
         />
       </FieldCard>
-      <ProductExtrasSection extras={form.extras} onChange={(next) => set('extras', next)} />
+      <ProductExtrasSection
+        extras={form.extras}
+        onChange={(next) => set('extras', next)}
+        optionStocks={optionStocks.stocks}
+        optionStocksError={optionStocks.error}
+      />
     </Stack>
   );
 }

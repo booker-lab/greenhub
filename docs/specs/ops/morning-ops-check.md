@@ -34,8 +34,8 @@
 
 | ID | 왜 보는지 | 이상 기준 | 사람이 내릴 결정 |
 |---|---|---|---|
-| M1 지급 후 환불 | 판매자에게 이미 지급한 정산의 주문이 환불되어도 시스템은 경고 로그만 남기고 정산은 `paid`로 둔다. 회수할 돈이 아무 데도 기록되지 않는다 | 🔴 정산 `status=='paid'`인데 주문 `status=='CANCELLED'`이거나 결제 `refundedAt`이 있음. 1건부터 | 판매자에게 돌려받기 / 다음 정산에서 빼기 / 그냥 두기. 정책 자체가 미정이다(재감사 결정 대기 "지급된 정산의 주문 환불: 차단 vs 회수 표시") |
-| M2 수수료율 차이 | 어드민에서 가게 수수료율을 바꿔도 정산은 전역 5%(`PLATFORM_FEE_RATE`)로만 계산한다. 화면 값과 실제 돈이 다르다 | 🟡 `stores.commissionRate`가 있고, 그 가게 최근 정산의 `platformFeeRate`와 다름. 평소에는 "N곳 · 정책 결정 대기" 한 줄만 보이고, 새로 생기거나 바뀐 날에만 가게별로 자세히 보인다 | 가게별 율을 정산에 반영할지(코드 변경 필요), 화면 값을 기본값으로 되돌릴지 |
+| M1 지급 후 환불 | 판매자에게 이미 지급한 정산의 주문이 환불되면 정산은 `paid`로 두고 회수 필요(`recoveryRequired`·`recoveryAmount`)를 표시하며 관리자만 닫는 운영 기록(`SETTLEMENT_RECOVERY_REQUIRED`)을 연다(2026-10-21 결정 ④, #592). 돌려받을 돈이 남아 있는지 매일 본다 | 🔴 정산 `status=='paid'`인데 주문 `status=='CANCELLED'`이거나 결제 `refundedAt`이 있음. 1건부터 | 판매자에게 돌려받은 뒤 관리자 회수 완료 처리 |
+| M2 수수료율 차이 | 정산은 생성 때 가게 `commissionRate`(없으면 `PLATFORM_FEE_RATE`)를 쓰고 이미 만든 정산은 다시 계산하지 않는다(2026-10-21 결정 ②, #592). 그래서 요율을 바꾼 직후에는 그 전에 만든 정산과 값이 다를 수 있다 | 🟡 `stores.commissionRate`가 있고, 그 가게 최근 정산의 `platformFeeRate`와 다름. 평소에는 한 줄만 보이고, 새로 생기거나 바뀐 날에만 가게별로 자세히 보인다 | 요율 변경 전에 만든 정산이면 그대로 둔다. 변경 뒤 만든 정산인데 다르면 기술 확인 |
 
 ### 2-2. 주문 흐름
 
@@ -207,7 +207,7 @@ S1~S3은 운영에 접근하지 않으므로 S0과 나란히 진행할 수 있�
 | R1 | 프로젝트 정책상 서비스 계정 열쇠 발급이 막혀 있을 수 있음(조직 정책 `iam.disableServiceAccountKeyCreation`) | S0에서 막히면 이 문서로 돌아와 경로를 다시 정한다(서버 요약 확장안이 차선) |
 | R2 | PC가 꺼지거나 Claude 앱이 닫혀 있으면 점검이 없음 | 서버 08:30 텔레그램 요약이 대비책. 단 §5-3의 텔레그램 설정 확인이 먼저 필요 |
 | R3 | 주문 상태별 시각이 없어 일정 없는 주문의 지연은 짐작치 | O1에서 "짐작"으로 표시. 정확히 하려면 주문에 상태 변경 시각을 남기는 별도 작업이 필요(이번 범위 아님) |
-| R4 | M1·M2는 정책이 정해질 때까지 매일 같은 내용이 뜰 수 있음 | M2는 평소 한 줄만 보임. M1은 돈 문제라 🔴 유지 |
+| R4 | M1은 회수 완료 전까지, M2는 요율 변경 전 정산이 남아 있는 동안 매일 같은 내용이 뜰 수 있음 | M2는 평소 한 줄만 보임. M1은 돈 문제라 🔴 유지 |
 | Q1 | 새 입점 문의(`partnerInquiries`)를 "사람 대기"에 넣을지 | 이번 확정 범위 밖. S7 재조정 때 판단 |
 | Q2 | 2단계(결정 대기함)로 넘어갈 시점 | 파일럿 이후, 1단계 보고가 2주 이상 안정적으로 온 뒤 |
 
@@ -216,8 +216,8 @@ S1~S3은 운영에 접근하지 않으므로 S0과 나란히 진행할 수 있�
 - 서버 아침 요약: `apps/api/src/ops-alerts/ops-digest.service.ts:43-71`(수집 4항목), `:92`(08:30 cron)
 - 기계 계정 통로 없음: `apps/api/src/admin/admin.controller.ts:19-21`(JWT + admin 역할만), API 키·내부 토큰 가드 없음
 - 클라이언트 규칙: `firestore.rules:52-54`(orders 차단), `:147-149`(그 밖 기본 차단)
-- 지급 후 환불: `apps/api/src/settlements/settlements.service.ts:240-245`(paid면 경고만)
-- 수수료율 미반영: `apps/api/src/settlements/settlements.service.ts:43,59`(전역 율), `apps/api/src/admin/admin.service.ts:97-100`(저장만)
+- 지급 후 환불: `apps/api/src/settlements/settlements.service.ts` `cancelSettlement`(paid면 회수 필요 표시·`SETTLEMENT_RECOVERY_REQUIRED` 운영 기록, #592)
+- 수수료율: `apps/api/src/settlements/settlements.service.ts` 정산 생성(가게 `commissionRate`, 없으면 `PLATFORM_FEE_RATE`, #592)
 - 결제 시각: `apps/api/src/payments/payment-finalization.service.ts:668-684`(`payments` 문서)
 - 기사 미배정: `apps/api/src/orders/driver-order-scope.service.ts:308`
 - 주문 상태 전이: `apps/api/src/orders/orders.helpers.ts:9-29`

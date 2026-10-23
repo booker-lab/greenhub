@@ -18,6 +18,7 @@ import { FirestoreModule } from './firestore/firestore.module';
 import { HubsModule } from './hubs/hubs.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OperationsModule } from './operations/operations.module';
+import { OptionStocksModule } from './option-stocks/option-stocks.module';
 import { OpsAlertModule } from './ops-alerts/ops-alert.module';
 import { OrdersModule } from './orders/orders.module';
 import { PayoutAccountsModule } from './payout-accounts/payout-accounts.module';
@@ -70,6 +71,7 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
     StoresModule,
     SettlementsModule,
     PayoutAccountsModule,
+    OptionStocksModule,
     HubsModule,
     AdminModule,
     DriverModule,

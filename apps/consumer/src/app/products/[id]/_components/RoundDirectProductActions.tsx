@@ -4,7 +4,7 @@ import type { Product } from '@greenhub/shared';
 import { ActionIcon, Box, Button, Divider, Group, Stack, Text } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
 import ProductCTABar from '@/components/ProductCTABar';
 import { type RoundCartItem, useCart } from '@/hooks/useCart';
@@ -14,7 +14,9 @@ import { cartAddFailureMessage } from '@/lib/round-quick-add';
 import OptionSheet, { type OptionSelection } from '@/components/benchmark/OptionSheet';
 import KakaoChannelCta from '@/components/benchmark/KakaoChannelCta';
 import { useRestockSubscriptions, useRoundWishlist } from '@/hooks/useBenchmark';
+import { fetchOptionAvailability } from '@/lib/benchmark-api';
 import { isFeatureOn } from '@/lib/features';
+import { type OptionAvailabilityMap, toAvailabilityMap } from '@/lib/option-availability';
 import type { RoundProductActionContext } from './ProductActions';
 
 interface Props {
@@ -32,6 +34,25 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
   // 옵션 시트(option-sheet): 옵션이 있는 상품은 담기·바로 구매 전에 시트에서 옵션을 고른다.
   const optionGroups = isFeatureOn('option-sheet') ? (product.options ?? []) : [];
   const [sheetIntent, setSheetIntent] = useState<'cart' | 'buy' | null>(null);
+  // 직접 출력한 화분처럼 재고에 연결된 선택지의 남은 수량. 시트를 열 때마다 새로 불러온다.
+  const [optionAvailability, setOptionAvailability] = useState<OptionAvailabilityMap | null>(null);
+  const hasStockLinkedOption = optionGroups.some((group) => group.choices.some((choice) => !!choice.stockId));
+  const sheetOpened = sheetIntent !== null;
+  useEffect(() => {
+    if (!sheetOpened || !hasStockLinkedOption) return;
+    let cancelled = false;
+    setOptionAvailability(null);
+    fetchOptionAvailability(product.id)
+      .then((body) => {
+        if (!cancelled) setOptionAvailability(toAvailabilityMap(body));
+      })
+      .catch(() => {
+        // 못 불러오면 제한 없이 그린다. 모자란 재고는 주문할 때 서버가 막고 안내한다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasStockLinkedOption, product.id, sheetOpened]);
   // 이번 회차 찜(wishlist): 지금 회차 상품에만 단다. 지난 회차·품절 상품은 다음 회차 알림 신청으로 받는다.
   const wishRoundId = roundProduct.state === 'current' ? roundProduct.item.roundId : null;
   const showWish = isFeatureOn('wishlist') && wishRoundId !== null;
@@ -271,6 +292,7 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
           basePrice={roundProduct.item.roundPrice}
           initialQuantity={quantity}
           intent={sheetIntent ?? 'cart'}
+          availability={optionAvailability}
           onConfirm={(selection, chosenQuantity, intent) => {
             setSheetIntent(null);
             if (intent === 'cart') handleAddToCart(selection, chosenQuantity);
