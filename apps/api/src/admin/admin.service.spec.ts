@@ -307,14 +307,16 @@ function makeLegacyForceRefundFixture(orderOverrides: Data = {}) {
   const payments = { processRefundByOrderId: jest.fn().mockResolvedValue(undefined) };
   const settlements = { cancelSettlement: jest.fn().mockResolvedValue(undefined) };
   const roundLifecycle = { cancelForRound: jest.fn() };
+  const notifications = { sendToUser: jest.fn().mockResolvedValue(undefined) };
   const service = new AdminService(
     firestore as never,
     payments as never,
     settlements as never,
     roundLifecycle as never,
     { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
+    notifications as never,
   );
-  return { records, firestore, payments, settlements, roundLifecycle, service };
+  return { records, firestore, payments, settlements, roundLifecycle, notifications, service };
 }
 
 describe('AdminService 강제 환불 수렴', () => {
@@ -538,6 +540,73 @@ describe('AdminService 강제 환불 수렴', () => {
       recoveryRequired: false,
       recoveryAmount: 0,
     });
+  });
+});
+
+describe('AdminService 일반 주문 강제 환불 고객 안내', () => {
+  const legacyOrder = { userId: 'consumer-1', orderNumber: '20260825-000007' };
+
+  it('환불이 끝까지 확정되면 회차 주문과 같은 관리자 환불 안내를 한 번 보낸다', async () => {
+    const fixture = makeLegacyForceRefundFixture(legacyOrder);
+
+    await fixture.service.forceRefund('order-1', {}, 'admin-1');
+    // 이미 끝난 환불을 다시 누르면 안내를 다시 보내지 않는다.
+    await fixture.service.forceRefund('order-1', {}, 'admin-1');
+
+    expect(fixture.notifications.sendToUser).toHaveBeenCalledTimes(1);
+    expect(fixture.notifications.sendToUser).toHaveBeenCalledWith(
+      'consumer-1',
+      'ORDER_CANCELLED',
+      { orderId: '20260825-000007', reason: '운영 확인 후 전액 환불했습니다' },
+      'order-1',
+      'refund-notice:ADMIN_REFUND:order-1',
+    );
+  });
+
+  it('결제사 환불이 실패하면 안내하지 않는다', async () => {
+    const fixture = makeLegacyForceRefundFixture(legacyOrder);
+    fixture.payments.processRefundByOrderId.mockRejectedValueOnce(new Error('환불 실패'));
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).rejects.toThrow('환불 실패');
+
+    expect(fixture.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('주문 정리가 실패하면 안내하지 않고, 다시 처리해 확정될 때 한 번 보낸다', async () => {
+    const fixture = makeLegacyForceRefundFixture(legacyOrder);
+    fixture.records.delete('dailyCaps/store-1_2026-08-25');
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).rejects.toThrow(
+      'legacy daily capacity 문서가 없습니다',
+    );
+    expect(fixture.notifications.sendToUser).not.toHaveBeenCalled();
+
+    fixture.records.set('dailyCaps/store-1_2026-08-25', { totalCap: 10, usedSlots: 1 });
+    await fixture.service.forceRefund('order-1', {}, 'admin-1');
+
+    expect(fixture.notifications.sendToUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('이미 취소가 끝난(상태 기록 없는) 주문은 환불만 하고 안내하지 않는다', async () => {
+    const fixture = makeLegacyForceRefundFixture({ ...legacyOrder, status: 'CANCELLED' });
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).resolves.toMatchObject({
+      ok: true,
+    });
+
+    expect(fixture.payments.processRefundByOrderId).toHaveBeenCalledTimes(1);
+    expect(fixture.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
+  it('안내 발송이 실패해도 끝난 환불은 성공으로 응답한다', async () => {
+    const fixture = makeLegacyForceRefundFixture(legacyOrder);
+    fixture.notifications.sendToUser.mockRejectedValueOnce(new Error('알림 실패'));
+
+    await expect(fixture.service.forceRefund('order-1', {}, 'admin-1')).resolves.toEqual({
+      ok: true,
+      orderId: 'order-1',
+    });
+    expect(fixture.records.get('orders/order-1')?.status).toBe('CANCELLED');
   });
 });
 
