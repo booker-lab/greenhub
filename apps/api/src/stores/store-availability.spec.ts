@@ -104,7 +104,7 @@ describe('치운 가게는 손님 화면에서 숨는다', () => {
         { products: [product('p-1', 's-1')] },
       );
       const service = new ProductsService(firestore as never);
-      await expect(service.getProducts('s-1', {} as never)).rejects.toBeInstanceOf(
+      await expect(service.getProducts('s-1', {})).rejects.toBeInstanceOf(
         NotFoundException,
       );
       await expect(service.getProduct('s-1', 'p-1')).rejects.toBeInstanceOf(NotFoundException);
@@ -141,7 +141,7 @@ describe('치운 가게는 손님 화면에서 숨는다', () => {
       );
       const service = new ProductsService(firestore as never);
 
-      const result = (await service.getPublicProducts({} as never)) as {
+      const result = (await service.getPublicProducts({})) as {
         items: Array<Record<string, unknown>>;
       };
 

@@ -287,7 +287,7 @@ describe('AuthService', () => {
         password: 'password-123',
         name: '신청 기사',
         role: 'driver',
-      } as never);
+      });
 
       expect(userRef.set).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'driver', driverApproved: false }),

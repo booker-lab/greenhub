@@ -233,8 +233,8 @@ describe('MVP 회차 주문 흐름 계약', () => {
     const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
     const service = new RoundOrderCreateService(firestore as never, capacity, retention as never);
 
-    const first = await service.create('store-round', 'user-1', roundOrderRequest() as never);
-    const second = await service.create('store-round', 'user-1', roundOrderRequest() as never);
+    const first = await service.create('store-round', 'user-1', roundOrderRequest());
+    const second = await service.create('store-round', 'user-1', roundOrderRequest());
 
     expect(second).toEqual(first);
     expect(Array.from(records.keys()).filter((path) => path.startsWith('orders/'))).toHaveLength(1);
@@ -250,7 +250,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       saveRecord: jest.fn(),
     } as never);
 
-    await service.create('store-round', 'user-1', roundOrderRequest() as never);
+    await service.create('store-round', 'user-1', roundOrderRequest());
     let error: unknown;
     try {
       await service.create(
@@ -258,7 +258,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
         'user-1',
         roundOrderRequest({
           roundItems: [{ roundItemId: 'round-item-1', quantity: 2 }],
-        }) as never,
+        }),
       );
     } catch (caught) {
       error = caught;
@@ -276,12 +276,12 @@ describe('MVP 회차 주문 흐름 계약', () => {
     const withNote = await service.create(
       'store-round',
       'user-1',
-      roundOrderRequest({ requestNote: '  받는 분 김그린\r\n토퍼: 개업 축하  ' }) as never,
+      roundOrderRequest({ requestNote: '  받는 분 김그린\r\n토퍼: 개업 축하  ' }),
     );
     const blank = await service.create(
       'store-round',
       'user-1',
-      roundOrderRequest({ clientOrderRequestId: 'payment-attempt-2', requestNote: '   ' }) as never,
+      roundOrderRequest({ clientOrderRequestId: 'payment-attempt-2', requestNote: '   ' }),
     );
 
     expect(records.get(`orders/${withNote.orderId as string}`)?.['requestNote']).toBe(
@@ -297,7 +297,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       saveRecord: jest.fn().mockResolvedValue({}),
     } as never);
 
-    const first = await service.create('store-round', 'user-1', roundOrderRequest() as never);
+    const first = await service.create('store-round', 'user-1', roundOrderRequest());
     await expect(
       service.create('store-round', 'user-1', roundOrderRequest({ requestNote: ' ' }) as never),
     ).resolves.toEqual(first);
@@ -415,7 +415,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
     const result = await service.create(
       'store-round',
       'user-1',
-      roundOrderRequest({ deliveryPhone: ' 010 9999 0000 ' }) as never,
+      roundOrderRequest({ deliveryPhone: ' 010 9999 0000 ' }),
     );
 
     expect(records.get(`orders/${result['orderId'] as string}`)?.['deliveryPhone']).toBe('010-9999-0000');
@@ -441,7 +441,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
           addressDetail: '101호',
           zipCode: '06234',
         },
-      } as never),
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -470,7 +470,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
           { roundItemId: 'round-item-1', quantity: 1 },
           { roundItemId: 'round-item-1', quantity: 1 },
         ],
-      } as never),
+      }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
@@ -529,7 +529,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       retention as never,
     );
 
-    const result = await service.create('store-round', 'user-1', roundOrderRequest() as never);
+    const result = await service.create('store-round', 'user-1', roundOrderRequest());
 
     expect(retention.saveRecord).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1478,7 +1478,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
       .fn()
       .mockRejectedValueOnce(new Error('예약 반환 실패'))
       .mockImplementationOnce((...args: unknown[]) =>
-        (originalCombined as (...a: unknown[]) => Promise<unknown>).apply(realCapacity, args),
+        originalCombined.apply(realCapacity, args),
       );
 
     await expect(
@@ -1556,13 +1556,13 @@ describe('MVP 회차 주문 흐름 계약', () => {
       orderId: 'order-1',
       requesterId: 'user-1',
       idempotencyKey: 'redelivery:order-1:first',
-    } as never);
+    });
     const retried = await service.createRedeliveryFeeCharge({
       storeId: 'store-round',
       orderId: 'order-1',
       requesterId: 'user-1',
       idempotencyKey: 'redelivery:order-1:retry',
-    } as never);
+    });
 
     const chargeWrites = writes.filter((write) => write.path.startsWith('orderCharges/'));
     expect(chargeWrites).toHaveLength(1);
@@ -1593,7 +1593,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
         orderId: 'order-1',
         requesterId: 'user-2',
         idempotencyKey: 'first',
-      } as never),
+      }),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 

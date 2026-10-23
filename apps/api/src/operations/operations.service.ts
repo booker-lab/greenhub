@@ -236,7 +236,7 @@ export class OperationsService {
         actionClaim: null,
       };
       tx.update(issueRef, patch);
-      return { ...fresh, ...patch } as OperationIssue;
+      return { ...fresh, ...patch };
     });
     return this.toSafeResponse(committed);
   }
@@ -458,7 +458,7 @@ export class OperationsService {
         resolvedAt: nextResolvedAt,
         ...(claimToken !== undefined ? { actionClaim: null } : {}),
         updatedAt: performedAt,
-      } as OperationIssue;
+      };
     });
     return committed;
   }

@@ -748,7 +748,7 @@ describe('결제 확정 뒤 결제사 되돌림 웹훅', () => {
       await fixture.service.handleWebhook({
         type: 'Transaction.PartialCancelled',
         data: { paymentId: 'order-1', storeId: 'portone-store', cancellationId },
-      } as never);
+      });
     }
 
     const keys = fixture.issueWriter.createOrMergeIssue.mock.calls.map(
@@ -783,7 +783,7 @@ describe('결제 확정 뒤 결제사 되돌림 웹훅', () => {
     await fixture.service.handleWebhook({
       type: 'Transaction.Cancelled',
       data: { paymentId: 'order-1', storeId: 'portone-store' },
-    } as never);
+    });
 
     expect(fixture.finalization.cancelPendingOrder).toHaveBeenCalledWith(
       'order-1',
@@ -800,7 +800,7 @@ describe('결제 확정 뒤 결제사 되돌림 웹훅', () => {
       fixture.service.handleWebhook({
         type: 'Transaction.Failed',
         data: { paymentId: 'order-1', storeId: 'portone-store' },
-      } as never),
+      }),
     ).resolves.toEqual({ ok: true });
 
     expect(fixture.issueWriter.createOrMergeIssue).not.toHaveBeenCalled();
@@ -818,7 +818,7 @@ describe('결제 확정 뒤 결제사 되돌림 웹훅', () => {
     await fixture.service.handleWebhook({
       type: 'Transaction.DisputeCreated',
       data: { paymentId: 'order-1', storeId: 'portone-store' },
-    } as never);
+    });
 
     expect(fixture.issueWriter.createOrMergeIssue).toHaveBeenCalledWith(
       expect.objectContaining({

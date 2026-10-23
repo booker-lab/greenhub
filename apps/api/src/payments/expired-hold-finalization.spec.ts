@@ -107,7 +107,7 @@ async function setup(limits?: { maxDeliveryAddresses: number; maxItemQuantity: n
     portone as never,
     notifications as never,
     { log: jest.fn() } as never,
-    capacity as never,
+    capacity,
     issueWriter as never,
     { saveRecord: jest.fn().mockResolvedValue({}) } as never,
     { refundByOrderId: jest.fn() } as never,

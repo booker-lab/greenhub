@@ -262,7 +262,8 @@ describe('InviteGenerator 받는 사람 이메일', () => {
   it('입력 변경은 onRecipientEmailChange로 값을 넘긴다', () => {
     const onRecipientEmailChange = vi.fn();
     const input = recipientInputProps(InviteGenerator({ ...baseProps, onRecipientEmailChange }));
-    (input?.onChange as (event: { currentTarget: { value: string } }) => void)({
+    if (!input) throw new Error('받는 사람 입력란을 찾지 못했습니다.');
+    (input.onChange as (event: { currentTarget: { value: string } }) => void)({
       currentTarget: { value: 'a@b.co' },
     });
     expect(onRecipientEmailChange).toHaveBeenCalledWith('a@b.co');

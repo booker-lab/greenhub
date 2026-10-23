@@ -143,7 +143,7 @@ describe('AdminService 어드민 행동 기록', () => {
       'banners/main_hero': { headline: '옛 문구', imageUrl: 'https://img/old.jpg' },
     });
 
-    await service.upsertBanner({ headline: '새 문구' } as never, 'admin-1');
+    await service.upsertBanner({ headline: '새 문구' }, 'admin-1');
 
     expect(audit.logAdmin).toHaveBeenCalledWith({
       action: 'admin.banner.updated',

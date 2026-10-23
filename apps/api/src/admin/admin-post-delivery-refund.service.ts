@@ -46,7 +46,7 @@ export class AdminPostDeliveryRefundService {
         actorId,
         targetType: 'order',
         targetId: orderId,
-        before: { status: (order['status'] as string | undefined) ?? null },
+        before: { status: order['status'] ?? null },
         after: { status: 'CANCELLED', reasonCode: dto.reasonCode, ...recoveryAfter },
         reason: dto.memo,
       });

@@ -8,11 +8,11 @@ import {
 
 describe('public visibility canonical predicate', () => {
   it('isActive true + testOnly not true만 공개한다', () => {
-    expect(isPubliclyVisibleProduct({ isActive: true } as never)).toBe(true);
-    expect(isPubliclyVisibleProduct({ isActive: true, testOnly: false } as never)).toBe(true);
-    expect(isPubliclyVisibleProduct({ isActive: false } as never)).toBe(false);
-    expect(isPubliclyVisibleProduct({ isActive: true, testOnly: true } as never)).toBe(false);
-    expect(isPubliclyVisibleProduct({} as never)).toBe(false);
+    expect(isPubliclyVisibleProduct({ isActive: true })).toBe(true);
+    expect(isPubliclyVisibleProduct({ isActive: true, testOnly: false })).toBe(true);
+    expect(isPubliclyVisibleProduct({ isActive: false })).toBe(false);
+    expect(isPubliclyVisibleProduct({ isActive: true, testOnly: true })).toBe(false);
+    expect(isPubliclyVisibleProduct({})).toBe(false);
     expect(isPubliclyVisibleProduct(null)).toBe(false);
   });
 });
@@ -39,7 +39,7 @@ describe('public product projection', () => {
   };
 
   it('detail에서 내부 필드를 제거한다', () => {
-    const detail = toPublicProductDetail(stored as never, null);
+    const detail = toPublicProductDetail(stored, null);
     expect(detail).not.toHaveProperty('sellerNote');
     expect(detail).not.toHaveProperty('sellerOverride');
     expect(detail).not.toHaveProperty('testOnly');
@@ -50,7 +50,7 @@ describe('public product projection', () => {
   });
 
   it('summary는 allowlist만 반환하고 원문을 spread하지 않는다', () => {
-    const summary = toPublicProductSummary(stored as never, null);
+    const summary = toPublicProductSummary(stored, null);
     expect(Object.keys(summary).sort()).toEqual(
       ['category', 'colors', 'id', 'images', 'isActive', 'name', 'price', 'saleType'].sort(),
     );
@@ -72,7 +72,7 @@ describe('public product projection', () => {
       deliveryFeeDiscount: 0,
       isProcessed: true,
     };
-    const summary = toPublicGroupSummary(gc as never);
+    const summary = toPublicGroupSummary(gc);
     expect(summary).not.toHaveProperty('isProcessed');
     expect(summary).toEqual({
       currentQuantity: 3,
@@ -81,7 +81,7 @@ describe('public product projection', () => {
       recruitDeadline: '2026-09-10T00:00:00.000Z',
     });
 
-    const config = toPublicGroupConfig(gc as never) as unknown as Record<string, unknown>;
+    const config = toPublicGroupConfig(gc) as unknown as Record<string, unknown>;
     expect(config).not.toHaveProperty('isProcessed');
     expect(config['productId']).toBe('p-1');
     expect(config['currentQuantity']).toBe(3);
@@ -100,7 +100,7 @@ describe('public product projection', () => {
       deliveryFeeDiscount: 0,
       isProcessed: false,
     };
-    const config = toPublicGroupConfig(gc as never) as unknown as Record<string, unknown>;
+    const config = toPublicGroupConfig(gc) as unknown as Record<string, unknown>;
     expect(config['recruitDeadline']).toBe('2026-09-10T00:00:00.000Z');
     expect(config['groupDeliveryDate']).toBe('2026-09-15T00:00:00.000Z');
   });

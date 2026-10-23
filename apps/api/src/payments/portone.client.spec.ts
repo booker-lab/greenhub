@@ -246,7 +246,7 @@ describe('PortoneClient V2 진단', () => {
     });
 
     it('조회가 상한을 넘기면 PortoneError(504, PORTONE_TIMEOUT)로 끝난다', async () => {
-      global.fetch = hangingFetch() as unknown as typeof fetch;
+      global.fetch = hangingFetch();
 
       const pending = makeClient()
         .getPayment('payment-1')
@@ -261,7 +261,7 @@ describe('PortoneClient V2 진단', () => {
     });
 
     it('환불이 상한을 넘기면 PortoneError(504, PORTONE_TIMEOUT)로 끝난다', async () => {
-      global.fetch = hangingFetch() as unknown as typeof fetch;
+      global.fetch = hangingFetch();
 
       const pending = makeClient()
         .refund('payment-1', 100, '사유')

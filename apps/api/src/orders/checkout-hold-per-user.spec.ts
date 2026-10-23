@@ -365,7 +365,7 @@ describe('같은 고객·같은 회차 활성 결제 예약 상한', () => {
       { refund: jest.fn(), getPayment: jest.fn() } as never,
       notifications as never,
       { log: jest.fn() } as never,
-      capacity as never,
+      capacity,
       { createOrMergeIssue: jest.fn() } as never,
       { saveRecord: jest.fn().mockResolvedValue({}) } as never,
       { refundByOrderId: jest.fn() } as never,
