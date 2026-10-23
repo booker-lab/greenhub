@@ -24,6 +24,10 @@
 
 또한 `main` merge는 production 배포 승인이 아니다. production 배포는 활성 deployment safety PLAN이 요구하는 exact release SHA 검증과 별도 승인 경계를 따른다.
 
+## 진행 중 계획
+
+- `api-hosting-cloud-run-plan.md` — 운영 API를 Railway에서 Cloud Run 서울로 옮기는 단계(C1~C8)와 2026-10-28 전환 판단 조건
+
 ## 조건부 후속 계획
 
 - `k6-load-test-plan.md` — `docs/BACKLOG.md`의 `LOAD-TEST-FORMAL` 재개 조건이 생길 때 사용

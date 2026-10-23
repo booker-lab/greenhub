@@ -17,6 +17,7 @@ process.env.NODE_ENV = 'test';
 process.env.FIREBASE_PROJECT_ID = 'greenhub-api-unit-test';
 process.env.FIREBASE_STORAGE_BUCKET = 'greenhub-api-unit-test.appspot.com';
 
+delete process.env.GREENHUB_ENVIRONMENT_NAME;
 delete process.env.RAILWAY_ENVIRONMENT_NAME;
 delete process.env.VERCEL_ENV;
 delete process.env.GREENHUB_LOCAL_RUNTIME;

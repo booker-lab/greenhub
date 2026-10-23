@@ -88,7 +88,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       # scripts 워크스페이스의 운영 의존성(firebase-admin·bcrypt)만 설치한다. devDependency인 firebase-tools는 설치하지 않는다.
       - name: 의존성 설치

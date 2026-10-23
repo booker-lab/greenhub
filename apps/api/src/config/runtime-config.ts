@@ -53,9 +53,25 @@ function readString(values: RuntimeConfigValues, key: string): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
-export function isProductionRuntime(values: RuntimeConfigValues): boolean {
+/**
+ * 배포 환경 이름. 호스팅과 무관한 GREENHUB_ENVIRONMENT_NAME을 먼저 보고, 없으면 Railway가 넣는
+ * RAILWAY_ENVIRONMENT_NAME을 쓴다. 둘 다 있는데 다르면 어느 쪽 경계(운영·비운영)를 믿을지 정할 수
+ * 없으므로 기동을 막는다. 없으면 빈 문자열이다.
+ */
+export function resolveDeploymentEnvironmentName(values: RuntimeConfigValues): string {
+  const environment = readString(values, 'GREENHUB_ENVIRONMENT_NAME');
   const railwayEnvironment = readString(values, 'RAILWAY_ENVIRONMENT_NAME');
-  if (railwayEnvironment) return railwayEnvironment === 'production';
+  if (environment && railwayEnvironment && environment !== railwayEnvironment) {
+    throw new RuntimeConfigurationError(
+      'GREENHUB_ENVIRONMENT_NAME과 RAILWAY_ENVIRONMENT_NAME이 서로 다릅니다.',
+    );
+  }
+  return environment || railwayEnvironment;
+}
+
+export function isProductionRuntime(values: RuntimeConfigValues): boolean {
+  const deploymentEnvironment = resolveDeploymentEnvironmentName(values);
+  if (deploymentEnvironment) return deploymentEnvironment === 'production';
 
   const vercelEnvironment = readString(values, 'VERCEL_ENV');
   if (vercelEnvironment) return vercelEnvironment === 'production';
@@ -261,17 +277,42 @@ export function resolveFirebaseAdminSettings(
  * 2홉, 그 밖(로컬 등)은 0(프록시 헤더 미신뢰)이다. Railway는 엣지 뒤에 중계 노드가 한 번 더
  * 붙는다: 2026-10-18 운영·스테이징 실측에서 1홉은 연결마다 바뀌는 중계 노드 IP를 접속자로
  * 잡았고, 2홉은 접속자마다 한 버킷이면서 클라이언트가 보낸 X-Forwarded-For를 무시했다.
+ * Railway 밖 배포(GREENHUB_ENVIRONMENT_NAME만 있음)는 프록시 구조를 실측한 값을 명시해야
+ * 기동한다. 0으로 두면 모든 접속자가 프록시 IP 한 버킷으로 묶인다.
  * `true` 같은 무제한 신뢰는 X-Forwarded-For를 그대로 믿게 되므로 정수만 허용한다.
  */
 export function resolveTrustProxyHops(values: RuntimeConfigValues = process.env): number {
   const raw = readString(values, 'TRUST_PROXY_HOPS');
-  if (!raw) return readString(values, 'RAILWAY_ENVIRONMENT_NAME') ? RAILWAY_TRUST_PROXY_HOPS : 0;
+  if (!raw) {
+    if (readString(values, 'RAILWAY_ENVIRONMENT_NAME')) return RAILWAY_TRUST_PROXY_HOPS;
+    if (readString(values, 'GREENHUB_ENVIRONMENT_NAME')) {
+      throw new RuntimeConfigurationError(
+        'Railway 밖 배포 환경은 TRUST_PROXY_HOPS를 명시해야 합니다.',
+      );
+    }
+    return 0;
+  }
   if (!/^\d+$/.test(raw) || Number(raw) > MAX_TRUST_PROXY_HOPS) {
     throw new RuntimeConfigurationError(
       `TRUST_PROXY_HOPS는 0~${MAX_TRUST_PROXY_HOPS} 사이의 정수여야 합니다.`,
     );
   }
   return Number(raw);
+}
+
+const COMMIT_SHA_PATTERN = /^[0-9a-f]{7,40}$/;
+
+/**
+ * 실행 중인 코드의 배포 커밋 SHA. 배포 도구가 넣는 GREENHUB_COMMIT_SHA나 Railway가 GitHub 배포에
+ * 넣는 RAILWAY_GIT_COMMIT_SHA를 쓴다. 둘 다 있는데 다르면 어느 값도 믿지 않는다(배포 확인이
+ * 잘못된 SHA로 통과하지 않게). 형식이 틀리거나 값이 없으면 null.
+ */
+export function resolveDeployedCommitSha(values: RuntimeConfigValues = process.env): string | null {
+  const commit = readString(values, 'GREENHUB_COMMIT_SHA');
+  const railwayCommit = readString(values, 'RAILWAY_GIT_COMMIT_SHA');
+  if (commit && railwayCommit && commit !== railwayCommit) return null;
+  const resolved = commit || railwayCommit;
+  return COMMIT_SHA_PATTERN.test(resolved) ? resolved : null;
 }
 
 function assertProductionJwtSecrets(values: RuntimeConfigValues): void {
@@ -321,6 +362,7 @@ export function validateRuntimeConfig(values: RuntimeConfigValues): RuntimeConfi
 export function getConfigValues(config: ConfigService): RuntimeConfigValues {
   return {
     NODE_ENV: config.get<string>('NODE_ENV'),
+    GREENHUB_ENVIRONMENT_NAME: config.get<string>('GREENHUB_ENVIRONMENT_NAME'),
     RAILWAY_ENVIRONMENT_NAME: config.get<string>('RAILWAY_ENVIRONMENT_NAME'),
     VERCEL_ENV: config.get<string>('VERCEL_ENV'),
     JWT_SECRET: config.get<string>('JWT_SECRET'),

@@ -64,6 +64,9 @@ describe('기사 앱 CSP 정책', () => {
       'blob:',
       'https://firebasestorage.googleapis.com',
       'https://storage.googleapis.com',
+      'https://k.kakaocdn.net',
+      'https://img1.kakaocdn.net',
+      'https://t1.kakaocdn.net',
     ]);
     expect(production.get('style-src')).toEqual(["'self'", "'unsafe-inline'"]);
     expect(production.get('font-src')).toEqual(["'self'", 'data:']);

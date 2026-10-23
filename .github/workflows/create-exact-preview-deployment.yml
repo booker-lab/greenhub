@@ -89,7 +89,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: run targeted-preview deterministic specs (mock/local only)
         run: node --test scripts/vercel/create-exact-preview-deployment.spec.mjs scripts/wait-preview-deploy.spec.mjs
@@ -111,7 +111,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: .nvmrc
 
       - name: owner + input preflight (fail-closed, Preview only)
         shell: bash

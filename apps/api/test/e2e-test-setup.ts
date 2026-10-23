@@ -12,7 +12,7 @@
 // `delete` alone would let `.env` resupply the key via the above semantics.
 //
 // Contract:
-// - Pins a non-production runtime (`NODE_ENV=test` plus empty Railway/Vercel
+// - Pins a non-production runtime (`NODE_ENV=test` plus empty deployment/Railway/Vercel
 //   markers) so host pollution can never select production validation.
 // - Pins an explicit non-operational synthetic Firebase identity for full-boot.
 //   Never uses the operational project `green-e4fe3`.
@@ -31,6 +31,7 @@
 //   `resolveFirebaseAdminSettings`) is unchanged and remains fail-closed.
 process.env.GREENHUB_API_UNIT_TEST = 'false';
 process.env.NODE_ENV = 'test';
+process.env.GREENHUB_ENVIRONMENT_NAME = '';
 process.env.RAILWAY_ENVIRONMENT_NAME = '';
 process.env.VERCEL_ENV = '';
 process.env.FIREBASE_PROJECT_ID = 'greenhub-api-e2e-test';
