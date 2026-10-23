@@ -1,6 +1,7 @@
 import { todayKST } from '@greenhub/shared';
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -237,7 +238,25 @@ export class ProductsService {
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException('상품을 찾을 수 없습니다.');
     }
-    await this.firestore.doc(`products/${productId}`).delete();
+
+    // 주문·회차 상품이 이 상품을 가리키면 지우지 않고 판매 중지로 안내한다(판매자 치우기와 같은 방식).
+    // 여러 상품 회차 주문도 상품마다 saleRoundItems 문서를 거치므로 두 컬렉션으로 참조를 모두 덮는다.
+    // 존재 여부만 확인하면 되므로 limit(1) — 단일 필드 자동 인덱스로 충분하다.
+    const ref = this.firestore.doc(`products/${productId}`);
+    await this.firestore.runTransaction(async (tx) => {
+      const [orderSnap, roundItemSnap] = await Promise.all([
+        tx.get(this.firestore.collection('orders').where('productId', '==', productId).limit(1)),
+        tx.get(
+          this.firestore.collection('saleRoundItems').where('productId', '==', productId).limit(1),
+        ),
+      ]);
+      if (!orderSnap.empty || !roundItemSnap.empty) {
+        throw new ConflictException(
+          '주문·회차에 쓰인 상품은 지울 수 없어요. 판매 중지를 눌러 주세요.',
+        );
+      }
+      tx.delete(ref);
+    });
   }
 
   async getDailyCaps(storeId: string, sellerId: string, from?: string, to?: string, role?: string) {

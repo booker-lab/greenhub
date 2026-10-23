@@ -183,7 +183,9 @@ DELETE /stores/:storeId/products/:productId
 - seller는 `stores/{storeId}.ownerId === user.sub` 검사를 통과해야 한다.
 - admin은 이 seller ownership 검사에서 예외다.
 
-현재 `DELETE`는 product 문서를 물리 삭제한다. 연결된 주문·회차·공동구매 참조의 장기 보존 의미를 바꾸려면 별도 설계가 필요하며, 운영에서 단순 정리 용도로 임의 삭제하지 않는다.
+`DELETE`는 참조가 없는 product 문서만 물리 삭제한다. `orders.productId` 또는 `saleRoundItems.productId`가 그 상품을 가리키는 문서가 하나라도 있으면(각각 `limit(1)` 쿼리, 단일 필드 자동 인덱스) 지우지 않고 `409 Conflict`를 돌려준다. 여러 상품 회차 주문도 상품마다 `saleRoundItems` 문서를 거치므로 두 컬렉션으로 주문·회차 참조를 모두 덮는다. 판매자 화면은 409를 받으면 "판매 중지"(`PATCH .../active`)로 유도한다. 참조 확인과 삭제는 한 트랜잭션에서 한다.
+
+후기는 주문이 있어야 생기므로 주문 참조로 함께 막힌다. 재입고 구독·장바구니처럼 주문·회차를 거치지 않는 참조는 삭제를 막지 않는다. 운영에서 단순 정리 용도로 임의 삭제하지 않는다.
 
 ## 7. Delivery fee config
 

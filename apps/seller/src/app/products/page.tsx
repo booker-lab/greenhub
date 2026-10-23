@@ -18,6 +18,7 @@ import {
   resolveStoreProductsView,
 } from '@/hooks/useStoreProducts.recovery';
 import { ApiError, apiJson } from '@/lib/api';
+import { resolveProductDeleteFailure } from './_deleteResult';
 
 type ProductFilter = 'all' | 'active' | 'inactive';
 
@@ -187,12 +188,15 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
   const [toggling, setToggling] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 주문·회차에 쓰여 지울 수 없는 상품 — 판매 중지 버튼으로 유도한다.
+  const [inUse, setInUse] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   async function handleToggleActive() {
     if (!storeId) return;
     setToggling(true);
     setError(null);
+    setInUse(false);
     try {
       await apiJson(
         `/stores/${storeId}/products/${product.id}/active`,
@@ -210,13 +214,18 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
     if (!storeId) return;
     setDeleting(true);
     setError(null);
+    setInUse(false);
     try {
       await apiJson(`/stores/${storeId}/products/${product.id}`, session?.user.accessToken ?? '', {
         method: 'DELETE',
       });
       setConfirmOpen(false);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : '상품 삭제에 실패했습니다');
+      const failure = resolveProductDeleteFailure(e, product.isActive);
+      setError(failure.message);
+      setInUse(failure.inUse);
+      // 지울 수 없는 상품이면 확인창을 닫아 카드의 안내와 판매 중지 버튼을 보이게 한다.
+      if (failure.inUse) setConfirmOpen(false);
     } finally {
       setDeleting(false);
     }
@@ -310,6 +319,17 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             >
               수정
             </Button>
+            {inUse && product.isActive && (
+              <Button
+                size="xs"
+                variant="light"
+                color="brand"
+                onClick={handleToggleActive}
+                loading={toggling}
+              >
+                판매 중지
+              </Button>
+            )}
             <Button
               size="xs"
               variant="subtle"
@@ -326,7 +346,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
       <ConfirmModal
         opened={confirmOpen}
         title="상품 삭제"
-        message={`"${product.name}" 상품을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`}
+        message={`"${product.name}" 상품을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다. 주문·회차에 쓰인 상품은 지울 수 없어요.`}
         confirmLabel="삭제"
         loading={deleting}
         onConfirm={handleDelete}
