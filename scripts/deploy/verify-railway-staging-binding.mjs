@@ -83,6 +83,8 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
+import { isProductionApiHost } from '../release/api-hosts.mjs';
+
 export const RAILWAY_GRAPHQL_ENDPOINT = 'https://backboard.railway.com/graphql/v2';
 export const STAGING_ENVIRONMENT = 'staging';
 export const STAGING_SERVICE = 'api';
@@ -115,8 +117,7 @@ const GITHUB_ALONE_SOURCES = new Set([
 
 const PRODUCTION_ENVIRONMENT_NAMES = new Set(['production', 'prod', 'live']);
 
-// docs/URLS.md의 production canonical Railway API + production host 판정 규칙.
-const PRODUCTION_API_HOSTS = Object.freeze(['api-production-13e7.up.railway.app']);
+// 운영 API 호스트 판정은 scripts/release/api-hosts.mjs(Railway·Cloud Run·고정 주소)를 따른다.
 
 const RUNTIME_URL_FAILURE_MESSAGES = Object.freeze({
   RUNTIME_URL_MISSING: 'runtime URL이 없습니다.',
@@ -143,7 +144,7 @@ function normalizeName(value) {
 export function isProductionHostname(hostname) {
   const normalized = normalizeName(hostname);
   if (!normalized) return false;
-  if (PRODUCTION_API_HOSTS.includes(normalized)) return true;
+  if (isProductionApiHost(normalized)) return true;
   if (normalized.startsWith('api-production-')) return true;
   if (normalized === 'greenlove.co.kr' || normalized.endsWith('.greenlove.co.kr')) return true;
   return false;
