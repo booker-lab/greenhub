@@ -29,6 +29,7 @@ import { getAllowedTransitions } from '../orders/orders.helpers';
 import { PaymentsService } from '../payments/payments.service';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 import { releaseLegacyGroupQuantityInTransaction } from '../orders/_lib/legacy-group-quantity';
+import { readOrderPayoutHoldInTransaction } from '../settlements/_lib/order-payout-hold';
 import { hasOpenProviderReversalInTransaction } from '../settlements/_lib/provider-reversal-hold';
 import {
   type CancelSettlementResult,
@@ -647,6 +648,16 @@ export class AdminService {
       if (await hasOpenProviderReversalInTransaction(this.firestore, t, orderId)) {
         throw new ConflictException(
           '결제사 취소·분쟁 확인이 끝나지 않은 주문입니다. 운영 확인 기록을 먼저 처리한 뒤 지급하세요.',
+        );
+      }
+      // 주문이 취소됐거나 취소·환불이 진행 중이면, 또는 주문 문서가 없으면 지급하지 않는다.
+      const orderHold = await readOrderPayoutHoldInTransaction(this.firestore, t, orderId);
+      if (orderHold === 'ORDER_MISSING') {
+        throw new ConflictException('주문을 확인할 수 없는 정산이라 지급할 수 없습니다.');
+      }
+      if (orderHold) {
+        throw new ConflictException(
+          '취소됐거나 환불이 진행 중인 주문의 정산이라 지급할 수 없습니다. 주문 상태를 먼저 확인하세요.',
         );
       }
 
