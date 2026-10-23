@@ -15,7 +15,8 @@
  *   30일 지난 보고는 지운다. 보고에는 주문번호·가게 이름·금액·건수만 담고, 계정 이메일·열쇠 내용·사용자 id는 넣지 않는다.
  * 종료 코드: 0 = 점검 완료(이상이 있어도 0), 1 = S0 🔴(멈춤·읽기 실패). 어느 쪽이든 JSON은 낸다.
  *
- * config.json 모양(사람이 S0에서 만든다): { "serviceAccountEmail": "...", "keyCreatedAt": "YYYY-MM-DD" }
+ * config.json 모양(사람이 S0에서 만든다): { "serviceAccountEmail": "...", "keyCreatedAt": "YYYY-MM-DD", "excludeStoreIds": [...] }
+ *   excludeStoreIds(선택)는 점검에서 뺄 테스트 가게 id 목록이다. 가게 id는 공개 저장소에 두지 않고 이 로컬 설정에만 둔다.
  */
 import { readdir, readFile, mkdir, rm, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -25,6 +26,7 @@ import { recordReport } from './morning-check-history.mjs';
 import {
   DAY_MS,
   evaluateAll,
+  excludeStores,
   IN_PROGRESS_ORDER_STATUSES,
   selectRounds,
   THRESHOLDS,
@@ -39,6 +41,7 @@ export const REPORTS_DIR = join(OPS_DIR, 'reports');
 export const ADMIN_KEY_BASENAME = 'firebase-adminsdk.json';
 const APP_NAME = 'greenhub-ops-readonly';
 const GET_ALL_CHUNK = 100;
+const STORE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 
 /**
  * 허용 목록(§3-3). 조회마다 이 중 필요한 필드만 고른다. 목록에 없는 필드는 Firestore가 보내지 않는다.
@@ -146,7 +149,17 @@ export async function loadReadonlyCredentials({ env, readText, configPath = CONF
   if (key.project_id !== EXPECTED_PROJECT_ID) {
     throw new OpsCheckStop('key-project-mismatch', '열쇠의 프로젝트가 운영 프로젝트가 아니라 멈춥니다.');
   }
-  return { key, keyCreatedAt: config.keyCreatedAt ?? null };
+  return { key, keyCreatedAt: config.keyCreatedAt ?? null, excludeStoreIds: parseExcludeStoreIds(config) };
+}
+
+/** config.json의 excludeStoreIds(점검에서 뺄 테스트 가게 id 목록). 없으면 빈 목록, 모양이 틀리면 멈춘다. */
+function parseExcludeStoreIds(config) {
+  const value = config?.excludeStoreIds;
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || !value.every((id) => typeof id === 'string' && STORE_ID_PATTERN.test(id))) {
+    throw new OpsCheckStop('config-exclude-invalid', 'config.json의 excludeStoreIds 모양이 틀려 멈춥니다(가게 id 문자열 목록).');
+  }
+  return value;
 }
 
 // ── 조회(읽기만) ─────────────────────────────────────────────────────────────
@@ -341,9 +354,9 @@ export async function run({
 } = {}) {
   let collected;
   try {
-    const { key, keyCreatedAt } = await loadReadonlyCredentials({ env, readText, configPath });
+    const { key, keyCreatedAt, excludeStoreIds } = await loadReadonlyCredentials({ env, readText, configPath });
     const db = await openFirestore(key);
-    collected = { ...(await collect(db, { now })), keyCreatedAt };
+    collected = { ...excludeStores(await collect(db, { now }), excludeStoreIds), keyCreatedAt };
   } catch (error) {
     const stop =
       error instanceof OpsCheckStop
