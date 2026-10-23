@@ -21,6 +21,7 @@ import {
   toPublicProductSummary,
 } from './product-visibility';
 import { isArchivedStore } from '../stores/store-availability';
+import { assertOptionStocksBelongToStore } from '../option-stocks/option-stocks.service';
 
 function assertProductOptionIds(options: CreateProductDto['options']): void {
   const conflict = findProductOptionIdConflict(options);
@@ -154,6 +155,7 @@ export class ProductsService {
   async createProduct(storeId: string, sellerId: string, dto: CreateProductDto, role?: string) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
     assertProductOptionIds(dto.options);
+    await assertOptionStocksBelongToStore(this.firestore, storeId, dto.options);
 
     const productId = randomUUID();
     const now = this.firestore.Timestamp.now();
@@ -191,6 +193,7 @@ export class ProductsService {
   ) {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
     assertProductOptionIds(dto.options);
+    await assertOptionStocksBelongToStore(this.firestore, storeId, dto.options);
     const snap = await this.firestore.doc(`products/${productId}`).get();
     if (!snap.exists || snap.data()!['storeId'] !== storeId) {
       throw new NotFoundException();

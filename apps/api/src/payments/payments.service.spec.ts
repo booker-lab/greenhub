@@ -335,6 +335,26 @@ describe('결제 최종화 경쟁 조건', () => {
     expect(fixture.records.get('orders/order-1')?.reservationId).toBe('late-reservation-1');
   });
 
+  it('늦은 결제는 주문 스냅샷의 옵션 재고(화분)도 다시 잡는다', async () => {
+    const fixture = makeFinalization({
+      status: 'CANCELLED',
+      cancelReason: 'timeout',
+      orderItems: [
+        {
+          roundItemId: 'round-item-1',
+          quantity: 2,
+          selectedOptions: [{ groupId: 'pot', choiceId: 'printed', stockId: 'stock-pot' }],
+        },
+        { roundItemId: 'round-item-2', quantity: 1 },
+      ],
+    });
+    await fixture.service.finalizePaidOrder('order-1', paymentData);
+    expect(fixture.capacity.reacquireAndConsumeLatePaymentInTransaction).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ optionStock: [{ stockId: 'stock-pot', quantity: 2 }] }),
+    );
+  });
+
   it('늦은 결제 한도 재확보 실패는 전액 환불 기록으로 수렴한다', async () => {
     const fixture = makeFinalization({ status: 'CANCELLED', cancelReason: 'timeout' });
     const { LatePaymentCapacityError } = require('../orders/order-capacity.service');
