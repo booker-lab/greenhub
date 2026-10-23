@@ -59,11 +59,14 @@ proof나 production deployment·activation·first live round를 의미하지 않
 - 결제 실패, 고객 취소, 만료 시 확보량을 즉시 반환한다.
 - 결제 성공은 `HELD → CONSUMED`로 예약·주문 카운터를 한 번만 이동한다. 실패·시간 초과는 `HELD` 카운터를, 결제 후 취소는 `CONSUMED` 카운터를 각각 한 번만 반환한다.
 - 같은 `roundItemId`를 한 요청에 두 번 제출하면 합산하지 않고 잘못된 요청으로 거부한다.
+- 같은 고객이 같은 회차에서 동시에 가질 수 있는 만료 전 `HELD` 예약은 3건이다(`MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND`, 4번째는 409).
+- 1인 상한(#546): 같은 고객·회차·품목의 만료 전 `HELD`와 `CONSUMED` 예약 수량 합이 상한을 넘으면 409로 거부한다. 상한은 회차 품목 `maxQuantityPerCustomer`(1 이상 정수), 없으면 품목 판매 한도의 절반 올림(최소 1)이다(`apps/api/src/orders/order-capacity.service.ts` `resolvePerCustomerItemLimit`). 결제 재시도 때 이전 `HELD` 예약도 합산되므로 만료(15분) 전에는 재시도가 이 409를 받을 수 있다.
 - 15분 이후 늦은 결제가 확인되면 서버가 회차 상태와 한도를 재검증하고, 수용 불가 시 포트원 취소 API로 전액 환불한다.
 
 ### `orders`
 
 - 신규 회차 주문은 `schemaVersion: 2`, `roundId`, 주문 상품 스냅샷 배열, 유입 스냅샷, 배송 연락용 전화번호를 가진다.
+- 상품 옵션(화분 등, 2026-10-23 운영 켜짐 `POT-OPTION-SHEET-PROD-ENABLE`): 요청 품목에 `optionChoiceIds`가 있으면 상품 `options`의 묶음마다 하나씩 골라야 하고(아니면 400), 고른 선택지의 `priceDelta`를 회차 단가에 더해 주문 상품 스냅샷 `selectedOptions`(묶음·선택지·금액, 문구 선택지면 `text`)와 `unitPrice`·`subtotalAmount`에 남긴다. `optionChoiceIds`를 보내지 않으면 서버는 옵션 없이 회차 단가로 받는다(`apps/api/src/orders/_lib/round-order-extras.ts` `resolveSelectedOptions`, `round-order-create.service.ts`). 재고 품목(`optionStocks`)에 연결된 선택지는 스냅샷에 `stockId`를 남기고, 결제 예약이 회차 한도·1인 상한 확인 뒤 옵션 재고도 같은 `HELD`/`CONSUMED` 전이로 잡고 돌려준다. 부족하면 409, 늦은 결제에서 부족하면 회차 한도 마감과 같이 환불한다(#636, `order-capacity.service.ts`, BACKLOG `POT-OPTION-STOCK`).
 - 주문 전체는 하나의 배송 상태로 관리하며 `DELIVERY_HELD`는 `PREPARING` 또는 `DELIVERING`에서 진입한다.
 - 배송 보류에는 발생 시각, 사유, 고객 책임 여부, 재배송비, 다음 안내 예정일, 연락 이력을 기록한다.
 - 스토어 소유자 또는 담당 기사만 배송 보류를 만들 수 있다. 보류 진입과 `PREPARING`·`DELIVERING`·`CANCELLED` 해소는 주문 변경과 같은 트랜잭션에서 `heldOrderCount`를 증감한다.
