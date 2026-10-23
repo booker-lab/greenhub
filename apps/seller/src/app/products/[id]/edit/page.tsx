@@ -1,12 +1,12 @@
 'use client';
 
+import { apiPathSegment, readRouteParam } from '@greenhub/shared';
 import { Box, Text, UnstyledButton } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { LoadingState } from '@/components/StateViews';
 import { getApiBaseUrl } from '@/lib/api-base-url';
-import { apiPathSegment, readRouteParam } from '@/lib/api-path';
 import type { ProductFormData } from '../../_components/ProductForm';
 import ProductForm from '../../_components/ProductForm';
 import { extrasFromProduct } from '../../_components/productExtras';

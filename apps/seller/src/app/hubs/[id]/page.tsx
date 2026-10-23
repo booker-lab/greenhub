@@ -1,5 +1,6 @@
 'use client';
 
+import { apiPathSegment, readRouteParam } from '@greenhub/shared';
 import { Badge, Box, Button, Container, Group, Paper, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -9,7 +10,6 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
-import { apiPathSegment, readRouteParam } from '@/lib/api-path';
 
 const INVALID_HUB_ADDRESS_MESSAGE =
   '거점 주소가 올바르지 않습니다. 거점 목록에서 다시 선택해 주세요.';

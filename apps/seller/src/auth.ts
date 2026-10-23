@@ -1,14 +1,14 @@
-import { cookies } from 'next/headers';
-import NextAuth, { CredentialsSignin } from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
-import Kakao from 'next-auth/providers/kakao';
 import {
   authUpstreamSignal,
   isLoopbackApiUrl,
   isTestCredentialsProviderEnabled,
   revokeApiSession,
   testSecretsMatch,
-} from '@/auth-runtime';
+} from '@greenhub/shared';
+import { cookies } from 'next/headers';
+import NextAuth, { CredentialsSignin } from 'next-auth';
+import Credentials from 'next-auth/providers/credentials';
+import Kakao from 'next-auth/providers/kakao';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import {
   inviteSignInError,
@@ -130,7 +130,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // 테스트 전용 Credentials provider는 운영 런타임에 등록하지 않는다(isTestCredentialsProviderEnabled).
     // E2E 헤더 게이팅 — 일치하는 x-e2e-test-token 없으면 즉시 거부.
     // SECRET 미설정 시 모든 credentials 요청 차단(안전 기본값).
-    ...(isTestCredentialsProviderEnabled()
+    ...(isTestCredentialsProviderEnabled(process.env)
       ? [
           Credentials({
             credentials: {

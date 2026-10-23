@@ -1,3 +1,4 @@
+"use strict";
 /**
  * 주소창 값(쿼리·경로 파라미터)을 API 경로 조각으로 쓰기 위한 형식 검사와 인코딩.
  *
@@ -8,51 +9,58 @@
  *   2. encodeURIComponent로 한 경로 조각 안에 가둔다(apiPathSegment).
  * 형식이 맞지 않으면 요청을 보내지 않는다. 화면은 readRouteParam 등으로 먼저 걸러 오류를 보여 준다.
  *
- * 기사 앱 `apps/driver/src/lib/api-path.ts`와 같은 규칙이다
+ * 판매자 앱과 기사 앱이 함께 쓴다
  * (소비자 앱 isSafeIdentifier 규칙에 `.`·`..` 거부를 더했다).
  */
-
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.InvalidApiPathSegmentError = void 0;
+exports.isSafeApiPathSegment = isSafeApiPathSegment;
+exports.apiPathSegment = apiPathSegment;
+exports.readRouteParam = readRouteParam;
 /** 식별자 최대 길이. 소비자 앱 isSafeIdentifier와 같다. */
 const MAX_API_PATH_SEGMENT_LENGTH = 128;
-
 /** 경로·쿼리·조각 구분자로 해석될 수 있는 문자. */
 const UNSAFE_API_PATH_SEGMENT_CHARACTERS = '/?#\\';
-
 /**
  * API 경로 한 조각으로 쓸 수 있는 식별자인지 판정한다.
  * 빈 값, 앞뒤 공백, 128자 초과, `/ ? # \`, 제어문자, `.` 한 글자, `..`를 포함한 값은 거부한다.
  */
-export function isSafeApiPathSegment(value: unknown): value is string {
-  if (typeof value !== 'string') return false;
-  if (value.length === 0 || value.length > MAX_API_PATH_SEGMENT_LENGTH) return false;
-  if (value.trim() !== value) return false;
-  if (value === '.' || value.includes('..')) return false;
-  for (let index = 0; index < value.length; index += 1) {
-    const code = value.charCodeAt(index);
-    if (code <= 0x1f || code === 0x7f) return false;
-    if (UNSAFE_API_PATH_SEGMENT_CHARACTERS.includes(value[index])) return false;
-  }
-  return true;
+function isSafeApiPathSegment(value) {
+    if (typeof value !== 'string')
+        return false;
+    if (value.length === 0 || value.length > MAX_API_PATH_SEGMENT_LENGTH)
+        return false;
+    if (value.trim() !== value)
+        return false;
+    if (value === '.' || value.includes('..'))
+        return false;
+    for (let index = 0; index < value.length; index += 1) {
+        const code = value.charCodeAt(index);
+        if (code <= 0x1f || code === 0x7f)
+            return false;
+        if (UNSAFE_API_PATH_SEGMENT_CHARACTERS.includes(value[index]))
+            return false;
+    }
+    return true;
 }
-
 /** 형식이 맞지 않는 값으로 API 경로를 만들려 할 때 던진다. fetch 전에 실패하므로 요청은 나가지 않는다. */
-export class InvalidApiPathSegmentError extends Error {
-  constructor() {
-    super('주소 형식이 올바르지 않아 요청을 보내지 않았습니다.');
-    this.name = 'InvalidApiPathSegmentError';
-  }
+class InvalidApiPathSegmentError extends Error {
+    constructor() {
+        super('주소 형식이 올바르지 않아 요청을 보내지 않았습니다.');
+        this.name = 'InvalidApiPathSegmentError';
+    }
 }
-
+exports.InvalidApiPathSegmentError = InvalidApiPathSegmentError;
 /**
  * 값을 검사한 뒤 encodeURIComponent로 인코딩해 API 경로 한 조각으로 돌려준다.
  * 예: `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/status`
  * 형식이 맞지 않으면 InvalidApiPathSegmentError를 던진다.
  */
-export function apiPathSegment(value: unknown): string {
-  if (!isSafeApiPathSegment(value)) throw new InvalidApiPathSegmentError();
-  return encodeURIComponent(value);
+function apiPathSegment(value) {
+    if (!isSafeApiPathSegment(value))
+        throw new InvalidApiPathSegmentError();
+    return encodeURIComponent(value);
 }
-
 /**
  * 동적 경로 파라미터(useParams()·page params)를 식별자로 읽는다. 형식이 맞지 않으면 null.
  *
@@ -63,13 +71,15 @@ export function apiPathSegment(value: unknown): string {
  * 문자열이 아닌 값(캐치올 배열·undefined)도 null이다.
  * 경로에 다시 넣을 때는 apiPathSegment(API 요청)나 encodeURIComponent(화면 이동)로 인코딩한다.
  */
-export function readRouteParam(value: unknown): string | null {
-  if (typeof value !== 'string') return null;
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(value);
-  } catch {
-    return null;
-  }
-  return isSafeApiPathSegment(decoded) ? decoded : null;
+function readRouteParam(value) {
+    if (typeof value !== 'string')
+        return null;
+    let decoded;
+    try {
+        decoded = decodeURIComponent(value);
+    }
+    catch {
+        return null;
+    }
+    return isSafeApiPathSegment(decoded) ? decoded : null;
 }

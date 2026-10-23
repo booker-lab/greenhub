@@ -29,6 +29,7 @@ const authMock = {
 };
 
 const policy = await loadTs('./lib/content-security-policy.ts', (specifier) => {
+  if (specifier === '@greenhub/shared') return require('@greenhub/shared');
   throw new Error(`unexpected module request in test: ${specifier}`);
 });
 const { config, proxy } = await loadTs('./proxy.ts', (specifier) => {

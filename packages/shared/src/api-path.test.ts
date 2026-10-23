@@ -4,7 +4,7 @@ import {
   InvalidApiPathSegmentError,
   isSafeApiPathSegment,
   readRouteParam,
-} from './api-path';
+} from './api-path.js';
 
 const API_BASE = 'https://api.example.test';
 

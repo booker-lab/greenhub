@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  apiPathSegment,
   type OrderStatus,
   POST_DELIVERY_REFUND_MEMO_MAX_LENGTH,
   POST_DELIVERY_REFUND_REASON_CODES,
@@ -11,7 +12,6 @@ import { Button, Group, Modal, Radio, Stack, Text, TextInput } from '@mantine/co
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
 import { apiJson } from '@/lib/api';
-import { apiPathSegment } from '@/lib/api-path';
 import {
   canSubmitPostDeliveryRefund,
   formatRefundDeadline,

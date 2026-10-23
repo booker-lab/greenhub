@@ -1,17 +1,27 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { describe, it } from 'node:test';
-import { resolveApiBaseUrl as resolveConsumerApiBaseUrl } from '../apps/consumer/src/lib/api-base-url.ts';
-import { resolveApiBaseUrl as resolveDriverApiBaseUrl } from '../apps/driver/src/lib/api-base-url.ts';
-import { resolveApiBaseUrl as resolveSellerApiBaseUrl } from '../apps/seller/src/lib/api-base-url.ts';
+import { resolveApiBaseUrl } from '../packages/shared/src/api-base-url.ts';
 
-const resolvers = [
-  ['consumer', resolveConsumerApiBaseUrl],
-  ['seller', resolveSellerApiBaseUrl],
-  ['driver', resolveDriverApiBaseUrl],
-];
+// 세 앱은 같은 검사 규칙(packages/shared/src/api-base-url.ts)을 쓰고, 환경변수만 각 앱에서 읽는다.
+const apps = ['consumer', 'seller', 'driver'];
 
-describe('세 앱 API base URL fail-closed 계약', () => {
-  for (const [app, resolveApiBaseUrl] of resolvers) {
+describe('세 앱 getApiBaseUrl 연결', () => {
+  for (const app of apps) {
+    it(`${app}: NEXT_PUBLIC_API_URL과 NODE_ENV를 공유 검사 규칙에 넘긴다`, () => {
+      const source = readFileSync(
+        new URL(`../apps/${app}/src/lib/api-base-url.ts`, import.meta.url),
+        'utf8',
+      );
+      assert.match(source, /import \{ resolveApiBaseUrl \} from '@greenhub\/shared';/);
+      assert.match(source, /configuredUrl: process\.env\.NEXT_PUBLIC_API_URL,/);
+      assert.match(source, /nodeEnv: process\.env\.NODE_ENV,/);
+    });
+  }
+});
+
+describe('API base URL fail-closed 계약(세 앱 공통)', () => {
+  for (const app of ['shared']) {
     it(`${app}: development는 명시 URL을 사용하고 없으면 localhost fallback을 사용한다`, () => {
       assert.equal(
         resolveApiBaseUrl({

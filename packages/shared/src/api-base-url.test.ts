@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ApiConfigurationError, DEVELOPMENT_API_BASE_URL, resolveApiBaseUrl } from './api-base-url';
+import { ApiConfigurationError, DEVELOPMENT_API_BASE_URL, resolveApiBaseUrl } from './api-base-url.js';
 
 describe('resolveApiBaseUrl 운영 구성 검증', () => {
   it('운영에서 HTTPS API URL은 끝 슬래시를 떼고 허용한다', () => {

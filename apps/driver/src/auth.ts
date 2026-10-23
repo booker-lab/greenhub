@@ -1,14 +1,14 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
-import NextAuth, { CredentialsSignin } from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
-import Kakao from 'next-auth/providers/kakao';
-import { DRIVER_ADMIN_ACCOUNT_ERROR } from '@/app/login/login-notice';
 import {
   authUpstreamSignal,
   isLoopbackApiUrl,
   isTestCredentialsProviderEnabled,
   revokeApiSession,
-} from '@/auth-runtime';
+} from '@greenhub/shared';
+import NextAuth, { CredentialsSignin } from 'next-auth';
+import Credentials from 'next-auth/providers/credentials';
+import Kakao from 'next-auth/providers/kakao';
+import { DRIVER_ADMIN_ACCOUNT_ERROR } from '@/app/login/login-notice';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 
 const API = getApiBaseUrl();
@@ -348,7 +348,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.KAKAO_CLIENT_ID!,
       clientSecret: process.env.KAKAO_CLIENT_SECRET!,
     }),
-    ...(isTestCredentialsProviderEnabled() ? [testCredentialsProvider] : []),
+    ...(isTestCredentialsProviderEnabled(process.env) ? [testCredentialsProvider] : []),
   ],
   events: {
     // 로그아웃하면 쿠키 삭제와 함께 API의 refresh token도 폐기한다. 실패해도 로그아웃은 계속한다.

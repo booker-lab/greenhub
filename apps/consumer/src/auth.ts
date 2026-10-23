@@ -1,14 +1,14 @@
-import NextAuth, { CredentialsSignin } from 'next-auth';
-import Credentials from 'next-auth/providers/credentials';
-import Kakao from 'next-auth/providers/kakao';
-import { getApiBaseUrl } from '@/lib/api-base-url';
-import { isAdmittedLoginCredentials } from '@/auth-credentials';
 import {
   authUpstreamSignal,
   isTestCredentialsProviderEnabled,
   revokeApiSession,
   testSecretsMatch,
-} from '@/auth-runtime';
+} from '@greenhub/shared';
+import NextAuth, { CredentialsSignin } from 'next-auth';
+import Credentials from 'next-auth/providers/credentials';
+import Kakao from 'next-auth/providers/kakao';
+import { isAdmittedLoginCredentials } from '@/auth-credentials';
+import { getApiBaseUrl } from '@/lib/api-base-url';
 
 const API = getApiBaseUrl();
 // accessToken 만료 55분 후 갱신 (Railway 기본값 1h 기준)
@@ -178,7 +178,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     //   S2 g2-secret-mismatch (x-e2e-test-token != runtime secret),
     //   S3 g3-credential-admission-rejected (LoginDto admission rejected).
     // S1/S2/S3 are all fail-closed with zero upstream calls.
-    ...(isTestCredentialsProviderEnabled()
+    ...(isTestCredentialsProviderEnabled(process.env)
       ? [
           Credentials({
             credentials: {

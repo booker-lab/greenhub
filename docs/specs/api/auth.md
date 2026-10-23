@@ -52,7 +52,7 @@ NextAuth callback은 Kakao에서 받은 access token을 `POST /auth/kakao-login`
 
 `Credentials` provider는 일반 사용자용 production 이메일 로그인 UI가 아니다. 앱별로 허용된 진입이 다르다.
 
-세 앱 모두 테스트 전용 Credentials provider 자체를 운영 runtime에 등록하지 않는다(`src/auth-runtime.ts`의 `isTestCredentialsProviderEnabled`). `VERCEL_ENV` 또는 `RAILWAY_ENVIRONMENT_NAME`이 `production`이면 등록하지 않고, `VERCEL_ENV === 'preview'`(로컬 E2E 실행기 포함)이면 등록하며, 그 밖에는 `NODE_ENV !== 'production'`일 때만 등록한다. 등록돼도 아래 앱별 authorize 게이트를 그대로 통과해야 한다. 직접 근거: `apps/consumer/src/auth-runtime.test.mjs`, `apps/seller/src/auth-runtime.test.ts`, `apps/driver/src/auth-runtime.test.ts`.
+세 앱 모두 테스트 전용 Credentials provider 자체를 운영 runtime에 등록하지 않는다(`packages/shared/src/auth-runtime.ts`의 `isTestCredentialsProviderEnabled`를 각 앱 `auth.ts`가 `process.env`로 부른다). `VERCEL_ENV` 또는 `RAILWAY_ENVIRONMENT_NAME`이 `production`이면 등록하지 않고, `VERCEL_ENV === 'preview'`(로컬 E2E 실행기 포함)이면 등록하며, 그 밖에는 `NODE_ENV !== 'production'`일 때만 등록한다. 등록돼도 아래 앱별 authorize 게이트를 그대로 통과해야 한다. 직접 근거: `packages/shared/src/auth-runtime.test.ts`(등록 조건), `apps/consumer/src/auth.contract.test.mjs`, `apps/seller/src/auth.contract.test.ts`, `apps/driver/src/auth.contract.test.ts`(게이트 연결).
 
 ### Consumer — E2E/test 전용
 
@@ -120,7 +120,7 @@ Login UI(`apps/driver/src/app/login/page.tsx`)는 `GREENHUB_LOCAL_RUNTIME === 't
 
 ### Seller/Driver local Firebase · API binding safety
 
-Seller/Driver local-runtime은 단순 UI flag가 아니라 로컬 runtime binding safety와 함께 사용된다. 아래는 현재 구현이 보장하는 범위다(`apps/seller/src/lib/firebase.ts`, `apps/driver/src/lib/firebase.ts`, `apps/seller/src/lib/api-base-url.ts`, `apps/driver/src/lib/api-base-url.ts`).
+Seller/Driver local-runtime은 단순 UI flag가 아니라 로컬 runtime binding safety와 함께 사용된다. 아래는 현재 구현이 보장하는 범위다(`apps/seller/src/lib/firebase.ts`, `apps/driver/src/lib/firebase.ts`, `apps/seller/src/lib/api-base-url.ts`, `apps/driver/src/lib/api-base-url.ts`, 검사 규칙은 `packages/shared/src/api-base-url.ts`).
 
 Firebase:
 
@@ -234,7 +234,7 @@ consumer | seller | driver
 - refresh endpoint: `POST /auth/refresh`
 - 갱신 실패 시 session에 token error를 표시하고 유효 access token을 비운다.
 - driver Credentials session은 E2E 경로와 local-runtime 경로 모두 `credentials` provider를 경유하므로 앱 레이어에서 더 짧은 access-token refresh 기준(15분, `E2E_ACCESS_TOKEN_TTL`)을 사용한다. 일반 Kakao session 기준(약 55분, `ACCESS_TOKEN_TTL`)과 구분된다. TTL 값을 새로 결정하지 않으며 `apps/driver/src/auth.ts`의 분기를 그대로 기술한다.
-- 세 앱 Auth.js 서버 쪽의 로그인·세션 확인·갱신 API 호출은 10초(`AUTH_UPSTREAM_TIMEOUT_MS`), 로그아웃 시 API 세션 폐기 전체는 5초(`AUTH_LOGOUT_TIMEOUT_MS`) 시간 제한을 쓴다(각 앱 `src/auth-runtime.ts`). 시간 제한 초과는 각 호출자의 기존 일시 실패 경로로 처리한다.
+- 세 앱 Auth.js 서버 쪽의 로그인·세션 확인·갱신 API 호출은 10초(`AUTH_UPSTREAM_TIMEOUT_MS`), 로그아웃 시 API 세션 폐기 전체는 5초(`AUTH_LOGOUT_TIMEOUT_MS`) 시간 제한을 쓴다(`packages/shared/src/auth-runtime.ts`). 시간 제한 초과는 각 호출자의 기존 일시 실패 경로로 처리한다.
 
 실제 서버 JWT 만료값은 환경 설정에 의해 달라질 수 있으므로 오래된 문서의 “항상 1시간/30일”을 외부 환경 현재값으로 단정하지 않는다.
 
@@ -265,7 +265,7 @@ rotation record 검증 뒤 authoritative user를 재조회하고 payload `role/s
 - `POST /auth/logout`은 access token의 `sid` 세션 하나만 끊는다: `refreshTokens/{sub}.sessions[sid]`와 `activeSessionIds`의 그 `sid`를 지우고 `auth.logout`(`sessionId` 포함)을 기록한다. Firebase refresh token 폐기는 사용자 단위라 다른 기기까지 끊으므로 이때는 하지 않으며, `sessionsRevokedAt`도 기록하지 않는다. `sid`가 없는 access token(#526 이전 발급)의 로그아웃은 모든 세션을 끊는다(`refreshTokens/{sub}` 삭제, `activeSessionIds` 비움, `sessionsRevokedAt` 기록, Firebase 폐기, audit `scope: all`). 재사용 감지도 모든 세션을 끊는 같은 처리를 한다. Firebase 사용자 기록이 없으면(custom token 미사용) 폐기할 것이 없으므로 그대로 진행하고, 그 밖의 폐기 실패는 API 세션 폐기를 되돌리지 않고 서버 로그에만 남긴다. 이미 발급된 Firebase ID token은 만료(최대 1시간)까지 남는다.
 - 모든 세션을 끊는 경로(`sid` 없는 로그아웃·재사용 감지)와 관리자 정지(`PATCH /admin/users/:userId/status`, `PATCH /admin/drivers/:userId/suspend`에서 `suspended: true`)는 `users/{uid}.sessionsRevokedAt`(Timestamp, 초 단위로 내린 시각)을 기록한다. `JwtStrategy`는 access token의 `iat * 1000`이 이 시각보다 이전이면 만료 전이어도 401로 거부한다(`iat` 없는 토큰·형식을 알 수 없는 기록도 거부). 같은 초에 새로 로그인해 받은 토큰은 통과한다. 또 `JwtStrategy`는 access token에 `sid`가 있으면 그 값이 `users/{uid}.activeSessionIds`에 있어야 통과시키고, 없으면 401(`폐기된 세션의 인증 토큰입니다.`)로 거부한다. 그래서 한 기기의 로그아웃·축출은 그 기기의 access token만 다음 요청부터 거부하고 다른 기기는 그대로 쓴다. `sid` 없는 access token은 `sessionsRevokedAt` 비교만 받으며 만료(최대 1시간)까지 남는다. 정지는 `refreshTokens/{uid}` 삭제와 Firebase refresh token 폐기(로그아웃과 같은 처리)도 함께 한다. 정지 해제는 폐기 시각을 지우지 않으므로 정지 전 토큰은 다시 쓰이지 않는다(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`, `apps/api/src/admin/admin.service.spec.ts`).
 - 세션 기록(`refreshTokens/{sub}.sessions[sid]`)의 `token`·`previousToken`은 refresh token 원문이 아니라 SHA-256(hex)이다. 회전 유예(60초) 동안 직전 토큰을 다시 보낸 요청에 현재 토큰을 돌려주기 위해, 현재 토큰을 직전 토큰에서 만든 키로 암호화한 `sealedToken`을 함께 둔다. #526 이전의 사용자당 단일 기록(원문 기록 포함)은 읽지 않으며, 그 기록에 묶인 token은 `sid`가 없어 refresh가 401로 끝나고 다시 로그인해야 한다.
-- 세 앱 Auth.js 로그아웃은 쿠키 삭제와 함께 `events.signOut`에서 `POST /auth/logout`을 호출해 그 기기의 서버 세션(`sid`)을 폐기한다(`apps/{consumer,seller,driver}/src/auth.ts`, 각 `src/auth-runtime.ts`의 `revokeApiSession`). access token이 401/403이면 refresh로 새 access token을 받아 한 번 더 호출하고, refresh도 401/403이면 이미 끝난 세션으로 본다. 폐기 실패·네트워크 오류·시간 제한(5초) 초과는 예외 없이 끝나 로그아웃 자체는 계속되며, 이 경우 서버 세션은 남는다. 직접 근거는 각 앱 `auth-runtime` 단위 테스트이며, `events.signOut` 연결은 소스 대조로만 확인한다. Preview E2E(`auth-session-lifecycle.spec.ts`)는 로그아웃 뒤 쿠키·세션 소멸만 확인하고 서버 token 폐기는 직접 확인하지 않는다.
+- 세 앱 Auth.js 로그아웃은 쿠키 삭제와 함께 `events.signOut`에서 `POST /auth/logout`을 호출해 그 기기의 서버 세션(`sid`)을 폐기한다(`apps/{consumer,seller,driver}/src/auth.ts`, `packages/shared/src/auth-runtime.ts`의 `revokeApiSession`). access token이 401/403이면 refresh로 새 access token을 받아 한 번 더 호출하고, refresh도 401/403이면 이미 끝난 세션으로 본다. 폐기 실패·네트워크 오류·시간 제한(5초) 초과는 예외 없이 끝나 로그아웃 자체는 계속되며, 이 경우 서버 세션은 남는다. 직접 근거는 `packages/shared/src/auth-runtime.test.ts` 단위 테스트이며, `events.signOut` 연결은 소스 대조로만 확인한다. Preview E2E(`auth-session-lifecycle.spec.ts`)는 로그아웃 뒤 쿠키·세션 소멸만 확인하고 서버 token 폐기는 직접 확인하지 않는다.
 - 다기기 정책(2026-10-15 결정, `docs/BACKLOG.md` `AUTH-MULTI-DEVICE-SESSION`): 같은 계정이 여러 기기에서 로그인해도 서로의 refresh를 재사용으로 판정하지 않고, 한 기기의 로그아웃은 그 기기만 끊는다. 재사용 감지·관리자 정지·`sid` 없는 로그아웃은 계속 모든 기기를 끊는다. 로그아웃 뒤 같은 계정이 다시 로그인해도 로그아웃한 기기 쿠키의 access token은 그 `sid`가 `activeSessionIds`에 없으므로 `GET /auth/session`을 포함한 API 요청에서 거부된다(`apps/api/src/auth/strategies/jwt.strategy.spec.ts`, `apps/api/src/auth/auth.per-device-sessions.spec.ts`).
 - “정지된 계정이 refresh를 통해 계속 새 권한 토큰을 얻을 수 있음”은 현재 계약이 아니다.
 
