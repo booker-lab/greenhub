@@ -38,6 +38,7 @@ import {
   formatOrderOpenLabel,
   roundSectionTitle,
 } from '@/lib/round-schedule-label';
+import { homePrefetchStoreId, useHomeStorePrefetch } from './home-store-prefetch';
 import { resolveHomeStoreId } from './home-store-selection';
 import {
   BenchmarkCardProvider,
@@ -738,6 +739,9 @@ export default function HomeProductList({ banner }: { banner?: ReactNode }) {
     () => resolveHomeStoreId([...products, ...groupProducts], requestedStoreId),
     [groupProducts, products, requestedStoreId],
   );
+  // 판매 방식 확인 → 회차 조회를 차례로 기다리지 않도록 매장을 알게 되는 즉시 둘을 함께 시작한다.
+  // 아래 조회들은 같은 공유 요청을 받으므로 화면 판정 순서는 그대로다.
+  useHomeStorePrefetch(homePrefetchStoreId(storeId, requestedStoreId));
   const storeMode = useStoreMode(storeId, loading || groupLoading);
   const saleRounds = useSaleRounds(
     storeMode.salesMode === 'round_direct' ? storeMode.storeId : null,
