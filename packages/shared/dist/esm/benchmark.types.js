@@ -18,6 +18,14 @@ export const PRODUCT_OPTION_CHOICE_MAX = 6;
 export const PRODUCT_OPTION_PRICE_DELTA_MAX = 200_000;
 /** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
 export const OPTION_TEXT_MAX_LENGTH = 20;
+export const OPTION_STOCK_NAME_MAX_LENGTH = 30;
+/** 한 번에 넣거나 맞출 수 있는 최대 수량 */
+export const OPTION_STOCK_QUANTITY_MAX = 10_000;
+/** 저장된 재고 품목의 남은 수량. 값이 숫자가 아니면 0으로 본다(판매 쪽은 서버가 따로 막는다). */
+export function optionStockRemaining(stock) {
+    const count = (value) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+    return Math.max(0, count(stock.stockQuantity) - count(stock.reservedQuantity) - count(stock.orderedQuantity));
+}
 /** 고시 항목의 표시 순서·이름·최대 길이(글자). API 검증과 판매자 입력이 같이 쓴다. */
 export const PRODUCT_NOTICE_FIELDS = [
     { key: 'itemName', label: '품명', maxLength: 60 },

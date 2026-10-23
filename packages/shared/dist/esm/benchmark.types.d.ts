@@ -26,6 +26,11 @@ export interface ProductOptionChoice {
     priceDelta: number;
     /** 고객이 문구를 직접 써야 하는 선택지(예: 스티커 라벨·3D 토퍼) */
     needsText?: boolean;
+    /**
+     * 이 선택지가 쓰는 매장 옵션 재고 품목 id(OptionStock, 예: 직접 출력한 화분).
+     * 없으면 수량 제한이 없다. 같은 품목을 여러 상품·선택지가 함께 쓸 수 있다.
+     */
+    stockId?: string;
 }
 /** 옵션 묶음. 묶음마다 선택지 하나를 고른다. */
 export interface ProductOptionGroup {
@@ -38,6 +43,41 @@ export declare const PRODUCT_OPTION_CHOICE_MAX = 6;
 export declare const PRODUCT_OPTION_PRICE_DELTA_MAX = 200000;
 /** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
 export declare const OPTION_TEXT_MAX_LENGTH = 20;
+/**
+ * 매장 단위 옵션 재고 품목(예: 판매자가 직접 출력한 화분). 회차 상품과 같은 방식으로 센다.
+ * - stockQuantity: 지금까지 넣은 수량(판매자가 출력해 더하거나 남은 수량을 맞추면 바뀐다)
+ * - reservedQuantity: 결제 중인 주문이 잡은 수량
+ * - orderedQuantity: 결제가 끝난 주문이 가져간 수량
+ * 남은 수량 = stockQuantity - reservedQuantity - orderedQuantity
+ */
+export interface OptionStock {
+    id: string;
+    storeId: string;
+    name: string;
+    stockQuantity: number;
+    reservedQuantity: number;
+    orderedQuantity: number;
+    remainingQuantity: number;
+}
+export declare const OPTION_STOCK_NAME_MAX_LENGTH = 30;
+/** 한 번에 넣거나 맞출 수 있는 최대 수량 */
+export declare const OPTION_STOCK_QUANTITY_MAX = 10000;
+/**
+ * 상품 옵션 선택지별 남은 수량(공개 조회 GET /products/:productId/option-availability).
+ * 재고 품목에 연결된 선택지만 들어 있다. 없는 선택지는 수량 제한이 없다.
+ */
+export interface ProductOptionAvailability {
+    choices: Array<{
+        choiceId: string;
+        remainingQuantity: number;
+    }>;
+}
+/** 저장된 재고 품목의 남은 수량. 값이 숫자가 아니면 0으로 본다(판매 쪽은 서버가 따로 막는다). */
+export declare function optionStockRemaining(stock: {
+    stockQuantity?: unknown;
+    reservedQuantity?: unknown;
+    orderedQuantity?: unknown;
+}): number;
 /**
  * 상품정보제공고시("기타 재화" 품목). 기능 토글과 상관없이 항상 받고 보여준다.
  * 빈 칸은 화면이 기본값으로 채운다(resolveProductNotice).
@@ -107,6 +147,8 @@ export interface SelectedProductOption {
     priceDelta: number;
     /** 문구가 필요한 선택지에 고객이 쓴 문구 */
     text?: string;
+    /** 주문 때 이 선택지가 쓴 옵션 재고 품목 id(ProductOptionChoice.stockId 스냅샷) */
+    stockId?: string;
 }
 export interface StoreGuarantee {
     enabled: boolean;

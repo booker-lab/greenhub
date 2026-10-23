@@ -4,6 +4,7 @@ import type {
   CreateReviewRequest,
   OwnReview,
   PartnerInquiryRequest,
+  ProductOptionAvailability,
   ProductReviewsResponse,
   ReviewPublic,
   ReviewSummary,
@@ -64,6 +65,12 @@ export function fetchStoreReviewStats(storeId: string): Promise<Record<string, R
     () => request<Record<string, ReviewSummary>>(`/stores/${enc(storeId)}/review-stats`),
     { ttlMs: SHARE_MS },
   );
+}
+
+// ── 옵션 남은 수량(직접 출력한 화분 등) ──
+// 옵션 시트를 열 때마다 새로 부른다(공유·캐시하지 않는다). 실패하면 화면은 제한 없이 그리고 서버가 주문 때 막는다.
+export function fetchOptionAvailability(productId: string): Promise<ProductOptionAvailability> {
+  return request<ProductOptionAvailability>(`/products/${enc(productId)}/option-availability`);
 }
 
 export function fetchProductReviews(productId: string): Promise<ProductReviewsResponse> {

@@ -44,7 +44,10 @@ export type AdminAuditAction =
   | 'admin.partner_inquiry.contacted'
   | 'admin.partner_inquiry.deleted'
   // 판매자(또는 관리자)가 정산 계좌를 저장. 계좌번호는 끝 4자리만 남긴다.
-  | 'store.payout_account.updated';
+  | 'store.payout_account.updated'
+  // 판매자(또는 관리자)가 옵션 재고 품목(직접 출력한 화분 등)을 만들거나 수량·이름을 바꿈.
+  | 'store.option_stock.created'
+  | 'store.option_stock.updated';
 
 export type AdminAuditTargetType =
   | 'store'
