@@ -115,7 +115,7 @@ describe('M2 수수료율 차이', () => {
     assert.equal(item.entries.length, 1);
     assert.equal(item.entries[0].storeName, '디어 오키드');
     assert.equal(item.entries[0].note, '화면 3% · 정산 5%');
-    assert.equal(item.summary, '1곳 · 정책 결정 대기');
+    assert.equal(item.summary, '1곳 · 요율 변경 시점 확인');
   });
 
   test('같으면(부동소수 오차 포함) 🟢, 최근 정산이 없으면 비교하지 않는다', () => {
