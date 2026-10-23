@@ -75,4 +75,11 @@ describe('DriversClient read recovery wiring', () => {
     expect(source).toContain('<ConfirmModal');
     expect(source).toContain('ACTION_META');
   });
+
+  it('정지가 확정되면 응답의 배송 중 주문 수로 안내창을 연다(정지는 막지 않는다)', () => {
+    expect(source).toMatch(
+      /result\.kind === 'confirmed' && pending\.action === 'suspend'[\s\S]*setDeliveryWarning\(describeActiveDeliveryWarning\(result\.activeDeliveryCount\)\)/,
+    );
+    expect(source).toContain('<ActiveDeliveryNotice message={deliveryWarning}');
+  });
 });

@@ -35,7 +35,7 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
     reviews.deleteOwnReview.mockResolvedValue({ id: 'order-1_product-1', deleted: true });
     reviews.hideReview.mockResolvedValue({ id: 'order-1_product-1', hidden: true });
     reviews.unhideReview.mockResolvedValue({ id: 'order-1_product-1', hidden: false });
-    reviews.listHiddenReviews.mockResolvedValue([]);
+    reviews.listHiddenReviews.mockResolvedValue({ reviews: [], hasMore: false, limit: 200 });
     engagement.setPartnerInquiryContacted.mockResolvedValue({ id: 'inq-1', contactedAt: null });
     engagement.deletePartnerInquiry.mockResolvedValue({ id: 'inq-1' });
     const module = await Test.createTestingModule({

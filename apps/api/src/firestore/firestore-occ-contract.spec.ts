@@ -262,6 +262,8 @@ describe('canonical harness high-risk regression proofs', () => {
       configService({ SETTLEMENT_CONFIRM_DELAY_DAYS: '1' }) as never,
     );
     const orderId = 'order-confirm-cancel-1';
+    // 확정은 주문 문서를 읽어 판단하므로, 확정을 시도하도록 배송 완료 주문을 함께 둔다.
+    occ.seed(`orders/${orderId}`, { id: orderId, storeId: 'store-1', status: 'DELIVERED' });
     occ.seed(`settlements/${orderId}`, {
       id: orderId,
       storeId: 'store-1',

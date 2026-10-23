@@ -14,9 +14,12 @@ const harness = vi.hoisted(() => {
   let cursor = 0;
   const state = {
     session: null as unknown,
+    // 목록 조회를 보는 테스트만 useEffect를 실제로 돌린다(의존성이 바뀔 때 정리 후 다시 실행).
+    runEffects: false,
     reset() {
       slots.length = 0;
       cursor = 0;
+      state.runEffects = false;
     },
     beginRender() {
       cursor = 0;
@@ -53,8 +56,15 @@ const harness = vi.hoisted(() => {
       slots[index] = { callback, deps };
       return callback;
     },
-    useEffect() {
-      cursor++;
+    useEffect(effect: () => undefined | (() => void), deps: readonly unknown[]) {
+      const index = cursor++;
+      if (!state.runEffects) return;
+      const previous = slots[index] as
+        | { deps: readonly unknown[]; cleanup: undefined | (() => void) }
+        | undefined;
+      if (previous && sameDeps(previous.deps, deps)) return;
+      previous?.cleanup?.();
+      slots[index] = { deps, cleanup: effect() };
     },
   };
 
@@ -153,5 +163,70 @@ describe('useSaleRounds — 토큰 갱신과 요청 함수 정체성', () => {
       '셀러 스토어 인증 정보를 확인할 수 없습니다.',
     );
     expect(apiJson).not.toHaveBeenCalled();
+  });
+});
+
+describe('useSaleRounds — 토큰 갱신과 회차 목록 재조회', () => {
+  const listPath = (storeId: string) => `/stores/${storeId}/sale-rounds`;
+  const listCalls = () => apiJson.mock.calls.filter(([path]) => path === listPath('store-a'));
+
+  beforeEach(() => {
+    harness.state.reset();
+    harness.state.runEffects = true;
+    apiJson.mockReset();
+    apiJson.mockResolvedValue({ items: [] });
+  });
+
+  it('토큰만 바뀌면 회차 목록을 다시 받지 않는다', () => {
+    render(authenticated('store-a', 'token-1'));
+    render(authenticated('store-a', 'token-2'));
+    render(authenticated('store-a', 'token-3'));
+
+    expect(listCalls()).toEqual([[listPath('store-a'), 'token-1']]);
+  });
+
+  it('토큰 갱신 중 세션이 잠깐 loading이 돼도 회차 목록을 다시 받지 않는다', () => {
+    render(authenticated('store-a', 'token-1'));
+    render({ ...authenticated('store-a', 'token-1'), status: 'loading' });
+    render(authenticated('store-a', 'token-2'));
+
+    expect(apiJson).toHaveBeenCalledTimes(1);
+  });
+
+  it('토큰만 바뀐 뒤 refetch는 최신 토큰으로 목록을 받는다', async () => {
+    render(authenticated('store-a', 'token-1'));
+    const after = render(authenticated('store-a', 'token-2'));
+
+    await after.refetch();
+    expect(apiJson).toHaveBeenLastCalledWith(listPath('store-a'), 'token-2');
+  });
+
+  it('스토어가 바뀌면 새 스토어 목록을 받는다', () => {
+    render(authenticated('store-a', 'token-1'));
+    render(authenticated('store-b', 'token-1'));
+
+    expect(apiJson.mock.calls).toEqual([
+      [listPath('store-a'), 'token-1'],
+      [listPath('store-b'), 'token-1'],
+    ]);
+  });
+
+  it('세션을 불러오는 중이라 토큰이 없다가 생기면 첫 목록을 받는다', () => {
+    const loading = render({ data: null, status: 'loading' });
+    expect(apiJson).not.toHaveBeenCalled();
+    expect(loading.loading).toBe(true);
+
+    render(authenticated('store-a', 'token-1'));
+    expect(listCalls()).toEqual([[listPath('store-a'), 'token-1']]);
+  });
+
+  it('토큰이 사라지면 목록을 비우고 인증 오류로 닫는다', () => {
+    render(authenticated('store-a', 'token-1'));
+    render({ data: { user: { storeId: 'store-a' } }, status: 'authenticated' });
+    const signedOut = render({ data: { user: { storeId: 'store-a' } }, status: 'authenticated' });
+
+    expect(apiJson).toHaveBeenCalledTimes(1);
+    expect(signedOut.rounds).toEqual([]);
+    expect(signedOut.error).toBe('셀러 스토어 인증 정보를 확인할 수 없습니다.');
   });
 });

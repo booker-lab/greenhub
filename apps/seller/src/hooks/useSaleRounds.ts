@@ -257,6 +257,9 @@ export function useSaleRounds(): UseSaleRoundsResult {
   const accessTokenRef = useRef(accessToken);
   accessTokenRef.current = accessToken;
   const hasAccessToken = Boolean(accessToken);
+  // 토큰 갱신(update) 동안 세션은 잠깐 loading이 되지만 기존 토큰을 그대로 들고 있다.
+  // 토큰이 아직 없을 때만 세션을 기다리는 중으로 본다.
+  const sessionPending = sessionStatus === 'loading' && !hasAccessToken;
 
   const getApiContext = useCallback((): ApiContext => {
     const currentAccessToken = accessTokenRef.current;
@@ -270,13 +273,15 @@ export function useSaleRounds(): UseSaleRoundsResult {
     };
   }, [storeId, hasAccessToken]);
 
+  // 목록도 같은 이유로 토큰은 ref로 읽어, 스토어·토큰 유무가 바뀔 때만 다시 받는다.
   const loadRounds = useCallback(async () => {
     const currentRequestId = ++listRequestId.current;
-    if (sessionStatus === 'loading') {
+    if (sessionPending) {
       setLoading(true);
       return;
     }
-    if (!storeId || !accessToken) {
+    const accessToken = accessTokenRef.current;
+    if (!storeId || !hasAccessToken || !accessToken) {
       setRounds([]);
       setLoading(false);
       setError('셀러 스토어 인증 정보를 확인할 수 없습니다.');
@@ -299,7 +304,7 @@ export function useSaleRounds(): UseSaleRoundsResult {
     } finally {
       if (listRequestId.current === currentRequestId) setLoading(false);
     }
-  }, [sessionStatus, storeId, accessToken]);
+  }, [sessionPending, storeId, hasAccessToken]);
 
   useEffect(() => {
     void loadRounds();
@@ -307,7 +312,7 @@ export function useSaleRounds(): UseSaleRoundsResult {
       listRequestId.current += 1;
     };
   }, [loadRounds]);
-  // 목록 재조회는 토큰·세션 상태마다 새 함수가 되므로 요청 함수 정체성에 섞지 않는다.
+  // 목록 재조회는 세션 대기 상태에도 묶여 있으므로 요청 함수 정체성에 섞지 않는다.
   const loadRoundsRef = useRef(loadRounds);
   loadRoundsRef.current = loadRounds;
 

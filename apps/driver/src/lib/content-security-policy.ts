@@ -9,16 +9,23 @@
  * - API: NEXT_PUBLIC_API_URL(lib/api-base-url.ts와 같은 값)
  * - Firebase: lib/firebase.ts(Auth 커스텀 토큰 로그인·토큰 갱신, 거점 사진 Storage 업로드).
  *   Firestore는 쓰지 않는다.
- * - 이미지: 사진 미리보기(blob:), Firebase Storage 다운로드 URL, GCS URL
+ * - 이미지: 사진 미리보기(blob:), Firebase Storage 다운로드 URL, GCS URL,
+ *   카카오 프로필 사진(lib/profile-image.ts의 호스트, https만)
  * - 로컬 개발(NODE_ENV=development): Firebase 에뮬레이터(lib/firebase.ts의 고정 주소)
  * - 프레임으로 띄우는 외부 화면은 없다. 카카오맵은 링크로 새 화면에서 연다.
  */
+
+import { KAKAO_PROFILE_IMAGE_HOSTS } from './profile-image';
 
 export const CSP_REPORT_PATH = '/api/csp-report';
 
 const DEVELOPMENT_API_ORIGIN = 'http://localhost:3000';
 
-const IMAGE_ORIGINS = ['https://firebasestorage.googleapis.com', 'https://storage.googleapis.com'];
+const IMAGE_ORIGINS = [
+  'https://firebasestorage.googleapis.com',
+  'https://storage.googleapis.com',
+  ...KAKAO_PROFILE_IMAGE_HOSTS.map((host) => `https://${host}`),
+];
 
 const CONNECT_ORIGINS = [
   'https://identitytoolkit.googleapis.com',
