@@ -775,7 +775,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 - [x] API(2026-10-23): 판매자 재고 품목 목록·추가·수량 조정(`apps/api/src/option-stocks/`, 새로 출력한 개수 더하기 `addQuantity` 또는 실제 남은 개수 맞추기 `remainingQuantity`, 행동 기록 `store.option_stock.*`). 상품 저장 때 같은 매장 품목만 연결. 회차 주문 예약이 옵션 재고를 회차 한도와 같은 트랜잭션에서 잡고(`apps/api/src/orders/order-capacity.service.ts`), 결제 확정·결제 전 만료·취소·환불·늦은 결제 재확보 전이를 회차 품목 카운터와 똑같이 따른다. 부족하면 남은 개수를 알려 주며 거절하고, 늦은 결제는 회차 한도처럼 환불로 간다. 근거: `apps/api/src/orders/option-stock-reservation.flow.spec.ts`, `apps/api/src/option-stocks/option-stocks.spec.ts`.
 - [x] 판매자 화면(2026-10-23): 설정 → 옵션 재고(`apps/seller/src/app/settings/option-stocks/`, `option-sheet`가 켜졌을 때 메뉴에 보임)에서 품목 추가·새로 출력한 개수 더하기·실제 남은 개수 맞추기. 상품 등록·수정 옵션 선택지마다 "재고 연결" 칸(`ProductExtrasSection.tsx`). 실제 판매자 로그인 화면에서의 확인은 아직 하지 않았다(단위 테스트·운영 빌드만).
-- [ ] 소비자 화면: 옵션 시트에 남은 수량·품절 표시(지금은 서버가 주문을 거절하며 안내 문구만 보여 준다).
+- [x] 소비자 화면(2026-10-23): 옵션 시트를 열 때 공개 조회 `GET /products/:productId/option-availability`(실제 재고 수는 숨기고 99까지만 알림)로 남은 수량을 받아, 품절 선택지는 고를 수 없고 5개 이하면 "N개 남음"을 보이며 남은 수량보다 많이 담지 못하게 한다(`apps/consumer/src/lib/option-availability.ts`, `OptionSheet.tsx`). 로컬 가짜 API + `next dev`로 화면 동작을 확인했다. 최종 판단은 여전히 주문 때 서버가 한다.
 
 ### SUPPLIES-ALWAYS-ON-SALES
 2026-10-23 사용자 결정: 파일럿(회차 식물 판매) 뒤 화분 자재를 상시 택배로 판다. 예전 상시 판매 흐름(`salesMode=legacy`: 택배·거점·날짜 지정 직배송·공동구매, `docs/discussions/DISCUSS_mvp_sales_focus.md`에서 숨김)을 다시 쓴다. 판매 방식은 매장마다 하나라서(`packages/shared/src/store.types.ts`, `apps/api/src/orders/orders-create.service.ts`의 `round_direct` 분기) 자재는 별도 `legacy` 매장에 두고, **판매자 한 명이 두 매장을 함께 관리**한다(사용자 결정: 별도 판매자 계정 아님). 순서: 2-B·2-F 결정과 택배사 계약 → 2-A·2-C·2-D·2-E → 2-G.

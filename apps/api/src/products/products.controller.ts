@@ -129,6 +129,12 @@ export class PublicProductsController {
   getPublicProduct(@Param('productId') productId: string) {
     return this.productsService.getPublicProduct(productId);
   }
+
+  /** 옵션 선택지별 남은 수량(직접 출력한 화분 등). 손님 옵션 시트가 열릴 때 부른다. */
+  @Get(':productId/option-availability')
+  getOptionAvailability(@Param('productId') productId: string) {
+    return this.productsService.getOptionAvailability(productId);
+  }
 }
 
 @Controller('stores/:storeId/daily-caps')

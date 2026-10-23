@@ -62,6 +62,16 @@ export interface OptionStock {
 export declare const OPTION_STOCK_NAME_MAX_LENGTH = 30;
 /** 한 번에 넣거나 맞출 수 있는 최대 수량 */
 export declare const OPTION_STOCK_QUANTITY_MAX = 10000;
+/**
+ * 상품 옵션 선택지별 남은 수량(공개 조회 GET /products/:productId/option-availability).
+ * 재고 품목에 연결된 선택지만 들어 있다. 없는 선택지는 수량 제한이 없다.
+ */
+export interface ProductOptionAvailability {
+    choices: Array<{
+        choiceId: string;
+        remainingQuantity: number;
+    }>;
+}
 /** 저장된 재고 품목의 남은 수량. 값이 숫자가 아니면 0으로 본다(판매 쪽은 서버가 따로 막는다). */
 export declare function optionStockRemaining(stock: {
     stockQuantity?: unknown;
