@@ -3,6 +3,7 @@
 # 운영 API를 Railway에서 Cloud Run(서울)으로 옮기기 — 계획서
 
 > 작성: 2026-10-23 · 상태: **C1 진행 중** · 결정: 사용자 확정(2026-10-23 채팅, "Cloud Run을 지금부터 구축, 단계별 진행")
+> 실행 명령은 [`api-cloud-run-runbook.md`](api-cloud-run-runbook.md)(R0~R11)가 소유한다.
 > 이 문서는 계획(`*-plan.md`)이다. 전환이 끝나면 현행 사실은 `docs/memory.md`·`docs/URLS.md`·배포 문서로 옮기고, 이 문서는 결정 배경으로만 남긴다.
 > 운영 전환·외부 서비스 설정·처리방침 변경은 단계마다 따로 승인받는다. 이 문서의 단계 완료 표시는 운영 승인이 아니다.
 
@@ -30,12 +31,12 @@
 4. 10/28까지 판단 조건이 다 맞지 않으면 **파일럿은 Railway로 시작**한다. Cloud Run은 언제든 넘어갈 수 있는 예비 서버로 두고, 전환은 첫 회차(11/10 배송) 뒤로 미룬다.
 5. 전환 뒤에도 **Railway는 첫 회차가 끝날 때까지 되돌리기용으로 둔다**(정기 작업은 끈 채로).
 6. 데스크탑을 서버로 쓰는 안은 택하지 않는다(정전·업데이트 재부팅·회선·보안·개인정보 안전조치 부담).
+7. **API 고정 주소 `api.greenlove.co.kr`를 전환(C7) 때 바로 적용한다**(2026-10-23 사용자 확정, 다른 세션). 서울 Cloud Run은 도메인 직접 연결이 없어 구글 외부 애플리케이션 부하분산기를 쓴다(월 약 18달러 추가). 전환 때 세 앱·PortOne 주소를 어차피 바꾸므로 한 번에 고정 주소로 바꾸고, 다음 이전은 DNS만 바꾸면 되게 한다. **첫 회차(11/10) 전에 전부 끝낸다.**
 
 ### 하지 않는 것
 
 - **데이터 이전**: 데이터는 그대로 Firestore에 있다. API 서버만 옮긴다. 그래서 되돌릴 때도 서버 주소만 되돌리면 된다.
 - 프런트엔드(Vercel)·Firebase 변경.
-- **API 자체 도메인**(`api.greenlove.co.kr` 등): Cloud Run 서울은 간단한 도메인 연결(domain mapping)을 지원하지 않아 로드밸런서(월 고정비)나 다른 앞단이 필요하다. 이번에는 Cloud Run 기본 주소(`…run.app`)를 쓰고, 자체 도메인은 C8에서 따로 판단한다.
 - **여러 대 자동 확장**: 처음에는 최대 1대로 둔다. 매분 도는 결제 대기 정리(`PaymentsService.cleanupPendingOrders`)에는 실행 lease가 없다. 2대 이상은 이 작업의 중복 실행 안전성을 확인한 뒤에 늘린다.
 
 ## 지금 Railway에 기대는 곳 (2026-10-23 `main` `e4d781d` 기준)
@@ -65,7 +66,8 @@
   - C3에서 실측한 `TRUST_PROXY_HOPS`
   - 비밀값은 Secret Manager에 둔다.
 - **송신 IP**: Direct VPC egress(모든 트래픽) + Cloud NAT 고정 IP. ALIGO에 이 IP를 등록하면 Fixie가 필요 없다.
-- **헬스 확인**: `/health`(Firestore 문서 한 건 읽기).
+- **헬스 확인**: `/health`(Firestore 문서 한 건 읽기). Cloud Run 시작 검사로도 써서, 통과한 리비전에만 트래픽을 옮긴다.
+- **주소**: 전환 뒤 `api.greenlove.co.kr`(부하분산기) 하나만 연다. run.app 직접 접속은 막는다(`ingress=internal-and-cloud-load-balancing`, `X-Forwarded-For` 위조로 요청 한도를 피하지 못하게).
 - **배포**: GitHub Actions가 Workload Identity Federation으로 인증해(키 파일 없이) 지정 SHA 이미지만 배포한다.
 - **정기 작업**: 전환 전까지 Cloud Run은 `GREENHUB_SCHEDULES_ENABLED=false`다. 두 서버가 함께 매분 작업을 돌리지 않게 한다.
 
@@ -107,11 +109,11 @@
 
 ### C4. 배포·점검 도구
 
-- `production-deploy.mjs`에 Cloud Run 배포 명령을 더한다. 지정 SHA 이미지 빌드·푸시 → 배포 → `/health` commit 확인 순서다. Railway 명령은 C8까지 둔다.
+- `production-deploy.mjs`에 Cloud Run 배포 명령을 더한다. 지정 SHA 이미지 빌드·푸시 → 트래픽 없이 배포(시작 검사 통과 필요) → 트래픽 이동 → `/health` commit 확인, 실패하면 이전 리비전으로 되돌린다. workflow는 `api_platform`(기본 railway)으로 고른다. Railway 명령은 C8까지 둔다.
 - `prod-config-check.mjs`가 Cloud Run 운영 서비스도 값 노출 없이 점검하게 한다(`GREENHUB_ENVIRONMENT_NAME`, `TRUST_PROXY_HOPS`, 정기 작업 설정 등).
 - 운영 API 호스트 목록에 Cloud Run 운영 호스트를 더한다.
   - 이 목록은 E2E·점검 도구가 운영 API를 잘못 건드리지 않게 막는 차단 목록이다.
-  - 그래서 운영 서비스를 띄우기(C5) 전에 넣는다.
+  - 그래서 운영 서비스를 띄우기(C5) 전에 넣는다. 정본은 `scripts/release/api-hosts.mjs`(Railway·Cloud Run 결정적·해시·태그 주소·`api.greenlove.co.kr`).
 - **확인**: 각 스크립트 spec, CI
 
 ### C5. 운영 Cloud Run 준비(트래픽 없음) — 승인 필요
@@ -138,8 +140,8 @@
 1. 처리방침 수정 PR을 준비한다. §4 처리위탁과 §5 국외 처리에서 API 처리 위치를 서울로 고친다. 공지·시행일 방식은 사용자가 정한다.
 2. **Railway 정기 작업을 끈다**(`GREENHUB_SCHEDULES_ENABLED=false`). 변수 변경이 Railway 재배포를 일으키므로 **바로 검증된 SHA로 다시 배포한다**(2026-10-08 교훈).
 3. Cloud Run 정기 작업을 켜고 다시 배포한다. 2와 3 사이 몇 분은 정기 작업이 쉬지만, 실주문이 없는 전환 시점에는 영향이 없다.
-4. 세 앱 운영 `NEXT_PUBLIC_API_URL`을 Cloud Run 주소로 바꾸고 같은 SHA로 다시 배포한다.
-5. PortOne 웹훅 주소를 Cloud Run 주소로 바꾼다(사용자 콘솔).
+4. 세 앱 운영 `NEXT_PUBLIC_API_URL`을 `https://api.greenlove.co.kr`로 바꾸고 같은 SHA로 다시 배포한다.
+5. PortOne 웹훅 주소를 `https://api.greenlove.co.kr` 기준으로 바꾼다(사용자 콘솔).
 6. 처리방침을 반영해 배포하고 `uptime.yml` 주소를 바꾼다.
 7. **확인**
    - Cloud Run 대상 `post-deploy-smoke`
@@ -155,7 +157,6 @@
 - 스테이징 API도 Cloud Run으로 옮길지 정한다. 지금 Railway 스테이징은 `main`에서 자동 배포된다.
 - Railway 해지 여부를 정하고, Railway 전용 스크립트·workflow와 `RAILWAY_*` 호환 코드를 정리한다.
 - `docs/memory.md`·`docs/URLS.md`·`docs/devops/toolchain.md`에 현행 사실을 옮긴다.
-- API 자체 도메인 필요 여부를 판단한다. 로드밸런서 비용과, 다음에 옮길 때 주소를 바꾸는 비용을 비교한다.
 
 ## 열린 질문
 

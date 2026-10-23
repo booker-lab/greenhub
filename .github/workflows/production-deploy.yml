@@ -6,7 +6,7 @@ name: Production deploy
 # 그 설정은 GitHub 저장소 설정이라 이 파일이 대신하지 않는다.
 #
 # 순서(docs/memory.md 운영 배포 순서와 같다):
-#   같은 SHA 원격 회차 E2E 통과 확인 → Firestore 인덱스(READY까지 대기) → API(Railway, /health commit 확인)
+#   같은 SHA 원격 회차 E2E 통과 확인 → Firestore 인덱스(READY까지 대기) → API(Railway 또는 Cloud Run, /health commit 확인)
 #   → 프런트 3개(Vercel production, 변경 없는 앱은 빌드 생략) → Firestore·Storage 규칙 → post-deploy-smoke
 # scope로 일부만 다시 실행할 수 있다(예: API만 늦었을 때 api).
 #
@@ -16,6 +16,11 @@ name: Production deploy
 #   VERCEL_PRODUCTION_TOKEN               Vercel Account Settings → Tokens, 팀 범위 token
 #   FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON  green-e4fe3 서비스 계정 키(역할: Firebase Admin, Service Usage Consumer)
 # 비밀값은 production Environment에만 두어 이 workflow의 deploy job만 읽는다. 값은 출력하지 않는다.
+#
+# Cloud Run(api_platform=cloudrun)은 키 파일 없이 Workload Identity Federation으로 인증한다. production Environment
+# 변수(비밀값 아님, docs/specs/ops/api-cloud-run-runbook.md R5에서 만든 값):
+#   GCP_WORKLOAD_IDENTITY_PROVIDER        projects/<번호>/locations/global/workloadIdentityPools/<풀>/providers/<공급자>
+#   GCP_DEPLOY_SERVICE_ACCOUNT            배포 전용 서비스 계정 이메일
 
 on:
   workflow_dispatch:
@@ -39,6 +44,14 @@ on:
           - api
           - frontends
           - rules
+      api_platform:
+        description: 'API 배포 대상(전환 전에는 railway, Cloud Run 시험·전환 때 cloudrun)'
+        required: true
+        type: choice
+        default: railway
+        options:
+          - railway
+          - cloudrun
       approval:
         description: '사용자가 채팅에서 이 SHA의 운영 배포를 승인했습니다.'
         required: true
@@ -130,10 +143,16 @@ jobs:
       name: production
     permissions:
       contents: read
+      # Cloud Run 배포의 Workload Identity Federation 인증(GitHub OIDC 토큰)에만 쓴다.
+      id-token: write
     env:
       SHA: ${{ inputs.sha }}
       SCOPE: ${{ inputs.scope }}
+      API_PLATFORM: ${{ inputs.api_platform }}
       FIREBASE_PROJECT: green-e4fe3
+      # scripts/release/api-hosts.mjs의 CLOUD_RUN_PRODUCTION과 같아야 한다.
+      CLOUD_RUN_IMAGE_REPOSITORY: asia-northeast3-docker.pkg.dev/green-e4fe3/greenhub/api
+      CLOUD_RUN_API_BASE: https://greenhub-api-988412563635.asia-northeast3.run.app
     # 비밀값은 job env에 두지 않고 그 값을 쓰는 step의 env에만 둔다. Firebase 서비스 계정 키 파일은 Firebase를 쓰는
     # step 안에서만 만들고 그 step이 끝날 때 지운다(GITHUB_ENV로 다음 step에 넘기지 않는다).
     steps:
@@ -166,14 +185,23 @@ jobs:
           HAS_RAILWAY_API_SERVICE_ID: ${{ secrets.RAILWAY_API_SERVICE_ID != '' }}
           HAS_VERCEL_PRODUCTION_TOKEN: ${{ secrets.VERCEL_PRODUCTION_TOKEN != '' }}
           HAS_FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON != '' }}
+          HAS_GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '' }}
+          HAS_GCP_DEPLOY_SERVICE_ACCOUNT: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT != '' }}
         run: |
           set -euo pipefail
           missing=()
           need() { local flag="HAS_$1"; [[ "${!flag:-false}" == 'true' ]] || missing+=("$1"); }
+          need_api() {
+            case "$API_PLATFORM" in
+              railway) need RAILWAY_TOKEN; need RAILWAY_API_SERVICE_ID ;;
+              cloudrun) need GCP_WORKLOAD_IDENTITY_PROVIDER; need GCP_DEPLOY_SERVICE_ACCOUNT ;;
+              *) echo "알 수 없는 api_platform: $API_PLATFORM" >&2; exit 1 ;;
+            esac
+          }
           case "$SCOPE" in
-            all) need RAILWAY_TOKEN; need RAILWAY_API_SERVICE_ID; need VERCEL_PRODUCTION_TOKEN; need FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON ;;
+            all) need_api; need VERCEL_PRODUCTION_TOKEN; need FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON ;;
             indexes|rules) need FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON ;;
-            api) need RAILWAY_TOKEN; need RAILWAY_API_SERVICE_ID ;;
+            api) need_api ;;
             frontends) need VERCEL_PRODUCTION_TOKEN ;;
             *) echo "알 수 없는 scope: $SCOPE" >&2; exit 1 ;;
           esac
@@ -181,7 +209,7 @@ jobs:
             printf 'production Environment 비밀값이 없습니다: %s\n' "${missing[*]}" >&2; exit 1
           fi
           {
-            echo "## 운영 배포 \`$SHA\` (scope: $SCOPE)"
+            echo "## 운영 배포 \`$SHA\` (scope: $SCOPE, API: $API_PLATFORM)"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -235,7 +263,7 @@ jobs:
           done
 
       - name: API 배포(Railway)
-        if: inputs.scope == 'all' || inputs.scope == 'api'
+        if: (inputs.scope == 'all' || inputs.scope == 'api') && inputs.api_platform == 'railway'
         shell: bash
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
@@ -246,12 +274,56 @@ jobs:
           echo "$result"
           echo "- API(Railway): \`$result\`" >> "$GITHUB_STEP_SUMMARY"
 
+      # 인덱스 단계(자기 gcloud 설정 폴더 사용)가 끝난 뒤에 인증해 그 단계에 영향을 주지 않는다.
+      # 키 파일 없이 GitHub OIDC 토큰을 배포 전용 서비스 계정의 짧은 토큰으로 바꾼다.
+      # api_platform=railway여도 WIF 변수가 있으면 Cloud Run 예비 서버(트래픽·정기 작업 없음)에 같은 SHA를
+      # 배포한다(2026-10-23 사용자 결정, docs/specs/ops/railway-outage-failover.md). 이때 아래 세 단계의 실패는
+      # 운영 배포를 막지 않는다(continue-on-error). Railway 배포·확인이 먼저 끝난 뒤에 실행된다.
+      - name: Google Cloud 인증(Workload Identity Federation)
+        continue-on-error: ${{ inputs.api_platform == 'railway' }}
+        if: (inputs.scope == 'all' || inputs.scope == 'api') && (inputs.api_platform == 'cloudrun' || vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '')
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SERVICE_ACCOUNT }}
+
+      # 배포 대상 SHA의 Dockerfile·소스로 이미지를 만든다. 같은 SHA 태그가 이미 있으면 다시 만들지 않는다.
+      - name: API 이미지 빌드·푸시(Artifact Registry)
+        continue-on-error: ${{ inputs.api_platform == 'railway' }}
+        if: (inputs.scope == 'all' || inputs.scope == 'api') && (inputs.api_platform == 'cloudrun' || vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '')
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$CLOUD_RUN_IMAGE_REPOSITORY:$SHA"
+          gcloud auth configure-docker asia-northeast3-docker.pkg.dev --quiet
+          if gcloud artifacts docker images describe "$image" --format='value(image_summary.digest)' >/dev/null 2>&1; then
+            echo "- API 이미지: 이미 있음 \`$image\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            docker build --pull -t "$image" target
+            docker push "$image"
+            echo "- API 이미지: 빌드·푸시 \`$image\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: API 배포(Cloud Run)
+        continue-on-error: ${{ inputs.api_platform == 'railway' }}
+        if: (inputs.scope == 'all' || inputs.scope == 'api') && (inputs.api_platform == 'cloudrun' || vars.GCP_WORKLOAD_IDENTITY_PROVIDER != '')
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$(node scripts/release/production-deploy.mjs cloudrun --sha="$SHA")"
+          echo "$result"
+          label='API(Cloud Run)'
+          if [[ "$API_PLATFORM" == 'railway' ]]; then label='Cloud Run 예비 서버'; fi
+          echo "- $label: \`$result\`" >> "$GITHUB_STEP_SUMMARY"
+
       - name: API /health commit 확인
         if: inputs.scope == 'all' || inputs.scope == 'api'
         shell: bash
         run: |
           set -euo pipefail
-          result="$(node scripts/release/production-deploy.mjs health --sha="$SHA")"
+          api_base=()
+          if [[ "$API_PLATFORM" == 'cloudrun' ]]; then api_base=(--api-base="$CLOUD_RUN_API_BASE"); fi
+          result="$(node scripts/release/production-deploy.mjs health --sha="$SHA" "${api_base[@]}")"
           echo "$result"
           echo "- API /health: \`$result\`" >> "$GITHUB_STEP_SUMMARY"
 
@@ -298,6 +370,8 @@ jobs:
           set -uo pipefail
           expect=()
           if [[ "$SCOPE" == 'all' || "$SCOPE" == 'api' ]]; then expect=(--expect-sha="$SHA"); fi
+          # Cloud Run 배포면 그 API를 확인한다(전환 전에는 프런트가 아직 Railway를 본다).
+          if [[ "$API_PLATFORM" == 'cloudrun' ]]; then expect+=(--api="$CLOUD_RUN_API_BASE"); fi
           status=0
           node scripts/release/post-deploy-smoke.mjs "${expect[@]}" > /tmp/smoke.txt 2>&1 || status=$?
           cat /tmp/smoke.txt

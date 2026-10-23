@@ -101,7 +101,15 @@ export function resolveE2ETargetUrl(app: TargetApp, env: NodeJS.ProcessEnv = pro
 
 // API를 직접 부르는 spec의 대상(API_BASE). 앱 base와 달리 운영 기본값이 없고 운영 API 지정도 거부한다.
 // 운영 판정은 scripts/check-round-direct-e2e-readiness.mjs의 운영 API origin 판정과 같아야 한다(테스트로 고정).
-const PRODUCTION_API_HOSTS: readonly string[] = ['api-production-13e7.up.railway.app'];
+// 운영 API 호스트 정본은 scripts/release/api-hosts.mjs다(Railway·Cloud Run·고정 주소).
+const PRODUCTION_API_HOSTS: readonly string[] = [
+  'api-production-13e7.up.railway.app',
+  'greenhub-api-988412563635.asia-northeast3.run.app',
+  'api.greenlove.co.kr',
+];
+// Cloud Run 해시 주소(`greenhub-api-<해시>-du.a.run.app`)와 태그 주소(`<태그>---…`).
+const CLOUD_RUN_PRODUCTION_HOST =
+  /^(?:[a-z0-9-]+---)?(?:greenhub-api-988412563635\.asia-northeast3|greenhub-api-[a-z0-9]+-du\.a)\.run\.app$/;
 
 export const E2E_API_BASE_MISSING_REASON =
   'API_BASE(스테이징 또는 로컬 API 주소)가 없어 건너뜀 — 운영 API로는 실행하지 않는다';
@@ -112,6 +120,7 @@ function isProductionApiHost(hostname: string): boolean {
     host === 'greenlove.co.kr' ||
     host.endsWith('.greenlove.co.kr') ||
     PRODUCTION_API_HOSTS.includes(host) ||
+    CLOUD_RUN_PRODUCTION_HOST.test(host) ||
     host.startsWith('api-production-')
   );
 }

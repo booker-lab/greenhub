@@ -5,19 +5,28 @@
  *
  *   node scripts/release/production-deploy.mjs verify-e2e --sha=<40자리> --run-id=<E2E run ID>
  *   node scripts/release/production-deploy.mjs railway    --sha=<40자리>
- *   node scripts/release/production-deploy.mjs health     --sha=<40자리>
- *   node scripts/release/production-deploy.mjs vercel     --sha=<40자리> --app=consumer|seller|driver
+ *   node scripts/release/production-deploy.mjs cloudrun   --sha=<40자리> [--api-base=<운영 API 주소>]
+ *   node scripts/release/production-deploy.mjs health     --sha=<40자리> [--api-base=<운영 API 주소>]
+ *   node scripts/release/production-deploy.mjs vercel     --sha=<40자리> --app=consumer|seller|driver [--require-build=true]
  *
  * 자격 증명은 환경 변수로만 받고 출력하지 않는다.
  * - verify-e2e: GITHUB_TOKEN(actions:read)
  * - railway: RAILWAY_TOKEN(운영 환경 project token), RAILWAY_API_SERVICE_ID
+ * - cloudrun: gcloud가 이미 인증돼 있어야 한다(workflow는 Workload Identity Federation, 키 파일 없음).
  * - vercel: VERCEL_PRODUCTION_TOKEN(팀 범위)
  *
  * 각 명령은 JSON 한 줄을 출력하고, 실패하면 exit 1.
  */
+import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { PREVIEW_APPS, VERCEL_API_ORIGIN, VERCEL_TEAM_ID } from '../wait-preview-deploy.mjs';
+import {
+  CLOUD_RUN_PRODUCTION,
+  CLOUD_RUN_PRODUCTION_API_HOST,
+  isProductionApiHost,
+} from './api-hosts.mjs';
 import { PRODUCTION_TARGETS } from './post-deploy-smoke.mjs';
 
 export const REPO_ORG = 'booker-lab';
@@ -175,6 +184,142 @@ export async function deployRailway({
   }
 }
 
+const execFileAsync = promisify(execFile);
+
+/** gcloud를 셸 없이 실행하고 표준 출력을 돌려준다. 인자는 배열로만 넘긴다. */
+export async function runGcloud(args) {
+  const { stdout } = await execFileAsync('gcloud', args, { maxBuffer: 16 * 1024 * 1024 });
+  return stdout;
+}
+
+function cloudRunScope(target) {
+  return [`--project=${target.project}`, `--region=${target.region}`];
+}
+
+async function describeCloudRunService(gcloud, target) {
+  return JSON.parse(
+    await gcloud([
+      'run',
+      'services',
+      'describe',
+      target.service,
+      ...cloudRunScope(target),
+      '--format=json',
+    ]),
+  );
+}
+
+async function routeAllTraffic(gcloud, target, revision) {
+  await gcloud([
+    'run',
+    'services',
+    'update-traffic',
+    target.service,
+    ...cloudRunScope(target),
+    `--to-revisions=${revision}=100`,
+    '--quiet',
+  ]);
+}
+
+/**
+ * 지정 SHA 이미지를 운영 Cloud Run에 배포한다. 이미지는 workflow가 `<저장소>:<SHA>`로 먼저 올려 둔다.
+ * 1. 태그가 가리키는 이미지 digest를 확인해 digest로 고정한다(태그가 나중에 바뀌어도 같은 이미지).
+ * 2. 지금 트래픽을 받는 리비전을 기억해 둔다(되돌릴 곳).
+ * 3. 새 리비전을 트래픽 없이 배포한다. 서비스의 시작 검사(`/health`, Firestore 한 건 읽기)를 통과해야
+ *    Ready가 되고, 실패하면 배포 명령이 실패해 트래픽은 이전 리비전에 그대로 있다. GREENHUB_COMMIT_SHA는
+ *    이 리비전에만 넣고, 다른 설정(대수·CPU 상시·비밀값·서비스 계정·네트워크)은 서비스 설정을 이어받는다.
+ * 4. 새 리비전이 Ready인지 확인하고 트래픽 100%를 옮긴다.
+ * 5. 공개 주소의 `/health` commit이 SHA가 될 때까지 기다린다. 끝내 아니면 이전 리비전으로 되돌린다.
+ * 새 리비전을 태그 주소로 먼저 확인하지 않는 것은, 전환 뒤 run.app 직접 접속을 막으면(부하분산기만 허용)
+ * 태그 주소에 닿을 수 없기 때문이다.
+ */
+export async function deployCloudRun({
+  sha,
+  apiBase = `https://${CLOUD_RUN_PRODUCTION_API_HOST}`,
+  target = CLOUD_RUN_PRODUCTION,
+  gcloud = runGcloud,
+  fetchImpl = fetch,
+  sleep = defaultSleep,
+  healthTimeoutMs = HEALTH_TIMEOUT_MS,
+  intervalMs = POLL_INTERVAL_MS,
+}) {
+  assertSha(sha);
+  const digest = (
+    await gcloud([
+      'artifacts',
+      'docker',
+      'images',
+      'describe',
+      `${target.imageRepository}:${sha}`,
+      '--format=value(image_summary.digest)',
+    ])
+  ).trim();
+  if (!/^sha256:[0-9a-f]{64}$/.test(digest)) {
+    throw new Error(`이미지 ${target.imageRepository}:${sha}의 digest를 확인하지 못했습니다.`);
+  }
+  const image = `${target.imageRepository}@${digest}`;
+
+  const before = await describeCloudRunService(gcloud, target);
+  const previous =
+    (before?.status?.traffic ?? []).find((entry) => entry?.percent === 100)?.revisionName ?? null;
+
+  await gcloud([
+    'run',
+    'deploy',
+    target.service,
+    ...cloudRunScope(target),
+    `--image=${image}`,
+    '--no-traffic',
+    `--update-env-vars=GREENHUB_COMMIT_SHA=${sha}`,
+    '--quiet',
+  ]);
+
+  const after = await describeCloudRunService(gcloud, target);
+  const revision = after?.status?.latestCreatedRevisionName;
+  if (!revision || revision === previous) {
+    throw new Error('Cloud Run이 새 리비전을 만들지 않았습니다.');
+  }
+  if (after?.status?.latestReadyRevisionName !== revision) {
+    throw new Error(`새 리비전 ${revision}이(가) Ready가 아닙니다(시작 검사 실패).`);
+  }
+
+  await routeAllTraffic(gcloud, target, revision);
+  try {
+    await waitHealthCommit({
+      sha,
+      apiBase,
+      fetchImpl,
+      sleep,
+      timeoutMs: healthTimeoutMs,
+      intervalMs,
+    });
+  } catch (error) {
+    if (!previous) throw error;
+    await routeAllTraffic(gcloud, target, previous);
+    throw new Error(
+      `${error instanceof Error ? error.message : String(error)} 트래픽을 이전 리비전 ${previous}(으)로 되돌렸습니다.`,
+    );
+  }
+  return { service: target.service, revision, previous, image };
+}
+
+/** `health --api-base`로 받을 수 있는 운영 API 주소. 운영 호스트 정본 밖의 주소는 받지 않는다. */
+export function resolveProductionApiBase(value) {
+  if (value === undefined || value === '') return PRODUCTION_TARGETS.api;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error('--api-base가 URL이 아닙니다.');
+  }
+  if (url.protocol !== 'https:' || url.origin !== value || !isProductionApiHost(url.hostname)) {
+    throw new Error(
+      `--api-base는 운영 API origin이어야 합니다(예: https://${CLOUD_RUN_PRODUCTION_API_HOST}).`,
+    );
+  }
+  return url.origin;
+}
+
 /** 운영 API `/health`의 commit이 지정 SHA가 될 때까지 기다린다(이전 컨테이너가 잠시 응답할 수 있다). */
 export async function waitHealthCommit({
   sha,
@@ -227,6 +372,7 @@ export async function deployVercel({
   app,
   sha,
   token,
+  requireBuild = false,
   fetchImpl = fetch,
   sleep = defaultSleep,
   timeoutMs = DEPLOY_TIMEOUT_MS,
@@ -270,8 +416,15 @@ export async function deployVercel({
       if (gitSha !== sha) throw new Error(`Vercel ${app} 배포 SHA 불일치: ${gitSha}`);
       return { app, status: 'deployed', deploymentId, url: deployment.url ?? null };
     }
-    if (state === 'CANCELED')
+    if (state === 'CANCELED') {
+      // 환경 변수만 바꾸고 같은 SHA로 다시 배포할 때는 생략되면 새 값이 반영되지 않으므로 성공으로 보지 않는다.
+      if (requireBuild) {
+        throw new Error(
+          `Vercel ${app} 빌드가 생략됐습니다(${deploymentId}). --require-build는 새 빌드가 필요해 실패로 봅니다.`,
+        );
+      }
       return { app, status: 'skipped', deploymentId, reason: '앱 변경 없음(빌드 생략)' };
+    }
     if (!VERCEL_PENDING.has(state)) {
       throw new Error(
         `Vercel ${app} 배포 ${deploymentId}이(가) ${state ?? '알 수 없음'} 상태로 끝났습니다.`,
@@ -296,7 +449,7 @@ export function parseArgs(argv) {
 
 export async function main(
   argv,
-  { env = process.env, fetchImpl = fetch, sleep = defaultSleep } = {},
+  { env = process.env, fetchImpl = fetch, sleep = defaultSleep, gcloud = runGcloud } = {},
 ) {
   const { command, options } = parseArgs(argv);
   const sha = assertSha(options.sha);
@@ -316,8 +469,23 @@ export async function main(
         fetchImpl,
         sleep,
       });
+    case 'cloudrun':
+      return deployCloudRun({
+        sha,
+        apiBase: resolveProductionApiBase(
+          options['api-base'] || `https://${CLOUD_RUN_PRODUCTION_API_HOST}`,
+        ),
+        gcloud,
+        fetchImpl,
+        sleep,
+      });
     case 'health':
-      return waitHealthCommit({ sha, fetchImpl, sleep });
+      return waitHealthCommit({
+        sha,
+        apiBase: resolveProductionApiBase(options['api-base']),
+        fetchImpl,
+        sleep,
+      });
     case 'vercel':
       if (!FRONTEND_APPS.includes(options.app))
         throw new Error('--app은 consumer|seller|driver 중 하나여야 합니다.');
@@ -325,11 +493,12 @@ export async function main(
         app: options.app,
         sha,
         token: requireEnv(env, 'VERCEL_PRODUCTION_TOKEN'),
+        requireBuild: options['require-build'] === 'true',
         fetchImpl,
         sleep,
       });
     default:
-      throw new Error('명령은 verify-e2e|railway|health|vercel 중 하나여야 합니다.');
+      throw new Error('명령은 verify-e2e|railway|cloudrun|health|vercel 중 하나여야 합니다.');
   }
 }
 
