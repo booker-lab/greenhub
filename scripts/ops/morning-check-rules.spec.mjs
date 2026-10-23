@@ -15,6 +15,7 @@ import {
   evaluateS1,
   evaluateS2,
   evaluateS3,
+  excludeStores,
   GREEN,
   HOUR_MS,
   kstDate,
@@ -463,6 +464,46 @@ describe('전체 보고', () => {
     assert.equal(s1.checked, false);
     assert.equal(s2.checked, false);
     assert.equal(report.overall, RED);
+  });
+
+  test('excludeStores는 뺄 가게의 가게 기록만 덜고, 가게와 묶이지 않은 기록은 남긴다', () => {
+    const collected = {
+      now: NOW,
+      stores: [{ id: 'store-a', name: '디어 오키드' }, { id: 'store-t', name: '테스트 상점' }],
+      paidSettlements: [{ id: 'o-a', storeId: 'store-a' }, { id: 'o-t', storeId: 'store-t' }],
+      ordersById: { 'o-a': { storeId: 'store-a' }, 'o-t': { storeId: 'store-t' } },
+      paymentsById: { 'o-a': { status: 'PAID' }, 'o-t': { status: 'PAID' } },
+      recentSettlements: [{ storeId: 'store-a' }, { storeId: 'store-t' }],
+      rounds: [{ id: 'r-t', storeId: 'store-t' }],
+      roundOrders: [{ storeId: 'store-t', roundId: 'r-t' }],
+      openOrdersWithoutRound: [{ storeId: 'store-a' }, { storeId: 'store-t' }],
+      heldOrders: [{ storeId: 'store-t' }],
+      operationIssues: [{ storeId: 'store-t' }],
+      drivers: [{ role: 'driver' }],
+      invites: [{ expiresAt: ts(NOW + HOUR_MS) }],
+      auditLogs: [{ action: 'auth.login.failed' }],
+    };
+    const result = excludeStores(collected, ['store-t']);
+    assert.deepEqual(result.stores.map((s) => s.id), ['store-a']);
+    assert.deepEqual(result.paidSettlements.map((s) => s.id), ['o-a']);
+    assert.deepEqual(Object.keys(result.ordersById), ['o-a']);
+    assert.deepEqual(Object.keys(result.paymentsById), ['o-a']);
+    assert.equal(result.recentSettlements.length, 1);
+    assert.equal(result.rounds.length, 0);
+    assert.equal(result.roundOrders.length, 0);
+    assert.equal(result.openOrdersWithoutRound.length, 1);
+    assert.equal(result.heldOrders.length, 0);
+    assert.equal(result.operationIssues.length, 0);
+    assert.equal(result.drivers, collected.drivers);
+    assert.equal(result.invites, collected.invites);
+    assert.equal(result.auditLogs, collected.auditLogs);
+    assert.equal(excludeStores(collected, []), collected);
+  });
+
+  test('뺀 가게가 있으면 보고에 그 수만 남고, 없으면 필드가 없다', () => {
+    const excluded = evaluateAll(excludeStores({ now: NOW, keyCreatedAt: '2026-10-01', stores: [] }, ['store-t', 'store-u']));
+    assert.equal(excluded.excludedStores, 2);
+    assert.equal('excludedStores' in evaluateAll({ now: NOW, keyCreatedAt: '2026-10-01', stores: [] }), false);
   });
 
   test('차단 장치가 멈추면 S0 하나만 내고 🔴', () => {
