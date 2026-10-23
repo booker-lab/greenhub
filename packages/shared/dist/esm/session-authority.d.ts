@@ -21,5 +21,25 @@ export declare function revalidateSessionToken(token: SessionToken, { verify, re
     now?: () => number;
     reuseVerified?: boolean;
 }): Promise<SessionToken | null>;
+/** 같은 access token의 거절로 강제 재검증을 다시 요청하기까지 쉬는 시간(거절이 이어질 때 요청 폭주 방지). */
+export declare const AUTHORITY_RECHECK_COOLDOWN_MS = 10000;
+type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
+/**
+ * 화면의 API 요청이 401/403으로 거절되면 onRejected를 부른다. 호출부는 세션을 update()로
+ * 다시 받아(jwt 콜백 trigger 'update') 재사용 구간이어도 API로 다시 검증하게 한다.
+ * - apiOrigin으로 가는 Bearer 요청만 본다. 응답은 손대지 않고 그대로 돌려준다.
+ * - 정지·기사 승인 철회는 403, 세션 폐기·탈퇴는 401이라 둘 다 본다.
+ * - 같은 access token은 cooldownMs 안에 한 번만 알린다(거절이 이어지는 화면의 요청 폭주 방지).
+ * 돌려준 함수를 부르면 원래 fetch로 되돌린다.
+ */
+export declare function watchApiAuthorityRejections({ target, apiOrigin, onRejected, now, cooldownMs, }: {
+    target: {
+        fetch: FetchLike;
+    };
+    apiOrigin: string;
+    onRejected: () => void;
+    now?: () => number;
+    cooldownMs?: number;
+}): () => void;
 export {};
 //# sourceMappingURL=session-authority.d.ts.map
