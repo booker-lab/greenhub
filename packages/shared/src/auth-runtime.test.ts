@@ -1,14 +1,15 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  AUTH_LOGOUT_TIMEOUT_MS,
   AUTH_UPSTREAM_TIMEOUT_MS,
+  authUpstreamSignal,
   isLoopbackApiUrl,
   isTestCredentialsProviderEnabled,
   revokeApiSession,
-} from './auth-runtime';
+  testSecretsMatch,
+} from './auth-runtime.js';
 
 const API = 'https://api.example.test';
-const authSource = readFileSync(new URL('./auth.ts', import.meta.url), 'utf8');
 
 function jsonResponse(status: number, body?: unknown): Response {
   return new Response(body === undefined ? null : JSON.stringify(body), {
@@ -40,6 +41,15 @@ describe('테스트 전용 Credentials provider 등록 조건', () => {
         RAILWAY_ENVIRONMENT_NAME: 'production',
       }),
     ).toBe(false);
+    // 운영 표식이 있으면 preview 표식이 함께 있어도 끈다.
+    expect(
+      isTestCredentialsProviderEnabled({
+        NODE_ENV: 'production',
+        VERCEL_ENV: 'preview',
+        RAILWAY_ENVIRONMENT_NAME: 'production',
+      }),
+    ).toBe(false);
+    // 표식 없는 운영 빌드(next start)는 끈다.
     expect(isTestCredentialsProviderEnabled({ NODE_ENV: 'production' })).toBe(false);
   });
 
@@ -48,6 +58,9 @@ describe('테스트 전용 Credentials provider 등록 조건', () => {
       isTestCredentialsProviderEnabled({ NODE_ENV: 'production', VERCEL_ENV: 'preview' }),
     ).toBe(true);
     expect(isTestCredentialsProviderEnabled({ NODE_ENV: 'development' })).toBe(true);
+    expect(
+      isTestCredentialsProviderEnabled({ NODE_ENV: 'development', VERCEL_ENV: 'development' }),
+    ).toBe(true);
   });
 });
 
@@ -59,6 +72,29 @@ describe('local runtime API loopback 검사', () => {
     expect(isLoopbackApiUrl('https://api-staging.example.test')).toBe(false);
     expect(isLoopbackApiUrl('http://localhost.example.test')).toBe(false);
     expect(isLoopbackApiUrl('not a url')).toBe(false);
+  });
+});
+
+describe('E2E secret 비교', () => {
+  it('같은 값만 통과하고 빈 값은 거부한다', async () => {
+    await expect(testSecretsMatch('secret-value', 'secret-value')).resolves.toBe(true);
+    await expect(testSecretsMatch('secret-value', 'secret-valuf')).resolves.toBe(false);
+    await expect(testSecretsMatch('secret', 'secret-value')).resolves.toBe(false);
+    await expect(testSecretsMatch(null, 'secret-value')).resolves.toBe(false);
+    await expect(testSecretsMatch(undefined, 'secret-value')).resolves.toBe(false);
+    await expect(testSecretsMatch('', '')).resolves.toBe(false);
+    await expect(testSecretsMatch('secret-value', undefined)).resolves.toBe(false);
+  });
+});
+
+describe('서버 fetch 시간 제한', () => {
+  it('신호는 설정한 시간 뒤 TimeoutError로 끊긴다', async () => {
+    expect(AUTH_UPSTREAM_TIMEOUT_MS).toBe(10_000);
+    const signal = authUpstreamSignal(5);
+    expect(signal.aborted).toBe(false);
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(signal.aborted).toBe(true);
+    expect((signal.reason as Error | undefined)?.name).toBe('TimeoutError');
   });
 });
 
@@ -77,7 +113,7 @@ describe('로그아웃 시 API 세션 폐기', () => {
 
   it('access token이 거절되면 refresh 뒤 한 번만 다시 폐기한다', async () => {
     const { calls, fetchImpl } = recordingFetch([
-      jsonResponse(401),
+      jsonResponse(401, { message: 'expired' }),
       jsonResponse(200, { accessToken: 'a2', refreshToken: 'r2' }),
       jsonResponse(204),
     ]);
@@ -89,7 +125,11 @@ describe('로그아웃 시 API 세션 폐기', () => {
       `${API}/auth/refresh`,
       `${API}/auth/logout`,
     ]);
+    expect(JSON.parse(String(calls[1].init.body))).toEqual({ refreshToken: 'r1' });
     expect(calls[2].init.headers).toEqual({ Authorization: 'Bearer a2' });
+    // 세 요청이 같은 시간 제한 신호를 공유한다.
+    expect(calls[1].init.signal).toBe(calls[0].init.signal);
+    expect(calls[2].init.signal).toBe(calls[1].init.signal);
   });
 
   it('재시도한 폐기도 거절되면 더 부르지 않고 failed로 끝난다', async () => {
@@ -105,24 +145,52 @@ describe('로그아웃 시 API 세션 폐기', () => {
   });
 
   it('refresh도 거절되면 이미 끝난 세션으로 본다', async () => {
-    const { fetchImpl } = recordingFetch([jsonResponse(401), jsonResponse(401)]);
+    const { calls, fetchImpl } = recordingFetch([jsonResponse(403), jsonResponse(401)]);
     await expect(
       revokeApiSession({ apiBaseUrl: API, accessToken: 'a1', refreshToken: 'r1', fetchImpl }),
     ).resolves.toBe('already-revoked');
+    expect(calls).toHaveLength(2);
   });
 
-  it('네트워크 오류는 예외 없이 failed로 끝난다', async () => {
-    const { fetchImpl } = recordingFetch([new TypeError('fetch failed')]);
+  it('일시 실패·네트워크 오류·잘못된 refresh 응답은 예외 없이 failed로 끝난다', async () => {
+    const serverError = recordingFetch([jsonResponse(503)]);
     await expect(
-      revokeApiSession({ apiBaseUrl: API, accessToken: 'a1', refreshToken: 'r1', fetchImpl }),
+      revokeApiSession({
+        apiBaseUrl: API,
+        accessToken: 'a1',
+        refreshToken: 'r1',
+        fetchImpl: serverError.fetchImpl,
+      }),
+    ).resolves.toBe('failed');
+    expect(serverError.calls).toHaveLength(1);
+
+    const network = recordingFetch([new TypeError('fetch failed')]);
+    await expect(
+      revokeApiSession({
+        apiBaseUrl: API,
+        accessToken: 'a1',
+        refreshToken: 'r1',
+        fetchImpl: network.fetchImpl,
+      }),
+    ).resolves.toBe('failed');
+
+    const badRefresh = recordingFetch([jsonResponse(401), jsonResponse(200, { accessToken: 1 })]);
+    await expect(
+      revokeApiSession({
+        apiBaseUrl: API,
+        accessToken: 'a1',
+        refreshToken: 'r1',
+        fetchImpl: badRefresh.fetchImpl,
+      }),
     ).resolves.toBe('failed');
   });
 
-  it('시간 제한을 넘기면 예외 없이 failed로 끝난다', async () => {
+  it('시간 제한을 넘기면 대기 중인 요청을 끊고 failed로 끝난다', async () => {
     const fetchImpl = (_url: string, init: RequestInit) =>
       new Promise<Response>((_resolve, reject) => {
-        init.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+        init.signal?.addEventListener('abort', () => reject(init.signal?.reason), { once: true });
       });
+    const started = Date.now();
     await expect(
       revokeApiSession({
         apiBaseUrl: API,
@@ -132,37 +200,15 @@ describe('로그아웃 시 API 세션 폐기', () => {
         timeoutMs: 20,
       }),
     ).resolves.toBe('failed');
-  });
-});
-
-describe('driver auth.ts 계약', () => {
-  it('Credentials provider는 런타임 게이트 뒤에서만 등록한다', () => {
-    expect(authSource.match(/Credentials\(\{/g)).toHaveLength(1);
-    expect(authSource).toMatch(/const testCredentialsProvider = Credentials\(\{/);
-    // providers에서는 게이트를 거친 spread로만 참조한다.
-    expect(authSource.match(/testCredentialsProvider\b/g)).toHaveLength(2);
-    expect(authSource).toMatch(
-      /\.\.\.\(isTestCredentialsProviderEnabled\(\) \? \[testCredentialsProvider\] : \[\]\)/,
-    );
-    expect(authSource).toMatch(/if \(!isLoopbackApiUrl\(API\)\) return false;/);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(AUTH_LOGOUT_TIMEOUT_MS).toBe(5_000);
   });
 
-  it('로그아웃 이벤트에서 API 세션을 폐기하고, 서버 쪽 API 호출은 시간 제한을 쓴다', () => {
-    expect(authSource).toMatch(/async signOut\(message\)/);
-    expect(authSource).toMatch(/revokeApiSession\(\{\s*apiBaseUrl: API,/);
-    const fetchCalls =
-      authSource.match(/await fetch\(`\$\{API\}[^`]*`, \{[\s\S]*?\n\s*\}\);/g) ?? [];
-    expect(fetchCalls).toHaveLength(5);
-    for (const call of fetchCalls) expect(call).toMatch(/signal: authUpstreamSignal\(\)/);
-    expect(AUTH_UPSTREAM_TIMEOUT_MS).toBe(10_000);
-  });
-
-  it('카카오 로그인 API 호출 실패는 예외 대신 false로 끝난다', () => {
-    const kakaoAt = authSource.search(/fetch\(`\$\{API\}\/auth\/kakao-login`/);
-    expect(kakaoAt).toBeGreaterThan(0);
-    const tryAt = authSource.lastIndexOf('try {', kakaoAt);
-    const signInAt = authSource.indexOf('async signIn({ user, account })');
-    expect(tryAt).toBeGreaterThan(signInAt);
-    expect(authSource.slice(kakaoAt)).toMatch(/\} catch \{\s*return false;\s*\}/);
+  it('token이 없으면 아무 요청도 보내지 않는다', async () => {
+    const { calls, fetchImpl } = recordingFetch([]);
+    await expect(
+      revokeApiSession({ apiBaseUrl: API, accessToken: '', refreshToken: undefined, fetchImpl }),
+    ).resolves.toBe('skipped');
+    expect(calls).toHaveLength(0);
   });
 });

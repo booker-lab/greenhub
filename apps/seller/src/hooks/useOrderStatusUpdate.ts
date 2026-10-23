@@ -1,11 +1,11 @@
 'use client';
 
 import type { OrderStatus } from '@greenhub/shared';
+import { apiPathSegment } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { useCallback, useState } from 'react';
 import type { DeliveryHoldPayload } from '@/app/orders/[id]/delivery-hold-form';
 import { apiJson } from '@/lib/api';
-import { apiPathSegment } from '@/lib/api-path';
 
 export interface OrderStatusExtra {
   reason?: string;

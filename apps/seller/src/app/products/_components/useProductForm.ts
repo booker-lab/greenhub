@@ -1,19 +1,18 @@
 'use client';
 
-import { FEATURE_KEYS } from '@greenhub/shared';
+import { apiPathSegment, FEATURE_KEYS } from '@greenhub/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { apiJson } from '@/lib/api';
-import { apiPathSegment } from '@/lib/api-path';
 import { isFeatureOn } from '@/lib/features';
 import type { ConflictWarning } from './AIPreviewPanel';
+import { extrasBody, fillNoticeDefaults, type NoticeStoreDefaults, noticeBody } from './productExtras';
 import {
   defaultForm,
   type GroupConfigForm,
   type ProductFormData,
   type ProductFormProps,
 } from './productForm.types';
-import { extrasBody, fillNoticeDefaults, type NoticeStoreDefaults, noticeBody } from './productExtras';
 
 /** 상품정보제공고시의 빈 칸만 기본값(생산자=매장명, 상담 전화=사업자 프로필 연락처)으로 채운다. */
 function withNoticeDefaults(form: ProductFormData, defaults: NoticeStoreDefaults): ProductFormData {

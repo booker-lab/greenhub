@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import test from 'node:test';
 import ts from 'typescript';
+
+const require = createRequire(import.meta.url);
 
 const source = await readFile(new URL('./content-security-policy.ts', import.meta.url), 'utf8');
 const compiled = ts.transpileModule(source, {
@@ -11,13 +14,14 @@ const compiled = ts.transpileModule(source, {
 const policyModule = { exports: {} };
 new Function('require', 'module', 'exports', compiled)(
   (specifier) => {
+    if (specifier === '@greenhub/shared') return require('@greenhub/shared');
     throw new Error(`unexpected module request in test: ${specifier}`);
   },
   policyModule,
   policyModule.exports,
 );
 
-const { buildContentSecurityPolicy, createCspNonce, resolveCspApiOrigin } = policyModule.exports;
+const { buildContentSecurityPolicy } = policyModule.exports;
 
 function directives(policy) {
   return new Map(
@@ -91,24 +95,4 @@ test('이미지·스타일·글꼴·워커·매니페스트와 기존 강제 지
 test('위반 보고를 /api/csp-report로 보낸다', () => {
   assert.deepEqual(production.get('report-uri'), ['/api/csp-report']);
   assert.equal(production.has('report-to'), false);
-});
-
-test('API 주소가 없거나 잘못돼도 예외 없이 운영에서는 API origin을 뺀다', () => {
-  assert.equal(resolveCspApiOrigin(undefined, 'production'), null);
-  assert.equal(resolveCspApiOrigin('not a url', 'production'), null);
-  assert.equal(resolveCspApiOrigin('javascript:alert(1)', 'production'), null);
-  assert.equal(resolveCspApiOrigin('', 'development'), 'http://localhost:3000');
-  assert.equal(
-    resolveCspApiOrigin('https://api.example.test/path?q=1', 'production'),
-    'https://api.example.test',
-  );
-  const policy = directives(buildContentSecurityPolicy({ nonce: 'n', nodeEnv: 'production' }));
-  assert.equal(policy.get('connect-src').includes('null'), false);
-});
-
-test('nonce는 요청마다 다른 128비트 base64 값이다', () => {
-  const first = createCspNonce();
-  const second = createCspNonce();
-  assert.match(first, /^[A-Za-z0-9+/]{22}==$/);
-  assert.notEqual(first, second);
 });

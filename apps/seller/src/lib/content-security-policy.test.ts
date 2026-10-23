@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  buildContentSecurityPolicy,
-  createCspNonce,
-  resolveCspApiOrigin,
-} from './content-security-policy';
+import { buildContentSecurityPolicy } from './content-security-policy';
 
 function directives(policy: string): Map<string, string[]> {
   return new Map(
@@ -81,25 +77,5 @@ describe('판매자 앱 CSP 정책', () => {
   it('위반 보고를 /api/csp-report로 보낸다', () => {
     expect(production.get('report-uri')).toEqual(['/api/csp-report']);
     expect(production.has('report-to')).toBe(false);
-  });
-
-  it('API 주소가 없거나 잘못돼도 예외 없이 운영에서는 API origin을 빼고 개발에서는 localhost를 쓴다', () => {
-    expect(resolveCspApiOrigin(undefined, 'production')).toBeNull();
-    expect(resolveCspApiOrigin('not a url', 'production')).toBeNull();
-    expect(resolveCspApiOrigin('javascript:alert(1)', 'production')).toBeNull();
-    expect(resolveCspApiOrigin('', 'development')).toBe('http://localhost:3000');
-    expect(resolveCspApiOrigin('https://api.example.test/path?q=1', 'production')).toBe(
-      'https://api.example.test',
-    );
-    const policy = directives(buildContentSecurityPolicy({ nonce: 'n', nodeEnv: 'production' }));
-    expect(policy.get('connect-src')?.[0]).toBe("'self'");
-    expect(policy.get('connect-src')).not.toContain('null');
-  });
-
-  it('nonce는 요청마다 다른 128비트 base64 값이다', () => {
-    const first = createCspNonce();
-    const second = createCspNonce();
-    expect(first).toMatch(/^[A-Za-z0-9+/]{22}==$/);
-    expect(second).not.toBe(first);
   });
 });

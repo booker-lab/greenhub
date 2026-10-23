@@ -2,17 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   CSP_REPORT_MAX_BYTES,
   formatCspViolation,
+  handleCspReportRequest as POST,
   readBodyWithinLimit,
   summarizeCspReports,
-} from './csp-report';
-
-// route.ts는 '@/lib/csp-report'를 쓰지만 vitest에는 '@/' 별칭 설정이 없어 같은 모듈로 잇는다.
-vi.mock('@/lib/csp-report', () => import('./csp-report'));
-
-const { POST } = await import('../app/api/csp-report/route');
+} from './csp-report.js';
 
 function reportRequest(body: string, contentType: string, headers: Record<string, string> = {}) {
-  return new Request('https://seller.example.test/api/csp-report', {
+  return new Request('https://app.example.test/api/csp-report', {
     method: 'POST',
     headers: { 'content-type': contentType, ...headers },
     body,
@@ -21,7 +17,7 @@ function reportRequest(body: string, contentType: string, headers: Record<string
 
 const legacyReport = {
   'csp-report': {
-    'document-uri': 'https://seller.example.test/orders/abc?phone=01012345678#top',
+    'document-uri': 'https://app.example.test/orders/abc?phone=01012345678#top',
     'violated-directive': 'script-src-elem',
     'effective-directive': 'script-src-elem',
     'blocked-uri': 'https://evil.example.test/x.js?token=secret',
@@ -51,7 +47,7 @@ describe('CSP 위반 보고 요약', () => {
       {
         type: 'csp-violation',
         body: {
-          documentURL: 'https://seller.example.test/login?callbackUrl=%2Forders',
+          documentURL: 'https://app.example.test/login?callbackUrl=%2Forders',
           effectiveDirective: 'connect-src',
           blockedURL: 'wss://socket.example.test/path',
           disposition: 'report',
@@ -61,7 +57,7 @@ describe('CSP 위반 보고 요약', () => {
       {
         type: 'csp-violation',
         body: {
-          documentURL: 'https://seller.example.test/',
+          documentURL: 'https://app.example.test/',
           effectiveDirective: 'script-src',
           blockedURL: 'inline',
         },
@@ -112,7 +108,7 @@ describe('CSP 위반 보고 요약', () => {
   });
 });
 
-describe('POST /api/csp-report', () => {
+describe('handleCspReportRequest(각 앱 POST /api/csp-report)', () => {
   it('report-uri 보고를 요약해 경고 로그 한 줄로 남기고 204를 돌려준다', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const response = await POST(
@@ -131,7 +127,7 @@ describe('POST /api/csp-report', () => {
       {
         type: 'csp-violation',
         body: {
-          documentURL: 'https://seller.example.test/',
+          documentURL: 'https://app.example.test/',
           effectiveDirective: 'img-src',
           blockedURL: 'https://img.example.test/a.png',
         },

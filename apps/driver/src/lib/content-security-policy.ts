@@ -5,7 +5,8 @@
  * 위반은 차단하지 않고 `/api/csp-report`로만 보고된다. 실제 보고를 확인한 뒤 강제로 바꾼다.
  * next.config.ts의 강제 CSP(object-src·base-uri·frame-ancestors)는 그대로 둔다.
  *
- * 출처 목록은 이 앱이 실제로 불러오는 곳만 둔다.
+ * 지시어 공통 틀은 packages/shared/src/content-security-policy.ts가 만들고, 이 파일은
+ * 이 앱이 실제로 불러오는 출처 목록과 frame-src·form-action 차이만 정한다.
  * - API: NEXT_PUBLIC_API_URL(lib/api-base-url.ts와 같은 값)
  * - Firebase: lib/firebase.ts(Auth 커스텀 토큰 로그인·토큰 갱신, 거점 사진 Storage 업로드).
  *   Firestore는 쓰지 않는다.
@@ -15,11 +16,14 @@
  * - 프레임으로 띄우는 외부 화면은 없다. 카카오맵은 링크로 새 화면에서 연다.
  */
 
+import {
+  type AppContentSecurityPolicy,
+  buildContentSecurityPolicy as buildPolicy,
+  type ContentSecurityPolicyInput,
+} from '@greenhub/shared';
 import { KAKAO_PROFILE_IMAGE_HOSTS } from './profile-image';
 
-export const CSP_REPORT_PATH = '/api/csp-report';
-
-const DEVELOPMENT_API_ORIGIN = 'http://localhost:3000';
+export { CSP_REPORT_PATH, createCspNonce } from '@greenhub/shared';
 
 const IMAGE_ORIGINS = [
   'https://firebasestorage.googleapis.com',
@@ -36,81 +40,14 @@ const CONNECT_ORIGINS = [
 // lib/firebase.ts의 로컬 에뮬레이터(Auth·Storage). 개발 모드에서만 허용한다.
 const DEVELOPMENT_CONNECT_ORIGINS = ['http://127.0.0.1:9099', 'http://127.0.0.1:9199'];
 
-export type ContentSecurityPolicyInput = {
-  nonce: string;
-  nodeEnv?: string;
-  apiUrl?: string;
+const DRIVER_POLICY: AppContentSecurityPolicy = {
+  imageOrigins: IMAGE_ORIGINS,
+  connectOrigins: CONNECT_ORIGINS,
+  developmentConnectOrigins: DEVELOPMENT_CONNECT_ORIGINS,
+  // 카카오 로그인은 서버 액션 폼을 제출한 뒤 외부로 리다이렉트하므로 form-action은 두지 않는다.
+  formActionSelf: false,
 };
 
-/** 요청마다 새로 만드는 128비트 nonce(base64). */
-export function createCspNonce(): string {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
-/**
- * connect-src에 넣을 API origin. 설정이 비었거나 형식이 틀려도 proxy가 페이지를 막지 않도록
- * 예외를 던지지 않고 null을 돌려준다(API 설정 오류는 lib/api-base-url.ts가 따로 알린다).
- */
-export function resolveCspApiOrigin(apiUrl: string | undefined, nodeEnv: string | undefined) {
-  const value = apiUrl?.trim();
-  if (!value) return nodeEnv === 'production' ? null : DEVELOPMENT_API_ORIGIN;
-  try {
-    const url = new URL(value);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    return url.origin;
-  } catch {
-    return null;
-  }
-}
-
-export function buildContentSecurityPolicy({
-  nonce,
-  nodeEnv,
-  apiUrl,
-}: ContentSecurityPolicyInput): string {
-  const isDevelopment = nodeEnv === 'development';
-  const apiOrigin = resolveCspApiOrigin(apiUrl, nodeEnv);
-  const directives: Array<[string, string[]]> = [
-    ['default-src', ["'self'"]],
-    // React 개발 모드는 오류 스택 복원에 eval을 쓴다. 운영 빌드에는 넣지 않는다.
-    [
-      'script-src',
-      [
-        "'self'",
-        `'nonce-${nonce}'`,
-        "'strict-dynamic'",
-        ...(isDevelopment ? ["'unsafe-eval'"] : []),
-      ],
-    ],
-    // Mantine 컴포넌트가 인라인 style을 쓴다.
-    ['style-src', ["'self'", "'unsafe-inline'"]],
-    ['img-src', ["'self'", 'data:', 'blob:', ...IMAGE_ORIGINS]],
-    ['font-src', ["'self'", 'data:']],
-    [
-      'connect-src',
-      [
-        "'self'",
-        ...(apiOrigin ? [apiOrigin] : []),
-        ...CONNECT_ORIGINS,
-        ...(isDevelopment ? DEVELOPMENT_CONNECT_ORIGINS : []),
-      ],
-    ],
-    ['frame-src', ["'none'"]],
-    ['worker-src', ["'self'", 'blob:']],
-    ['manifest-src', ["'self'"]],
-    ['object-src', ["'none'"]],
-    ['base-uri', ["'self'"]],
-    ['frame-ancestors', ["'self'"]],
-    // 카카오 로그인은 서버 액션 폼을 제출한 뒤 외부로 리다이렉트하므로 form-action은 두지 않는다.
-    // report-to(Reporting API)를 함께 두면 Chrome은 report-uri를 무시한다. 로컬 확인에서
-    // report-to 보고가 전달되지 않아 실제로 도착하는 report-uri만 둔다.
-    ['report-uri', [CSP_REPORT_PATH]],
-  ];
-  return directives
-    .map(([name, sources]) => `${name} ${[...new Set(sources)].join(' ')}`)
-    .join('; ');
+export function buildContentSecurityPolicy(input: ContentSecurityPolicyInput): string {
+  return buildPolicy(DRIVER_POLICY, input);
 }

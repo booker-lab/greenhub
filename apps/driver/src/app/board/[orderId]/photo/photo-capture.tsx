@@ -1,12 +1,12 @@
 'use client';
 
+import { apiPathSegment, isSafeApiPathSegment, readRouteParam } from '@greenhub/shared';
 import { Button, Loader, Text, Title } from '@mantine/core';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
 import { apiFetch, apiRead } from '@/lib/api';
-import { apiPathSegment, isSafeApiPathSegment, readRouteParam } from '@/lib/api-path';
 import { readDriverOrderCommandErrorCodeFromResponse } from '../../_lib/driver-order-detail';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
 import {
