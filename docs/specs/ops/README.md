@@ -27,6 +27,7 @@
 ## 진행 중 계획
 
 - `api-hosting-cloud-run-plan.md` — 운영 API를 Railway에서 Cloud Run 서울로 옮기는 단계(C1~C8)와 2026-10-28 전환 판단 조건
+- `railway-outage-failover.md` — 전환 전 Railway 장애 때 Cloud Run 예비 서버로 30분 안에 대피하는 순서·판단 기준·평소 준비(예비 서버 준비 뒤 사용)
 
 ## 조건부 후속 계획
 
