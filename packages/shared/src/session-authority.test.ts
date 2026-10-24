@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   AUTHORITY_RECHECK_COOLDOWN_MS,
+  isSessionEnded,
+  recheckSessionAfterRejection,
   revalidateSessionToken,
   SESSION_AUTHORITY_REUSE_MS,
   type SessionAuthorityResult,
@@ -285,5 +287,71 @@ describe('watchApiAuthorityRejections', () => {
     expect(h.target.fetch).not.toBe(h.original);
     h.stop();
     expect(h.target.fetch).toBe(h.original);
+  });
+});
+
+describe('recheckSessionAfterRejection', () => {
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  function run({ updated, session }: { updated: unknown; session: () => Promise<Response> }) {
+    const calls = { update: 0, session: 0, signOut: 0 };
+    const result = recheckSessionAfterRejection({
+      update: async () => {
+        calls.update += 1;
+        return updated;
+      },
+      fetchImpl: async () => {
+        calls.session += 1;
+        return session();
+      },
+      signOut: () => {
+        calls.signOut += 1;
+      },
+    });
+    return { result, calls };
+  }
+
+  it('다시 검증한 세션이 돌아오면 세션 조회 없이 그대로 둔다', async () => {
+    const { result, calls } = run({
+      updated: { user: { role: 'driver' } },
+      session: async () => json(null),
+    });
+    expect(await result).toBe('kept');
+    expect(calls).toEqual({ update: 1, session: 0, signOut: 0 });
+  });
+
+  it('세션이 돌아오지 않고 세션 조회도 비어 있으면 로그아웃시킨다', async () => {
+    for (const body of [null, {}]) {
+      const { result, calls } = run({ updated: null, session: async () => json(body) });
+      expect(await result).toBe('ended');
+      expect(calls).toEqual({ update: 1, session: 1, signOut: 1 });
+    }
+  });
+
+  it('세션 조회가 실패하거나 아직 사용자가 있으면 로그아웃시키지 않는다(일시 장애 보존)', async () => {
+    const cases: Array<() => Promise<Response>> = [
+      async () => {
+        throw new TypeError('Failed to fetch');
+      },
+      async () => json({ message: 'error' }, 500),
+      async () => new Response('<html>', { status: 200 }),
+      async () => json({ user: { role: 'seller' } }),
+    ];
+    for (const session of cases) {
+      const { result, calls } = run({ updated: null, session });
+      expect(await result).toBe('unknown');
+      expect(calls.signOut).toBe(0);
+    }
+  });
+
+  it('isSessionEnded는 기본으로 같은 출처 세션 조회를 캐시 없이 부른다', async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const ended = await isSessionEnded(async (input, init) => {
+      requests.push({ url: String(input), init });
+      return json(null);
+    });
+    expect(ended).toBe(true);
+    expect(requests).toEqual([{ url: '/api/auth/session', init: { cache: 'no-store' } }]);
   });
 });
