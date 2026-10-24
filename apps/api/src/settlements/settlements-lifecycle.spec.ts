@@ -296,7 +296,7 @@ function makeOrderLifecycleService(
   };
   const payments = {
     processRefundByOrderId: jest.fn().mockResolvedValue(undefined),
-    refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
   };
   const capacity = {
     releaseReservation: jest.fn().mockResolvedValue(undefined),

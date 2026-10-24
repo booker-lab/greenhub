@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   canSubmitPostDeliveryRefund,
   formatRefundDeadline,
+  isPostDeliveryRefundRetry,
   postDeliveryRefundBlockedMessage,
   shouldCheckPostDeliveryRefund,
 } from './post-delivery-refund';
@@ -21,6 +22,13 @@ describe('배송 후 환불 버튼 판단', () => {
     expect(postDeliveryRefundBlockedMessage('NO_SETTLEMENT')).toContain('관리자에게 문의');
     expect(postDeliveryRefundBlockedMessage('OK')).toBeNull();
     expect(postDeliveryRefundBlockedMessage('ALREADY_REFUNDED')).toBeNull();
+  });
+
+  it('실패로 멈춘 환불은 이미 환불됨과 구분해 다시 시도 버튼을 보여 준다', () => {
+    expect(isPostDeliveryRefundRetry('RETRY_AVAILABLE')).toBe(true);
+    expect(isPostDeliveryRefundRetry('OK')).toBe(false);
+    expect(isPostDeliveryRefundRetry('ALREADY_REFUNDED')).toBe(false);
+    expect(postDeliveryRefundBlockedMessage('RETRY_AVAILABLE')).toBeNull();
   });
 
   it('마감 시각을 한국 시간으로 보여 준다', () => {

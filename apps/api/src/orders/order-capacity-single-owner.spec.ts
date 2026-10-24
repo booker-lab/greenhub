@@ -393,7 +393,7 @@ describe('CAPACITY single-owner remediation proof', () => {
     const firestore = memory.firestore as never;
     const payments = {
       processRefundByOrderId: jest.fn().mockResolvedValue(undefined),
-      refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+      refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
     };
     const settlements = { cancelSettlement: jest.fn().mockResolvedValue(undefined) };
     const capacity = new OrderCapacityService(firestore);
@@ -511,7 +511,7 @@ describe('CAPACITY single-owner remediation proof', () => {
         firestore,
         {
           processRefundByOrderId: jest.fn().mockResolvedValue(undefined),
-          refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+          refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
         } as never,
         { cancelSettlement: jest.fn().mockResolvedValue(undefined) } as never,
         new OrderCapacityService(firestore),
@@ -814,7 +814,7 @@ describe('CAPACITY single-owner remediation proof', () => {
     const releaseSpy = jest.spyOn(capacity, 'releaseReservation');
     const payments = {
       processRefundByOrderId: jest.fn().mockResolvedValue(undefined),
-      refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+      refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
     };
     const settlements = {
       createSettlement: jest.fn().mockResolvedValue(undefined),
