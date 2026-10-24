@@ -46,6 +46,7 @@
 | R6 | 완료 | 2026-10-24 | `scripts/deploy/cloud-run-env.mjs from-railway`로 운영 비밀값 10개를 Secret Manager에, 일반 값을 저장소 밖 YAML(`%USERPROFILE%\.greenhub\cloud-run-green-e4fe3.env.yaml`)에 옮겼다 |
 | R7 | 완료 | 2026-10-24 | 송신 고정 IP `greenhub-api-egress` = `34.64.250.181`, 라우터 `greenhub-api-router`, NAT `greenhub-api-nat`(서브넷 `default` 기본 범위, 수동 IP). 알리고 발송 서버 IP에 추가(Fixie IP 2개는 전환 전까지 유지) |
 | R8 | 일부 | 2026-10-24 | 시험 서비스 `greenhub-api-staging`(최소 0대·정기 작업 끔) 배포, **run.app 직접 = 1홉** 실측. 회차 E2E는 아직(아래 R8) |
+| R9 | 완료 | 2026-10-24 | 운영 서비스 `greenhub-api`(상시 1대·최대 1대·CPU 상시, 정기 작업 끔, `TRUST_PROXY_HOPS=1`, 송신은 고정 IP) 생성. 이미지 `756348854d…`(R5 첫 배포 때 올라간 digest `sha256:5a3a26cd…`라 Cloud Build 불필요). `/health` 200·commit 일치, CORS(운영 화면 허용·낯선 주소 헤더 없음), 위조 `X-Forwarded-For`로 한도가 갈리지 않음, 정기 작업 모듈 미적재를 확인. `ALIGO_OUTBOUND_PROXY_URL`(Fixie)은 넣지 않아 알리고 호출이 고정 IP로 바로 나간다. 고정 IP에서 알리고 읽기 조회는 아직 |
 
 ## R0. 읽기 전용 점검 — 승인 불필요, 2026-10-23 실행
 
