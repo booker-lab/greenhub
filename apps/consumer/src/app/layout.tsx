@@ -32,6 +32,10 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'Green Love',
   },
+  // 네이버 서치어드바이저 소유 확인(HTML 태그 방식). 지우면 소유 확인이 풀린다.
+  verification: {
+    other: { 'naver-site-verification': 'a69f8be2ede55c9efa26e8e75d077f9e9ea8ecbe' },
+  },
 };
 
 export const viewport: Viewport = {
