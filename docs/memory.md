@@ -142,6 +142,8 @@ revocation window 결정(D2, 2026-09-28, 2026-10-23 조정: API 데이터 요청
 
 상태: production deployment `DONE`(2026-09-28) / activation `DONE`(2026-09-29, 아래 activation 항목) / live round·실제 결제 `NOT DONE`(파일럿 2026-11-01).
 
+> 배포 기록: `production-deploy.yml`의 `record` job이 배포가 성공할 때마다 GitHub Release(tag `prod-<KST 날짜>-<SHA 8자리>`)에 SHA·배포 ID·E2E run·직전 배포·변경 PR 목록을 남긴다. 현재 운영 SHA는 Latest Release(범위 `all`)로 확인하고, 이 절에는 Release가 생기기 전 이력과 Release에 없는 판단만 남긴다.
+
 출시 SHA `197f84a4`(원격 회차 E2E run `36372493414` 52/52 + 세션 12/12, cleanup 잔여 0)를 사용자 승인(Task 3.1)으로 배포했다. 순서는 API → 프런트 3개 → 규칙·인덱스다. 옛 프런트(8/11·8/23 배포본)가 Firestore를 직접 읽었으므로 규칙을 앱보다 먼저 배포하지 않았다.
 
 | 대상 | 새 배포 | 이전(되돌리기) |
