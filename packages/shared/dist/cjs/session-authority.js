@@ -7,6 +7,8 @@
 //   화면 틀만 볼 수 있다.
 // - 화면의 API 요청이 거절(401/403)되면 watchApiAuthorityRejections가 세션을 update()로 다시
 //   받게 해 재사용 없이 바로 검증한다. 폐기된 세션은 그 자리에서 끝난다.
+// - update()가 세션을 돌려주지 않으면 recheckSessionAfterRejection이 세션 조회로 정말 끝났는지
+//   확인해 로그아웃시킨다(현재 탭이 로그인 상태로 남지 않게). 일시 장애로는 로그아웃시키지 않는다.
 // - access token이 바뀌면(갱신·재로그인) 재사용하지 않고 바로 다시 검증한다.
 // - 화면이 update()로 세션을 다시 받을 때(판매자 가게 등록 직후 등)도 재사용하지 않는다.
 // - revoked(401/403·허용되지 않은 역할)는 refresh를 한 번 시도해 만료와 폐기를 가린다
@@ -17,6 +19,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.AUTHORITY_RECHECK_COOLDOWN_MS = exports.SESSION_AUTHORITY_REUSE_MS = void 0;
 exports.revalidateSessionToken = revalidateSessionToken;
 exports.watchApiAuthorityRejections = watchApiAuthorityRejections;
+exports.isSessionEnded = isSessionEnded;
+exports.recheckSessionAfterRejection = recheckSessionAfterRejection;
 /** 같은 access token의 세션 검증 성공을 재사용하는 시간. */
 exports.SESSION_AUTHORITY_REUSE_MS = 60_000;
 function isNonEmptyString(value) {
@@ -126,4 +130,35 @@ function watchApiAuthorityRejections({ target, apiOrigin, onRejected, now = Date
         if (target.fetch === watched)
             target.fetch = original;
     };
+}
+/**
+ * 세션이 정말 끝났는지 세션 조회(GET `/api/auth/session`)로 확인한다. next-auth는 세션 없음과
+ * 네트워크 오류를 모두 null로 돌려주므로 update() 결과만으로는 둘을 가릴 수 없다.
+ * 정상(2xx) 응답인데 사용자가 없을 때만 true다. 네트워크 오류·2xx 아님·읽을 수 없는 본문은
+ * false로 보고 일시 장애로 로그아웃시키지 않는다.
+ */
+async function isSessionEnded(fetchImpl, sessionUrl = '/api/auth/session') {
+    try {
+        const response = await fetchImpl(sessionUrl, { cache: 'no-store' });
+        if (!response.ok)
+            return false;
+        const body = await response.json();
+        return !body || typeof body !== 'object' || !('user' in body) || !body.user;
+    }
+    catch {
+        return false;
+    }
+}
+/**
+ * API 거절 뒤 세션을 재사용 없이 다시 검증한다(update는 POST, jwt 콜백 trigger 'update').
+ * 세션이 돌아오면 그대로 둔다(만료 토큰이 갱신된 경우 등). 돌아오지 않으면 isSessionEnded로
+ * 확인해 정말 끝났을 때만 signOut으로 현재 탭과 다른 탭을 로그아웃 상태로 바꾼다.
+ */
+async function recheckSessionAfterRejection({ update, fetchImpl, signOut, sessionUrl, }) {
+    if (await update())
+        return 'kept';
+    if (!(await isSessionEnded(fetchImpl, sessionUrl)))
+        return 'unknown';
+    await signOut();
+    return 'ended';
 }

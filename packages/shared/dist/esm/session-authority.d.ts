@@ -41,5 +41,23 @@ export declare function watchApiAuthorityRejections({ target, apiOrigin, onRejec
     now?: () => number;
     cooldownMs?: number;
 }): () => void;
+/**
+ * 세션이 정말 끝났는지 세션 조회(GET `/api/auth/session`)로 확인한다. next-auth는 세션 없음과
+ * 네트워크 오류를 모두 null로 돌려주므로 update() 결과만으로는 둘을 가릴 수 없다.
+ * 정상(2xx) 응답인데 사용자가 없을 때만 true다. 네트워크 오류·2xx 아님·읽을 수 없는 본문은
+ * false로 보고 일시 장애로 로그아웃시키지 않는다.
+ */
+export declare function isSessionEnded(fetchImpl: FetchLike, sessionUrl?: string): Promise<boolean>;
+/**
+ * API 거절 뒤 세션을 재사용 없이 다시 검증한다(update는 POST, jwt 콜백 trigger 'update').
+ * 세션이 돌아오면 그대로 둔다(만료 토큰이 갱신된 경우 등). 돌아오지 않으면 isSessionEnded로
+ * 확인해 정말 끝났을 때만 signOut으로 현재 탭과 다른 탭을 로그아웃 상태로 바꾼다.
+ */
+export declare function recheckSessionAfterRejection({ update, fetchImpl, signOut, sessionUrl, }: {
+    update: () => Promise<unknown>;
+    fetchImpl: FetchLike;
+    signOut: () => Promise<unknown> | void;
+    sessionUrl?: string;
+}): Promise<'kept' | 'ended' | 'unknown'>;
 export {};
 //# sourceMappingURL=session-authority.d.ts.map

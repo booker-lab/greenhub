@@ -294,7 +294,10 @@ gap을 다음 최소 authority로 닫는다.
   즉시(다음 요청) 거부된다. 웹 앱 화면 세션은 **화면의 API 요청이 `401/403`으로 거절되면 즉시**
   끝난다. 세 앱 `Providers`의 `SessionAuthorityRecheck`가 `watchApiAuthorityRejections`로 API
   origin의 Bearer 요청 거절을 보고 `update({})`(POST, trigger `update`)로 세션을 다시 받아
-  재사용 없이 검증한다(같은 access token은 10초에 한 번). API 요청이 없는 화면 이동만 이어지면
+  재사용 없이 검증한다(같은 access token은 10초에 한 번). `update()`는 결과가 `null`이면 화면
+  세션을 바꾸지 않으므로, `recheckSessionAfterRejection`이 세션 조회(`GET /api/auth/session`)가
+  정상 응답인데 비어 있을 때만 `signOut`해 현재 탭을 로그인 화면으로 보낸다(네트워크 오류·5xx는
+  로그아웃시키지 않는다). API 요청이 없는 화면 이동만 이어지면
   최대 60초 동안 화면 틀(데이터 없음)이 남을 수 있다.
 - TTL 만료 단독은 폐기로 단정하지 않는다. verify가 `401/403`이어도
   `POST /auth/refresh`를 한 번 시도해 access 만료(refresh 성공, 새 토큰)인가
@@ -487,6 +490,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-24 | 강제 재검증 결과가 `null`이고 세션 조회도 비어 있으면 세 앱이 `signOut`해 현재 탭도 로그인 화면으로 바꾼다(`recheckSessionAfterRejection`). `auth-session-lifecycle.spec.ts`에 현재 탭 `/login` 전환 확인 추가 |
 | 2026-10-24 | 화면의 API 요청이 401/403으로 거절되면 세 앱 `Providers`가 `update({})`로 세션을 재사용 없이 다시 검증해 그 자리에서 끊는다(`watchApiAuthorityRejections`). `auth-session-lifecycle.spec.ts` 정지·철회 시험을 "폐기 뒤 화면 API 거절 → 즉시 세션 종료" 확인으로 변경 |
 | 2026-10-24 | 코드 대조: Railway 밖 배포 환경의 `TRUST_PROXY_HOPS` 필수(#605) 반영 |
 | 2026-10-23 | 세 앱 `jwt` callback의 `GET /auth/session` 검증 성공을 같은 access token에 한해 60초 재사용(#627). revocation window를 API 데이터 요청 즉시·앱 세션 최대 60초로 조정(사용자 결정), `auth-session-lifecycle.spec.ts` 정지·철회 시험을 60초 뒤 끊김 확인으로 변경 |
