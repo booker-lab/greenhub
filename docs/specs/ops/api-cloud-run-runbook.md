@@ -44,6 +44,8 @@
 | R4 | 완료 | 2026-10-24 | `greenhub-api-deployer` |
 | R5 | 완료 | 2026-10-24 | 풀 `github`·공급자 `greenhub-deploy`, GitHub `Production` 환경 변수 2개. 환경 이름이 `Production`이라 조건은 `production`·`Production`을 모두 받는다. 실제 토큰 교환은 첫 workflow 실행 때 확인한다. 이 변수가 생겨 이후 Railway 운영 배포마다 Cloud Run 예비 배포 3단계가 돈다(R9 전에는 마지막 단계 실패 표시, 운영 배포는 계속) |
 | R6 | 완료 | 2026-10-24 | `scripts/deploy/cloud-run-env.mjs from-railway`로 운영 비밀값 10개를 Secret Manager에, 일반 값을 저장소 밖 YAML(`%USERPROFILE%\.greenhub\cloud-run-green-e4fe3.env.yaml`)에 옮겼다 |
+| R7 | 완료 | 2026-10-24 | 송신 고정 IP `greenhub-api-egress` = `34.64.250.181`, 라우터 `greenhub-api-router`, NAT `greenhub-api-nat`(서브넷 `default` 기본 범위, 수동 IP). 알리고 발송 서버 IP에 추가(Fixie IP 2개는 전환 전까지 유지) |
+| R8 | 일부 | 2026-10-24 | 시험 서비스 `greenhub-api-staging`(최소 0대·정기 작업 끔) 배포, **run.app 직접 = 1홉** 실측. 회차 E2E는 아직(아래 R8) |
 
 ## R0. 읽기 전용 점검 — 승인 불필요, 2026-10-23 실행
 
@@ -174,7 +176,7 @@ gcloud compute addresses describe greenhub-api-egress --region=asia-northeast3 -
 
 - **프록시 홉 수 실측**: 2026-10-18 Railway 실측과 같은 기준(접속자마다 다른 요청 한도 버킷, 클라이언트가 보낸 `X-Forwarded-For` 무시). **부하분산기 경유와 run.app 직접은 홉 수가 다를 수 있다.** 운영은 부하분산기 경유 값을 쓴다.
 - 회차 E2E 1회(회차 64 + 세션 12), 원격 E2E 예산 규칙(`development-authority.md` §4.1)을 따른다.
-- **배포 방법**: 시험 서비스는 R9처럼 Cloud Shell에서 Cloud Build로 수동 배포한다. 시험용 배포 workflow나 Workload Identity Federation은 두지 않는다(배포가 드물고, 운영 공급자 R5는 `production-deploy.yml`·`production` Environment 전용이다).
+- **배포 방법**: 시험 서비스는 수동으로 배포한다. 시험용 배포 workflow나 Workload Identity Federation은 두지 않는다(배포가 드물고, 운영 공급자 R5는 `production-deploy.yml`·`production` Environment 전용이다). 이미지는 운영 저장소에 이미 올라간 것을 digest로 그대로 쓴다. 이를 위해 시험 프로젝트 Cloud Run 서비스 에이전트(`service-1066622638505@serverless-robot-prod.iam.gserviceaccount.com`)에 운영 저장소 `greenhub` 읽기(`artifactregistry.reader`)만 준다(2026-10-24 사용자 승인). 시험이 끝나면 지울 수 있다.
 - **실행 기록(2026-10-23, 이 절차서가 `main`에 오르기 전 다른 세션 안내로 만든 것)**: 시험 프로젝트에 다음이 이미 있다.
   - 켠 API: `run`·`artifactregistry`·`secretmanager`·`compute`·`iamcredentials`·`sts`
   - 저장소 `greenhub`(`asia-northeast3`)
@@ -194,6 +196,16 @@ gcloud iam service-accounts remove-iam-policy-binding greenhub-api-runtime@$P.ia
   --member="serviceAccount:$D" --role=roles/iam.serviceAccountUser --quiet >/dev/null && echo "removed serviceAccountUser"
 gcloud iam service-accounts delete $D --project=$P --quiet
 ```
+
+- **2026-10-24 실행 기록**
+  - 런타임 계정 `greenhub-api-runtime` 권한: `datastore.user`·`firebaseauth.admin`(프로젝트), 버킷 `greenhub-round-direct-e2e.firebasestorage.app` `storage.objectAdmin`, 자기 자신 `serviceAccountTokenCreator`
+  - 비밀값: `JWT_SECRET`·`JWT_REFRESH_SECRET`만 시험 전용 무작위 값으로 만들었다(운영 값과 무관, 화면 비표시). API는 `JWT_SECRET`이 없으면 기동하지 않는다.
+  - 서비스 `greenhub-api-staging`(`https://greenhub-api-staging-1066622638505.asia-northeast3.run.app`): 운영 이미지 `756348854d…`(digest `sha256:5a3a26cd…`), 최소 0대·최대 1대, `GREENHUB_ENVIRONMENT_NAME=staging`, `GREENHUB_SCHEDULES_ENABLED=false`, 시작 검사 `/health` 통과(키 파일 없이 ADC로 Firestore 읽기 확인)
+- **홉 수 실측(run.app 직접, `/health`의 `X-RateLimit-Remaining`)**
+  - `TRUST_PROXY_HOPS=1`: 새 연결 5번 99→95, 매번 다른 위조 `X-Forwarded-For` 5번 94→90, 위조 2개 이어 붙임 89→87. 접속자 하나가 한 버킷이고 위조로 바뀌지 않는다.
+  - `TRUST_PROXY_HOPS=2`(반례): 위조 값을 바꿀 때마다 99로 새 버킷 → 위조로 요청 한도를 피할 수 있다.
+  - 결론: **run.app 직접 접속은 1홉.** 부하분산기 경유 값은 R10에서 같은 방법으로 다시 잰다. 시험 서비스는 1로 되돌려 두었다.
+- **남은 것**: 회차 E2E 1회. 시험 서비스에 회차 E2E용 설정(`ROUND_DIRECT_E2E_*`·공유 secret·CORS)과 세 앱 Preview의 API 주소를 바꿔야 해서, 원격 E2E 예산과 함께 따로 정한다.
 
 ## R9. 운영 서비스 만들기(트래픽 없음, 계획서 C5) — 승인 필요
 
