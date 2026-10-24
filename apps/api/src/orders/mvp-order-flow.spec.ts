@@ -196,7 +196,7 @@ describe('MVP 회차 주문 흐름 계약', () => {
   };
   const payments = {
     processRefundByOrderId: jest.fn(),
-    refundOrderChargesByOrderId: jest.fn(),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
   };
   const settlements = {
     createSettlement: jest.fn(),
@@ -1724,6 +1724,35 @@ describe('MVP 회차 주문 흐름 계약', () => {
     await expect(
       service.cancelOrder('store-round', 'order-1', 'user-1', '고객 요청'),
     ).rejects.toThrow('재배송비 환불 실패');
+
+    expect(records.get('orders/order-1')).toMatchObject({
+      status: 'ACCEPTED',
+      cancellation: expect.objectContaining({ status: 'REFUND_FAILED' }),
+    });
+  });
+
+  it('재배송비가 다른 시도에서 환불 중이라 PAID로 남으면 주문 취소를 완료하지 않는다', async () => {
+    const { firestore, records } = makeFirestore(
+      seedRoundRecords({
+        'orders/order-1': {
+          id: 'order-1',
+          storeId: 'store-round',
+          userId: 'user-1',
+          status: 'ACCEPTED',
+          schemaVersion: 2,
+          roundId: 'round-1',
+          reservationId: 'reservation-1',
+          redeliveryChargeId: 'charge-1',
+          orderItems: [{ roundItemId: 'round-item-1', quantity: 1 }],
+        },
+      }),
+    );
+    payments.refundOrderChargesByOrderId.mockResolvedValueOnce({ unsettledCount: 1 });
+    const service = makeLifecycle(firestore);
+
+    await expect(
+      service.cancelOrder('store-round', 'order-1', 'user-1', '고객 요청'),
+    ).rejects.toThrow('재배송비 환불이 아직 끝나지 않아');
 
     expect(records.get('orders/order-1')).toMatchObject({
       status: 'ACCEPTED',

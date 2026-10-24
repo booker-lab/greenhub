@@ -23,7 +23,7 @@ function makeService(occ: Occ, options: { refundFails?: boolean } = {}) {
         refundedAt: new Date().toISOString(),
       });
     }),
-    refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
   };
   const settlements = { cancelSettlement: jest.fn().mockResolvedValue(undefined) };
   const notifications = { sendToUser: jest.fn().mockResolvedValue(undefined) };
@@ -233,6 +233,44 @@ describe('PostDeliveryRefundService', () => {
     });
   });
 
+  it('본 결제만 환불되고 재배송비 환불이 실패했으면, 재시도에서 재배송비를 다시 환불한 뒤에만 완료한다', async () => {
+    const occ = createOccFirestore();
+    seed(occ);
+    const { service, payments, notifications } = makeService(occ);
+    payments.refundOrderChargesByOrderId.mockRejectedValueOnce(new Error('재배송비 환불 시간 초과'));
+
+    await expect(service.refund(sellerInput)).rejects.toThrow('재배송비 환불 시간 초과');
+    expect(occ.getData(PAYMENT_PATH)).toMatchObject({ status: 'CANCELLED' });
+    expect(occ.getData(ORDER_PATH)).toMatchObject({
+      status: 'DELIVERED',
+      cancellation: { status: 'REFUND_FAILED' },
+    });
+    expect(notifications.sendToUser).not.toHaveBeenCalled();
+
+    await expect(service.refund(sellerInput)).resolves.toEqual({ orderId: ORDER_ID, status: 'CANCELLED' });
+    // 본 결제는 이미 환불돼 다시 부르지 않고, 재배송비는 다시 확인한다.
+    expect(payments.processRefundByOrderId).toHaveBeenCalledTimes(1);
+    expect(payments.refundOrderChargesByOrderId).toHaveBeenCalledTimes(2);
+    expect(occ.getData(ORDER_PATH)).toMatchObject({ status: 'CANCELLED', cancellation: { status: 'COMPLETED' } });
+    expect(notifications.sendToUser).toHaveBeenCalledTimes(1);
+  });
+
+  it('재배송비가 다른 시도에서 환불 중이거나 결과가 불확실해 PAID로 남으면 완료·알림 없이 REFUND_FAILED로 둔다', async () => {
+    const occ = createOccFirestore();
+    seed(occ);
+    const { service, payments, settlements, notifications } = makeService(occ);
+    payments.refundOrderChargesByOrderId.mockResolvedValueOnce({ unsettledCount: 1 });
+
+    await expect(service.refund(sellerInput)).rejects.toThrow('재배송비 환불이 아직 끝나지 않아');
+    expect(occ.getData(ORDER_PATH)).toMatchObject({
+      status: 'DELIVERED',
+      cancellation: { status: 'REFUND_FAILED' },
+      postDeliveryRefund: { completedAt: null },
+    });
+    expect(settlements.cancelSettlement).not.toHaveBeenCalled();
+    expect(notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
   it('관리자는 배송 완료 10일째·정산 지급 완료 주문도 환불할 수 있다', async () => {
     const occ = createOccFirestore();
     seed(occ, { deliveredDaysAgo: 10, settlementStatus: 'paid' });
@@ -269,6 +307,39 @@ describe('PostDeliveryRefundService', () => {
       expect(result).toMatchObject({ eligible: true, reason: 'OK', amount: 30000 });
       const settledAt = occ.getData(SETTLEMENT_PATH)?.['settledAt'] as Date;
       expect(result.deadline).toBe(new Date(settledAt.getTime() + 7 * DAY_MS).toISOString());
+    });
+
+    it('환불이 실패로 멈췄으면 이미 환불됨이 아니라 다시 시도 가능으로 알린다', async () => {
+      const occ = createOccFirestore();
+      seed(occ);
+      const { service } = makeService(occ, { refundFails: true });
+      await expect(service.refund(sellerInput)).rejects.toThrow('PortOne 응답 없음');
+      expect(occ.getData(PAYMENT_PATH)).toMatchObject({ status: 'PAID' });
+
+      await expect(service.getSellerEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+        eligible: true,
+        reason: 'RETRY_AVAILABLE',
+      });
+    });
+
+    it('환불이 시작돼 처리 중이면 처리 중으로, 끝났으면 이미 환불됨으로 알린다', async () => {
+      const occ = createOccFirestore();
+      seed(occ);
+      const { service } = makeService(occ);
+      occ.updateOutsideTransaction(ORDER_PATH, {
+        postDeliveryRefund: { reasonCode: 'QUALITY_DAMAGED', completedAt: null },
+        cancellation: { status: 'REFUNDING' },
+      });
+      await expect(service.getSellerEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+        eligible: false,
+        reason: 'CANCELLATION_IN_PROGRESS',
+      });
+
+      await service.refund(sellerInput);
+      await expect(service.getSellerEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+        eligible: false,
+        reason: 'ALREADY_REFUNDED',
+      });
     });
 
     it.each([

@@ -499,7 +499,13 @@ export class RoundOrderLifecycleService {
   }) {
     try {
       await this.payments.processRefundByOrderId(input.orderId, input.reason);
-      await this.payments.refundOrderChargesByOrderId(input.orderId, input.reason);
+      const charges = await this.payments.refundOrderChargesByOrderId(input.orderId, input.reason);
+      // 다른 시도가 처리 중이거나 결과가 불확실해 PAID로 남은 재배송비가 있으면 취소를 완료하지 않는다.
+      if (charges.unsettledCount > 0) {
+        throw new ConflictException(
+          '재배송비 환불이 아직 끝나지 않아 주문 취소를 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
+        );
+      }
     } catch (error) {
       await this.recordCancellationState(input, 'REFUND_FAILED');
       throw error;

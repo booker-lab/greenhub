@@ -55,7 +55,7 @@ describe('POST /stores/:storeId/operation-issues/:issueId/resolve', () => {
   let memory: ReturnType<typeof createInMemoryFirestore>;
   const payments = {
     processRefundByOrderId: jest.fn(),
-    refundOrderChargesByOrderId: jest.fn(),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
   };
   const notifications = { resendSms: jest.fn() };
 

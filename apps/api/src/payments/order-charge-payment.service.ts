@@ -70,13 +70,23 @@ export class OrderChargePaymentService {
     return this.finalizePaid(chargeId, paymentId, paymentData);
   }
 
-  async refundByOrderId(orderId: string, reason: string) {
-    const snap = await this.firestore
-      .collection('orderCharges')
-      .where('orderId', '==', orderId)
-      .where('status', '==', 'PAID')
-      .get();
+  /**
+   * 주문의 PAID 재배송비를 환불하고, 끝난 뒤에도 PAID로 남은 재배송비 수를 돌려준다.
+   * 다른 시도가 환불 중(claim_in_flight)이거나 결과가 불확실해 멈춘(UNKNOWN) 청구는 PAID로 남으므로,
+   * 호출 측은 이 값이 0일 때만 주문 취소를 완료한다.
+   */
+  async refundByOrderId(orderId: string, reason: string): Promise<{ unsettledCount: number }> {
+    const paidCharges = () =>
+      this.firestore
+        .collection('orderCharges')
+        .where('orderId', '==', orderId)
+        .where('status', '==', 'PAID')
+        .get();
+    const snap = await paidCharges();
+    if (snap.docs.length === 0) return { unsettledCount: 0 };
     await Promise.all(snap.docs.map((doc) => this.refundCharge(doc.ref, reason)));
+    const remaining = await paidCharges();
+    return { unsettledCount: remaining.docs.length };
   }
 
   private async finalizePaid(chargeId: string, paymentId: string, paymentData: PaymentData) {

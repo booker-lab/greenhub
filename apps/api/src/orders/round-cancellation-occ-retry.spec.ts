@@ -33,7 +33,7 @@ function makeService(occ: Occ) {
         });
       }
     }),
-    refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
     __providerCalls: () => providerCalls,
   };
   const settlements = { cancelSettlement: jest.fn().mockResolvedValue(undefined) };

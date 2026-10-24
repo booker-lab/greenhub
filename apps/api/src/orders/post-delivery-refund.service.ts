@@ -55,6 +55,7 @@ export type SellerRefundEligibilityReason =
   | 'NOT_ROUND_ORDER'
   | 'NOT_DELIVERED'
   | 'ALREADY_REFUNDED'
+  | 'RETRY_AVAILABLE'
   | 'CANCELLATION_IN_PROGRESS'
   | 'NO_SETTLEMENT'
   | 'SETTLEMENT_PAID'
@@ -97,7 +98,8 @@ export class PostDeliveryRefundService {
     const reason = this.sellerBlockReason(order, settlement, payment, Date.now());
     const settledAtMs = timestampMillis(settlement?.['settledAt']);
     return {
-      eligible: reason === 'OK',
+      // 실패로 멈춘 환불은 시작 기록의 사유·처리자로 이어서 끝낸다(기간·정산 조건을 다시 묻지 않는다).
+      eligible: reason === 'OK' || reason === 'RETRY_AVAILABLE',
       reason,
       deadline: Number.isFinite(settledAtMs)
         ? new Date(settledAtMs + POST_DELIVERY_REFUND_SELLER_WINDOW_DAYS * DAY_MS).toISOString()
@@ -114,16 +116,23 @@ export class PostDeliveryRefundService {
     const providerReason = `배송 후 환불(${label})`;
 
     const claim = await this.claim({ ...input, memo }, providerReason);
-    if (claim.needsRefund) {
-      try {
+    try {
+      if (claim.needsRefund) {
         await this.payments.processRefundByOrderId(input.orderId, providerReason, {
           verifyProviderFirst: true,
         });
-        await this.payments.refundOrderChargesByOrderId(input.orderId, providerReason);
-      } catch (error) {
-        await this.recordCancellationState(input, providerReason, 'REFUND_FAILED');
-        throw error;
       }
+      // 재배송비는 본 결제와 따로 확인한다. 재시도에서 본 결제가 이미 환불됐어도 재배송비가 PAID로
+      // 남아 있으면 다시 환불하고, 다른 시도가 처리 중이거나 결과가 불확실해 남으면 완료하지 않는다.
+      const charges = await this.payments.refundOrderChargesByOrderId(input.orderId, providerReason);
+      if (charges.unsettledCount > 0) {
+        throw new ConflictException(
+          '재배송비 환불이 아직 끝나지 않아 주문 취소를 완료하지 못했습니다. 잠시 뒤 다시 시도해 주세요.',
+        );
+      }
+    } catch (error) {
+      await this.recordCancellationState(input, providerReason, 'REFUND_FAILED');
+      throw error;
     }
 
     try {
@@ -284,7 +293,15 @@ export class PostDeliveryRefundService {
     payment: OrderRecord | null,
     nowMs: number,
   ): SellerRefundEligibilityReason {
-    if (order['postDeliveryRefund'] || order['status'] === 'CANCELLED') return 'ALREADY_REFUNDED';
+    const started = order['postDeliveryRefund'] as PostDeliveryRefundRecord | null | undefined;
+    if (started && !started.completedAt && order['status'] !== 'CANCELLED') {
+      // 시작했지만 끝나지 않은 환불: 실패로 멈췄으면 같은 요청으로 이어서 끝낼 수 있다.
+      const cancellationStatus = order['cancellation']?.['status'];
+      return cancellationStatus === 'REFUND_FAILED' || cancellationStatus === 'LOCAL_FAILED'
+        ? 'RETRY_AVAILABLE'
+        : 'CANCELLATION_IN_PROGRESS';
+    }
+    if (started || order['status'] === 'CANCELLED') return 'ALREADY_REFUNDED';
     if (order['schemaVersion'] !== 2 || !order['roundId']) return 'NOT_ROUND_ORDER';
     if (isOrderCancellationInProgress(order)) return 'CANCELLATION_IN_PROGRESS';
     if (!POST_DELIVERY_REFUNDABLE_STATUSES.includes(order['status'])) return 'NOT_DELIVERED';
