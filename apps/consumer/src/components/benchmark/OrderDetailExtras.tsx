@@ -9,6 +9,7 @@ import { useCart } from '@/hooks/useCart';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { isFeatureOn } from '@/lib/features';
 import { roundItemCartInput } from '@/lib/round-quick-add';
+import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
 import type { OrderBenchmarkExtras } from '@/app/mypage/orders/[id]/_detail';
 import OrderReviews from './OrderReviews';
 
@@ -139,16 +140,34 @@ export default function OrderDetailExtras({
             radius="xl"
             size="lg"
             disabled={reorderable.length === 0}
-            onClick={() => {
+            onClick={async () => {
+              // 옵션(화분 등)을 골라야 하는 상품은 옵션 없이 담지 않는다. 상품 화면에서 골라 담게 안내한다.
+              const needsOptions = await Promise.all(
+                reorderable.map((entry) => fetchNeedsOptionChoice(entry.roundItem!.productId)),
+              );
               let added = 0;
+              let skipped = 0;
               let failure: string | null = null;
-              for (const entry of reorderable) {
+              reorderable.forEach((entry, index) => {
+                if (needsOptions[index]) {
+                  skipped += 1;
+                  return;
+                }
                 const result = addItem(roundItemCartInput(entry.roundItem!, entry.item.quantity));
                 if (result.ok) added += 1;
                 else failure = '장바구니에 다른 회차 상품이 있어 담지 못했어요.';
+              });
+              if (added > 0 && skipped === 0) {
+                router.push('/cart');
+                return;
               }
-              if (added > 0) router.push('/cart');
-              else setReorderMessage(failure ?? '담을 상품이 없어요.');
+              if (skipped > 0) {
+                setReorderMessage(
+                  `${added > 0 ? `${added}개 상품을 담았어요. ` : ''}화분 등 옵션을 골라야 하는 상품 ${skipped}개는 상품 화면에서 옵션을 골라 담아 주세요.`,
+                );
+                return;
+              }
+              setReorderMessage(failure ?? '담을 상품이 없어요.');
             }}
           >
             {reorderable.length > 0

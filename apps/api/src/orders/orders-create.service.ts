@@ -282,16 +282,14 @@ export class OrdersCreateService {
         if (nextQuantity > (item['saleLimitQuantity'] ?? 0)) {
           throw new ConflictException('회차 상품 수량이 마감되었습니다.');
         }
-        // 옵션 시트(벤치마킹 비교 기능): 옵션을 고른 상품만 상품 문서를 읽어 금액을 더한다.
-        let option: ReturnType<typeof resolveSelectedOptions> = { selected: [], priceDelta: 0 };
-        if (input.optionChoiceIds?.length) {
-          const productSnap = await this.firestore.doc(`products/${item['productId']}`).get();
-          option = resolveSelectedOptions(
-            productSnap.exists ? productSnap.data()?.['options'] : undefined,
-            input.optionChoiceIds,
-            input.optionText,
-          );
-        }
+        // 옵션 시트: 상품 문서를 읽어 옵션 금액을 더한다. 옵션이 있는 상품은 묶음마다 하나씩 골라야
+        // 한다(화분 옵션 필수, 2026-10-24 결정). 결제 예약(RoundOrderCreateService)과 같은 판정이다.
+        const productSnap = await this.firestore.doc(`products/${item['productId']}`).get();
+        const option = resolveSelectedOptions(
+          productSnap.exists ? productSnap.data()?.['options'] : undefined,
+          input.optionChoiceIds,
+          input.optionText,
+        );
         const unitPrice = item['roundPrice'] + option.priceDelta;
         return {
           roundItemId: input.roundItemId,
