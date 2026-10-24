@@ -21,6 +21,7 @@ import {
   SECRET_KEYS,
   secretArgs,
   selectSecretKeys,
+  storeSecret,
   versionNumber,
 } from './cloud-run-env.mjs';
 
@@ -289,6 +290,36 @@ describe('gcloud 호출', () => {
     assert.ok(logs.some((line) => line.includes('버전 2') && line.includes('이전 버전 1 끔')));
   });
 
+  it('두 실행이 겹쳐도 켜진 버전이 0개가 되지 않는다(새 버전보다 낮은 번호만 끈다)', async () => {
+    const gcloud = fakeGcloud({ JWT_SECRET: ['1'] });
+    const target = resolveProject('green-e4fe3');
+    let interleaved = false;
+    // 실행 A가 버전 목록을 읽기 직전에 실행 B가 새 버전을 넣고 끝까지 돈다.
+    const racing = async (args, options) => {
+      if (!interleaved && args[1] === 'versions' && args[2] === 'list') {
+        interleaved = true;
+        await storeSecret({
+          gcloud: gcloud.impl,
+          target,
+          name: 'JWT_SECRET',
+          value: 'b'.repeat(40),
+          exists: true,
+        });
+      }
+      return gcloud.impl(args, options);
+    };
+    const a = await storeSecret({
+      gcloud: racing,
+      target,
+      name: 'JWT_SECRET',
+      value: 'a'.repeat(40),
+      exists: true,
+    });
+    assert.equal(a.version, '2');
+    assert.deepEqual(a.disabled, [], 'A는 B가 넣은 더 새 버전 3을 끄지 않는다');
+    assert.deepEqual(gcloud.versions.JWT_SECRET, ['3'], '가장 새 버전은 켜진 채 남는다');
+  });
+
   describe('교체가 끝난 Railway에서 옮기기', () => {
     const ROTATED = {
       JWT_SECRET: 'j'.repeat(64),
@@ -345,6 +376,7 @@ describe('gcloud 호출', () => {
       const summary = await runFromRailway({
         project: 'green-e4fe3',
         out: 'C:/tmp/out.yaml',
+        railwayProjectId: 'p1',
         fetchImpl: railway.impl,
         gcloud: gcloud.impl,
         hidden: async () => 'railway-token',
@@ -386,6 +418,7 @@ describe('gcloud 호출', () => {
       let wrote = false;
       const summary = await runFromRailway({
         project: 'green-e4fe3',
+        railwayProjectId: 'p1',
         fetchImpl: railwayFetch().impl,
         gcloud: gcloud.impl,
         hidden: async () => 'railway-token',
@@ -404,6 +437,7 @@ describe('gcloud 호출', () => {
       await assert.rejects(
         runFromRailway({
           project: 'green-e4fe3',
+          railwayProjectId: 'p1',
           fetchImpl: railwayFetch({ environment: 'staging' }).impl,
           gcloud: fakeGcloud().impl,
           hidden: async () => 'railway-token',
@@ -415,10 +449,73 @@ describe('gcloud 호출', () => {
       );
     });
 
+    async function rejectsWithoutWrites(options, pattern) {
+      const gcloud = fakeGcloud({ JWT_SECRET: ['1'] });
+      let wrote = false;
+      await assert.rejects(
+        runFromRailway({
+          project: 'green-e4fe3',
+          gcloud: gcloud.impl,
+          hidden: async () => 'railway-token',
+          visible: async () => 'green-e4fe3',
+          write: () => {
+            wrote = true;
+          },
+          log: () => {},
+          ...options,
+        }),
+        pattern,
+      );
+      assert.deepEqual(gcloud.calls, [], 'Secret Manager를 건드리지 않는다');
+      assert.deepEqual(gcloud.versions.JWT_SECRET, ['1'], '기존 버전을 끄지 않는다');
+      assert.equal(wrote, false);
+    }
+
+    it('원본 Railway 프로젝트 ID를 지정하지 않으면 토큰을 묻기 전에 멈춘다', async () => {
+      let asked = false;
+      await rejectsWithoutWrites(
+        {
+          fetchImpl: railwayFetch().impl,
+          hidden: async () => {
+            asked = true;
+            return 'railway-token';
+          },
+        },
+        /--railway-project-id/,
+      );
+      assert.equal(asked, false);
+    });
+
+    it('다른 Railway 프로젝트의 production 토큰이면 아무것도 쓰지 않고 멈춘다', async () => {
+      await rejectsWithoutWrites(
+        { railwayProjectId: 'p-greenhub-prod', fetchImpl: railwayFetch().impl },
+        /다른 Railway 프로젝트\(p1\)/,
+      );
+    });
+
+    it('읽은 FIREBASE_PROJECT_ID가 대상 GCP 프로젝트와 다르면 아무것도 쓰지 않고 멈춘다', async () => {
+      await rejectsWithoutWrites(
+        {
+          railwayProjectId: 'p1',
+          fetchImpl: railwayFetch({ own: { ...ROTATED, FIREBASE_PROJECT_ID: 'other-firebase' } }).impl,
+        },
+        /FIREBASE_PROJECT_ID가 "other-firebase"/,
+      );
+      await rejectsWithoutWrites(
+        {
+          railwayProjectId: 'p1',
+          fetchImpl: railwayFetch({ own: { JWT_SECRET: ROTATED.JWT_SECRET } }).impl,
+        },
+        /FIREBASE_PROJECT_ID가 "없음"/,
+      );
+    });
+
     it('API 서비스가 하나로 정해지지 않으면 번호로 고르게 한다', async () => {
       const read = await readRailwayApiVariables({
         token: 't',
+        expectedProjectId: 'p1',
         expectedEnvironment: 'production',
+        expectedFirebaseProject: 'green-e4fe3',
         chooseService: async (services) => services.find((entry) => entry.name === 'backend'),
         fetchImpl: railwayFetch({
           services: [

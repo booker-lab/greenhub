@@ -133,13 +133,13 @@ node scripts/deploy/cloud-run-env.mjs list
 - **일반 값 → Cloud Run 환경 변수(R9의 `--env-vars-file`)**: 고정값 `NODE_ENV=production`, `GREENHUB_ENVIRONMENT_NAME`(프로젝트에 따라 production·staging), `GREENHUB_SCHEDULES_ENABLED=false`(전환 전까지)와 Railway에서 옮기는 `CORS_ORIGIN`, `FIREBASE_*`, `KAKAO_APP_ID`, `ALIGO_USER_ID`·`ALIGO_SENDER_PHONE`·`ALIGO_TEMPLATE_CODES_JSON`, `OPS_TELEGRAM_CHAT_ID`, `PORTONE_STORE_ID`, `TRUST_PROXY_HOPS`(R8 실측) 등
 - **옮기지 않음**: `RAILWAY_*`, `PORT`, `FIREBASE_SERVICE_ACCOUNT_JSON`·`GOOGLE_APPLICATION_CREDENTIALS`(ADC로 대체), 로컬·단위 테스트·비운영 E2E 전용 값
 
-**권장: Railway에서 바로 옮기기** — Railway 값을 먼저 최신으로 바꾼 뒤 실행한다. Railway project token(운영 환경용)을 가려서 입력받아 토큰의 환경이 `production`인지 확인하고, API 서비스 변수(공유 변수 포함)를 읽어 비밀값은 Secret Manager 새 버전으로, 일반 값은 아래 YAML로 쓴다. 붙여 넣기가 없어 Railway와 같은 값이 들어가고, Railway가 직접 만든 값(화면에 나오지 않는 무작위 값)도 옮길 수 있다. `TRUST_PROXY_HOPS`는 앞단 구성이 달라 옮기지 않는다. 이름 목록을 보여 준 뒤 프로젝트 이름을 입력해야 쓴다.
+**권장: Railway에서 바로 옮기기** — Railway 값을 먼저 최신으로 바꾼 뒤 실행한다. 원본 Railway 프로젝트 ID(Railway 프로젝트 설정 → General)를 `--railway-project-id`로 꼭 지정한다. Railway project token(운영 환경용)을 가려서 입력받아 토큰의 프로젝트가 그 ID와 같고 환경이 `production`인지 확인하고, 읽은 `FIREBASE_PROJECT_ID`가 대상 GCP 프로젝트(`green-e4fe3`)와 다르면 아무것도 쓰지 않고 멈춘다(2026-10-24 보완, 다른 프로젝트 토큰으로 운영 비밀값을 덮어쓰지 않게). API 서비스 변수(공유 변수 포함)를 읽어 비밀값은 Secret Manager 새 버전으로, 일반 값은 아래 YAML로 쓴다. 붙여 넣기가 없어 Railway와 같은 값이 들어가고, Railway가 직접 만든 값(화면에 나오지 않는 무작위 값)도 옮길 수 있다. `TRUST_PROXY_HOPS`는 앞단 구성이 달라 옮기지 않는다. 이름 목록을 보여 준 뒤 프로젝트 이름을 입력해야 쓴다.
 
 ```bash
-node scripts/deploy/cloud-run-env.mjs from-railway
+node scripts/deploy/cloud-run-env.mjs from-railway --railway-project-id=<Railway 프로젝트 ID>
 ```
 
-새 버전을 넣으면 그 전의 켜진 버전은 끈다(삭제 아님, `gcloud secrets versions enable`로 되돌릴 수 있음). 아래 `secrets`·`env`는 Railway에 없는 값을 따로 넣거나 하나만 고칠 때 쓴다.
+새 버전을 넣으면 그보다 번호가 낮은 켜진 버전만 끈다(삭제 아님, `gcloud secrets versions enable`로 되돌릴 수 있음). 두 실행이 겹쳐도 가장 새 버전은 끄지 않아 켜진 버전이 0개가 되지 않는다. 그래도 같은 비밀값을 두 터미널에서 동시에 바꾸지 않는다. 아래 `secrets`·`env`는 Railway에 없는 값을 따로 넣거나 하나만 고칠 때 쓴다.
 
 **비밀값** — 사용자가 자기 터미널(PowerShell)에서 실행한다. 이름마다 값을 화면에 보이지 않게 입력받아 gcloud 표준 입력으로만 Secret Manager에 넣고, 런타임 서비스 계정에 그 비밀값 읽기 권한을 준다. 이미 값이 있으면 묻고(기본은 건너뜀), 비우고 Enter면 건너뛴다. 값은 파일·명령 인자·로그에 남지 않는다.
 
