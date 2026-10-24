@@ -2,6 +2,7 @@ import {
   type CareGuide,
   LIGHT_LEVELS,
   type LightLevel,
+  type OptionStock,
   PLACEMENTS,
   PRODUCT_OPTION_CHOICE_MAX,
   PRODUCT_OPTION_GROUP_MAX,
@@ -29,6 +30,8 @@ export interface OptionChoiceForm {
   priceDelta: string;
   /** 손님이 문구를 직접 쓰는 선택지(스티커 라벨·3D 토퍼) */
   needsText: boolean;
+  /** 연결한 옵션 재고 품목 id(직접 출력한 화분 등). 빈 문자열이면 수량 제한 없음. */
+  stockId: string;
 }
 
 export interface OptionGroupForm {
@@ -142,6 +145,7 @@ export function extrasFromProduct(data: Partial<ProductExtras> | null | undefine
         label: choice.label,
         priceDelta: String(choice.priceDelta),
         needsText: choice.needsText === true,
+        stockId: typeof choice.stockId === 'string' ? choice.stockId : '',
       })),
     })),
     guaranteed: data.guaranteed === true,
@@ -151,6 +155,24 @@ export function extrasFromProduct(data: Partial<ProductExtras> | null | undefine
 }
 
 /** 지금 있는 id와 겹치지 않는 새 id(영문·숫자만). */
+/**
+ * 선택지의 "재고 연결" 목록. 첫 줄은 연결 안 함(수량 제한 없음).
+ * 저장된 품목이 목록에 없으면(불러오기 실패 등) 지우지 않도록 그 값을 그대로 남긴다.
+ */
+export function optionStockSelectData(
+  stocks: readonly OptionStock[],
+  currentStockId: string,
+): Array<{ value: string; label: string }> {
+  const data = [
+    { value: '', label: '연결 안 함 (수량 제한 없음)' },
+    ...stocks.map((stock) => ({ value: stock.id, label: `${stock.name} (남은 ${stock.remainingQuantity}개)` })),
+  ];
+  if (currentStockId && !stocks.some((stock) => stock.id === currentStockId)) {
+    data.push({ value: currentStockId, label: '연결된 재고 (목록에서 찾지 못함)' });
+  }
+  return data;
+}
+
 export function nextOptionId(prefix: 'g' | 'c', taken: Iterable<string>): string {
   const used = new Set(taken);
   let n = 1;
@@ -225,6 +247,7 @@ export function extrasBody(form: ProductExtrasForm): ExtrasBodyResult {
           label: choice.label,
           priceDelta: optionalInt(choice.priceDelta, '추가 금액', 0, PRODUCT_OPTION_PRICE_DELTA_MAX) ?? 0,
           ...(choice.needsText ? { needsText: true } : {}),
+          ...(choice.stockId ? { stockId: choice.stockId } : {}),
         })),
       });
     }

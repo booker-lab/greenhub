@@ -179,13 +179,13 @@ export const ITEM_DEFS = Object.freeze({
     id: 'M1',
     title: '지급 후 환불',
     sources: ['settlements.paid', 'orders.byId', 'payments.byId', 'stores'],
-    decision: '판매자에게 돌려받기 / 다음 정산에서 빼기 / 그냥 두기(정책 미정)',
+    decision: '판매자에게 돌려받은 뒤 관리자 회수 완료 처리(회수 필요 표시·운영 기록, #592)',
   },
   M2: {
     id: 'M2',
     title: '수수료율 차이',
     sources: ['stores', 'settlements.recent'],
-    decision: '가게별 율을 정산에 반영할지(코드 변경 필요), 화면 값을 기본값으로 되돌릴지',
+    decision: '요율 변경 전에 만든 정산이면 그대로 둔다. 변경 뒤 정산인데 다르면 기술 확인',
   },
   O1: {
     id: 'O1',
@@ -305,7 +305,7 @@ export function evaluateM2(input) {
   return makeItem(ITEM_DEFS.M2, {
     entries,
     failedSources: input.failedSources,
-    extra: entries.length > 0 ? { summary: `${entries.length}곳 · 정책 결정 대기` } : {},
+    extra: entries.length > 0 ? { summary: `${entries.length}곳 · 요율 변경 시점 확인` } : {},
   });
 }
 

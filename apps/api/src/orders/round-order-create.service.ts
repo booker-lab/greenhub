@@ -17,7 +17,11 @@ import { RetentionService } from '../retention/retention.service';
 import type { CreateOrderDto } from './dto/create-order.dto';
 import { OrderCapacityService } from './order-capacity.service';
 import { normalizeKoreanMobilePhone } from './_lib/korean-mobile-phone';
-import { normalizeGift, resolveSelectedOptions } from './_lib/round-order-extras';
+import {
+  collectOptionStockLines,
+  normalizeGift,
+  resolveSelectedOptions,
+} from './_lib/round-order-extras';
 import { assertStoreAcceptsOrders } from '../stores/store-availability';
 
 @Injectable()
@@ -84,6 +88,13 @@ export class RoundOrderCreateService {
         idempotencyKey: `checkout:${requestId}`,
         deliveryAddress: dto.deliveryAddress,
         items: dto.roundItems!,
+        // 재고 품목에 연결된 옵션은 회차 한도와 같은 예약으로 잡는다.
+        optionStock: collectOptionStockLines(
+          dto.roundItems!.map((item) => ({
+            quantity: item.quantity,
+            selectedOptions: optionPricing.byRoundItemId.get(item.roundItemId)?.selected,
+          })),
+        ),
       });
       const roundItems = reservation.items.map((item) => {
         const option = optionPricing.byRoundItemId.get(item.roundItemId);
@@ -186,13 +197,12 @@ export class RoundOrderCreateService {
   }
 
   /**
-   * 옵션을 고른 회차 상품의 상품 문서를 읽어 옵션 금액과 스냅샷을 만든다.
+   * 회차 상품마다 상품 문서를 읽어 옵션 금액과 스냅샷을 만든다. 옵션이 있는 상품은 고르지 않았어도
+   * 읽어서 묶음마다 하나씩 고르지 않은 주문을 거부한다(화분 옵션 필수, 2026-10-24 결정).
    * 회차 상품·상품 문서는 예약 단계에서 다시 읽지만, 같은 트랜잭션 안이라 값이 같다.
    */
   private async readOptionPricing(tx: any, storeId: string, dto: CreateOrderDto) {
     const byRoundItemId = new Map<string, ReturnType<typeof resolveSelectedOptions>>();
-    const needsItems = dto.roundItems!.some((item) => item.optionChoiceIds?.length);
-    if (!needsItems) return { byRoundItemId };
     const itemSnaps = await Promise.all(
       dto.roundItems!.map((item) => tx.get(this.firestore.doc(`saleRoundItems/${item.roundItemId}`))),
     );
@@ -204,21 +214,15 @@ export class RoundOrderCreateService {
       return data;
     });
     const productSnaps = await Promise.all(
-      roundItems.map((item, index) =>
-        dto.roundItems![index].optionChoiceIds?.length
-          ? tx.get(this.firestore.doc(`products/${item['productId']}`))
-          : Promise.resolve(null),
-      ),
+      roundItems.map((item) => tx.get(this.firestore.doc(`products/${item['productId']}`))),
     );
     dto.roundItems!.forEach((input, index) => {
-      const productSnap = productSnaps[index] as { exists: boolean; data: () => any } | null;
-      const option = productSnap
-        ? resolveSelectedOptions(
-            productSnap.exists ? productSnap.data()?.['options'] : undefined,
-            input.optionChoiceIds,
-            input.optionText,
-          )
-        : { selected: [], priceDelta: 0 };
+      const productSnap = productSnaps[index] as { exists: boolean; data: () => any };
+      const option = resolveSelectedOptions(
+        productSnap.exists ? productSnap.data()?.['options'] : undefined,
+        input.optionChoiceIds,
+        input.optionText,
+      );
       byRoundItemId.set(input.roundItemId, option);
     });
     return { byRoundItemId };

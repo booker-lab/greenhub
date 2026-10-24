@@ -47,6 +47,10 @@ export function resolveSelectedOptions(
       choiceLabel: String(choice['label']),
       priceDelta,
     };
+    // 재고 품목에 연결된 선택지는 주문 스냅샷에 품목 id를 남긴다(늦은 결제 재확보가 이 값으로 다시 잡는다).
+    if (typeof choice['stockId'] === 'string' && choice['stockId'] !== '') {
+      snapshot.stockId = choice['stockId'];
+    }
     if (choice['needsText'] === true) {
       // 줄바꿈·보이지 않는 글자를 정리한 뒤 길이를 잰다(잘라 내지 않고 넘치면 막는다).
       const text = toSingleLineText(optionText, OPTION_TEXT_MAX_LENGTH * 10);
@@ -59,6 +63,28 @@ export function resolveSelectedOptions(
     return snapshot;
   });
   return { selected, priceDelta: selected.reduce((sum, option) => sum + option.priceDelta, 0) };
+}
+
+/** 주문 예약이 잡는 옵션 재고 한 줄: 품목 id와 수량. */
+export type OptionStockLine = { stockId: string; quantity: number };
+
+/**
+ * 주문 품목들의 옵션 스냅샷에서 재고 품목별로 잡을 수량을 모은다(품목 수량 × 선택 1개).
+ * 재고에 연결되지 않은 선택지는 세지 않는다. 결과는 품목 id 순서라 같은 입력이면 같은 값이다.
+ */
+export function collectOptionStockLines(
+  items: ReadonlyArray<{ quantity: number; selectedOptions?: ReadonlyArray<{ stockId?: string }> }>,
+): OptionStockLine[] {
+  const totals = new Map<string, number>();
+  for (const item of items) {
+    for (const option of item.selectedOptions ?? []) {
+      if (!option.stockId) continue;
+      totals.set(option.stockId, (totals.get(option.stockId) ?? 0) + item.quantity);
+    }
+  }
+  return [...totals.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([stockId, quantity]) => ({ stockId, quantity }));
 }
 
 /** 선물 정보는 한 줄로 정리한다. 받는 분 이름·연락처, 보내는 분 이름은 꼭 있어야 한다. */

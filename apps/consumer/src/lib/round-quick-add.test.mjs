@@ -9,7 +9,8 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 new Function('module', 'exports', compiled)(module, module.exports);
-const { canQuickAdd, roundItemCartInput, cartAddFailureMessage } = module.exports;
+const { canQuickAdd, roundItemCartInput, cartAddFailureMessage, roundProductHref, productNeedsOptionChoice } =
+  module.exports;
 
 const item = {
   id: 'round-item-1',
@@ -54,4 +55,17 @@ test('담기 실패 이유마다 다음 행동을 알려주는 문구를 쓴다'
   assert.match(cartAddFailureMessage('different_round'), /같은 회차 상품만/);
   assert.match(cartAddFailureMessage('incompatible_cart'), /함께 담을 수 없습니다/);
   assert.match(cartAddFailureMessage('invalid_item'), /담지 못했습니다/);
+});
+
+test('옵션 묶음이 있는 상품만 바로 담지 않고 상품 화면으로 보낸다', () => {
+  assert.equal(productNeedsOptionChoice({ id: 'p', options: [{ id: 'pot', choices: [] }] }), true);
+  assert.equal(productNeedsOptionChoice({ id: 'p', options: [] }), false);
+  assert.equal(productNeedsOptionChoice({ id: 'p' }), false);
+  assert.equal(productNeedsOptionChoice(null), false);
+  assert.equal(productNeedsOptionChoice({ options: 'pot' }), false);
+});
+
+test('상품 화면 주소는 회차를 붙이고 경로 조각을 인코딩한다', () => {
+  assert.equal(roundProductHref(item), '/products/product-1?round=round-1');
+  assert.equal(roundProductHref({ productId: 'a/b', roundId: 'r 1' }), '/products/a%2Fb?round=r%201');
 });

@@ -550,3 +550,58 @@ describe('판매자 상품·배송비 쓰기 경로', () => {
     expect(records.has('deliveryFeeConfig/store-1')).toBe(false);
   });
 });
+
+describe('공개 옵션 남은 수량', () => {
+  const { createInMemoryFirestore } = require('../../test/helpers/in-memory-firestore');
+  const product = (overrides: Record<string, unknown> = {}) => ({
+    id: 'p-1',
+    storeId: 'store-1',
+    isActive: true,
+    saleType: 'normal',
+    options: [
+      {
+        id: 'pot',
+        name: '화분',
+        choices: [
+          { id: 'plastic', label: '기본 화분', priceDelta: 0 },
+          { id: 'white', label: '흰색 출력 화분', priceDelta: 7000, stockId: 'stock-white' },
+          { id: 'other', label: '다른 가게 재고', priceDelta: 0, stockId: 'stock-other' },
+          { id: 'big', label: '넉넉한 화분', priceDelta: 0, stockId: 'stock-big' },
+        ],
+      },
+    ],
+    ...overrides,
+  });
+
+  it('재고에 연결된 선택지만 남은 수량을 돌려주고, 다른 가게 재고는 0개, 많으면 99개로 본다', async () => {
+    const memory = createInMemoryFirestore({
+      'stores/store-1': { ownerId: 'seller-1' },
+      'products/p-1': product(),
+      'optionStocks/stock-white': {
+        storeId: 'store-1',
+        name: '흰색 출력 화분',
+        stockQuantity: 10,
+        reservedQuantity: 2,
+        orderedQuantity: 5,
+      },
+      'optionStocks/stock-other': { storeId: 'store-2', stockQuantity: 9 },
+      'optionStocks/stock-big': { storeId: 'store-1', stockQuantity: 500 },
+    });
+    const service = new ProductsService(memory.firestore as never);
+
+    await expect(service.getOptionAvailability('p-1')).resolves.toEqual({
+      choices: [
+        { choiceId: 'white', remainingQuantity: 3 },
+        { choiceId: 'other', remainingQuantity: 0 },
+        // 실제 재고 수(500)는 공개하지 않고 한 번에 담을 수 있는 수까지만 알려 준다.
+        { choiceId: 'big', remainingQuantity: 99 },
+      ],
+    });
+  });
+
+  it('공개되지 않은 상품은 상품 없음으로 처리한다', async () => {
+    const memory = createInMemoryFirestore({ 'products/p-1': product({ isActive: false }) });
+    const service = new ProductsService(memory.firestore as never);
+    await expect(service.getOptionAvailability('p-1')).rejects.toBeInstanceOf(NotFoundException);
+  });
+});

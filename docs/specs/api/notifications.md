@@ -81,6 +81,8 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 
 외부 API 응답에서는 `TimestampInterceptor`에 의해 timestamp가 ISO 문자열로 변환될 수 있다. 클라이언트는 Firestore 내부 객체 형태를 공개 API 계약으로 가정하지 않는다.
 
+보관: 알림 기록은 `createdAt` 기준 90일이 지나면 매일 03:00(KST) 정기 파기(`RetentionService.runScheduledPurge`)에서 지운다. 한 번에 450건씩 최대 20번(9,000건)까지 지우고 남은 것은 다음 날 이어서 지운다. 지운 기록은 운영 이슈의 SMS 재발송(`resendSms`)에서 "재발송할 알림 기록을 찾을 수 없습니다"로 거절된다. 발송 중복 방지 기록(`notificationDeliveries`)은 전화·본문이 없어 지우지 않는다.
+
 ## 4. 본문 registry와 변수 검증
 
 본문 정본은 `apps/api/src/notifications/notification-templates.ts`의 `NOTIFICATION_TEMPLATES`다.
@@ -100,7 +102,8 @@ API 내부 registry는 판매자용 legacy 코드도 추가로 지원한다.
 
 - `ORDER_ACCEPTED.name`: 결제 확정 시 주문 snapshot의 표시명을 사용하고 유효한 표시명이 없으면 서버 규칙에 따라 비개인 fallback을 사용한다.
 - `ORDER_DELIVERY_HELD.reason`: 자유 입력 원문이 아니라 서버가 허용한 reason code의 비개인 고정 문구를 사용한다.
-- `ORDER_CANCELLED.reason`: 서버가 정규화한 취소 사유를 사용한다. 소비자 직접 취소는 자유 입력 사유 대신 고정 문구 `고객 요청`을 사용한다.
+- `ORDER_CANCELLED.reason`: 서버가 정규화한 취소 사유를 사용한다. 소비자 직접 취소는 자유 입력 사유 대신 고정 문구 `고객 요청`을 사용한다. 판매자 취소 사유는 입력 단계에서 100자·줄바꿈·제어문자와 이메일·전화번호·웹 주소/도메인을 400으로 거부한다(`orders-lifecycle.service.ts`).
+- 판매자가 입력한 값이 들어가는 변수(`reason`·`productName`·`hubAddress`)에 웹 주소·도메인·전화번호가 보이면 본문 렌더 때 고정 문구(`판매자 사정`·`주문 상품`·`주문 상세에서 확인해 주세요`)로 바꾼다(`notification-templates.ts` `NOTIFICATION_SELLER_TEXT_FALLBACKS`, #549). 승인된 템플릿 본문은 바꾸지 않는다.
 
 소비자 직접 취소 알림 정책(2026-09-28 결정): 회차 주문을 소비자가 주문 마감 전에 직접 취소해도 `ORDER_CANCELLED` 거래성 알림을 보낸다. 결제 전(`PENDING`) 주문과 호출 시점에 이미 `CANCELLED`인 주문은 보내지 않으며, 같은 취소의 재호출은 멱등 키 `round-consumer-cancel:<orderId>`로 한 번만 발송한다. 직접 근거: `apps/api/src/orders/legacy-consumer-cancel-convergence.spec.ts` S9~S12.
 
@@ -261,6 +264,8 @@ provider 응답은 `classifyAlimtalkProviderError()`/`classifySmsProviderError()
 - 끝까지 예외면 주문 id·전이·오류 종류만 오류 로그로 남기고 운영 알림(`docs/specs/ops/ops-alerts.md`)을 보낸다. 상태 변경 요청의 결과는 바뀌지 않는다(예전에는 알림 예외가 상태 변경 뒤 500 응답으로 번졌다).
 - 서버 종료 신호(`enableShutdownHooks`)를 받으면 남은 알림을 최대 30초 기다리고, 그 뒤에 끝나는 요청은 알림을 응답 전에 보낸다(Nest는 진행 중 요청을 마무리한 다음 Firestore 연결을 닫는다). 그 사이 프로세스가 강제 종료되면 응답 전 동기 발송 때와 같이 그 알림은 보내지 못할 수 있다(`PROCESSING` 발송 기록이 남는다).
 - 소비자 직접 취소(`cancelOrder`)와 결제·환불 경로의 알림은 이번 변경 대상이 아니며 기존처럼 응답 전에 보낸다.
+- 멱등 키(#549, `apps/api/src/orders/order-transition-notice.ts`): 취소는 `order-transition:{orderId}:CANCELLED`(주문당 한 번), 배송 보류 회차에 묶인 전이(보류 진입·보류에서 재개·준비 중에서 배송 시작)는 보류가 있었으면 `order-transition:{orderId}:{from}:{to}:hold-{N}`, 그 밖은 `order-transition:{orderId}:{from}:{to}`다.
+- 보류 회차 상한: 보류 회차 번호가 3(`MAX_NOTIFIED_DELIVERY_HOLDS`)을 넘으면 그 회차의 보류·재배송·재개 알림은 보내지 않는다. 상태 전이는 막지 않고, 배송 완료·취소·거점 도착 알림은 주문당 한 번 보낸다.
 - 직접 근거: `apps/api/src/orders/order-notice-dispatcher.spec.ts`(순서·재시도·운영 알림·종료 대기), `apps/api/src/orders/orders-lifecycle-completion.spec.ts`(응답이 알림을 기다리지 않음, 예외 뒤 같은 키로 재시도). 상태 전이 알림 내용을 단언하는 주문 스펙은 `apps/api/test/helpers/settled-orders-lifecycle.ts`로 명령 뒤 알림 처리 완료를 기다린 다음 단언한다.
 
 운영 이슈에서 명시적으로 SMS 재발송하는 경로는 기존 실패 알림 기록의 전화번호·template code·variables를 사용해 `AligoClient.sendSms()`를 호출한다.
@@ -412,6 +417,7 @@ state → withdrawal → retention evidence → sender gating의 lifecycle을 �
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-24 | 코드 대조: 판매자 입력 변수의 링크·전화번호 고정 문구 대체와 취소 사유 입력 거부, 상태 전이 알림 멱등 키 형식과 보류 3회차 알림 상한(#549) 반영 |
 | 2026-10-21 | 주문 상태 전이 고객 알림을 응답 뒤 발송(`OrderNoticeDispatcher`: 주문별 순서, 예외 재시도 2회, 최종 예외 운영 알림, 종료 시 30초 대기)으로 변경 |
 | 2026-10-09 | 알림 본문 변수 한 줄 정리·변수별 길이 상한(이름 링크 차단), 수신번호 단일 휴대폰 형식 강제, legacy 공동구매 처리 lease·알림 멱등 키 반영 |
 | 2026-09-28 | 선택 설정 `ALIGO_OUTBOUND_PROXY_URL`(고정 IP 프록시 경유)과 형식 오류 fail-closed 계약 추가 |

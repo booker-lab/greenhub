@@ -107,7 +107,7 @@ PATCH /admin/stores/:storeId/restore
 GET /admin/users
 ```
 
-현재 `role == consumer`만 조회한다. 반환 전에 `passwordHash`를 제거한다.
+`role == consumer`만 조회하고, 탈퇴한 소비자(개인정보를 지운 문서)는 뺀다. 응답은 허용 필드 `id`·`email`·`name`·`phone`·`suspended`·`createdAt`만 담는다(`admin.service.ts` `ADMIN_USER_LIST_FIELDS`, #578·#594).
 
 ### 정지/복구 flag
 
@@ -119,9 +119,9 @@ PATCH /admin/users/:userId/status
 { suspended: boolean }
 ```
 
-이 endpoint는 Firestore `suspended` 값을 갱신한다.
+이 endpoint는 Firestore `suspended` 값을 갱신한다. 소비자 계정만 받고(아니면 400) 요청한 관리자 자신은 정지할 수 없다(400, #578).
 
-현재 신규 로그인은 suspended 사용자를 거부하지만, **기존 세션의 refresh·JWT·Firebase custom claims가 언제 무효화되는지는 별도 auth P0**다. `suspended: true` write 성공만으로 기존 세션이 즉시 차단됐다고 기록하지 않는다.
+정지하면 `sessionsRevokedAt`을 기록하고 refresh 기록과 Firebase 세션을 폐기한다. 기존 세션의 차단 시점(API 데이터 요청 즉시, 앱 세션 최대 60초)은 `docs/specs/api/auth.md` §6을 따른다.
 
 정본: `docs/specs/api/auth.md`의 `AUTH-DRIVER-APPROVAL-AND-SESSION-REVOCATION`.
 
@@ -201,9 +201,11 @@ POST /admin/orders/:orderId/post-delivery-refund   { reasonCode, memo }
 ### 목록
 
 ```text
-GET /admin/settlements?storeId=<storeId>&from=<date>&to=<date>&status=<status>&limit=<n>&cursor=<id>
-GET /admin/settlements/summary?storeId=<storeId>&from=<date>&to=<date>&status=<status>
+GET /admin/settlements?storeId=<storeId>&from=<YYYY-MM-DD>&to=<YYYY-MM-DD>&status=<status>&limit=<n>&cursor=<id>
+GET /admin/settlements/summary?storeId=<storeId>&from=<YYYY-MM-DD>&to=<YYYY-MM-DD>&status=<status>
 ```
+
+`from`·`to`는 `YYYY-MM-DD` 형식만 받고 그 밖은 400이다(`AdminSettlementFilterDto`, #578).
 
 - `settledAt DESC`, `limit` 기본 100·상한 500, `cursor`로 이어 받기(`hasMore`·`nextCursor`)
 - 행에 가게 이름·주문번호·회수 필드·보류 사유·지급 대상 행의 정산 계좌를 붙인다. 합계는 summary가 조건 전체로 계산한다(`docs/specs/api/settlements.md` §9)
@@ -224,6 +226,7 @@ PATCH /admin/settlements/:settlementId/pay
 - transaction 안에서 status 재확인
 - `paidAt`, `paidBy`(처리한 어드민 ID), `updatedAt` 기록
 - 같은 transaction에 `adminAuditLogs` 기록(`admin.settlement.paid`)을 함께 쓴다. 기록 없는 지급은 생기지 않는다.
+- 주문이 취소됐거나 취소·환불이 진행 중이면, 또는 주문 문서가 없으면 409로 거부한다(#603, `docs/specs/api/settlements.md`). 결제사 취소·분쟁 확인이 열린 주문도 409다.
 
 ### 회수 완료
 
@@ -389,7 +392,23 @@ banners/main_hero
 
 admin upsert는 client가 되돌려 보낸 `updatedAt/createdAt`을 제거하고 서버 `updatedAt`을 기록한다.
 
+입력 제약(#578, `apps/api/src/admin/dto/admin.dto.ts`): `imageUrl`은 빈 문자열 또는 https 주소, CTA `href`는 빈 문자열·`/`로 시작하는 사이트 안 경로(`//`·역슬래시 금지)·https 주소만 받는다. 길이 상한은 URL 2048, `tagText` 50, `headline` 100, `subText` 300, CTA `label` 30자다. 위반은 400이다.
+
 Storage write/read 권한은 현재 `storage.rules`를 정본으로 확인한다. 과거 문서의 “인증 사용자 누구나 banner 경로 write” 설명을 현재 보안 계약으로 자동 적용하지 않는다.
+
+### 후기·입점 문의 관리
+
+`apps/api/src/engagement/engagement.controller.ts`(JWT + `admin`, 서버 쪽 기능 토글 없음):
+
+```text
+GET    /admin/partner-inquiries
+PUT    /admin/partner-inquiries/:inquiryId/contacted
+DELETE /admin/partner-inquiries/:inquiryId
+GET    /admin/reviews/hidden
+POST   /admin/reviews/:reviewId/unhide
+```
+
+숨긴 후기 목록은 최대 50건 `{ reviews, hasMore, limit }`이고, 숨김 해제는 사유(`reason`)를 받는다.
 
 ## 10. 어드민 행동 기록
 
@@ -463,6 +482,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-24 | 코드 대조: 소비자 목록 허용 필드·탈퇴 제외, 정지 대상 제한·자기 정지 400(#578·#594), 정산 지급의 주문 보류 409(#603), 정산 날짜 `YYYY-MM-DD`·배너 URL 제약(#578), 후기·입점 문의 관리 경로(#555·#590) 반영 |
 | 2026-10-23 | 주문·기사 목록 커서 이어받기, 치운 판매자 숨김·주문 차단과 복구 상태(#593)를 §3·§5·§7·§11에 반영 |
 | 2026-10-21 | 관리자 배송 후 환불(§5) endpoint와 행동 기록 `admin.order.post_delivery_refunded` 추가. 지급 뒤 환불의 회수 완료는 운영 기록(`SETTLEMENT_RECOVERY_REQUIRED`) 닫기로 처리 |
 | 2026-10-21 | 운영 판매자 가입을 초대 링크 → 카카오 로그인으로 결정(`kakao-login` `inviteToken`), 초대 탭 링크 복사·발급/사용 시각·사용 계정 표시 |
