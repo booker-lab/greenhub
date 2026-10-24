@@ -43,7 +43,7 @@
 | R3 | 완료 | 2026-10-24 | `greenhub-api-runtime`(위와 같이 먼저 만들어져 있었고 권한은 없었음). 운영 버킷은 `green-e4fe3.firebasestorage.app`(`appspot.com` 버킷 없음) |
 | R4 | 완료 | 2026-10-24 | `greenhub-api-deployer` |
 | R5 | 완료 | 2026-10-24 | 풀 `github`·공급자 `greenhub-deploy`, GitHub `Production` 환경 변수 2개. 환경 이름이 `Production`이라 조건은 `production`·`Production`을 모두 받는다. 실제 토큰 교환은 첫 workflow 실행 때 확인한다. 이 변수가 생겨 이후 Railway 운영 배포마다 Cloud Run 예비 배포 3단계가 돈다(R9 전에는 마지막 단계 실패 표시, 운영 배포는 계속) |
-| R6 | 준비 | 2026-10-24 | `scripts/deploy/cloud-run-env.mjs` |
+| R6 | 완료 | 2026-10-24 | `scripts/deploy/cloud-run-env.mjs from-railway`로 운영 비밀값 10개를 Secret Manager에, 일반 값을 저장소 밖 YAML(`%USERPROFILE%\.greenhub\cloud-run-green-e4fe3.env.yaml`)에 옮겼다 |
 
 ## R0. 읽기 전용 점검 — 승인 불필요, 2026-10-23 실행
 
@@ -174,6 +174,26 @@ gcloud compute addresses describe greenhub-api-egress --region=asia-northeast3 -
 
 - **프록시 홉 수 실측**: 2026-10-18 Railway 실측과 같은 기준(접속자마다 다른 요청 한도 버킷, 클라이언트가 보낸 `X-Forwarded-For` 무시). **부하분산기 경유와 run.app 직접은 홉 수가 다를 수 있다.** 운영은 부하분산기 경유 값을 쓴다.
 - 회차 E2E 1회(회차 64 + 세션 12), 원격 E2E 예산 규칙(`development-authority.md` §4.1)을 따른다.
+- **배포 방법**: 시험 서비스는 R9처럼 Cloud Shell에서 Cloud Build로 수동 배포한다. 시험용 배포 workflow나 Workload Identity Federation은 두지 않는다(배포가 드물고, 운영 공급자 R5는 `production-deploy.yml`·`production` Environment 전용이다).
+- **실행 기록(2026-10-23, 이 절차서가 `main`에 오르기 전 다른 세션 안내로 만든 것)**: 시험 프로젝트에 다음이 이미 있다.
+  - 켠 API: `run`·`artifactregistry`·`secretmanager`·`compute`·`iamcredentials`·`sts`
+  - 저장소 `greenhub`(`asia-northeast3`)
+  - 런타임 서비스 계정 `greenhub-api-runtime`(역할 없음)
+  - 배포 서비스 계정 `greenhub-api-deployer`: 프로젝트 역할 `run.admin`·`artifactregistry.writer`·`secretmanager.viewer`, 런타임 계정에 대한 `serviceAccountUser`
+  - Workload Identity 풀 `github`과 공급자 `greenhub`: 조건은 `main`의 `cloud-run-deploy.yml`인데, 이 workflow는 저장소에 없다.
+  - 위 배포 방법에 따라 공급자 `greenhub`와 배포 서비스 계정은 쓰지 않으므로 지운다(아래 정리 명령). 빈 풀 `github`은 남겨 둔다(아무 권한도 주지 않는다). **2026-10-23 정리 완료**(공급자·배포 계정 없음을 읽기로 확인).
+
+```bash
+P=greenhub-round-direct-e2e
+D=greenhub-api-deployer@$P.iam.gserviceaccount.com
+gcloud iam workload-identity-pools providers delete greenhub --location=global --workload-identity-pool=github --project=$P --quiet
+for R in roles/run.admin roles/artifactregistry.writer roles/secretmanager.viewer; do
+  gcloud projects remove-iam-policy-binding $P --member="serviceAccount:$D" --role=$R --condition=None --quiet >/dev/null && echo "removed $R"
+done
+gcloud iam service-accounts remove-iam-policy-binding greenhub-api-runtime@$P.iam.gserviceaccount.com --project=$P \
+  --member="serviceAccount:$D" --role=roles/iam.serviceAccountUser --quiet >/dev/null && echo "removed serviceAccountUser"
+gcloud iam service-accounts delete $D --project=$P --quiet
+```
 
 ## R9. 운영 서비스 만들기(트래픽 없음, 계획서 C5) — 승인 필요
 
