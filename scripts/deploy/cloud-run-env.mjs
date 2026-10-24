@@ -6,15 +6,17 @@
  *   node scripts/deploy/cloud-run-env.mjs list
  *   node scripts/deploy/cloud-run-env.mjs secrets [--project=green-e4fe3] [--only=JWT_SECRET,PORTONE_V2_SECRET]
  *   node scripts/deploy/cloud-run-env.mjs env [--project=green-e4fe3] [--out=<YAML 경로>]
- *   node scripts/deploy/cloud-run-env.mjs from-railway [--project=green-e4fe3] [--out=<YAML 경로>] [--service-id=<ID>]
+ *   node scripts/deploy/cloud-run-env.mjs from-railway --railway-project-id=<Railway 프로젝트 ID> [--project=green-e4fe3] [--out=<YAML 경로>] [--service-id=<ID>]
  *
  * - secrets: 비밀값을 하나씩 화면에 보이지 않게 입력받아 gcloud 표준 입력으로만 Secret Manager에 넣고,
  *   런타임 서비스 계정에 그 비밀값 읽기 권한을 준다. 값은 파일·명령 인자·로그에 남기지 않는다.
  * - env: 비밀이 아닌 값을 입력받아 `gcloud run deploy --env-vars-file`용 YAML을 저장소 밖에 쓴다.
  * - list: 옮길 이름과 옮기지 않는 이름을 이유와 함께 보여 준다.
  * - from-railway: 교체가 끝난 Railway에서 값을 직접 읽어 secrets·env와 같은 곳에 쓴다(붙여 넣기 없음).
- *   project token을 가려서 입력받고, 토큰의 환경이 프로젝트와 맞는지(운영=production) 먼저 확인한다.
- * 새 비밀값 버전을 넣으면 그 전의 켜진 버전은 끈다(삭제 아님, 되돌릴 수 있음).
+ *   project token을 가려서 입력받고, 토큰의 프로젝트가 --railway-project-id와 같은지, 환경이 프로젝트와
+ *   맞는지(운영=production), 읽은 FIREBASE_PROJECT_ID가 대상 GCP 프로젝트와 같은지 먼저 확인한다.
+ * 새 비밀값 버전을 넣으면 그보다 번호가 낮은 켜진 버전만 끈다(삭제 아님, 되돌릴 수 있음). 두 실행이 겹쳐도
+ * 가장 새 버전은 아무도 끄지 않으므로 켜진 버전이 0개가 되지 않는다.
  */
 import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -335,9 +337,10 @@ export function versionNumber(value) {
 }
 
 /**
- * 비밀값 하나를 새 버전으로 넣고 런타임 계정에 읽기 권한을 준 뒤, 그 전의 켜진 버전은 끈다.
+ * 비밀값 하나를 새 버전으로 넣고 런타임 계정에 읽기 권한을 준 뒤, 새 버전보다 번호가 낮은 켜진 버전을 끈다.
  * 끄기는 삭제가 아니어서 되돌릴 수 있다(`gcloud secrets versions enable`). 값을 바꾼 뒤에는 옛 값이
- * 계속 읽히지 않게 한다.
+ * 계속 읽히지 않게 한다. 다른 실행이 그사이 넣은 더 높은 번호는 끄지 않는다(동시 실행이 서로의 새 버전을
+ * 꺼서 켜진 버전이 0개가 되는 것을 막는다. 가장 높은 번호는 어느 실행도 끄지 않는다).
  */
 export async function storeSecret({ gcloud, target, name, value, exists }) {
   if (!exists) {
@@ -366,7 +369,7 @@ export async function storeSecret({ gcloud, target, name, value, exists }) {
   const disabled = [];
   for (const line of listed.stdout.split(/\r?\n/)) {
     const version = versionNumber(line);
-    if (!version || version === created) continue;
+    if (!version || Number(version) >= Number(created)) continue;
     await gcloudOk(
       gcloud,
       secretArgs({ action: 'disable-version', name, project: target.project, version }),
@@ -504,16 +507,25 @@ async function railwayQuery({ token, query, variables, fetchImpl, label }) {
 }
 
 /**
- * project token이 가리키는 환경이 기대한 환경인지 확인하고, API 서비스의 변수(공유 변수 포함)를 읽는다.
- * 서비스 변수가 같은 이름의 공유 변수보다 우선한다.
+ * project token이 가리키는 프로젝트·환경이 기대한 것인지 확인하고, API 서비스의 변수(공유 변수 포함)를 읽는다.
+ * 서비스 변수가 같은 이름의 공유 변수보다 우선한다. 다른 Railway 프로젝트의 production 토큰으로 운영 GCP에
+ * 엉뚱한 값을 넣지 않도록 프로젝트 ID와, 읽은 FIREBASE_PROJECT_ID가 대상 GCP 프로젝트와 같은지 확인한다.
  */
 export async function readRailwayApiVariables({
   token,
+  expectedProjectId,
   expectedEnvironment,
+  expectedFirebaseProject,
   serviceId,
   chooseService,
   fetchImpl = fetch,
 }) {
+  if (!expectedProjectId) {
+    throw new Error(
+      '원본 Railway 프로젝트 ID를 --railway-project-id로 지정하세요(Railway 프로젝트 설정 → General).',
+    );
+  }
+  if (!expectedFirebaseProject) throw new Error('대상 Firebase 프로젝트를 알 수 없습니다.');
   const scope = await railwayQuery({
     token,
     fetchImpl,
@@ -525,6 +537,11 @@ export async function readRailwayApiVariables({
   if (!projectId || !environmentId) {
     throw new Error(
       'project token이 아닙니다. Railway 프로젝트 설정 → Tokens에서 만든 토큰이 필요합니다.',
+    );
+  }
+  if (projectId !== expectedProjectId) {
+    throw new Error(
+      `토큰은 다른 Railway 프로젝트(${projectId})용입니다. --railway-project-id(${expectedProjectId})의 토큰이 필요합니다.`,
     );
   }
   const project = await railwayQuery({
@@ -565,7 +582,13 @@ export async function readRailwayApiVariables({
     )?.variables ?? {};
   const shared = await read(null, '공유 변수 조회');
   const own = await read(service.id, '서비스 변수 조회');
-  return { service, environmentName, variables: { ...shared, ...own } };
+  const variables = { ...shared, ...own };
+  if (variables.FIREBASE_PROJECT_ID !== expectedFirebaseProject) {
+    throw new Error(
+      `Railway 서비스의 FIREBASE_PROJECT_ID가 "${variables.FIREBASE_PROJECT_ID ?? '없음'}"입니다. 대상 "${expectedFirebaseProject}"와 같은 서비스에서만 옮깁니다.`,
+    );
+  }
+  return { service, environmentName, variables };
 }
 
 /** Railway 변수에서 옮길 비밀값·일반 값을 고른다. 값은 돌려주지만 로그에는 이름만 쓴다. */
@@ -603,6 +626,7 @@ async function chooseServiceInteractively(services, visible, log) {
 export async function runFromRailway({
   project,
   out,
+  railwayProjectId,
   serviceId,
   fetchImpl = fetch,
   gcloud = runGcloud,
@@ -617,11 +641,18 @@ export async function runFromRailway({
     `[${target.label} ${target.project}] Railway "${target.environmentName}" 환경 값을 옮깁니다.`,
   );
   log('⚠️ Railway 값을 먼저 최신으로 바꾼 뒤에 실행하세요. 아직이면 지금 Ctrl+C로 멈추세요.');
+  if (!railwayProjectId) {
+    throw new Error(
+      '원본 Railway 프로젝트 ID를 --railway-project-id로 지정하세요(Railway 프로젝트 설정 → General).',
+    );
+  }
   const token = await hidden('Railway project token');
   if (!token) throw new Error('토큰을 넣지 않아 멈춥니다.');
   const read = await readRailwayApiVariables({
     token,
+    expectedProjectId: railwayProjectId,
     expectedEnvironment: target.environmentName,
+    expectedFirebaseProject: target.project,
     serviceId,
     chooseService: (services) => chooseServiceInteractively(services, visible, log),
     fetchImpl,
@@ -712,6 +743,7 @@ export async function main(argv) {
       await runFromRailway({
         project: options.project,
         out: options.out,
+        railwayProjectId: options['railway-project-id'],
         serviceId: options['service-id'],
       });
       return;
