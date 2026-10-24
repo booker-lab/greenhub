@@ -67,6 +67,12 @@ import {
   DEFAULT_CODEX_TIMEOUT_MS,
 } from './agent-executor.mjs';
 
+// Windows는 환경 변수 이름이 대소문자를 가리지 않아 자식 env에 Path로 남을 수 있다.
+// process.env.PATH는 대소문자 없이 읽히지만 일반 객체는 아니므로, 이름을 대소문자 없이 찾아 값을 비교한다.
+function envPathValue(env) {
+  return Object.entries(env).find(([name]) => name.toUpperCase() === 'PATH')?.[1];
+}
+
 function git(cwd, args) {
   return execFileSync('git', args, {
     cwd,
@@ -2498,7 +2504,7 @@ test('PROOF ENV — runOnce hands proofs the sanitized environment', () => {
     assert.equal(proofEnvs.length, 1);
     assert.equal(proofEnvs[0].GH_TOKEN, undefined);
     assert.equal(proofEnvs[0].FIREBASE_TOKEN, undefined);
-    assert.equal(proofEnvs[0].PATH, process.env.PATH);
+    assert.equal(envPathValue(proofEnvs[0]), process.env.PATH);
   } finally {
     removeFixture(fixture);
   }
