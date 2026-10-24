@@ -3,12 +3,14 @@
 import type { SaleRoundItem } from '@greenhub/shared';
 import { Box, Group, Text } from '@mantine/core';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import Script from 'next/script';
 import { useState } from 'react';
 import { type CartItem, useCart } from '@/hooks/useCart';
 import type { PublicSaleRound } from '@/hooks/useSaleRounds';
 import { isFeatureOn } from '@/lib/features';
-import { cartAddFailureMessage, roundItemCartInput } from '@/lib/round-quick-add';
+import { cartAddFailureMessage, roundItemCartInput, roundProductHref } from '@/lib/round-quick-add';
+import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
 import { formatRoundTime } from '@/lib/round-schedule-label';
 
 // 장바구니의 벤치마킹 비교 기능(도착 시각·배송 지역 미리 확인·추가 제안).
@@ -102,6 +104,7 @@ export function IcheonPrecheck() {
 /** 장바구니에 없는 이번 회차 상품 제안(cart-upsell). */
 export function CartUpsell({ round, items }: { round: PublicSaleRound; items: CartItem[] }) {
   const { addItem } = useCart();
+  const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   if (!isFeatureOn('cart-upsell') || round.status !== 'OPEN') return null;
   const inCart = new Set(items.map((item) => item.roundItemId));
@@ -136,7 +139,12 @@ export function CartUpsell({ round, items }: { round: PublicSaleRound; items: Ca
             </Text>
             <button
               type="button"
-              onClick={() => {
+              onClick={async () => {
+                // 옵션(화분 등)을 골라야 하는 상품은 담지 않고 상품 화면의 옵션 시트로 보낸다.
+                if (await fetchNeedsOptionChoice(item.productId)) {
+                  router.push(roundProductHref(item));
+                  return;
+                }
                 const result = addItem(roundItemCartInput(item));
                 setMessage(result.ok ? `${item.productNameSnapshot}을 담았어요` : cartAddFailureMessage(result.reason));
               }}

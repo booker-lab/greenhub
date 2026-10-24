@@ -3,7 +3,7 @@
 import type { SaleRoundItem } from '@greenhub/shared';
 import { Box, Button, Container, SimpleGrid, Stack, Text, Title } from '@mantine/core';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import KakaoChannelCta from '@/components/benchmark/KakaoChannelCta';
 import { resolveHomeStoreId } from '@/components/home-store-selection';
@@ -12,7 +12,8 @@ import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { isFeatureOn } from '@/lib/features';
-import { cartAddFailureMessage, roundItemCartInput } from '@/lib/round-quick-add';
+import { cartAddFailureMessage, roundItemCartInput, roundProductHref } from '@/lib/round-quick-add';
+import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
 
 // 이번 회차 찜(wishlist, 벤치마킹 비교 기능). 이 브라우저에만, 이번 회차에만 남는다.
 // 기능이 꺼져 있으면 없는 화면이다.
@@ -27,6 +28,7 @@ function WishlistContent() {
   const { currentRound, loading: roundsLoading } = useSaleRounds(storeId);
   const wishlist = useRoundWishlist(currentRound?.id ?? null, true);
   const { addItem } = useCart();
+  const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const loading = productsLoading || roundsLoading;
 
@@ -71,7 +73,12 @@ function WishlistContent() {
                   <Button
                     size="sm"
                     radius="xl"
-                    onClick={() => {
+                    onClick={async () => {
+                      // 옵션(화분 등)을 골라야 하는 상품은 담지 않고 상품 화면의 옵션 시트로 보낸다.
+                      if (await fetchNeedsOptionChoice(item.productId)) {
+                        router.push(roundProductHref(item));
+                        return;
+                      }
                       const result = addItem(roundItemCartInput(item));
                       setMessage(
                         result.ok ? `${item.productNameSnapshot}을 담았어요` : cartAddFailureMessage(result.reason),
