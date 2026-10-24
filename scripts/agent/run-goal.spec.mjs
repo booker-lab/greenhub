@@ -48,6 +48,12 @@ import {
   readLiveRemoteMain,
 } from './run-once.mjs';
 
+// Windows는 환경 변수 이름이 대소문자를 가리지 않아 자식 env에 Path로 남을 수 있다.
+// process.env.PATH는 대소문자 없이 읽히지만 일반 객체는 아니므로, 이름을 대소문자 없이 찾아 값을 비교한다.
+function envPathValue(env) {
+  return Object.entries(env).find(([name]) => name.toUpperCase() === 'PATH')?.[1];
+}
+
 function git(cwd, args) {
   return execFileSync('git', args, {
     cwd,
@@ -2031,7 +2037,7 @@ test('PLANNER Q — the planner child environment excludes publication and provi
     ]) {
       assert.equal(denied in childEnv, false, `${denied} must not reach the planner child`);
     }
-    assert.equal(childEnv.PATH, process.env.PATH);
+    assert.equal(envPathValue(childEnv), process.env.PATH);
     assert.equal(childEnv.GIT_TERMINAL_PROMPT, '0');
     assert.ok(childEnv.GH_CONFIG_DIR.length > 0);
   } finally {
@@ -3067,7 +3073,7 @@ test('PROOF ENV — PROOF_AT_MAIN criterion commands receive the sanitized envir
     for (const env of proofEnvs) {
       assert.equal(env.GH_TOKEN, undefined);
       assert.equal(env.FIREBASE_SERVICE_ACCOUNT_JSON, undefined);
-      assert.equal(env.PATH, process.env.PATH);
+      assert.equal(envPathValue(env), process.env.PATH);
     }
   } finally {
     removeFixture(fixture);
