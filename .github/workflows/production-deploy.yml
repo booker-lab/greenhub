@@ -395,16 +395,16 @@ jobs:
           exit "$status"
 
       # 앞 단계가 모두 성공했을 때만 결과를 넘긴다(실패한 배포는 기록하지 않는다).
+      # 여러 줄 비밀값(서비스 계정 JSON 키)의 `{`·`}` 줄이 가림 값으로 등록돼, 중괄호가 든 output은
+      # "may contain secret"으로 버려진다(2026-10-24 run 40074882199). 결과에는 비밀값이 없으므로
+      # 중괄호가 없는 base64 한 줄로 넘기고 record job에서 되돌린다.
       - name: 배포 결과 모으기
         id: collect
         shell: bash
         run: |
           set -euo pipefail
-          {
-            echo 'results<<GREENHUB_DEPLOY_RESULTS'
-            cat "$RUNNER_TEMP/deploy-results.tsv" 2>/dev/null || true
-            echo 'GREENHUB_DEPLOY_RESULTS'
-          } >> "$GITHUB_OUTPUT"
+          touch "$RUNNER_TEMP/deploy-results.tsv"
+          printf 'results=%s\n' "$(base64 -w0 "$RUNNER_TEMP/deploy-results.tsv")" >> "$GITHUB_OUTPUT"
 
       # 각 step이 끝날 때 지우지만, 취소 등으로 남았을 수 있는 키·gcloud 설정을 한 번 더 지운다.
       - name: 서비스 계정 키 삭제
@@ -444,7 +444,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -uo pipefail
-          printf '%s\n' "$RESULTS" > "$RUNNER_TEMP/deploy-results.tsv"
+          printf '%s' "$RESULTS" | base64 -d > "$RUNNER_TEMP/deploy-results.tsv" \
+            || echo '::warning::배포 결과를 읽지 못했습니다. Release에는 결과 표 없이 남깁니다.'
           if out="$(node scripts/release/release-record.mjs --sha="$SHA" --scope="$SCOPE" \
             --api-platform="$API_PLATFORM" --e2e-run-id="$E2E_RUN_ID" --run-id="$RUN_ID" \
             --results="$RUNNER_TEMP/deploy-results.tsv")"; then
