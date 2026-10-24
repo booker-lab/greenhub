@@ -25,3 +25,10 @@ test('메타데이터 설명에 그린러브와 디어 오키드의 운영 관�
     /description: '그린러브는 사업자 디어 오키드가 운영하는 화훼 쇼핑몰입니다\.'/,
   );
 });
+
+test('네이버 서치어드바이저 소유 확인 meta를 내보낸다', () => {
+  assert.match(
+    layoutSource,
+    /'naver-site-verification': 'a69f8be2ede55c9efa26e8e75d077f9e9ea8ecbe'/,
+  );
+});
