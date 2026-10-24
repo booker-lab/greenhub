@@ -7,7 +7,7 @@
  * - 계정 정지·기사 승인 철회 뒤 화면의 API 요청은 바로 거부되고, 화면이 그 거절을 받으면 그 자리에서
  *   세션이 끊긴다(48A same-deployment authority, 2026-10-24 결정). 세션 확인 성공은 60초 재사용하므로
  *   폐기 직후 세션 조회만으로는 끊기지 않을 수 있다(API 요청이 없으면 최대 60초). 화면의 API 거절이
- *   재검증을 일으킨다.
+ *   재검증을 일으키고, 세션이 끝났으면 현재 탭도 로그인 화면으로 바뀐다.
  *
  * 로그아웃·정지는 같은 계정의 다른 세션에도 영향을 줄 수 있으므로, 이 스펙은 회차 E2E
  * 64건이 끝난 뒤 별도 단계에서만 실행한다. 사용자 상태 변경은 비운영 fixture 가드를
@@ -45,6 +45,10 @@ const API_READING_SCREEN: Record<Role, string> = {
   seller: '/orders',
   driver: '/board',
 };
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
 
 /** 화면이 Bearer 토큰으로 보낸 요청이 권한 거절(401/403)을 받았는지. */
 function isRejectedBearerRequest(response: Response): boolean {
@@ -130,6 +134,10 @@ test.describe('회차 직배송 세션 수명주기 계약', () => {
         await page.goto(`${base}${API_READING_SCREEN[role]}`);
         await rejected;
         await expect.poll(() => hasSessionCookie(page, base), { timeout: 15_000 }).toBe(false);
+        // 쿠키만 지워지고 현재 탭이 로그인된 화면으로 남지 않아야 한다(재검증 뒤 로그아웃).
+        await expect(page).toHaveURL(new RegExp(`^${escapeRegExp(base)}/login(?:[/?#]|$)`), {
+          timeout: 15_000,
+        });
         expect(await readSessionRole(page, base)).toBeNull();
       });
 
