@@ -125,8 +125,12 @@ export class PaymentsService {
     await this.refunds.refundByOrderId(orderId, reason, options);
   }
 
-  async refundOrderChargesByOrderId(orderId: string, reason: string): Promise<void> {
-    await this.orderChargePayments.refundByOrderId(orderId, reason);
+  /** 주문의 재배송비를 환불하고 아직 PAID로 남은 재배송비 수를 돌려준다(0이어야 취소 완료 가능). */
+  async refundOrderChargesByOrderId(
+    orderId: string,
+    reason: string,
+  ): Promise<{ unsettledCount: number }> {
+    return this.orderChargePayments.refundByOrderId(orderId, reason);
   }
 
   @Cron(CronExpression.EVERY_MINUTE)

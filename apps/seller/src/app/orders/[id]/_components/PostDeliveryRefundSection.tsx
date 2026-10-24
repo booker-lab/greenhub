@@ -15,6 +15,7 @@ import { apiJson } from '@/lib/api';
 import {
   canSubmitPostDeliveryRefund,
   formatRefundDeadline,
+  isPostDeliveryRefundRetry,
   postDeliveryRefundBlockedMessage,
   type SellerRefundEligibility,
   shouldCheckPostDeliveryRefund,
@@ -116,7 +117,8 @@ export function PostDeliveryRefundSection({
     );
   }
 
-  const deadline = formatRefundDeadline(eligibility.deadline);
+  const retry = isPostDeliveryRefundRetry(eligibility.reason);
+  const deadline = retry ? null : formatRefundDeadline(eligibility.deadline);
   const amountText =
     eligibility.amount != null ? `${eligibility.amount.toLocaleString('ko-KR')}원` : '결제 금액';
 
@@ -131,8 +133,13 @@ export function PostDeliveryRefundSection({
           variant="outline"
           color="red"
         >
-          배송 후 환불
+          {retry ? '배송 후 환불 다시 시도' : '배송 후 환불'}
         </Button>
+        {retry && (
+          <Text ta="center" style={{ ...smallText, color: 'var(--color-text-secondary)' }}>
+            앞선 환불이 끝나지 않았어요. 다시 시도하면 처음 고른 사유로 이어서 처리합니다.
+          </Text>
+        )}
         {deadline && (
           <Text ta="center" style={{ ...smallText, color: 'var(--color-text-secondary)' }}>
             {deadline}까지 직접 환불할 수 있어요. 그 뒤는 관리자에게 문의해 주세요.

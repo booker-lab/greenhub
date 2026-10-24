@@ -13,6 +13,7 @@ export interface SellerRefundEligibility {
     | 'NOT_ROUND_ORDER'
     | 'NOT_DELIVERED'
     | 'ALREADY_REFUNDED'
+    | 'RETRY_AVAILABLE'
     | 'CANCELLATION_IN_PROGRESS'
     | 'NO_SETTLEMENT'
     | 'SETTLEMENT_PAID'
@@ -33,6 +34,7 @@ export function postDeliveryRefundBlockedMessage(
 ): string | null {
   switch (reason) {
     case 'OK':
+    case 'RETRY_AVAILABLE':
     case 'ALREADY_REFUNDED':
     case 'NOT_DELIVERED':
       return null;
@@ -45,6 +47,11 @@ export function postDeliveryRefundBlockedMessage(
     default:
       return '이 주문은 직접 환불할 수 없어요. 환불이 필요하면 관리자에게 문의해 주세요.';
   }
+}
+
+/** 앞선 환불이 실패로 멈춘 주문인지. 버튼으로 같은 환불을 이어서 끝낸다(처음 고른 사유로 처리된다). */
+export function isPostDeliveryRefundRetry(reason: SellerRefundEligibility['reason']): boolean {
+  return reason === 'RETRY_AVAILABLE';
 }
 
 /** 마감 시각을 "11월 8일 15:00"처럼 한국 시간으로 보여 준다(실행 환경 언어 설정과 무관). 값이 없으면 null. */

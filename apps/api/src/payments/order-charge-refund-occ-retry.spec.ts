@@ -52,7 +52,9 @@ describe('OrderCharge refund OCC retry purity', () => {
     };
     arm();
 
-    await service.refundByOrderId('order-oc-normal-1', '주문 취소');
+    await expect(service.refundByOrderId('order-oc-normal-1', '주문 취소')).resolves.toEqual({
+      unsettledCount: 0,
+    });
     occ.clearHooks();
 
     expect(refund).toHaveBeenCalledTimes(1);
@@ -92,7 +94,10 @@ describe('OrderCharge refund OCC retry purity', () => {
     };
     arm();
 
-    await service.refundByOrderId('order-oc-conflict-1', '주문 취소');
+    // 다른 시도가 잡은 청구는 PAID로 남으므로 호출 측이 취소를 완료하지 않도록 남은 수를 알린다.
+    await expect(service.refundByOrderId('order-oc-conflict-1', '주문 취소')).resolves.toEqual({
+      unsettledCount: 1,
+    });
     occ.clearHooks();
 
     expect(commits).toHaveLength(2);

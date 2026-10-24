@@ -224,11 +224,11 @@ POST /admin/orders/:orderId/post-delivery-refund             # 관리자 환불(
 
 - 판매자(매장 소유자, 겸직 관리자 포함): 정산 `settledAt`부터 7일 미만이고 정산이 `paid`가 아닐 때만. 정산이 없거나 판단할 수 없으면 거부(fail closed). 관리자 경로는 기간·정산 조건이 없다.
 - 본문: `reasonCode`(`QUALITY_DAMAGED`·`BROKEN`·`WRONG_DELIVERY`·`OTHER`, shared SSOT)와 한 줄 `memo`(1~200자, 제어문자 금지) 필수.
-- 순서: ① 한 transaction에서 상태·기간·정산·결제(`PAID`)를 확인하고 `postDeliveryRefund` 시작 기록과 `cancellation: REFUNDING`을 쓴다 → ② 본 결제 환불(`verifyProviderFirst`, payments.md §9)과 paid 재배송비 환불 → ③ 주문 `CANCELLED`·`cancellation: COMPLETED`·`postDeliveryRefund.completedAt` → ④ `cancelSettlement`(지급 완료면 `paid` 유지 + 회수 필요·관리자만 닫는 운영 기록, settlements.md §7. 응답에 `recoveryRequired`·`recoveryAmount`를 싣는다) → ⑤ `ORDER_CANCELLED` 알림(사유 코드별 서버 고정 문구, 판매자 메모는 보내지 않음, 주문당 멱등 키).
+- 순서: ① 한 transaction에서 상태·기간·정산·결제(`PAID`)를 확인하고 `postDeliveryRefund` 시작 기록과 `cancellation: REFUNDING`을 쓴다 → ② 본 결제 환불(`verifyProviderFirst`, payments.md §9, 결제가 아직 `PAID`일 때만)과 paid 재배송비 환불(매 시도마다 따로 확인. 끝난 뒤에도 `PAID`로 남은 재배송비가 있으면(다른 시도가 처리 중이거나 결과 불확실) 409·`REFUND_FAILED`로 멈추고 ③ 이후로 가지 않는다) → ③ 주문 `CANCELLED`·`cancellation: COMPLETED`·`postDeliveryRefund.completedAt` → ④ `cancelSettlement`(지급 완료면 `paid` 유지 + 회수 필요·관리자만 닫는 운영 기록, settlements.md §7. 응답에 `recoveryRequired`·`recoveryAmount`를 싣는다) → ⑤ `ORDER_CANCELLED` 알림(사유 코드별 서버 고정 문구, 판매자 메모는 보내지 않음, 주문당 멱등 키).
 - 배송이 끝난 주문이라 reservation·round/item capacity·held counter는 되돌리지 않는다.
-- `postDeliveryRefund`는 `cancellation`과 별도 칸이다(`cancellation`은 재시도 기록 때 통째로 다시 쓰인다). 시작 기록이 있으면 같은 요청 재시도가 기간·정산 조건을 다시 묻지 않고 처음 사유·처리자로 이어서 끝낸다. 환불 실패는 `REFUND_FAILED`, 로컬 확정 실패는 `LOCAL_FAILED`로 남는다.
+- `postDeliveryRefund`는 `cancellation`과 별도 칸이다(`cancellation`은 재시도 기록 때 통째로 다시 쓰인다). 시작 기록이 있으면 같은 요청 재시도가 기간·정산 조건을 다시 묻지 않고 처음 사유·처리자로 이어서 끝낸다. 환불 실패는 `REFUND_FAILED`, 로컬 확정 실패는 `LOCAL_FAILED`로 남는다. 판매자 `GET` 판정은 시작 기록이 있어도 끝나지 않았으면 `ALREADY_REFUNDED`로 보지 않는다: `REFUND_FAILED`·`LOCAL_FAILED`면 `RETRY_AVAILABLE`(`eligible: true`, 판매자 화면 "배송 후 환불 다시 시도"), `REFUNDING`이면 `CANCELLATION_IN_PROGRESS`, 완료(`completedAt` 또는 `CANCELLED`)면 `ALREADY_REFUNDED`(2026-10-24 수정).
 - 이미 다른 경로로 취소된 주문, 다른 취소가 진행 중인 주문, 옛 일반 주문은 거부한다.
-- 직접 증거: `apps/api/src/orders/post-delivery-refund.service.spec.ts`(3일차 성공·8일차·지급 완료·정산 없음·배송 전 거부, 중복 요청 환불 1회, 실패 뒤 재시도, 관리자 10일차), `apps/api/src/admin/admin-post-delivery-refund.service.spec.ts`.
+- 직접 증거: `apps/api/src/orders/post-delivery-refund.service.spec.ts`(3일차 성공·8일차·지급 완료·정산 없음·배송 전 거부, 중복 요청 환불 1회, 실패 뒤 재시도, 본 결제만 환불된 뒤 재배송비 재시도, 재배송비 미완료 시 완료·알림 없음, 판정 `RETRY_AVAILABLE`·`CANCELLATION_IN_PROGRESS`, 관리자 10일차), `apps/api/src/admin/admin-post-delivery-refund.service.spec.ts`.
 
 ### 8A. Legacy consumer cancel (RECRUITING group) — `IMPLEMENTATION COMPLETE`
 
@@ -451,6 +451,7 @@ POST /admin/orders/:orderId/post-delivery-refund             # 관리자 환불(
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-24 | 배송 후 환불·회차 취소: 재배송비 환불을 본 결제와 따로 확인하고 `PAID`로 남은 재배송비가 있으면 완료하지 않음, 판매자 판정 `RETRY_AVAILABLE` 추가(§8D) |
 | 2026-10-24 | 코드 대조: Driver 전이의 배송 방법 제약(`deliveryTransitionViolation`, #549) 추가 |
 | 2026-10-21 | 배송 후 환불(Section 8D): 판매자 7일·관리자 무기한 전액 환불 endpoint, `postDeliveryRefund` 기록, 수량 미반환, 고정 사유 알림 |
 | 2026-10-09 | legacy 판매자 취소의 환불 전 `REFUNDING` claim과 claim 중 legacy 상태 전이 거절(Section 8A-2), 주문 `buyerName` 한 줄 정리·20자 상한, 요청사항 제어문자 제거 반영 |
