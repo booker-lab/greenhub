@@ -80,7 +80,7 @@ function makeContext(options: {
   };
   const payments = {
     processRefundByOrderId: jest.fn().mockResolvedValue(undefined),
-    refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
   };
   const settlements = {
     createSettlement: jest.fn().mockResolvedValue(undefined),

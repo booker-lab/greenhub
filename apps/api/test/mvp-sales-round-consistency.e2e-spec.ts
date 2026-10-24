@@ -107,7 +107,7 @@ function makeFixture(overrides: Record<string, Data> = {}) {
         });
       }
     }),
-    refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
   };
   const settlements = { cancelSettlement: jest.fn().mockResolvedValue(undefined) };
   const lifecycle = new RoundOrderLifecycleService(

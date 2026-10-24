@@ -25,7 +25,7 @@ function makeService(occ: Occ, onRefund?: () => void) {
       occ.updateOutsideTransaction(PAYMENT_PATH, { refundedAt: '2026-10-01T00:00:00.000Z' });
       onRefund?.();
     }),
-    refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
   };
   const settlements = { cancelSettlement: jest.fn().mockResolvedValue(undefined) };
   const capacity = {

@@ -65,7 +65,7 @@ function makeLifecycle(memory: ReturnType<typeof createInMemoryFirestore>, notif
   const firestore = memory.firestore as never;
   const payments = {
     processRefundByOrderId: jest.fn().mockResolvedValue(undefined),
-    refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
   };
   const settlements = {
     createSettlement: jest.fn().mockResolvedValue(undefined),

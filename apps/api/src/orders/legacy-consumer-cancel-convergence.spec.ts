@@ -164,7 +164,7 @@ function makeContext(options: { order?: Data; gc?: Data } = {}) {
       portoneCalls += 1;
       providerRefunded = true;
     }),
-    refundOrderChargesByOrderId: jest.fn().mockResolvedValue(undefined),
+    refundOrderChargesByOrderId: jest.fn().mockResolvedValue({ unsettledCount: 0 }),
     __portoneCalls: () => portoneCalls,
     __markRefunded: () => {
       providerRefunded = true;
