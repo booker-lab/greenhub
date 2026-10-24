@@ -703,7 +703,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - 2026-10-10 결정: 이전 예약 유지는 그대로 두고, 같은 회차에서 고객 한 명이 동시에 가질 수 있는 만료 전 결제 예약을 3건으로 제한한다(4번째 시도는 409 안내). 구현: `OrderCapacityService` `MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND`. 2026-10-24 코드 대조: #546의 품목별 1인 상한도 만료 전 `HELD` 예약을 합산하므로, 재시도 수량이 상한에 걸리면 이전 예약이 만료(15분)될 때까지 409를 받을 수 있다.
 
 ### CI-REQUIRED-CHECK
-- [ ] **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다. 2026-10-09 CI 추가(#417) 뒤 PR마다 통과한다. 남은 일은 branch protection 필수 검사 지정(사용자)이다.
+- [x] **2026-10-24 사용자 지정 완료**: `main` branch protection 필수 검사가 `verify`, `lint · typecheck`, `unit tests`, `Firebase rules (emulator)`, `build`(모두 GitHub Actions)다. 최신 main 반영 필수와 우회 금지는 그대로다. 이전 기록: **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다. 2026-10-09 CI 추가(#417) 뒤 PR마다 통과한다. 남은 일은 branch protection 필수 검사 지정(사용자)이다.
 
 ### STORE-COMMISSION-RATE-UNUSED
 - [x] **2026-10-21 결정 ②로 반영(2026-10-23 `951044f2` 운영 반영)**: 정산 생성이 같은 transaction에서 가게 `commissionRate`(0~1)를 쓰고, 없으면 `PLATFORM_FEE_RATE`(기본 5%)를 쓴다. 이미 만든 정산은 다시 계산하지 않는다. 어드민 판매자 탭은 % 단위로 받고 "다음 정산부터 적용"을 안내한다. 이전 기록: 어드민이 가게별 수수료(`stores.commissionRate`)를 저장하지만 정산 생성은 전역 `PLATFORM_FEE_RATE`만 쓴다(`apps/api/src/settlements/settlements.service.ts`). **2026-10-09 결정: 파일럿 동안 그대로 둔다**(가게가 하나). 어드민 판매자 목록에 "정산은 공통 수수료율" 안내만 표시한다. 가게가 늘면 다시 정한다.
@@ -712,9 +712,10 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 - [x] **2026-10-15 사용자 결정: 현재 문구로 확정**(`apps/api/src/notifications/refund-notice-reasons.ts`의 `ROUND_CANCELLED`·`ADMIN_REFUND`·`LATE_PAYMENT`, 코드 변경 없음). 이전 기록: 회차 전체 취소, 관리자 강제 환불, 늦은 결제 자동 환불은 환불만 하고 고객 알림톡을 보내지 않는다. **2026-10-09 결정: 보낸다.** 승인된 `ORDER_CANCELLED`에 상황별 고정 사유를 싣는다. 사유 문구는 파일럿 개시 전에 사용자가 최종 확정한다. 2026-10-09 코드 반영(#420, 운영 반영). 남은 일은 `apps/api/src/notifications/refund-notice-reasons.ts` 문구 확정이다.
 
 ### OPS-ALERTING
-- [ ] 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다. 2026-10-09 코드 반영(#421, 텔레그램 봇과 GitHub 15분 가동 확인, 운영 반영). 남은 일은 `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`를 Railway 운영과 GitHub Actions 비밀값에 넣는 것이다(`docs/specs/ops/ops-alerts.md` §2).
+- [x] **2026-10-24 확인**: `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`를 Railway 운영과 GitHub Actions 비밀값에 넣었고, 2026-10-24 08:30 KST 아침 운영 요약이 사용자 텔레그램 봇에 실제로 도착했다(Railway API 경로 동작 확인). GitHub 가동 확인 실패 알림은 실패가 있을 때만 보내므로 실발송은 아직 보지 못했다. 이전 기록: 운영 이슈 생성·ALIGO 계정 오류(잔액 부족·IP 미허용·발신번호)·PortOne 서명/금액 이상·정기 작업 실패를 사람에게 알리는 채널이 없다. `/operations` 화면과 홈 "운영 확인 N건"(2026-10-09)은 들어와서 봐야 보인다. **2026-10-09 결정: 도입한다.** 휴대폰 푸시 채널과 GitHub 정기 가동 확인(실패 시 소유자 이메일)으로 시작한다. 2026-10-09 코드 반영(#421, 텔레그램 봇과 GitHub 15분 가동 확인, 운영 반영). 남은 일은 `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`를 Railway 운영과 GitHub Actions 비밀값에 넣는 것이다(`docs/specs/ops/ops-alerts.md` §2).
 
 ### FIRESTORE-MANAGED-BACKUP
+- [x] **2026-10-24 복구 연습 완료(사용자 수행)**: 2026-10-24 02:29 KST 일일 백업을 새 데이터베이스 `restore-drill-1024`(asia-northeast3)로 복원(1분 내외 완료)하고, 주요 컬렉션과 `orders` 문서 필드(주소·금액·상태·중첩 `deliveryAddress`)를 Firestore Studio에서 확인한 뒤 삭제했다. `(default)`는 건드리지 않았다. 복원된 데이터베이스는 삭제 보호가 켜진 채 만들어지므로 연습 정리 때 `gcloud firestore databases update --no-delete-protection` 뒤 삭제한다. 이때 PITR 가장 이른 버전은 10/17 15:52 KST, 일일 백업은 10/11~10/24가 있었다.
 - [x] **2026-10-15 사용자 콘솔 확인: 켜져 있다.** 운영 `green-e4fe3` `(default)` 재해 복구 화면: PITR 사용 설정, 보관 7일, 가장 이른 버전 2026-10-08 23:46 KST. 예약 백업 일일, 보관 14일(주간 백업 없음). 같은 날 Google Cloud 콘솔 백업 목록 확인: 2026-10-09부터 10-15까지 매일 새벽(약 00:30~01:20 KST) 백업 7개가 생성돼 있고 각각 14일 뒤 만료된다. 남은 일: 비운영 프로젝트(또는 새 데이터베이스)로 복구 연습 1회. 이전 기록: 운영 Firestore 백업은 손으로 돌리는 `scripts/backup-firestore.mjs`(로컬 JSON)뿐이었다. **2026-10-09 결정: 켠다.** PITR과 일일 관리형 백업을 GCP 콘솔에서 사용자가 켠다(이 저장소 작업 환경에는 GCP 권한이 없다). 켠 뒤 비운영 프로젝트 복구 연습을 한 번 한다.
 
 ### ROUND-HOLD-ABUSE-LIMITS
