@@ -14,6 +14,15 @@ export type CreateOperationIssueInput = Record<string, unknown> & {
   latestSnapshot?: Record<string, unknown>;
 };
 
+export type CreateOperationIssueOptions = {
+  /**
+   * 사람이 닫은(OPEN이 아닌) 기록에 같은 키가 다시 오면 상태는 그대로 두고 최신 상태 정보만 합친다.
+   * 같은 사건의 재전송(결제사 웹훅 재전송 등)처럼 "다시 생긴 원인"이 아닌 경우에 쓴다.
+   * 기본값(false)은 지금처럼 다시 연다(같은 원인이 다시 생긴 경우).
+   */
+  keepClosed?: boolean;
+};
+
 export type OperationIssueTransaction = {
   get: (ref: ReturnType<FirestoreService['doc']>) => Promise<{ exists: boolean; data(): unknown }>;
   set: (ref: ReturnType<FirestoreService['doc']>, data: Record<string, unknown>) => void;
@@ -30,6 +39,7 @@ export class OperationIssueWriterService {
   async createOrMergeIssue(
     input: CreateOperationIssueInput,
     transaction?: OperationIssueTransaction,
+    options: CreateOperationIssueOptions = {},
   ): Promise<OperationIssueRecord> {
     const issueId = this.issueId(input.idempotencyKey);
     const issueRef = this.firestore.doc(`operationIssues/${issueId}`);
@@ -38,10 +48,26 @@ export class OperationIssueWriterService {
 
     const write = async (tx: OperationIssueTransaction) => {
       const existingSnap = await tx.get(issueRef);
-      opened = !existingSnap.exists || (existingSnap.data() as OperationIssueRecord).status !== 'OPEN';
+      opened =
+        !existingSnap.exists || (existingSnap.data() as OperationIssueRecord).status !== 'OPEN';
       const now = this.firestore.Timestamp.now();
       if (existingSnap.exists) {
         const existing = existingSnap.data() as OperationIssueRecord;
+        if (options.keepClosed && existing.status !== 'OPEN') {
+          // 닫힌 기록은 다시 열지 않고 알리지도 않는다. 상태·해결 경위는 그대로 둔다.
+          opened = false;
+          const kept = {
+            ...existing,
+            latestSnapshot: {
+              ...this.snapshot(existing.latestSnapshot),
+              ...this.snapshot(input.latestSnapshot),
+            },
+            updatedAt: now,
+          } as OperationIssueRecord;
+          tx.set(issueRef, kept);
+          result = kept;
+          return;
+        }
         const merged = {
           ...existing,
           ...input,

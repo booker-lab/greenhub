@@ -752,6 +752,10 @@ describe('결제 확정 뒤 결제사 되돌림 웹훅', () => {
       }),
     );
     expect(second.idempotencyKey).toBe(first.idempotencyKey);
+    // 재전송은 관리자가 닫은 기록을 다시 열지 않는다.
+    for (const call of fixture.issueWriter.createOrMergeIssue.mock.calls) {
+      expect(call[2]).toEqual({ keepClosed: true });
+    }
     // 주문·결제·정산 문서는 바꾸지 않는다.
     expect(fixture.records.get('orders/order-1')).toEqual(acceptedOrder);
     expect(fixture.records.get('payments/order-1')).toEqual(paidPayment);
@@ -851,6 +855,8 @@ describe('결제 확정 뒤 결제사 되돌림 웹훅', () => {
           settlementStatus: null,
         }),
       }),
+      undefined,
+      { keepClosed: true },
     );
     expect(JSON.stringify(fixture.issueWriter.createOrMergeIssue.mock.calls)).not.toMatch(/민감값/);
   });
