@@ -42,11 +42,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function isPrice(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
+// 장바구니에는 옵션을 고르는 칸이 없으므로, 옵션을 고르지 않고 담긴 상품은 상품 화면으로 돌아가게 안내한다.
+const OPTION_REQUIRED_REASON = '옵션을 골라야 하는 상품이에요. 상품 화면에서 옵션을 고른 뒤 다시 담아 주세요.';
+// 서버 안내 중 해결 방법이 문장에 들어 있는 것(옵션 재고, 한 분당 수량, 이전 결제 시도)은 그대로 보여 준다.
+const ACTIONABLE_SERVER_REASON = /골라 주세요|한 분당|남았어요|다 팔렸어요|이전 결제 시도/;
+const HANGUL = /[가-힣]/;
+const MAX_SERVER_REASON_LENGTH = 160;
+
 function unavailableReason(message?: string) {
   if (!message) return '서버에서 구매 가능 여부를 확인하지 못했습니다.';
-  if (/수량|한도|품절/.test(message)) return '요청한 수량을 구매할 수 없습니다.';
-  if (/마감|현재 주문 가능한 회차|구매할 수 없는/.test(message)) return '판매가 마감되었습니다.';
-  if (/찾을 수 없/.test(message)) return '현재 구매할 수 없는 상품입니다.';
+  const trimmed = message.trim();
+  if (/옵션을 묶음마다/.test(trimmed)) return OPTION_REQUIRED_REASON;
+  if (ACTIONABLE_SERVER_REASON.test(trimmed) && trimmed.length <= MAX_SERVER_REASON_LENGTH) {
+    return trimmed;
+  }
+  if (/수량|한도|품절/.test(trimmed)) return '요청한 수량을 구매할 수 없습니다.';
+  if (/마감|현재 주문 가능한 회차|구매할 수 없는/.test(trimmed)) return '판매가 마감되었습니다.';
+  if (/찾을 수 없/.test(trimmed)) return '현재 구매할 수 없는 상품입니다.';
+  // 그 밖의 한국어 안내는 손님에게 보여 주려고 쓴 문장이라 그대로 보인다. 검증 기술 메시지(영문)나
+  // 지나치게 긴 응답은 일반 문구로 바꾼다.
+  if (HANGUL.test(trimmed) && trimmed.length <= MAX_SERVER_REASON_LENGTH) return trimmed;
   return '서버에서 구매 가능 여부를 확인하지 못했습니다.';
 }
 function readErrorMessage(value: unknown) {
