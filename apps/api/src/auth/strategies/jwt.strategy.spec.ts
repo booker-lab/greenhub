@@ -102,6 +102,35 @@ describe('JwtStrategy driver 승인 경계', () => {
     expect(firestore.doc).toHaveBeenCalledWith('users/consumer-1');
   });
 
+  it('매장 없이 받은 판매자 토큰은 가게 등록 뒤 새 매장으로 통과한다', async () => {
+    // 가게 등록(POST /stores)은 users.storeId만 바꾸고 토큰을 다시 발급하지 않는다.
+    const { strategy } = makeStrategy({
+      id: 'seller-1',
+      role: 'seller',
+      storeId: 'store-new',
+      suspended: false,
+    });
+
+    await expect(strategy.validate({ sub: 'seller-1', role: 'seller' })).resolves.toEqual({
+      sub: 'seller-1',
+      role: 'seller',
+      storeId: 'store-new',
+    });
+  });
+
+  it('매장이 있던 판매자 토큰은 매장 연결이 사라지면 거부한다', async () => {
+    const { strategy } = makeStrategy({
+      id: 'seller-1',
+      role: 'seller',
+      storeId: null,
+      suspended: false,
+    });
+
+    await expect(
+      strategy.validate({ sub: 'seller-1', role: 'seller', storeId: 'store-1' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
   it('현재 사용자 role/storeId를 request.user에 반영한다', async () => {
     const { strategy } = makeStrategy({
       id: 'seller-1',
