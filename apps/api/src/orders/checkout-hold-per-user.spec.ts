@@ -5,6 +5,7 @@ import type { CreateOrderDto } from './dto/create-order.dto';
 import {
   MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND,
   OrderCapacityService,
+  RESERVATION_OWNER_MISMATCH_MESSAGE,
 } from './order-capacity.service';
 import { RoundOrderCreateService } from './round-order-create.service';
 
@@ -303,6 +304,21 @@ describe('같은 고객·같은 회차 활성 결제 예약 상한', () => {
     await expectHoldLimit(
       create('round2-4', [{ roundItemId: 'round-item-3', quantity: 1 }], 'user-1', 'round-2'),
     );
+  });
+
+  it('다른 고객이 같은 결제 시도 ID를 보내면 409로 거절하고 원래 예약·주문을 건드리지 않는다', async () => {
+    const { create, memory } = setup();
+    const first = await create('shared-attempt', undefined, 'user-1');
+    const before = snapshotAll(memory);
+
+    const error = await rejection(create('shared-attempt', undefined, 'user-2'));
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error.message).toBe(RESERVATION_OWNER_MISMATCH_MESSAGE);
+    expect(snapshotAll(memory)).toEqual(before);
+    expect(memory.records.get(`checkoutReservations/${first.reservationId}`)).toMatchObject({
+      userId: 'user-1',
+      status: 'HELD',
+    });
   });
 
   it('상한에 도달해도 같은 결제 시도 ID 재요청은 기존 주문·예약을 그대로 돌려준다', async () => {
