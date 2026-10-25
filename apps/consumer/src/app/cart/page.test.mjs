@@ -232,6 +232,26 @@ test('마감·품절·구매 불가 서버 사유를 항목별 제외 사유로 
   });
 });
 
+test('해결 방법이 든 서버 안내는 그대로, 옵션 미선택은 상품 화면 안내로, 기술 메시지는 일반 문구로 보인다', () => {
+  const reasonOf = (message) => resolveRoundCartValidation(roundItem, null, message).reason;
+  assert.equal(
+    reasonOf('옵션을 묶음마다 하나씩 골라 주세요.'),
+    '옵션을 골라야 하는 상품이에요. 상품 화면에서 옵션을 고른 뒤 다시 담아 주세요.',
+  );
+  for (const message of [
+    '화분 흰색 2개만 남았어요. 수량을 줄이거나 다른 옵션을 골라 주세요.',
+    '화분 흰색 다 팔렸어요. 다른 옵션을 골라 주세요.',
+    '호접란 이번 회차에 한 분당 1개까지 주문할 수 있어요. 수량을 줄여 다시 시도해 주세요.',
+    '이전 결제 시도를 아직 처리하고 있어요. 잠시 후 다시 시도하거나 주문 내역을 확인해 주세요.',
+    '이 가게는 지금 주문을 받지 않아요.',
+  ]) {
+    assert.equal(reasonOf(message), message);
+  }
+  for (const message of ['roundItems.0.quantity must not be greater than 99', '가'.repeat(200)]) {
+    assert.equal(reasonOf(message), '서버에서 구매 가능 여부를 확인하지 못했습니다.');
+  }
+});
+
 test('결제 대상은 같은 회차의 서버 검증 통과 항목만 포함하고 legacy 항목은 보존한다', () => {
   const anotherRoundItem = {
     ...roundItem,
