@@ -310,6 +310,35 @@ describe('기기별 refresh 세션', () => {
     expect(firebaseAuth.revokeRefreshTokens).toHaveBeenCalledWith(SELLER.id);
   });
 
+  it('가게 등록 전에 받은 토큰은 등록 뒤에도 세션 확인·refresh가 이어지고 새 토큰에 매장을 담는다', async () => {
+    const { authenticate, docs, jwt, login, refresh, service, stolenAudits } = await setup();
+    docs.set(`users/${SELLER.id}`, { ...docs.get(`users/${SELLER.id}`), storeId: null });
+    const before = await login();
+    expect(jwt.decode(before.accessToken)).not.toHaveProperty('storeId');
+
+    // POST /stores는 users.storeId만 갱신하고 토큰을 다시 발급하지 않는다.
+    docs.set(`users/${SELLER.id}`, { ...docs.get(`users/${SELLER.id}`), storeId: 'store-new' });
+
+    const principal = await authenticate(before.accessToken);
+    expect(principal).toMatchObject({ sub: SELLER.id, role: 'seller', storeId: 'store-new' });
+    await expect(service.getSession(principal)).resolves.toBeDefined();
+
+    const after = await refresh(before.refreshToken);
+    expect(jwt.decode(after.accessToken)).toMatchObject({ storeId: 'store-new' });
+    expect(jwt.decode(after.refreshToken)).toMatchObject({ storeId: 'store-new' });
+    await expect(authenticate(after.accessToken)).resolves.toMatchObject({ storeId: 'store-new' });
+    expect(stolenAudits()).toHaveLength(0);
+  });
+
+  it('다른 매장으로 옮겨진 판매자의 이전 토큰은 세션 확인·refresh 모두 거부한다', async () => {
+    const { authenticate, docs, login, refresh } = await setup();
+    const before = await login();
+    docs.set(`users/${SELLER.id}`, { ...docs.get(`users/${SELLER.id}`), storeId: 'store-2' });
+
+    await expect(authenticate(before.accessToken)).rejects.toThrow();
+    await expect(refresh(before.refreshToken)).rejects.toThrow();
+  });
+
   it('살아 있는 세션 목록은 GET /auth/me 응답에 넣지 않는다', async () => {
     const { login, service } = await setup();
     await login();
