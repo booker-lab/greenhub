@@ -11,6 +11,7 @@ import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
+import { useTokenRef } from '@/lib/use-token-ref';
 
 // 가게 소개(공개 페이지)·품질 보장 문구·남은 수량 공개 여부. 팔도감 벤치마킹 비교 기능.
 
@@ -81,12 +82,15 @@ export default function StoreProfileSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 토큰 갱신만으로 소개를 다시 읽어 쓰는 중인 내용을 덮지 않는다.
+  const { tokenRef, hasToken } = useTokenRef(token);
+
   useEffect(() => {
-    if (!storeId || !token) return;
-    apiJson<StoreProfileExtras>(`/stores/${storeId}/public-profile`, token)
+    if (!storeId || !hasToken) return;
+    apiJson<StoreProfileExtras>(`/stores/${storeId}/public-profile`, tokenRef.current)
       .then((profile) => setForm(toForm(profile)))
       .catch(() => setForm(toForm({})));
-  }, [storeId, token]);
+  }, [storeId, hasToken, tokenRef]);
 
   const patch = (next: Partial<FormState>) => setForm((current) => (current ? { ...current, ...next } : current));
 
