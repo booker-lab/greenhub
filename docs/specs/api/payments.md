@@ -126,7 +126,7 @@ webhook-signature
 4. `Transaction.Paid`가 아닌 이벤트는 아직 처리 가능한 `PENDING` 주문을 `payment_failed`로 취소·release하는 경로로 보낸다.
    `PENDING`이 아닌 주문에 `Transaction.Cancelled`·`Transaction.PartialCancelled`·`Transaction.CancelPending`·`Transaction.DisputeCreated`가 오면
    주문·결제·정산 문서는 바꾸지 않고 결제사 상태·정산 상태를 담은 `PROVIDER_REVERSAL_DETECTED` critical 운영 기록을 남긴다.
-   취소 계열은 우리 쪽 취소·환불 흐름이 소유한 경우(주문 `CANCELLED`, 결제 `CANCELLED`/`refundedAt`/`refundClaim`, `finalizationRefund`)를 제외하고, 분쟁은 항상 기록한다. 재전송은 같은 기록에 합친다.
+   취소 계열은 우리 쪽 취소·환불 흐름이 소유한 경우(주문 `CANCELLED`, 결제 `CANCELLED`/`refundedAt`/`refundClaim`, `finalizationRefund`)를 제외하고, 분쟁은 항상 기록한다. 재전송은 같은 기록에 합치고, 관리자가 이미 닫은 기록은 다시 열지 않는다(최신 상태 정보만 합치고 알림·정산 보류를 다시 만들지 않는다, 2026-10-25). 새 취소·분쟁은 `cancellationId`·이벤트 유형이 달라 다른 기록이 된다.
 5. `Transaction.Paid`이면 webhook body의 금액을 신뢰하지 않고 `GET /payments/{paymentId}`로 PortOne 원격 결제를 다시 조회한다.
 6. `PaymentFinalizationService.finalizePaidOrder()`가 원격 `paymentData.status === 'PAID'`를 다시
    확인한 뒤 정상 finalization·취소 후 환불 수렴을 진행한다.
