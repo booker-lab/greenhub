@@ -10,6 +10,7 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 import type { ProductFormData } from '../../_components/ProductForm';
 import ProductForm from '../../_components/ProductForm';
 import { extrasFromProduct } from '../../_components/productExtras';
+import { useTokenRef } from '@/lib/use-token-ref';
 
 // Firestore Timestamp | ISO string → YYYY-MM-DD
 function toISODate(value: unknown): Date | null {
@@ -47,16 +48,19 @@ export default function EditProductPage() {
 
   const [initialData, setInitialData] = useState<Partial<ProductFormData> | undefined>();
   const [notFound, setNotFound] = useState(false);
+  // 토큰 갱신만으로 상품을 다시 읽어 수정 중인 폼을 덮지 않는다.
+  const { tokenRef, hasToken } = useTokenRef(token);
 
   useEffect(() => {
-    if (!storeId || !token || !productId) return;
+    if (!storeId || !hasToken || !productId) return;
+    const requestToken = tokenRef.current;
 
     // 경로 조각 검증 실패도 요청 없이 아래 catch(찾을 수 없음)로 모인다.
     Promise.resolve()
       .then(() =>
         fetch(
           `${getApiBaseUrl()}/stores/${apiPathSegment(storeId)}/products/${apiPathSegment(productId)}/owner`,
-          { headers: { Authorization: `Bearer ${token}` } },
+          { headers: { Authorization: `Bearer ${requestToken}` } },
         ),
       )
       .then(async (res) => {
@@ -104,7 +108,7 @@ export default function EditProductPage() {
         setInitialData(mapped);
       })
       .catch(() => setNotFound(true));
-  }, [storeId, token, productId]);
+  }, [storeId, hasToken, productId, tokenRef]);
 
   if (notFound || !productId) {
     return (

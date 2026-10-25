@@ -358,7 +358,11 @@ describe('Seller 주문 상세 read-recovery — ordering/scope (TASK 7-8)', () 
     expect(
       shouldInvalidateOrderDetailScope(base, { ...base, storeId: 'store-2' }),
     ).toBe(true);
-    expect(shouldInvalidateOrderDetailScope(base, { ...base, token: 'token-2' })).toBe(true);
+    // 같은 주문·매장의 토큰 갱신은 화면을 비우지 않는다(열린 보류·환불 창 유지).
+    expect(shouldInvalidateOrderDetailScope(base, { ...base, token: 'token-2' })).toBe(false);
+    // 토큰이 사라지면(로그아웃) 이전 주문을 남기지 않는다.
+    expect(shouldInvalidateOrderDetailScope(base, { ...base, token: null })).toBe(true);
+    expect(shouldInvalidateOrderDetailScope(base, { ...base, token: undefined })).toBe(true);
     expect(
       shouldInvalidateOrderDetailScope(base, { orderId: 'order-1', storeId: null, token: 'token-1' }),
     ).toBe(true);
