@@ -120,7 +120,7 @@ export function useOrderDetail(orderId: string): UseOrderDetailResult {
 
     const nextScope = { orderId, storeId, token };
     if (shouldInvalidateOrderDetailScope(scopeRef.current, nextScope)) {
-      // orderId/storeId/token 변경: 이전 scope의 order·보조 정보를 새 scope로 leak하지 않는다.
+      // orderId/storeId 변경·토큰 소멸: 이전 scope의 order·보조 정보를 새 scope로 leak하지 않는다.
       requestIdRef.current += 1;
       hasDataRef.current = false;
       scopeRef.current = nextScope;

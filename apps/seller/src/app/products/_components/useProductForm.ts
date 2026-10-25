@@ -13,6 +13,7 @@ import {
   type ProductFormData,
   type ProductFormProps,
 } from './productForm.types';
+import { useTokenRef } from '@/lib/use-token-ref';
 
 /** 상품정보제공고시의 빈 칸만 기본값(생산자=매장명, 상담 전화=사업자 프로필 연락처)으로 채운다. */
 function withNoticeDefaults(form: ProductFormData, defaults: NoticeStoreDefaults): ProductFormData {
@@ -32,6 +33,8 @@ export function useProductForm({
 
   // 매장에서 읽은 고시 기본값. 폼을 새로 채울 때마다 빈 칸에만 넣는다.
   const noticeDefaults = useRef<NoticeStoreDefaults>({ producer: '', csPhone: '' });
+  // 토큰 갱신만으로 매장 정보를 다시 읽어 판매자가 비운 고시 칸을 다시 채우지 않는다.
+  const { tokenRef, hasToken } = useTokenRef(token);
 
   const [form, setForm] = useState<ProductFormData>(() =>
     initialData ? { ...defaultForm(), ...initialData } : defaultForm(),
@@ -85,9 +88,9 @@ export function useProductForm({
 
   // 매장 이름·연락처를 읽어 고시의 빈 생산자·상담 전화 칸을 채운다. 실패하면 빈 칸으로 두고 판매자가 직접 쓴다.
   useEffect(() => {
-    if (!storeId || !token) return;
+    if (!storeId || !hasToken) return;
     let active = true;
-    apiJson<{ name?: string; phone?: string }>(`/stores/${apiPathSegment(storeId)}`, token)
+    apiJson<{ name?: string; phone?: string }>(`/stores/${apiPathSegment(storeId)}`, tokenRef.current)
       .then((store) => {
         if (!active) return;
         const defaults = { producer: store.name?.trim() ?? '', csPhone: store.phone?.trim() ?? '' };
@@ -98,7 +101,7 @@ export function useProductForm({
     return () => {
       active = false;
     };
-  }, [storeId, token]);
+  }, [storeId, hasToken, tokenRef]);
 
   function set<K extends keyof ProductFormData>(key: K, value: ProductFormData[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
