@@ -311,6 +311,7 @@ gap을 다음 최소 authority로 닫는다.
 - 계정 정지 시 기존 refresh token의 후속 갱신을 거부하는 정책을 정의·구현
 - refresh 시 authoritative user 상태를 확인하고 현재 role/storeId/승인 상태와 충돌하는 stale claims를 재발급하지 않음
 - role/storeId 변경 시 다음 refresh에서 이전 권한이 유지되지 않음
+- 예외: 토큰에 매장이 없고 사용자 문서에 매장이 생긴 전이(판매자 가게 등록 직후, 관리자 매장 연결)는 세션 확인·refresh 모두 허용하고, 요청 권한과 다음 회전 토큰은 사용자 문서의 매장으로 정한다. 매장이 다른 매장으로 바뀌거나 사라지면 거부한다(`apps/api/src/auth/store-binding.ts`, 2026-10-25 재검증에서 가게 등록 직후 로그아웃 결함으로 확인).
 - access token 이미 발급분의 허용 revocation window를 명시적으로 결정하고 테스트함
 - 즉시 차단이 요구되면 token version/session revocation 또는 동등한 서버 검증 경계를 사용
 - logout/refresh-token rotation 동작 유지
