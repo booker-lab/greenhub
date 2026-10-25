@@ -10,6 +10,7 @@ import {
   isIssuedBeforeSessionRevocation,
   SESSIONS_REVOKED_AT_FIELD,
 } from '../session-revocation';
+import { isTokenStoreBindingCurrent } from '../store-binding';
 import { hasExpectedTokenClaims, JWT_ALGORITHM } from '../token-claims';
 import { JwtPayload } from '../types/jwt-payload.type';
 
@@ -60,7 +61,10 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       !isStoreIdValue(user?.['storeId']) ||
       user?.['suspended'] === true ||
       payload.role !== currentRole ||
-      normalizeStoreId(payload.storeId) !== normalizeStoreId(user?.['storeId']) ||
+      !isTokenStoreBindingCurrent(
+        normalizeStoreId(payload.storeId),
+        normalizeStoreId(user?.['storeId']),
+      ) ||
       (currentRole === 'driver' && user?.['driverApproved'] !== true)
     ) {
       throw new ForbiddenException('현재 사용자 권한과 일치하지 않는 인증 토큰입니다.');

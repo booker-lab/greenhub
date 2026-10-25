@@ -49,6 +49,7 @@ import {
   openRotatedRefreshToken,
   sealRotatedRefreshToken,
 } from './refresh-token-store';
+import { isTokenStoreBindingCurrent } from './store-binding';
 import {
   ACTIVE_SESSION_IDS_FIELD,
   type RefreshSessions,
@@ -652,7 +653,7 @@ export class AuthService {
     if (
       !isStoreIdValue(payload.storeId) ||
       payload.role !== currentUser.role ||
-      normalizeStoreId(payload.storeId) !== currentUser.storeId
+      !isTokenStoreBindingCurrent(normalizeStoreId(payload.storeId), currentUser.storeId)
     ) {
       throw new UnauthorizedException('현재 사용자 권한과 일치하지 않는 리프레시 토큰입니다.');
     }
@@ -734,7 +735,7 @@ export class AuthService {
     if (
       !isStoreIdValue(user.storeId) ||
       user.role !== currentUser.role ||
-      normalizeStoreId(user.storeId) !== currentUser.storeId
+      !isTokenStoreBindingCurrent(normalizeStoreId(user.storeId), currentUser.storeId)
     ) {
       throw new UnauthorizedException('현재 사용자 권한과 일치하지 않는 세션입니다.');
     }
