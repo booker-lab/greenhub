@@ -13,9 +13,11 @@ on:
 permissions:
   contents: read
 
+# PR은 새 push가 오면 앞 실행을 취소한다. main push는 병합된 SHA마다 끝까지 검사해야
+# 운영 배포 후보의 CI 결론이 남으므로 취소하지 않는다.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   static:
@@ -118,6 +120,9 @@ jobs:
         run: pnpm --filter driver test
       - name: Consumer (node:test)
         run: pnpm --filter consumer test
+      # Jest는 .spec.ts만 잡으므로 API 안의 node:test(.spec.mjs)는 따로 실행한다.
+      - name: API (node:test .spec.mjs)
+        run: pnpm --filter api test:node
       - name: Shared (vitest)
         run: pnpm --filter @greenhub/shared test
 
@@ -239,3 +244,24 @@ jobs:
         with:
           version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
           extra_args: --only-verified
+
+  # 브랜치 보호 필수 검사는 이 job 하나만 등록한다. job 이름이 바뀌어도 필수 검사 목록을
+  # 다시 맞출 필요가 없고, 위 job 중 하나라도 실패·취소·건너뜀이면 실패한다.
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [static, unit, scripts, rules, build, secrets]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 모든 검사가 성공했는지 확인
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "검사 결과: $RESULTS"
+          for result in $RESULTS; do
+            if [ "$result" != "success" ]; then
+              echo "::error::성공하지 않은 검사가 있다: $RESULTS"
+              exit 1
+            fi
+          done
