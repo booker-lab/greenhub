@@ -36,6 +36,9 @@ export class LatePaymentCapacityError extends ConflictException {
 // 결제를 다시 시도해도 이전 시도의 결제 전 주문·예약은 반환하지 않는다(늦게 도착한 결제의
 // 재확보·자동 환불 흐름과 맞추기 위한 2026-10-04 결정). 대신 재시도가 쌓여 한 고객이 회차
 // 한도를 오래 차지하지 않도록 개수를 제한한다.
+/** 다른 고객의 결제 시도 키로 예약을 요청했을 때. 클라이언트가 새 결제 시도 키로 다시 요청하게 한다. */
+export const RESERVATION_OWNER_MISMATCH_MESSAGE =
+  '결제 시도 정보가 맞지 않아요. 결제 화면에서 다시 시도해 주세요.';
 export const MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND = 3;
 
 const ACTIVE_CHECKOUT_HOLD_LIMIT_MESSAGE =
@@ -195,7 +198,16 @@ export class OrderCapacityService {
     const reservationId = this.reservationId(input.storeId, input.roundId, input.idempotencyKey);
     const reservationRef = this.firestore.doc(`checkoutReservations/${reservationId}`);
     const reservationSnap = await tx.get(reservationRef);
-    if (reservationSnap.exists) return reservationSnap.data() as ReservationRecord;
+    if (reservationSnap.exists) {
+      const existing = reservationSnap.data() as ReservationRecord;
+      // 예약 id는 가게·회차·결제 시도 키로만 정해진다. 다른 고객이 같은 결제 시도 키를 보내면
+      // 남의 예약을 받아 그 품목으로 주문하고 결제 확정 때 예약을 먼저 소비해, 원래 고객의 결제가
+      // 확정되지 못한다. 같은 고객의 재요청만 기존 예약을 돌려준다.
+      if (existing.userId !== input.userId) {
+        throw new ConflictException(RESERVATION_OWNER_MISMATCH_MESSAGE);
+      }
+      return existing;
+    }
 
     // 같은 고객의 같은 회차 HELD·CONSUMED 예약은 회차 문서보다 먼저 읽는다(회차 문서를 여러
     // 결제가 다투는 구간을 늘리지 않는다). 동등 조건만 써서 복합 색인이 필요 없다.
