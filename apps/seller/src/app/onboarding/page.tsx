@@ -27,6 +27,7 @@ import {
   LOGO_IMAGE_ENCODE,
   reencodeImageToJpeg,
 } from '../products/_components/image-reencode';
+import { useTokenRef } from '@/lib/use-token-ref';
 
 export default function OnboardingPage() {
   const { data: session, update } = useSession();
@@ -47,10 +48,13 @@ export default function OnboardingPage() {
     logoUrl: '',
   });
 
+  // 토큰 갱신만으로 매장 정보를 다시 읽어 고치는 중인 프로필을 덮지 않는다(매장이 바뀌면 다시 읽는다).
+  const { tokenRef, hasToken } = useTokenRef(session?.user.accessToken);
+
   useEffect(() => {
     const storeId = session?.user.storeId;
-    const token = session?.user.accessToken;
-    if (!storeId || !token) return;
+    const token = tokenRef.current;
+    if (!storeId || !hasToken) return;
     apiJson<{
       name?: string;
       ceoName?: string;
@@ -73,7 +77,7 @@ export default function OnboardingPage() {
       .catch(() => {
         // 기존 store GET 실패 시 빈 폼 유지 (silent)
       });
-  }, [session?.user.storeId, session?.user.accessToken]);
+  }, [session?.user.storeId, hasToken, tokenRef]);
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];

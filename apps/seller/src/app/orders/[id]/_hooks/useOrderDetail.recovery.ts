@@ -95,7 +95,9 @@ export interface OrderDetailScope {
 
 /**
  * scope가 바뀌면 이전 scope의 authoritative order를 새 scope처럼 노출하지 않는다.
- * - orderId/storeId/token 중 하나라도 바뀌면 무효화.
+ * - orderId/storeId가 바뀌거나 토큰이 사라지면(로그아웃) 무효화.
+ * - 같은 주문·매장에서 토큰 문자열만 바뀐 갱신(keepalive·재검증)은 무효화하지 않는다. 무효화하면 화면이
+ *   첫 로딩으로 돌아가 열려 있던 보류·환불 창과 입력이 사라진다. 이때는 background 재조회만 한다.
  * - 최초 마운트(prev null)는 무효화 대상이 아니다(초기 상태가 이미 비어 있음).
  * - 동일 scope의 retry(tick/focus)는 무효화하지 않고 stale 보존한다.
  */
@@ -104,7 +106,11 @@ export function shouldInvalidateOrderDetailScope(
   next: OrderDetailScope,
 ): boolean {
   if (!prev) return false;
-  return prev.orderId !== next.orderId || prev.storeId !== next.storeId || prev.token !== next.token;
+  return (
+    prev.orderId !== next.orderId ||
+    prev.storeId !== next.storeId ||
+    Boolean(prev.token) !== Boolean(next.token)
+  );
 }
 
 /**

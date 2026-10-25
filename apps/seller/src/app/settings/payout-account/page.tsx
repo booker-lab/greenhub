@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { apiJson } from '@/lib/api';
+import { useTokenRef } from '@/lib/use-token-ref';
 import {
   ACCOUNT_HOLDER_MAX_LENGTH,
   ACCOUNT_NUMBER_MAX_LENGTH,
@@ -34,10 +35,12 @@ export default function PayoutAccountSettingsPage() {
   const [form, setForm] = useState<PayoutAccountForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 토큰 갱신만으로 계좌를 다시 읽어 입력 중인 계좌번호를 지우지 않는다.
+  const { tokenRef, hasToken } = useTokenRef(token);
 
   useEffect(() => {
-    if (!storeId || !token) return;
-    apiJson(`/stores/${storeId}/payout-account`, token)
+    if (!storeId || !hasToken) return;
+    apiJson(`/stores/${storeId}/payout-account`, tokenRef.current)
       .then((body) => {
         const account = readMaskedPayoutAccount(body);
         setSaved(account);
@@ -48,7 +51,7 @@ export default function PayoutAccountSettingsPage() {
       })
       .catch(() => setLoadError('저장된 계좌를 불러오지 못했어요. 잠시 후 다시 열어 주세요.'))
       .finally(() => setLoaded(true));
-  }, [storeId, token]);
+  }, [storeId, hasToken, tokenRef]);
 
   const patch = (next: Partial<PayoutAccountForm>) => setForm((current) => ({ ...current, ...next }));
 
