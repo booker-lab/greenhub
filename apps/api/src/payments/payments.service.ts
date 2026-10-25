@@ -218,26 +218,33 @@ export class PaymentsService {
       : null;
     const cancellationId = dto.data.cancellationId ?? null;
 
-    await this.issueWriter.createOrMergeIssue({
-      storeId: String(order['storeId'] ?? ''),
-      orderId,
-      paymentId: orderId,
-      type: PROVIDER_REVERSAL_ISSUE_TYPE,
-      severity: 'critical',
-      title: isDispute ? '결제사 분쟁 접수' : '결제사 쪽 결제 취소 감지',
-      message: isDispute
-        ? '결제가 확정된 주문에 결제사 분쟁이 접수됐습니다. 정산 지급 전에 PortOne 콘솔에서 확인하세요.'
-        : '결제가 확정된 주문이 결제사 쪽에서 취소됐습니다. 정산 지급 전에 PortOne 콘솔에서 확인하세요.',
-      idempotencyKey: `provider-reversal:${orderId}:${dto.type}:${cancellationId ?? '-'}`,
-      latestSnapshot: {
-        orderStatus,
-        paymentStatus: typeof payment?.['status'] === 'string' ? payment['status'] : null,
-        providerStatus,
-        providerEvent: dto.type,
-        settlementStatus,
-        failureStage: 'provider_reversal',
+    await this.issueWriter.createOrMergeIssue(
+      {
+        storeId: String(order['storeId'] ?? ''),
+        orderId,
+        paymentId: orderId,
+        type: PROVIDER_REVERSAL_ISSUE_TYPE,
+        severity: 'critical',
+        title: isDispute ? '결제사 분쟁 접수' : '결제사 쪽 결제 취소 감지',
+        message: isDispute
+          ? '결제가 확정된 주문에 결제사 분쟁이 접수됐습니다. 정산 지급 전에 PortOne 콘솔에서 확인하세요.'
+          : '결제가 확정된 주문이 결제사 쪽에서 취소됐습니다. 정산 지급 전에 PortOne 콘솔에서 확인하세요.',
+        idempotencyKey: `provider-reversal:${orderId}:${dto.type}:${cancellationId ?? '-'}`,
+        latestSnapshot: {
+          orderStatus,
+          paymentStatus: typeof payment?.['status'] === 'string' ? payment['status'] : null,
+          providerStatus,
+          providerEvent: dto.type,
+          settlementStatus,
+          failureStage: 'provider_reversal',
+        },
       },
-    });
+      undefined,
+      // 같은 결제사 이벤트의 재전송은 새 사건이 아니다. 관리자가 확인하고 닫은 기록을 다시 열면
+      // 정산 확정·지급이 다시 보류되고 알림이 또 간다. 새 취소·분쟁은 cancellationId·이벤트 유형이
+      // 달라 다른 기록이 된다.
+      { keepClosed: true },
+    );
     this.logger.warn(
       `[PaymentsWebhook] 결제사 되돌림 감지 orderId=${orderId} event=${dto.type} orderStatus=${orderStatus} providerStatus=${providerStatus} settlementStatus=${String(settlementStatus)}`,
     );

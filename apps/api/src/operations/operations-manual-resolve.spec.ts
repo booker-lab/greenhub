@@ -326,4 +326,40 @@ describe('POST /stores/:storeId/operation-issues/:issueId/resolve', () => {
       .expect(200);
     expect(detail.body).toMatchObject({ status: 'OPEN', resolution: null });
   });
+
+  it('keepClosed로 같은 사건이 다시 오면 닫힌 기록을 다시 열지 않고 최신 상태만 합친다', async () => {
+    const issueId = createHash('sha256')
+      .update(baseIssue.idempotencyKey)
+      .digest('hex')
+      .slice(0, 32);
+    await boot({
+      'stores/store-1': { ownerId: 'seller-1' },
+      [`operationIssues/${issueId}`]: { ...baseIssue, id: issueId, latestSnapshot: { a: 1 } },
+    });
+    await resolve('seller', { memo: '콘솔 확인' }, 'store-1', issueId).expect(200);
+    const closed = structuredClone(memory.read(`operationIssues/${issueId}`) as Data);
+
+    const writer = new OperationIssueWriterService(memory.firestore as never);
+    const result = await writer.createOrMergeIssue(
+      {
+        storeId: 'store-1',
+        orderId: 'order-1',
+        paymentId: 'order-1',
+        type: 'DELIVERY_PHOTO_RECONCILIATION_REQUIRED',
+        severity: 'critical',
+        idempotencyKey: baseIssue.idempotencyKey,
+        latestSnapshot: { b: 2 },
+      },
+      undefined,
+      { keepClosed: true },
+    );
+
+    const kept = memory.read(`operationIssues/${issueId}`) as Data;
+    expect(kept['status']).toBe(closed['status']);
+    expect(kept['status']).not.toBe('OPEN');
+    expect(kept['resolution']).toEqual(closed['resolution']);
+    expect(kept['resolvedAt']).toEqual(closed['resolvedAt']);
+    expect(kept['latestSnapshot']).toEqual({ a: 1, b: 2 });
+    expect(result['status']).toBe(closed['status']);
+  });
 });
