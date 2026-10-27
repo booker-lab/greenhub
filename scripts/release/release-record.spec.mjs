@@ -161,6 +161,59 @@ test('직전 prod Release와 비교한 변경 목록을 넣는다', async () => 
   assert.match(create.body.body, /fix by @a in #639/);
 });
 
+test('직전 배포는 목록 순서가 아니라 Release를 만든 시각(published_at)으로 고른다', async () => {
+  // 2026-10-27 실제 목록 응답 순서. GitHub는 tag 이름 역순으로 주고, created_at은 대상 커밋 날짜다.
+  const { impl, calls } = githubFetch({
+    releases: [
+      {
+        tag_name: 'prod-20261024-dd7b3952',
+        html_url: 'https://github.test/r/dd7b',
+        body: '',
+        created_at: '2026-10-24T06:46:24Z',
+        published_at: '2026-10-24T08:37:31Z',
+      },
+      {
+        tag_name: 'prod-20261024-bed4b97c',
+        html_url: 'https://github.test/r/bed4',
+        body: '',
+        created_at: '2026-10-24T06:29:04Z',
+        published_at: '2026-10-24T07:00:23Z',
+      },
+      {
+        tag_name: 'prod-20261024-7ad5b07b',
+        html_url: 'https://github.test/r/7ad5',
+        body: '',
+        created_at: '2026-10-24T13:14:30Z',
+        published_at: '2026-10-24T13:46:03Z',
+      },
+      {
+        tag_name: 'prod-20261024-2ee48162',
+        html_url: 'https://github.test/r/2ee4',
+        body: '',
+        created_at: '2026-10-24T08:57:56Z',
+        published_at: '2026-10-24T10:04:10Z',
+      },
+      // 초안은 아직 배포 기록이 아니다.
+      {
+        tag_name: 'prod-20261025-aaaaaaaa',
+        html_url: 'https://github.test/r/draft',
+        body: '',
+        draft: true,
+        published_at: null,
+      },
+    ],
+  });
+  const result = await recordRelease({ ...base, fetchImpl: impl });
+  assert.equal(result.previous, 'prod-20261024-7ad5b07b');
+  const notes = calls.find((call) => call.url.endsWith('/generate-notes'));
+  assert.equal(notes.body.previous_tag_name, 'prod-20261024-7ad5b07b');
+  const create = calls.find((call) => call.method === 'POST' && call.url.endsWith('/releases'));
+  assert.match(
+    create.body.body,
+    /직전 배포: \[prod-20261024-7ad5b07b\]\(https:\/\/github.test\/r\/7ad5\)/,
+  );
+});
+
 test('같은 이름 tag가 이미 있으면(같은 날 같은 SHA 재배포) run ID를 붙인다', async () => {
   const fromRelease = githubFetch({
     releases: [{ tag_name: 'prod-20261024-7563488a', html_url: 'x', body: '- 배포 run: other' }],
