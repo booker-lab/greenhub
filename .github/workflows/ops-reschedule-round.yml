@@ -1,0 +1,136 @@
+name: Ops reschedule round
+
+# 아직 열리지 않은 운영 회차 1개의 일정을 뒤로 미루거나(reschedule) 그 회차의 이름·상태·일정을 본다(check).
+# 저장소 owner가 main에서 수동 실행할 때만 production Environment의 Firebase 서비스 계정 키를 쓴다.
+# 스크립트: scripts/ops/reschedule-round.mjs (API `SaleRoundsService.updateRound`가 쓰는 schedule·name·updatedAt만
+# 한 트랜잭션에 갱신. 상품·한도·지역은 손대지 않고, 이미 열렸거나 예약·주문이 있는 회차는 거부).
+# 저장소가 공개라 Actions 로그도 공개다. 이 workflow는 스크립트 기본 출력(모드·결과·회차 이름·상태·일정)만 남긴다.
+# 판매자 앱 없이 바꾸는 이유(2026-10-28 결정): 판매자 앱은 카카오 로그인 계정이라 운영자가 대신 로그인할 수 없고,
+# 결제사 LIVE 채널이 생기기 전에 첫 실제 회차가 자동으로 열리면 안 된다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      round_id:
+        description: 회차 id(UUID)
+        required: true
+        type: string
+      mode:
+        description: check(회차 1개의 이름·상태·일정만 조회) 또는 reschedule(일정 변경)
+        required: true
+        type: choice
+        options:
+          - check
+          - reschedule
+        default: check
+      shift_days:
+        description: 'reschedule에서 schedule과 둘 중 하나만. 일정 5개를 모두 이 일수만큼 뒤로(1~90, 요일 구조를 지키려면 7의 배수)'
+        required: false
+        type: string
+        default: ''
+      schedule:
+        description: 'reschedule에서 shift_days와 둘 중 하나만. 한국 시간 5개를 |로 구분: 주문시작|주문마감|경매|배송시작|배송종료 (예: 2026-11-22 10:00|2026-11-30 00:00|2026-11-30 07:00|2026-12-01 00:00|2026-12-01 09:00)'
+        required: false
+        type: string
+        default: ''
+      name:
+        description: 선택. 새 회차 이름(40자 이하). 이름에 배송 날짜가 들어 있으면 같이 바꾼다
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-reschedule-round
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 실행자 확인
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: dispatch·실행자·ref 확인
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch로만 실행합니다.' >&2; exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" || "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo '실행자가 저장소 owner가 아니어서 차단합니다.' >&2; exit 1
+          fi
+          if [[ "$REF" != 'refs/heads/main' ]]; then
+            echo 'main에서만 실행합니다.' >&2; exit 1
+          fi
+
+  reschedule-round:
+    name: 회차 일정 확인·변경
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    permissions:
+      contents: read
+    env:
+      FIREBASE_PROJECT: green-e4fe3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      # scripts 워크스페이스의 운영 의존성(firebase-admin·bcrypt)만 설치한다. devDependency인 firebase-tools는 설치하지 않는다.
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile --filter ./scripts --prod
+
+      # ops-lock-account.yml과 같은 방식으로 키를 RUNNER_TEMP에 600 권한으로 쓴다.
+      - name: Firebase 인증
+        shell: bash
+        env:
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo 'production Environment 비밀값이 없습니다: FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON' >&2; exit 1
+          fi
+          key="$RUNNER_TEMP/firebase-deploy.json"
+          umask 077
+          printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key"
+          chmod 600 "$key"
+          project="$(jq -r .project_id "$key")"
+          if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
+            echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
+          fi
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$key" >> "$GITHUB_ENV"
+
+      - name: 회차 일정 확인·변경 실행
+        shell: bash
+        env:
+          ROUND_ID: ${{ inputs.round_id }}
+          ROUND_MODE: ${{ inputs.mode }}
+          ROUND_SHIFT_DAYS: ${{ inputs.shift_days }}
+          ROUND_SCHEDULE: ${{ inputs.schedule }}
+          ROUND_NAME: ${{ inputs.name }}
+        run: node scripts/ops/reschedule-round.mjs
+
+      - name: 서비스 계정 키 삭제
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/firebase-deploy.json"
