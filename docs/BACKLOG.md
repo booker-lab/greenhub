@@ -494,7 +494,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - [ ] settlement 및 payment 검증 결과 반영
 - [x] PortOne/PG·ALIGO 전화번호·메시지 처리 경계 반영 — 8/30 판 `/privacy` 4절. ALIGO 고정 IP 프록시는 HTTPS 터널이라 위탁 고지 대상 아님(2026-10-10)
 - [x] **`LEGAL-PRIVACY-OFFICER`**: 2026-10-10 사용자 결정(대표자)으로 `/privacy` 9절에 반영, `legal-documents.test.mjs`에 고정. 2026-11-01 시행 개정판이며 운영 배포 대기 묶음과 함께 나간다.
-- [ ] **`LEGAL-MAIL-ORDER-REGISTRATION`** (파일럿 전, 사람 결정): 통신판매업 신고 대상 여부를 정한다. 2026-10-18 footer 칸을 미리 만들었다: 신고하면 `apps/consumer/src/lib/publicBusinessInfo.ts`의 `mailOrderRegistrationNumber`에 번호만 넣고 consumer를 배포한다(빈 값이면 footer에 칸이 나오지 않는다).
+- [x] **`LEGAL-MAIL-ORDER-REGISTRATION`**: 2026-10-19 정부24 접수 → 2026-10-21 이천시 신고증 발급(제 2026-경기이천-0718 호). 2026-10-27 `apps/consumer/src/lib/publicBusinessInfo.ts`의 `mailOrderRegistrationNumber`에 번호를 채웠다(footer 칸 자동 노출, consumer 배포 뒤 운영 반영).
 - [x] **`LEGAL-DRIVER-KAKAOMAP-NOTICE`**: 2026-10-10 사용자 결정(고지)으로 `/privacy` 4절에 반영.
 - [x] **`LEGAL-LATE-PAYMENT-REFUND-TERMS`**: `/terms` 제7조에 반영(2026-11-01 시행).
 - [x] **`LEGAL-REVISION-EFFECTIVE-DATE`**: 2026-10-12 `55ed02d9` 운영 배포로 개정판이 시행일(2026-11-01) 전에 게시됐다.
