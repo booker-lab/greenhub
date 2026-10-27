@@ -11,16 +11,23 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { KakaoClient } from './kakao.client';
 
-// 운영 런타임의 이메일 로그인·가입 차단을 HTTP 경로(입력 검증 → 컨트롤러 → 서비스)로 확인한다.
-// 차단은 계정·초대 조회 전에 일어나야 하므로 Firestore는 어떤 호출이든 실패하게 둔다.
+// 운영 런타임의 이메일 로그인·가입 제한을 HTTP 경로(입력 검증 → 컨트롤러 → 서비스)로 확인한다.
+// - login: 심사 허용 표식이 없는 계정(여기서는 없는 계정)은 사용자 조회만 거치고 403이다. 토큰 발급·감사 기록·
+//   다른 문서 접근이 없어야 한다.
+// - register: 계정·초대 조회 전에 403이므로 Firestore는 어떤 호출이든 실패하게 둔다.
 function failOnFirestore(path: string): never {
   throw new Error(`운영 차단 전에 Firestore에 접근했습니다: ${path}`);
 }
 
 describe('운영 런타임 이메일 인증 경로(HTTP)', () => {
   let app: INestApplication<App>;
+  const usersQuery = {
+    where: jest.fn().mockReturnThis(),
+    limit: jest.fn().mockReturnThis(),
+    get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+  };
   const firestore = {
-    collection: jest.fn(failOnFirestore),
+    collection: jest.fn((path: string) => (path === 'users' ? usersQuery : failOnFirestore(path))),
     doc: jest.fn(failOnFirestore),
     runTransaction: jest.fn(() => failOnFirestore('runTransaction')),
   };
@@ -60,7 +67,7 @@ describe('운영 런타임 이메일 인증 경로(HTTP)', () => {
     jest.clearAllMocks();
   });
 
-  it('POST /auth/login은 403이고 계정 조회·토큰 발급·감사 기록이 없다', async () => {
+  it('POST /auth/login은 심사 허용 표식이 없으면 403이고 사용자 조회 외 접근·토큰 발급·감사 기록이 없다', async () => {
     await request(app.getHttpServer())
       .post('/auth/login')
       .send({ email: 'seller@example.com', password: 'password-123' })
@@ -73,8 +80,10 @@ describe('운영 런타임 이메일 인증 경로(HTTP)', () => {
         expect(body).not.toHaveProperty('accessToken');
       });
 
-    expect(firestore.collection).not.toHaveBeenCalled();
+    expect(firestore.collection).toHaveBeenCalledTimes(1);
+    expect(firestore.collection).toHaveBeenCalledWith('users');
     expect(firestore.doc).not.toHaveBeenCalled();
+    expect(firestore.runTransaction).not.toHaveBeenCalled();
     expect(jwt.sign).not.toHaveBeenCalled();
     expect(audit.log).not.toHaveBeenCalled();
   });
