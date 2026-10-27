@@ -41,6 +41,10 @@ import type { LoginDto } from './dto/login.dto';
 import type { RegisterDto } from './dto/register.dto';
 import type { UpdateMeDto } from './dto/update-me.dto';
 import { emailIdentityKey, normalizeEmail } from './email-identity';
+import {
+  isProductionEmailLoginAdmitted,
+  PRODUCTION_EMAIL_LOGIN_BLOCKED_MESSAGE,
+} from './email-login-admission';
 import { KakaoClient, type KakaoProfile } from './kakao.client';
 import {
   hashRefreshToken,
@@ -316,11 +320,12 @@ export class AuthService {
   }
 
   async login(dto: LoginDto) {
-    // 운영 화면은 카카오 로그인만 쓴다. 운영 런타임의 이메일 로그인은 받지 않는다(2026-10-18 결정).
-    // 계정 조회·비밀번호 비교 전에 막아 계정 상태와 무관하게 같은 응답을 준다. local·test·Preview·스테이징은 그대로 둔다.
-    if (isProductionRuntime(getConfigValues(this.config))) {
-      throw new ForbiddenException('이메일 로그인은 지원하지 않습니다.');
-    }
+    // 운영 화면은 카카오 로그인만 쓴다. 운영 런타임의 이메일 로그인은 결제사 연동 심사용으로
+    // 심사 허용 만료 시각(`emailLoginAllowedUntil`)이 남은 계정만 받는다(2026-10-27 결정,
+    // 2026-10-18의 전면 차단을 좁힘). 그 밖의 계정은 비밀번호가 맞아도 계정 조회·bcrypt 비교를
+    // 똑같이 거친 뒤 같은 403으로 끝내, 응답 내용과 시간으로 가입 여부가 드러나지 않게 한다.
+    // 이때 감사 기록·토큰 발급은 없다. local·test·Preview·스테이징은 그대로 둔다.
+    const productionRuntime = isProductionRuntime(getConfigValues(this.config));
 
     const snap = await this.firestore
       .collection('users')
@@ -337,6 +342,10 @@ export class AuthService {
       dto.password,
       hasPassword ? passwordHash : DUMMY_PASSWORD_HASH,
     );
+
+    if (productionRuntime && !isProductionEmailLoginAdmitted(userData, Date.now())) {
+      throw new ForbiddenException(PRODUCTION_EMAIL_LOGIN_BLOCKED_MESSAGE);
+    }
 
     if (!userData) {
       await this.audit.log('auth.login.failed', {

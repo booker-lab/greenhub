@@ -1,11 +1,16 @@
 import { Container, Stack, Text, Title } from '@mantine/core';
 import { Suspense } from 'react';
+import { shouldShowEmailLoginForm } from './_email-login-visibility';
 import { LoginForm } from './_form';
 
 export const dynamic = 'force-dynamic';
 
-export default function LoginPage() {
-  const showCredentials = process.env.E2E_TEST === 'true';
+type LoginPageProps = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const showCredentials = shouldShowEmailLoginForm(process.env, await searchParams);
 
   return (
     <Container size={400} style={{ minHeight: '100vh', display: 'flex', alignItems: 'center' }}>

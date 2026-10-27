@@ -928,13 +928,16 @@ describe('AuthService', () => {
   describe('이메일 로그인 운영 제한', () => {
     const password = 'password-123';
     const PRODUCTION_LOGIN_BLOCKED = { status: 403, message: '이메일 로그인은 지원하지 않습니다.' };
+    const PRODUCTION = { RAILWAY_ENVIRONMENT_NAME: 'production' };
     const compare = bcrypt.compare as unknown as jest.Mock;
+    // Firestore Timestamp처럼 toMillis()를 가진 값으로 심사 허용 만료 시각을 흉내 낸다.
+    const allowedUntil = (offsetMillis: number) => ({ toMillis: () => Date.now() + offsetMillis });
 
     beforeEach(() => {
       compare.mockClear();
     });
 
-    async function makePasswordUser() {
+    async function makePasswordUser(extra: Record<string, unknown> = {}) {
       return {
         id: 'seller-1',
         email: 'seller@example.com',
@@ -942,6 +945,7 @@ describe('AuthService', () => {
         storeId: 'store-1',
         suspended: false,
         passwordHash: await bcrypt.hash(password, 4),
+        ...extra,
       };
     }
 
@@ -950,9 +954,9 @@ describe('AuthService', () => {
       ['VERCEL_ENV', { VERCEL_ENV: 'production' }],
       ['NODE_ENV', { NODE_ENV: 'production' }],
     ])(
-      '운영 런타임(%s)에서는 비밀번호가 맞아도 계정 조회 전에 403으로 막는다',
+      '운영 런타임(%s)에서는 심사 허용 표식이 없는 계정은 비밀번호가 맞아도 403으로 막는다',
       async (_label, config) => {
-        const { audit, jwt, refreshTokenRef, service, usersQuery } = makeKakaoLoginService({
+        const { audit, jwt, refreshTokenRef, service } = makeKakaoLoginService({
           config,
           user: await makePasswordUser(),
         });
@@ -960,30 +964,84 @@ describe('AuthService', () => {
         await expect(
           service.login({ email: 'seller@example.com', password }),
         ).rejects.toMatchObject(PRODUCTION_LOGIN_BLOCKED);
-        expect(usersQuery.get).not.toHaveBeenCalled();
-        expect(compare).not.toHaveBeenCalled();
         expect(audit.log).not.toHaveBeenCalled();
         expect(jwt.sign).not.toHaveBeenCalled();
         expect(refreshTokenRef.set).not.toHaveBeenCalled();
       },
     );
 
-    it('운영 런타임에서는 없는 계정도 같은 403이라 가입 여부가 드러나지 않는다', async () => {
-      const { service, usersQuery } = makeKakaoLoginService({
-        config: { RAILWAY_ENVIRONMENT_NAME: 'production' },
+    it('운영 런타임에서는 없는 계정·만료된 계정도 같은 403이고 bcrypt 비교를 똑같이 거친다', async () => {
+      const missing = makeKakaoLoginService({ config: PRODUCTION });
+      await expect(
+        missing.service.login({ email: 'nobody@example.com', password }),
+      ).rejects.toMatchObject(PRODUCTION_LOGIN_BLOCKED);
+      expect(compare).toHaveBeenCalledTimes(1);
+      expect(missing.audit.log).not.toHaveBeenCalled();
+
+      compare.mockClear();
+      const expired = makeKakaoLoginService({
+        config: PRODUCTION,
+        user: await makePasswordUser({ emailLoginAllowedUntil: allowedUntil(-1_000) }),
+      });
+      await expect(
+        expired.service.login({ email: 'seller@example.com', password }),
+      ).rejects.toMatchObject(PRODUCTION_LOGIN_BLOCKED);
+      expect(compare).toHaveBeenCalledTimes(1);
+      expect(expired.audit.log).not.toHaveBeenCalled();
+      expect(expired.jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('운영 런타임에서도 심사 허용 만료 시각이 남은 계정은 비밀번호가 맞으면 로그인한다', async () => {
+      const { jwt, service } = makeKakaoLoginService({
+        config: PRODUCTION,
+        user: await makePasswordUser({
+          id: 'review-1',
+          role: 'consumer',
+          storeId: null,
+          emailLoginAllowedUntil: allowedUntil(60_000),
+        }),
       });
 
-      await expect(service.login({ email: 'nobody@example.com', password })).rejects.toMatchObject(
-        PRODUCTION_LOGIN_BLOCKED,
+      const result = await service.login({ email: 'seller@example.com', password });
+      expect(result.accessToken).toBe('access-token');
+      expect(result.refreshToken).toBe('refresh-token');
+      expect(result.user).toMatchObject({ id: 'review-1', role: 'consumer' });
+      expect(jwt.sign).toHaveBeenCalledTimes(2);
+    });
+
+    it('운영 런타임에서 심사 허용 계정이라도 비밀번호가 틀리면 401이다', async () => {
+      const { audit, jwt, service } = makeKakaoLoginService({
+        config: PRODUCTION,
+        user: await makePasswordUser({ emailLoginAllowedUntil: allowedUntil(60_000) }),
+      });
+
+      await expect(
+        service.login({ email: 'seller@example.com', password: 'wrong-password' }),
+      ).rejects.toMatchObject({ status: 401 });
+      expect(audit.log).toHaveBeenCalledWith(
+        'auth.login.failed',
+        expect.objectContaining({ detail: expect.objectContaining({ reason: 'wrong_password' }) }),
       );
-      expect(usersQuery.get).not.toHaveBeenCalled();
+      expect(jwt.sign).not.toHaveBeenCalled();
+    });
+
+    it('운영 런타임에서 심사 허용 계정이라도 정지돼 있으면 로그인하지 못한다(잠금으로 회수 가능)', async () => {
+      const { jwt, service } = makeKakaoLoginService({
+        config: PRODUCTION,
+        user: await makePasswordUser({ suspended: true, emailLoginAllowedUntil: allowedUntil(60_000) }),
+      });
+
+      await expect(
+        service.login({ email: 'seller@example.com', password }),
+      ).rejects.toMatchObject({ status: 401, message: '정지된 계정입니다. 고객센터에 문의해주세요.' });
+      expect(jwt.sign).not.toHaveBeenCalled();
     });
 
     it.each([
       ['Railway 스테이징', { RAILWAY_ENVIRONMENT_NAME: 'staging', NODE_ENV: 'production' }],
       ['Vercel Preview', { VERCEL_ENV: 'preview', NODE_ENV: 'production' }],
       ['로컬·테스트', {}],
-    ])('운영이 아닌 런타임(%s)에서는 이메일 로그인을 그대로 받는다', async (_label, config) => {
+    ])('운영이 아닌 런타임(%s)에서는 표식 없이도 이메일 로그인을 그대로 받는다', async (_label, config) => {
       const { jwt, service } = makeKakaoLoginService({ config, user: await makePasswordUser() });
 
       const result = await service.login({ email: 'seller@example.com', password });

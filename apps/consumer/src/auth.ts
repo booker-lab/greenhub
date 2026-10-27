@@ -55,15 +55,10 @@ export function canonicalUpstreamOrigin(value: string): string | null {
   }
 }
 
-export async function fingerprintUpstreamOrigin(
-  canonicalOrigin: string,
-): Promise<string | null> {
+export async function fingerprintUpstreamOrigin(canonicalOrigin: string): Promise<string | null> {
   try {
     if (typeof canonicalOrigin !== 'string' || !canonicalOrigin) return null;
-    const digest = await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(canonicalOrigin),
-    );
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(canonicalOrigin));
     const hex = [...new Uint8Array(digest)]
       .map((byte) => byte.toString(16).padStart(2, '0'))
       .join('');
@@ -106,9 +101,7 @@ function isExplicitSessionRevocationStatus(status: unknown): boolean {
   return status === 401 || status === 403;
 }
 
-async function verifySessionAuthority(
-  accessToken: string,
-): Promise<SessionAuthorityResult> {
+async function verifySessionAuthority(accessToken: string): Promise<SessionAuthorityResult> {
   try {
     const res = await fetch(`${API}/auth/session`, {
       method: 'GET',
@@ -169,9 +162,11 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.KAKAO_CLIENT_ID!,
       clientSecret: process.env.KAKAO_CLIENT_SECRET!,
     }),
-    // 테스트 전용 Credentials provider는 운영 런타임에 등록하지 않는다(isTestCredentialsProviderEnabled).
-    // E2E 헤더 게이팅 — 일치하는 x-e2e-test-token 없으면 즉시 거부.
-    // SECRET 미설정 시 모든 credentials 요청 차단(안전 기본값).
+    // Credentials provider는 모든 런타임에 등록한다(2026-10-27 결정, docs/specs/api/auth.md §3).
+    // - 테스트 게이트 런타임(isTestCredentialsProviderEnabled)에서는 기존 E2E 헤더 게이트를 먼저 거친다:
+    //   일치하는 x-e2e-test-token 없으면 즉시 거부, SECRET 미설정 시 모든 credentials 요청 차단(안전 기본값).
+    // - 운영 런타임에서는 헤더 게이트 없이 API로 넘기고, 운영 API가 결제사 연동 심사용으로 심사 허용
+    //   만료 시각이 남은 계정만 이메일 로그인을 받는다. 폼 노출·provider 등록은 권한 통제가 아니다.
     // PILOT-AUTH-CONSUMER-PREUPSTREAM-DIAGNOSTIC-PROJECTION-38C: the three
     // pre-upstream gates emit deterministic static codes only (no values,
     // lengths, hashes, timing, headers, or env contents). Top-level class
@@ -180,95 +175,91 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     //   S2 g2-secret-mismatch (x-e2e-test-token != runtime secret),
     //   S3 g3-credential-admission-rejected (LoginDto admission rejected).
     // S1/S2/S3 are all fail-closed with zero upstream calls.
-    ...(isTestCredentialsProviderEnabled(process.env)
-      ? [
-          Credentials({
-            credentials: {
-              email: { label: '이메일', type: 'email' },
-              password: { label: '비밀번호', type: 'password' },
-            },
-            async authorize(credentials, request) {
-              const expected = process.env.E2E_TEST_SECRET;
-              if (!expected)
-                throw new DiagnosticCredentialsSignin('authorize-rejected__g1-secret-missing');
-              const got = request?.headers?.get('x-e2e-test-token');
-              if (!(await testSecretsMatch(got, expected)))
-                throw new DiagnosticCredentialsSignin('authorize-rejected__g2-secret-mismatch');
+    Credentials({
+      credentials: {
+        email: { label: '이메일', type: 'email' },
+        password: { label: '비밀번호', type: 'password' },
+      },
+      async authorize(credentials, request) {
+        if (isTestCredentialsProviderEnabled(process.env)) {
+          const expected = process.env.E2E_TEST_SECRET;
+          if (!expected)
+            throw new DiagnosticCredentialsSignin('authorize-rejected__g1-secret-missing');
+          const got = request?.headers?.get('x-e2e-test-token');
+          if (!(await testSecretsMatch(got, expected)))
+            throw new DiagnosticCredentialsSignin('authorize-rejected__g2-secret-mismatch');
+        }
 
-              // PILOT-AUTH-CALLBACK-EMAIL-ADMISSION-CONVERGENCE-34A: fail closed
-              // before any upstream call when the credentials would be rejected by
-              // API LoginDto (email @IsEmail). No value is logged or embedded in
-              // the rejection; the admitted pair is forwarded verbatim with the
-              // exact {email,password} shape (no extra keys, no normalization).
-              if (!isAdmittedLoginCredentials(credentials)) {
-                throw new DiagnosticCredentialsSignin(
-                  'authorize-rejected__g3-credential-admission-rejected',
-                );
-              }
-              const email = credentials.email;
-              const password = credentials.password;
+        // PILOT-AUTH-CALLBACK-EMAIL-ADMISSION-CONVERGENCE-34A: fail closed
+        // before any upstream call when the credentials would be rejected by
+        // API LoginDto (email @IsEmail). No value is logged or embedded in
+        // the rejection; the admitted pair is forwarded verbatim with the
+        // exact {email,password} shape (no extra keys, no normalization).
+        if (!isAdmittedLoginCredentials(credentials)) {
+          throw new DiagnosticCredentialsSignin(
+            'authorize-rejected__g3-credential-admission-rejected',
+          );
+        }
+        const email = credentials.email;
+        const password = credentials.password;
 
-              let res: Response;
-              try {
-                res = await fetch(`${API}/auth/login`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    email,
-                    password,
-                  }),
-                  signal: authUpstreamSignal(),
-                });
-              } catch {
-                throw new DiagnosticCredentialsSignin('api-binding-failure');
-              }
-              if (!res.ok) {
-                // Diagnostic projection (29A): preserve the actual upstream status
-                // plus a fingerprint of the upstream origin. The actual response
-                // target (`res.url`, redirect-aware) is preferred; the configured
-                // request origin is the fallback when the response URL is
-                // absent/unparseable. Only the canonical origin (no path, query,
-                // or credentials) is fingerprinted — never bodies or secrets.
-                const status = res.status;
-                const fingerprint = await fingerprintUpstreamOrigin(
-                  canonicalUpstreamOrigin(res.url) ?? canonicalUpstreamOrigin(API) ?? '',
-                );
-                throw new DiagnosticCredentialsSignin(
-                  buildUpstreamRejectedCode(status, fingerprint),
-                );
-              }
+        let res: Response;
+        try {
+          res = await fetch(`${API}/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email,
+              password,
+            }),
+            signal: authUpstreamSignal(),
+          });
+        } catch {
+          throw new DiagnosticCredentialsSignin('api-binding-failure');
+        }
+        if (!res.ok) {
+          // Diagnostic projection (29A): preserve the actual upstream status
+          // plus a fingerprint of the upstream origin. The actual response
+          // target (`res.url`, redirect-aware) is preferred; the configured
+          // request origin is the fallback when the response URL is
+          // absent/unparseable. Only the canonical origin (no path, query,
+          // or credentials) is fingerprinted — never bodies or secrets.
+          const status = res.status;
+          const fingerprint = await fingerprintUpstreamOrigin(
+            canonicalUpstreamOrigin(res.url) ?? canonicalUpstreamOrigin(API) ?? '',
+          );
+          throw new DiagnosticCredentialsSignin(buildUpstreamRejectedCode(status, fingerprint));
+        }
 
-              let data: {
-                accessToken?: unknown;
-                refreshToken?: unknown;
-                user?: { id?: unknown; email?: unknown; name?: unknown; role?: unknown };
-              };
-              try {
-                data = await res.json();
-              } catch {
-                throw new DiagnosticCredentialsSignin('api-binding-failure');
-              }
-              if (
-                !data.user ||
-                !['consumer', 'admin'].includes(String(data.user.role)) ||
-                typeof data.user.id !== 'string' ||
-                typeof data.accessToken !== 'string' ||
-                typeof data.refreshToken !== 'string'
-              ) {
-                throw new DiagnosticCredentialsSignin('api-binding-failure');
-              }
-              return {
-                id: data.user.id,
-                email: typeof data.user.email === 'string' ? data.user.email : undefined,
-                name: typeof data.user.name === 'string' ? data.user.name : undefined,
-                role: String(data.user.role),
-                accessToken: data.accessToken,
-                refreshToken: data.refreshToken,
-              };
-            },
-          }),
-        ]
-      : []),
+        let data: {
+          accessToken?: unknown;
+          refreshToken?: unknown;
+          user?: { id?: unknown; email?: unknown; name?: unknown; role?: unknown };
+        };
+        try {
+          data = await res.json();
+        } catch {
+          throw new DiagnosticCredentialsSignin('api-binding-failure');
+        }
+        if (
+          !data.user ||
+          !['consumer', 'admin'].includes(String(data.user.role)) ||
+          typeof data.user.id !== 'string' ||
+          typeof data.accessToken !== 'string' ||
+          typeof data.refreshToken !== 'string'
+        ) {
+          throw new DiagnosticCredentialsSignin('api-binding-failure');
+        }
+        return {
+          id: data.user.id,
+          email: typeof data.user.email === 'string' ? data.user.email : undefined,
+          name: typeof data.user.name === 'string' ? data.user.name : undefined,
+          role: String(data.user.role),
+          accessToken: data.accessToken,
+          refreshToken: data.refreshToken,
+        };
+      },
+    }),
   ],
   events: {
     // 로그아웃하면 쿠키 삭제와 함께 API의 refresh token도 폐기한다. 실패해도 로그아웃은 계속한다.
