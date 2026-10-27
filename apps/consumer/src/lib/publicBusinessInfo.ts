@@ -9,8 +9,8 @@ export const PUBLIC_BUSINESS_INFO = {
   email: 'support@greenlove.co.kr',
   emailHref: 'mailto:support@greenlove.co.kr',
   hostingProvider: 'Vercel Inc.',
-  // 통신판매업 신고 뒤 받은 번호를 넣는다(예: '2026-경기이천-0000'). 빈 값이면 footer에 칸을 그리지 않는다.
-  mailOrderRegistrationNumber: '' as string,
+  // 2026-10-21 이천시 발급 통신판매업신고증 번호(제 2026-경기이천-0718 호). 빈 값이면 footer에 칸을 그리지 않는다.
+  mailOrderRegistrationNumber: '2026-경기이천-0718' as string,
   supportHours: '09:00~18:00 (점심시간 12:00~13:00)',
   relationship: '그린러브는 디어 오키드가 운영하는 화훼 쇼핑몰입니다.',
   // KB 발급 공개값. KB 원본 폼(GET)을 쿼리스트링으로 바꾼 확인 URL이고, 마크는 로컬 사본을 쓴다(http 핫링크 금지).
