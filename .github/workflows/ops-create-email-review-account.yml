@@ -1,0 +1,155 @@
+name: Ops create email review account
+
+# 결제사(카카오페이) 연동 심사용 이메일 로그인 계정 1개를 운영에 만들거나(create) 상태를 본다(check). 저장소 owner가 main에서
+# 수동 실행할 때만 production Environment의 Firebase 서비스 계정 키를 쓴다. 스크립트: scripts/ops/create-email-review-account.mjs
+# 운영 API는 이 스크립트가 심은 심사 허용 만료 시각(`emailLoginAllowedUntil`)이 남은 계정만 이메일 로그인을 받는다
+# (docs/specs/api/auth.md §3, 2026-10-27 결정). 회수는 만료를 기다리거나 ops-lock-account.yml(lock, consumer)로 잠근다.
+# 저장소가 공개라 Actions 로그도 공개다. 이 workflow는 스크립트 기본 출력(모드·결과·role·허용 일수·만료 시각)만 남긴다.
+# 비밀번호는 평문을 받지 않는다. 로컬에서 만든 bcrypt 해시만 받고, 이메일과 해시는 로그에서 가린다.
+#   로컬 해시 생성 예: node -e "require('bcrypt').hash(process.argv[1], 12).then(console.log)" '<비밀번호>'  (scripts 워크스페이스)
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: 계정 이메일(로그인 ID, 소문자로 저장)
+        required: true
+        type: string
+      mode:
+        description: check(조회만) 또는 create(생성)
+        required: true
+        type: choice
+        options:
+          - check
+          - create
+        default: check
+      password_hash:
+        description: create 필수. 로컬에서 만든 bcrypt 해시($2b$12$…). 평문 비밀번호를 넣지 않는다
+        required: false
+        type: string
+        default: ''
+      allowed_days:
+        description: 심사 허용 기간(일, 1~90). 지나면 운영 API가 자동으로 거부한다
+        required: false
+        type: string
+        default: '30'
+      name:
+        description: 표시 이름(20자 이하)
+        required: false
+        type: string
+        default: '결제 심사 담당자'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-create-email-review-account
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 실행자 확인
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: dispatch·실행자·ref 확인
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch로만 실행합니다.' >&2; exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" || "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo '실행자가 저장소 owner가 아니어서 차단합니다.' >&2; exit 1
+          fi
+          if [[ "$REF" != 'refs/heads/main' ]]; then
+            echo 'main에서만 실행합니다.' >&2; exit 1
+          fi
+
+  create-email-review-account:
+    name: 심사용 계정 확인·생성
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    permissions:
+      contents: read
+    env:
+      FIREBASE_PROJECT: green-e4fe3
+    steps:
+      # 이후 모든 로그에서 입력 이메일 원문과 비밀번호 해시를 가린다. 값은 step env가 아니라 이벤트 payload에서 읽는다.
+      - name: 입력 마스킹
+        shell: bash
+        run: |
+          set -euo pipefail
+          email="$(jq -r '.inputs.email // empty' "$GITHUB_EVENT_PATH")"
+          if [[ -z "$email" ]]; then
+            echo '입력 email이 비었습니다.' >&2; exit 1
+          fi
+          echo "::add-mask::$email"
+          lower="$(printf '%s' "$email" | tr '[:upper:]' '[:lower:]')"
+          echo "::add-mask::$lower"
+          hash="$(jq -r '.inputs.password_hash // empty' "$GITHUB_EVENT_PATH")"
+          if [[ -n "$hash" ]]; then
+            echo "::add-mask::$hash"
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      # scripts 워크스페이스의 운영 의존성(firebase-admin·bcrypt)만 설치한다. devDependency인 firebase-tools는 설치하지 않는다.
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile --filter ./scripts --prod
+
+      # ops-lock-account.yml과 같은 방식으로 키를 RUNNER_TEMP에 600 권한으로 쓴다.
+      - name: Firebase 인증
+        shell: bash
+        env:
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo 'production Environment 비밀값이 없습니다: FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON' >&2; exit 1
+          fi
+          key="$RUNNER_TEMP/firebase-deploy.json"
+          umask 077
+          printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key"
+          chmod 600 "$key"
+          project="$(jq -r .project_id "$key")"
+          if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
+            echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
+          fi
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$key" >> "$GITHUB_ENV"
+
+      - name: 계정 확인·생성 실행
+        shell: bash
+        env:
+          REVIEW_MODE: ${{ inputs.mode }}
+          REVIEW_ALLOWED_DAYS: ${{ inputs.allowed_days }}
+          REVIEW_NAME: ${{ inputs.name }}
+        run: |
+          set -euo pipefail
+          REVIEW_EMAIL="$(jq -r '.inputs.email // empty' "$GITHUB_EVENT_PATH")" \
+            REVIEW_PASSWORD_HASH="$(jq -r '.inputs.password_hash // empty' "$GITHUB_EVENT_PATH")" \
+            node scripts/ops/create-email-review-account.mjs
+
+      - name: 서비스 계정 키 삭제
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/firebase-deploy.json"

@@ -52,17 +52,17 @@ NextAuth callback은 Kakao에서 받은 access token을 `POST /auth/kakao-login`
 
 `Credentials` provider는 일반 사용자용 production 이메일 로그인 UI가 아니다. 앱별로 허용된 진입이 다르다.
 
-세 앱 모두 테스트 전용 Credentials provider 자체를 운영 runtime에 등록하지 않는다(`packages/shared/src/auth-runtime.ts`의 `isTestCredentialsProviderEnabled`를 각 앱 `auth.ts`가 `process.env`로 부른다). `VERCEL_ENV` 또는 `RAILWAY_ENVIRONMENT_NAME`이 `production`이면 등록하지 않고, `VERCEL_ENV === 'preview'`(로컬 E2E 실행기 포함)이면 등록하며, 그 밖에는 `NODE_ENV !== 'production'`일 때만 등록한다. 등록돼도 아래 앱별 authorize 게이트를 그대로 통과해야 한다. 직접 근거: `packages/shared/src/auth-runtime.test.ts`(등록 조건), `apps/consumer/src/auth.contract.test.mjs`, `apps/seller/src/auth.contract.test.ts`, `apps/driver/src/auth.contract.test.ts`(게이트 연결).
+판매자·기사 앱은 테스트 전용 Credentials provider 자체를 운영 runtime에 등록하지 않는다(`packages/shared/src/auth-runtime.ts`의 `isTestCredentialsProviderEnabled`를 각 앱 `auth.ts`가 `process.env`로 부른다). `VERCEL_ENV` 또는 `RAILWAY_ENVIRONMENT_NAME`이 `production`이면 등록하지 않고, `VERCEL_ENV === 'preview'`(로컬 E2E 실행기 포함)이면 등록하며, 그 밖에는 `NODE_ENV !== 'production'`일 때만 등록한다. 등록돼도 아래 앱별 authorize 게이트를 그대로 통과해야 한다. 소비자 앱은 2026-10-27부터 모든 런타임에 Credentials provider를 등록하되, 같은 함수가 참인 테스트 게이트 런타임에서만 E2E 헤더 게이트를 거치고 운영에서는 운영 API의 심사 허용 판정에 맡긴다(아래 Consumer). 직접 근거: `packages/shared/src/auth-runtime.test.ts`(등록 조건), `apps/consumer/src/auth.contract.test.mjs`, `apps/seller/src/auth.contract.test.ts`, `apps/driver/src/auth.contract.test.ts`(게이트 연결).
 
-### Consumer — E2E/test 전용
+### Consumer — E2E/test + 결제사 연동 심사용 계정
 
-Consumer는 E2E-only Credentials다. `apps/consumer/src/auth.ts`에 Seller/Driver와 같은 `GREENHUB_LOCAL_RUNTIME` local credentials branch가 없다.
+Consumer Credentials는 E2E/test 경로와 결제사(카카오페이) 연동 심사용 경로를 하나의 provider로 받는다(2026-10-27 결정). `apps/consumer/src/auth.ts`에 Seller/Driver와 같은 `GREENHUB_LOCAL_RUNTIME` local credentials branch가 없다.
 
-- `E2E_TEST_SECRET`이 없으면 credentials 요청을 모두 거부한다.
-- request header `x-e2e-test-token`이 secret과 정확히 일치해야 한다.
+- 테스트 게이트 런타임(`isTestCredentialsProviderEnabled(process.env)`가 참)에서만: `E2E_TEST_SECRET`이 없으면 credentials 요청을 모두 거부하고, request header `x-e2e-test-token`이 secret과 정확히 일치해야 한다.
+- 운영 런타임에서는 헤더 게이트 없이 입력 형식 검사(`isAdmittedLoginCredentials`)만 거친다. 권한 판정은 운영 API가 한다(§5 운영 런타임 이메일 로그인: 심사 허용 만료 시각이 남은 계정만 통과).
 - 이후 NestJS `POST /auth/login`을 호출한다.
 - consumer는 `consumer|admin` 역할만 허용한다.
-- Login UI(`apps/consumer/src/app/login/page.tsx`)는 `E2E_TEST === 'true'`일 때만 Credentials form을 노출한다.
+- Login UI(`apps/consumer/src/app/login/page.tsx`, `_email-login-visibility.ts`)는 `E2E_TEST === 'true'`이거나 요청 쿼리가 `?method=email`일 때 Credentials form을 노출한다. 운영에서는 심사 담당자처럼 안내받은 주소(`/login?method=email`)로 들어온 사람만 폼을 보고, 일반 손님 화면은 카카오 로그인만 유지한다. UI 노출 자체는 authorization control이 아니다.
 
 ### Seller — E2E/test + 명시적 non-production local-runtime
 
@@ -338,7 +338,7 @@ POST /auth/refresh
 - **이 두 endpoint가 공개라는 사실 자체는 현재 보안 경계다. UI 미노출을 authorization control로 취급하지 않는다.**
 - `role: driver` register→login 승인 우회는 해소됐다: 공개 `register`는 `driverApproved: false`를 저장하고 client 주입을 거부하며, 승인값이 false/누락인 driver의 `login`·`getFirebaseToken`은 token side effect 전에 거부된다(`apps/api/src/auth/auth.service.spec.ts`). 공개 endpoint라는 사실 자체는 계속 현재 보안 경계다.
 - 일반 사용자에게 credentials 인증을 제품 기능으로 노출하려면 별도 제품·보안 결정이 필요하다.
-- 운영 런타임(`isProductionRuntime`: 배포 환경 이름(`GREENHUB_ENVIRONMENT_NAME`, 없으면 `RAILWAY_ENVIRONMENT_NAME`, 둘이 다르면 기동 거부) → `VERCEL_ENV` → `NODE_ENV` 순으로 `production` 판정)은 이메일 `login`·`register`를 모두 받지 않는다(2026-10-18 결정, 운영 화면은 카카오 로그인만 사용. 판매자 초대 가입만 받던 2026-10-10 결정을 대체). `login`은 계정 조회·비밀번호 비교 전에 403(`이메일 로그인은 지원하지 않습니다.`)이고, `register`는 역할·초대 토큰과 관계없이 사용자·초대 문서를 읽기 전에 403(`이메일 회원가입은 지원하지 않습니다.`)이다. 계정 유무·상태와 관계없이 같은 응답이고 감사 기록·토큰 발급·초대 소모가 없다. 운영에서 새 판매자는 관리자가 보낸 초대 링크로 카카오 로그인해 가입한다(2026-10-21 결정, 아래 카카오 판매자 초대 가입). local·test·Preview·스테이징 런타임의 로그인·가입은 그대로다(E2E와 로컬 시드가 쓴다). 직접 근거: `apps/api/src/auth/auth.service.spec.ts` `이메일 로그인 운영 제한`·`이메일 가입 운영 제한·중복 방지`, `apps/api/src/auth/auth.production-email.spec.ts`.
+- 운영 런타임(`isProductionRuntime`: 배포 환경 이름(`GREENHUB_ENVIRONMENT_NAME`, 없으면 `RAILWAY_ENVIRONMENT_NAME`, 둘이 다르면 기동 거부) → `VERCEL_ENV` → `NODE_ENV` 순으로 `production` 판정)은 이메일 `register`를 받지 않고, 이메일 `login`은 결제사 연동 심사용 계정만 받는다(2026-10-27 결정. 2026-10-18의 전면 차단을 좁혔고, 판매자 초대 가입만 받던 2026-10-10 결정을 대체한 점은 그대로다. 운영 화면은 카카오 로그인만 사용). `login`은 계정 조회와 bcrypt 비교를 모든 요청에 똑같이 거친 뒤, 사용자 문서의 `emailLoginAllowedUntil`(Firestore Timestamp)이 현재 시각보다 뒤인 계정만 기존 경로(비밀번호 불일치 401·정지 401·토큰 발급)로 진행하고, 그 밖의 계정(표식 없음·만료·계정 없음)은 비밀번호가 맞아도 403(`이메일 로그인은 지원하지 않습니다.`)이다(`apps/api/src/auth/email-login-admission.ts`). 403 경로는 감사 기록·토큰 발급이 없고 응답 내용·시간으로 계정 유무가 드러나지 않는다. 이 표식은 운영 유지보수 스크립트 `scripts/ops/create-email-review-account.mjs`(workflow `ops-create-email-review-account.yml`, owner 수동 실행, 로컬 bcrypt 해시 입력, 기본 30일·최대 90일)만 심고, 공개 API·앱 화면에는 바꾸는 경로가 없다. 회수는 만료 또는 `ops-lock-account.yml` 잠금(정지된 계정은 표식이 있어도 401)이다. `register`는 역할·초대 토큰과 관계없이 사용자·초대 문서를 읽기 전에 403(`이메일 회원가입은 지원하지 않습니다.`)이고 초대 소모가 없다. 운영에서 새 판매자는 관리자가 보낸 초대 링크로 카카오 로그인해 가입한다(2026-10-21 결정, 아래 카카오 판매자 초대 가입). local·test·Preview·스테이징 런타임의 로그인·가입은 그대로다(E2E와 로컬 시드가 쓴다). 직접 근거: `apps/api/src/auth/auth.service.spec.ts` `이메일 로그인 운영 제한`·`이메일 가입 운영 제한·중복 방지`, `apps/api/src/auth/auth.production-email.spec.ts`, `apps/api/src/auth/email-login-admission.spec.ts`, `scripts/ops/create-email-review-account.spec.mjs`.
 - 운영이 아닌 런타임의 `login`은 계정 없음·비밀번호 불일치·비밀번호 없는(카카오 전용) 계정을 모두 같은 bcrypt 비교 비용을 거쳐 같은 401 메시지로 거부한다.
 - 카카오 첫 로그인의 사용자 생성은 `kakaoIdentities/{kakaoId}`(`userId`)를 사용자 문서와 한 트랜잭션에서 함께 써서, 같은 카카오 계정의 동시 요청이 사용자 문서를 하나만 만들게 한다(`apps/api/src/auth/auth.kakao-signup-occ.spec.ts`). 이 연결 문서가 없는 기존 사용자는 지금처럼 `users.kakaoId` 조회로 찾는다.
 - 운영이 아닌 런타임에서 판매자 가입의 초대 판정(`apps/api/src/auth/auth.service.ts` `assertInviteRedeemable`, #512): `inviteToken`이 없으면 403, 영숫자 1~64자가 아니면 404, 문서가 없으면 403이다. 그다음 취소(409 `already_revoked`) → 만료(410) → 사용(409) → 받는 사람(초대의 `recipientEmail`과 정규화한 가입 이메일이 다르면 409 `recipient_mismatch`. #518부터 새 초대는 받는 사람 이메일이 필수이고, 그 전에 발급된 `recipientEmail` 없는 초대만 이 확인을 건너뛴다) 순으로 확인한다. 같은 판정을 가입 트랜잭션 안에서 다시 해 만료·취소·동시 가입을 막고, 통과할 때만 `usedAt`·`usedBy`를 기록한다(받는 사람 불일치는 토큰을 소모하지 않는다). 초대 유효 기간은 72시간이다.
@@ -455,7 +455,7 @@ interface SavedAddress {
 
 - Kakao identity는 서버에서 access token으로 재검증한다.
 - password hash, refresh token, JWT, OAuth token, E2E shared secret을 문서·로그에 기록하지 않는다.
-- Credentials provider는 E2E gate를 제거한 채 production 로그인으로 열지 않는다.
+- Credentials provider는 E2E gate를 제거한 채 일반 사용자용 production 로그인으로 열지 않는다. 유일한 예외는 결제사 연동 심사용 계정이며, 운영 API가 `emailLoginAllowedUntil`로 계정 단위·기간 한정으로 판정하고 만료·잠금으로 회수한다(§3 Consumer, §5).
 - **공개 register/login endpoint는 frontend UI 미노출을 보안 통제로 간주하지 않는다.**
 - role/storeId/driver approval은 client targetRole, registration role 또는 stale token payload만으로 최종 결정하지 않는다.
 - driver 관리자 승인 게이트를 가입·로그인 side effect로 자동 충족시키지 않는다.
@@ -491,6 +491,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-10-27 | 결제사(카카오페이) 연동 심사용 이메일 로그인: 운영 API `login`은 `emailLoginAllowedUntil`이 남은 계정만 통과(그 밖은 조회·bcrypt 비교 뒤 같은 403), 소비자 앱 Credentials provider를 모든 런타임에 등록하되 E2E 헤더 게이트는 테스트 게이트 런타임에서만, 로그인 폼은 `?method=email`에서 노출, 계정은 `ops-create-email-review-account.yml`로 생성 |
 | 2026-10-24 | 강제 재검증 결과가 `null`이고 세션 조회도 비어 있으면 세 앱이 `signOut`해 현재 탭도 로그인 화면으로 바꾼다(`recheckSessionAfterRejection`). `auth-session-lifecycle.spec.ts`에 현재 탭 `/login` 전환 확인 추가 |
 | 2026-10-24 | 화면의 API 요청이 401/403으로 거절되면 세 앱 `Providers`가 `update({})`로 세션을 재사용 없이 다시 검증해 그 자리에서 끊는다(`watchApiAuthorityRejections`). `auth-session-lifecycle.spec.ts` 정지·철회 시험을 "폐기 뒤 화면 API 거절 → 즉시 세션 종료" 확인으로 변경 |
 | 2026-10-24 | 코드 대조: Railway 밖 배포 환경의 `TRUST_PROXY_HOPS` 필수(#605) 반영 |
