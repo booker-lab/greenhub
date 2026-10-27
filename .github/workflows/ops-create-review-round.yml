@@ -1,0 +1,148 @@
+name: Ops create review round
+
+# 결제사(카카오페이) 연동 심사의 구매 테스트용 회차 1개를 운영 매장에 만들거나(create) 그 매장의 회차를 본다(check).
+# 저장소 owner가 main에서 수동 실행할 때만 production Environment의 Firebase 서비스 계정 키를 쓴다.
+# 스크립트: scripts/ops/create-review-round.mjs (API `SaleRoundsService.createRound`와 같은 문서 모양으로
+# `saleRounds`·`saleRoundItems`를 한 트랜잭션에 쓰고 상태는 바로 SCHEDULED, 배송 지역은 그 매장의 최근 회차에서 복사).
+# 저장소가 공개라 Actions 로그도 공개다. 이 workflow는 스크립트 기본 출력(모드·결과·회차 이름·일정·한도·상품 이름)만 남긴다.
+# 판매자 앱 없이 만드는 이유(2026-10-28 결정): 판매자 앱은 카카오 로그인 계정이라 운영자가 대신 로그인할 수 없다.
+# 심사가 끝나면 판매자 앱 회차 상세의 "회차 취소"로 정리한다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      store_id:
+        description: 매장 id(UUID)
+        required: true
+        type: string
+      mode:
+        description: check(그 매장의 회차 목록만 조회) 또는 create(생성)
+        required: true
+        type: choice
+        options:
+          - check
+          - create
+        default: check
+      name:
+        description: create 필수. 회차 이름(40자 이하)
+        required: false
+        type: string
+        default: ''
+      product_id:
+        description: create 필수. 회차에 넣을 상품 id(UUID, 이 매장 상품 1개)
+        required: false
+        type: string
+        default: ''
+      price:
+        description: 회차 가격(원). 비우면 상품의 현재 가격
+        required: false
+        type: string
+        default: ''
+      schedule:
+        description: 'create 필수. 한국 시간 5개를 |로 구분: 주문시작|주문마감|경매|배송시작|배송종료 (예: 2026-10-28 09:00|2026-11-11 23:00|2026-11-12 07:00|2026-11-13 00:00|2026-11-13 09:00)'
+        required: false
+        type: string
+        default: ''
+      limits:
+        description: '상품별 한도,배송지 한도,판매 수량 한도 (기본 2,2,2 · 각 1~10)'
+        required: false
+        type: string
+        default: '2,2,2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ops-create-review-round
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    name: 실행자 확인
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: dispatch·실행자·ref 확인
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+          REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
+            echo 'workflow_dispatch로만 실행합니다.' >&2; exit 1
+          fi
+          if [[ "$ACTOR" != "$REPOSITORY_OWNER" || "$TRIGGERING_ACTOR" != "$REPOSITORY_OWNER" ]]; then
+            echo '실행자가 저장소 owner가 아니어서 차단합니다.' >&2; exit 1
+          fi
+          if [[ "$REF" != 'refs/heads/main' ]]; then
+            echo 'main에서만 실행합니다.' >&2; exit 1
+          fi
+
+  create-review-round:
+    name: 심사용 회차 확인·생성
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+    permissions:
+      contents: read
+    env:
+      FIREBASE_PROJECT: green-e4fe3
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+
+      # scripts 워크스페이스의 운영 의존성(firebase-admin·bcrypt)만 설치한다. devDependency인 firebase-tools는 설치하지 않는다.
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile --filter ./scripts --prod
+
+      # ops-lock-account.yml과 같은 방식으로 키를 RUNNER_TEMP에 600 권한으로 쓴다.
+      - name: Firebase 인증
+        shell: bash
+        env:
+          FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" ]]; then
+            echo 'production Environment 비밀값이 없습니다: FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON' >&2; exit 1
+          fi
+          key="$RUNNER_TEMP/firebase-deploy.json"
+          umask 077
+          printf '%s' "$FIREBASE_DEPLOY_SERVICE_ACCOUNT_JSON" > "$key"
+          chmod 600 "$key"
+          project="$(jq -r .project_id "$key")"
+          if [[ "$project" != "$FIREBASE_PROJECT" ]]; then
+            echo "서비스 계정 프로젝트($project)가 운영($FIREBASE_PROJECT)이 아닙니다." >&2; exit 1
+          fi
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$key" >> "$GITHUB_ENV"
+
+      - name: 회차 확인·생성 실행
+        shell: bash
+        env:
+          ROUND_STORE_ID: ${{ inputs.store_id }}
+          ROUND_MODE: ${{ inputs.mode }}
+          ROUND_NAME: ${{ inputs.name }}
+          ROUND_PRODUCT_ID: ${{ inputs.product_id }}
+          ROUND_PRICE: ${{ inputs.price }}
+          ROUND_SCHEDULE: ${{ inputs.schedule }}
+          ROUND_LIMITS: ${{ inputs.limits }}
+        run: node scripts/ops/create-review-round.mjs
+
+      - name: 서비스 계정 키 삭제
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/firebase-deploy.json"
