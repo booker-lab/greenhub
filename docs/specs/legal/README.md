@@ -100,7 +100,7 @@ provider 승인, 실제 결제·환불·알림 발송을 승인했다는 뜻이 
 | 기사 카카오맵 길찾기(#418, 미배포) | `DECISION REQUIRED` → 고지하기로 결정, 2026-11-01 개정판 `/privacy` 4절에 반영 | 기사가 누르면 배송지 기본주소(이름·동·호수 제외) 또는 거점 좌표가 `map.kakao.com` 링크로 Kakao에 전달된다(`apps/driver/src/app/map/_lib/map-navigation-link.ts`). `/privacy` 4절은 Kakao를 로그인·우편번호 검색으로만 적는다 |
 | 늦은 결제 자동 환불(2026-07부터 존재) | `COVERAGE GAP` → 2026-11-01 개정판 `/terms` 제7조에 반영 | 결제가 확인됐지만 예약 만료 뒤 회차 한도가 마감되면 주문을 받지 않고 자동 환불한다(`apps/api/src/payments/payment-finalization.service.ts`). `/terms` 제7조·제8조에는 이 경우가 없다 |
 | 개인정보 보호책임자 | `IMPLEMENTATION FINDING` → 2026-11-01 개정판 `/privacy` 9절에 대표자로 반영(사용자 결정) | `/privacy`에 보호책임자(성명 또는 담당 부서와 연락처) 항목이 없고 고객센터 연락처만 있다. 처리방침 필수 기재 사항이다 |
-| 통신판매업 신고번호 | `DECISION REQUIRED` | footer는 번호가 있을 때만 칸을 그린다(`apps/consumer/src/lib/publicBusinessInfo.ts` `mailOrderRegistrationNumber`, 빈 값이면 미노출, `BusinessInfoFooter.test.mjs`). 신고하면 이 값 한 줄만 채운다. 2026-11-01 실제 판매 시작 전에 신고 대상 여부를 사람이 판단한다(카카오페이 심사 답변: 심사 영향은 없지만 미리 신청 권장) |
+| 통신판매업 신고번호 | `VERIFIED` — 2026-10-21 이천시 발급(제 2026-경기이천-0718 호) | footer는 번호가 있을 때만 칸을 그린다(`apps/consumer/src/lib/publicBusinessInfo.ts` `mailOrderRegistrationNumber`, `BusinessInfoFooter.test.mjs`). 2026-10-27 정본에 번호를 채워 footer에 "통신판매업 신고번호" 칸이 나온다(consumer 배포 뒤 운영 반영) |
 
 후속 작업과 완료 조건은 `docs/BACKLOG.md`의 `법무·출시 후보 정합성`이 소유한다. 위 세 항목은
 2026-10-10 사용자 결정(보호책임자=대표자, 카카오맵 고지, 시행일 2026-11-01)으로 개정판에 반영했다.
