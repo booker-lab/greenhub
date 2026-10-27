@@ -99,10 +99,16 @@ async function signOut(page: Page, base: string): Promise<void> {
   expect(response.status()).toBeLessThan(400);
 }
 
+// packages/shared/src/session-authority.ts SESSION_AUTHORITY_REUSE_MS와 같아야 한다.
+const SESSION_AUTHORITY_REUSE_MS = 60_000;
+// 재사용 구간이 끝난 뒤 다음 조회가 API 재검증·refresh 거절까지 마칠 여유.
+const SESSION_SETTLE_MS = 20_000;
+
 // 일반 E2E(e2e.yml)는 '회차 직배송' 제목을 --grep-invert로 제외하므로 이 스펙은 회차 E2E에서만 돈다.
 test.describe('회차 직배송 세션 수명주기 계약', () => {
   for (const { role } of REVOCATIONS) {
     test(`${role} 세션은 쿠키로 유지되고 로그아웃하면 사라진다`, async ({ page }, testInfo) => {
+      test.setTimeout(testInfo.timeout + SESSION_AUTHORITY_REUSE_MS + SESSION_SETTLE_MS);
       const project = roundDirectProject(testInfo);
       const base = await login(page, role, project);
 
@@ -114,8 +120,16 @@ test.describe('회차 직배송 세션 수명주기 계약', () => {
       expect(await readSessionRole(page, base)).toBe(role);
 
       await signOut(page, base);
+      // 로그아웃 순간 화면이 보낸 세션 조회의 늦은 응답이 쿠키를 다시 써 넣을 수 있다
+      // (BACKLOG AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE). 서버 세션은 이미 폐기됐으므로 API 데이터 요청은
+      // 바로 거부되고, 화면 세션은 검증 재사용 구간(60초, 2026-10-23 결정) 안에 끊겨야 한다.
+      await expect
+        .poll(() => readSessionRole(page, base), {
+          timeout: SESSION_AUTHORITY_REUSE_MS + SESSION_SETTLE_MS,
+          intervals: [1_000, 5_000],
+        })
+        .toBeNull();
       expect(await hasSessionCookie(page, base)).toBe(false);
-      expect(await readSessionRole(page, base)).toBeNull();
     });
   }
 
