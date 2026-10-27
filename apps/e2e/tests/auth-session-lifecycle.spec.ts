@@ -123,13 +123,21 @@ test.describe('회차 직배송 세션 수명주기 계약', () => {
       // 로그아웃 순간 화면이 보낸 세션 조회의 늦은 응답이 쿠키를 다시 써 넣을 수 있다
       // (BACKLOG AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE). 서버 세션은 이미 폐기됐으므로 API 데이터 요청은
       // 바로 거부되고, 화면 세션은 검증 재사용 구간(60초, 2026-10-23 결정) 안에 끊겨야 한다.
+      // 역할과 쿠키를 따로 확인하면 "역할 없음" 뒤에 늦은 응답이 쿠키를 되살리는 틈에 걸린다
+      // (2026-10-27 run 40466056694 1·2차). 세션 조회(서버 재검증과 쿠키 정리를 일으킨다)와 쿠키 확인을
+      // 한 번에 묶어, 두 조건이 함께 만족하는 안정 상태가 올 때까지 기다린다.
       await expect
-        .poll(() => readSessionRole(page, base), {
-          timeout: SESSION_AUTHORITY_REUSE_MS + SESSION_SETTLE_MS,
-          intervals: [1_000, 5_000],
-        })
-        .toBeNull();
-      expect(await hasSessionCookie(page, base)).toBe(false);
+        .poll(
+          async () => ({
+            role: await readSessionRole(page, base),
+            cookie: await hasSessionCookie(page, base),
+          }),
+          {
+            timeout: SESSION_AUTHORITY_REUSE_MS + SESSION_SETTLE_MS,
+            intervals: [1_000, 2_000, 5_000],
+          },
+        )
+        .toEqual({ role: null, cookie: false });
     });
   }
 
