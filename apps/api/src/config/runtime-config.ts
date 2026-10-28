@@ -91,6 +91,46 @@ export function shouldEnableScheduledJobs(values: RuntimeConfigValues = process.
   return readString(values, 'GREENHUB_SCHEDULES_ENABLED') !== 'false';
 }
 
+export type SchedulerTriggerSettings = {
+  invokerEmail: string;
+  audience: string;
+};
+
+const SERVICE_ACCOUNT_EMAIL_PATTERN = /^[a-z0-9-]+@[a-z0-9-]+\.iam\.gserviceaccount\.com$/;
+
+/**
+ * 외부 예약 호출(Cloud Scheduler)로 정기 작업을 돌리는 설정. 둘 다 비어 있으면 끈 것이다(null).
+ * 서버 안 정기 작업과 함께 켜면 같은 작업이 두 번 돌므로 기동을 막는다.
+ */
+export function resolveSchedulerTriggerSettings(
+  values: RuntimeConfigValues = process.env,
+): SchedulerTriggerSettings | null {
+  const invokerEmail = readString(values, 'GREENHUB_SCHEDULER_INVOKER_EMAIL');
+  const audience = readString(values, 'GREENHUB_SCHEDULER_AUDIENCE');
+  if (!invokerEmail && !audience) return null;
+  if (!invokerEmail || !audience) {
+    throw new RuntimeConfigurationError(
+      'GREENHUB_SCHEDULER_INVOKER_EMAIL과 GREENHUB_SCHEDULER_AUDIENCE는 함께 설정해야 합니다.',
+    );
+  }
+  if (!SERVICE_ACCOUNT_EMAIL_PATTERN.test(invokerEmail)) {
+    throw new RuntimeConfigurationError(
+      'GREENHUB_SCHEDULER_INVOKER_EMAIL은 Google 서비스 계정 이메일이어야 합니다.',
+    );
+  }
+  if (!/^https:\/\/[^/\s]+$/.test(audience)) {
+    throw new RuntimeConfigurationError(
+      'GREENHUB_SCHEDULER_AUDIENCE는 경로 없는 https 주소여야 합니다.',
+    );
+  }
+  if (shouldEnableScheduledJobs(values)) {
+    throw new RuntimeConfigurationError(
+      '예약 호출을 켜려면 서버 안 정기 작업을 꺼야 합니다(GREENHUB_SCHEDULES_ENABLED=false).',
+    );
+  }
+  return { invokerEmail, audience };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -339,6 +379,7 @@ function assertProductionJwtSecrets(values: RuntimeConfigValues): void {
 
 export function validateRuntimeConfig(values: RuntimeConfigValues): RuntimeConfigValues {
   resolveTrustProxyHops(values);
+  resolveSchedulerTriggerSettings(values);
 
   if (!isProductionRuntime(values)) {
     resolveFirebaseAdminSettings(values);
@@ -379,5 +420,7 @@ export function getConfigValues(config: ConfigService): RuntimeConfigValues {
     FIREBASE_AUTH_EMULATOR_HOST: config.get<string>('FIREBASE_AUTH_EMULATOR_HOST'),
     GREENHUB_LOCAL_RUNTIME: config.get<string>('GREENHUB_LOCAL_RUNTIME'),
     GREENHUB_SCHEDULES_ENABLED: config.get<string>('GREENHUB_SCHEDULES_ENABLED'),
+    GREENHUB_SCHEDULER_INVOKER_EMAIL: config.get<string>('GREENHUB_SCHEDULER_INVOKER_EMAIL'),
+    GREENHUB_SCHEDULER_AUDIENCE: config.get<string>('GREENHUB_SCHEDULER_AUDIENCE'),
   };
 }

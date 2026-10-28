@@ -272,6 +272,66 @@ gcloud compute addresses describe greenhub-api-ip --global $P --format="value(ad
 
 **되돌리기**: 계획서 C7의 되돌리기와 같다. ingress를 `all`로 되돌리면 run.app 주소도 다시 쓸 수 있다.
 
+## R12. 정기 작업 예약 호출(Cloud Scheduler) — 승인 필요
+
+Cloud Run은 서버 안 정기 작업(`@Cron`)을 쓰지 않는다. Cloud Scheduler가 정해진 서비스 계정의 OIDC token으로 `POST /internal/scheduled-jobs/<작업>`을 부른다. API는 token의 서명·수신자(`GREENHUB_SCHEDULER_AUDIENCE`)·호출 계정(`GREENHUB_SCHEDULER_INVOKER_EMAIL`)을 확인하고, 작업이 끝난 뒤 204로 답한다. 실패하면 2xx가 아니므로 Cloud Scheduler 기록에 실패로 남는다.
+
+작업 목록. 시각은 서버 안 `@Cron`과 같아야 한다(코드: `apps/api/src/scheduled-jobs/scheduled-jobs.service.ts`).
+
+| 작업 이름 | 예약(Asia/Seoul) | 원래 `@Cron` |
+|---|---|---|
+| `payments-cleanup-pending-orders` | `* * * * *` | `PaymentsService.cleanupPendingOrders` |
+| `group-buy-deadlines` | `* * * * *` | `NotificationsService.processGroupBuyDeadlines` |
+| `group-buy-deadline-soon` | `*/10 * * * *` | `NotificationsService.notifyDeadlineSoon` |
+| `retention-purge` | `0 3 * * *` | `RetentionService.runScheduledPurge` |
+| `partner-inquiry-purge` | `20 3 * * *` | `EngagementService.runScheduledPartnerInquiryPurge` |
+| `settlements-confirm-due` | `0 4 * * *` | `SettlementsService.confirmDueSettlements` |
+| `ops-daily-digest` | `30 8 * * *` | `OpsDigestService.sendDailyDigest` |
+
+1. **미리 만들어 멈춰 둔다**(전환 전 아무 때나). 이때 Cloud Run에는 두 변수를 넣지 않으므로 호출해도 404다.
+
+```bash
+P="--project=green-e4fe3"
+BASE=https://greenhub-api-988412563635.asia-northeast3.run.app
+SA=greenhub-scheduler@green-e4fe3.iam.gserviceaccount.com
+gcloud services enable cloudscheduler.googleapis.com $P
+gcloud iam service-accounts create greenhub-scheduler --display-name="Greenhub 정기 작업 호출" $P
+job() {
+  gcloud scheduler jobs create http "greenhub-$1" --location=asia-northeast3 $P \
+    --schedule="$2" --time-zone=Asia/Seoul --http-method=POST \
+    --uri="$BASE/internal/scheduled-jobs/$1" \
+    --oidc-service-account-email=$SA --oidc-token-audience=$BASE --attempt-deadline=60s
+  gcloud scheduler jobs pause "greenhub-$1" --location=asia-northeast3 $P
+}
+job payments-cleanup-pending-orders '* * * * *'
+job group-buy-deadlines '* * * * *'
+job group-buy-deadline-soon '*/10 * * * *'
+job retention-purge '0 3 * * *'
+job partner-inquiry-purge '20 3 * * *'
+job settlements-confirm-due '0 4 * * *'
+job ops-daily-digest '30 8 * * *'
+```
+
+- 서비스는 `--allow-unauthenticated`라 Cloud Run IAM 호출 권한은 따로 주지 않는다. 호출자 확인은 API가 한다.
+- 수신자는 작업마다 달리하지 않고 run.app 기본 주소 하나로 둔다. 서비스 주소가 바뀌면 `--oidc-token-audience`와 `GREENHUB_SCHEDULER_AUDIENCE`를 함께 바꾼다.
+- Cloud Run 요청 시간 한도는 60초(R9 `--timeout=60`)다. 하루 1회 파기·확정 작업이 60초를 넘기면 응답 전에 끊기므로, 첫 실행 뒤 Cloud Scheduler 기록과 Cloud Run 로그에서 소요 시간을 확인한다.
+
+2. **전환 때(계획서 C7 3단계)** Railway 정기 작업을 끈 뒤에 연다.
+
+```bash
+gcloud run services update greenhub-api $P --region=asia-northeast3 \
+  --update-env-vars=GREENHUB_SCHEDULER_INVOKER_EMAIL=$SA,GREENHUB_SCHEDULER_AUDIENCE=$BASE
+for j in payments-cleanup-pending-orders group-buy-deadlines group-buy-deadline-soon retention-purge partner-inquiry-purge settlements-confirm-due ops-daily-digest; do
+  gcloud scheduler jobs resume "greenhub-$j" --location=asia-northeast3 $P
+done
+```
+
+- 서버 안 정기 작업이 켜진 채(`GREENHUB_SCHEDULES_ENABLED`가 `false`가 아님) 두 변수를 넣으면 API가 기동하지 않는다. 같은 작업이 두 번 돌지 않게 하는 장치다.
+- 확인: 매분 작업이 204로 끝나는지 `gcloud scheduler jobs describe greenhub-payments-cleanup-pending-orders --location=asia-northeast3 $P`의 `status`와 Cloud Run 요청 로그로 본다. 다음 날 03:00·04:00·08:30 작업 뒤 `jobLeases`와 아침 요약 도착을 본다.
+- **R11 3단계와의 관계(확인 필요)**: ingress를 `internal-and-cloud-load-balancing`으로 바꾼 뒤에도 같은 프로젝트의 Cloud Scheduler 호출이 run.app에 닿는지 R11 전에 확인한다. 막히면 예약 주소를 `https://api.greenlove.co.kr`로 바꾸고 수신자도 맞춘다.
+
+**되돌리기**: 작업을 모두 `pause`하고 Railway 정기 작업을 켠다(계획서 C7 되돌리기). Cloud Run 두 변수는 지워도 되고 남겨도 된다(멈춘 작업은 호출하지 않는다).
+
 ## 배포 중 겹침
 
 - Cloud Run 배포는 새 리비전이 시작 검사를 통과한 뒤 트래픽을 옮긴다. 그사이 잠깐 이전·새 리비전이 함께 떠 있을 수 있고, 정기 작업이 켜진 뒤라면 두 리비전에서 같은 작업이 겹칠 수 있다(Railway 배포 겹침과 같은 성격). 하루 1회 작업은 job lease가 막고, lease 없는 매분 작업(결제 대기 정리 등)은 계획서 "여러 대 자동 확장" 항목의 확인 대상이다.
