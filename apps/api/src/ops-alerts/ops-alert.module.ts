@@ -14,6 +14,6 @@ import { OpsDigestService } from './ops-digest.service';
     },
     OpsDigestService,
   ],
-  exports: [OpsAlertService],
+  exports: [OpsAlertService, OpsDigestService],
 })
 export class OpsAlertModule {}

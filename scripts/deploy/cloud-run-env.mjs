@@ -104,6 +104,8 @@ export const EXCLUDED_KEYS = Object.freeze({
   RAILWAY_ENVIRONMENT_NAME: 'Railway 전용(GREENHUB_ENVIRONMENT_NAME으로 대체)',
   RAILWAY_GIT_COMMIT_SHA: 'Railway 전용(배포 도구가 GREENHUB_COMMIT_SHA를 넣음)',
   GREENHUB_COMMIT_SHA: '배포 도구가 리비전마다 넣음',
+  GREENHUB_SCHEDULER_INVOKER_EMAIL: '전환(C7) 때 R12에서 넣음(Railway에는 없음)',
+  GREENHUB_SCHEDULER_AUDIENCE: '전환(C7) 때 R12에서 넣음(Railway에는 없음)',
   PORT: 'Cloud Run이 넣음',
   FIREBASE_SERVICE_ACCOUNT_JSON: '키 파일 대신 런타임 서비스 계정(ADC)',
   GOOGLE_APPLICATION_CREDENTIALS: '키 파일 대신 런타임 서비스 계정(ADC)',
