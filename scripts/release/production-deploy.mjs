@@ -209,6 +209,46 @@ async function describeCloudRunService(gcloud, target) {
   );
 }
 
+/** 리비전의 Ready 조건을 읽는다. 아직 정해지지 않았으면 status는 'Unknown'이거나 없다. */
+async function readRevisionReady(gcloud, target, revision) {
+  const described = JSON.parse(
+    await gcloud([
+      'run',
+      'revisions',
+      'describe',
+      revision,
+      ...cloudRunScope(target),
+      '--format=json',
+    ]),
+  );
+  return (described?.status?.conditions ?? []).find((condition) => condition?.type === 'Ready');
+}
+
+/** 새 리비전이 Ready(True)가 될 때까지 기다리고, False(시작 검사 실패)나 시간 초과면 실패한다. */
+export async function waitRevisionReady({
+  gcloud,
+  target,
+  revision,
+  sleep = defaultSleep,
+  timeoutMs = HEALTH_TIMEOUT_MS,
+  intervalMs = POLL_INTERVAL_MS,
+}) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const ready = await readRevisionReady(gcloud, target, revision);
+    if (ready?.status === 'True') return;
+    if (ready?.status === 'False') {
+      throw new Error(
+        `새 리비전 ${revision}이(가) Ready가 아닙니다(시작 검사 실패: ${ready.message ?? ready.reason ?? '사유 없음'}).`,
+      );
+    }
+    if (Date.now() > deadline) {
+      throw new Error(`새 리비전 ${revision}이(가) 제한 시간 안에 Ready가 되지 않았습니다.`);
+    }
+    await sleep(intervalMs);
+  }
+}
+
 async function routeAllTraffic(gcloud, target, revision) {
   await gcloud([
     'run',
@@ -228,7 +268,7 @@ async function routeAllTraffic(gcloud, target, revision) {
  * 3. 새 리비전을 트래픽 없이 배포한다. 서비스의 시작 검사(`/health`, Firestore 한 건 읽기)를 통과해야
  *    Ready가 되고, 실패하면 배포 명령이 실패해 트래픽은 이전 리비전에 그대로 있다. GREENHUB_COMMIT_SHA는
  *    이 리비전에만 넣고, 다른 설정(대수·CPU 상시·비밀값·서비스 계정·네트워크)은 서비스 설정을 이어받는다.
- * 4. 새 리비전이 Ready인지 확인하고 트래픽 100%를 옮긴다.
+ * 4. 새 리비전의 Ready 조건이 정해질 때까지 기다린 뒤(True면 계속, False면 실패) 트래픽 100%를 옮긴다.
  * 5. 공개 주소의 `/health` commit이 SHA가 될 때까지 기다린다. 끝내 아니면 이전 리비전으로 되돌린다.
  * 새 리비전을 태그 주소로 먼저 확인하지 않는 것은, 전환 뒤 run.app 직접 접속을 막으면(부하분산기만 허용)
  * 태그 주소에 닿을 수 없기 때문이다.
@@ -241,6 +281,7 @@ export async function deployCloudRun({
   fetchImpl = fetch,
   sleep = defaultSleep,
   healthTimeoutMs = HEALTH_TIMEOUT_MS,
+  readyTimeoutMs = HEALTH_TIMEOUT_MS,
   intervalMs = POLL_INTERVAL_MS,
 }) {
   assertSha(sha);
@@ -279,9 +320,16 @@ export async function deployCloudRun({
   if (!revision || revision === previous) {
     throw new Error('Cloud Run이 새 리비전을 만들지 않았습니다.');
   }
-  if (after?.status?.latestReadyRevisionName !== revision) {
-    throw new Error(`새 리비전 ${revision}이(가) Ready가 아닙니다(시작 검사 실패).`);
-  }
+  // --no-traffic 배포는 새 리비전이 Ready가 되기 전에 끝날 수 있다. 리비전의 Ready 조건이
+  // True(통과)나 False(시작 검사 실패)로 정해질 때까지 기다린다.
+  await waitRevisionReady({
+    gcloud,
+    target,
+    revision,
+    sleep,
+    timeoutMs: readyTimeoutMs,
+    intervalMs,
+  });
 
   await routeAllTraffic(gcloud, target, revision);
   try {
