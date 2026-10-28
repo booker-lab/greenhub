@@ -185,13 +185,20 @@ export async function recordRelease({
   if (!token) throw new Error('GITHUB_TOKEN이 없어 실행을 멈춥니다.');
   const call = (options) => github({ token, fetchImpl, ...options });
 
-  // 최신 Release가 앞에 온다. 배포 기록은 하루 몇 건이라 첫 쪽(100건)만 본다.
+  // 배포 기록은 하루 몇 건이라 첫 쪽(100건)만 본다.
   const releases = (await call({ path: '/releases?per_page=100' })) ?? [];
   const existing = releases.find((release) => release.body?.split('\n').includes(runLine(runId)));
   if (existing) {
     return { status: 'exists', tag: existing.tag_name, url: existing.html_url };
   }
-  const previous = releases.find((release) => release.tag_name?.startsWith(TAG_PREFIX)) ?? null;
+  // 목록 순서는 배포 순서가 아니다(같은 날 tag는 이름 역순으로 온다). created_at도 대상 커밋 날짜라
+  // 쓸 수 없고, record job이 Release를 만든 시각인 published_at이 가장 늦은 것을 직전 배포로 본다.
+  const previous =
+    releases
+      .filter((release) => release.tag_name?.startsWith(TAG_PREFIX) && !release.draft)
+      .sort((a, b) =>
+        String(b.published_at ?? '').localeCompare(String(a.published_at ?? '')),
+      )[0] ?? null;
 
   let tag = baseTag({ sha, now });
   const taken =
