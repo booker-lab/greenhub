@@ -2,7 +2,7 @@
 
 # Railway 장애 때 API를 Cloud Run 예비 서버로 대피하기 — 비상 순서
 
-> 작성: 2026-10-23 · 상태: **계획(아직 실행 불가)** · 결정: 사용자 확정(2026-10-23 채팅, 아래 "함께 정한 것")
+> 작성: 2026-10-23 · 갱신: 2026-10-28 · 상태: **예비 서버 있음, 리허설(P5) 전이라 30분 대피는 아직 보장하지 못함** · 결정: 사용자 확정(2026-10-23 채팅, 아래 "함께 정한 것")
 > **쓸 수 있는 때**: 세 앱이 Railway 주소(`api-production-13e7.up.railway.app`)를 쓰는 동안. 그리고 Cloud Run 운영 예비 서버가 만들어진 뒤(`api-hosting-cloud-run-plan.md` C5)부터.
 > **함께 볼 문서**
 > - 계획된 이전(C1~C8)·비용·목표 구성의 정본: `api-hosting-cloud-run-plan.md`
@@ -37,6 +37,7 @@
    - 평소 드는 돈은 없다.
    - 서울 Cloud Run에는 간단한 도메인 연결이 없다. 우회하면 인증서 발급에 15분~24시간이 걸려 30분을 지킬 수 없다.
 5. **자동 일(정기 작업)**: 대피할 때는 **끈 채로** 손님 주문부터 살린다. Railway 서버가 확실히 멈춘 것을 확인한 뒤에 켠다.
+6. **대기 비용**(2026-10-28 사용자 결정): 평소 예비 서버는 최소 0대·CPU 요청 때만으로 둬 고정비를 없앤다. 대피할 때만 손님 트래픽을 받을 설정(최소 1대·CPU 항상 할당)으로 올린다.
 
 ### 하지 않는 것
 
@@ -145,7 +146,7 @@ ALIGO 고정 IP는 Fixie로 어디서든 해결되므로 선택을 가르지 않
 | 시점 | 할 일 | 누가 | 확인 |
 |---|---|---|---|
 | 0분 | 판단 기준 확인, 사용자 승인 | 사용자 | 채팅에 승인 문구 |
-| ~5분 | 예비 서버를 **정기 작업 끈 채로**(`GREENHUB_SCHEDULES_ENABLED=false`) 최소 1대로 켠다 | Claude(명령)·사용자(GCP 승인) | 예비 서버 `/health` 200, `commit`이 마지막 운영 SHA |
+| ~5분 | 예비 서버를 **정기 작업 끈 채로**(`GREENHUB_SCHEDULES_ENABLED=false`) 손님 트래픽을 받을 설정으로 올린다: `gcloud run services update greenhub-api --project=green-e4fe3 --region=asia-northeast3 --min-instances=1 --no-cpu-throttling`. **CPU 항상 할당이 필요하다**: 주문 상태 알림톡(`OrderNoticeDispatcher`)과 새 주문 운영 알림은 응답을 보낸 뒤에 보내므로, CPU를 요청 때만 쓰면 밀리거나 멈춘다 | Claude(명령)·사용자(GCP 승인) | 예비 서버 `/health` 200, `commit`이 마지막 운영 SHA, `describe`의 최소 1대·CPU 항상 할당 |
 | ~8분 | 예비 서버 CORS preflight를 세 앱 주소로 확인 | Claude | 세 주소 모두 허용 헤더 |
 | ~10분 | 세 앱 Vercel production `NEXT_PUBLIC_API_URL`을 예비 서버 주소로 바꾼다 | 사용자(또는 승인 뒤 Claude) | Vercel 화면에서 값 확인 |
 | ~20분 | 세 앱을 같은 SHA로 **빌드 생략 없이** 다시 배포한다(위 "함정"). 배포 도구로 할 때는 `production-deploy.mjs vercel --require-build=true`를 쓴다(C4에서 추가, CANCELED를 실패로 본다) | 사용자(또는 승인 뒤 Claude) | 세 배포 모두 READY. CANCELED·skipped면 실패로 본다 |
@@ -165,7 +166,12 @@ ALIGO 고정 IP는 Fixie로 어디서든 해결되므로 선택을 가르지 않
 - Railway 화면·상태 페이지에서 운영 서비스가 멈췄거나 지워진 것을 확인
 - Railway 운영 로그에 정기 작업 기록(`[PaymentsScheduler]` 등)이 30분 넘게 없음
 
-조건이 맞으면 예비 서버를 `GREENHUB_SCHEDULES_ENABLED=true`로 다시 배포한다. 확인할 것:
+조건이 맞으면 둘 중 하나로 켠다.
+
+- **A. 예약 호출(권장)**: 예비 서버 이미지에 #676(`49db8a2`) 이후 코드가 있고 Cloud Scheduler 작업이 미리 만들어져 있을 때(P8). `api-cloud-run-runbook.md` R12의 2단계(두 변수 넣기·작업 `resume`)를 한다. `GREENHUB_SCHEDULES_ENABLED`는 `false` 그대로 둔다.
+- **B. 서버 안 정기 작업**: A가 준비되지 않았을 때. `GREENHUB_SCHEDULES_ENABLED=true`로 다시 배포한다. 위 ~5분 단계의 최소 1대·CPU 항상 할당이 그대로여야 매분 작업이 돈다.
+
+확인할 것:
 
 - 다음 매분 정리 로그
 - 다음 날 08:30 아침 요약
@@ -181,12 +187,12 @@ ALIGO 고정 IP는 Fixie로 어디서든 해결되므로 선택을 가르지 않
 
 1. Railway 운영이 장애 전 SHA로 정상인지 `/health`로 확인한다.
    - 회복 중 자동 재배포로 다른 SHA가 나갔으면 검증 SHA로 다시 배포한다.
-2. **예비 서버 정기 작업을 먼저 끈다.**
+2. **예비 서버 정기 작업을 먼저 끈다.** A였으면 Cloud Scheduler 작업을 모두 `pause`하고, B였으면 `GREENHUB_SCHEDULES_ENABLED=false`로 다시 배포한다.
    - 이때 Railway 정기 작업은 켜져 있다.
    - 몇 분간 두 서버가 함께 돌 수 있으니, 예비 서버를 끄고 나서 세 앱 주소를 되돌린다.
 3. 세 앱 `NEXT_PUBLIC_API_URL`을 Railway 주소로 되돌리고, 빌드 생략 없이 다시 배포한다.
 4. PortOne 웹훅 주소를 Railway 주소로 되돌린다.
-5. 예비 서버를 꺼진 대기 상태(최소 0대)로 돌린다. `post-deploy-smoke`를 Railway 대상으로 다시 실행한다.
+5. 예비 서버를 대기 상태로 돌린다: `--min-instances=0 --cpu-throttling`. A였으면 R12의 두 변수도 지운다(`--remove-env-vars=GREENHUB_SCHEDULER_INVOKER_EMAIL,GREENHUB_SCHEDULER_AUDIENCE`). `post-deploy-smoke`를 Railway 대상으로 다시 실행한다.
 6. `docs/memory.md`에 장애·대피·복귀 시각과 배포 ID를 남긴다.
 
 데이터는 계속 같은 Firestore라 되돌릴 데이터는 없다. 다만 대피 중 예비 서버에서 처리된 주문·알림은 그대로 남는다.
@@ -197,13 +203,14 @@ ALIGO 고정 IP는 Fixie로 어디서든 해결되므로 선택을 가르지 않
 
 | # | 할 일 | 맡는 곳 | 상태 |
 |---|---|---|---|
-| P1 | 운영 예비 서버(Cloud Run 서울, 정기 작업 꺼짐)와 운영 비밀값(Secret Manager) | 이전 계획 C2·C5(사용자 승인) | 미착수 |
-| P2 | 운영 배포 때마다 예비 서버에도 같은 SHA를 꺼진 채로 배포(트래픽 없음, 최소 0대). 운영 Railway 배포 성공 뒤에 한다 | 이전 계획 C4(`production-deploy.mjs`·`.yml`) | C4 PR에서 구현 중(Railway 배포 뒤 같은 SHA로 예비 서버 배포, 실패해도 운영 배포는 계속) |
+| P1 | 운영 예비 서버(Cloud Run 서울, 정기 작업 꺼짐)와 운영 비밀값(Secret Manager) | 이전 계획 C2·C5(사용자 승인) | 완료(2026-10-24, `api-cloud-run-runbook.md` R6·R9). 2026-10-28 사용자 결정으로 대기 설정을 최소 0대·CPU 요청 때만으로 낮추는 중(Railway 세션) |
+| P2 | 운영 배포 때마다 예비 서버에도 같은 SHA를 꺼진 채로 배포(트래픽 없음, 최소 0대). 운영 Railway 배포 성공 뒤에 한다 | 이전 계획 C4(`production-deploy.mjs`·`.yml`) | 구현됨(Railway 배포 뒤 같은 SHA로 예비 서버 배포, 실패해도 운영 배포는 계속). 10/24~10/27 배포는 새 리비전이 Ready 되기 전에 판정해 트래픽을 옮기지 못했고 #672(2026-10-28)로 고쳤다. **다음 운영 배포에서 예비 서버가 그 SHA로 응답하는지 확인한다** |
 | P3 | **Railway 운영 변수를 바꿀 때 예비 서버 비밀값도 같이 바꾼다**(텔레그램·ALIGO·PortOne 등). 어긋나면 대피 때 알림·결제가 깨진다 | 사용자(운영 변수 변경 절차) | 규칙 |
-| P4 | ALIGO 호출: 예비 서버에도 Fixie 값(`ALIGO_OUTBOUND_PROXY_URL`)을 넣어 둔다. Cloud NAT IP를 ALIGO에 추가하면 그 경로도 쓸 수 있다 | 이전 계획 C5 | 미착수 |
+| P4 | ALIGO 호출: 예비 서버에도 Fixie 값(`ALIGO_OUTBOUND_PROXY_URL`)을 넣어 둔다. Cloud NAT IP를 ALIGO에 추가하면 그 경로도 쓸 수 있다 | 이전 계획 C5 | 완료(2026-10-24, R6에서 Fixie 값을 비밀값으로 옮김, R7 고정 IP를 ALIGO에 추가) |
 | P5 | **리허설 1회**(시험 환경): 시험용 Cloud Run 대상으로 Preview 세 앱 주소를 바꿔 다시 배포하고 로그인·주문 화면 확인. Vercel "Ignored Build Step 끄고 Redeploy"가 실제로 빌드하는지 함께 확인 | 이전 계획 C3에 묶어서 | 미착수 |
 | P6 | 장애 때 쓸 열쇠가 Railway 밖에 있는지 확인: Vercel 운영 토큰, PortOne 콘솔 로그인, GCP 배포 권한(WIF) | 사용자 | 확인 필요 |
 | P7 | 결제 안 된 주문 정리(매분)를 두 서버가 함께 돌려도 안전한지 확인. 안전하면 "정기 작업 켜기" 조건을 풀 수 있다 | 별도 작업(이전 계획 "여러 대 자동 확장"과 같은 확인) | 미착수 |
+| P8 | "정기 작업 켜기" A를 쓸 수 있게 Cloud Scheduler 작업 7개를 미리 만들어 멈춰 둔다(`api-cloud-run-runbook.md` R12 1단계) | 사용자 승인(GCP) | 미착수. 그 전까지는 B로 켠다 |
 
 DNS(가비아)는 이 순서에서 바꾸지 않는다. CORS도 바꿀 것이 없다.
 
