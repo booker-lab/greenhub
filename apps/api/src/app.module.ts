@@ -26,6 +26,7 @@ import { PaymentsModule } from './payments/payments.module';
 import { ProductsModule } from './products/products.module';
 import { RetentionModule } from './retention/retention.module';
 import { SaleRoundsModule } from './sale-rounds/sale-rounds.module';
+import { ScheduledJobsModule } from './scheduled-jobs/scheduled-jobs.module';
 import { SettlementsModule } from './settlements/settlements.module';
 import { StoresModule } from './stores/stores.module';
 import { VarietiesModule } from './varieties/varieties.module';
@@ -82,6 +83,8 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
     RetentionModule,
     // 팔도감 벤치마킹 비교용(후기·알림 신청·제안·입점 문의)
     EngagementModule,
+    // 서버 안 정기 작업을 끈 호스트(Cloud Run)에서 Cloud Scheduler가 부르는 정기 작업 경로
+    ScheduledJobsModule,
   ],
 })
 export class AppModule {}

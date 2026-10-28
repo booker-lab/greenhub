@@ -59,7 +59,7 @@
 ## 목표 구성
 
 - **서비스**: Cloud Run `asia-northeast3`. 이미지는 지금 `Dockerfile` 그대로이고, 같은 리전 Artifact Registry에 둔다.
-- **대수**: 최소 1대·최대 1대, **CPU 항상 할당**. 요청이 없을 때도 매분 정기 작업이 돌아야 한다.
+- **대수**: 최소 0대·최대 1대, **CPU는 요청을 처리할 때만** 쓴다(2026-10-28 사용자 결정, 상시 1대 고정비를 없앤다). 정기 작업은 서버 안에서 돌리지 않고 Cloud Scheduler가 `POST /internal/scheduled-jobs/<작업>`을 불러 깨운다. 작업이 끝난 뒤 응답하므로 CPU가 요청 동안만 할당돼도 끝까지 돈다.
 - **환경 변수**: Railway 운영 변수와 같은 값에 다음을 더한다.
   - `GREENHUB_ENVIRONMENT_NAME=production`
   - 배포마다 `GREENHUB_COMMIT_SHA=<배포 SHA>`
@@ -69,9 +69,9 @@
 - **헬스 확인**: `/health`(Firestore 문서 한 건 읽기). Cloud Run 시작 검사로도 써서, 통과한 리비전에만 트래픽을 옮긴다.
 - **주소**: 전환 뒤 `api.greenlove.co.kr`(부하분산기) 하나만 연다. run.app 직접 접속은 막는다(`ingress=internal-and-cloud-load-balancing`, `X-Forwarded-For` 위조로 요청 한도를 피하지 못하게).
 - **배포**: GitHub Actions가 Workload Identity Federation으로 인증해(키 파일 없이) 지정 SHA 이미지만 배포한다.
-- **정기 작업**: 전환 전까지 Cloud Run은 `GREENHUB_SCHEDULES_ENABLED=false`다. 두 서버가 함께 매분 작업을 돌리지 않게 한다.
+- **정기 작업**: Cloud Run은 언제나 `GREENHUB_SCHEDULES_ENABLED=false`다(서버 안 `@Cron`을 쓰지 않는다). 예약 호출 경로는 `GREENHUB_SCHEDULER_INVOKER_EMAIL`(호출 서비스 계정)·`GREENHUB_SCHEDULER_AUDIENCE`(run.app 기본 주소)를 넣어야 열리고, 서버 안 정기 작업이 켜져 있으면 기동을 막는다. 두 값이 없으면 경로는 404다(Railway). 전환 전까지는 두 값을 넣지 않아 두 서버가 함께 작업을 돌리지 않게 한다. 작업 목록과 예약 시각은 `api-cloud-run-runbook.md` R12가 소유한다.
 
-비용은 Cloud Run 상시 1대(CPU 항상 할당), Cloud NAT·고정 IP, Secret Manager·Artifact Registry에서 든다. 정확한 월 금액은 C2에서 GCP 가격 계산기로 확인해 이 문서에 적는다.
+비용은 Cloud Run 요청 처리 시간, Cloud Scheduler 작업 7개(무료 3개를 넘는 작업당 월 0.1달러), Cloud NAT·고정 IP, Secret Manager·Artifact Registry에서 든다. 정확한 월 금액은 C2에서 GCP 가격 계산기로 확인해 이 문서에 적는다.
 
 ## 단계
 
@@ -139,7 +139,7 @@
 
 1. 처리방침 수정 PR을 준비한다. §4 처리위탁과 §5 국외 처리에서 API 처리 위치를 서울로 고친다. 공지·시행일 방식은 사용자가 정한다.
 2. **Railway 정기 작업을 끈다**(`GREENHUB_SCHEDULES_ENABLED=false`). 변수 변경이 Railway 재배포를 일으키므로 **바로 검증된 SHA로 다시 배포한다**(2026-10-08 교훈).
-3. Cloud Run 정기 작업을 켜고 다시 배포한다. 2와 3 사이 몇 분은 정기 작업이 쉬지만, 실주문이 없는 전환 시점에는 영향이 없다.
+3. Cloud Run에 `GREENHUB_SCHEDULER_INVOKER_EMAIL`·`GREENHUB_SCHEDULER_AUDIENCE`를 넣고, 멈춰 둔 Cloud Scheduler 작업을 다시 켠다(`api-cloud-run-runbook.md` R12). 2와 3 사이 몇 분은 정기 작업이 쉬지만, 실주문이 없는 전환 시점에는 영향이 없다.
 4. 세 앱 운영 `NEXT_PUBLIC_API_URL`을 `https://api.greenlove.co.kr`로 바꾸고 같은 SHA로 다시 배포한다.
 5. PortOne 웹훅 주소를 `https://api.greenlove.co.kr` 기준으로 바꾼다(사용자 콘솔).
 6. 처리방침을 반영해 배포하고 `uptime.yml` 주소를 바꾼다.
@@ -149,7 +149,7 @@
    - 다음 날 08:30 아침 요약 도착
    - 첫 정기 작업의 `jobLeases` 정상
 
-**되돌리기**: 4·5를 원래 주소로 되돌린다. Cloud Run 정기 작업을 끄고, Railway 정기 작업을 켠다(검증 SHA로 다시 배포). 데이터는 그대로라 되돌릴 데이터가 없다.
+**되돌리기**: 4·5를 원래 주소로 되돌린다. Cloud Scheduler 작업을 멈추고, Railway 정기 작업을 켠다(검증 SHA로 다시 배포). 데이터는 그대로라 되돌릴 데이터가 없다.
 
 ### C8. 정리 — 첫 회차(11/10) 뒤
 
