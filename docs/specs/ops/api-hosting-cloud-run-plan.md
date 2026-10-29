@@ -59,7 +59,9 @@
 ## 목표 구성
 
 - **서비스**: Cloud Run `asia-northeast3`. 이미지는 지금 `Dockerfile` 그대로이고, 같은 리전 Artifact Registry에 둔다.
-- **대수**: 최소 0대·최대 1대, **CPU는 요청을 처리할 때만** 쓴다(2026-10-28 사용자 결정, 상시 1대 고정비를 없앤다). 정기 작업은 서버 안에서 돌리지 않고 Cloud Scheduler가 `POST /internal/scheduled-jobs/<작업>`을 불러 깨운다. 작업이 끝난 뒤 응답하므로 CPU가 요청 동안만 할당돼도 끝까지 돈다.
+- **대수**: 최소 0대·최대 1대(2026-10-28 사용자 결정, 상시 1대 고정비를 없앤다). 정기 작업은 서버 안에서 돌리지 않고 Cloud Scheduler가 `POST /internal/scheduled-jobs/<작업>`을 불러 깨운다. 작업이 끝난 뒤 응답한다.
+  - **CPU**: 손님 트래픽이 없는 대기(전환 전 예비 서버)는 요청 때만 쓴다. 손님 트래픽을 받는 동안(대피·전환 뒤)은 **항상 할당**한다. 주문 상태 알림톡(`OrderNoticeDispatcher`)과 새 주문 운영 알림을 응답 뒤에 보내므로, 요청 때만 쓰면 밀리거나 멈춘다.
+  - 그래서 전환 뒤에는 매분 예약 호출로 인스턴스가 계속 떠 있고, CPU 항상 할당 요금이 상시 1대와 비슷하게 든다. 더 줄이려면 응답 뒤 알림을 응답 전에 끝내거나 다른 방식(예: Cloud Tasks)으로 옮기는 별도 작업이 필요하다.
 - **환경 변수**: Railway 운영 변수와 같은 값에 다음을 더한다.
   - `GREENHUB_ENVIRONMENT_NAME=production`
   - 배포마다 `GREENHUB_COMMIT_SHA=<배포 SHA>`
@@ -71,7 +73,7 @@
 - **배포**: GitHub Actions가 Workload Identity Federation으로 인증해(키 파일 없이) 지정 SHA 이미지만 배포한다.
 - **정기 작업**: Cloud Run은 언제나 `GREENHUB_SCHEDULES_ENABLED=false`다(서버 안 `@Cron`을 쓰지 않는다). 예약 호출 경로는 `GREENHUB_SCHEDULER_INVOKER_EMAIL`(호출 서비스 계정)·`GREENHUB_SCHEDULER_AUDIENCE`(run.app 기본 주소)를 넣어야 열리고, 서버 안 정기 작업이 켜져 있으면 기동을 막는다. 두 값이 없으면 경로는 404다(Railway). 전환 전까지는 두 값을 넣지 않아 두 서버가 함께 작업을 돌리지 않게 한다. 작업 목록과 예약 시각은 `api-cloud-run-runbook.md` R12가 소유한다.
 
-비용은 Cloud Run 요청 처리 시간, Cloud Scheduler 작업 7개(무료 3개를 넘는 작업당 월 0.1달러), Cloud NAT·고정 IP, Secret Manager·Artifact Registry에서 든다. 정확한 월 금액은 C2에서 GCP 가격 계산기로 확인해 이 문서에 적는다.
+비용은 Cloud Run(대기 중에는 요청 처리 시간만, 손님 트래픽을 받는 동안은 CPU 항상 할당), Cloud Scheduler 작업 7개(무료 3개를 넘는 작업당 월 0.1달러), Cloud NAT·고정 IP, Secret Manager·Artifact Registry에서 든다. 정확한 월 금액은 C2에서 GCP 가격 계산기로 확인해 이 문서에 적는다.
 
 ## 단계
 
