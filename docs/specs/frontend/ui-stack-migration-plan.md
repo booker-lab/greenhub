@@ -62,6 +62,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 | `--color-bg` `#FFFFFF` | `--background` | `bg-background` |
 | `--color-text` `#111111` | `--foreground` | `text-foreground` |
 | `--color-primary` `#00A65A` | `--primary` (+ `--primary-foreground` `#FFFFFF`) | `bg-primary` |
+| (추가) 버튼 면 `#007A43` | P1 뒤 값 변경 PR에서 `--primary`를 `#007A43`으로 바꾸고, `#00A65A`는 `--brand`(머리띠·선택 표시·진행 막대)로 옮긴다 | `bg-primary`, `bg-brand` |
 | `--color-primary-dark` `#007A43` | `--brand-ink` (추가) | `text-brand-ink` |
 | `--color-primary-surface` `#E9F9EF` | `--brand-surface` (추가) | `bg-brand-surface` |
 | `--color-surface-muted` `#F1F3F2` | `--muted` / `--secondary` | `bg-muted` |
