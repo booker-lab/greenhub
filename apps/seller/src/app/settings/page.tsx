@@ -1,13 +1,12 @@
 'use client';
 
-import type { SalesMode } from '@greenhub/shared';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
-import { type ReactNode, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
-import { apiJson } from '@/lib/api';
+import { useStoreSalesMode } from '@/hooks/useStoreSalesMode';
 import { isFeatureOn } from '@/lib/features';
 import { logout } from '@/lib/logout';
 import { benchmarkSettingsLinks, operationSettingsFor } from './settings-links';
@@ -77,24 +76,8 @@ export default function SettingsPage() {
   const isDualRole = session?.user.role === 'admin' && !!session.user.storeId;
   const storeId = session?.user.storeId;
   const token = session?.user.accessToken;
-  const [salesMode, setSalesMode] = useState<SalesMode>();
-
   // 회차 판매 가게에는 적용되지 않는 예전 방식 메뉴(배송비·배송 슬롯·거점)를 숨기려고 판매 방식을 확인한다.
-  useEffect(() => {
-    if (!storeId || !token) return;
-    let cancelled = false;
-    apiJson<{ salesMode?: SalesMode }>(`/stores/${storeId}/public-profile`, token)
-      .then((profile) => {
-        if (!cancelled) setSalesMode(profile.salesMode ?? 'legacy');
-      })
-      .catch(() => {
-        // 조회 실패 시 메뉴 접근을 막지 않는다.
-        if (!cancelled) setSalesMode('legacy');
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [storeId, token]);
+  const salesMode = useStoreSalesMode(storeId, token);
 
   return (
     <PageShell>

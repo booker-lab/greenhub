@@ -174,7 +174,7 @@ test.describe('어드민 로컬 — 판매자 치우기·복구', () => {
 
     const archiveMessage = await confirmRowAction(page, '치우기', 'archive');
     expect(archiveMessage).toContain(`${fx.storeName} 판매자를 치울까요?`);
-    expect(archiveMessage).toContain('주문·정산 기록이 하나라도 있는 판매자는 치울 수 없습니다.');
+    expect(archiveMessage).toContain('주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 치워집니다.');
     // 기본 보기(활성)에서는 치운 판매자가 빠진다.
     await expect(page.getByText('조건에 맞는 판매자가 없습니다.')).toBeVisible({ timeout: 15_000 });
     expect((await readDoc(`stores/${fx.storeId}`))?.status).toBe('archived');

@@ -33,7 +33,14 @@ const BOX_KEYS = [
   'opacity',
   'boxShadow',
 ];
-const TEXT_KEYS = ['fontSize', 'fontWeight', 'letterSpacing', 'textTransform', 'color'];
+const TEXT_KEYS = [
+  'fontSize',
+  'fontWeight',
+  'letterSpacing',
+  'textTransform',
+  'textDecorationLine',
+  'color',
+];
 const KEYS_BY_KIND = {
   root: BOX_KEYS,
   button: BOX_KEYS,

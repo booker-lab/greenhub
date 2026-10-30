@@ -4,6 +4,7 @@ import { Button, Container, Group, Stack, Text, UnstyledButton } from '@mantine/
 import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
+import { useStoreSalesMode } from '@/hooks/useStoreSalesMode';
 import AIPreviewPanel from './AIPreviewPanel';
 import type { ProductFormProps } from './productForm.types';
 import SellerNoteInput from './SellerNoteInput';
@@ -19,6 +20,7 @@ export default function ProductForm(props: ProductFormProps) {
   const { mode, storeId, token } = props;
   const router = useRouter();
   const f = useProductForm(props);
+  const salesMode = useStoreSalesMode(storeId, token);
 
   function renderStep() {
     switch (f.step) {
@@ -70,6 +72,7 @@ export default function ProductForm(props: ProductFormProps) {
             form={f.form}
             set={f.set}
             setGroupConfig={f.setGroupConfig}
+            salesMode={salesMode}
           />
         );
     }
