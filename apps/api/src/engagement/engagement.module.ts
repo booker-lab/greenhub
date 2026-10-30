@@ -16,5 +16,6 @@ import { ReviewsService } from './reviews.service';
     AdminEngagementController,
   ],
   providers: [ReviewsService, EngagementService],
+  exports: [EngagementService],
 })
 export class EngagementModule {}

@@ -325,10 +325,12 @@ function fakeGcloud({
   digest = DIGEST,
   before = { revision: 'greenhub-api-00041-old' },
   created = 'greenhub-api-00042-new',
-  ready = created,
+  // 새 리비전 Ready 조건을 읽을 때마다 차례로 돌려줄 값. 마지막 값은 그 뒤로 계속 돌려준다.
+  readySequence = ['True'],
 } = {}) {
   const calls = [];
   let describes = 0;
+  let readyReads = 0;
   const impl = async (args) => {
     calls.push(args);
     const [group, sub, verb] = args;
@@ -340,7 +342,22 @@ function fakeGcloud({
         status:
           describes === 1
             ? { latestCreatedRevisionName: before.revision, traffic }
-            : { latestCreatedRevisionName: created, latestReadyRevisionName: ready, traffic },
+            : { latestCreatedRevisionName: created, traffic },
+      });
+    }
+    if (group === 'run' && sub === 'revisions' && verb === 'describe') {
+      const status = readySequence[Math.min(readyReads, readySequence.length - 1)];
+      readyReads += 1;
+      return JSON.stringify({
+        status: {
+          conditions: [
+            {
+              type: 'Ready',
+              status,
+              message: status === 'False' ? 'Startup probe failed' : undefined,
+            },
+          ],
+        },
       });
     }
     return '';
@@ -425,10 +442,10 @@ test('cloudrun: digest를 못 읽거나 새 리비전이 없거나 Ready가 아�
     deployCloudRun({ sha: SHA, gcloud: notCreated.impl, fetchImpl, sleep: noSleep }),
     /새 리비전을 만들지 않았습니다/,
   );
-  const notReady = fakeGcloud({ ready: 'greenhub-api-00041-old' });
+  const notReady = fakeGcloud({ readySequence: ['Unknown', 'False'] });
   await assert.rejects(
     deployCloudRun({ sha: SHA, gcloud: notReady.impl, fetchImpl, sleep: noSleep }),
-    /Ready가 아닙니다/,
+    /Ready가 아닙니다\(시작 검사 실패: Startup probe failed\)/,
   );
   assert.deepEqual(trafficCalls([...notCreated.calls, ...notReady.calls]), []);
 });
@@ -555,4 +572,41 @@ test('workflow: Cloud Run 배포 명령은 CLOUD_RUN_API_BASE로 확인한다', 
     .filter((line) => line.includes('production-deploy.mjs cloudrun'));
   assert.ok(calls.length > 0, 'workflow에 cloudrun 배포 명령이 있어야 한다');
   for (const line of calls) assert.ok(line.includes('--api-base="$CLOUD_RUN_API_BASE"'), line);
+});
+
+test('cloudrun: 배포 명령이 Ready 전에 끝나도 Ready가 될 때까지 기다린 뒤 트래픽을 옮긴다', async () => {
+  // 2026-10-24 운영 배포 3회에서 생긴 경합: --no-traffic 배포 직후에는 아직 Unknown이었다.
+  const gcloud = fakeGcloud({ readySequence: ['Unknown', 'Unknown', 'True'] });
+  const fetchImpl = async () => json({ status: 'ok', commit: SHA });
+  const result = await deployCloudRun({ sha: SHA, gcloud: gcloud.impl, fetchImpl, sleep: noSleep });
+  assert.equal(result.revision, 'greenhub-api-00042-new');
+  const readyReads = gcloud.calls.filter(
+    (args) => args[1] === 'revisions' && args[2] === 'describe',
+  );
+  assert.equal(readyReads.length, 3);
+  assert.deepEqual(readyReads[0].slice(3), [
+    'greenhub-api-00042-new',
+    '--project=green-e4fe3',
+    '--region=asia-northeast3',
+    '--format=json',
+  ]);
+  assert.deepEqual(trafficCalls(gcloud.calls), ['--to-revisions=greenhub-api-00042-new=100']);
+});
+
+test('cloudrun: 제한 시간 안에 Ready가 정해지지 않으면 트래픽을 옮기지 않고 실패한다', async () => {
+  const gcloud = fakeGcloud({ readySequence: ['Unknown'] });
+  const fetchImpl = async () => {
+    throw new Error('요청하면 안 됨');
+  };
+  await assert.rejects(
+    deployCloudRun({
+      sha: SHA,
+      gcloud: gcloud.impl,
+      fetchImpl,
+      sleep: noSleep,
+      readyTimeoutMs: -1,
+    }),
+    /제한 시간 안에 Ready가 되지 않았습니다/,
+  );
+  assert.deepEqual(trafficCalls(gcloud.calls), []);
 });
