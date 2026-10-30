@@ -308,7 +308,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         expect(harness.serviceBoundary.setCommission).toHaveBeenCalledWith('store-1', { rate: 0.1 }, 'admin-1');
         break;
       case 'archiveStore':
-        expect(harness.serviceBoundary.archiveStore).toHaveBeenCalledWith('store-1', 'admin-1');
+        expect(harness.serviceBoundary.archiveStore).toHaveBeenCalledWith('store-1', 'admin-1', undefined);
         break;
       case 'restoreStore':
         expect(harness.serviceBoundary.restoreStore).toHaveBeenCalledWith('store-1', 'admin-1');

@@ -36,7 +36,7 @@ export type RoundPaymentOrderRequest = Pick<
   Partial<
     Pick<
       CreateOrderRequest,
-      'requestedDeliveryDate' | 'acquisition' | 'requestNote' | 'gift'
+      'requestedDeliveryDate' | 'acquisition' | 'requestNote' | 'gift' | 'packageLabel'
     >
   >;
 
@@ -164,12 +164,12 @@ function prepareRoundOrderRequest(
       ...(orderRequest.acquisition ? { acquisition: orderRequest.acquisition } : {}),
       ...(orderRequest.requestNote ? { requestNote: orderRequest.requestNote } : {}),
       ...(orderRequest.gift ? { gift: orderRequest.gift } : {}),
+      ...(orderRequest.packageLabel ? { packageLabel: orderRequest.packageLabel } : {}),
       roundId: firstItem.roundId,
       roundItems: roundItems.map((item) => ({
         roundItemId: item.roundItemId,
         quantity: item.quantity,
         ...(item.optionChoiceIds?.length ? { optionChoiceIds: item.optionChoiceIds } : {}),
-        ...(item.optionText ? { optionText: item.optionText } : {}),
       })),
       clientOrderRequestId,
     },

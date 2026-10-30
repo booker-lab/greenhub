@@ -95,12 +95,11 @@ function buildRoundCartValidationRequest(value: RoundCartItem | RoundCartItem[])
     },
     deliveryPhone: '00000000',
     roundId: item.roundId,
-    roundItems: items.map(({ roundItemId, quantity, optionChoiceIds, optionText }) => ({
+    roundItems: items.map(({ roundItemId, quantity, optionChoiceIds }) => ({
       roundItemId,
       quantity,
-      // 옵션 시트(벤치마킹 비교 기능)로 고른 옵션과 라벨·토퍼 문구. 없으면 기존 요청과 같다.
+      // 옵션 시트(벤치마킹 비교 기능)로 고른 옵션. 없으면 기존 요청과 같다.
       ...(optionChoiceIds?.length ? { optionChoiceIds } : {}),
-      ...(optionText ? { optionText } : {}),
     })),
   };
 }

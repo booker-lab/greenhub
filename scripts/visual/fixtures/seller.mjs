@@ -62,7 +62,7 @@ const SELLER_ORDERS = [
     ['만천홍', 25000, 2],
   ]),
   roundOrder('order-round-single', '20261001-000002', 'ACCEPTED', [['v3', 45000, 1]]),
-  // 비교 기능(옵션·토퍼 문구·선물)이 담긴 회차 주문 — 포장할 때 옵션·문구와 선물 카드를 봐야 한다.
+  // 비교 기능(옵션·축하 토퍼·포장 라벨·선물)이 담긴 회차 주문 — 포장할 때 옵션·라벨 문구와 선물 카드를 봐야 한다.
   roundOrder('order-round-gift', '20261002-000007', 'ACCEPTED', [['빅립', 43000, 1]], {
     orderItems: [
       {
@@ -75,14 +75,7 @@ const SELLER_ORDERS = [
         subtotalAmount: 43000,
         selectedOptions: [
           { groupId: 'g1', groupName: '화분', choiceId: 'c2', choiceLabel: '백자 도자기 화분', priceDelta: 8000 },
-          {
-            groupId: 'g2',
-            groupName: '문구',
-            choiceId: 'c5',
-            choiceLabel: '3D 토퍼',
-            priceDelta: 5000,
-            text: '엄마 생신 축하해요',
-          },
+          { groupId: 'g2', groupName: '축하 토퍼', choiceId: 'c5', choiceLabel: '祝 生辰', priceDelta: 5000 },
         ],
       },
     ],
@@ -93,6 +86,7 @@ const SELLER_ORDERS = [
       senderName: '김그린',
       cardMessage: '늘 고마워요. 건강하세요!',
     },
+    packageLabel: '김그린',
   }),
   roundOrder('order-round-preparing', '20261001-000003', 'PREPARING', [['빅립', 30000, 2]]),
   roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]]),
@@ -529,11 +523,11 @@ export const firestoreSeed = {
         },
         {
           id: 'g2',
-          name: '문구',
+          name: '축하 토퍼',
           choices: [
-            { id: 'c3', label: '문구 없음', priceDelta: 0 },
-            { id: 'c4', label: '스티커 라벨', priceDelta: 2000, needsText: true },
-            { id: 'c5', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+            { id: 'c3', label: '토퍼 없음', priceDelta: 0 },
+            { id: 'c4', label: '祝 開業', priceDelta: 5000 },
+            { id: 'c5', label: '祝 生辰', priceDelta: 5000 },
           ],
         },
       ],
