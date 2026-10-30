@@ -4,7 +4,7 @@ import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 import { Box, Group, Paper, Text } from '@mantine/core';
 import { useSession } from 'next-auth/react';
 import { useMarketSummaries } from '@/hooks/useMarketPrices';
-import { estimatePurchase, formatWon } from '@/lib/market-price';
+import { estimatePurchase, formatWon, MARKET_PRICE_SOURCE } from '@/lib/market-price';
 import { buildRoundPurchaseList } from '@/lib/round-purchase-list';
 
 // 회차 구매 목록(경매에서 살 상품별 수량). 수량은 서버 회차 상품 집계를 그대로 쓴다.
@@ -97,6 +97,7 @@ export function RoundPurchaseListCard({
         >
           경매 시세 기준 예상 매입액 약 {formatWon(estimate.total)}
           {estimate.unknownCount > 0 ? ` (시세 모르는 상품 ${estimate.unknownCount}개 제외)` : ''}
+          {` · ${MARKET_PRICE_SOURCE}`}
         </Text>
       )}
       {list.pendingTotal > 0 && (

@@ -9,6 +9,7 @@ aT 화훼공판장 경락가격을 매일 받아 저장하고, 판매자가 회�
 ## 수집
 
 - 출처: aT 화훼유통정보시스템 경락가격 OpenAPI(`kind=f001`). 요청 변수 `serviceKey`·`baseDate`(YYYY-MM-DD)·`flowerGubn`(1 절화, 2 관엽, 3 난, 4 춘란)·`dataType=json`.
+- 신청(2026-10-30): 서비스 "화훼가격정보" 일자별 경매정보, 자동 승인, 일일 3,000건, **승인일로부터 20개월 활용**(만료 전 연장 신청), 이용허락범위 **제작자 표시** — 시세를 보여 주는 판매자 화면마다 "출처: aT 화훼유통정보"를 붙인다(`MARKET_PRICE_SOURCE`). 요청 주소와 요청 변수는 aT 샘플 URL(`/api/returnData.api?kind=f001&serviceKey=…&baseDate=…&flowerGubn=…&dataType=json&countPerPage=…`)과 일치함을 확인했다. 데이터는 aT화훼공판장(양재) 것만이다.
 - 환경 변수: `FLOWER_AUCTION_API_KEY`(없으면 수집하지 않음), `FLOWER_AUCTION_API_URL`(선택, 기본 `https://flower.at.or.kr/api/returnData.api`), `FLOWER_AUCTION_OUTBOUND_PROXY_URL`(선택, 고정 IP HTTP 프록시).
 - 접속 IP: aT는 신청 때 등록한 접속 IP에서 온 호출만 받는다. Railway는 송신 IP가 고정되지 않으므로 운영은 ALIGO와 같은 Fixie 고정 IP 프록시를 `FLOWER_AUCTION_OUTBOUND_PROXY_URL`에 넣고 Fixie IP를 aT에 등록한다. Cloud Run은 고정 송신 IP(`api-cloud-run-runbook.md` R7)로 바로 나가므로 이 값을 넣지 않고 그 IP를 등록한다. 값이 없으면 직접 호출하고, 형식이 틀리면(`http`·`https`가 아님) 직접 호출로 우회하지 않고 매 호출을 실패로 남긴다. 프록시 URL은 인증 정보를 담으므로 로그에 남기지 않는다.
 - 해외 IP 접속 여부: 2026-10-30 미국 송신 IP의 이 세션에서 `flower.at.or.kr:443`이 TLS 응답 없이 끊겼다. 해외 IP 차단인지는 확인하지 못했다. Fixie(해외 IP)를 거친 호출이 실제로 되는지는 키 발급 뒤 확인한다.

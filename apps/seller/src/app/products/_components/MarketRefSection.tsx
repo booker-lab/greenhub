@@ -3,7 +3,13 @@
 import { FLOWER_MARKET_GUBN_LABELS, FLOWER_MARKET_GUBNS } from '@greenhub/shared';
 import { Autocomplete, Select, Stack, Text, TextInput } from '@mantine/core';
 import { useMarketCatalog, useMarketLookup } from '@/hooks/useMarketPrices';
-import { marketLookupQuery, type MarketRefForm, marketSummaryLines, marketUnitLabel } from '@/lib/market-price';
+import {
+  MARKET_PRICE_SOURCE,
+  marketLookupQuery,
+  type MarketRefForm,
+  marketSummaryLines,
+  marketUnitLabel,
+} from '@/lib/market-price';
 import { FieldCard } from './FormPrimitives';
 
 const HINT_STYLE = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' } as const;
@@ -100,6 +106,7 @@ export function MarketRefSection({
                   {line}
                 </Text>
               ))}
+            {lookup.summary && <Text style={HINT_STYLE}>{MARKET_PRICE_SOURCE}</Text>}
             {lookup.error && <Text style={HINT_STYLE}>{lookup.error}</Text>}
             {catalog && catalog.items.length === 0 && (
               <Text style={HINT_STYLE}>아직 수집된 경매 이름이 없어요. 경매 이름을 그대로 적어 두면 수집 뒤에 시세가 보여요.</Text>

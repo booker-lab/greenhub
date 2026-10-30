@@ -18,7 +18,7 @@ import {
 } from '@mantine/core';
 import { Copy, Link2, PackagePlus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { checkRoundPrice, roundPriceCheckText } from '@/lib/market-price';
+import { checkRoundPrice, MARKET_PRICE_SOURCE, roundPriceCheckText } from '@/lib/market-price';
 
 export type NumericValue = number | string;
 
@@ -289,6 +289,11 @@ export function ProductsSection({
           </Stack>
         </Paper>
       ))}
+      {items.some((item) => marketSummaries[item.productId]) && (
+        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          경매 시세 {MARKET_PRICE_SOURCE}
+        </Text>
+      )}
 
       <Stack gap="xs">
         <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>

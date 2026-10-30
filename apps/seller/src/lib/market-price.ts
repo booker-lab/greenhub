@@ -10,6 +10,9 @@ import {
 
 // 경매 시세(aT 화훼공판장 경락가격) 판매자 화면 계산. 서버가 준 시세를 그대로 쓰고 여기서는 보여 줄 값만 만든다.
 
+/** aT 화훼유통정보 OpenAPI 이용허락(제작자 표시) — 시세를 보여 주는 곳마다 붙인다. */
+export const MARKET_PRICE_SOURCE = '출처: aT 화훼유통정보';
+
 /** 상품 편집의 시세 연결 칸. flowerGubn이 빈 문자열이면 연결하지 않는다. */
 export interface MarketRefForm {
   flowerGubn: '' | `${FlowerMarketGubn}`;
