@@ -10,7 +10,7 @@ import {
   PRODUCT_OPTION_GROUP_MAX,
   type OptionStock,
 } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLabel } from '@greenhub/ui/components/button';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
 import { Chip } from '@greenhub/ui/components/chip';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
@@ -32,6 +32,7 @@ import {
 // ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Group·Stack·SimpleGrid 값. 색 green = Mantine green-6.
 const TEXT = 'm-0 p-0 text-base font-normal';
 const GREEN = '#40c057';
+const GREEN_HOVER = '#37b24d';
 const UNIT_CLASS = `${TEXT} text-sm`;
 
 const CARE_FIELDS = [
@@ -125,6 +126,7 @@ export function ProductExtrasSection({
                   key={placement}
                   value={placement}
                   color={GREEN}
+                  hoverColor={GREEN_HOVER}
                   checked={extras.placements.includes(placement)}
                   onCheckedChange={(checked) => {
                     const next = checked
@@ -145,6 +147,7 @@ export function ProductExtrasSection({
                   name="product-extras-light"
                   value={level}
                   color={GREEN}
+                  hoverColor={GREEN_HOVER}
                   checked={extras.light === level}
                   onCheckedChange={(checked) => checked && patch({ light: level })}
                 >
@@ -207,7 +210,7 @@ export function ProductExtrasSection({
                       setGroups(extras.options.filter((_, index) => index !== groupIndex))
                     }
                   >
-                    묶음 삭제
+                    <ButtonLabel>묶음 삭제</ButtonLabel>
                   </Button>
                 </div>
                 {group.choices.map((choice, choiceIndex) => (
@@ -283,7 +286,7 @@ export function ProductExtrasSection({
                       setGroups(next);
                     }}
                   >
-                    + 선택지
+                    <ButtonLabel>+ 선택지</ButtonLabel>
                   </Button>
                 )}
               </div>
@@ -321,7 +324,7 @@ export function ProductExtrasSection({
                   ])
                 }
               >
-                + 옵션 묶음 추가
+                <ButtonLabel>+ 옵션 묶음 추가</ButtonLabel>
               </Button>
             )}
           </div>

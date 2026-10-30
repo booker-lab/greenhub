@@ -6,7 +6,12 @@ import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import type { ConflictWarning } from './AIPreviewPanel';
-import { extrasBody, fillNoticeDefaults, type NoticeStoreDefaults, noticeBody } from './productExtras';
+import {
+  extrasBody,
+  fillNoticeDefaults,
+  type NoticeStoreDefaults,
+  noticeBody,
+} from './productExtras';
 import {
   defaultForm,
   type GroupConfigForm,
@@ -17,7 +22,10 @@ import { useTokenRef } from '@/lib/use-token-ref';
 
 /** 상품정보제공고시의 빈 칸만 기본값(생산자=매장명, 상담 전화=사업자 프로필 연락처)으로 채운다. */
 function withNoticeDefaults(form: ProductFormData, defaults: NoticeStoreDefaults): ProductFormData {
-  return { ...form, extras: { ...form.extras, notice: fillNoticeDefaults(form.extras.notice, defaults) } };
+  return {
+    ...form,
+    extras: { ...form.extras, notice: fillNoticeDefaults(form.extras.notice, defaults) },
+  };
 }
 
 /** ProductForm의 상태·검증·임시저장·제출 로직을 모두 담는 훅. */
@@ -90,7 +98,10 @@ export function useProductForm({
   useEffect(() => {
     if (!storeId || !hasToken) return;
     let active = true;
-    apiJson<{ name?: string; phone?: string }>(`/stores/${apiPathSegment(storeId)}`, tokenRef.current)
+    apiJson<{ name?: string; phone?: string }>(
+      `/stores/${apiPathSegment(storeId)}`,
+      tokenRef.current,
+    )
       .then((store) => {
         if (!active) return;
         const defaults = { producer: store.name?.trim() ?? '', csPhone: store.phone?.trim() ?? '' };

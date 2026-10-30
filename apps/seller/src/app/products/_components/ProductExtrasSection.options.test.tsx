@@ -58,7 +58,11 @@ function extrasWithPot(): ProductExtrasForm {
 
 describe('ProductExtrasSection 옵션 재고 연결', () => {
   it('선택지마다 재고 연결 칸을 그리고 재고 목록을 보여 준다', () => {
-    const tree = ProductExtrasSection({ extras: extrasWithPot(), onChange: () => {}, optionStocks: [STOCK] });
+    const tree = ProductExtrasSection({
+      extras: extrasWithPot(),
+      onChange: () => {},
+      optionStocks: [STOCK],
+    });
     const selects = collect(tree).filter((element) => element.props.label === '재고 연결');
     expect(selects).toHaveLength(2);
     expect(selects[0].props.data).toEqual([
@@ -85,7 +89,9 @@ describe('ProductExtrasSection 옵션 재고 연결', () => {
       onChange: () => {},
       optionStocksError: '옵션 재고를 불러오지 못했어요.',
     });
-    const alerts = collect(tree).filter((element) => element.props.children === '옵션 재고를 불러오지 못했어요.');
+    const alerts = collect(tree).filter(
+      (element) => element.props.children === '옵션 재고를 불러오지 못했어요.',
+    );
     expect(alerts).toHaveLength(1);
   });
 });

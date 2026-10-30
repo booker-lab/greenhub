@@ -872,7 +872,11 @@ export function UiCompare({ open }: { open?: string }) {
               + 옵션 묶음 추가
             </MButton>
           }
-          ui={<Button variant="outline-green">+ 옵션 묶음 추가</Button>}
+          ui={
+            <Button variant="outline-green">
+              <ButtonLabel>+ 옵션 묶음 추가</ButtonLabel>
+            </Button>
+          }
         />
       </Section>
 

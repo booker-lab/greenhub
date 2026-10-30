@@ -14,6 +14,8 @@ const LABEL = { xs: 'text-xs', sm: '', md: 'text-base' } as const;
 const CHEVRON = { xs: 'size-3.5', sm: 'size-[18px]', md: 'size-5' } as const;
 const SECTION = { xs: 'w-7', sm: 'w-[34px]', md: 'w-10' } as const;
 const PADDING = { xs: 'pe-7', sm: 'pe-[34px]', md: 'pe-10' } as const;
+// Mantine 입력칸 줄 높이(높이 - 2px). select 글자는 줄 높이에 따라 세로 위치가 바뀐다.
+const LINE_HEIGHT = { xs: 'leading-7', sm: 'leading-[34px]', md: 'leading-10' } as const;
 
 function NativeSelect({
   data,
@@ -39,6 +41,7 @@ function NativeSelect({
           inputSizeClassName[size],
           'cursor-pointer',
           PADDING[size],
+          LINE_HEIGHT[size],
           className,
         )}
         {...props}
