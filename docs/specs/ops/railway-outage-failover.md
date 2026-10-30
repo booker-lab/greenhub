@@ -2,7 +2,7 @@
 
 # Railway 장애 때 API를 Cloud Run 예비 서버로 대피하기 — 비상 순서
 
-> 작성: 2026-10-23 · 갱신: 2026-10-28 · 상태: **예비 서버 있음, 리허설(P5) 전이라 30분 대피는 아직 보장하지 못함** · 결정: 사용자 확정(2026-10-23 채팅, 아래 "함께 정한 것")
+> 작성: 2026-10-23 · 갱신: 2026-10-30 · 상태: **예비 서버 있음, 리허설(P5) 완료 — 주소 바꾸기부터 세 앱 새 빌드 READY까지 약 9분이라 30분 순서는 지킬 수 있다. 새 빌드는 Vercel Redeploy 체크 해제, API `skipIgnoreBuildStep=1`, 또는 이 쿼리를 보내는 배포 도구 `--require-build=true`로 강제한다(도구 경로는 운영에서 아직 실행해 보지 않음)** · 결정: 사용자 확정(2026-10-23 채팅, 아래 "함께 정한 것")
 > **쓸 수 있는 때**: 세 앱이 Railway 주소(`api-production-13e7.up.railway.app`)를 쓰는 동안. 그리고 Cloud Run 운영 예비 서버가 만들어진 뒤(`api-hosting-cloud-run-plan.md` C5)부터.
 > **함께 볼 문서**
 > - 계획된 이전(C1~C8)·비용·목표 구성의 정본: `api-hosting-cloud-run-plan.md`
@@ -98,7 +98,11 @@
 - **함정**: 같은 커밋으로 다시 배포하면 빌드 생략 규칙(`scripts/vercel/ignore-build.mjs`)이 "바뀐 것 없음"으로 보고 빌드를 취소한다.
   - `production-deploy.mjs vercel`은 이 취소를 `skipped`로 기록하고 성공으로 끝난다.
   - 즉 **새 주소가 반영되지 않았는데 성공처럼 보인다.**
-  - 대피 때는 Vercel 화면의 Redeploy에서 "프로젝트의 Ignored Build Step 사용"을 끄고 다시 배포한다. 실제 동작은 P5에서 미리 확인한다.
+  - 대피 때는 생략 규칙을 건너뛰고 다시 배포한다. P5(2026-10-29)에서 확인한 방법은 둘이다.
+    - **Vercel 화면**: 배포 상세 `…` → Redeploy → "Use project's Ignore Build Step" 체크를 끈다(기본은 켜져 있다). 켠 채로 누르면 2초 만에 CANCELED된다. 누를 때 Vercel이 **이메일 코드 재인증**을 요구할 수 있다(P5에서 약 1분).
+    - **API**: 화면이 보내는 요청과 같다. `POST /v13/deployments?forceNew=1&skipIgnoreBuildStep=1`에 본문 `{"deploymentId":"<기존 배포 ID>","name":"<프로젝트>","meta":{"action":"redeploy"}}`. 기존 배포 대신 `gitSource`(브랜치·SHA)로 새로 만들 때도 같은 쿼리로 생략이 꺼진다. 빌드 로그에 "Ignore Build Step was explicitly skipped for this deployment."가 찍힌다.
+  - `production-deploy.mjs vercel --require-build=true`는 `gitSource` 생성 요청에 이 쿼리를 붙여 생략 규칙을 건너뛰고, 그래도 생략되면 실패로 멈춘다. `--require-build` 없는 평소 배포는 생략 규칙을 그대로 따른다. 이 도구 경로는 운영에서 아직 실행해 보지 않았다(쿼리 동작은 P5 Preview에서 API로 확인).
+  - 세 앱 빌드는 한 번에 하나씩 돈다. P5에서 세 앱이 모두 READY 되기까지 약 6분(캐시 없이 앱당 1분 30초~2분 45초).
 - API의 CORS는 세 앱 주소(`greenlove.co.kr`, `seller.`, `driver.`)를 허용한다. API 주소가 바뀌어도 CORS 값은 그대로다.
 
 ### 그 밖에 API 주소가 들어 있는 곳
@@ -149,7 +153,7 @@ ALIGO 고정 IP는 Fixie로 어디서든 해결되므로 선택을 가르지 않
 | ~5분 | 예비 서버를 **정기 작업 끈 채로**(`GREENHUB_SCHEDULES_ENABLED=false`) 손님 트래픽을 받을 설정으로 올린다: `gcloud run services update greenhub-api --project=green-e4fe3 --region=asia-northeast3 --min-instances=1 --no-cpu-throttling`. **CPU 항상 할당이 필요하다**: 주문 상태 알림톡(`OrderNoticeDispatcher`)과 새 주문 운영 알림은 응답을 보낸 뒤에 보내므로, CPU를 요청 때만 쓰면 밀리거나 멈춘다 | Claude(명령)·사용자(GCP 승인) | 예비 서버 `/health` 200, `commit`이 마지막 운영 SHA, `describe`의 최소 1대·CPU 항상 할당 |
 | ~8분 | 예비 서버 CORS preflight를 세 앱 주소로 확인 | Claude | 세 주소 모두 허용 헤더 |
 | ~10분 | 세 앱 Vercel production `NEXT_PUBLIC_API_URL`을 예비 서버 주소로 바꾼다 | 사용자(또는 승인 뒤 Claude) | Vercel 화면에서 값 확인 |
-| ~20분 | 세 앱을 같은 SHA로 **빌드 생략 없이** 다시 배포한다(위 "함정"). 배포 도구로 할 때는 `production-deploy.mjs vercel --require-build=true`를 쓴다(C4에서 추가, CANCELED를 실패로 본다) | 사용자(또는 승인 뒤 Claude) | 세 배포 모두 READY. CANCELED·skipped면 실패로 본다 |
+| ~20분 | 세 앱을 같은 SHA로 **빌드 생략 없이** 다시 배포한다(위 "함정"). `production-deploy.mjs vercel --require-build=true`(앱마다 한 번, `skipIgnoreBuildStep=1`을 보낸다)로 하거나, Vercel 화면 Redeploy에서 "Use project's Ignore Build Step"을 끄거나, API에 `skipIgnoreBuildStep=1`을 붙인다. 세 앱 빌드에 약 6분 | 사용자(또는 승인 뒤 Claude) | 세 배포 모두 READY, 빌드 로그에 "Ignore Build Step was explicitly skipped". CANCELED·skipped면 실패로 본다 |
 | ~22분 | PortOne 콘솔 결제 웹훅 주소를 예비 서버 주소로 바꾼다 | 사용자 | 콘솔 저장 화면 |
 | ~25분 | 운영 확인: `post-deploy-smoke`를 예비 서버 대상으로, 세 앱 로그인·상품·장바구니 화면, 비인증 API 401 | Claude | 전부 통과 |
 | ~30분 | 텔레그램·채팅으로 "대피 완료, 정기 작업은 꺼짐" 기록 | Claude | `docs/memory.md` 기록은 장애 종료 뒤 |
@@ -203,11 +207,11 @@ ALIGO 고정 IP는 Fixie로 어디서든 해결되므로 선택을 가르지 않
 
 | # | 할 일 | 맡는 곳 | 상태 |
 |---|---|---|---|
-| P1 | 운영 예비 서버(Cloud Run 서울, 정기 작업 꺼짐)와 운영 비밀값(Secret Manager) | 이전 계획 C2·C5(사용자 승인) | 완료(2026-10-24, `api-cloud-run-runbook.md` R6·R9). 2026-10-28 사용자 결정으로 대기 설정을 최소 0대·CPU 요청 때만으로 낮추는 중(Railway 세션) |
+| P1 | 운영 예비 서버(Cloud Run 서울, 정기 작업 꺼짐)와 운영 비밀값(Secret Manager) | 이전 계획 C2·C5(사용자 승인) | 완료(2026-10-24, `api-cloud-run-runbook.md` R6·R9). 대기 설정을 최소 0대·CPU 요청 때만으로 낮춤도 완료(2026-10-29, #678) |
 | P2 | 운영 배포 때마다 예비 서버에도 같은 SHA를 꺼진 채로 배포(트래픽 없음, 최소 0대). 운영 Railway 배포 성공 뒤에 한다 | 이전 계획 C4(`production-deploy.mjs`·`.yml`) | 구현됨(Railway 배포 뒤 같은 SHA로 예비 서버 배포, 실패해도 운영 배포는 계속). 10/24~10/27 배포는 새 리비전이 Ready 되기 전에 판정해 트래픽을 옮기지 못했고 #672(2026-10-28)로 고쳤다. **다음 운영 배포에서 예비 서버가 그 SHA로 응답하는지 확인한다** |
 | P3 | **Railway 운영 변수를 바꿀 때 예비 서버 비밀값도 같이 바꾼다**(텔레그램·ALIGO·PortOne 등). 어긋나면 대피 때 알림·결제가 깨진다 | 사용자(운영 변수 변경 절차) | 규칙 |
 | P4 | ALIGO 호출: 예비 서버에도 Fixie 값(`ALIGO_OUTBOUND_PROXY_URL`)을 넣어 둔다. Cloud NAT IP를 ALIGO에 추가하면 그 경로도 쓸 수 있다 | 이전 계획 C5 | 완료(2026-10-24, R6에서 Fixie 값을 비밀값으로 옮김, R7 고정 IP를 ALIGO에 추가) |
-| P5 | **리허설 1회**(시험 환경): 시험용 Cloud Run 대상으로 Preview 세 앱 주소를 바꿔 다시 배포하고 로그인·주문 화면 확인. Vercel "Ignored Build Step 끄고 Redeploy"가 실제로 빌드하는지 함께 확인 | 이전 계획 C3에 묶어서 | 미착수 |
+| P5 | **리허설 1회**(시험 환경): 시험용 Cloud Run 대상으로 Preview 세 앱 주소를 바꿔 다시 배포하고 로그인·주문 화면 확인. Vercel "Ignored Build Step 끄고 Redeploy"가 실제로 빌드하는지 함께 확인 | 이전 계획 C3에 묶어서 | 완료(2026-10-29, 아래 "P5 리허설 결과"). 로그인 완료와 주문은 Preview가 Kakao 로그인 완료를 지원하지 않아 인증 화면 진입까지만 봤다 |
 | P6 | 장애 때 쓸 열쇠가 Railway 밖에 있는지 확인: Vercel 운영 토큰, PortOne 콘솔 로그인, GCP 배포 권한(WIF) | 사용자 | 확인 필요 |
 | P7 | 결제 안 된 주문 정리(매분)를 두 서버가 함께 돌려도 안전한지 확인. 안전하면 "정기 작업 켜기" 조건을 풀 수 있다 | 별도 작업(이전 계획 "여러 대 자동 확장"과 같은 확인) | 미착수 |
 | P8 | "정기 작업 켜기" A를 쓸 수 있게 Cloud Scheduler 작업 7개를 미리 만들어 멈춰 둔다(`api-cloud-run-runbook.md` R12 1단계) | 사용자 승인(GCP) | 미착수. 그 전까지는 B로 켠다 |
@@ -223,14 +227,41 @@ DNS(가비아)는 이 순서에서 바꾸지 않는다. CORS도 바꿀 것이 �
 - 첫 회차(11/10)까지 Railway로 되돌리는 법은 이전 계획 C7 "되돌리기"를 따른다.
 - 그 뒤의 장애 대비(부하분산기 뒤 예비 대상, 다른 리전 등)는 전환 때 이 문서를 다시 써서 정한다.
 
+## P5 리허설 결과 (2026-10-29, 시험 환경)
+
+대상: `main` `02039a82`를 리허설 브랜치로 올린 세 앱 Preview → 시험 Cloud Run `greenhub-api-staging`. 끝난 뒤 브랜치 한정 env와 브랜치는 지웠고, 운영·공통 Preview 값이 처음과 같음을 다시 읽어 확인했다.
+
+| 질문 | 답 |
+|---|---|
+| 1. Redeploy에서 생략 규칙을 끄면 같은 SHA도 빌드하나 | **한다.** 켠 채로(기본값) Redeploy한 consumer는 생략 규칙이 `files=0`으로 SKIP해 2초 만에 CANCELED. 끄면 세 앱 모두 BUILDING → READY. 화면 체크 해제 = API `skipIgnoreBuildStep=1`(위 "함정") |
+| 2. 새 주소가 화면 코드와 CSP에 들어가나 | **들어간다.** 세 앱 모두 `connect-src`(Report-Only 정책)와 JS 묶음에 run.app 주소가 있고 Railway 주소는 없다 |
+| 3. 세 앱이 Cloud Run 상대로 뜨고 API가 되나 | **된다.** consumer 상품 목록·상세·장바구니에서 API 7건 모두 run.app 200, CORS 오류 없음. 세 앱 비인증 `/auth/me` 401. 세 앱 로그인 버튼이 Kakao 인증 화면(돌아올 주소 = 각 Preview)으로 간다 |
+
+걸린 시간(UTC)
+
+| 단계 | 시간 |
+|---|---|
+| 시험 서버 이미지 갱신(`747808af`, 리비전 `00004`) | 23초. 최소 0대라 첫 `/health`는 약 12초 |
+| 브랜치 한정 `NEXT_PUBLIC_API_URL` 세 앱 추가(API) | 몇 초 |
+| 대조 Redeploy(재인증 포함) | 클릭 06:23:12 → 재인증 뒤 생성 06:24:25 → CANCELED 06:24:28 |
+| 본 Redeploy 세 앱 | 06:25:19 → consumer 06:28:06, seller 06:29:54, driver 06:31:21(약 6분, 한 번에 한 빌드) |
+| 화면·CSP·JS·CORS 확인 | 약 6분(빌드와 겹침) |
+| 주소 바꾸기부터 마지막 확인까지 | 약 12분(대조 실험 2분 포함) |
+
+그 밖에 알게 된 것
+
+- 세 앱 `vercel.json`은 Git 자동 배포가 꺼져 있다(`git.deploymentEnabled: false`). 브랜치를 push해도 Preview가 생기지 않아 API(`gitSource`)로 만들었다. 새 브랜치 첫 배포는 비교 기준(`VERCEL_GIT_PREVIOUS_SHA`)이 없어 생략 규칙이 BUILD로 열린다.
+- 시험 서버는 `GREENHUB_ENVIRONMENT_NAME=staging`이라 `CORS_ALLOW_VERCEL_PREVIEWS` 없이도 팀 Preview 주소를 허용한다. 긴 브랜치 이름은 Vercel이 `…-git-rehearsal-fai-4693f7-…`처럼 줄여도 허용 규칙에 맞는다.
+- Preview는 Vercel 로그인 보호가 있어, 확인은 팀 계정으로 로그인한 브라우저에서 했다(보호 우회 없음).
+- 운영에서 실제로 바꿀 PortOne 웹훅·운영 env·예비 서버 최소 1대 올리기는 리허설 범위 밖이라 해 보지 않았다.
+
 ## 열린 질문
 
 - P7 결과에 따라 정기 작업 켜기 조건을 바꿀지
-- Vercel Redeploy에서 빌드 생략을 끄는 방법의 실제 동작(P5)
 - 예비 서버 대기 비용 실측(이전 계획 C2)
 
 ## 근거
 
 - 서울 Cloud Run 도메인 연결 미지원, 인증서 15분~24시간: Google Cloud "Mapping custom domains" 문서(2026-10-23 조회)
-- Vercel Redeploy에서 Ignored Build Step 끄기: Vercel "Git settings" 문서(2026-10-23 조회)
+- Vercel Redeploy에서 Ignored Build Step 끄기: Vercel "Git settings" 문서(2026-10-23 조회), 실제 동작·요청 형태는 P5 리허설(2026-10-29) 실측
 - Fly.io·Render·Railway 고정 IP 가격: 각 사 문서·변경 기록과 제3자 정리(2026-10-23 조회, 확인 필요)
