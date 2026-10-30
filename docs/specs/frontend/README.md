@@ -9,7 +9,7 @@
 - 인증은 `docs/specs/api/auth.md`, 주문·결제·상품·정산은 해당 API spec을 함께 본다.
 - 공통 visual token은 `packages/ui`의 현재 구현을 정본으로 본다.
 - 색·글자·모양을 어디에 쓰는지는 `design-standard.md`(2026-10-03 확정 디자인 기준)를 따른다.
-- shadcn/ui 전환용 화면 개편 방향은 `design-direction.md`(2026-10-28 제안, 확정 전)이고, 교체 순서와 컴포넌트 대응은 `ui-stack-migration-plan.md`다. 확정 전까지 시각 계약은 `design-standard.md`다.
+- shadcn/ui 전환용 화면 개편 방향은 `design-direction.md`(부분 확정)이고, 교체 순서·동결·컴포넌트 대응은 `ui-stack-migration-plan.md`(최종 제안, 확정 전)다. `design-direction.md`에서 확정되지 않은 부분의 시각 계약은 `design-standard.md`다.
 
 ## 기본적으로 역사 자료인 파일
 
