@@ -40,6 +40,11 @@ import {
 } from '@/lib/portone-config';
 import CheckoutForm from './_components/CheckoutForm';
 import { EMPTY_GIFT, type GiftState, giftPayload } from '@/components/benchmark/GiftFields';
+import {
+  EMPTY_PACKAGE_LABEL,
+  type PackageLabelState,
+  packageLabelPayload,
+} from '@/components/benchmark/PackageLabelFields';
 import { isFeatureOn } from '@/lib/features';
 import { formatRoundTime } from '@/lib/round-schedule-label';
 
@@ -469,6 +474,11 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   // 벤치마킹 비교 기능: 선물하기(gift)
   const [gift, setGift] = useState<GiftState>(EMPTY_GIFT);
   const giftInfo = isFeatureOn('gift') ? giftPayload(gift, deliveryPhone) : null;
+  // 포장 라벨(무료, 옵션 시트와 함께 켠다). 선물이면 보내는 분 이름이 라벨이라 따로 보내지 않는다.
+  const [packageLabel, setPackageLabel] = useState<PackageLabelState>(EMPTY_PACKAGE_LABEL);
+  const giftOn = isFeatureOn('gift') && gift.enabled;
+  const packageLabelValue =
+    isFeatureOn('option-sheet') && !giftOn ? packageLabelPayload(packageLabel) : null;
 
   useEffect(() => {
     setAcquisition(getAcquisitionSnapshot());
@@ -506,6 +516,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       ...(schedule ? { requestedDeliveryDate: schedule.requestedDeliveryDate } : {}),
       ...(acquisition ? { acquisition } : {}),
       ...(giftInfo ? { gift: giftInfo } : {}),
+      ...(typeof packageLabelValue === 'string' ? { packageLabel: packageLabelValue } : {}),
     },
     roundItems: cartItems,
     accessToken: session?.user?.accessToken ?? '',
@@ -550,6 +561,8 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     !!session;
   // 선물을 켰으면 받는 분·보내는 분 이름을 모두 적어야 결제한다(gift).
   const giftReady = !isFeatureOn('gift') || !gift.enabled || giftInfo !== null;
+  // 포장 라벨에 "문구 넣기"를 골랐으면 문구를 적어야 결제한다.
+  const packageLabelReady = packageLabelValue !== 'invalid';
 
   return (
     <>
@@ -595,7 +608,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       paymentMethod={paymentMethod}
       onPaymentMethodChange={setPaymentMethod}
       isLoading={isLoading}
-      canPay={canPay && giftReady}
+      canPay={canPay && giftReady && packageLabelReady}
       error={scheduleError ?? error}
       onPay={requestPayment}
       benchmark={{
@@ -604,6 +617,9 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
             ? formatRoundTime(schedule.round.schedule.deliveryEndAt)
             : null,
         gift: isFeatureOn('gift') ? { value: gift, onChange: setGift } : undefined,
+        packageLabel: isFeatureOn('option-sheet')
+          ? { value: packageLabel, onChange: setPackageLabel }
+          : undefined,
       }}
     />
     </>

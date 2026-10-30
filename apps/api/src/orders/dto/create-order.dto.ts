@@ -1,7 +1,7 @@
 import {
   GIFT_MESSAGE_MAX_LENGTH,
-  OPTION_TEXT_MAX_LENGTH,
   ORDER_REQUEST_NOTE_MAX_LENGTH,
+  PACKAGE_LABEL_MAX_LENGTH,
   PRODUCT_OPTION_GROUP_MAX,
 } from '@greenhub/shared';
 import { Type } from 'class-transformer';
@@ -78,10 +78,11 @@ class RoundOrderItemDto {
   @Matches(/^[A-Za-z0-9_-]{1,40}$/, { each: true, message: DOCUMENT_ID_MESSAGE })
   optionChoiceIds?: string[];
 
-  // 문구가 필요한 옵션(스티커 라벨·3D 토퍼)에 넣을 문구. 줄바꿈 정리 뒤 길이는 서비스에서 다시 잰다.
+  // 옛 앱 호환(2026-10-30 전 옵션 시트의 상품별 문구). 받기만 하고 쓰지 않는다.
+  // 자유 문구는 주문의 packageLabel로 받는다.
   @IsOptional()
   @IsString()
-  @MaxLength(OPTION_TEXT_MAX_LENGTH * 2)
+  @MaxLength(40)
   optionText?: string;
 }
 
@@ -181,7 +182,7 @@ export class CreateOrderDto {
   })
   deliveryPhone: string;
 
-  // 회차 주문 요청사항(받는 분·토퍼 문구·배송 요청). 일반 주문은 저장하지 않는다.
+  // 회차 주문 요청사항(배송 요청 등). 일반 주문은 저장하지 않는다.
   @IsOptional()
   @IsString()
   @MaxLength(ORDER_REQUEST_NOTE_MAX_LENGTH)
@@ -227,4 +228,10 @@ export class CreateOrderDto {
   @ValidateNested()
   @Type(() => GiftDto)
   gift?: GiftDto;
+
+  // 포장 겉면 라벨 문구(회차 주문, 무료). 선물이면 보내지 않는다. 한 줄 정리 뒤 길이는 서비스에서 다시 잰다.
+  @IsOptional()
+  @IsString()
+  @MaxLength(PACKAGE_LABEL_MAX_LENGTH * 2)
+  packageLabel?: string;
 }

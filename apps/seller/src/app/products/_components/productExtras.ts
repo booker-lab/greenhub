@@ -28,8 +28,6 @@ export interface OptionChoiceForm {
   id: string;
   label: string;
   priceDelta: string;
-  /** 손님이 문구를 직접 쓰는 선택지(스티커 라벨·3D 토퍼) */
-  needsText: boolean;
   /** 연결한 옵션 재고 품목 id(직접 출력한 화분 등). 빈 문자열이면 수량 제한 없음. */
   stockId: string;
 }
@@ -144,7 +142,6 @@ export function extrasFromProduct(data: Partial<ProductExtras> | null | undefine
         id: choice.id,
         label: choice.label,
         priceDelta: String(choice.priceDelta),
-        needsText: choice.needsText === true,
         stockId: typeof choice.stockId === 'string' ? choice.stockId : '',
       })),
     })),
@@ -246,7 +243,6 @@ export function extrasBody(form: ProductExtrasForm): ExtrasBodyResult {
           id: choice.id,
           label: choice.label,
           priceDelta: optionalInt(choice.priceDelta, '추가 금액', 0, PRODUCT_OPTION_PRICE_DELTA_MAX) ?? 0,
-          ...(choice.needsText ? { needsText: true } : {}),
           ...(choice.stockId ? { stockId: choice.stockId } : {}),
         })),
       });

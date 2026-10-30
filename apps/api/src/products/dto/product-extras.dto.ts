@@ -94,11 +94,6 @@ export class ProductOptionChoiceDto {
   @Max(PRODUCT_OPTION_PRICE_DELTA_MAX)
   priceDelta: number;
 
-  /** 고객이 문구를 직접 써야 하는 선택지(스티커 라벨·3D 토퍼) */
-  @IsOptional()
-  @IsBoolean()
-  needsText?: boolean;
-
   /** 이 선택지가 쓰는 매장 옵션 재고 품목 id(직접 출력한 화분 등). 없으면 수량 제한이 없다. */
   @IsOptional()
   @Matches(OPTION_STOCK_ID_PATTERN, { message: '옵션 재고 품목 id 형식이 올바르지 않습니다.' })
