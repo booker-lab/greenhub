@@ -189,6 +189,8 @@ export const screens = [
     path: '/board/order-prep-1',
     steps: [{ click: '수거 완료 / 배송 시작' }],
     viewport: true,
+    // 알림이 들어오는 전환(높이·위치) 중 그려진 그림이 남아 찍을 때마다 1px씩 달라진다(shots.mjs 참고).
+    freezeTransitions: true,
   },
   { id: 'map', group: '기사', title: '지도', path: '/map' },
   { id: 'profile', group: '기사', title: '내 정보', path: '/profile' },

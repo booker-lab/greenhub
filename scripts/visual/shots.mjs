@@ -196,11 +196,14 @@ const manifest = {
 };
 // Playwright 버전과 설치된 브라우저가 다른 환경(예: 클라우드 세션의 /opt/pw-browsers/chromium)에서는
 // GREENHUB_VISUAL_CHROMIUM으로 실행 파일을 지정한다.
-const browser = await chromium.launch(
-  process.env.GREENHUB_VISUAL_CHROMIUM
+// --disable-partial-raster: 바뀐 영역만 다시 그리는 최적화를 끈다. 켜 두면 같은 화면도 앞서 그린 이력에 따라
+// 안티앨리어싱이 달라져(기사 배송 중 상세의 외곽선 버튼 모서리 3px, 채널 차이 2) 같은 커밋 두 번 촬영이 흔들린다.
+const browser = await chromium.launch({
+  args: ['--disable-partial-raster'],
+  ...(process.env.GREENHUB_VISUAL_CHROMIUM
     ? { executablePath: process.env.GREENHUB_VISUAL_CHROMIUM }
-    : undefined,
-);
+    : {}),
+});
 try {
   for (const viewportName of viewportNames) {
     const authed = await newContext(browser, viewportName);
@@ -231,6 +234,21 @@ try {
           for (const [k, v] of Object.entries(stored.sessionStorage ?? {}))
             sessionStorage.setItem(k, v);
         }, browserStorage);
+      }
+      // freezeTransitions: true인 화면은 CSS 전환을 끄고 연다. 전환 중에 합성 레이어로 그려진 그림이 전환이
+      // 끝난 뒤에도 남아(소수점 위치로 래스터된 채 옮겨지기만 한다) 같은 코드도 찍을 때마다 1px씩 달라지기
+      // 때문이다(기사 알림 화면, ui-stack-migration-plan.md P3). 끝난 상태만 찍으므로 화면 결과는 같다.
+      if (screen.freezeTransitions) {
+        await page.addInitScript((css) => {
+          const add = () => {
+            const style = document.createElement('style');
+            style.dataset.visualFreeze = '';
+            style.textContent = css;
+            (document.head ?? document.documentElement).appendChild(style);
+          };
+          if (document.documentElement) add();
+          else document.addEventListener('DOMContentLoaded', add, { once: true });
+        }, '*,*::before,*::after{transition:none!important}');
       }
       // wish: true인 화면은 이번 회차 찜(브라우저 저장)을 넣고 연다.
       if (screen.wish && wishStorage) {
