@@ -1,0 +1,20 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "base-nova",
+  "rsc": true,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "src/styles/tokens.css",
+    "baseColor": "neutral",
+    "cssVariables": true
+  },
+  "iconLibrary": "lucide",
+  "aliases": {
+    "components": "@greenhub/ui/components",
+    "utils": "@greenhub/ui/lib/utils",
+    "ui": "@greenhub/ui/components",
+    "lib": "@greenhub/ui/lib",
+    "hooks": "@greenhub/ui/hooks"
+  }
+}
