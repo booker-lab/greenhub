@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
   describeArchiveConfirm,
+  describeArchiveRecordsPrompt,
   describeCommissionSaved,
   filterStores,
   formatRate,
@@ -9,6 +10,7 @@ import {
   getAdminStoresReadState,
   parseRate,
   rateToInput,
+  storeIdConfirmPrefix,
 } from './_lib';
 
 describe('parseRate (% 단위 입력 → 0~1 저장값)', () => {
@@ -202,7 +204,16 @@ describe('판매자 검색·연락처·치우기 안내', () => {
     expect(message).toContain('난플렉스 판매자를 치울까요?');
     expect(message).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다');
     expect(message).toContain('계속 로그인할 수 있고');
-    expect(message).toContain('기록이 하나라도 있는 판매자는 치울 수 없습니다');
+    expect(message).toContain('기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 치워집니다');
     expect(message).not.toContain('보존됩니다');
+  });
+
+  it('기록 있는 판매자 입력창은 가게 ID 앞 8자리를 보여 준다(이름이 비어도 ID로 확인)', () => {
+    const store = { id: '9b2cb652-ff77-46b9-a773-e1efa78fb763', name: '' };
+    expect(storeIdConfirmPrefix(store.id)).toBe('9b2cb652');
+    const message = describeArchiveRecordsPrompt(store);
+    expect(message).toContain('(미설정) 판매자는 주문·정산 기록이 있습니다.');
+    expect(message).toContain('"9b2cb652"');
+    expect(message).toContain('기록은 그대로 남고');
   });
 });
