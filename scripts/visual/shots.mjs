@@ -9,6 +9,7 @@
 // 브라우저 시계는 start.mjs가 정한 기준 시각(clock.mjs)에 고정하고, CSS 애니메이션은 멈춘 채 찍는다.
 // 정상 판정을 통과하지 못한 화면이 하나라도 있으면 종료 코드 1이다.
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -17,6 +18,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { APPS, RUNTIME_FILE } from './apps.mjs';
 import { VISUAL_NOW_ENV } from './clock.mjs';
 import { expectedPathOf, shotProblems } from './soundness.mjs';
+import { shootStable } from './stable.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -202,13 +204,13 @@ async function runSteps(page, steps) {
   return null;
 }
 
-async function capture(page, file, { viewportOnly = false } = {}) {
+/** 찍은 PNG를 돌려준다(파일은 안정 촬영이 고른 장만 쓴다). */
+async function capture(page, { viewportOnly = false } = {}) {
   if (viewportOnly) {
     // 아래에서 올라오는 시트처럼 지금 보이는 화면이 중요한 경우는 화면 크기 그대로 찍는다.
     await page.addStyleTag({ content: 'nextjs-portal{display:none!important}' });
     await page.waitForTimeout(400);
-    await page.screenshot({ path: file, animations: 'disabled', caret: 'hide' });
-    return;
+    return page.screenshot({ animations: 'disabled', caret: 'hide' });
   }
   // 하단 고정 메뉴가 본문 중간에 겹쳐 찍히지 않도록, 화면 높이를 문서 높이로 늘려 한 장으로 찍는다.
   const size = page.viewportSize();
@@ -220,8 +222,98 @@ async function capture(page, file, { viewportOnly = false } = {}) {
   // next dev 개발 표시(N·Issues 배지)가 하단 메뉴를 가리지 않게 숨긴다.
   await page.addStyleTag({ content: 'nextjs-portal{display:none!important}' });
   await page.waitForTimeout(400);
-  await page.screenshot({ path: file, animations: 'disabled', caret: 'hide' });
+  const png = await page.screenshot({ animations: 'disabled', caret: 'hide' });
   await page.setViewportSize(size);
+  return png;
+}
+
+/** 화면 하나를 새 페이지로 열어 한 번 찍는다(안정 촬영의 한 시도). */
+async function shootOnce(context, screen, viewportName) {
+  const page = await context.newPage();
+  const errors = [];
+  page.on('console', (m) => {
+    // Firebase 토큰(503)·Firestore 접속 차단(ERR_FAILED)은 하네스 한계라 기록하지 않는다.
+    const where = m.location()?.url ?? '';
+    if (
+      m.type() !== 'error' ||
+      where.includes('/auth/firebase-token') ||
+      HARNESS_NOISE.test(m.text())
+    )
+      return;
+    // 리소스 404처럼 문장만으로 원인을 알 수 없는 오류는 주소를 붙인다.
+    errors.push(`${m.text().slice(0, 300)}${where ? ` (${where.slice(0, 200)})` : ''}`);
+  });
+  page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 300)));
+  // 앱이 가짜 API에 닿지 못한 요청(TLS·연결 실패)은 콘솔 오류 없이 "불러오지 못했습니다" 화면이 될 수 있다.
+  // 찍기 전까지 실패한 API 요청을 모은다. 이동·닫기로 취소된 요청(ERR_ABORTED)은 빼고, 찍은 뒤는 보지 않는다.
+  const failed = [];
+  let captured = false;
+  page.on('requestfailed', (request) => {
+    const text = request.failure()?.errorText ?? '';
+    if (captured || text === 'net::ERR_ABORTED' || !request.url().startsWith(apiOrigin)) return;
+    failed.push(`${new URL(request.url()).pathname} ${text}`);
+  });
+  // storage: true인 화면은 열기 전에 fixture의 브라우저 저장소 값(장바구니 등)을 넣는다.
+  if (screen.storage && browserStorage) {
+    await page.addInitScript((stored) => {
+      for (const [k, v] of Object.entries(stored.localStorage ?? {})) localStorage.setItem(k, v);
+      for (const [k, v] of Object.entries(stored.sessionStorage ?? {}))
+        sessionStorage.setItem(k, v);
+    }, browserStorage);
+  }
+  // wish: true인 화면은 이번 회차 찜(브라우저 저장)을 넣고 연다.
+  if (screen.wish && wishStorage) {
+    await page.addInitScript((stored) => {
+      for (const [k, v] of Object.entries(stored.localStorage ?? {})) localStorage.setItem(k, v);
+    }, wishStorage);
+  }
+  // scenario: 그 화면을 열 때만 가짜 API 경로를 바꾼다.
+  await fetch(`${apiBase}/__scenario?name=${encodeURIComponent(screen.scenario ?? '')}`, {
+    method: 'POST',
+  });
+  await fetch(`${apiBase}/__log/reset`, { method: 'POST' });
+  // 카운트다운·"오늘" 같은 시각 글자가 캡처마다 달라지지 않게 브라우저 시계를 기준 시각에 고정한다.
+  await page.clock.setFixedTime(new Date(runtime.visualNow));
+  const t0 = Date.now();
+  await page.goto(`${base}${screen.path}`, { waitUntil: 'load', timeout: 180_000 });
+  // 데이터 요청이 끝나고 화면이 안정될 때까지 잠시 기다린다.
+  // 에뮬레이터 모드는 Firestore 구독이 연결을 계속 열어 두어 networkidle이 오지 않으므로 짧게 기다린다.
+  await page
+    .waitForLoadState('networkidle', { timeout: runtime.emulator ? 2_000 : 15_000 })
+    .catch(() => {});
+  await page.waitForTimeout(runtime.emulator ? 2_000 : 800);
+  // click: 주소로 열 수 없는 화면 안 상태(탭 등)는 찍기 전에 그 글자를 가진 요소를 누른다.
+  if (screen.click) {
+    await page.getByText(screen.click, { exact: true }).first().click();
+    await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => {});
+    await page.waitForTimeout(800);
+  }
+  const stepNote = screen.steps ? await runSteps(page, screen.steps) : null;
+  const png = await capture(page, { viewportOnly: screen.viewport === true });
+  captured = true;
+  const log = await (await fetch(`${apiBase}/__log`)).json();
+  const missing = [...new Set(log.filter((e) => e.kind === 'missing').map((e) => e.path))];
+  const shot = {
+    id: screen.id,
+    group: screen.group,
+    title: screen.title,
+    path: screen.path,
+    viewport: viewportName,
+    file: `${screen.id}-${viewportName}.png`,
+    finalPath: new URL(page.url()).pathname,
+    missing,
+    errors: [...new Set(errors)],
+    failed: [...new Set(failed)],
+    ...(stepNote ? { stepNote } : {}),
+    // Firestore를 직접 구독하는 화면은 에뮬레이터 없이는 데이터 없이 찍힌다(셀러 앱은 운영 빌드에서 로컬 Firebase를 거절).
+    ...(screen.firestore && !runtime.emulator
+      ? { unsupported: 'Firestore 에뮬레이터 없음(운영 빌드·--phone)' }
+      : {}),
+    ms: Date.now() - t0,
+  };
+  await page.close();
+  const sound = shotProblems(shot, expectedPathOf(screen)).length === 0;
+  return { hash: createHash('sha256').update(png).digest('hex'), sound, value: { shot, png } };
 }
 
 let gitSha = null;
@@ -243,6 +335,9 @@ const manifest = {
 };
 // Playwright 버전과 설치된 브라우저가 다른 환경(예: 클라우드 세션의 /opt/pw-browsers/chromium)에서는
 // GREENHUB_VISUAL_CHROMIUM으로 실행 파일을 지정한다.
+// --disable-partial-raster: Chromium은 바뀐 영역만 다시 래스터하는데, 그리는 이력에 따라 글자·둥근 모서리의
+// 안티앨리어싱이 채널 2~40만큼 달라져 같은 커밋 두 번 촬영이 어긋났다(기사 배송 보류 버튼·알림 화면, 컨텍스트마다
+// 약 5~15%). 끄면 20번 중 20번 같고 결과는 기본 렌더의 다수 쪽과 같다(2026-10-30 실측).
 // 운영 빌드(start.mjs --prod)의 가짜 API 인증서는 브라우저 전체에서 그 공개키 지문으로만 믿는다.
 // Playwright ignoreHTTPSErrors는 서비스워커(PWA)가 대신 보내는 요청에는 걸리지 않아, 서비스워커가 붙은 화면에서
 // API 요청이 TLS 오류로 실패한다(주문을 불러오지 못한 화면이 찍힌다). 서비스워커는 운영과 같게 막지 않는다.
@@ -250,9 +345,10 @@ const browser = await chromium.launch({
   ...(process.env.GREENHUB_VISUAL_CHROMIUM
     ? { executablePath: process.env.GREENHUB_VISUAL_CHROMIUM }
     : {}),
-  ...(runtime.prod
-    ? { args: [`--ignore-certificate-errors-spki-list=${runtime.apiCertSpki}`] }
-    : {}),
+  args: [
+    '--disable-partial-raster',
+    ...(runtime.prod ? [`--ignore-certificate-errors-spki-list=${runtime.apiCertSpki}`] : []),
+  ],
 });
 try {
   for (const viewportName of viewportNames) {
@@ -261,98 +357,20 @@ try {
     const guest = await newContext(browser, viewportName);
     for (const screen of screens) {
       const context = screen.auth === false ? guest : authed;
-      const page = await context.newPage();
-      const errors = [];
-      page.on('console', (m) => {
-        // Firebase 토큰(503)·Firestore 접속 차단(ERR_FAILED)은 하네스 한계라 기록하지 않는다.
-        const where = m.location()?.url ?? '';
-        if (
-          m.type() !== 'error' ||
-          where.includes('/auth/firebase-token') ||
-          HARNESS_NOISE.test(m.text())
-        )
-          return;
-        // 리소스 404처럼 문장만으로 원인을 알 수 없는 오류는 주소를 붙인다.
-        errors.push(`${m.text().slice(0, 300)}${where ? ` (${where.slice(0, 200)})` : ''}`);
-      });
-      page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 300)));
-      // 앱이 가짜 API에 닿지 못한 요청(TLS·연결 실패)은 콘솔 오류 없이 "불러오지 못했습니다" 화면이 될 수 있다.
-      // 찍기 전까지 실패한 API 요청을 모은다. 이동·닫기로 취소된 요청(ERR_ABORTED)은 빼고, 찍은 뒤는 보지 않는다.
-      const failed = [];
-      let captured = false;
-      page.on('requestfailed', (request) => {
-        const text = request.failure()?.errorText ?? '';
-        if (captured || text === 'net::ERR_ABORTED' || !request.url().startsWith(apiOrigin)) return;
-        failed.push(`${new URL(request.url()).pathname} ${text}`);
-      });
-      // storage: true인 화면은 열기 전에 fixture의 브라우저 저장소 값(장바구니 등)을 넣는다.
-      if (screen.storage && browserStorage) {
-        await page.addInitScript((stored) => {
-          for (const [k, v] of Object.entries(stored.localStorage ?? {}))
-            localStorage.setItem(k, v);
-          for (const [k, v] of Object.entries(stored.sessionStorage ?? {}))
-            sessionStorage.setItem(k, v);
-        }, browserStorage);
+      // 안정 촬영: 페이지를 새로 열어 다시 찍고, 픽셀이 같은 결과가 두 번 나온 장만 쓴다(stable.mjs).
+      const result = await shootStable(() => shootOnce(context, screen, viewportName));
+      const { shot, png } = result.value;
+      fs.writeFileSync(path.join(outDir, shot.file), png);
+      shot.attempts = result.attempts;
+      if (result.outcome === 'unstable') {
+        shot.unstable = `불안정: ${result.attempts}번 찍어 같은 결과가 두 번 나오지 않음`;
       }
-      // wish: true인 화면은 이번 회차 찜(브라우저 저장)을 넣고 연다.
-      if (screen.wish && wishStorage) {
-        await page.addInitScript((stored) => {
-          for (const [k, v] of Object.entries(stored.localStorage ?? {}))
-            localStorage.setItem(k, v);
-        }, wishStorage);
-      }
-      // scenario: 그 화면을 열 때만 가짜 API 경로를 바꾼다.
-      await fetch(`${apiBase}/__scenario?name=${encodeURIComponent(screen.scenario ?? '')}`, {
-        method: 'POST',
-      });
-      await fetch(`${apiBase}/__log/reset`, { method: 'POST' });
-      // 카운트다운·"오늘" 같은 시각 글자가 캡처마다 달라지지 않게 브라우저 시계를 기준 시각에 고정한다.
-      await page.clock.setFixedTime(new Date(runtime.visualNow));
-      const t0 = Date.now();
-      await page.goto(`${base}${screen.path}`, { waitUntil: 'load', timeout: 180_000 });
-      // 데이터 요청이 끝나고 화면이 안정될 때까지 잠시 기다린다.
-      // 에뮬레이터 모드는 Firestore 구독이 연결을 계속 열어 두어 networkidle이 오지 않으므로 짧게 기다린다.
-      await page
-        .waitForLoadState('networkidle', { timeout: runtime.emulator ? 2_000 : 15_000 })
-        .catch(() => {});
-      await page.waitForTimeout(runtime.emulator ? 2_000 : 800);
-      // click: 주소로 열 수 없는 화면 안 상태(탭 등)는 찍기 전에 그 글자를 가진 요소를 누른다.
-      if (screen.click) {
-        await page.getByText(screen.click, { exact: true }).first().click();
-        await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => {});
-        await page.waitForTimeout(800);
-      }
-      const stepNote = screen.steps ? await runSteps(page, screen.steps) : null;
-      const file = `${screen.id}-${viewportName}.png`;
-      await capture(page, path.join(outDir, file), { viewportOnly: screen.viewport === true });
-      captured = true;
-      const log = await (await fetch(`${apiBase}/__log`)).json();
-      const missing = [...new Set(log.filter((e) => e.kind === 'missing').map((e) => e.path))];
-      const shot = {
-        id: screen.id,
-        group: screen.group,
-        title: screen.title,
-        path: screen.path,
-        viewport: viewportName,
-        file,
-        finalPath: new URL(page.url()).pathname,
-        missing,
-        errors: [...new Set(errors)],
-        failed: [...new Set(failed)],
-        ...(stepNote ? { stepNote } : {}),
-        // Firestore를 직접 구독하는 화면은 에뮬레이터 없이는 데이터 없이 찍힌다(셀러 앱은 운영 빌드에서 로컬 Firebase를 거절).
-        ...(screen.firestore && !runtime.emulator
-          ? { unsupported: 'Firestore 에뮬레이터 없음(운영 빌드·--phone)' }
-          : {}),
-        ms: Date.now() - t0,
-      };
       shot.problems = shotProblems(shot, expectedPathOf(screen));
       shot.sound = shot.problems.length === 0;
       manifest.shots.push(shot);
       console.log(
-        `${shot.sound ? '✅' : '⚠️'} ${viewportName} ${screen.id} (${shot.ms}ms)${shot.sound ? '' : ` · ${shot.problems.join(' · ')}`}`,
+        `${shot.sound ? '✅' : '⚠️'} ${viewportName} ${screen.id} (${shot.ms}ms · ${shot.attempts}번)${shot.sound ? '' : ` · ${shot.problems.join(' · ')}`}`,
       );
-      await page.close();
     }
     await authed.close();
     await guest.close();
