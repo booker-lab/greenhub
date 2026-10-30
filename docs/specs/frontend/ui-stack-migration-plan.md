@@ -249,6 +249,10 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - `packages/ui` 추가: `Input` 크기 `xs`·`md`와 왼쪽·오른쪽 칸(Mantine left·rightSection), `Select`(Base UI Select. 닫힌 칸은 Mantine처럼 읽기 전용 input이라 글자 위치가 입력칸과 같다. 묶음·지우기·체크), `Textarea`(autosize·minRows는 react-textarea-autosize 계산, 폭이 바뀌면 다시 잼), `Loader`(oval), Badge `outline-gray`, `ButtonLabel`(Mantine Button inner·label 구조: 긴 내용을 왼쪽부터 그리고 오른쪽을 자른다. 출하 형태 두 줄 버튼이 이렇게 잘린다).
   - 촬영 목록에 상품 수정 2~5단계(`product-edit-step2~5`, "다음"을 n-1번), 예전 방식 가게의 공동구매 설정(`product-edit-step5-group`, scenario `legacy-store`), 4단계 다시 생성 확인 모달(`modal-product-regenerate`)을 더했다(판매자 49화면 147장). 기준 촬영도 `main` 코드에 같은 fixture를 넣고 찍었다.
   - 대조 화면: 상품 폼 입력 부품 행(입력칸 md·xl, Select 자리표시·값, Textarea, autosize, Loader, Badge 버튼, 두 줄·잘리는 버튼)과 Select 열린 목록(`?open=select|uiselect`, 하네스가 입력칸을 실제로 누름). 행은 390·768·1280에서 모두 같다. 열린 목록은 768·1280에서 0, 390에서 체크 아이콘 안티앨리어싱 19픽셀(채널 차이 4 이하)이다.
+- 상품 등록·수정 폼 2(2026-10-31): 4·5단계(`AIPreviewPanel`·`Step5Pricing`·`GroupConfigSection`·`ProductExtrasSection`)의 `@mantine/core`를 걷었다. 상품 폼에 Mantine이 남지 않는다.
+  - `packages/ui` 추가: `NumberInput`(천 단위 구분·범위는 칸을 떠날 때 맞춤), `Checkbox`(Mantine처럼 모양을 지운 checkbox input + 체크 svg, 모서리 radius sm 4px), `Chip`(숨은 input + label, text-box-trim, 마우스 올림 색), `NativeSelect`(label을 주면 라벨 → 칸, 줄 높이 = 높이 - 2px), Button `outline-warning`·`outline-green`·`light-green`. `Textarea` autosize는 화면이 살아나기 전에도 minRows 높이다(rows). 다시 생성 확인 모달은 `Dialog`(Mantine Modal xs = 320px)다.
+  - 버튼 글자가 칸의 소수점 위치에 따라 1열 어긋나는 곳(묶음 삭제·+ 선택지·+ 옵션 묶음 추가)은 `ButtonLabel`로 맞췄다. select 글자도 줄 높이를 Mantine과 같게 해야 세로 1px 어긋남이 없다.
+  - 기능 플래그 뒤 `ProductExtrasSection`은 하네스를 `NEXT_PUBLIC_GREENHUB_FEATURES=size-info,care-guide,option-sheet,quality-guarantee,plant-search`로 띄워 기준·비교 모두 `product-edit-step5`·`product-edit-step5-group` 6장을 찍어 같음을 확인했다. "다음"을 누른 마우스가 5단계의 칩 위에 남아 Mantine hover 색이 찍히므로 Chip hover도 같아야 한다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)
