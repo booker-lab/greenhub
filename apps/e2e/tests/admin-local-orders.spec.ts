@@ -14,6 +14,7 @@ import {
   openAdminPage,
   pickSelectOption,
   readDoc,
+  rowOrListItem,
   seedDocs,
   visible,
 } from './_helpers/admin-local';
@@ -118,7 +119,7 @@ test.describe('어드민 로컬 — 주문', () => {
     visible(page.getByText(new RegExp(`^${fx.orderPrefix}`), { exact: true }));
   // 데스크톱은 표의 행, 모바일은 카드 — 주문번호로 한 줄을 집는다.
   const orderRow = (page: Page, orderNumber: string) =>
-    visible(page.locator('tbody > tr, .mantine-Stack-root > .mantine-Paper-root')).filter({
+    rowOrListItem(page).filter({
       has: page.getByText(orderNumber, { exact: true }),
     });
 
