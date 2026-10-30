@@ -149,6 +149,11 @@ async function runSteps(page, steps) {
       const target = page.getByText(step.click, { exact: true }).first();
       if (!(await target.isVisible().catch(() => false))) return `누를 글자 없음: ${step.click}`;
       await target.click();
+    } else if (step.clickSelector) {
+      // 글자가 없는 대상(값이 든 입력칸 등)은 CSS 선택자로 실제 마우스 클릭을 한다.
+      const target = page.locator(step.clickSelector).first();
+      if (!(await target.isVisible().catch(() => false))) return `누를 대상 없음: ${step.clickSelector}`;
+      await target.click();
     } else if (typeof step.fill === 'string') {
       await page.getByRole('textbox').first().fill(step.fill);
     } else if (step.fill) {

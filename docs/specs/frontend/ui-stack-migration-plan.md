@@ -245,6 +245,10 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 상품 목록 구현(2026-10-31): `products`(목록)의 `@mantine/core`를 걷었다. 공용 틀(`PageHeader`·`SegmentedTabs`·`ConfirmModal`·`StateViews`)은 여러 묶음이 쓰므로 P4(앱 틀)에서 바꾼다. 상품 등록·수정 폼은 다음 PR이다.
   - `packages/ui` 추가: `Alert`(Mantine Alert light, 빨강·노랑·기본), Button 변형 `light-destructive`·`subtle-destructive`·`light-warning`, 아이콘 여백(svg에 `data-icon="inline-start"`·`"inline-end"`면 그쪽 여백이 Mantine left·rightSection처럼 좌우 여백 ÷ 1.5), 링크로 그릴 때 밑줄 없음(`no-underline`). 링크 버튼은 `render={<Link />}`·`nativeButton={false}`.
   - 로컬 증명: 판매자 129장 `main`과 같음(`--tolerance 1`), 대조 화면 행 모두 같음(Alert·링크 버튼·왼쪽 아이콘 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 871개. Alert(조회 실패·오래된 목록)와 빈 목록은 촬영 목록에 없어 대조 화면으로만 확인했다.
+- 상품 등록·수정 폼 1(2026-10-31): 폼 틀(`ProductForm`·`StepIndicator`·`FormPrimitives`)과 1~3단계(`Step1Basic`·`ImageUpload`·`VarietySelector`·`TouchSelector`·`SellerNoteInput`), 수정 화면의 "찾을 수 없음"에서 `@mantine/core`를 걷었다. 4·5단계(`AIPreviewPanel`·`Step5Pricing`·`GroupConfigSection`·`ProductExtrasSection`)는 다음 PR이다.
+  - `packages/ui` 추가: `Input` 크기 `xs`·`md`와 왼쪽·오른쪽 칸(Mantine left·rightSection), `Select`(Base UI Select. 닫힌 칸은 Mantine처럼 읽기 전용 input이라 글자 위치가 입력칸과 같다. 묶음·지우기·체크), `Textarea`(autosize·minRows는 react-textarea-autosize 계산, 폭이 바뀌면 다시 잼), `Loader`(oval), Badge `outline-gray`, `ButtonLabel`(Mantine Button inner·label 구조: 긴 내용을 왼쪽부터 그리고 오른쪽을 자른다. 출하 형태 두 줄 버튼이 이렇게 잘린다).
+  - 촬영 목록에 상품 수정 2~5단계(`product-edit-step2~5`, "다음"을 n-1번), 예전 방식 가게의 공동구매 설정(`product-edit-step5-group`, scenario `legacy-store`), 4단계 다시 생성 확인 모달(`modal-product-regenerate`)을 더했다(판매자 49화면 147장). 기준 촬영도 `main` 코드에 같은 fixture를 넣고 찍었다.
+  - 대조 화면: 상품 폼 입력 부품 행(입력칸 md·xl, Select 자리표시·값, Textarea, autosize, Loader, Badge 버튼, 두 줄·잘리는 버튼)과 Select 열린 목록(`?open=select|uiselect`, 하네스가 입력칸을 실제로 누름). 행은 390·768·1280에서 모두 같다. 열린 목록은 768·1280에서 0, 390에서 체크 아이콘 안티앨리어싱 19픽셀(채널 차이 4 이하)이다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)

@@ -1,28 +1,29 @@
 'use client';
 
-import { Box, Container, Group, Text } from '@mantine/core';
 import { STEP_LABELS } from './productForm.types';
+
+// ① 외형 유지(UI 교체 P2b): Mantine Container(sm = 720px, 좌우 16)·Group(gap 0)·Text(p, 여백 0) 값.
 
 /** ProductForm 5단계 진행 인디케이터. */
 export function StepIndicator({ step }: { step: number }) {
   return (
-    <Box
+    <div
       style={{
         backgroundColor: 'var(--color-bg)',
         borderBottom: '1px solid var(--color-border)',
         padding: '8px 16px',
       }}
     >
-      <Container size="sm">
+      <div className="mx-auto max-w-[720px] px-4">
         {/* 두 줄 이름이 있어도 동그라미가 같은 높이에 오도록 위쪽 정렬 */}
-        <Group gap={0} align="flex-start" wrap="nowrap">
+        <div className="flex flex-row flex-nowrap items-start justify-start gap-0">
           {STEP_LABELS.map((label, i) => {
             const s = i + 1;
             const active = s === step;
             const done = s < step;
             return (
-              <Box key={s} style={{ flex: 1, textAlign: 'center', padding: '4px 2px' }}>
-                <Box
+              <div key={s} style={{ flex: 1, textAlign: 'center', padding: '4px 2px' }}>
+                <div
                   style={{
                     width: 24,
                     height: 24,
@@ -46,8 +47,9 @@ export function StepIndicator({ step }: { step: number }) {
                   }}
                 >
                   {done ? '✓' : s}
-                </Box>
-                <Text
+                </div>
+                <p
+                  className="m-0 p-0 text-base font-normal"
                   style={{
                     fontSize: 'var(--font-size-xs)',
                     lineHeight: 1.35,
@@ -57,12 +59,12 @@ export function StepIndicator({ step }: { step: number }) {
                   }}
                 >
                   {label}
-                </Text>
-              </Box>
+                </p>
+              </div>
             );
           })}
-        </Group>
-      </Container>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }
