@@ -242,6 +242,9 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - Button은 클래스 없는 svg를 16px로 줄이므로 아이콘 버튼의 svg에는 크기 클래스(`size-5`)를 준다.
   - `@mantine/notifications`(저장 알림)는 앱 전체 공급자를 바꾸는 일이라 이 묶음에서 남겼다. Mantine Button `loading`은 `disabled`·`aria-busy`로 바꿨다(저장 중 회전 표시 없음).
   - 로컬 증명: 판매자 촬영 129장 `main`과 같음(`--tolerance 1`, 바꾼 4화면 12장 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 판매자 단위 테스트 871개 통과. 배송 슬롯 편집 패널(날짜를 누른 뒤)은 촬영 목록에 없어 대조 화면의 `outline-gray` 행으로만 확인했다.
+- 상품 목록 구현(2026-10-31): `products`(목록)의 `@mantine/core`를 걷었다. 공용 틀(`PageHeader`·`SegmentedTabs`·`ConfirmModal`·`StateViews`)은 여러 묶음이 쓰므로 P4(앱 틀)에서 바꾼다. 상품 등록·수정 폼은 다음 PR이다.
+  - `packages/ui` 추가: `Alert`(Mantine Alert light, 빨강·노랑·기본), Button 변형 `light-destructive`·`subtle-destructive`·`light-warning`, 아이콘 여백(svg에 `data-icon="inline-start"`·`"inline-end"`면 그쪽 여백이 Mantine left·rightSection처럼 좌우 여백 ÷ 1.5), 링크로 그릴 때 밑줄 없음(`no-underline`). 링크 버튼은 `render={<Link />}`·`nativeButton={false}`.
+  - 로컬 증명: 판매자 129장 `main`과 같음(`--tolerance 1`), 대조 화면 행 모두 같음(Alert·링크 버튼·왼쪽 아이콘 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 871개. Alert(조회 실패·오래된 목록)와 빈 목록은 촬영 목록에 없어 대조 화면으로만 확인했다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)
