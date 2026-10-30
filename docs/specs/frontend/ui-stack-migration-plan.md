@@ -235,6 +235,12 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
     - 판매자·어드민 로컬 E2E(`node scripts/admin-local-e2e.mjs`, dev:local) 20/20·건너뜀 0(`main` 기준 P0.5와 같음). 판매자 단위 테스트 871개 통과, `packages/ui`·seller 타입 검사, Biome, CSS 변수 검사, `tokens.spec` 5/5, scripts spec 통과.
 - **P2b 회차 운영과 무관한 화면**: 설정 → 상품(옵션 재고 제외) → 어드민. 어드민에는 기사 승인(`admin/drivers`)·환불(`admin/orders`의 환불 모달)이 있으므로, 다음 회차가 잡혀 있으면 이 둘은 회차 운영 화면과 같이 다룬다(P4 규칙).
 - 1단계(외형 유지, §7)만 한다.
+- 설정 묶음 구현(2026-10-31, P2a 위에 쌓음): `settings`(첫 화면)·`settings/payout-account`·`settings/delivery`·`settings/daily-caps`의 `@mantine/core`를 걷었다. `settings/option-stocks`(옵션 재고)와 기능 플래그가 꺼진 `settings/store-profile`은 뒤로 미룬다.
+  - Mantine Text·Paper·UnstyledButton·Container·Group·Stack·SimpleGrid·Title은 같은 값의 요소+Tailwind로(예: Text = `p` + `m-0 p-0 text-base`, Paper = `rounded-[16px] bg-white` + Mantine 그림자). Mantine 그림자 xs·sm은 판매자 `globals.css`의 `@theme`(`shadow-mantine-xs`·`shadow-mantine-sm`)에 두었다.
+  - `packages/ui` 추가: `Switch`(Mantine Switch sm), `Autocomplete`(Base UI Autocomplete, 입력칸은 `Input`과 같은 클래스 `inputClassName`), Button `outline-gray` 변형(Mantine outline gray). 대조 화면에 Switch·ActionIcon 28px·outline gray 행을 더해 같음을 확인했다.
+  - Button은 클래스 없는 svg를 16px로 줄이므로 아이콘 버튼의 svg에는 크기 클래스(`size-5`)를 준다.
+  - `@mantine/notifications`(저장 알림)는 앱 전체 공급자를 바꾸는 일이라 이 묶음에서 남겼다. Mantine Button `loading`은 `disabled`·`aria-busy`로 바꿨다(저장 중 회전 표시 없음).
+  - 로컬 증명: 판매자 촬영 129장 `main`과 같음(`--tolerance 1`, 바꾼 4화면 12장 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 판매자 단위 테스트 871개 통과. 배송 슬롯 편집 패널(날짜를 누른 뒤)은 촬영 목록에 없어 대조 화면의 `outline-gray` 행으로만 확인했다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)
