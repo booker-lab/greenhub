@@ -1,7 +1,6 @@
 'use client';
 
 import type { SalesMode } from '@greenhub/shared';
-import { Box, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -13,12 +12,22 @@ import { isFeatureOn } from '@/lib/features';
 import { logout } from '@/lib/logout';
 import { benchmarkSettingsLinks, operationSettingsFor } from './settings-links';
 
+// ① 외형 유지(UI 교체 P2b): Mantine Paper·Text·UnstyledButton과 같은 값을 Tailwind로 그린다.
+// Text = p(16px·줄 높이 1.55·여백 0), UnstyledButton = 배경·테두리·여백 없는 16px 왼쪽 정렬, Paper = 흰 바탕 + 모서리·그림자.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+
 /** 설정 섹션 카드 — 작은 회색 라벨 헤더 + 행 목록. */
 function SectionCard({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <Paper radius="lg" shadow="xs" style={{ overflow: 'hidden' }}>
-      <Box px="md" py="sm" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <Text
+    <div
+      className="block overflow-hidden rounded-[16px] bg-white shadow-mantine-xs"
+      style={{ overflow: 'hidden' }}
+    >
+      <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
+        <p
+          className={TEXT}
           style={{
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-medium)',
@@ -26,10 +35,10 @@ function SectionCard({ label, children }: { label: string; children: ReactNode }
           }}
         >
           {label}
-        </Text>
-      </Box>
+        </p>
+      </div>
       {children}
-    </Paper>
+    </div>
   );
 }
 
@@ -53,10 +62,12 @@ function LinkRow({
   borderTop?: boolean;
 }) {
   return (
-    <UnstyledButton component={Link} href={href} style={rowStyle(borderTop)}>
-      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>{label}</Text>
+    <Link href={href} className={UNSTYLED_BUTTON} style={rowStyle(borderTop)}>
+      <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
+        {label}
+      </p>
       <ChevronRight size={16} color="var(--color-text-disabled)" />
-    </UnstyledButton>
+    </Link>
   );
 }
 
@@ -89,17 +100,23 @@ export default function SettingsPage() {
     <PageShell>
       <PageHeader title="설정" sticky={false} />
 
-      <Container size="sm" px="md" py="md">
-        <Stack gap="sm">
+      <div className="mx-auto max-w-[720px] p-4">
+        <div className="flex flex-col items-stretch justify-start gap-3">
           <SectionCard label="계정">
             <LinkRow href="/onboarding" label="사업자 프로필 수정" />
-            <UnstyledButton onClick={() => void logout()} style={rowStyle(true)}>
-              <Text
+            <button
+              type="button"
+              onClick={() => void logout()}
+              className={UNSTYLED_BUTTON}
+              style={rowStyle(true)}
+            >
+              <p
+                className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 로그아웃
-              </Text>
-            </UnstyledButton>
+              </p>
+            </button>
           </SectionCard>
 
           {isDualRole && (
@@ -125,19 +142,23 @@ export default function SettingsPage() {
           )}
 
           <SectionCard label="정보">
-            <Group justify="space-between" px="md" py="md">
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}>
+            <div className="flex flex-row flex-wrap items-center justify-between gap-4 p-4">
+              <p
+                className={TEXT}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}
+              >
                 앱 버전
-              </Text>
-              <Text
+              </p>
+              <p
+                className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 0.1.0
-              </Text>
-            </Group>
+              </p>
+            </div>
           </SectionCard>
-        </Stack>
-      </Container>
+        </div>
+      </div>
     </PageShell>
   );
 }

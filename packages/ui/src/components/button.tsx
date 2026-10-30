@@ -15,6 +15,8 @@ const buttonVariants = cva(
       variant: {
         default: 'bg-primary text-primary-foreground hover:bg-primary/90',
         outline: 'border-primary bg-transparent text-brand-ink hover:bg-primary/5',
+        // Mantine variant="outline" color="gray"(gray-6 테두리·글자, 대조 화면 계산값).
+        'outline-gray': 'border-[#868e96] bg-transparent text-[#868e96] hover:bg-[#868e96]/5',
         light: 'bg-[#d2f2df] text-[#005c32]',
         subtle: 'bg-transparent text-[#005c32] hover:bg-brand-surface',
         secondary: 'bg-[#f1f3f5] text-[#212529] hover:bg-[#e9ecef]',
