@@ -45,7 +45,7 @@ jobs:
         run: pnpm --filter api exec eslint "{src,apps,libs,test}/**/*.ts" --quiet
       - name: Typecheck apps
         run: |
-          for dir in apps/consumer apps/seller apps/driver apps/e2e packages/shared; do
+          for dir in apps/consumer apps/seller apps/driver apps/e2e packages/shared packages/ui; do
             echo "::group::tsc $dir"
             (cd "$dir" && npx tsc --noEmit -p tsconfig.json)
             echo "::endgroup::"

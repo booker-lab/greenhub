@@ -27,7 +27,7 @@ const change = ({ files = [], added = {}, labels = [], rebuilds = [] } = {}) => 
 describe('parseState', () => {
   it('저장소의 상태 파일을 읽는다', () => {
     const state = parseState(readFileSync(path.join(ROOT, STATE_FILE), 'utf8'));
-    assert.ok(['open', 'pre-candidate', 'candidate'].includes(state.stage));
+    assert.ok(['open', 'consumer-freeze', 'pre-candidate', 'candidate'].includes(state.stage));
   });
 
   it('모르는 구간·후보 SHA 없는 candidate·깨진 JSON은 예외다', () => {
@@ -129,6 +129,53 @@ describe('evaluatePullRequest', () => {
       false,
     );
     assert.equal(evaluatePullRequest(state, change({ files: ['apps/api/src/x.ts'] })).ok, true);
+  });
+});
+
+describe('consumer-freeze', () => {
+  const state = { stage: 'consumer-freeze' };
+
+  it('판매자·기사·packages/ui 새 파일의 교체 코드는 통과시킨다', () => {
+    const r = evaluatePullRequest(
+      state,
+      change({
+        files: ['packages/ui/src/components/button.tsx', 'apps/seller/postcss.config.mjs'],
+        added: {
+          'apps/seller/src/app/page.tsx': [
+            "import { Button } from '@greenhub/ui/components/button';",
+          ],
+          'packages/ui/package.json': ['    "@base-ui/react": "1.9.0",'],
+        },
+        rebuilds: ['consumer', 'seller'],
+      }),
+    );
+    assert.equal(r.ok, true, r.violations.join('\n'));
+  });
+
+  it('소비자 앱의 교체 흔적과 소비자 화면 값을 바꾸는 공용 파일 수정은 막는다', () => {
+    const r = evaluatePullRequest(
+      state,
+      change({
+        files: ['apps/consumer/postcss.config.mjs', 'packages/ui/src/theme.ts'],
+        added: {
+          'apps/consumer/src/app/page.tsx': [
+            "import { Button } from '@greenhub/ui/components/button';",
+          ],
+        },
+      }),
+    );
+    assert.equal(r.ok, false);
+    assert.equal(r.violations.length, 3);
+  });
+
+  it('교체 흔적이 없는 소비자 수정(결제 수정 등)은 통과시킨다', () => {
+    assert.equal(
+      evaluatePullRequest(
+        state,
+        change({ files: ['apps/consumer/src/app/checkout/page.tsx'], rebuilds: ['consumer'] }),
+      ).ok,
+      true,
+    );
   });
 });
 

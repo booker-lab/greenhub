@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 앱·UI 소스에서 쓰는 CSS 변수(var(--x))가 어딘가에 정의돼 있는지 확인한다.
 // 정의되지 않은 변수는 조용히 무시돼 글꼴 굵기·크기·모서리가 기본값으로 바뀐다.
-// 대체값을 준 var(--x, …)와 Mantine 런타임 변수(--mantine-*)는 검사하지 않는다.
+// 대체값을 준 var(--x, …)와 라이브러리가 정의하는 변수(EXTERNAL_PREFIXES)는 검사하지 않는다.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +13,10 @@ export const SOURCE_ROOTS = [
   'apps/driver/src',
   'packages/ui/src',
 ];
+
+// 이 저장소 밖에서 정의되는 변수: Mantine 런타임, Base UI Toast가 요소에 넣는 런타임 변수,
+// Tailwind 테마(tailwindcss/theme.css)의 간격 단위.
+export const EXTERNAL_PREFIXES = ['--mantine', '--toast-', '--spacing'];
 
 function listSources(dir) {
   const out = [];
@@ -34,7 +38,7 @@ export function findUndefinedCssVars(sources) {
     for (const m of text.matchAll(/(--[A-Za-z0-9-]+)\s*:/g)) defined.add(m[1]);
     for (const m of text.matchAll(/['"](--[A-Za-z0-9-]+)['"]\s*:/g)) defined.add(m[1]);
     for (const m of text.matchAll(/var\(\s*(--[A-Za-z0-9-]+)\s*(,)?/g)) {
-      if (m[2] || m[1].startsWith('--mantine')) continue;
+      if (m[2] || EXTERNAL_PREFIXES.some((prefix) => m[1].startsWith(prefix))) continue;
       if (!used.has(m[1])) used.set(m[1], new Set());
       used.get(m[1]).add(file);
     }
