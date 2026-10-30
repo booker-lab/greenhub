@@ -1,7 +1,7 @@
 'use client';
 
-import { OPTION_TEXT_MAX_LENGTH, type ProductOptionGroup } from '@greenhub/shared';
-import { ActionIcon, Box, Button, Drawer, Group, Stack, Text, TextInput } from '@mantine/core';
+import type { ProductOptionGroup } from '@greenhub/shared';
+import { ActionIcon, Box, Button, Drawer, Group, Stack, Text } from '@mantine/core';
 import { useEffect, useState } from 'react';
 import {
   choiceRemaining,
@@ -14,42 +14,30 @@ import {
 
 // 옵션 시트(option-sheet). 하단 고정 바의 장바구니·바로 구매를 누르면 아래에서 올라온다.
 // 옵션 묶음마다 하나씩 고르고, 고른 조합의 가격과 수량을 보여준 뒤 담거나 바로 산다.
-// 스티커 라벨·3D 토퍼처럼 문구가 필요한 선택지를 고르면 문구 칸이 열리고, 문구를 써야 담을 수 있다.
+// 축하 문구는 미리 출력한 토퍼 선택지로 고른다. 자유 문구(포장 라벨)는 결제할 때 주문마다 한 번 받는다.
 // 직접 출력한 화분처럼 재고에 연결된 선택지는 품절이면 고를 수 없고, 남은 수량보다 많이 담을 수 없다.
 
 export interface OptionSelection {
   choiceIds: string[];
   label: string;
   priceDelta: number;
-  /** 라벨·토퍼에 넣을 문구(문구가 필요한 선택지를 골랐을 때만) */
-  text?: string;
-}
-
-/** 줄바꿈·앞뒤 공백을 정리한 문구. 서버(resolveSelectedOptions)와 같은 기준으로 한 줄로 만든다. */
-export function normalizeOptionText(value: string): string {
-  return value.replace(/\s+/g, ' ').trim();
 }
 
 export function describeSelection(
   groups: ProductOptionGroup[],
   picked: Record<string, string>,
-  rawText = '',
 ): OptionSelection | null {
   const parts: string[] = [];
   const choiceIds: string[] = [];
   let priceDelta = 0;
-  let needsText = false;
-  const text = normalizeOptionText(rawText);
   for (const group of groups) {
     const choice = group.choices.find((c) => c.id === picked[group.id]);
     if (!choice) return null;
-    parts.push(`${group.name}: ${choice.label}${choice.needsText && text ? ` "${text}"` : ''}`);
+    parts.push(`${group.name}: ${choice.label}`);
     choiceIds.push(choice.id);
     priceDelta += choice.priceDelta;
-    if (choice.needsText) needsText = true;
   }
-  if (needsText && (!text || Array.from(text).length > OPTION_TEXT_MAX_LENGTH)) return null;
-  return { choiceIds, label: parts.join(' · '), priceDelta, ...(needsText ? { text } : {}) };
+  return { choiceIds, label: parts.join(' · '), priceDelta };
 }
 
 export default function OptionSheet({
@@ -75,12 +63,10 @@ export default function OptionSheet({
   // 첫 선택지(보통 기본 화분 같은 0원 선택지)를 미리 골라 두어 한 번에 담을 수 있게 한다.
   const [picked, setPicked] = useState<Record<string, string>>({});
   const [quantity, setQuantity] = useState(initialQuantity);
-  const [text, setText] = useState('');
   useEffect(() => {
     if (!opened) return;
     setPicked(Object.fromEntries(groups.map((g) => [g.id, g.choices[0]?.id ?? ''])));
     setQuantity(initialQuantity);
-    setText('');
   }, [groups, initialQuantity, opened]);
   // 남은 수량은 시트가 열린 뒤 도착한다. 품절인 선택지를 골라 둔 묶음만 다른 선택지로 바꾼다.
   useEffect(() => {
@@ -98,10 +84,7 @@ export default function OptionSheet({
   const pickedChoiceIds = groups.map((group) => picked[group.id] ?? '');
   const maxQuantity = maxQuantityFor(availability, pickedChoiceIds);
   const overStock = quantity > maxQuantity;
-  const selection = overStock ? null : describeSelection(groups, picked, text);
-  const textChoice = groups
-    .map((group) => group.choices.find((c) => c.id === picked[group.id]))
-    .find((choice) => choice?.needsText);
+  const selection = overStock ? null : describeSelection(groups, picked);
   const unitPrice = basePrice + (selection?.priceDelta ?? 0);
 
   return (
@@ -175,23 +158,6 @@ export default function OptionSheet({
                 );
               })}
             </Stack>
-            {textChoice && group.choices.some((c) => c.id === textChoice.id) && (
-              <TextInput
-                mt={8}
-                label={`${textChoice.label}에 넣을 문구`}
-                description={`한 줄, ${OPTION_TEXT_MAX_LENGTH}자까지. 받는 분이 보는 문구예요.`}
-                placeholder="예: 개업을 축하해요"
-                value={text}
-                maxLength={OPTION_TEXT_MAX_LENGTH}
-                onChange={(event) => setText(event.currentTarget.value)}
-                rightSection={
-                  <Text size="xs" c="var(--color-text-disabled)" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                    {Array.from(text).length}/{OPTION_TEXT_MAX_LENGTH}
-                  </Text>
-                }
-                rightSectionWidth={52}
-              />
-            )}
           </Box>
         ))}
 
@@ -218,7 +184,7 @@ export default function OptionSheet({
               ? maxQuantity > 0
                 ? `고른 옵션은 ${maxQuantity}개까지 담을 수 있어요`
                 : '고른 옵션이 품절이에요'
-              : (selection?.label ?? (textChoice ? '문구를 적어 주세요' : '옵션을 골라 주세요'))}
+              : (selection?.label ?? '옵션을 골라 주세요')}
           </Text>
           <Text fw={800} size="lg" style={{ fontVariantNumeric: 'tabular-nums' }}>
             {(unitPrice * quantity).toLocaleString()}원
