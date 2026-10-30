@@ -71,7 +71,7 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
-- 들어오는 전환(높이·위치가 움직이는 알림 등)이 있는 화면은 `freezeTransitions: true`로 CSS 전환을 끄고 연다(예: 기사 `toast-status-uncertain`). 전환 중에 합성 레이어로 그려진 그림이 끝난 뒤에도 남아, 같은 코드도 찍을 때마다 1px씩 달라지기 때문이다. 끝난 상태만 찍으므로 화면 결과는 같다.
+- 들어오는 전환(높이·위치가 움직이는 알림 등)이 있는 화면은 `freezeTransitions: true`로 CSS 전환을 끄고 연다(예: 기사 `toast-status-uncertain`). 전환 중에 합성 레이어로 그려진 그림이 끝난 뒤에도 남아, 같은 코드도 찍을 때마다 1px씩 달라지기 때문이다. 끝난 상태만 찍으므로 화면 결과는 같다. 끄는 규칙은 페이지를 열 때와 누르기 직전 두 번 넣는다(처음 규칙이 hydration 중에 빠질 수 있다).
 - **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
 - 캡처는 `%TEMP%\greenhub-visual\<app>\shots\<label>\`에 PNG와 `manifest.json`으로 남는다.
   - `manifest.json`에는 화면별 최종 주소, 콘솔 오류, fixture가 없는 API 경로가 함께 기록된다.

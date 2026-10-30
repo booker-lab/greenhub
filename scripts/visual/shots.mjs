@@ -246,6 +246,7 @@ try {
       // freezeTransitions: true인 화면은 CSS 전환을 끄고 연다. 전환 중에 합성 레이어로 그려진 그림이 전환이
       // 끝난 뒤에도 남아(소수점 위치로 래스터된 채 옮겨지기만 한다) 같은 코드도 찍을 때마다 1px씩 달라지기
       // 때문이다(기사 알림 화면, ui-stack-migration-plan.md P3). 끝난 상태만 찍으므로 화면 결과는 같다.
+      const FREEZE_TRANSITIONS_CSS = '*,*::before,*::after{transition:none!important}';
       if (screen.freezeTransitions) {
         await page.addInitScript((css) => {
           const add = () => {
@@ -256,7 +257,7 @@ try {
           };
           if (document.documentElement) add();
           else document.addEventListener('DOMContentLoaded', add, { once: true });
-        }, '*,*::before,*::after{transition:none!important}');
+        }, FREEZE_TRANSITIONS_CSS);
       }
       // wish: true인 화면은 이번 회차 찜(브라우저 저장)을 넣고 연다.
       if (screen.wish && wishStorage) {
@@ -280,6 +281,9 @@ try {
         .waitForLoadState('networkidle', { timeout: runtime.emulator ? 2_000 : 15_000 })
         .catch(() => {});
       await page.waitForTimeout(runtime.emulator ? 2_000 : 800);
+      // 처음에 넣은 규칙은 hydration 중에 빠질 수 있다(실측: main 기사 알림 화면이 가끔 전환 켜진 그림으로 찍힘).
+      // 화면을 누르기 전에 한 번 더 넣는다.
+      if (screen.freezeTransitions) await page.addStyleTag({ content: FREEZE_TRANSITIONS_CSS });
       // click: 주소로 열 수 없는 화면 안 상태(탭 등)는 찍기 전에 그 글자를 가진 요소를 누른다.
       if (screen.click) {
         await page.getByText(screen.click, { exact: true }).first().click();
