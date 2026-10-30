@@ -148,6 +148,48 @@ export const screens = [
     path: '/board/order-deliv-1',
   },
   { id: 'board-held', group: '기사', title: '주문 상세 · 배송 보류', path: '/board/order-held-1' },
+  {
+    id: 'board-delivering-tab',
+    group: '기사',
+    title: '배송판 · 배송 중 탭',
+    path: '/board?tab=delivering',
+  },
+  // 모달·전체 화면 덮개·알림은 지금 보이는 화면이 중요해 화면 크기 그대로 찍는다(viewport: true).
+  {
+    id: 'modal-hold',
+    group: '기사',
+    title: '배송 보류 모달',
+    path: '/board/order-deliv-1',
+    steps: [{ click: '배송 보류' }],
+    viewport: true,
+  },
+  {
+    id: 'photo-round-direct',
+    group: '기사',
+    title: '배송 완료 사진 촬영',
+    path: '/board/order-deliv-1/photo/round-direct',
+    viewport: true,
+  },
+  // 헤드리스 브라우저에는 카메라가 없어 getUserMedia가 거절된다 → 앱이 권한 안내 문구를 띄운다.
+  {
+    id: 'photo-camera-denied',
+    group: '기사',
+    title: '배송 완료 사진 · 카메라 권한 없음',
+    path: '/board/order-deliv-1/photo/round-direct',
+    steps: [{ click: '카메라 촬영' }],
+    viewport: true,
+  },
+  // 알림(toast): 가짜 API는 상태 변경 PATCH에 200 {}을 돌려준다. 앱은 ACK(orderId·status)가 맞지 않으므로
+  // 다시 보내지 않고 주문을 다시 읽는다(불확실 수렴). 다시 읽어도 준비 중이라 "확실하지 않음"·"아직 처리되지 않음"
+  // 두 알림이 뜬다(apps/driver/src/app/board/[orderId]/page.tsx).
+  {
+    id: 'toast-status-uncertain',
+    group: '기사',
+    title: '알림 · 상태 변경 확인 못 함',
+    path: '/board/order-prep-1',
+    steps: [{ click: '수거 완료 / 배송 시작' }],
+    viewport: true,
+  },
   { id: 'map', group: '기사', title: '지도', path: '/map' },
   { id: 'profile', group: '기사', title: '내 정보', path: '/profile' },
 ];

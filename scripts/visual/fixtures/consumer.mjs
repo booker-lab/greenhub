@@ -706,8 +706,38 @@ export const screens = [
   },
   { id: 'addresses', group: 'MY', title: '배송지', path: '/mypage/addresses' },
   { id: 'notifications', group: 'MY', title: '알림', path: '/mypage/notifications' },
+  {
+    id: 'notification-settings',
+    group: 'MY',
+    title: '알림 설정',
+    path: '/mypage/notifications/settings',
+  },
+  { id: 'withdraw', group: 'MY', title: '회원 탈퇴', path: '/mypage/withdraw' },
+  { id: 'category', group: '찾기', title: '상품 탭', path: '/category', auth: false },
+  { id: 'search', group: '찾기', title: '검색', path: '/search', auth: false },
+  {
+    id: 'search-result',
+    group: '찾기',
+    title: '검색 · 결과 "빅립"',
+    path: '/search',
+    auth: false,
+    steps: [{ fill: '빅립' }],
+  },
+  // 가게가 회차 직배송(round_direct)이면 공동구매 화면은 홈으로 보낸다(apps/consumer/src/app/groupbuy/page.tsx).
+  // 이 이동이 그대로인지를 확인하는 화면이다.
+  {
+    id: 'groupbuy',
+    group: '찾기',
+    title: '공동구매 → 홈(회차 직배송 가게)',
+    path: '/groupbuy',
+    expectPath: '/',
+    auth: false,
+  },
   { id: 'terms', group: '안내', title: '이용약관', path: '/terms', auth: false },
   { id: 'privacy', group: '안내', title: '개인정보처리방침', path: '/privacy', auth: false },
+  // 기능 플래그(NEXT_PUBLIC_GREENHUB_FEATURES)가 꺼져 있으면 404인 화면은 넣지 않는다:
+  // /guarantee·/partner·/store/[storeId]·/mypage/wishlist·/mypage/purchase-history.
+  // 운영 기본값이 비어 있어 지금은 모두 404다. 기능을 켠 모양은 benchmarkScreens가 찍는다.
 ];
 
 /** 이번 회차 찜(wishlist)은 브라우저에만 있다. wish: true 화면은 열기 전에 이 값을 넣는다. */
