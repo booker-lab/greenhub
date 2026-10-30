@@ -148,9 +148,10 @@ export function OrdersTable({
   return (
     <>
       {/* 모바일(<sm): 카드 리스트 — 마지막 컬럼(금액·강제환불) 잘림 방지 */}
-      <Stack gap="sm" hiddenFrom="sm">
+      <Stack gap="sm" hiddenFrom="sm" role="list" aria-label="주문 목록">
         {orders.map((order) => (
           <Paper
+            role="listitem"
             key={order.id}
             radius="md"
             px="md"

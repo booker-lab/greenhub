@@ -13,7 +13,7 @@ import {
   newRunId,
   openAdminPage,
   readDoc,
-  visible,
+  rowOrListItem,
 } from './_helpers/admin-local';
 
 // 어드민 판매자 초대(#589) — 발급한 초대의 복사 값이 토큰이 아니라 `/invite/<토큰>` 링크이고,
@@ -103,9 +103,7 @@ test.describe('어드민 로컬 — 판매자 초대', () => {
     // 발급 내역 — 같은 토큰 행에 발급 일시(KST)와 유효 상태, 행 복사도 링크.
     const stored = await readDoc(`invites/${token}`);
     const issuedAt = KST_DATE_TIME.format(new Date(String(stored?.createdAt)));
-    const row = visible(
-      page.locator('tbody > tr, .mantine-Stack-root > .mantine-Paper-root'),
-    ).filter({ has: page.getByText(token, { exact: true }) });
+    const row = rowOrListItem(page).filter({ has: page.getByText(token, { exact: true }) });
     await expect(row).toHaveCount(1);
     await expect(row).toContainText(issuedAt);
     await expect(row).toContainText('유효');

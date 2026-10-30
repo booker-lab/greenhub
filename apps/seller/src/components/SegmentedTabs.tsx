@@ -17,6 +17,8 @@ type Props<T extends string> = {
   sticky?: boolean;
   topOffset?: string;
   layout?: 'flex' | 'scroll';
+  /** 탭 묶음의 이름. 주면 묶음이 이 이름의 group으로 읽힌다. */
+  ariaLabel?: string;
 };
 
 export function SegmentedTabs<T extends string>({
@@ -26,6 +28,7 @@ export function SegmentedTabs<T extends string>({
   sticky = false,
   topOffset = 'var(--header-height)',
   layout = 'flex',
+  ariaLabel,
 }: Props<T>) {
   const containerStyle: CSSProperties = {
     backgroundColor: 'var(--color-bg)',
@@ -39,7 +42,12 @@ export function SegmentedTabs<T extends string>({
   return (
     <Box style={containerStyle}>
       <Container size="sm">
-        <Group gap={0} style={groupStyle}>
+        <Group
+          gap={0}
+          style={groupStyle}
+          role={ariaLabel ? 'group' : undefined}
+          aria-label={ariaLabel}
+        >
           {tabs.map((tab) => {
             const active = tab.key === value;
             const buttonStyle: CSSProperties = {

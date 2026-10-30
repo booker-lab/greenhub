@@ -26,7 +26,13 @@ function Card({
   color?: string;
 }) {
   return (
-    <Paper radius="lg" style={{ border: '1px solid var(--color-border)' }} p="md">
+    <Paper
+      role="group"
+      aria-label={label}
+      radius="lg"
+      style={{ border: '1px solid var(--color-border)' }}
+      p="md"
+    >
       <Text style={labelStyle} mb={4}>
         {label}
       </Text>
@@ -53,7 +59,12 @@ export function SummaryCards({ summary, loading, error }: SummaryCardsProps) {
   const pending = loading ? '…' : undefined;
   return (
     <>
-      <SimpleGrid cols={{ base: 2, sm: summary.recovery.count > 0 ? 4 : 3 }} mb="md">
+      <SimpleGrid
+        role="group"
+        aria-label="정산 합계"
+        cols={{ base: 2, sm: summary.recovery.count > 0 ? 4 : 3 }}
+        mb="md"
+      >
         <Card
           label="지급 대기"
           value={pending ?? toKRW(summary.payable.netAmount)}
