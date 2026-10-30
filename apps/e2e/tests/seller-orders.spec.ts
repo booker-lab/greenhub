@@ -102,15 +102,13 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
         .or(page.locator('text=연결 중'))
         .or(page.locator('text=연결 오류')),
     ).toBeVisible({ timeout: 15_000 })
-    // 각 탭 버튼에 건수 뱃지가 있으면 그 텍스트는 숫자여야 함
+    // 각 탭 버튼은 '이름' 또는 '이름 + 건수'다. 건수가 붙으면 숫자여야 함
+    const tabs = page.getByRole('group', { name: '주문 상태', exact: true })
     for (const label of ['처리 필요', '대기 중', '배송 중', '완료', '취소']) {
-      const badge = page
-        .locator('button', { hasText: label })
-        .locator('.mantine-Badge-root')
-      if ((await badge.count()) > 0) {
-        const txt = (await badge.first().textContent())?.trim() ?? ''
-        expect(txt).toMatch(/^\d+$/)
-      }
+      const tab = tabs.getByRole('button').filter({ hasText: new RegExp(`^${label}`) })
+      await expect(tab).toHaveCount(1)
+      const txt = ((await tab.textContent()) ?? '').trim()
+      expect(txt).toMatch(new RegExp(`^${label}\\s*\\d*$`))
     }
   })
 

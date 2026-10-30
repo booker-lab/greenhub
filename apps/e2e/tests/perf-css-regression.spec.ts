@@ -52,15 +52,18 @@ test.describe('Consumer — CSS 회귀', () => {
     expect(fontFamily).toMatch(/Pretendard|system-ui|sans-serif/)
   })
 
-  test('홈 — Badge 컴포넌트 스타일 정상', async ({ page }) => {
+  test('홈 — 상품 상태 태그 스타일 정상', async ({ page }) => {
     await page.goto(CONSUMER_BASE)
-    const badge = page.locator('.mantine-Badge-root, [class*="Badge"]').first()
-    const count = await badge.count()
+    // 회차 상품 태그(HomeProductList roundItemTag): 품절·판매 예정·판매 종료·"…요일 아침 도착"
+    const tag = page.getByText(/^(품절|판매 예정|판매 종료|.+ 아침 도착)$/).first()
+    const count = await tag.count()
     if (count > 0) {
-      const display = await badge.evaluate((el) =>
-        getComputedStyle(el).display
-      )
-      expect(display).not.toBe('none')
+      const style = await tag.evaluate((el) => {
+        const s = getComputedStyle(el)
+        return { display: s.display, background: s.backgroundColor }
+      })
+      expect(style.display).not.toBe('none')
+      expect(style.background).not.toBe('rgba(0, 0, 0, 0)')
     }
   })
 
