@@ -7,6 +7,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import {
   AdminSettlementFilterDto,
+  ArchiveStoreDto,
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
   QueryAdminDriversDto,
@@ -40,8 +41,13 @@ export class AdminController {
   }
 
   @Patch('stores/:storeId/archive')
-  archiveStore(@Param('storeId') storeId: string, @CurrentUser() user: JwtPayload) {
-    return this.admin.archiveStore(storeId, user.sub);
+  archiveStore(
+    @Param('storeId') storeId: string,
+    @Body() dto: ArchiveStoreDto | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    // 기록 없는 판매자는 본문 없이 보낸다.
+    return this.admin.archiveStore(storeId, user.sub, dto?.confirmStoreIdPrefix);
   }
 
   @Patch('stores/:storeId/restore')

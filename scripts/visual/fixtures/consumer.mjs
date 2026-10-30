@@ -52,11 +52,11 @@ const PRODUCT_SPECS = [
         },
         {
           id: 'g2',
-          name: '문구',
+          name: '축하 토퍼',
           choices: [
-            { id: 'c3', label: '문구 없음', priceDelta: 0 },
-            { id: 'c4', label: '스티커 라벨', priceDelta: 2000, needsText: true },
-            { id: 'c5', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+            { id: 'c3', label: '토퍼 없음', priceDelta: 0 },
+            { id: 'c4', label: '祝 開業', priceDelta: 5000 },
+            { id: 'c5', label: '祝 生辰', priceDelta: 5000 },
           ],
         },
       ],
@@ -333,7 +333,7 @@ const ORDERS = [
     createdAt: '2026-09-26T05:10:00.000Z',
     updatedAt: '2026-09-28T22:30:00.000Z',
   }),
-  // 비교 기능 화면(후기·관리 안내·다시 주문·옵션·선물)을 보는 배송 완료 주문.
+  // 비교 기능 화면(후기·관리 안내·다시 주문·옵션·선물·포장 라벨)을 보는 배송 완료 주문.
   roundOrder('order-round-delivered', '20260925-000020', ROUND_CLOSED, 'DELIVERED', [[0, 1]], {
     orderItems: [
       {
@@ -342,14 +342,7 @@ const ORDERS = [
         subtotalAmount: PRODUCTS[0].price + 13000,
         selectedOptions: [
           { groupId: 'g1', groupName: '화분', choiceId: 'c2', choiceLabel: '백자 도자기 화분', priceDelta: 8000 },
-          {
-            groupId: 'g2',
-            groupName: '문구',
-            choiceId: 'c5',
-            choiceLabel: '3D 토퍼',
-            priceDelta: 5000,
-            text: '엄마 생신 축하해요',
-          },
+          { groupId: 'g2', groupName: '축하 토퍼', choiceId: 'c5', choiceLabel: '祝 生辰', priceDelta: 5000 },
         ],
       },
     ],
@@ -360,6 +353,7 @@ const ORDERS = [
       senderName: '김그린',
       cardMessage: '늘 고마워요. 건강하세요!',
     },
+    packageLabel: '김그린',
     createdAt: '2026-09-25T04:00:00.000Z',
     updatedAt: '2026-09-29T00:10:00.000Z',
   }),
@@ -810,13 +804,12 @@ export const benchmarkScreens = [
   {
     id: 'bm-product-options',
     group: '상품',
-    title: '상품 상세 · 옵션 시트(토퍼 문구 입력)',
+    title: '상품 상세 · 옵션 시트(축하 토퍼 고르기)',
     path: '/products/product-1?round=round-open',
     viewport: true,
     steps: [
       { click: '장바구니' },
-      { click: '3D 토퍼' },
-      { fill: { label: '3D 토퍼에 넣을 문구', value: '개업을 축하해요' } },
+      { click: '祝 開業' },
     ],
     features: ['option-sheet'],
   },
