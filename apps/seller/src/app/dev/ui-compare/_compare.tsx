@@ -3,6 +3,8 @@
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
 import { Button, ButtonLabel } from '@greenhub/ui/components/button';
+import { Checkbox } from '@greenhub/ui/components/checkbox';
+import { Chip } from '@greenhub/ui/components/chip';
 import {
   Card,
   CardContent,
@@ -21,6 +23,8 @@ import {
 import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { Loader } from '@greenhub/ui/components/loader';
+import { NativeSelect } from '@greenhub/ui/components/native-select';
+import { NumberInput } from '@greenhub/ui/components/number-input';
 import { Select } from '@greenhub/ui/components/select';
 import { Switch } from '@greenhub/ui/components/switch';
 import { Textarea } from '@greenhub/ui/components/textarea';
@@ -38,9 +42,13 @@ import {
   Badge as MBadge,
   Button as MButton,
   Card as MCard,
+  Checkbox as MCheckbox,
+  Chip as MChip,
   Drawer,
   Loader as MLoader,
   Modal,
+  NativeSelect as MNativeSelect,
+  NumberInput as MNumberInput,
   Select as MSelect,
   Switch as MSwitch,
   Text,
@@ -675,6 +683,196 @@ export function UiCompare({ open }: { open?: string }) {
               이전
             </Button>
           }
+        />
+      </Section>
+
+      <Section title="상품 폼 4·5단계 부품">
+        <Row
+          name="NumberInput md xl ₩ ↔ NumberInput md (가격)"
+          mantine={
+            <MNumberInput
+              placeholder="가격"
+              leftSection={<Text style={{ fontSize: 15, color: '#a3a9a6' }}>₩</Text>}
+              thousandSeparator=","
+              hideControls
+              value={30000}
+              size="md"
+              radius="xl"
+              w="100%"
+            />
+          }
+          ui={
+            <div className="w-full">
+              <NumberInput
+                placeholder="가격"
+                leftSection={
+                  <p
+                    className="m-0 p-0 text-base font-normal"
+                    style={{ fontSize: 15, color: '#a3a9a6' }}
+                  >
+                    ₩
+                  </p>
+                }
+                thousandSeparator=","
+                value={30000}
+                onValueChange={() => {}}
+                size="md"
+                className="rounded-xl"
+              />
+            </div>
+          }
+        />
+        <Row
+          name="TextInput label·단위 radius md ↔ Field + Input rightSection (크기)"
+          mantine={
+            <TextInput
+              label="높이"
+              rightSection={<Text size="sm">cm</Text>}
+              defaultValue="55"
+              radius="md"
+              w="100%"
+            />
+          }
+          ui={
+            <div className="w-full">
+              <Field>
+                <FieldLabel htmlFor="cmp-height">높이</FieldLabel>
+                <Input
+                  id="cmp-height"
+                  rightSection={<p className="m-0 p-0 text-base font-normal text-sm">cm</p>}
+                  defaultValue="55"
+                  className="rounded-[8px]"
+                />
+              </Field>
+            </div>
+          }
+        />
+        <Row
+          name="NativeSelect xs label ↔ NativeSelect xs label (재고 연결)"
+          mantine={
+            <MNativeSelect
+              size="xs"
+              label="재고 연결"
+              data={[{ value: '', label: '연결 안 함 (수량 제한 없음)' }]}
+              w="100%"
+            />
+          }
+          ui={
+            <div className="w-full">
+              <NativeSelect
+                size="xs"
+                label="재고 연결"
+                data={[{ value: '', label: '연결 안 함 (수량 제한 없음)' }]}
+              />
+            </div>
+          }
+        />
+        <Row
+          name="Checkbox green 꺼짐 ↔ Checkbox"
+          mantine={
+            <MCheckbox
+              color="green"
+              label="가게의 품질 보장 대상"
+              checked={false}
+              onChange={() => {}}
+            />
+          }
+          ui={
+            <Checkbox
+              color="#40c057"
+              label="가게의 품질 보장 대상"
+              checked={false}
+              onCheckedChange={() => {}}
+            />
+          }
+        />
+        <Row
+          name="Checkbox green 켜짐 ↔ Checkbox"
+          mantine={
+            <MCheckbox color="green" label="가게의 품질 보장 대상" checked onChange={() => {}} />
+          }
+          ui={
+            <Checkbox
+              color="#40c057"
+              label="가게의 품질 보장 대상"
+              checked
+              onCheckedChange={() => {}}
+            />
+          }
+        />
+        <Row
+          name="Chip green 꺼짐 ↔ Chip"
+          mantine={
+            <MChip color="green" checked={false} onChange={() => {}}>
+              거실
+            </MChip>
+          }
+          ui={
+            <Chip color="#40c057" checked={false} onCheckedChange={() => {}}>
+              거실
+            </Chip>
+          }
+        />
+        <Row
+          name="Chip green 켜짐 ↔ Chip"
+          mantine={
+            <MChip color="green" checked onChange={() => {}}>
+              거실
+            </MChip>
+          }
+          ui={
+            <Chip color="#40c057" checked onCheckedChange={() => {}}>
+              거실
+            </Chip>
+          }
+        />
+        <Row
+          name="Button xs outline yellow ↔ outline-warning"
+          mantine={
+            <MButton size="xs" variant="outline" color="yellow">
+              수정 반영하기
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="outline-warning">
+              수정 반영하기
+            </Button>
+          }
+        />
+        <Row
+          name="Button xs subtle gray ↔ ghost xs"
+          mantine={
+            <MButton size="xs" variant="subtle" color="gray">
+              그대로 등록하기
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="ghost">
+              그대로 등록하기
+            </Button>
+          }
+        />
+        <Row
+          name="Button xs light green ↔ light-green"
+          mantine={
+            <MButton size="xs" variant="light" color="green">
+              + 선택지
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="light-green">
+              + 선택지
+            </Button>
+          }
+        />
+        <Row
+          name="Button outline green ↔ outline-green"
+          mantine={
+            <MButton variant="outline" color="green" radius="xl">
+              + 옵션 묶음 추가
+            </MButton>
+          }
+          ui={<Button variant="outline-green">+ 옵션 묶음 추가</Button>}
         />
       </Section>
 
