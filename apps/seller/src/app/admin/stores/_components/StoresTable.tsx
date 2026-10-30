@@ -200,9 +200,10 @@ export function StoresTable({
   return (
     <>
       {/* 모바일(<sm): 카드 리스트 — 수수료율·설정 버튼 잘림 방지 */}
-      <Stack gap="sm" hiddenFrom="sm">
+      <Stack gap="sm" hiddenFrom="sm" role="list" aria-label="가게 목록">
         {stores.map((store) => (
           <Paper
+            role="listitem"
             key={store.id}
             radius="md"
             px="md"

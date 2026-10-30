@@ -24,7 +24,7 @@ test.describe('소비자 공동구매 페이지', () => {
 
   test('공구 카드에 진행률 바 렌더링', async ({ page }) => {
     await page.waitForTimeout(2000) // 데이터 로딩 대기
-    const cards = page.locator('[class*="mantine-Progress"]')
+    const cards = page.getByRole('progressbar')
     const count = await cards.count()
     if (count > 0) {
       await expect(cards.first()).toBeVisible()
