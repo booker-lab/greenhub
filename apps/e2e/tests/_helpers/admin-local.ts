@@ -252,6 +252,11 @@ export function visible(locator: Locator): Locator {
   return locator.filter({ visible: true });
 }
 
+/** 데스크톱은 표의 행, 모바일(<sm)은 카드 목록의 항목이다. 컴포넌트 클래스 대신 표 구조와 listitem 역할로 찾는다. */
+export function rowOrListItem(page: Page): Locator {
+  return visible(page.locator('tbody > tr').or(page.getByRole('listitem')));
+}
+
 /** Mantine Select에서 옵션 하나를 고른다(검색 가능한 Select는 글자를 쳐서 좁힌다). */
 export async function pickSelectOption(
   page: Page,

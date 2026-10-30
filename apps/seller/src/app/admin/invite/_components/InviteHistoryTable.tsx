@@ -171,11 +171,12 @@ export function InviteHistoryTable({
   return (
     <>
       {/* 모바일(<sm): 카드 리스트 — 날짜 컬럼 잘림 방지 */}
-      <Stack gap="sm" hiddenFrom="sm">
+      <Stack gap="sm" hiddenFrom="sm" role="list" aria-label="초대 기록">
         {invites.map((inv) => {
           const { label, color, expDate, revocable } = inviteStatus(inv);
           return (
             <Paper
+              role="listitem"
               key={inv.token}
               radius="md"
               px="md"

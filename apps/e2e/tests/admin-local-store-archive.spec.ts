@@ -13,8 +13,8 @@ import {
   openAdminPage,
   pickSelectOption,
   readDoc,
+  rowOrListItem,
   seedDocs,
-  visible,
 } from './_helpers/admin-local';
 
 // 어드민 판매자 치우기(#593 결정 ③) — 기록 없는 가게를 치우면 손님 공개 API(가게 소개·회차·상품)가 404,
@@ -139,7 +139,7 @@ test.describe('어드민 로컬 — 판매자 치우기·복구', () => {
     Object.fromEntries(publicPaths().map((path) => [path, status]));
 
   const storeRow = (page: Page) =>
-    visible(page.locator('tbody > tr, .mantine-Stack-root > .mantine-Paper-root')).filter({
+    rowOrListItem(page).filter({
       has: page.getByText(fx.storeName, { exact: true }),
     });
 

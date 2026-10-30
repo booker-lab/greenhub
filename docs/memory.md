@@ -197,6 +197,12 @@ revocation window 결정(D2, 2026-09-28, 2026-10-23 조정: API 데이터 요청
 
 Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`이 코드와 공개 문서에 반영돼 있다. 회차 주문 API는 `marketingConsent`를 거부하고(`apps/api/src/orders/round-order-create.service.ts`, 회귀 `mvp-order-flow.spec.ts`), 결제 화면은 동의를 받지 않으며, MY 마케팅 설정은 파일럿 미운영 안내만 보인다. `/privacy`·`/terms`와 `docs/specs/legal/README.md`도 같은 정책을 적는다. 마케팅 재도입은 별도 product·legal·provider 결정이다.
 
+### 8. UI 교체 동결 (Mantine → shadcn/ui)
+
+상태: `DECIDED` — 2026-10-30 사용자 확정(`docs/specs/frontend/ui-stack-migration-plan.md` §8·§10 M2).
+
+첫 회차 배송(12/1) 전에는 UI 교체 작업 중 P0(E2E 선택자, 판매자 앱에 ARIA 속성만 더함)·P0.5(증명 도구, 프런트 빌드를 일으키지 않는 경로만)만 `main`에 병합한다. LIVE 출시 후보 SHA를 정하는 시점(늦어도 주문 오픈 3일 전)부터 배송 완료 다음 날(12/2)까지는 수정·revert만 병합하고, P1(`packages/ui`) 이후 교체는 12/2부터 병합한다. 릴리스 세션은 배포 전에 운영 SHA와의 차이에 교체 코드가 없는지 확인한다. 도구 강제(동결 상태 파일·PR 경로 검사·배포 검사)는 P0.5에서 만든다. 회차가 다시 미뤄지면 구간이 함께 움직인다.
+
 ## HISTORICAL / CLOSED BY REL-STATE-01
 
 > 2026-09-28 재대조: 아래 P0의 구현·직접 회귀는 현재 `main`에 있다(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, admin 강제환불·권한, 정산 lifecycle, auth 세션 폐기 근거 spec 7개 191건 통과, 당시 `firestore.rules`의 orders read는 seller·admin만 허용 — #402 이후 `main` 규칙은 `orders` 원문 직접 읽기·쓰기를 모든 클라이언트에 거부한다). 각 절의 "미완료" 서술은 당시 기록이다.
