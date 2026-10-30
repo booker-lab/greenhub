@@ -4,12 +4,14 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../lib/utils';
 
 // ① 외형 유지: Mantine Button(radius xl = 32px, 600, 줄 높이 1) 크기·색과 같게 둔다.
+// 아이콘을 글자 앞뒤에 둘 때는 svg에 data-icon="inline-start"·"inline-end"를 준다. Mantine left·rightSection처럼
+// 그쪽 여백이 좌우 여백 ÷ 1.5가 되고, 글자와는 10px(gap) 떨어진다. 링크로 그려도 밑줄이 없다.
 // 초점 표시는 Mantine focusRing auto와 같은 주색 2px 외곽선(간격 2px)이다.
 // 모서리는 rounded-full(9999px)이 아니라 Mantine과 같은 32px이고, Mantine처럼 position: relative·overflow: hidden이다.
 // 색은 판매자 앱 대조 화면(/dev/ui-compare, scripts/visual/compare-cells.mjs)에서 Mantine 계산값을 읽어 맞췄다.
 // light·subtle은 Mantine brand-1·brand-9, 회색 글자는 gray-9, 위험은 red-6, 비활성은 gray-2 면·gray-5 글자다.
 const buttonVariants = cva(
-  'group/button relative inline-flex shrink-0 overflow-hidden cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-transparent text-sm leading-none font-semibold whitespace-nowrap normal-case transition-all outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-[#e9ecef] disabled:text-[#adb5bd] aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=size-])]:size-4',
+  'group/button relative inline-flex shrink-0 overflow-hidden cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-transparent text-sm leading-none font-semibold whitespace-nowrap normal-case no-underline transition-all outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-[#e9ecef] disabled:text-[#adb5bd] aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=size-])]:size-4',
   {
     variants: {
       variant: {
@@ -22,14 +24,18 @@ const buttonVariants = cva(
         secondary: 'bg-[#f1f3f5] text-[#212529] hover:bg-[#e9ecef]',
         ghost: 'bg-transparent text-[#212529] hover:bg-muted aria-expanded:bg-muted',
         destructive: 'bg-[#fa5252] text-white hover:bg-[#fa5252]/90',
+        // Mantine light·subtle color="red"·"yellow"(노랑 light는 theme.ts가 경고 토큰으로 바꾼 값).
+        'light-destructive': 'bg-[#ffe3e3] text-[#c92a2a] hover:bg-[#ffc9c9]',
+        'subtle-destructive': 'bg-transparent text-[#c92a2a] hover:bg-[#ffe3e3]',
+        'light-warning': 'bg-[#fff4cc] text-[#7a5b00]',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
       size: {
-        default: 'h-9 px-4.5',
-        xs: 'h-7.5 px-3.5 text-xs leading-none',
-        sm: 'h-7.5 px-3.5 text-xs leading-none',
-        md: 'h-10.5 px-5.5 text-base leading-none',
-        lg: 'h-12.5 px-6.5 text-lg leading-none',
+        default: 'h-9 px-4.5 has-data-[icon=inline-start]:ps-[calc(18px/1.5)] has-data-[icon=inline-end]:pe-[calc(18px/1.5)]',
+        xs: 'h-7.5 px-3.5 text-xs leading-none has-data-[icon=inline-start]:ps-[calc(14px/1.5)] has-data-[icon=inline-end]:pe-[calc(14px/1.5)]',
+        sm: 'h-7.5 px-3.5 text-xs leading-none has-data-[icon=inline-start]:ps-[calc(14px/1.5)] has-data-[icon=inline-end]:pe-[calc(14px/1.5)]',
+        md: 'h-10.5 px-5.5 text-base leading-none has-data-[icon=inline-start]:ps-[calc(22px/1.5)] has-data-[icon=inline-end]:pe-[calc(22px/1.5)]',
+        lg: 'h-12.5 px-6.5 text-lg leading-none has-data-[icon=inline-start]:ps-[calc(26px/1.5)] has-data-[icon=inline-end]:pe-[calc(26px/1.5)]',
         icon: 'size-9',
         'icon-xs': 'size-6 [&_svg:not([class*=size-])]:size-3',
         'icon-sm': 'size-7.5',

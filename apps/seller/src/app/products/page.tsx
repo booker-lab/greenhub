@@ -1,7 +1,9 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { Alert, Box, Button, Container, Group, Paper, Stack, Switch, Text } from '@mantine/core';
+import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
+import { Button } from '@greenhub/ui/components/button';
+import { Switch } from '@greenhub/ui/components/switch';
 import { RefreshCcw } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -21,6 +23,9 @@ import { ApiError, apiJson } from '@/lib/api';
 import { resolveProductDeleteFailure } from './_deleteResult';
 
 type ProductFilter = 'all' | 'active' | 'inactive';
+
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(흰 바탕·모서리 16·그림자 xs·안쪽 16) 값.
+const TEXT = 'm-0 p-0 text-base';
 
 const CATEGORY_LABEL: Record<string, string> = {
   cut_flower: '절화',
@@ -58,7 +63,7 @@ export default function ProductsPage() {
       <PageHeader
         title="상품 관리"
         right={
-          <Button component={Link} href="/products/new" size="xs">
+          <Button render={<Link href="/products/new" />} nativeButton={false} size="xs">
             + 등록
           </Button>
         }
@@ -76,60 +81,53 @@ export default function ProductsPage() {
       />
 
       {/* 상품 목록 — error/empty/filter-empty 분리. 첫 조회 실패는 empty로 collapse하지 않는다. */}
-      <Container size="sm" px="md" py="md">
-        <Stack gap="sm">
+      <div className="mx-auto max-w-[720px] p-4">
+        <div className="flex flex-col gap-3">
           {!storeId && sessionStatus === 'loading' && <LoadingState />}
 
           {!storeId && sessionStatus !== 'loading' && (
-            <Alert color="red" title="스토어 정보를 확인할 수 없습니다" role="alert">
-              로그인된 셀러 스토어 정보를 확인한 뒤 다시 시도해 주세요.
+            <Alert variant="destructive" role="alert">
+              <AlertTitle>스토어 정보를 확인할 수 없습니다</AlertTitle>
+              <AlertDescription>
+                로그인된 셀러 스토어 정보를 확인한 뒤 다시 시도해 주세요.
+              </AlertDescription>
             </Alert>
           )}
 
           {!!storeId && listView === 'loading' && <LoadingState />}
 
           {!!storeId && listView === 'error' && (
-            <Alert
-              color="red"
-              title="상품을 불러오지 못했습니다"
-              role="alert"
-            >
-              <Stack gap="xs">
-                <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
-                <Button
-                  size="xs"
-                  variant="light"
-                  color="red"
-                  leftSection={<RefreshCcw size={14} />}
-                  onClick={retry}
-                >
-                  다시 조회
-                </Button>
-              </Stack>
+            <Alert variant="destructive" role="alert">
+              <AlertTitle>상품을 불러오지 못했습니다</AlertTitle>
+              <AlertDescription>
+                <div className="flex flex-col gap-2.5">
+                  <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
+                    {error}
+                  </p>
+                  <Button size="xs" variant="light-destructive" onClick={retry}>
+                    <RefreshCcw className="size-3.5" data-icon="inline-start" />
+                    다시 조회
+                  </Button>
+                </div>
+              </AlertDescription>
             </Alert>
           )}
 
           {!!storeId && isStale && (
-            <Alert
-              color="yellow"
-              title="최신 상품 정보를 확인하지 못했습니다"
-              role="alert"
-            >
-              <Stack gap="xs">
-                <Text style={{ fontSize: 'var(--font-size-sm)' }}>
-                  이전 목록을 표시합니다. 상태 변경·삭제는 서버 기준으로 처리되며 목록이
-                  오래된 상태일 수 있습니다.
-                </Text>
-                <Button
-                  size="xs"
-                  variant="light"
-                  color="yellow"
-                  leftSection={<RefreshCcw size={14} />}
-                  onClick={retry}
-                >
-                  다시 조회
-                </Button>
-              </Stack>
+            <Alert variant="warning" role="alert">
+              <AlertTitle>최신 상품 정보를 확인하지 못했습니다</AlertTitle>
+              <AlertDescription>
+                <div className="flex flex-col gap-2.5">
+                  <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
+                    이전 목록을 표시합니다. 상태 변경·삭제는 서버 기준으로 처리되며 목록이 오래된
+                    상태일 수 있습니다.
+                  </p>
+                  <Button size="xs" variant="light-warning" onClick={retry}>
+                    <RefreshCcw className="size-3.5" data-icon="inline-start" />
+                    다시 조회
+                  </Button>
+                </div>
+              </AlertDescription>
             </Alert>
           )}
 
@@ -152,10 +150,9 @@ export default function ProductsPage() {
               }
               text="등록된 상품이 없습니다"
               action={
-                <Text
-                  component={Link}
+                <Link
                   href="/products/new"
-                  mt="xs"
+                  className="m-0 mt-2.5 p-0 text-base no-underline"
                   style={{
                     color: 'var(--color-primary-dark)',
                     fontWeight: 'var(--fw-medium)',
@@ -163,7 +160,7 @@ export default function ProductsPage() {
                   }}
                 >
                   상품 등록하기 →
-                </Text>
+                </Link>
               }
             />
           )}
@@ -172,13 +169,13 @@ export default function ProductsPage() {
             <EmptyState text="조건에 맞는 상품이 없습니다" />
           )}
 
-          {!!storeId && (listView === 'list' || listView === 'stale') && (
+          {!!storeId &&
+            (listView === 'list' || listView === 'stale') &&
             filtered.map((product) => (
               <ProductCard key={product.id} product={product} storeId={storeId} />
-            ))
-          )}
-        </Stack>
-      </Container>
+            ))}
+        </div>
+      </div>
     </PageShell>
   );
 }
@@ -232,10 +229,10 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
   }
 
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Group gap="sm" align="flex-start">
+    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+      <div className="flex flex-row flex-wrap items-start justify-start gap-3">
         {/* 이미지 */}
-        <Box
+        <div
           style={{
             width: 64,
             height: 64,
@@ -258,7 +255,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
               style={{ objectFit: 'cover' }}
             />
           ) : (
-            <Box style={{ color: 'var(--color-text-disabled)' }}>
+            <div style={{ color: 'var(--color-text-disabled)' }}>
               <svg
                 width="24"
                 height="24"
@@ -273,49 +270,49 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
                 <circle cx="8.5" cy="8.5" r="1.5" />
                 <path d="m21 15-5-5L5 21" />
               </svg>
-            </Box>
+            </div>
           )}
-        </Box>
+        </div>
 
         {/* 정보 */}
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          <Group gap="xs" justify="space-between" wrap="nowrap" align="center">
-            <Text
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="flex flex-row flex-nowrap items-center justify-between gap-2.5">
+            <p
+              className={`${TEXT} overflow-hidden text-ellipsis whitespace-nowrap`}
               style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}
-              truncate
             >
               {product.name}
-            </Text>
+            </p>
             <Switch
               checked={product.isActive}
-              onChange={handleToggleActive}
+              onCheckedChange={() => void handleToggleActive()}
               disabled={toggling}
-              size="sm"
-              color="brand"
               aria-label={
                 product.isActive ? '판매 중 — 클릭하여 비활성' : '비활성 — 클릭하여 판매 중으로'
               }
             />
-          </Group>
-          <Text
+          </div>
+          <p
+            className={`${TEXT} mt-0.5`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            mt={2}
           >
             {CATEGORY_LABEL[product.category]} · ₩{product.price.toLocaleString()}
             {product.saleType === 'group' && ' · 공동구매'}
-          </Text>
+          </p>
           {error && (
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mt={4}>
+            <p
+              className={`${TEXT} mt-1`}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+            >
               {error}
-            </Text>
+            </p>
           )}
-          <Group gap="xs" mt="xs">
+          <div className="mt-2.5 flex flex-row flex-wrap items-center justify-start gap-2.5">
             <Button
-              component={Link}
-              href={`/products/${product.id}/edit`}
+              render={<Link href={`/products/${product.id}/edit`} />}
+              nativeButton={false}
               size="xs"
-              variant="subtle"
-              color="gray"
+              variant="ghost"
             >
               수정
             </Button>
@@ -323,25 +320,25 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
               <Button
                 size="xs"
                 variant="light"
-                color="brand"
                 onClick={handleToggleActive}
-                loading={toggling}
+                disabled={toggling}
+                aria-busy={toggling}
               >
                 판매 중지
               </Button>
             )}
             <Button
               size="xs"
-              variant="subtle"
-              color="red"
+              variant="subtle-destructive"
               onClick={() => setConfirmOpen(true)}
-              loading={deleting}
+              disabled={deleting}
+              aria-busy={deleting}
             >
               삭제
             </Button>
-          </Group>
-        </Box>
-      </Group>
+          </div>
+        </div>
+      </div>
 
       <ConfirmModal
         opened={confirmOpen}
@@ -354,6 +351,6 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
           if (!deleting) setConfirmOpen(false);
         }}
       />
-    </Paper>
+    </div>
   );
 }
