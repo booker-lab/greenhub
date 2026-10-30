@@ -78,6 +78,22 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
   - 사람이 화면마다 괜찮음/고칠 것과 메모를 남긴다.
   - 판정은 `verdicts` 컬렉션(문서 id `<label>__<screen id>`)에 저장되고, Claude가 읽어 다음 수정을 정한다.
 
+## UI 교체 대조 화면(판매자)
+
+Mantine을 걷어내는 동안(`docs/specs/frontend/ui-stack-migration-plan.md` P1·P2a) `@greenhub/ui` 컴포넌트가 같은 크기의 Mantine과 같은 모양인지 본다.
+
+```bash
+node scripts/visual/shots.mjs seller --label compare --set compare   # 대조 화면과 Modal·Dialog·Drawer·Sheet 열린 상태(fixture compareScreens)
+node scripts/visual/compare-cells.mjs --viewport 390                 # 짝마다 위치·크기·계산된 스타일·픽셀 비교(390·768·1280)
+```
+
+- 화면은 판매자 앱 `/dev/ui-compare`다. 행마다 왼쪽 Mantine, 오른쪽 `@greenhub/ui`를 그린다. 짝은 판매자 앱이 실제로 쓰는 props(`theme.ts` 기본값 포함)로 고른다.
+- 열린 상태는 `?open=modal|dialog|drawer|sheet`. Modal은 `ConfirmModal`, Drawer는 소비자 `OptionSheet`와 같은 설정이다. 두 캡처는 같은 화면 위에 열리므로 캡처끼리 그대로 비교한다.
+- 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열린다. 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`).
+- `compare-cells.mjs`는 같은 순서의 부품(칸의 첫 요소·button·input·svg·글자)을 짝지어 칸 안 위치·크기와 면·테두리·모서리·글꼴·색을 비교한다. 줄 높이·여백은 글자 위치로 드러나므로 따로 보지 않는다.
+  - 픽셀은 같은 자리에서 비교한다. 오른쪽 칸을 찍고, 그 칸을 왼쪽(Mantine) 내용의 복제로 바꿔 다시 찍는다. 같은 Mantine 버튼도 가로 위치가 다른 칸에 놓으면 모서리 안티앨리어싱이 15픽셀 달라지기 때문이다(2026-10-31 실측).
+  - 채널 허용치는 1(`diff.mjs --tolerance 1`과 같다). 차이 있는 행이 있으면 종료 코드 1이다. `--out <폴더>`로 칸 이미지를 남긴다.
+
 ## 작업 전·후 픽셀 비교
 
 ```bash
@@ -109,6 +125,7 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `soundness.mjs` | 정상 촬영 판정 |
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
 | `report.mjs` · `report-template.html` | 캡처 결과로 확인판 HTML 생성 |
+| `compare-cells.mjs` | UI 교체 대조 화면의 짝 비교(위치·스타일·픽셀) |
 
 ## 안전장치
 
