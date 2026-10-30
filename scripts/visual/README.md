@@ -70,6 +70,7 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
+- 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 대조 화면 `ui-compare-select`).
 - **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
 - 캡처는 `%TEMP%\greenhub-visual\<app>\shots\<label>\`에 PNG와 `manifest.json`으로 남는다.
   - `manifest.json`에는 화면별 최종 주소, 콘솔 오류, fixture가 없는 API 경로가 함께 기록된다.
@@ -88,10 +89,11 @@ node scripts/visual/compare-cells.mjs --viewport 390                 # 짝마다
 ```
 
 - 화면은 판매자 앱 `/dev/ui-compare`다. 행마다 왼쪽 Mantine, 오른쪽 `@greenhub/ui`를 그린다. 짝은 판매자 앱이 실제로 쓰는 props(`theme.ts` 기본값 포함)로 고른다.
-- 열린 상태는 `?open=modal|dialog|drawer|sheet`. Modal은 `ConfirmModal`, Drawer는 소비자 `OptionSheet`와 같은 설정이다. 두 캡처는 같은 화면 위에 열리므로 캡처끼리 그대로 비교한다.
+- 열린 상태는 `?open=modal|dialog|drawer|sheet|select|uiselect`. Select 목록 둘은 입력칸을 실제로 눌러 연다. Modal은 `ConfirmModal`, Drawer는 소비자 `OptionSheet`와 같은 설정이다. 두 캡처는 같은 화면 위에 열리므로 캡처끼리 그대로 비교한다.
 - 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열린다. 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`).
 - `compare-cells.mjs`는 같은 순서의 부품(칸의 첫 요소·button·input·svg·글자)을 짝지어 칸 안 위치·크기와 면·테두리·모서리·글꼴·색을 비교한다. 줄 높이·여백은 글자 위치로 드러나므로 따로 보지 않는다.
   - 픽셀은 같은 자리에서 비교한다. 오른쪽 칸을 찍고, 그 칸을 왼쪽(Mantine) 내용의 복제로 바꿔 다시 찍는다. 같은 Mantine 버튼도 가로 위치가 다른 칸에 놓으면 모서리 안티앨리어싱이 15픽셀 달라지기 때문이다(2026-10-31 실측).
+  - textarea는 입력칸처럼 상자·글꼴을 비교하고, 안의 글자는 픽셀로만 본다(글자 노드 범위 좌표가 화면 위치가 아니다).
   - 채널 허용치는 1(`diff.mjs --tolerance 1`과 같다). 차이 있는 행이 있으면 종료 코드 1이다. `--out <폴더>`로 칸 이미지를 남긴다.
 
 ## 작업 전·후 픽셀 비교

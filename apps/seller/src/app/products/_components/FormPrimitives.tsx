@@ -1,7 +1,11 @@
 'use client';
 
-import { Button, Group, Paper, Text } from '@mantine/core';
+import { Button, ButtonLabel } from '@greenhub/ui/components/button';
 import type { ReactNode } from 'react';
+
+// ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·그림자 xs·안쪽 16)·Text(p, 여백 0)·Group(간격 10) 값.
+const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const TEXT = 'm-0 p-0 text-base font-normal';
 
 const LABEL_STYLE = {
   fontSize: 'var(--font-size-sm)',
@@ -26,12 +30,12 @@ export function FieldCard({
   children: ReactNode;
 }) {
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Text style={LABEL_STYLE} mb={labelGap}>
+    <div className={PAPER}>
+      <p className={`${TEXT} ${labelGap === 'xs' ? 'mb-2.5' : 'mb-3'}`} style={LABEL_STYLE}>
         {label}
-      </Text>
+      </p>
       {children}
-    </Paper>
+    </div>
   );
 }
 
@@ -46,21 +50,18 @@ export function ChoiceRow({
   onChange: (value: string) => void;
 }) {
   return (
-    <Group gap="xs">
+    <div className="flex flex-row flex-wrap items-center justify-start gap-2.5">
       {options.map(({ value: v, label }) => (
         <Button
           key={v}
           onClick={() => onChange(v)}
-          flex={1}
-          size="sm"
-          radius="xl"
-          variant={value === v ? 'filled' : 'outline'}
-          color="gray"
+          className="flex-1"
+          variant={value === v ? 'default' : 'outline-gray'}
           style={value === v ? SELECTED_STYLE : {}}
         >
-          {label}
+          <ButtonLabel>{label}</ButtonLabel>
         </Button>
       ))}
-    </Group>
+    </div>
   );
 }
