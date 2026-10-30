@@ -1,5 +1,7 @@
 export default {
   plugins: {
+    // Tailwind가 @import(Mantine CSS 포함)를 먼저 펼치고 layer로 감싼다(ui-stack-migration-plan.md P2a·P3).
+    '@tailwindcss/postcss': {},
     'postcss-preset-mantine': {},
     'postcss-simple-vars': {
       variables: {

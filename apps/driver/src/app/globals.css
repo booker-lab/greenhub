@@ -1,3 +1,13 @@
+/* UI 교체(ui-stack-migration-plan.md P2a·P3): Mantine과 같이 쓰는 동안 Tailwind를 preflight 없이 연결한다.
+   Mantine CSS는 모두 mantine layer에 넣어 Tailwind 유틸리티가 이기게 한다. layer 밖 규칙(아래 body 등)은 모든 layer를 이긴다. */
+@layer theme, base, mantine, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+@import "@greenhub/ui/styles/shadcn-tailwind.css";
+@import "@greenhub/ui/styles/tokens.css";
+@source "../../../../packages/ui/src";
+
 /* Pretendard Variable — 글자 범위별로 나눈 파일(dynamic subset)을 webpack이 번들링한다.
    브라우저는 화면에 나온 글자 범위의 조각만 받는다(전체 2MB 한 파일 대신). */
 @import "@greenhub/ui/fonts/pretendard.css";
@@ -12,42 +22,42 @@
 }
 
 /* Mantine v9 — 선택적 CSS import (사용 컴포넌트만) */
-@import "@mantine/core/styles/global.css";
-@import "@mantine/core/styles/baseline.css";
-@import "@mantine/core/styles/default-css-variables.css";
+@import "@mantine/core/styles/global.css" layer(mantine);
+@import "@mantine/core/styles/baseline.css" layer(mantine);
+@import "@mantine/core/styles/default-css-variables.css" layer(mantine);
 
 /* 내부 공통 의존 */
-@import "@mantine/core/styles/ScrollArea.css";
-@import "@mantine/core/styles/VisuallyHidden.css";
-@import "@mantine/core/styles/UnstyledButton.css";
-@import "@mantine/core/styles/Paper.css";
-@import "@mantine/core/styles/CloseButton.css";
-@import "@mantine/core/styles/Overlay.css";
-@import "@mantine/core/styles/ModalBase.css";
-@import "@mantine/core/styles/Input.css";
-@import "@mantine/core/styles/InlineInput.css";
-@import "@mantine/core/styles/ActionIcon.css";
+@import "@mantine/core/styles/ScrollArea.css" layer(mantine);
+@import "@mantine/core/styles/VisuallyHidden.css" layer(mantine);
+@import "@mantine/core/styles/UnstyledButton.css" layer(mantine);
+@import "@mantine/core/styles/Paper.css" layer(mantine);
+@import "@mantine/core/styles/CloseButton.css" layer(mantine);
+@import "@mantine/core/styles/Overlay.css" layer(mantine);
+@import "@mantine/core/styles/ModalBase.css" layer(mantine);
+@import "@mantine/core/styles/Input.css" layer(mantine);
+@import "@mantine/core/styles/InlineInput.css" layer(mantine);
+@import "@mantine/core/styles/ActionIcon.css" layer(mantine);
 
 /* 사용 컴포넌트 */
-@import "@mantine/core/styles/Alert.css";
-@import "@mantine/core/styles/Anchor.css";
-@import "@mantine/core/styles/Badge.css";
-@import "@mantine/core/styles/Button.css";
-@import "@mantine/core/styles/Card.css";
-@import "@mantine/core/styles/Checkbox.css";
-@import "@mantine/core/styles/Divider.css";
-@import "@mantine/core/styles/Group.css";
-@import "@mantine/core/styles/Loader.css";
-@import "@mantine/core/styles/Modal.css";
-@import "@mantine/core/styles/Notification.css";
-@import "@mantine/core/styles/NumberInput.css";
-@import "@mantine/core/styles/PasswordInput.css";
-@import "@mantine/core/styles/Radio.css";
-@import "@mantine/core/styles/Stack.css";
-@import "@mantine/core/styles/Text.css";
-@import "@mantine/core/styles/Title.css";
+@import "@mantine/core/styles/Alert.css" layer(mantine);
+@import "@mantine/core/styles/Anchor.css" layer(mantine);
+@import "@mantine/core/styles/Badge.css" layer(mantine);
+@import "@mantine/core/styles/Button.css" layer(mantine);
+@import "@mantine/core/styles/Card.css" layer(mantine);
+@import "@mantine/core/styles/Checkbox.css" layer(mantine);
+@import "@mantine/core/styles/Divider.css" layer(mantine);
+@import "@mantine/core/styles/Group.css" layer(mantine);
+@import "@mantine/core/styles/Loader.css" layer(mantine);
+@import "@mantine/core/styles/Modal.css" layer(mantine);
+@import "@mantine/core/styles/Notification.css" layer(mantine);
+@import "@mantine/core/styles/NumberInput.css" layer(mantine);
+@import "@mantine/core/styles/PasswordInput.css" layer(mantine);
+@import "@mantine/core/styles/Radio.css" layer(mantine);
+@import "@mantine/core/styles/Stack.css" layer(mantine);
+@import "@mantine/core/styles/Text.css" layer(mantine);
+@import "@mantine/core/styles/Title.css" layer(mantine);
 /* notifications 컨테이너(고정 위치) — Notifications가 providers에서 렌더된다 */
-@import "@mantine/notifications/styles.css";
+@import "@mantine/notifications/styles.css" layer(mantine);
 
 @import "@greenhub/ui/style.css";
 
