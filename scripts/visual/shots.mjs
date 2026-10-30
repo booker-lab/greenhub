@@ -1,10 +1,13 @@
-// 화면 자동 캡처 — start.mjs로 띄운 화면 확인 서버에서 fixtures/<app>.mjs의 screens를 모바일·데스크톱으로 찍는다.
+// 화면 자동 캡처 — start.mjs로 띄운 화면 확인 서버에서 fixtures/<app>.mjs의 screens를 모바일·태블릿·데스크톱으로 찍는다.
 //
 //   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3202] [--set benchmark]
+//                                 [--viewports mobile,tablet,desktop]
 //     --set benchmark  fixtures의 benchmarkScreens(팔도감 벤치마킹 비교 화면)를 찍는다
 //
 // 결과: %TEMP%/greenhub-visual/<app>/shots/<label>/ 아래 PNG와 manifest.json.
-// manifest에는 화면별 최종 주소·콘솔 오류·fixture 없는 API 경로가 남는다(report.mjs가 읽는다).
+// manifest에는 화면별 최종 주소·콘솔 오류·fixture 없는 API 경로와 정상 판정(soundness.mjs)이 남는다(report.mjs·diff.mjs가 읽는다).
+// 브라우저 시계는 start.mjs가 정한 기준 시각(clock.mjs)에 고정하고, CSS 애니메이션은 멈춘 채 찍는다.
+// 정상 판정을 통과하지 못한 화면이 하나라도 있으면 종료 코드 1이다.
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -12,6 +15,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APPS, RUNTIME_FILE } from './apps.mjs';
+import { VISUAL_NOW_ENV } from './clock.mjs';
+import { expectedPathOf, shotProblems } from './soundness.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -23,6 +28,8 @@ const VIEWPORTS = {
     isMobile: true,
     hasTouch: true,
   },
+  // 판매자 1100px 이하 배치(상단바·메뉴 시트)를 보는 폭.
+  tablet: { viewport: { width: 768, height: 1024 }, deviceScaleFactor: 1, hasTouch: true },
   desktop: { viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 },
 };
 
@@ -43,6 +50,23 @@ const base = option('base', `http://127.0.0.1:${app.port}`);
 const runtimeFile = path.join(os.tmpdir(), 'greenhub-visual', appName, RUNTIME_FILE);
 const runtime = fs.existsSync(runtimeFile) ? JSON.parse(fs.readFileSync(runtimeFile, 'utf8')) : {};
 const apiBase = `http://${new URL(base).hostname}:${app.apiPort}`;
+if (!runtime.visualNow) {
+  console.error(
+    `❌ ${runtimeFile}에 기준 시각이 없습니다. node scripts/visual/start.mjs ${appName} 를 다시 실행하세요.`,
+  );
+  process.exit(1);
+}
+// fixture가 import될 때 서버(start.mjs)와 같은 기준 시각으로 회차 일정을 만든다.
+process.env[VISUAL_NOW_ENV] = runtime.visualNow;
+const viewportNames = option('viewports', Object.keys(VIEWPORTS).join(','))
+  .split(',')
+  .filter(Boolean);
+for (const name of viewportNames) {
+  if (!VIEWPORTS[name]) {
+    console.error(`❌ 지원하지 않는 화면 폭: ${name} (가능: ${Object.keys(VIEWPORTS).join(', ')})`);
+    process.exit(1);
+  }
+}
 const label = option('label', 'current');
 const only = option('only', '')?.split(',').filter(Boolean) ?? [];
 const outDir = option('out', path.join(os.tmpdir(), 'greenhub-visual', appName, 'shots', label));
@@ -136,7 +160,7 @@ async function capture(page, file, { viewportOnly = false } = {}) {
     // 아래에서 올라오는 시트처럼 지금 보이는 화면이 중요한 경우는 화면 크기 그대로 찍는다.
     await page.addStyleTag({ content: 'nextjs-portal{display:none!important}' });
     await page.waitForTimeout(400);
-    await page.screenshot({ path: file });
+    await page.screenshot({ path: file, animations: 'disabled', caret: 'hide' });
     return;
   }
   // 하단 고정 메뉴가 본문 중간에 겹쳐 찍히지 않도록, 화면 높이를 문서 높이로 늘려 한 장으로 찍는다.
@@ -149,7 +173,7 @@ async function capture(page, file, { viewportOnly = false } = {}) {
   // next dev 개발 표시(N·Issues 배지)가 하단 메뉴를 가리지 않게 숨긴다.
   await page.addStyleTag({ content: 'nextjs-portal{display:none!important}' });
   await page.waitForTimeout(400);
-  await page.screenshot({ path: file });
+  await page.screenshot({ path: file, animations: 'disabled', caret: 'hide' });
   await page.setViewportSize(size);
 }
 
@@ -166,6 +190,8 @@ const manifest = {
   base,
   gitSha,
   createdAt: new Date().toISOString(),
+  visualNow: runtime.visualNow,
+  viewports: viewportNames,
   shots: [],
 };
 // Playwright 버전과 설치된 브라우저가 다른 환경(예: 클라우드 세션의 /opt/pw-browsers/chromium)에서는
@@ -176,7 +202,7 @@ const browser = await chromium.launch(
     : undefined,
 );
 try {
-  for (const viewportName of Object.keys(VIEWPORTS)) {
+  for (const viewportName of viewportNames) {
     const authed = await newContext(browser, viewportName);
     await login(authed);
     const guest = await newContext(browser, viewportName);
@@ -193,7 +219,8 @@ try {
           HARNESS_NOISE.test(m.text())
         )
           return;
-        errors.push(m.text().slice(0, 300));
+        // 리소스 404처럼 문장만으로 원인을 알 수 없는 오류는 주소를 붙인다.
+        errors.push(`${m.text().slice(0, 300)}${where ? ` (${where.slice(0, 200)})` : ''}`);
       });
       page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 300)));
       // storage: true인 화면은 열기 전에 fixture의 브라우저 저장소 값(장바구니 등)을 넣는다.
@@ -217,6 +244,8 @@ try {
         method: 'POST',
       });
       await fetch(`${apiBase}/__log/reset`, { method: 'POST' });
+      // 카운트다운·"오늘" 같은 시각 글자가 캡처마다 달라지지 않게 브라우저 시계를 기준 시각에 고정한다.
+      await page.clock.setFixedTime(new Date(runtime.visualNow));
       const t0 = Date.now();
       await page.goto(`${base}${screen.path}`, { waitUntil: 'load', timeout: 180_000 });
       // 데이터 요청이 끝나고 화면이 안정될 때까지 잠시 기다린다.
@@ -236,7 +265,7 @@ try {
       await capture(page, path.join(outDir, file), { viewportOnly: screen.viewport === true });
       const log = await (await fetch(`${apiBase}/__log`)).json();
       const missing = [...new Set(log.filter((e) => e.kind === 'missing').map((e) => e.path))];
-      manifest.shots.push({
+      const shot = {
         id: screen.id,
         group: screen.group,
         title: screen.title,
@@ -248,10 +277,12 @@ try {
         errors: [...new Set(errors)],
         ...(stepNote ? { stepNote } : {}),
         ms: Date.now() - t0,
-      });
-      const mark = missing.length || errors.length ? '⚠️' : '✅';
+      };
+      shot.problems = shotProblems(shot, expectedPathOf(screen));
+      shot.sound = shot.problems.length === 0;
+      manifest.shots.push(shot);
       console.log(
-        `${mark} ${viewportName} ${screen.id} (${Date.now() - t0}ms)${missing.length ? ` fixture 없음: ${missing.join(', ')}` : ''}${stepNote ? ` · ${stepNote}` : ''}${errors.length ? ` · 오류 ${errors.length}건` : ''}`,
+        `${shot.sound ? '✅' : '⚠️'} ${viewportName} ${screen.id} (${shot.ms}ms)${shot.sound ? '' : ` · ${shot.problems.join(' · ')}`}`,
       );
       await page.close();
     }
@@ -264,4 +295,11 @@ try {
 }
 
 fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
-console.log(`\n📁 ${outDir} (${manifest.shots.length}장)`);
+const unsound = manifest.shots.filter((s) => !s.sound);
+console.log(`\n📁 ${outDir} (${manifest.shots.length}장, 기준 시각 ${runtime.visualNow})`);
+if (unsound.length) {
+  console.error(
+    `⚠️ 정상 판정을 통과하지 못한 캡처 ${unsound.length}장: ${unsound.map((s) => `${s.id}(${s.viewport})`).join(', ')}`,
+  );
+  process.exitCode = 1;
+}

@@ -1,5 +1,7 @@
 // 셀러 앱(어드민 포함) 화면 확인용 고정 데이터.
 // 2026-09-28 프론트 PR #314~#320 육안 확인에 쓴 데이터를 옮겼다. 화면을 추가할 때 경로를 여기에 더한다.
+import { hoursFromNow } from '../clock.mjs';
+
 const STORE_ID = 'store-visual-0001';
 
 // 겸직(어드민 + 셀러) 계정 — 셀러 화면과 /admin 화면을 한 로그인으로 모두 볼 수 있다.
@@ -44,6 +46,10 @@ function sellerOrder(id, orderNumber, extra) {
     ...extra,
   };
 }
+// 상세 주소로만 여는 주문(목록·회차 건수에는 넣지 않는다). 배송 보류 모달처럼 특정 상태가 필요한 화면용.
+const DETAIL_ONLY_ORDERS = [
+  roundOrder('order-round-preparing', '20261001-000009', 'PREPARING', [['빅립', 43000, 1]]),
+];
 const SELLER_ORDERS = [
   sellerOrder('order-with-contact', '20260928-000101', {
     buyerName: '김그린',
@@ -264,12 +270,13 @@ function saleRound(id, name, status, schedule, counters = {}) {
   };
 }
 const SALE_ROUNDS = [
+  // 다가오는 회차는 고정 시각(clock.mjs) 기준 상대값이다. 날짜가 지나도 "예정" 화면이 그대로 찍힌다.
   saleRound('round-scheduled', '11월 3일 배송 회차', 'SCHEDULED', {
-    orderOpenAt: '2026-10-29T01:00:00.000Z',
-    orderCloseAt: '2026-11-01T15:00:00.000Z',
-    auctionAt: '2026-11-01T22:00:00.000Z',
-    deliveryStartAt: '2026-11-02T15:00:00.000Z',
-    deliveryEndAt: '2026-11-03T00:00:00.000Z',
+    orderOpenAt: hoursFromNow(-14),
+    orderCloseAt: hoursFromNow(72),
+    auctionAt: hoursFromNow(79),
+    deliveryStartAt: hoursFromNow(96),
+    deliveryEndAt: hoursFromNow(105),
   }),
   saleRound(
     'round-open',
@@ -304,11 +311,11 @@ const SALE_ROUNDS = [
     { orderedDeliveryAddresses: 15, orderedItemQuantity: 27 },
   ),
   saleRound('round-draft', '11월 10일 배송 회차(작성 중)', 'DRAFT', {
-    orderOpenAt: '2026-11-05T01:00:00.000Z',
-    orderCloseAt: '2026-11-08T15:00:00.000Z',
-    auctionAt: '2026-11-08T22:00:00.000Z',
-    deliveryStartAt: '2026-11-09T15:00:00.000Z',
-    deliveryEndAt: '2026-11-10T00:00:00.000Z',
+    orderOpenAt: hoursFromNow(154),
+    orderCloseAt: hoursFromNow(240),
+    auctionAt: hoursFromNow(247),
+    deliveryStartAt: hoursFromNow(264),
+    deliveryEndAt: hoursFromNow(273),
   }),
 ];
 // 상품별 수량은 회차 counters 합계와 맞춘다(판매 중 11개·결제 중 2개, 마감 27개).
@@ -572,6 +579,100 @@ const VARIETIES = [
   createdAt: '2026-08-01T01:00:00.000Z',
 }));
 
+// 감사 기록(/admin/audit) — 종류 이름은 화면의 ACTION_LABEL과 맞춘다.
+const ADMIN_AUDIT_LOGS = [
+  {
+    id: 'audit-1',
+    action: 'admin.driver.approved',
+    actorId: 'admin-visual-0001',
+    targetType: 'driver',
+    targetId: 'driver-visual-0002',
+    before: { status: 'pending' },
+    after: { status: 'approved' },
+    reason: null,
+    createdAt: '2026-10-05T01:20:00.000Z',
+  },
+  {
+    id: 'audit-2',
+    action: 'admin.order.force_refunded',
+    actorId: 'admin-visual-0001',
+    targetType: 'order',
+    targetId: 'order-round-multi',
+    before: { status: 'PAID' },
+    after: { status: 'REFUNDED' },
+    reason: '꽃 상태 불량으로 손님 요청',
+    createdAt: '2026-10-04T08:05:00.000Z',
+  },
+  {
+    id: 'audit-3',
+    action: 'store.payout_account.updated',
+    actorId: 'admin-visual-0001',
+    targetType: 'store',
+    targetId: STORE_ID,
+    before: null,
+    after: { bankName: '농협은행', accountNumberLast4: '7788' },
+    reason: null,
+    createdAt: '2026-10-02T03:00:00.000Z',
+  },
+];
+// 옵션 재고(/settings/option-stocks) — 직접 출력한 화분 등.
+const OPTION_STOCKS = [
+  {
+    id: 'stock-1',
+    storeId: STORE_ID,
+    name: '3D 출력 화분 · 흰색 중형',
+    stockQuantity: 20,
+    reservedQuantity: 2,
+    orderedQuantity: 7,
+    remainingQuantity: 11,
+  },
+  {
+    id: 'stock-2',
+    storeId: STORE_ID,
+    name: '3D 출력 화분 · 연두 소형',
+    stockQuantity: 10,
+    reservedQuantity: 0,
+    orderedQuantity: 10,
+    remainingQuantity: 0,
+  },
+];
+const HUB_ARRIVED_ORDERS = [
+  {
+    id: 'order-hub-1',
+    status: 'HUB_ARRIVED',
+    totalAmount: 38000,
+    createdAt: '2026-10-05T02:10:00.000Z',
+    items: [
+      { name: '호접란 2대', quantity: 1 },
+      { name: '스투키', quantity: 1 },
+    ],
+    customerName: '김*연',
+    pickupCode: '4821',
+  },
+];
+const DELIVERY_CONFIG = {
+  directFee: 3000,
+  hubFee: 1000,
+  parcelFee: 4000,
+  freeThresholdDirect: 50000,
+  freeThresholdHub: 30000,
+  freeThresholdParcel: 50000,
+  weatherRestrictionActive: false,
+};
+function adminSettlementsSummary() {
+  const sum = (list, key) => list.reduce((total, s) => total + (s[key] ?? 0), 0);
+  const payable = ADMIN_SETTLEMENTS.filter((s) => s.status === 'confirmed');
+  const paid = ADMIN_SETTLEMENTS.filter((s) => s.status === 'paid');
+  const recovery = ADMIN_SETTLEMENTS.filter((s) => (s.recoveryAmount ?? 0) > 0);
+  return {
+    count: ADMIN_SETTLEMENTS.length,
+    payable: { count: payable.length, netAmount: sum(payable, 'netAmount') },
+    paid: { count: paid.length, netAmount: sum(paid, 'netAmount') },
+    platformFee: sum(ADMIN_SETTLEMENTS, 'platformFee'),
+    recovery: { count: recovery.length, amount: sum(recovery, 'recoveryAmount') },
+    truncated: false,
+  };
+}
 const HUBS = [
   {
     id: 'hub-0001',
@@ -641,11 +742,17 @@ const benchmarkRoutes = [
 export const routes = [
   ...benchmarkRoutes,
   ['GET', /^\/stores\/[^/]+\/orders$/, () => ({ body: SELLER_ORDERS })],
+  // 홈의 끝난 주문 건수(완료·취소 탭). 주문 상세 경로보다 먼저 둔다(summary를 주문 id로 읽지 않게).
+  [
+    'GET',
+    /^\/stores\/[^/]+\/orders\/summary$/,
+    () => ({ body: { archivedStatusCounts: { DELIVERED: 12, PICKED_UP: 1, REVIEWED: 3, CANCELLED: 2 } } }),
+  ],
   [
     'GET',
     /^\/stores\/[^/]+\/orders\/([^/]+)$/,
     ({ params: [id] }) => {
-      const o = SELLER_ORDERS.find((x) => x.id === id);
+      const o = [...SELLER_ORDERS, ...DETAIL_ONLY_ORDERS].find((x) => x.id === id);
       return o ? { body: o } : { status: 404, body: { message: '주문 없음' } };
     },
   ],
@@ -671,6 +778,8 @@ export const routes = [
   ],
   ['GET', /^\/admin\/orders$/, ({ url }) => ({ body: { orders: byStatus(ADMIN_ORDERS, url) } })],
   ['GET', /^\/admin\/settlements$/, () => ({ body: { settlements: ADMIN_SETTLEMENTS } })],
+  // 합계 카드는 같은 목록에서 계산한다(서버 계산과 같은 모양).
+  ['GET', /^\/admin\/settlements\/summary$/, () => ({ body: adminSettlementsSummary() })],
   // 새로고침 시 '불러오는 중...'을 볼 수 있게 약간 늦춘다.
   ['GET', /^\/admin\/users$/, () => ({ body: { users: ADMIN_USERS }, delay: 700 })],
   ['GET', /^\/admin\/invite$/, () => ({ body: ADMIN_INVITES })],
@@ -688,21 +797,9 @@ export const routes = [
   ],
   ['GET', /^\/admin\/drivers$/, () => ({ body: { drivers: ADMIN_DRIVERS } })],
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
-  [
-    'GET',
-    /^\/stores\/[^/]+\/delivery-config$/,
-    () => ({
-      body: {
-        directFee: 3000,
-        hubFee: 1000,
-        parcelFee: 4000,
-        freeThresholdDirect: 50000,
-        freeThresholdHub: 30000,
-        freeThresholdParcel: 50000,
-        weatherRestrictionActive: false,
-      },
-    }),
-  ],
+  ['GET', /^\/stores\/[^/]+\/delivery-config$/, () => ({ body: DELIVERY_CONFIG })],
+  // 설정 · 배송비 화면은 판매자 전용 조회 경로를 쓴다.
+  ['GET', /^\/stores\/[^/]+\/delivery-config\/owner$/, () => ({ body: DELIVERY_CONFIG })],
   // 이번 달 몇몇 날짜에 한도를 넣는다(보는 달이 바뀌어도 같은 날짜 모양이 보이게 from의 연·월을 따른다).
   [
     'GET',
@@ -721,6 +818,35 @@ export const routes = [
     },
   ],
   ['GET', /^\/stores\/[^/]+\/hubs$/, () => ({ body: { hubs: HUBS } })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/hubs\/([^/]+)$/,
+    ({ params: [id] }) => {
+      const hub = HUBS.find((h) => h.id === id);
+      return hub ? { body: hub } : { status: 404, body: { message: '거점 없음' } };
+    },
+  ],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/hubs\/([^/]+)\/orders$/,
+    () => ({ body: { orders: HUB_ARRIVED_ORDERS } }),
+  ],
+  ['GET', /^\/admin\/audit-logs$/, () => ({ body: ADMIN_AUDIT_LOGS })],
+  ['GET', /^\/stores\/[^/]+\/option-stocks$/, () => ({ body: { stocks: OPTION_STOCKS } })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/payout-account$/,
+    () => ({
+      body: {
+        account: {
+          bankName: '농협은행',
+          accountHolder: '검증 판매자',
+          accountNumberMasked: '351-****-****-7788',
+          accountNumberLast4: '7788',
+        },
+      },
+    }),
+  ],
   [
     'GET',
     /^\/stores\/([^/]+)$/,
@@ -867,6 +993,66 @@ export const screens = [
   { id: 'admin-stores', group: '어드민', title: '판매자', path: '/admin/stores' },
   { id: 'admin-drivers', group: '어드민', title: '기사', path: '/admin/drivers' },
   { id: 'admin-banner', group: '어드민', title: '배너', path: '/admin/banner' },
+  // 2026-10-30 UI 교체 P0.5: 촬영 목록에 없던 화면을 채운다(ui-stack-migration-plan.md P0.5-1).
+  // /admin은 /admin/stores로 넘어가는 주소라, 기능 플래그가 꺼진 후기·입점 문의·고객 반응·가게 소개는
+  // 지금 404라 넣지 않는다(기능을 켠 모양은 benchmarkScreens).
+  { id: 'admin-audit', group: '어드민', title: '감사 기록', path: '/admin/audit' },
+  { id: 'hub-detail', group: '판매자', title: '거점 상세', path: '/hubs/hub-0001' },
+  { id: 'hub-edit', group: '판매자', title: '거점 수정', path: '/hubs/hub-0001/edit' },
+  { id: 'hub-pickup', group: '판매자', title: '거점 픽업', path: '/hubs/hub-0001/pickup' },
+  { id: 'hub-new', group: '판매자', title: '거점 추가', path: '/hubs/new' },
+  {
+    id: 'settings-option-stocks',
+    group: '판매자',
+    title: '설정 · 옵션 재고',
+    path: '/settings/option-stocks',
+  },
+  {
+    id: 'settings-payout-account',
+    group: '판매자',
+    title: '설정 · 정산 계좌',
+    path: '/settings/payout-account',
+  },
+  {
+    id: 'invite-token',
+    group: '판매자',
+    title: '초대 수락',
+    path: '/invite/visualInviteToken0001',
+    auth: false,
+  },
+  {
+    id: 'invite-token-invalid',
+    group: '판매자',
+    title: '초대 수락 · 잘못된 링크',
+    path: '/invite/visual-invalid-token',
+    auth: false,
+  },
+  { id: 'login-error', group: '판매자', title: '로그인 오류', path: '/login/error', auth: false },
+  // 모달이 열린 상태 — 같이 쓰는 기간의 CSS 우선순위 회귀는 열린 상태에서 드러난다(P2a 판정 범위).
+  {
+    id: 'modal-order-hold',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 보류',
+    path: '/orders/order-round-preparing',
+    steps: [{ click: '배송 보류' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-order-cancel',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 강제 취소',
+    path: '/orders/order-with-contact',
+    steps: [{ click: '강제 취소' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-round-cancel',
+    group: '판매자 · 모달',
+    title: '회차 상세 · 회차 취소',
+    path: '/sale-rounds/round-scheduled',
+    steps: [{ click: '회차 취소' }],
+    viewport: true,
+  },
 ];
 
 /**
