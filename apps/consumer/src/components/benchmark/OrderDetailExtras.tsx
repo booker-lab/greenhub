@@ -46,6 +46,8 @@ export default function OrderDetailExtras({
     ? extras.items.filter((item) => item.optionLabel)
     : [];
   const showGift = isFeatureOn('gift') && extras.gift;
+  // 포장 라벨: 선물이면 보내는 분 이름과 같으므로 선물 칸에서 함께 알린다.
+  const packageLabel = isFeatureOn('option-sheet') && !showGift ? extras.packageLabel : null;
   const reorderable =
     reorderOn && currentRound?.status === 'OPEN'
       ? extras.items
@@ -62,6 +64,7 @@ export default function OrderDetailExtras({
   if (
     optionLines.length === 0 &&
     !showGift &&
+    !packageLabel &&
     !reviewsOn &&
     !reorderOn &&
     !(isFeatureOn('care-guide') && REVIEWABLE.has(status))
@@ -71,7 +74,7 @@ export default function OrderDetailExtras({
 
   return (
     <Stack gap="md" mb="lg">
-      {(optionLines.length > 0 || showGift) && (
+      {(optionLines.length > 0 || showGift || packageLabel) && (
         <Paper p="md" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
           <Stack gap={4}>
             {optionLines.map((item) => (
@@ -79,6 +82,7 @@ export default function OrderDetailExtras({
                 {nameOf(item.id)} · {item.optionLabel}
               </Text>
             ))}
+            {packageLabel && <Text size="sm">포장 라벨 · {packageLabel}</Text>}
             {showGift && extras.gift && (
               <Stack gap={2} mt={optionLines.length > 0 ? 6 : 0}>
                 <Text size="sm" fw={700}>
@@ -88,7 +92,10 @@ export default function OrderDetailExtras({
                 {extras.gift.recipientPhone && (
                   <Text size="sm">받는 분 연락처 · {extras.gift.recipientPhone}</Text>
                 )}
-                <Text size="sm">보내는 분 · {extras.gift.senderName}</Text>
+                <Text size="sm">
+                  보내는 분 · {extras.gift.senderName}
+                  {isFeatureOn('option-sheet') && extras.packageLabel ? ' (포장 라벨로 붙여요)' : ''}
+                </Text>
                 {extras.gift.cardMessage && (
                   <Text size="sm">카드 문구 · "{extras.gift.cardMessage}"</Text>
                 )}
