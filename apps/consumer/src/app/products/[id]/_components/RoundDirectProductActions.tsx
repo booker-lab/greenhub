@@ -70,7 +70,6 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
           optionChoiceIds: selection.choiceIds,
           optionLabel: selection.label,
           optionPriceDelta: selection.priceDelta,
-          ...(selection.text ? { optionText: selection.text } : {}),
         }
       : { price: roundProduct.item.roundPrice };
   }

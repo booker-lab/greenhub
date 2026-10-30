@@ -34,6 +34,8 @@ const DETAIL_FIELDS = [
   'requestNote',
   // 벤치마킹 비교 기능: 선물 정보(없으면 응답에 키가 없다).
   'gift',
+  // 포장 겉면 라벨 문구(없으면 응답에 키가 없다).
+  'packageLabel',
 ] as const;
 
 const DELIVERY_HOLD_FIELDS = [

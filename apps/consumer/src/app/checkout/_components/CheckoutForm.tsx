@@ -23,6 +23,7 @@ import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
 import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';
 import GiftFields, { type GiftState } from '@/components/benchmark/GiftFields';
+import PackageLabelFields, { type PackageLabelState } from '@/components/benchmark/PackageLabelFields';
 
 const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
@@ -54,10 +55,11 @@ export interface CheckoutFormProps {
     deliveryMethod: DeliveryMethod;
     requestedDeliveryDate?: string;
   };
-  /** 벤치마킹 비교 기능(도착 시각·선물). 회차 결제에서만 넘긴다. */
+  /** 벤치마킹 비교 기능(도착 시각·선물·포장 라벨). 회차 결제에서만 넘긴다. */
   benchmark?: {
     arrivalLabel?: string | null;
     gift?: { value: GiftState; onChange: (next: GiftState) => void };
+    packageLabel?: { value: PackageLabelState; onChange: (next: PackageLabelState) => void };
   };
 }
 
@@ -342,6 +344,7 @@ export default function CheckoutForm({
           <GiftFields
             value={benchmark.gift.value}
             onChange={benchmark.gift.onChange}
+            senderIsPackageLabel={Boolean(benchmark.packageLabel)}
             phoneSlot={
               giftOn ? (
                 <TextInput
@@ -359,6 +362,10 @@ export default function CheckoutForm({
               ) : null
             }
           />
+        )}
+        {isRoundCheckout && benchmark?.packageLabel && !giftOn && (
+          // 포장 라벨(무료): 선물이면 보내는 분 이름이 라벨이라 이 칸을 숨긴다.
+          <PackageLabelFields value={benchmark.packageLabel.value} onChange={benchmark.packageLabel.onChange} />
         )}
         {isRoundCheckout && onRequestNoteChange && (
           <Textarea
