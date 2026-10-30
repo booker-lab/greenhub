@@ -547,6 +547,9 @@ export async function main(
     case 'vercel':
       if (!FRONTEND_APPS.includes(options.app))
         throw new Error('--app은 consumer|seller|driver 중 하나여야 합니다.');
+      // 오타(예: --require-build=yes)가 조용히 일반 배포가 되지 않도록 true·false만 받는다.
+      if (!['true', 'false', undefined].includes(options['require-build']))
+        throw new Error('--require-build는 true 또는 false여야 합니다.');
       return deployVercel({
         app: options.app,
         sha,

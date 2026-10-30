@@ -346,6 +346,28 @@ test('main: 자격 증명이 없거나 인자가 틀리면 요청 전에 멈춘�
   );
   await assert.rejects(main(['railway', '--sha=bd159830'], { env: {}, fetchImpl }), /40자리/);
   await assert.rejects(main(['deploy-all', `--sha=${SHA}`], { env: {}, fetchImpl }), /명령은/);
+  await assert.rejects(
+    main(['vercel', `--sha=${SHA}`, '--app=consumer', '--require-build=yes'], {
+      env: { VERCEL_PRODUCTION_TOKEN: 't' },
+      fetchImpl,
+    }),
+    /--require-build는 true 또는 false/,
+  );
+});
+
+test('main: vercel --require-build=true만 생략 규칙을 건너뛰고 false는 평소 배포다', async () => {
+  for (const [flag, expected] of [
+    ['--require-build=true', true],
+    ['--require-build=false', false],
+  ]) {
+    const { impl, calls } = vercelFetch(['READY']);
+    await main(['vercel', `--sha=${SHA}`, '--app=consumer', flag], {
+      env: { VERCEL_PRODUCTION_TOKEN: 't' },
+      fetchImpl: impl,
+      sleep: noSleep,
+    });
+    assert.equal(new URL(calls[0].url).searchParams.has('skipIgnoreBuildStep'), expected, flag);
+  }
 });
 
 const DIGEST = `sha256:${'a'.repeat(64)}`;
@@ -640,4 +662,49 @@ test('cloudrun: 제한 시간 안에 Ready가 정해지지 않으면 트래픽�
     /제한 시간 안에 Ready가 되지 않았습니다/,
   );
   assert.deepEqual(trafficCalls(gcloud.calls), []);
+});
+
+function readDeployWorkflow() {
+  return readFileSync(
+    fileURLToPath(new URL('../../.github/workflows/production-deploy.yml', import.meta.url)),
+    'utf8',
+  );
+}
+
+test('workflow: require_build는 기본 none이고 고른 앱의 vercel 배포에만 --require-build=true를 넘긴다', () => {
+  const source = readDeployWorkflow();
+  const input = /^ {6}require_build:\n(?:^ {8}.*\n)+/m.exec(source)?.[0] ?? '';
+  assert.match(input, /^ {8}default: none$/m);
+  for (const option of ['none', 'consumer', 'seller', 'driver', 'all']) {
+    assert.match(input, new RegExp(`^ {10}- ${option}$`, 'm'), option);
+  }
+  assert.match(source, /^ {6}REQUIRE_BUILD: \$\{\{ inputs\.require_build \}\}$/m);
+  // 프런트를 배포하지 않는 scope에서 고르면 gate에서 멈춘다.
+  assert.match(
+    source,
+    /"\$REQUIRE_BUILD" != 'none' && "\$SCOPE" != 'all' && "\$SCOPE" != 'frontends'/,
+  );
+
+  const calls = source.split('\n').filter((line) => line.includes('production-deploy.mjs vercel'));
+  assert.equal(calls.length, 1);
+  assert.ok(calls[0].includes('--require-build="$require_build"'), calls[0]);
+  assert.match(
+    source,
+    /require_build=false\n\s+if \[\[ "\$REQUIRE_BUILD" == 'all' \|\| "\$REQUIRE_BUILD" == "\$app" \]\]; then require_build=true; fi/,
+  );
+});
+
+test('workflow: expect_portone_channels는 env로만 받아 값이 있을 때 post-deploy-smoke에 넘긴다', () => {
+  const source = readDeployWorkflow();
+  assert.match(
+    source,
+    /^ {6}EXPECT_PORTONE_CHANNELS: \$\{\{ inputs\.expect_portone_channels \}\}$/m,
+  );
+  // 입력값을 run 스크립트에 직접 끼워 넣지 않는다(셸 주입 방지).
+  const runLines = source.split('\n').filter((line) => !/^\s+[A-Z_]+: \$\{\{/.test(line));
+  assert.ok(!runLines.some((line) => line.includes('inputs.expect_portone_channels')));
+  assert.match(
+    source,
+    /if \[\[ -n "\$EXPECT_PORTONE_CHANNELS" \]\]; then expect\+=\(--expect-portone-channels="\$EXPECT_PORTONE_CHANNELS"\); fi/,
+  );
 });

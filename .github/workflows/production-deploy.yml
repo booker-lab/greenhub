@@ -9,6 +9,9 @@ name: Production deploy
 #   같은 SHA 원격 회차 E2E 통과 확인 → Firestore 인덱스(READY까지 대기) → API(Railway 또는 Cloud Run, /health commit 확인)
 #   → 프런트 3개(Vercel production, 변경 없는 앱은 빌드 생략) → Firestore·Storage 규칙 → post-deploy-smoke
 # scope로 일부만 다시 실행할 수 있다(예: API만 늦었을 때 api).
+# 프런트 환경 변수만 바꾸고 같은 SHA로 다시 배포할 때는 require_build로 그 앱의 빌드 생략 규칙을 건너뛰고,
+# PortOne 채널을 바꿨으면 expect_portone_channels로 consumer 번들의 채널 키를 확인한다
+# (docs/specs/ops/portone-live-channel-switch.md).
 #
 # 1회 준비(저장소 Settings → Environments → production → Environment secrets):
 #   RAILWAY_TOKEN                         Railway 프로젝트 Settings → Tokens에서 production 환경용 project token
@@ -52,6 +55,22 @@ on:
         options:
           - railway
           - cloudrun
+      require_build:
+        description: '빌드 생략 규칙을 건너뛰고 반드시 새로 빌드할 프런트(환경 변수만 바꾼 같은 SHA 재배포). 평소에는 none'
+        required: true
+        type: choice
+        default: none
+        options:
+          - none
+          - consumer
+          - seller
+          - driver
+          - all
+      expect_portone_channels:
+        description: '배포 뒤 consumer 번들의 PortOne 채널 키가 모두 이 앞부분 중 하나로 시작해야 한다(쉼표로 나눔, 예: channel-key-1234abcd). 비우면 확인 안 함'
+        required: false
+        type: string
+        default: ''
       approval:
         description: '사용자가 채팅에서 이 SHA의 운영 배포를 승인했습니다.'
         required: true
@@ -86,9 +105,10 @@ jobs:
           APPROVAL: ${{ inputs.approval }}
           SHA: ${{ inputs.sha }}
           SCOPE: ${{ inputs.scope }}
+          REQUIRE_BUILD: ${{ inputs.require_build }}
         run: |
           set -euo pipefail
-          printf 'sha=%s scope=%s actor=%s ref=%s\n' "$SHA" "$SCOPE" "$ACTOR" "$REF"
+          printf 'sha=%s scope=%s require_build=%s actor=%s ref=%s\n' "$SHA" "$SCOPE" "$REQUIRE_BUILD" "$ACTOR" "$REF"
           if [[ "$EVENT_NAME" != 'workflow_dispatch' ]]; then
             echo 'workflow_dispatch로만 운영 배포를 실행합니다.' >&2; exit 1
           fi
@@ -104,6 +124,10 @@ jobs:
           fi
           if [[ ! "$SHA" =~ ^[0-9a-f]{40}$ ]]; then
             echo 'SHA는 40자리 소문자 16진수여야 합니다.' >&2; exit 1
+          fi
+          # 프런트를 배포하지 않는 scope에서 require_build를 고르면 아무 일도 하지 않으므로 멈춘다.
+          if [[ "$REQUIRE_BUILD" != 'none' && "$SCOPE" != 'all' && "$SCOPE" != 'frontends' ]]; then
+            echo "require_build=$REQUIRE_BUILD는 scope all·frontends에서만 쓸 수 있습니다." >&2; exit 1
           fi
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -152,6 +176,8 @@ jobs:
       SHA: ${{ inputs.sha }}
       SCOPE: ${{ inputs.scope }}
       API_PLATFORM: ${{ inputs.api_platform }}
+      REQUIRE_BUILD: ${{ inputs.require_build }}
+      EXPECT_PORTONE_CHANNELS: ${{ inputs.expect_portone_channels }}
       FIREBASE_PROJECT: green-e4fe3
       # scripts/release/api-hosts.mjs의 CLOUD_RUN_PRODUCTION과 같아야 한다.
       CLOUD_RUN_IMAGE_REPOSITORY: asia-northeast3-docker.pkg.dev/green-e4fe3/greenhub/api
@@ -212,7 +238,7 @@ jobs:
             printf 'production Environment 비밀값이 없습니다: %s\n' "${missing[*]}" >&2; exit 1
           fi
           {
-            echo "## 운영 배포 \`$SHA\` (scope: $SCOPE, API: $API_PLATFORM)"
+            echo "## 운영 배포 \`$SHA\` (scope: $SCOPE, API: $API_PLATFORM, 강제 빌드: $REQUIRE_BUILD)"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -343,8 +369,11 @@ jobs:
         run: |
           set -euo pipefail
           # Vercel Hobby는 동시 빌드 1개라 consumer부터 차례로 배포한다(consumer가 규칙보다 먼저 나가야 한다).
+          # require_build로 고른 앱만 생략 규칙을 건너뛰고, 그래도 생략되면 실패한다. 나머지는 평소처럼 배포한다.
           for app in consumer seller driver; do
-            result="$(node scripts/release/production-deploy.mjs vercel --sha="$SHA" --app="$app")"
+            require_build=false
+            if [[ "$REQUIRE_BUILD" == 'all' || "$REQUIRE_BUILD" == "$app" ]]; then require_build=true; fi
+            result="$(node scripts/release/production-deploy.mjs vercel --sha="$SHA" --app="$app" --require-build="$require_build")"
             echo "$result"
             echo "- $app(Vercel): \`$result\`" >> "$GITHUB_STEP_SUMMARY"
             printf 'vercel\t%s\n' "$result" >> "$RUNNER_TEMP/deploy-results.tsv"
@@ -382,6 +411,8 @@ jobs:
           if [[ "$SCOPE" == 'all' || "$SCOPE" == 'api' ]]; then expect=(--expect-sha="$SHA"); fi
           # Cloud Run 배포면 그 API를 확인한다(전환 전에는 프런트가 아직 Railway를 본다).
           if [[ "$API_PLATFORM" == 'cloudrun' ]]; then expect+=(--api="$CLOUD_RUN_API_BASE"); fi
+          # PortOne 채널을 바꾼 배포면 consumer 번들의 채널 키가 기대값인지 본다(키 값은 출력하지 않는다).
+          if [[ -n "$EXPECT_PORTONE_CHANNELS" ]]; then expect+=(--expect-portone-channels="$EXPECT_PORTONE_CHANNELS"); fi
           status=0
           node scripts/release/post-deploy-smoke.mjs "${expect[@]}" > /tmp/smoke.txt 2>&1 || status=$?
           cat /tmp/smoke.txt
