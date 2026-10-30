@@ -55,7 +55,6 @@ node scripts/visual/start.mjs seller --now 2026-10-30T00:00:00+09:00  # 기준 �
 - fixture의 다가오는 회차 일정은 이 시각 기준 상대값이다(`hoursFromNow`). 날짜가 지나도 "예정" 화면이 그대로 찍힌다.
 - `shots.mjs`는 브라우저 시계를 이 시각에 고정하고(`page.clock.setFixedTime`, 타이머는 돈다), CSS 애니메이션을 멈춘 채 찍는다.
 - 다른 날 찍은 캡처와 비교하려면 두 번 모두 같은 `--now`로 서버를 띄운다. 기준 시각이 다르면 `diff.mjs`가 비교하지 않는다.
-- 서버 시간대도 한국이어야 한다. 브라우저는 `Asia/Seoul`로 찍는데 서버(next dev)가 UTC면 서버가 그린 시각 글자(기사 배송판 `수거 오전 06:00` 등)가 브라우저와 달라 hydration 오류로 정상 촬영 판정에서 떨어진다. 시간대가 UTC인 컨테이너에서는 `TZ=Asia/Seoul node scripts/visual/start.mjs driver`처럼 띄운다.
 
 ## 자동 캡처와 확인판
 
@@ -71,7 +70,6 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
-- 들어오는 전환(높이·위치가 움직이는 알림 등)이 있는 화면은 `freezeTransitions: true`로 CSS 전환을 끄고 연다(예: 기사 `toast-status-uncertain`). 전환 중에 합성 레이어로 그려진 그림이 끝난 뒤에도 남아, 같은 코드도 찍을 때마다 1px씩 달라지기 때문이다. 끝난 상태만 찍으므로 화면 결과는 같다. 끄는 규칙은 페이지를 열 때와 누르기 직전 두 번 넣는다(처음 규칙이 hydration 중에 빠질 수 있다).
 - **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
 - 캡처는 `%TEMP%\greenhub-visual\<app>\shots\<label>\`에 PNG와 `manifest.json`으로 남는다.
   - `manifest.json`에는 화면별 최종 주소, 콘솔 오류, fixture가 없는 API 경로가 함께 기록된다.
@@ -109,7 +107,6 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 - 픽셀은 하나라도 다르면 차이다. `--tolerance <0~255>`는 채널 차이 허용치이고 결과에 기록된다. 기본 0이다.
   - 실측(2026-10-30, 판매자 129장을 같은 커밋에서 두 번): 128장은 완전히 같았고, 1장(상품 수정 태블릿)에서 입력칸 둥근 모서리 4px의 안티앨리어싱이 채널 값 1만큼 흔들렸다. 그래서 UI 교체 PR 판정은 `--tolerance 1`로 한다. 이때도 채널 값 2를 바꾼 1px은 차이로 잡힌다.
   - 그 밖의 값으로 바꾸려면 같은 커밋 두 번 비교로 근거를 만들고 PR에 적는다.
-- 브라우저는 `--disable-partial-raster`로 띄운다. 바뀐 영역만 다시 그리는 최적화가 켜져 있으면 같은 화면도 앞서 그린 이력에 따라 안티앨리어싱이 달라진다(실측 2026-10-31: 기사 배송 중 상세 PC의 외곽선 버튼 모서리 3px, 채널 차이 2가 6번 중 2번 나옴 → 끄면 12번 모두 같음). 이 인자로 기사 36장·소비자 66장·판매자 129장을 같은 커밋에서 두 번 찍어 모두 같았다(판매자 2장은 next dev가 메모리 한도로 스스로 재시작한 순간에 걸려 다시 찍었고, 다시 찍은 것은 같았다).
 - 기준 시각이 같아도 서버는 실제 시각으로 그린다. 작업 전·후를 한국 날짜가 같은 날 찍는다(자정을 넘기면 서버가 그린 날짜 글자가 달라질 수 있다).
 - UI 교체 PR의 판정 규칙(허용하지 않는 차이 등)은 `docs/specs/frontend/ui-stack-migration-plan.md` §7을 따른다.
 
