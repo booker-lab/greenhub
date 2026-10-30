@@ -199,11 +199,11 @@ Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`이 코드와 공개 문서에 반영�
 
 ### 8. UI 교체 동결 (Mantine → shadcn/ui)
 
-상태: `DECIDED` — 2026-10-30 사용자 확정(`docs/specs/frontend/ui-stack-migration-plan.md` §8·§10 M2).
+상태: `DECIDED` — 2026-10-30 사용자 결정(`docs/specs/frontend/ui-stack-migration-plan.md` §8·§10 M2, 같은 날 다시 정함).
 
-첫 회차 배송(12/1) 전에는 UI 교체 작업 중 P0(E2E 선택자, 판매자 앱에 ARIA 속성만 더함)·P0.5(증명 도구, 프런트 빌드를 일으키지 않는 경로만)만 `main`에 병합한다. LIVE 출시 후보 SHA를 정하는 시점(늦어도 주문 오픈 3일 전)부터 배송 완료 다음 날(12/2)까지는 수정·revert만 병합하고, P1(`packages/ui`) 이후 교체는 12/2부터 병합한다. 릴리스 세션은 배포 전에 운영 SHA와의 차이에 교체 코드가 없는지 확인한다. 회차가 다시 미뤄지면 구간이 함께 움직인다.
+첫 회차(11/22 주문·12/1 배송 일정)는 UI 교체가 끝난 뒤로 미룬다. 회차 일정 변경은 운영 데이터라 사용자가 한다. 교체는 단계마다 증명이 끝나는 대로 `main`에 병합한다. 카카오페이 심사·LIVE 결제 전환·실결제 1건 확인이 끝날 때까지는 소비자 앱 화면만 묶는다(소비자 동결).
 
-도구 강제(P0.5): 상태 파일 `docs/release/ui-migration-freeze.json`(현재 `pre-candidate`)을 `scripts/release/freeze-guard.mjs`가 읽는다. PR CI `UI 교체 동결` job(`ci-ok`에 포함)이 base SHA의 상태로 교체 흔적을 막고, `production-deploy.yml`이 `candidate` 구간에 후보 SHA 계열만 배포하게 한다. **릴리스 세션이 LIVE 출시 후보 SHA를 정하면 같은 때 상태 파일을 `candidate`와 그 SHA로 바꾸는 커밋을 병합하고, 12/2에 `open`으로 바꾼다.**
+도구 강제: 상태 파일 `docs/release/ui-migration-freeze.json`(현재 `consumer-freeze`)을 `scripts/release/freeze-guard.mjs`가 읽는다. PR CI `UI 교체 동결` job(`ci-ok`에 포함)이 base SHA의 상태로 `apps/consumer`의 교체 흔적과 `packages/ui/src/theme.ts`·`style.css` 수정을 막는다. **사용자가 심사·LIVE·실결제 확인이 끝났다고 알려 주면 상태를 `open`으로 바꾸는 커밋을 병합한다.** 다음 회차 일정을 잡으면 그 회차 기준으로 `pre-candidate`·`candidate`를 다시 쓴다(계획 §8 "회차 기준 동결"). 소비자 동결 중의 운영 배포는 소비자 빌드가 바뀌지 않았는지 확인한다.
 
 ## HISTORICAL / CLOSED BY REL-STATE-01
 
