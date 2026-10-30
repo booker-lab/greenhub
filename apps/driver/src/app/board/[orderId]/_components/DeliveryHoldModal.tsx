@@ -2,9 +2,13 @@
 
 import { apiPathSegment } from '@greenhub/shared';
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
+import { CloseIcon, closeButtonClassName } from '@greenhub/ui/components/close-button';
+import { cn } from '@greenhub/ui/lib/utils';
 import {
   Dialog,
+  DialogBody,
   DialogClose,
+  DialogHeader,
   DialogOverlay,
   DialogPortal,
   DialogTitle,
@@ -12,7 +16,6 @@ import {
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { AppButton } from '@/components/app-button';
-import { CloseIcon } from '@/components/close-icon';
 import {
   CheckboxField,
   NumberField,
@@ -310,25 +313,25 @@ export function DeliveryHoldModal({
       }}
     >
       <DialogPortal>
-        {/* ① 외형 유지: Mantine Modal(centered, size md 440px, 화면 여백 5vw·5dvh, radius 16, 그림자 xl).
-            하단 탭(z 100) 위에 덮도록 Mantine과 같은 z 200을 쓴다. */}
+        {/* 머리·닫기·본문은 packages/ui Dialog(Mantine Modal 구조)를 쓴다. 하단 탭(z 100) 위를 덮도록 Mantine과 같은
+            z 200을 써야 하는데 DialogContent는 오버레이·뷰포트 z가 50으로 고정이라 풀어서 둔다. 가운데 정렬은 flex
+            뷰포트 대신 m-auto로 한다(flex로 두면 Mantine 화면과 라디오 원 가장자리 안티앨리어싱이 1~4 다르게 그려진다). */}
         <DialogOverlay className="z-[200]" />
         <DialogPrimitive.Popup
           data-slot="dialog-content"
-          className="fixed inset-0 z-[200] m-auto h-fit max-h-[90dvh] w-[min(440px,90vw)] overflow-y-auto rounded-[16px] bg-white text-base/[1.55] text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none"
+          className="fixed inset-0 z-[200] m-auto flex h-fit max-h-[90dvh] w-[min(440px,90vw)] flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none"
         >
-          <header className="sticky top-0 z-[1000] flex min-h-[60px] items-center justify-between rounded-t-[16px] bg-white p-4 pe-[11px]">
-            <DialogTitle className="m-0 p-0 text-base leading-none font-normal text-black">
-              배송 보류 기록
-            </DialogTitle>
-            <DialogClose
-              aria-label="닫기"
-              className="relative ms-auto inline-flex size-7 min-h-7 min-w-7 cursor-pointer appearance-none items-center justify-center rounded-[16px] border-0 bg-transparent p-0 leading-none text-[#495057] select-none hover:bg-[#f8f9fa]"
-            >
-              <CloseIcon size="70%" />
-            </DialogClose>
-          </header>
-          <div className="p-4 pt-0">
+          <DialogHeader>
+            <DialogTitle className="m-0 p-0 text-black">배송 보류 기록</DialogTitle>
+          </DialogHeader>
+          {/* preflight 없이 연결한 앱이라 버튼 기본 테두리·여백을 지운다. */}
+          <DialogClose
+            aria-label="닫기"
+            className={cn(closeButtonClassName, 'appearance-none border-0 p-0')}
+          >
+            <CloseIcon />
+          </DialogClose>
+          <DialogBody>
             <div className="flex flex-col gap-4">
               <RadioGroupField
                 label="보류 유형"
@@ -390,7 +393,7 @@ export function DeliveryHoldModal({
                 </AppButton>
               </div>
             </div>
-          </div>
+          </DialogBody>
         </DialogPrimitive.Popup>
       </DialogPortal>
     </Dialog>

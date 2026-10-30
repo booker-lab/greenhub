@@ -3,7 +3,7 @@
 import { Toast as ToastPrimitive } from '@base-ui/react/toast';
 import { ToastProvider, toast } from '@greenhub/ui/components/toast';
 import type * as React from 'react';
-import { CloseIcon } from './close-icon';
+import { CloseIcon } from '@greenhub/ui/components/close-button';
 
 // 알림은 packages/ui의 toast 관리자(toast.add)로 띄운다. 여기서는 그 알림을 Mantine Notification과 같은
 // 모양으로 그린다(① 외형 유지, ui-stack-migration-plan.md §7): 오른쪽 아래, 폭 440px까지, 알림 사이 16px,
@@ -41,7 +41,7 @@ function ToastList() {
         aria-label="닫기"
         className="relative inline-flex size-7 min-h-7 min-w-7 cursor-pointer appearance-none items-center justify-center rounded-[16px] border-0 bg-transparent p-0 leading-none text-[#495057] select-none hover:bg-[#f8f9fa]"
       >
-        <CloseIcon size={16} />
+        <CloseIcon style={{ width: 16, height: 16 }} />
       </ToastPrimitive.Close>
     </ToastPrimitive.Root>
   ));
