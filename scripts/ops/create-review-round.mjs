@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 결제사(카카오페이) 연동 심사의 구매 테스트용 회차 1개를 운영 매장에 만든다(owner 수동 실행 전용 유지보수 도구).
+ * 결제사(카카오페이·PG·카드사) 연동 심사의 구매 테스트용 회차 1개를 운영 매장에 만든다(owner 수동 실행 전용 유지보수 도구).
  *
  * 배경(2026-10-28 결정): 판매자 앱은 카카오 로그인 계정이라 운영자가 대신 로그인해 회차를 만들 수 없다.
  * 심사 담당자가 결제창까지 가 보려면 주문이 열린 회차가 필요하므로, API `SaleRoundsService.createRound`가 쓰는
@@ -12,8 +12,10 @@
  *   ROUND_STORE_ID    매장 id(UUID)
  *   ROUND_MODE        check(그 매장의 회차 목록만 조회, 기본) | create(생성)
  *   ROUND_NAME        create 필수. 회차 이름(40자 이하, 제어문자 금지)
- *   ROUND_PRODUCT_ID  create 필수. 회차에 넣을 상품 id(UUID). 이 매장 상품이어야 하고 공동구매(group) 상품은 받지 않는다.
- *   ROUND_PRICE       선택. 회차 가격(원, 정수). 비우면 상품의 현재 가격
+ *   ROUND_PRODUCT_ID  create 필수. 회차에 넣을 상품 id(UUID) 1~5개를 ,로 구분(적은 순서가 진열 순서). 이 매장 상품이어야
+ *                     하고 공동구매(group) 상품은 받지 않는다. PG·카드사 입점 심사는 배송 상품 3개 이상을 요구한다.
+ *   ROUND_PRICE       선택. 회차 가격(원, 정수). 비우면 상품의 현재 가격. 상품이 여럿이면 같은 순서로 ,로 구분하고
+ *                     빈 칸은 그 상품의 현재 가격
  *   ROUND_SCHEDULE    create 필수. 한국 시간 5개를 |로 구분: 주문시작|주문마감|경매|배송시작|배송종료
  *                     (각 'YYYY-MM-DD HH:mm'). API와 같은 순서 규칙: 시작 < 마감 <= 경매 <= 배송시작 < 배송종료.
  *                     주문 기간은 30일 이하(심사용이므로).
@@ -27,7 +29,7 @@
  *
  * check: 매장의 회차를 주문 시작 최신순으로 이름·상태·주문 기간과 함께 낸다(읽기 전용).
  * create: 같은 이름의 살아 있는 회차(취소·완료가 아닌)가 있으면 아무것도 바꾸지 않고 exit 1. 아니면 한 트랜잭션으로
- *   saleRounds/{uuid}(status SCHEDULED)와 saleRoundItems/{uuid}(상품 1개, displayOrder 0)를 만들고 auditLogs에
+ *   saleRounds/{uuid}(status SCHEDULED)와 saleRoundItems/{uuid}(상품마다 1개, displayOrder는 적은 순서)를 만들고 auditLogs에
  *   sale_round.review_created_by_owner_maintenance를 남긴다.
  * 정리: 심사가 끝나면 판매자 앱 회차 상세의 "회차 취소"로 정리한다(테스트 결제라 실제 환불은 없다).
  */
@@ -55,6 +57,7 @@ export const MAX_LIMIT = 10;
 export const NAME_MAX_LENGTH = 40;
 export const MAX_ORDER_WINDOW_DAYS = 30;
 export const MAX_PRICE = 10_000_000;
+export const MAX_PRODUCTS = 5;
 export const ROUND_QUERY_LIMIT = 50;
 export const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -161,24 +164,36 @@ export function readInputs(env) {
       `ROUND_NAME은 1~${NAME_MAX_LENGTH}자이고 제어문자를 포함할 수 없습니다.`,
     );
   }
-  const productId = String(env.ROUND_PRODUCT_ID ?? '').trim();
-  if (!UUID_PATTERN.test(productId)) {
-    throw new CreateReviewRoundError('ROUND_PRODUCT_ID가 비었거나 UUID 형식이 아닙니다.');
+  const productIds = String(env.ROUND_PRODUCT_ID ?? '')
+    .split(',')
+    .map((id) => id.trim());
+  if (productIds.length > MAX_PRODUCTS || productIds.some((id) => !UUID_PATTERN.test(id))) {
+    throw new CreateReviewRoundError(
+      `ROUND_PRODUCT_ID는 UUID 1~${MAX_PRODUCTS}개를 ,로 구분해 적어야 합니다.`,
+    );
+  }
+  if (new Set(productIds).size !== productIds.length) {
+    throw new CreateReviewRoundError('ROUND_PRODUCT_ID에 같은 상품을 두 번 적을 수 없습니다.');
   }
   const priceRaw = String(env.ROUND_PRICE ?? '').trim();
-  let price = null;
-  if (priceRaw) {
-    price = Number(priceRaw);
+  const priceParts = priceRaw ? priceRaw.split(',').map((part) => part.trim()) : [];
+  if (priceRaw && priceParts.length !== productIds.length) {
+    throw new CreateReviewRoundError('ROUND_PRICE는 비우거나 상품 수만큼 ,로 구분해 적어야 합니다.');
+  }
+  const items = productIds.map((productId, index) => {
+    const part = priceParts[index] ?? '';
+    if (!part) return { productId, price: null };
+    const price = Number(part);
     if (!Number.isInteger(price) || price < 1 || price > MAX_PRICE) {
       throw new CreateReviewRoundError(`ROUND_PRICE는 1~${MAX_PRICE} 사이 정수(원)여야 합니다.`);
     }
-  }
+    return { productId, price };
+  });
   return {
     mode,
     storeId,
     name,
-    productId,
-    price,
+    items,
     schedule: parseSchedule(env.ROUND_SCHEDULE),
     limits: parseLimits(env.ROUND_LIMITS),
   };
@@ -231,6 +246,7 @@ export function buildItemDocument({
   product,
   roundPrice,
   saleLimitQuantity,
+  displayOrder = 0,
   now,
 }) {
   return {
@@ -244,7 +260,7 @@ export function buildItemDocument({
     saleLimitQuantity,
     reservedQuantity: 0,
     orderedQuantity: 0,
-    displayOrder: 0,
+    displayOrder,
     status: 'ACTIVE',
     createdAt: now,
     updatedAt: now,
@@ -373,26 +389,49 @@ export async function run({
     }
 
     const roundId = randomUUID();
-    const itemId = randomUUID();
+    const itemIds = inputs.items.map(() => randomUUID());
     const nowTimestamp = Timestamp.fromMillis(nowMillis);
     const roundRef = db.doc(`saleRounds/${roundId}`);
-    const itemRef = db.doc(`saleRoundItems/${itemId}`);
-    const productRef = db.doc(`products/${inputs.productId}`);
     let created = null;
 
     await db.runTransaction(async (tx) => {
-      const productSnap = await tx.get(productRef);
-      if (!productSnap.exists || productSnap.data()?.storeId !== inputs.storeId) {
-        throw new CreateReviewRoundError('회차 상품을 찾을 수 없습니다(없거나 다른 매장 상품).');
+      // 트랜잭션은 읽기를 모두 마친 뒤 쓴다.
+      const products = [];
+      for (const [index, { productId }] of inputs.items.entries()) {
+        const productSnap = await tx.get(db.doc(`products/${productId}`));
+        const label = `${index + 1}번째 상품`;
+        if (!productSnap.exists || productSnap.data()?.storeId !== inputs.storeId) {
+          throw new CreateReviewRoundError(
+            `회차 상품을 찾을 수 없습니다(${label}: 없거나 다른 매장 상품).`,
+          );
+        }
+        const product = productSnap.data();
+        if (product.saleType === 'group') {
+          throw new CreateReviewRoundError(
+            `공동구매(group) 상품은 회차 상품으로 넣지 않습니다(${label}).`,
+          );
+        }
+        products.push(product);
       }
-      const product = productSnap.data();
-      if (product.saleType === 'group') {
-        throw new CreateReviewRoundError('공동구매(group) 상품은 회차 상품으로 넣지 않습니다.');
-      }
-      const roundPrice = inputs.price ?? product.price;
-      if (!Number.isInteger(roundPrice) || roundPrice < 1) {
-        throw new CreateReviewRoundError('회차 가격을 정할 수 없습니다. ROUND_PRICE를 지정하세요.');
-      }
+      const items = inputs.items.map(({ productId, price }, index) => {
+        const roundPrice = price ?? products[index].price;
+        if (!Number.isInteger(roundPrice) || roundPrice < 1) {
+          throw new CreateReviewRoundError(
+            `회차 가격을 정할 수 없습니다(${index + 1}번째 상품). ROUND_PRICE를 지정하세요.`,
+          );
+        }
+        return buildItemDocument({
+          itemId: itemIds[index],
+          roundId,
+          storeId: inputs.storeId,
+          productId,
+          product: products[index],
+          roundPrice,
+          saleLimitQuantity: inputs.limits.itemLimit,
+          displayOrder: index,
+          now: nowTimestamp,
+        });
+      });
       const round = buildRoundDocument({
         roundId,
         storeId: inputs.storeId,
@@ -402,19 +441,9 @@ export async function run({
         limits: inputs.limits,
         now: nowTimestamp,
       });
-      const item = buildItemDocument({
-        itemId,
-        roundId,
-        storeId: inputs.storeId,
-        productId: inputs.productId,
-        product,
-        roundPrice,
-        saleLimitQuantity: inputs.limits.itemLimit,
-        now: nowTimestamp,
-      });
       tx.create(roundRef, round);
-      tx.create(itemRef, item);
-      created = { round, item };
+      for (const item of items) tx.create(db.doc(`saleRoundItems/${item.id}`), item);
+      created = { round, items };
     });
 
     const auditId = randomUUID();
@@ -426,13 +455,15 @@ export async function run({
       detail: {
         storeId: inputs.storeId,
         roundId,
-        roundItemId: itemId,
-        productId: inputs.productId,
+        items: created.items.map((item) => ({
+          roundItemId: item.id,
+          productId: item.productId,
+          roundPrice: item.roundPrice,
+        })),
         status: 'SCHEDULED',
         schedule: inputs.schedule,
         limits: created.round.limits,
-        saleLimitQuantity: created.item.saleLimitQuantity,
-        roundPrice: created.item.roundPrice,
+        saleLimitQuantity: inputs.limits.itemLimit,
       },
       createdAt: nowTimestamp,
     });
@@ -443,9 +474,11 @@ export async function run({
     for (const key of SCHEDULE_KEYS) print(`${key}: ${created.round.schedule[key]}`);
     print(`deliveryRegion: ${created.round.deliveryRegion.city}`);
     print(
-      `limits: item ${created.item.saleLimitQuantity}, addresses ${created.round.limits.maxDeliveryAddresses}, quantity ${created.round.limits.maxItemQuantity}`,
+      `limits: item ${inputs.limits.itemLimit}, addresses ${created.round.limits.maxDeliveryAddresses}, quantity ${created.round.limits.maxItemQuantity}`,
     );
-    print(`product: ${created.item.productNameSnapshot} (${created.item.roundPrice}원)`);
+    for (const item of created.items) {
+      print(`product: ${item.productNameSnapshot} (${item.roundPrice}원)`);
+    }
     print(detailLine(`roundIdPrefix: ${idPrefix(roundId)}`));
     return 0;
   } catch (error) {

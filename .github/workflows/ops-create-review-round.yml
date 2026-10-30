@@ -29,12 +29,12 @@ on:
         type: string
         default: ''
       product_id:
-        description: create 필수. 회차에 넣을 상품 id(UUID, 이 매장 상품 1개)
+        description: create 필수. 회차에 넣을 상품 id(UUID, 이 매장 상품 1~5개를 ,로 구분. 적은 순서가 진열 순서)
         required: false
         type: string
         default: ''
       price:
-        description: 회차 가격(원). 비우면 상품의 현재 가격
+        description: 회차 가격(원). 비우면 상품의 현재 가격. 상품이 여럿이면 같은 순서로 ,로 구분(빈 칸은 현재 가격)
         required: false
         type: string
         default: ''
