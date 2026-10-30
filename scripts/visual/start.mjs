@@ -18,7 +18,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APPS, RUNTIME_FILE } from './apps.mjs';
+import { APPS, DEV_RESTARTS_FILE, RUNTIME_FILE } from './apps.mjs';
 import { resolveVisualNow, VISUAL_NOW_ENV } from './clock.mjs';
 import {
   assertEmulatorPortsFree,
@@ -256,8 +256,18 @@ const child = spawn(
 );
 const nextLog = fs.createWriteStream(logs.next, { flags: 'a' });
 let announced = false;
+// next dev는 힙 사용량이 상한의 80%를 넘으면 스스로 재시작한다. 재시작 중·직후에 찍힌 화면은 연결 오류나
+// 덜 그려진 상태(로딩)일 수 있으므로 횟수를 파일로 남겨 shots.mjs가 그 사이 찍은 화면을 정상 판정에서 뺀다.
+const devRestartsFile = path.join(runDir, DEV_RESTARTS_FILE);
+let devRestarts = 0;
+fs.writeFileSync(devRestartsFile, '0');
 const onOutput = (chunk) => {
   nextLog.write(chunk);
+  const restarts = String(chunk).match(/approaching the used memory threshold/g)?.length ?? 0;
+  if (restarts) {
+    devRestarts += restarts;
+    fs.writeFileSync(devRestartsFile, String(devRestarts));
+  }
   if (!announced && /Ready in/.test(String(chunk))) {
     announced = true;
     console.log(

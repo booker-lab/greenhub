@@ -11,7 +11,7 @@ export function expectedPathOf(screen) {
 
 /**
  * 한 캡처의 문제 목록. 비어 있으면 정상이다.
- * @param {{ missing?: string[], errors?: string[], failed?: string[], stepNote?: string | null, unsupported?: string, finalPath?: string }} shot
+ * @param {{ missing?: string[], errors?: string[], failed?: string[], stepNote?: string | null, unsupported?: string, devRestarted?: string, finalPath?: string }} shot
  * @param {string} expectedPath
  */
 export function shotProblems(shot, expectedPath) {
@@ -21,6 +21,7 @@ export function shotProblems(shot, expectedPath) {
   if (shot.failed?.length) problems.push(`API 요청 실패: ${shot.failed.join(', ')}`);
   if (shot.stepNote) problems.push(shot.stepNote);
   if (shot.unsupported) problems.push(shot.unsupported);
+  if (shot.devRestarted) problems.push(shot.devRestarted);
   if (shot.finalPath !== expectedPath) {
     problems.push(`주소 다름: ${shot.finalPath ?? '(없음)'} (기대 ${expectedPath})`);
   }

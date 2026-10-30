@@ -14,7 +14,7 @@ import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { APPS, RUNTIME_FILE } from './apps.mjs';
+import { APPS, DEV_RESTARTS_FILE, RUNTIME_FILE } from './apps.mjs';
 import { VISUAL_NOW_ENV } from './clock.mjs';
 import { expectedPathOf, shotProblems } from './soundness.mjs';
 
@@ -48,6 +48,18 @@ if (!app) {
 }
 const base = option('base', `http://127.0.0.1:${app.port}`);
 const runtimeFile = path.join(os.tmpdir(), 'greenhub-visual', appName, RUNTIME_FILE);
+const devRestartsFile = path.join(os.tmpdir(), 'greenhub-visual', appName, DEV_RESTARTS_FILE);
+/** start.mjs가 센 next dev 메모리 재시작 횟수(파일이 없으면 0). */
+function devRestartCount() {
+  try {
+    return Number(fs.readFileSync(devRestartsFile, 'utf8')) || 0;
+  } catch {
+    return 0;
+  }
+}
+// 바로 앞 화면을 찍기 시작할 때의 재시작 횟수. 재시작 직후 다음 화면은 다시 컴파일하는 동안 덜 그려진(로딩)
+// 채로 찍힐 수 있어서(판매자 회차 상세 데스크톱에서 확인) 이 화면과 바로 앞 화면 사이의 재시작을 모두 본다.
+let restartsAtPreviousStart = devRestartCount();
 const runtime = fs.existsSync(runtimeFile) ? JSON.parse(fs.readFileSync(runtimeFile, 'utf8')) : {};
 const apiBase = `http://${new URL(base).hostname}:${app.apiPort}`;
 if (!runtime.visualNow) {
@@ -273,6 +285,7 @@ async function shootOnce(context, screen, viewportName) {
   // 카운트다운·"오늘" 같은 시각 글자가 캡처마다 달라지지 않게 브라우저 시계를 기준 시각에 고정한다.
   await page.clock.setFixedTime(new Date(runtime.visualNow));
   const t0 = Date.now();
+  const restartsAtStart = devRestartCount();
   await page.goto(`${base}${screen.path}`, { waitUntil: 'load', timeout: 180_000 });
   // 데이터 요청이 끝나고 화면이 안정될 때까지 잠시 기다린다.
   // 에뮬레이터 모드는 Firestore 구독이 연결을 계속 열어 두어 networkidle이 오지 않으므로 짧게 기다린다.
@@ -307,8 +320,13 @@ async function shootOnce(context, screen, viewportName) {
     ...(screen.firestore && !runtime.emulator
       ? { unsupported: 'Firestore 에뮬레이터 없음(운영 빌드·--phone)' }
       : {}),
+    // 이 화면이나 바로 앞 화면을 찍는 사이 next dev가 메모리 재시작을 했으면 연결 오류나 덜 그려진 화면일 수 있다.
+    ...(devRestartCount() !== restartsAtPreviousStart
+      ? { devRestarted: 'next dev 메모리 재시작 중·직후 촬영(이 화면만 다시 찍는다)' }
+      : {}),
     ms: Date.now() - t0,
   };
+  restartsAtPreviousStart = restartsAtStart;
   await page.close();
   return { shot, png };
 }
