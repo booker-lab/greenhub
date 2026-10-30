@@ -56,7 +56,7 @@ exports.FEATURES = [
     { key: 'order-success-guide', group: 'ux', title: '주문 완료 안내', summary: '주문 완료 화면에 실제 도착 날짜와 받는 방법, 다음 할 일을 보여준다' },
     { key: 'reorder', group: 'ux', title: '다시 주문하기', summary: '지난 주문의 상품이 이번 회차에 있으면 한 번에 다시 담는다' },
     { key: 'purchase-history', group: 'ux', title: '구매한 꽃', summary: 'MY에서 지금까지 산 꽃을 상품별로 모아 마지막 구매일과 구매 횟수를 보여준다' },
-    { key: 'option-sheet', group: 'matrix', title: '옵션 시트', summary: '화분·문구 라벨·토퍼 같은 옵션을 아래에서 올라오는 시트에서 고르고, 문구는 직접 쓴다' },
+    { key: 'option-sheet', group: 'matrix', title: '옵션 시트', summary: '화분·축하 토퍼 같은 옵션을 아래에서 올라오는 시트에서 고르고, 결제할 때 포장 라벨 문구(무료)를 넣을지 고른다' },
     { key: 'seller-store', group: 'matrix', title: '판매자 소개', summary: '판매자 화면과 상세에 누가 골라 보내는지 판매자 소개를 보여준다' },
     { key: 'quality-guarantee', group: 'matrix', title: '품질 보장 라벨', summary: '보장 대상 상품에 라벨을 달고 보장 조건을 모아 보여준다' },
     { key: 'reviews', group: 'matrix', title: '후기·별점', summary: '배송 받은 주문에 후기를 남기고, 카드와 상세에 별점·후기 수를 보여준다' },

@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { normalizeGift, resolveSelectedOptions } from './round-order-extras';
+import { normalizeGift, resolvePackageLabel, resolveSelectedOptions } from './round-order-extras';
 
 const OPTIONS = [
   {
@@ -20,13 +20,14 @@ const OPTIONS = [
   },
 ];
 
-const MESSAGE_OPTIONS = [
+// 2026-10-30 전 상품 문서처럼 needsText가 남아 있는 축하 토퍼 묶음
+const LEGACY_TOPPER_OPTIONS = [
   {
-    id: 'msg',
-    name: '문구',
+    id: 'topper',
+    name: '축하 토퍼',
     choices: [
-      { id: 'none', label: '문구 없음', priceDelta: 0 },
-      { id: 'topper', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+      { id: 'none', label: '토퍼 없음', priceDelta: 0 },
+      { id: 'promotion', label: '祝 昇進', priceDelta: 5000, needsText: true },
     ],
   },
 ];
@@ -56,24 +57,33 @@ describe('회차 주문 옵션 계산', () => {
   });
 });
 
-describe('문구 옵션(라벨·토퍼)', () => {
-  it('문구가 필요한 선택지는 한 줄로 정리한 문구를 스냅샷에 넣는다', () => {
-    const result = resolveSelectedOptions(MESSAGE_OPTIONS, ['topper'], ' 개업\n축하해요 ');
+describe('축하 토퍼 옵션', () => {
+  it('예전 상품 문서에 needsText가 남아 있어도 문구 없이 고른 선택지로만 계산한다', () => {
+    const result = resolveSelectedOptions(LEGACY_TOPPER_OPTIONS, ['promotion']);
     expect(result.priceDelta).toBe(5000);
-    expect(result.selected[0]).toMatchObject({ choiceId: 'topper', text: '개업 축하해요' });
+    expect(result.selected).toEqual([
+      { groupId: 'topper', groupName: '축하 토퍼', choiceId: 'promotion', choiceLabel: '祝 昇進', priceDelta: 5000 },
+    ]);
+  });
+});
+
+describe('포장 라벨 문구', () => {
+  const GIFT = { recipientName: '박꽃님', recipientPhone: '010-9876-5432', senderName: '김그린', cardMessage: '' };
+
+  it('선물이 아니면 넣은 문구를 한 줄로 정리하고, 없거나 비면 라벨 없음이다', () => {
+    expect(resolvePackageLabel(' 그린\n플라워 ', null)).toBe('그린 플라워');
+    expect(resolvePackageLabel(undefined, null)).toBeNull();
+    expect(resolvePackageLabel('   ', null)).toBeNull();
   });
 
-  it('문구가 비거나 20자를 넘으면 거부한다', () => {
-    expect(() => resolveSelectedOptions(MESSAGE_OPTIONS, ['topper'], '  ')).toThrow(BadRequestException);
-    expect(() => resolveSelectedOptions(MESSAGE_OPTIONS, ['topper'], '가'.repeat(21))).toThrow(
-      BadRequestException,
-    );
+  it('20자를 넘으면 잘라 내지 않고 거부한다', () => {
+    expect(resolvePackageLabel('가'.repeat(20), null)).toBe('가'.repeat(20));
+    expect(() => resolvePackageLabel('가'.repeat(21), null)).toThrow(BadRequestException);
   });
 
-  it('문구가 필요 없는 선택이면 보낸 문구를 버린다', () => {
-    expect(resolveSelectedOptions(MESSAGE_OPTIONS, ['none'], '쓸모없는 문구').selected[0]).not.toHaveProperty(
-      'text',
-    );
+  it('선물이면 보내는 분 이름이 라벨이고, 라벨 문구를 따로 보내면 거부한다', () => {
+    expect(resolvePackageLabel(undefined, GIFT)).toBe('김그린');
+    expect(() => resolvePackageLabel('다른 이름', GIFT)).toThrow(BadRequestException);
   });
 });
 
@@ -83,6 +93,17 @@ describe('선물 정보 정리', () => {
     expect(() =>
       normalizeGift({ recipientName: ' ', recipientPhone: '010-1234-5678', senderName: '김그린', cardMessage: '' }),
     ).toThrow(BadRequestException);
+  });
+
+  it('보내는 분 이름은 포장 라벨이라 20자를 넘으면 잘라 내지 않고 거부한다', () => {
+    expect(() =>
+      normalizeGift({
+        recipientName: '박꽃님',
+        recipientPhone: '010-9876-5432',
+        senderName: `${'가'.repeat(10)}\n${'나'.repeat(10)}`,
+        cardMessage: '',
+      }),
+    ).toThrow('보내는 분 이름은 20자까지 쓸 수 있어요.');
   });
 
   it('받는 분 휴대폰 번호가 틀리면 거부한다', () => {
