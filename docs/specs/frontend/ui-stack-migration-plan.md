@@ -1,7 +1,7 @@
 # Mantine → shadcn/ui + Tailwind CSS v4 + Base UI 교체 계획
 
-> 작성 2026-10-28. 상태: **P0 완료, P1 전**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 1라운드 검토(§11)를 반영한 제안이고 아직 확정 전이다.
-> 화면을 어떻게 바꿀지는 `design-direction.md`(제안)를 따르고, 확정 전까지 시각 계약은 `design-standard.md`다.
+> 작성 2026-10-28. 상태: **P0 작업 브랜치 완료(`main` 미병합), P0.5 전**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 1·2라운드 검토(§11)를 반영한 제안이고 아직 확정 전이다.
+> 화면을 어떻게 바꿀지는 `design-direction.md`(부분 확정)를 따르고, 그 문서에서 확정되지 않은 부분의 시각 계약은 `design-standard.md`다.
 > 이 문서는 `*-plan.md`이므로 교체가 끝나면 역사 자료가 된다. 끝난 뒤의 규칙은 `design-standard.md`와 `packages/ui`가 소유한다.
 
 ## 1. 대상 버전
@@ -15,7 +15,7 @@
 | `@base-ui/react` | 1.9.0 | 옛 이름 `@base-ui-components/react`는 deprecated |
 | `tailwind-merge` / `class-variance-authority` | 3.7.0 / 0.7.1 | `cn()`·variant 정의 |
 | `tw-animate-css` | 1.4.0 | shadcn 기본 애니메이션 |
-| `sonner` | 2.0.8 | 알림(toast) |
+| (알림) | — | `-b base`의 알림은 shadcn `toast`(Base UI Toast, `@base-ui/react`)다. Base UI 문서 목록에 `sonner`는 없다. radix·aria용 `sonner`는 `next-themes`를 같이 설치하므로 쓰지 않는다(§5 다크 모드 없음) |
 | `lucide-react` | 1.63.0 | 이미 consumer·seller가 사용 중 |
 | 비교: `@mantine/core` | 9.7.4 | 현행 |
 
@@ -24,6 +24,7 @@
 ## 2. 현재 범위 (2026-10-28 `main` 기준 직접 집계)
 
 - `@mantine/*`를 import하는 파일: consumer 51, seller 121(어드민 포함), driver 12, `packages/ui` 1. 합계 약 185개.
+- 2026-10-30 다시 세면 seller는 테스트를 뺀 ts/tsx 119개, `@mantine/notifications`는 17개 파일이다. 단계별 범위는 각 PR에서 다시 센다.
 - 많이 쓰는 컴포넌트(import 횟수): Text 128, Stack 103, Box 84, Group 79, Button 75, Paper 55, Container 43, Title 35, TextInput 24, Badge 24, UnstyledButton 19, Textarea 11, Alert 10, SimpleGrid 8, Modal 7, Divider 6.
 - 적게 쓰는 컴포넌트: Select·Radio·Checkbox·Loader·ActionIcon 각 4~5, PasswordInput 3, Card 3, Switch·Skeleton·Anchor 각 2, Stepper(consumer 주문 상세), Progress·NumberInput·List·Drawer·Autocomplete 각 1.
 - `@mantine/notifications`: 16개 파일(seller·driver). `@mantine/hooks`: seller 어드민 2개 파일.
@@ -55,7 +56,16 @@ apps/{consumer,seller,driver}
 
 ## 4. 토큰 대응
 
-P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기존 hex 값을 그대로 쓴다(shadcn 기본은 OKLCH이지만 hex도 유효하다). 값 변경은 `design-direction.md` 확정 뒤 별도 PR로 한다.
+P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기존 hex 값을 그대로 쓴다(shadcn 기본은 OKLCH이지만 hex도 유효하다). 값 변경은 Mantine과 같이 쓰는 동안 `theme.ts`·`style.css`와 새 `globals.css` 양쪽을 한 PR에서 바꿔야 하므로, 소비자 동결(§8)이 끝난 뒤에 한다.
+
+**기존 변수와 이름이 겹친다.** 현행 `style.css`와 shadcn·Tailwind가 같은 이름을 다른 뜻으로 쓴다. 기존 변수를 쓰는 앱 파일(소비자 포함)을 고치지 않도록, 새 쪽이 기존 이름·값에 맞춘다.
+
+| 이름 | 현행 | shadcn·Tailwind | 처리 |
+|---|---|---|---|
+| `--border` | 색이 아니라 `1px solid var(--color-border)` 묶음 값(`style.css`:37). 앱 코드 40곳이 `border: var(--border)`로 쓴다 | 테두리 **색**, `@theme inline { --color-border: var(--border) }` | 새 `globals.css`에서 `--border`를 정의하지 않는다. `--color-border`를 기존과 같은 `#ECEFED`로 직접 둔다. CLI가 `--border`를 써 넣으면 지우고, 그런 정의를 막는 검사를 P1에 둔다 |
+| `--radius-sm` | 8px(`style.css`:34) | `calc(var(--radius) * 0.6)` = 9.6px | `@theme`에서 8px로 고정한다 |
+| `--color-*` (`--color-primary`, `--color-bg` 등) | Mantine 쪽 값 | Tailwind 색 이름 공간 | 같은 이름은 같은 값으로만 정의한다. 값을 바꿀 때는 양쪽을 한 PR에서 바꾼다 |
+| 줄 높이 | Mantine 기본 xs 1.4·sm 1.45·md 1.55·lg 1.6·xl 1.65(`@mantine/core` default theme, `theme.ts`는 덮어쓰지 않음) | Tailwind 기본(`text-sm` 1.4286 등) | `--text-*--line-height`를 Mantine 값으로 같이 고정한다 |
 
 | 현행 변수 | shadcn 의미 변수 | Tailwind 예 |
 |---|---|---|
@@ -102,7 +112,7 @@ shadcn의 반경 단계(`--radius-sm` = 0.6배 등)는 `--radius` 16에서 계�
 | Button · UnstyledButton · ActionIcon | `Button`(variant: default·outline·ghost, size: default·sm·icon) | 완전히 둥글게, 아이콘 버튼은 `aria-label` 필수 |
 | TextInput · Textarea · PasswordInput | `Field` + `Input` / `Textarea` / `InputGroup` | 오류 문구는 `FieldError`로 입력칸과 연결 |
 | NumberInput | `Input type="number" inputMode="numeric"` 또는 Base UI NumberField | 사용처 1곳 |
-| Select | 휴대폰 폼은 `NativeSelect`, 그 외는 `Select` | 휴대폰에서 OS 기본 선택기가 쓰기 쉽다 |
+| Select | 휴대폰 폼은 `NativeSelect`, 그 외는 `Select` | 휴대폰에서 OS 기본 선택기가 쓰기 쉽다. UI UX Pro Max `shadcn.csv`:21은 native select를 피하라고 하지만 이 결정을 유지한다 |
 | Autocomplete | `Combobox` | 사용처 1곳 |
 | Checkbox · Radio · Switch | `Checkbox` · `RadioGroup` · `Switch` | 결제 확인 체크박스는 E2E 계약 이름을 유지 |
 | Badge | `Badge` + 주문 상태 variant | Badge 한글 잘림 보정은 Mantine 전용이라 사라진다. 교체 뒤 한글 배지를 눈으로 확인한다 |
@@ -113,13 +123,24 @@ shadcn의 반경 단계(`--radius-sm` = 0.6배 등)는 `--radius` 16에서 계�
 | Anchor | `next/link` + 링크 클래스 | |
 | Stepper | 직접 만든다(`ol` + 단계 상태) | shadcn에 없다. consumer 주문 상세 1곳 |
 | List | `ul`·`ol` | |
-| `@mantine/notifications` | `sonner`(`Toaster` + `toast()`) | 16개 파일 |
+| `@mantine/notifications` | shadcn `toast`(Base UI Toast) | 17개 파일. 호출 방식이 달라 파일마다 바꾼다 |
 | `@mantine/hooks` | 직접 작성하거나 React 기본 API | 2개 파일 |
 | MantineProvider · ColorSchemeScript | 제거 | 다크 모드를 지원하지 않으므로 `next-themes`도 넣지 않는다 |
 
 ## 6. 단계
 
-각 단계는 독립적으로 병합할 수 있는 PR(또는 PR 묶음) 하나다. 앞 단계가 병합된 `main`에서 다음 단계를 시작한다.
+각 단계는 독립적으로 병합할 수 있는 PR(또는 PR 묶음)이다. 앞 단계가 병합된 `main`에서 다음 단계를 시작한다. 첫 회차 배송(12/1) 전에 `main`에 넣는 것은 P0~P2뿐이고, 나머지는 브랜치에서 작업하다 동결(§8)이 풀린 뒤 병합한다.
+
+| 단계 | 내용 | `main` 병합 |
+|---|---|---|
+| P0 | E2E 선택자 정리 | 지금(PR 필요) |
+| P0.5 | 증명 도구 | 마지막 출시 전 |
+| P1 | `packages/ui` 기반(새 파일만) | 마지막 출시 전 |
+| P2 | 판매자 앱 연결 + 회차 운영과 무관한 판매자 화면 | 마지막 출시 전 |
+| P3 | 기사 앱 | 12/2 이후 |
+| P4 | 판매자 앱 틀·회차·주문·준비·재고 | 12/2 이후 |
+| P5 | 소비자 앱 | 12/2 이후 |
+| P6 | 정리 | 마지막 |
 
 ### P0. 사전 준비 (Mantine 상태에서)
 - `.mantine-*` 클래스로 요소를 찾던 E2E를 역할·이름 기반 선택자로 바꾼다. Mantine 클래스 이름은 교체와 함께 사라지기 때문이다.
@@ -127,37 +148,62 @@ shadcn의 반경 단계(`--radius-sm` = 0.6배 등)는 `--radius` 16에서 계�
   - 정산 합계 카드는 `정산 합계` group 안의 카드별 group으로 찾는다.
   - 판매자 주문 탭은 `SegmentedTabs`의 `ariaLabel`("주문 상태") group 안의 버튼 글자로 건수를 확인한다.
   - 공동구매 진행률은 `progressbar` 역할로, 성능 회귀의 Badge 확인은 홈 상품 상태 태그 글자로 찾는다.
-  - `driver-design-system.spec.ts`의 `--mantine-color-` 검사는 인라인 스타일에 Mantine 색 변수를 쓰지 말라는 규칙이라 교체 뒤에도 그대로 유효하다. 같은 파일의 카카오 버튼 색(:24-33)·Paper 테두리(:57-69)·하단 바 `borderTop`(:142-158) 검사는 인라인 `style`을 읽으므로 Tailwind 클래스로 바꾸면 동작이 같아도 실패한다. 이 셋은 P2에서 계산된 스타일(`getComputedStyle`) 기준으로 바꾼다.
-- 기준 스크린샷은 따로 보관하지 않는다. `scripts/visual/README.md` 절차대로 각 교체 PR에서 main을 `--label before`, 작업 브랜치를 `--label after`로 찍어 비교한다(에뮬레이터 포트가 `dev:local`과 같아 둘을 동시에 띄우지 않는다).
+- `driver-design-system.spec.ts`의 인증 화면 묶음(`--mantine-color-` 금지, Paper 테두리, 하단 바 `borderTop`)은 `DRIVER_SESSION_COOKIE`가 없으면 건너뛰고(:98) 쿠키 도메인이 운영으로 고정돼 있다(:106). 로컬에서는 실패가 아니라 건너뛰므로 지금은 증거가 되지 못한다. 그중 둘은 인라인 `style`을 읽어 Tailwind 클래스로 바꾸면 깨진다. P3에서 쿠키 도메인을 대상 주소에 맞추고 계산된 스타일 기준으로 바꾼다.
+- 상태: 작업 브랜치에서 끝났다(`d947a78`). `main`에 병합해야 P0.5를 시작할 수 있다.
 
-### P1. 기반 (`packages/ui`와 기사 앱만 연결)
-- `packages/ui`에 Tailwind v4와 shadcn(`-b base`)을 초기화하고 §4 토큰을 넣는다. 처음 쓸 컴포넌트(Button·Input·Field·Card·Badge·Dialog·Sheet·Sonner·Skeleton)를 설치한다. CLI는 먼저 `--dry-run`으로 바뀔 파일을 확인한다.
-- 앱 연결(PostCSS의 `@tailwindcss/postcss`, `globals.css`의 공용 CSS import)은 **기사 앱에만** 한다. Tailwind preflight가 앱 전체에 걸려 "화면 변화 없음"이 보장되지 않기 때문이다. 판매자·소비자 앱은 각자 교체 단계의 첫 PR에서 연결한다.
-- 같이 두는 동안의 CSS 우선순위: Mantine CSS를 cascade layer로 감싸(`@import "..." layer(mantine);`) Tailwind 유틸리티보다 아래에 둔다. Tailwind preflight와 Mantine baseline이 같은 요소를 다르게 초기화하지 않는지 확인한다.
-- 옛 CSS 변수(`--font-size-sm`, `--radius-sm`, `--fw-bold`, `--font-size-md`, `--color-text-disabled` 등)는 P5까지 남긴다. `consumer-design-system.spec.ts` 등이 이 변수를 읽는다.
-- 완료 기준: 기사 앱 스크린샷이 main과 차이 0, 세 앱 `pnpm build` 통과, CSS 번들 크기 증가 기록.
+### P0.5. 증명 도구 (Mantine 상태, 화면·동작 변화 없음)
+2라운드 검토에서 이 계획이 요구하는 증명을 지금 도구로는 실행할 수 없다고 확인됐다. 교체보다 먼저 만든다.
+1. **화면 비교를 기계로 판정한다** (`scripts/visual`)
+   - `shots.mjs`가 Playwright `page.clock`으로 시각을 고정하고, fixture의 회차 시각(`orderCloseAt` 등, 지금은 2026-11-01 같은 절대 시각)을 고정 시각 기준 상대값으로 바꾼다. 1초마다 바뀌는 카운트다운도 고정 시각에서 멈춘다.
+   - 768px 폭을 추가한다(판매자 1100px 이하 배치, `design-direction.md` §5).
+   - before/after PNG를 픽셀로 비교해 "차이 난 화면 목록"과 차이 영역을 내는 비교 명령을 추가한다. 의도한 차이는 PR에 화면별 사유로만 허용한다.
+   - 하네스는 `next dev`로 띄운다. 운영 빌드에서는 로컬 로그인이 꺼지므로(`apps/driver/src/auth.ts`:124) 로그인 화면은 dev로 찍는다. CSS 우선순위가 dev와 다를 수 있으므로 공개 화면은 `next build && next start`로도 찍는다.
+   - 촬영 목록에 없는 화면을 채운다. 기사 배송 보류 모달·사진 촬영·알림, 판매자 `admin/audit`·`admin/reviews`·`hubs/[id]`·`invite/[token]`·`option-stocks`·`payout-account` 등이다.
+2. **로컬 E2E가 실제로 돌았는지 판정한다** (`apps/e2e`)
+   - 지금은 `BASE`를 주지 않으면 운영 주소를 치고(`tests/_helpers/target-url.ts`), 자격 정보가 없으면 많은 spec이 건너뛴 채 통과로 보인다.
+   - 앱별 spec 묶음을 로컬 대상(`dev:local` 또는 운영 빌드)으로만 돌리는 실행 명령을 만든다. 대상이 루프백이 아니면 실패시키고, 원격 게이트처럼 기대 건수·건너뜀 0을 판정한다(`e2e-round-direct.yml`의 "64건 무건너뜀 판정" 참고).
+   - 교체 PR은 `main`에서 같은 명령을 먼저 돌린 기준 결과와 비교한다.
+3. **동결을 CI로 막는다**: PR CI에 경로 검사를 넣어 §8 구간에 막힌 경로를 바꾸는 PR을 실패시킨다. 수정·revert PR은 표시(라벨 등)로 통과시킨다. 구간 날짜는 한 파일에서 읽는다.
+4. **Taste 실행 래퍼**: `inspect.mjs`는 `CHROME_PATH`의 실행 파일을 인자 없이 띄워(`inspect.mjs`:70, `scripts/lib/cdp.mjs`) 컨테이너에서 필요한 `--no-sandbox`를 넘길 수 없다. 래퍼 스크립트를 저장소에 두거나 M4를 따른다.
+- 완료 기준: `main`에서 만든 기준 촬영·기준 E2E 결과가 있고, 같은 커밋을 두 번 찍어 비교하면 차이 0이 나온다.
 
-### P2. 기사 앱 (12개 파일)
-- 가장 작은 앱으로 교체 방식(컴포넌트 대응, sonner, 휴대폰 레이아웃)을 먼저 검증한다.
-- `design-direction.md` D4가 미확정이므로 1단계(외형 유지, §7)만 한다.
-- `driver-design-system.spec.ts`의 인라인 스타일 검사 3개를 계산된 스타일 기준으로 바꾼다(P0 참고).
-- 운영 배포 전에 운영 빌드(`next build && next start`)를 실제 휴대폰에서 기사 계정으로 확인한다(도착 사진·완료 처리·서비스워커). 확인하지 못하면 첫 회차 배송(12/1) 뒤로 미룬다.
+### P1. 기반 (`packages/ui`에 새 파일만 추가)
+- `packages/ui`에 Tailwind v4와 shadcn(`-b base`)을 초기화하고 §4 토큰을 넣는다. 처음 쓸 컴포넌트(Button·Input·Field·Card·Badge·Dialog·Sheet·Toast·Skeleton)를 설치한다. `add`는 `--dry-run`으로 바뀔 파일을 먼저 본다(`init`에는 이 옵션이 없다).
+- 기존 `style.css`·`theme.ts`는 고치지 않는다(첫 회차 배송 전까지 추가만). 어느 앱에도 아직 연결하지 않는다.
+- §4의 이름 충돌 처리를 넣고, 새 `globals.css`에 `--border` 색 정의가 들어오면 실패하는 검사를 둔다.
+- 완료 기준: 세 앱 `pnpm build` 통과, 세 앱 촬영(P0.5)이 `main`과 차이 0. lockfile이 바뀌어 세 앱이 다시 빌드되기 때문이다.
 
-### P3. 판매자·어드민 (121개 파일)
-- 첫 PR에서 판매자 앱을 Tailwind에 연결한다.
-- 여러 PR로 나눈다: 앱 틀(사이드바·상단바) → 회차·주문·준비 → 상품·재고 → 정산·설정 → 어드민.
-- 회차·주문·준비 묶음은 끝까지 교체된 상태로만 첫 회차 전 마지막 출시(§8)에 넣는다. 다 끝내지 못하면 그 묶음은 12/1 배송 뒤로 미룬다. 반쯤 바뀐 준비 화면으로 회차를 운영하지 않기 위해서다.
-- 첫 회차 전에 내보내면 판매자 대표가 실제 계정으로 회차·주문·준비 화면을 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
+### P2. 판매자 앱 연결 + 회차 운영과 무관한 화면
+- 판매자 앱에 Tailwind를 연결한다. Mantine과 같이 쓰는 동안은 preflight 없이 연결한다.
+  ```css
+  @layer theme, base, mantine, components, utilities;
+  @import "tailwindcss/theme.css" layer(theme);
+  @import "tailwindcss/utilities.css" layer(utilities);
+  /* Mantine CSS는 layer(mantine)으로 import */
+  ```
+  preflight가 없으면 Tailwind `border` 유틸리티가 선 모양(`border-style`) 없이 폭만 준다. 새 컴포넌트에 필요한 최소 초기화는 Mantine 화면에 닿지 않게 범위를 좁혀 둔다. 실제 동작은 이 PR에서 판매자 전체 화면 비교로 확인한다.
+- 교체 화면: 어드민 → 설정 → 상품(옵션 재고 제외). 회차·주문·준비·재고와 앱 틀(사이드바·상단바)은 P4다.
+- 1단계(외형 유지, §7)만 한다.
+- 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
-### P4. 소비자 앱 (51개 파일)
-- 첫 회차 배송이 끝나기 전에는 main에 병합하지 않는다(§8). 작업은 브랜치에서 할 수 있다.
-- 첫 PR에서 소비자 앱을 Tailwind에 연결한다.
-- 결제와 무관한 화면(홈·검색·마이페이지·법정 고지) → 결제 동선(상품 상세 → 장바구니 → 결제 → 주문 완료 → 내 주문) 순서로 나눈다. 결제 동선은 실제 결제·환불 1건으로 확인한다. 로컬 E2E는 PortOne을 stub으로 막아 결제창 호출 경로를 확인하지 못한다.
-- 결제·장바구니 단위 테스트(`checkout/page.test.mjs` 등)는 허용한 모듈 밖의 import에서 예외를 던진다. 새 `@greenhub/ui` import마다 테스트 허용 목록을 같이 고친다.
+### P3. 기사 앱 (12개 파일, 12/2 이후 병합)
+- 기사 앱을 연결하고 1단계만 한다(`design-direction.md` D4 미확정).
+- `driver-design-system.spec.ts`의 인증 화면 묶음을 로컬에서도 돌게 고친다(P0 참고).
+- 병합 전에 실제 휴대폰에서 기사 계정으로 확인한다(도착 사진·완료 처리·서비스워커). 휴대폰은 클라우드 컨테이너의 `next start`에 붙을 수 없고, 운영 빌드에서는 로컬 로그인이 꺼진다. 확인 방법(Preview 테스트 로그인 등)은 이 단계 시작 때 정한다.
+
+### P4. 판매자 앱 틀·회차·주문·준비·재고 (12/2 이후 병합)
+- 앱 틀(사이드바·상단바) → 회차·주문·준비 → 재고 → 정산 순서로 나눈다.
+- 다음 회차가 잡혀 있으면, 회차 운영 동선 묶음은 끝까지 교체된 상태로만 그 회차의 마지막 출시에 넣는다. 판매자 대표가 실제 계정으로 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
+
+### P5. 소비자 앱 (51개 파일, 12/2 이후 병합)
+- 첫 PR에서 소비자 앱을 연결한다.
+- 결제와 무관한 화면(홈·검색·마이페이지·법정 고지) → 결제 동선(상품 상세 → 장바구니 → 결제 → 주문 완료 → 내 주문) 순서로 나눈다.
+- 결제 동선은 실제 결제·환불 1건으로 확인한다. 로컬 E2E는 PortOne을 stub으로 막아 결제창 호출 경로를 확인하지 못한다(`consumer-round-direct.spec.ts`).
+- 결제·장바구니 단위 테스트(`checkout/page.test.mjs` 등)는 허용한 모듈 밖의 import에서 예외를 던진다. 새 `@greenhub/ui` import마다 허용 목록을 같이 고친다.
 - 예전 판매(legacy·공동구매) 화면은 컴포넌트만 바꾸고 구성은 바꾸지 않는다(`design-standard.md` §5).
 
-### P5. 정리
-- 세 앱과 `packages/ui`에서 `@mantine/*`, `postcss-preset-mantine`, `postcss-simple-vars`, `theme.ts`, `style.css`의 Mantine 보정을 제거한다.
+### P6. 정리
+- 세 앱과 `packages/ui`에서 `@mantine/*`, `postcss-preset-mantine`, `postcss-simple-vars`, `theme.ts`, `style.css`의 Mantine 보정을 제거한다. §4에서 기존 이름에 맞춰 둔 값(`--border` 묶음 값 등)은 이때 shadcn 방식으로 정리한다.
 - `design-standard.md`의 값 정본 표기(`theme.ts`)를 새 위치로 바꾸고, 앱별 `AGENTS.md`의 글꼴 크기 예외 표를 새 컴포넌트 이름으로 갱신한다.
 - `docs/specs/perf/mantine-treeshaking.md`는 역사 자료로 표시한다.
 
@@ -170,44 +216,58 @@ shadcn의 반경 단계(`--radius-sm` = 0.6배 등)는 `--radius` 16에서 계�
 | C. 화면별 2단계 (제안) | 화면마다 ① 외형 유지 교체 ② 확정된 방향 적용을 따로 한다 | A의 회귀 검출과 B의 진행 속도를 같이 얻는다. ①은 버리는 작업이 아니다 |
 
 C의 규칙:
-- ① 외형 유지 교체: `scripts/visual` before/after에서 **차이가 난 화면 목록이 0**이어야 끝난다. 차이가 남으면 ②로 넘어가지 않는다. 이 단계에는 Taste Skill의 redesign 절차를 적용하지 않는다(그 절차는 스택 교체가 없는 개편을 전제한다, taste `SKILL.md`:493).
-- ② 방향 적용: `design-direction.md`에서 해당 D 결정이 확정됐을 때만 한다. Taste 절차대로 개편 전 기록 → 적용 → 결과 증명(같은 `SKILL.md`:485·502)을 거친다. ①과 ②는 별도 PR이고, 원인이 하나씩이라 전후 비교가 성립한다.
-- 버튼 `#007A43`처럼 전체에 걸리는 확정 값은 ②에서 화면마다 넣지 않고 variant·토큰을 고치는 PR 하나로 적용한다.
-- 구성을 통째로 바꾸는 화면(소비자 홈 도감 타일, 판매자 주문 화면 등)은 ①을 빼고 바로 ②로 갈 수 있다. 이 경우 그 앱 spec을 로컬 E2E로 돌리고, 옛 시각 계약을 검사하는 design-system spec은 같은 PR에서 이유를 적어 고친다.
+- **① 외형 유지 교체**
+  - 끝나는 조건: P0.5의 기계 비교에서 차이 난 화면이 0이거나, 남은 차이마다 PR에 화면별 사유가 있고 사람이 확인판에서 승인했다. 시각 고정·픽셀 비교·화면별 사유 중 하나라도 없으면 끝난 것으로 보지 않는다.
+  - Mantine 보정이 사라져 생기는 차이(Badge 한글 잘림 등)는 사유로 넘기지 말고 맞춘다.
+  - 이 단계에는 Taste Skill을 쓰지 않는다. Taste의 redesign 절차는 스택 교체가 없는 개편을 전제하고(taste `SKILL.md`:493), lint FAIL을 고치면 외형이 바뀌기 때문이다.
+- **② 방향 적용**
+  - `design-direction.md`에서 해당 D 결정이 확정됐고 동결(§8) 구간이 아닐 때만 한다. 첫 회차 배송 전에는 하지 않는다.
+  - Taste 절차의 "dealt direction"은 `design-direction.md`다. `draw.mjs`로 방향을 새로 뽑지 않는다. 개편 전 기록 → 적용 → 결과 증명(`SKILL.md`:485·502)을 따른다. 로그인해야 보이는 화면은 `inspect.mjs`가 열지 못하므로 개편 전후 기록을 `shots.mjs` 촬영으로 대신한다.
+  - ①과 ②는 별도 PR이라 전후 비교의 원인이 하나씩이다.
+- 버튼 `#007A43`처럼 전체에 걸리는 확정 값은 화면마다 넣지 않는다. 토큰·variant를 고치는 PR 하나로 적용하되, Mantine과 같이 쓰는 동안은 `theme.ts`와 새 `globals.css`를 같이 바꾼다. 소비자 앱도 바뀌므로 소비자 동결이 끝난 뒤에 한다.
+- 구성을 통째로 바꾸는 화면(소비자 홈 도감 타일, 판매자 주문 화면 등)은 ①을 건너뛸 수 있다. 단 그 앱 spec이 P0.5 로컬 실행기에서 건너뜀 0으로 돌 때만이다. 판매자 주문 spec은 자격 정보가 없으면 건너뛰므로, 지금 상태로는 건너뛸 수 없다.
 
 ## 8. 일정 제약
 
-첫 회차는 주문이 2026-11-22 10:00에 열리고 12/1 00:00~09:00에 배송한다(2026-10-28 결정, `docs/BACKLOG.md` PORTONE-CHANNEL-CHECK). 카카오페이 가맹점 심사는 심사용 "11월 특별 회차"(10/28~11/11)로 진행 중이지만 8/31 신청 뒤 아직 "심사중"이다. 심사 뒤 LIVE 채널 전환·운영 배포·실결제 확인이 11/22 전에 끝나지 않으면 회차를 다시 미룬다. 따라서 동결은 날짜가 아니라 **상태**로 정한다.
+첫 회차는 주문이 2026-11-22 10:00에 열리고 12/1 00:00~09:00에 배송한다(2026-10-28 결정, `docs/BACKLOG.md` PORTONE-CHANNEL-CHECK). 카카오페이 가맹점 심사는 심사용 "11월 특별 회차"(10/28~11/11)로 진행 중이지만 8/31 신청 뒤 아직 "심사중"이다. 승인 뒤에도 카드사 심사가 남고, PortOne 접수 90일 자동 철회 기한이 약 11/29다. 심사 뒤 LIVE 채널 전환·운영 배포·실결제 확인이 11/22 전에 끝나지 않으면 회차를 다시 미룬다. 따라서 동결은 날짜가 아니라 **상태**로 정한다.
 
-운영 배포는 `main`에 있는 SHA 하나로 프런트 세 앱을 함께 내보낸다(`production-deploy.yml`의 SHA 확인과 "프런트 3개 배포" 단계). 앱 하나만 골라 동결할 수 없으므로, 동결은 **무엇을 `main`에 병합하는가**로 정한다. `main`에 들어간 교체 코드는 그 뒤의 모든 배포(결제 핫픽스 포함)에 실린다.
+운영 배포는 `main`에 있는 SHA 하나로 프런트 세 앱을 차례로 내보내고, 바뀐 것이 없는 앱은 빌드를 생략한다(`production-deploy.yml`, `scripts/vercel/ignore-build.mjs`). 다음 변경은 소비자 앱을 다시 빌드하게 한다.
+- `apps/consumer`, 의존 패키지 `packages/ui`·`packages/shared`
+- 루트 `package.json`·`pnpm-lock.yaml`·`pnpm-workspace.yaml`·`tsconfig.base.json`·`.vercelignore`·`scripts/vercel/`
+- 빌드 생략 규칙이 분류하지 않은 경로(예: `.claude/`). 분류되지 않은 경로가 바뀌면 세 앱 모두 다시 빌드한다
 
-| 구간 | 소비자 교체 | 판매자·기사 교체 |
-|---|---|---|
-| 지금 ~ 첫 회차 배송 완료(12/1 09:00, 환불 처리 여유를 두고 12/2) | `main` 병합 금지(브랜치 작업만) | 아래 두 구간을 따른다 |
-| 지금 ~ 첫 회차 전 마지막 출시(11/19) | — | 병합 가능. 단 병합하는 순간 어느 배포에든 실릴 수 있으므로, 병합 전에 로컬 증명(§9)을 모두 끝낸다 |
-| 11/19 마지막 출시 이후 ~ 배송 완료 | — | 병합 금지. 수정 배포만 한다 |
+앱 하나만 골라 동결할 수 없으므로, 동결은 **무엇을 `main`에 병합하는가**로 정한다. `main`에 들어간 코드는 그 뒤의 모든 배포에 실린다.
 
-- 11/19 출시: 그 SHA로 원격 회차 E2E를 통과한 뒤 배포한다. 실패하면 로컬에서 고쳐 1회 다시 돌릴 여유로 11/20~21을 남긴다.
-- 회차가 다시 미뤄지면 구간이 함께 움직인다: "마지막 출시 = 주문 오픈 3일 전", "병합 재개 = 배송 완료 다음 날".
-- 수정 배포 직전에는 운영 SHA와 비교해 `apps/consumer`·`packages/ui`·`pnpm-lock.yaml` 차이가 수정분뿐인지 확인한다. lockfile은 세 앱을 모두 다시 빌드하게 하는 입력이다(`scripts/vercel/ignore-build.mjs`).
-- 이 동결은 문서 규칙일 뿐 도구가 막지 않는다(10/24에 동결 중 배포가 있었다, `docs/memory.md`). M2를 확정하면 `docs/memory.md`의 현재 릴리스 상태에 동결 구간을 적어, 릴리스 세션이 배포 전에 확인하게 한다.
+**마지막 출시**: 첫 회차 전 마지막 출시는 LIVE 채널 전환과 #426을 담은 출시 하나로 본다. 교체 병합은 "LIVE 출시 후보 SHA를 정할 때"와 "주문 오픈 3일 전(11/19)" 중 이른 쪽에 멈춘다.
+
+| 구간 | 병합할 수 있는 것 |
+|---|---|
+| 지금 ~ 마지막 출시 후보 확정 | P0~P2. 단 소비자 앱을 다시 빌드하게 하는 변경(위 목록)은 세 앱 촬영이 `main`과 차이 0일 때만. `apps/consumer`와 `packages/ui`의 기존 파일 수정은 금지 |
+| 후보 확정 ~ 첫 회차 배송 완료 다음 날(12/2) | 수정과 revert만. 교체·도구·스킬 병합은 금지. 후보 SHA의 원격 E2E가 실패하면 그 수정은 병합할 수 있다 |
+| 12/2 이후 | P3~P6을 순서대로 병합한다 |
+
+- 롤백: 운영을 직전 배포 ID로 되돌리면 `main`에는 원인 코드가 남는다. 다음 배포에 다시 실리지 않게 revert PR을 병합한다(동결 중에도 허용).
+- 수정 배포 직전에는 운영 SHA와 비교해 위 목록의 경로 차이가 수정분뿐인지 확인한다.
+- LIVE 채널 키처럼 환경 변수만 바꾼 배포는 같은 SHA면 소비자 빌드가 생략되면서 성공으로 기록된다. 이때는 `production-deploy.mjs vercel --require-build=true`로 새 빌드를 강제하거나, 생략을 실패로 보고 다시 배포한다.
+- 회차가 다시 미뤄지면 구간이 함께 움직인다("마지막 출시 = 주문 오픈 3일 전", "병합 재개 = 배송 완료 다음 날"). 소비자 동결이 한없이 길어지면(카카오페이 심사 철회 등) 그 시점에 이 표를 사람이 다시 정한다.
+- 강제: P0.5의 CI 경로 검사가 막는다. 문서 규칙만으로는 10/24에 동결 중 배포가 있었다(`docs/memory.md`). M2를 확정하면 `docs/memory.md`의 "현재 release residual"에 구간을 적어 릴리스 세션이 배포 전에 확인하게 한다.
 
 ## 9. 단계별 검증
 
-- 로컬: `pnpm typecheck`, `pnpm lint`(Biome), 바뀐 앱의 단위 테스트, `pnpm build`, 필요하면 운영 빌드(`next start`)로 화면 확인.
-- 화면: `scripts/visual/` before/after 스크린샷과 `design-direction.md` §7 검수 기준. `shots.mjs`는 지금 390·1280px만 찍는다. 판매자의 1100px 이하 배치(`design-direction.md` §5)를 보려면 P3 전에 768px 촬영을 추가한다. 판정은 사람이 확인판에서 눈으로 하며 픽셀 자동 비교는 없다.
-- E2E: **교체 PR마다 바뀐 앱의 spec 전체를 로컬 E2E로 돌린다.** 원격 회차 E2E는 `consumer-round-direct`·`seller-sale-rounds`·`driver-direct-delivery`와 세션 spec만 돌기 때문에(`.github/workflows/e2e-round-direct.yml`), 장바구니·결제·어드민·design-system spec은 로컬 실행이 유일한 증거다. 원격 Preview·E2E는 병합을 모은 최종 `main` SHA로 배포 직전에 1회만 실행한다(`AGENTS.md` §0-9).
-- 디자인 검수: Taste `inspect.mjs`는 Chromium이 필요하다. 클라우드 컨테이너에는 `/opt/pw-browsers/chromium`이 있어 `CHROME_PATH`로 넘기면 돈다(`--no-sandbox` 필요).
+- 로컬: `pnpm typecheck`, `pnpm lint`(Biome), 바뀐 앱의 단위 테스트, `pnpm build`.
+- 화면: P0.5의 촬영·기계 비교(390·768·1280px, 시각 고정)와 `design-direction.md` §7 검수 기준. `packages/ui`나 루트 설정을 바꾸는 PR은 세 앱을 모두 찍는다.
+- E2E: 교체 PR마다 바뀐 앱의 spec 묶음을 P0.5 로컬 실행기로 돌린다. 대상은 루프백, 건너뜀 0, `main` 기준 결과와 비교한다. 원격 회차 E2E는 `consumer-round-direct`·`seller-sale-rounds`·`driver-direct-delivery`와 세션 spec만 돌기 때문에(`.github/workflows/e2e-round-direct.yml`), 장바구니·결제·어드민·design-system spec은 로컬 실행이 유일한 증거다. 원격 Preview·E2E는 병합을 모은 최종 `main` SHA로 배포 직전에 1회만 실행한다(`AGENTS.md` §0-9).
+- 디자인 검수(② 단계만): Taste `inspect.mjs`는 로그인 없이 열리는 화면만 검사할 수 있다. 앱 화면 lint는 `lint.mjs --app`을 명시한다(`.taste-skill/direction.json`이 없으면 page 모드가 되어 `h-px` 구분선 등이 FAIL로 나온다). 결과는 권고로 쓰고 병합 게이트로 쓰지 않는다. 컨테이너에서는 `--no-sandbox` 래퍼가 필요하다(P0.5).
 - 성능: 앱별 JS·CSS 번들 크기를 교체 전후로 기록한다(`docs/specs/perf/bundle-optimization.md` 기준).
 
 ## 10. 결정이 필요한 것
 
-| # | 결정 | 제안 (1라운드 반영) |
+| # | 결정 | 제안 (2라운드 반영) |
 |---|---|---|
-| M1 | 화면 변경을 같이 할지(§7) | C. 화면별 2단계: ① 외형 유지 교체(전후 차이 0) ② 확정된 방향 적용 |
-| M2 | 동결(§8) | 상태·병합 기준. 소비자 교체는 첫 회차 배송 완료까지 `main` 병합 금지. 판매자·기사 교체는 11/19 마지막 출시까지만 병합 |
-| M3 | 교체 순서(§6) | P1(`packages/ui`+기사 연결) → 기사 → 판매자·어드민 → 소비자(결제 외 → 결제 동선) |
-| M4 | 스킬을 저장소에 넣을지 | Taste Skill만 `.claude/skills/`에 넣는다(`evals` 제외, `.taste-skill/`은 `.gitignore`). 확정 방향은 `design-direction.md`이고, 교체 PR에서는 `lint`·`inspect`·`critique`만 쓰며 `draw.mjs`로 방향을 새로 뽑지 않는다는 규칙을 함께 둔다. UI UX Pro Max는 넣지 않는다: `ui-styling`이 Radix `asChild`·Tailwind v3 설정·HSL 값을 전제해 `-b base`와 어긋나고, `design` 스킬이 외부 이미지 API 키를 쓰며, `--persist`가 두 번째 디자인 기준 문서를 만든다 |
+| M1 | 화면 변경을 같이 할지(§7) | C. 화면별 2단계. ①은 시각 고정·픽셀 비교·화면별 사유로 판정하고 Taste를 쓰지 않는다. ②는 `design-direction.md`를 방향으로 삼아 첫 회차 배송 뒤에만 한다 |
+| M2 | 동결(§8) | 상태·병합 기준. 마지막 출시 = LIVE 출시, 후보 확정(늦어도 11/19) 뒤로는 수정·revert만 병합. 소비자를 다시 빌드하게 하는 변경은 세 앱 촬영 차이 0일 때만. P0.5의 CI 경로 검사로 강제 |
+| M3 | 교체 순서(§6) | 첫 회차 전: P0 → P0.5 증명 도구 → P1 `packages/ui`(새 파일만) → P2 판매자 연결(preflight 없음) + 어드민·설정·상품. 12/2 이후: P3 기사 → P4 판매자 회차·주문·준비·재고 → P5 소비자 → P6 정리 |
+| M4 | 스킬을 저장소에 넣을지 | Taste Skill만 넣는다(`evals` 제외, `.taste-skill/`은 `.gitignore`, `--no-sandbox` 래퍼 포함). 넣는 시점은 12/2 이후이거나, 그 전이면 빌드 생략 규칙에 `.claude/`를 등록하는 변경과 함께 마지막 출시 전에 넣는다. 쓰임은 ② 단계의 권고 검수로 한정한다. UI UX Pro Max는 넣지 않는다. 핵심 `shadcn.csv`는 Base UI 기준이라 참고할 수 있지만, `ui-styling` 하위 스킬이 Radix `asChild`·Tailwind v3 설정·HSL 값을 전제하고, `design` 스킬이 외부 이미지 API 키를 쓰며, `--persist`가 두 번째 디자인 기준 문서를 만든다. 우리 결정과 다른 규칙(native select 금지 `shadcn.csv`:21, 다크 모드 필수 :7)도 있다 |
 
 ## 11. 검토 기록
 
@@ -225,3 +285,25 @@ C의 규칙:
 - 당시 제안에서 틀린 사실: 카카오페이 심사가 11/11에 끝난다고 가정했다(실제로는 아직 심사중). 앱별로 배포를 동결할 수 있다고 가정했다(실제로는 `main` SHA 하나로 세 앱이 함께 나간다). `driver-design-system.spec.ts`가 교체 뒤에도 유효하다고 했다(인라인 스타일 검사 3개는 깨진다). 화면 촬영 폭을 390·768·1440으로 적었다(실제 390·1280).
 - 검토자 주장 중 틀린 것: A·C가 "이 컨테이너에 Chrome이 없어 `inspect.mjs`를 못 쓴다"고 했으나 `/opt/pw-browsers/chromium`이 있고 시안 검수 1~3라운드에서 실제로 썼다.
 - 검토자 제안 중 채택하지 않은 것: 동결 중 핫픽스를 운영 SHA 태그에서 딴 브랜치로 내보내자는 안. 배포 workflow가 SHA가 `origin/main` 이력에 있는지 확인하므로 쓸 수 없다. 대신 병합 기준 동결로 `main`을 깨끗하게 둔다.
+
+### 2라운드 (2026-10-30)
+
+새 검토자 셋(관점은 1라운드와 같음)이 1라운드 반영안을 그대로 실행한다고 보고 채점하고, 각자 가장 강한 대안과 비교했다.
+
+| # | 반영안 (A / B / C) | 대안 (A / B / C) | 판정 |
+|---|---|---|---|
+| M1 | 5.3 / 6.6 / 6.1 | 7.0 / 7.15 / 7.05 | 셋 다 수정 |
+| M2 | 6.8 / 5.8 / 6.8 | 7.3 / 6.9 / 7.1 | 수정 2, 보완 1 |
+| M3 | 5.7 / 6.5 / 6.5 | 6.7 / 7.2 / 7.2 | 셋 다 수정 |
+| M4 | 6.5 / 7.25 / 6.8 | 7.3 / 7.9 / 7.35 | 셋 다 수정 |
+
+반영한 지적(원본에서 직접 확인함):
+- ①의 "차이 0"을 잴 수단이 없다: 픽셀 비교 없음, 촬영 시각 고정 없음, fixture 회차 시각이 2026-11-01 절대 시각, 카운트다운, `next dev` 촬영 → P0.5 신설.
+- 이름 충돌: `--border`가 묶음 값이고 40곳에서 쓴다, `--radius-sm` 8px 대 9.6px, 줄 높이, layer 순서 미지정 → §4 표, P2 layer 순서.
+- 소비자 동결의 구멍: `packages/ui`·lockfile·분류되지 않은 경로가 소비자를 다시 빌드한다. 11/19 이후 병합 금지와 E2E 실패 수정이 모순된다. LIVE 출시 자리가 없다. revert 규칙이 없다. 환경 변수만 바꾼 배포의 빌드 생략 → §8.
+- 기사 앱 실기기 확인은 운영 빌드에서 로컬 로그인이 꺼지고 Preview 규칙과도 맞지 않아 첫 회차 전에 증명할 수 없다 → 기사·판매자 회차 동선·소비자를 12/2 이후로.
+- 로컬 E2E가 기본으로 운영 주소를 치고 자격 정보가 없으면 건너뛴다. `driver-design-system` 인증 묶음은 운영 도메인 쿠키가 없으면 건너뛴다 → P0.5 로컬 실행기, P0·P3 정정.
+- `inspect.mjs`는 로그인 화면을 열지 못하고 `--no-sandbox`를 넘기지 못한다. `lint`는 `--app`이 필요하다 → §9, M4.
+- 틀린 사실 정정: `sonner`(Base UI에는 Toast), `init --dry-run` 없음, "세 앱을 함께 내보낸다"(바뀌지 않은 앱은 빌드 생략), 핫픽스 확인 경로 목록 누락, `design-direction.md` "(제안)" 표기, P0 `main` 미병합, seller 119·notifications 17개, Mantine에 묶인 판매자 단위 테스트, `memory.md` 절 이름, UI UX Pro Max 제외 근거(핵심 `shadcn.csv`는 Base UI 기준).
+- 채택하지 않은 것: P1에서 기사 앱도 연결하는 안(1라운드 반영안). 판매자 앱 하나로 연결 방식을 먼저 검증한다.
+
