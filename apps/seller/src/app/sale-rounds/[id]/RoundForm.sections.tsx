@@ -1,6 +1,6 @@
 'use client';
 
-import type { Product, SaleRoundDeliveryRegion } from '@greenhub/shared';
+import type { MarketPriceSummary, Product, SaleRoundDeliveryRegion } from '@greenhub/shared';
 import {
   Alert,
   Badge,
@@ -18,6 +18,7 @@ import {
 } from '@mantine/core';
 import { Copy, Link2, PackagePlus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { checkRoundPrice, roundPriceCheckText } from '@/lib/market-price';
 
 export type NumericValue = number | string;
 
@@ -199,10 +200,13 @@ export function ProductsSection({
   onAdd,
   onRemove,
   onUpdate,
+  marketSummaries = {},
 }: {
   items: ItemDraft[];
   availableProducts: readonly Product[];
   busy: boolean;
+  /** 상품별 경매 시세(연결한 상품만). 회차 가격 옆에 예상 매입가를 보여 준다. */
+  marketSummaries?: Readonly<Record<string, MarketPriceSummary | null>>;
   onAdd: (product: Product) => void;
   onRemove: (key: string) => void;
   onUpdate: (
@@ -278,6 +282,10 @@ export function ProductsSection({
                 required
               />
             </SimpleGrid>
+            <RoundPriceMarketHint
+              roundPrice={item.roundPrice}
+              summary={marketSummaries[item.productId]}
+            />
           </Stack>
         </Paper>
       ))}
@@ -322,6 +330,34 @@ export function ProductsSection({
         ))}
       </Stack>
     </FormSection>
+  );
+}
+
+/** 회차 가격과 경매 시세로 낸 예상 매입가 비교. 시세를 연결하지 않은 상품은 아무것도 보이지 않는다. */
+function RoundPriceMarketHint({
+  roundPrice,
+  summary,
+}: {
+  roundPrice: NumericValue;
+  summary: MarketPriceSummary | null | undefined;
+}) {
+  if (!summary) return null;
+  const price = roundPrice === '' ? null : Number(roundPrice);
+  const check = checkRoundPrice(price, summary);
+  const text =
+    roundPriceCheckText(check) ??
+    (summary.recent || summary.latest
+      ? '회차 가격을 넣으면 예상 매입가와 비교해 드려요.'
+      : '아직 이 상품에 맞는 경매 시세가 없어요.');
+  return (
+    <Text
+      style={{
+        fontSize: 'var(--font-size-sm)',
+        color: check.kind === 'below' ? 'var(--color-danger)' : 'var(--color-text-secondary)',
+      }}
+    >
+      경매 시세 · {text}
+    </Text>
   );
 }
 

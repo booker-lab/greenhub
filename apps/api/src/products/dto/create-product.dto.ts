@@ -14,6 +14,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { IsProductImageUrl } from '../validators/product-image-url';
+import { ProductMarketRefDto } from '../../market-prices/dto/market-ref.dto';
 import { ProductExtrasDto } from './product-extras.dto';
 
 /** 원 단위 금액 상한(1억 원). */
@@ -141,4 +142,10 @@ export class CreateProductDto extends ProductExtrasDto {
   @ValidateNested()
   @Type(() => GroupConfigDto)
   groupConfig?: GroupConfigDto;
+
+  /** 따라 볼 경매 시세(판매자 전용). null을 보내면 연결을 지운다. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProductMarketRefDto)
+  marketRef?: ProductMarketRefDto | null;
 }

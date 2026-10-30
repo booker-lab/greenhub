@@ -4,6 +4,7 @@ import { apiPathSegment, FEATURE_KEYS } from '@greenhub/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { apiJson } from '@/lib/api';
+import { marketRefBody } from '@/lib/market-price';
 import { isFeatureOn } from '@/lib/features';
 import type { ConflictWarning } from './AIPreviewPanel';
 import { extrasBody, fillNoticeDefaults, type NoticeStoreDefaults, noticeBody } from './productExtras';
@@ -69,6 +70,7 @@ export function useProductForm({
                 ...(p.extras ?? {}),
                 notice: { ...def.extras.notice, ...(p.extras?.notice ?? {}) },
               },
+              marketRef: { ...def.marketRef, ...(p.marketRef ?? {}) },
             },
             noticeDefaults.current,
           ),
@@ -239,6 +241,14 @@ export function useProductForm({
       return;
     }
     body.notice = notice.body;
+    // 경매 시세 연결은 판매자 전용이라 항상 보낸다. 고치기에서 null은 연결을 지운다.
+    const marketRef = marketRefBody(form.marketRef);
+    if (!marketRef.ok) {
+      setError(marketRef.error);
+      setSubmitting(false);
+      return;
+    }
+    if (marketRef.body || mode === 'edit') body.marketRef = marketRef.body;
     if (FEATURE_KEYS.some(isFeatureOn)) {
       const extras = extrasBody(form.extras);
       if (!extras.ok) {

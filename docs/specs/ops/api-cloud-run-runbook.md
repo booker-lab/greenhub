@@ -292,6 +292,7 @@ Cloud Run은 서버 안 정기 작업(`@Cron`)을 쓰지 않는다. Cloud Schedu
 | `partner-inquiry-purge` | `20 3 * * *` | `EngagementService.runScheduledPartnerInquiryPurge` |
 | `settlements-confirm-due` | `0 4 * * *` | `SettlementsService.confirmDueSettlements` |
 | `ops-daily-digest` | `30 8 * * *` | `OpsDigestService.sendDailyDigest` |
+| `market-prices-ingest` | `10 21 * * *` | `MarketPricesService.runScheduledIngest` |
 
 1. **미리 만들어 멈춰 둔다**(전환 전 아무 때나). 이때 Cloud Run에는 두 변수를 넣지 않으므로 호출해도 404다.
 
@@ -315,6 +316,7 @@ job retention-purge '0 3 * * *'
 job partner-inquiry-purge '20 3 * * *'
 job settlements-confirm-due '0 4 * * *'
 job ops-daily-digest '30 8 * * *'
+job market-prices-ingest '10 21 * * *'
 ```
 
 - 서비스는 `--allow-unauthenticated`라 Cloud Run IAM 호출 권한은 따로 주지 않는다. 호출자 확인은 API가 한다.
@@ -326,7 +328,7 @@ job ops-daily-digest '30 8 * * *'
 ```bash
 gcloud run services update greenhub-api $P --region=asia-northeast3 \
   --update-env-vars=GREENHUB_SCHEDULER_INVOKER_EMAIL=$SA,GREENHUB_SCHEDULER_AUDIENCE=$BASE
-for j in payments-cleanup-pending-orders group-buy-deadlines group-buy-deadline-soon retention-purge partner-inquiry-purge settlements-confirm-due ops-daily-digest; do
+for j in payments-cleanup-pending-orders group-buy-deadlines group-buy-deadline-soon retention-purge partner-inquiry-purge settlements-confirm-due ops-daily-digest market-prices-ingest; do
   gcloud scheduler jobs resume "greenhub-$j" --location=asia-northeast3 $P
 done
 ```

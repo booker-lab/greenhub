@@ -16,6 +16,7 @@ import { DriverModule } from './driver/driver.module';
 import { EngagementModule } from './engagement/engagement.module';
 import { FirestoreModule } from './firestore/firestore.module';
 import { HubsModule } from './hubs/hubs.module';
+import { MarketPricesModule } from './market-prices/market-prices.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OperationsModule } from './operations/operations.module';
 import { OptionStocksModule } from './option-stocks/option-stocks.module';
@@ -73,6 +74,7 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
     SettlementsModule,
     PayoutAccountsModule,
     OptionStocksModule,
+    MarketPricesModule,
     HubsModule,
     AdminModule,
     DriverModule,

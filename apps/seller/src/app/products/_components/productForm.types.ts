@@ -1,3 +1,4 @@
+import { defaultMarketRefForm, type MarketRefForm } from '@/lib/market-price';
 import { defaultExtras, type ProductExtrasForm } from './productExtras';
 import type { SelectionForm } from './TouchSelector';
 
@@ -48,6 +49,8 @@ export interface ProductFormData {
    * 단, 상품정보제공고시(extras.notice)는 법정 표시라 토글과 상관없이 항상 보이고 제출된다.
    */
   extras: ProductExtrasForm;
+  /** 따라 볼 경매 시세(판매자 전용, 기능 토글과 상관없이 항상 보이고 제출된다). */
+  marketRef: MarketRefForm;
 }
 
 export interface ProductFormProps {
@@ -88,5 +91,6 @@ export function defaultForm(): ProductFormData {
     content: { headline: '', description: '', isEditedByUser: false },
     sellerOverride: false,
     extras: defaultExtras(),
+    marketRef: defaultMarketRefForm(),
   };
 }

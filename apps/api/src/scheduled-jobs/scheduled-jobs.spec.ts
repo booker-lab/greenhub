@@ -9,6 +9,7 @@ import {
   resolveSchedulerTriggerSettings,
 } from '../config/runtime-config';
 import { EngagementService } from '../engagement/engagement.service';
+import { MarketPricesService } from '../market-prices/market-prices.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OpsDigestService } from '../ops-alerts/ops-digest.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -43,6 +44,7 @@ function makeServices() {
     retention: { runScheduledPurge: jest.fn().mockResolvedValue({ skipped: true }) },
     engagement: { runScheduledPartnerInquiryPurge: jest.fn().mockResolvedValue(undefined) },
     opsDigest: { sendDailyDigest: jest.fn().mockResolvedValue(undefined) },
+    marketPrices: { runScheduledIngest: jest.fn().mockResolvedValue(undefined) },
   };
 }
 
@@ -61,6 +63,7 @@ async function makeApp(config: Record<string, string>, verify: SchedulerIdTokenV
       { provide: RetentionService, useValue: services.retention },
       { provide: EngagementService, useValue: services.engagement },
       { provide: OpsDigestService, useValue: services.opsDigest },
+      { provide: MarketPricesService, useValue: services.marketPrices },
     ],
   }).compile();
   const app = moduleRef.createNestApplication({ logger: false });
@@ -113,6 +116,7 @@ describe('Cloud Scheduler 정기 작업 경로', () => {
       'retention-purge': services.retention.runScheduledPurge,
       'partner-inquiry-purge': services.engagement.runScheduledPartnerInquiryPurge,
       'ops-daily-digest': services.opsDigest.sendDailyDigest,
+      'market-prices-ingest': services.marketPrices.runScheduledIngest,
     };
     expect(app.get(ScheduledJobsService).jobNames().sort()).toEqual(Object.keys(expected).sort());
 

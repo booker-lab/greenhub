@@ -15,6 +15,7 @@
 | Admin | `admin.md` |
 | Auth | `auth.md` |
 | Hubs | `hubs.md` |
+| Market prices (화훼 경매 시세) | `market-prices.md` |
 | Notifications | `notifications.md` |
 | Orders | `orders.md` |
 | Payments | `payments.md` |

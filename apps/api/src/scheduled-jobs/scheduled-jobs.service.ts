@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { EngagementService } from '../engagement/engagement.service';
+import { MarketPricesService } from '../market-prices/market-prices.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OpsDigestService } from '../ops-alerts/ops-digest.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -22,6 +23,7 @@ export class ScheduledJobsService {
     retention: RetentionService,
     engagement: EngagementService,
     opsDigest: OpsDigestService,
+    marketPrices: MarketPricesService,
   ) {
     this.jobs = {
       'payments-cleanup-pending-orders': () => payments.cleanupPendingOrders(),
@@ -31,6 +33,7 @@ export class ScheduledJobsService {
       'retention-purge': () => retention.runScheduledPurge(),
       'partner-inquiry-purge': () => engagement.runScheduledPartnerInquiryPurge(),
       'ops-daily-digest': () => opsDigest.sendDailyDigest(),
+      'market-prices-ingest': () => marketPrices.runScheduledIngest(),
     };
   }
 
