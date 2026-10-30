@@ -11,6 +11,7 @@ node scripts/visual/start.mjs consumer           # 소비자 → http://127.0.0.
 node scripts/visual/start.mjs driver             # 기사 → http://127.0.0.1:3203/login
 node scripts/visual/start.mjs consumer --phone   # Tailscale 주소에 바인딩 → 휴대폰에서 http://<Tailscale IP>:3201/
 node scripts/visual/start.mjs seller --now 2026-10-30T00:00:00+09:00  # 기준 시각을 정해 띄운다(아래 "기준 시각")
+node scripts/visual/start.mjs driver --prod      # 운영 빌드(next build && next start)로 띄운다(아래 "운영 빌드로 찍기")
 ```
 
 포트는 `apps.mjs`가 정한다. `dev:local`(3000~3003)과 로컬 E2E(127.0.0.x:3101~3103)를 피해 3200번대를 쓰고,
@@ -46,6 +47,20 @@ node scripts/visual/start.mjs seller --now 2026-10-30T00:00:00+09:00  # 기준 �
 - 에뮬레이터 주소가 127.0.0.1로 고정이라 `--phone`에서는 에뮬레이터를 쓰지 않는다(상품·준비는 빈 화면).
 - 기록: `%TEMP%\greenhub-visual\seller\firebase-emulator.log`
 
+## 운영 빌드로 찍기(`--prod`)
+
+`next dev`로 찍은 화면은 운영 빌드와 다를 수 있다(개발 표시, 하네스 전용 로그인 입력칸 등). `--prod`는 앱 `build`와 같은 `next build --webpack` 뒤 `next start`로 띄운다. 앱 코드는 바꾸지 않는다.
+
+- **로그인**: 운영 빌드에서는 로컬 로그인이 꺼진다(`NODE_ENV=production`, 기사·셀러 `isLocalCredentialRuntime`). 그래서 `start.mjs`가 실행마다 만든 `AUTH_SECRET`을 `runtime.json`에 남기고, `shots.mjs`가 그 값으로 Auth.js 세션 쿠키(`authjs.session-token`, 앱 `next-auth/jwt`의 `encode`)를 직접 만들어 넣는다. 토큰 모양은 세 앱 jwt 콜백이 로그인 직후 만드는 값과 같고, 앱은 이후 요청마다 가짜 API `/auth/session`으로 다시 검증한다. 로그인 화면은 운영과 같은 모양(카카오 버튼만)으로 찍힌다.
+- **가짜 API 주소**: 운영 빌드는 API 주소로 HTTPS이면서 `localhost`·`127.0.0.1`이 아닌 주소만 받는다(`packages/shared/src/api-base-url.ts`). 그래서 가짜 API를 `https://127.0.0.2:<apiPort>`에도 연다(하네스 내부 조회는 그대로 `http://127.0.0.1`).
+  - 인증서는 실행마다 새로 만드는 자체 서명 인증서다(`tls-cert.mjs`, node:crypto만 사용). next 서버는 `NODE_EXTRA_CA_CERTS`로, 브라우저는 그 공개키 지문만 믿는다(`--ignore-certificate-errors-spki-list`).
+  - Playwright `ignoreHTTPSErrors`는 쓰지 않는다. 서비스워커(PWA)가 대신 보내는 요청에는 걸리지 않아, 서비스워커가 붙은 화면에서 주문 조회가 TLS 오류로 실패한 채 찍혔다.
+  - `127.0.0.2`는 Linux·Windows에서는 바로 쓰인다. macOS는 `sudo ifconfig lo0 alias 127.0.0.2`가 필요하다.
+- **서비스워커**: 운영과 같게 막지 않는다(막으면 앱의 등록 스크립트가 `navigator.serviceWorker`가 없어 오류를 낸다).
+- **셀러 Firestore 화면**: 셀러 앱은 `NODE_ENV=production`에서 로컬 Firebase 런타임(에뮬레이터)을 거절한다(`apps/seller/src/lib/firebase.ts`). 그래서 `--prod`에서는 에뮬레이터를 띄우지 않고, `firestore: true` 화면(홈·준비·회차 상세·새 회차·상품 목록·회차 취소 모달)은 정상 판정에서 빠진다(문제: "Firestore 에뮬레이터 없음"). 이 화면들은 dev 촬영으로 비교한다.
+- 빌드 기록은 `next-build.log`, 서버 기록은 `next-start.log`. 빌드 산출물(`.next`)과 빌드가 고치는 파일(`next-env.d.ts`·앱 `AGENTS.md`, 셀러는 저장소에 들어 있는 `public/sw.js`도 다시 만든다)은 커밋하지 않는다. 끝나면 `git checkout apps/seller/public/sw.js`로 되돌린다.
+- 실측(2026-10-30, 같은 커밋 두 번): 기사 36장·소비자 66장·셀러 108장(Firestore 21장 제외) 정상 판정 통과. 비교 결과는 `docs/specs/frontend/ui-stack-migration-plan.md` P0.5에 적었다.
+
 ## 기준 시각
 
 같은 시각으로 찍어야 작업 전·후 캡처를 픽셀로 비교할 수 있다(`clock.mjs`).
@@ -71,7 +86,9 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
 - 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 대조 화면 `ui-compare-select`).
-- **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
+- **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 가짜 API에 닿지 못한 요청 0(취소된 요청 제외), 하네스가 지원하지 않는 화면 0(`--prod`의 셀러 Firestore 화면), 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
+- **렌더 결정성**: 브라우저는 `--disable-partial-raster`로 띄운다. Chromium이 바뀐 영역만 다시 래스터하면 그리는 이력에 따라 글자·둥근 모서리의 안티앨리어싱이 채널 2~40만큼 달라져, 같은 커밋 두 번 촬영이 브라우저 컨텍스트마다 약 5~15% 어긋났다(2026-10-30 기사 화면 실측). 끄면 20번 중 20번 같았다.
+- `next dev`는 힙 사용량이 상한(시스템 메모리의 50%)의 80%를 넘으면 스스로 재시작한다("Server is approaching the used memory threshold, restarting..."). 한 서버로 여러 번 연달아 찍다가 재시작하면, 그 사이 찍힌 화면은 연결 오류나 덜 그려진 상태(로딩)가 된다. `start.mjs`가 재시작 횟수를 `dev-restarts.txt`에 적고 `shots.mjs`가 재시작이 걸친 화면과 그 바로 다음 화면을 정상 판정에서 뺀다("next dev 메모리 재시작 중·직후 촬영"). 그 화면만 `--only`로 다시 찍는다. 세 앱 서버와 에뮬레이터를 한 컨테이너에서 같이 띄우면 더 자주 일어난다.
 - 캡처는 `%TEMP%\greenhub-visual\<app>\shots\<label>\`에 PNG와 `manifest.json`으로 남는다.
   - `manifest.json`에는 화면별 최종 주소, 콘솔 오류, fixture가 없는 API 경로가 함께 기록된다.
 - 작업 전 화면은 main worktree에서 같은 명령을 `--label before`로 찍는다.
@@ -116,10 +133,11 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 
 | 파일 | 역할 |
 |---|---|
-| `start.mjs` | 가짜 API와 next dev를 함께 띄우는 실행기 |
+| `start.mjs` | 가짜 API와 next dev(`--prod`면 운영 빌드)를 함께 띄우는 실행기 |
 | `mock-api.mjs` | 가짜 API 서버. 쓰기 요청은 기록만 하고 `200 {}`을 돌려준다 |
 | `fixtures/<app>.mjs` | 앱별 가짜 사용자, 조회 경로 표, 캡처 화면 목록 |
 | `node-guard.cjs` | next dev 프로세스의 외부 연결 차단 |
+| `tls-cert.mjs` | `--prod` 가짜 API용 1회용 자체 서명 인증서(의존성 없음) |
 | `firebase-emulator.mjs` | Auth·Firestore 에뮬레이터 기동·시드·커스텀 토큰(fixture에 `firestoreSeed`가 있을 때) |
 | `apps.mjs` | 앱별 포트 등 공통 설정 |
 | `clock.mjs` | 기준 시각(캡처 시계·fixture 일정) |

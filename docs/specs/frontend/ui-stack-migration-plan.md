@@ -1,6 +1,6 @@
 # Mantine → shadcn/ui + Tailwind CSS v4 + Base UI 교체 계획
 
-> 작성 2026-10-28. 상태: **P0 완료(#684), P0.5 완료(#687), P1 완료(#689), P2a 로컬 증명 완료(병합 전)**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 검토 3라운드(§11)를 거쳐 2026-10-30 사용자가 확정했고, 같은 날 M2·M3을 다시 정했다(§10).
+> 작성 2026-10-28. 상태: **P0 완료(#684), P0.5 완료(#687), P1 완료(#689), P2a 완료(#693), P2b 완료(#695), P3 로컬 증명(병합 전, 실기기 확인 대기)**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 검토 3라운드(§11)를 거쳐 2026-10-30 사용자가 확정했고, 같은 날 M2·M3을 다시 정했다(§10).
 > 요약: 첫 회차는 교체가 끝난 뒤로 미룬다. 교체는 지금부터 단계마다 증명이 끝나는 대로 `main`에 병합한다. 카카오페이 심사·LIVE 결제 전환·실결제 확인 전까지는 소비자 앱 화면만 묶는다.
 > 화면을 어떻게 바꿀지는 `design-direction.md`(부분 확정)를 따르고, 그 문서에서 확정되지 않은 부분의 시각 계약은 `design-standard.md`다.
 > 이 문서는 `*-plan.md`이므로 교체가 끝나면 역사 자료가 된다. 끝난 뒤의 규칙은 `design-standard.md`와 `packages/ui`가 소유한다.
@@ -167,7 +167,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
    - **픽셀 비교**(`diff.mjs`·`compare.mjs`·`png.mjs`): node 내장 zlib만으로 PNG를 읽어 픽셀 하나라도 다르면 차이로 본다. 의도한 차이는 허용 목록에 화면·폭·**영역(bbox)과 사유**로만 적을 수 있고, 그 영역 밖 차이는 0이어야 한다. 크기가 달라진 화면은 `"full"`로만 허용한다. 기준 시각·폭 목록이 다른 두 묶음은 비교하지 않는다.
    - **민감도 시험**: `compare.spec.mjs`가 1px 변화를 차이로 잡는지 CI에서 확인한다.
    - **폭**: 390·768·1280(`--viewports`로 고를 수 있다).
-   - 하네스는 `next dev`로 띄운다. 운영 빌드에서는 로컬 로그인이 꺼진다(`apps/driver/src/auth.ts`:124, seller도 같다). 로그인 화면을 운영 빌드로 찍는 방법(하네스가 자기 `AUTH_SECRET`으로 세션 쿠키를 만들기 등)은 P2a 전에 정한다. 그 전까지 dev로만 찍은 화면은 "운영 빌드 미증명"으로 본다.
+   - 하네스는 기본으로 `next dev`로 띄운다. 운영 빌드에서는 로컬 로그인이 꺼진다(`apps/driver/src/auth.ts`:124, seller도 같다). 그래서 `start.mjs --prod`(2026-10-30, P0.5b)가 `next build --webpack && next start`로 띄우고, `shots.mjs`가 실행기의 1회용 `AUTH_SECRET`으로 Auth.js 세션 쿠키를 직접 만들어 로그인한다(앱 코드 변경 없음). 운영 빌드는 API 주소로 HTTPS·비루프백 이름만 받으므로 가짜 API를 `https://127.0.0.2`(1회용 자체 서명 인증서, 브라우저는 그 공개키 지문만 신뢰)에 연다. 셀러 앱은 운영 빌드에서 Firestore 에뮬레이터를 거절하므로 Firestore 구독 화면 7개(홈·준비·회차 상세 2·새 회차·상품 목록·회차 취소 모달)는 `--prod`에서 정상 판정에서 빠지고 dev 촬영으로만 증명한다. 쓰는 법과 한계는 `scripts/visual/README.md` "운영 빌드로 찍기".
    - 판매자·어드민 촬영 목록을 채웠다: `admin/audit`·`hubs/[id]`(상세·수정·픽업)·`hubs/new`·`settings/option-stocks`·`settings/payout-account`·`invite/[token]`(정상·잘못된 링크)·`login/error`, 모달이 열린 상태 3개(주문 배송 보류·강제 취소, 회차 취소). `/admin`은 `/admin/stores`로 넘어가는 주소이고, 후기 관리·입점 문의·고객 반응·가게 소개는 기능 플래그가 꺼져 지금 404라 넣지 않았다(기능을 켠 모양은 `benchmarkScreens`). 기사·소비자 촬영 목록도 채웠다(2026-10-30, P0.5b). 기사는 배송 중 탭·배송 보류 모달·배송 완료 사진 촬영(카메라 권한 없음 포함)·알림(상태 변경 확인 못 함)을 더해 12화면, 소비자는 알림 설정·회원 탈퇴·상품 탭·검색(빈 칸·결과)·공동구매(회차 직배송 가게는 홈으로 이동, `expectPath`)를 더해 22화면이다. 소비자의 기능 플래그 화면(`/guarantee`·`/partner`·`/store/[id]`·`/mypage/wishlist`·`/mypage/purchase-history`)은 지금 404라 넣지 않았다.
 2. **로컬 E2E가 실제로 돌았는지 판정한다** (`apps/e2e`)
    - 회차 spec은 이미 `pnpm test:e2e:local`이 루프백 운영 빌드로 돌리고 64건 무건너뜀을 판정한다(`scripts/round-direct-e2e-local.mjs`). 다만 데이터는 원격 스테이징 API이고, E2E Firebase 키(`.env.local-target`)가 있어야 돈다.
@@ -185,7 +185,13 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 판매자 촬영 129장(43화면 × 390·768·1280) 전부 정상 촬영 판정 통과.
   - 같은 커밋 두 번 비교: 허용치 0에서 128장 같음·1장 차이(상품 수정 태블릿, 입력칸 둥근 모서리 4px 안티앨리어싱, 채널 차이 1). 허용치 1에서 129장 같음. 그래서 ①의 기계 판정은 `diff.mjs --tolerance 1`로 한다(`scripts/visual/README.md`).
   - 민감도: 실제 캡처 한 장의 1px을 채널 값 1(허용치 0)·2(허용치 1)만큼 바꿨을 때 둘 다 그 위치 1px만 차이로 잡혔다. 그 영역을 허용 목록에 사유와 함께 넣었을 때만 통과했다.
-  - 기사·소비자 촬영(P0.5b, 앱 코드는 `main`과 같음): 기사 36장(12화면 × 3폭)·소비자 66장(22화면 × 3폭) 전부 정상 촬영 판정 통과. 같은 커밋 두 번 비교는 허용치 0·1 모두 전부 같음. 이때 `start.mjs`가 `--now` 없이 앱 이름을 무시하고 늘 판매자로 뜨던 문제를 고쳤다.
+  - 기사·소비자 촬영(P0.5b, 앱 코드는 `main`과 같음): 기사 36장(12화면 × 3폭)·소비자 66장(22화면 × 3폭) 전부 정상 촬영 판정 통과. 같은 커밋 두 번 비교는 첫 측정에서 허용치 0·1 모두 전부 같았지만, 뒤 측정에서 아래 흔들림이 나왔다. 이때 `start.mjs`가 `--now` 없이 앱 이름을 무시하고 늘 판매자로 뜨던 문제를 고쳤다.
+  - 운영 빌드 촬영(`--prod`, P0.5b, 앱 코드는 `edb3008`, 같은 커밋 두 번, 아래 흔들림 수정 전): 기사 36장·소비자 66장·판매자 108장(Firestore 화면 21장 제외) 정상 판정 통과. 소비자는 허용치 0에서 65장 같음·1장 차이(장바구니 태블릿), 허용치 1에서 66장 같음. 판매자는 허용치 0에서 106장 같음·2장 차이, 허용치 1에서 108장 같음.
+  - 촬영 흔들림과 수정(P0.5b): 같은 커밋인데 일부 화면이 두 가지 렌더로 갈렸다. 기사 주문 상세 배송 중의 빨간 외곽선 `배송 보류` 글자(채널 2), 운영 빌드 기사 알림 태블릿의 버튼 모서리(채널 최대 40)이고, 브라우저 컨텍스트마다 약 5~15%였다. DOM·애니메이션·hover 상태는 같았고 같은 페이지를 연달아 찍으면 늘 같았다. 원인은 Chromium의 부분 래스터(바뀐 영역만 다시 래스터)로, 그리는 이력에 따라 안티앨리어싱이 달라졌다. `shots.mjs`가 `--disable-partial-raster`로 띄우면 20번 중 20번 같고, 결과는 기본 렌더의 다수 쪽과 같다. 허용치는 올리지 않았다(판정 완화 금지, `AGENTS.md` §0-5).
+    - "같은 결과가 두 번 나올 때만 채택"하는 안정 촬영도 시험했다. 부분 래스터를 끈 상태에서 기사 72장·소비자 132장·판매자 257장·기사 알림 화면 15번(폭마다 30장)이 모두 첫 두 장에서 같아, 결과를 바꾸지 않고 촬영 시간만 두 배가 됐다. 그래서 넣지 않았다.
+    - 수정 뒤 같은 커밋 두 번(dev, 앱 코드 `77db119`, 허용치 0): 기사 36/36·소비자 66/66 같음(세 앱 동시 촬영). 기사 알림 화면은 따로 15번 찍어 세 폭 모두 같았다. 판매자 129장 두 번(단독 촬영)에서 127장 같음. 나머지 2장(회차 상세 진행 중·예정, 데스크톱)은 두 번째 촬영 도중 판매자 `next dev`가 메모리 재시작을 해서, 하나는 연결 오류(정상 판정 실패), 하나는 다시 컴파일하는 동안 로딩 화면으로 찍혔다. 이 두 화면을 다시 찍었더니 세 폭 모두 첫 촬영과 같았다. 그래서 재시작이 걸친 화면과 그 바로 다음 화면은 정상 판정에서 빼도록 했다.
+    - `next dev`는 힙 사용량이 상한의 80%를 넘으면 스스로 재시작한다. 재시작 중·직후에 찍힌 화면은 연결 오류나 로딩 화면이 된다(판매자 상품 목록·회차 상세 데스크톱에서 확인). `start.mjs`가 재시작 횟수를 남기고 `shots.mjs`가 그 화면과 바로 다음 화면을 정상 판정에서 뺀다. 그 화면만 다시 찍는다(`scripts/visual/README.md`).
+  - 운영 빌드 미증명(dev로만 판정): 판매자 Firestore 구독 화면 7개(`home`·`prep`·`sale-round-open`·`sale-round-scheduled`·`sale-round-new`·`products`·`modal-round-cancel`). 판매자 앱이 운영 빌드에서 로컬 Firebase 에뮬레이터를 거절하므로(`apps/seller/src/lib/firebase.ts`) `--prod`에서는 데이터 없이 찍히고 정상 판정에서 빠진다. 이 화면들의 교체 PR 판정은 dev 촬영으로만 한다.
   - 판매자·어드민 로컬 E2E: `node scripts/admin-local-e2e.mjs`가 dev:local에서 20/20 통과·건너뜀 0. 대상 주소를 운영으로 바꾸면 실행하지 않았다. P0.5는 앱 코드를 바꾸지 않으므로 이 결과가 `main` 기준 결과다.
   - 동결 검사: 실제 커밋으로 pre-candidate 교체 흔적 차단, 일반 프런트 수정 통과, candidate에서 라벨 없는 프런트 수정 차단·`freeze-fix` 통과, 후보 이전 SHA 배포 차단을 확인했다.
 
@@ -259,6 +265,25 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 기사 앱을 연결하고 1단계만 한다(`design-direction.md` D4 미확정). 연결 방식은 P2a와 같다.
 - `driver-design-system.spec.ts`의 인증 화면 묶음을 로컬에서도 돌게 고친다(P0 참고).
 - 병합 전에 실제 휴대폰에서 기사 계정으로 확인한다(도착 사진·완료 처리·서비스워커). 휴대폰은 클라우드 컨테이너의 `next start`에 붙을 수 없고, 운영 빌드에서는 로컬 로그인이 꺼진다. 확인 방법(Preview 테스트 로그인 등)은 이 단계 시작 때 정한다.
+
+구현(2026-10-31, 브랜치 `claude/ui-p3-driver`):
+- **연결 → 교체 → Mantine 제거**를 한 갈래에서 했다. 먼저 P2a와 같은 방식(layer 순서 `theme, base, mantine, components, utilities`, Mantine CSS 전부 `layer(mantine)`, `tw-animate-css`·`shadcn-tailwind.css`·`tokens.css`, `@source` packages/ui)으로 연결한 커밋을 두고, 그 뒤 12개 파일을 모두 바꿔 기사 앱의 `@mantine/*` 3개·`postcss-preset-mantine`·`postcss-simple-vars`·`MantineProvider`·`ColorSchemeScript`·`Notifications`·`next.config.ts`의 Mantine 최적화 설정을 걷어냈다(P6의 기사 앱 몫). 앱 CSS는 `@layer theme, base, components, utilities;`이고, Mantine이 깔던 기본 규칙(상자 크기, 본문 글꼴 16px·줄 높이 1.55·검정, 입력·버튼 글꼴 상속, 글꼴 다듬기)만 base layer에 옮겼다. preflight 전환은 P6에서 세 앱을 같이 한다.
+- **부품**: `packages/ui`의 Button·Badge·Card·Input·Label·Dialog와 Toast(`toast.add`·`ToastProvider`)를 쓴다. ① 외형 값(Mantine 크기·색·글자 칸 자르기 `text-box-trim`, 입력칸·라디오·체크박스·금액 입력, Mantine 모양의 알림)은 `apps/driver/src/components`(`app-button`·`fields`·`look`·`spinner`·`app-toaster`)에 둔다. Badge 색은 P2(#693)가 `packages/ui` variant를 Mantine 값으로 고친 뒤 그 variant(`light`·`destructive`·`warning`·`secondary`)를 쓰고, `packages/ui`에 없는 Mantine dark 색만 기사 쪽에 남겼다. 배송 보류 모달은 `packages/ui` Dialog의 머리·닫기 버튼·본문(`DialogHeader`·`closeButtonClassName`·`DialogBody`)을 쓴다. 하단 탭 위를 덮는 z 200 때문에 `DialogContent`는 쓰지 못하고, 닫기 버튼에는 preflight 없는 앱이라 버튼 기본 테두리·여백 지우기를 더했다.
+- **알림**: `@mantine/notifications` 7곳(상세 화면 상태 명령의 불확실·미반영·목록 이탈·확인 안내)을 `toast.add({ description, type })`로 바꿨다. 노랑(경고)은 `type: 'warning'`이다. 알림 모양·위치(오른쪽 아래, 폭 440px까지)·4초 닫힘·오래된 알림이 위·들어오고 나가는 전환은 Mantine과 같게 그리며, 그리는 부품은 Base UI Toast(`@base-ui/react` 1.9.0, `packages/ui`와 같은 설치본)다.
+- **단위 테스트**: 소스 문자열에 Mantine 이름을 묶은 단언 4곳(`<Button` 나눔, `notifications.show`, `<Title order={1}>`, `component="a"`)을 같은 뜻의 새 이름(`<AppButton`, `toast.add`, `<h1>`, `href={...}`)으로 바꿨다. 판정 내용은 그대로다.
+- **E2E**: `driver-design-system.spec.ts` 인증 묶음은 `DRIVER_SESSION_COOKIE`를 대상 주소 도메인에 넣고, 쿠키가 없고 대상이 루프백이면 로컬 파일럿 로그인으로 연다(로그인이 안 되면 실패). 인라인 `style` 단언 3개(카카오 버튼 색, 로그인 카드 테두리, 하단 탭 윗선)는 계산된 스타일로 바꿨다. 하단 탭과 겹치는 `text=내 정보`는 제목 역할로 찾는다.
+- **로컬 증명**(KST 2026-10-31, 기준 시각 `2026-10-31T00:00+09:00`, 하네스 `TZ=Asia/Seoul`):
+  - 촬영 36장(12화면 × 390·768·1280, #694 병합 뒤 `main` 하네스 `e9bdbf1`, `--disable-partial-raster`): `main`(e9bdbf1)과 이 브랜치(a933144)를 각각 두 번 찍어 `diff.mjs --tolerance 1`, 허용 목록 없음.
+    - `main`↔이 브랜치: 두 쌍 모두 36장 같음(허용치 0에서도 같음). `main`↔`main`, 브랜치↔브랜치도 36장 같음.
+    - #694 전에는 알림 화면 3장이 촬영마다 흔들렸다(`main`끼리도 3번 중 1번). 원인은 Chromium 부분 래스터였고 #694 하네스에서 사라졌다.
+  - 누르기·입력·업로드·완료 처리: 하네스(가짜 API)에서 Playwright로 8개 흐름(로그인, 배송판 탭, 카드→상세, 수거 완료, 배송 보류 입력·저장, 보류 닫기, 사진 선택·등록, 로그아웃)을 `main`과 이 브랜치에서 같은 스크립트로 돌려, 화면 반응과 가짜 API가 받은 쓰기 요청 본문이 8개 모두 같았다. 실제 API 완료 처리·업로드 ACK, `getUserMedia` 촬영, 카메라 앱, 서비스워커, 카카오·Firebase 로그인은 덮지 못했고 실기기 2단계에서 확인한다.
+  - 단위: 기사 vitest 34·node:test 305+4 통과. 기사 운영 빌드 통과. CI 검사 로컬 재현(타입 6곳, Biome, CSS 변수, 스크립트 spec 1394, E2E 헬퍼 38) 통과.
+  - E2E `driver-design-system`(하네스 `DRIVER_BASE=http://127.0.0.1:3203`, 재시도 0): 이 브랜치 24 통과·2 실패·건너뜀 0. `main`의 원래 spec은 14 통과·2 실패·10 건너뜀, 고친 spec을 `main`에 돌리면 20 통과·6 실패다. 남은 2 실패(로그인 카드 테두리·그림자 없음 단언)는 `main`에서도 실패한다. 로그인 카드는 Mantine `shadow="sm"`·테두리 없음이라 `design-standard.md`(그림자는 담기 버튼에만)와 어긋난 실제 구현 차이다. ①에서는 고치지 않는다.
+  - E2E `driver-direct-delivery`(회차 spec)는 이 컨테이너에 `apps/e2e/.env.local-target`(E2E Firebase 키)이 없어 `pnpm test:e2e:local`을 돌리지 못했다.
+  - 번들(CI build job과 같은 가짜 공개 설정, `.next/static` 전체): CSS 142,141 → 101,639 B(gzip 28,327 → 24,467), JS 1,472,850 → 1,400,064 B(gzip 445,923 → 428,888).
+- **실기기 확인(2026-10-30 사용자 결정: 출시 전 Preview에서 확인)**
+  - ① 병합 전: 사용자가 `scripts/visual/start.mjs driver --phone`(Tailscale, 가짜 데이터)으로 화면·입력·알림을 휴대폰에서 확인한다(PR 본문 체크리스트).
+  - ② 실제 기사 계정의 도착 사진 업로드·완료 처리·서비스워커는 운영 배포 직전 출시 E2E용 exact Preview에서 사용자가 휴대폰으로 확인한 뒤 배포를 승인한다. PR마다 Preview를 쓰지 않는다(`AGENTS.md` §0-9).
 
 ### P4. 판매자 앱 틀·회차·주문·준비·재고·정산
 - 앱 틀(사이드바·상단바) → 회차·주문·준비 → 재고 → 정산 순서로 나눈다.
