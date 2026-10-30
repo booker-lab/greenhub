@@ -1,7 +1,9 @@
 'use client';
 
-import { Badge, Button, Group, Paper, Stack, Text, TextInput } from '@mantine/core';
 import { COLOR_OPTIONS } from '@greenhub/shared';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button, ButtonLabel } from '@greenhub/ui/components/button';
+import { Input } from '@greenhub/ui/components/input';
 
 const STEM_OPTIONS = [
   { value: '외대', label: '외대', desc: '1줄기' },
@@ -43,6 +45,17 @@ interface Props {
   availableStemTypes?: string[];
 }
 
+// ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·그림자 xs·안쪽 16)·Text(p, 여백 0)·
+// Group(간격 10)·Stack 값. 안쪽 Text(span)는 Mantine처럼 16px·400으로 돌아간다.
+const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const TEXT = 'm-0 p-0 text-base font-normal';
+const GROUP = 'flex flex-row flex-wrap items-center justify-start gap-2.5';
+const LABEL_STYLE = {
+  fontSize: 'var(--font-size-sm)',
+  fontWeight: 'var(--fw-medium)',
+  color: 'var(--color-text-disabled)',
+} as const;
+
 const activeStyle = {
   backgroundColor: 'var(--color-primary)',
   borderColor: 'var(--color-primary)',
@@ -66,71 +79,59 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
     : STEM_OPTIONS;
 
   return (
-    <Stack gap="sm">
-      <Paper radius="lg" shadow="xs" p="md">
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
-            color: 'var(--color-text-disabled)',
-          }}
-          mb="xs"
-        >
+    <div className="flex flex-col gap-3">
+      <div className={PAPER}>
+        <p className={`${TEXT} mb-2.5`} style={LABEL_STYLE}>
           출하 형태
-        </Text>
-        <Group gap="xs">
+        </p>
+        <div className={GROUP}>
           {stemOptions.map(({ value: v, label, desc }) => (
             <Button
               key={v}
               onClick={() => set('stemType', v as SelectionForm['stemType'])}
-              flex={1}
+              className="flex-1"
               size="md"
-              radius="xl"
-              variant="outline"
-              color="gray"
+              variant="outline-gray"
               style={value.stemType === v ? activeStyle : {}}
             >
-              <Stack gap={0} align="center">
-                <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
-                  {label}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 'var(--font-size-sm)',
-                    color: value.stemType === v ? 'white' : 'var(--color-text-disabled)',
-                  }}
-                >
-                  {desc}
-                </Text>
-              </Stack>
+              <ButtonLabel>
+                <div className="flex flex-col items-center justify-start gap-0">
+                  <p
+                    className={TEXT}
+                    style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+                  >
+                    {label}
+                  </p>
+                  <p
+                    className={TEXT}
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: value.stemType === v ? 'white' : 'var(--color-text-disabled)',
+                    }}
+                  >
+                    {desc}
+                  </p>
+                </div>
+              </ButtonLabel>
             </Button>
           ))}
-        </Group>
-      </Paper>
+        </div>
+      </div>
 
-      <Paper radius="lg" shadow="xs" p="md">
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
-            color: 'var(--color-text-disabled)',
-          }}
-          mb="xs"
-        >
+      <div className={PAPER}>
+        <p className={`${TEXT} mb-2.5`} style={LABEL_STYLE}>
           색상{' '}
-          <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>
+          <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
             (복수 선택 가능)
-          </Text>
-        </Text>
-        <Group gap="xs" style={{ flexWrap: 'wrap' }}>
+          </span>
+        </p>
+        <div className={GROUP} style={{ flexWrap: 'wrap' }}>
           {COLOR_OPTIONS.map((color) => (
             <Badge
               key={color}
-              component="button"
+              render={<button type="button" />}
               onClick={() => toggleColor(color)}
-              radius="xl"
-              variant={value.colors.includes(color) ? 'filled' : 'outline'}
-              color="gray"
+              variant="outline-gray"
               style={{
                 cursor: 'pointer',
                 backgroundColor: value.colors.includes(color)
@@ -143,115 +144,87 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
               {color}
             </Badge>
           ))}
-        </Group>
-      </Paper>
+        </div>
+      </div>
 
-      <Paper radius="lg" shadow="xs" p="md">
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
-            color: 'var(--color-text-disabled)',
-          }}
-          mb="xs"
-        >
+      <div className={PAPER}>
+        <p className={`${TEXT} mb-2.5`} style={LABEL_STYLE}>
           향기
-        </Text>
-        <Group gap="xs">
+        </p>
+        <div className={GROUP}>
           {FRAGRANCE_OPTIONS.map(({ value: v, label, icon }) => (
             <Button
               key={v}
               onClick={() => set('fragrance', v as SelectionForm['fragrance'])}
-              flex={1}
+              className="flex-1"
               size="md"
-              radius="xl"
-              variant="outline"
-              color="gray"
+              variant="outline-gray"
               style={value.fragrance === v ? activeStyle : {}}
             >
-              {icon} {label}
+              <ButtonLabel>
+                {icon} {label}
+              </ButtonLabel>
             </Button>
           ))}
-        </Group>
-      </Paper>
+        </div>
+      </div>
 
-      <Paper radius="lg" shadow="xs" p="md">
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
-            color: 'var(--color-text-disabled)',
-          }}
-          mb="xs"
-        >
+      <div className={PAPER}>
+        <p className={`${TEXT} mb-2.5`} style={LABEL_STYLE}>
           개화 상태
-        </Text>
-        <Group gap="xs">
+        </p>
+        <div className={GROUP}>
           {BLOOM_OPTIONS.map(({ value: v, label, icon }) => (
             <Button
               key={v}
               onClick={() => set('bloomCondition', v as SelectionForm['bloomCondition'])}
-              flex={1}
+              className="flex-1"
               size="md"
-              radius="xl"
-              variant="outline"
-              color="gray"
+              variant="outline-gray"
               style={value.bloomCondition === v ? activeStyle : {}}
             >
-              {icon} {label}
+              <ButtonLabel>
+                {icon} {label}
+              </ButtonLabel>
             </Button>
           ))}
-        </Group>
-      </Paper>
+        </div>
+      </div>
 
-      <Paper radius="lg" shadow="xs" p="md">
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
-            color: 'var(--color-text-disabled)',
-          }}
-          mb="xs"
-        >
+      <div className={PAPER}>
+        <p className={`${TEXT} mb-2.5`} style={LABEL_STYLE}>
           관리 난이도
-        </Text>
-        <Group gap="xs">
+        </p>
+        <div className={GROUP}>
           {CARE_OPTIONS.map(({ value: v, label, icon }) => (
             <Button
               key={v}
               onClick={() => set('careLevel', v as SelectionForm['careLevel'])}
-              flex={1}
+              className="flex-1"
               size="md"
-              radius="xl"
-              variant="outline"
-              color="gray"
+              variant="outline-gray"
               style={value.careLevel === v ? activeStyle : {}}
             >
-              {icon} {label}
+              <ButtonLabel>
+                {icon} {label}
+              </ButtonLabel>
             </Button>
           ))}
-        </Group>
-      </Paper>
+        </div>
+      </div>
 
-      <Paper radius="lg" shadow="xs" p="md">
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
-            color: 'var(--color-text-disabled)',
-          }}
-          mb="xs"
-        >
+      <div className={PAPER}>
+        <p className={`${TEXT} mb-2.5`} style={LABEL_STYLE}>
           판매 단위
-        </Text>
-        <TextInput
+        </p>
+        <Input
           placeholder="예: 1분, 3묶음, 1박스"
           value={value.bundleUnit}
           onChange={(e) => set('bundleUnit', e.target.value)}
           size="md"
-          radius="xl"
+          className="rounded-xl"
         />
-      </Paper>
-    </Stack>
+      </div>
+    </div>
   );
 }

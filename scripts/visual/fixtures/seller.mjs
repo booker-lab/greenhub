@@ -951,6 +951,23 @@ export const screens = [
   { id: 'products', group: '판매자', title: '상품 목록', path: '/products' },
   { id: 'product-new', group: '판매자', title: '상품 등록', path: '/products/new' },
   { id: 'product-edit', group: '판매자', title: '상품 수정', path: '/products/product-1/edit' },
+  // 상품 폼 2~5단계는 주소로 열 수 없어 수정 화면에서 "다음"을 n-1번 누른다.
+  ...[2, 3, 4, 5].map((step) => ({
+    id: `product-edit-step${step}`,
+    group: '판매자',
+    title: `상품 수정 · ${step}단계`,
+    path: '/products/product-1/edit',
+    steps: Array.from({ length: step - 1 }, () => ({ click: '다음' })),
+  })),
+  {
+    // 예전 방식(legacy) 가게에서만 공동구매 선택이 보인다(#696). 공동구매를 골라 설정 칸까지 연다.
+    id: 'product-edit-step5-group',
+    group: '판매자',
+    title: '상품 수정 · 5단계 · 공동구매(예전 방식 가게)',
+    path: '/products/product-1/edit',
+    scenario: 'legacy-store',
+    steps: [...Array.from({ length: 4 }, () => ({ click: '다음' })), { click: '공동구매' }],
+  },
   { id: 'settlements', group: '판매자', title: '정산', path: '/settlements' },
   {
     id: 'settlements-period',
@@ -1047,7 +1064,27 @@ export const screens = [
     steps: [{ click: '회차 취소' }],
     viewport: true,
   },
+  {
+    // 수정 화면 상품은 직접 편집한 내용으로 보므로 다시 생성하기가 확인 모달을 연다.
+    id: 'modal-product-regenerate',
+    group: '판매자 · 모달',
+    title: '상품 수정 · 4단계 · 다시 생성 확인',
+    path: '/products/product-1/edit',
+    steps: [...Array.from({ length: 3 }, () => ({ click: '다음' })), { click: '다시 생성하기' }],
+    viewport: true,
+  },
 ];
+
+/** 화면별 상황(shots.mjs가 화면을 열 때 /__scenario로 고른다). 그 경로를 기본 경로 앞에 끼운다. */
+export const scenarioRoutes = {
+  'legacy-store': [
+    [
+      'GET',
+      /^\/stores\/([^/]+)\/public-profile$/,
+      ({ params: [id] }) => ({ body: { id, name: '그린러브 검증 가게', logoUrl: null, salesMode: 'legacy' } }),
+    ],
+  ],
+};
 
 /**
  * UI 교체 대조 화면(ui-stack-migration-plan.md §6 P1·P2a, `shots.mjs --set compare`).
@@ -1061,12 +1098,16 @@ export const compareScreens = [
     ['dialog', '@greenhub/ui Dialog'],
     ['drawer', 'Mantine Drawer(bottom)'],
     ['sheet', '@greenhub/ui Sheet(bottom)'],
+    ['select', 'Mantine Select 목록(묶음·고른 항목)'],
+    ['uiselect', '@greenhub/ui Select 목록(묶음·고른 항목)'],
   ].map(([open, title]) => ({
     id: `ui-compare-${open}`,
     group: 'UI 대조',
     title,
     path: `/dev/ui-compare?open=${open}`,
     viewport: true,
+    // Select 목록은 사람이 누른 것처럼 연다(Mantine은 이때 입력칸에 초점이 남는다).
+    ...(open.endsWith('select') ? { steps: [{ clickSelector: 'main input:not([type=hidden])' }] } : {}),
   })),
 ];
 
