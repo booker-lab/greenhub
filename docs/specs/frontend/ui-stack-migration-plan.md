@@ -1,6 +1,6 @@
 # Mantine → shadcn/ui + Tailwind CSS v4 + Base UI 교체 계획
 
-> 작성 2026-10-28. 상태: **P0 작업 브랜치 완료(`main` 미병합), P0.5 전**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 검토 3라운드(§11)를 거쳐 2026-10-30 사용자가 확정했다.
+> 작성 2026-10-28. 상태: **P0 완료(#684), P0.5 구현 중**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 검토 3라운드(§11)를 거쳐 2026-10-30 사용자가 확정했다.
 > 요약: 첫 회차 배송(12/1) 전에는 교체 코드를 `main`에 넣지 않는다. 그 전에는 P0(E2E 선택자)과 P0.5(증명 도구)만 병합하고, P1부터는 12/2 이후에 병합한다.
 > 화면을 어떻게 바꿀지는 `design-direction.md`(부분 확정)를 따르고, 그 문서에서 확정되지 않은 부분의 시각 계약은 `design-standard.md`다.
 > 이 문서는 `*-plan.md`이므로 교체가 끝나면 역사 자료가 된다. 끝난 뒤의 규칙은 `design-standard.md`와 `packages/ui`가 소유한다.
@@ -154,27 +154,31 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 판매자 주문 탭은 `SegmentedTabs`의 `ariaLabel`("주문 상태") group 안의 버튼 글자로 건수를 확인한다.
   - 공동구매 진행률은 `progressbar` 역할로, 성능 회귀의 Badge 확인은 홈 상품 상태 태그 글자로 찾는다.
 - `driver-design-system.spec.ts`의 인증 화면 묶음(`--mantine-color-` 금지, Paper 테두리, 하단 바 `borderTop`)은 `DRIVER_SESSION_COOKIE`가 없으면 건너뛰고(:98) 쿠키 도메인이 운영으로 고정돼 있다(:106). 로컬에서는 실패가 아니라 건너뛰므로 지금은 증거가 되지 못한다. 그중 둘은 인라인 `style`을 읽어 Tailwind 클래스로 바꾸면 깨진다. P3에서 쿠키 도메인을 대상 주소에 맞추고 계산된 스타일 기준으로 바꾼다.
-- 상태: 작업 브랜치에서 끝났다(`d947a78`). `main`에 병합해야 P0.5를 시작할 수 있다.
+- 상태: 완료(2026-10-30, #684 병합).
 
 ### P0.5. 증명 도구 (Mantine 상태, 화면·동작 변화 없음)
-검토에서 이 계획이 요구하는 증명을 지금 도구로는 실행할 수 없다고 확인됐다. 첫 회차 전 남은 기간에 맞춰 범위를 줄이고, 교체보다 먼저 만든다. 새 npm 의존성을 넣지 않는다(lockfile이 바뀌면 세 앱이 다시 빌드된다).
+검토에서 이 계획이 요구하는 증명을 지금 도구로는 실행할 수 없다고 확인됐다. 첫 회차 전 남은 기간에 맞춰 범위를 줄이고, 교체보다 먼저 만든다. 새 npm 의존성을 넣지 않는다(lockfile이 바뀌면 세 앱이 다시 빌드된다). 바꾸는 경로는 `scripts/`·`.github/`·문서뿐이라 프런트 빌드를 일으키지 않는다.
+
+상태: 구현(2026-10-30). 쓰는 법은 `scripts/visual/README.md`·`apps/e2e/README.md`.
+
 1. **화면 비교를 기계로 판정한다** (`scripts/visual`)
-   - **시각 고정**: `shots.mjs`가 Playwright `page.clock`으로 시각을 고정하고, fixture의 회차 시각(`orderCloseAt` 등, 지금은 2026-11-01 같은 절대 시각)을 고정 시각 기준 상대값으로 바꾼다. 1초마다 바뀌는 카운트다운도 멈춘다. CSS 애니메이션(Loader·Skeleton)은 시계로 멈추지 않으므로 촬영에 `animations: 'disabled'`를 준다.
-   - **정상 촬영 판정**: 지금 `shots.mjs`는 fixture 누락·콘솔 오류·누를 글자 없음(`stepNote`)이 있어도 ⚠️만 찍고 계속한다(:252). 그래서 전후가 같은 오류 화면이면 차이 0이 나온다. 화면마다 `missing=0`, `errors=0`, `stepNote` 없음, 최종 주소 = 의도한 주소일 때만 비교에 넣고, 아니면 그 화면을 실패로 본다.
-   - **픽셀 비교**: before/after PNG를 비교해 "차이 난 화면 목록"과 차이 영역을 낸다. 새 의존성 없이 Chromium(canvas)으로 비교한다. 의도한 차이는 PR에 화면별 **영역(bbox)과 사유**로만 허용하고, 그 영역을 가린 나머지 차이는 0이어야 한다.
-   - **민감도 시험**: 한 화면을 1px 일부러 바꿨을 때 차이로 잡히는지 확인한다.
-   - **폭**: 390·1280에 768을 더한다(판매자 1100px 이하 배치, `design-direction.md` §5).
-   - 하네스는 `next dev`로 띄운다. 운영 빌드에서는 로컬 로그인이 꺼진다(`apps/driver/src/auth.ts`:124, seller도 같다). 로그인 화면을 운영 빌드로 찍는 방법(하네스가 자기 `AUTH_SECRET`으로 세션 쿠키를 만들기 등)은 P2a 전에 정한다. 그 전까지 dev로만 찍은 화면은 "운영 빌드 미증명"으로 표시한다.
-   - 촬영 목록에 없는 화면은 P0.5에서 판매자·어드민부터 채운다(`admin/audit`·`admin/reviews`·`hubs/[id]`·`invite/[token]`·`option-stocks`·`payout-account`, 모달이 열린 상태). 기사(배송 보류 모달·사진 촬영·알림)와 소비자는 해당 단계 전에 채운다.
+   - **기준 시각**(`clock.mjs`): `start.mjs`가 기준 시각을 정하고(기본 실행한 날의 한국 시간 0시, `--now`로 지정), `shots.mjs`가 브라우저 시계를 그 시각에 고정한다(`page.clock.setFixedTime`, 타이머는 돈다). 서버(next dev)는 실제 시각으로 그리므로 날짜가 같도록 기본값을 "오늘 0시"로 했다. fixture의 다가오는 회차 일정은 기준 시각 기준 상대값이다. 지난 회차·주문 날짜는 절대값 그대로다. CSS 애니메이션은 촬영에서 멈춘다(`animations: 'disabled'`).
+   - **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소일 때만 정상이다. 정상이 아닌 캡처는 비교하지 않고 실패로 본다.
+   - **픽셀 비교**(`diff.mjs`·`compare.mjs`·`png.mjs`): node 내장 zlib만으로 PNG를 읽어 픽셀 하나라도 다르면 차이로 본다. 의도한 차이는 허용 목록에 화면·폭·**영역(bbox)과 사유**로만 적을 수 있고, 그 영역 밖 차이는 0이어야 한다. 크기가 달라진 화면은 `"full"`로만 허용한다. 기준 시각·폭 목록이 다른 두 묶음은 비교하지 않는다.
+   - **민감도 시험**: `compare.spec.mjs`가 1px 변화를 차이로 잡는지 CI에서 확인한다.
+   - **폭**: 390·768·1280(`--viewports`로 고를 수 있다).
+   - 하네스는 `next dev`로 띄운다. 운영 빌드에서는 로컬 로그인이 꺼진다(`apps/driver/src/auth.ts`:124, seller도 같다). 로그인 화면을 운영 빌드로 찍는 방법(하네스가 자기 `AUTH_SECRET`으로 세션 쿠키를 만들기 등)은 P2a 전에 정한다. 그 전까지 dev로만 찍은 화면은 "운영 빌드 미증명"으로 본다.
+   - 판매자·어드민 촬영 목록을 채웠다: `admin/audit`·`hubs/[id]`(상세·수정·픽업)·`hubs/new`·`settings/option-stocks`·`settings/payout-account`·`invite/[token]`(정상·잘못된 링크)·`login/error`, 모달이 열린 상태 3개(주문 배송 보류·강제 취소, 회차 취소). `/admin`은 `/admin/stores`로 넘어가는 주소이고, 후기 관리·입점 문의·고객 반응·가게 소개는 기능 플래그가 꺼져 지금 404라 넣지 않았다(기능을 켠 모양은 `benchmarkScreens`). 기사(배송 보류 모달·사진 촬영·알림)와 소비자는 해당 단계 전에 채운다.
 2. **로컬 E2E가 실제로 돌았는지 판정한다** (`apps/e2e`)
    - 회차 spec은 이미 `pnpm test:e2e:local`이 루프백 운영 빌드로 돌리고 64건 무건너뜀을 판정한다(`scripts/round-direct-e2e-local.mjs`). 다만 데이터는 원격 스테이징 API이고, E2E Firebase 키(`.env.local-target`)가 있어야 돈다.
    - 회차 밖 spec은 `BASE`를 주지 않으면 운영 주소를 치고(`tests/_helpers/target-url.ts`), 자격 정보가 없거나 데이터에 따라 건너뛴다(`seller-banner.spec.ts`:29는 무조건 건너뜀). 앱 전체 "건너뜀 0"은 spec 작업이 커서 P0.5에서는 하지 않는다.
-   - P0.5 범위: 판매자·어드민 묶음(`admin-local-*`, dev:local 대상)을 루프백이 아니면 실패시키고, 기대 건수를 명시적으로 고정해 건너뜀 0을 판정한다. 다른 묶음은 그 앱 단계 전에 같은 방식으로 만든다. 기준을 맞추려고 판정을 완화하지 않는다(`AGENTS.md` §0-5).
+   - 판매자·어드민 묶음: `node scripts/admin-local-e2e.mjs`가 `admin-local-*`를 dev:local(루프백 고정)에서 재시도 없이 돌리고, 실행 건수 20(spec 5개 × chromium·mobile)·실패 0·재시도 통과 0·건너뜀 0일 때만 통과시킨다. 대상 주소를 밖으로 바꾸면 실행하지 않는다. 다른 묶음은 그 앱 단계 전에 같은 방식으로 만든다. 기준을 맞추려고 판정을 완화하지 않는다(`AGENTS.md` §0-5).
    - 교체 PR은 `main`에서 같은 명령을 먼저 돌린 기준 결과와 비교한다.
-3. **동결을 도구로 막는다**
-   - 상태 파일 하나(예: `docs/release/freeze.json`)에 현재 구간과 후보 SHA를 적고, 구간 전환은 이 파일을 바꾸는 커밋으로 한다. 날짜로 자동 전환하지 않는다(§8은 상태 기준이다).
-   - PR CI 경로 검사: 상태 파일은 PR 쪽이 아니라 **base SHA**에서 읽는다(PR이 파일을 같이 고쳐 동결을 풀지 못하게). 경로 분류는 `scripts/vercel/ignore-build.mjs`의 함수를 그대로 쓴다. 수정·revert 예외 라벨이 바뀌면 다시 돌도록 `labeled`·`unlabeled` 트리거를 넣고, 필수 검사(strict)로 둔다. `packages/ui/package.json`은 파일 단위가 아니라 키 단위(`dependencies`·`exports` 추가)로 허용 범위를 정한다.
-   - 배포 쪽 검사: 10/24 사고는 병합이 아니라 동결 중 **배포**였다(`docs/memory.md`). `production-deploy.yml`에 "동결 구간에는 상태 파일의 후보 SHA 또는 그 뒤 수정·revert 커밋만 배포" 검사를 둔다.
+3. **동결을 도구로 막는다** (`scripts/release/freeze-guard.mjs`)
+   - 상태 파일 `docs/release/ui-migration-freeze.json`에 구간(`open`·`pre-candidate`·`candidate`)과 후보 SHA를 적는다. 구간 전환은 이 파일을 바꾸는 커밋으로 한다. 날짜로 자동 전환하지 않는다(§8은 상태 기준이다).
+   - **PR 검사**(`ci.yml`의 `UI 교체 동결` job, `ci-ok`에 포함): 상태 파일을 PR 쪽이 아니라 **base SHA**에서 읽는다(PR이 파일을 같이 고쳐 동결을 풀지 못하게). `pre-candidate`·`candidate`에서는 교체 흔적을 막는다. 교체 전용 경로(`packages/ui/src/{components,styles,lib}/`, `components.json`, 앱 `postcss.config`, `.claude/skills/`)와, 프런트 소스·패키지 매니페스트에 새로 들어온 줄의 교체 흔적(`@greenhub/ui/{components,styles,lib}`, `tailwindcss`, `@base-ui/react`, `tw-animate-css`, `shadcn`)이다. `packages/ui/package.json`은 경로로 막지 않고 이 흔적 줄만 막는다. `candidate`에서는 프런트를 다시 빌드하게 하는 변경(판정은 `scripts/vercel/ignore-build.mjs` 그대로)에 수정·revert 라벨 `freeze-fix`를 요구한다. 라벨은 교체 흔적을 통과시키지 않는다. 라벨 변화에 다시 돌도록 `pull_request`에 `labeled`·`unlabeled`를 넣었다.
+   - **배포 검사**(`production-deploy.yml`의 "UI 교체 동결 확인"): 10/24 사고는 병합이 아니라 동결 중 **배포**였다(`docs/memory.md`). `candidate` 구간에는 상태 파일의 후보 SHA이거나 그 뒤의 SHA만, 그 사이에 교체 흔적이 없을 때만 배포한다.
+   - 필수 검사는 이미 `ci-ok`이고 branch protection이 strict라, 상태 파일이 바뀐 뒤 열린 PR은 최신 `main`을 반영해 다시 검사받는다. GitHub 설정은 바꾸지 않았다.
 - Taste 실행 래퍼는 P0.5에서 빼고 M4(12/2 이후)로 옮긴다.
 - 완료 기준: `main`에서 만든 기준 촬영·기준 E2E 결과가 있다. 같은 커밋을 두 번 찍어 비교하면 차이 0이고, 민감도 시험의 1px 변화는 차이로 잡힌다. 경로 검사가 막힌 경로 PR을 실제로 실패시킨다.
 

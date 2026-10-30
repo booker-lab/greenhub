@@ -111,7 +111,7 @@ export function evaluatePullRequest(state, change) {
     !change.labels.includes(FIX_LABEL)
   ) {
     violations.push(
-      `후보 확정 뒤에는 프런트(${change.rebuildsFrontend.join('·')})를 다시 빌드하게 하는 변경은 수정·revert만 병합한다. 수정·revert면 라벨 ${FIX_LABEL}을 붙인다`,
+      `후보 확정 뒤에는 프런트(${change.rebuildsFrontend.join('·')})를 다시 빌드하게 하는 변경은 수정·revert만 병합한다. 수정·revert면 라벨 ${FIX_LABEL}를 붙인다`,
     );
   }
   return { ok: violations.length === 0, violations };
