@@ -85,6 +85,7 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
+- 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 대조 화면 `ui-compare-select`).
 - **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 가짜 API에 닿지 못한 요청 0(취소된 요청 제외), 하네스가 지원하지 않는 화면 0(`--prod`의 셀러 Firestore 화면), 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
 - **렌더 결정성**: 브라우저는 `--disable-partial-raster`로 띄운다. Chromium이 바뀐 영역만 다시 래스터하면 그리는 이력에 따라 글자·둥근 모서리의 안티앨리어싱이 채널 2~40만큼 달라져, 같은 커밋 두 번 촬영이 브라우저 컨텍스트마다 약 5~15% 어긋났다(2026-10-30 기사 화면 실측). 끄면 20번 중 20번 같았다.
 - `next dev`는 힙 사용량이 상한(시스템 메모리의 50%)의 80%를 넘으면 스스로 재시작한다("Server is approaching the used memory threshold, restarting..."). 한 서버로 여러 번 연달아 찍다가 재시작하면, 그 사이 찍힌 화면은 연결 오류나 덜 그려진 상태(로딩)가 된다. `start.mjs`가 재시작 횟수를 `dev-restarts.txt`에 적고 `shots.mjs`가 재시작이 걸친 화면과 그 바로 다음 화면을 정상 판정에서 뺀다("next dev 메모리 재시작 중·직후 촬영"). 그 화면만 `--only`로 다시 찍는다. 세 앱 서버와 에뮬레이터를 한 컨테이너에서 같이 띄우면 더 자주 일어난다.
@@ -94,6 +95,23 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 - Claude가 `<폴더>`를 claude.ai 아티팩트로 게시한다(`db` 기능 사용).
   - 사람이 화면마다 괜찮음/고칠 것과 메모를 남긴다.
   - 판정은 `verdicts` 컬렉션(문서 id `<label>__<screen id>`)에 저장되고, Claude가 읽어 다음 수정을 정한다.
+
+## UI 교체 대조 화면(판매자)
+
+Mantine을 걷어내는 동안(`docs/specs/frontend/ui-stack-migration-plan.md` P1·P2a) `@greenhub/ui` 컴포넌트가 같은 크기의 Mantine과 같은 모양인지 본다.
+
+```bash
+node scripts/visual/shots.mjs seller --label compare --set compare   # 대조 화면과 Modal·Dialog·Drawer·Sheet 열린 상태(fixture compareScreens)
+node scripts/visual/compare-cells.mjs --viewport 390                 # 짝마다 위치·크기·계산된 스타일·픽셀 비교(390·768·1280)
+```
+
+- 화면은 판매자 앱 `/dev/ui-compare`다. 행마다 왼쪽 Mantine, 오른쪽 `@greenhub/ui`를 그린다. 짝은 판매자 앱이 실제로 쓰는 props(`theme.ts` 기본값 포함)로 고른다.
+- 열린 상태는 `?open=modal|dialog|drawer|sheet|select|uiselect`. Select 목록 둘은 입력칸을 실제로 눌러 연다. Modal은 `ConfirmModal`, Drawer는 소비자 `OptionSheet`와 같은 설정이다. 두 캡처는 같은 화면 위에 열리므로 캡처끼리 그대로 비교한다.
+- 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열린다. 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`).
+- `compare-cells.mjs`는 같은 순서의 부품(칸의 첫 요소·button·input·svg·글자)을 짝지어 칸 안 위치·크기와 면·테두리·모서리·글꼴·색을 비교한다. 줄 높이·여백은 글자 위치로 드러나므로 따로 보지 않는다.
+  - 픽셀은 같은 자리에서 비교한다. 오른쪽 칸을 찍고, 그 칸을 왼쪽(Mantine) 내용의 복제로 바꿔 다시 찍는다. 같은 Mantine 버튼도 가로 위치가 다른 칸에 놓으면 모서리 안티앨리어싱이 15픽셀 달라지기 때문이다(2026-10-31 실측).
+  - textarea는 입력칸처럼 상자·글꼴을 비교하고, 안의 글자는 픽셀로만 본다(글자 노드 범위 좌표가 화면 위치가 아니다).
+  - 채널 허용치는 1(`diff.mjs --tolerance 1`과 같다). 차이 있는 행이 있으면 종료 코드 1이다. `--out <폴더>`로 칸 이미지를 남긴다.
 
 ## 작업 전·후 픽셀 비교
 
@@ -127,6 +145,7 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `soundness.mjs` | 정상 촬영 판정 |
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
 | `report.mjs` · `report-template.html` | 캡처 결과로 확인판 HTML 생성 |
+| `compare-cells.mjs` | UI 교체 대조 화면의 짝 비교(위치·스타일·픽셀) |
 
 ## 안전장치
 

@@ -62,7 +62,7 @@ const SELLER_ORDERS = [
     ['만천홍', 25000, 2],
   ]),
   roundOrder('order-round-single', '20261001-000002', 'ACCEPTED', [['v3', 45000, 1]]),
-  // 비교 기능(옵션·토퍼 문구·선물)이 담긴 회차 주문 — 포장할 때 옵션·문구와 선물 카드를 봐야 한다.
+  // 비교 기능(옵션·축하 토퍼·포장 라벨·선물)이 담긴 회차 주문 — 포장할 때 옵션·라벨 문구와 선물 카드를 봐야 한다.
   roundOrder('order-round-gift', '20261002-000007', 'ACCEPTED', [['빅립', 43000, 1]], {
     orderItems: [
       {
@@ -75,14 +75,7 @@ const SELLER_ORDERS = [
         subtotalAmount: 43000,
         selectedOptions: [
           { groupId: 'g1', groupName: '화분', choiceId: 'c2', choiceLabel: '백자 도자기 화분', priceDelta: 8000 },
-          {
-            groupId: 'g2',
-            groupName: '문구',
-            choiceId: 'c5',
-            choiceLabel: '3D 토퍼',
-            priceDelta: 5000,
-            text: '엄마 생신 축하해요',
-          },
+          { groupId: 'g2', groupName: '축하 토퍼', choiceId: 'c5', choiceLabel: '祝 生辰', priceDelta: 5000 },
         ],
       },
     ],
@@ -93,6 +86,7 @@ const SELLER_ORDERS = [
       senderName: '김그린',
       cardMessage: '늘 고마워요. 건강하세요!',
     },
+    packageLabel: '김그린',
   }),
   roundOrder('order-round-preparing', '20261001-000003', 'PREPARING', [['빅립', 30000, 2]]),
   roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]]),
@@ -529,11 +523,11 @@ export const firestoreSeed = {
         },
         {
           id: 'g2',
-          name: '문구',
+          name: '축하 토퍼',
           choices: [
-            { id: 'c3', label: '문구 없음', priceDelta: 0 },
-            { id: 'c4', label: '스티커 라벨', priceDelta: 2000, needsText: true },
-            { id: 'c5', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+            { id: 'c3', label: '토퍼 없음', priceDelta: 0 },
+            { id: 'c4', label: '祝 開業', priceDelta: 5000 },
+            { id: 'c5', label: '祝 生辰', priceDelta: 5000 },
           ],
         },
       ],
@@ -967,6 +961,23 @@ export const screens = [
   { id: 'products', group: '판매자', title: '상품 목록', path: '/products', firestore: true },
   { id: 'product-new', group: '판매자', title: '상품 등록', path: '/products/new' },
   { id: 'product-edit', group: '판매자', title: '상품 수정', path: '/products/product-1/edit' },
+  // 상품 폼 2~5단계는 주소로 열 수 없어 수정 화면에서 "다음"을 n-1번 누른다.
+  ...[2, 3, 4, 5].map((step) => ({
+    id: `product-edit-step${step}`,
+    group: '판매자',
+    title: `상품 수정 · ${step}단계`,
+    path: '/products/product-1/edit',
+    steps: Array.from({ length: step - 1 }, () => ({ click: '다음' })),
+  })),
+  {
+    // 예전 방식(legacy) 가게에서만 공동구매 선택이 보인다(#696). 공동구매를 골라 설정 칸까지 연다.
+    id: 'product-edit-step5-group',
+    group: '판매자',
+    title: '상품 수정 · 5단계 · 공동구매(예전 방식 가게)',
+    path: '/products/product-1/edit',
+    scenario: 'legacy-store',
+    steps: [...Array.from({ length: 4 }, () => ({ click: '다음' })), { click: '공동구매' }],
+  },
   { id: 'settlements', group: '판매자', title: '정산', path: '/settlements' },
   {
     id: 'settlements-period',
@@ -1064,6 +1075,51 @@ export const screens = [
     steps: [{ click: '회차 취소' }],
     viewport: true,
   },
+  {
+    // 수정 화면 상품은 직접 편집한 내용으로 보므로 다시 생성하기가 확인 모달을 연다.
+    id: 'modal-product-regenerate',
+    group: '판매자 · 모달',
+    title: '상품 수정 · 4단계 · 다시 생성 확인',
+    path: '/products/product-1/edit',
+    steps: [...Array.from({ length: 3 }, () => ({ click: '다음' })), { click: '다시 생성하기' }],
+    viewport: true,
+  },
+];
+
+/** 화면별 상황(shots.mjs가 화면을 열 때 /__scenario로 고른다). 그 경로를 기본 경로 앞에 끼운다. */
+export const scenarioRoutes = {
+  'legacy-store': [
+    [
+      'GET',
+      /^\/stores\/([^/]+)\/public-profile$/,
+      ({ params: [id] }) => ({ body: { id, name: '그린러브 검증 가게', logoUrl: null, salesMode: 'legacy' } }),
+    ],
+  ],
+};
+
+/**
+ * UI 교체 대조 화면(ui-stack-migration-plan.md §6 P1·P2a, `shots.mjs --set compare`).
+ * 왼쪽 Mantine, 오른쪽 @greenhub/ui를 같은 칸에 그린다. main에는 없는 화면이라 전·후 비교(screens)에 넣지 않는다.
+ * 앱은 하네스·dev:local(GREENHUB_LOCAL_RUNTIME=true + next dev)에서만 이 주소를 연다(apps/seller/src/lib/local-preview.ts).
+ */
+export const compareScreens = [
+  { id: 'ui-compare', group: 'UI 대조', title: '컴포넌트 대조', path: '/dev/ui-compare' },
+  ...[
+    ['modal', 'Mantine Modal'],
+    ['dialog', '@greenhub/ui Dialog'],
+    ['drawer', 'Mantine Drawer(bottom)'],
+    ['sheet', '@greenhub/ui Sheet(bottom)'],
+    ['select', 'Mantine Select 목록(묶음·고른 항목)'],
+    ['uiselect', '@greenhub/ui Select 목록(묶음·고른 항목)'],
+  ].map(([open, title]) => ({
+    id: `ui-compare-${open}`,
+    group: 'UI 대조',
+    title,
+    path: `/dev/ui-compare?open=${open}`,
+    viewport: true,
+    // Select 목록은 사람이 누른 것처럼 연다(Mantine은 이때 입력칸에 초점이 남는다).
+    ...(open.endsWith('select') ? { steps: [{ clickSelector: 'main input:not([type=hidden])' }] } : {}),
+  })),
 ];
 
 /**

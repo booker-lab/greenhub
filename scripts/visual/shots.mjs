@@ -3,6 +3,7 @@
 //   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3202] [--set benchmark]
 //                                 [--viewports mobile,tablet,desktop]
 //     --set benchmark  fixtures의 benchmarkScreens(팔도감 벤치마킹 비교 화면)를 찍는다
+//     --set compare    fixtures의 compareScreens(UI 교체 대조 화면: Mantine ↔ @greenhub/ui)를 찍는다
 //
 // 결과: %TEMP%/greenhub-visual/<app>/shots/<label>/ 아래 PNG와 manifest.json.
 // manifest에는 화면별 최종 주소·콘솔 오류·fixture 없는 API 경로와 정상 판정(soundness.mjs)이 남는다(report.mjs·diff.mjs가 읽는다).
@@ -86,7 +87,14 @@ const outDir = option('out', path.join(os.tmpdir(), 'greenhub-visual', appName, 
 const fixture = await import(`./fixtures/${appName}.mjs`);
 const { browserStorage, wishStorage } = fixture;
 const screenSet = option('set', '');
-const allScreens = screenSet === 'benchmark' ? (fixture.benchmarkScreens ?? []) : fixture.screens;
+const SCREEN_SETS = { benchmark: 'benchmarkScreens', compare: 'compareScreens' };
+if (screenSet && !SCREEN_SETS[screenSet]) {
+  console.error(
+    `❌ 지원하지 않는 화면 묶음: ${screenSet} (가능: ${Object.keys(SCREEN_SETS).join(', ')})`,
+  );
+  process.exit(1);
+}
+const allScreens = screenSet ? (fixture[SCREEN_SETS[screenSet]] ?? []) : fixture.screens;
 const screens = only.length ? allScreens.filter((s) => only.includes(s.id)) : allScreens;
 
 const { chromium } = createRequire(path.join(ROOT, 'apps/e2e/package.json'))('@playwright/test');
@@ -199,6 +207,11 @@ async function runSteps(page, steps) {
     if (step.click) {
       const target = page.getByText(step.click, { exact: true }).first();
       if (!(await target.isVisible().catch(() => false))) return `누를 글자 없음: ${step.click}`;
+      await target.click();
+    } else if (step.clickSelector) {
+      // 글자가 없는 대상(값이 든 입력칸 등)은 CSS 선택자로 실제 마우스 클릭을 한다.
+      const target = page.locator(step.clickSelector).first();
+      if (!(await target.isVisible().catch(() => false))) return `누를 대상 없음: ${step.clickSelector}`;
       await target.click();
     } else if (typeof step.fill === 'string') {
       await page.getByRole('textbox').first().fill(step.fill);

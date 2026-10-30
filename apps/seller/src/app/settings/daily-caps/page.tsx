@@ -1,23 +1,34 @@
 'use client';
 
-import {
-  ActionIcon,
-  Box,
-  Button,
-  Container,
-  Group,
-  Paper,
-  SimpleGrid,
-  Text,
-  Title,
-  UnstyledButton,
-} from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { notifications } from '@mantine/notifications';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
 import { todayKST } from '@greenhub/shared';
 import { ApiError, apiJson } from '@/lib/api';
+
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(sm 그림자)·UnstyledButton·SimpleGrid(7칸, 간격 16) 값.
+const TEXT = 'm-0 p-0 text-base';
+const PAPER = 'block rounded-[16px] bg-white shadow-mantine-sm';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+const GRID7 = 'grid grid-cols-7 gap-4';
+const BACK_ICON = (d: string) => (
+  <svg
+    className="size-5"
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    aria-hidden="true"
+    focusable="false"
+  >
+    <path d={d} />
+  </svg>
+);
 
 interface DailyCap {
   date: string;
@@ -139,116 +150,107 @@ export default function DailyCapsPage() {
   });
 
   return (
-    <Box
-      component="main"
+    <main
       style={{
         minHeight: '100vh',
         backgroundColor: 'var(--color-surface-muted)',
         padding: '32px 16px',
       }}
     >
-      <Container size="xs">
-        <Group gap="sm" mb="lg">
-          <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
-            <svg
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </ActionIcon>
-          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
+      <div className="mx-auto max-w-[540px] px-4">
+        <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-3">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-7"
+            aria-label="뒤로"
+            onClick={() => router.back()}
+          >
+            {BACK_ICON('M15 18l-6-6 6-6')}
+          </Button>
+          <h2
+            className="m-0 leading-[1.35] font-extrabold"
+            style={{ fontSize: 'var(--font-size-xl)' }}
+          >
             배송 슬롯 설정
-          </Title>
-        </Group>
+          </h2>
+        </div>
 
-        <Text
+        <p
+          className={`${TEXT} mb-4`}
           style={{
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-disabled)',
             lineHeight: 1.6,
           }}
-          mb="md"
         >
           날짜를 탭하면 해당 날짜의 최대 배송 슬롯(총 수량)을 설정할 수 있습니다.
-        </Text>
+        </p>
 
         {/* 월 이동 */}
-        <Paper radius="lg" shadow="sm" p="md" mb="md">
-          <Group justify="space-between" mb="md">
-            <ActionIcon variant="subtle" color="gray" onClick={prevMonth}>
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M15 18l-6-6 6-6" />
-              </svg>
-            </ActionIcon>
-            <Text style={{ fontWeight: 'var(--fw-medium)' }}>{monthLabel}</Text>
-            <ActionIcon variant="subtle" color="gray" onClick={nextMonth}>
-              <svg
-                width="20"
-                height="20"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                aria-hidden="true"
-                focusable="false"
-              >
-                <path d="M9 18l6-6-6-6" />
-              </svg>
-            </ActionIcon>
-          </Group>
+        <div className={`${PAPER} mb-4 p-4`}>
+          <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              aria-label="이전 달"
+              onClick={prevMonth}
+            >
+              {BACK_ICON('M15 18l-6-6 6-6')}
+            </Button>
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+              {monthLabel}
+            </p>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
+              aria-label="다음 달"
+              onClick={nextMonth}
+            >
+              {BACK_ICON('M9 18l6-6-6-6')}
+            </Button>
+          </div>
 
           {/* 요일 헤더 */}
-          <SimpleGrid cols={7} mb={4}>
+          <div className={`${GRID7} mb-1`}>
             {['일', '월', '화', '수', '목', '금', '토'].map((d) => (
-              <Text
+              <p
                 key={d}
-                ta="center"
+                className={`${TEXT} py-1 text-center`}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                py={4}
               >
                 {d}
-              </Text>
+              </p>
             ))}
-          </SimpleGrid>
+          </div>
 
           {/* 날짜 그리드 */}
           {loading ? (
-            <Box py={32} style={{ textAlign: 'center' }}>
-              <Text
+            <div className="py-8" style={{ textAlign: 'center' }}>
+              <p
+                className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 불러오는 중...
-              </Text>
-            </Box>
+              </p>
+            </div>
           ) : (
             calendar.map((week, wi) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: 캘린더 주 인덱스 — 5~6주 고정, reorder 없음
-              <SimpleGrid key={wi} cols={7}>
+              <div key={wi} className={GRID7}>
                 {week.map((date, di) => {
                   // biome-ignore lint/suspicious/noArrayIndexKey: 캘린더 빈칸(요일 시프트) — 위치 고정 키
-                  if (!date) return <Box key={di} />;
+                  if (!date) return <div key={di} />;
                   const cap = caps[date];
                   const isToday = date === todayStr;
                   const isPast = date < todayStr;
                   return (
-                    <UnstyledButton
+                    <button
+                      type="button"
                       key={date}
+                      className={UNSTYLED_BUTTON}
                       onClick={() => !isPast && startEdit(date)}
                       disabled={isPast}
                       style={{
@@ -262,7 +264,8 @@ export default function DailyCapsPage() {
                         backgroundColor: isToday ? 'var(--color-primary-surface)' : undefined,
                       }}
                     >
-                      <Text
+                      <p
+                        className={TEXT}
                         style={{
                           fontSize: 'var(--font-size-sm)',
                           fontWeight: 'var(--fw-medium)',
@@ -272,9 +275,9 @@ export default function DailyCapsPage() {
                         }}
                       >
                         {parseInt(date.split('-')[2], 10)}
-                      </Text>
-                      <Text
-                        mt={2}
+                      </p>
+                      <p
+                        className={`${TEXT} mt-0.5`}
                         style={{
                           fontSize: 'var(--font-size-sm)',
                           fontWeight: cap ? 'var(--fw-medium)' : undefined,
@@ -284,39 +287,40 @@ export default function DailyCapsPage() {
                         }}
                       >
                         {cap ? cap.totalCap : '—'}
-                      </Text>
+                      </p>
                       {cap && (cap.usedSlots ?? 0) > 0 && (
-                        <Text
+                        <p
+                          className={TEXT}
                           style={{
                             fontSize: 'var(--font-size-xs)',
                             color: 'var(--color-text-disabled)',
                           }}
                         >
                           {cap.usedSlots}↑
-                        </Text>
+                        </p>
                       )}
-                    </UnstyledButton>
+                    </button>
                   );
                 })}
-              </SimpleGrid>
+              </div>
             ))
           )}
-        </Paper>
+        </div>
 
         {/* 편집 패널 */}
         {editing && (
-          <Paper radius="lg" shadow="sm" p="lg">
-            <Text
+          <div className={`${PAPER} p-5`}>
+            <p
+              className={`${TEXT} mb-3`}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
                 color: 'var(--color-text)',
               }}
-              mb="sm"
             >
               {editing} 슬롯 설정
-            </Text>
-            <Group align="center" gap="sm">
+            </p>
+            <div className="flex flex-row flex-wrap items-center justify-start gap-3">
               <input
                 type="number"
                 min="0"
@@ -331,43 +335,35 @@ export default function DailyCapsPage() {
                   textAlign: 'right',
                 }}
               />
-              <Text
+              <p
+                className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 개
-              </Text>
-            </Group>
-            <Text
+              </p>
+            </div>
+            <p
+              className={`${TEXT} mt-1.5`}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              mt={6}
             >
               0 = 해당일 배송 불가
-            </Text>
-            <Group gap="xs" mt="md">
-              <Button
-                onClick={() => setEditing(null)}
-                flex={1}
-                size="sm"
-                radius="xl"
-                variant="outline"
-                color="gray"
-              >
+            </p>
+            <div className="mt-4 flex flex-row flex-wrap items-center justify-start gap-2.5">
+              <Button onClick={() => setEditing(null)} className="flex-1" variant="outline-gray">
                 취소
               </Button>
               <Button
                 onClick={() => saveCap(editing)}
                 disabled={saving}
-                flex={1}
-                size="sm"
-                radius="xl"
+                className="flex-1"
                 style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 {saving ? '저장 중...' : '저장'}
               </Button>
-            </Group>
-          </Paper>
+            </div>
+          </div>
         )}
-      </Container>
-    </Box>
+      </div>
+    </main>
   );
 }

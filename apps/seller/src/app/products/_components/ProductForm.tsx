@@ -1,9 +1,10 @@
 'use client';
 
-import { Button, Container, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
+import { useStoreSalesMode } from '@/hooks/useStoreSalesMode';
 import AIPreviewPanel from './AIPreviewPanel';
 import type { ProductFormProps } from './productForm.types';
 import SellerNoteInput from './SellerNoteInput';
@@ -15,10 +16,16 @@ import { useProductForm } from './useProductForm';
 
 export type { ProductFormData, ProductFormProps } from './productForm.types';
 
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 16px·줄 높이 1.55·여백 0)·UnstyledButton·Container(sm = 720px) 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+
 export default function ProductForm(props: ProductFormProps) {
   const { mode, storeId, token } = props;
   const router = useRouter();
   const f = useProductForm(props);
+  const salesMode = useStoreSalesMode(storeId, token);
 
   function renderStep() {
     switch (f.step) {
@@ -70,6 +77,7 @@ export default function ProductForm(props: ProductFormProps) {
             form={f.form}
             set={f.set}
             setGroupConfig={f.setGroupConfig}
+            salesMode={salesMode}
           />
         );
     }
@@ -81,15 +89,19 @@ export default function ProductForm(props: ProductFormProps) {
         title={mode === 'create' ? '상품 등록' : '상품 수정'}
         onBack={() => router.back()}
         right={
-          <Group gap="xs">
-            <UnstyledButton
+          <div className="flex flex-row flex-wrap items-center justify-start gap-2.5">
+            <button
+              type="button"
               onClick={f.handleDraftReset}
+              className={UNSTYLED_BUTTON}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               초기화
-            </UnstyledButton>
-            <UnstyledButton
+            </button>
+            <button
+              type="button"
               onClick={f.handleDraftSave}
+              className={UNSTYLED_BUTTON}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
@@ -97,44 +109,35 @@ export default function ProductForm(props: ProductFormProps) {
               }}
             >
               {f.draftSaved ? '저장됨 ✓' : '임시저장'}
-            </UnstyledButton>
-          </Group>
+            </button>
+          </div>
         }
       />
 
       <StepIndicator step={f.step} />
 
-      <Container size="sm" px="md" py="md" pb={96}>
-        <Stack gap="sm">
+      <div className="mx-auto max-w-[720px] px-4 pt-4 pb-24">
+        <div className="flex flex-col gap-3">
           {renderStep()}
           {f.error && (
-            <Text
+            <p
+              className={`${TEXT} px-2.5 text-center`}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-              ta="center"
-              px="xs"
             >
               {f.error}
-            </Text>
+            </p>
           )}
-          <Group gap="xs" mt="xs">
+          <div className="mt-2.5 flex flex-row flex-wrap items-center justify-start gap-2.5">
             {f.step > 1 && (
-              <Button
-                onClick={f.goPrev}
-                variant="outline"
-                color="gray"
-                flex={1}
-                size="lg"
-                radius="xl"
-              >
+              <Button onClick={f.goPrev} variant="outline-gray" size="lg" className="flex-1">
                 이전
               </Button>
             )}
             {f.step < 5 ? (
               <Button
                 onClick={f.goNext}
-                flex={1}
                 size="lg"
-                radius="xl"
+                className="flex-1"
                 style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}
               >
                 다음
@@ -143,17 +146,16 @@ export default function ProductForm(props: ProductFormProps) {
               <Button
                 onClick={f.handleSubmit}
                 disabled={f.submitting}
-                flex={1}
                 size="lg"
-                radius="xl"
+                className="flex-1"
                 style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}
               >
                 {f.submitting ? '처리 중...' : mode === 'create' ? '등록하기' : '저장하기'}
               </Button>
             )}
-          </Group>
-        </Stack>
-      </Container>
+          </div>
+        </div>
+      </div>
     </PageShell>
   );
 }

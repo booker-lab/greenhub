@@ -1,6 +1,6 @@
 # Mantine → shadcn/ui + Tailwind CSS v4 + Base UI 교체 계획
 
-> 작성 2026-10-28. 상태: **P0 완료(#684), P0.5 완료(#687), P1 로컬 증명 완료(병합 전)**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 검토 3라운드(§11)를 거쳐 2026-10-30 사용자가 확정했고, 같은 날 M2·M3을 다시 정했다(§10).
+> 작성 2026-10-28. 상태: **P0 완료(#684), P0.5 완료(#687), P1 완료(#689), P2a 로컬 증명 완료(병합 전)**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 검토 3라운드(§11)를 거쳐 2026-10-30 사용자가 확정했고, 같은 날 M2·M3을 다시 정했다(§10).
 > 요약: 첫 회차는 교체가 끝난 뒤로 미룬다. 교체는 지금부터 단계마다 증명이 끝나는 대로 `main`에 병합한다. 카카오페이 심사·LIVE 결제 전환·실결제 확인 전까지는 소비자 앱 화면만 묶는다.
 > 화면을 어떻게 바꿀지는 `design-direction.md`(부분 확정)를 따르고, 그 문서에서 확정되지 않은 부분의 시각 계약은 `design-standard.md`다.
 > 이 문서는 `*-plan.md`이므로 교체가 끝나면 역사 자료가 된다. 끝난 뒤의 규칙은 `design-standard.md`와 `packages/ui`가 소유한다.
@@ -227,8 +227,34 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - `layout.tsx`가 JS로 import하는 `@mantine/notifications/styles.css`도 `globals.css`의 `layer(mantine)`으로 옮긴다. Mantine import가 모두 layer 안에 있는지 검사한다.
   - preflight 없이 남는 빈틈: 테두리 기본 색(`* { border-color }` 기본 규칙이 없으면 `currentColor`)과 button·input의 브라우저 기본 스타일. 초기화는 새 컴포넌트에만 걸리도록 범위를 좁힌다(예: `[data-slot]`, 추측). `postcss-preset-mantine`과 `@tailwindcss/postcss`의 순서도 이 PR에서 정한다.
   - 완료 기준: 판매자 전체 화면(로그인 화면은 운영 빌드 방법이 정해졌으면 운영 빌드로) 차이 0, 판매자·어드민 로컬 E2E 기준과 같음.
+  - 구현(2026-10-31):
+    - `globals.css`: 위 layer 순서. `tailwindcss/theme.css`·`utilities.css`, `tw-animate-css`, `@greenhub/ui/styles/shadcn-tailwind.css`·`tokens.css`를 import하고, Mantine CSS 전부(`layout.tsx`에서 옮긴 `@mantine/notifications/styles.css` 포함)와 `@greenhub/ui/style.css`를 예전 순서 그대로 `layer(mantine)`에 넣었다. `@source "../../../../packages/ui/src"`. 계약은 `src/app/globals-css.test.ts`가 검사한다.
+    - preflight 빈틈: `@layer base`에서 `[data-slot]`(새 컴포넌트)에만 `box-sizing`·`margin`·`padding`·`border: 0 solid`, `button[data-slot]`·`input[data-slot]` 등에만 글꼴·색·배경·`appearance` 초기화. Mantine 요소에는 `data-slot`이 없다.
+    - postcss 순서: `@tailwindcss/postcss`(`optimize: false`) → `postcss-preset-mantine` → `postcss-simple-vars`. Tailwind가 `@import`를 먼저 펼쳐야 Mantine 프리셋이 예전처럼 Mantine CSS 전체에 적용된다. `optimize`를 끈 것은 운영 빌드에서 Tailwind의 lightningcss가 펼친 Mantine CSS를 다시 쓰지 않게 하려는 것이다(압축은 예전처럼 Next). Tailwind 출력의 중첩 규칙은 Mantine 프리셋(postcss-nested)이 펼친다.
+    - 대조 화면: 판매자 `/dev/ui-compare`(`?open=modal|dialog|drawer|sheet`). 운영 차단은 `src/lib/local-preview.ts`의 `GREENHUB_LOCAL_RUNTIME === 'true' && NODE_ENV !== 'production'`(로컬 로그인과 같은 조건)이 아니면 `notFound()`이고 `force-dynamic`이다. 운영 빌드는 `NODE_ENV`가 production으로 고정되므로 값을 넣어도 열리지 않는다(`local-preview.test.ts`). 하네스 `--set compare`와 `scripts/visual/compare-cells.mjs`로 판정한다(`scripts/visual/README.md`).
+    - 대조 결과로 고친 `packages/ui` 값(① 외형 유지, Mantine 계산값): Button(줄 높이 1, 크기별 글자 xs·sm 13·md 16·lg 18, 모서리 32px·`overflow: hidden`, light·subtle brand-1·brand-9, secondary·ghost gray-1·gray-9, destructive red-6, 비활성 gray-2 면·gray-5 글자, 초점 주색 2px 외곽선, 테두리 밑까지 면), Badge(light·secondary·destructive 색, 모서리 1000px), Input(글자 검정, 자리표시 gray-5, 비활성·오류 색), Field(Mantine InputWrapper 흐름: 라벨 줄 높이 1.55·600, 설명·오류 13px·1.2·5px 간격, 세로 Field는 block), Card(글자 검정, 제목 줄 높이 1.55), Dialog·Sheet(Mantine Modal·Drawer 구조: 머리 60px·본문 `DialogBody`·`SheetBody` 추가, CloseButton 28px와 Mantine X 모양 `close-button.tsx`, 그림자 xl, Dialog 가운데 정렬은 flex, 폭 440px·90vw). 사용처가 아직 없어 앱 화면에는 영향이 없다.
+    - 남은 대조 차이: 짝 30행은 390·768·1280에서 위치·계산된 스타일·픽셀(허용치 1)이 모두 같다. 열린 상태는 Modal↔Dialog가 768·1280에서 0, 390에서 닫기 버튼 초점 외곽선 66픽셀(2배율), Drawer↔Sheet가 390에서 0, 768·1280에서 모서리·초점 외곽선 59픽셀이다. 값(위치·크기·색·모서리)은 같고 안티앨리어싱만 다르다. 판매자 화면은 Sheet를 쓰지 않고, Dialog는 `ConfirmModal`을 바꿀 때 그 화면 촬영으로 다시 판정한다.
+    - 같은 Mantine 요소도 가로 위치가 다른 칸에 그리면 모서리 안티앨리어싱이 달라진다(Mantine 버튼을 복제해 오른쪽 칸에 놓아도 15픽셀). 그래서 `compare-cells.mjs`는 같은 자리에서 비교한다.
+  - 로컬 증명(2026-10-31, dev 하네스·기준 시각 2026-10-31T00:00+09:00):
+    - 판매자 촬영 129장(43화면 × 390·768·1280, 모달 열린 상태 3개 포함) 모두 정상 촬영 판정 통과, `diff.mjs --tolerance 1` 129장 같음(허용치 0으로도 129장 같음). 로그인 화면은 dev 촬영이다(운영 빌드 로그인 촬영은 아직 없음, 운영 빌드 미증명).
+    - 운영 빌드 대신 확인한 것: `main`과 P2a를 같은 경로에서 CI build 설정으로 빌드했다. consumer(91개)·driver(48개) 정적 JS·CSS는 내용 해시가 모두 같다(빌드 ID 폴더 이름만 다름). seller 운영 CSS는 `main`의 규칙 691개가 모두 그대로(`layer(mantine)` 또는 layer 밖) 들어 있고, 더해진 것은 토큰 `:root`, Drawer(대조 화면용), Tailwind·tw-animate 규칙과 keyframes뿐이다.
+    - 번들: seller CSS 4개 파일 174,094B(gzip 합 32,720B) → 1개 파일 213,050B(41,228B). JS 합 2,730,051B → 2,911,180B(gzip 899,067B → 960,489B). Base UI 청크는 `/dev/ui-compare`만 참조한다(`page_client-reference-manifest`).
+    - 판매자·어드민 로컬 E2E(`node scripts/admin-local-e2e.mjs`, dev:local) 20/20·건너뜀 0(`main` 기준 P0.5와 같음). 판매자 단위 테스트 871개 통과, `packages/ui`·seller 타입 검사, Biome, CSS 변수 검사, `tokens.spec` 5/5, scripts spec 통과.
 - **P2b 회차 운영과 무관한 화면**: 설정 → 상품(옵션 재고 제외) → 어드민. 어드민에는 기사 승인(`admin/drivers`)·환불(`admin/orders`의 환불 모달)이 있으므로, 다음 회차가 잡혀 있으면 이 둘은 회차 운영 화면과 같이 다룬다(P4 규칙).
 - 1단계(외형 유지, §7)만 한다.
+- 설정 묶음 구현(2026-10-31, P2a 위에 쌓음): `settings`(첫 화면)·`settings/payout-account`·`settings/delivery`·`settings/daily-caps`의 `@mantine/core`를 걷었다. `settings/option-stocks`(옵션 재고)와 기능 플래그가 꺼진 `settings/store-profile`은 뒤로 미룬다.
+  - Mantine Text·Paper·UnstyledButton·Container·Group·Stack·SimpleGrid·Title은 같은 값의 요소+Tailwind로(예: Text = `p` + `m-0 p-0 text-base`, Paper = `rounded-[16px] bg-white` + Mantine 그림자). Mantine 그림자 xs·sm은 판매자 `globals.css`의 `@theme`(`shadow-mantine-xs`·`shadow-mantine-sm`)에 두었다.
+  - `packages/ui` 추가: `Switch`(Mantine Switch sm), `Autocomplete`(Base UI Autocomplete, 입력칸은 `Input`과 같은 클래스 `inputClassName`), Button `outline-gray` 변형(Mantine outline gray). 대조 화면에 Switch·ActionIcon 28px·outline gray 행을 더해 같음을 확인했다.
+  - Button은 클래스 없는 svg를 16px로 줄이므로 아이콘 버튼의 svg에는 크기 클래스(`size-5`)를 준다.
+  - `@mantine/notifications`(저장 알림)는 앱 전체 공급자를 바꾸는 일이라 이 묶음에서 남겼다. Mantine Button `loading`은 `disabled`·`aria-busy`로 바꿨다(저장 중 회전 표시 없음).
+  - 로컬 증명: 판매자 촬영 129장 `main`과 같음(`--tolerance 1`, 바꾼 4화면 12장 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 판매자 단위 테스트 871개 통과. 배송 슬롯 편집 패널(날짜를 누른 뒤)은 촬영 목록에 없어 대조 화면의 `outline-gray` 행으로만 확인했다.
+- 상품 목록 구현(2026-10-31): `products`(목록)의 `@mantine/core`를 걷었다. 공용 틀(`PageHeader`·`SegmentedTabs`·`ConfirmModal`·`StateViews`)은 여러 묶음이 쓰므로 P4(앱 틀)에서 바꾼다. 상품 등록·수정 폼은 다음 PR이다.
+  - `packages/ui` 추가: `Alert`(Mantine Alert light, 빨강·노랑·기본), Button 변형 `light-destructive`·`subtle-destructive`·`light-warning`, 아이콘 여백(svg에 `data-icon="inline-start"`·`"inline-end"`면 그쪽 여백이 Mantine left·rightSection처럼 좌우 여백 ÷ 1.5), 링크로 그릴 때 밑줄 없음(`no-underline`). 링크 버튼은 `render={<Link />}`·`nativeButton={false}`.
+  - 로컬 증명: 판매자 129장 `main`과 같음(`--tolerance 1`), 대조 화면 행 모두 같음(Alert·링크 버튼·왼쪽 아이콘 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 871개. Alert(조회 실패·오래된 목록)와 빈 목록은 촬영 목록에 없어 대조 화면으로만 확인했다.
+- 상품 등록·수정 폼 1(2026-10-31): 폼 틀(`ProductForm`·`StepIndicator`·`FormPrimitives`)과 1~3단계(`Step1Basic`·`ImageUpload`·`VarietySelector`·`TouchSelector`·`SellerNoteInput`), 수정 화면의 "찾을 수 없음"에서 `@mantine/core`를 걷었다. 4·5단계(`AIPreviewPanel`·`Step5Pricing`·`GroupConfigSection`·`ProductExtrasSection`)는 다음 PR이다.
+  - `packages/ui` 추가: `Input` 크기 `xs`·`md`와 왼쪽·오른쪽 칸(Mantine left·rightSection), `Select`(Base UI Select. 닫힌 칸은 Mantine처럼 읽기 전용 input이라 글자 위치가 입력칸과 같다. 묶음·지우기·체크), `Textarea`(autosize·minRows는 react-textarea-autosize 계산, 폭이 바뀌면 다시 잼), `Loader`(oval), Badge `outline-gray`, `ButtonLabel`(Mantine Button inner·label 구조: 긴 내용을 왼쪽부터 그리고 오른쪽을 자른다. 출하 형태 두 줄 버튼이 이렇게 잘린다).
+  - 촬영 목록에 상품 수정 2~5단계(`product-edit-step2~5`, "다음"을 n-1번), 예전 방식 가게의 공동구매 설정(`product-edit-step5-group`, scenario `legacy-store`), 4단계 다시 생성 확인 모달(`modal-product-regenerate`)을 더했다(판매자 49화면 147장). 기준 촬영도 `main` 코드에 같은 fixture를 넣고 찍었다.
+  - 대조 화면: 상품 폼 입력 부품 행(입력칸 md·xl, Select 자리표시·값, Textarea, autosize, Loader, Badge 버튼, 두 줄·잘리는 버튼)과 Select 열린 목록(`?open=select|uiselect`, 하네스가 입력칸을 실제로 누름). 행은 390·768·1280에서 모두 같다. 열린 목록은 768·1280에서 0, 390에서 체크 아이콘 안티앨리어싱 19픽셀(채널 차이 4 이하)이다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)
