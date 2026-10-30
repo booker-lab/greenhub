@@ -9,7 +9,6 @@
 // 브라우저 시계는 start.mjs가 정한 기준 시각(clock.mjs)에 고정하고, CSS 애니메이션은 멈춘 채 찍는다.
 // 정상 판정을 통과하지 못한 화면이 하나라도 있으면 종료 코드 1이다.
 import { execSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
@@ -18,7 +17,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { APPS, RUNTIME_FILE } from './apps.mjs';
 import { VISUAL_NOW_ENV } from './clock.mjs';
 import { expectedPathOf, shotProblems } from './soundness.mjs';
-import { shootStable } from './stable.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -204,7 +202,7 @@ async function runSteps(page, steps) {
   return null;
 }
 
-/** 찍은 PNG를 돌려준다(파일은 안정 촬영이 고른 장만 쓴다). */
+/** 찍은 PNG를 돌려준다. */
 async function capture(page, { viewportOnly = false } = {}) {
   if (viewportOnly) {
     // 아래에서 올라오는 시트처럼 지금 보이는 화면이 중요한 경우는 화면 크기 그대로 찍는다.
@@ -227,7 +225,7 @@ async function capture(page, { viewportOnly = false } = {}) {
   return png;
 }
 
-/** 화면 하나를 새 페이지로 열어 한 번 찍는다(안정 촬영의 한 시도). */
+/** 화면 하나를 새 페이지로 열어 찍는다. */
 async function shootOnce(context, screen, viewportName) {
   const page = await context.newPage();
   const errors = [];
@@ -312,8 +310,7 @@ async function shootOnce(context, screen, viewportName) {
     ms: Date.now() - t0,
   };
   await page.close();
-  const sound = shotProblems(shot, expectedPathOf(screen)).length === 0;
-  return { hash: createHash('sha256').update(png).digest('hex'), sound, value: { shot, png } };
+  return { shot, png };
 }
 
 let gitSha = null;
@@ -357,19 +354,13 @@ try {
     const guest = await newContext(browser, viewportName);
     for (const screen of screens) {
       const context = screen.auth === false ? guest : authed;
-      // 안정 촬영: 페이지를 새로 열어 다시 찍고, 픽셀이 같은 결과가 두 번 나온 장만 쓴다(stable.mjs).
-      const result = await shootStable(() => shootOnce(context, screen, viewportName));
-      const { shot, png } = result.value;
+      const { shot, png } = await shootOnce(context, screen, viewportName);
       fs.writeFileSync(path.join(outDir, shot.file), png);
-      shot.attempts = result.attempts;
-      if (result.outcome === 'unstable') {
-        shot.unstable = `불안정: ${result.attempts}번 찍어 같은 결과가 두 번 나오지 않음`;
-      }
       shot.problems = shotProblems(shot, expectedPathOf(screen));
       shot.sound = shot.problems.length === 0;
       manifest.shots.push(shot);
       console.log(
-        `${shot.sound ? '✅' : '⚠️'} ${viewportName} ${screen.id} (${shot.ms}ms · ${shot.attempts}번)${shot.sound ? '' : ` · ${shot.problems.join(' · ')}`}`,
+        `${shot.sound ? '✅' : '⚠️'} ${viewportName} ${screen.id} (${shot.ms}ms)${shot.sound ? '' : ` · ${shot.problems.join(' · ')}`}`,
       );
     }
     await authed.close();

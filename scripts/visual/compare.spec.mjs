@@ -5,7 +5,6 @@ import { defaultVisualNow, resolveVisualNow } from './clock.mjs';
 import { comparePixels, compareRuns, parseAllowances } from './compare.mjs';
 import { decodePng, encodePng } from './png.mjs';
 import { expectedPathOf, shotProblems } from './soundness.mjs';
-import { pickStable, shootStable } from './stable.mjs';
 
 function image(width, height, rgba = [255, 255, 255, 255]) {
   const data = new Uint8Array(width * height * 4);
@@ -198,7 +197,7 @@ describe('compareRuns', () => {
 });
 
 describe('soundness', () => {
-  it('fixture 누락·콘솔 오류·API 요청 실패·멈춘 단계·하네스 미지원·불안정·다른 주소를 문제로 잡는다', () => {
+  it('fixture 누락·콘솔 오류·API 요청 실패·멈춘 단계·하네스 미지원·다른 주소를 문제로 잡는다', () => {
     const problems = shotProblems(
       {
         missing: ['/x'],
@@ -206,12 +205,11 @@ describe('soundness', () => {
         failed: ['/driver/orders/o1 net::ERR_CERT_AUTHORITY_INVALID'],
         stepNote: '누를 글자 없음: 저장',
         unsupported: 'Firestore 에뮬레이터 없음',
-        unstable: '불안정: 5번 찍어 같은 결과가 두 번 나오지 않음',
         finalPath: '/login',
       },
       '/orders',
     );
-    assert.equal(problems.length, 7);
+    assert.equal(problems.length, 6);
     assert.deepEqual(
       shotProblems({ missing: [], errors: [], finalPath: '/orders' }, '/orders'),
       [],
@@ -224,69 +222,6 @@ describe('soundness', () => {
       expectedPathOf({ path: '/products/p1', expectPath: '/products/p2' }),
       '/products/p2',
     );
-  });
-});
-
-describe('stable', () => {
-  /** 정해 둔 결과를 차례로 돌려주는 가짜 촬영. */
-  function fakeShoot(results) {
-    let i = 0;
-    const calls = () => i;
-    const shoot = async () => {
-      const r = results[i];
-      i += 1;
-      return { hash: r.hash, sound: r.sound ?? true, value: `${r.hash}#${i}` };
-    };
-    return { shoot, calls };
-  }
-
-  it('같은 결과가 두 번째로 나온 시도를 고른다', () => {
-    assert.deepEqual(pickStable(['a', 'a']), { index: 1, hash: 'a' });
-    assert.deepEqual(pickStable(['a', 'b', 'a']), { index: 2, hash: 'a' });
-    assert.deepEqual(pickStable(['a', 'b', 'c', 'b']), { index: 3, hash: 'b' });
-    assert.equal(pickStable(['a', 'b', 'c']), null);
-    assert.equal(pickStable([]), null);
-  });
-
-  it('처음 두 장이 같으면 두 번만 찍는다', async () => {
-    const { shoot, calls } = fakeShoot([{ hash: 'a' }, { hash: 'a' }, { hash: 'x' }]);
-    const r = await shootStable(shoot, 5);
-    assert.equal(r.outcome, 'stable');
-    assert.equal(r.attempts, 2);
-    assert.equal(r.value, 'a#2');
-    assert.equal(calls(), 2);
-  });
-
-  it('다르면 다시 찍어 두 번 나온 결과를 쓴다', async () => {
-    const { shoot } = fakeShoot([{ hash: 'a' }, { hash: 'b' }, { hash: 'b' }]);
-    const r = await shootStable(shoot, 5);
-    assert.equal(r.outcome, 'stable');
-    assert.equal(r.attempts, 3);
-    assert.equal(r.value, 'b#3');
-  });
-
-  it('상한까지 같은 결과 두 번이 없으면 불안정이다', async () => {
-    const { shoot, calls } = fakeShoot(['a', 'b', 'c', 'd', 'e'].map((hash) => ({ hash })));
-    const r = await shootStable(shoot, 5);
-    assert.equal(r.outcome, 'unstable');
-    assert.equal(r.attempts, 5);
-    assert.equal(calls(), 5);
-  });
-
-  it('정상 판정에 실패한 시도는 다시 찍어 숨기지 않고 그대로 돌려준다', async () => {
-    const { shoot, calls } = fakeShoot([
-      { hash: 'a' },
-      { hash: 'err', sound: false },
-      { hash: 'a' },
-    ]);
-    const r = await shootStable(shoot, 5);
-    assert.equal(r.outcome, 'unsound');
-    assert.equal(r.value, 'err#2');
-    assert.equal(calls(), 2);
-  });
-
-  it('상한은 2 이상이어야 한다', async () => {
-    await assert.rejects(shootStable(async () => ({ hash: 'a', sound: true, value: 1 }), 1));
   });
 });
 
