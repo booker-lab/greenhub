@@ -1,5 +1,5 @@
 {
-  "stage": "pre-candidate",
+  "stage": "consumer-freeze",
   "candidateSha": null,
-  "note": "UI 교체(Mantine → shadcn/ui) 동결 상태. 기준: docs/specs/frontend/ui-stack-migration-plan.md §8. 검사: scripts/release/freeze-guard.mjs. 구간 전환은 이 파일을 바꾸는 커밋으로 한다: LIVE 출시 후보 SHA를 정하면(늦어도 주문 오픈 3일 전) stage를 candidate로 바꾸고 candidateSha를 적는다. 첫 회차 배송 완료 다음 날(12/2) open으로 바꾼다."
+  "note": "UI 교체(Mantine → shadcn/ui) 동결 상태. 기준: docs/specs/frontend/ui-stack-migration-plan.md §8(2026-10-30 사용자 결정: 첫 회차를 교체 뒤로 미루고, 카카오페이 심사·LIVE 결제 전환·실결제 확인 전까지 소비자 앱 화면만 묶는다). 검사: scripts/release/freeze-guard.mjs. 심사·LIVE·실결제 확인이 끝나면 open으로 바꾸는 커밋을 병합한다. 다음 회차 일정을 잡으면 그 회차 기준으로 pre-candidate·candidate를 다시 쓴다."
 }
