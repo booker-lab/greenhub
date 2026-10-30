@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
-import { ColorSchemeScript } from '@mantine/core';
 import Providers from './providers';
 import BottomNav from '@/components/BottomNav';
 import { decodeInitialSession, INITIAL_SESSION_HEADER } from '@/lib/initial-session';
@@ -32,15 +31,10 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const requestHeaders = await headers();
-  // proxy가 요청마다 만든 CSP nonce. 인라인 색상 모드 스크립트에 붙인다.
-  const nonce = requestHeaders.get('x-nonce') ?? undefined;
   // proxy가 보호 경로에서 이미 확인한 기사 세션. 없으면(공개 경로) 화면이 예전처럼 직접 조회한다.
   const initialSession = decodeInitialSession(requestHeaders.get(INITIAL_SESSION_HEADER));
   return (
-    <html lang="ko" suppressHydrationWarning>
-      <head>
-        <ColorSchemeScript nonce={nonce} />
-      </head>
+    <html lang="ko">
       <body>
         <Providers session={initialSession}>
           <div

@@ -1,11 +1,14 @@
 'use client';
 
 import { apiPathSegment, isSafeApiPathSegment, readRouteParam } from '@greenhub/shared';
-import { Button, Loader, Text, Title } from '@mantine/core';
+import { cn } from '@greenhub/ui/lib/utils';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { AppButton } from '@/components/app-button';
+import { text } from '@/components/look';
+import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
 import { readDriverOrderCommandErrorCodeFromResponse } from '../../_lib/driver-order-detail';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
@@ -69,17 +72,20 @@ export default function PhotoCapture({ orderId: rawOrderId, mode }: PhotoCapture
           padding: 24,
         }}
       >
-        <Text style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }} ta="center">
+        <p
+          className={cn(text, 'text-center')}
+          style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }}
+        >
           {INVALID_ORDER_ADDRESS_MESSAGE}
-        </Text>
-        <Button
+        </p>
+        <AppButton
           onClick={() => router.replace('/board')}
-          color="white"
+          tone="white"
+          className="rounded-sm"
           style={{ color: 'var(--color-text)' }}
-          radius="md"
         >
           배송 목록으로
-        </Button>
+        </AppButton>
       </div>
     );
   }
@@ -529,8 +535,8 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             />
           </svg>
         </button>
-        <Title
-          order={1}
+        <h1
+          className="m-0 leading-[1.3]"
           style={{
             color: 'var(--color-bg)',
             fontSize: 'var(--font-size-md)',
@@ -538,7 +544,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           }}
         >
           {isRoundDirect ? '배송 완료 사진' : '거점 하차 인증 사진'}
-        </Title>
+        </h1>
       </header>
 
       <div style={{ flex: 1, position: 'relative' }}>
@@ -565,39 +571,40 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               gap: 24,
             }}
           >
-            <Text style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }}>
+            <p
+              className={text}
+              style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }}
+            >
               {isRoundDirect ? '문 앞 배송 완료 상태를 촬영해주세요' : '하차 물품을 촬영해주세요'}
-            </Text>
-            <Button
+            </p>
+            <AppButton
               onClick={startCamera}
               disabled={preparing}
-              color="white"
+              tone="white"
+              className="rounded-sm"
               style={{ color: 'var(--color-text)' }}
-              radius="md"
             >
               {isRoundDirect ? '카메라 촬영' : '사진 촬영'}
-            </Button>
+            </AppButton>
             {isRoundDirect && (
-              <Button
+              <AppButton
                 onClick={() => fileInputRef.current?.click()}
                 loading={preparing}
                 disabled={preparing}
-                variant="outline"
-                color="white"
+                tone="white-outline"
+                className="rounded-sm"
                 style={{ color: 'var(--color-bg)' }}
-                radius="md"
               >
                 카메라 앱으로 찍기·사진 선택
-              </Button>
+              </AppButton>
             )}
             {error && (
-              <Text
+              <p
+                className={cn(text, 'px-8 text-center')}
                 style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}
-                ta="center"
-                px="xl"
               >
                 {error}
-              </Text>
+              </p>
             )}
           </div>
         )}
@@ -677,29 +684,25 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           }}
         >
           {captured && (
-            <Button
-              flex={1}
+            <AppButton
               onClick={retake}
               disabled={uploading}
-              variant="outline"
-              color="white"
-              radius="xl"
+              tone="white-outline"
               size="lg"
+              className="flex-1"
             >
               재촬영
-            </Button>
+            </AppButton>
           )}
-          <Button
-            flex={1}
+          <AppButton
             onClick={upload}
             disabled={!captured || uploading || !sessionReady}
-            color="brand"
-            radius="xl"
             size="lg"
-            leftSection={uploading ? <Loader size="xs" color="white" /> : null}
+            className="flex-1"
+            leftSection={uploading ? <Spinner size={18} className="text-white" /> : null}
           >
             {uploading ? '업로드 중...' : isRoundDirect ? '사진을 등록하고 배송 완료' : '업로드'}
-          </Button>
+          </AppButton>
         </div>
       )}
 
