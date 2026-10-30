@@ -1,6 +1,8 @@
 // 소비자 앱 화면 확인용 고정 데이터 — 프런트 개편 1순위 동선(회차 구매).
 // 스토어는 회차 직판(round_direct) 모드다. 회차 일정·상품은 seller.mjs와 맞춘다.
 // 화면을 추가할 때 경로를 여기에 더한다.
+import { hoursFromNow } from '../clock.mjs';
+
 const STORE_ID = 'store-visual-0001';
 const STORE_NAME = '디어 오키드';
 
@@ -186,12 +188,13 @@ function saleRound(id, name, status, schedule, counters = {}) {
   };
 }
 const SALE_ROUNDS = [
+  // 다가오는 회차는 고정 시각(clock.mjs) 기준 상대값이다. 날짜가 지나도 "예정" 화면이 그대로 찍힌다.
   saleRound('round-scheduled', '11월 3일 배송 회차', 'SCHEDULED', {
-    orderOpenAt: '2026-10-29T01:00:00.000Z',
-    orderCloseAt: '2026-11-01T15:00:00.000Z',
-    auctionAt: '2026-11-01T22:00:00.000Z',
-    deliveryStartAt: '2026-11-02T15:00:00.000Z',
-    deliveryEndAt: '2026-11-03T00:00:00.000Z',
+    orderOpenAt: hoursFromNow(-14),
+    orderCloseAt: hoursFromNow(72),
+    auctionAt: hoursFromNow(79),
+    deliveryStartAt: hoursFromNow(96),
+    deliveryEndAt: hoursFromNow(105),
   }),
   saleRound(
     'round-open',
