@@ -1,0 +1,104 @@
+/*
+ * Greenhub 디자인 토큰 — Tailwind v4 · shadcn 의미 변수 (UI 교체 P1, docs/specs/frontend/ui-stack-migration-plan.md §4)
+ *
+ * Mantine과 같이 쓰는 동안 앱은 `@import "tailwindcss"`(preflight 포함) 대신 이 파일을 import한다(P2a의 layer 순서).
+ * 값은 현행 packages/ui/src/style.css·theme.ts와 같다. 값을 바꿀 때는 두 파일을 한 PR에서 같이 바꾼다
+ * (소비자 동결 중에는 바꾸지 않는다, §8).
+ *
+ * 이름 충돌(§4):
+ * - `--border`는 정의하지 않는다. 현행 style.css의 `--border`는 색이 아니라 `1px solid …` 묶음 값이고 앱 40곳이 쓴다.
+ *   테두리 색 유틸리티(`border-border`)는 `--color-border`를 현행과 같은 값으로 직접 둔다.
+ * - `--color-*`·`--radius-sm`처럼 style.css와 이름이 같은 테마 변수는 같은 값만 쓴다.
+ * - 줄 높이는 Mantine 기본(xs 1.4·sm 1.45·md 1.55·lg 1.6·xl 1.65)과 같게 둔다.
+ *
+ * ① 외형 유지 값: `--input`(Mantine 입력칸 테두리 gray-4)·`--card-border`(Mantine Paper·Card 테두리 gray-3)는
+ * 지금 화면과 같은 모양을 내기 위한 값이다. 화면 방향(design-direction.md) 적용은 ② 단계에서 한다.
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #111111;
+  --card: #ffffff;
+  --card-foreground: #111111;
+  --card-border: #dee2e6;
+  --popover: #ffffff;
+  --popover-foreground: #111111;
+  --primary: #00a65a;
+  --primary-foreground: #ffffff;
+  --secondary: #f1f3f2;
+  --secondary-foreground: #111111;
+  --muted: #f1f3f2;
+  --muted-foreground: #6b716e;
+  --accent: #e9f9ef;
+  --accent-foreground: #007a43;
+  --destructive: #d92d20;
+  --destructive-surface: #fde8e6;
+  --input: #ced4da;
+  --ring: #007a43;
+  --brand: #00a65a;
+  --brand-ink: #007a43;
+  --brand-surface: #e9f9ef;
+  --deadline: #ffd43b;
+  --deadline-surface: #fff4cc;
+  --deadline-foreground: #3b2f00;
+  --status-info: #f1f3f2;
+  --status-info-foreground: #3f4642;
+  --status-warning: #fff4cc;
+  --status-warning-foreground: #7a5b00;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-card-border: var(--card-border);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-surface: var(--destructive-surface);
+  --color-border: #ecefed;
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-surface: var(--brand-surface);
+  --color-deadline: var(--deadline);
+  --color-deadline-surface: var(--deadline-surface);
+  --color-deadline-foreground: var(--deadline-foreground);
+  --color-status-info: var(--status-info);
+  --color-status-info-foreground: var(--status-info-foreground);
+  --color-status-warning: var(--status-warning);
+  --color-status-warning-foreground: var(--status-warning-foreground);
+
+  --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --font-brand: 'Nunito', 'Pretendard Variable', Pretendard, system-ui, sans-serif;
+
+  /* 글자 크기: Tailwind 기본(xs 12·sm 14)은 15px 본문 기준보다 작아 덮어쓴다(§4). */
+  --text-xs: 13px;
+  --text-xs--line-height: 1.4;
+  --text-sm: 15px;
+  --text-sm--line-height: 1.45;
+  --text-base: 16px;
+  --text-base--line-height: 1.55;
+  --text-lg: 18px;
+  --text-lg--line-height: 1.6;
+  --text-xl: 20px;
+  --text-xl--line-height: 1.65;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 1.35;
+
+  /* 모서리: shadcn은 --radius에서 비율로 계산하지만(§4), 지금 화면 값에 고정한다. */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 32px;
+  --radius-tag: 6px;
+}

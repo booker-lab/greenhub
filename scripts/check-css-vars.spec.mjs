@@ -12,6 +12,8 @@ test('정의되지 않은 변수만 찾고 대체값·Mantine·인라인 정의�
         "style={{ fontWeight: 'var(--fw-semibold)' }}",
         "style={{ color: 'var(--color-error, #e03131)' }}",
         "style={{ gap: 'var(--mantine-spacing-xs)' }}",
+        "className='h-(--toast-height) translate-y-[calc(var(--toast-index)*-1px)]'",
+        'width: calc(var(--spacing) * 4);',
         "style={{ '--local-height': '10px', height: 'var(--local-height)' }}",
       ].join('\n'),
     },
