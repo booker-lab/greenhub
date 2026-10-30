@@ -65,7 +65,7 @@ function row(overrides: Record<string, unknown> = {}) {
   };
 }
 
-const ok = (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
+const ok = async (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
 
 describe('aT 경락가격 응답 정규화', () => {
   it('숫자 문자열·쉼표를 읽고 거래 없는 줄은 건너뛴다', () => {
