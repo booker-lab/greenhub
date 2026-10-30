@@ -55,6 +55,7 @@ node scripts/visual/start.mjs seller --now 2026-10-30T00:00:00+09:00  # 기준 �
 - fixture의 다가오는 회차 일정은 이 시각 기준 상대값이다(`hoursFromNow`). 날짜가 지나도 "예정" 화면이 그대로 찍힌다.
 - `shots.mjs`는 브라우저 시계를 이 시각에 고정하고(`page.clock.setFixedTime`, 타이머는 돈다), CSS 애니메이션을 멈춘 채 찍는다.
 - 다른 날 찍은 캡처와 비교하려면 두 번 모두 같은 `--now`로 서버를 띄운다. 기준 시각이 다르면 `diff.mjs`가 비교하지 않는다.
+- 서버 시간대도 한국이어야 한다. 브라우저는 `Asia/Seoul`로 찍는데 서버(next dev)가 UTC면 서버가 그린 시각 글자(기사 배송판 `수거 오전 06:00` 등)가 브라우저와 달라 hydration 오류로 정상 촬영 판정에서 떨어진다. 시간대가 UTC인 컨테이너에서는 `TZ=Asia/Seoul node scripts/visual/start.mjs driver`처럼 띄운다.
 
 ## 자동 캡처와 확인판
 

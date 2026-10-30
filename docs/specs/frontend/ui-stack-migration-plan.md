@@ -1,6 +1,6 @@
 # Mantine → shadcn/ui + Tailwind CSS v4 + Base UI 교체 계획
 
-> 작성 2026-10-28. 상태: **P0 완료(#684), P0.5 완료(#687), P1 로컬 증명 완료(병합 전)**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 검토 3라운드(§11)를 거쳐 2026-10-30 사용자가 확정했고, 같은 날 M2·M3을 다시 정했다(§10).
+> 작성 2026-10-28. 상태: **P0 완료(#684), P0.5 완료(#687), P1 완료(#689), P3 로컬 증명(병합 전, 실기기 확인 대기)**. 사용자가 비용을 감수하고 교체하기로 했다(2026-10-28). M1~M4(§10)는 검토 3라운드(§11)를 거쳐 2026-10-30 사용자가 확정했고, 같은 날 M2·M3을 다시 정했다(§10).
 > 요약: 첫 회차는 교체가 끝난 뒤로 미룬다. 교체는 지금부터 단계마다 증명이 끝나는 대로 `main`에 병합한다. 카카오페이 심사·LIVE 결제 전환·실결제 확인 전까지는 소비자 앱 화면만 묶는다.
 > 화면을 어떻게 바꿀지는 `design-direction.md`(부분 확정)를 따르고, 그 문서에서 확정되지 않은 부분의 시각 계약은 `design-standard.md`다.
 > 이 문서는 `*-plan.md`이므로 교체가 끝나면 역사 자료가 된다. 끝난 뒤의 규칙은 `design-standard.md`와 `packages/ui`가 소유한다.
@@ -229,6 +229,20 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 기사 앱을 연결하고 1단계만 한다(`design-direction.md` D4 미확정). 연결 방식은 P2a와 같다.
 - `driver-design-system.spec.ts`의 인증 화면 묶음을 로컬에서도 돌게 고친다(P0 참고).
 - 병합 전에 실제 휴대폰에서 기사 계정으로 확인한다(도착 사진·완료 처리·서비스워커). 휴대폰은 클라우드 컨테이너의 `next start`에 붙을 수 없고, 운영 빌드에서는 로컬 로그인이 꺼진다. 확인 방법(Preview 테스트 로그인 등)은 이 단계 시작 때 정한다.
+
+구현(2026-10-31, 브랜치 `claude/ui-p3-driver`):
+- **연결 → 교체 → Mantine 제거**를 한 갈래에서 했다. 먼저 P2a와 같은 방식(layer 순서 `theme, base, mantine, components, utilities`, Mantine CSS 전부 `layer(mantine)`, `tw-animate-css`·`shadcn-tailwind.css`·`tokens.css`, `@source` packages/ui)으로 연결한 커밋을 두고, 그 뒤 12개 파일을 모두 바꿔 기사 앱의 `@mantine/*` 3개·`postcss-preset-mantine`·`postcss-simple-vars`·`MantineProvider`·`ColorSchemeScript`·`Notifications`·`next.config.ts`의 Mantine 최적화 설정을 걷어냈다(P6의 기사 앱 몫). 앱 CSS는 `@layer theme, base, components, utilities;`이고, Mantine이 깔던 기본 규칙(상자 크기, 본문 글꼴 16px·줄 높이 1.55·검정, 입력·버튼 글꼴 상속, 글꼴 다듬기)만 base layer에 옮겼다. preflight 전환은 P6에서 세 앱을 같이 한다.
+- **부품**: `packages/ui`의 Button·Badge·Card·Input·Label·Dialog와 Toast(`toast.add`·`ToastProvider`)를 쓴다. ① 외형 값(Mantine 크기·색·글자 칸 자르기 `text-box-trim`, 입력칸·라디오·체크박스·금액 입력, Mantine 모양의 알림)은 `apps/driver/src/components`(`app-button`·`fields`·`look`·`spinner`·`app-toaster`)에 두고 `packages/ui` 기존 컴포넌트는 고치지 않았다(P2와 병렬). Badge light는 P1 기본값(`brand-surface` 바탕)이 Mantine 실제 값(바탕 `#D2F2DF`, 글자 `#005C32`)과 달라 기사 쪽에서 덮었다. 판매자 교체 때 같은 차이가 나므로 그때 `packages/ui` variant를 고친다.
+- **알림**: `@mantine/notifications` 7곳(상세 화면 상태 명령의 불확실·미반영·목록 이탈·확인 안내)을 `toast.add({ description, type })`로 바꿨다. 노랑(경고)은 `type: 'warning'`이다. 알림 모양·위치(오른쪽 아래, 폭 440px까지)·4초 닫힘·오래된 알림이 위·들어오고 나가는 전환은 Mantine과 같게 그리며, 그리는 부품은 Base UI Toast(`@base-ui/react` 1.9.0, `packages/ui`와 같은 설치본)다.
+- **단위 테스트**: 소스 문자열에 Mantine 이름을 묶은 단언 4곳(`<Button` 나눔, `notifications.show`, `<Title order={1}>`, `component="a"`)을 같은 뜻의 새 이름(`<AppButton`, `toast.add`, `<h1>`, `href={...}`)으로 바꿨다. 판정 내용은 그대로다.
+- **E2E**: `driver-design-system.spec.ts` 인증 묶음은 `DRIVER_SESSION_COOKIE`를 대상 주소 도메인에 넣고, 쿠키가 없고 대상이 루프백이면 로컬 파일럿 로그인으로 연다(로그인이 안 되면 실패). 인라인 `style` 단언 3개(카카오 버튼 색, 로그인 카드 테두리, 하단 탭 윗선)는 계산된 스타일로 바꿨다. 하단 탭과 겹치는 `text=내 정보`는 제목 역할로 찾는다.
+- **로컬 증명**(KST 2026-10-31, 기준 시각 `2026-10-31T00:00+09:00`, 하네스 `TZ=Asia/Seoul`):
+  - 촬영 36장(12화면 × 390·768·1280): `main` 대비 `diff.mjs --tolerance 1`로 32장 같음, 4장 차이. 차이 둘 중 하나는 배송 중 상세 PC의 빨간 외곽선 버튼 모서리 3px(채널 차이 2)로, 같은 코드를 다시 찍으면 나왔다 안 나왔다 한다(연결만 한 커밋·교체 뒤 모두 같은 3px, t3·t5 같음, t4 차이). 다른 하나는 알림 화면 3폭으로, 먼저 뜬 알림의 아랫변·둘째 줄이 1 CSS px 다르게 그려진다. 레이아웃 값(위치·크기·글자 상자)은 `main`과 같고, `main`끼리 두 번 찍어도 태블릿·PC는 다르다. 원인을 찾지 못했고 허용 목록에 넣지 않았다.
+  - 단위: 기사 vitest 34·node:test 305+4 통과. 기사 운영 빌드 통과. CI 검사 로컬 재현(타입 6곳, Biome, CSS 변수, 스크립트 spec 1394, E2E 헬퍼 38) 통과.
+  - E2E `driver-design-system`(하네스 `DRIVER_BASE=http://127.0.0.1:3203`, 재시도 0): 이 브랜치 24 통과·2 실패·건너뜀 0. `main`의 원래 spec은 14 통과·2 실패·10 건너뜀, 고친 spec을 `main`에 돌리면 20 통과·6 실패다. 남은 2 실패(로그인 카드 테두리·그림자 없음 단언)는 `main`에서도 실패한다. 로그인 카드는 Mantine `shadow="sm"`·테두리 없음이라 `design-standard.md`(그림자는 담기 버튼에만)와 어긋난 실제 구현 차이다. ①에서는 고치지 않는다.
+  - E2E `driver-direct-delivery`(회차 spec)는 이 컨테이너에 `apps/e2e/.env.local-target`(E2E Firebase 키)이 없어 `pnpm test:e2e:local`을 돌리지 못했다.
+  - 번들(CI build job과 같은 가짜 공개 설정, `.next/static` 전체): CSS 142,141 → 101,639 B(gzip 28,327 → 24,467), JS 1,472,850 → 1,400,064 B(gzip 445,923 → 428,888).
+- **실기기 확인**은 PR 본문의 절차를 따른다. 가짜 데이터 화면은 `scripts/visual/start.mjs driver --phone`으로 바로 볼 수 있고, 실제 계정·사진 업로드·완료 처리·서비스워커는 HTTPS 운영 빌드와 실제 로그인이 필요해 방법을 사용자가 정한다.
 
 ### P4. 판매자 앱 틀·회차·주문·준비·재고·정산
 - 앱 틀(사이드바·상단바) → 회차·주문·준비 → 재고 → 정산 순서로 나눈다.
