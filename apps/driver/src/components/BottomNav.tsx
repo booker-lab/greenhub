@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Box, UnstyledButton, Stack, Text } from '@mantine/core';
+import { text } from './look';
 
 const TABS = [
   {
@@ -73,8 +73,7 @@ export default function BottomNav() {
   if (pathname === '/login') return null;
 
   return (
-    <Box
-      component="nav"
+    <nav
       style={{
         position: 'fixed',
         bottom: 0,
@@ -89,14 +88,19 @@ export default function BottomNav() {
         justifyContent: 'center',
       }}
     >
-      <Box style={{ maxWidth: 430, width: '100%', display: 'flex' }}>
+      <div style={{ maxWidth: 430, width: '100%', display: 'flex' }}>
         {TABS.map((tab) => {
           const active = pathname.startsWith(tab.href);
           return (
-            <UnstyledButton key={tab.href} component={Link} href={tab.href} style={{ flex: 1 }}>
-              <Stack align="center" justify="center" gap={4} h="100%">
+            <Link
+              key={tab.href}
+              href={tab.href}
+              className="flex-1 cursor-pointer text-inherit no-underline"
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-1">
                 {tab.icon(active)}
-                <Text
+                <p
+                  className={text}
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     fontWeight: active ? 'var(--fw-bold)' : 'var(--fw-medium)',
@@ -104,12 +108,12 @@ export default function BottomNav() {
                   }}
                 >
                   {tab.label}
-                </Text>
-              </Stack>
-            </UnstyledButton>
+                </p>
+              </div>
+            </Link>
           );
         })}
-      </Box>
-    </Box>
+      </div>
+    </nav>
   );
 }

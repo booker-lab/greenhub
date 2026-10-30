@@ -3,10 +3,8 @@
 import type { Session } from 'next-auth';
 import { useEffect, useRef } from 'react';
 import { getSession, SessionProvider, useSession, signOut } from 'next-auth/react';
-import { MantineProvider } from '@mantine/core';
-import { Notifications } from '@mantine/notifications';
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
-import { theme } from '@greenhub/ui';
+import { AppToaster } from '@/components/app-toaster';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { startSessionKeepAlive } from '@/lib/session-refresh';
@@ -92,13 +90,12 @@ export default function Providers({
   session?: Session;
 }) {
   return (
-    <MantineProvider theme={theme}>
-      <Notifications />
+    <AppToaster>
       <SessionProvider session={session}>
         <SessionKeepAlive />
         <SessionAuthorityRecheck />
         <TokenErrorGuard>{children}</TokenErrorGuard>
       </SessionProvider>
-    </MantineProvider>
+    </AppToaster>
   );
 }
