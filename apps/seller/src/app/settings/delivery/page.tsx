@@ -1,17 +1,7 @@
 'use client';
 
-import {
-  ActionIcon,
-  Box,
-  Button,
-  Container,
-  Group,
-  Paper,
-  Stack,
-  Switch,
-  Text,
-  Title,
-} from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
+import { Switch } from '@greenhub/ui/components/switch';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -27,6 +17,10 @@ interface DeliveryConfig {
   freeThresholdParcel: number;
   weatherRestrictionActive: boolean;
 }
+
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(sm 그림자, 안쪽 20) 값.
+const TEXT = 'm-0 p-0 text-base';
+const PAPER = 'block rounded-[16px] bg-white p-5 shadow-mantine-sm';
 
 const DEFAULTS: DeliveryConfig = {
   directFee: 3000,
@@ -89,8 +83,7 @@ export default function DeliverySettingsPage() {
 
   if (loading) {
     return (
-      <Box
-        component="main"
+      <main
         style={{
           minHeight: '100vh',
           backgroundColor: 'var(--color-surface-muted)',
@@ -99,26 +92,35 @@ export default function DeliverySettingsPage() {
           justifyContent: 'center',
         }}
       >
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        >
           불러오는 중...
-        </Text>
-      </Box>
+        </p>
+      </main>
     );
   }
 
   return (
-    <Box
-      component="main"
+    <main
       style={{
         minHeight: '100vh',
         backgroundColor: 'var(--color-surface-muted)',
         padding: '32px 16px',
       }}
     >
-      <Container size="xs">
-        <Group gap="sm" mb="lg">
-          <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
+      <div className="mx-auto max-w-[540px] px-4">
+        <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-3">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="size-7"
+            aria-label="뒤로"
+            onClick={() => router.back()}
+          >
             <svg
+              className="size-5"
               width="20"
               height="20"
               viewBox="0 0 24 24"
@@ -130,16 +132,20 @@ export default function DeliverySettingsPage() {
             >
               <path d="M15 18l-6-6 6-6" />
             </svg>
-          </ActionIcon>
-          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
+          </Button>
+          <h2
+            className="m-0 leading-[1.35] font-extrabold"
+            style={{ fontSize: 'var(--font-size-xl)' }}
+          >
             배송비 설정
-          </Title>
-        </Group>
+          </h2>
+        </div>
 
-        <Stack gap="md">
+        <div className="flex flex-col gap-4">
           {/* 배송 방법별 기본 배송비 */}
-          <Paper radius="lg" shadow="sm" p="lg">
-            <Text
+          <div className={PAPER}>
+            <p
+              className={`${TEXT} mb-4`}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
@@ -147,11 +153,10 @@ export default function DeliverySettingsPage() {
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
               }}
-              mb="md"
             >
               기본 배송비
-            </Text>
-            <Stack gap="sm">
+            </p>
+            <div className="flex flex-col gap-3">
               {(
                 [
                   { label: '직배송', field: 'directFee' },
@@ -159,17 +164,24 @@ export default function DeliverySettingsPage() {
                   { label: '택배', field: 'parcelFee' },
                 ] as { label: string; field: keyof DeliveryConfig }[]
               ).map(({ label, field }) => (
-                <Group key={field} justify="space-between" gap="md">
-                  <Text
+                <div
+                  key={field}
+                  className="flex flex-row flex-wrap items-center justify-between gap-4"
+                >
+                  <p
+                    className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
+                      width: 80,
                     }}
-                    w={80}
                   >
                     {label}
-                  </Text>
-                  <Group gap="xs" style={{ flex: 1 }}>
+                  </p>
+                  <div
+                    className="flex flex-row flex-wrap items-center justify-start gap-2.5"
+                    style={{ flex: 1 }}
+                  >
                     <input
                       type="number"
                       min="0"
@@ -185,7 +197,8 @@ export default function DeliverySettingsPage() {
                         textAlign: 'right',
                       }}
                     />
-                    <Text
+                    <p
+                      className={TEXT}
                       style={{
                         fontSize: 'var(--font-size-sm)',
                         color: 'var(--color-text-disabled)',
@@ -193,16 +206,17 @@ export default function DeliverySettingsPage() {
                       }}
                     >
                       원
-                    </Text>
-                  </Group>
-                </Group>
+                    </p>
+                  </div>
+                </div>
               ))}
-            </Stack>
-          </Paper>
+            </div>
+          </div>
 
           {/* 무료 배송 기준 */}
-          <Paper radius="lg" shadow="sm" p="lg">
-            <Text
+          <div className={PAPER}>
+            <p
+              className={`${TEXT} mb-4`}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
@@ -210,11 +224,10 @@ export default function DeliverySettingsPage() {
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
               }}
-              mb="md"
             >
               무료 배송 기준금액
-            </Text>
-            <Stack gap="sm">
+            </p>
+            <div className="flex flex-col gap-3">
               {(
                 [
                   { label: '직배송', field: 'freeThresholdDirect' },
@@ -222,17 +235,24 @@ export default function DeliverySettingsPage() {
                   { label: '택배', field: 'freeThresholdParcel' },
                 ] as { label: string; field: keyof DeliveryConfig }[]
               ).map(({ label, field }) => (
-                <Group key={field} justify="space-between" gap="md">
-                  <Text
+                <div
+                  key={field}
+                  className="flex flex-row flex-wrap items-center justify-between gap-4"
+                >
+                  <p
+                    className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
+                      width: 80,
                     }}
-                    w={80}
                   >
                     {label}
-                  </Text>
-                  <Group gap="xs" style={{ flex: 1 }}>
+                  </p>
+                  <div
+                    className="flex flex-row flex-wrap items-center justify-start gap-2.5"
+                    style={{ flex: 1 }}
+                  >
                     <input
                       type="number"
                       min="0"
@@ -248,7 +268,8 @@ export default function DeliverySettingsPage() {
                         textAlign: 'right',
                       }}
                     />
-                    <Text
+                    <p
+                      className={TEXT}
                       style={{
                         fontSize: 'var(--font-size-sm)',
                         color: 'var(--color-text-disabled)',
@@ -256,18 +277,19 @@ export default function DeliverySettingsPage() {
                       }}
                     >
                       원
-                    </Text>
-                  </Group>
-                </Group>
+                    </p>
+                  </div>
+                </div>
               ))}
-            </Stack>
-          </Paper>
+            </div>
+          </div>
 
           {/* 기상 제한 토글 */}
-          <Paper radius="lg" shadow="sm" p="lg">
-            <Group justify="space-between">
-              <Stack gap={2}>
-                <Text
+          <div className={PAPER}>
+            <div className="flex flex-row flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-col gap-0.5">
+                <p
+                  className={TEXT}
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     fontWeight: 'var(--fw-medium)',
@@ -275,49 +297,49 @@ export default function DeliverySettingsPage() {
                   }}
                 >
                   기상 제한 배송
-                </Text>
-                <Text
+                </p>
+                <p
+                  className={TEXT}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
                 >
                   악천후 시 배송 제한 활성화
-                </Text>
-              </Stack>
+                </p>
+              </div>
               <Switch
+                aria-label="기상 제한 배송"
                 checked={config.weatherRestrictionActive}
-                onChange={(e) =>
+                onCheckedChange={(checked) =>
                   setConfig((prev) => ({
                     ...prev,
-                    weatherRestrictionActive: e.currentTarget.checked,
+                    weatherRestrictionActive: checked,
                   }))
                 }
-                color="brand"
               />
-            </Group>
-          </Paper>
+            </div>
+          </div>
 
           {error && (
-            <Text
+            <p
+              className={`${TEXT} text-center`}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-              ta="center"
             >
               {error}
-            </Text>
+            </p>
           )}
 
           <Button
             onClick={handleSave}
             disabled={saving}
-            fullWidth
             size="md"
-            radius="xl"
+            className="w-full"
             style={{
               backgroundColor: saved ? 'var(--color-status-info-text)' : 'var(--color-primary)',
             }}
           >
             {saving ? '저장 중...' : saved ? '저장 완료!' : '저장'}
           </Button>
-        </Stack>
-      </Container>
-    </Box>
+        </div>
+      </div>
+    </main>
   );
 }
