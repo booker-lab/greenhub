@@ -189,11 +189,19 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 동결 검사: 실제 커밋으로 pre-candidate 교체 흔적 차단, 일반 프런트 수정 통과, candidate에서 라벨 없는 프런트 수정 차단·`freeze-fix` 통과, 후보 이전 SHA 배포 차단을 확인했다.
 
 ### P1. 기반 (`packages/ui`)
-- `packages/ui`에 Tailwind v4와 shadcn(`-b base`)을 초기화하고 §4 토큰을 `tokens.css`에 넣는다. 처음 쓸 컴포넌트(Button·Input·Field·Card·Badge·Dialog·Sheet·Toast·Skeleton)를 설치한다. `add`는 `--dry-run`으로 바뀔 파일을 먼저 본다(`init`에는 이 옵션이 없다).
+- `packages/ui`에 Tailwind v4와 shadcn(`-b base`) 토큰·컴포넌트를 둔다. 처음 쓸 컴포넌트는 Button·Input·Field(+Label)·Card·Badge·Dialog·Sheet·Toast·Skeleton이다.
 - 기존 `style.css`·`theme.ts`의 값은 바꾸지 않는다. 어느 앱에도 아직 연결하지 않는다.
-- 검사: 새 CSS에 `--border` 색 정의가 없다. 같이 쓰는 동안 앱이 import할 파일에 `@import "tailwindcss"`(preflight)가 없다. Tailwind 출력의 `:root`에 기존 이름(`--color-*`, `--radius-sm`)이 다른 값으로 나오지 않는다.
-- 우리 variant를 Mantine과 같은 모양(반경·글자·줄 높이·테두리 색)으로 먼저 만들고, 컴포넌트 대조 화면을 P0.5 촬영에 넣어 Mantine과 차이 0을 확인한다. 화면 교체 전에 컴포넌트 단위에서 외형을 맞춰 두기 위해서다.
-- 완료 기준: 세 앱 `pnpm build` 통과, 세 앱 촬영이 `main`과 차이 0(lockfile이 바뀌어 세 앱이 다시 빌드된다), 컴포넌트 대조 차이 0.
+- 검사: 새 CSS에 `--border` 색 정의가 없다. 같이 쓰는 동안 앱이 import할 파일에 `@import "tailwindcss"`(preflight)가 없다. Tailwind 출력의 `:root`에 기존 이름(`--color-*`, `--radius-sm`)이 다른 값으로 나오지 않는다(`scripts/ui/tokens.spec.mjs`).
+- 우리 variant를 Mantine과 같은 모양(반경·글자·줄 높이·테두리 색)으로 먼저 만든다. 컴포넌트를 Mantine과 나란히 찍는 대조 화면은 컴포넌트를 실제로 그릴 앱이 연결되는 P2a에서 만든다(P1에는 그릴 앱이 없다).
+- 완료 기준: 세 앱 `pnpm build` 통과, 세 앱 화면이 `main`과 같음(lockfile이 바뀌어 세 앱이 다시 빌드된다).
+
+구현(2026-10-30):
+- **shadcn CLI 대신 레지스트리 원본**: 이 실행 환경에서 `ui.shadcn.com`에 닿지 않아 `init`·`add`를 쓸 수 없다. shadcn 저장소의 Base UI 원본(`apps/v4/registry/bases/base/ui`, 2026-10-27 커밋 `96da9cc7`)을 구조·`data-slot`·export 그대로 쓰고, 자리표시 클래스(`cn-*`)를 `tokens.css`의 의미 유틸리티로 채웠다. `components.json`은 나중에 CLI를 쓸 수 있게 둔다.
+- **의존성**(모두 2주 이상 된 버전): `@base-ui/react` 1.9.0, `class-variance-authority` 0.7.1, `cn` 0.4.0(shadcn 제작, clsx + tailwind-merge 대체), `tw-animate-css` 1.4.0, `lucide-react` ^1.61.0(앱과 같음). 개발용 `tailwindcss`·`@tailwindcss/postcss` 4.3.3. `shadcn` 패키지는 CLI 의존성 33개를 끌고 와 넣지 않고, 그 안의 `dist/tailwind.css`(열림·닫힘 변형, MIT)만 `src/styles/shadcn-tailwind.css`로 옮겼다.
+- **기본값(① 외형 유지)**: 버튼 36/18px·완전 둥근 모서리·15px 600, 입력칸 36px·16px 모서리·gray-4 테두리, 카드 16px 모서리·16px 여백·gray-3 테두리, 배지 20px·11px 700 대문자(한글 잘림 보정 없이 `overflow-visible`). 값은 설치된 Mantine 9.7 CSS와 `theme.ts`에서 읽었다.
+- **lockfile 부수 변화**: 새 패키지 외에 `jiti` 2.6.1→2.7.0(ESLint·vitest 같은 개발 도구), `workbox-build`(PWA 서비스워커 빌드)의 `@babel/runtime` 7.29.2→7.29.10(이미 있던 버전으로 합쳐짐)이 바뀐다.
+- `scripts/check-css-vars.mjs`는 Base UI Toast 런타임 변수(`--toast-*`)와 Tailwind 테마 간격(`--spacing`)을 라이브러리 정의 변수로 넘긴다.
+- CI 타입 검사에 `packages/ui`를 더했다.
 
 ### P2. 판매자 앱 (P1 뒤)
 - **P2a 연결만** (화면 교체 0)
