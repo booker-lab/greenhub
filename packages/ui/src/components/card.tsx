@@ -2,7 +2,7 @@ import type * as React from 'react';
 
 import { cn } from '../lib/utils';
 
-// ① 외형 유지: Mantine Card(radius 16, padding 16, gray-3 테두리, 그림자 없음).
+// ① 외형 유지: Mantine Card(radius 16, padding 16, gray-3 테두리, 그림자 없음, 글자 검정).
 // 안쪽 부품은 카드가 이미 여백을 주므로 가로 여백을 따로 두지 않는다.
 function Card({
   className,
@@ -14,7 +14,7 @@ function Card({
       data-slot="card"
       data-size={size}
       className={cn(
-        'group/card flex flex-col gap-4 overflow-hidden rounded-lg border border-card-border bg-card p-4 text-card-foreground data-[size=sm]:gap-3 data-[size=sm]:p-3 has-[>img:first-child]:pt-0 *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg',
+        'group/card flex flex-col gap-4 overflow-hidden rounded-lg border border-card-border bg-card p-4 text-black data-[size=sm]:gap-3 data-[size=sm]:p-3 has-[>img:first-child]:pt-0 *:[img:first-child]:rounded-t-lg *:[img:last-child]:rounded-b-lg',
         className,
       )}
       {...props}
@@ -39,10 +39,7 @@ function CardTitle({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="card-title"
-      className={cn(
-        'text-base leading-snug font-bold group-data-[size=sm]/card:text-sm',
-        className,
-      )}
+      className={cn('text-base font-bold group-data-[size=sm]/card:text-sm', className)}
       {...props}
     />
   );

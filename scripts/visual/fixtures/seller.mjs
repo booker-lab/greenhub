@@ -1056,6 +1056,27 @@ export const screens = [
 ];
 
 /**
+ * UI 교체 대조 화면(ui-stack-migration-plan.md §6 P1·P2a, `shots.mjs --set compare`).
+ * 왼쪽 Mantine, 오른쪽 @greenhub/ui를 같은 칸에 그린다. main에는 없는 화면이라 전·후 비교(screens)에 넣지 않는다.
+ * 앱은 하네스·dev:local(GREENHUB_LOCAL_RUNTIME=true + next dev)에서만 이 주소를 연다(apps/seller/src/lib/local-preview.ts).
+ */
+export const compareScreens = [
+  { id: 'ui-compare', group: 'UI 대조', title: '컴포넌트 대조', path: '/dev/ui-compare' },
+  ...[
+    ['modal', 'Mantine Modal'],
+    ['dialog', '@greenhub/ui Dialog'],
+    ['drawer', 'Mantine Drawer(bottom)'],
+    ['sheet', '@greenhub/ui Sheet(bottom)'],
+  ].map(([open, title]) => ({
+    id: `ui-compare-${open}`,
+    group: 'UI 대조',
+    title,
+    path: `/dev/ui-compare?open=${open}`,
+    viewport: true,
+  })),
+];
+
+/**
  * 팔도감 벤치마킹 비교(수정 전·후)용 판매자 화면. features는 그 화면에서 보이는 기능 토글 키다.
  * clicks: 찍기 전에 차례로 누를 글자(없으면 건너뛴다)
  */
