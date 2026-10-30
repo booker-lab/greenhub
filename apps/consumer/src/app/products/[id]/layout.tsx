@@ -1,4 +1,6 @@
+import { Container } from '@mantine/core';
 import type { Metadata } from 'next';
+import BusinessInfoFooter from '@/components/BusinessInfoFooter';
 import { buildProductShareMetadata } from '@/lib/share-metadata';
 import { fetchCachedProduct } from './product-server';
 
@@ -18,6 +20,15 @@ export async function generateMetadata({
   return { ...metadata, alternates: { canonical: `/products/${encodeURIComponent(id)}` } };
 }
 
+// PG·카드사 입점 심사는 사업자 정보가 홈뿐 아니라 상품·결제 화면에도 늘 보이길 요구한다.
+// 하단에 고정된 구매 바(ProductCTABar)가 footer 끝을 가리지 않게 아래를 그 높이만큼 띄운다.
 export default function ProductLayout({ children }: { children: React.ReactNode }) {
-  return children;
+  return (
+    <>
+      {children}
+      <Container size="sm" px="md" pb="calc(120px + env(safe-area-inset-bottom))">
+        <BusinessInfoFooter />
+      </Container>
+    </>
+  );
 }
