@@ -218,20 +218,6 @@ export function ProductExtrasSection({
                       setGroups(next);
                     }}
                   />
-                  {/* 스티커 라벨·3D 토퍼처럼 손님이 문구를 써야 하는 선택지 */}
-                  <Checkbox
-                    color="green"
-                    size="xs"
-                    label="손님이 문구를 직접 써요 (라벨·토퍼)"
-                    checked={choice.needsText}
-                    onChange={(event) => {
-                      const choices = [...group.choices];
-                      choices[choiceIndex] = { ...choice, needsText: event.currentTarget.checked };
-                      const next = [...extras.options];
-                      next[groupIndex] = { ...group, choices };
-                      setGroups(next);
-                    }}
-                  />
                   </Stack>
                 ))}
                 {group.choices.length < PRODUCT_OPTION_CHOICE_MAX && (
@@ -245,7 +231,7 @@ export function ProductExtrasSection({
                         ...group,
                         choices: [
                           ...group.choices,
-                          { id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', needsText: false, stockId: '' },
+                          { id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', stockId: '' },
                         ],
                       };
                       setGroups(next);
@@ -272,7 +258,7 @@ export function ProductExtrasSection({
                     {
                       id: nextOptionId('g', extras.options.map((group) => group.id)),
                       name: '',
-                      choices: [{ id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', needsText: false, stockId: '' }],
+                      choices: [{ id: nextOptionId('c', allChoiceIds), label: '', priceDelta: '', stockId: '' }],
                     },
                   ])
                 }

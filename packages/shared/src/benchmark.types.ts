@@ -42,8 +42,6 @@ export interface ProductOptionChoice {
   label: string
   /** 회차 가격에 더하는 금액(원). 0 이상. */
   priceDelta: number
-  /** 고객이 문구를 직접 써야 하는 선택지(예: 스티커 라벨·3D 토퍼) */
-  needsText?: boolean
   /**
    * 이 선택지가 쓰는 매장 옵션 재고 품목 id(OptionStock, 예: 직접 출력한 화분).
    * 없으면 수량 제한이 없다. 같은 품목을 여러 상품·선택지가 함께 쓸 수 있다.
@@ -61,8 +59,11 @@ export interface ProductOptionGroup {
 export const PRODUCT_OPTION_GROUP_MAX = 3
 export const PRODUCT_OPTION_CHOICE_MAX = 6
 export const PRODUCT_OPTION_PRICE_DELTA_MAX = 200_000
-/** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
-export const OPTION_TEXT_MAX_LENGTH = 20
+/**
+ * 포장 겉면 라벨 문구 최대 길이(글자). 주문마다 한 장, 무료.
+ * 선물이면 보내는 분 이름(GiftInfo.senderName)이 라벨 문구다. 축하 문구는 미리 출력한 토퍼 옵션으로 고른다.
+ */
+export const PACKAGE_LABEL_MAX_LENGTH = 20
 
 /**
  * 매장 단위 옵션 재고 품목(예: 판매자가 직접 출력한 화분). 회차 상품과 같은 방식으로 센다.
@@ -177,7 +178,7 @@ export interface SelectedProductOption {
   choiceId: string
   choiceLabel: string
   priceDelta: number
-  /** 문구가 필요한 선택지에 고객이 쓴 문구 */
+  /** 2026-10-30 전 주문의 문구 선택지(라벨·토퍼)에 고객이 쓴 문구. 새 주문은 Order.packageLabel을 쓴다. */
   text?: string
   /** 주문 때 이 선택지가 쓴 옵션 재고 품목 id(ProductOptionChoice.stockId 스냅샷) */
   stockId?: string
