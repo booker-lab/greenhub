@@ -71,7 +71,9 @@ function killTree(child) {
 
 const args = process.argv.slice(2);
 const nowIndex = args.indexOf('--now');
-const appName = args.find((a, i) => !a.startsWith('--') && i !== nowIndex + 1) ?? 'seller';
+// --now 값은 앱 이름이 아니다. --now가 없을 때(nowIndex = -1) 첫 인자를 빼지 않도록 nowIndex를 먼저 본다.
+const appName =
+  args.find((a, i) => !a.startsWith('--') && (nowIndex === -1 || i !== nowIndex + 1)) ?? 'seller';
 const phone = args.includes('--phone');
 let visualNowIso;
 try {
