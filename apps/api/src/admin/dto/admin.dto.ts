@@ -154,6 +154,14 @@ export class SetCommissionDto {
   rate: number;
 }
 
+export class ArchiveStoreDto {
+  // 주문·정산 기록이 있는 판매자를 치울 때만 쓴다. 가게 ID 앞 8자리.
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  confirmStoreIdPrefix?: string;
+}
+
 export class ForceRefundDto {
   @IsOptional()
   @IsString()
