@@ -97,10 +97,7 @@ describe('productExtras', () => {
   });
 
   it('고시 기본 입력은 원산지·인증 사항을 미리 채우고, 매장 정보로 생산자·상담 전화를 채운다', () => {
-    const notice = fillNoticeDefaults(defaultExtras().notice, {
-      producer: '디어 오키드',
-      csPhone: '010-0000-0000',
-    });
+    const notice = fillNoticeDefaults(defaultExtras().notice, { producer: '디어 오키드', csPhone: '010-0000-0000' });
     expect(notice).toEqual({
       itemName: '',
       origin: '국내산(경기도 이천)',
@@ -111,13 +108,8 @@ describe('productExtras', () => {
   });
 
   it('판매자가 쓴 고시 값은 매장 기본값으로 덮지 않는다', () => {
-    const form = extrasFromProduct({
-      notice: { producer: '이천 난농원', csPhone: '031-000-0000' },
-    });
-    const notice = fillNoticeDefaults(form.notice, {
-      producer: '디어 오키드',
-      csPhone: '010-0000-0000',
-    });
+    const form = extrasFromProduct({ notice: { producer: '이천 난농원', csPhone: '031-000-0000' } });
+    const notice = fillNoticeDefaults(form.notice, { producer: '디어 오키드', csPhone: '010-0000-0000' });
     expect(notice.producer).toBe('이천 난농원');
     expect(notice.csPhone).toBe('031-000-0000');
     expect(notice.origin).toBe('국내산(경기도 이천)');
@@ -127,13 +119,7 @@ describe('productExtras', () => {
     const extras = extrasBody(defaultExtras());
     expect(extras.ok && extras.body).not.toHaveProperty('notice');
     expect(
-      noticeBody({
-        itemName: '  ',
-        origin: ' 국내산 ',
-        producer: '디어 오키드',
-        certification: '',
-        csPhone: '',
-      }),
+      noticeBody({ itemName: '  ', origin: ' 국내산 ', producer: '디어 오키드', certification: '', csPhone: '' }),
     ).toEqual({ ok: true, body: { origin: '국내산', producer: '디어 오키드' } });
   });
 

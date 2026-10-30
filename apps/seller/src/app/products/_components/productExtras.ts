@@ -123,9 +123,7 @@ function pick<T extends string>(values: readonly T[], input: unknown): T[] {
 }
 
 /** API 상품 응답 → 입력 상태. 알 수 없는 값은 버린다. */
-export function extrasFromProduct(
-  data: Partial<ProductExtras> | null | undefined,
-): ProductExtrasForm {
+export function extrasFromProduct(data: Partial<ProductExtras> | null | undefined): ProductExtrasForm {
   const base = defaultExtras();
   if (!data) return base;
   const options = Array.isArray(data.options) ? data.options : [];
@@ -164,10 +162,7 @@ export function optionStockSelectData(
 ): Array<{ value: string; label: string }> {
   const data = [
     { value: '', label: '연결 안 함 (수량 제한 없음)' },
-    ...stocks.map((stock) => ({
-      value: stock.id,
-      label: `${stock.name} (남은 ${stock.remainingQuantity}개)`,
-    })),
+    ...stocks.map((stock) => ({ value: stock.id, label: `${stock.name} (남은 ${stock.remainingQuantity}개)` })),
   ];
   if (currentStockId && !stocks.some((stock) => stock.id === currentStockId)) {
     data.push({ value: currentStockId, label: '연결된 재고 (목록에서 찾지 못함)' });
@@ -201,10 +196,7 @@ export function noticeBody(notice: Required<ProductNotice>): NoticeBodyResult {
   for (const field of PRODUCT_NOTICE_FIELDS) {
     const value = notice[field.key].trim();
     if (value.length > field.maxLength) {
-      return {
-        ok: false,
-        error: `상품 정보 고시의 ${field.label}은(는) ${field.maxLength}자까지 쓸 수 있어요.`,
-      };
+      return { ok: false, error: `상품 정보 고시의 ${field.label}은(는) ${field.maxLength}자까지 쓸 수 있어요.` };
     }
     if (value) body[field.key] = value;
   }
@@ -250,8 +242,7 @@ export function extrasBody(form: ProductExtrasForm): ExtrasBodyResult {
         choices: choices.map((choice) => ({
           id: choice.id,
           label: choice.label,
-          priceDelta:
-            optionalInt(choice.priceDelta, '추가 금액', 0, PRODUCT_OPTION_PRICE_DELTA_MAX) ?? 0,
+          priceDelta: optionalInt(choice.priceDelta, '추가 금액', 0, PRODUCT_OPTION_PRICE_DELTA_MAX) ?? 0,
           ...(choice.stockId ? { stockId: choice.stockId } : {}),
         })),
       });
@@ -274,9 +265,7 @@ export function extrasBody(form: ProductExtrasForm): ExtrasBodyResult {
       guaranteed: form.guaranteed,
       aliases,
     };
-    const definedSize = Object.fromEntries(
-      Object.entries(size).filter(([, value]) => value !== undefined),
-    );
+    const definedSize = Object.fromEntries(Object.entries(size).filter(([, value]) => value !== undefined));
     if (Object.keys(definedSize).length > 0) body.size = definedSize;
     if (form.light) body.light = form.light;
     if (hasCare) body.careGuide = Object.fromEntries(careEntries) as unknown as CareGuide;
