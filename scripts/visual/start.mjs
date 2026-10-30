@@ -1,9 +1,10 @@
 // 화면 확인용 dev 실행기 — 가짜 API + next dev(외부 차단)를 한 번에 띄운다.
 // 배포·Vercel·카카오 로그인 없이 작업 직후 화면을 PC 브라우저나 휴대폰(Tailscale)으로 본다.
 //
-//   node scripts/visual/start.mjs [app] [--phone]
+//   node scripts/visual/start.mjs [app] [--phone] [--now <ISO>]
 //     app      seller(셀러·어드민, 기본), consumer(소비자), driver(기사)
 //     --phone  Tailscale 주소에 바인딩해 휴대폰에서 접속한다(같은 tailnet 기기만 접근 가능)
+//     --now    fixture 일정과 캡처 시계의 기준 시각(기본: 오늘 한국 시간 0시, clock.mjs)
 //
 // 안전장치: 앱의 .env 파일 값(운영 API·Firebase·비밀값)을 전부 빈 값으로 덮고,
 // next dev 프로세스의 외부 연결을 node-guard.cjs로 막는다. 운영 데이터에 닿지 않는다.
@@ -15,6 +16,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { APPS, RUNTIME_FILE } from './apps.mjs';
+import { resolveVisualNow, VISUAL_NOW_ENV } from './clock.mjs';
 import {
   assertEmulatorPortsFree,
   EMULATOR,
@@ -68,8 +70,17 @@ function killTree(child) {
 }
 
 const args = process.argv.slice(2);
-const appName = args.find((a) => !a.startsWith('--')) ?? 'seller';
+const nowIndex = args.indexOf('--now');
+const appName = args.find((a, i) => !a.startsWith('--') && i !== nowIndex + 1) ?? 'seller';
 const phone = args.includes('--phone');
+let visualNowIso;
+try {
+  visualNowIso = resolveVisualNow(nowIndex > -1 ? args[nowIndex + 1] : undefined);
+} catch (error) {
+  fail(error.message);
+}
+// fixture가 import될 때 이 시각으로 회차 일정을 만든다.
+process.env[VISUAL_NOW_ENV] = visualNowIso;
 const app = APPS[appName];
 if (!app) fail(`지원하지 않는 앱: ${appName} (가능: ${Object.keys(APPS).join(', ')})`);
 
@@ -176,6 +187,7 @@ fs.writeFileSync(
     apiUrl,
     e2eSecret: app.credentials === 'e2e-header' ? e2eSecret : null,
     emulator: useEmulator,
+    visualNow: visualNowIso,
   }),
 );
 
@@ -200,6 +212,7 @@ const onOutput = (chunk) => {
         '',
         `✅ 화면 확인 서버 준비됨 (${appName})`,
         `   주소: ${appUrl}/login`,
+        `   기준 시각: ${visualNowIso} (캡처 시계·fixture 일정)`,
         app.credentials === 'local-runtime'
           ? '   로그인: 아무 이메일·비밀번호나 입력 → fixture의 가짜 계정으로 들어갑니다'
           : '   로그인: 브라우저에서는 공개 화면만 볼 수 있어요(로그인 화면은 자동 캡처 shots.mjs에서만 통과)',

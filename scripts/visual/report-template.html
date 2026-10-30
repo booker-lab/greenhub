@@ -110,6 +110,7 @@ textarea {
     <div class="controls">
       <div class="seg" role="group" aria-label="화면 크기">
         <button type="button" id="vp-mobile" data-vp="mobile" aria-pressed="true">폰</button>
+        <button type="button" id="vp-tablet" data-vp="tablet" aria-pressed="false">태블릿</button>
         <button type="button" id="vp-desktop" data-vp="desktop" aria-pressed="false">PC</button>
       </div>
       <div class="seg" role="group" aria-label="판정 필터" id="filters">
@@ -286,7 +287,7 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.save')) save(id, { note: card.querySelector('textarea').value });
 });
 
-state.viewport = readPref('viewport', 'mobile') === 'desktop' ? 'desktop' : 'mobile';
+state.viewport = ['mobile', 'tablet', 'desktop'].includes(readPref('viewport', 'mobile')) ? readPref('viewport', 'mobile') : 'mobile';
 for (const b of document.querySelectorAll('[data-vp]')) b.setAttribute('aria-pressed', String(b.dataset.vp === state.viewport));
 renderMeta();
 render();

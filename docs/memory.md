@@ -201,7 +201,9 @@ Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`이 코드와 공개 문서에 반영�
 
 상태: `DECIDED` — 2026-10-30 사용자 확정(`docs/specs/frontend/ui-stack-migration-plan.md` §8·§10 M2).
 
-첫 회차 배송(12/1) 전에는 UI 교체 작업 중 P0(E2E 선택자, 판매자 앱에 ARIA 속성만 더함)·P0.5(증명 도구, 프런트 빌드를 일으키지 않는 경로만)만 `main`에 병합한다. LIVE 출시 후보 SHA를 정하는 시점(늦어도 주문 오픈 3일 전)부터 배송 완료 다음 날(12/2)까지는 수정·revert만 병합하고, P1(`packages/ui`) 이후 교체는 12/2부터 병합한다. 릴리스 세션은 배포 전에 운영 SHA와의 차이에 교체 코드가 없는지 확인한다. 도구 강제(동결 상태 파일·PR 경로 검사·배포 검사)는 P0.5에서 만든다. 회차가 다시 미뤄지면 구간이 함께 움직인다.
+첫 회차 배송(12/1) 전에는 UI 교체 작업 중 P0(E2E 선택자, 판매자 앱에 ARIA 속성만 더함)·P0.5(증명 도구, 프런트 빌드를 일으키지 않는 경로만)만 `main`에 병합한다. LIVE 출시 후보 SHA를 정하는 시점(늦어도 주문 오픈 3일 전)부터 배송 완료 다음 날(12/2)까지는 수정·revert만 병합하고, P1(`packages/ui`) 이후 교체는 12/2부터 병합한다. 릴리스 세션은 배포 전에 운영 SHA와의 차이에 교체 코드가 없는지 확인한다. 회차가 다시 미뤄지면 구간이 함께 움직인다.
+
+도구 강제(P0.5): 상태 파일 `docs/release/ui-migration-freeze.json`(현재 `pre-candidate`)을 `scripts/release/freeze-guard.mjs`가 읽는다. PR CI `UI 교체 동결` job(`ci-ok`에 포함)이 base SHA의 상태로 교체 흔적을 막고, `production-deploy.yml`이 `candidate` 구간에 후보 SHA 계열만 배포하게 한다. **릴리스 세션이 LIVE 출시 후보 SHA를 정하면 같은 때 상태 파일을 `candidate`와 그 SHA로 바꾸는 커밋을 병합하고, 12/2에 `open`으로 바꾼다.**
 
 ## HISTORICAL / CLOSED BY REL-STATE-01
 
