@@ -799,6 +799,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
   - **막힘(2026-10-23)**: 택배사 계약 없음. 계약 뒤 고지 문구·시행일을 정하고 출시 묶음과 함께 배포한다.
 - [ ] 2-G 출시: 자재 매장 생성(`salesMode=legacy`)·상품 등록, 묶음 최종 `main` SHA로 원격 E2E 1회, 운영 배포(사용자 승인).
 
+### ADMIN-ROLE-GRANT-AND-STAFF-PERMISSIONS
+- [ ] **2026-10-30 결정: 지금은 만들지 않는다. 첫 직원을 들일 때 다시 연다.** 현재 운영 관리자는 사용자 본인의 카카오 겸직 계정(관리자 + 디어 오키드 매장) 1개뿐이다. 앱 안에서 관리자 권한을 주거나 회수하는 방법이 없다. 회원가입은 `consumer`·`seller`·`driver`만 받고(`apps/api/src/auth/dto/register.dto.ts`), 관리자 "초대" 탭은 판매자 초대 전용이다. 운영 스크립트(`scripts/ops/`)에도 역할을 바꾸는 것이 없다. 남은 수단은 Firestore `users/{uid}.role` 직접 수정뿐이다. 이 경우 바꾼 뒤 재로그인이 필요하고(`JwtStrategy`가 요청마다 현재 role과 토큰 role을 비교), 누가 권한을 줬는지는 audit에 남지 않는다. `docs/specs/api/admin.md`는 이 방식을 현행 정식 절차로 쓰지 않는다고 적지만, 정식 절차는 아직 정의되지 않았다. 직원이 생기면 먼저 맡을 일을 정한다. (가) 전권 관리자가 필요하면 `lock-account.mjs`·`link-store-owner.mjs` 방식(check/apply 분리, audit 기록)의 관리자 권한 부여·회수 운영 스크립트를 만든다. (나) 조회·일부 기능만 필요하면 권한 분리를 설계한다. 지금 서버는 관리자 API 전체를 `@Roles('admin')` 하나로 막고 있으므로(`apps/api/src/admin/admin.controller.ts`) 엔드포인트별 권한으로 바꿔야 한다. 매장 일을 돕는 직원이면 관리자가 아니라 한 매장의 판매자 직원 여러 명 기능이 필요하다(계정당 매장 1개 구조는 `SUPPLIES-ALWAYS-ON-SALES` 2-B 참고).
+
 ---
 
 ## STALE_OR_SUPERSEDED
