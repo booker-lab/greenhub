@@ -35,10 +35,10 @@ describe('productExtras', () => {
           id: 'g1',
           name: '화분',
           choices: [
-            { id: 'c1', label: '기본', priceDelta: '', needsText: false, stockId: '' },
-            { id: 'c2', label: '3D 토퍼', priceDelta: '5000', needsText: true, stockId: '' },
-            { id: 'c3', label: ' ', priceDelta: '', needsText: false, stockId: '' },
-            { id: 'c4', label: '출력 화분', priceDelta: '7000', needsText: false, stockId: 'stock-pot' },
+            { id: 'c1', label: '기본', priceDelta: '', stockId: '' },
+            { id: 'c2', label: '3D 토퍼', priceDelta: '5000', stockId: '' },
+            { id: 'c3', label: ' ', priceDelta: '', stockId: '' },
+            { id: 'c4', label: '출력 화분', priceDelta: '7000', stockId: 'stock-pot' },
           ],
         },
       ],
@@ -57,7 +57,7 @@ describe('productExtras', () => {
             name: '화분',
             choices: [
               { id: 'c1', label: '기본', priceDelta: 0 },
-              { id: 'c2', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+              { id: 'c2', label: '3D 토퍼', priceDelta: 5000 },
               { id: 'c4', label: '출력 화분', priceDelta: 7000, stockId: 'stock-pot' },
             ],
           },
@@ -80,7 +80,8 @@ describe('productExtras', () => {
           id: 'g1',
           name: '크기',
           choices: [
-            { id: 'c1', label: '대', priceDelta: 3000, needsText: true },
+            // 2026-10-30 전 상품 문서에 남은 문구 입력 여부(needsText)는 읽지 않는다.
+            { id: 'c1', label: '대', priceDelta: 3000, needsText: true } as never,
             { id: 'c2', label: '출력 화분', priceDelta: 0, stockId: 'stock-pot' },
           ],
         },
@@ -89,7 +90,7 @@ describe('productExtras', () => {
     });
     expect(form.placements).toEqual(['living']);
     expect(form.options[0].choices[0].priceDelta).toBe('3000');
-    expect(form.options[0].choices[0].needsText).toBe(true);
+    expect(form.options[0].choices[0]).not.toHaveProperty('needsText');
     expect(form.options[0].choices[0].stockId).toBe('');
     expect(form.options[0].choices[1].stockId).toBe('stock-pot');
     expect(form.aliases).toBe('a, b');
