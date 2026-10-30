@@ -80,6 +80,7 @@ pnpm dev:local                          # 다른 터미널에서 먼저 띄운�
 ADMIN_LOCAL_E2E=1 SELLER_BASE=http://localhost:3002 CONSUMER_BASE=http://localhost:3001 DRIVER_BASE=http://localhost:3003   pnpm --filter e2e exec playwright test admin-local-
 ```
 
+- 묶음 판정 실행기: `node scripts/admin-local-e2e.mjs`(dev:local을 먼저 띄운다). 대상 주소를 루프백으로 고정하고 재시도를 끈 채 돌려, 실행 건수가 기대값(spec 5개 × chromium·mobile = 20)과 같고 실패·재시도 통과·건너뜀이 모두 0일 때만 통과한다. UI 교체 PR의 판매자·어드민 로컬 증거다(`docs/specs/frontend/ui-stack-migration-plan.md` P0.5). spec을 더하거나 빼면 실행기의 `EXPECTED_TESTS`를 같은 PR에서 고친다.
 - `ADMIN_LOCAL_E2E=1`이 없으면 `admin-local-*.spec.ts`는 모두 건너뛴다(일반·회차 원격 E2E에서도 건너뜀).
 - 각 spec이 전용 관리자(에뮬레이터에 직접 생성, 로그인은 API 실경로)와 시드 문서를 만들고, afterAll에서 그 문서와 그 관리자가 남긴 기록(`adminAuditLogs` 등)을 지운다. 다른 문서는 건드리지 않는다.
 - chromium(데스크톱 표)과 mobile(카드)을 함께 돈다. 실행마다 id·이름·전화번호가 달라 동시에 돌아도 섞이지 않는다.
