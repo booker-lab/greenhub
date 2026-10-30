@@ -25,7 +25,9 @@ import { useOrderPhoneSearch } from '@/hooks/useOrderPhoneSearch';
 import { useOrderArchive } from '@/hooks/useOrderArchive';
 import { ACTIVE_SELLER_ORDERS_QUERY, useOrders } from '@/hooks/useOrders';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
+import { useStoreSalesMode } from '@/hooks/useStoreSalesMode';
 import { pickDeadlineRound } from '@/lib/round-deadline';
+import { showsGroupBuyChoice } from '@/lib/sales-mode';
 import { DateSection } from './_components/DateSection';
 import { OrderSearchInput } from './_components/OrderSearchInput';
 import { SaleTypeToggle } from './_components/SaleTypeToggle';
@@ -111,6 +113,7 @@ export default function OrdersPage() {
   const { rounds } = useSaleRounds();
   const deadlineRound = useMemo(() => pickDeadlineRound(rounds), [rounds]);
   const [saleType, setSaleType] = useState<SaleType>('normal');
+  const salesMode = useStoreSalesMode(storeId, session?.user.accessToken);
   const [activeTab, setActiveTab] = useState<OrderGroup>('ACTION_REQUIRED');
   const [subFilter, setSubFilter] = useState<'ALL' | 'DELIVERING' | 'HUB_ARRIVED'>('ALL');
   const [heldOnly, setHeldOnly] = useState(false);
@@ -357,8 +360,10 @@ export default function OrdersPage() {
         </Container>
       )}
 
-      {/* 판매 유형 토글 — 일반/공구 1차 분기 */}
-      <SaleTypeToggle value={saleType} onChange={handleSaleTypeChange} />
+      {/* 판매 유형 토글 — 일반/공구 1차 분기. 공동구매가 없는 회차 판매 가게에는 숨긴다. */}
+      {showsGroupBuyChoice(salesMode, saleType) && (
+        <SaleTypeToggle value={saleType} onChange={handleSaleTypeChange} />
+      )}
       <OrderSearchInput
         value={searchQuery}
         onChange={setSearchQuery}
