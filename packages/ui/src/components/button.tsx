@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button';
 import { cva, type VariantProps } from 'class-variance-authority';
+import type * as React from 'react';
 import { Children } from 'react';
 
 import { cn } from '../lib/utils';
@@ -98,4 +99,28 @@ function Button({
   );
 }
 
-export { Button, buttonVariants };
+// ① 외형 유지: Mantine Button 안쪽(inner·label) 구조. 버튼보다 긴 내용(두 줄 글자 등)을 Mantine처럼
+// 왼쪽부터 그리고 오른쪽을 자르고, 글자 위치도 Mantine과 같은 반올림으로 놓는다.
+// 글자만 있는 보통 버튼은 Button이 글자 칸으로 감싸므로(wrapLabels) 쓰지 않아도 된다. 직접 감싼 ButtonLabel은
+// 요소라서 다시 감싸지 않는다.
+function ButtonLabel({ className, children, ...props }: React.ComponentProps<'span'>) {
+  return (
+    <span
+      data-slot="button-inner"
+      className="flex h-full w-full min-w-0 items-center justify-center overflow-visible"
+    >
+      <span
+        data-slot="button-label"
+        className={cn(
+          'flex h-full items-center overflow-hidden whitespace-nowrap [text-box-edge:cap_alphabetic] [text-box-trim:trim-both]',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
+
+export { Button, ButtonLabel, buttonVariants };

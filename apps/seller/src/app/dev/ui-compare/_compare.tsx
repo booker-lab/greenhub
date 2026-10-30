@@ -2,7 +2,7 @@
 
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLabel } from '@greenhub/ui/components/button';
 import {
   Card,
   CardContent,
@@ -20,7 +20,10 @@ import {
 } from '@greenhub/ui/components/dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
+import { Loader } from '@greenhub/ui/components/loader';
+import { Select } from '@greenhub/ui/components/select';
 import { Switch } from '@greenhub/ui/components/switch';
+import { Textarea } from '@greenhub/ui/components/textarea';
 import {
   Sheet,
   SheetBody,
@@ -36,9 +39,12 @@ import {
   Button as MButton,
   Card as MCard,
   Drawer,
+  Loader as MLoader,
   Modal,
+  Select as MSelect,
   Switch as MSwitch,
   Text,
+  Textarea as MTextarea,
   TextInput,
   Title,
 } from '@mantine/core';
@@ -79,7 +85,13 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section style={{ marginBottom: 24 }}>
       <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>{title}</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 8 }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)',
+          columnGap: 8,
+        }}
+      >
         <div style={{ fontSize: 12, fontWeight: 700 }}>Mantine</div>
         <div style={{ fontSize: 12, fontWeight: 700 }}>@greenhub/ui</div>
         {children}
@@ -150,7 +162,75 @@ const MODAL_TEXT = '이 주문을 취소하면 결제 금액이 환불됩니다.
 const SHEET_TEXT =
   '화분 종류와 문구를 고르면 가격이 바로 바뀝니다. 고른 옵션은 장바구니와 주문 내역에 그대로 남고, 배송 전까지는 주문 상세에서 확인할 수 있습니다. 문구가 필요한 옵션은 고른 뒤 아래 입력칸에 적어 주세요. 같은 상품을 다른 옵션으로 더 담으면 장바구니에 따로 들어갑니다.';
 
+// 상품 등록·수정의 품종 선택(VarietySelector)과 같은 묶음 목록.
+const VARIETY_GROUPS = [
+  {
+    group: '심비디움',
+    items: [
+      { value: 'variety-biglip', label: '빅립' },
+      { value: 'variety-mancheonhong', label: '만천홍' },
+    ],
+  },
+  { group: '호접란', items: [{ value: 'variety-white', label: '화이트 호접' }] },
+];
+const LONG_TEXT =
+  '경매에서 직접 고른 동양란입니다. 꽃대가 튼튼하고 향이 은은해 거실이나 사무실에 두기 좋아요. 받으신 뒤에는 밝은 창가에 두고 겉흙이 마르면 물을 주세요.';
+
+// 상품 폼 출하 형태 버튼(TouchSelector)처럼 글자 두 줄을 넣은 버튼 안쪽.
+function StemLabel() {
+  return (
+    <div className="flex flex-col items-center justify-start gap-0">
+      <p className="m-0 p-0 text-base font-normal" style={{ fontSize: 15, fontWeight: 700 }}>
+        외대
+      </p>
+      <p className="m-0 p-0 text-base font-normal" style={{ fontSize: 15, color: '#a3a9a6' }}>
+        1줄기
+      </p>
+    </div>
+  );
+}
+
+const SELECTED_BADGE = {
+  cursor: 'pointer',
+  backgroundColor: 'var(--color-primary-surface)',
+  color: 'var(--color-primary-dark)',
+  borderColor: 'var(--color-primary)',
+} as const;
+
+function SelectOpen({ open }: { open: string }) {
+  // 열린 목록은 칸 밖으로 나오므로 같은 자리에 하나씩 그려 캡처끼리 비교한다.
+  // 촬영(fixture compareScreens)이 입력칸을 실제로 눌러 연다.
+  return (
+    <main style={{ padding: 16, maxWidth: 480 }}>
+      {open === 'select' ? (
+        <MSelect
+          placeholder="품종 선택 (선택사항)"
+          data={VARIETY_GROUPS}
+          value="variety-biglip"
+          clearable
+          size="md"
+          radius="xl"
+          maxDropdownHeight={240}
+          comboboxProps={{ position: 'bottom', middlewares: { flip: false } }}
+        />
+      ) : (
+        <Select
+          placeholder="품종 선택 (선택사항)"
+          data={VARIETY_GROUPS}
+          value="variety-biglip"
+          onValueChange={() => {}}
+          clearable
+          size="md"
+          className="rounded-xl"
+          maxDropdownHeight={240}
+        />
+      )}
+    </main>
+  );
+}
+
 export function UiCompare({ open }: { open?: string }) {
+  if (open === 'select' || open === 'uiselect') return <SelectOpen open={open} />;
   return (
     <main style={{ padding: 16, maxWidth: 960, margin: '0 auto' }}>
       <Title order={1} style={{ fontSize: 20, marginBottom: 16 }}>
@@ -437,6 +517,213 @@ export function UiCompare({ open }: { open?: string }) {
         />
       </Section>
 
+      <Section title="상품 폼 입력 부품">
+        <Row
+          name="TextInput md xl ↔ Input md rounded-xl (자리표시)"
+          mantine={<TextInput placeholder="상품명" size="md" radius="xl" w="100%" />}
+          ui={<Input placeholder="상품명" size="md" className="rounded-xl" />}
+        />
+        <Row
+          name="TextInput md xl ↔ Input md rounded-xl (값)"
+          mantine={<TextInput defaultValue="동양란 빅립" size="md" radius="xl" w="100%" />}
+          ui={<Input defaultValue="동양란 빅립" size="md" className="rounded-xl" />}
+        />
+        <Row
+          name="Select md xl clearable ↔ Select md (자리표시)"
+          mantine={
+            <MSelect
+              placeholder="품종 선택 (선택사항)"
+              data={VARIETY_GROUPS}
+              value={null}
+              clearable
+              size="md"
+              radius="xl"
+              w="100%"
+            />
+          }
+          ui={
+            <div className="w-full">
+              <Select
+                placeholder="품종 선택 (선택사항)"
+                data={VARIETY_GROUPS}
+                value={null}
+                onValueChange={() => {}}
+                clearable
+                size="md"
+                className="rounded-xl"
+              />
+            </div>
+          }
+        />
+        <Row
+          name="Select md xl clearable ↔ Select md (값·지우기)"
+          mantine={
+            <MSelect
+              placeholder="품종 선택 (선택사항)"
+              data={VARIETY_GROUPS}
+              value="variety-biglip"
+              clearable
+              size="md"
+              radius="xl"
+              w="100%"
+            />
+          }
+          ui={
+            <div className="w-full">
+              <Select
+                placeholder="품종 선택 (선택사항)"
+                data={VARIETY_GROUPS}
+                value="variety-biglip"
+                onValueChange={() => {}}
+                clearable
+                size="md"
+                className="rounded-xl"
+              />
+            </div>
+          }
+        />
+        <Row
+          name="Textarea radius md 16·1.6 ↔ Textarea (판매자 메모)"
+          mantine={
+            <MTextarea
+              placeholder="예: 직접 키운 호접란입니다."
+              radius="md"
+              w="100%"
+              styles={{ input: { fontSize: 'var(--font-size-md)', lineHeight: 1.6 } }}
+            />
+          }
+          ui={
+            <div className="w-full">
+              <Textarea
+                placeholder="예: 직접 키운 호접란입니다."
+                className="rounded-[8px]"
+                style={{ fontSize: 'var(--font-size-md)', lineHeight: 1.6 }}
+              />
+            </div>
+          }
+        />
+        <Row
+          name="Textarea autosize minRows 5 ↔ Textarea autosize (상세 설명)"
+          mantine={
+            <MTextarea
+              defaultValue={LONG_TEXT}
+              autosize
+              minRows={5}
+              radius="md"
+              w="100%"
+              styles={{ input: { fontSize: 'var(--font-size-sm)', lineHeight: 1.7 } }}
+            />
+          }
+          ui={
+            <div className="w-full">
+              <Textarea
+                defaultValue={LONG_TEXT}
+                autosize
+                minRows={5}
+                className="rounded-[8px]"
+                style={{ fontSize: 'var(--font-size-sm)', lineHeight: 1.7 }}
+              />
+            </div>
+          }
+        />
+        <Row
+          name="Loader xs ↔ Loader xs"
+          mantine={<MLoader size="xs" color="var(--color-primary)" />}
+          ui={<Loader size="xs" />}
+        />
+        <Row
+          name="Loader md ↔ Loader md"
+          mantine={<MLoader size="md" color="var(--color-primary)" />}
+          ui={<Loader size="md" />}
+        />
+        <Row
+          name="Badge button outline gray ↔ Badge outline-gray"
+          mantine={
+            <MBadge
+              component="button"
+              radius="xl"
+              variant="outline"
+              color="gray"
+              style={{ cursor: 'pointer' }}
+            >
+              핑크
+            </MBadge>
+          }
+          ui={
+            <Badge
+              render={<button type="button" />}
+              variant="outline-gray"
+              style={{ cursor: 'pointer' }}
+            >
+              핑크
+            </Badge>
+          }
+        />
+        <Row
+          name="Badge button filled gray 고름 ↔ Badge outline-gray 고름"
+          mantine={
+            <MBadge
+              component="button"
+              radius="xl"
+              variant="filled"
+              color="gray"
+              style={SELECTED_BADGE}
+            >
+              핑크
+            </MBadge>
+          }
+          ui={
+            <Badge render={<button type="button" />} variant="outline-gray" style={SELECTED_BADGE}>
+              핑크
+            </Badge>
+          }
+        />
+        <Row
+          name="Button md outline gray 두 줄 ↔ outline-gray md (출하 형태)"
+          mantine={
+            <MButton size="md" variant="outline" color="gray" w={120}>
+              <StemLabel />
+            </MButton>
+          }
+          ui={
+            <Button size="md" variant="outline-gray" className="w-[120px]">
+              <StemLabel />
+            </Button>
+          }
+        />
+        <Row
+          name="Button md outline gray 두 줄·좁음 ↔ outline-gray md + ButtonLabel (잘림)"
+          mantine={
+            <MButton size="md" variant="outline" color="gray" w={70}>
+              <StemLabel />
+            </MButton>
+          }
+          ui={
+            <Button size="md" variant="outline-gray" className="w-[70px]">
+              <ButtonLabel>
+                <StemLabel />
+              </ButtonLabel>
+            </Button>
+          }
+        />
+        <Row
+          name="Button lg outline gray ↔ outline-gray lg (이전)"
+          mantine={
+            <MButton size="lg" variant="outline" color="gray" flex={1}>
+              이전
+            </MButton>
+          }
+          ui={
+            <Button size="lg" variant="outline-gray" className="flex-1">
+              이전
+            </Button>
+          }
+        />
+      </Section>
+
+      <p style={{ fontSize: 13, color: '#6b716e' }}>
+        Select 열린 상태는 ?open=select·uiselect 로 따로 찍는다.
+      </p>
       <p style={{ fontSize: 13, color: '#6b716e' }}>
         Dialog · Sheet 열린 상태는 ?open=modal·dialog·drawer·sheet 로 따로 찍는다.
       </p>

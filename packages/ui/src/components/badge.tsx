@@ -15,6 +15,8 @@ const badgeVariants = cva(
         default: 'bg-primary text-primary-foreground [a]:hover:bg-primary/90',
         light: 'bg-[#d2f2df] text-[#005c32]',
         outline: 'border-primary bg-transparent text-brand-ink',
+        // Mantine variant="outline" color="gray"(gray-6 테두리·글자).
+        'outline-gray': 'border-[#868e96] bg-transparent text-[#868e96]',
         warning: 'bg-status-warning text-status-warning-foreground',
         secondary: 'bg-[#f1f3f5] text-[#212529]',
         destructive: 'bg-[#ffe3e3] text-[#c92a2a]',
