@@ -15,6 +15,8 @@ import {
 
 const STORE = '80189070-2c3d-45f2-bc11-68a870b13951';
 const PRODUCT = '0a96f85d-b906-439c-a38c-f469a21e1dbf';
+const PRODUCT_2 = '1b07a96e-c017-44ad-b49d-0a57b32f2ec0';
+const PRODUCT_3 = '2c18ba7f-d128-45be-85ae-1b68c4303fd1';
 const OTHER_STORE = '11111111-2222-4333-8444-555555555555';
 const KEY_PATH = '/fixture/sa.json';
 const NOW = Date.UTC(2026, 9, 27, 16, 30, 0, 0);
@@ -232,11 +234,12 @@ test('readInputs: check는 매장 id만, create는 이름·상품·일정·한�
   assert.deepEqual(readInputs({ ROUND_STORE_ID: STORE }), { mode: 'check', storeId: STORE });
   const inputs = readInputs({ ROUND_STORE_ID: STORE, ...createEnv, ROUND_PRICE: '25000' });
   assert.equal(inputs.name, '11월 특별 회차');
-  assert.equal(inputs.productId, PRODUCT);
-  assert.equal(inputs.price, 25000);
+  assert.deepEqual(inputs.items, [{ productId: PRODUCT, price: 25000 }]);
   assert.deepEqual(inputs.limits, { ...DEFAULT_LIMITS });
   assert.equal(inputs.schedule.timezone, 'Asia/Seoul');
-  assert.equal(readInputs({ ROUND_STORE_ID: STORE, ...createEnv }).price, null);
+  assert.deepEqual(readInputs({ ROUND_STORE_ID: STORE, ...createEnv }).items, [
+    { productId: PRODUCT, price: null },
+  ]);
 
   assert.throws(() => readInputs({ ROUND_STORE_ID: 'nope' }), /ROUND_STORE_ID/);
   assert.throws(() => readInputs({ ROUND_STORE_ID: STORE, ROUND_MODE: 'open' }), /ROUND_MODE/);
@@ -257,8 +260,43 @@ test('readInputs: check는 매장 id만, create는 이름·상품·일정·한�
     /ROUND_PRICE/,
   );
   assert.throws(
+    () => readInputs({ ROUND_STORE_ID: STORE, ...createEnv, ROUND_PRODUCT_ID: '' }),
+    /ROUND_PRODUCT_ID/,
+  );
+  assert.throws(
     () => readInputs({ ROUND_STORE_ID: STORE, ...createEnv, ROUND_SCHEDULE: '' }),
     /5개/,
+  );
+});
+
+test('readInputs: 상품 여러 개를 적은 순서대로 받고 가격은 같은 순서·빈 칸은 상품 가격이다', () => {
+  const inputs = readInputs({
+    ROUND_STORE_ID: STORE,
+    ...createEnv,
+    ROUND_PRODUCT_ID: ` ${PRODUCT} , ${PRODUCT_2},${PRODUCT_3}`,
+    ROUND_PRICE: '25000, ,30000',
+  });
+  assert.deepEqual(inputs.items, [
+    { productId: PRODUCT, price: 25000 },
+    { productId: PRODUCT_2, price: null },
+    { productId: PRODUCT_3, price: 30000 },
+  ]);
+
+  const env = { ROUND_STORE_ID: STORE, ...createEnv };
+  // 6개(상한 5개 초과), 같은 상품 두 번, 가격 개수 불일치, 한 칸만 잘못된 가격
+  const six = Array.from({ length: 6 }, (_, i) => PRODUCT.replace(/^0/, String(i))).join(',');
+  assert.throws(() => readInputs({ ...env, ROUND_PRODUCT_ID: six }), /1~5개/);
+  assert.throws(
+    () => readInputs({ ...env, ROUND_PRODUCT_ID: `${PRODUCT},${PRODUCT}` }),
+    /두 번/,
+  );
+  assert.throws(
+    () => readInputs({ ...env, ROUND_PRODUCT_ID: `${PRODUCT},${PRODUCT_2}`, ROUND_PRICE: '1000' }),
+    /상품 수만큼/,
+  );
+  assert.throws(
+    () => readInputs({ ...env, ROUND_PRODUCT_ID: `${PRODUCT},${PRODUCT_2}`, ROUND_PRICE: '1000,x' }),
+    /ROUND_PRICE는 1~/,
   );
 });
 
@@ -411,7 +449,10 @@ test('create: 회차·회차 상품을 한 트랜잭션에 만들고 배송 지�
   assert.equal(audits.length, 1);
   assert.equal(audits[0].action, AUDIT_ACTION);
   assert.equal(audits[0].detail.roundId, round.id);
-  assert.equal(audits[0].detail.roundItemId, items[0].id);
+  assert.deepEqual(audits[0].detail.items, [
+    { roundItemId: items[0].id, productId: PRODUCT, roundPrice: 25000 },
+  ]);
+  assert.equal(audits[0].detail.saleLimitQuantity, 1);
 
   assert.deepEqual(
     h.fake.writes.map(([op, p]) => `${op}:${p.split('/')[0]}`),
@@ -422,6 +463,67 @@ test('create: 회차·회차 상품을 한 트랜잭션에 만들고 배송 지�
     /result: created\nname: 11월 특별 회차\nstatus: SCHEDULED\norderOpenAt: 2026-10-28T00:00:00\.000Z[\s\S]*deliveryRegion: 이천시\nlimits: item 1, addresses 2, quantity 3\nproduct: 만천홍 \(25000원\)/,
   );
   assert.ok(!h.output().includes(round.id), 'round id must not appear in default output');
+});
+
+test('create: 상품 여러 개를 한 트랜잭션에 적은 순서대로 진열하고 감사 기록에 모두 남긴다', async () => {
+  const h = harness({
+    env: {
+      ...createEnv,
+      ROUND_PRODUCT_ID: `${PRODUCT},${PRODUCT_2},${PRODUCT_3}`,
+      ROUND_PRICE: ',18000,',
+    },
+    seed: {
+      [`saleRounds/${existingRound().id}`]: existingRound(),
+      [`products/${PRODUCT}`]: product(),
+      [`products/${PRODUCT_2}`]: product({ id: PRODUCT_2, name: '빅립', price: 20000 }),
+      [`products/${PRODUCT_3}`]: product({ id: PRODUCT_3, name: '오렌지 글로우', price: 30000 }),
+    },
+  });
+  assert.equal(await h.run(), 0);
+
+  const [round] = roundsOf(h).filter((r) => r.name === '11월 특별 회차');
+  const items = itemsOf(h).sort((a, b) => a.displayOrder - b.displayOrder);
+  assert.deepEqual(
+    items.map((item) => [item.displayOrder, item.productNameSnapshot, item.roundPrice, item.roundId]),
+    [
+      [0, '만천홍', 25000, round.id],
+      [1, '빅립', 18000, round.id],
+      [2, '오렌지 글로우', 30000, round.id],
+    ],
+  );
+  assert.equal(new Set(items.map((item) => item.id)).size, 3);
+  assert.deepEqual(
+    auditsOf(h)[0].detail.items.map((item) => item.productId),
+    [PRODUCT, PRODUCT_2, PRODUCT_3],
+  );
+  assert.deepEqual(
+    h.fake.writes.map(([op, p]) => `${op}:${p.split('/')[0]}`),
+    [
+      'create:saleRounds',
+      'create:saleRoundItems',
+      'create:saleRoundItems',
+      'create:saleRoundItems',
+      'set:auditLogs',
+    ],
+  );
+  assert.match(
+    h.output(),
+    /product: 만천홍 \(25000원\)\nproduct: 빅립 \(18000원\)\nproduct: 오렌지 글로우 \(30000원\)/,
+  );
+});
+
+test('create: 상품 하나라도 없거나 다른 매장 상품이면 회차·다른 상품도 쓰지 않는다', async () => {
+  const h = harness({
+    env: { ...createEnv, ROUND_PRODUCT_ID: `${PRODUCT},${PRODUCT_2}` },
+    seed: {
+      [`saleRounds/${existingRound().id}`]: existingRound(),
+      [`products/${PRODUCT}`]: product(),
+      [`products/${PRODUCT_2}`]: product({ id: PRODUCT_2, storeId: OTHER_STORE }),
+    },
+  });
+  assert.equal(await h.run(), 1);
+  assert.match(h.output(), /2번째 상품/);
+  assert.deepEqual(h.fake.writes, []);
 });
 
 test('create: ROUND_PRICE를 주면 그 값이 회차 가격이 된다', async () => {
