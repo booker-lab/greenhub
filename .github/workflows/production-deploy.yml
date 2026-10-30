@@ -124,6 +124,16 @@ jobs:
           git cat-file -e "${SHA}^{commit}"
           git merge-base --is-ancestor "$SHA" origin/main
 
+      # UI 교체 동결(ui-stack-migration-plan.md §8). candidate 구간에는 상태 파일의 후보 SHA 또는 그 뒤의 SHA만,
+      # 그 사이에 교체 코드가 없을 때만 배포한다. 상태는 main checkout의 docs/release/ui-migration-freeze.json.
+      - name: UI 교체 동결 확인
+        shell: bash
+        env:
+          SHA: ${{ inputs.sha }}
+        run: |
+          set -euo pipefail
+          node scripts/release/freeze-guard.mjs deploy --sha="$SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: 같은 SHA 원격 회차 E2E 통과 확인
         shell: bash
         env:
