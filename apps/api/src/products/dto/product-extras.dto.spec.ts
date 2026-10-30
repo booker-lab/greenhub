@@ -34,11 +34,11 @@ const extras = {
       ],
     },
     {
-      id: 'message',
-      name: '문구',
+      id: 'topper',
+      name: '축하 토퍼',
       choices: [
-        { id: 'none', label: '문구 없음', priceDelta: 0 },
-        { id: 'topper', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+        { id: 'none', label: '토퍼 없음', priceDelta: 0 },
+        { id: 'opening', label: '祝 開業', priceDelta: 5000 },
       ],
     },
   ],
@@ -66,7 +66,6 @@ describe('상품 추가 정보(벤치마킹 비교) 계약', () => {
   it.each([
     ['모르는 빛 조건', { light: 'dark' }],
     ['모르는 놓을 곳', { placements: ['garage'] }],
-    ['문구 여부가 참·거짓이 아닌 선택지', { options: [{ id: 'msg', name: '문구', choices: [{ id: 'a', label: 'A', priceDelta: 0, needsText: 'yes' }] }] }],
     ['음수 옵션 금액', { options: [{ id: 'pot', name: '화분', choices: [{ id: 'a', label: 'A', priceDelta: -1 }] }] }],
     ['선택지 없는 옵션 묶음', { options: [{ id: 'pot', name: '화분', choices: [] }] }],
     ['id 형식이 틀린 옵션', { options: [{ id: 'p o t', name: '화분', choices: [{ id: 'a', label: 'A', priceDelta: 0 }] }] }],
@@ -102,6 +101,16 @@ describe('상품 추가 정보(벤치마킹 비교) 계약', () => {
       forbidNonWhitelisted: true,
     });
     expect(errors.map((error) => error.property)).toContain('listPrice');
+  });
+
+  it('선택지의 문구 입력 여부(needsText)는 더 이상 받지 않는다 — 자유 문구는 주문의 포장 라벨로 받는다', async () => {
+    const errors = await validate(
+      plainToInstance(UpdateProductDto, {
+        options: [{ id: 'topper', name: '축하 토퍼', choices: [{ id: 'a', label: 'A', priceDelta: 0, needsText: true }] }],
+      }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+    expect(errors.map((error) => error.property)).toContain('options');
   });
 
   it('옵션 묶음·선택지 id 중복을 찾는다', () => {

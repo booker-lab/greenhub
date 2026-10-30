@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button';
 import { cva, type VariantProps } from 'class-variance-authority';
+import type * as React from 'react';
 
 import { cn } from '../lib/utils';
 
@@ -31,7 +32,8 @@ const buttonVariants = cva(
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
       size: {
-        default: 'h-9 px-4.5 has-data-[icon=inline-start]:ps-[calc(18px/1.5)] has-data-[icon=inline-end]:pe-[calc(18px/1.5)]',
+        default:
+          'h-9 px-4.5 has-data-[icon=inline-start]:ps-[calc(18px/1.5)] has-data-[icon=inline-end]:pe-[calc(18px/1.5)]',
         xs: 'h-7.5 px-3.5 text-xs leading-none has-data-[icon=inline-start]:ps-[calc(14px/1.5)] has-data-[icon=inline-end]:pe-[calc(14px/1.5)]',
         sm: 'h-7.5 px-3.5 text-xs leading-none has-data-[icon=inline-start]:ps-[calc(14px/1.5)] has-data-[icon=inline-end]:pe-[calc(14px/1.5)]',
         md: 'h-10.5 px-5.5 text-base leading-none has-data-[icon=inline-start]:ps-[calc(22px/1.5)] has-data-[icon=inline-end]:pe-[calc(22px/1.5)]',
@@ -64,4 +66,27 @@ function Button({
   );
 }
 
-export { Button, buttonVariants };
+// ① 외형 유지: Mantine Button 안쪽(inner·label) 구조. 버튼보다 긴 내용(두 줄 글자 등)을 Mantine처럼
+// 왼쪽부터 그리고 오른쪽을 자르고, 글자 위치도 Mantine과 같은 반올림으로 놓는다.
+// 내용이 버튼에 들어가는 보통 경우에는 쓰지 않아도 모양이 같다.
+function ButtonLabel({ className, children, ...props }: React.ComponentProps<'span'>) {
+  return (
+    <span
+      data-slot="button-inner"
+      className="flex h-full w-full min-w-0 items-center justify-center overflow-visible"
+    >
+      <span
+        data-slot="button-label"
+        className={cn(
+          'flex h-full items-center overflow-hidden whitespace-nowrap [text-box-edge:cap_alphabetic] [text-box-trim:trim-both]',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
+
+export { Button, ButtonLabel, buttonVariants };

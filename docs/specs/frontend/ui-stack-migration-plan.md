@@ -167,7 +167,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
    - **픽셀 비교**(`diff.mjs`·`compare.mjs`·`png.mjs`): node 내장 zlib만으로 PNG를 읽어 픽셀 하나라도 다르면 차이로 본다. 의도한 차이는 허용 목록에 화면·폭·**영역(bbox)과 사유**로만 적을 수 있고, 그 영역 밖 차이는 0이어야 한다. 크기가 달라진 화면은 `"full"`로만 허용한다. 기준 시각·폭 목록이 다른 두 묶음은 비교하지 않는다.
    - **민감도 시험**: `compare.spec.mjs`가 1px 변화를 차이로 잡는지 CI에서 확인한다.
    - **폭**: 390·768·1280(`--viewports`로 고를 수 있다).
-   - 하네스는 `next dev`로 띄운다. 운영 빌드에서는 로컬 로그인이 꺼진다(`apps/driver/src/auth.ts`:124, seller도 같다). 로그인 화면을 운영 빌드로 찍는 방법(하네스가 자기 `AUTH_SECRET`으로 세션 쿠키를 만들기 등)은 P2a 전에 정한다. 그 전까지 dev로만 찍은 화면은 "운영 빌드 미증명"으로 본다.
+   - 하네스는 기본으로 `next dev`로 띄운다. 운영 빌드에서는 로컬 로그인이 꺼진다(`apps/driver/src/auth.ts`:124, seller도 같다). 그래서 `start.mjs --prod`(2026-10-30, P0.5b)가 `next build --webpack && next start`로 띄우고, `shots.mjs`가 실행기의 1회용 `AUTH_SECRET`으로 Auth.js 세션 쿠키를 직접 만들어 로그인한다(앱 코드 변경 없음). 운영 빌드는 API 주소로 HTTPS·비루프백 이름만 받으므로 가짜 API를 `https://127.0.0.2`(1회용 자체 서명 인증서, 브라우저는 그 공개키 지문만 신뢰)에 연다. 셀러 앱은 운영 빌드에서 Firestore 에뮬레이터를 거절하므로 Firestore 구독 화면 7개(홈·준비·회차 상세 2·새 회차·상품 목록·회차 취소 모달)는 `--prod`에서 정상 판정에서 빠지고 dev 촬영으로만 증명한다. 쓰는 법과 한계는 `scripts/visual/README.md` "운영 빌드로 찍기".
    - 판매자·어드민 촬영 목록을 채웠다: `admin/audit`·`hubs/[id]`(상세·수정·픽업)·`hubs/new`·`settings/option-stocks`·`settings/payout-account`·`invite/[token]`(정상·잘못된 링크)·`login/error`, 모달이 열린 상태 3개(주문 배송 보류·강제 취소, 회차 취소). `/admin`은 `/admin/stores`로 넘어가는 주소이고, 후기 관리·입점 문의·고객 반응·가게 소개는 기능 플래그가 꺼져 지금 404라 넣지 않았다(기능을 켠 모양은 `benchmarkScreens`). 기사·소비자 촬영 목록도 채웠다(2026-10-30, P0.5b). 기사는 배송 중 탭·배송 보류 모달·배송 완료 사진 촬영(카메라 권한 없음 포함)·알림(상태 변경 확인 못 함)을 더해 12화면, 소비자는 알림 설정·회원 탈퇴·상품 탭·검색(빈 칸·결과)·공동구매(회차 직배송 가게는 홈으로 이동, `expectPath`)를 더해 22화면이다. 소비자의 기능 플래그 화면(`/guarantee`·`/partner`·`/store/[id]`·`/mypage/wishlist`·`/mypage/purchase-history`)은 지금 404라 넣지 않았다.
 2. **로컬 E2E가 실제로 돌았는지 판정한다** (`apps/e2e`)
    - 회차 spec은 이미 `pnpm test:e2e:local`이 루프백 운영 빌드로 돌리고 64건 무건너뜀을 판정한다(`scripts/round-direct-e2e-local.mjs`). 다만 데이터는 원격 스테이징 API이고, E2E Firebase 키(`.env.local-target`)가 있어야 돈다.
@@ -185,7 +185,13 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 판매자 촬영 129장(43화면 × 390·768·1280) 전부 정상 촬영 판정 통과.
   - 같은 커밋 두 번 비교: 허용치 0에서 128장 같음·1장 차이(상품 수정 태블릿, 입력칸 둥근 모서리 4px 안티앨리어싱, 채널 차이 1). 허용치 1에서 129장 같음. 그래서 ①의 기계 판정은 `diff.mjs --tolerance 1`로 한다(`scripts/visual/README.md`).
   - 민감도: 실제 캡처 한 장의 1px을 채널 값 1(허용치 0)·2(허용치 1)만큼 바꿨을 때 둘 다 그 위치 1px만 차이로 잡혔다. 그 영역을 허용 목록에 사유와 함께 넣었을 때만 통과했다.
-  - 기사·소비자 촬영(P0.5b, 앱 코드는 `main`과 같음): 기사 36장(12화면 × 3폭)·소비자 66장(22화면 × 3폭) 전부 정상 촬영 판정 통과. 같은 커밋 두 번 비교는 허용치 0·1 모두 전부 같음. 이때 `start.mjs`가 `--now` 없이 앱 이름을 무시하고 늘 판매자로 뜨던 문제를 고쳤다.
+  - 기사·소비자 촬영(P0.5b, 앱 코드는 `main`과 같음): 기사 36장(12화면 × 3폭)·소비자 66장(22화면 × 3폭) 전부 정상 촬영 판정 통과. 같은 커밋 두 번 비교는 첫 측정에서 허용치 0·1 모두 전부 같았지만, 뒤 측정에서 아래 흔들림이 나왔다. 이때 `start.mjs`가 `--now` 없이 앱 이름을 무시하고 늘 판매자로 뜨던 문제를 고쳤다.
+  - 운영 빌드 촬영(`--prod`, P0.5b, 앱 코드는 `edb3008`, 같은 커밋 두 번, 아래 흔들림 수정 전): 기사 36장·소비자 66장·판매자 108장(Firestore 화면 21장 제외) 정상 판정 통과. 소비자는 허용치 0에서 65장 같음·1장 차이(장바구니 태블릿), 허용치 1에서 66장 같음. 판매자는 허용치 0에서 106장 같음·2장 차이, 허용치 1에서 108장 같음.
+  - 촬영 흔들림과 수정(P0.5b): 같은 커밋인데 일부 화면이 두 가지 렌더로 갈렸다. 기사 주문 상세 배송 중의 빨간 외곽선 `배송 보류` 글자(채널 2), 운영 빌드 기사 알림 태블릿의 버튼 모서리(채널 최대 40)이고, 브라우저 컨텍스트마다 약 5~15%였다. DOM·애니메이션·hover 상태는 같았고 같은 페이지를 연달아 찍으면 늘 같았다. 원인은 Chromium의 부분 래스터(바뀐 영역만 다시 래스터)로, 그리는 이력에 따라 안티앨리어싱이 달라졌다. `shots.mjs`가 `--disable-partial-raster`로 띄우면 20번 중 20번 같고, 결과는 기본 렌더의 다수 쪽과 같다. 허용치는 올리지 않았다(판정 완화 금지, `AGENTS.md` §0-5).
+    - "같은 결과가 두 번 나올 때만 채택"하는 안정 촬영도 시험했다. 부분 래스터를 끈 상태에서 기사 72장·소비자 132장·판매자 257장·기사 알림 화면 15번(폭마다 30장)이 모두 첫 두 장에서 같아, 결과를 바꾸지 않고 촬영 시간만 두 배가 됐다. 그래서 넣지 않았다.
+    - 수정 뒤 같은 커밋 두 번(dev, 앱 코드 `77db119`, 허용치 0): 기사 36/36·소비자 66/66 같음(세 앱 동시 촬영). 기사 알림 화면은 따로 15번 찍어 세 폭 모두 같았다. 판매자 129장 두 번(단독 촬영)에서 127장 같음. 나머지 2장(회차 상세 진행 중·예정, 데스크톱)은 두 번째 촬영 도중 판매자 `next dev`가 메모리 재시작을 해서, 하나는 연결 오류(정상 판정 실패), 하나는 다시 컴파일하는 동안 로딩 화면으로 찍혔다. 이 두 화면을 다시 찍었더니 세 폭 모두 첫 촬영과 같았다. 그래서 재시작이 걸친 화면과 그 바로 다음 화면은 정상 판정에서 빼도록 했다.
+    - `next dev`는 힙 사용량이 상한의 80%를 넘으면 스스로 재시작한다. 재시작 중·직후에 찍힌 화면은 연결 오류나 로딩 화면이 된다(판매자 상품 목록·회차 상세 데스크톱에서 확인). `start.mjs`가 재시작 횟수를 남기고 `shots.mjs`가 그 화면과 바로 다음 화면을 정상 판정에서 뺀다. 그 화면만 다시 찍는다(`scripts/visual/README.md`).
+  - 운영 빌드 미증명(dev로만 판정): 판매자 Firestore 구독 화면 7개(`home`·`prep`·`sale-round-open`·`sale-round-scheduled`·`sale-round-new`·`products`·`modal-round-cancel`). 판매자 앱이 운영 빌드에서 로컬 Firebase 에뮬레이터를 거절하므로(`apps/seller/src/lib/firebase.ts`) `--prod`에서는 데이터 없이 찍히고 정상 판정에서 빠진다. 이 화면들의 교체 PR 판정은 dev 촬영으로만 한다.
   - 판매자·어드민 로컬 E2E: `node scripts/admin-local-e2e.mjs`가 dev:local에서 20/20 통과·건너뜀 0. 대상 주소를 운영으로 바꾸면 실행하지 않았다. P0.5는 앱 코드를 바꾸지 않으므로 이 결과가 `main` 기준 결과다.
   - 동결 검사: 실제 커밋으로 pre-candidate 교체 흔적 차단, 일반 프런트 수정 통과, candidate에서 라벨 없는 프런트 수정 차단·`freeze-fix` 통과, 후보 이전 SHA 배포 차단을 확인했다.
 
@@ -245,6 +251,10 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 상품 목록 구현(2026-10-31): `products`(목록)의 `@mantine/core`를 걷었다. 공용 틀(`PageHeader`·`SegmentedTabs`·`ConfirmModal`·`StateViews`)은 여러 묶음이 쓰므로 P4(앱 틀)에서 바꾼다. 상품 등록·수정 폼은 다음 PR이다.
   - `packages/ui` 추가: `Alert`(Mantine Alert light, 빨강·노랑·기본), Button 변형 `light-destructive`·`subtle-destructive`·`light-warning`, 아이콘 여백(svg에 `data-icon="inline-start"`·`"inline-end"`면 그쪽 여백이 Mantine left·rightSection처럼 좌우 여백 ÷ 1.5), 링크로 그릴 때 밑줄 없음(`no-underline`). 링크 버튼은 `render={<Link />}`·`nativeButton={false}`.
   - 로컬 증명: 판매자 129장 `main`과 같음(`--tolerance 1`), 대조 화면 행 모두 같음(Alert·링크 버튼·왼쪽 아이콘 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 871개. Alert(조회 실패·오래된 목록)와 빈 목록은 촬영 목록에 없어 대조 화면으로만 확인했다.
+- 상품 등록·수정 폼 1(2026-10-31): 폼 틀(`ProductForm`·`StepIndicator`·`FormPrimitives`)과 1~3단계(`Step1Basic`·`ImageUpload`·`VarietySelector`·`TouchSelector`·`SellerNoteInput`), 수정 화면의 "찾을 수 없음"에서 `@mantine/core`를 걷었다. 4·5단계(`AIPreviewPanel`·`Step5Pricing`·`GroupConfigSection`·`ProductExtrasSection`)는 다음 PR이다.
+  - `packages/ui` 추가: `Input` 크기 `xs`·`md`와 왼쪽·오른쪽 칸(Mantine left·rightSection), `Select`(Base UI Select. 닫힌 칸은 Mantine처럼 읽기 전용 input이라 글자 위치가 입력칸과 같다. 묶음·지우기·체크), `Textarea`(autosize·minRows는 react-textarea-autosize 계산, 폭이 바뀌면 다시 잼), `Loader`(oval), Badge `outline-gray`, `ButtonLabel`(Mantine Button inner·label 구조: 긴 내용을 왼쪽부터 그리고 오른쪽을 자른다. 출하 형태 두 줄 버튼이 이렇게 잘린다).
+  - 촬영 목록에 상품 수정 2~5단계(`product-edit-step2~5`, "다음"을 n-1번), 예전 방식 가게의 공동구매 설정(`product-edit-step5-group`, scenario `legacy-store`), 4단계 다시 생성 확인 모달(`modal-product-regenerate`)을 더했다(판매자 49화면 147장). 기준 촬영도 `main` 코드에 같은 fixture를 넣고 찍었다.
+  - 대조 화면: 상품 폼 입력 부품 행(입력칸 md·xl, Select 자리표시·값, Textarea, autosize, Loader, Badge 버튼, 두 줄·잘리는 버튼)과 Select 열린 목록(`?open=select|uiselect`, 하네스가 입력칸을 실제로 누름). 행은 390·768·1280에서 모두 같다. 열린 목록은 768·1280에서 0, 390에서 체크 아이콘 안티앨리어싱 19픽셀(채널 차이 4 이하)이다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)
