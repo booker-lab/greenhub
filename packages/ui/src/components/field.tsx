@@ -52,11 +52,14 @@ function FieldGroup({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-// ① 외형 유지: Mantine 입력 묶음처럼 라벨·입력칸·설명 사이 4px.
+// ① 외형 유지(세로): Mantine InputWrapper와 같은 흐름으로 쌓는다(대조 화면에서 위치를 맞춤).
+// 라벨은 줄 높이 1.55 줄 안의 inline 상자, 설명(라벨 아래·입력칸 위)과 오류(입력칸 아래)는 입력칸과 5px 띄운다.
+// 그래서 세로 Field는 flex가 아니라 block이고, 순서는 라벨 → 설명 → 입력칸 → 오류다.
 const fieldVariants = cva('group/field flex w-full gap-1', {
   variants: {
     orientation: {
-      vertical: 'flex-col *:w-full [&>.sr-only]:w-auto',
+      vertical:
+        'block *:w-full [&>.sr-only]:w-auto *:data-[slot=input]:block *:data-[slot=field-description]:mb-[5px] *:data-[slot=field-error]:mt-[5px]',
       horizontal:
         'flex-row items-center gap-2 has-[>[data-slot=field-content]]:items-start *:data-[slot=field-label]:flex-auto has-[>[data-slot=field-content]]:[&>[role=checkbox],[role=radio]]:mt-px',
       responsive:
@@ -100,7 +103,7 @@ function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>)
     <Label
       data-slot="field-label"
       className={cn(
-        'group/field-label peer/field-label flex w-fit gap-2 text-sm font-medium group-data-[disabled=true]/field:opacity-50',
+        'group/field-label peer/field-label inline-flex w-fit gap-2 text-sm leading-[1.55] font-semibold group-data-[disabled=true]/field:opacity-50',
         'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-input has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 *:data-[slot=field]:p-2.5',
         className,
       )}
@@ -127,7 +130,7 @@ function FieldDescription({ className, ...props }: React.ComponentProps<'p'>) {
     <p
       data-slot="field-description"
       className={cn(
-        'text-left text-xs leading-normal font-normal text-muted-foreground group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5',
+        'text-left text-xs leading-[1.2] font-normal text-[#868e96] group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5',
         '[&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-brand-ink',
         className,
       )}
@@ -210,7 +213,7 @@ function FieldError({
     <div
       role="alert"
       data-slot="field-error"
-      className={cn('text-xs font-normal text-destructive', className)}
+      className={cn('text-xs leading-[1.2] font-normal text-[#fa5252]', className)}
       {...props}
     >
       {content}

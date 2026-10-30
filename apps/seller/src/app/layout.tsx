@@ -1,5 +1,4 @@
 import { ColorSchemeScript } from '@mantine/core';
-import '@mantine/notifications/styles.css';
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
 import AppShell from '@/components/AppShell';
