@@ -32,21 +32,16 @@ const policy = await loadTs('./lib/content-security-policy.ts', (specifier) => {
   if (specifier === '@greenhub/shared') return require('@greenhub/shared');
   throw new Error(`unexpected module request in test: ${specifier}`);
 });
-const initialSession = await loadTs('./lib/initial-session.ts', (specifier) => {
-  throw new Error(`unexpected module request in test: ${specifier}`);
-});
-const { decodeInitialSession, encodeInitialSession, INITIAL_SESSION_HEADER } = initialSession;
 const { config, proxy } = await loadTs('./proxy.ts', (specifier) => {
   if (specifier === 'next/server') return require('next/server');
   if (specifier === '@/auth') return authMock;
   if (specifier === '@/lib/content-security-policy') return policy;
-  if (specifier === '@/lib/initial-session') return initialSession;
   throw new Error(`unexpected module request in test: ${specifier}`);
 });
 
-async function run(path, headers) {
+async function run(path) {
   state.authPaths = [];
-  return proxy(new NextRequest(`https://shop.example.test${path}`, { headers }), {});
+  return proxy(new NextRequest(`https://shop.example.test${path}`), {});
 }
 
 function nonceOf(response) {
@@ -98,49 +93,6 @@ test('공개 경로는 세션을 읽지 않고 리다이렉트하지 않는다',
     assert.equal(response.headers.get('location'), null, path);
     assert.equal(response.headers.get('x-middleware-next'), '1');
     assert.deepEqual(state.authPaths, [], path);
-  }
-});
-
-const consumerSession = {
-  user: { id: 'user-1', name: '김소비', role: 'consumer', accessToken: 'access-1' },
-  expires: '2099-01-01T00:00:00.000Z',
-};
-const forgedSession = encodeInitialSession({
-  user: { id: 'other', role: 'admin', accessToken: 'forged' },
-  expires: '2099-01-01T00:00:00.000Z',
-});
-const passedSession = (response) =>
-  response.headers.get(`x-middleware-request-${INITIAL_SESSION_HEADER}`);
-
-test('보호 경로에서 확인한 세션을 그대로 layout에 넘긴다(브라우저가 보낸 값은 덮어쓴다)', async () => {
-  state.session = consumerSession;
-  for (const path of ['/cart', '/mypage', '/mypage/orders/o-1', '/checkout', '/order/success']) {
-    const response = await run(path, { [INITIAL_SESSION_HEADER]: forgedSession });
-    assert.equal(response.headers.get('location'), null, path);
-    assert.deepEqual(decodeInitialSession(passedSession(response)), consumerSession, path);
-  }
-});
-
-test('공개 경로에서는 세션을 넘기지 않고 브라우저가 보낸 같은 이름의 헤더도 지운다', async () => {
-  state.session = consumerSession;
-  for (const path of ['/', '/login', '/products/p-1']) {
-    const response = await run(path, { [INITIAL_SESSION_HEADER]: forgedSession });
-    assert.equal(passedSession(response), null, path);
-    assert.doesNotMatch(
-      response.headers.get('x-middleware-override-headers') ?? '',
-      new RegExp(INITIAL_SESSION_HEADER),
-      path,
-    );
-    assert.deepEqual(state.authPaths, [], path);
-  }
-});
-
-test('로그인 화면으로 보내는 경우에는 세션을 넘기지 않는다', async () => {
-  for (const session of [null, { user: { role: 'driver' } }]) {
-    state.session = session;
-    const response = await run('/mypage', { [INITIAL_SESSION_HEADER]: forgedSession });
-    assert.equal(response.status, 307);
-    assert.equal(passedSession(response), null);
   }
 });
 

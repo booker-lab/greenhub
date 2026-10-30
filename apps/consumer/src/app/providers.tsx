@@ -1,6 +1,5 @@
 'use client';
 
-import type { Session } from 'next-auth';
 import { useEffect, useRef } from 'react';
 import { SessionProvider, useSession, signOut } from 'next-auth/react';
 import { MantineProvider } from '@mantine/core';
@@ -44,18 +43,10 @@ function SessionAuthorityRecheck() {
   return null;
 }
 
-// session은 루트 layout이 넘긴 proxy 확인 세션이다. 있으면 첫 화면에서 /api/auth/session을 다시
-// 조회하지 않는다. 없으면(undefined) 예전처럼 SessionProvider가 직접 조회한다.
-export default function Providers({
-  children,
-  session,
-}: {
-  children: React.ReactNode;
-  session?: Session;
-}) {
+export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider theme={theme}>
-      <SessionProvider session={session}>
+      <SessionProvider>
         <SessionAuthorityRecheck />
         <TokenErrorGuard>{children}</TokenErrorGuard>
       </SessionProvider>
