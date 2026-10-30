@@ -2,7 +2,7 @@
 
 # Railway 장애 때 API를 Cloud Run 예비 서버로 대피하기 — 비상 순서
 
-> 작성: 2026-10-23 · 갱신: 2026-10-29 · 상태: **예비 서버 있음, 리허설(P5) 완료 — 주소 바꾸기부터 세 앱 새 빌드 READY까지 약 9분이라 30분 순서는 지킬 수 있다. 단 새 빌드는 Vercel Redeploy 체크 해제나 API `skipIgnoreBuildStep=1`로만 강제되고, 배포 도구 `--require-build`는 아직 생략을 실패로 드러낼 뿐 빌드를 강제하지 않는다** · 결정: 사용자 확정(2026-10-23 채팅, 아래 "함께 정한 것")
+> 작성: 2026-10-23 · 갱신: 2026-10-30 · 상태: **예비 서버 있음, 리허설(P5) 완료 — 주소 바꾸기부터 세 앱 새 빌드 READY까지 약 9분이라 30분 순서는 지킬 수 있다. 새 빌드는 Vercel Redeploy 체크 해제, API `skipIgnoreBuildStep=1`, 또는 이 쿼리를 보내는 배포 도구 `--require-build=true`로 강제한다(도구 경로는 운영에서 아직 실행해 보지 않음)** · 결정: 사용자 확정(2026-10-23 채팅, 아래 "함께 정한 것")
 > **쓸 수 있는 때**: 세 앱이 Railway 주소(`api-production-13e7.up.railway.app`)를 쓰는 동안. 그리고 Cloud Run 운영 예비 서버가 만들어진 뒤(`api-hosting-cloud-run-plan.md` C5)부터.
 > **함께 볼 문서**
 > - 계획된 이전(C1~C8)·비용·목표 구성의 정본: `api-hosting-cloud-run-plan.md`
@@ -101,7 +101,7 @@
   - 대피 때는 생략 규칙을 건너뛰고 다시 배포한다. P5(2026-10-29)에서 확인한 방법은 둘이다.
     - **Vercel 화면**: 배포 상세 `…` → Redeploy → "Use project's Ignore Build Step" 체크를 끈다(기본은 켜져 있다). 켠 채로 누르면 2초 만에 CANCELED된다. 누를 때 Vercel이 **이메일 코드 재인증**을 요구할 수 있다(P5에서 약 1분).
     - **API**: 화면이 보내는 요청과 같다. `POST /v13/deployments?forceNew=1&skipIgnoreBuildStep=1`에 본문 `{"deploymentId":"<기존 배포 ID>","name":"<프로젝트>","meta":{"action":"redeploy"}}`. 기존 배포 대신 `gitSource`(브랜치·SHA)로 새로 만들 때도 같은 쿼리로 생략이 꺼진다. 빌드 로그에 "Ignore Build Step was explicitly skipped for this deployment."가 찍힌다.
-  - `production-deploy.mjs vercel --require-build=true`는 생략을 실패로 드러낼 뿐 이 쿼리를 보내지 않는다. 대피 때 이 도구로 다시 배포하면 실패로 멈춘다.
+  - `production-deploy.mjs vercel --require-build=true`는 `gitSource` 생성 요청에 이 쿼리를 붙여 생략 규칙을 건너뛰고, 그래도 생략되면 실패로 멈춘다. `--require-build` 없는 평소 배포는 생략 규칙을 그대로 따른다. 이 도구 경로는 운영에서 아직 실행해 보지 않았다(쿼리 동작은 P5 Preview에서 API로 확인).
   - 세 앱 빌드는 한 번에 하나씩 돈다. P5에서 세 앱이 모두 READY 되기까지 약 6분(캐시 없이 앱당 1분 30초~2분 45초).
 - API의 CORS는 세 앱 주소(`greenlove.co.kr`, `seller.`, `driver.`)를 허용한다. API 주소가 바뀌어도 CORS 값은 그대로다.
 
@@ -153,7 +153,7 @@ ALIGO 고정 IP는 Fixie로 어디서든 해결되므로 선택을 가르지 않
 | ~5분 | 예비 서버를 **정기 작업 끈 채로**(`GREENHUB_SCHEDULES_ENABLED=false`) 손님 트래픽을 받을 설정으로 올린다: `gcloud run services update greenhub-api --project=green-e4fe3 --region=asia-northeast3 --min-instances=1 --no-cpu-throttling`. **CPU 항상 할당이 필요하다**: 주문 상태 알림톡(`OrderNoticeDispatcher`)과 새 주문 운영 알림은 응답을 보낸 뒤에 보내므로, CPU를 요청 때만 쓰면 밀리거나 멈춘다 | Claude(명령)·사용자(GCP 승인) | 예비 서버 `/health` 200, `commit`이 마지막 운영 SHA, `describe`의 최소 1대·CPU 항상 할당 |
 | ~8분 | 예비 서버 CORS preflight를 세 앱 주소로 확인 | Claude | 세 주소 모두 허용 헤더 |
 | ~10분 | 세 앱 Vercel production `NEXT_PUBLIC_API_URL`을 예비 서버 주소로 바꾼다 | 사용자(또는 승인 뒤 Claude) | Vercel 화면에서 값 확인 |
-| ~20분 | 세 앱을 같은 SHA로 **빌드 생략 없이** 다시 배포한다(위 "함정"). Vercel 화면 Redeploy에서 "Use project's Ignore Build Step"을 끄거나, API에 `skipIgnoreBuildStep=1`을 붙인다. `production-deploy.mjs vercel --require-build=true`는 아직 생략을 강제로 건너뛰지 못해 실패로 멈춘다. 세 앱 빌드에 약 6분 | 사용자(또는 승인 뒤 Claude) | 세 배포 모두 READY, 빌드 로그에 "Ignore Build Step was explicitly skipped". CANCELED·skipped면 실패로 본다 |
+| ~20분 | 세 앱을 같은 SHA로 **빌드 생략 없이** 다시 배포한다(위 "함정"). `production-deploy.mjs vercel --require-build=true`(앱마다 한 번, `skipIgnoreBuildStep=1`을 보낸다)로 하거나, Vercel 화면 Redeploy에서 "Use project's Ignore Build Step"을 끄거나, API에 `skipIgnoreBuildStep=1`을 붙인다. 세 앱 빌드에 약 6분 | 사용자(또는 승인 뒤 Claude) | 세 배포 모두 READY, 빌드 로그에 "Ignore Build Step was explicitly skipped". CANCELED·skipped면 실패로 본다 |
 | ~22분 | PortOne 콘솔 결제 웹훅 주소를 예비 서버 주소로 바꾼다 | 사용자 | 콘솔 저장 화면 |
 | ~25분 | 운영 확인: `post-deploy-smoke`를 예비 서버 대상으로, 세 앱 로그인·상품·장바구니 화면, 비인증 API 401 | Claude | 전부 통과 |
 | ~30분 | 텔레그램·채팅으로 "대피 완료, 정기 작업은 꺼짐" 기록 | Claude | `docs/memory.md` 기록은 장애 종료 뒤 |
@@ -258,7 +258,6 @@ DNS(가비아)는 이 순서에서 바꾸지 않는다. CORS도 바꿀 것이 �
 ## 열린 질문
 
 - P7 결과에 따라 정기 작업 켜기 조건을 바꿀지
-- `production-deploy.mjs vercel --require-build=true`가 `skipIgnoreBuildStep=1`을 보내게 할지(P5에서 API로 동작 확인. 바꾸면 대피·전환 때 도구 한 줄로 강제 빌드)
 - 예비 서버 대기 비용 실측(이전 계획 C2)
 
 ## 근거

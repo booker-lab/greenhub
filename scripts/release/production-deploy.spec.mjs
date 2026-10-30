@@ -251,6 +251,37 @@ test('vercel: READY와 SHA·운영 대상을 확인한다', async () => {
   assert.match(calls[0].url, /teamId=team_/);
 });
 
+test('vercel: --require-build일 때만 생성 요청이 빌드 생략 규칙을 건너뛴다', async () => {
+  const plain = vercelFetch(['READY']);
+  await deployVercel({
+    app: 'seller',
+    sha: SHA,
+    token: 't',
+    fetchImpl: plain.impl,
+    sleep: noSleep,
+  });
+  const plainQuery = new URL(plain.calls[0].url).searchParams;
+  assert.equal(plain.calls[0].method, 'POST');
+  assert.equal(plainQuery.get('forceNew'), '1');
+  assert.equal(plainQuery.has('skipIgnoreBuildStep'), false);
+
+  const forced = vercelFetch(['READY']);
+  await deployVercel({
+    app: 'seller',
+    sha: SHA,
+    token: 't',
+    requireBuild: true,
+    fetchImpl: forced.impl,
+    sleep: noSleep,
+  });
+  const forcedQuery = new URL(forced.calls[0].url).searchParams;
+  assert.equal(forced.calls[0].method, 'POST');
+  assert.equal(forcedQuery.get('forceNew'), '1');
+  assert.equal(forcedQuery.get('skipIgnoreBuildStep'), '1');
+  // 배포 상태 조회 요청에는 붙이지 않는다.
+  assert.equal(new URL(forced.calls[1].url).searchParams.has('skipIgnoreBuildStep'), false);
+});
+
 test('vercel: 빌드 생략(CANCELED)은 skipped, ERROR·SHA 불일치·비운영은 실패', async () => {
   const skipped = await deployVercel({
     app: 'driver',
@@ -260,7 +291,7 @@ test('vercel: 빌드 생략(CANCELED)은 skipped, ERROR·SHA 불일치·비운�
     sleep: noSleep,
   });
   assert.equal(skipped.status, 'skipped');
-  // 환경 변수만 바꾼 같은 SHA 재배포는 빌드가 생략되면 새 값이 반영되지 않으므로 실패로 본다.
+  // 생략 규칙을 건너뛰라고 요청했는데도 생략되면 새 값이 반영되지 않으므로 실패로 본다.
   await assert.rejects(
     deployVercel({
       app: 'driver',
