@@ -73,6 +73,14 @@ test('좁은 화면에서 긴 사업자 정보가 안전하게 줄바꿈된다',
   assert.doesNotMatch(componentSource, /['"]use client['"]/);
 });
 
+test('홈 밖의 상품·결제 화면에도 사업자 정보 footer를 붙인다(PG·카드사 입점 심사 요건)', () => {
+  for (const layout of ['../app/products/[id]/layout.tsx', '../app/checkout/layout.tsx']) {
+    const source = readFileSync(join(testDirectory, layout), 'utf8');
+    assert.match(source, /import BusinessInfoFooter from '@\/components\/BusinessInfoFooter';/, layout);
+    assert.ok(source.indexOf('{children}') < source.indexOf('<BusinessInfoFooter />'), layout);
+  }
+});
+
 test('확정되지 않은 외부 증거는 노출하지 않는다', () => {
   const source = `${loadComponentSource()}\n${loadBusinessInfoSource()}`;
 
