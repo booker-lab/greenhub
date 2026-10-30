@@ -1,8 +1,10 @@
 'use client';
 
+import type { SalesMode } from '@greenhub/shared';
 import { Group, NumberInput, Stack, Text } from '@mantine/core';
 import { useOptionStocks } from '@/hooks/useOptionStocks';
 import { isFeatureOn } from '@/lib/features';
+import { showsGroupBuyChoice } from '@/lib/sales-mode';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
 import GroupConfigSection from '../GroupConfigSection';
 import { ProductExtrasSection } from '../ProductExtrasSection';
@@ -14,9 +16,17 @@ interface Step5PricingProps {
   form: ProductFormData;
   set: <K extends keyof ProductFormData>(key: K, value: ProductFormData[K]) => void;
   setGroupConfig: <K extends keyof GroupConfigForm>(key: K, value: GroupConfigForm[K]) => void;
+  salesMode: SalesMode | undefined;
 }
 
-export function Step5Pricing({ storeId, token, form, set, setGroupConfig }: Step5PricingProps) {
+export function Step5Pricing({
+  storeId,
+  token,
+  form,
+  set,
+  setGroupConfig,
+  salesMode,
+}: Step5PricingProps) {
   const optionStocks = useOptionStocks(storeId, token, isFeatureOn('option-sheet'));
   return (
     <Stack gap="sm">
@@ -45,34 +55,37 @@ export function Step5Pricing({ storeId, token, form, set, setGroupConfig }: Step
           onChange={(v) => set('deliverySize', v)}
         />
       </FieldCard>
-      <FieldCard label="판매 방식" labelGap="sm">
-        <Group gap="xl">
-          {(['normal', 'group'] as const).map((type) => (
-            <label
-              key={type}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
-            >
-              <input
-                type="radio"
-                name="saleType"
-                checked={form.saleType === type}
-                onChange={() => set('saleType', type)}
-                style={{ accentColor: 'var(--color-primary)', width: 16, height: 16 }}
-              />
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+      {/* 공동구매는 예전 판매 방식 가게 전용 — 회차 판매 가게에는 판매 방식 선택을 숨긴다. */}
+      {showsGroupBuyChoice(salesMode, form.saleType) && (
+        <FieldCard label="판매 방식" labelGap="sm">
+          <Group gap="xl">
+            {(['normal', 'group'] as const).map((type) => (
+              <label
+                key={type}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}
               >
-                {type === 'normal' ? '일반 판매' : '공동구매'}
-              </Text>
-            </label>
-          ))}
-        </Group>
-        <GroupConfigSection
-          visible={form.saleType === 'group'}
-          config={form.groupConfig}
-          setGroupConfig={setGroupConfig}
-        />
-      </FieldCard>
+                <input
+                  type="radio"
+                  name="saleType"
+                  checked={form.saleType === type}
+                  onChange={() => set('saleType', type)}
+                  style={{ accentColor: 'var(--color-primary)', width: 16, height: 16 }}
+                />
+                <Text
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  {type === 'normal' ? '일반 판매' : '공동구매'}
+                </Text>
+              </label>
+            ))}
+          </Group>
+          <GroupConfigSection
+            visible={form.saleType === 'group'}
+            config={form.groupConfig}
+            setGroupConfig={setGroupConfig}
+          />
+        </FieldCard>
+      )}
       <ProductExtrasSection
         extras={form.extras}
         onChange={(next) => set('extras', next)}
