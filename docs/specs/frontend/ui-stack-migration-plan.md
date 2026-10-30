@@ -245,6 +245,11 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 상품 목록 구현(2026-10-31): `products`(목록)의 `@mantine/core`를 걷었다. 공용 틀(`PageHeader`·`SegmentedTabs`·`ConfirmModal`·`StateViews`)은 여러 묶음이 쓰므로 P4(앱 틀)에서 바꾼다. 상품 등록·수정 폼은 다음 PR이다.
   - `packages/ui` 추가: `Alert`(Mantine Alert light, 빨강·노랑·기본), Button 변형 `light-destructive`·`subtle-destructive`·`light-warning`, 아이콘 여백(svg에 `data-icon="inline-start"`·`"inline-end"`면 그쪽 여백이 Mantine left·rightSection처럼 좌우 여백 ÷ 1.5), 링크로 그릴 때 밑줄 없음(`no-underline`). 링크 버튼은 `render={<Link />}`·`nativeButton={false}`.
   - 로컬 증명: 판매자 129장 `main`과 같음(`--tolerance 1`), 대조 화면 행 모두 같음(Alert·링크 버튼·왼쪽 아이콘 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 871개. Alert(조회 실패·오래된 목록)와 빈 목록은 촬영 목록에 없어 대조 화면으로만 확인했다.
+- 어드민 기사 승인 구현(2026-10-31): `admin/drivers`(목록·탭·배지·배송 중 안내창)와 공용 `ConfirmModal`·`SuspendReasonMessage`의 `@mantine/core`를 걷었다.
+  - `ConfirmModal`은 `Dialog`로 그린다. Mantine `confirmColor`(brand·red·gray·green)는 같은 색의 Button으로 옮긴다. 이 컴포넌트를 쓰는 화면(회차 취소·주문·정산·소비자·어드민 여러 곳)의 확인창이 함께 바뀐다.
+  - `Dialog`를 Mantine Modal 구조에 더 가깝게 바꿨다. 닫기 버튼은 `DialogHeader` 안 flex 끝에 두고(본문 상자에 `position`을 주면 안쪽 버튼 모서리가 다르게 그려졌다), 본문 상자에 `will-change: opacity`를 준다(Mantine은 열림 전환 때문에 본문을 따로 합성해 그린다. 없으면 모바일 2배율에서 버튼 위 모서리 한 줄이 달랐다). 닫기 버튼이 첫 초점이고, 안쪽에 `data-autofocus` 요소가 있으면 그 요소가 첫 초점이다(Mantine 약속. 강제환불 사유 입력칸이 이것으로 Enter 한 번에 환불되지 않게 한다).
+  - `Button`: 글자를 Mantine 글자 칸과 같은 `span`으로 감싼다(`text-box-trim: trim-both`·`text-box-edge: cap alphabetic`, 글자를 대문자 높이 기준으로 가운데에 둔다). 없으면 글자 가장자리 픽셀이 Mantine과 달랐다.
+  - 촬영 목록에 기사 승인·정지 확인창(`modal-driver-approve`·`modal-driver-suspend`)을 더했다. 기준은 같은 fixture로 `main`을 찍었다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)

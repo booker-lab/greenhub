@@ -307,6 +307,49 @@ export function UiCompare({ open }: { open?: string }) {
         />
       </Section>
 
+      <Section title="Button · 모서리 8px·나란히 채우기">
+        <Row
+          name="Button xs light red radius md"
+          mantine={
+            <MButton size="xs" variant="light" color="red" radius="md">
+              정지
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="light-destructive" className="rounded-[8px]">
+              정지
+            </Button>
+          }
+        />
+        <Row
+          name="Button 확인·취소 flex 1"
+          mantine={
+            <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+              <MButton flex={1} color="red" style={{ fontWeight: 'var(--fw-medium)' }}>
+                승인
+              </MButton>
+              <MButton flex={1} variant="outline" color="gray">
+                취소
+              </MButton>
+            </div>
+          }
+          ui={
+            <div style={{ display: 'flex', gap: 10, width: '100%' }}>
+              <Button
+                variant="destructive"
+                className="flex-1"
+                style={{ fontWeight: 'var(--fw-medium)' }}
+              >
+                승인
+              </Button>
+              <Button variant="outline-gray" className="flex-1">
+                취소
+              </Button>
+            </div>
+          }
+        />
+      </Section>
+
       <Section title="Alert">
         <Row
           name="Alert light red"

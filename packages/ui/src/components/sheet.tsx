@@ -76,7 +76,7 @@ function SheetContent({
           <SheetPrimitive.Close
             data-slot="sheet-close"
             aria-label="닫기"
-            className={closeButtonClassName}
+            className={cn(closeButtonClassName, 'absolute top-4 right-[11px] z-20')}
           >
             <CloseIcon />
           </SheetPrimitive.Close>

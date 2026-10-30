@@ -2,6 +2,7 @@
 
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import type * as React from 'react';
+import { useRef } from 'react';
 
 import { cn } from '../lib/utils';
 import { Button } from './button';
@@ -38,6 +39,8 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
 }
 
 // ① 외형 유지: Mantine Modal(md 440px, 좁은 화면은 90vw, 가운데, 모서리 16, 그림자 xl, 글자 검정).
+// will-change: opacity — Mantine은 열림 전환(투명도) 때문에 본문 상자를 따로 합성해 그린다. 같게 하지 않으면 모바일 2배율에서
+// 안쪽 버튼 모서리 한 줄이 다르게 그려진다(판매자 기사 확인창 촬영 실측).
 // 가운데 정렬은 Mantine처럼 flex(위아래 5dvh·좌우 5vw 여백)로 한다. translate(-50%)로 옮기면 소수점 위치의 글자가 다르게 그려진다.
 // 구성은 Mantine과 같이 머리(DialogHeader: 제목, 60px) → 본문(DialogBody: 좌우·아래 16px)이다.
 // 설명(DialogDescription)은 머리가 아니라 본문에 둔다.
@@ -45,11 +48,13 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
 function DialogContent({
   className,
   children,
-  showCloseButton = true,
+  initialFocus,
   ...props
-}: DialogPrimitive.Popup.Props & {
-  showCloseButton?: boolean;
-}) {
+}: DialogPrimitive.Popup.Props) {
+  // Mantine Modal과 같은 약속: 안쪽에 data-autofocus 요소가 있으면 열릴 때 그 요소에 초점을 둔다
+  // (예: 강제환불 사유 입력칸 — Enter만 눌러 환불되지 않게). 없으면 Base UI 기본 동작(첫 초점 가능 요소).
+  const popupRef = useRef<HTMLDivElement>(null);
+  const autofocus = () => popupRef.current?.querySelector<HTMLElement>('[data-autofocus]') ?? true;
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -58,41 +63,52 @@ function DialogContent({
         className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-[5vw] py-[5dvh]"
       >
         <DialogPrimitive.Popup
+          ref={popupRef}
+          initialFocus={initialFocus ?? autofocus}
           data-slot="dialog-content"
           className={cn(
-            'pointer-events-auto relative flex max-h-[90dvh] w-[440px] max-w-full flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+            'pointer-events-auto flex max-h-[90dvh] will-change-[opacity] w-[440px] max-w-full flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
             className,
           )}
           {...props}
         >
           {children}
-          {showCloseButton && (
-            <DialogPrimitive.Close
-              data-slot="dialog-close"
-              aria-label="닫기"
-              className={closeButtonClassName}
-            >
-              <CloseIcon />
-            </DialogPrimitive.Close>
-          )}
         </DialogPrimitive.Popup>
       </DialogPrimitive.Viewport>
     </DialogPortal>
   );
 }
 
-// Mantine Modal 머리: 높이 최소 60px, 위아래·왼쪽 16px, 위 모서리 16px 흰 바탕으로 위에 붙는다(본문이 길면 머리 아래로 스크롤).
-// 오른쪽은 닫기 버튼(11px + 28px) 자리를 비운다.
-function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
+// Mantine Modal 머리: 높이 최소 60px, 위아래·왼쪽 16px·오른쪽 11px, 위 모서리 16px 흰 바탕으로 위에 붙는다
+// (본문이 길면 머리 아래로 스크롤). 닫기 버튼은 Mantine처럼 머리 안 flex 끝에 둔다. 본문 상자에 position을
+// 주어 absolute로 두면 안쪽 버튼 모서리가 Mantine과 다르게 그려진다(판매자 확인창 촬영 실측).
+// 닫기 버튼이 제목 다음 첫 초점 가능 요소라 Mantine처럼 열릴 때 첫 초점이 간다.
+function DialogHeader({
+  className,
+  children,
+  showCloseButton = true,
+  ...props
+}: React.ComponentProps<'div'> & { showCloseButton?: boolean }) {
   return (
     <div
       data-slot="dialog-header"
       className={cn(
-        'sticky top-0 z-10 flex min-h-[60px] items-center rounded-t-lg bg-background py-4 pr-[47px] pl-4',
+        'sticky top-0 z-10 flex min-h-[60px] items-center justify-between rounded-t-lg bg-background py-4 pr-[11px] pl-4',
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {showCloseButton && (
+        <DialogPrimitive.Close
+          data-slot="dialog-close"
+          aria-label="닫기"
+          className={cn(closeButtonClassName, 'ms-auto')}
+        >
+          <CloseIcon />
+        </DialogPrimitive.Close>
+      )}
+    </div>
   );
 }
 

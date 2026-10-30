@@ -1,5 +1,6 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button';
 import { cva, type VariantProps } from 'class-variance-authority';
+import { Children } from 'react';
 
 import { cn } from '../lib/utils';
 
@@ -31,7 +32,8 @@ const buttonVariants = cva(
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
       size: {
-        default: 'h-9 px-4.5 has-data-[icon=inline-start]:ps-[calc(18px/1.5)] has-data-[icon=inline-end]:pe-[calc(18px/1.5)]',
+        default:
+          'h-9 px-4.5 has-data-[icon=inline-start]:ps-[calc(18px/1.5)] has-data-[icon=inline-end]:pe-[calc(18px/1.5)]',
         xs: 'h-7.5 px-3.5 text-xs leading-none has-data-[icon=inline-start]:ps-[calc(14px/1.5)] has-data-[icon=inline-end]:pe-[calc(14px/1.5)]',
         sm: 'h-7.5 px-3.5 text-xs leading-none has-data-[icon=inline-start]:ps-[calc(14px/1.5)] has-data-[icon=inline-end]:pe-[calc(14px/1.5)]',
         md: 'h-10.5 px-5.5 text-base leading-none has-data-[icon=inline-start]:ps-[calc(22px/1.5)] has-data-[icon=inline-end]:pe-[calc(22px/1.5)]',
@@ -49,10 +51,40 @@ const buttonVariants = cva(
   },
 );
 
+// Mantine Button의 글자 칸(.mantine-Button-label)과 같은 값. 글자 줄 상자를 대문자 높이로 잘라
+// (text-box-trim) 세로 가운데에 놓으므로, 감싸지 않으면 글자 가장자리 픽셀이 Mantine과 달라진다.
+const labelClassName =
+  'flex h-full items-center overflow-hidden whitespace-nowrap [text-box-edge:cap_alphabetic] [text-box-trim:trim-both]';
+
+/** 이어진 글자(문자열·숫자)를 한 글자 칸으로 감싼다(Mantine은 글자 전체가 칸 하나). 아이콘 등 요소는 그대로 둔다. */
+function wrapLabels(children: React.ReactNode) {
+  const out: React.ReactNode[] = [];
+  let text: (string | number)[] = [];
+  const flush = () => {
+    if (text.length === 0) return;
+    out.push(
+      <span key={`label-${out.length}`} data-slot="button-label" className={labelClassName}>
+        {text.join('')}
+      </span>,
+    );
+    text = [];
+  };
+  for (const child of Children.toArray(children)) {
+    if (typeof child === 'string' || typeof child === 'number') text.push(child);
+    else {
+      flush();
+      out.push(child);
+    }
+  }
+  flush();
+  return out;
+}
+
 function Button({
   className,
   variant = 'default',
   size = 'default',
+  children,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
@@ -60,7 +92,9 @@ function Button({
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {typeof children === 'function' ? children : wrapLabels(children)}
+    </ButtonPrimitive>
   );
 }
 
