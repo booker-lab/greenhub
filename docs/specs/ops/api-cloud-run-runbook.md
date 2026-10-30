@@ -271,7 +271,7 @@ gcloud compute addresses describe greenhub-api-ip --global $P --format="value(ad
    - **주의**: 같은 SHA로 Vercel 운영을 다시 배포하면 빌드 생략 규칙(`scripts/vercel/ignore-build.mjs`)이 "바뀐 것 없음"으로 보고 CANCELED한다. 그러면 바꾼 `NEXT_PUBLIC_API_URL`이 반영되지 않는다. 빌드를 실제로 일으키는 방법은 2026-10-29 Preview 리허설(`railway-outage-failover.md` "P5 리허설 결과")로 확인했다.
      - Vercel 화면: 배포 `…` → Redeploy → "Use project's Ignore Build Step" 체크 해제(기본은 켜짐, 켠 채로는 CANCELED). 이메일 코드 재인증을 요구할 수 있다.
      - API: `POST /v13/deployments?forceNew=1&skipIgnoreBuildStep=1`. 기존 배포를 다시 배포할 때는 본문 `{"deploymentId","name","meta":{"action":"redeploy"}}`, 지정 SHA로 새로 만들 때는 `gitSource`와 같은 쿼리. 빌드 로그에 "Ignore Build Step was explicitly skipped for this deployment."가 찍힌다.
-     - `production-deploy.mjs vercel --require-build=true`는 지금 이 쿼리를 보내지 않아 생략되면 실패로 멈출 뿐이다. 전환 전에 도구가 이 쿼리를 보내게 바꾸거나, 위 두 방법으로 다시 배포한다.
+     - 배포 도구: `production-deploy.mjs vercel --require-build=true`는 `gitSource` 생성 요청에 이 쿼리를 붙여 생략 규칙을 건너뛰고, 그래도 생략되면 실패로 멈춘다. 운영에서는 아직 이 도구 경로로 실행해 보지 않았으니 결과가 READY이고 빌드 로그에 위 문구가 있는지 확인한다.
 2. `production-deploy.yml`의 `api_platform` 기본값을 `cloudrun`으로, `CLOUD_RUN_API_BASE`를 `https://api.greenlove.co.kr`로 바꾼다.
 3. **run.app 직접 접속을 막는다**: `gcloud run services update greenhub-api --ingress=internal-and-cloud-load-balancing --project=green-e4fe3 --region=asia-northeast3`. 열어 두면 run.app으로 들어온 요청이 `X-Forwarded-For`를 꾸며 요청 한도를 피할 수 있다(홉 수를 부하분산기 기준으로 맞췄기 때문).
 

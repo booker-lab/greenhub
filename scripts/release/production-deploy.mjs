@@ -9,6 +9,9 @@
  *   node scripts/release/production-deploy.mjs health     --sha=<40자리> [--api-base=<운영 API 주소>]
  *   node scripts/release/production-deploy.mjs vercel     --sha=<40자리> --app=consumer|seller|driver [--require-build=true]
  *
+ * `--require-build=true`는 환경 변수만 바꾸고 같은 SHA로 다시 배포할 때 쓴다. 앱 빌드 생략 규칙을 건너뛰어
+ * (`skipIgnoreBuildStep=1`) 반드시 새로 빌드하고, 그래도 생략되면 실패한다. 없으면 생략 규칙을 따른다.
+ *
  * 자격 증명은 환경 변수로만 받고 출력하지 않는다.
  * - verify-e2e: GITHUB_TOKEN(actions:read)
  * - railway: RAILWAY_TOKEN(운영 환경 project token), RAILWAY_API_SERVICE_ID
@@ -415,6 +418,7 @@ export function buildVercelProductionBody({ app, sha }) {
  * Vercel 운영 배포를 지정 SHA의 Git 원본으로 만들고 끝날 때까지 기다린다.
  * CANCELED는 앱 빌드 생략 규칙(`scripts/vercel/ignore-build.mjs`)이 "이 앱은 바뀐 것이 없다"고 판단한 경우라
  * 기존 운영 배포가 계속 서비스한다. 결과에 `skipped`로 남긴다.
+ * `requireBuild`면 생성 요청에 `skipIgnoreBuildStep=1`을 붙여 생략 규칙을 건너뛰고 반드시 새로 빌드한다.
  */
 export async function deployVercel({
   app,
@@ -433,6 +437,9 @@ export async function deployVercel({
     forceNew: '1',
     skipAutoDetectionConfirmation: '1',
   });
+  // 환경 변수만 바꾼 같은 SHA 재배포는 빌드 생략 규칙을 건너뛰어야 새 값이 빌드에 들어간다.
+  // 대시보드 Redeploy에서 생략 규칙 체크를 끄는 것과 같은 쿼리다(2026-10-29 Preview 실측).
+  if (requireBuild) createQuery.set('skipIgnoreBuildStep', '1');
   const created = await readJson(
     await fetchImpl(`${VERCEL_API_ORIGIN}/v13/deployments?${createQuery}`, {
       method: 'POST',
