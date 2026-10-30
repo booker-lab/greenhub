@@ -14,6 +14,7 @@ import {
   DEFAULT_SORT,
   DEFAULT_STATUS_FILTER,
   describeArchiveConfirm,
+  describeArchiveRecordsPrompt,
   describeRestoreConfirm,
   filterStores,
   getAdminStoresReadState,
@@ -161,7 +162,14 @@ export default function AdminStoresClient() {
   const handleArchive = async (store: AdminStore) => {
     if (!window.confirm(describeArchiveConfirm(store))) return;
     try {
-      const reconciliation = await archiveStore(store.id);
+      const reconciliation = await archiveStore(store.id).catch((e: unknown) => {
+        // 주문·정산 기록이 있는 판매자(412) — 가게 ID 앞 8자리를 받아 한 번 더 보낸다.
+        const classified = classifyAdminCommandError(e);
+        if (classified.kind !== 'rejected' || classified.status !== 412) throw e;
+        const typed = window.prompt(describeArchiveRecordsPrompt(store));
+        return typed === null ? null : archiveStore(store.id, typed);
+      });
+      if (reconciliation === null) return;
       if (!reconciliation.reconciled) {
         // COMMAND CONFIRMED + RECONCILIATION FAILED — 실패로 표현하지 않고 중복 실행을 유도하지 않는다.
         notifications.show({
