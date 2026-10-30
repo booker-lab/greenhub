@@ -1,5 +1,6 @@
 'use client';
 
+import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
 import { Button } from '@greenhub/ui/components/button';
 import {
@@ -30,6 +31,7 @@ import {
 } from '@greenhub/ui/components/sheet';
 import {
   ActionIcon,
+  Alert as MAlert,
   Badge as MBadge,
   Button as MButton,
   Card as MCard,
@@ -40,7 +42,8 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, RefreshCcw } from 'lucide-react';
+import Link from 'next/link';
 import type { ReactNode } from 'react';
 
 // 행마다 왼쪽 Mantine, 오른쪽 @greenhub/ui를 같은 칸 크기로 그린다. 촬영해 두 칸을 눈과 픽셀로 비교한다.
@@ -98,6 +101,21 @@ const BUTTON_VARIANTS = [
   { name: 'light gray ↔ secondary', m: { variant: 'light', color: 'gray' }, ui: 'secondary' },
   { name: 'subtle gray ↔ ghost', m: { variant: 'subtle', color: 'gray' }, ui: 'ghost' },
   { name: 'filled red ↔ destructive', m: { variant: 'filled', color: 'red' }, ui: 'destructive' },
+  {
+    name: 'light red ↔ light-destructive',
+    m: { variant: 'light', color: 'red' },
+    ui: 'light-destructive',
+  },
+  {
+    name: 'subtle red ↔ subtle-destructive',
+    m: { variant: 'subtle', color: 'red' },
+    ui: 'subtle-destructive',
+  },
+  {
+    name: 'light yellow ↔ light-warning',
+    m: { variant: 'light', color: 'yellow' },
+    ui: 'light-warning',
+  },
 ] as const;
 
 const BUTTON_SIZES = [
@@ -238,6 +256,89 @@ export function UiCompare({ open }: { open?: string }) {
           name="Input disabled"
           mantine={<TextInput disabled defaultValue="수정할 수 없음" style={{ width: '100%' }} />}
           ui={<Input disabled defaultValue="수정할 수 없음" />}
+        />
+      </Section>
+
+      <Section title="Button · 링크·왼쪽 아이콘·작은 크기">
+        <Row
+          name="Button 링크 xs subtle gray"
+          mantine={
+            <MButton component={Link} href="/products" size="xs" variant="subtle" color="gray">
+              수정
+            </MButton>
+          }
+          ui={
+            <Button
+              render={<Link href="/products" />}
+              nativeButton={false}
+              size="xs"
+              variant="ghost"
+            >
+              수정
+            </Button>
+          }
+        />
+        <Row
+          name="Button 링크 xs filled"
+          mantine={
+            <MButton component={Link} href="/products/new" size="xs">
+              + 등록
+            </MButton>
+          }
+          ui={
+            <Button render={<Link href="/products/new" />} nativeButton={false} size="xs">
+              + 등록
+            </Button>
+          }
+        />
+        <Row
+          name="Button xs light red 왼쪽 아이콘"
+          mantine={
+            <MButton size="xs" variant="light" color="red" leftSection={<RefreshCcw size={14} />}>
+              다시 조회
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="light-destructive">
+              <RefreshCcw className="size-3.5" data-icon="inline-start" />
+              다시 조회
+            </Button>
+          }
+        />
+      </Section>
+
+      <Section title="Alert">
+        <Row
+          name="Alert light red"
+          mantine={
+            <MAlert color="red" title="상품을 불러오지 못했습니다" style={{ width: '100%' }}>
+              네트워크 오류
+            </MAlert>
+          }
+          ui={
+            <Alert variant="destructive" className="w-full">
+              <AlertTitle>상품을 불러오지 못했습니다</AlertTitle>
+              <AlertDescription>네트워크 오류</AlertDescription>
+            </Alert>
+          }
+        />
+        <Row
+          name="Alert light yellow"
+          mantine={
+            <MAlert
+              color="yellow"
+              title="최신 정보를 확인하지 못했습니다"
+              style={{ width: '100%' }}
+            >
+              이전 목록을 표시합니다.
+            </MAlert>
+          }
+          ui={
+            <Alert variant="warning" className="w-full">
+              <AlertTitle>최신 정보를 확인하지 못했습니다</AlertTitle>
+              <AlertDescription>이전 목록을 표시합니다.</AlertDescription>
+            </Alert>
+          }
         />
       </Section>
 
