@@ -4,7 +4,7 @@ import type { Product, SaleRoundItem, SalesMode, Variety } from '@greenhub/share
 import { normalizeSalesMode } from '@greenhub/shared';
 import { Box, Button, Container, Skeleton, Stack, Text } from '@mantine/core';
 import Link from 'next/link';
-import { notFound, usePathname, useRouter } from 'next/navigation';
+import { notFound, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import DetailExtras from '@/components/benchmark/DetailExtras';
 import PanelExtras from '@/components/benchmark/PanelExtras';
@@ -54,12 +54,13 @@ interface ProductDetailContentProps {
 
 interface ProductDetailClientProps {
   id: string;
-  roundQuery: string | string[] | undefined;
   hint: ProductLoadHint | null;
 }
 
-function readRoundId(value: string | string[] | undefined) {
-  if (typeof value !== 'string') return null;
+// 주소의 round 값(searchParams.getAll('round')). 정확히 하나일 때만 받는다.
+function readRoundId(values: string[]) {
+  if (values.length !== 1) return null;
+  const value = values[0];
   const trimmed = value.trim();
   const containsUnsafeCharacter = [...value].some((character) => {
     const code = character.charCodeAt(0);
@@ -355,12 +356,14 @@ function ProductDetailContent({ product, variety, roundProduct }: ProductDetailC
 function RoundDirectProductDetail({
   product,
   variety,
-  roundId,
 }: {
   product: Product;
   variety: Variety | null;
-  roundId: string | null;
 }) {
+  // 상품 화면은 정적으로 만들어지므로 회차 쿼리는 서버가 아니라 브라우저 주소에서 읽는다.
+  // 이 화면은 상품·판매 방식 조회가 끝난 뒤에만 그려져 정적 렌더 중에는 쿼리를 읽지 않는다.
+  const searchParams = useSearchParams();
+  const roundId = readRoundId(searchParams.getAll('round'));
   const saleRounds = useSaleRounds(product.storeId);
   const router = useRouter();
   const pathname = usePathname();
@@ -525,8 +528,7 @@ function RoundDirectProductDetail({
   return <ProductDetailContent product={product} variety={variety} roundProduct={roundProduct} />;
 }
 
-export default function ProductDetailClient({ id, roundQuery, hint }: ProductDetailClientProps) {
-  const roundId = readRoundId(roundQuery);
+export default function ProductDetailClient({ id, hint }: ProductDetailClientProps) {
   const validHint = hint?.id === id ? hint : null;
   const detail = useProductDetail(id, validHint?.varietyId ?? null);
   const readyProduct = detail.status === 'ready' ? detail.product : null;
@@ -592,7 +594,6 @@ export default function ProductDetailClient({ id, roundQuery, hint }: ProductDet
       key={storeMode.storeId}
       product={product}
       variety={variety}
-      roundId={roundId}
     />
   );
 }
