@@ -592,6 +592,30 @@ export function UiCompare({ open }: { open?: string }) {
           }
         />
         <Row
+          name="Textarea autosize minRows 5 빈 칸 ↔ Textarea autosize (상세 설명 비었을 때)"
+          mantine={
+            <MTextarea
+              placeholder="AI가 생성한 상세 설명"
+              autosize
+              minRows={5}
+              radius="md"
+              w="100%"
+              styles={{ input: { fontSize: 'var(--font-size-sm)', lineHeight: 1.7 } }}
+            />
+          }
+          ui={
+            <div className="w-full">
+              <Textarea
+                placeholder="AI가 생성한 상세 설명"
+                autosize
+                minRows={5}
+                className="rounded-[8px]"
+                style={{ fontSize: 'var(--font-size-sm)', lineHeight: 1.7 }}
+              />
+            </div>
+          }
+        />
+        <Row
           name="Loader xs ↔ Loader xs"
           mantine={<MLoader size="xs" color="var(--color-primary)" />}
           ui={<Loader size="xs" />}
