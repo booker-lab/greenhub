@@ -126,15 +126,12 @@ test.describe('어드민 로컬 — 정산', () => {
 
   const rows = (page: Page) =>
     visible(page.getByText(new RegExp(`^${fx.orderPrefix}`), { exact: true }));
-  // 합계 카드는 '플랫폼 수수료' 카드가 있는 묶음 안에서만 찾는다(목록 카드의 상태 배지와 섞이지 않게).
-  const summaryCard = (page: Page, label: string) => {
-    const grid = visible(page.locator('.mantine-SimpleGrid-root')).filter({
-      has: page.getByText('플랫폼 수수료', { exact: true }),
+  // 합계 카드는 '정산 합계' 묶음 안에서만 찾는다(목록 카드의 상태 배지와 섞이지 않게).
+  const summaryCard = (page: Page, label: string) =>
+    visible(page.getByRole('group', { name: '정산 합계', exact: true })).getByRole('group', {
+      name: label,
+      exact: true,
     });
-    return grid.locator('.mantine-Paper-root').filter({
-      has: page.getByText(label, { exact: true }),
-    });
-  };
   const statusTab = (page: Page, label: string) =>
     visible(page.getByRole('button', { name: label, exact: true }));
 

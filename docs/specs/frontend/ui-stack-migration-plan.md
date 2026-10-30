@@ -122,8 +122,13 @@ shadcn의 반경 단계(`--radius-sm` = 0.6배 등)는 `--radius` 16에서 계�
 각 단계는 독립적으로 병합할 수 있는 PR(또는 PR 묶음) 하나다. 앞 단계가 병합된 `main`에서 다음 단계를 시작한다.
 
 ### P0. 사전 준비 (Mantine 상태에서)
-- `.mantine-*` 선택자를 쓰는 E2E spec 8개(§2)를 역할·라벨·`data-testid` 선택자로 바꾸고, Mantine 화면에서 그대로 통과하는지 확인한다.
-- `scripts/visual/`로 세 앱의 주요 화면 기준 스크린샷을 찍어 둔다.
+- `.mantine-*` 클래스로 요소를 찾던 E2E를 역할·이름 기반 선택자로 바꾼다. Mantine 클래스 이름은 교체와 함께 사라지기 때문이다.
+  - 어드민 모바일 카드 목록(가게·초대 기록·주문)은 `role="list"`/`listitem`을 붙이고, 테스트는 `tests/_helpers/admin-local.ts`의 `rowOrListItem`(표의 행 또는 목록 항목)으로 찾는다.
+  - 정산 합계 카드는 `정산 합계` group 안의 카드별 group으로 찾는다.
+  - 판매자 주문 탭은 `SegmentedTabs`의 `ariaLabel`("주문 상태") group 안의 버튼 글자로 건수를 확인한다.
+  - 공동구매 진행률은 `progressbar` 역할로, 성능 회귀의 Badge 확인은 홈 상품 상태 태그 글자로 찾는다.
+  - `driver-design-system.spec.ts`의 `--mantine-color-` 검사는 인라인 스타일에 Mantine 색 변수를 쓰지 말라는 규칙이라 교체 뒤에도 그대로 유효하다.
+- 기준 스크린샷은 따로 보관하지 않는다. `scripts/visual/README.md` 절차대로 각 교체 PR에서 main을 `--label before`, 작업 브랜치를 `--label after`로 찍어 비교한다(에뮬레이터 포트가 `dev:local`과 같아 둘을 동시에 띄우지 않는다).
 
 ### P1. 기반 (화면 변화 없음)
 - `packages/ui`에 Tailwind v4와 shadcn(`-b base`)을 초기화하고 §4 토큰을 넣는다. 처음 쓸 컴포넌트(Button·Input·Field·Card·Badge·Dialog·Sheet·Sonner·Skeleton)를 설치한다.
