@@ -7,6 +7,7 @@
 - `mvp-sales-round-e2e-environment.md` — 지정 SHA 비운영 E2E 격리 계약
 - `preview-auth-url-policy.md` — Preview/Kakao OAuth URL 정책
 - `ops-alerts.md` — 운영자 휴대폰 알림(텔레그램)과 가동 확인
+- `portone-live-channel-switch.md` — PortOne 결제 채널 LIVE 전환 순서(Vercel 환경 변수 → consumer 강제 빌드 `require_build` → 번들 채널 키 확인 `expect_portone_channels`)
 - `morning-ops-check.md` — 아침 운영 점검 보고(읽기 전용 점검 열쇠·판정 기준표·권한 경계, 어드민 운영 자동화 1단계)
 - `platform-modernization-plan.md` — 개발 환경 현대화(의존성·런타임 버전) 결정·단계(2026-10-23 확정). API 이전은 아래 Cloud Run 계획서
 
