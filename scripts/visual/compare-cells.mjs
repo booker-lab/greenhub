@@ -101,6 +101,9 @@ const rows = await page.evaluate(
       out[0].tag = root.tagName;
       for (const el of cell.querySelectorAll('button, input, svg')) {
         const kind = el.tagName.toLowerCase();
+        // 보이지 않는 input(Switch·Checkbox의 숨은 체크박스)은 구현마다 다르고 화면에 그려지지 않는다.
+        const box = el.getBoundingClientRect();
+        if (kind === 'input' && (getComputedStyle(el).opacity === '0' || box.width <= 1)) continue;
         if (el !== root || kind !== 'button') boxPart(el, kind);
       }
       const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);

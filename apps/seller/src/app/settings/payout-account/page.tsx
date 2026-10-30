@@ -1,6 +1,9 @@
 'use client';
 
-import { Autocomplete, Button, Container, Paper, Stack, Text, TextInput } from '@mantine/core';
+import { Autocomplete } from '@greenhub/ui/components/autocomplete';
+import { Button } from '@greenhub/ui/components/button';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
 import { notifications } from '@mantine/notifications';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -22,6 +25,11 @@ import {
 
 // 판매자 정산 계좌(결정 ⑤). 판매자 본인·관리자만 보고, 관리자가 정산 지급할 때 이 계좌로 보낸다.
 // 저장된 계좌번호는 끝 4자리 외를 가려 보이고, 바꿀 때는 번호를 처음부터 다시 입력한다.
+
+// ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·그림자 xs·안쪽 16)와 Text(p, 여백 0) 값.
+const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const TEXT = 'm-0 p-0 text-base';
+const TEXT_SM = 'm-0 p-0 text-sm';
 
 const EMPTY_FORM: PayoutAccountForm = { bankName: '', accountHolder: '', accountNumber: '' };
 
@@ -45,7 +53,11 @@ export default function PayoutAccountSettingsPage() {
         const account = readMaskedPayoutAccount(body);
         setSaved(account);
         if (account) {
-          setForm({ bankName: account.bankName, accountHolder: account.accountHolder, accountNumber: '' });
+          setForm({
+            bankName: account.bankName,
+            accountHolder: account.accountHolder,
+            accountNumber: '',
+          });
         }
         setLoadError(null);
       })
@@ -53,7 +65,8 @@ export default function PayoutAccountSettingsPage() {
       .finally(() => setLoaded(true));
   }, [storeId, hasToken, tokenRef]);
 
-  const patch = (next: Partial<PayoutAccountForm>) => setForm((current) => ({ ...current, ...next }));
+  const patch = (next: Partial<PayoutAccountForm>) =>
+    setForm((current) => ({ ...current, ...next }));
 
   const save = async () => {
     if (!storeId || !token) return;
@@ -83,73 +96,82 @@ export default function PayoutAccountSettingsPage() {
   return (
     <PageShell>
       <PageHeader title="정산 계좌" />
-      <Container size="sm" px="md" py="md">
+      <div className="mx-auto max-w-[720px] p-4">
         {!loaded ? (
           <LoadingState />
         ) : (
-          <Stack gap="sm">
-            <Paper radius="lg" shadow="xs" p="md">
-              <Stack gap={4}>
-                <Text fw={700}>저장된 계좌</Text>
+          <div className="flex flex-col gap-3">
+            <div className={PAPER}>
+              <div className="flex flex-col gap-1">
+                <p className={`${TEXT} font-bold`}>저장된 계좌</p>
                 {loadError ? (
-                  <Text role="alert" size="sm" c="var(--color-danger)">
+                  <p role="alert" className={TEXT_SM} style={{ color: 'var(--color-danger)' }}>
                     {loadError}
-                  </Text>
+                  </p>
                 ) : saved ? (
-                  <Text size="sm">{describeSavedAccount(saved)}</Text>
+                  <p className={TEXT_SM}>{describeSavedAccount(saved)}</p>
                 ) : (
-                  <Text size="sm" c="var(--color-text-secondary)">
+                  <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
                     아직 없어요. 정산금을 받을 계좌를 등록해 주세요.
-                  </Text>
+                  </p>
                 )}
-              </Stack>
-            </Paper>
+              </div>
+            </div>
 
-            <Paper radius="lg" shadow="xs" p="md">
-              <Stack gap="sm">
-                <Text fw={700}>{saved ? '계좌 바꾸기' : '계좌 등록'}</Text>
-                <Autocomplete
-                  label="은행"
-                  placeholder="예: 국민은행"
-                  data={[...COMMON_BANKS]}
-                  maxLength={20}
-                  value={form.bankName}
-                  onChange={(bankName) => patch({ bankName })}
-                />
-                <TextInput
-                  label="예금주"
-                  maxLength={ACCOUNT_HOLDER_MAX_LENGTH}
-                  value={form.accountHolder}
-                  onChange={(event) => patch({ accountHolder: event.currentTarget.value })}
-                />
-                <TextInput
-                  label="계좌번호"
-                  placeholder="숫자와 하이픈(-)만"
-                  inputMode="numeric"
-                  autoComplete="off"
-                  maxLength={ACCOUNT_NUMBER_MAX_LENGTH}
-                  value={form.accountNumber}
-                  onChange={(event) =>
-                    patch({ accountNumber: event.currentTarget.value.replace(/[^0-9-]/g, '') })
-                  }
-                />
-                <Text size="sm" c="var(--color-text-secondary)">
+            <div className={PAPER}>
+              <div className="flex flex-col gap-3">
+                <p className={`${TEXT} font-bold`}>{saved ? '계좌 바꾸기' : '계좌 등록'}</p>
+                <Field>
+                  <FieldLabel htmlFor="payout-bank">은행</FieldLabel>
+                  <Autocomplete
+                    id="payout-bank"
+                    placeholder="예: 국민은행"
+                    items={COMMON_BANKS}
+                    maxLength={20}
+                    value={form.bankName}
+                    onValueChange={(bankName) => patch({ bankName })}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="payout-holder">예금주</FieldLabel>
+                  <Input
+                    id="payout-holder"
+                    maxLength={ACCOUNT_HOLDER_MAX_LENGTH}
+                    value={form.accountHolder}
+                    onChange={(event) => patch({ accountHolder: event.currentTarget.value })}
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="payout-number">계좌번호</FieldLabel>
+                  <Input
+                    id="payout-number"
+                    placeholder="숫자와 하이픈(-)만"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    maxLength={ACCOUNT_NUMBER_MAX_LENGTH}
+                    value={form.accountNumber}
+                    onChange={(event) =>
+                      patch({ accountNumber: event.currentTarget.value.replace(/[^0-9-]/g, '') })
+                    }
+                  />
+                </Field>
+                <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
                   사업자 정보와 같은 명의의 계좌를 써 주세요. 계좌는 관리자만 정산 지급에 사용하고,
                   저장한 번호는 끝 4자리만 보여요.
-                </Text>
+                </p>
                 {error && (
-                  <Text role="alert" size="sm" c="var(--color-danger)">
+                  <p role="alert" className={TEXT_SM} style={{ color: 'var(--color-danger)' }}>
                     {error}
-                  </Text>
+                  </p>
                 )}
-                <Button radius="xl" size="md" loading={saving} onClick={save}>
+                <Button size="md" disabled={saving} aria-busy={saving} onClick={save}>
                   저장
                 </Button>
-              </Stack>
-            </Paper>
-          </Stack>
+              </div>
+            </div>
+          </div>
         )}
-      </Container>
+      </div>
     </PageShell>
   );
 }
