@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { APPS, RUNTIME_FILE } from './apps.mjs';
 import { VISUAL_NOW_ENV } from './clock.mjs';
 import { expectedPathOf, shotProblems } from './soundness.mjs';
@@ -94,7 +94,11 @@ fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
 const HARNESS_NOISE = /firebase-token|@firebase\/|net::ERR_FAILED/;
+// 앱이 부르는 가짜 API 주소(운영 빌드는 https://127.0.0.2). 예전 runtime.json에는 apiUrl이 없을 수 있다.
+const apiOrigin = new URL(runtime.apiUrl ?? apiBase).origin;
 const allowedHosts = new Set(['127.0.0.1', 'localhost', '[::1]', new URL(base).hostname]);
+// 운영 빌드(start.mjs --prod)의 가짜 API는 https://127.0.0.2다.
+if (runtime.prod) allowedHosts.add(new URL(runtime.apiUrl).hostname);
 
 async function newContext(browser, viewportName) {
   const context = await browser.newContext({
@@ -113,8 +117,51 @@ async function newContext(browser, viewportName) {
   return context;
 }
 
-/** Credentials 로그인(가짜 API /auth/login 경유). 세션 쿠키는 컨텍스트에 저장된다. */
+// 운영 빌드는 로컬 로그인(Credentials)이 꺼져 있다. 앱의 jwt 콜백이 로그인 직후 만드는 토큰과 같은 모양을
+// start.mjs의 AUTH_SECRET으로 암호화해 세션 쿠키로 넣는다. 앱은 이후 요청마다 가짜 API /auth/session으로
+// 다시 검증한다(revalidateSessionToken). 필드는 세 앱 jwt 콜백의 합집합이다(쓰지 않는 필드는 앱이 무시한다).
+// http 주소라 쿠키 이름에 __Secure- 접두사가 붙지 않는다. Auth.js는 쿠키 이름을 암호화 salt로 쓴다.
+const SESSION_COOKIE = 'authjs.session-token';
+async function forgeSessionCookie(context) {
+  // 앱이 쓰는 next-auth와 같은 설치본을 쓴다(새 의존성 없음).
+  const jwtModule = createRequire(path.join(ROOT, app.dir, 'package.json')).resolve(
+    'next-auth/jwt',
+  );
+  const { encode } = await import(pathToFileURL(jwtModule).href);
+  const { user } = fixture;
+  const token = {
+    name: user.name,
+    email: user.email,
+    sub: user.id,
+    id: user.id,
+    role: user.role,
+    storeId: user.storeId,
+    accessToken: 'mock-access-token',
+    refreshToken: 'mock-refresh-token',
+    accessTokenExpires: Date.now() + 55 * 60 * 1000,
+  };
+  const value = await encode({
+    token,
+    secret: runtime.authSecret,
+    salt: SESSION_COOKIE,
+    maxAge: 60 * 60,
+  });
+  const { hostname } = new URL(base);
+  await context.addCookies([
+    { name: SESSION_COOKIE, value, domain: hostname, path: '/', httpOnly: true, sameSite: 'Lax' },
+  ]);
+}
+
+/** Credentials 로그인(가짜 API /auth/login 경유). 세션 쿠키는 컨텍스트에 저장된다. 운영 빌드는 쿠키를 직접 넣는다. */
 async function login(context) {
+  if (runtime.prod) {
+    await forgeSessionCookie(context);
+    const session = await (await context.request.get(`${base}/api/auth/session`))
+      .json()
+      .catch(() => ({}));
+    if (!session?.user?.accessToken) throw new Error('세션 쿠키 로그인 실패(운영 빌드)');
+    return;
+  }
   const csrf = await (await context.request.get(`${base}/api/auth/csrf`)).json();
   await context.request.post(`${base}/api/auth/callback/credentials`, {
     maxRedirects: 0,
@@ -196,11 +243,17 @@ const manifest = {
 };
 // Playwright 버전과 설치된 브라우저가 다른 환경(예: 클라우드 세션의 /opt/pw-browsers/chromium)에서는
 // GREENHUB_VISUAL_CHROMIUM으로 실행 파일을 지정한다.
-const browser = await chromium.launch(
-  process.env.GREENHUB_VISUAL_CHROMIUM
+// 운영 빌드(start.mjs --prod)의 가짜 API 인증서는 브라우저 전체에서 그 공개키 지문으로만 믿는다.
+// Playwright ignoreHTTPSErrors는 서비스워커(PWA)가 대신 보내는 요청에는 걸리지 않아, 서비스워커가 붙은 화면에서
+// API 요청이 TLS 오류로 실패한다(주문을 불러오지 못한 화면이 찍힌다). 서비스워커는 운영과 같게 막지 않는다.
+const browser = await chromium.launch({
+  ...(process.env.GREENHUB_VISUAL_CHROMIUM
     ? { executablePath: process.env.GREENHUB_VISUAL_CHROMIUM }
-    : undefined,
-);
+    : {}),
+  ...(runtime.prod
+    ? { args: [`--ignore-certificate-errors-spki-list=${runtime.apiCertSpki}`] }
+    : {}),
+});
 try {
   for (const viewportName of viewportNames) {
     const authed = await newContext(browser, viewportName);
@@ -223,6 +276,15 @@ try {
         errors.push(`${m.text().slice(0, 300)}${where ? ` (${where.slice(0, 200)})` : ''}`);
       });
       page.on('pageerror', (e) => errors.push(String(e.message).slice(0, 300)));
+      // 앱이 가짜 API에 닿지 못한 요청(TLS·연결 실패)은 콘솔 오류 없이 "불러오지 못했습니다" 화면이 될 수 있다.
+      // 찍기 전까지 실패한 API 요청을 모은다. 이동·닫기로 취소된 요청(ERR_ABORTED)은 빼고, 찍은 뒤는 보지 않는다.
+      const failed = [];
+      let captured = false;
+      page.on('requestfailed', (request) => {
+        const text = request.failure()?.errorText ?? '';
+        if (captured || text === 'net::ERR_ABORTED' || !request.url().startsWith(apiOrigin)) return;
+        failed.push(`${new URL(request.url()).pathname} ${text}`);
+      });
       // storage: true인 화면은 열기 전에 fixture의 브라우저 저장소 값(장바구니 등)을 넣는다.
       if (screen.storage && browserStorage) {
         await page.addInitScript((stored) => {
@@ -263,6 +325,7 @@ try {
       const stepNote = screen.steps ? await runSteps(page, screen.steps) : null;
       const file = `${screen.id}-${viewportName}.png`;
       await capture(page, path.join(outDir, file), { viewportOnly: screen.viewport === true });
+      captured = true;
       const log = await (await fetch(`${apiBase}/__log`)).json();
       const missing = [...new Set(log.filter((e) => e.kind === 'missing').map((e) => e.path))];
       const shot = {
@@ -275,7 +338,12 @@ try {
         finalPath: new URL(page.url()).pathname,
         missing,
         errors: [...new Set(errors)],
+        failed: [...new Set(failed)],
         ...(stepNote ? { stepNote } : {}),
+        // Firestore를 직접 구독하는 화면은 에뮬레이터 없이는 데이터 없이 찍힌다(셀러 앱은 운영 빌드에서 로컬 Firebase를 거절).
+        ...(screen.firestore && !runtime.emulator
+          ? { unsupported: 'Firestore 에뮬레이터 없음(운영 빌드·--phone)' }
+          : {}),
         ms: Date.now() - t0,
       };
       shot.problems = shotProblems(shot, expectedPathOf(screen));

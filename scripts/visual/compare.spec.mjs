@@ -197,12 +197,19 @@ describe('compareRuns', () => {
 });
 
 describe('soundness', () => {
-  it('fixture 누락·콘솔 오류·멈춘 단계·다른 주소를 문제로 잡는다', () => {
+  it('fixture 누락·콘솔 오류·API 요청 실패·멈춘 단계·하네스 미지원·다른 주소를 문제로 잡는다', () => {
     const problems = shotProblems(
-      { missing: ['/x'], errors: ['boom'], stepNote: '누를 글자 없음: 저장', finalPath: '/login' },
+      {
+        missing: ['/x'],
+        errors: ['boom'],
+        failed: ['/driver/orders/o1 net::ERR_CERT_AUTHORITY_INVALID'],
+        stepNote: '누를 글자 없음: 저장',
+        unsupported: 'Firestore 에뮬레이터 없음',
+        finalPath: '/login',
+      },
       '/orders',
     );
-    assert.equal(problems.length, 4);
+    assert.equal(problems.length, 6);
     assert.deepEqual(
       shotProblems({ missing: [], errors: [], finalPath: '/orders' }, '/orders'),
       [],

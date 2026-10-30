@@ -914,10 +914,12 @@ export const routes = [
  * 자동 캡처 대상 화면. id는 파일 이름, group은 보고서 묶음이다.
  * auth: false면 로그인 없이 연다. 회차·상품 같은 fixture가 없는 화면은 빈 상태나 오류로 찍히고,
  * 캡처 기록(missing)에 빠진 API 경로가 남는다.
+ * firestore: true는 브라우저가 Firestore `products`를 직접 구독하는 화면(useStoreProducts)이다. 에뮬레이터가
+ * 없으면(운영 빌드 --prod) 데이터 없이 "연결 중"·로딩으로 찍히므로 shots.mjs가 정상 판정에서 뺀다.
  */
 export const screens = [
   { id: 'login', group: '판매자', title: '로그인', path: '/login', auth: false },
-  { id: 'home', group: '판매자', title: '홈', path: '/' },
+  { id: 'home', group: '판매자', title: '홈', path: '/', firestore: true },
   { id: 'onboarding', group: '판매자', title: '사업자 프로필 수정', path: '/onboarding' },
   { id: 'orders', group: '판매자', title: '주문 목록', path: '/orders' },
   {
@@ -938,7 +940,7 @@ export const screens = [
     title: '회차 주문 상세(여러 상품)',
     path: '/orders/order-round-multi',
   },
-  { id: 'prep', group: '판매자', title: '준비', path: '/prep' },
+  { id: 'prep', group: '판매자', title: '준비', path: '/prep', firestore: true },
   { id: 'operations', group: '판매자', title: '운영 확인', path: '/operations' },
   { id: 'sale-rounds', group: '판매자', title: '회차 목록', path: '/sale-rounds' },
   {
@@ -946,15 +948,23 @@ export const screens = [
     group: '판매자',
     title: '회차 상세 · 진행 중',
     path: '/sale-rounds/round-open',
+    firestore: true,
   },
   {
     id: 'sale-round-scheduled',
     group: '판매자',
     title: '회차 상세 · 예정',
     path: '/sale-rounds/round-scheduled',
+    firestore: true,
   },
-  { id: 'sale-round-new', group: '판매자', title: '새 회차', path: '/sale-rounds/new' },
-  { id: 'products', group: '판매자', title: '상품 목록', path: '/products' },
+  {
+    id: 'sale-round-new',
+    group: '판매자',
+    title: '새 회차',
+    path: '/sale-rounds/new',
+    firestore: true,
+  },
+  { id: 'products', group: '판매자', title: '상품 목록', path: '/products', firestore: true },
   { id: 'product-new', group: '판매자', title: '상품 등록', path: '/products/new' },
   { id: 'product-edit', group: '판매자', title: '상품 수정', path: '/products/product-1/edit' },
   { id: 'settlements', group: '판매자', title: '정산', path: '/settlements' },
@@ -1050,6 +1060,7 @@ export const screens = [
     group: '판매자 · 모달',
     title: '회차 상세 · 회차 취소',
     path: '/sale-rounds/round-scheduled',
+    firestore: true,
     steps: [{ click: '회차 취소' }],
     viewport: true,
   },
