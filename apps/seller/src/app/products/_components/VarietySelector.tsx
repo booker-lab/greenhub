@@ -1,6 +1,6 @@
 'use client';
 
-import { Select, Text } from '@mantine/core';
+import { Select } from '@greenhub/ui/components/select';
 import { useEffect, useState } from 'react';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 
@@ -45,9 +45,12 @@ export default function VarietySelector({
 
   if (varieties.length === 0) {
     return (
-      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+      <p
+        className="m-0 p-0 text-base font-normal"
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+      >
         등록된 품종이 없습니다
-      </Text>
+      </p>
     );
   }
 
@@ -67,15 +70,14 @@ export default function VarietySelector({
       placeholder="품종 선택 (선택사항)"
       data={data}
       value={value || null}
-      onChange={(v) => {
+      onValueChange={(v) => {
         onChange(v ?? '');
         onVarietyChange?.(varieties.find((vr) => vr.id === v) ?? null);
       }}
       clearable
       size="md"
-      radius="xl"
+      className="rounded-xl"
       maxDropdownHeight={240}
-      comboboxProps={{ position: 'bottom', middlewares: { flip: false } }}
     />
   );
 }
