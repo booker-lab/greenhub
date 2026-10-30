@@ -6,6 +6,8 @@ name: CI
 on:
   pull_request:
     branches: [main]
+    # labeled·unlabeled: UI 교체 동결 검사(freeze)가 수정 라벨(freeze-fix) 변화를 다시 판정한다.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   workflow_dispatch:
@@ -245,12 +247,37 @@ jobs:
           version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
           extra_args: --only-verified
 
+  # UI 교체(Mantine → shadcn/ui) 동결 검사. 기준은 ui-stack-migration-plan.md §8, 상태는
+  # docs/release/ui-migration-freeze.json을 PR의 base SHA에서 읽는다(PR이 상태를 같이 고쳐 풀 수 없다).
+  # PR이 아닌 실행(main push·수동)은 검사할 변경 범위가 없어 건너뛰고 성공으로 끝난다.
+  freeze:
+    name: UI 교체 동결
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: github.event_name == 'pull_request'
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: github.event_name == 'pull_request'
+        with:
+          node-version-file: .nvmrc
+      # HEAD는 PR merge commit(base + PR 변경)이다. 병합하면 main에 들어갈 변경을 그대로 본다.
+      - name: 동결 검사
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: node scripts/release/freeze-guard.mjs pr --base "$BASE_SHA" --head HEAD --labels "$LABELS"
+
   # 브랜치 보호 필수 검사는 이 job 하나만 등록한다. job 이름이 바뀌어도 필수 검사 목록을
   # 다시 맞출 필요가 없고, 위 job 중 하나라도 실패·취소·건너뜀이면 실패한다.
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [static, unit, scripts, rules, build, secrets]
+    needs: [static, unit, scripts, rules, build, secrets, freeze]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
