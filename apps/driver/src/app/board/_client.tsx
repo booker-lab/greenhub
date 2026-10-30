@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { AppButton } from '@/components/app-button';
-import { badgeCircle, badgeSize, badgeTone, text, titleH4 } from '@/components/look';
+import { badgeCircle, badgeDark, badgeSize, text, titleH4 } from '@/components/look';
 import OrderCard from '@/components/OrderCard';
 import { apiRead } from '@/lib/api';
 import {
@@ -237,7 +237,7 @@ export default function BoardClient() {
                   className={cn(
                     badgeSize.xs,
                     badgeCircle,
-                    badgeTone[key === 'preparing' ? 'brand-filled' : 'dark-filled'],
+                    key === 'delivering' && badgeDark.filled,
                   )}
                 >
                   {count}

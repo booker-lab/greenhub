@@ -5,7 +5,7 @@ import { cn } from '@greenhub/ui/lib/utils';
 import Link from 'next/link';
 import { getRedeliveryPaymentPresentation } from '@/app/board/_lib/redelivery-payment';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
-import { type BadgeColor, badgeTone, card, text } from './look';
+import { type BadgeColor, badgeLightVariant, card, text } from './look';
 
 const METHOD_BADGE: Record<string, { label: string; color: BadgeColor }> = {
   direct: { label: '직배송', color: 'brand' },
@@ -52,13 +52,9 @@ export default function OrderCard({
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2.5">
-              <Badge className={badgeTone[`${badge.color}-light`]}>{badge.label}</Badge>
-              {order.status === 'DELIVERY_HELD' && (
-                <Badge className={badgeTone['red-light']}>배송 보류</Badge>
-              )}
-              {payment && (
-                <Badge className={badgeTone[`${payment.color}-light`]}>{payment.label}</Badge>
-              )}
+              <Badge variant={badgeLightVariant[badge.color]}>{badge.label}</Badge>
+              {order.status === 'DELIVERY_HELD' && <Badge variant="destructive">배송 보류</Badge>}
+              {payment && <Badge variant={badgeLightVariant[payment.color]}>{payment.label}</Badge>}
             </div>
             <p
               className={text}

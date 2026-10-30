@@ -76,6 +76,14 @@ function rootClassName({
     disabled && !loading
       ? 'cursor-not-allowed border-transparent bg-[#e9ecef] text-[#adb5bd] hover:bg-[#e9ecef]'
       : null,
+    // packages/ui Button은 disabled일 때 회색 면을 칠하므로, 로딩 중에는 같은 색을 disabled에도 다시 준다.
+    loading
+      ? TONE[tone]
+          .split(' ')
+          .filter((c) => !c.startsWith('hover:'))
+          .map((c) => `disabled:${c}`)
+          .join(' ')
+      : null,
     loading
       ? "cursor-not-allowed before:pointer-events-none before:absolute before:-inset-px before:rounded-[inherit] before:bg-white/15 before:blur-[12px] before:content-['']"
       : null,

@@ -13,7 +13,7 @@ import { buildOrderMapLink, pickNextDeliveryStop } from './_lib/map-navigation-l
 import { Badge } from '@greenhub/ui/components/badge';
 import { cn } from '@greenhub/ui/lib/utils';
 import { AppButton } from '@/components/app-button';
-import { badgeSize, badgeTone, text, titleH4 } from '@/components/look';
+import { badgeDark, badgeSize, text, titleH4 } from '@/components/look';
 
 type Order = {
   id: string;
@@ -379,10 +379,8 @@ export default function MapPage() {
                     </p>
                   </div>
                   <Badge
-                    className={cn(
-                      badgeSize.xs,
-                      badgeTone[order.status === 'DELIVERING' ? 'dark-light' : 'yellow-light'],
-                    )}
+                    variant={order.status === 'DELIVERING' ? 'default' : 'warning'}
+                    className={cn(badgeSize.xs, order.status === 'DELIVERING' && badgeDark.light)}
                   >
                     {order.status === 'DELIVERING' ? '배송 중' : '수거 대기'}
                   </Badge>

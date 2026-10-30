@@ -12,7 +12,7 @@ import { signOut, useSession } from 'next-auth/react';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import { AppButton } from '@/components/app-button';
 import { TOAST_WARNING } from '@/components/app-toaster';
-import { badgeSize, badgeTone, card, text } from '@/components/look';
+import { badgeLightVariant, badgeSize, card, text } from '@/components/look';
 import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
 import { isApiTimeoutError } from '@/lib/api-timeout';
@@ -644,7 +644,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
           </svg>
         </button>
         <div className="flex flex-wrap items-center gap-2.5">
-          <Badge className={cn(badgeSize.sm, badgeTone['brand-light'])}>
+          <Badge variant="light" className={badgeSize.sm}>
             {METHOD_LABEL[order.deliveryMethod] ?? order.deliveryMethod}
           </Badge>
           {isDelivering && (
@@ -830,7 +830,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
                   <p className={text} style={{ fontWeight: 'var(--fw-bold)' }}>
                     재배송비 결제
                   </p>
-                  <Badge className={badgeTone[`${paymentPresentation.color}-light`]}>
+                  <Badge variant={badgeLightVariant[paymentPresentation.color]}>
                     {paymentPresentation.label}
                   </Badge>
                 </div>

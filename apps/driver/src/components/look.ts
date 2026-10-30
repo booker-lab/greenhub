@@ -18,19 +18,21 @@ export const badgeSize = {
   md: '',
 } as const;
 
-/** Mantine Badge 색. light는 Mantine light 변형(밝은 바탕 + 짙은 글자), filled는 채운 바탕 + 흰 글자다. */
-export const badgeTone = {
-  'brand-light': 'bg-[#d2f2df] text-[#005c32]',
-  'red-light': 'bg-[#ffe3e3] text-[#c92a2a]',
-  // theme.ts가 노랑 light를 경고 토큰으로 바꾼다.
-  'yellow-light': 'bg-status-warning text-status-warning-foreground',
-  'gray-light': 'bg-[#f1f3f5] text-[#212529]',
-  'dark-light': 'bg-[#b8b8b8] text-[#141414]',
-  'brand-filled': 'bg-primary text-white',
-  'dark-filled': 'bg-[#2e2e2e] text-white',
+/** Mantine Badge light(밝은 바탕 + 짙은 글자) 색 → packages/ui Badge variant. 노랑은 theme.ts의 경고 토큰이다. */
+export const badgeLightVariant = {
+  brand: 'light',
+  red: 'destructive',
+  yellow: 'warning',
+  gray: 'secondary',
 } as const;
 
-export type BadgeColor = 'brand' | 'red' | 'yellow' | 'gray' | 'dark';
+export type BadgeColor = keyof typeof badgeLightVariant;
+
+/** packages/ui Badge에 없는 Mantine dark 색(light: 회색 바탕 + 검정 글자, filled: 짙은 회색 바탕 + 흰 글자). */
+export const badgeDark = {
+  light: 'bg-[#b8b8b8] text-[#141414]',
+  filled: 'bg-[#2e2e2e] text-white',
+} as const;
 
 /** Mantine Badge circle(xs): 정사각형, 좌우 여백 2px. */
 export const badgeCircle = 'w-4 px-0.5';
