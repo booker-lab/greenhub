@@ -19,6 +19,7 @@ import {
 } from '@greenhub/ui/components/dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
+import { Switch } from '@greenhub/ui/components/switch';
 import {
   Sheet,
   SheetBody,
@@ -34,6 +35,7 @@ import {
   Card as MCard,
   Drawer,
   Modal,
+  Switch as MSwitch,
   Text,
   TextInput,
   Title,
@@ -86,6 +88,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 const BUTTON_VARIANTS = [
   { name: 'filled ↔ default', m: { variant: 'filled' }, ui: 'default' },
   { name: 'outline ↔ outline', m: { variant: 'outline' }, ui: 'outline' },
+  {
+    name: 'outline gray ↔ outline-gray',
+    m: { variant: 'outline', color: 'gray' },
+    ui: 'outline-gray',
+  },
   { name: 'light ↔ light', m: { variant: 'light' }, ui: 'light' },
   { name: 'subtle ↔ subtle', m: { variant: 'subtle' }, ui: 'subtle' },
   { name: 'light gray ↔ secondary', m: { variant: 'light', color: 'gray' }, ui: 'secondary' },
@@ -102,6 +109,7 @@ const BUTTON_SIZES = [
 ] as const;
 
 const ICON_SIZES = [
+  { name: 'ActionIcon 기본(28) ↔ ghost size-7', px: 28, ui: 'icon-sm', className: 'size-7' },
   { name: 'ActionIcon 24 ↔ icon-xs', px: 24, ui: 'icon-xs' },
   { name: 'ActionIcon 30 ↔ icon-sm', px: 30, ui: 'icon-sm' },
   { name: 'ActionIcon 36 ↔ icon', px: 36, ui: 'icon' },
@@ -166,7 +174,12 @@ export function UiCompare({ open }: { open?: string }) {
               </ActionIcon>
             }
             ui={
-              <Button size={s.ui} variant="ghost" aria-label="뒤로">
+              <Button
+                size={s.ui}
+                variant="ghost"
+                aria-label="뒤로"
+                className={'className' in s ? s.className : undefined}
+              >
                 <ChevronLeft className="size-5" />
               </Button>
             }
@@ -225,6 +238,19 @@ export function UiCompare({ open }: { open?: string }) {
           name="Input disabled"
           mantine={<TextInput disabled defaultValue="수정할 수 없음" style={{ width: '100%' }} />}
           ui={<Input disabled defaultValue="수정할 수 없음" />}
+        />
+      </Section>
+
+      <Section title="Switch">
+        <Row
+          name="Switch 꺼짐"
+          mantine={<MSwitch aria-label="기상 제한" />}
+          ui={<Switch aria-label="기상 제한" />}
+        />
+        <Row
+          name="Switch 켜짐"
+          mantine={<MSwitch aria-label="기상 제한" defaultChecked />}
+          ui={<Switch aria-label="기상 제한" defaultChecked />}
         />
       </Section>
 
