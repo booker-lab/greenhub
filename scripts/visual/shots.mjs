@@ -28,6 +28,7 @@ import {
   upsertShot,
   writeJsonAtomic,
 } from './manifest-store.mjs';
+import { waitForExpectedPath } from './navigation.mjs';
 import { expectedPathOf, shotProblems } from './soundness.mjs';
 import { runSteps } from './steps.mjs';
 
@@ -332,6 +333,16 @@ async function shootOnce(context, screen, viewportName) {
     await page.waitForTimeout(800);
   }
   const stepNote = screen.steps ? await runSteps(page, screen.steps, { apiBase }) : null;
+  // 의도한 이동(expectPath)이 있으면 그 주소에 도착할 때까지 기다린다(navigation.mjs). 시간 안에 도착하지 않으면
+  // 기다리기만 멈추고 그대로 찍는다 — 판정(주소 다름)은 soundness.mjs가 그대로 한다.
+  if (screen.expectPath) {
+    await waitForExpectedPath(page, screen.expectPath, {
+      settle: async () => {
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+        await page.waitForTimeout(800);
+      },
+    });
+  }
   const png = await capture(page, { viewportOnly: screen.viewport === true });
   captured = true;
   // 접근성 의미(역할·이름·상태)를 남긴다. 링크가 버튼이 되는 것 같은 회귀는 픽셀이 같아도 여기서 드러난다.
