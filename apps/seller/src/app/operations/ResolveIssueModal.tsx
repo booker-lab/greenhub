@@ -8,9 +8,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
 import { useEffect, useState } from 'react';
-import { BUTTON_LOADING, ButtonLoader } from '@/app/orders/[id]/_components/ButtonLoading';
 import { ISSUE_LABELS } from '@/app/orders/[id]/operation-issues';
 import {
   isValidManualResolveMemo,
@@ -114,17 +114,16 @@ export function ResolveIssueModal({ issue, onClose, onConfirm }: ResolveIssueMod
               </p>
             )}
             <div className="flex flex-row flex-wrap items-center justify-start gap-2.5">
-              <Button
+              <LoadingButton
+                measured
                 onClick={() => void handleConfirm()}
-                disabled={!valid || submitting}
-                data-loading={submitting || undefined}
-                aria-busy={submitting || undefined}
-                className={`flex-1 ${submitting ? BUTTON_LOADING.default : ''}`}
+                loading={submitting}
+                disabled={!valid}
+                className="flex-1"
                 style={{ fontWeight: 'var(--fw-medium)' }}
               >
-                {submitting && <ButtonLoader variant="default" height={36} />}
                 해결로 닫기
-              </Button>
+              </LoadingButton>
               <Button
                 onClick={onClose}
                 disabled={submitting}

@@ -1,8 +1,6 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
-import { Loader } from '@greenhub/ui/components/loader';
-import type { CSSProperties } from 'react';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 
 interface LoadMoreSettlementsProps {
   loadedCount: number;
@@ -12,11 +10,8 @@ interface LoadMoreSettlementsProps {
 }
 
 // ① 외형 유지(UI 교체 P4): Mantine Stack(gap 6·가운데·py sm)·Text·Button light size sm과 같은 값.
-// 불러오는 중 모양은 어드민 정산 LoadMoreButton과 같다. Mantine Button loading처럼 면색을 그대로 두고 글자를
-// 숨긴 채, 흐린 흰 덮개(15%·blur 12px) 위 가운데에 20px(높이 ÷ 1.8) 원을 돌린다.
+// 불러오는 중은 LoadingButton measured(Mantine Button loading 실측 모양, #718)다.
 const TEXT = 'm-0 p-0 text-base';
-const LOADING =
-  "disabled:bg-[#d2f2df] disabled:text-[#005c32] before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-xl before:bg-white/15 before:blur-[12px] before:content-[''] [&_[data-slot=button-label]]:translate-y-full [&_[data-slot=button-label]]:opacity-0";
 
 /** 서버가 같은 조건의 정산이 더 있다고 알려 준 경우에만 보인다. 불러온 범위와 CSV 범위를 함께 알린다. */
 export function LoadMoreSettlements({
@@ -41,26 +36,9 @@ export function LoadMoreSettlements({
           {error}
         </p>
       )}
-      <Button
-        variant="light"
-        onClick={onLoadMore}
-        disabled={loadingMore}
-        data-loading={loadingMore || undefined}
-        className={loadingMore ? LOADING : undefined}
-      >
-        {loadingMore && (
-          <span
-            aria-hidden
-            className="absolute top-1/2 left-1/2 [transform:translate(-50%,calc(-50%+1px))] will-change-transform"
-          >
-            <Loader
-              color="#005c32"
-              style={{ '--loader-size': '20px', '--loader-border': '2.5px' } as CSSProperties}
-            />
-          </span>
-        )}
+      <LoadingButton measured variant="light" onClick={onLoadMore} loading={loadingMore}>
         더 보기
-      </Button>
+      </LoadingButton>
     </div>
   );
 }

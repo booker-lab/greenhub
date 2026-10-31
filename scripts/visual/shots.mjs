@@ -331,7 +331,7 @@ async function shootOnce(context, screen, viewportName) {
     await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => {});
     await page.waitForTimeout(800);
   }
-  const stepNote = screen.steps ? await runSteps(page, screen.steps) : null;
+  const stepNote = screen.steps ? await runSteps(page, screen.steps, { apiBase }) : null;
   const png = await capture(page, { viewportOnly: screen.viewport === true });
   captured = true;
   // 접근성 의미(역할·이름·상태)를 남긴다. 링크가 버튼이 되는 것 같은 회귀는 픽셀이 같아도 여기서 드러난다.
