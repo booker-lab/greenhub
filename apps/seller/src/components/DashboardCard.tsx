@@ -1,6 +1,5 @@
 'use client';
 
-import { Group, Paper, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -13,6 +12,10 @@ interface DashboardCardProps {
   children: ReactNode;
 }
 
+// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg·shadow xs·p md)·Group(space-between, mb sm)·Text·
+// UnstyledButton과 같은 값을 Tailwind로 그린다.
+const TEXT = 'm-0 p-0 text-base font-normal';
+
 /** 홈 대시보드 카드 — 제목 + 선택적 "더보기 >" 링크 + 본문. */
 export function DashboardCard({
   title,
@@ -21,25 +24,31 @@ export function DashboardCard({
   children,
 }: DashboardCardProps) {
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Group justify="space-between" mb="sm">
-        <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>
+    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+      <div className="mb-3 flex flex-row flex-wrap items-center justify-between gap-4">
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}
+        >
           {title}
-        </Text>
+        </p>
         {moreHref && (
-          <UnstyledButton
-            component={Link}
+          <Link
             href={moreHref}
+            className="cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
             style={{ display: 'flex', alignItems: 'center', gap: 2 }}
           >
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
               {moreLabel}
-            </Text>
+            </p>
             <ChevronRight size={14} color="var(--color-text-disabled)" />
-          </UnstyledButton>
+          </Link>
         )}
-      </Group>
+      </div>
       {children}
-    </Paper>
+    </div>
   );
 }
