@@ -3,7 +3,7 @@
 import type { SaleRound, SaleRoundSchedule, SaleRoundStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -211,15 +211,14 @@ function RoundCard({ round, onCopy }: { round: SaleRound; onCopy: (round: SaleRo
             </p>
           </div>
           <div className="flex flex-col items-end justify-start gap-1.5" style={{ flexShrink: 0 }}>
-            <Button
+            <ButtonLink
               render={<Link href={`/sale-rounds/${encodeURIComponent(round.id)}`} />}
-              nativeButton={false}
               size="xs"
               variant="light"
             >
               회차 열기
               <ChevronRight className="size-3.5" data-icon="inline-end" />
-            </Button>
+            </ButtonLink>
             <Button size="xs" variant="secondary" onClick={() => onCopy(round)}>
               <Copy className="size-3.5" data-icon="inline-start" />
               이전 회차 복사
@@ -298,14 +297,13 @@ function RoundCard({ round, onCopy }: { round: SaleRound; onCopy: (round: SaleRo
             )}
           </div>
           {requiresAttention && (
-            <Button
+            <ButtonLink
               render={<Link href="/orders?tab=ACTION_REQUIRED" />}
-              nativeButton={false}
               size="xs"
               variant="subtle-destructive"
             >
               확인 필요 주문
-            </Button>
+            </ButtonLink>
           )}
         </div>
       </div>
@@ -388,14 +386,9 @@ export default function SaleRoundsPage() {
         title="판매 회차"
         right={
           <div className="flex flex-row flex-nowrap items-center justify-start gap-2.5">
-            <Button
-              render={<Link href="/sale-rounds/new" />}
-              nativeButton={false}
-              size="xs"
-              variant="light"
-            >
+            <ButtonLink render={<Link href="/sale-rounds/new" />} size="xs" variant="light">
               <Plus className="size-3.5" data-icon="inline-start" />새 회차
-            </Button>
+            </ButtonLink>
             <Button
               size="icon-sm"
               variant="ghost"
@@ -420,17 +413,16 @@ export default function SaleRoundsPage() {
                   <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
                     {copySuccess.message}
                   </p>
-                  <Button
+                  <ButtonLink
                     render={
                       <Link href={`/sale-rounds/${encodeURIComponent(copySuccess.roundId)}`} />
                     }
-                    nativeButton={false}
                     size="xs"
                     variant="light"
                   >
                     복사한 회차 열어 일정·상품 확인하기
                     <ChevronRight className="size-3.5" data-icon="inline-end" />
-                  </Button>
+                  </ButtonLink>
                 </div>
               </AlertDescription>
             </Alert>
@@ -479,9 +471,9 @@ export default function SaleRoundsPage() {
               icon={<CalendarDays size={48} strokeWidth={1.5} />}
               text="아직 등록된 판매 회차가 없습니다"
               action={
-                <Button render={<Link href="/sale-rounds/new" />} nativeButton={false}>
+                <ButtonLink render={<Link href="/sale-rounds/new" />}>
                   <Plus className="size-4" data-icon="inline-start" />새 회차 만들기
-                </Button>
+                </ButtonLink>
               }
             />
           )}
