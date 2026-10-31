@@ -13,7 +13,7 @@ import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Paper(lg·sm·lg)·Stack(md)·TextInput(radius xl)·Text·Button과 같은 값.
-// 필수 칸은 Mantine처럼 직접 붙인 빨간 "*" 뒤에 required 별표가 한 번 더 붙는다(지금 화면 그대로).
+// 라벨은 Mantine처럼 inline-block이다(글자 뒤에 붙인 "(선택)"과 사이가 한 칸). 필수 칸은 Mantine처럼 직접 붙인 빨간 "*" 뒤에 required 별표가 한 번 더 붙는다(지금 화면 그대로).
 const TEXT = 'm-0 p-0 text-base font-normal';
 
 const INVALID_HUB_ADDRESS_MESSAGE =
@@ -177,7 +177,7 @@ export default function EditHubPage() {
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor={`${formId}-addressDetail`}>
+                  <FieldLabel className="inline-block" htmlFor={`${formId}-addressDetail`}>
                     <OptionalLabel>상세 주소</OptionalLabel>
                   </FieldLabel>
                   <Input
@@ -191,7 +191,7 @@ export default function EditHubPage() {
                 </Field>
 
                 <Field>
-                  <FieldLabel htmlFor={`${formId}-operatingHours`}>
+                  <FieldLabel className="inline-block" htmlFor={`${formId}-operatingHours`}>
                     <OptionalLabel>운영 시간</OptionalLabel>
                   </FieldLabel>
                   <Input
