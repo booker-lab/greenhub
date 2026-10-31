@@ -9,7 +9,7 @@ import { inputClassName } from './input';
 // ① 외형 유지: Mantine Textarea(입력칸과 같은 테두리·색, 여러 줄이라 높이 auto·최소 36, 위아래 5.5px,
 // 줄 높이 1.55). rows를 주지 않으면 브라우저 기본 2줄 높이다.
 // autosize면 Mantine(react-textarea-autosize)처럼 높이를 글 양에 맞춘다:
-// max(minRows × 줄 높이 + 위아래 여백, 글 높이) + 위아래 테두리.
+// max(minRows × 한 줄 높이 + 위아래 여백, 글 높이) + 위아래 테두리.
 function Textarea({
   className,
   autosize = false,
@@ -33,7 +33,9 @@ function Textarea({
     if (![paddingY, borderY, lineHeight].every(Number.isFinite)) return;
     el.style.height = '0px';
     const content = el.scrollHeight;
-    const rows = minRows ? minRows * lineHeight + paddingY : 0;
+    // react-textarea-autosize는 한 줄 높이를 scrollHeight(정수)로 재므로 줄 높이 + 위아래 여백을 반올림한 값을 쓴다.
+    const rowHeight = Math.round(lineHeight + paddingY) - paddingY;
+    const rows = minRows ? minRows * rowHeight + paddingY : 0;
     el.style.height = `${Math.max(rows, content) + borderY}px`;
   }, [autosize, minRows]);
 
@@ -70,6 +72,8 @@ function Textarea({
       }}
       value={value}
       onChange={onChange}
+      // 화면이 살아나기(hydration) 전 서버 HTML도 Mantine처럼 minRows 높이로 그린다.
+      rows={autosize && minRows ? minRows : undefined}
       className={cn(
         inputClassName,
         'h-auto min-h-9 resize-none py-[5.5px] leading-[1.55]',

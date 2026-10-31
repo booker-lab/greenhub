@@ -110,7 +110,7 @@ node scripts/visual/compare-cells.mjs --viewport 390                 # 짝마다
 - 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열린다. 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`).
 - `compare-cells.mjs`는 같은 순서의 부품(칸의 첫 요소·button·input·svg·글자)을 짝지어 칸 안 위치·크기와 면·테두리·모서리·글꼴·색을 비교한다. 줄 높이·여백은 글자 위치로 드러나므로 따로 보지 않는다.
   - 픽셀은 같은 자리에서 비교한다. 오른쪽 칸을 찍고, 그 칸을 왼쪽(Mantine) 내용의 복제로 바꿔 다시 찍는다. 같은 Mantine 버튼도 가로 위치가 다른 칸에 놓으면 모서리 안티앨리어싱이 15픽셀 달라지기 때문이다(2026-10-31 실측).
-  - textarea는 입력칸처럼 상자·글꼴을 비교하고, 안의 글자는 픽셀로만 본다(글자 노드 범위 좌표가 화면 위치가 아니다).
+  - textarea·select는 입력칸처럼 상자·글꼴을 비교하고, 안의 글자(option 포함)는 픽셀로만 본다(글자 노드 범위 좌표가 화면 위치가 아니다).
   - 채널 허용치는 1(`diff.mjs --tolerance 1`과 같다). 차이 있는 행이 있으면 종료 코드 1이다. `--out <폴더>`로 칸 이미지를 남긴다.
 
 ## 작업 전·후 픽셀 비교
