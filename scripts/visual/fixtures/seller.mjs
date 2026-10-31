@@ -94,6 +94,52 @@ const SELLER_ORDERS = [
     ['빅립', 30000, 1],
     ['만천홍', 25000, 1],
   ]),
+  // 주문 목록 탭별 카드(UI 교체 P4): 배송 중·거점 도착(픽업 코드)·공동구매 모집 중(예전 방식 가게에서만 보인다).
+  sellerOrder('order-delivering', '20260928-000103', {
+    status: 'DELIVERING',
+    buyerName: '박배송',
+    deliveryPhone: '010-3456-7890',
+  }),
+  sellerOrder('order-hub-arrived', '20260928-000104', {
+    status: 'HUB_ARRIVED',
+    deliveryMethod: 'hub',
+    hubId: 'hub-0001',
+    pickupCode: '482915',
+    buyerName: '최픽업',
+    deliveryPhone: '010-4567-8901',
+  }),
+  sellerOrder('order-recruiting', '20260928-000105', {
+    status: 'RECRUITING',
+    saleType: 'group',
+    productId: 'product-1',
+    buyerName: '정공구',
+    deliveryPhone: '010-5678-9012',
+  }),
+];
+
+// 끝난 주문(완료·취소 탭, scope=archive): 첫 쪽 뒤에 다음 쪽이 있다. 다음 쪽은 늦게 답해 "불러오는 중"을 찍는다.
+const ARCHIVED_ORDERS = [
+  sellerOrder('order-delivered', '20260920-000201', {
+    status: 'DELIVERED',
+    buyerName: '김완료',
+    createdAt: '2026-09-20T01:00:00.000Z',
+    updatedAt: '2026-09-22T01:00:00.000Z',
+  }),
+  sellerOrder('order-cancelled', '20260921-000202', {
+    status: 'CANCELLED',
+    buyerName: '이취소',
+    cancelReason: '손님 요청',
+    createdAt: '2026-09-21T01:00:00.000Z',
+    updatedAt: '2026-09-21T05:00:00.000Z',
+  }),
+];
+const ARCHIVED_ORDERS_MORE = [
+  sellerOrder('order-delivered-old', '20260910-000203', {
+    status: 'REVIEWED',
+    buyerName: '오구매',
+    createdAt: '2026-09-10T01:00:00.000Z',
+    updatedAt: '2026-09-12T01:00:00.000Z',
+  }),
 ];
 
 function roundOrder(id, orderNumber, status, items, extra = {}) {
@@ -853,7 +899,16 @@ const benchmarkRoutes = [
 
 export const routes = [
   ...benchmarkRoutes,
-  ['GET', /^\/stores\/[^/]+\/orders$/, () => ({ body: SELLER_ORDERS })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/orders$/,
+    ({ url }) => {
+      if (url.searchParams.get('scope') !== 'archive') return { body: SELLER_ORDERS };
+      return url.searchParams.get('cursor')
+        ? { body: { orders: ARCHIVED_ORDERS_MORE, hasMore: false, nextCursor: null }, delay: 8000 }
+        : { body: { orders: ARCHIVED_ORDERS, hasMore: true, nextCursor: 'visual-archive-2' } };
+    },
+  ],
   // 홈의 끝난 주문 건수(완료·취소 탭). 주문 상세 경로보다 먼저 둔다(summary를 주문 id로 읽지 않게).
   [
     'GET',
@@ -864,7 +919,12 @@ export const routes = [
     'GET',
     /^\/stores\/[^/]+\/orders\/([^/]+)$/,
     ({ params: [id] }) => {
-      const o = [...SELLER_ORDERS, ...DETAIL_ONLY_ORDERS].find((x) => x.id === id);
+      const o = [
+        ...SELLER_ORDERS,
+        ...DETAIL_ONLY_ORDERS,
+        ...ARCHIVED_ORDERS,
+        ...ARCHIVED_ORDERS_MORE,
+      ].find((x) => x.id === id);
       return o ? { body: o } : { status: 404, body: { message: '주문 없음' } };
     },
   ],
@@ -1050,6 +1110,91 @@ export const screens = [
   { id: 'home', group: '판매자', title: '홈', path: '/', firestore: true },
   { id: 'onboarding', group: '판매자', title: '사업자 프로필 수정', path: '/onboarding' },
   { id: 'orders', group: '판매자', title: '주문 목록', path: '/orders' },
+  // 주문 목록 상태별(UI 교체 P4): 탭·하위 필터·날짜 직접 입력·검색·회차 필터·끝난 주문 더 보기·공동구매 모집.
+  {
+    id: 'orders-held',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 배송 보류만',
+    path: '/orders',
+    steps: [{ clickSelector: 'button[aria-label^="배송 보류 "]' }],
+  },
+  {
+    id: 'orders-waiting',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 대기 중 탭',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("대기 중")' }],
+  },
+  {
+    id: 'orders-in-delivery',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 배송 중 탭(픽업 코드)',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("배송 중")' }],
+  },
+  {
+    id: 'orders-in-delivery-hub',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 배송 중 탭 · 거점 도착',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("배송 중")' }, { click: '거점 도착' }],
+  },
+  {
+    id: 'orders-done',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 완료 탭(더 보기)',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("완료")' }],
+  },
+  {
+    id: 'orders-done-loading',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 완료 탭 · 더 불러오는 중',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("완료")' }, { click: '지난 주문 더 보기' }],
+  },
+  {
+    id: 'orders-cancelled',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 취소 탭',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("취소")' }],
+  },
+  {
+    id: 'orders-date-custom',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 날짜 직접 입력',
+    path: '/orders',
+    steps: [{ click: '직접 입력' }],
+  },
+  {
+    id: 'orders-search-empty',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 검색 결과 없음',
+    path: '/orders',
+    steps: [{ fill: { label: '주문 검색', value: '없는손님' } }],
+  },
+  {
+    id: 'orders-search-phone',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 전화번호 검색(찾지 못함)',
+    path: '/orders',
+    steps: [{ fill: { label: '주문 검색', value: '010-1234-5678' } }],
+  },
+  {
+    id: 'orders-round-filter',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 회차 주문만',
+    path: '/orders?round=round-open',
+  },
+  {
+    id: 'orders-group',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 공동구매(예전 방식 가게)',
+    path: '/orders',
+    scenario: 'legacy-store',
+    steps: [{ click: '공동구매' }],
+  },
   {
     id: 'order-contact',
     group: '판매자',
@@ -1299,6 +1444,43 @@ export const screens = [
     title: '기사 · 정지 확인(사유)',
     path: '/admin/drivers',
     steps: [{ click: '정지' }],
+    viewport: true,
+  },
+  // 어드민 판매자·소비자(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  {
+    id: 'admin-stores-all',
+    group: '어드민',
+    title: '판매자 · 전체(치운 판매자 포함)',
+    path: '/admin/stores?status=all',
+  },
+  {
+    id: 'admin-stores-no-match',
+    group: '어드민',
+    title: '판매자 · 검색 결과 없음',
+    path: '/admin/stores?keyword=%EC%97%86%EB%8A%94%EA%B0%80%EA%B2%8C',
+  },
+  {
+    id: 'admin-stores-commission-edit',
+    group: '어드민',
+    title: '판매자 · 수수료율 입력',
+    path: '/admin/stores',
+    steps: [{ clickSelector: 'button:has-text("수수료 설정"):visible' }],
+  },
+  {
+    // 상태 Select 열린 목록(Mantine Combobox ↔ Base UI Select, #719 열린 목록 기본값).
+    id: 'admin-stores-status-open',
+    group: '어드민',
+    title: '판매자 · 상태 고르기 열림',
+    path: '/admin/stores',
+    steps: [{ clickSelector: 'input[readonly]:visible' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-user-suspend',
+    group: '어드민 · 모달',
+    title: '소비자 · 정지 확인(사유)',
+    path: '/admin/users',
+    steps: [{ clickSelector: 'button:has-text("정지"):visible' }],
     viewport: true,
   },
   // 어드민 정산 — 가게 검색 Select(열림·맞는 가게 없음·고른 뒤 지우기 버튼), 더 보기 불러오는 중.
