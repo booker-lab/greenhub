@@ -42,8 +42,7 @@ export function PageHeader({
   return (
     <header
       style={{
-        backgroundColor: 'var(--color-bg)',
-        borderBottom: '1px solid var(--color-border)',
+        backgroundColor: 'var(--frame)',
         padding: '16px',
         ...(sticky ? { position: 'sticky', top: 0, zIndex: 10 } : {}),
       }}
