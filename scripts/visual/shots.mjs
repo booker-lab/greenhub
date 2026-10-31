@@ -1,12 +1,15 @@
 // 화면 자동 캡처 — start.mjs로 띄운 화면 확인 서버에서 fixtures/<app>.mjs의 screens를 모바일·태블릿·데스크톱으로 찍는다.
 //
 //   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3202] [--set benchmark]
-//                                 [--viewports mobile,tablet,desktop]
+//                                 [--viewports mobile,tablet,desktop] [--resume]
 //     --set benchmark  fixtures의 benchmarkScreens(팔도감 벤치마킹 비교 화면)를 찍는다
 //     --set compare    fixtures의 compareScreens(UI 교체 대조 화면: Mantine ↔ @greenhub/ui)를 찍는다
+//     --resume         같은 --label의 끊긴 촬영을 이어 찍는다. 기록이 있는 화면은 건너뛰고, --only로 고른 화면은 다시 찍는다.
+//                      기준 시각·화면 폭·--set이 같아야 한다(서버를 다시 띄웠다면 같은 --now로).
 //
 // 결과: %TEMP%/greenhub-visual/<app>/shots/<label>/ 아래 PNG와 manifest.json.
 // manifest에는 화면별 최종 주소·콘솔 오류·fixture 없는 API 경로와 정상 판정(soundness.mjs)이 남는다(report.mjs·diff.mjs가 읽는다).
+// manifest는 화면마다 원자적으로 저장한다(manifest-store.mjs). 끊기면 complete: false로 남고 diff·parity는 비교하지 않는다.
 // 브라우저 시계는 start.mjs가 정한 기준 시각(clock.mjs)에 고정하고, CSS 애니메이션은 멈춘 채 찍는다.
 // 정상 판정을 통과하지 못한 화면이 하나라도 있으면 종료 코드 1이다.
 import { execSync } from 'node:child_process';
@@ -17,6 +20,14 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { APPS, DEV_RESTARTS_FILE, RUNTIME_FILE } from './apps.mjs';
 import { VISUAL_NOW_ENV } from './clock.mjs';
+import {
+  expectedKeys,
+  isComplete,
+  pendingShots,
+  resumeManifest,
+  upsertShot,
+  writeJsonAtomic,
+} from './manifest-store.mjs';
 import { expectedPathOf, shotProblems } from './soundness.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -96,6 +107,8 @@ if (screenSet && !SCREEN_SETS[screenSet]) {
 }
 const allScreens = screenSet ? (fixture[SCREEN_SETS[screenSet]] ?? []) : fixture.screens;
 const screens = only.length ? allScreens.filter((s) => only.includes(s.id)) : allScreens;
+const resume = args.includes('--resume');
+const manifestFile = path.join(outDir, 'manifest.json');
 
 const { chromium } = createRequire(path.join(ROOT, 'apps/e2e/package.json'))('@playwright/test');
 
@@ -110,7 +123,8 @@ try {
   process.exit(1);
 }
 
-fs.rmSync(outDir, { recursive: true, force: true });
+// 이어 찍기면 앞선 PNG·기록을 지우지 않는다.
+if (!resume) fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
 const HARNESS_NOISE = /firebase-token|@firebase\/|net::ERR_FAILED/;
@@ -429,7 +443,7 @@ try {
   /* git 없음 */
 }
 
-const manifest = {
+const freshManifest = {
   app: appName,
   label,
   base,
@@ -437,8 +451,32 @@ const manifest = {
   createdAt: new Date().toISOString(),
   visualNow: runtime.visualNow,
   viewports: viewportNames,
+  set: screenSet || null,
+  // 이 묶음이 찍기로 한 화면(id@폭). 모두 기록되면 complete: true가 된다.
+  expected: expectedKeys(screens, viewportNames),
+  complete: false,
   shots: [],
 };
+let manifest = freshManifest;
+if (resume) {
+  const previous = fs.existsSync(manifestFile)
+    ? JSON.parse(fs.readFileSync(manifestFile, 'utf8'))
+    : null;
+  const resumed = resumeManifest(previous, freshManifest);
+  if (!resumed.manifest) {
+    console.error(`❌ 이어 찍을 수 없습니다(${manifestFile}): ${resumed.problems.join(' · ')}`);
+    process.exit(1);
+  }
+  manifest = resumed.manifest;
+  if (previous.gitSha !== gitSha) {
+    console.warn(`⚠️ 앞선 촬영과 커밋이 다릅니다: ${previous.gitSha} → ${gitSha}`);
+  }
+}
+const pending = pendingShots(screens, viewportNames, manifest, { resume, only });
+if (resume) {
+  console.log(`↪️ 이어 찍기: 기록 ${manifest.shots.length}장, 이번에 찍을 화면 ${pending.length}장`);
+}
+writeJsonAtomic(manifestFile, manifest);
 // Playwright 버전과 설치된 브라우저가 다른 환경(예: 클라우드 세션의 /opt/pw-browsers/chromium)에서는
 // GREENHUB_VISUAL_CHROMIUM으로 실행 파일을 지정한다.
 // --disable-partial-raster: Chromium은 바뀐 영역만 다시 래스터하는데, 그리는 이력에 따라 글자·둥근 모서리의
@@ -458,17 +496,21 @@ const browser = await chromium.launch({
 });
 try {
   for (const viewportName of viewportNames) {
+    const todo = pending.filter((p) => p.viewport === viewportName).map((p) => p.screen);
+    if (todo.length === 0) continue;
     const authed = await newContext(browser, viewportName);
     await login(authed);
     const guest = await newContext(browser, viewportName);
-    for (const screen of screens) {
+    for (const screen of todo) {
       const context = screen.auth === false ? guest : authed;
       const { shot, png, aria } = await shootOnce(context, screen, viewportName);
       fs.writeFileSync(path.join(outDir, shot.file), png);
       fs.writeFileSync(path.join(outDir, shot.aria), aria);
       shot.problems = shotProblems(shot, expectedPathOf(screen));
       shot.sound = shot.problems.length === 0;
-      manifest.shots.push(shot);
+      upsertShot(manifest, shot);
+      // 화면마다 저장한다. 촬영이 끊겨도 여기까지의 기록은 남는다(complete: false).
+      writeJsonAtomic(manifestFile, manifest);
       console.log(
         `${shot.sound ? '✅' : '⚠️'} ${viewportName} ${screen.id} (${shot.ms}ms)${shot.sound ? '' : ` · ${shot.problems.join(' · ')}`}`,
       );
@@ -481,12 +523,19 @@ try {
   await browser.close();
 }
 
-fs.writeFileSync(path.join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+manifest.complete = isComplete(manifest);
+writeJsonAtomic(manifestFile, manifest);
 const unsound = manifest.shots.filter((s) => !s.sound);
 console.log(`\n📁 ${outDir} (${manifest.shots.length}장, 기준 시각 ${runtime.visualNow})`);
 if (unsound.length) {
   console.error(
     `⚠️ 정상 판정을 통과하지 못한 캡처 ${unsound.length}장: ${unsound.map((s) => `${s.id}(${s.viewport})`).join(', ')}`,
+  );
+  process.exitCode = 1;
+}
+if (!manifest.complete) {
+  console.error(
+    '⚠️ 찍기로 한 화면을 다 찍지 못했습니다(complete: false). --resume로 이어 찍으세요.',
   );
   process.exitCode = 1;
 }
