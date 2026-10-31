@@ -24,12 +24,12 @@ describe('isLocalPreviewEnabled', () => {
   });
 });
 
-describe('UI 교체 대조 화면', () => {
-  const page = readFileSync(new URL('../app/dev/ui-compare/page.tsx', import.meta.url), 'utf8');
+describe('창 초점 검사 화면', () => {
+  const page = readFileSync(new URL('../app/dev/overlays/page.tsx', import.meta.url), 'utf8');
 
   it('그리기 전에 로컬 조건을 확인하고 아니면 404로 보낸다', () => {
     expect(page).toMatch(/if \(!isLocalPreviewEnabled\(\)\) notFound\(\);/);
-    expect(page.indexOf('notFound()')).toBeLessThan(page.indexOf('<UiCompare'));
+    expect(page.indexOf('notFound()')).toBeLessThan(page.indexOf('<OverlayCheck'));
   });
 
   it('요청마다 조건을 다시 읽는다(빌드 때 한 번 그린 결과를 쓰지 않는다)', () => {
