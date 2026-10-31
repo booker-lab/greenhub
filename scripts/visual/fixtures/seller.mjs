@@ -1963,6 +1963,14 @@ export const screens = [
     path: '/admin/stores?keyword=%EC%97%86%EB%8A%94%EA%B0%80%EA%B2%8C',
   },
   {
+    // 검색어 입력 → 300ms 뒤 URL 반영(지연 호출, P6-b @mantine/hooks 걷어 내기).
+    id: 'admin-stores-search',
+    group: '어드민',
+    title: '판매자 · 검색어 입력',
+    path: '/admin/stores',
+    steps: [{ fill: { label: '판매자 검색', value: '농원' } }],
+  },
+  {
     id: 'admin-stores-commission-edit',
     group: '어드민',
     title: '판매자 · 수수료율 입력',
