@@ -1,11 +1,11 @@
 'use client';
 
 import { Button } from '@greenhub/ui/components/button';
-import { useDebouncedCallback } from '@mantine/hooks';
 import { notifications } from '@mantine/notifications';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { AdminStore } from '@/hooks/useAdmin';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
 import {
   classifyAdminCommandError,
   describeAdminCommandOutcome,
