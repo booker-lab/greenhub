@@ -5,6 +5,7 @@ import type * as React from 'react';
 
 import { cn } from '../lib/utils';
 import { CloseIcon, closeButtonClassName } from './close-button';
+import { DialogPopup } from './dialog';
 
 function Sheet({ ...props }: SheetPrimitive.Root.Props) {
   return <SheetPrimitive.Root data-slot="sheet" {...props} />;
@@ -39,7 +40,8 @@ function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
 // ① 외형 유지: Mantine Drawer(모서리 16, 그림자 xl, 글자 검정, 머리 60px → 본문 16px).
 // 아래(bottom)는 소비자 OptionSheet처럼 내용 높이만큼이다. 좌우는 Mantine 기본 md 440px(좁은 화면은 화면 폭)이다.
 // 설명(SheetDescription)은 머리가 아니라 본문(SheetBody)에 둔다.
-// 초점 이동은 Base UI에 맡긴다. 여기서 focus()를 호출하지 않는다.
+// 첫 초점 이동은 Base UI에 맡긴다. 여기서 focus()를 호출하지 않는다.
+// 본체는 Dialog와 같은 DialogPopup이다: Tab·Shift+Tab이 서랍 안에서만 돌고 aria-modal="true"가 붙는다.
 function SheetContent({
   className,
   children,
@@ -53,7 +55,7 @@ function SheetContent({
   return (
     <SheetPortal>
       <SheetOverlay />
-      <SheetPrimitive.Popup
+      <DialogPopup
         data-slot="sheet-content"
         data-side={side}
         className={cn(
@@ -81,7 +83,7 @@ function SheetContent({
             <CloseIcon />
           </SheetPrimitive.Close>
         )}
-      </SheetPrimitive.Popup>
+      </DialogPopup>
     </SheetPortal>
   );
 }
@@ -102,9 +104,15 @@ function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
 }
 
 // Mantine Drawer 본문: 16px, 머리 다음이면 위 여백 0.
-function SheetBody({ className, ...props }: React.ComponentProps<'div'>) {
+// DialogBody와 같이 Base UI Description으로 그려(요소는 div) 서랍의 aria-describedby가 본문을 가리킨다.
+function SheetBody({ className, ...props }: SheetPrimitive.Description.Props) {
   return (
-    <div data-slot="sheet-body" className={cn('px-4 pb-4 first:pt-4', className)} {...props} />
+    <SheetPrimitive.Description
+      data-slot="sheet-body"
+      render={<div />}
+      className={cn('px-4 pb-4 first:pt-4', className)}
+      {...props}
+    />
   );
 }
 

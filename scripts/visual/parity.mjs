@@ -17,6 +17,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { incompleteReason } from './manifest-store.mjs';
 
 export const PARITY_KINDS = ['writes', 'portoneCalls', 'storage', 'aria'];
 
@@ -122,6 +123,9 @@ function readRecords(shotsRoot, label) {
   const file = path.join(dir, 'manifest.json');
   if (!fs.existsSync(file)) throw new Error(`캡처 기록이 없습니다: ${file}`);
   const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+  // 끊긴 촬영(complete: false)은 비교하지 않는다(예전에는 manifest가 없어 실패했다).
+  const incomplete = incompleteReason(manifest, label);
+  if (incomplete) throw new Error(incomplete);
   const records = {};
   for (const shot of manifest.shots) {
     if (!shot.aria || !Array.isArray(shot.writes)) {
