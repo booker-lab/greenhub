@@ -85,6 +85,7 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
+- 불러오는 중 버튼처럼 누른 뒤 응답을 기다리는 상태는 `steps`에 `{ scenario: '<이름>' }`을 넣어 화면을 연 뒤에 가짜 API 상황을 바꾸고(예: 셀러 `slow-writes` = 쓰기 요청 60초 지연) 버튼을 누른다. 찍고 나면 페이지를 닫으므로 기다리던 요청은 취소된다(`ERR_ABORTED`, 정상 판정 제외).
 - 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 대조 화면 `ui-compare-select`).
 - 버튼은 `{ press: '<접근성 이름>', nth }`(글자가 기호뿐이거나 같은 이름이 여러 곳인 버튼), 체크박스는 `{ check: '<접근성 이름>' }`, 앱이 스스로 주소를 바꾸는 동작(결제 완료 뒤 이동 등)은 `{ waitPath: '/order/success' }`로 기다린다.
 - **결제창 stub**(`portone: 'success' | 'cancel'`): 소비자 결제 화면은 PortOne SDK가 `window.PortOne`이 이미 있으면 CDN 스크립트를 불러오지 않는 점을 이용해 stub을 넣는다(로컬 E2E `installPortOneBrowserStub`과 같은 방식). `success`는 결제 완료, `cancel`은 결제창 취소 응답을 돌려주고, 넘긴 인자를 `manifest.json`의 `portoneCalls`에 남긴다. `start.mjs consumer`는 가짜 PortOne 공개 설정(상점 ID·카카오페이 채널 키)을 넣는다. 외부 요청은 그대로 막혀 있어 실제 결제창·결제는 일어나지 않는다.
@@ -94,6 +95,8 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 - **렌더 결정성**: 브라우저는 `--disable-partial-raster`로 띄운다. Chromium이 바뀐 영역만 다시 래스터하면 그리는 이력에 따라 글자·둥근 모서리의 안티앨리어싱이 채널 2~40만큼 달라져, 같은 커밋 두 번 촬영이 브라우저 컨텍스트마다 약 5~15% 어긋났다(2026-10-30 기사 화면 실측). 끄면 20번 중 20번 같았다.
 - `next dev`는 힙 사용량이 상한(시스템 메모리의 50%)의 80%를 넘으면 스스로 재시작한다("Server is approaching the used memory threshold, restarting..."). 한 서버로 여러 번 연달아 찍다가 재시작하면, 그 사이 찍힌 화면은 연결 오류나 덜 그려진 상태(로딩)가 된다. `start.mjs`가 재시작 횟수를 `dev-restarts.txt`에 적고 `shots.mjs`가 재시작이 걸친 화면과 그 바로 다음 화면을 정상 판정에서 뺀다("next dev 메모리 재시작 중·직후 촬영"). 그 화면만 `--only`로 다시 찍는다. 세 앱 서버와 에뮬레이터를 한 컨테이너에서 같이 띄우면 더 자주 일어난다. 그래서 `start.mjs seller`는 다른 앱 하네스가 떠 있으면 시작하지 않는다(`--allow-concurrent`로 무시). 판매자가 떠 있을 때 다른 앱을 띄우면 경고만 한다.
 - 캡처는 `%TEMP%\greenhub-visual\<app>\shots\<label>\`에 PNG와 `manifest.json`으로 남는다.
+  - `manifest.json`은 화면마다 원자적으로(임시 파일 → 이름 바꾸기) 저장한다. 촬영이 끊기면 그때까지의 기록이 `complete: false`로 남고, `diff.mjs`·`parity.mjs`는 끝나지 않은 묶음을 비교하지 않는다(일부만 같다고 통과시키지 않는다).
+  - 끊긴 촬영은 서버를 같은 `--now`로 띄운 뒤 `shots.mjs <app> --label <같은 label> --resume`으로 이어 찍는다. 기록이 있는 화면은 건너뛴다. `--resume --only <id,...>`는 고른 화면만 같은 묶음 안에서 다시 찍는다(next dev 재시작이 걸친 화면 등). 기준 시각·화면 폭·`--set`이 다르면 이어 찍지 않는다.
   - `manifest.json`에는 화면별 최종 주소, 콘솔 오류, fixture가 없는 API 경로가 함께 기록된다.
 - 작업 전 화면은 main worktree에서 같은 명령을 `--label before`로 찍는다.
 - Claude가 `<폴더>`를 claude.ai 아티팩트로 게시한다(`db` 기능 사용).
@@ -128,6 +131,24 @@ node scripts/visual/parity.mjs consumer --before before --after after --allow pa
 - 화면·폭마다 `writes`·`portoneCalls`·`storage`·`aria`를 비교한다. 결제마다 새로 만드는 UUID와 실제 시각(ISO)은 자리표시로 바꿔 비교한다.
 - 통과 조건: 모두 같거나, 다른 항목이 허용 목록(`{ "screen", "viewport"?, "kind", "reason" }`, kind는 위 넷 중 하나)에 사유와 함께 있다. 한쪽에만 있는 화면·기록·정상 촬영 판정 실패는 실패다. 판정은 `parity.spec.mjs`(`node --test scripts/visual/parity.spec.mjs`).
 
+## 창 초점 순회 검사
+
+```bash
+node scripts/visual/focus-trap.mjs seller                          # steps로 여는 창 전부, 세 폭
+node scripts/visual/focus-trap.mjs driver --only modal-hold --viewports desktop
+node scripts/visual/focus-trap.mjs seller --set compare           # UI 교체 대조 화면(?open=dialog·sheet 등 주소로 연 창 포함)
+```
+
+- 서버를 띄운 채로 실행한다(next dev만, `--prod`는 지원하지 않는다). steps가 있는 화면 중 steps 뒤에 창(`role=dialog`·`alertdialog`)이 열린 화면을 검사한다. id가 `modal-`로 시작하는데 창이 열리지 않으면 실패다.
+- 판정(하나라도 어기면 종료 코드 1):
+  - 창이 열린 뒤 초점을 받은 요소(`focusin`)가 모두 창 안이다. 다음 프레임에 창 안으로 돌아가는 Base UI 초점 가드(`span[data-base-ui-focus-guard]`)가 잠깐 받은 초점도 실패로 센다.
+  - Tab만, Shift+Tab만 눌러 각각 출발 요소로 돌아온다(한 바퀴). 누를 때마다 두 프레임 뒤 초점이 창 안이다.
+  - 창이 열린 직후 첫 초점은 창 안 `data-autofocus` 요소, 없으면 창 안 첫 Tab 대상이다.
+  - 창에 `aria-modal="true"`가 있고, 본문(`data-slot=dialog-body`·`sheet-body`)이 있으면 `aria-describedby`가 창 안 요소를 가리킨다.
+  - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다. 주소로 연 창(`--set compare`)은 여는 요소가 없고 닫기 처리기도 없어 이 항목만 빼고 결과에 기록한다.
+- 결과: `%TEMP%\greenhub-visual\<app>\focus\<label>.json`(화면·폭마다 Tab·Shift+Tab으로 거친 요소 목록 포함).
+- 실측(2026-11-01): Base UI 교체 직후 `main`(b9c2f5a)은 판매자 창 21개 모두 실패했다(창마다 초점 가드 2번, `aria-modal`·`aria-describedby` 없음). 원인과 수정은 `packages/ui/src/components/dialog.tsx` `DialogPopup` 주석.
+
 ## 작업 전·후 픽셀 비교
 
 ```bash
@@ -157,6 +178,8 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `apps.mjs` | 앱별 포트 등 공통 설정 |
 | `clock.mjs` | 기준 시각(캡처 시계·fixture 일정) |
 | `shots.mjs` | 화면 자동 캡처(Playwright, `apps/e2e`의 설치본 사용) |
+| `steps.mjs` | 화면 안 동작(steps) 실행기(`shots.mjs`·`focus-trap.mjs` 공용) |
+| `focus-trap.mjs` | 창 초점 순회·aria-modal·초점 복귀 검사 |
 | `soundness.mjs` | 정상 촬영 판정 |
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
 | `parity.mjs` | 작업 전·후 쓰기 요청·결제창 인자·저장소·접근성 트리 비교(`parity.spec.mjs`) |
