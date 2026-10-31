@@ -33,6 +33,8 @@ const buttonVariants = cva(
         // Mantine outline yellow·green(yellow-6·green-6 테두리·글자), light green(green-1 면·green-9 글자).
         'outline-warning': 'border-[#fab005] bg-transparent text-[#fab005] hover:bg-[#fab005]/5',
         'outline-green': 'border-[#40c057] bg-transparent text-[#40c057] hover:bg-[#40c057]/5',
+        // Mantine outline red(red-6 테두리·글자).
+        'outline-destructive': 'border-[#fa5252] bg-transparent text-[#fa5252] hover:bg-[#fa5252]/5',
         'light-green': 'bg-[#d3f9d8] text-[#2b8a3e]',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
