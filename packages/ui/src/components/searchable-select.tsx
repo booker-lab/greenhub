@@ -7,7 +7,7 @@ import { popupPositionClassName, useDocumentAnchor } from '../lib/use-document-a
 import { cn } from '../lib/utils';
 import { CloseIcon } from './close-button';
 import { type InputSize, inputClassName, inputSizeClassName } from './input';
-import { OptionCheck, SelectChevron, type SelectItem } from './select';
+import { listboxLabel, OptionCheck, SelectChevron, type SelectItem } from './select';
 
 // ① 외형 유지: Mantine Select searchable. 닫힌 모양·목록은 Select(검색 없음)와 같고, 입력칸에 글자를 적어 거른다.
 // Mantine 동작을 따른다.
@@ -72,6 +72,7 @@ function SearchableSelect({
   const [keyboardHighlight, setKeyboardHighlight] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const anchor = useDocumentAnchor(rootRef);
+  const [listLabel, setListLabel] = useState(ariaLabel);
 
   useEffect(() => {
     latestLabelRef.current = selectedLabel;
@@ -102,8 +103,10 @@ function SearchableSelect({
         if (details.reason === 'input-change') setSearch(next);
       }}
       onOpenChange={(open) => {
-        if (open) anchor.measure();
-        else setSearch(latestLabelRef.current);
+        if (open) {
+          anchor.measure();
+          setListLabel(listboxLabel(rootRef.current, ariaLabel));
+        } else setSearch(latestLabelRef.current);
       }}
       onItemHighlighted={(item, details) =>
         setKeyboardHighlight(item !== undefined && details.reason === 'keyboard')
@@ -169,7 +172,10 @@ function SearchableSelect({
               !nothingFoundMessage && filtered.length === 0 && 'hidden',
             )}
           >
+            {/* 목록 이름은 Select와 같다(listboxLabel). Base UI가 입력칸 옆에 넣는 숨은 닫기 버튼의 이름 "Dismiss"는
+                Base UI 1.9 ComboboxInternalDismissButton에 고정돼 있고 바꾸는 속성·로케일이 없다. */}
             <ComboboxPrimitive.List
+              aria-label={listLabel}
               className="overflow-y-auto empty:hidden"
               style={{ maxHeight: maxDropdownHeight }}
             >
