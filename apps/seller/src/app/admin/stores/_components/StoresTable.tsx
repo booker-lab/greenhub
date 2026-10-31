@@ -2,7 +2,7 @@
 
 import { Badge } from '@greenhub/ui/components/badge';
 import { Button } from '@greenhub/ui/components/button';
-import { Input } from '@greenhub/ui/components/input';
+import { Input, InputSection } from '@greenhub/ui/components/input';
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
   formatRate,
@@ -180,25 +180,29 @@ export function StoresTable({
     editId === store.id ? (
       <div className={`${GROUP} justify-start gap-2.5`}>
         {/* % 단위 입력(예: 5 = 5%). 저장할 때 0~1 값으로 바꾼다(_lib parseRate). */}
-        <Input
-          inputMode="decimal"
-          value={rateInput}
-          onChange={(event) => {
-            const accepted = acceptRateInput(event.currentTarget.value);
-            if (accepted !== null) onRateInput(accepted);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
-            event.preventDefault();
-            onRateInput(stepRate(rateInput, event.key === 'ArrowUp' ? 1 : -1));
-          }}
-          placeholder="5"
-          rightSection="%"
-          aria-label="수수료율(%)"
-          size="xs"
-          className="rounded-[4px]"
-          rootClassName="w-[104px]"
-        />
+        {/* Mantine NumberInput xs의 오른쪽 칸은 17px(--ni-right-section-width-xs)이다. */}
+        <div className="relative w-[104px]">
+          <Input
+            inputMode="decimal"
+            value={rateInput}
+            onChange={(event) => {
+              const accepted = acceptRateInput(event.currentTarget.value);
+              if (accepted !== null) onRateInput(accepted);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+              event.preventDefault();
+              onRateInput(stepRate(rateInput, event.key === 'ArrowUp' ? 1 : -1));
+            }}
+            placeholder="5"
+            aria-label="수수료율(%)"
+            size="xs"
+            className="rounded-[4px] pe-[17px]"
+          />
+          <InputSection side="right" size="xs" className="w-[17px] rounded-e-[4px]">
+            %
+          </InputSection>
+        </div>
         <Button
           onClick={() => onSave(store.id)}
           disabled={saving}

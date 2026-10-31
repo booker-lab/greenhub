@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
-import { Input } from '@greenhub/ui/components/input';
+import { Input, InputSection } from '@greenhub/ui/components/input';
 import { Loader } from '@greenhub/ui/components/loader';
 import { NativeSelect } from '@greenhub/ui/components/native-select';
 import { NumberInput } from '@greenhub/ui/components/number-input';
@@ -972,7 +972,7 @@ export function UiCompare({ open }: { open?: string }) {
           }
         />
         <Row
-          name="NumberInput xs sm % ↔ Input xs rightSection"
+          name="NumberInput xs sm % ↔ Input xs + 17px 칸"
           mantine={
             <MNumberInput
               value="5"
@@ -984,14 +984,12 @@ export function UiCompare({ open }: { open?: string }) {
             />
           }
           ui={
-            <Input
-              value="5"
-              onChange={() => {}}
-              rightSection="%"
-              size="xs"
-              className="rounded-[4px]"
-              rootClassName="w-[104px]"
-            />
+            <div className="relative w-[104px]">
+              <Input value="5" onChange={() => {}} size="xs" className="rounded-[4px] pe-[17px]" />
+              <InputSection side="right" size="xs" className="w-[17px] rounded-e-[4px]">
+                %
+              </InputSection>
+            </div>
           }
         />
         <Row

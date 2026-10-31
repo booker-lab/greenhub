@@ -25,7 +25,7 @@ interface StoresFiltersProps {
 }
 
 // ① 외형 유지(UI 교체 P2b): Mantine Group(gap sm, align end)·TextInput·Select(radius md)와 같은 값.
-// 정렬 칸은 Mantine hiddenFrom="sm"(48em)과 같은 경계에서 숨는다.
+// Field는 기본 w-full이라 w-auto로 Mantine 입력 상자(폭 없음)처럼 둔다. 정렬 칸은 Mantine hiddenFrom="sm"(48em)과 같은 경계에서 숨는다.
 export function StoresFilters({
   keyword,
   status,
@@ -38,7 +38,7 @@ export function StoresFilters({
 }: StoresFiltersProps) {
   return (
     <div className="mb-4 flex flex-row flex-wrap items-end justify-start gap-3">
-      <Field style={{ flex: 1, minWidth: 180 }}>
+      <Field className="w-auto" style={{ flex: 1, minWidth: 180 }}>
         <FieldLabel htmlFor="stores-keyword">판매자 검색</FieldLabel>
         <Input
           id="stores-keyword"
@@ -48,7 +48,7 @@ export function StoresFilters({
           className="rounded-[8px]"
         />
       </Field>
-      <Field style={{ minWidth: 120 }}>
+      <Field className="w-auto" style={{ minWidth: 120 }}>
         <FieldLabel htmlFor="stores-status">상태</FieldLabel>
         <Select
           id="stores-status"
