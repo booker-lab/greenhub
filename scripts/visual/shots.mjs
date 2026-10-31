@@ -3,7 +3,6 @@
 //   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3202] [--set benchmark]
 //                                 [--viewports mobile,tablet,desktop] [--resume]
 //     --set benchmark  fixtures의 benchmarkScreens(팔도감 벤치마킹 비교 화면)를 찍는다
-//     --set compare    fixtures의 compareScreens(UI 교체 대조 화면: Mantine ↔ @greenhub/ui)를 찍는다
 //     --resume         같은 --label의 끊긴 촬영을 이어 찍는다. 기록이 있는 화면은 건너뛰고, --only로 고른 화면은 다시 찍는다.
 //                      기준 시각·화면 폭·--set이 같아야 한다(서버를 다시 띄웠다면 같은 --now로).
 //
@@ -99,7 +98,7 @@ const outDir = option('out', path.join(os.tmpdir(), 'greenhub-visual', appName, 
 const fixture = await import(`./fixtures/${appName}.mjs`);
 const { browserStorage, wishStorage } = fixture;
 const screenSet = option('set', '');
-const SCREEN_SETS = { benchmark: 'benchmarkScreens', compare: 'compareScreens' };
+const SCREEN_SETS = { benchmark: 'benchmarkScreens' };
 if (screenSet && !SCREEN_SETS[screenSet]) {
   console.error(
     `❌ 지원하지 않는 화면 묶음: ${screenSet} (가능: ${Object.keys(SCREEN_SETS).join(', ')})`,
