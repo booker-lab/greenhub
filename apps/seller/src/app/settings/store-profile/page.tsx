@@ -1,17 +1,54 @@
 'use client';
 
 import type { StoreProfileExtras } from '@greenhub/shared';
-import { Button, Checkbox, Container, Paper, Stack, Text, Textarea, TextInput } from '@mantine/core';
+import { Checkbox } from '@greenhub/ui/components/checkbox';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
+import { Textarea } from '@greenhub/ui/components/textarea';
 import { notify } from '@/components/AppToaster';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import { useTokenRef } from '@/lib/use-token-ref';
+import { LoadingButton } from '../_components/LoadingButton';
+
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·Paper(radius lg·shadow xs·p md)·
+// Stack(gap sm)·Text(sm = 15px·줄 높이 1.45)·TextInput·Textarea(autosize, 라벨)·Checkbox green(green-6)과 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const TEXT_SM = 'm-0 p-0 text-sm';
+const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const STACK = 'flex flex-col items-stretch justify-start gap-3';
+const GREEN = '#40c057';
+
+/** Mantine TextInput(label)과 같은 흐름: 라벨 → 입력칸. */
+function LabeledInput({ label, ...props }: { label: string } & React.ComponentProps<typeof Input>) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Input id={id} {...props} />
+    </Field>
+  );
+}
+
+/** Mantine Textarea(label, autosize)와 같은 흐름: 라벨 → 입력칸. */
+function LabeledTextarea({
+  label,
+  ...props
+}: { label: string } & React.ComponentProps<typeof Textarea>) {
+  const id = useId();
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Textarea id={id} {...props} />
+    </Field>
+  );
+}
 
 // 가게 소개(공개 페이지)·품질 보장 문구·남은 수량 공개 여부. 팔도감 벤치마킹 비교 기능.
 
@@ -97,23 +134,23 @@ export default function StoreProfileSettingsPage() {
   return (
     <PageShell>
       <PageHeader title="가게 소개·품질 보장" />
-      <Container size="sm" px="md" py="md">
+      <div className="mx-auto max-w-[720px] px-4 py-4">
         {!form ? (
           <LoadingState />
         ) : (
-          <Stack gap="sm">
+          <div className={STACK}>
             {store && (
-              <Paper radius="lg" shadow="xs" p="md">
-                <Stack gap="sm">
-                  <Text fw={700}>소비자에게 보이는 가게 소개</Text>
-                  <TextInput
+              <div className={PAPER}>
+                <div className={STACK}>
+                  <p className={`${TEXT} font-bold`}>소비자에게 보이는 가게 소개</p>
+                  <LabeledInput
                     label="한 줄 소개"
                     maxLength={60}
                     placeholder="예: 매주 경매에서 직접 골라 보내는 이천 꽃집"
                     value={form.intro}
                     onChange={(event) => patch({ intro: event.currentTarget.value })}
                   />
-                  <Textarea
+                  <LabeledTextarea
                     label="고르는 기준·매입 이야기"
                     maxLength={600}
                     autosize
@@ -121,72 +158,71 @@ export default function StoreProfileSettingsPage() {
                     value={form.story}
                     onChange={(event) => patch({ story: event.currentTarget.value })}
                   />
-                  <TextInput
+                  <LabeledInput
                     label="지역"
                     maxLength={30}
                     placeholder="예: 경기 이천"
                     value={form.region}
                     onChange={(event) => patch({ region: event.currentTarget.value })}
                   />
-                  <TextInput
+                  <LabeledInput
                     label="운영 시작 연도"
                     inputMode="numeric"
                     maxLength={4}
                     value={form.sinceYear}
                     onChange={(event) => patch({ sinceYear: event.currentTarget.value.replace(/[^0-9]/g, '') })}
                   />
-                </Stack>
-              </Paper>
+                </div>
+              </div>
             )}
 
             {guarantee && (
-              <Paper radius="lg" shadow="xs" p="md">
-                <Stack gap="sm">
+              <div className={PAPER}>
+                <div className={STACK}>
                   <Checkbox
-                    color="green"
+                    color={GREEN}
                     label="품질 보장을 보여 줘요 (보장 대상 상품에만 표시)"
                     checked={form.guaranteeEnabled}
-                    onChange={(event) => patch({ guaranteeEnabled: event.currentTarget.checked })}
+                    onCheckedChange={(guaranteeEnabled) => patch({ guaranteeEnabled })}
                   />
-                  <TextInput
+                  <LabeledInput
                     label="보장 제목"
                     maxLength={40}
                     value={form.guaranteeTitle}
                     onChange={(event) => patch({ guaranteeTitle: event.currentTarget.value })}
                   />
-                  <Textarea
+                  <LabeledTextarea
                     label="보장 내용 (한 줄에 하나, 6줄까지)"
                     autosize
                     minRows={3}
                     value={form.guaranteeTerms}
                     onChange={(event) => patch({ guaranteeTerms: event.currentTarget.value })}
                   />
-                  <Text size="sm" c="var(--color-text-secondary)">
+                  <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
                     실제로 지킬 수 있는 약속만 써 주세요. 소비자 화면에 그대로 보여요. &quot;받은 날만 환불&quot;처럼
                     기한을 줄이는 문구는 쓰지 마세요.
-                  </Text>
-                </Stack>
-              </Paper>
+                  </p>
+                </div>
+              </div>
             )}
 
             {demand && (
-              <Paper radius="lg" shadow="xs" p="md">
+              <div className={PAPER}>
                 <Checkbox
-                  color="green"
+                  color={GREEN}
                   label="남은 수량과 이번 회차 주문 수를 소비자에게 보여 줘요"
                   checked={form.showDemandSignals}
-                  onChange={(event) => patch({ showDemandSignals: event.currentTarget.checked })}
+                  onCheckedChange={(showDemandSignals) => patch({ showDemandSignals })}
                 />
-              </Paper>
+              </div>
             )}
 
             {error && (
-              <Text role="alert" size="sm" c="var(--color-danger)">
+              <p role="alert" className={TEXT_SM} style={{ color: 'var(--color-danger)' }}>
                 {error}
-              </Text>
+              </p>
             )}
-            <Button
-              radius="xl"
+            <LoadingButton
               size="md"
               loading={saving}
               onClick={async () => {
@@ -209,10 +245,10 @@ export default function StoreProfileSettingsPage() {
               }}
             >
               저장
-            </Button>
-          </Stack>
+            </LoadingButton>
+          </div>
         )}
-      </Container>
+      </div>
     </PageShell>
   );
 }

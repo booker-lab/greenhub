@@ -1,6 +1,5 @@
 'use client';
 
-import { Box, Group, Text, Title } from '@mantine/core';
 import { notify } from '@/components/AppToaster';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -68,11 +67,12 @@ export default function AdminInviteClient() {
     void copy(lastToken.token);
   };
 
+  // ① 외형 유지(UI 교체 P2b): Mantine Group·Title order 4(18px·800·줄 높이 1.45)·Text와 같은 값.
   return (
-    <Box>
-      <Group justify="space-between" mb="md">
-        <Title order={4}>판매자 초대 링크</Title>
-      </Group>
+    <div>
+      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">판매자 초대 링크</h4>
+      </div>
 
       <InviteGenerator
         generating={generating}
@@ -87,16 +87,16 @@ export default function AdminInviteClient() {
         onCopy={handleCopy}
       />
 
-      <Text
+      <p
+        className="m-0 mb-3 p-0 text-base"
         style={{
           fontSize: 'var(--font-size-sm)',
           fontWeight: 'var(--fw-medium)',
           color: 'var(--color-text-secondary)',
         }}
-        mb="sm"
       >
         발급 내역
-      </Text>
+      </p>
       <InviteHistoryTable
         invites={invites}
         loading={loading}
@@ -108,9 +108,9 @@ export default function AdminInviteClient() {
         onRevoke={setPendingRevoke}
       />
       {cap !== null && !loading && error === null && (
-        <Text size="xs" mt="xs" style={{ color: 'var(--color-text-secondary)' }}>
+        <p className="m-0 mt-2.5 p-0 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
           {describeListCap(cap)}
-        </Text>
+        </p>
       )}
       <ManualCopyModal link={manualLink} onClose={closeManual} />
       <ConfirmModal
@@ -126,6 +126,6 @@ export default function AdminInviteClient() {
           if (revokingToken === null) setPendingRevoke(null);
         }}
       />
-    </Box>
+    </div>
   );
 }

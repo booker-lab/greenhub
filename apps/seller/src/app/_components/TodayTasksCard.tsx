@@ -1,11 +1,15 @@
 'use client';
 
 import type { Order, Product } from '@greenhub/shared';
-import { Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { DashboardCard } from '@/components/DashboardCard';
 import { buildTodayTasks } from './today-tasks';
+
+// ① 외형 유지(UI 교체 P4): Mantine Text·Stack·UnstyledButton과 같은 값을 Tailwind로 그린다.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 
 /**
  * 홈 최상단 "오늘 할 일" 체크리스트.
@@ -36,7 +40,8 @@ export function TodayTasksCard({
   return (
     <DashboardCard title="오늘 할 일">
       {showProductWarning && (
-        <Text
+        <p
+          className={TEXT}
           role={productsError ? 'alert' : 'status'}
           style={{
             fontSize: 'var(--font-size-sm)',
@@ -47,23 +52,29 @@ export function TodayTasksCard({
           {productsError
             ? '상품 정보를 불러오지 못했습니다. 비활성 상품 점검을 건너뜁니다.'
             : '상품 상태 확인 중… 비활성 상품 점검을 잠시 건너뜁니다.'}
-        </Text>
+        </p>
       )}
       {tasks.length === 0 && productsTrustworthy ? (
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        >
           오늘 할 일을 모두 마쳤어요
-        </Text>
+        </p>
       ) : tasks.length === 0 && !productsTrustworthy ? (
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        >
           주문 할 일은 없습니다.
-        </Text>
+        </p>
       ) : (
-        <Stack gap={0}>
+        <div className="flex flex-col items-stretch justify-start gap-0">
           {tasks.map((t, i) => (
-            <UnstyledButton
+            <Link
               key={t.key}
-              component={Link}
               href={t.href}
+              className={UNSTYLED_BUTTON}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -82,7 +93,8 @@ export function TodayTasksCard({
                   flexShrink: 0,
                 }}
               />
-              <Text
+              <p
+                className={TEXT}
                 style={{
                   flex: 1,
                   fontSize: 'var(--font-size-sm)',
@@ -91,11 +103,11 @@ export function TodayTasksCard({
                 }}
               >
                 {t.label}
-              </Text>
+              </p>
               <ChevronRight size={16} color="var(--color-text-disabled)" />
-            </UnstyledButton>
+            </Link>
           ))}
-        </Stack>
+        </div>
       )}
     </DashboardCard>
   );

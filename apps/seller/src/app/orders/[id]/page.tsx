@@ -1,7 +1,7 @@
 'use client';
 
 import { readRouteParam } from '@greenhub/shared';
-import { Box, Button, Container, Stack, Text, UnstyledButton } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import type { ReactNode } from 'react';
@@ -27,9 +27,16 @@ import { useOrderOperations } from './_hooks/useOrderOperations';
 import { READONLY_STATUSES } from './_lib';
 import { holdReleaseMessage, resolveOrderDetailActions } from './order-actions';
 
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Stack·Text(p, 여백 0, 줄 높이 1.55)·
+// UnstyledButton과 같은 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+const CONTAINER = 'mx-auto max-w-[720px] px-4';
+
 function DetailStatusBox({ children }: { children: ReactNode }) {
   return (
-    <Box
+    <div
       style={{
         minHeight: '100vh',
         backgroundColor: 'var(--color-surface-muted)',
@@ -38,12 +45,10 @@ function DetailStatusBox({ children }: { children: ReactNode }) {
         justifyContent: 'center',
       }}
     >
-      <Container size="sm" px="md" py="md">
-        <Stack gap="sm" align="center">
-          {children}
-        </Stack>
-      </Container>
-    </Box>
+      <div className={`${CONTAINER} py-4`}>
+        <div className="flex flex-col items-center gap-3">{children}</div>
+      </div>
+    </div>
   );
 }
 
@@ -56,13 +61,21 @@ export default function OrderDetailPage() {
   if (!orderId) {
     return (
       <DetailStatusBox>
-        <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}
+        >
           주문 주소가 올바르지 않습니다.
-        </Text>
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        </p>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        >
           주문 목록에서 다시 선택해 주세요.
-        </Text>
-        <UnstyledButton
+        </p>
+        <button
+          type="button"
+          className={UNSTYLED_BUTTON}
           onClick={() => router.back()}
           style={{
             color: 'var(--color-primary-dark)',
@@ -71,7 +84,7 @@ export default function OrderDetailPage() {
           }}
         >
           돌아가기
-        </UnstyledButton>
+        </button>
       </DetailStatusBox>
     );
   }
@@ -144,16 +157,22 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
   if (view === 'AUTH_FAILED') {
     return (
       <DetailStatusBox>
-        <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}
+        >
           {SELLER_ORDER_DETAIL_AUTH_ERROR}
-        </Text>
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        </p>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        >
           로그인 상태 확인 후 다시 시도해 주세요.
-        </Text>
-        <Button onClick={refresh} size="sm" radius="xl">
-          다시 시도
-        </Button>
-        <UnstyledButton
+        </p>
+        <Button onClick={refresh}>다시 시도</Button>
+        <button
+          type="button"
+          className={UNSTYLED_BUTTON}
           onClick={() => router.back()}
           style={{
             color: 'var(--color-primary-dark)',
@@ -162,7 +181,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
           }}
         >
           돌아가기
-        </UnstyledButton>
+        </button>
       </DetailStatusBox>
     );
   }
@@ -170,18 +189,24 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
   if (view === 'READ_FAILED') {
     return (
       <DetailStatusBox>
-        <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}
+        >
           주문을 불러오지 못했습니다.
-        </Text>
+        </p>
         {detailError && (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
             {detailError}
-          </Text>
+          </p>
         )}
-        <Button onClick={refresh} size="sm" radius="xl">
-          다시 시도
-        </Button>
-        <UnstyledButton
+        <Button onClick={refresh}>다시 시도</Button>
+        <button
+          type="button"
+          className={UNSTYLED_BUTTON}
           onClick={() => router.back()}
           style={{
             color: 'var(--color-primary-dark)',
@@ -190,14 +215,14 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
           }}
         >
           돌아가기
-        </UnstyledButton>
+        </button>
       </DetailStatusBox>
     );
   }
 
   if (view === 'NOT_FOUND' || !order) {
     return (
-      <Box
+      <div
         style={{
           minHeight: '100vh',
           backgroundColor: 'var(--color-surface-muted)',
@@ -224,7 +249,9 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
           }
           text="주문을 찾을 수 없습니다"
           action={
-            <UnstyledButton
+            <button
+              type="button"
+              className={UNSTYLED_BUTTON}
               onClick={() => router.back()}
               style={{
                 color: 'var(--color-primary-dark)',
@@ -233,10 +260,10 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
               }}
             >
               돌아가기
-            </UnstyledButton>
+            </button>
           }
         />
-      </Box>
+      </div>
     );
   }
 
@@ -262,15 +289,20 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
     <PageShell paddingBottom={showFooter ? 200 : 96}>
       <PageHeader title="주문 상세" onBack={() => router.back()} />
 
-      <Container size="sm" px="md" py="md">
-        <Stack gap="sm">
-          <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div className={`${CONTAINER} py-4`}>
+        <div className="flex flex-col gap-3">
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             {refreshing ? (
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+              <p
+                className={TEXT}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              >
                 최신 상태 확인 중…
-              </Text>
+              </p>
             ) : (
-              <UnstyledButton
+              <button
+                type="button"
+                className={UNSTYLED_BUTTON}
                 onClick={refresh}
                 style={{
                   color: 'var(--color-primary-dark)',
@@ -278,11 +310,11 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                 }}
               >
                 새로고침
-              </UnstyledButton>
+              </button>
             )}
-          </Box>
+          </div>
           {isStale && (
-            <Box
+            <div
               style={{
                 border: '1px solid var(--color-border)',
                 borderRadius: 8,
@@ -293,10 +325,15 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                 gap: 8,
               }}
             >
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              <p
+                className={TEXT}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+              >
                 {reconcileMessage ?? '최신 주문 정보를 확인하지 못했습니다.'}
-              </Text>
-              <UnstyledButton
+              </p>
+              <button
+                type="button"
+                className={UNSTYLED_BUTTON}
                 onClick={reconcile}
                 style={{
                   color: 'var(--color-primary-dark)',
@@ -305,8 +342,8 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                 }}
               >
                 다시 확인
-              </UnstyledButton>
-            </Box>
+              </button>
+            </div>
           )}
           <OrderInfoSection order={order} productName={productName} groupConfig={groupConfig} />
           <OrderOperationsSection
@@ -320,12 +357,12 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
           />
 
           {actionError && (
-            <Text
+            <p
+              className={`${TEXT} text-center`}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-              ta="center"
             >
               {actionError}
-            </Text>
+            </p>
           )}
 
           {showPrepareForm && (
@@ -351,12 +388,12 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
               onRefunded={handleReconciled}
             />
           )}
-        </Stack>
-      </Container>
+        </div>
+      </div>
 
       {/* 액션 버튼 — BottomNav 위에 고정 (D4) */}
       {showFooter && (
-        <Box
+        <div
           style={{
             position: 'fixed',
             left: 0,
@@ -367,15 +404,14 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
             zIndex: 20,
           }}
         >
-          <Container size="sm" px="md" py="sm">
-            <Stack gap="xs">
+          <div className={`${CONTAINER} py-3`}>
+            <div className="flex flex-col gap-2.5">
               {canPrepare && (
                 <Button
                   onClick={() => setShowPrepareForm(true)}
                   disabled={actionLoading}
-                  fullWidth
                   size="md"
-                  radius="xl"
+                  className="w-full"
                   style={{
                     backgroundColor: 'var(--color-primary)',
                     fontWeight: 'var(--fw-medium)',
@@ -388,9 +424,8 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                 <Button
                   onClick={handleShipParcel}
                   disabled={actionLoading}
-                  fullWidth
                   size="md"
-                  radius="xl"
+                  className="w-full"
                   style={{
                     backgroundColor: 'var(--color-primary)',
                     fontWeight: 'var(--fw-medium)',
@@ -406,9 +441,8 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                     setShowReleaseConfirm(true);
                   }}
                   disabled={actionLoading}
-                  fullWidth
                   size="md"
-                  radius="xl"
+                  className="w-full"
                   style={{
                     backgroundColor: 'var(--color-primary)',
                     fontWeight: 'var(--fw-medium)',
@@ -424,11 +458,9 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                     setShowHoldModal(true);
                   }}
                   disabled={actionLoading}
-                  fullWidth
                   size="md"
-                  radius="xl"
-                  variant="outline"
-                  color="gray"
+                  variant="outline-gray"
+                  className="w-full"
                 >
                   배송 보류
                 </Button>
@@ -437,18 +469,16 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                 <Button
                   onClick={() => setShowCancelModal(true)}
                   disabled={actionLoading}
-                  fullWidth
                   size="md"
-                  radius="xl"
-                  variant="outline"
-                  color="red"
+                  variant="outline-destructive"
+                  className="w-full"
                 >
                   {isHeld ? '주문 취소·환불' : '강제 취소'}
                 </Button>
               )}
-            </Stack>
-          </Container>
-        </Box>
+            </div>
+          </div>
+        </div>
       )}
 
       <CancelOrderModal
