@@ -17,9 +17,15 @@ const badgeVariants = cva(
         outline: 'border-primary bg-transparent text-brand-ink',
         // Mantine variant="outline" color="gray"(gray-6 테두리·글자).
         'outline-gray': 'border-[#868e96] bg-transparent text-[#868e96]',
+        // Mantine variant="outline" color="yellow"·"red"(yellow-6·red-6 테두리·글자).
+        'outline-warning': 'border-[#fab005] bg-transparent text-[#fab005]',
+        'outline-destructive': 'border-[#fa5252] bg-transparent text-[#fa5252]',
         warning: 'bg-status-warning text-status-warning-foreground',
         secondary: 'bg-[#f1f3f5] text-[#212529]',
         destructive: 'bg-[#ffe3e3] text-[#c92a2a]',
+        // Mantine filled red(red-6 면·흰 글자), light orange(orange-1 면·orange-9 글자).
+        'destructive-filled': 'bg-[#fa5252] text-white',
+        'light-orange': 'bg-[#ffe8cc] text-[#d9480f]',
         ghost: 'bg-transparent text-foreground hover:bg-muted',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },

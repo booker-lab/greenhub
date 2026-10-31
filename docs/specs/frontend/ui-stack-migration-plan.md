@@ -273,7 +273,21 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - `Textarea` autosize: Mantine Autosize와 같이 숨긴 textarea의 정수 `scrollHeight`로 글 높이·한 줄 높이를 잰다(자리표시가 있으면 빈 칸도 자리표시로 잰다). 줄 높이 계산값(15px × 1.55 = 23.25)을 곱하면 Mantine(한 줄 23)보다 0.5px 커져 확인창 전체가 반 픽셀 움직였다.
   - 배송 후 환불 사유 라디오는 Mantine Radio(sm) 계산값으로 화면 안에 그린다(기사 앱 `RadioGroupField`와 같은 값).
   - 촬영 목록에 `modal-admin-refund`·`modal-admin-post-delivery-refund`·`modal-admin-post-delivery-refund-filled`(사유·메모 입력)를, 어드민 주문 fixture에 회차 배송 완료 주문(`R-DELIVERED`)을 더했다. 기준은 Mantine 확인창이 남은 `main` e93322d(#712 전)에 같은 fixture를 넣고 찍었다(#712는 그 커밋과 판매자 153장이 같음을 증명했다).
+- 어드민 주문 구현(2026-10-31): `admin/orders`의 목록(카드·표·배지·강제환불·배송 후 환불 버튼)·필터·머리 글자에서 `@mantine/core`를 걷었다. `@mantine/notifications`와 공용 `LoadMoreFooter`(기사 탭과 같이 씀)는 남았다. 환불 확인창은 #714에서 바꿨다.
+  - `packages/ui` 추가: `SearchableSelect`(Base UI Combobox. Mantine Select searchable과 같은 동작: 고른 이름이면 전체 목록, 글자로 거름, 맞는 항목 없음 글자, 닫히면 고른 이름으로 되돌림, 고른 항목 다시 누르면 고름 풀기, clearable), Badge `outline-warning`·`outline-destructive`, Button `outline-destructive`, `Select`의 `itemClassName`·`inlinePopup`(기본값은 그대로).
+  - 열린 목록이 Mantine과 같으려면 셋이 필요했다. 항목 줄 높이는 Mantine처럼 본문 1.55(기존 `Select`는 `text-sm`의 1.45라 항목이 1px 낮다), 목록을 body가 아니라 칸 상자 안에 top·left로 둔다(Base UI가 body 위치를 정수 픽셀로 반올림해 칸이 소수점 위치면 글자가 1px 어긋난다), Base UI가 위치 상자에 붙이는 `will-change: transform`을 끈다(따로 합성되면 2배 화면에서 글자가 1px 어긋난다).
+  - 촬영 목록에 주문 필터 화면 5개(가게 목록 열림·검색·맞는 가게 없음·상태 목록 열림·고른 상태의 주문 없음)를 더하고, 어드민 주문 fixture에 배송 완료 회차·요청사항·환불 진행 중·실패 주문을 넣었다. 정산 PR과 같은 fixture로 찍었다.
+  - 로컬 증명(#694 하네스, 판매자 단독, 기준 `main` 94211c2 + 같은 fixture, 기준 시각 2026-10-31T00:00+09:00): 판매자 189장 정상 촬영 189, `diff.mjs --tolerance 1` 189장 같음(허용 목록 없음), 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 879개. 운영 빌드는 증명하지 않았다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
+- 어드민 정산 구현(2026-10-31): `admin/settlements`의 목록(카드·표·상태·회수 필요·지급 보류 배지·지급처리)·가게 검색 필터·합계 카드·더 보기·머리 글자·조회 실패 상자에서 `@mantine/core`를 걷었다. 공용 `SegmentedTabs`·`ConfirmModal`과 `@mantine/notifications`는 남았다.
+  - 가게 검색은 주문 PR의 `SearchableSelect`(clearable)를 쓴다. `packages/ui` 추가: Badge `destructive-filled`(filled red)·`light-orange`.
+  - 더 보기 불러오는 중은 Mantine Button loading처럼 면색을 두고 글자를 숨기며, 흐린 흰 덮개(`::before` 15%·blur 12px)와 따로 합성되는 원(`will-change: transform`)이 있어야 같다.
+  - 합계 카드의 role group은 로컬 E2E가 이름으로 찾으므로 그대로 두고 biome `useSemanticElements`만 사유와 함께 끈다.
+  - 촬영 목록에 정산 필터 화면 4개(가게 목록 열림·맞는 가게 없음·가게 고름·더 보기 불러오는 중)를 더하고, 정산 fixture에 상태별·회수 필요·지급 보류 데이터와 다음 쪽(늦게 답함)을 넣었다. 주문 PR과 같은 fixture로 찍었다.
+  - 로컬 증명(#694 하네스, 판매자 단독, 기준 `main` 94211c2 + 같은 fixture, 기준 시각 2026-10-31T00:00+09:00): 판매자 189장 정상 촬영 189, `diff.mjs --tolerance 1` 189장 같음(허용 목록 없음, 더 보기 불러오는 중 포함), 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 879개. 운영 빌드는 증명하지 않았다.
+- Select 열린 목록 바로잡기(2026-10-31): 어드민 주문 작업에서 찾은 기존 `Select` 열린 목록의 1px 차이를 기본값에서 고쳤다. 항목 줄 높이를 Mantine 본문 1.55로 두고(`text-sm`의 1.45라 항목이 1px 낮았다), `Select`·`SearchableSelect` 목록을 Mantine처럼 body에 두되 입력칸 아래 8px을 문서 좌표 top·left로 준다(`packages/ui/src/lib/use-document-anchor.ts`). Base UI Positioner는 위치를 transform으로 주며 정수 픽셀로 반올림하고 `will-change: transform`을 붙여, 칸이 소수점 위치면 글자가 1px 어긋났다. 칸 안에 두던 `inlinePopup`은 조상 overflow에 잘릴 수 있어 걷었다.
+  - 촬영 목록에 상품 등록 품종 Select 목록 열림·고른 뒤 열림(`product-new-variety-open`·`product-new-variety-picked-open`)을 더했다. 이 두 화면과 주문 상태 목록 열림은 Mantine 시절 `main`(b697d67, #710 직전)에 지금 하네스를 얹어 찍은 기준과 같다.
+  - 로컬 증명(기준 시각 2026-10-31T00:00+09:00): Mantine 시절 기준과 9장 같음(지금 `main` be10e7c는 품종 목록 6장이 달랐다). 판매자 195장 정상 촬영 195, 기준 `main` be10e7c + 같은 fixture와 `diff.mjs --tolerance 1` 189장 같음·품종 목록 6장만 다름(위의 바로잡음, 허용 목록 없음). 대조 화면의 Mantine·`@greenhub/ui` Select 열린 목록 캡처는 세 폭 모두 0픽셀 차이(전에는 390에서 19픽셀), 대조 행 세 폭 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 879개. 운영 빌드는 증명하지 않았다.
 
 ### P3. 기사 앱 (12개 파일)
 - 기사 앱을 연결하고 1단계만 한다(`design-direction.md` D4 미확정). 연결 방식은 P2a와 같다.
