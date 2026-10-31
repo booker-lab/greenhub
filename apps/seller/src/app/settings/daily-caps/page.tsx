@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@greenhub/ui/components/button';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -134,7 +134,7 @@ export default function DailyCapsPage() {
       setCaps((prev) => ({ ...prev, [date]: { ...prev[date], date, totalCap } }));
       setEditing(null);
     } catch (e) {
-      notifications.show({
+      notify({
         color: 'red',
         title: '설정 저장 실패',
         message: e instanceof ApiError ? e.message : '일일 캡 저장에 실패했습니다',
