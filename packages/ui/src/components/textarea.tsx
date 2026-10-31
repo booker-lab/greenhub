@@ -127,6 +127,8 @@ function Textarea({
       }}
       value={value}
       onChange={onChange}
+      // 화면이 살아나기(hydration) 전 서버 HTML도 Mantine처럼 minRows 높이로 그린다.
+      rows={autosize && minRows ? minRows : undefined}
       className={cn(
         inputClassName,
         'h-auto min-h-9 resize-none py-[5.5px] leading-[1.55]',

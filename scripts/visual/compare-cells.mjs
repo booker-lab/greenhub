@@ -47,6 +47,7 @@ const KEYS_BY_KIND = {
   svg: ['color', 'opacity'],
   input: [...BOX_KEYS, ...TEXT_KEYS],
   textarea: [...BOX_KEYS, ...TEXT_KEYS],
+  select: [...BOX_KEYS, ...TEXT_KEYS],
 };
 
 const { chromium } = createRequire(path.join(ROOT, 'apps/e2e/package.json'))('@playwright/test');
@@ -107,7 +108,7 @@ const rows = await page.evaluate(
       };
       boxPart(root, 'root');
       out[0].tag = root.tagName;
-      for (const el of cell.querySelectorAll('button, input, textarea, svg')) {
+      for (const el of cell.querySelectorAll('button, input, textarea, select, svg')) {
         const kind = el.tagName.toLowerCase();
         // 보이지 않는 input(Switch·Checkbox의 숨은 체크박스)은 구현마다 다르고 화면에 그려지지 않는다.
         const box = el.getBoundingClientRect();
@@ -117,8 +118,8 @@ const rows = await page.evaluate(
       const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
       for (let n = walker.nextNode(); n; n = walker.nextNode()) {
         if (!n.textContent.trim()) continue;
-        // textarea 안 글자는 입력칸 상자(textarea)와 픽셀로 비교한다. 글자 노드의 범위 좌표는 화면 위치가 아니다.
-        if (n.parentElement?.tagName === 'TEXTAREA') continue;
+        // textarea·select 안 글자는 입력칸 상자와 픽셀로 비교한다. 글자 노드의 범위 좌표는 화면 위치가 아니다.
+        if (['TEXTAREA', 'OPTION'].includes(n.parentElement?.tagName ?? '')) continue;
         const range = document.createRange();
         range.selectNodeContents(n);
         const r = range.getBoundingClientRect();
