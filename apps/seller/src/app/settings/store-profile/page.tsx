@@ -2,7 +2,7 @@
 
 import type { StoreProfileExtras } from '@greenhub/shared';
 import { Button, Checkbox, Container, Paper, Stack, Text, Textarea, TextInput } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -200,7 +200,7 @@ export default function StoreProfileSettingsPage() {
                 setError(null);
                 try {
                   await apiJson(`/stores/${storeId}`, token, { method: 'PATCH', body: JSON.stringify(body) });
-                  notifications.show({ message: '저장했어요' });
+                  notify({ message: '저장했어요' });
                 } catch (e) {
                   setError(e instanceof Error ? e.message : '저장하지 못했어요.');
                 } finally {

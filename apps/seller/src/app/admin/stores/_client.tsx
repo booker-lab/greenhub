@@ -2,7 +2,7 @@
 
 import { Button } from '@greenhub/ui/components/button';
 import { useDebouncedCallback } from '@mantine/hooks';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { AdminStore } from '@/hooks/useAdmin';
@@ -115,7 +115,7 @@ export default function AdminStoresClient() {
   const handleSave = async (storeId: string) => {
     const parsed = parseRate(rateInput);
     if (!parsed.ok) {
-      notifications.show({
+      notify({
         color: 'yellow',
         title: '입력 값을 확인하세요',
         message: '0~100 사이의 수수료율(%)을 입력해야 합니다 (예: 5 = 5%).',
@@ -129,7 +129,7 @@ export default function AdminStoresClient() {
       setEditId(null);
       setRateInput('');
       const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
-      notifications.show({
+      notify({
         color: 'brand',
         title: '수수료율 저장',
         message: describeCommissionSaved(storeName, parsed.rate),
@@ -141,7 +141,7 @@ export default function AdminStoresClient() {
       setEditId(null);
       setRateInput('');
       const presentation = describeAdminCommandOutcome(outcome, '수수료율 변경');
-      notifications.show({
+      notify({
         color: 'yellow',
         title: presentation.title,
         message: presentation.message,
@@ -150,7 +150,7 @@ export default function AdminStoresClient() {
     }
     // rejected: 서버 reason 보존 + 편집 유지(수정 가능). unknown: 재확인 우선 + 편집 유지.
     const presentation = describeAdminCommandOutcome(outcome, '수수료율 변경');
-    notifications.show({
+    notify({
       color: outcome.kind === 'rejected' ? 'red' : 'yellow',
       title: presentation.title,
       message: presentation.message,
@@ -180,14 +180,14 @@ export default function AdminStoresClient() {
       if (reconciliation === null) return;
       if (!reconciliation.reconciled) {
         // COMMAND CONFIRMED + RECONCILIATION FAILED — 실패로 표현하지 않고 중복 실행을 유도하지 않는다.
-        notifications.show({
+        notify({
           color: 'yellow',
           title: '치우기는 완료됐으나 목록 확인 실패',
           message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
         });
         return;
       }
-      notifications.show({
+      notify({
         color: 'brand',
         title: '판매자를 치웠습니다',
         message: `${store.name || '(미설정)'} — 손님 화면에서 숨고 새 주문을 받지 않습니다.`,
@@ -196,7 +196,7 @@ export default function AdminStoresClient() {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
         const presentation = describeAdminCommandOutcome(classified, '치우기');
-        notifications.show({
+        notify({
           color: 'yellow',
           title: presentation.title,
           message: presentation.message,
@@ -204,7 +204,7 @@ export default function AdminStoresClient() {
         return;
       }
       // 기록 가드(400) 등 차단 사유를 서버 메시지 그대로 안내
-      notifications.show({
+      notify({
         color: 'red',
         title: '치울 수 없습니다',
         message: e instanceof Error ? e.message : '판매자를 치우는 중 오류가 발생했습니다.',
@@ -217,14 +217,14 @@ export default function AdminStoresClient() {
     try {
       const reconciliation = await restoreStore(store.id);
       if (!reconciliation.reconciled) {
-        notifications.show({
+        notify({
           color: 'yellow',
           title: '복구 처리는 완료됐으나 목록 확인 실패',
           message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
         });
         return;
       }
-      notifications.show({
+      notify({
         color: 'brand',
         title: '판매자를 복구했습니다',
         message: `${store.name || '(미설정)'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
@@ -233,14 +233,14 @@ export default function AdminStoresClient() {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
         const presentation = describeAdminCommandOutcome(classified, '복구');
-        notifications.show({
+        notify({
           color: 'yellow',
           title: presentation.title,
           message: presentation.message,
         });
         return;
       }
-      notifications.show({
+      notify({
         color: 'red',
         title: '복구할 수 없습니다',
         message: e instanceof Error ? e.message : '판매자 복구 중 오류가 발생했습니다.',

@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Group, Text, Title } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { describeListCap, type IssuedInvite, useAdminInvite } from '@/hooks/useAdmin';
@@ -55,7 +55,7 @@ export default function AdminInviteClient() {
       setPendingRevoke(null);
       const notice = describeInviteRevokeOutcome(outcome);
       if (!notice) return;
-      notifications.show({ color: notice.color, title: notice.title, message: notice.message });
+      notify({ color: notice.color, title: notice.title, message: notice.message });
       // 404·409·결과 불확정은 화면 목록이 서버와 어긋났을 수 있어 다시 조회한다.
       if (notice.needsReload) void reload();
     } finally {
