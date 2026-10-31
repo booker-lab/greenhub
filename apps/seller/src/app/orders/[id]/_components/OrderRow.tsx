@@ -1,6 +1,10 @@
 'use client';
 
-import { Group, Text } from '@mantine/core';
+// ① 외형 유지(UI 교체 P4): Mantine Group(사이 띄움, 위 정렬, gap xs = 10px, 줄바꿈)·Text(p, 여백 0, 줄 높이 1.55)와 같은 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
+// Mantine ff="monospace"(--mantine-font-family-monospace) 값.
+const MONOSPACE =
+  'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono, Courier New, monospace';
 
 export function Row({
   label,
@@ -16,8 +20,9 @@ export function Row({
   mono?: boolean;
 }) {
   return (
-    <Group justify="space-between" align="flex-start" gap="xs">
-      <Text
+    <div className="flex flex-row flex-wrap items-start justify-between gap-2.5">
+      <p
+        className={TEXT}
         style={{
           flexShrink: 0,
           fontSize: 'var(--font-size-sm)',
@@ -25,11 +30,11 @@ export function Row({
         }}
       >
         {label}
-      </Text>
-      <Text
-        ta="right"
-        ff={mono ? 'monospace' : undefined}
+      </p>
+      <p
+        className={`${TEXT} text-right`}
         style={{
+          fontFamily: mono ? MONOSPACE : undefined,
           wordBreak: 'break-all',
           fontSize: 'var(--font-size-sm)',
           fontWeight: bold ? 'var(--fw-bold)' : undefined,
@@ -41,7 +46,7 @@ export function Row({
         }}
       >
         {value}
-      </Text>
-    </Group>
+      </p>
+    </div>
   );
 }
