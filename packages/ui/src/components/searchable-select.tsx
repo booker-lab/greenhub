@@ -14,6 +14,8 @@ import { OptionCheck, SelectChevron, type SelectItem } from './select';
 // - 맞는 항목이 없으면 nothingFoundMessage를 gray-6 가운데 글자로 보인다.
 // - 닫히면(초점을 잃으면) 입력 글자를 고른 항목 이름으로 되돌린다.
 // - 고른 항목을 다시 누르면 고름을 푼다(allowDeselect). clearable이고 값이 있으면 지우기 버튼을 둔다.
+// 목록은 입력칸 상자 안에 절대 위치(입력칸 아래 8px)로 그린다. body에 그리면 Base UI가 위치를 정수 픽셀로
+// 반올림해, 입력칸이 소수점 위치에 있을 때 Mantine(반올림 없음)과 글자가 1px 어긋난다.
 
 const CHEVRON_SIZE = { xs: 'size-3.5', sm: 'size-[18px]', md: 'size-5' } as const;
 const CLEAR_SIZE = { xs: 'size-[18px]', sm: 'size-[22px]', md: 'size-7' } as const;
@@ -22,10 +24,11 @@ const COMBINED_WIDTH = { xs: 'w-[41px]', sm: 'w-[50px]', md: 'w-15' } as const;
 const COMBINED_INPUT_PADDING = { xs: 'pe-[41px]', sm: 'pe-[50px]', md: 'pe-15' } as const;
 const SECTION_WIDTH = { xs: 'w-7', sm: 'w-[34px]', md: 'w-10' } as const;
 const SECTION_INPUT_PADDING = { xs: 'pe-7', sm: 'pe-[34px]', md: 'pe-10' } as const;
+// 항목 글자 줄 높이는 Mantine처럼 본문 1.55를 물려받는다.
 const OPTION_CLASS = {
-  xs: 'px-2 py-1 text-xs',
-  sm: 'px-2.5 py-1.5 text-sm',
-  md: 'px-3 py-2 text-base',
+  xs: 'px-2 py-1 text-xs leading-[1.55]',
+  sm: 'px-2.5 py-1.5 text-sm leading-[1.55]',
+  md: 'px-3 py-2 text-base leading-[1.55]',
 } as const;
 
 function filterItems(items: readonly SelectItem[], search: string): SelectItem[] {
@@ -65,6 +68,9 @@ function SearchableSelect({
   const [search, setSearch] = useState(selectedLabel);
   // 닫힐 때 되돌릴 이름. 고른 직후에는 부모가 새 값을 내려주기 전이라 따로 둔다.
   const latestLabelRef = useRef(selectedLabel);
+  // Mantine은 방향키로 옮긴 항목만 주색으로 칠한다(마우스는 gray-0, 막 열었을 때 고른 항목은 칠하지 않음).
+  const [keyboardHighlight, setKeyboardHighlight] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     latestLabelRef.current = selectedLabel;
@@ -86,7 +92,8 @@ function SearchableSelect({
       filteredItems={filtered}
       value={selected}
       onValueChange={(next) => {
-        if (next) choose(next);
+        // Mantine allowDeselect: 고른 항목을 다시 누르면 고름을 푼다.
+        if (next) choose(next.value === value ? null : next);
       }}
       inputValue={search}
       onInputValueChange={(next, details) => {
@@ -96,10 +103,14 @@ function SearchableSelect({
       onOpenChange={(open) => {
         if (!open) setSearch(latestLabelRef.current);
       }}
+      onItemHighlighted={(item, details) =>
+        setKeyboardHighlight(item !== undefined && details.reason === 'keyboard')
+      }
+      highlightItemOnHover={false}
       isItemEqualToValue={(item, current) => item.value === current.value}
       modal={false}
     >
-      <div data-slot="select-root" className="relative">
+      <div ref={rootRef} data-slot="select-root" className="relative">
         <ComboboxPrimitive.Input
           id={id}
           aria-label={ariaLabel}
@@ -140,9 +151,12 @@ function SearchableSelect({
           <SelectChevron className={CHEVRON_SIZE[size]} />
         </div>
       </div>
-      <ComboboxPrimitive.Portal>
+      <ComboboxPrimitive.Portal container={rootRef}>
+        {/* 위치를 transform이 아니라 top·left로 주고, Base UI가 붙이는 will-change: transform을 끈다.
+            따로 합성된 층으로 그리면 2배 화면에서 글자가 1px 어긋난다. */}
         <ComboboxPrimitive.Positioner
-          className="z-50 outline-none"
+          className="top-[calc(100%+8px)]! left-0! z-50 transform-none! outline-none will-change-auto!"
+          positionMethod="absolute"
           side="bottom"
           sideOffset={8}
           collisionAvoidance={{ side: 'none' }}
@@ -163,15 +177,9 @@ function SearchableSelect({
                   key={item.value}
                   value={item}
                   data-slot="select-item"
-                  onClick={(event) => {
-                    // Mantine allowDeselect: 고른 항목을 다시 누르면 고름을 푼다.
-                    if (item.value === value) {
-                      event.preventDefault();
-                      choose(null);
-                    }
-                  }}
                   className={cn(
-                    'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none data-highlighted:bg-[#f8f9fa]',
+                    'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-[#f8f9fa]',
+                    keyboardHighlight && 'data-highlighted:bg-primary! data-highlighted:text-white',
                     OPTION_CLASS[size],
                   )}
                 >
@@ -182,10 +190,12 @@ function SearchableSelect({
                 </ComboboxPrimitive.Item>
               )}
             </ComboboxPrimitive.List>
+            {/* Mantine 목록 상자는 오른쪽 안쪽 여백이 0이고(data-composed) 항목만 스크롤 칸 여백 4px을 둔다.
+                맞는 항목 없음 글자는 그 여백 밖이라 오른쪽으로 4px 넓다. */}
             {nothingFoundMessage && (
               <ComboboxPrimitive.Empty
                 data-slot="select-empty"
-                className={cn('text-center text-[#868e96] empty:hidden', OPTION_CLASS[size])}
+                className={cn('-me-1 text-center text-[#868e96] empty:hidden', OPTION_CLASS[size])}
               >
                 {nothingFoundMessage}
               </ComboboxPrimitive.Empty>
