@@ -15,7 +15,7 @@ import {
 } from '@mantine/core';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
+import { type ReactNode, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import DeadlineSection from '@/components/DeadlineSection';
 import ProductCard from '@/components/ProductCard';
 import QuickAddToast, { type QuickAddToastState } from '@/components/QuickAddToast';
@@ -736,8 +736,28 @@ export function useHomeCardContext(
   );
 }
 
+// 홈은 정적으로 만들어 CDN에 두므로 빌드 때는 주소 쿼리를 알 수 없다. 정적 HTML에는 storeId 없이 그린
+// 첫 화면(배너·불러오는 중 표시)을 두고, 브라우저에서는 주소의 storeId로 다시 그린다.
 export default function HomeProductList({ banner }: { banner?: ReactNode }) {
+  return (
+    <Suspense fallback={<HomeProductListBody banner={banner} requestedStoreId={null} />}>
+      <HomeProductListWithQuery banner={banner} />
+    </Suspense>
+  );
+}
+
+function HomeProductListWithQuery({ banner }: { banner?: ReactNode }) {
   const requestedStoreId = useSearchParams().get('storeId');
+  return <HomeProductListBody banner={banner} requestedStoreId={requestedStoreId} />;
+}
+
+function HomeProductListBody({
+  banner,
+  requestedStoreId,
+}: {
+  banner?: ReactNode;
+  requestedStoreId: string | null;
+}) {
   const { products, loading, error, refetch } = useProducts();
   const { products: groupProducts, loading: groupLoading } = useProducts(
     undefined,

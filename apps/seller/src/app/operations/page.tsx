@@ -2,7 +2,7 @@
 
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { CheckCircle2, ChevronRight, RefreshCcw, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -109,15 +109,14 @@ function IssueRow({
           )}
         </div>
         <div className="flex flex-col items-end gap-1.5" style={{ flexShrink: 0 }}>
-          <Button
+          <ButtonLink
             render={<Link href={`/orders/${encodeURIComponent(issue.orderId)}`} />}
-            nativeButton={false}
             size="xs"
             variant="light"
           >
             주문 보기
             <ChevronRight className="size-3.5" data-icon="inline-end" />
-          </Button>
+          </ButtonLink>
           {canResolve && (
             <Button size="xs" variant="ghost" onClick={() => onResolve(issue)}>
               <CheckCircle2 className="size-3.5" data-icon="inline-start" />

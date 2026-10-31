@@ -1,7 +1,7 @@
 'use client';
 
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { notify } from '@/components/AppToaster';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -94,15 +94,14 @@ export default function HubsPage() {
       <PageHeader
         title="거점 관리"
         right={
-          <Button
+          <ButtonLink
             render={<Link href="/hubs/new" />}
-            nativeButton={false}
             size="xs"
             className="rounded-[8px]"
             style={{ backgroundColor: 'var(--color-primary)' }}
           >
             + 거점 등록
-          </Button>
+          </ButtonLink>
         }
       />
 
