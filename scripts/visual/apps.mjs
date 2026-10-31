@@ -12,3 +12,6 @@ export const APPS = {
 
 /** start.mjs가 기동 정보를 남기고 shots.mjs가 읽는 파일(실행마다 새로 만드는 하네스 전용 비밀값 포함). */
 export const RUNTIME_FILE = 'runtime.json';
+
+/** start.mjs가 next dev 메모리 재시작 횟수를 적고 shots.mjs가 화면마다 읽는 파일. */
+export const DEV_RESTARTS_FILE = 'dev-restarts.txt';

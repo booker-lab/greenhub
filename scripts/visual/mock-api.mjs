@@ -4,6 +4,7 @@
 // 없으면 200 {}을 돌려준다(예: 장바구니 검증처럼 화면이 응답 내용을 읽는 POST).
 import fs from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
 
 /**
  * @param {object} opts
@@ -14,6 +15,9 @@ import http from 'node:http';
  * @param {string} opts.logFile 요청 기록(JSON lines)
  * @param {(() => string) | null} [opts.firebaseToken] 있으면 /auth/firebase-token이 이 값(Auth 에뮬레이터용
  *   커스텀 토큰)을 평문으로 돌려준다. 앱은 응답을 res.text()로 읽어 signInWithCustomToken에 넘긴다.
+ * @param {{ host: string, cert: string, key: string } | null} [opts.tls] 있으면 같은 처리기를 이 주소의 HTTPS로도
+ *   연다(운영 빌드 하네스 start.mjs --prod: 운영 빌드는 HTTPS·비루프백 이름의 API 주소만 받는다).
+ *   하네스 내부 조회(/__log·/__scenario)는 그대로 hosts의 HTTP로 한다.
  */
 export function startMockApi({
   port,
@@ -22,6 +26,7 @@ export function startMockApi({
   fixtures,
   logFile,
   firebaseToken = null,
+  tls = null,
 }) {
   const log = [];
   const record = (entry) => {
@@ -157,6 +162,16 @@ export function startMockApi({
       .on('error', (e) => console.error(`[mock-api] ${host}:${port} 바인딩 실패: ${e.message}`))
       .listen(port, host),
   );
+  if (tls) {
+    servers.push(
+      https
+        .createServer({ cert: tls.cert, key: tls.key }, handler)
+        .on('error', (e) =>
+          console.error(`[mock-api] https ${tls.host}:${port} 바인딩 실패: ${e.message}`),
+        )
+        .listen(port, tls.host),
+    );
+  }
   return {
     log,
     close: () => {

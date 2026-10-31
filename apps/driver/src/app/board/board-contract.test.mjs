@@ -244,7 +244,7 @@ test('Driver Board·상세는 orderCharges와 raw payment 필드를 직접 조�
 });
 
 test('사진 화면은 heading과 촬영·최종 완료 버튼의 접근 가능한 이름을 제공한다', () => {
-  assert.match(photoCaptureSource, /<Title[^>]*order=\{1\}[^>]*>/);
+  assert.match(photoCaptureSource, /<h1[\s>]/);
   assert.match(photoCaptureSource, /배송 완료 사진/);
   assert.match(photoCaptureSource, /aria-label=['"]사진 촬영['"]/);
   assert.match(photoCaptureSource, /['"]사진 촬영['"]/);
