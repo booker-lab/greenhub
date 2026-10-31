@@ -1,14 +1,31 @@
 'use client';
 
 import type { OperationIssueActionType, OperationIssueStatus, Order } from '@greenhub/shared';
-import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button } from '@greenhub/ui/components/button';
 import {
   getAllowedOperationAction,
   ISSUE_DESCRIPTIONS,
   ISSUE_LABELS,
   type OrderOperationIssue,
 } from '../operation-issues';
+import { BUTTON_LOADING, ButtonLoader } from './ButtonLoading';
 import { Row } from './OrderRow';
+
+// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, shadow xs)·Group·Stack·Text(p, 여백 0, 줄 높이 1.55)와 같은 값.
+// 배지는 Mantine Badge light(모서리 = 기본 반경 16px). 안쪽 Paper(기록 카드·조치 기록)는 바깥 Paper의
+// --paper-shadow를 물려받아 같은 그림자(xs)가 진다.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
+const GROUP_BETWEEN = 'flex flex-row flex-wrap items-center justify-between gap-4';
+
+// Mantine Badge light color → @greenhub/ui Badge 변형.
+const LIGHT_BADGE: Record<string, 'light' | 'destructive' | 'warning' | 'secondary'> = {
+  brand: 'light',
+  red: 'destructive',
+  yellow: 'warning',
+  gray: 'secondary',
+};
 
 const STATUS_LABELS: Record<OperationIssueStatus, string> = {
   OPEN: '확인 필요',
@@ -67,17 +84,22 @@ function RedeliveryPaymentPanel({ payment }: { payment: Order['redeliveryPayment
   if (!presentation) return null;
 
   return (
-    <Paper radius="lg" shadow="xs" p="md" data-testid="seller-redelivery-payment">
-      <Group justify="space-between" mb="xs">
-        <Text style={{ fontWeight: 'var(--fw-medium)' }}>재배송비 결제</Text>
-        <Badge color={presentation.color} variant="light">
+    <div className={`${PAPER} p-4`} data-testid="seller-redelivery-payment">
+      <div className={`${GROUP_BETWEEN} mb-2.5`}>
+        <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+          재배송비 결제
+        </p>
+        <Badge variant={LIGHT_BADGE[presentation.color]} className="rounded-[16px]">
           {presentation.label}
         </Badge>
-      </Group>
-      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+      </div>
+      <p
+        className={TEXT}
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+      >
         {presentation.description}
-      </Text>
-    </Paper>
+      </p>
+    </div>
   );
 }
 
@@ -98,6 +120,8 @@ function IssueCard({
   onAction: (issue: OrderOperationIssue) => Promise<void>;
 }) {
   const allowedAction = getAllowedOperationAction(issue);
+  const actionVariant = allowedAction === 'RETRY_REFUND' ? 'destructive' : 'default';
+  const actionLoading = actionIssueId === issue.id;
   const snapshotRows = [
     ['주문 상태', issue.currentState?.orderStatus ?? issue.latestSnapshot.orderStatus],
     ['결제 상태', issue.currentState?.paymentStatus ?? issue.latestSnapshot.paymentStatus],
@@ -109,31 +133,38 @@ function IssueCard({
   ].filter((row): row is [string, string] => typeof row[1] === 'string');
 
   return (
-    <Paper withBorder radius="md" p="sm">
-      <Group justify="space-between" align="flex-start" gap="xs">
-        <Stack gap={2} style={{ flex: 1 }}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
+    <div className="block rounded-[8px] border border-solid border-[#dee2e6] bg-white p-3 shadow-mantine-xs">
+      <div className="flex flex-row flex-wrap items-start justify-between gap-2.5">
+        <div className="flex flex-col gap-0.5" style={{ flex: 1 }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+          >
             {ISSUE_LABELS[issue.type]}
-          </Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          </p>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
             {ISSUE_DESCRIPTIONS[issue.type]}
-          </Text>
-        </Stack>
-        <Badge color={issueColor(issue)} variant="light">
+          </p>
+        </div>
+        <Badge variant={LIGHT_BADGE[issueColor(issue)]} className="rounded-[16px]">
           {STATUS_LABELS[issue.status]}
         </Badge>
-      </Group>
+      </div>
 
-      <Stack gap={4} mt="sm">
+      <div className="mt-3 flex flex-col gap-1">
         {snapshotRows.map(([label, value]) => (
           <Row key={label} label={label} value={value} />
         ))}
         <Row label="최근 갱신" value={formatDateTime(issue.updatedAt)} />
-      </Stack>
+      </div>
 
       {issue.actions.length > 0 && (
-        <Stack gap={6} mt="sm">
-          <Text
+        <div className="mt-3 flex flex-col gap-1.5">
+          <p
+            className={TEXT}
             style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-disabled)',
@@ -141,57 +172,58 @@ function IssueCard({
             }}
           >
             {issue.type === 'CUSTOMER_NOTICE_FAILED' ? '고객 연락 기록' : '조치 감사 기록'}
-          </Text>
+          </p>
           {issue.actions.map((action) => (
-            <Paper
+            <div
               key={`${action.actorId}-${action.performedAt}-${action.actionType}-${action.status}`}
-              radius="sm"
-              p="xs"
+              className="block rounded-[4px] bg-white p-2.5 shadow-mantine-xs"
               style={{ backgroundColor: 'var(--color-surface-muted)' }}
             >
-              <Group justify="space-between" gap="xs">
-                <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+              <div className="flex flex-row flex-wrap items-center justify-between gap-2.5">
+                <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
                   {ACTION_LABELS[action.actionType]}
-                </Text>
-                <Badge color={action.status === 'SUCCEEDED' ? 'brand' : 'red'} variant="light">
+                </p>
+                <Badge
+                  variant={action.status === 'SUCCEEDED' ? 'light' : 'destructive'}
+                  className="rounded-[16px]"
+                >
                   {action.status === 'SUCCEEDED' ? '성공' : '실패'}
                 </Badge>
-              </Group>
-              <Text
-                mt={2}
+              </div>
+              <p
+                className={`${TEXT} mt-0.5`}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 {formatDateTime(action.performedAt)}
                 {action.failureReason ? ` · ${action.failureReason}` : ''}
-              </Text>
-            </Paper>
+              </p>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
 
       {allowedAction && (
         <>
           <Button
-            mt="sm"
-            fullWidth
-            radius="xl"
-            color={allowedAction === 'RETRY_REFUND' ? 'red' : 'brand'}
-            loading={actionIssueId === issue.id}
-            disabled={actionIssueId !== null && actionIssueId !== issue.id}
+            variant={actionVariant}
+            className={`mt-3 w-full ${actionLoading ? BUTTON_LOADING[actionVariant] : ''}`}
+            disabled={actionIssueId !== null}
+            data-loading={actionLoading || undefined}
+            aria-busy={actionLoading || undefined}
             onClick={() => void onAction(issue)}
           >
+            {actionLoading && <ButtonLoader variant={actionVariant} height={36} />}
             {ACTION_LABELS[allowedAction]}
           </Button>
-          <Text
-            ta="center"
-            mt={4}
+          <p
+            className={`${TEXT} text-center mt-1`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             실행 직전 서버의 최신 주문·결제 상태를 다시 확인합니다.
-          </Text>
+          </p>
         </>
       )}
-    </Paper>
+    </div>
   );
 }
 
@@ -217,14 +249,19 @@ export function OrderOperationsSection({
       <RedeliveryPaymentPanel payment={order.redeliveryPayment} />
 
       {order.deliveryHold && (
-        <Paper radius="lg" shadow="xs" p="md">
-          <Group justify="space-between" mb="xs">
-            <Text style={{ fontWeight: 'var(--fw-medium)' }}>배송 보류 운영</Text>
-            <Badge color={order.status === 'DELIVERY_HELD' ? 'red' : 'gray'} variant="light">
+        <div className={`${PAPER} p-4`}>
+          <div className={`${GROUP_BETWEEN} mb-2.5`}>
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+              배송 보류 운영
+            </p>
+            <Badge
+              variant={order.status === 'DELIVERY_HELD' ? 'destructive' : 'secondary'}
+              className="rounded-[16px]"
+            >
               {order.status === 'DELIVERY_HELD' ? '조치 중' : '해소 기록'}
             </Badge>
-          </Group>
-          <Stack gap={6}>
+          </div>
+          <div className="flex flex-col gap-1.5">
             <Row label="보류 사유" value={order.deliveryHold.reasonMessage} />
             <Row label="발생 시각" value={formatDateTime(order.deliveryHold.heldAt)} />
             <Row
@@ -256,48 +293,61 @@ export function OrderOperationsSection({
               }
               highlight
             />
-          </Stack>
-          <Text
-            mt="sm"
+          </div>
+          <p
+            className={`${TEXT} mt-3`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             재배송비 결제 생성은 주문자 전용이며, 셀러는 서버에 기록된 금액과 일정만 확인합니다.
-          </Text>
-        </Paper>
+          </p>
+        </div>
       )}
 
-      <Paper radius="lg" shadow="xs" p="md">
-        <Group justify="space-between" mb="sm">
-          <Stack gap={2}>
-            <Text style={{ fontWeight: 'var(--fw-medium)' }}>연락·환불·분쟁 기록</Text>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+      <div className={`${PAPER} p-4`}>
+        <div className={`${GROUP_BETWEEN} mb-3`}>
+          <div className="flex flex-col gap-0.5">
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+              연락·환불·분쟁 기록
+            </p>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               서버가 반환한 운영 기록과 허용 조치만 표시합니다.
-            </Text>
-          </Stack>
+            </p>
+          </div>
           <Button
             size="xs"
-            variant="subtle"
-            color="gray"
-            loading={loading}
-            disabled={actionIssueId !== null}
+            variant="ghost"
+            className={loading ? BUTTON_LOADING.ghost : undefined}
+            disabled={loading || actionIssueId !== null}
+            data-loading={loading || undefined}
+            aria-busy={loading || undefined}
             onClick={() => void onReload()}
           >
+            {loading && <ButtonLoader variant="ghost" height={30} />}
             새로고침
           </Button>
-        </Group>
+        </div>
 
         {error && (
-          <Text mb="sm" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+          <p
+            className={`${TEXT} mb-3`}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+          >
             {error}
-          </Text>
+          </p>
         )}
         {!loading && issues.length === 0 && (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
             이 주문에 연결된 운영 기록이 없습니다.
-          </Text>
+          </p>
         )}
         {issues.length > 0 && (
-          <Stack gap="sm">
+          <div className="flex flex-col gap-3">
             {issues.map((issue) => (
               <IssueCard
                 key={issue.id}
@@ -306,9 +356,9 @@ export function OrderOperationsSection({
                 onAction={onAction}
               />
             ))}
-          </Stack>
+          </div>
         )}
-      </Paper>
+      </div>
     </>
   );
 }
