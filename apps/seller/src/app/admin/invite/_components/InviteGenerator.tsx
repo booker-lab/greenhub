@@ -1,8 +1,61 @@
 'use client';
 
-import { Box, Button, Group, Paper, Text, TextInput } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
+import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
+import { type ChangeEvent, useId } from 'react';
 import type { IssuedInvite } from '@/hooks/useAdmin';
 import { formatKstDateTime, INVITE_RECIPIENT_EMAIL_MAX_LENGTH } from '../_lib';
+
+// ① 외형 유지(UI 교체 P2b): Mantine Paper(lg·xs·lg)·Text(16px·줄 높이 1.55)·Box·Group·TextInput·Button과 같은 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
+
+interface RecipientEmailInputProps {
+  label: string;
+  description: string;
+  required: boolean;
+  placeholder: string;
+  value: string;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  error: string | null;
+  maxLength: number;
+  disabled: boolean;
+}
+
+/** Mantine TextInput(label·description·required·error)과 같은 배치: 라벨(필수 표시 *) → 설명 → 입력칸 → 오류. */
+function RecipientEmailInput({
+  label,
+  description,
+  required,
+  error,
+  ...inputProps
+}: RecipientEmailInputProps) {
+  const id = useId();
+  return (
+    <Field data-invalid={error ? true : undefined} className="mb-4">
+      <FieldLabel htmlFor={id}>
+        {label}
+        {required && (
+          // Mantine 필수 표시: 라벨 글자 바로 뒤 공백 + red-6 별표(라벨 칸 간격 8px는 지운다).
+          <span aria-hidden="true" className="-ms-2 text-[#fa5252]">
+            {'\u00a0*'}
+          </span>
+        )}
+      </FieldLabel>
+      <FieldDescription id={`${id}-description`}>{description}</FieldDescription>
+      <Input
+        id={id}
+        type="email"
+        required={required}
+        autoComplete="off"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={`${id}-description`}
+        {...inputProps}
+      />
+      {error && <FieldError>{error}</FieldError>}
+    </Field>
+  );
+}
 
 interface InviteGeneratorProps {
   generating: boolean;
@@ -37,23 +90,19 @@ export function InviteGenerator({
   const recipientMissing = recipientEmail.trim() === '';
 
   return (
-    <Paper
-      radius="lg"
-      shadow="xs"
+    <div
+      className="mb-8 block rounded-[16px] bg-white p-5 shadow-mantine-xs"
       style={{ border: '1px solid var(--color-border)' }}
-      p="lg"
-      mb="xl"
     >
-      <Text
+      <p
+        className={`${TEXT} mb-4`}
         style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-        mb="md"
       >
         판매자 초대 링크를 만듭니다. 링크는 발급 후 <strong>72시간</strong> 동안 한 번만 쓸 수 있고,
         받는 분이 링크를 열어 카카오로 로그인하면 판매자로 가입돼요.
-      </Text>
+      </p>
 
-      <TextInput
-        type="email"
+      <RecipientEmailInput
         label="받는 사람 이메일"
         description="카카오 계정 이메일이 있으면 이 이메일과 같아야 가입할 수 있어요."
         required
@@ -63,15 +112,12 @@ export function InviteGenerator({
         error={recipientEmailError}
         maxLength={INVITE_RECIPIENT_EMAIL_MAX_LENGTH}
         disabled={generating}
-        autoComplete="off"
-        mb="md"
       />
 
       <Button
         onClick={onGenerate}
         disabled={generating || recipientMissing}
         size="md"
-        radius="xl"
         style={{ backgroundColor: 'var(--color-primary)' }}
       >
         {generating ? '만드는 중…' : '새 초대 링크 만들기'}
@@ -79,54 +125,54 @@ export function InviteGenerator({
 
       {/* 발급 command 실패는 성공과 구분해 사용자에게 알린다. 성공한 경우에만 lastToken이 갱신되므로 이 블록은 이전 성공 토큰을 덮어쓰지 않는다. */}
       {generateError !== null && (
-        <Box
-          mt="md"
-          p="md"
+        <div
+          className="mt-4 p-4"
           style={{
             border: '1px solid var(--color-border)',
             borderRadius: 12,
           }}
         >
-          <Text
+          <p
+            className={`${TEXT} mb-1`}
             style={{
               fontSize: 'var(--font-size-sm)',
               fontWeight: 'var(--fw-medium)',
               color: 'var(--color-danger)',
             }}
-            mb={4}
           >
             초대 링크 발급에 실패했습니다.
-          </Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          </p>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
             {generateError}
-          </Text>
-        </Box>
+          </p>
+        </div>
       )}
 
       {lastToken && (
-        <Box
-          mt="md"
-          p="md"
+        <div
+          className="mt-4 p-4"
           style={{
             backgroundColor: 'var(--color-primary-surface)',
             border: '1px solid var(--color-border)',
             borderRadius: 12,
           }}
         >
-          <Text
+          <p
+            className={`${TEXT} mb-2.5`}
             style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-primary-dark)',
               fontWeight: 'var(--fw-medium)',
             }}
-            mb="xs"
           >
             생성된 초대 링크
-          </Text>
-          <Group gap="sm" wrap="nowrap" align="flex-start">
-            <Text
-              component="code"
-              ff="monospace"
+          </p>
+          <div className="flex flex-row flex-nowrap items-start justify-start gap-3">
+            <code
+              className={`${TEXT} font-mono`}
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -137,27 +183,27 @@ export function InviteGenerator({
               }}
             >
               {lastLink ?? lastToken.token}
-            </Text>
-            <Button onClick={onCopy} size="xs" variant="outline" color="brand" radius="md">
+            </code>
+            <Button onClick={onCopy} size="xs" variant="outline" className="rounded-[8px]">
               {copied ? '복사됨!' : '링크 복사'}
             </Button>
-          </Group>
-          <Text
+          </div>
+          <p
+            className={`${TEXT} mt-2.5`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
-            mt="xs"
           >
             만료: {formatKstDateTime(lastToken.expiresAt)}
-          </Text>
+          </p>
           {lastToken.recipientEmail && (
-            <Text
+            <p
+              className={`${TEXT} mt-1`}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
-              mt={4}
             >
               받는 사람: {lastToken.recipientEmail}
-            </Text>
+            </p>
           )}
-        </Box>
+        </div>
       )}
-    </Paper>
+    </div>
   );
 }

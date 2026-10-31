@@ -1,17 +1,8 @@
 'use client';
 
 import type { SaleRound } from '@greenhub/shared';
-import {
-  Alert,
-  Box,
-  Button,
-  Group,
-  Paper,
-  SimpleGrid,
-  Stack,
-  Text,
-  UnstyledButton,
-} from '@mantine/core';
+import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
+import { Button } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -29,6 +20,12 @@ import {
   runBulkPrepare,
   summarizeBulkPrepare,
 } from '@/lib/round-orders';
+
+// ① 외형 유지(UI 교체 P4): Mantine Paper(lg·xs·md)·Stack(sm 12px)·Group·SimpleGrid(4칸·10px)·UnstyledButton·
+// Text·Alert·Button과 같은 값을 Tailwind와 @greenhub/ui로 그린다.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 
 // 회차 상세 "이 회차 주문": 상태별 건수(누르면 그 주문 목록), 결제 완료 주문 한꺼번에 준비 시작,
 // 마감 뒤에도 준비 시작 전 주문이 남으면 기사 화면에 안 보인다는 경고.
@@ -106,52 +103,68 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
   const showBulkButton = canBulkPrepare(round.status, targets.length);
 
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Stack gap="sm">
-        <Group justify="space-between" align="baseline">
-          <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>
+    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+      <div className="flex flex-col items-stretch justify-start gap-3">
+        <div className="flex flex-row flex-wrap items-baseline justify-between gap-4">
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}
+          >
             이 회차 주문
-          </Text>
+          </p>
           {!loading && (
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               총 {counts.total.toLocaleString()}건
-            </Text>
+            </p>
           )}
-        </Group>
+        </div>
 
         {loading && orders.length === 0 ? (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
             주문을 불러오는 중…
-          </Text>
+          </p>
         ) : error && orders.length === 0 ? (
-          <Group justify="space-between" gap="xs" wrap="nowrap">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+          <div className="flex flex-row flex-nowrap items-center justify-between gap-2.5">
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+            >
               주문을 불러오지 못했어요.
-            </Text>
+            </p>
             <Button size="xs" variant="light" onClick={refresh}>
               다시 불러오기
             </Button>
-          </Group>
+          </div>
         ) : (
           <>
             {error && (
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              <p
+                className={TEXT}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+              >
                 최신 주문을 불러오지 못해 이전 건수를 보여 줘요.
-              </Text>
+              </p>
             )}
             {counts.total === 0 ? (
-              <Text
+              <p
+                className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 아직 이 회차 주문이 없어요.
-              </Text>
+              </p>
             ) : (
-              <SimpleGrid cols={4} spacing="xs">
+              <div className="grid grid-cols-4 gap-2.5">
                 {stats.map((stat) => (
-                  <UnstyledButton
+                  <Link
                     key={stat.key}
-                    component={Link}
                     href={stat.href}
+                    className={UNSTYLED_BUTTON}
                     aria-label={`${stat.label} ${stat.count.toLocaleString()}건 주문 보기`}
                     style={{
                       display: 'block',
@@ -160,7 +173,8 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
                       background: 'var(--color-surface-muted)',
                     }}
                   >
-                    <Text
+                    <p
+                      className={TEXT}
                       style={{
                         fontSize: 'var(--font-size-xs)',
                         fontWeight: 'var(--fw-bold)',
@@ -168,10 +182,11 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
                       }}
                     >
                       {stat.label}
-                    </Text>
-                    <Text
-                      mt={2}
+                    </p>
+                    <p
+                      className={TEXT}
                       style={{
+                        marginTop: 2,
                         fontSize: 'var(--font-size-lg)',
                         fontWeight: 'var(--fw-extrabold)',
                         fontVariantNumeric: 'tabular-nums',
@@ -179,24 +194,26 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
                       }}
                     >
                       {stat.count.toLocaleString()}건
-                    </Text>
-                  </UnstyledButton>
+                    </p>
+                  </Link>
                 ))}
-              </SimpleGrid>
+              </div>
             )}
 
             {hasOrdersHiddenFromDriver(round.status, targets.length) && (
-              <Alert color="red" title="기사 화면에 아직 안 보여요" role="alert">
-                결제 완료 {targets.length.toLocaleString()}건이 아직 준비 시작 전이에요. 준비 시작을
-                해야 기사 화면에 나와요.
+              <Alert variant="destructive" role="alert">
+                <AlertTitle>기사 화면에 아직 안 보여요</AlertTitle>
+                <AlertDescription>
+                  결제 완료 {targets.length.toLocaleString()}건이 아직 준비 시작 전이에요. 준비
+                  시작을 해야 기사 화면에 나와요.
+                </AlertDescription>
               </Alert>
             )}
 
             {showBulkButton && (
-              <Box>
+              <div>
                 <Button
-                  fullWidth
-                  radius="xl"
+                  className="w-full"
                   onClick={() => setConfirming(true)}
                   disabled={running || !storeId}
                 >
@@ -204,43 +221,53 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
                     ? `준비 시작 중… ${progress.done.toLocaleString()}/${progress.total.toLocaleString()}`
                     : `결제 완료 ${targets.length.toLocaleString()}건 모두 준비 시작`}
                 </Button>
-                <Text
-                  mt={6}
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                <p
+                  className={TEXT}
+                  style={{
+                    marginTop: 6,
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-secondary)',
+                  }}
                 >
                   경매로 사서 포장을 마친 뒤 눌러 주세요.
-                </Text>
-              </Box>
+                </p>
+              </div>
             )}
           </>
         )}
 
         {summary &&
           (summary.failed.length === 0 ? (
-            <Alert color="brand" title="준비 시작을 마쳤어요" role="status">
-              {summary.succeeded.toLocaleString()}건을 준비 시작했어요. 이제 기사 화면에 보여요.
+            <Alert role="status">
+              <AlertTitle>준비 시작을 마쳤어요</AlertTitle>
+              <AlertDescription>
+                {summary.succeeded.toLocaleString()}건을 준비 시작했어요. 이제 기사 화면에 보여요.
+              </AlertDescription>
             </Alert>
           ) : (
-            <Alert color="red" title="일부 주문은 준비 시작을 못 했어요" role="alert">
-              <Stack gap={4}>
-                <Text style={{ fontSize: 'var(--font-size-sm)' }}>
-                  {summary.succeeded.toLocaleString()}건 성공,{' '}
-                  {summary.failed.length.toLocaleString()}건 실패예요. 버튼을 다시 누르면 남은
-                  주문만 다시 보내요.
-                </Text>
-                <Box component="ul" m={0} pl="md">
-                  {summary.failed.map((outcome) => (
-                    <li key={outcome.id}>
-                      <Text style={{ fontSize: 'var(--font-size-sm)' }}>
-                        {outcome.label}: {outcome.error}
-                      </Text>
-                    </li>
-                  ))}
-                </Box>
-              </Stack>
+            <Alert variant="destructive" role="alert">
+              <AlertTitle>일부 주문은 준비 시작을 못 했어요</AlertTitle>
+              <AlertDescription>
+                <div className="flex flex-col items-stretch justify-start gap-1">
+                  <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
+                    {summary.succeeded.toLocaleString()}건 성공,{' '}
+                    {summary.failed.length.toLocaleString()}건 실패예요. 버튼을 다시 누르면 남은
+                    주문만 다시 보내요.
+                  </p>
+                  <ul className="m-0 pl-4">
+                    {summary.failed.map((outcome) => (
+                      <li key={outcome.id}>
+                        <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
+                          {outcome.label}: {outcome.error}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </AlertDescription>
             </Alert>
           ))}
-      </Stack>
+      </div>
 
       <ConfirmModal
         opened={confirming}
@@ -251,6 +278,6 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
         onConfirm={startBulkPrepare}
         onClose={() => setConfirming(false)}
       />
-    </Paper>
+    </div>
   );
 }
