@@ -328,6 +328,8 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 촬영 목록 추가: 회차 목록 불러오는 중·없음(`sale-rounds-loading`·`sale-rounds-empty`, scenario `rounds-slow`·`rounds-empty`), 어드민 기사 더 보기 불러오는 중(`admin-drivers-load-more`, 기사 목록이 다음 쪽이 있다고 답함), 주문 마감 확인창(`modal-round-close`). 더 보기 실패·dark 확인 버튼은 대조 화면 행으로 본다(실패 응답은 콘솔 오류라 촬영 판정에 걸린다).
   - 로컬 증명(판매자 단독, 기준 시각 2026-10-31T00:00+09:00): `main` fc16129를 merge한 뒤 기준 `main` fc16129 + 같은 fixture 264장과 `diff.mjs --tolerance 1` 261장 같음, `modal-round-close` 3장만 `main`(빨강)과 다르고 Mantine 시절 e93322d + 같은 fixture와 같음(허용 목록 없음). 그 뒤 #726·#716을 merge하고 로그인·로그인 오류·onboarding·어드민 배너·감사 기록 15장을 `main` 69919ed + 같은 fixture와 다시 찍어 같음. 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0(fc16129 merge 뒤), 단위 테스트 881개. 운영 빌드는 증명하지 않았다.
 - 앱 틀(사이드바·상단바) → 회차·주문·준비 → 재고 → 정산 순서로 나눈다.
+- 판매자 앱 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-2`): 판매자 앱에는 사이드바·모바일 메뉴가 없고 하단 탭(`BottomNav`)이 틀이다. `BottomNav`·`ConnectionStatus`(머리 오른쪽 연결 상태)의 `@mantine/core`를 걷었다(UnstyledButton 링크·Stack·Group·Text 계산값). `layout.tsx`의 `ColorSchemeScript`·`providers.tsx`의 `MantineProvider`는 Mantine 화면이 남아 있는 동안 둔다.
+  - 로컬 증명(판매자 단독, 허용 목록 없음): `main` 1423448 merge 뒤 기준 `main` 1423448 + 같은 fixture와 351장 같음. 이어 `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture(기준 시각 2026-11-01T00:00+09:00)와 그 사이 바뀐 화면 81장(주문 목록·홈·준비·운영 확인·초대·배송 보류·어드민 판매자)과 기능 플래그를 켠 고객 반응 4화면 12장이 같음. 대조 행 세 폭 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
 - 다음 회차가 잡혀 있으면, 회차 운영 동선 묶음(어드민 기사 승인·환불 포함)은 끝까지 교체된 상태로만 그 회차의 마지막 출시에 넣는다. 판매자 대표가 실제 계정으로 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
 
 ### P5. 소비자 앱 (51개 파일)
