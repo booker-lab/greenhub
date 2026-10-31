@@ -21,7 +21,8 @@ describe('globals.css', () => {
     );
     expect(mantine.length).toBeGreaterThan(30);
     for (const i of mantine) expect(i, i.path).toMatchObject({ rest: 'layer(mantine)' });
-    expect(mantine.map((i) => i.path)).toContain('@mantine/notifications/styles.css');
+    // 알림은 AppToaster(Base UI Toast)가 그린다(UI 교체 P4). @mantine/notifications CSS는 넣지 않는다.
+    expect(mantine.map((i) => i.path)).not.toContain('@mantine/notifications/styles.css');
   });
 
   it('Tailwind는 preflight 없이 theme·utilities만 각 layer로 연결한다', () => {
