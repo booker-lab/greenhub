@@ -12,7 +12,7 @@ import {
   SheetTitle,
 } from '@greenhub/ui/components/sheet';
 import { cn } from '@greenhub/ui/lib/utils';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   choiceRemaining,
   choiceStockLabel,
@@ -119,6 +119,9 @@ export default function OptionSheet({
   // 안티앨리어싱이 달라진다. 열고 닫는 움직임은 Tailwind translate(transform과 별개 속성)가 맡는다.
   // 본체는 SheetContent와 같은 DialogPopup이라 Tab·Shift+Tab이 시트 안에서만 돌고 aria-modal="true"가 붙는다.
   // Esc·바깥 누르기로 닫히면 onClose를 부른다(Mantine Drawer와 같다).
+  // 첫 초점은 Mantine Drawer처럼 닫기 버튼이다(Mantine은 머리의 닫기 버튼이 첫 Tab 대상). 닫기 버튼은 Sheet처럼 본체 끝에
+  // 있으므로 initialFocus로 지정하고 data-autofocus로 표시한다.
+  const closeRef = useRef<HTMLButtonElement>(null);
   return (
     <Sheet
       open={opened}
@@ -129,6 +132,7 @@ export default function OptionSheet({
       <DialogPortal>
         <DialogOverlay className="z-[200]" />
         <DialogPopup
+          initialFocus={closeRef}
           data-slot="sheet-content"
           data-side="bottom"
           className="fixed bottom-0 left-0 z-[200] flex h-auto w-max max-w-full [transform:translateY(0)] backface-hidden max-h-[85dvh] flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] transition duration-200 ease-in-out outline-none data-ending-style:translate-y-10 data-ending-style:opacity-0 data-starting-style:translate-y-10 data-starting-style:opacity-0"
@@ -269,6 +273,8 @@ export default function OptionSheet({
           </SheetBody>
           {/* preflight 없이 연결한 앱이라 버튼 기본 테두리·여백을 지운다. */}
           <SheetClose
+            ref={closeRef}
+            data-autofocus
             aria-label="닫기"
             className={cn(closeButtonClassName, 'appearance-none border-0 p-0')}
           >
