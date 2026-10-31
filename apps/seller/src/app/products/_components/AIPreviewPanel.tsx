@@ -1,7 +1,7 @@
 'use client';
 
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLabel } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -159,7 +159,7 @@ export default function AIPreviewPanel({
         다시 생성하기
       </Button>
 
-      {/* Mantine Modal size xs = 320px */}
+      {/* Mantine Modal size xs = 320px. */}
       <Dialog open={confirmOpen} onOpenChange={(open) => !open && setConfirmOpen(false)}>
         <DialogContent className="w-[320px]">
           <DialogHeader>
@@ -171,10 +171,10 @@ export default function AIPreviewPanel({
             </p>
             <div className="flex flex-row flex-wrap items-center justify-end gap-2.5">
               <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
-                취소
+                <ButtonLabel>취소</ButtonLabel>
               </Button>
               <Button variant="destructive" onClick={handleRegenerate}>
-                새로 생성
+                <ButtonLabel>새로 생성</ButtonLabel>
               </Button>
             </div>
           </DialogBody>
