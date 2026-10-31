@@ -129,6 +129,14 @@ const SELLER_ORDERS = [
     buyerName: '최픽업',
     deliveryPhone: '010-4567-8901',
   }),
+  // 오늘 배송 주문(준비 물량 "오늘 준비 물량" 칸, UI 교체 P4). 기준 시각(한국 0시)의 날짜다.
+  sellerOrder('order-today', '20260928-000106', {
+    buyerName: '한오늘',
+    deliveryPhone: '010-6789-0123',
+    requestedDeliveryDate: new Date(Date.parse(hoursFromNow(12)) + 9 * 3600_000)
+      .toISOString()
+      .slice(0, 10),
+  }),
   sellerOrder('order-recruiting', '20260928-000105', {
     status: 'RECRUITING',
     saleType: 'group',
@@ -662,14 +670,24 @@ const OPERATION_ISSUES = [
       },
     ],
   },
-  operationIssue(
-    'issue-visual-0003',
-    'AUTO_REFUND_FAILED',
-    'warning',
-    'RESOLVED',
-    'order-with-contact',
-    '2026-10-05T09:00:00.000Z',
-  ),
+  // 사람이 메모와 함께 닫은 기록(운영 확인 전체 탭의 해결 경위, UI 교체 P4).
+  {
+    ...operationIssue(
+      'issue-visual-0003',
+      'AUTO_REFUND_FAILED',
+      'warning',
+      'RESOLVED',
+      'order-with-contact',
+      '2026-10-05T09:00:00.000Z',
+    ),
+    resolution: {
+      method: 'MANUAL',
+      actorId: 'admin-visual-0001',
+      actorRole: 'admin',
+      memo: '결제사 화면에서 환불 완료를 확인했어요',
+      resolvedAt: '2026-10-05T09:00:00.000Z',
+    },
+  },
 ];
 
 // ── 어드민 기사·배너 ──
@@ -976,6 +994,20 @@ const STORE_REVIEWS = [
   ['review-2', 'product-1', 5, '도자기 화분으로 골랐는데 선물하기 좋네요.', '정*호', '2026-09-23T05:00:00.000Z'],
   ['review-3', 'product-2', 4, '반쯤 핀 상태로 와서 일주일 뒤에 활짝 폈어요.', '최*은', '2026-09-16T08:00:00.000Z'],
 ].map(([id, productId, rating, text, authorName, createdAt]) => ({ id, productId, rating, text, authorName, createdAt }));
+// 판매자가 숨긴 후기(숨김 배지·사유, UI 교체 P4).
+STORE_REVIEWS.push({
+  id: 'review-4',
+  productId: 'product-1',
+  rating: 1,
+  text: '다른 가게 홍보 글입니다',
+  authorName: '광*고',
+  createdAt: '2026-09-10T02:00:00.000Z',
+  hidden: true,
+  hiddenReasonCode: 'spam',
+  hiddenNote: '다른 가게 홍보',
+  hiddenByRole: 'seller',
+  hiddenAt: '2026-09-11T03:00:00.000Z',
+});
 const benchmarkRoutes = [
   ['GET', /^\/stores\/[^/]+\/reviews$/, () => ({ body: STORE_REVIEWS })],
   [
@@ -1759,6 +1791,44 @@ export const screens = [
       { click: '전액 환불 확정' },
     ],
   },
+  // 운영 확인(UI 교체 P4): 전체 탭(해결 경위), 해결로 닫기 창(빈 메모·입력), 해결로 닫기 누름(요청 비교).
+  {
+    id: 'operations-all',
+    group: '판매자 · 운영 확인',
+    title: '운영 확인 · 전체',
+    path: '/operations',
+    steps: [{ clickSelector: 'button:has-text("전체")' }],
+  },
+  {
+    id: 'modal-operations-resolve',
+    group: '판매자 · 모달',
+    title: '운영 확인 · 해결로 닫기',
+    path: '/operations',
+    steps: [{ clickSelector: 'button:has-text("해결로 닫기")' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-operations-resolve-filled',
+    group: '판매자 · 모달',
+    title: '운영 확인 · 해결로 닫기(메모 입력)',
+    path: '/operations',
+    steps: [
+      { clickSelector: 'button:has-text("해결로 닫기")' },
+      { fill: { label: '닫는 이유 메모', value: '고객과 통화해 배송 사진을 다시 확인했어요' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'operations-resolve-submit',
+    group: '판매자 · 운영 확인 동작',
+    title: '운영 확인 · 해결로 닫기 누름',
+    path: '/operations',
+    steps: [
+      { clickSelector: 'button:has-text("해결로 닫기")' },
+      { fill: { label: '닫는 이유 메모', value: '고객과 통화해 배송 사진을 다시 확인했어요' } },
+      { clickSelector: '[role="dialog"] button:has-text("해결로 닫기")' },
+    ],
+  },
   // 모달이 열린 상태 — 같이 쓰는 기간의 CSS 우선순위 회귀는 열린 상태에서 드러난다(P2a 판정 범위).
   {
     id: 'modal-order-hold',
@@ -1767,6 +1837,46 @@ export const screens = [
     path: '/orders/order-round-preparing',
     steps: [{ click: '배송 보류' }],
     viewport: true,
+  },
+  // 배송 보류 창 입력(UI 교체 P4): 고객 책임인데 재배송비 없음(안내), 모두 입력, 보류 저장 누름(요청 비교).
+  {
+    id: 'modal-order-hold-customer',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 보류(고객 책임·재배송비 안내)',
+    path: '/orders/order-round-preparing',
+    steps: [{ click: '배송 보류' }, { click: '고객 연락 불가' }, { click: '고객 책임' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-order-hold-filled',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 보류(모두 입력)',
+    path: '/orders/order-round-preparing',
+    steps: [
+      { click: '배송 보류' },
+      { click: '고객 연락 불가' },
+      { click: '고객 책임' },
+      { fill: { label: '보류 사유', value: '받는 분 연락이 닿지 않음' } },
+      { fill: { label: '재배송비', value: '5000' } },
+      { fill: { label: '다음 연락 예정', value: '2026-10-06T10:00' } },
+      { fill: { label: '새 배송 예정', value: '2026-10-07T09:00' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'order-hold-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 배송 보류 저장 누름',
+    path: '/orders/order-round-preparing',
+    steps: [
+      { click: '배송 보류' },
+      { click: '고객 연락 불가' },
+      { click: '고객 책임' },
+      { fill: { label: '보류 사유', value: '받는 분 연락이 닿지 않음' } },
+      { fill: { label: '재배송비', value: '5000' } },
+      { fill: { label: '새 배송 예정', value: '2026-10-07T09:00' } },
+      { click: '보류 저장' },
+    ],
   },
   {
     id: 'modal-order-cancel',
@@ -2099,11 +2209,21 @@ export const benchmarkScreens = [
     features: ['reviews'],
   },
   {
+    // 후기 숨기기 사유 고르기(UI 교체 P4).
+    id: 'bm-seller-review-hide',
+    group: '판매자',
+    title: '고객 반응 · 후기 숨기기 사유',
+    path: '/reactions',
+    steps: [{ click: '숨기기' }, { click: '욕설·비방' }],
+    features: ['reviews'],
+  },
+  {
     id: 'bm-seller-restock',
     group: '판매자',
     title: '고객 반응 · 알림 신청',
     path: '/reactions',
     clicks: ['알림 신청'],
+    steps: [{ click: '알림 신청' }],
     features: ['restock-alert'],
   },
   {
@@ -2112,6 +2232,7 @@ export const benchmarkScreens = [
     title: '고객 반응 · 찾는 상품',
     path: '/reactions',
     clicks: ['찾는 상품'],
+    steps: [{ click: '찾는 상품' }],
     features: ['product-request'],
   },
   {
