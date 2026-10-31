@@ -86,7 +86,7 @@ export default function DeliverySettingsPage() {
       <main
         style={{
           minHeight: '100vh',
-          backgroundColor: 'var(--color-surface-muted)',
+          backgroundColor: 'var(--frame)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -106,7 +106,7 @@ export default function DeliverySettingsPage() {
     <main
       style={{
         minHeight: '100vh',
-        backgroundColor: 'var(--color-surface-muted)',
+        backgroundColor: 'var(--frame)',
         padding: '32px 16px',
       }}
     >
