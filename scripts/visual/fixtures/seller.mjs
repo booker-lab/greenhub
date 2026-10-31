@@ -145,6 +145,46 @@ const SELLER_SETTLEMENTS = [
     status: 'paid',
     settledAt: '2026-09-27T15:00:00.000Z',
   },
+  // UI 교체 P4: 상태별 배지 색(대기·확정·취소)과 "더 보기"를 찍는다.
+  {
+    id: 'settle-0002',
+    orderId: 'order-settle-0002-abcdef',
+    totalAmount: 25000,
+    platformFee: 2500,
+    netAmount: 22500,
+    status: 'confirmed',
+    settledAt: '2026-09-26T15:00:00.000Z',
+  },
+  {
+    id: 'settle-0003',
+    orderId: 'order-settle-0003-abcdef',
+    totalAmount: 18000,
+    platformFee: 1800,
+    netAmount: 16200,
+    status: 'pending',
+    settledAt: '2026-09-25T15:00:00.000Z',
+  },
+  {
+    id: 'settle-0004',
+    orderId: 'order-settle-0004-abcdef',
+    totalAmount: 12000,
+    platformFee: 1200,
+    netAmount: 10800,
+    status: 'cancelled',
+    settledAt: '2026-09-24T15:00:00.000Z',
+  },
+];
+// 정산 "더 보기" 다음 쪽. 불러오는 중 모양을 찍도록 늦게 답한다.
+const SELLER_SETTLEMENTS_MORE = [
+  {
+    id: 'settle-0005',
+    orderId: 'order-settle-0005-abcdef',
+    totalAmount: 15000,
+    platformFee: 1500,
+    netAmount: 13500,
+    status: 'paid',
+    settledAt: '2026-09-23T15:00:00.000Z',
+  },
 ];
 
 // ── 어드민 주문: 회차(R-)·일반(L-) 주문을 상태별로 한 건씩 ──
@@ -835,18 +875,27 @@ export const routes = [
     ({ url }) => ({
       body: {
         date: url.searchParams.get('date') ?? '2026-09-28',
-        count: 1,
-        totalAmount: 33000,
-        totalPlatformFee: 3300,
-        totalNetAmount: 29700,
-        byStatus: { pending: 0, confirmed: 0, paid: 1, cancelled: 0 },
+        count: 4,
+        totalAmount: 88000,
+        totalPlatformFee: 8800,
+        totalNetAmount: 79200,
+        byStatus: { pending: 1, confirmed: 1, paid: 1, cancelled: 1 },
       },
     }),
   ],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements$/,
-    ({ url }) => ({ body: { settlements: byStatus(SELLER_SETTLEMENTS, url) } }),
+    ({ url }) =>
+      url.searchParams.get('cursor')
+        ? { body: { settlements: byStatus(SELLER_SETTLEMENTS_MORE, url), hasMore: false }, delay: 8000 }
+        : {
+            body: {
+              settlements: byStatus(SELLER_SETTLEMENTS, url),
+              hasMore: true,
+              nextCursor: 'visual-more',
+            },
+          },
   ],
   ['GET', /^\/admin\/orders$/, ({ url }) => ({ body: { orders: byStatus(ADMIN_ORDERS, url) } })],
   [
@@ -1099,6 +1148,22 @@ export const screens = [
     title: '정산 · 주문별 상세',
     path: '/settlements',
     click: '주문별 상세',
+  },
+  {
+    id: 'settlements-period-list',
+    group: '판매자',
+    title: '정산 · 기간별 조회 결과',
+    path: '/settlements',
+    click: '기간별 조회',
+    steps: [{ click: '조회' }],
+  },
+  {
+    id: 'settlements-orders-load-more',
+    group: '판매자',
+    title: '정산 · 주문별 상세 더 보기 불러오는 중',
+    path: '/settlements',
+    click: '주문별 상세',
+    steps: [{ click: '더 보기' }],
   },
   { id: 'settings', group: '판매자', title: '설정', path: '/settings' },
   {
