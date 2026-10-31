@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Loader, Paper, Text } from '@mantine/core';
+import { Loader } from '@greenhub/ui/components/loader';
 import Image from 'next/image';
 import type React from 'react';
 
@@ -10,15 +10,22 @@ interface BannerImageSectionProps {
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
+// ① 외형 유지(UI 교체 P2b): Mantine Paper(lg·xs·lg)·Text·Box·Loader xs와 같은 값.
 export function BannerImageSection({ imageUrl, uploading, onUpload }: BannerImageSectionProps) {
   return (
-    <Paper radius="lg" shadow="xs" p="lg" style={{ border: '1px solid var(--color-border)' }}>
-      <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }} mb="sm">
+    <div
+      className="block rounded-[16px] bg-white p-5 shadow-mantine-xs"
+      style={{ border: '1px solid var(--color-border)' }}
+    >
+      <p
+        className="m-0 mb-3 p-0 text-base"
+        style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
+      >
         배경 이미지
-      </Text>
+      </p>
       {imageUrl && (
-        <Box
-          mb="sm"
+        <div
+          className="mb-3"
           style={{ borderRadius: 12, overflow: 'hidden', height: 180, position: 'relative' }}
         >
           <Image
@@ -28,10 +35,9 @@ export function BannerImageSection({ imageUrl, uploading, onUpload }: BannerImag
             sizes="100vw"
             style={{ objectFit: 'cover' }}
           />
-        </Box>
+        </div>
       )}
-      <Box
-        component="label"
+      <label
         style={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -52,7 +58,7 @@ export function BannerImageSection({ imageUrl, uploading, onUpload }: BannerImag
           onChange={onUpload}
           disabled={uploading}
         />
-      </Box>
-    </Paper>
+      </label>
+    </div>
   );
 }
