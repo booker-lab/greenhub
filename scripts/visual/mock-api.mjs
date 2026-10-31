@@ -148,14 +148,15 @@ export function startMockApi({
         path: p,
         query: url.search,
         status,
-        ...(isWrite ? { body: body.slice(0, 500) } : {}),
+        // 쓰기 요청 본문은 작업 전·후 동작 비교(parity.mjs)에 쓴다.
+        ...(isWrite ? { body: body.slice(0, 4000) } : {}),
       });
       return send(req, res, status, out.body, out.delay ?? 0);
     }
 
     // ── fixture에 없는 쓰기 요청: 기록만 하고 200 ──
     if (isWrite) {
-      record({ kind: 'write', method: m, path: p, query: url.search, body: body.slice(0, 500) });
+      record({ kind: 'write', method: m, path: p, query: url.search, body: body.slice(0, 4000) });
       return send(req, res, 200, {});
     }
 
