@@ -103,7 +103,8 @@ describe('AdminStoresClient read-error recovery wiring', () => {
   });
 
   it('검색어는 debounce 후 replace로 URL에 반영하고 상태·정렬은 즉시 push한다', () => {
-    expect(source).toContain("import { useDebouncedCallback } from '@mantine/hooks'");
+    expect(source).toContain("import { useDebouncedCallback } from '@/hooks/useDebouncedCallback'");
+    expect(source).not.toContain('@mantine/hooks');
     expect(source).toContain('const KEYWORD_URL_DEBOUNCE_MS = 300;');
     expect(source).toMatch(/writeViewToUrl\(next, 'replace'\),\s*KEYWORD_URL_DEBOUNCE_MS/);
     expect(source).toContain("if (mode === 'replace') router.replace(href, { scroll: false });");
