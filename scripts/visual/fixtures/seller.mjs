@@ -1601,6 +1601,24 @@ export const screens = [
     path: '/sale-rounds',
     scenario: 'rounds-empty',
   },
+  // UI 교체 P4 알림 전환: 오른쪽 위 알림(제목 없는 주색, 제목 있는 노랑). 가짜 API가 쓰기에 200 {}을 돌려줘
+  // 재고 저장은 성공 알림, 기사 승인은 "확인 못 함" 알림이 뜬다.
+  {
+    id: 'toast-option-stock-saved',
+    group: '알림',
+    title: '옵션 재고 · 저장 알림',
+    path: '/settings/option-stocks',
+    steps: [{ fill: { label: '새로 출력한 개수', value: '5' } }, { click: '더하기' }],
+    viewport: true,
+  },
+  {
+    id: 'toast-driver-approve',
+    group: '알림',
+    title: '기사 · 승인 결과 알림',
+    path: '/admin/drivers',
+    steps: [{ click: '승인' }, { clickSelector: '[role=dialog] button:has-text("승인")' }],
+    viewport: true,
+  },
   {
     id: 'admin-drivers-load-more',
     group: '어드민 · 필터',
