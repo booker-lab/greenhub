@@ -213,6 +213,23 @@ async function runSteps(page, steps) {
       const target = page.locator(step.clickSelector).first();
       if (!(await target.isVisible().catch(() => false))) return `누를 대상 없음: ${step.clickSelector}`;
       await target.click();
+    } else if (step.waitPath) {
+      // 앱이 스스로 주소를 바꾸는 동작(결제 완료 뒤 router.replace 등)을 기다린다. next dev는 처음 여는 화면을
+      // 그때 컴파일하므로 넉넉히 기다린다. 끝내 바뀌지 않으면 도착 주소 판정이 실패로 잡는다.
+      await page
+        .waitForURL((url) => url.pathname === step.waitPath, { timeout: 60_000 })
+        .catch(() => {});
+      await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+    } else if (step.press) {
+      // 버튼은 접근성 이름으로 누른다(글자가 기호뿐인 버튼·같은 글자가 여러 곳인 버튼). nth로 몇 번째인지 고른다.
+      const target = page.getByRole('button', { name: step.press, exact: true }).nth(step.nth ?? 0);
+      if (!(await target.isVisible().catch(() => false))) return `누를 버튼 없음: ${step.press}`;
+      await target.click();
+    } else if (step.check) {
+      // 체크박스는 접근성 이름으로 찾아 켠다(라벨 글자를 누르는 것과 같다).
+      const target = page.getByRole('checkbox', { name: step.check, exact: true }).first();
+      if (!(await target.isVisible().catch(() => false))) return `체크박스 없음: ${step.check}`;
+      await target.check();
     } else if (typeof step.fill === 'string') {
       await page.getByRole('textbox').first().fill(step.fill);
     } else if (step.fill) {
@@ -290,6 +307,36 @@ async function shootOnce(context, screen, viewportName) {
       for (const [k, v] of Object.entries(stored.localStorage ?? {})) localStorage.setItem(k, v);
     }, wishStorage);
   }
+  // portone: 결제창(PortOne SDK)을 stub으로 바꾼다. SDK는 window.PortOne이 이미 있으면 CDN 스크립트를
+  // 불러오지 않고 그것을 쓴다(@portone/browser-sdk). 호출 인자는 기록해 작업 전·후를 비교한다(parity.mjs).
+  // 'success'는 결제 완료 응답, 'cancel'은 결제창에서 취소한 응답(code·message)을 돌려준다.
+  // 로컬 E2E의 installPortOneBrowserStub(apps/e2e/tests/_helpers/round-direct.ts)과 같은 방식이다.
+  if (screen.portone) {
+    await page.addInitScript((mode) => {
+      const calls = [];
+      Object.defineProperty(window, '__VISUAL_PORTONE_CALLS__', { value: calls });
+      Object.defineProperty(window, 'PortOne', {
+        value: {
+          async requestPayment(request) {
+            calls.push(JSON.parse(JSON.stringify(request)));
+            if (mode === 'cancel') {
+              return {
+                code: 'FAILURE_TYPE_PG',
+                message: '사용자가 결제를 취소하였습니다.',
+                paymentId: request.paymentId,
+                transactionType: 'PAYMENT',
+              };
+            }
+            return {
+              paymentId: request.paymentId,
+              transactionType: 'PAYMENT',
+              txId: `visual-${request.paymentId}`,
+            };
+          },
+        },
+      });
+    }, screen.portone);
+  }
   // scenario: 그 화면을 열 때만 가짜 API 경로를 바꾼다.
   await fetch(`${apiBase}/__scenario?name=${encodeURIComponent(screen.scenario ?? '')}`, {
     method: 'POST',
@@ -315,7 +362,31 @@ async function shootOnce(context, screen, viewportName) {
   const stepNote = screen.steps ? await runSteps(page, screen.steps) : null;
   const png = await capture(page, { viewportOnly: screen.viewport === true });
   captured = true;
+  // 접근성 의미(역할·이름·상태)를 남긴다. 링크가 버튼이 되는 것 같은 회귀는 픽셀이 같아도 여기서 드러난다.
+  const aria = await page
+    .locator('body')
+    .ariaSnapshot({ timeout: 10_000 })
+    .catch((e) => `ariaSnapshot 실패: ${e.message}`);
+  const portoneCalls = screen.portone
+    ? await page.evaluate(() => window.__VISUAL_PORTONE_CALLS__ ?? []).catch(() => null)
+    : undefined;
+  // 브라우저 저장소(장바구니 담기 등 서버에 보내지 않는 동작의 결과).
+  const storage = await page
+    .evaluate(() => {
+      const dump = (store) =>
+        Object.fromEntries(
+          Object.keys(store)
+            .sort()
+            .map((key) => [key, store.getItem(key)]),
+        );
+      return { localStorage: dump(localStorage), sessionStorage: dump(sessionStorage) };
+    })
+    .catch(() => null);
   const log = await (await fetch(`${apiBase}/__log`)).json();
+  // 이 화면에서 앱이 보낸 쓰기 요청(본문 포함). 작업 전·후가 같아야 한다(parity.mjs).
+  const writes = log
+    .filter((e) => e.kind === 'write')
+    .map(({ method, path: p, query, body }) => ({ method, path: p, query, body }));
   const missing = [...new Set(log.filter((e) => e.kind === 'missing').map((e) => e.path))];
   const shot = {
     id: screen.id,
@@ -326,7 +397,14 @@ async function shootOnce(context, screen, viewportName) {
     file: `${screen.id}-${viewportName}.png`,
     finalPath: new URL(page.url()).pathname,
     missing,
-    errors: [...new Set(errors)],
+    writes,
+    storage,
+    ...(portoneCalls !== undefined ? { portoneCalls } : {}),
+    aria: `${screen.id}-${viewportName}.aria.yml`,
+    // expectedErrors: 화면이 일부러 만든 오류 응답(주문 거절 409 등)에 브라우저가 남기는 리소스 오류 줄만 뺀다.
+    errors: [...new Set(errors)].filter(
+      (text) => !(screen.expectedErrors ?? []).some((pattern) => new RegExp(pattern).test(text)),
+    ),
     failed: [...new Set(failed)],
     ...(stepNote ? { stepNote } : {}),
     // Firestore를 직접 구독하는 화면은 에뮬레이터 없이는 데이터 없이 찍힌다(셀러 앱은 운영 빌드에서 로컬 Firebase를 거절).
@@ -341,7 +419,7 @@ async function shootOnce(context, screen, viewportName) {
   };
   restartsAtPreviousStart = restartsAtStart;
   await page.close();
-  return { shot, png };
+  return { shot, png, aria };
 }
 
 let gitSha = null;
@@ -387,8 +465,9 @@ try {
     const guest = await newContext(browser, viewportName);
     for (const screen of screens) {
       const context = screen.auth === false ? guest : authed;
-      const { shot, png } = await shootOnce(context, screen, viewportName);
+      const { shot, png, aria } = await shootOnce(context, screen, viewportName);
       fs.writeFileSync(path.join(outDir, shot.file), png);
+      fs.writeFileSync(path.join(outDir, shot.aria), aria);
       shot.problems = shotProblems(shot, expectedPathOf(screen));
       shot.sound = shot.problems.length === 0;
       manifest.shots.push(shot);

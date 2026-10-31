@@ -86,6 +86,10 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
 - 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 대조 화면 `ui-compare-select`).
+- 버튼은 `{ press: '<접근성 이름>', nth }`(글자가 기호뿐이거나 같은 이름이 여러 곳인 버튼), 체크박스는 `{ check: '<접근성 이름>' }`, 앱이 스스로 주소를 바꾸는 동작(결제 완료 뒤 이동 등)은 `{ waitPath: '/order/success' }`로 기다린다.
+- **결제창 stub**(`portone: 'success' | 'cancel'`): 소비자 결제 화면은 PortOne SDK가 `window.PortOne`이 이미 있으면 CDN 스크립트를 불러오지 않는 점을 이용해 stub을 넣는다(로컬 E2E `installPortOneBrowserStub`과 같은 방식). `success`는 결제 완료, `cancel`은 결제창 취소 응답을 돌려주고, 넘긴 인자를 `manifest.json`의 `portoneCalls`에 남긴다. `start.mjs consumer`는 가짜 PortOne 공개 설정(상점 ID·카카오페이 채널 키)을 넣는다. 외부 요청은 그대로 막혀 있어 실제 결제창·결제는 일어나지 않는다.
+- 화면이 일부러 만든 오류 응답(주문 거절 409 등)에 브라우저가 남기는 리소스 오류 줄은 `expectedErrors: ['<정규식>']`로만 뺀다.
+- 화면마다 `manifest.json`에 쓰기 요청(`writes`, 본문 포함)·브라우저 저장소(`storage`)를, `<id>-<viewport>.aria.yml`에 접근성 트리(Playwright `ariaSnapshot`)를 남긴다. 비교는 아래 "작업 전·후 동작·접근성 비교".
 - **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 가짜 API에 닿지 못한 요청 0(취소된 요청 제외), 하네스가 지원하지 않는 화면 0(`--prod`의 셀러 Firestore 화면), 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
 - **렌더 결정성**: 브라우저는 `--disable-partial-raster`로 띄운다. Chromium이 바뀐 영역만 다시 래스터하면 그리는 이력에 따라 글자·둥근 모서리의 안티앨리어싱이 채널 2~40만큼 달라져, 같은 커밋 두 번 촬영이 브라우저 컨텍스트마다 약 5~15% 어긋났다(2026-10-30 기사 화면 실측). 끄면 20번 중 20번 같았다.
 - `next dev`는 힙 사용량이 상한(시스템 메모리의 50%)의 80%를 넘으면 스스로 재시작한다("Server is approaching the used memory threshold, restarting..."). 한 서버로 여러 번 연달아 찍다가 재시작하면, 그 사이 찍힌 화면은 연결 오류나 덜 그려진 상태(로딩)가 된다. `start.mjs`가 재시작 횟수를 `dev-restarts.txt`에 적고 `shots.mjs`가 재시작이 걸친 화면과 그 바로 다음 화면을 정상 판정에서 뺀다("next dev 메모리 재시작 중·직후 촬영"). 그 화면만 `--only`로 다시 찍는다. 세 앱 서버와 에뮬레이터를 한 컨테이너에서 같이 띄우면 더 자주 일어난다. 그래서 `start.mjs seller`는 다른 앱 하네스가 떠 있으면 시작하지 않는다(`--allow-concurrent`로 무시). 판매자가 떠 있을 때 다른 앱을 띄우면 경고만 한다.
@@ -112,6 +116,17 @@ node scripts/visual/compare-cells.mjs --viewport 390                 # 짝마다
   - 픽셀은 같은 자리에서 비교한다. 오른쪽 칸을 찍고, 그 칸을 왼쪽(Mantine) 내용의 복제로 바꿔 다시 찍는다. 같은 Mantine 버튼도 가로 위치가 다른 칸에 놓으면 모서리 안티앨리어싱이 15픽셀 달라지기 때문이다(2026-10-31 실측).
   - textarea·select는 입력칸처럼 상자·글꼴을 비교하고, 안의 글자(option 포함)는 픽셀로만 본다(글자 노드 범위 좌표가 화면 위치가 아니다).
   - 채널 허용치는 1(`diff.mjs --tolerance 1`과 같다). 차이 있는 행이 있으면 종료 코드 1이다. `--out <폴더>`로 칸 이미지를 남긴다.
+
+## 작업 전·후 동작·접근성 비교
+
+```bash
+node scripts/visual/parity.mjs consumer --before before --after after                     # 쓰기 요청·결제창 인자·저장소·접근성 트리
+node scripts/visual/parity.mjs consumer --before before --after after --allow parity-allow.json
+```
+
+- 픽셀이 같아도 동작이 바뀔 수 있다(주문 요청 본문, 결제창 인자, 링크가 버튼이 되는 역할 변화). UI 교체 PR은 `diff.mjs`와 함께 이 비교도 통과해야 한다.
+- 화면·폭마다 `writes`·`portoneCalls`·`storage`·`aria`를 비교한다. 결제마다 새로 만드는 UUID와 실제 시각(ISO)은 자리표시로 바꿔 비교한다.
+- 통과 조건: 모두 같거나, 다른 항목이 허용 목록(`{ "screen", "viewport"?, "kind", "reason" }`, kind는 위 넷 중 하나)에 사유와 함께 있다. 한쪽에만 있는 화면·기록·정상 촬영 판정 실패는 실패다. 판정은 `parity.spec.mjs`(`node --test scripts/visual/parity.spec.mjs`).
 
 ## 작업 전·후 픽셀 비교
 
@@ -144,6 +159,7 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `shots.mjs` | 화면 자동 캡처(Playwright, `apps/e2e`의 설치본 사용) |
 | `soundness.mjs` | 정상 촬영 판정 |
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
+| `parity.mjs` | 작업 전·후 쓰기 요청·결제창 인자·저장소·접근성 트리 비교(`parity.spec.mjs`) |
 | `report.mjs` · `report-template.html` | 캡처 결과로 확인판 HTML 생성 |
 | `compare-cells.mjs` | UI 교체 대조 화면의 짝 비교(위치·스타일·픽셀) |
 

@@ -105,16 +105,17 @@ export function startMockApi({
 
     const body = m === 'GET' || m === 'HEAD' ? '' : await readBody(req);
 
-    // ── 화면별 상황(scenario)이 고른 경로는 기본 인증 응답보다 먼저 본다(예: 로그인 실패) ──
-    for (const [method, pattern, handle] of scenario) {
-      if (method !== m) continue;
-      const match = p.match(pattern);
-      if (!match) continue;
-      const out = handle({ url, params: match.slice(1).map(decodeURIComponent), body });
-      const status = out.status ?? 200;
-      const kind = p.startsWith('/auth/') ? 'auth' : m !== 'GET' && m !== 'HEAD' ? 'write' : 'read';
-      record({ kind, method: m, path: p, query: url.search, status });
-      return send(req, res, status, out.body, out.delay ?? 0);
+    // ── 화면별 상황(scenario)이 고른 인증 경로는 기본 인증 응답보다 먼저 본다(예: 로그인 실패) ──
+    if (p.startsWith('/auth/')) {
+      for (const [method, pattern, handle] of scenario) {
+        if (method !== m) continue;
+        const match = p.match(pattern);
+        if (!match) continue;
+        const out = handle({ url, params: match.slice(1).map(decodeURIComponent), body });
+        const status = out.status ?? 200;
+        record({ kind: 'auth', method: m, path: p, status });
+        return send(req, res, status, out.body, out.delay ?? 0);
+      }
     }
 
     // ── 인증: 어떤 계정·비밀번호든 fixture 사용자로 로그인된다 ──
@@ -154,13 +155,21 @@ export function startMockApi({
       if (!match) continue;
       const out = handle({ url, params: match.slice(1).map(decodeURIComponent), body });
       const status = out.status ?? 200;
-      record({ kind: isWrite ? 'write' : 'read', method: m, path: p, query: url.search, status });
+      record({
+        kind: isWrite ? 'write' : 'read',
+        method: m,
+        path: p,
+        query: url.search,
+        status,
+        // 쓰기 요청 본문은 작업 전·후 동작 비교(parity.mjs)에 쓴다.
+        ...(isWrite ? { body: body.slice(0, 4000) } : {}),
+      });
       return send(req, res, status, out.body, out.delay ?? 0);
     }
 
     // ── fixture에 없는 쓰기 요청: 기록만 하고 200 ──
     if (isWrite) {
-      record({ kind: 'write', method: m, path: p, query: url.search, body: body.slice(0, 500) });
+      record({ kind: 'write', method: m, path: p, query: url.search, body: body.slice(0, 4000) });
       return send(req, res, 200, {});
     }
 
