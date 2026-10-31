@@ -1,7 +1,10 @@
 import { auth, signOut } from '@/auth';
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
-import { Box, Stack, Card, Group, Text, Title, Button, Divider } from '@mantine/core';
+import { Card } from '@greenhub/ui/components/card';
+import { cn } from '@greenhub/ui/lib/utils';
+import { AppButton } from '@/components/app-button';
+import { card, text, titleH4 } from '@/components/look';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { profileImageSrc } from '@/lib/profile-image';
 
@@ -34,16 +37,16 @@ export default async function ProfilePage() {
   const imageSrc = profileImageSrc(user.image);
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
-      <Box component="header" style={{ padding: '24px 16px 16px' }}>
-        <Title order={4}>내 정보</Title>
-      </Box>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+      <header style={{ padding: '24px 16px 16px' }}>
+        <h4 className={titleH4}>내 정보</h4>
+      </header>
 
-      <Box component="main" style={{ flex: 1, padding: '0 16px' }}>
-        <Stack gap="md">
+      <main style={{ flex: 1, padding: '0 16px' }}>
+        <div className="flex flex-col gap-4">
           {/* 프로필 */}
-          <Card radius="xl" withBorder p="lg">
-            <Group gap="md" align="center">
+          <Card className={cn(card, 'p-5')}>
+            <div className="flex flex-wrap items-center gap-4">
               {imageSrc ? (
                 // 카카오 CDN 사진은 이미지 최적화 허용 대상이 아니라 브라우저가 바로 받는다.
                 <Image
@@ -55,7 +58,7 @@ export default async function ProfilePage() {
                   style={{ borderRadius: '50%' }}
                 />
               ) : (
-                <Box
+                <div
                   style={{
                     width: 60,
                     height: 60,
@@ -66,7 +69,8 @@ export default async function ProfilePage() {
                     justifyContent: 'center',
                   }}
                 >
-                  <Text
+                  <p
+                    className={text}
                     style={{
                       color: 'var(--color-primary-dark)',
                       fontWeight: 'var(--fw-bold)',
@@ -74,50 +78,59 @@ export default async function ProfilePage() {
                     }}
                   >
                     {user.name?.[0] ?? '기'}
-                  </Text>
-                </Box>
+                  </p>
+                </div>
               )}
-              <Stack gap={2}>
-                <Text style={{ fontWeight: 'var(--fw-bold)' }}>{user.name ?? '기사'}</Text>
-                <Text
+              <div className="flex flex-col gap-0.5">
+                <p className={text} style={{ fontWeight: 'var(--fw-bold)' }}>
+                  {user.name ?? '기사'}
+                </p>
+                <p
+                  className={text}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
                 >
                   {user.email ?? ''}
-                </Text>
-              </Stack>
-            </Group>
+                </p>
+              </div>
+            </div>
           </Card>
 
           {/* 계정 정보 */}
-          <Card radius="xl" withBorder p={0}>
-            <Group justify="space-between" align="center" px="md" py="md">
-              <Text
+          <Card className={cn(card, 'p-0')}>
+            <div className="flex flex-wrap items-center justify-between gap-4 p-4">
+              <p
+                className={text}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 연결된 계정
-              </Text>
-              <Group gap="xs">
-                <Box
+              </p>
+              <div className="flex flex-wrap items-center gap-2.5">
+                <div
                   style={{ width: 16, height: 16, borderRadius: '50%', backgroundColor: '#FEE500' }}
                 />
-                <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>
+                <p
+                  className={text}
+                  style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
+                >
                   카카오
-                </Text>
-              </Group>
-            </Group>
-            <Divider />
-            <Group justify="space-between" align="center" px="md" py="md">
-              <Text
+                </p>
+              </div>
+            </div>
+            <div className="border-t border-[#dee2e6]" />
+            <div className="flex flex-wrap items-center justify-between gap-4 p-4">
+              <p
+                className={text}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 앱 버전
-              </Text>
-              <Text
+              </p>
+              <p
+                className={text}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 1.0.0
-              </Text>
-            </Group>
+              </p>
+            </div>
           </Card>
 
           {/* 로그아웃 */}
@@ -128,12 +141,12 @@ export default async function ProfilePage() {
               await signOut({ redirectTo: '/login' });
             }}
           >
-            <Button type="submit" fullWidth variant="default" radius="xl" size="md">
+            <AppButton type="submit" fullWidth tone="default" size="md">
               로그아웃
-            </Button>
+            </AppButton>
           </form>
-        </Stack>
-      </Box>
-    </Box>
+        </div>
+      </main>
+    </div>
   );
 }

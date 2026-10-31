@@ -1,7 +1,6 @@
 'use client';
 
 import { apiPathSegment, readRouteParam } from '@greenhub/shared';
-import { Box, Text, UnstyledButton } from '@mantine/core';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -112,7 +111,8 @@ export default function EditProductPage() {
 
   if (notFound || !productId) {
     return (
-      <Box
+      // ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·UnstyledButton 값.
+      <div
         style={{
           minHeight: '100vh',
           backgroundColor: 'var(--color-surface-muted)',
@@ -123,11 +123,16 @@ export default function EditProductPage() {
           gap: 12,
         }}
       >
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        <p
+          className="m-0 p-0 text-base font-normal"
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        >
           상품을 찾을 수 없습니다
-        </Text>
-        <UnstyledButton
+        </p>
+        <button
+          type="button"
           onClick={() => router.back()}
+          className="cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
           style={{
             color: 'var(--color-primary-dark)',
             textDecoration: 'underline',
@@ -135,8 +140,8 @@ export default function EditProductPage() {
           }}
         >
           돌아가기
-        </UnstyledButton>
-      </Box>
+        </button>
+      </div>
     );
   }
 

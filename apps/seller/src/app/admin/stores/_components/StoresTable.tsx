@@ -1,16 +1,8 @@
 'use client';
 
-import {
-  Badge,
-  Box,
-  Button,
-  Group,
-  NumberInput,
-  Paper,
-  Stack,
-  Text,
-  UnstyledButton,
-} from '@mantine/core';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button } from '@greenhub/ui/components/button';
+import { Input, InputSection } from '@greenhub/ui/components/input';
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
   formatRate,
@@ -21,6 +13,25 @@ import {
   type StoreSort,
   type StoreSortKey,
 } from '../_lib';
+
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 16px·줄 높이 1.55·여백 0)·Paper·Group·Stack과 같은 값.
+// 카드·표 전환은 Mantine hiddenFrom·visibleFrom="sm"(48em)과 같은 경계다.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
+const HIDDEN_FROM_SM = 'min-[48em]:hidden!';
+const VISIBLE_FROM_SM = 'max-[47.99375em]:hidden!';
+const GROUP = 'flex flex-row flex-wrap items-center';
+// Mantine Badge light: brand ↔ light, yellow ↔ warning, gray ↔ secondary.
+const STATUS_BADGE_VARIANT = { brand: 'light', yellow: 'warning', gray: 'secondary' } as const;
+
+function StatusBadge({ status }: { status: AdminStore['status'] }) {
+  const color = (STATUS_COLOR[status] ?? 'gray') as keyof typeof STATUS_BADGE_VARIANT;
+  return (
+    <Badge variant={STATUS_BADGE_VARIANT[color] ?? 'secondary'} className="rounded-[32px]">
+      {STATUS_LABEL[status] ?? status}
+    </Badge>
+  );
+}
 
 interface StoresTableProps {
   stores: AdminStore[];
@@ -46,6 +57,23 @@ const thBase = {
   color: 'var(--color-text-secondary)',
 };
 
+const RATE_MAX = 100;
+const RATE_STEP = 0.5;
+
+/** Mantine NumberInput(decimalScale 2, clampBehavior strict)처럼 숫자·소수점 둘째 자리까지, 100 넘는 값은 받지 않는다. */
+function acceptRateInput(raw: string): string | null {
+  if (!/^\d*(\.\d{0,2})?$/.test(raw)) return null;
+  if (raw !== '' && raw !== '.' && Number(raw) > RATE_MAX) return null;
+  return raw;
+}
+
+/** 방향키 위·아래로 0.5씩 바꾼다(Mantine NumberInput step). */
+function stepRate(current: string, direction: 1 | -1): string {
+  const base = Number(current);
+  const next = (Number.isFinite(base) ? base : 0) + direction * RATE_STEP;
+  return String(Math.min(RATE_MAX, Math.max(0, Math.round(next * 100) / 100)));
+}
+
 interface SortHeaderProps {
   label: string;
   sortKey: StoreSortKey;
@@ -59,19 +87,17 @@ function SortHeader({ label, sortKey, sort, onSortChange }: SortHeaderProps) {
   const indicator = active ? (sort.direction === 'asc' ? '↑' : '↓') : '↕';
 
   return (
-    <UnstyledButton
+    <button
+      type="button"
       onClick={() => onSortChange({ key: sortKey, direction })}
       aria-label={`${label} ${direction === 'asc' ? '오름차순' : '내림차순'} 정렬`}
+      className="cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
     >
-      <Group gap={4} wrap="nowrap">
-        <Text component="span" inherit>
-          {label}
-        </Text>
-        <Text component="span" inherit style={{ color: 'var(--color-text-disabled)' }}>
-          {indicator}
-        </Text>
-      </Group>
-    </UnstyledButton>
+      <div className="flex flex-row flex-nowrap items-center justify-start gap-1">
+        <span>{label}</span>
+        <span style={{ color: 'var(--color-text-disabled)' }}>{indicator}</span>
+      </div>
+    </button>
   );
 }
 
@@ -79,7 +105,10 @@ function SortHeader({ label, sortKey, sort, onSortChange }: SortHeaderProps) {
 function StoreContact({ store }: { store: AdminStore }) {
   const phone = store.phone?.trim();
   return (
-    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+    <p
+      className={TEXT}
+      style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+    >
       {phone ? (
         <>
           {store.ceoName?.trim() ? `${store.ceoName.trim()} · ` : ''}
@@ -90,7 +119,18 @@ function StoreContact({ store }: { store: AdminStore }) {
       ) : (
         formatStoreContact(store)
       )}
-    </Text>
+    </p>
+  );
+}
+
+function StoreIdText({ store }: { store: AdminStore }) {
+  return (
+    <p
+      className={`${TEXT} font-mono`}
+      style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+    >
+      {store.id.slice(0, 8)}…
+    </p>
   );
 }
 
@@ -113,67 +153,72 @@ export function StoresTable({
 }: StoresTableProps) {
   if (loading || emptyKind !== 'has-data') {
     return (
-      <Paper
-        radius="lg"
-        shadow="xs"
+      <div
+        className={PAPER}
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
       >
-        <Stack align="center" gap="sm" py={64}>
-          <Text ta="center" style={{ color: 'var(--color-text-disabled)' }}>
+        <div className="flex flex-col items-center gap-3 py-16">
+          <p className={`${TEXT} text-center`} style={{ color: 'var(--color-text-disabled)' }}>
             {loading
               ? '불러오는 중...'
               : emptyKind === 'no-match'
                 ? '조건에 맞는 판매자가 없습니다.'
                 : '등록된 판매자가 없습니다.'}
-          </Text>
+          </p>
           {!loading && emptyKind === 'no-match' && (
-            <Button size="xs" variant="light" color="gray" onClick={onResetFilters}>
+            <Button size="xs" variant="secondary" onClick={onResetFilters}>
               필터 초기화
             </Button>
           )}
-        </Stack>
-      </Paper>
+        </div>
+      </div>
     );
   }
 
   // 수수료율 표시/편집 — 테이블·카드 공용(중복 제거)
   const renderRate = (store: AdminStore) =>
     editId === store.id ? (
-      <Group gap="xs">
+      <div className={`${GROUP} justify-start gap-2.5`}>
         {/* % 단위 입력(예: 5 = 5%). 저장할 때 0~1 값으로 바꾼다(_lib parseRate). */}
-        <NumberInput
-          min={0}
-          max={100}
-          step={0.5}
-          decimalScale={2}
-          clampBehavior="strict"
-          inputMode="decimal"
-          value={rateInput}
-          onChange={(value) => onRateInput(String(value))}
-          placeholder="5"
-          rightSection="%"
-          aria-label="수수료율(%)"
-          size="xs"
-          radius="sm"
-          w={104}
-        />
+        {/* Mantine NumberInput xs의 오른쪽 칸은 17px(--ni-right-section-width-xs)이다. */}
+        <div className="relative w-[104px]">
+          <Input
+            inputMode="decimal"
+            value={rateInput}
+            onChange={(event) => {
+              const accepted = acceptRateInput(event.currentTarget.value);
+              if (accepted !== null) onRateInput(accepted);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowUp' && event.key !== 'ArrowDown') return;
+              event.preventDefault();
+              onRateInput(stepRate(rateInput, event.key === 'ArrowUp' ? 1 : -1));
+            }}
+            placeholder="5"
+            aria-label="수수료율(%)"
+            size="xs"
+            className="rounded-[4px] pe-[17px]"
+          />
+          <InputSection side="right" size="xs" className="w-[17px] rounded-e-[4px]">
+            %
+          </InputSection>
+        </div>
         <Button
           onClick={() => onSave(store.id)}
           disabled={saving}
           size="xs"
-          color="brand"
-          radius="md"
+          className="rounded-[8px]"
         >
           저장
         </Button>
-        <Button onClick={onCancelEdit} size="xs" variant="subtle" color="gray" radius="md">
+        <Button onClick={onCancelEdit} size="xs" variant="ghost" className="rounded-[8px]">
           취소
         </Button>
-      </Group>
+      </div>
     ) : (
-      <Text style={{ color: 'var(--color-text-secondary)' }}>
+      <p className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
         {formatRate(store.commissionRate)}
-      </Text>
+      </p>
     );
 
   // 수수료 설정 진입 버튼 — 테이블·카드 공용
@@ -192,7 +237,7 @@ export function StoresTable({
         복구
       </Button>
     ) : (
-      <Button onClick={() => onArchive(store)} size="xs" variant="subtle" color="red">
+      <Button onClick={() => onArchive(store)} size="xs" variant="subtle-destructive">
         치우기
       </Button>
     ));
@@ -200,126 +245,97 @@ export function StoresTable({
   return (
     <>
       {/* 모바일(<sm): 카드 리스트 — 수수료율·설정 버튼 잘림 방지 */}
-      <Stack gap="sm" hiddenFrom="sm" role="list" aria-label="가게 목록">
+      {/* biome-ignore lint/a11y/useSemanticElements: Mantine Stack(div) 그대로의 목록 역할. ul로 바꾸면 기본 여백·글머리표가 생긴다. */}
+      <div className={`flex flex-col gap-3 ${HIDDEN_FROM_SM}`} role="list" aria-label="가게 목록">
         {stores.map((store) => (
-          <Paper
+          // biome-ignore lint/a11y/useSemanticElements: 위 목록(div)의 항목. Mantine Paper(div) 그대로다.
+          <div
             role="listitem"
             key={store.id}
-            radius="md"
-            px="md"
-            py="sm"
-            shadow="xs"
+            className="block rounded-[8px] bg-white px-4 py-3 shadow-mantine-xs"
             style={{ border: '1px solid var(--color-border)' }}
           >
-            <Group justify="space-between" mb="xs" align="flex-start">
-              <Box>
-                <Text style={{ fontWeight: 'var(--fw-medium)' }}>{store.name || '(미설정)'}</Text>
+            <div className="mb-2.5 flex flex-row flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+                  {store.name || '(미설정)'}
+                </p>
                 <StoreContact store={store} />
-                <Text
-                  style={{
-                    fontSize: 'var(--font-size-sm)',
-                    color: 'var(--color-text-disabled)',
-                  }}
-                  ff="monospace"
-                >
-                  {store.id.slice(0, 8)}…
-                </Text>
-              </Box>
-              <Badge color={STATUS_COLOR[store.status] ?? 'gray'} variant="light" radius="xl">
-                {STATUS_LABEL[store.status] ?? store.status}
-              </Badge>
-            </Group>
-            <Group justify="space-between" align="center" mt="xs">
+                <StoreIdText store={store} />
+              </div>
+              <StatusBadge status={store.status} />
+            </div>
+            <div className={`${GROUP} mt-2.5 justify-between gap-4`}>
               {renderRate(store)}
-              <Group gap="xs">
+              <div className={`${GROUP} justify-start gap-2.5`}>
                 {renderSetButton(store)}
                 {renderArchiveButton(store)}
-              </Group>
-            </Group>
-          </Paper>
+              </div>
+            </div>
+          </div>
         ))}
-      </Stack>
+      </div>
 
       {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
-      <Paper
-        radius="lg"
-        shadow="xs"
+      <div
+        className={`${PAPER} ${VISIBLE_FROM_SM}`}
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        visibleFrom="sm"
       >
-        <Box
-          component="table"
+        <table
           style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
         >
-          <Box
-            component="thead"
+          <thead
             style={{
               backgroundColor: 'var(--color-surface-muted)',
               borderBottom: '1px solid var(--color-border)',
             }}
           >
             <tr>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
+              <th style={{ ...thBase, textAlign: 'left' }}>
                 <SortHeader label="상호" sortKey="name" sort={sort} onSortChange={onSortChange} />
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                대표자·연락처
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
+              </th>
+              <th style={{ ...thBase, textAlign: 'left' }}>대표자·연락처</th>
+              <th style={{ ...thBase, textAlign: 'left' }}>
                 <SortHeader label="상태" sortKey="status" sort={sort} onSortChange={onSortChange} />
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
+              </th>
+              <th style={{ ...thBase, textAlign: 'left' }}>
                 <SortHeader
                   label="수수료율"
                   sortKey="rate"
                   sort={sort}
                   onSortChange={onSortChange}
                 />
-              </Box>
-              <Box component="th" style={{ padding: '12px 16px' }} />
+              </th>
+              <th style={{ padding: '12px 16px' }} />
             </tr>
-          </Box>
-          <Box component="tbody" style={{ borderTop: 'none' }}>
+          </thead>
+          <tbody style={{ borderTop: 'none' }}>
             {stores.map((store) => (
-              <Box
-                component="tr"
-                key={store.id}
-                style={{ borderTop: '1px solid var(--color-border)' }}
-              >
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Text style={{ fontWeight: 'var(--fw-medium)' }}>{store.name || '(미설정)'}</Text>
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-disabled)',
-                    }}
-                    ff="monospace"
-                  >
-                    {store.id.slice(0, 8)}…
-                  </Text>
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
+              <tr key={store.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                <td style={{ padding: '12px 16px' }}>
+                  <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+                    {store.name || '(미설정)'}
+                  </p>
+                  <StoreIdText store={store} />
+                </td>
+                <td style={{ padding: '12px 16px' }}>
                   <StoreContact store={store} />
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Badge color={STATUS_COLOR[store.status] ?? 'gray'} variant="light" radius="xl">
-                    {STATUS_LABEL[store.status] ?? store.status}
-                  </Badge>
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  {renderRate(store)}
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
-                  <Group gap="xs" justify="flex-end">
+                </td>
+                <td style={{ padding: '12px 16px' }}>
+                  <StatusBadge status={store.status} />
+                </td>
+                <td style={{ padding: '12px 16px' }}>{renderRate(store)}</td>
+                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                  <div className={`${GROUP} justify-end gap-2.5`}>
                     {renderSetButton(store)}
                     {renderArchiveButton(store)}
-                  </Group>
-                </Box>
-              </Box>
+                  </div>
+                </td>
+              </tr>
             ))}
-          </Box>
-        </Box>
-      </Paper>
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

@@ -1,6 +1,8 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button } from '@greenhub/ui/components/button';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import type { InviteToken } from '@/hooks/useAdmin';
 import { formatKstDateTime, getAdminInviteReadState, inviteStatus } from '../_lib';
 
@@ -20,6 +22,19 @@ interface InviteHistoryTableProps {
   /** 행별 초대 취소 요청 — 유효 상태 행에만 노출하며, 확인 창은 호출자가 띄운다. */
   onRevoke: (token: string) => void;
 }
+
+// ① 외형 유지(UI 교체 P2b): Mantine Text(16px·줄 높이 1.55)·Paper·Group·Stack·Badge light·Button compact-xs와 같은 값.
+// 카드·표 전환은 Mantine hiddenFrom·visibleFrom="sm"(48em)과 같은 경계다.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
+const GROUP_NOWRAP = 'flex flex-row flex-nowrap items-center justify-start gap-2.5';
+// Mantine Badge light: brand ↔ light, gray ↔ secondary, red ↔ destructive, orange ↔ light-orange.
+const BADGE_VARIANT = {
+  brand: 'light',
+  gray: 'secondary',
+  red: 'destructive',
+  orange: 'light-orange',
+} as const;
 
 const dateCell = {
   padding: '12px 16px',
@@ -48,8 +63,7 @@ function CopyTokenButton({
       onClick={() => onCopy(token)}
       size="compact-xs"
       variant="outline"
-      color="brand"
-      radius="md"
+      className="rounded-[8px]"
       aria-label={`토큰 ${token} 초대 링크 복사`}
     >
       {copied ? '복사됨!' : '링크 복사'}
@@ -67,18 +81,17 @@ function RevokeInviteButton({
   onRevoke: (token: string) => void;
 }) {
   return (
-    <Button
+    <LoadingButton
       onClick={() => onRevoke(token)}
       size="compact-xs"
-      variant="subtle"
-      color="red"
-      radius="md"
+      variant="subtle-destructive"
+      className="rounded-[8px]"
       loading={revokingToken === token}
       disabled={revokingToken !== null}
       aria-label={`토큰 ${token} 초대 취소`}
     >
       취소
-    </Button>
+    </LoadingButton>
   );
 }
 
@@ -95,8 +108,8 @@ function usageText(inv: InviteToken): string {
 function recipientEmailText(recipientEmail: string | null | undefined) {
   if (!recipientEmail) return null;
   return (
-    <Text
-      mt={4}
+    <p
+      className={`${TEXT} mt-1`}
       style={{
         fontSize: 'var(--font-size-sm)',
         color: 'var(--color-text-disabled)',
@@ -104,7 +117,7 @@ function recipientEmailText(recipientEmail: string | null | undefined) {
       }}
     >
       받는 사람 {recipientEmail}
-    </Text>
+    </p>
   );
 }
 
@@ -122,85 +135,81 @@ export function InviteHistoryTable({
 
   if (readState === 'LOADING') {
     return (
-      <Text ta="center" py={32} style={{ color: 'var(--color-text-disabled)' }}>
+      <p className={`${TEXT} py-8 text-center`} style={{ color: 'var(--color-text-disabled)' }}>
         불러오는 중...
-      </Text>
+      </p>
     );
   }
 
   // 조회 실패는 성공-empty와 구조적으로 구분 — "발급된 토큰이 없습니다."로 collapse 금지.
   if (readState === 'FETCH_ERROR') {
     return (
-      <Paper
-        radius="lg"
-        shadow="xs"
+      <div
+        className={PAPER}
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
       >
-        <Stack gap="sm" align="center" py={48} px="md">
-          <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+        <div className="flex flex-col items-center gap-3 px-4 py-12">
+          <p className={TEXT} style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
             발급 내역을 불러오지 못했습니다.
-          </Text>
-          <Text
-            ta="center"
+          </p>
+          <p
+            className={`${TEXT} text-center`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             {error}
-          </Text>
-          <Button onClick={onRetry} size="sm" variant="outline" radius="md">
+          </p>
+          <Button onClick={onRetry} variant="outline" className="rounded-[8px]">
             다시 조회
           </Button>
-        </Stack>
-      </Paper>
+        </div>
+      </div>
     );
   }
 
   if (readState === 'EMPTY') {
     return (
-      <Paper
-        radius="lg"
-        shadow="xs"
+      <div
+        className={PAPER}
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
       >
-        <Text ta="center" py={48} style={{ color: 'var(--color-text-disabled)' }}>
+        <p className={`${TEXT} py-12 text-center`} style={{ color: 'var(--color-text-disabled)' }}>
           발급된 초대 링크가 없습니다.
-        </Text>
-      </Paper>
+        </p>
+      </div>
     );
   }
 
   return (
     <>
       {/* 모바일(<sm): 카드 리스트 — 날짜 컬럼 잘림 방지 */}
-      <Stack gap="sm" hiddenFrom="sm" role="list" aria-label="초대 기록">
+      {/* biome-ignore lint/a11y/useSemanticElements: Mantine Stack(div) 그대로의 목록 역할. ul로 바꾸면 기본 여백·글머리표가 생긴다. */}
+      <div className="flex flex-col gap-3 min-[48em]:hidden!" role="list" aria-label="초대 기록">
         {invites.map((inv) => {
           const { label, color, expDate, revocable } = inviteStatus(inv);
           return (
-            <Paper
+            // biome-ignore lint/a11y/useSemanticElements: 위 목록(div)의 항목. Mantine Paper(div) 그대로다.
+            <div
               role="listitem"
               key={inv.token}
-              radius="md"
-              px="md"
-              py="sm"
-              shadow="xs"
+              className="block rounded-[8px] bg-white px-4 py-3 shadow-mantine-xs"
               style={{ border: '1px solid var(--color-border)' }}
             >
-              <Group justify="space-between" mb="xs">
-                <Group gap="xs" wrap="nowrap">
-                  <Text
-                    component="code"
-                    ff="monospace"
+              <div className="mb-2.5 flex flex-row flex-wrap items-center justify-between gap-4">
+                <div className={GROUP_NOWRAP}>
+                  <code
+                    className={`${TEXT} font-mono`}
                     style={{ letterSpacing: '0.1em', color: 'var(--color-text)' }}
                   >
                     {inv.token}
-                  </Text>
+                  </code>
                   <CopyTokenButton
                     token={inv.token}
                     copied={copiedToken === inv.token}
                     onCopy={onCopy}
                   />
-                </Group>
-                <Group gap="xs" wrap="nowrap">
-                  <Badge color={color} variant="light" radius="xl">
+                </div>
+                <div className={GROUP_NOWRAP}>
+                  <Badge variant={BADGE_VARIANT[color]} className="rounded-[32px]">
                     {label}
                   </Badge>
                   {revocable && (
@@ -210,84 +219,71 @@ export function InviteHistoryTable({
                       onRevoke={onRevoke}
                     />
                   )}
-                </Group>
-              </Group>
-              <Text style={mutedSm}>발급 {formatKstDateTime(inv.createdAt)}</Text>
-              <Text style={mutedSm}>만료 {formatKstDateTime(expDate)}</Text>
+                </div>
+              </div>
+              <p className={TEXT} style={mutedSm}>
+                발급 {formatKstDateTime(inv.createdAt)}
+              </p>
+              <p className={TEXT} style={mutedSm}>
+                만료 {formatKstDateTime(expDate)}
+              </p>
               {inv.usedAt && (
-                <Text style={{ ...mutedSm, wordBreak: 'break-all' }}>사용 {usageText(inv)}</Text>
+                <p className={TEXT} style={{ ...mutedSm, wordBreak: 'break-all' }}>
+                  사용 {usageText(inv)}
+                </p>
               )}
               {recipientEmailText(inv.recipientEmail)}
-            </Paper>
+            </div>
           );
         })}
-      </Stack>
+      </div>
 
       {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
-      <Paper
-        radius="lg"
-        shadow="xs"
+      <div
+        className={`${PAPER} max-[47.99375em]:hidden!`}
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        visibleFrom="sm"
       >
-        <Box
-          component="table"
+        <table
           style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
         >
-          <Box
-            component="thead"
+          <thead
             style={{
               backgroundColor: 'var(--color-surface-muted)',
               borderBottom: '1px solid var(--color-border)',
             }}
           >
             <tr>
-              <Box component="th" style={thBase}>
-                토큰
-              </Box>
-              <Box component="th" style={thBase}>
-                상태
-              </Box>
-              <Box component="th" style={thBase}>
-                발급
-              </Box>
-              <Box component="th" style={thBase}>
-                만료
-              </Box>
-              <Box component="th" style={thBase}>
-                사용
-              </Box>
+              <th style={thBase}>토큰</th>
+              <th style={thBase}>상태</th>
+              <th style={thBase}>발급</th>
+              <th style={thBase}>만료</th>
+              <th style={thBase}>사용</th>
             </tr>
-          </Box>
-          <Box component="tbody">
+          </thead>
+          <tbody>
             {invites.map((inv) => {
               const { label, color, expDate, revocable } = inviteStatus(inv);
               return (
-                <Box
-                  component="tr"
-                  key={inv.token}
-                  style={{ borderTop: '1px solid var(--color-border)' }}
-                >
-                  <Box component="td" style={{ padding: '12px 16px' }}>
-                    <Group gap="xs" wrap="nowrap">
-                      <Text
-                        component="code"
-                        ff="monospace"
+                <tr key={inv.token} style={{ borderTop: '1px solid var(--color-border)' }}>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div className={GROUP_NOWRAP}>
+                      <code
+                        className={`${TEXT} font-mono`}
                         style={{ letterSpacing: '0.1em', color: 'var(--color-text)' }}
                       >
                         {inv.token}
-                      </Text>
+                      </code>
                       <CopyTokenButton
                         token={inv.token}
                         copied={copiedToken === inv.token}
                         onCopy={onCopy}
                       />
-                    </Group>
+                    </div>
                     {recipientEmailText(inv.recipientEmail)}
-                  </Box>
-                  <Box component="td" style={{ padding: '12px 16px' }}>
-                    <Group gap="xs" wrap="nowrap">
-                      <Badge color={color} variant="light" radius="xl">
+                  </td>
+                  <td style={{ padding: '12px 16px' }}>
+                    <div className={GROUP_NOWRAP}>
+                      <Badge variant={BADGE_VARIANT[color]} className="rounded-[32px]">
                         {label}
                       </Badge>
                       {revocable && (
@@ -297,23 +293,17 @@ export function InviteHistoryTable({
                           onRevoke={onRevoke}
                         />
                       )}
-                    </Group>
-                  </Box>
-                  <Box component="td" style={dateCell}>
-                    {formatKstDateTime(inv.createdAt)}
-                  </Box>
-                  <Box component="td" style={dateCell}>
-                    {formatKstDateTime(expDate)}
-                  </Box>
-                  <Box component="td" style={{ ...dateCell, wordBreak: 'break-all' }}>
-                    {usageText(inv)}
-                  </Box>
-                </Box>
+                    </div>
+                  </td>
+                  <td style={dateCell}>{formatKstDateTime(inv.createdAt)}</td>
+                  <td style={dateCell}>{formatKstDateTime(expDate)}</td>
+                  <td style={{ ...dateCell, wordBreak: 'break-all' }}>{usageText(inv)}</td>
+                </tr>
               );
             })}
-          </Box>
-        </Box>
-      </Paper>
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }

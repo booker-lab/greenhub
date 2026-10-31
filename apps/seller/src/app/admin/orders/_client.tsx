@@ -1,7 +1,6 @@
 'use client';
 
 import type { PostDeliveryRefundReasonCode } from '@greenhub/shared';
-import { Box, Group, Text, Title } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useRef, useState } from 'react';
 import {
@@ -35,9 +34,9 @@ export default function AdminOrdersClient() {
     forceRefund,
     postDeliveryRefund,
   } = useAdminOrders({
-      storeId: storeFilter || undefined,
-      status: statusFilter || undefined,
-    });
+    storeId: storeFilter || undefined,
+    status: statusFilter || undefined,
+  });
   const [refundTarget, setRefundTarget] = useState<AdminOrder | null>(null);
   const [refundReason, setRefundReason] = useState('');
   const [deliveredTarget, setDeliveredTarget] = useState<AdminOrder | null>(null);
@@ -109,19 +108,20 @@ export default function AdminOrdersClient() {
   };
 
   return (
-    <Box>
-      <Group justify="space-between" mb="md">
-        <Title order={4}>
+    <div>
+      {/* ① 외형 유지(UI 교체 P2b): Mantine Group(mb md)·Title order 4(18px·800·줄 높이 1.45)·Text span 값. */}
+      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">
           전체 주문{' '}
-          <Text
-            component="span"
+          <span
+            className="m-0 p-0 text-base font-normal"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             ({orders.length}
             {hasMore ? '+' : ''})
-          </Text>
-        </Title>
-      </Group>
+          </span>
+        </h4>
+      </div>
 
       <OrdersFilters
         storeFilter={storeFilter}
@@ -167,6 +167,6 @@ export default function AdminOrdersClient() {
         onConfirm={runDeliveredRefund}
         onClose={() => setDeliveredTarget(null)}
       />
-    </Box>
+    </div>
   );
 }

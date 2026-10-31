@@ -1,9 +1,11 @@
 'use client';
 
 import type { Order } from '@greenhub/shared';
-import { Paper, Stack, Text } from '@mantine/core';
 import { isFeatureOn } from '@/lib/features';
 import { Row } from './OrderRow';
+
+// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, shadow xs, p md)·Stack·Text(p, 여백 0, 줄 높이 1.55)와 같은 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
 
 // 팔도감 벤치마킹 비교 기능의 주문 정보: 포장할 때 볼 옵션(축하 토퍼 등), 포장 라벨 문구, 선물 카드.
 // 값이 없는 주문(기존 주문)에서는 아무것도 그리지 않는다.
@@ -25,59 +27,76 @@ export function OrderBenchmarkSection({ order }: { order: Order }) {
   } as const;
 
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Stack gap={6}>
+    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+      <div className="flex flex-col gap-1.5">
         {optionLines.length > 0 && (
           <>
-            <Text style={label}>포장 옵션</Text>
+            <p className={TEXT} style={label}>
+              포장 옵션
+            </p>
             {optionLines.map((item) => (
-              <Stack key={`${item.productId}-${item.roundItemId ?? ''}`} gap={2}>
+              <div
+                key={`${item.productId}-${item.roundItemId ?? ''}`}
+                className="flex flex-col gap-0.5"
+              >
                 <Row
                   label={item.productName}
-                  value={(item.selectedOptions ?? []).map((option) => option.choiceLabel).join(' · ')}
+                  value={(item.selectedOptions ?? [])
+                    .map((option) => option.choiceLabel)
+                    .join(' · ')}
                   highlight
                 />
                 {(item.selectedOptions ?? [])
                   .filter((option) => option.text)
                   .map((option) => (
                     // 2026-10-30 전 주문의 상품별 문구(라벨·토퍼). 손님이 쓴 그대로 출력한다.
-                    <Text
+                    <p
+                      className={TEXT}
                       key={option.choiceId}
                       style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
                     >
                       {option.choiceLabel} 문구: “{option.text}”
-                    </Text>
+                    </p>
                   ))}
-              </Stack>
+              </div>
             ))}
           </>
         )}
         {packageLabel && (
           <>
-            <Text style={label} mt={optionLines.length > 0 ? 'xs' : 0}>
+            <p className={`${TEXT} ${optionLines.length > 0 ? 'mt-2.5' : 'mt-0'}`} style={label}>
               포장 라벨 (화분 포장 겉면에 붙여 주세요)
-            </Text>
-            <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
+            </p>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+            >
               “{packageLabel}”
-            </Text>
+            </p>
           </>
         )}
         {gift && (
           <>
-            <Text style={label} mt={optionLines.length > 0 || packageLabel ? 'xs' : 0}>
+            <p
+              className={`${TEXT} ${optionLines.length > 0 || packageLabel ? 'mt-2.5' : 'mt-0'}`}
+              style={label}
+            >
               선물 (카드는 포장에 넣어 주세요)
-            </Text>
+            </p>
             <Row label="받는 분" value={gift.recipientName} />
             {gift.recipientPhone && <Row label="받는 분 연락처" value={gift.recipientPhone} />}
             <Row label="보내는 분" value={gift.senderName} />
             {gift.cardMessage && (
-              <Text style={{ fontSize: 'var(--font-size-sm)', whiteSpace: 'pre-wrap' }}>
+              <p
+                className={TEXT}
+                style={{ fontSize: 'var(--font-size-sm)', whiteSpace: 'pre-wrap' }}
+              >
                 카드 문구: “{gift.cardMessage}”
-              </Text>
+              </p>
             )}
           </>
         )}
-      </Stack>
-    </Paper>
+      </div>
+    </div>
   );
 }

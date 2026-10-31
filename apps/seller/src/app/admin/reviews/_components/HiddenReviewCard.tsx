@@ -1,8 +1,13 @@
 import type { AdminHiddenReview } from '@greenhub/shared';
-import { Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { hiddenReasonLabel, hiddenSummary } from '../../../reactions/_lib';
 
 // 관리자 콘솔 숨긴 후기 한 건: 가게·상품·별점·내용·사유·설명·숨긴 사람/시각과 숨김 해제 버튼.
+
+// ① 외형 유지(UI 교체 P2b): Mantine Paper(lg·xs·md)·Group·Stack·Text(기본 16px·1.55, sm 15px·1.45)·Button light compact-sm과 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const TEXT_SM = 'm-0 p-0 text-sm';
+const SECONDARY = { color: 'var(--color-text-secondary)' };
 
 const day = (iso: string) =>
   new Date(iso).toLocaleDateString('ko-KR', {
@@ -24,33 +29,38 @@ export interface HiddenReviewCardProps {
 export function HiddenReviewCard({ review, busy, error, onUnhide }: HiddenReviewCardProps) {
   const reason = hiddenReasonLabel(review) ?? '사유 없음';
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Group justify="space-between" wrap="nowrap" align="flex-start">
-        <Stack gap={0}>
-          <Text fw={700}>{review.storeName ?? review.storeId}</Text>
-          <Text size="sm" c="var(--color-text-secondary)">
+    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+      <div className="flex flex-row flex-nowrap items-start justify-between gap-4">
+        <div className="flex flex-col gap-0">
+          <p className={`${TEXT} font-bold`}>{review.storeName ?? review.storeId}</p>
+          <p className={TEXT_SM} style={SECONDARY}>
             {review.productName ?? '삭제된 상품'}
-          </Text>
-        </Stack>
-        <Text size="sm" c="var(--color-text-secondary)" style={{ flexShrink: 0 }}>
+          </p>
+        </div>
+        <p className={TEXT_SM} style={{ ...SECONDARY, flexShrink: 0 }}>
           {review.authorName} · {day(review.createdAt)}
-        </Text>
-      </Group>
-      <Text
-        fw={700}
-        mt={6}
-        c="var(--color-text-secondary)"
+        </p>
+      </div>
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: Mantine Text(p)에 붙어 있던 별점 읽기 이름을 그대로 둔다. */}
+      <p
+        className={`${TEXT} mt-1.5 font-bold`}
+        style={SECONDARY}
         aria-label={`별점 5점 중 ${review.rating}점`}
       >
         {ratingLabel(review.rating)}
-      </Text>
-      <Text size="sm" mt={2} style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+      </p>
+      <p
+        className={`${TEXT_SM} mt-0.5`}
+        style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}
+      >
         {review.text}
-      </Text>
+      </p>
       {review.photoUrls && review.photoUrls.length > 0 && (
-        <Group gap={6} mt={6} wrap="nowrap" style={{ overflowX: 'auto' }}>
+        <div
+          className="mt-1.5 flex flex-row flex-nowrap items-center justify-start gap-1.5"
+          style={{ overflowX: 'auto' }}
+        >
           {review.photoUrls.map((url, index) => (
-            // 눌러서 새 탭에서 원본 크기로 본다(숨김 사유 확인용).
             <a key={url} href={url} target="_blank" rel="noopener noreferrer">
               {/* biome-ignore lint/performance/noImgElement: 한 시간짜리 서명 URL이라 next/image 최적화 대상이 아니다. */}
               <img
@@ -63,31 +73,29 @@ export function HiddenReviewCard({ review, busy, error, onUnhide }: HiddenReview
               />
             </a>
           ))}
-        </Group>
+        </div>
       )}
-      <Stack gap={0} mt={8}>
-        <Text size="sm" fw={700}>
-          사유: {reason}
-        </Text>
+      <div className="mt-2 flex flex-col gap-0">
+        <p className={`${TEXT_SM} font-bold`}>사유: {reason}</p>
         {review.hiddenNote && (
-          <Text size="sm" c="var(--color-text-secondary)">
+          <p className={TEXT_SM} style={SECONDARY}>
             설명: {review.hiddenNote}
-          </Text>
+          </p>
         )}
-        <Text size="sm" c="var(--color-text-secondary)">
+        <p className={TEXT_SM} style={SECONDARY}>
           {hiddenSummary(review)}
-        </Text>
-      </Stack>
-      <Group justify="flex-end" mt={8}>
-        <Button variant="light" radius="xl" size="compact-sm" loading={busy} onClick={onUnhide}>
+        </p>
+      </div>
+      <div className="mt-2 flex flex-row flex-wrap items-center justify-end gap-4">
+        <LoadingButton variant="light" size="compact-sm" loading={busy} onClick={onUnhide}>
           숨김 해제
-        </Button>
-      </Group>
+        </LoadingButton>
+      </div>
       {error && (
-        <Text role="alert" size="sm" mt={6} c="var(--color-danger)">
+        <p role="alert" className={`${TEXT_SM} mt-1.5`} style={{ color: 'var(--color-danger)' }}>
           {error}
-        </Text>
+        </p>
       )}
-    </Paper>
+    </div>
   );
 }
