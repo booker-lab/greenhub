@@ -503,26 +503,28 @@ export function UiCompare({ open }: { open?: string }) {
         <Row
           name="AdminFetchError"
           mantine={
-            <Paper
-              radius="lg"
-              shadow="xs"
-              style={{ border: '1px solid var(--color-border)', overflow: 'hidden', width: '100%' }}
-            >
-              <MStack gap="sm" align="center" py={64} px="md">
-                <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
-                  숨긴 후기를 불러오지 못했습니다.
-                </Text>
-                <Text
-                  ta="center"
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                >
-                  숨긴 후기 조회 중 오류 발생
-                </Text>
-                <MButton size="sm" variant="outline" radius="md">
-                  다시 조회
-                </MButton>
-              </MStack>
-            </Paper>
+            <div style={{ width: '100%' }}>
+              <Paper
+                radius="lg"
+                shadow="xs"
+                style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
+              >
+                <MStack gap="sm" align="center" py={64} px="md">
+                  <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+                    숨긴 후기를 불러오지 못했습니다.
+                  </Text>
+                  <Text
+                    ta="center"
+                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                  >
+                    숨긴 후기 조회 중 오류 발생
+                  </Text>
+                  <MButton size="sm" variant="outline" radius="md">
+                    다시 조회
+                  </MButton>
+                </MStack>
+              </Paper>
+            </div>
           }
           ui={
             <div style={{ width: '100%' }}>
