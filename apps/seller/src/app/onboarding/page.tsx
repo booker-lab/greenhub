@@ -199,7 +199,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main style={{ minHeight: '100vh', backgroundColor: 'var(--color-bg)', padding: '32px 16px' }}>
+    <main style={{ minHeight: '100vh', backgroundColor: 'var(--frame)', padding: '32px 16px' }}>
       <div className="mx-auto max-w-[540px] px-4">
         {isEdit ? (
           <div className="mb-5 flex flex-row flex-nowrap items-center justify-start gap-3">

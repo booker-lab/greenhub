@@ -21,7 +21,7 @@ export default async function SignInErrorPage({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'var(--color-bg)',
+        backgroundColor: 'var(--frame)',
         padding: '0 16px',
       }}
     >

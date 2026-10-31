@@ -153,7 +153,7 @@ export default function DailyCapsPage() {
     <main
       style={{
         minHeight: '100vh',
-        backgroundColor: 'var(--color-surface-muted)',
+        backgroundColor: 'var(--frame)',
         padding: '32px 16px',
       }}
     >

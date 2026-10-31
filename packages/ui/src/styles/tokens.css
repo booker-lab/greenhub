@@ -13,6 +13,10 @@
  *
  * ① 외형 유지 값: `--input`(Mantine 입력칸 테두리 gray-4)·`--card-border`(Mantine Paper·Card 테두리 gray-3)는
  * 지금 화면과 같은 모양을 내기 위한 값이다. 화면 방향(design-direction.md) 적용은 ② 단계에서 한다.
+ *
+ * ② 방향 값(design-direction.md §5·§8 D3·D7): 판매자·어드민 화면만 쓴다. 소비자 앱은 이 파일을 import하지 않는다.
+ * - `--frame`: 판매자·어드민 틀(머리·하단 탭·사이드바·상단바·바탕)의 옅은 초록빛 회색.
+ * - `--rule`: 어드민 종이 1px 테두리·표 행 선·선택 메뉴 테두리.
  */
 :root {
   --background: #ffffff;
@@ -44,6 +48,8 @@
   --status-info-foreground: #3f4642;
   --status-warning: #fff4cc;
   --status-warning-foreground: #7a5b00;
+  --frame: #f4f7f5;
+  --rule: #e3e8e5;
 }
 
 @theme inline {
@@ -77,6 +83,8 @@
   --color-status-info-foreground: var(--status-info-foreground);
   --color-status-warning: var(--status-warning);
   --color-status-warning-foreground: var(--status-warning-foreground);
+  --color-frame: var(--frame);
+  --color-rule: var(--rule);
 
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-brand: 'Nunito', 'Pretendard Variable', Pretendard, system-ui, sans-serif;
