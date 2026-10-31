@@ -148,6 +148,9 @@ function Chevron({ up }: { up?: boolean }) {
   );
 }
 
+// Mantine Input 글자 줄 높이 = 입력칸 높이 - 2px(34px). 날짜·시각 칸은 안쪽 칸이 줄 높이로 세로 위치를 정한다.
+const INPUT_LINE = 'leading-[34px]';
+
 const FEE_STEP = 1000;
 const CONTROL =
   'flex h-[17px] w-full flex-[0_0_50%] cursor-pointer appearance-none items-center justify-center border-0 border-s border-solid border-s-[#ced4da] bg-transparent p-0 text-black hover:bg-[#f8f9fa] disabled:cursor-not-allowed disabled:bg-transparent disabled:text-[#adb5bd] disabled:opacity-60';
@@ -183,7 +186,7 @@ function FeeInput({
           const digits = event.currentTarget.value.replace(/[^0-9]/g, '');
           onChange(digits === '' ? '' : Number(digits));
         }}
-        className="pe-6"
+        className={`pe-6 ${INPUT_LINE}`}
       />
       <div
         className="absolute end-px top-px bottom-px z-[1] flex w-6 items-center justify-center rounded-e-lg text-[#868e96]"
@@ -205,7 +208,8 @@ function FeeInput({
             type="button"
             tabIndex={-1}
             aria-hidden
-            disabled={disabled || current === null || current <= 0}
+            // Mantine은 값이 숫자이고 최소값(0) 이하일 때만 아래 버튼을 끈다(빈 칸이면 켜 둔다).
+            disabled={disabled || (current !== null && current <= 0)}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => step(-1)}
             className={`${CONTROL} rounded-none rounded-ee-[15px]`}
@@ -295,7 +299,10 @@ export function DeliveryHoldModal({
         if (!open) onClose();
       }}
     >
-      <DialogContent>
+      {/* Mantine Modal 본문은 열린 뒤에도 transform: translateY(0)·backface-visibility: hidden을 갖는다. 이 창은 내용이
+          화면 높이(90dvh)보다 길어 본문이 소수점 위치(약 42.2px)에 놓이는데, will-change: opacity만으로는 입력 뒤 다시 그린
+          영역이 1px 어긋나고(폰·태블릿) 끄면 처음 열린 모양이 달라져 Mantine과 같은 값을 준다. */}
+      <DialogContent className="will-change-auto [backface-visibility:hidden] [transform:translateY(0px)]">
         <DialogHeader>
           <DialogTitle className="leading-[1.55] font-bold">배송 보류</DialogTitle>
         </DialogHeader>
@@ -328,8 +335,11 @@ export function DeliveryHoldModal({
             </div>
             <Field>
               <FieldLabel htmlFor={messageId}>
-                보류 사유
-                {REQUIRED}
+                {/* FieldLabel은 자식 사이를 띄우므로 글자와 필수 표시를 한 덩어리로 둔다(Mantine은 " *"가 글자에 붙는다). */}
+                <span>
+                  보류 사유
+                  {REQUIRED}
+                </span>
               </FieldLabel>
               <Textarea
                 id={messageId}
@@ -369,6 +379,7 @@ export function DeliveryHoldModal({
               <Input
                 id={contactId}
                 type="datetime-local"
+                className={INPUT_LINE}
                 value={nextContactAt}
                 onChange={(event) => setNextContactAt(event.currentTarget.value)}
               />
@@ -380,6 +391,7 @@ export function DeliveryHoldModal({
               <Input
                 id={deliveryId}
                 type="datetime-local"
+                className={INPUT_LINE}
                 value={nextDeliveryAt}
                 onChange={(event) => setNextDeliveryAt(event.currentTarget.value)}
               />
