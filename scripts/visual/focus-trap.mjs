@@ -3,7 +3,7 @@
 //
 //   node scripts/visual/focus-trap.mjs [app] [--only id,id] [--viewports mobile,tablet,desktop] [--label <이름>]
 //
-// 대상: steps가 있는 화면 중 steps 뒤에 창(role=dialog·alertdialog)이 열려 있는 화면. id가 modal-로 시작하는데
+// 대상: steps가 있는 화면 중 steps 뒤에 모달 창(role=dialog·alertdialog, aria-modal="false" 제외)이 열려 있는 화면. id가 modal-로 시작하는데
 // 창이 열리지 않으면 실패다. 판정(하나라도 어기면 종료 코드 1):
 //   - 창이 열린 뒤 초점을 받은 요소(focusin)가 모두 창 안이다. 다음 프레임에 창 안으로 되돌아가는 초점 가드도 실패로 본다.
 //   - Tab만 눌러 출발 요소로 돌아오고(한 바퀴), Shift+Tab만 눌러도 돌아온다. 누를 때마다 두 프레임 뒤 초점이 창 안이다.
@@ -37,7 +37,9 @@ const VIEWPORTS = {
 // 한 방향으로 한 바퀴를 도는 데 허용하는 최대 입력 수 = 창 안 Tab 대상 수 × 4 + 10.
 // 날짜·시각 입력칸은 칸 안의 연·월·일 등에서도 Tab이 멈추므로 대상 수보다 많이 눌러야 한 바퀴가 된다.
 const MAX_PRESS = (count) => count * 4 + 10;
-const DIALOG = '[role="dialog"],[role="alertdialog"]';
+// 스스로 비모달이라고 밝힌 창(aria-modal="false", 예: Base UI 알림 toast)은 초점을 가두지 않는 것이 맞아 뺀다.
+// aria-modal이 없는 창은 모달로 보고 검사한다(그래서 aria-modal 누락은 실패로 잡힌다).
+const DIALOG = ':is([role="dialog"],[role="alertdialog"]):not([aria-modal="false"])';
 
 function option(name, fallback) {
   const i = process.argv.indexOf(`--${name}`);
