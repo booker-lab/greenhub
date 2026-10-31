@@ -58,6 +58,8 @@ const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
 const ROW = 'flex flex-row flex-wrap items-center';
 const COLUMN = 'flex flex-col items-stretch justify-start';
 // Mantine Button loading(filled): 면색을 그대로 두고 글자를 숨긴 채, 흐린 흰 덮개 위 가운데에 흰 원(높이 ÷ 1.8)을 돌린다.
+// datetime 입력칸은 Mantine 입력칸 줄 높이(높이 - 2px = 34px)를 준다. text-sm 1.45로 두면 날짜 글자가 소수점만큼 어긋난다.
+const DATETIME_INPUT = 'leading-[34px]';
 const FILLED_LOADING =
   "disabled:bg-primary disabled:text-white before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-xl before:bg-white/15 before:blur-[12px] before:content-[''] [&_[data-slot=button-label]]:translate-y-full [&_[data-slot=button-label]]:opacity-0";
 
@@ -533,6 +535,7 @@ export default function SaleRoundsPage() {
                   <Input
                     id={`${copyFieldId}-open`}
                     type="datetime-local"
+                    className={DATETIME_INPUT}
                     value={copyForm.orderOpenAt}
                     onChange={(event) =>
                       setCopyForm((current) =>
@@ -550,6 +553,7 @@ export default function SaleRoundsPage() {
                   <Input
                     id={`${copyFieldId}-close`}
                     type="datetime-local"
+                    className={DATETIME_INPUT}
                     value={copyForm.orderCloseAt}
                     onChange={(event) =>
                       setCopyForm((current) =>
