@@ -23,6 +23,7 @@ import {
 import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
 import { Input, InputSection } from '@greenhub/ui/components/input';
 import { Loader } from '@greenhub/ui/components/loader';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { NativeSelect } from '@greenhub/ui/components/native-select';
 import { NumberInput } from '@greenhub/ui/components/number-input';
 import { Select } from '@greenhub/ui/components/select';
@@ -57,7 +58,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { ChevronLeft, RefreshCcw } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import { LoadMoreFooter } from '@/app/admin/_components/LoadMoreFooter';
@@ -496,6 +497,58 @@ export function UiCompare({ open }: { open?: string }) {
             </Alert>
           }
         />
+        <Row
+          name="Alert light gray ↔ secondary"
+          mantine={
+            <MAlert color="gray" title="기본값을 채워 두었습니다" style={{ width: '100%' }}>
+              저장하면 작성 중 회차로 만들어집니다.
+            </MAlert>
+          }
+          ui={
+            <Alert variant="secondary" className="w-full">
+              <AlertTitle>기본값을 채워 두었습니다</AlertTitle>
+              <AlertDescription>저장하면 작성 중 회차로 만들어집니다.</AlertDescription>
+            </Alert>
+          }
+        />
+        <Row
+          name="Alert icon ↔ icon"
+          mantine={
+            <MAlert
+              color="red"
+              title="최신 회차를 다시 확인하지 못했습니다"
+              icon={<AlertTriangle size={18} />}
+              style={{ width: '100%' }}
+            >
+              네트워크 오류
+            </MAlert>
+          }
+          ui={
+            <Alert variant="destructive" icon={<AlertTriangle size={18} />} className="w-full">
+              <AlertTitle>최신 회차를 다시 확인하지 못했습니다</AlertTitle>
+              <AlertDescription>네트워크 오류</AlertDescription>
+            </Alert>
+          }
+        />
+        <Row
+          name="Alert withCloseButton ↔ onClose"
+          mantine={
+            <MAlert
+              title="회차 복사 완료"
+              withCloseButton
+              onClose={() => {}}
+              style={{ width: '100%' }}
+            >
+              복사한 회차를 열어 확인해 주세요.
+            </MAlert>
+          }
+          ui={
+            <Alert onClose={() => {}} closeButtonLabel="닫기" className="w-full">
+              <AlertTitle>회차 복사 완료</AlertTitle>
+              <AlertDescription>복사한 회차를 열어 확인해 주세요.</AlertDescription>
+            </Alert>
+          }
+        />
       </Section>
 
       <Section title="Switch">
@@ -508,6 +561,16 @@ export function UiCompare({ open }: { open?: string }) {
           name="Switch 켜짐"
           mantine={<MSwitch aria-label="기상 제한" defaultChecked />}
           ui={<Switch aria-label="기상 제한" defaultChecked />}
+        />
+        <Row
+          name="Switch 잠김·꺼짐"
+          mantine={<MSwitch aria-label="기상 제한" disabled />}
+          ui={<Switch aria-label="기상 제한" disabled />}
+        />
+        <Row
+          name="Switch 잠김·켜짐"
+          mantine={<MSwitch aria-label="기상 제한" defaultChecked disabled />}
+          ui={<Switch aria-label="기상 제한" defaultChecked disabled />}
         />
       </Section>
 
@@ -986,6 +1049,102 @@ export function UiCompare({ open }: { open?: string }) {
             <Button variant="outline-green">
               <ButtonLabel>+ 옵션 묶음 추가</ButtonLabel>
             </Button>
+          }
+        />
+        <Row
+          name="Button compact-xs outline md ↔ outline compact-xs"
+          mantine={
+            <MButton size="compact-xs" variant="outline" radius="md">
+              링크 복사
+            </MButton>
+          }
+          ui={
+            <Button size="compact-xs" variant="outline" className="rounded-[8px]">
+              링크 복사
+            </Button>
+          }
+        />
+        <Row
+          name="Button compact-xs subtle red md ↔ subtle-destructive"
+          mantine={
+            <MButton size="compact-xs" variant="subtle" color="red" radius="md">
+              취소
+            </MButton>
+          }
+          ui={
+            <Button size="compact-xs" variant="subtle-destructive" className="rounded-[8px]">
+              취소
+            </Button>
+          }
+        />
+        <Row
+          name="Button compact-xs subtle red loading ↔ LoadingButton"
+          mantine={
+            <MButton size="compact-xs" variant="subtle" color="red" radius="md" loading>
+              취소
+            </MButton>
+          }
+          ui={
+            <LoadingButton
+              size="compact-xs"
+              variant="subtle-destructive"
+              className="rounded-[8px]"
+              loading
+            >
+              취소
+            </LoadingButton>
+          }
+        />
+        <Row
+          name="Button compact-sm light ↔ light compact-sm"
+          mantine={
+            <MButton size="compact-sm" variant="light">
+              숨김 해제
+            </MButton>
+          }
+          ui={
+            <Button size="compact-sm" variant="light">
+              숨김 해제
+            </Button>
+          }
+        />
+        <Row
+          name="Button compact-sm default ↔ plain"
+          mantine={
+            <MButton size="compact-sm" variant="default">
+              연락 전으로 되돌리기
+            </MButton>
+          }
+          ui={
+            <Button size="compact-sm" variant="plain">
+              연락 전으로 되돌리기
+            </Button>
+          }
+        />
+        <Row
+          name="Badge light orange ↔ light-orange"
+          mantine={
+            <MBadge variant="light" color="orange" radius="xl">
+              취소됨
+            </MBadge>
+          }
+          ui={
+            <Badge variant="light-orange" className="rounded-[32px]">
+              취소됨
+            </Badge>
+          }
+        />
+        <Row
+          name="Badge light green sm ↔ light-green"
+          mantine={
+            <MBadge variant="light" color="green" radius="sm">
+              연락함
+            </MBadge>
+          }
+          ui={
+            <Badge variant="light-green" className="rounded-[4px]">
+              연락함
+            </Badge>
           }
         />
         <Row

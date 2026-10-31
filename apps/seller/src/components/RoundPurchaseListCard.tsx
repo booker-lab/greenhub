@@ -1,8 +1,10 @@
 'use client';
 
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
-import { Box, Group, Paper, Text } from '@mantine/core';
 import { buildRoundPurchaseList } from '@/lib/round-purchase-list';
+
+// ① 외형 유지(UI 교체 P4): Mantine Paper(lg·xs·md)·Group·Text와 같은 값을 Tailwind로 그린다.
+const TEXT = 'm-0 p-0 text-base font-normal';
 
 // 회차 구매 목록(경매에서 살 상품별 수량). 수량은 서버 회차 상품 집계를 그대로 쓴다.
 export function RoundPurchaseListCard({
@@ -15,24 +17,29 @@ export function RoundPurchaseListCard({
   const list = buildRoundPurchaseList(round);
 
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>{title}</Text>
-      <Text
-        mt={2}
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+      <p className={TEXT} style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>
+        {title}
+      </p>
+      <p
+        className={TEXT}
+        style={{
+          marginTop: 2,
+          fontSize: 'var(--font-size-sm)',
+          color: 'var(--color-text-secondary)',
+        }}
       >
         결제가 끝난 주문 기준이에요. 취소·환불되면 바로 빠져요.
-      </Text>
-      <Box mt="sm">
+      </p>
+      <div className="mt-3">
         {list.lines.map((line, index) => (
-          <Group
+          <div
             key={line.roundItemId}
-            justify="space-between"
-            wrap="nowrap"
-            py={10}
+            className="flex flex-row flex-nowrap items-center justify-between gap-4 py-2.5"
             style={index > 0 ? { borderTop: '1px solid var(--color-border)' } : undefined}
           >
-            <Text
+            <p
+              className={TEXT}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 color: 'var(--color-text)',
@@ -41,8 +48,9 @@ export function RoundPurchaseListCard({
               }}
             >
               {line.productName}
-            </Text>
-            <Text
+            </p>
+            <p
+              className={TEXT}
               style={{
                 fontSize: 'var(--font-size-md)',
                 fontWeight: 'var(--fw-bold)',
@@ -51,12 +59,16 @@ export function RoundPurchaseListCard({
               }}
             >
               {line.orderedQuantity.toLocaleString()}개
-            </Text>
-          </Group>
+            </p>
+          </div>
         ))}
-      </Box>
-      <Group justify="flex-end" pt={10} style={{ borderTop: '1px solid var(--color-border)' }}>
-        <Text
+      </div>
+      <div
+        className="flex flex-row flex-wrap items-center justify-end gap-4 pt-2.5"
+        style={{ borderTop: '1px solid var(--color-border)' }}
+      >
+        <p
+          className={TEXT}
           style={{
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-secondary)',
@@ -65,16 +77,20 @@ export function RoundPurchaseListCard({
         >
           배송지 {list.orderedDeliveryAddresses.toLocaleString()}곳 · 총{' '}
           {list.orderedTotal.toLocaleString()}개
-        </Text>
-      </Group>
+        </p>
+      </div>
       {list.pendingTotal > 0 && (
-        <Text
-          mt={6}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        <p
+          className={TEXT}
+          style={{
+            marginTop: 6,
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+          }}
         >
           지금 결제 중인 {list.pendingTotal.toLocaleString()}개는 결제가 끝나면 더해져요.
-        </Text>
+        </p>
       )}
-    </Paper>
+    </div>
   );
 }

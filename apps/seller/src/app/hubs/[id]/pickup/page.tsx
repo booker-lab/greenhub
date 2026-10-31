@@ -1,7 +1,7 @@
 'use client';
 
 import { apiPathSegment, InvalidApiPathSegmentError, isSafeApiPathSegment } from '@greenhub/shared';
-import { Box, Button, Container, Group, Stack, Text, Title } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
@@ -11,6 +11,11 @@ import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { ApiError, apiJson } from '@/lib/api';
 
 type Step = 'input' | 'success' | 'error';
+
+// ① 외형 유지(UI 교체 P4): Mantine Container(sm, 위아래 40px)·Stack(가운데, md 16px)·Group(xs 10px)·Text·
+// Title order 3(h3 22px·800·1.4)·Button과 같은 값을 Tailwind와 @greenhub/ui로 그린다.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const CENTER_STACK = 'flex flex-col items-center justify-start gap-4';
 
 const INVALID_ORDER_ADDRESS_MESSAGE =
   '주문 주소가 올바르지 않습니다. 거점 화면에서 주문을 다시 선택해 주세요.';
@@ -110,11 +115,11 @@ export default function HubPickupPage() {
     <PageShell>
       <PageHeader title="픽업 코드 확인" onBack={() => router.back()} />
 
-      <Container size="sm" px="md" py={40}>
-        <Stack align="center">
+      <div className="mx-auto max-w-[720px] px-4 py-10">
+        <div className={CENTER_STACK}>
           {step === 'success' ? (
-            <Stack align="center" gap="md" py={40}>
-              <Box
+            <div className={`${CENTER_STACK} py-10`}>
+              <div
                 style={{
                   width: 80,
                   height: 80,
@@ -137,59 +142,60 @@ export default function HubPickupPage() {
                 >
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
-              </Box>
-              <Title order={3}>픽업 완료!</Title>
-              <Text
+              </div>
+              <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">픽업 완료!</h3>
+              <p
+                className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 주문이 PICKED_UP 상태로 전환되었습니다.
-              </Text>
+              </p>
               <Button
                 onClick={() => router.push(`/hubs/${hubId}`)}
                 size="md"
-                radius="xl"
-                mt="md"
+                className="mt-4"
                 style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 거점으로 돌아가기
               </Button>
-            </Stack>
+            </div>
           ) : !orderId ? (
-            <Stack align="center" gap="md" py={40}>
-              <Text
+            <div className={`${CENTER_STACK} py-10`}>
+              <p
+                className={`${TEXT} text-center`}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-                ta="center"
               >
                 {INVALID_ORDER_ADDRESS_MESSAGE}
-              </Text>
-              <Button
-                onClick={() => router.push(`/hubs/${hubId}`)}
-                size="md"
-                radius="xl"
-                variant="light"
-              >
+              </p>
+              <Button onClick={() => router.push(`/hubs/${hubId}`)} size="md" variant="light">
                 거점으로 돌아가기
               </Button>
-            </Stack>
+            </div>
           ) : (
             <>
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                mb={4}
-                ta="center"
+              <p
+                className={`${TEXT} text-center`}
+                style={{
+                  marginBottom: 4,
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-disabled)',
+                }}
               >
                 소비자의 픽업 코드 6자리를 입력하세요
-              </Text>
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                mb="xl"
-                ta="center"
+              </p>
+              <p
+                className={`${TEXT} text-center`}
+                style={{
+                  marginBottom: 32,
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-disabled)',
+                }}
               >
                 소비자가 소비자 앱에서 확인한 코드를 제시합니다
-              </Text>
+              </p>
 
               {/* 6자리 입력 */}
-              <Group gap="xs" mb="xl">
+              <div className="mb-8 flex flex-row flex-wrap items-center justify-start gap-2.5">
                 {digits.map((digit, i) => (
                   <input
                     // biome-ignore lint/suspicious/noArrayIndexKey: OTP 6자리 고정 박스 — reorder 없음
@@ -234,33 +240,34 @@ export default function HubPickupPage() {
                     }}
                   />
                 ))}
-              </Group>
+              </div>
 
               {step === 'error' && errorMsg && (
-                <Text
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-                  mb="md"
-                  ta="center"
+                <p
+                  className={`${TEXT} text-center`}
+                  style={{
+                    marginBottom: 16,
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-danger)',
+                  }}
                 >
                   {errorMsg}
-                </Text>
+                </p>
               )}
 
               <Button
                 onClick={handleConfirm}
                 disabled={!isFilled || loading}
-                fullWidth
-                maw={320}
                 size="lg"
-                radius="xl"
+                className="w-full max-w-[320px]"
                 style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}
               >
                 {loading ? '확인 중...' : '픽업 확인'}
               </Button>
             </>
           )}
-        </Stack>
-      </Container>
+        </div>
+      </div>
     </PageShell>
   );
 }
