@@ -1,4 +1,4 @@
-import { Button } from '@greenhub/ui/components/button';
+import { ButtonLink } from '@greenhub/ui/components/button';
 import { describeSignInError } from '@/lib/seller-invite';
 
 export const dynamic = 'force-dynamic';
@@ -35,14 +35,9 @@ export default async function SignInErrorPage({
             >
               {notice.message}
             </p>
-            <Button
-              render={<a href="/login" />}
-              nativeButton={false}
-              variant="outline"
-              className="w-full"
-            >
+            <ButtonLink href="/login" variant="outline" className="w-full">
               로그인 화면으로
-            </Button>
+            </ButtonLink>
           </div>
         </div>
       </div>
