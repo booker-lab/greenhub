@@ -535,6 +535,14 @@ export const scenarioRoutes = {
       ({ body }) => ({ ...createOrderResponse(body), delay: 30_000 }),
     ],
   ],
+  // 공용 틀(UI 교체 P5 A 묶음): 화면 오류 안내(app/error.tsx). 금액이 빠진 주문은 MY 주문 카드가 그리다 예외를 던진다.
+  'render-error': [
+    [
+      'GET',
+      /^\/orders$/,
+      () => ({ body: [{ id: 'order-broken', status: 'ACCEPTED', createdAt: '2026-10-30T01:00:00.000Z' }] }),
+    ],
+  ],
   scheduled: [
     [
       'GET',
@@ -917,6 +925,14 @@ export const screens = [
     path: '/groupbuy',
     expectPath: '/',
     auth: false,
+  },
+  { id: 'not-found', group: '안내', title: '없는 주소(404 안내)', path: '/no-such-page', auth: false },
+  {
+    id: 'render-error',
+    group: '안내',
+    title: '화면 오류 안내(error.tsx)',
+    path: '/mypage',
+    scenario: 'render-error',
   },
   { id: 'terms', group: '안내', title: '이용약관', path: '/terms', auth: false },
   { id: 'privacy', group: '안내', title: '개인정보처리방침', path: '/privacy', auth: false },
