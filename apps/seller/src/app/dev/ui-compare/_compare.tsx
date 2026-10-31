@@ -523,6 +523,24 @@ export function UiCompare({ open }: { open?: string }) {
           mantine={<MBadge variant="light">new</MBadge>}
           ui={<Badge variant="light">new</Badge>}
         />
+        <Row
+          name="Badge filled red ↔ destructive-filled"
+          mantine={
+            <MBadge color="red" variant="filled">
+              회수 필요 ₩25,200
+            </MBadge>
+          }
+          ui={<Badge variant="destructive-filled">회수 필요 ₩25,200</Badge>}
+        />
+        <Row
+          name="Badge light orange ↔ light-orange"
+          mantine={
+            <MBadge color="orange" variant="light">
+              지급 보류
+            </MBadge>
+          }
+          ui={<Badge variant="light-orange">지급 보류</Badge>}
+        />
       </Section>
 
       <Section title="상품 폼 입력 부품">
