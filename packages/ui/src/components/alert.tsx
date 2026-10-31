@@ -2,6 +2,7 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
 
 import { cn } from '../lib/utils';
+import { CloseIcon } from './close-button';
 
 // ① 외형 유지: Mantine Alert variant="light"(안쪽 16, 모서리 16, 투명 테두리 1px, 제목 15px·700, 본문 15px 검정,
 // 제목·본문 사이 10px). 색은 Mantine 계산값이다: 기본 brand-1 면·brand-9 글자, 빨강 red-1·red-9,
@@ -15,6 +16,8 @@ const alertVariants = cva(
         default: 'bg-[#d2f2df] text-[#005c32]',
         destructive: 'bg-[#ffe3e3] text-[#c92a2a]',
         warning: 'bg-[#fff4cc] text-[#7a5b00]',
+        // Mantine light gray(gray-1 면·gray-9 글자).
+        secondary: 'bg-[#f1f3f5] text-[#212529]',
       },
     },
     defaultVariants: {
@@ -23,16 +26,53 @@ const alertVariants = cva(
   },
 );
 
+// icon: Mantine Alert icon(20px 칸, 오른쪽 16px·위 1px, 줄 높이 1).
+// onClose: Mantine withCloseButton(본문 오른쪽 20px 투명 닫기 버튼, X 16px, 글자색). 제목은 오른쪽을 16px 비운다.
 function Alert({
   className,
   variant,
   children,
+  icon,
+  onClose,
+  closeButtonLabel,
   ...props
-}: React.ComponentProps<'div'> & VariantProps<typeof alertVariants>) {
+}: React.ComponentProps<'div'> &
+  VariantProps<typeof alertVariants> & {
+    icon?: React.ReactNode;
+    onClose?: () => void;
+    closeButtonLabel?: string;
+  }) {
   return (
-    <div data-slot="alert" className={cn(alertVariants({ variant }), className)} {...props}>
+    <div
+      data-slot="alert"
+      className={cn(
+        alertVariants({ variant }),
+        onClose && '[&_[data-slot=alert-title]]:pe-4',
+        className,
+      )}
+      {...props}
+    >
       <div className="flex">
+        {icon && (
+          <div
+            data-slot="alert-icon"
+            className="me-4 mt-px flex size-5 items-center justify-start leading-none"
+          >
+            {icon}
+          </div>
+        )}
         <div className="flex flex-1 flex-col gap-2.5">{children}</div>
+        {onClose && (
+          <button
+            type="button"
+            data-slot="alert-close"
+            aria-label={closeButtonLabel}
+            onClick={onClose}
+            className="relative flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-lg border-0 bg-transparent p-0 leading-none text-inherit outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid"
+          >
+            <CloseIcon style={{ width: 16, height: 16 }} />
+          </button>
+        )}
       </div>
     </div>
   );
