@@ -313,6 +313,8 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 ### P4. 판매자 앱 틀·회차·주문·준비·재고·정산
 - 앱 틀(사이드바·상단바) → 회차·주문·준비 → 재고 → 정산 순서로 나눈다.
 - 다음 회차가 잡혀 있으면, 회차 운영 동선 묶음(어드민 기사 승인·환불 포함)은 끝까지 교체된 상태로만 그 회차의 마지막 출시에 넣는다. 판매자 대표가 실제 계정으로 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
+- 어드민 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-3`): 어드민 `layout.tsx`(머리·관리자 콘솔 글자·셀러 화면 링크·ADMIN 배지·본문 칸)·`AdminNav`·`AdminLogoutButton`·`AdminFetchError`의 `@mantine/core`를 걷었다. Mantine Container lg(1140px)·Group·Text·Badge light red(= `destructive`)·Paper(radius lg·shadow xs)·Button outline radius md 계산값이다. 조회 실패 화면은 실패 응답이 콘솔 오류라 촬영 판정에 걸리므로 대조 화면 행으로 본다.
+  - 로컬 증명(판매자 단독, 기준 `main` d79dae9 + 같은 fixture, 기준 시각 2026-10-31T00:00+09:00): 204장 정상 촬영, `diff.mjs --tolerance 1` 204장 같음(허용 목록 없음), 대조 행 세 폭 같음(조회 실패 행 포함). 운영 빌드는 증명하지 않았다.
 
 ### P5. 소비자 앱 (51개 파일)
 - 첫 PR에서 소비자 앱을 연결한다(P2a 방식).
