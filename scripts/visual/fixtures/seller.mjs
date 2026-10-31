@@ -428,7 +428,7 @@ const ADMIN_INVITES = [
 ];
 
 // ── 회차: 예정·진행·마감·임시저장 한 건씩. 일정은 파일럿 첫 회차(목 10:00 오픈 → 일 24:00 마감) 형태 ──
-function saleRound(id, name, status, schedule, counters = {}) {
+function saleRound(id, name, status, schedule, counters = {}, overrides = {}) {
   return {
     id,
     storeId: STORE_ID,
@@ -458,6 +458,7 @@ function saleRound(id, name, status, schedule, counters = {}) {
     completedAt: null,
     createdAt: '2026-09-28T15:00:00.000Z',
     updatedAt: '2026-09-28T15:00:00.000Z',
+    ...overrides,
   };
 }
 const SALE_ROUNDS = [
@@ -508,6 +509,66 @@ const SALE_ROUNDS = [
     deliveryStartAt: hoursFromNow(264),
     deliveryEndAt: hoursFromNow(273),
   }),
+  // 회차 상태 분기(배송 완료·취소·취소 멈춤)도 목록·상세에서 보이게 한 건씩 둔다(UI 교체 P4).
+  saleRound(
+    'round-completed',
+    '9월 22일 배송 회차',
+    'COMPLETED',
+    {
+      orderOpenAt: '2026-09-17T01:00:00.000Z',
+      orderCloseAt: '2026-09-20T15:00:00.000Z',
+      auctionAt: '2026-09-20T22:00:00.000Z',
+      deliveryStartAt: '2026-09-21T15:00:00.000Z',
+      deliveryEndAt: '2026-09-22T00:00:00.000Z',
+    },
+    { orderedDeliveryAddresses: 12, orderedItemQuantity: 20 },
+    { closeReason: 'CAPACITY', completedAt: '2026-09-22T09:00:00.000Z' },
+  ),
+  saleRound(
+    'round-cancelled',
+    '9월 15일 배송 회차',
+    'CANCELLED',
+    {
+      orderOpenAt: '2026-09-10T01:00:00.000Z',
+      orderCloseAt: '2026-09-13T15:00:00.000Z',
+      auctionAt: '2026-09-13T22:00:00.000Z',
+      deliveryStartAt: '2026-09-14T15:00:00.000Z',
+      deliveryEndAt: '2026-09-15T00:00:00.000Z',
+    },
+    {},
+    {
+      cancellation: {
+        status: 'COMPLETED',
+        reason: '경매 일정 취소',
+        failedOrderId: null,
+        updatedAt: '2026-09-12T03:00:00.000Z',
+        completedAt: '2026-09-12T03:00:00.000Z',
+      },
+      cancelledAt: '2026-09-12T03:00:00.000Z',
+    },
+  ),
+  saleRound(
+    'round-cancel-stuck',
+    '11월 17일 배송 회차',
+    'SCHEDULED',
+    {
+      orderOpenAt: hoursFromNow(322),
+      orderCloseAt: hoursFromNow(408),
+      auctionAt: hoursFromNow(415),
+      deliveryStartAt: hoursFromNow(432),
+      deliveryEndAt: hoursFromNow(441),
+    },
+    {},
+    {
+      cancellation: {
+        status: 'LOCAL_FAILED',
+        reason: '경매 일정 취소',
+        failedOrderId: null,
+        updatedAt: '2026-10-29T03:00:00.000Z',
+        completedAt: null,
+      },
+    },
+  ),
 ];
 // 상품별 수량은 회차 counters 합계와 맞춘다(판매 중 11개·결제 중 2개, 마감 27개).
 const ROUND_ITEM_QUANTITIES = {
@@ -1360,6 +1421,41 @@ export const screens = [
     firestore: true,
   },
   {
+    id: 'sale-round-closed',
+    group: '판매자',
+    title: '회차 상세 · 주문 마감',
+    path: '/sale-rounds/round-closed',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-draft',
+    group: '판매자',
+    title: '회차 상세 · 작성 중',
+    path: '/sale-rounds/round-draft',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-completed',
+    group: '판매자',
+    title: '회차 상세 · 배송 완료',
+    path: '/sale-rounds/round-completed',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-cancelled',
+    group: '판매자',
+    title: '회차 상세 · 취소',
+    path: '/sale-rounds/round-cancelled',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-cancel-stuck',
+    group: '판매자',
+    title: '회차 상세 · 취소 멈춤',
+    path: '/sale-rounds/round-cancel-stuck',
+    firestore: true,
+  },
+  {
     id: 'sale-round-new',
     group: '판매자',
     title: '새 회차',
@@ -1467,6 +1563,18 @@ export const screens = [
   { id: 'hub-detail', group: '판매자', title: '거점 상세', path: '/hubs/hub-0001' },
   { id: 'hub-edit', group: '판매자', title: '거점 수정', path: '/hubs/hub-0001/edit' },
   { id: 'hub-pickup', group: '판매자', title: '거점 픽업', path: '/hubs/hub-0001/pickup' },
+  {
+    id: 'hub-detail-inactive',
+    group: '판매자',
+    title: '거점 상세 · 비활성',
+    path: '/hubs/hub-0002',
+  },
+  {
+    id: 'hub-pickup-order',
+    group: '판매자',
+    title: '거점 픽업 · 코드 입력',
+    path: '/hubs/hub-0001/pickup?orderId=order-hub-1',
+  },
   { id: 'hub-new', group: '판매자', title: '거점 추가', path: '/hubs/new' },
   {
     id: 'settings-option-stocks',
@@ -1758,6 +1866,16 @@ export const screens = [
       { clickSelector: 'button:has-text("배송 후 환불"):visible' },
       { click: '꽃 상함' },
       { fill: { label: '메모 (손님에게는 보이지 않음, 필수)', value: '꽃잎이 상해 도착' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-round-copy',
+    group: '판매자 · 모달',
+    title: '회차 목록 · 이전 회차 복사',
+    path: '/sale-rounds',
+    steps: [
+      { clickSelector: '[data-testid="sale-round-round-open"] button:has-text("이전 회차 복사")' },
     ],
     viewport: true,
   },
