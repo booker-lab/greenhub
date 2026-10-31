@@ -68,6 +68,48 @@ function row(overrides: Record<string, unknown> = {}) {
 const ok = async (body: unknown) => ({ ok: true, status: 200, text: async () => JSON.stringify(body) });
 
 describe('aT 경락가격 응답 정규화', () => {
+  // 2026-10-31 국내 PC에서 aT 샘플 URL(flowerGubn=1, countPerPage=10)로 받은 실제 응답의 일부(값 그대로).
+  const REAL_SAMPLE = {
+    response: {
+      resultCd: '0',
+      resultMsg: 'OK',
+      numOfRows: '10',
+      items: [
+        { saleDate: '2026-10-31', flowerGubn: '절화', pumName: '노무라', goodName: '노무라', lvNm: '상1', maxAmt: '1120', minAmt: '1120', avgAmt: '1120', totAmt: '184800', totQty: '165' },
+        { saleDate: '2026-10-31', flowerGubn: '절화', pumName: '국화', goodName: '보라미', lvNm: '상1', maxAmt: '2000', minAmt: '1500', avgAmt: '1759', totAmt: '204000', totQty: '116' },
+        { saleDate: '2026-10-31', flowerGubn: '절화', pumName: '국화', goodName: '그린소국', lvNm: '특3', maxAmt: '1100', minAmt: '900', avgAmt: '1033', totAmt: '99200', totQty: '96' },
+        { saleDate: '2026-10-31', flowerGubn: '절화', pumName: '거베라', goodName: '미니핑크', lvNm: '특2', maxAmt: '1510', minAmt: '1320', avgAmt: '1440', totAmt: '93590', totQty: '65' },
+      ],
+    },
+  };
+
+  it('실제 aT 응답을 그대로 읽는다(값은 문자열, 행의 부류는 이름이라 요청한 부류 코드를 쓴다)', () => {
+    const rows = parseFlowerAuctionResponse(REAL_SAMPLE, '2026-10-31', 1);
+    expect(rows).toHaveLength(4);
+    expect(rows[1]).toEqual({
+      saleDate: '2026-10-31',
+      flowerGubn: 1,
+      pumName: '국화',
+      goodName: '보라미',
+      grade: '상1',
+      avg: 1759,
+      min: 1500,
+      max: 2000,
+      qty: 116,
+      amt: 204000,
+    });
+    // 같은 품목(국화)의 품종은 따로 묶이고, 평균은 총금액 ÷ 총물량으로 다시 내도 aT 평균과 같다.
+    const series = groupRowsBySeries(rows);
+    expect(series.map((entry) => `${entry.pumName}/${entry.goodName}`).sort()).toEqual([
+      '거베라/미니핑크',
+      '국화/그린소국',
+      '국화/보라미',
+      '노무라/노무라',
+    ]);
+    const borami = series.find((entry) => entry.goodName === '보라미')!;
+    expect(borami.points).toEqual([{ d: '2026-10-31', g: '상1', avg: 1759, min: 1500, max: 2000, qty: 116, amt: 204000 }]);
+  });
+
   it('숫자 문자열·쉼표를 읽고 거래 없는 줄은 건너뛴다', () => {
     const rows = parseFlowerAuctionResponse(
       { response: { resultCd: '0', items: [row(), row({ lvNm: '상', totQty: '0', avgAmt: '0' })] } },

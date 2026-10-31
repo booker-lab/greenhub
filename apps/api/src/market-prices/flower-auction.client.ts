@@ -6,9 +6,9 @@ import { ISO_DATE_PATTERN, type MarketAuctionRow } from './market-price.fields';
 /**
  * aT 화훼유통정보시스템 경락가격 OpenAPI(kind=f001) 클라이언트.
  *
- * 요청 변수 serviceKey·baseDate·flowerGubn·dataType은 aT 공개 안내(flower.at.or.kr/api/apiOpenInfo.do)에서
- * 확인했다. 응답 항목 이름(RESPONSE_FIELDS)과 요청 주소는 실제 응답으로 아직 확인하지 못했으므로,
- * 모양이 다르면 저장하지 않고 실패한다(빈 시세나 0원을 저장하지 않는다). 주소는 FLOWER_AUCTION_API_URL로 바꿀 수 있다.
+ * 요청 주소·변수는 aT 샘플 URL, 응답 모양({ response: { resultCd, resultMsg, numOfRows, items[] } }, 값은 모두 문자열,
+ * 행의 flowerGubn은 코드가 아니라 "절화" 같은 이름)은 2026-10-31 실제 응답으로 확인했다.
+ * 모양이 바뀌면 저장하지 않고 실패한다(빈 시세나 0원을 저장하지 않는다). 주소는 FLOWER_AUCTION_API_URL로 바꿀 수 있다.
  */
 export const FLOWER_AUCTION_DEFAULT_URL = 'https://flower.at.or.kr/api/returnData.api';
 export const FLOWER_AUCTION_REQUEST_TIMEOUT_MS = 15_000;
@@ -168,7 +168,6 @@ export class FlowerAuctionClient {
       baseDate,
       flowerGubn: String(flowerGubn),
       dataType: 'json',
-      currentPage: '1',
       countPerPage: String(FLOWER_AUCTION_PAGE_SIZE),
     }).toString();
 

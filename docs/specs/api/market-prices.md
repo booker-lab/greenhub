@@ -13,7 +13,7 @@ aT 화훼공판장 경락가격을 매일 받아 저장하고, 판매자가 회�
 - 환경 변수: `FLOWER_AUCTION_API_KEY`(없으면 수집하지 않음), `FLOWER_AUCTION_API_URL`(선택, 기본 `https://flower.at.or.kr/api/returnData.api`).
 - 접속 IP: aT는 신청 때 등록한 접속 IP 하나에서 온 호출만 받는다. 등록 IP는 Cloud Run 고정 송신 IP `34.64.250.181`(`api-cloud-run-runbook.md` R7)이다. Railway는 송신 IP가 고정되지 않아 aT를 부를 수 없으므로, **Cloud Run 전환 전에는 Railway에 `FLOWER_AUCTION_API_KEY`를 넣지 않는다**(넣지 않으면 수집을 건너뛴다). 송신 고정 IP를 바꾸면 aT 접속 IP도 함께 바꾼다.
 - 예약: `MarketPricesService.runScheduledIngest`, 매일 21:10 KST(`@Cron`, Cloud Scheduler 작업 이름 `market-prices-ingest`). 오늘 포함 최근 3일 × 4부류를 받아 같은 날·등급은 덮어쓴다. `jobLeases/market-prices-ingest`로 하루 한 번만 완료로 남기며, 일부 날·부류를 못 받으면 받은 만큼 저장하고 완료로 남기지 않는다.
-- **응답 형식은 실제 응답으로 아직 확인하지 않았다.** 응답 항목 이름은 `flower-auction.client.ts`의 `RESPONSE_FIELDS`(`saleDate`·`pumName`·`goodName`·`lvNm`·`maxAmt`·`minAmt`·`avgAmt`·`totAmt`·`totQty`) 한 곳에 있다. 결과 코드가 정상이 아니거나, 줄 목록을 못 찾거나, 줄이 있는데 하나도 못 읽거나, 다른 경매일이 섞이거나, 1000줄이 꽉 차서 오면 그 날·부류는 저장하지 않고 실패한다. 0원·빈 시세를 저장하지 않는다. 첫 수집 뒤 로그(`[MarketPrices]`)로 행 수·실패를 확인한다.
+- 응답 형식은 2026-10-31 실제 응답(국내 PC에서 샘플 URL 호출)으로 확인했다: `{ response: { resultCd: "0", resultMsg: "OK", numOfRows, items[] } }`, 값은 모두 문자열, 행의 `flowerGubn`은 "절화" 같은 이름(저장에는 요청한 부류 코드를 쓴다), 등급은 "특2"·"상1"처럼 온다. 응답 항목 이름은 `flower-auction.client.ts`의 `RESPONSE_FIELDS`(`saleDate`·`pumName`·`goodName`·`lvNm`·`maxAmt`·`minAmt`·`avgAmt`·`totAmt`·`totQty`) 한 곳에 있다. 결과 코드가 정상이 아니거나, 줄 목록을 못 찾거나, 줄이 있는데 하나도 못 읽거나, 다른 경매일이 섞이거나, 1000줄이 꽉 차서 오면 그 날·부류는 저장하지 않고 실패한다. 0원·빈 시세를 저장하지 않는다. 첫 수집 뒤 로그(`[MarketPrices]`)로 행 수·실패를 확인한다.
 
 ## 저장 (서버 전용, `firestore.rules` 기본 거부)
 
