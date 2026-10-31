@@ -265,6 +265,10 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - `Dialog` 본문 상자에 `will-change: opacity`를 준다(Mantine은 열림 전환 때문에 본문을 따로 합성해 그린다. 없으면 확인창 안 버튼 둥근 모서리의 안티앨리어싱이 세 폭 모두 달랐다). 닫기 버튼을 본문보다 앞(DOM 순서)에 두어 Mantine처럼 첫 초점이 닫기 버튼에 간다(확인 버튼이 첫 초점이면 Enter 한 번에 승인·정지된다). 닫기 버튼을 머리 안으로 옮기는 처리는 #694 하네스(`--disable-partial-raster`)로 다시 재 보니 필요 없어 넣지 않았다.
   - `Button`: 글자를 Mantine 글자 칸과 같은 `span`으로 감싼다(`text-box-trim: trim-both`·`text-box-edge: cap alphabetic`, 글자를 대문자 높이 기준으로 가운데에 둔다). 없으면 글자 가장자리 픽셀이 Mantine과 달랐다.
   - 촬영 목록에 기사 승인·정지 확인창(`modal-driver-approve`·`modal-driver-suspend`)을 더했다. 기준은 같은 fixture로 `main`을 찍었다.
+- 어드민 판매자·소비자 구현(2026-10-31): `admin/stores`(목록·필터·수수료율 입력)와 `admin/users`의 `@mantine/core`를 걷었다.
+  - 카드·표 전환은 Mantine `hiddenFrom`·`visibleFrom="sm"`과 같은 48em 경계(`min-[48em]:hidden!`·`max-[47.99375em]:hidden!`)다. 필터 줄의 `Field`는 기본 `w-full`이라 `w-auto`로 Mantine 입력 상자처럼 둔다(없으면 태블릿·PC에서 칸이 줄마다 떨어졌다).
+  - 수수료율 입력은 `Input` xs + 오른쪽 17px 칸(Mantine NumberInput `--ni-right-section-width-xs`)이다. 소수 둘째 자리·100 초과 거부·방향키 0.5는 Mantine NumberInput과 같게 받는다. 새로고침(Mantine light gray `loading`)은 `admin/_components/RefreshButton`.
+  - `packages/ui` 추가: Button `outline-destructive`(Mantine outline red). 촬영 목록에 판매자 전체·검색 결과 없음·수수료율 입력·소비자 정지 확인창을 더했다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)
