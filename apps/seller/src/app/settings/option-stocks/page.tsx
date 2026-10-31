@@ -1,10 +1,11 @@
 'use client';
 
 import type { OptionStock } from '@greenhub/shared';
-import { Button, Container, Group, Paper, Stack, Text, TextInput } from '@mantine/core';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
 import { notifications } from '@mantine/notifications';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
@@ -19,11 +20,34 @@ import {
   toRemainingBody,
   upsertStock,
 } from './_lib';
+import { LoadingButton } from '../_components/LoadingButton';
 
 // 옵션 재고(직접 출력한 화분 등). 상품 옵션 선택지에 연결하면 주문할 때마다 줄고, 결제 전 취소·환불이면
 // 돌아온다. 남은 개수가 모자라면 손님 주문을 받지 않는다.
 
 const onlyDigits = (value: string) => value.replace(/[^0-9]/g, '');
+
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·Paper(radius lg·shadow xs·p md)·
+// Stack·Group(gap xs·아래 맞춤)·Text(sm = 15px·줄 높이 1.45)·TextInput(라벨)과 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const TEXT_SM = 'm-0 p-0 text-sm';
+const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const ROW = 'flex flex-row flex-nowrap items-end justify-start gap-2.5';
+
+/** Mantine TextInput(label)과 같은 흐름: 라벨 → 입력칸. */
+function LabeledInput({
+  label,
+  style,
+  ...props
+}: { label: string } & React.ComponentProps<typeof Input>) {
+  const id = useId();
+  return (
+    <Field style={style}>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Input id={id} {...props} />
+    </Field>
+  );
+}
 
 function StockRow({
   stock,
@@ -54,16 +78,16 @@ function StockRow({
   };
 
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Stack gap="xs">
+    <div className={PAPER}>
+      <div className="flex flex-col items-stretch justify-start gap-2.5">
         <div>
-          <Text fw={700}>{stock.name}</Text>
-          <Text size="sm" c="var(--color-text-secondary)">
+          <p className={`${TEXT} font-bold`}>{stock.name}</p>
+          <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
             {describeStockCounts(stock)}
-          </Text>
+          </p>
         </div>
-        <Group gap="xs" wrap="nowrap" align="flex-end">
-          <TextInput
+        <div className={ROW}>
+          <LabeledInput
             label="새로 출력한 개수"
             placeholder="예: 5"
             inputMode="numeric"
@@ -71,12 +95,16 @@ function StockRow({
             onChange={(event) => setAdd(onlyDigits(event.currentTarget.value))}
             style={{ flex: 1 }}
           />
-          <Button variant="light" color="green" loading={busy === 'add'} onClick={() => submit('add')}>
+          <LoadingButton
+            variant="light-green"
+            loading={busy === 'add'}
+            onClick={() => submit('add')}
+          >
             더하기
-          </Button>
-        </Group>
-        <Group gap="xs" wrap="nowrap" align="flex-end">
-          <TextInput
+          </LoadingButton>
+        </div>
+        <div className={ROW}>
+          <LabeledInput
             label="실제 남은 개수"
             placeholder={String(stock.remainingQuantity)}
             inputMode="numeric"
@@ -84,22 +112,21 @@ function StockRow({
             onChange={(event) => setRemaining(onlyDigits(event.currentTarget.value))}
             style={{ flex: 1 }}
           />
-          <Button
-            variant="light"
-            color="gray"
+          <LoadingButton
+            variant="secondary"
             loading={busy === 'remaining'}
             onClick={() => submit('remaining')}
           >
             맞추기
-          </Button>
-        </Group>
+          </LoadingButton>
+        </div>
         {error && (
-          <Text role="alert" size="sm" c="var(--color-danger)">
+          <p role="alert" className={TEXT_SM} style={{ color: 'var(--color-danger)' }}>
             {error}
-          </Text>
+          </p>
         )}
-      </Stack>
-    </Paper>
+      </div>
+    </div>
   );
 }
 
@@ -175,35 +202,35 @@ export default function OptionStocksSettingsPage() {
   return (
     <PageShell>
       <PageHeader title="옵션 재고 (화분)" />
-      <Container size="sm" px="md" py="md">
+      <div className="mx-auto max-w-[720px] px-4 py-4">
         {!loaded ? (
           <LoadingState />
         ) : (
-          <Stack gap="sm">
-            <Text size="sm" c="var(--color-text-secondary)">
+          <div className="flex flex-col items-stretch justify-start gap-3">
+            <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
               직접 출력한 화분처럼 개수가 정해진 옵션을 관리해요. 상품 옵션 선택지에 연결하면 주문할
-              때마다 줄고, 결제 전 취소·환불이면 다시 늘어요. 남은 개수가 모자라면 그 옵션으로는 주문을
-              받지 않아요.
-            </Text>
+              때마다 줄고, 결제 전 취소·환불이면 다시 늘어요. 남은 개수가 모자라면 그 옵션으로는
+              주문을 받지 않아요.
+            </p>
             {loadError && (
-              <Text role="alert" size="sm" c="var(--color-danger)">
+              <p role="alert" className={TEXT_SM} style={{ color: 'var(--color-danger)' }}>
                 {loadError}
-              </Text>
+              </p>
             )}
 
             {stocks.map((stock) => (
               <StockRow key={stock.id} stock={stock} onSave={(body) => update(stock.id, body)} />
             ))}
             {!loadError && stocks.length === 0 && (
-              <Text size="sm" c="var(--color-text-secondary)">
+              <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
                 아직 재고가 없어요. 아래에서 추가해 주세요.
-              </Text>
+              </p>
             )}
 
-            <Paper radius="lg" shadow="xs" p="md">
-              <Stack gap="sm">
-                <Text fw={700}>재고 추가</Text>
-                <TextInput
+            <div className={PAPER}>
+              <div className="flex flex-col items-stretch justify-start gap-3">
+                <p className={`${TEXT} font-bold`}>재고 추가</p>
+                <LabeledInput
                   label="이름"
                   placeholder="예: 흰색 출력 화분"
                   maxLength={OPTION_STOCK_NAME_MAX_LENGTH}
@@ -213,7 +240,7 @@ export default function OptionStocksSettingsPage() {
                     setForm((current) => ({ ...current, name }));
                   }}
                 />
-                <TextInput
+                <LabeledInput
                   label="지금 있는 개수"
                   placeholder="예: 10"
                   inputMode="numeric"
@@ -224,18 +251,18 @@ export default function OptionStocksSettingsPage() {
                   }}
                 />
                 {createError && (
-                  <Text role="alert" size="sm" c="var(--color-danger)">
+                  <p role="alert" className={TEXT_SM} style={{ color: 'var(--color-danger)' }}>
                     {createError}
-                  </Text>
+                  </p>
                 )}
-                <Button radius="xl" size="md" loading={creating} onClick={create}>
+                <LoadingButton size="md" loading={creating} onClick={create}>
                   추가
-                </Button>
-              </Stack>
-            </Paper>
-          </Stack>
+                </LoadingButton>
+              </div>
+            </div>
+          </div>
         )}
-      </Container>
+      </div>
     </PageShell>
   );
 }
