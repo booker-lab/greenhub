@@ -1,25 +1,15 @@
 'use client';
 
 import type { OrderStatus } from '@greenhub/shared';
-import {
-  Alert,
-  Box,
-  Button,
-  Container,
-  Divider,
-  Group,
-  Image,
-  Paper,
-  SegmentedControl,
-  Stack,
-  Stepper,
-  Text,
-  Title,
-} from '@mantine/core';
+import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
+import { Button, ButtonLabel } from '@greenhub/ui/components/button';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { SegmentedControl } from '@mantine/core';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { use, useEffect, useState } from 'react';
+import { type ReactNode, use, useEffect, useId, useState } from 'react';
+import OrderDetailExtras from '@/components/benchmark/OrderDetailExtras';
 import {
   ORDER_STATUS_POLL_INTERVAL_MS,
   ORDER_STATUS_POLL_MAX_MS,
@@ -27,6 +17,7 @@ import {
 } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
+import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
 import {
   buildPaymentRedirectUrl,
   type PaymentRedirectResult,
@@ -36,7 +27,6 @@ import {
   resolveRedeliveryPaymentReturn,
   shouldRecheckRedeliveryPayment,
 } from '@/lib/payment-redirect';
-import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
 import {
   buildPortonePayMethodRequest,
   type PortonePaymentMethod,
@@ -59,7 +49,6 @@ import {
   readOrderDetail,
   readRedeliveryPaymentResponse,
 } from './_detail';
-import OrderDetailExtras from '@/components/benchmark/OrderDetailExtras';
 
 const API_URL = getApiBaseUrl();
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
@@ -85,6 +74,117 @@ function getTimelineSteps(order: OrderDetailView): OrderStatus[] {
     return ['ACCEPTED', 'PREPARING', 'DELIVERING', 'HUB_ARRIVED', 'PICKED_UP'];
   }
   return ['ACCEPTED', 'PREPARING', 'DELIVERING', 'DELIVERED'];
+}
+
+// ① 외형 유지(UI 교체 P5): Mantine Alert(light·radius lg)와 같은 접근성 구조. role=alert, 제목이 있으면
+// 제목으로 이름을 붙이고(aria-labelledby), 본문은 aria-describedby로 잇는다.
+function DetailAlert({
+  variant,
+  title,
+  className,
+  children,
+}: {
+  variant: 'destructive' | 'warning' | 'secondary';
+  title?: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  const titleId = useId();
+  const bodyId = useId();
+  return (
+    <Alert
+      variant={variant}
+      role="alert"
+      aria-labelledby={title ? titleId : undefined}
+      aria-describedby={bodyId}
+      className={className}
+    >
+      {title && <AlertTitle id={titleId}>{title}</AlertTitle>}
+      <AlertDescription id={bodyId}>{children}</AlertDescription>
+    </Alert>
+  );
+}
+
+// Mantine Button variant="transparent" pl={0}(글자 brand light-color, 아이콘과 글자가 한 글자 칸).
+function BackButton({ onClick, className }: { onClick: () => void; className: string }) {
+  return (
+    <Button
+      variant="subtle"
+      className={`hover:bg-transparent ${className}`}
+      style={{ paddingLeft: 0 }}
+      onClick={onClick}
+    >
+      <ButtonLabel>
+        <ChevronLeft size={16} /> 뒤로
+      </ButtonLabel>
+    </Button>
+  );
+}
+
+// Mantine Stepper(size sm·vertical·color brand) 계산값: 아이콘 36px 원(테두리 2px gray-2, 완료 = 주색 면·흰 체크,
+// 진행 = 주색 테두리), 단계 최소 높이 36 + 32 + 5, 단계 사이 5px, 세로 연결선 2px, 라벨 15px·600·줄 높이 1.
+const STEP_OUTLINE = '#e9ecef';
+const STEP_COLOR = 'var(--mantine-color-brand-filled, #00a65a)';
+
+function DeliverySteps({ labels, active }: { labels: string[]; active: number }) {
+  return (
+    <ol className="m-0 flex list-none flex-col flex-nowrap items-start p-0">
+      {labels.map((label, index) => {
+        const completed = active > index;
+        const progress = active === index;
+        return (
+          <li
+            key={label}
+            className="mt-[5px] flex min-h-[73px] justify-start overflow-hidden text-base first:mt-0 last:min-h-auto"
+          >
+            <span className="relative">
+              <span
+                className="relative flex size-9 min-h-9 min-w-9 items-center justify-center rounded-full border-2 border-solid font-bold"
+                style={{
+                  background: completed ? STEP_COLOR : STEP_OUTLINE,
+                  borderColor: completed || progress ? STEP_COLOR : STEP_OUTLINE,
+                  color: completed ? '#fff' : '#495057',
+                  fontSize: 'var(--font-size-sm)',
+                }}
+              >
+                {completed ? (
+                  <span className="absolute inset-0 flex items-center justify-center text-white">
+                    <svg
+                      viewBox="0 0 10 7"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden
+                      style={{ width: '60%', height: '60%' }}
+                    >
+                      <path
+                        d="M4 4.586L1.707 2.293A1 1 0 1 0 .293 3.707l3 3a.997.997 0 0 0 1.414 0l5-5A1 1 0 1 0 8.293.293L4 4.586z"
+                        fill="currentColor"
+                        fillRule="evenodd"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </span>
+                ) : (
+                  <span className="flex">{index + 1}</span>
+                )}
+              </span>
+              {index < labels.length - 1 && (
+                <span
+                  className="absolute top-[41px] left-[18px] h-screen border-0 border-l-2 border-solid"
+                  style={{ borderColor: completed ? STEP_COLOR : STEP_OUTLINE }}
+                />
+              )}
+            </span>
+            <span className="ms-3 flex flex-col">
+              <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, lineHeight: 1 }}>
+                {label}
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
 }
 
 export default function OrderDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -510,103 +610,99 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   if (sessionStatus === 'loading' || (loading && !detail && status === 'loading')) {
     return (
-      <Box py={60} ta="center">
-        <Text c="var(--color-text-disabled)">로딩 중...</Text>
-      </Box>
+      <div className="py-[60px] text-center">
+        <p className="m-0 text-base" style={{ color: 'var(--color-text-disabled)' }}>
+          로딩 중...
+        </p>
+      </div>
     );
   }
 
   if (sessionStatus === 'unauthenticated' || status === 'auth') {
     return (
-      <Container size="sm" px="md" py="lg">
-        <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="md">
-          <ChevronLeft size={16} /> 뒤로
-        </Button>
-        <Stack align="center" gap="sm" py={40}>
-          <Text ta="center" c="var(--color-danger)" size="sm">
+      <div className="mx-auto max-w-[720px] px-4 py-5">
+        <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
+        <div className="flex flex-col items-center justify-start gap-3 py-10">
+          <p className="m-0 text-center text-sm" style={{ color: 'var(--color-danger)' }}>
             로그인이 필요하거나 이 주문을 볼 권한이 없습니다.
-          </Text>
-          <Group justify="center" gap="sm">
-            <Button onClick={() => router.push('/login')} loading={retrying}>
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <LoadingButton onClick={() => router.push('/login')} loading={retrying}>
               로그인
-            </Button>
+            </LoadingButton>
             <Button variant="outline" onClick={() => router.push('/mypage')}>
               주문 목록으로 돌아가기
             </Button>
-          </Group>
-        </Stack>
-      </Container>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (!orderId || status === 'not-found') {
     return (
-      <Container size="sm" px="md" py="lg">
-        <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="md">
-          <ChevronLeft size={16} /> 뒤로
-        </Button>
-        <Stack align="center" gap="sm" py={40}>
-          <Text ta="center" c="var(--color-text-secondary)" size="sm">
+      <div className="mx-auto max-w-[720px] px-4 py-5">
+        <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
+        <div className="flex flex-col items-center justify-start gap-3 py-10">
+          <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
             존재하지 않는 주문입니다. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요.
-          </Text>
+          </p>
           <Button variant="outline" onClick={() => router.push('/mypage')}>
             주문 목록으로 돌아가기
           </Button>
-        </Stack>
-      </Container>
+        </div>
+      </div>
     );
   }
 
   if (!detail && (status === 'network' || status === 'server')) {
     return (
-      <Container size="sm" px="md" py="lg">
-        <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="md">
-          <ChevronLeft size={16} /> 뒤로
-        </Button>
-        <Stack align="center" gap="sm" py={40}>
-          <Text ta="center" c="var(--color-danger)" size="sm">
+      <div className="mx-auto max-w-[720px] px-4 py-5">
+        <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
+        <div className="flex flex-col items-center justify-start gap-3 py-10">
+          <p className="m-0 text-center text-sm" style={{ color: 'var(--color-danger)' }}>
             {error ?? '주문 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'}
-          </Text>
-          <Group justify="center" gap="sm">
-            <Button onClick={handleRetry} loading={retrying} disabled={retrying}>
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <LoadingButton onClick={handleRetry} loading={retrying} disabled={retrying}>
               다시 시도
-            </Button>
+            </LoadingButton>
             <Button variant="outline" onClick={() => router.push('/mypage')}>
               주문 목록으로 돌아가기
             </Button>
-          </Group>
-        </Stack>
-      </Container>
+          </div>
+        </div>
+      </div>
     );
   }
 
   if (!detail) {
     if (loading) {
       return (
-        <Box py={60} ta="center">
-          <Text c="var(--color-text-disabled)">로딩 중...</Text>
-        </Box>
+        <div className="py-[60px] text-center">
+          <p className="m-0 text-base" style={{ color: 'var(--color-text-disabled)' }}>
+            로딩 중...
+          </p>
+        </div>
       );
     }
     return (
-      <Container size="sm" px="md" py="lg">
-        <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="md">
-          <ChevronLeft size={16} /> 뒤로
-        </Button>
-        <Stack align="center" gap="sm" py={40}>
-          <Text ta="center" c="var(--color-danger)" size="sm">
+      <div className="mx-auto max-w-[720px] px-4 py-5">
+        <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
+        <div className="flex flex-col items-center justify-start gap-3 py-10">
+          <p className="m-0 text-center text-sm" style={{ color: 'var(--color-danger)' }}>
             주문 정보를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.
-          </Text>
-          <Group justify="center" gap="sm">
-            <Button onClick={handleRetry} loading={retrying} disabled={retrying}>
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <LoadingButton onClick={handleRetry} loading={retrying} disabled={retrying}>
               다시 시도
-            </Button>
+            </LoadingButton>
             <Button variant="outline" onClick={() => router.push('/mypage')}>
               주문 목록으로 돌아가기
             </Button>
-          </Group>
-        </Stack>
-      </Container>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -649,49 +745,45 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const isProblemStatus = detail.status === 'DELIVERY_HELD' || detail.status === 'CANCELLED';
 
   return (
-    <Container size="sm" px="md" pt="lg" pb={80}>
-      <Button variant="transparent" onClick={() => router.push('/mypage')} pl={0} mb="sm">
-        <ChevronLeft size={16} /> 뒤로
-      </Button>
+    // ① 외형 유지(UI 교체 P5): Mantine Container(sm·px md·pt lg·pb 80)·Paper·Group·Stack·Text·Title·Alert·
+    // Divider·Image·Stepper 계산값.
+    <div className="mx-auto max-w-[720px] px-4 pt-5 pb-20">
+      <BackButton className="mb-3" onClick={() => router.push('/mypage')} />
       {(status === 'network' || status === 'server') && (
-        <Alert
-          color="yellow"
-          variant="light"
-          radius="lg"
-          mb="lg"
-          title="최신 정보를 불러오지 못했습니다"
-        >
-          <Stack gap={6}>
-            <Text size="sm">{error ?? '최신 주문 정보를 확인하지 못했습니다.'}</Text>
-            <Text size="sm">표시된 정보가 최신이 아닐 수 있습니다.</Text>
-            <Text size="sm">
+        <DetailAlert variant="warning" className="mb-5" title="최신 정보를 불러오지 못했습니다">
+          <div className="flex flex-col gap-1.5">
+            <p className="m-0 text-sm">{error ?? '최신 주문 정보를 확인하지 못했습니다.'}</p>
+            <p className="m-0 text-sm">표시된 정보가 최신이 아닐 수 있습니다.</p>
+            <p className="m-0 text-sm">
               최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없습니다.
-            </Text>
-            <Button
-              mt="xs"
+            </p>
+            <LoadingButton
+              className="mt-2.5"
               variant="outline"
               loading={retrying}
               disabled={retrying}
               onClick={handleRetry}
             >
-              다시 시도
-            </Button>
-          </Stack>
-        </Alert>
+              {' '}
+              다시 시도{' '}
+            </LoadingButton>
+          </div>
+        </DetailAlert>
       )}
-      <Group justify="space-between" align="flex-start" mb="lg">
-        <Box>
-          <Title
-            order={1}
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1
+            className="m-0 leading-[1.3]"
             style={{ fontSize: 22, fontWeight: 'var(--fw-extrabold)', letterSpacing: '-0.01em' }}
           >
             주문 상세
-          </Title>
-          <Text size="sm" c="var(--color-text-disabled)">
+          </h1>
+          <p className="m-0 text-sm" style={{ color: 'var(--color-text-disabled)' }}>
             주문번호: {detail.orderNumber}
-          </Text>
-        </Box>
-        <Text
+          </p>
+        </div>
+        <p
+          className="m-0 leading-[1.55]"
           style={{
             background: isProblemStatus
               ? 'var(--color-danger-surface)'
@@ -705,44 +797,49 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           }}
         >
           {STATUS_LABELS[detail.status]}
-        </Text>
-      </Group>
+        </p>
+      </div>
 
-      <Paper
-        p="md"
-        mb="lg"
+      <div
+        className="mb-5 p-4"
         style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
       >
-        <Group justify="space-between" mb="sm">
-          <Text fw="var(--fw-extrabold)">주문 상품</Text>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-4">
+          <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-extrabold)' }}>
+            주문 상품
+          </p>
           {detail.items.length > 0 && (
-            <Text size="sm" c="var(--color-text-secondary)">
+            <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               총 {detail.items.length}개 상품 ·{' '}
               {detail.items.reduce((sum, item) => sum + item.quantity, 0)}개
-            </Text>
+            </p>
           )}
-        </Group>
-        <Stack gap="xs">
+        </div>
+        <div className="flex flex-col gap-2.5">
           {detail.items.map((item) => (
-            <Group key={item.id} justify="space-between" align="flex-start">
-              <Text size="sm">
+            <div key={item.id} className="flex flex-wrap items-start justify-between gap-4">
+              <p className="m-0 text-sm">
                 {item.productName} × {item.quantity}
-              </Text>
-              <Text size="sm">{item.subtotalAmount.toLocaleString('ko-KR')}원</Text>
-            </Group>
+              </p>
+              <p className="m-0 text-sm">{item.subtotalAmount.toLocaleString('ko-KR')}원</p>
+            </div>
           ))}
-          <Divider />
+          {/* Mantine Divider(gray-3 1px 위 테두리, 구분선 역할) */}
+          <hr className="m-0 h-0 border-0 border-t border-solid border-[#dee2e6]" />
           {detail.deliveryFee > 0 && (
-            <Group justify="space-between">
-              <Text size="sm" c="var(--color-text-secondary)">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 배송비
-              </Text>
-              <Text size="sm">{detail.deliveryFee.toLocaleString('ko-KR')}원</Text>
-            </Group>
+              </p>
+              <p className="m-0 text-sm">{detail.deliveryFee.toLocaleString('ko-KR')}원</p>
+            </div>
           )}
-          <Group justify="space-between">
-            <Text fw="var(--fw-bold)">결제 금액</Text>
-            <Text
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-bold)' }}>
+              결제 금액
+            </p>
+            <p
+              className="m-0 leading-[1.55]"
               style={{
                 fontSize: 20,
                 fontVariantNumeric: 'tabular-nums',
@@ -750,10 +847,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               }}
             >
               {detail.totalAmount.toLocaleString('ko-KR')}원
-            </Text>
-          </Group>
-        </Stack>
-      </Paper>
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* 벤치마킹 비교 기능(옵션·선물 표시, 후기, 관리 안내, 다시 주문) */}
       <OrderDetailExtras
@@ -765,71 +862,75 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         extras={readOrderBenchmarkExtras(order)}
       />
 
-      <Paper withBorder radius="lg" p="md" mb="lg">
-        <Stack gap="xs">
-          <Group justify="space-between">
-            <Text size="sm" c="var(--color-text-secondary)">
+      <div className="mb-5 rounded-lg border border-solid border-[#dee2e6] bg-white p-4">
+        <div className="flex flex-col gap-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               배송 방식
-            </Text>
-            <Text size="sm" fw="var(--fw-bold)">
+            </p>
+            <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
               {detail.deliveryMethod === 'hub'
                 ? '거점 픽업'
                 : detail.deliveryMethod === 'parcel'
                   ? '택배'
                   : '직배송'}
               {detail.saleType === 'group' && ' (공동구매)'}
-            </Text>
-          </Group>
+            </p>
+          </div>
           {detail.deliveryAddress && (
-            <Group justify="space-between" align="flex-start">
-              <Text size="sm" c="var(--color-text-secondary)">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 배송지
-              </Text>
-              <Text size="sm" ta="right">
+              </p>
+              <p className="m-0 text-right text-sm">
                 {detail.deliveryAddress.address} {detail.deliveryAddress.addressDetail}
-              </Text>
-            </Group>
+              </p>
+            </div>
           )}
           {detail.requestedDeliveryDate && (
-            <Group justify="space-between">
-              <Text size="sm" c="var(--color-text-secondary)">
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 배송 예정일
-              </Text>
-              <Text size="sm">{detail.requestedDeliveryDate.slice(0, 10)}</Text>
-            </Group>
+              </p>
+              <p className="m-0 text-sm">{detail.requestedDeliveryDate.slice(0, 10)}</p>
+            </div>
           )}
-        </Stack>
-      </Paper>
+        </div>
+      </div>
 
       {detail.deliveryHold && isDeliveryHoldActive(detail) && (
-        <Alert color="red" variant="light" radius="lg" mb="lg" title="배송 보류">
-          <Stack gap={6}>
-            <Text size="sm">{detail.deliveryHold.reasonMessage}</Text>
-            <Text size="sm">
+        <DetailAlert variant="destructive" className="mb-5" title="배송 보류">
+          <div className="flex flex-col gap-1.5">
+            <p className="m-0 text-sm">{detail.deliveryHold.reasonMessage}</p>
+            <p className="m-0 text-sm">
               고객 책임: {detail.deliveryHold.customerResponsible ? '해당' : '없음'}
-            </Text>
+            </p>
             {detail.deliveryHold.redeliveryFee !== null && (
-              <Text size="sm">
+              <p className="m-0 text-sm">
                 재배송비: {detail.deliveryHold.redeliveryFee.toLocaleString('ko-KR')}원
-              </Text>
+              </p>
             )}
             {detail.deliveryHold.nextContactAt && (
-              <Text size="sm">다음 연락: {formatDateTime(detail.deliveryHold.nextContactAt)}</Text>
+              <p className="m-0 text-sm">
+                다음 연락: {formatDateTime(detail.deliveryHold.nextContactAt)}
+              </p>
             )}
             {detail.deliveryHold.nextDeliveryAt && (
-              <Text size="sm">다음 배송: {formatDateTime(detail.deliveryHold.nextDeliveryAt)}</Text>
+              <p className="m-0 text-sm">
+                다음 배송: {formatDateTime(detail.deliveryHold.nextDeliveryAt)}
+              </p>
             )}
             {detail.redeliveryPayment.required && (
-              <Stack gap={6} mt="xs">
+              <div className="mt-2.5 flex flex-col gap-1.5">
                 {paymentIsDone && (
-                  <Text size="sm" fw="var(--fw-bold)">
+                  <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
                     재배송비 결제가 완료되었습니다. 배송 재개를 기다리고 있습니다.
-                  </Text>
+                  </p>
                 )}
                 {!paymentIsDone && detail.redeliveryPayment.requiresRecovery && (
-                  <Text size="sm" c="var(--color-danger)">
+                  <p className="m-0 text-sm" style={{ color: 'var(--color-danger)' }}>
                     재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.
-                  </Text>
+                  </p>
                 )}
                 {!paymentIsDone &&
                   !detail.redeliveryPayment.requiresRecovery &&
@@ -849,9 +950,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           }))}
                         />
                       )}
-                      <Button
-                        mt="xs"
-                        color="red"
+                      <LoadingButton
+                        className="mt-2.5"
+                        variant="destructive"
                         loading={redeliveryBusy}
                         disabled={redeliveryBusy || isStaleRead}
                         onClick={handleRedeliveryPayment}
@@ -861,199 +962,200 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           : detail.redeliveryPayment.status === 'PENDING'
                             ? '재배송비 결제 계속하기'
                             : '재배송비 결제'}
-                      </Button>
+                      </LoadingButton>
                     </>
                   )}
-              </Stack>
+              </div>
             )}
-          </Stack>
-        </Alert>
+          </div>
+        </DetailAlert>
       )}
 
       {detail.deliveryPhotoUrl && (
-        <Paper withBorder radius="lg" p="md" mb="lg">
-          <Text fw="var(--fw-bold)" size="sm" mb="sm">
+        <div className="mb-5 rounded-lg border border-solid border-[#dee2e6] bg-white p-4">
+          <p className="m-0 mb-3 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
             배송 완료 사진
-          </Text>
-          <Image
+          </p>
+          {/* Mantine Image(radius lg·fit cover·mah 420): 블록·폭 100%·flex 0 */}
+          {/* biome-ignore lint/performance/noImgElement: Mantine Image와 같은 img 요소를 그린다 */}
+          <img
             src={detail.deliveryPhotoUrl}
             alt="배송 완료 사진"
-            radius="lg"
-            fit="cover"
-            mah={420}
+            className="block w-full flex-[0] rounded-lg object-cover"
+            style={{ maxHeight: 420 }}
           />
-        </Paper>
+        </div>
       )}
 
       {showPickupCode && (
-        <Paper withBorder radius="lg" p="lg" mb="lg" ta="center">
-          <Text size="sm" fw="var(--fw-bold)" c="brand.8">
+        <div className="mb-5 rounded-lg border border-solid border-[#dee2e6] bg-white p-5 text-center">
+          <p
+            className="m-0 text-sm"
+            style={{ fontWeight: 'var(--fw-bold)', color: 'var(--mantine-color-brand-8, #007a43)' }}
+          >
             픽업 코드
-          </Text>
-          <Text fz={36} ff="monospace" fw="var(--fw-bold)" lts={8}>
+          </p>
+          <p
+            className="m-0 leading-[1.55]"
+            style={{
+              fontSize: 36,
+              fontFamily: 'monospace',
+              fontWeight: 'var(--fw-bold)',
+              letterSpacing: 8,
+            }}
+          >
             {detail.pickupCode}
-          </Text>
-          <Text size="sm" c="var(--color-text-secondary)">
+          </p>
+          <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
             코드를 제시하고 수령하세요
-          </Text>
-        </Paper>
+          </p>
+        </div>
       )}
 
       {showCancelCommand && (
-        <Alert
-          color="gray"
-          variant="light"
-          radius="lg"
-          mb="lg"
+        <DetailAlert
+          variant="secondary"
+          className="mb-5"
           title={detail.isRoundOrder ? '주문 마감 전 취소' : '공동구매 모집 중'}
         >
-          <Text size="sm" mb="sm">
+          <p className="m-0 mb-3 text-sm">
             {detail.isRoundOrder
               ? '취소 요청 시 서버가 회차 마감 여부를 다시 확인하고 환불과 주문 한도 반환을 처리합니다.'
               : '모집 중인 공동구매 참여를 취소할 수 있습니다.'}
-          </Text>
+          </p>
           {isStaleRead && (
-            <Text size="sm" mb="sm">
+            <p className="m-0 mb-3 text-sm">
               최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.
-            </Text>
+            </p>
           )}
           {cancelOutcome.kind === 'reconciling' && (
-            <Text size="sm" mb="sm">
+            <p className="m-0 mb-3 text-sm">
               서버에서 취소를 확인했습니다. 최신 주문 상태를 확인 중입니다.
-            </Text>
+            </p>
           )}
-          <Button
-            fullWidth
-            variant="outline"
-            color="red"
+          <LoadingButton
+            className="w-full"
+            variant="outline-destructive"
             loading={cancelBusy}
             disabled={cancelBusy || isStaleRead || cancelOutcome.kind === 'reconcile-failed'}
             onClick={handleCancel}
           >
             {detail.isRoundOrder ? '주문 취소' : '공동구매 참여 취소'}
-          </Button>
-        </Alert>
+          </LoadingButton>
+        </DetailAlert>
       )}
 
       {showCancelReconcileWarning && (
-        <Alert
-          color="yellow"
-          variant="light"
-          radius="lg"
-          mb="lg"
-          title="취소 확인됨 · 상태 재확인 필요"
-        >
-          <Stack gap={6}>
-            <Text size="sm">
+        <DetailAlert variant="warning" className="mb-5" title="취소 확인됨 · 상태 재확인 필요">
+          <div className="flex flex-col gap-1.5">
+            <p className="m-0 text-sm">
               취소는 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 취소 실패가
               아니므로 바로 다시 취소하지 말고 상태를 확인해 주세요.
-            </Text>
-            <Button
-              mt="xs"
+            </p>
+            <LoadingButton
+              className="mt-2.5"
               variant="outline"
               loading={retrying}
               disabled={retrying}
               onClick={handleRetry}
             >
-              다시 시도
-            </Button>
-          </Stack>
-        </Alert>
+              {' '}
+              다시 시도{' '}
+            </LoadingButton>
+          </div>
+        </DetailAlert>
       )}
 
       {isCancelled && (
-        <Alert color="red" variant="light" radius="lg" mb="lg" ta="center">
-          <Text fw="var(--fw-bold)">주문이 취소되었습니다</Text>
-          {cancelReasonText && <Text size="sm">사유: {cancelReasonText}</Text>}
-        </Alert>
+        <DetailAlert variant="destructive" className="mb-5 text-center">
+          <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-bold)' }}>
+            주문이 취소되었습니다
+          </p>
+          {cancelReasonText && <p className="m-0 text-sm">사유: {cancelReasonText}</p>}
+        </DetailAlert>
       )}
 
       {actionError && (
-        <Alert color="red" variant="light" radius="lg" mb="lg">
-          <Stack gap={6}>
-            <Text size="sm">{actionError}</Text>
+        <DetailAlert variant="destructive" className="mb-5">
+          <div className="flex flex-col gap-1.5">
+            <p className="m-0 text-sm">{actionError}</p>
             {needsStatusRecheck && (
-              <Text size="sm">중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요.</Text>
+              <p className="m-0 text-sm">중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요.</p>
             )}
             {needsStatusRecheck && (
-              <Button
-                mt="xs"
+              <LoadingButton
+                className="mt-2.5"
                 variant="outline"
                 loading={retrying}
                 disabled={retrying}
                 onClick={handleRetry}
               >
-                상태 다시 확인
-              </Button>
+                {' '}
+                상태 다시 확인{' '}
+              </LoadingButton>
             )}
-          </Stack>
-        </Alert>
+          </div>
+        </DetailAlert>
       )}
 
       {showReviewSection && (
-        <Stack gap={6} mb="lg">
-          <Button
-            fullWidth
+        <div className="mb-5 flex flex-col gap-1.5">
+          <LoadingButton
+            className="w-full"
             disabled={
               reviewBusy || showReviewConfirmed || showReviewReconcileWarning || isStaleRead
             }
             loading={reviewBusy}
-            variant={showReviewConfirmed ? 'outline' : 'filled'}
+            variant={showReviewConfirmed ? 'outline' : 'default'}
             onClick={handleConfirm}
           >
             {reviewLabel}
-          </Button>
+          </LoadingButton>
           {isStaleRead && isReviewable && (
-            <Text size="sm" c="var(--color-text-secondary)" ta="center">
+            <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.
-            </Text>
+            </p>
           )}
           {reviewOutcome.kind === 'reconciling' && (
-            <Text size="sm" c="var(--color-text-secondary)" ta="center">
+            <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               서버에서 구매 확정을 확인했습니다. 최신 주문 상태를 확인 중입니다.
-            </Text>
+            </p>
           )}
-        </Stack>
+        </div>
       )}
 
       {showReviewReconcileWarning && (
-        <Alert
-          color="yellow"
-          variant="light"
-          radius="lg"
-          mb="lg"
-          title="구매 확정 확인됨 · 상태 재확인 필요"
-        >
-          <Stack gap={6}>
-            <Text size="sm">
+        <DetailAlert variant="warning" className="mb-5" title="구매 확정 확인됨 · 상태 재확인 필요">
+          <div className="flex flex-col gap-1.5">
+            <p className="m-0 text-sm">
               구매 확정은 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 확정 실패가
               아니므로 바로 다시 확정하지 말고 상태를 확인해 주세요.
-            </Text>
-            <Button
-              mt="xs"
+            </p>
+            <LoadingButton
+              className="mt-2.5"
               variant="outline"
               loading={retrying}
               disabled={retrying}
               onClick={handleRetry}
             >
-              다시 시도
-            </Button>
-          </Stack>
-        </Alert>
+              {' '}
+              다시 시도{' '}
+            </LoadingButton>
+          </div>
+        </DetailAlert>
       )}
 
       {!isCancelled && detail.status !== 'DELIVERY_HELD' && (
-        <Box>
-          <Text fw="var(--fw-bold)" size="sm" mb="md">
+        <div>
+          <p className="m-0 mb-4 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
             배송 현황
-          </Text>
-          <Stepper active={currentStep} color="brand" size="sm" orientation="vertical">
-            {steps.map((stepStatus) => (
-              <Stepper.Step key={stepStatus} label={STATUS_LABELS[stepStatus] ?? stepStatus} />
-            ))}
-          </Stepper>
-        </Box>
+          </p>
+          <DeliverySteps
+            active={currentStep}
+            labels={steps.map((stepStatus) => STATUS_LABELS[stepStatus] ?? stepStatus)}
+          />
+        </div>
       )}
-    </Container>
+    </div>
   );
 }
