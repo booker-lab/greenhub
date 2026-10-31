@@ -1,3 +1,4 @@
+import type { ConfirmColor } from '@/components/ConfirmModal';
 import type { AdminDriver, DriverStatus } from '@/hooks/useAdmin';
 
 export type DriverAction = 'approve' | 'suspend' | 'unsuspend';
@@ -13,7 +14,7 @@ export interface PendingAction {
 // 액션별 ConfirmModal 문구/색 — 승인·정지·정지 해제. 대상 표시는 describeDriverConfirm이 붙인다.
 export const ACTION_META: Record<
   DriverAction,
-  { title: string; message: string; confirmLabel: string; confirmColor: string }
+  { title: string; message: string; confirmLabel: string; confirmColor: ConfirmColor }
 > = {
   approve: {
     title: '드라이버 승인',

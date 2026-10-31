@@ -318,6 +318,10 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - ② 실제 기사 계정의 도착 사진 업로드·완료 처리·서비스워커는 운영 배포 직전 출시 E2E용 exact Preview에서 사용자가 휴대폰으로 확인한 뒤 배포를 승인한다. PR마다 Preview를 쓰지 않는다(`AGENTS.md` §0-9).
 
 ### P4. 판매자 앱 틀·회차·주문·준비·재고·정산
+- 공용 틀 부품 구현(2026-10-31, 브랜치 `claude/ui-p4-frame`): `PageHeader`·`PageShell`·`SegmentedTabs`·`StateViews`(LoadingState·EmptyState)·어드민 `LoadMoreFooter`의 `@mantine/core`를 걷었다. Mantine Container(xs 540·sm 720·md 960·lg 1140·xl 1320, 좌우 16px)·Group·Stack·Title order 3(22px·800·1.4)·ActionIcon(28px subtle gray = `ghost` `size-7`, svg는 `size-5`)·Badge xs(16px·좌우 6·9px·줄 높이 14, filled gray-6·red-6)·Loader sm 계산값을 옮겼다. `LoadMoreFooter` 불러오는 중은 정산 `LoadMoreButton`과 같은 Mantine loading 모양(덮개·따로 합성되는 원)이다. `SegmentedTabs`의 이름 있는 group은 spread로 역할을 줘 biome 규칙을 끄지 않았다.
+  - 공용 `ConfirmModal` 회귀 바로잡기: #712에서 확인 버튼 색 표에 `dark`가 빠져 회차 상세 "주문 마감" 확인창이 빨강이었다. Mantine 9 light 계산값(filled dark-6 `#2e2e2e`, 마우스 올림 dark-7)을 더하고 gray·green 마우스 올림도 Mantine 값(gray-7·green-7)으로 두었다. `confirmColor`는 `ConfirmColor`(brand·red·gray·green·dark) 유니온이라 모르는 값은 타입 검사에서 걸린다.
+  - 촬영 목록 추가: 회차 목록 불러오는 중·없음(`sale-rounds-loading`·`sale-rounds-empty`, scenario `rounds-slow`·`rounds-empty`), 어드민 기사 더 보기 불러오는 중(`admin-drivers-load-more`, 기사 목록이 다음 쪽이 있다고 답함), 주문 마감 확인창(`modal-round-close`). 더 보기 실패·dark 확인 버튼은 대조 화면 행으로 본다(실패 응답은 콘솔 오류라 촬영 판정에 걸린다).
+  - 로컬 증명(판매자 단독, 기준 시각 2026-10-31T00:00+09:00): `main` fc16129를 merge한 뒤 기준 `main` fc16129 + 같은 fixture 264장과 `diff.mjs --tolerance 1` 261장 같음, `modal-round-close` 3장만 `main`(빨강)과 다르고 Mantine 시절 e93322d + 같은 fixture와 같음(허용 목록 없음). 그 뒤 #726·#716을 merge하고 로그인·로그인 오류·onboarding·어드민 배너·감사 기록 15장을 `main` 69919ed + 같은 fixture와 다시 찍어 같음. 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0(fc16129 merge 뒤), 단위 테스트 881개. 운영 빌드는 증명하지 않았다.
 - 앱 틀(사이드바·상단바) → 회차·주문·준비 → 재고 → 정산 순서로 나눈다.
 - 다음 회차가 잡혀 있으면, 회차 운영 동선 묶음(어드민 기사 승인·환불 포함)은 끝까지 교체된 상태로만 그 회차의 마지막 출시에 넣는다. 판매자 대표가 실제 계정으로 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
 
