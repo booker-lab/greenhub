@@ -562,6 +562,16 @@ export function UiCompare({ open }: { open?: string }) {
           mantine={<MSwitch aria-label="기상 제한" defaultChecked />}
           ui={<Switch aria-label="기상 제한" defaultChecked />}
         />
+        <Row
+          name="Switch 잠김·꺼짐"
+          mantine={<MSwitch aria-label="기상 제한" disabled />}
+          ui={<Switch aria-label="기상 제한" disabled />}
+        />
+        <Row
+          name="Switch 잠김·켜짐"
+          mantine={<MSwitch aria-label="기상 제한" defaultChecked disabled />}
+          ui={<Switch aria-label="기상 제한" defaultChecked disabled />}
+        />
       </Section>
 
       <Section title="Card">
