@@ -268,6 +268,11 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 어드민 배너·감사 기록 구현(2026-10-31): `admin/banner`(이미지·텍스트·버튼 섹션)와 `admin/audit`의 `@mantine/core`를 걷었다.
   - 배너 활성화 `Switch`는 Mantine 라벨 배치(트랙 뒤 12px, 15px·줄 높이 20px)로 그린다. 버튼 섹션 `Group grow`는 칸마다 flex-grow 1·최대 폭 50% - 8px다.
   - 감사 기록 배지는 Mantine Badge처럼 `overflow: hidden`인 grid라 휴대폰 폭에서 줄어들고, 글자 칸은 `style.css` 보정(`overflow: visible`)처럼 좌우 여백으로 넘쳐 보인다(ui Badge 기본 `shrink-0`이면 휴대폰 1장이 달랐다).
+- 어드민 환불 확인창 구현(2026-10-31): `admin/orders`의 `RefundConfirmModal`(강제환불)·`PostDeliveryRefundModal`(배송 후 환불)의 `@mantine/core`를 걷었다. 주문 표·필터(검색 Select)·알림은 다음 PR이다.
+  - `Dialog`: 안쪽 `data-autofocus` 요소가 열릴 때 첫 초점이다(Mantine Modal 약속). #712 뒤 `ConfirmModal`이 `Dialog`가 되면서 두 확인창의 사유·메모 입력칸 첫 초점이 닫기 버튼으로 바뀌었던 것을 되돌린다.
+  - `Textarea` autosize: Mantine Autosize와 같이 숨긴 textarea의 정수 `scrollHeight`로 글 높이·한 줄 높이를 잰다(자리표시가 있으면 빈 칸도 자리표시로 잰다). 줄 높이 계산값(15px × 1.55 = 23.25)을 곱하면 Mantine(한 줄 23)보다 0.5px 커져 확인창 전체가 반 픽셀 움직였다.
+  - 배송 후 환불 사유 라디오는 Mantine Radio(sm) 계산값으로 화면 안에 그린다(기사 앱 `RadioGroupField`와 같은 값).
+  - 촬영 목록에 `modal-admin-refund`·`modal-admin-post-delivery-refund`·`modal-admin-post-delivery-refund-filled`(사유·메모 입력)를, 어드민 주문 fixture에 회차 배송 완료 주문(`R-DELIVERED`)을 더했다. 기준은 Mantine 확인창이 남은 `main` e93322d(#712 전)에 같은 fixture를 넣고 찍었다(#712는 그 커밋과 판매자 153장이 같음을 증명했다).
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)

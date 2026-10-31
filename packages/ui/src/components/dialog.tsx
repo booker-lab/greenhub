@@ -2,6 +2,7 @@
 
 import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import type * as React from 'react';
+import { useRef } from 'react';
 
 import { cn } from '../lib/utils';
 import { Button } from './button';
@@ -43,16 +44,21 @@ function DialogOverlay({ className, ...props }: DialogPrimitive.Backdrop.Props) 
 // 가운데 정렬은 Mantine처럼 flex(위아래 5dvh·좌우 5vw 여백)로 한다. translate(-50%)로 옮기면 소수점 위치의 글자가 다르게 그려진다.
 // 구성은 Mantine과 같이 머리(DialogHeader: 제목, 60px) → 본문(DialogBody: 좌우·아래 16px)이다.
 // 설명(DialogDescription)은 머리가 아니라 본문에 둔다.
-// 초점 이동은 Base UI에 맡긴다. 여기서 focus()를 호출하지 않는다. 닫기 버튼을 본문보다 앞에 두어 Mantine Modal처럼
+// 초점 이동은 Base UI에 맡긴다(아래 data-autofocus는 대상만 고른다). 여기서 focus()를 호출하지 않는다. 닫기 버튼을 본문보다 앞에 두어 Mantine Modal처럼
 // 열릴 때 첫 초점이 닫기 버튼에 간다(확인 버튼이 첫 초점이면 Enter 한 번에 승인·정지된다). 위치는 absolute라 화면은 같다.
 function DialogContent({
   className,
   children,
   showCloseButton = true,
+  initialFocus,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
 }) {
+  // Mantine Modal과 같은 약속: 안쪽에 data-autofocus 요소가 있으면 열릴 때 그 요소가 첫 초점이다
+  // (강제환불 사유 입력칸 등). 없으면 Base UI 기본(첫 초점 가능 요소 = 닫기 버튼).
+  const popupRef = useRef<HTMLDivElement>(null);
+  const autofocus = () => popupRef.current?.querySelector<HTMLElement>('[data-autofocus]') ?? true;
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -61,6 +67,8 @@ function DialogContent({
         className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-[5vw] py-[5dvh]"
       >
         <DialogPrimitive.Popup
+          ref={popupRef}
+          initialFocus={initialFocus ?? autofocus}
           data-slot="dialog-content"
           className={cn(
             'pointer-events-auto relative flex max-h-[90dvh] will-change-[opacity] w-[440px] max-w-full flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
