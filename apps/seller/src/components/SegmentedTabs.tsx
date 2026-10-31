@@ -36,8 +36,7 @@ export function SegmentedTabs<T extends string>({
   ariaLabel,
 }: Props<T>) {
   const containerStyle: CSSProperties = {
-    backgroundColor: 'var(--color-bg)',
-    borderBottom: '1px solid var(--color-border)',
+    backgroundColor: 'var(--frame)',
     ...(sticky ? { position: 'sticky', top: topOffset, zIndex: 10 } : {}),
   };
 
