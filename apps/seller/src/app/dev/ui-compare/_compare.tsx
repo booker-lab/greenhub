@@ -56,7 +56,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core';
-import { ChevronLeft, RefreshCcw } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 
@@ -491,6 +491,58 @@ export function UiCompare({ open }: { open?: string }) {
             <Alert variant="warning" className="w-full">
               <AlertTitle>최신 정보를 확인하지 못했습니다</AlertTitle>
               <AlertDescription>이전 목록을 표시합니다.</AlertDescription>
+            </Alert>
+          }
+        />
+        <Row
+          name="Alert light gray ↔ secondary"
+          mantine={
+            <MAlert color="gray" title="기본값을 채워 두었습니다" style={{ width: '100%' }}>
+              저장하면 작성 중 회차로 만들어집니다.
+            </MAlert>
+          }
+          ui={
+            <Alert variant="secondary" className="w-full">
+              <AlertTitle>기본값을 채워 두었습니다</AlertTitle>
+              <AlertDescription>저장하면 작성 중 회차로 만들어집니다.</AlertDescription>
+            </Alert>
+          }
+        />
+        <Row
+          name="Alert icon ↔ icon"
+          mantine={
+            <MAlert
+              color="red"
+              title="최신 회차를 다시 확인하지 못했습니다"
+              icon={<AlertTriangle size={18} />}
+              style={{ width: '100%' }}
+            >
+              네트워크 오류
+            </MAlert>
+          }
+          ui={
+            <Alert variant="destructive" icon={<AlertTriangle size={18} />} className="w-full">
+              <AlertTitle>최신 회차를 다시 확인하지 못했습니다</AlertTitle>
+              <AlertDescription>네트워크 오류</AlertDescription>
+            </Alert>
+          }
+        />
+        <Row
+          name="Alert withCloseButton ↔ onClose"
+          mantine={
+            <MAlert
+              title="회차 복사 완료"
+              withCloseButton
+              onClose={() => {}}
+              style={{ width: '100%' }}
+            >
+              복사한 회차를 열어 확인해 주세요.
+            </MAlert>
+          }
+          ui={
+            <Alert onClose={() => {}} closeButtonLabel="닫기" className="w-full">
+              <AlertTitle>회차 복사 완료</AlertTitle>
+              <AlertDescription>복사한 회차를 열어 확인해 주세요.</AlertDescription>
             </Alert>
           }
         />
