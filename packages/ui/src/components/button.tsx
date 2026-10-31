@@ -37,6 +37,8 @@ const buttonVariants = cva(
         'outline-destructive':
           'border-[#fa5252] bg-transparent text-[#fa5252] hover:bg-[#fa5252]/5',
         'light-green': 'bg-[#d3f9d8] text-[#2b8a3e]',
+        // Mantine outline dark(dark-6 테두리·글자).
+        'outline-dark': 'border-[#2e2e2e] bg-transparent text-[#2e2e2e] hover:bg-[#2e2e2e]/5',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
       size: {
