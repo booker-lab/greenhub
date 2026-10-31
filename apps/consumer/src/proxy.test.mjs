@@ -108,20 +108,29 @@ test('Report-Only 헤더에 요청마다 새 nonce를 싣고 강제 CSP 헤더�
   );
 });
 
-test('matcher는 페이지 문서에서 실행되고 보호 경로는 프리페치에서도 실행된다', () => {
+test('matcher는 보호 경로와 로그인 화면에서만 실행되고 보호 경로는 프리페치에서도 실행된다', () => {
   const matches = (url, headers) => unstable_doesMiddlewareMatch({ config, url, headers });
-  for (const path of [
-    '/',
-    '/login',
-    '/products/p-1',
-    '/cart',
-    '/mypage/orders/o-1',
-    '/order/success',
-  ]) {
+  for (const path of ['/login', '/cart', '/mypage', '/mypage/orders/o-1', '/checkout', '/order/success']) {
     assert.equal(matches(path), true, path);
   }
   assert.equal(matches('/cart', { 'next-router-prefetch': '1' }), true);
-  assert.equal(matches('/products/p-1', { 'next-router-prefetch': '1' }), false);
+});
+
+test('matcher는 정적 공개 화면에서는 실행되지 않아 CDN이 바로 응답한다', () => {
+  for (const path of [
+    '/',
+    '/products/p-1',
+    '/category',
+    '/search',
+    '/store/s-1',
+    '/groupbuy',
+    '/guarantee',
+    '/partner',
+    '/terms',
+    '/privacy',
+  ]) {
+    assert.equal(unstable_doesMiddlewareMatch({ config, url: path }), false, path);
+  }
 });
 
 test('matcher는 API, Next 정적 파일, 서비스워커, 매니페스트, 이미지에서는 실행되지 않는다', () => {
