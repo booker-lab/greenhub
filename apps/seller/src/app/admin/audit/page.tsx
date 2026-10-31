@@ -58,8 +58,15 @@ export default function AdminAuditPage() {
           <div key={log.id} className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
             <div className="flex flex-row flex-nowrap items-center justify-between gap-2.5">
               <div className="flex flex-row flex-nowrap items-center justify-start gap-2.5">
-                <Badge variant="secondary" className="rounded-[16px]">
-                  {actionLabel(log.action)}
+                {/* Mantine Badge는 overflow: hidden인 grid라 좁은 폭에서 줄어든다. 글자 칸(label)은
+                    style.css 보정으로 overflow: visible이라 가운데 놓인 글자가 좌우 여백으로 넘쳐 보인다. */}
+                <Badge
+                  variant="secondary"
+                  className="inline-grid shrink overflow-hidden text-ellipsis rounded-[16px]"
+                >
+                  <span className="overflow-visible text-center text-ellipsis whitespace-nowrap">
+                    {actionLabel(log.action)}
+                  </span>
                 </Badge>
                 <p className={`${TEXT_SM} font-semibold`}>{targetLabel(log)}</p>
               </div>
