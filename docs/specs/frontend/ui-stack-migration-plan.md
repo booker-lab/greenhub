@@ -271,6 +271,11 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 배송 후 환불 사유 라디오는 Mantine Radio(sm) 계산값으로 화면 안에 그린다(기사 앱 `RadioGroupField`와 같은 값).
   - 촬영 목록에 `modal-admin-refund`·`modal-admin-post-delivery-refund`·`modal-admin-post-delivery-refund-filled`(사유·메모 입력)를, 어드민 주문 fixture에 회차 배송 완료 주문(`R-DELIVERED`)을 더했다. 기준은 Mantine 확인창이 남은 `main` e93322d(#712 전)에 같은 fixture를 넣고 찍었다(#712는 그 커밋과 판매자 153장이 같음을 증명했다).
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
+- 어드민 정산 구현(2026-10-31): `admin/settlements`의 목록(카드·표·상태·회수 필요·지급 보류 배지·지급처리)·가게 검색 필터·합계 카드·더 보기·머리 글자·조회 실패 상자에서 `@mantine/core`를 걷었다. 공용 `SegmentedTabs`·`ConfirmModal`과 `@mantine/notifications`는 남았다.
+  - 가게 검색은 주문 PR의 `SearchableSelect`(clearable)를 쓴다. `packages/ui` 추가: Badge `destructive-filled`(filled red)·`light-orange`.
+  - 더 보기 불러오는 중은 Mantine Button loading처럼 면색을 두고 글자를 숨기며, 흐린 흰 덮개(`::before` 15%·blur 12px)와 따로 합성되는 원(`will-change: transform`)이 있어야 같다.
+  - 합계 카드의 role group은 로컬 E2E가 이름으로 찾으므로 그대로 두고 biome `useSemanticElements`만 사유와 함께 끈다.
+  - 촬영 목록에 정산 필터 화면 4개(가게 목록 열림·맞는 가게 없음·가게 고름·더 보기 불러오는 중)를 더하고, 정산 fixture에 상태별·회수 필요·지급 보류 데이터와 다음 쪽(늦게 답함)을 넣었다. 주문 PR과 같은 fixture로 찍었다.
 
 ### P3. 기사 앱 (12개 파일)
 - 기사 앱을 연결하고 1단계만 한다(`design-direction.md` D4 미확정). 연결 방식은 P2a와 같다.
