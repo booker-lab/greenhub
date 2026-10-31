@@ -1,25 +1,26 @@
 'use client';
 
 import type { SavedAddress } from '@greenhub/shared';
-import {
-  Alert,
-  Badge,
-  Box,
-  Button,
-  Container,
-  Group,
-  Modal,
-  Paper,
-  Stack,
-  Text,
-  TextInput,
-} from '@mantine/core';
+import { AlertDescription, Alert as UiAlert } from '@greenhub/ui/components/alert';
+import { Badge as UiBadge } from '@greenhub/ui/components/badge';
+import { Button as UiButton } from '@greenhub/ui/components/button';
+// 배송지 추가·수정 창은 공용 Dialog의 초점 가두기·aria-modal 수정이 들어온 뒤 바꾼다(그때까지 Mantine Modal).
+import { Alert, Button, Modal, Stack, Text, TextInput } from '@mantine/core';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useState } from 'react';
 import type { AddressFormData } from '@/hooks/useAddresses';
 import { useAddresses } from '@/hooks/useAddresses';
+
+// ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 16)·Group(gap xs 10)·Stack·Paper(md 16, radius lg 16,
+// withBorder gray-3)·Text(p, 줄 높이 1.55)·Badge xs light·Button xs outline gray·red·white red·Button sm·md와 같은 값.
+const TEXT = 'm-0 p-0 leading-[1.55]';
+const SMALL_TEXT_STYLE = { fontSize: 'var(--font-size-sm)' } as const;
+const DISABLED_TEXT_STYLE = {
+  color: 'var(--color-text-disabled)',
+  fontSize: 'var(--font-size-sm)',
+} as const;
 
 const EMPTY_FORM: AddressFormData = { label: '', address: '', addressDetail: '', zipCode: '' };
 
@@ -35,20 +36,24 @@ function AddressCard({
   onSetDefault: () => void;
 }) {
   return (
-    <Paper p="md" radius="lg" withBorder>
-      <Group justify="space-between" align="flex-start" mb="xs">
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          <Group gap="xs" mb={4}>
-            <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}>
+    <div className="rounded-[16px] border border-solid border-[#dee2e6] bg-white p-4">
+      <div className="mb-2.5 flex flex-row flex-wrap items-start justify-between gap-4">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="mb-1 flex flex-row flex-wrap items-center justify-start gap-2.5">
+            <p
+              className={TEXT}
+              style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}
+            >
               {addr.label}
-            </Text>
+            </p>
             {addr.isDefault && (
-              <Badge size="xs" color="brand" variant="light">
+              <UiBadge size="xs" variant="light">
                 기본
-              </Badge>
+              </UiBadge>
             )}
-          </Group>
-          <Text
+          </div>
+          <p
+            className={TEXT}
             style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-secondary)',
@@ -57,29 +62,29 @@ function AddressCard({
           >
             {addr.address}
             {addr.addressDetail ? ` ${addr.addressDetail}` : ''}
-          </Text>
-          <Text
+          </p>
+          <p
+            className={`${TEXT} mt-0.5`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            mt={2}
           >
             {addr.zipCode}
-          </Text>
-        </Box>
-      </Group>
-      <Group gap="xs" mt="xs">
+          </p>
+        </div>
+      </div>
+      <div className="mt-2.5 flex flex-row flex-wrap items-center justify-start gap-2.5">
         {!addr.isDefault && (
-          <Button size="xs" variant="outline" color="gray" radius="xl" onClick={onSetDefault}>
+          <UiButton type="button" size="xs" variant="outline-gray" onClick={onSetDefault}>
             기본으로 설정
-          </Button>
+          </UiButton>
         )}
-        <Button size="xs" variant="outline" color="gray" radius="xl" onClick={onEdit}>
+        <UiButton type="button" size="xs" variant="outline-gray" onClick={onEdit}>
           수정
-        </Button>
-        <Button size="xs" variant="outline" color="red" radius="xl" onClick={onDelete}>
+        </UiButton>
+        <UiButton type="button" size="xs" variant="outline-destructive" onClick={onDelete}>
           삭제
-        </Button>
-      </Group>
-    </Paper>
+        </UiButton>
+      </div>
+    </div>
   );
 }
 
@@ -227,71 +232,79 @@ export default function AddressesClient() {
   }
 
   return (
-    <Container size="sm" px="md" pt="lg" pb={80}>
-      <Group gap="xs" mb="lg">
-        <Button
-          variant="transparent"
+    <div className="mx-auto max-w-[720px] px-4 pt-5 pb-20">
+      <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-2.5">
+        <UiButton
+          type="button"
+          variant="ghost"
+          className="ps-0 hover:bg-transparent"
           style={{ color: 'var(--color-text)' }}
-          pl={0}
           onClick={() => router.back()}
         >
-          <ChevronLeft size={20} />
-        </Button>
-        <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}>
+          <ChevronLeft size={20} className="size-5" />
+        </UiButton>
+        <p
+          className={TEXT}
+          style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}
+        >
           배송지 관리
-        </Text>
-      </Group>
+        </p>
+      </div>
 
       {(error || actionError) && (
-        <Stack gap="xs" mb="md">
+        <div className="mb-4 flex flex-col items-stretch justify-start gap-2.5">
           {error && (
-            <Alert color="red" variant="light">
-              <Group justify="space-between" align="center" gap="sm">
-                <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
-                <Button size="xs" variant="white" color="red" radius="xl" onClick={() => refetch()}>
-                  다시 시도
-                </Button>
-              </Group>
-            </Alert>
+            <UiAlert role="alert" variant="destructive">
+              <AlertDescription>
+                <div className="flex flex-row flex-wrap items-center justify-between gap-3">
+                  <p className={TEXT} style={SMALL_TEXT_STYLE}>
+                    {error}
+                  </p>
+                  {/* Mantine Button white red(흰 면·red-6 글자) */}
+                  <UiButton
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    className="bg-white text-[#fa5252] hover:bg-white"
+                    onClick={() => refetch()}
+                  >
+                    다시 시도
+                  </UiButton>
+                </div>
+              </AlertDescription>
+            </UiAlert>
           )}
           {actionError && (
-            <Alert color="red" variant="light">
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{actionError}</Text>
-            </Alert>
+            <UiAlert role="alert" variant="destructive">
+              <AlertDescription>
+                <p className={TEXT} style={SMALL_TEXT_STYLE}>
+                  {actionError}
+                </p>
+              </AlertDescription>
+            </UiAlert>
           )}
-        </Stack>
+        </div>
       )}
 
       {loading ? (
-        <Text
-          ta="center"
-          style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-          py={40}
-        >
+        <p className={`${TEXT} py-10 text-center`} style={DISABLED_TEXT_STYLE}>
           불러오는 중...
-        </Text>
+        </p>
       ) : error && addresses.length === 0 ? (
-        <Stack align="center" gap="sm" py={48}>
-          <Text
-            ta="center"
-            style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-          >
+        <div className="flex flex-col items-center justify-start gap-3 py-12">
+          <p className={`${TEXT} text-center`} style={DISABLED_TEXT_STYLE}>
             배송지 정보를 불러오지 못했습니다.
-          </Text>
-          <Button size="sm" color="brand" radius="xl" onClick={() => refetch()}>
+          </p>
+          <UiButton type="button" onClick={() => refetch()}>
             다시 조회
-          </Button>
-        </Stack>
+          </UiButton>
+        </div>
       ) : addresses.length === 0 ? (
-        <Text
-          ta="center"
-          style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-          py={48}
-        >
+        <p className={`${TEXT} py-12 text-center`} style={DISABLED_TEXT_STYLE}>
           등록된 배송지가 없습니다.
-        </Text>
+        </p>
       ) : (
-        <Stack gap="sm" mb="lg">
+        <div className="mb-5 flex flex-col items-stretch justify-start gap-3">
           {addresses.map((addr) => (
             <AddressCard
               key={addr.id}
@@ -301,18 +314,17 @@ export default function AddressesClient() {
               onSetDefault={() => handleSetDefault(addr.id)}
             />
           ))}
-        </Stack>
+        </div>
       )}
 
-      <Button
-        fullWidth
-        color="brand"
-        radius="xl"
+      <UiButton
+        type="button"
         size="md"
+        className="w-full"
         onClick={() => setModal({ mode: 'add' })}
       >
         + 배송지 추가
-      </Button>
+      </UiButton>
 
       <AddressFormModal
         opened={modal !== null}
@@ -324,6 +336,6 @@ export default function AddressesClient() {
         }
         onClose={() => setModal(null)}
       />
-    </Container>
+    </div>
   );
 }

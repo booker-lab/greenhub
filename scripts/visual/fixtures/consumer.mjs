@@ -535,6 +535,15 @@ export const scenarioRoutes = {
       ({ body }) => ({ ...createOrderResponse(body), delay: 30_000 }),
     ],
   ],
+  // MY 빈 상태·조회 실패(UI 교체 P5 마이페이지 묶음): 주문·배송지·알림 목록이 비었거나 조회가 실패한 화면.
+  'mypage-empty': [['GET', /^\/orders$/, () => ({ body: [] })]],
+  'mypage-error': [['GET', /^\/orders$/, () => ({ status: 500, body: { message: '서버 오류' } })]],
+  'addresses-empty': [['GET', /^\/auth\/me$/, () => ({ body: { ...ME, savedAddresses: [] } })]],
+  'addresses-error': [['GET', /^\/auth\/me$/, () => ({ status: 500, body: { message: '서버 오류' } })]],
+  'notifications-empty': [['GET', /^\/notifications\/me$/, () => ({ body: { items: [] } })]],
+  'notifications-error': [
+    ['GET', /^\/notifications\/me$/, () => ({ status: 500, body: { message: '서버 오류' } })],
+  ],
   scheduled: [
     [
       'GET',
@@ -898,6 +907,52 @@ export const screens = [
     path: '/mypage/notifications/settings',
   },
   { id: 'withdraw', group: 'MY', title: '회원 탈퇴', path: '/mypage/withdraw' },
+  {
+    id: 'withdraw-checked',
+    group: 'MY',
+    title: '회원 탈퇴 · 확인 체크',
+    path: '/mypage/withdraw',
+    steps: [{ check: '위 내용을 확인했고 탈퇴합니다.' }],
+  },
+  { id: 'mypage-empty', group: 'MY', title: 'MY · 주문 없음', path: '/mypage', scenario: 'mypage-empty' },
+  {
+    id: 'mypage-error',
+    group: 'MY',
+    title: 'MY · 주문 조회 실패',
+    path: '/mypage',
+    scenario: 'mypage-error',
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/orders\\?'],
+  },
+  {
+    id: 'addresses-empty',
+    group: 'MY',
+    title: '배송지 · 없음',
+    path: '/mypage/addresses',
+    scenario: 'addresses-empty',
+  },
+  {
+    id: 'addresses-error',
+    group: 'MY',
+    title: '배송지 · 조회 실패',
+    path: '/mypage/addresses',
+    scenario: 'addresses-error',
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/auth/me\\)$'],
+  },
+  {
+    id: 'notifications-empty',
+    group: 'MY',
+    title: '알림 · 없음',
+    path: '/mypage/notifications',
+    scenario: 'notifications-empty',
+  },
+  {
+    id: 'notifications-error',
+    group: 'MY',
+    title: '알림 · 조회 실패',
+    path: '/mypage/notifications',
+    scenario: 'notifications-error',
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/notifications/me'],
+  },
   { id: 'category', group: '찾기', title: '상품 탭', path: '/category', auth: false },
   { id: 'search', group: '찾기', title: '검색', path: '/search', auth: false },
   {
