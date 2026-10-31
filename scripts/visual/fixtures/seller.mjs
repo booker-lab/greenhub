@@ -1262,7 +1262,7 @@ export const screens = [
     group: '어드민',
     title: '판매자 · 상태 고르기 열림',
     path: '/admin/stores',
-    steps: [{ clickSelector: '#stores-status' }],
+    steps: [{ clickSelector: 'input[readonly]:visible' }],
     viewport: true,
   },
   {
