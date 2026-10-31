@@ -18,6 +18,7 @@ import { SummaryCards } from './_components/SummaryCards';
 import {
   ADMIN_SETTLEMENT_FILTER_TABS,
   type AdminSettlementFilterKey,
+  canPay,
   describePayConfirm,
   toStoreOptions,
 } from './_lib';
@@ -158,6 +159,7 @@ export default function AdminSettlementsClient() {
         confirmLabel="지급 완료"
         confirmColor="brand"
         loading={processingId !== null}
+        confirmDisabled={payTarget !== null && !canPay(payTarget)}
         onConfirm={runPay}
         onClose={() => {
           if (processingId === null) setPayTarget(null);
