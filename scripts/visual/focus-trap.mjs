@@ -1,15 +1,15 @@
 // 창(Dialog) 초점 순회 검사 — start.mjs로 띄운 화면 확인 서버에서 fixture 화면의 steps로 창을 연 뒤,
 // Tab·Shift+Tab을 눌러 초점이 창 안에서만 도는지, Esc로 닫으면 초점이 여는 버튼으로 돌아오는지 본다.
 //
-//   node scripts/visual/focus-trap.mjs [app] [--only id,id] [--viewports mobile,tablet,desktop] [--label <이름>]
+//   node scripts/visual/focus-trap.mjs [app] [--only id,id] [--viewports mobile,tablet,desktop] [--label <이름>] [--set compare]
 //
 // 대상: steps가 있는 화면 중 steps 뒤에 모달 창(role=dialog·alertdialog, aria-modal="false" 제외)이 열려 있는 화면. id가 modal-로 시작하는데
 // 창이 열리지 않으면 실패다. 판정(하나라도 어기면 종료 코드 1):
 //   - 창이 열린 뒤 초점을 받은 요소(focusin)가 모두 창 안이다. 다음 프레임에 창 안으로 되돌아가는 초점 가드도 실패로 본다.
 //   - Tab만 눌러 출발 요소로 돌아오고(한 바퀴), Shift+Tab만 눌러도 돌아온다. 누를 때마다 두 프레임 뒤 초점이 창 안이다.
 //   - 창이 열린 직후 첫 초점은 창 안 data-autofocus 요소, 없으면 창 안 첫 Tab 대상이다(Mantine Modal과 같은 약속).
-//   - 창에 aria-modal="true"가 있고, 본문(data-slot=dialog-body)이 있으면 aria-describedby가 창 안 요소를 가리킨다.
-//   - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다.
+//   - 창에 aria-modal="true"가 있고, 본문(data-slot=dialog-body·sheet-body)이 있으면 aria-describedby가 창 안 요소를 가리킨다.
+//   - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다(--set compare처럼 주소로 연 창은 여는 요소가 없어 빼고 기록한다).
 // 결과: %TEMP%/greenhub-visual/<app>/focus/<label>.json
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -82,10 +82,18 @@ for (const name of viewportNames) {
 const only = option('only', '')?.split(',').filter(Boolean) ?? [];
 const label = option('label', 'current');
 const fixture = await import(`./fixtures/${appName}.mjs`);
-const screens = fixture.screens.filter((s) => s.steps && (!only.length || only.includes(s.id)));
+// --set compare: UI 교체 대조 화면(fixture compareScreens). 주소(?open=…)로 창을 여는 화면도 검사한다.
+const screenSet = option('set', '');
+if (screenSet && screenSet !== 'compare') {
+  console.error(`❌ 지원하지 않는 화면 묶음: ${screenSet} (가능: compare)`);
+  process.exit(1);
+}
+const screens = (screenSet ? (fixture.compareScreens ?? []) : fixture.screens).filter(
+  (s) => (screenSet || s.steps) && (!only.length || only.includes(s.id)),
+);
 const missingIds = only.filter((id) => !screens.some((s) => s.id === id));
 if (missingIds.length) {
-  console.error(`❌ steps가 있는 화면이 아닙니다: ${missingIds.join(', ')}`);
+  console.error(`❌ 검사 대상 화면이 아닙니다: ${missingIds.join(', ')}`);
   process.exit(1);
 }
 
@@ -251,8 +259,27 @@ async function checkScreen(context, screen) {
       await page.getByText(screen.click, { exact: true }).first().click();
       await page.waitForTimeout(800);
     }
+    // 창이 열린 직후 첫 초점(data-autofocus가 있으면 그 요소, 없으면 첫 Tab 대상).
+    const checkInitialFocus = async () => {
+      const first = await page.evaluate(() => {
+        const dialog = window.__openDialog__();
+        const expected =
+          dialog.querySelector('[data-autofocus]') ?? window.__tabbables__(dialog)[0];
+        return {
+          ok: document.activeElement === expected,
+          expected: window.__describeFocus__(expected),
+          actual: window.__describeFocus__(document.activeElement),
+          autofocus: !!dialog.querySelector('[data-autofocus]'),
+        };
+      });
+      result.initialFocus = first;
+      if (!first.ok) problems.push(`첫 초점이 ${first.expected}가 아니라 ${first.actual}`);
+    };
     let opener = null;
-    for (const step of screen.steps) {
+    // 주소(?open=…)로 이미 열린 창. 여는 요소가 없으므로 닫기·초점 복귀는 검사하지 않는다(아래).
+    const openedByUrl = await page.evaluate(() => !!window.__openDialog__());
+    if (openedByUrl) await checkInitialFocus();
+    for (const step of screen.steps ?? []) {
       const wasOpen = await page.evaluate(() => !!window.__openDialog__());
       const locator = wasOpen ? null : stepLocator(page, step);
       const openerHandle = locator
@@ -265,20 +292,7 @@ async function checkScreen(context, screen) {
       }
       if (!wasOpen && (await page.evaluate(() => !!window.__openDialog__()))) {
         opener = openerHandle;
-        // 창이 열린 직후 첫 초점(data-autofocus가 있으면 그 요소, 없으면 첫 Tab 대상).
-        const first = await page.evaluate(() => {
-          const dialog = window.__openDialog__();
-          const expected =
-            dialog.querySelector('[data-autofocus]') ?? window.__tabbables__(dialog)[0];
-          return {
-            ok: document.activeElement === expected,
-            expected: window.__describeFocus__(expected),
-            actual: window.__describeFocus__(document.activeElement),
-            autofocus: !!dialog.querySelector('[data-autofocus]'),
-          };
-        });
-        result.initialFocus = first;
-        if (!first.ok) problems.push(`첫 초점이 ${first.expected}가 아니라 ${first.actual}`);
+        await checkInitialFocus();
       }
     }
     const open = await page.evaluate(() => !!window.__openDialog__());
@@ -295,7 +309,7 @@ async function checkScreen(context, screen) {
         modal: dialog.getAttribute('aria-modal'),
         describedby,
         describedInside: !!target && dialog.contains(target),
-        hasBody: !!dialog.querySelector('[data-slot="dialog-body"]'),
+        hasBody: !!dialog.querySelector('[data-slot="dialog-body"],[data-slot="sheet-body"]'),
         count: window.__tabbables__(dialog).length,
       };
     });
@@ -322,6 +336,11 @@ async function checkScreen(context, screen) {
       );
       if (escaped.length)
         problems.push(`창 밖으로 간 초점 ${escaped.length}번: ${[...new Set(escaped)].join(', ')}`);
+    }
+    // 주소로 연 창(대조 화면)은 여는 요소가 없고 닫기 처리기도 없어(open 고정) 닫기·복귀를 검사하지 않는다.
+    if (openedByUrl) {
+      result.closeCheck = '주소로 연 창: 닫기·초점 복귀 검사 안 함';
+      return result;
     }
     // Esc로 닫고 초점이 창을 연 요소로 돌아오는지.
     await page.keyboard.press('Escape');

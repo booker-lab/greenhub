@@ -135,6 +135,7 @@ node scripts/visual/parity.mjs consumer --before before --after after --allow pa
 ```bash
 node scripts/visual/focus-trap.mjs seller                          # steps로 여는 창 전부, 세 폭
 node scripts/visual/focus-trap.mjs driver --only modal-hold --viewports desktop
+node scripts/visual/focus-trap.mjs seller --set compare           # UI 교체 대조 화면(?open=dialog·sheet 등 주소로 연 창 포함)
 ```
 
 - 서버를 띄운 채로 실행한다(next dev만, `--prod`는 지원하지 않는다). steps가 있는 화면 중 steps 뒤에 창(`role=dialog`·`alertdialog`)이 열린 화면을 검사한다. id가 `modal-`로 시작하는데 창이 열리지 않으면 실패다.
@@ -142,8 +143,8 @@ node scripts/visual/focus-trap.mjs driver --only modal-hold --viewports desktop
   - 창이 열린 뒤 초점을 받은 요소(`focusin`)가 모두 창 안이다. 다음 프레임에 창 안으로 돌아가는 Base UI 초점 가드(`span[data-base-ui-focus-guard]`)가 잠깐 받은 초점도 실패로 센다.
   - Tab만, Shift+Tab만 눌러 각각 출발 요소로 돌아온다(한 바퀴). 누를 때마다 두 프레임 뒤 초점이 창 안이다.
   - 창이 열린 직후 첫 초점은 창 안 `data-autofocus` 요소, 없으면 창 안 첫 Tab 대상이다.
-  - 창에 `aria-modal="true"`가 있고, 본문(`data-slot=dialog-body`)이 있으면 `aria-describedby`가 창 안 요소를 가리킨다.
-  - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다.
+  - 창에 `aria-modal="true"`가 있고, 본문(`data-slot=dialog-body`·`sheet-body`)이 있으면 `aria-describedby`가 창 안 요소를 가리킨다.
+  - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다. 주소로 연 창(`--set compare`)은 여는 요소가 없고 닫기 처리기도 없어 이 항목만 빼고 결과에 기록한다.
 - 결과: `%TEMP%\greenhub-visual\<app>\focus\<label>.json`(화면·폭마다 Tab·Shift+Tab으로 거친 요소 목록 포함).
 - 실측(2026-11-01): Base UI 교체 직후 `main`(b9c2f5a)은 판매자 창 21개 모두 실패했다(창마다 초점 가드 2번, `aria-modal`·`aria-describedby` 없음). 원인과 수정은 `packages/ui/src/components/dialog.tsx` `DialogPopup` 주석.
 
