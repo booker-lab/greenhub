@@ -260,6 +260,11 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 버튼 글자가 칸의 소수점 위치에 따라 1열 어긋나는 곳(묶음 삭제·+ 선택지·+ 옵션 묶음 추가)은 `ButtonLabel`로 맞췄다. select 글자도 줄 높이를 Mantine과 같게 해야 세로 1px 어긋남이 없다.
   - 로컬 증명(#694 하네스, 기준 `main` e93322d, 기준 시각 2026-10-31T00:00+09:00): 판매자 147장 정상 촬영 147, `diff.mjs --tolerance 1` 144장 같음. 남은 차이는 `modal-product-regenerate`(Mantine Modal → Dialog) 3장뿐이다: 390에서 65픽셀(채널 차이 최대 44, 닫기 X와 새로 생성 버튼 모서리), 768·1280에서 각 3픽셀(채널 6, 버튼 오른쪽 가장자리). 대화상자·버튼 위치와 크기는 소수점까지 같고(대화상자 y 424.75, 버튼 오른쪽 528) 가장자리 안티앨리어싱만 다르다(P2a 대조의 Modal↔Dialog 차이와 같은 종류). 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 875개.
   - 기능 플래그 뒤 `ProductExtrasSection`은 하네스를 `NEXT_PUBLIC_GREENHUB_FEATURES=size-info,care-guide,option-sheet,quality-guarantee,plant-search`로 띄워 기준·비교 모두 `product-edit-step5`·`product-edit-step5-group` 6장을 찍어 같음을 확인했다. "다음"을 누른 마우스가 5단계의 칩 위에 남아 Mantine hover 색이 찍히므로 Chip hover도 같아야 한다.
+- 어드민 기사 승인 구현(2026-10-31): `admin/drivers`(목록·탭·배지·배송 중 안내창)와 공용 `ConfirmModal`·`SuspendReasonMessage`의 `@mantine/core`를 걷었다.
+  - `ConfirmModal`은 `Dialog`로 그린다. Mantine `confirmColor`(brand·red·gray·green)는 같은 색의 Button으로 옮긴다. 이 컴포넌트를 쓰는 화면(회차 취소·주문·정산·소비자·어드민 여러 곳)의 확인창이 함께 바뀐다.
+  - `Dialog` 본문 상자에 `will-change: opacity`를 준다(Mantine은 열림 전환 때문에 본문을 따로 합성해 그린다. 없으면 확인창 안 버튼 둥근 모서리의 안티앨리어싱이 세 폭 모두 달랐다). 닫기 버튼을 본문보다 앞(DOM 순서)에 두어 Mantine처럼 첫 초점이 닫기 버튼에 간다(확인 버튼이 첫 초점이면 Enter 한 번에 승인·정지된다). 닫기 버튼을 머리 안으로 옮기는 처리는 #694 하네스(`--disable-partial-raster`)로 다시 재 보니 필요 없어 넣지 않았다.
+  - `Button`: 글자를 Mantine 글자 칸과 같은 `span`으로 감싼다(`text-box-trim: trim-both`·`text-box-edge: cap alphabetic`, 글자를 대문자 높이 기준으로 가운데에 둔다). 없으면 글자 가장자리 픽셀이 Mantine과 달랐다.
+  - 촬영 목록에 기사 승인·정지 확인창(`modal-driver-approve`·`modal-driver-suspend`)을 더했다. 기준은 같은 fixture로 `main`을 찍었다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)

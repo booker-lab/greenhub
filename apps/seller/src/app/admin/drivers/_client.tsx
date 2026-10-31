@@ -1,6 +1,5 @@
 'use client';
 
-import { Box, Group, Title, UnstyledButton } from '@mantine/core';
 import { notifications } from '@mantine/notifications';
 import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -89,18 +88,19 @@ export default function DriversClient() {
   const pendingMeta = pending ? ACTION_META[pending.action] : null;
 
   return (
-    <Box>
-      <Title order={4} mb="md">
-        드라이버 관리
-      </Title>
+    <div>
+      {/* ① 외형 유지(UI 교체 P2b): Mantine Title order 4(18px·800·줄 높이 1.45)·UnstyledButton 값. */}
+      <h4 className="m-0 mb-4 text-[18px] leading-[1.45] font-extrabold">드라이버 관리</h4>
 
       {/* 탭 */}
-      <Box mb="md" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <Group gap={4}>
+      <div className="mb-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
+        <div className="flex flex-row flex-wrap items-center justify-start gap-1">
           {STATUS_TABS.map((t) => (
-            <UnstyledButton
+            <button
+              type="button"
               key={t.value}
               onClick={() => setTab(t.value)}
+              className="cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
               style={{
                 padding: '8px 16px',
                 fontSize: 'var(--font-size-sm)',
@@ -111,10 +111,10 @@ export default function DriversClient() {
               }}
             >
               {t.label}
-            </UnstyledButton>
+            </button>
           ))}
-        </Group>
-      </Box>
+        </div>
+      </div>
 
       <DriverList
         drivers={drivers}
@@ -161,6 +161,6 @@ export default function DriversClient() {
       />
 
       <ActiveDeliveryNotice message={deliveryWarning} onClose={() => setDeliveryWarning(null)} />
-    </Box>
+    </div>
   );
 }

@@ -1066,6 +1066,23 @@ export const screens = [
     steps: [{ click: '강제 취소' }],
     viewport: true,
   },
+  // 어드민 기사 승인·정지 확인창(ConfirmModal, 정지는 사유 입력칸 포함). 기본 탭은 승인 대기다.
+  {
+    id: 'modal-driver-approve',
+    group: '어드민 · 모달',
+    title: '기사 · 승인 확인',
+    path: '/admin/drivers',
+    steps: [{ click: '승인' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-driver-suspend',
+    group: '어드민 · 모달',
+    title: '기사 · 정지 확인(사유)',
+    path: '/admin/drivers',
+    steps: [{ click: '정지' }],
+    viewport: true,
+  },
   {
     id: 'modal-round-cancel',
     group: '판매자 · 모달',

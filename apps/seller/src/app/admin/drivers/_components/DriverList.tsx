@@ -1,10 +1,14 @@
 'use client';
 
-import { Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import type { AdminDriver } from '@/hooks/useAdmin';
 import { formatJoinedDate, formatPhone } from '../../users/_lib';
 import { type AdminDriversReadState, type DriverAction, getAdminDriversReadState } from '../_lib';
 import { DriverBadge } from './DriverBadge';
+
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper·Group·Stack과 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const TRUNCATE = 'overflow-hidden text-ellipsis whitespace-nowrap';
 
 interface DriverListProps {
   drivers: AdminDriver[];
@@ -29,70 +33,68 @@ export function DriverList({
 
   if (readState === 'LOADING') {
     return (
-      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+      <p className={`${TEXT} py-20 text-center`} style={{ color: 'var(--color-text-disabled)' }}>
         불러오는 중...
-      </Text>
+      </p>
     );
   }
 
   // 조회 실패는 성공-empty와 구조적으로 구분 — "드라이버가 없습니다."로 collapse 금지.
   if (readState === 'FETCH_ERROR') {
     return (
-      <Stack gap="sm" align="center" py={64} px="md">
-        <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+      <div className="flex flex-col items-center gap-3 px-4 py-16">
+        <p className={TEXT} style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
           드라이버 목록을 불러오지 못했습니다.
-        </Text>
-        <Text
-          ta="center"
+        </p>
+        <p
+          className={`${TEXT} text-center`}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
         >
           {error}
-        </Text>
-        <Button onClick={onRetry} size="sm" variant="outline" radius="md">
+        </p>
+        <Button onClick={onRetry} variant="outline" className="rounded-[8px]">
           다시 조회
         </Button>
-      </Stack>
+      </div>
     );
   }
 
   if (readState === 'EMPTY') {
     return (
-      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+      <p className={`${TEXT} py-20 text-center`} style={{ color: 'var(--color-text-disabled)' }}>
         드라이버가 없습니다.
-      </Text>
+      </p>
     );
   }
 
   return (
-    <Stack gap="xs">
+    <div className="flex flex-col gap-2.5">
       {drivers.map((driver) => (
-        <Paper
+        <div
           key={driver.id}
-          radius="lg"
-          px="md"
-          py="sm"
+          className="block rounded-[16px] bg-white px-4 py-3"
           style={{ border: '1px solid var(--color-border)' }}
         >
-          <Group justify="space-between" gap="md">
-            <Box style={{ minWidth: 0 }}>
-              <Group gap="xs" mb={2}>
-                <Text
+          <div className="flex flex-row flex-wrap items-center justify-between gap-4">
+            <div style={{ minWidth: 0 }}>
+              <div className="mb-0.5 flex flex-row flex-wrap items-center justify-start gap-2.5">
+                <p
+                  className={`${TEXT} ${TRUNCATE}`}
                   style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)' }}
-                  truncate
                 >
                   {driver.name}
-                </Text>
+                </p>
                 <DriverBadge driver={driver} />
-              </Group>
-              <Text
+              </div>
+              <p
+                className={`${TEXT} ${TRUNCATE}`}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                truncate
               >
                 {driver.email ?? '이메일 없음'}
-              </Text>
-              <Text
+              </p>
+              <p
+                className={`${TEXT} ${TRUNCATE}`}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                truncate
               >
                 {driver.phone?.trim() ? (
                   <a href={`tel:${driver.phone.trim()}`} style={{ color: 'inherit' }}>
@@ -102,17 +104,19 @@ export function DriverList({
                   formatPhone(driver.phone)
                 )}{' '}
                 · 가입일 {formatJoinedDate(driver.createdAt)}
-              </Text>
-            </Box>
+              </p>
+            </div>
 
-            <Group gap="xs" style={{ flexShrink: 0 }}>
+            <div
+              className="flex flex-row flex-wrap items-center justify-start gap-2.5"
+              style={{ flexShrink: 0 }}
+            >
               {!driver.driverApproved && !driver.suspended && (
                 <Button
                   onClick={() => onAction(driver.id, 'approve')}
                   disabled={processingId === driver.id}
                   size="xs"
-                  color="brand"
-                  radius="md"
+                  className="rounded-[8px]"
                 >
                   {processingId === driver.id ? '처리중…' : '승인'}
                 </Button>
@@ -122,9 +126,8 @@ export function DriverList({
                   onClick={() => onAction(driver.id, 'suspend')}
                   disabled={processingId === driver.id}
                   size="xs"
-                  variant="light"
-                  color="red"
-                  radius="md"
+                  variant="light-destructive"
+                  className="rounded-[8px]"
                 >
                   정지
                 </Button>
@@ -133,17 +136,16 @@ export function DriverList({
                   onClick={() => onAction(driver.id, 'unsuspend')}
                   disabled={processingId === driver.id}
                   size="xs"
-                  variant="light"
-                  color="gray"
-                  radius="md"
+                  variant="secondary"
+                  className="rounded-[8px]"
                 >
                   정지 해제
                 </Button>
               )}
-            </Group>
-          </Group>
-        </Paper>
+            </div>
+          </div>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 }

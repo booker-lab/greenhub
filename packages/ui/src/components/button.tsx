@@ -1,6 +1,7 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
+import { Children } from 'react';
 
 import { cn } from '../lib/utils';
 
@@ -55,10 +56,40 @@ const buttonVariants = cva(
   },
 );
 
+// Mantine Button의 글자 칸(.mantine-Button-label)과 같은 값. 글자 줄 상자를 대문자 높이로 잘라
+// (text-box-trim) 세로 가운데에 놓으므로, 감싸지 않으면 글자 가장자리 픽셀이 Mantine과 달라진다.
+const labelClassName =
+  'flex h-full items-center overflow-hidden whitespace-nowrap [text-box-edge:cap_alphabetic] [text-box-trim:trim-both]';
+
+/** 이어진 글자(문자열·숫자)를 한 글자 칸으로 감싼다(Mantine은 글자 전체가 칸 하나). 아이콘 등 요소는 그대로 둔다. */
+function wrapLabels(children: React.ReactNode) {
+  const out: React.ReactNode[] = [];
+  let text: (string | number)[] = [];
+  const flush = () => {
+    if (text.length === 0) return;
+    out.push(
+      <span key={`label-${out.length}`} data-slot="button-label" className={labelClassName}>
+        {text.join('')}
+      </span>,
+    );
+    text = [];
+  };
+  for (const child of Children.toArray(children)) {
+    if (typeof child === 'string' || typeof child === 'number') text.push(child);
+    else {
+      flush();
+      out.push(child);
+    }
+  }
+  flush();
+  return out;
+}
+
 function Button({
   className,
   variant = 'default',
   size = 'default',
+  children,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
@@ -66,13 +97,16 @@ function Button({
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {typeof children === 'function' ? children : wrapLabels(children)}
+    </ButtonPrimitive>
   );
 }
 
 // ① 외형 유지: Mantine Button 안쪽(inner·label) 구조. 버튼보다 긴 내용(두 줄 글자 등)을 Mantine처럼
 // 왼쪽부터 그리고 오른쪽을 자르고, 글자 위치도 Mantine과 같은 반올림으로 놓는다.
-// 내용이 버튼에 들어가는 보통 경우에는 쓰지 않아도 모양이 같다.
+// 글자만 있는 보통 버튼은 Button이 글자 칸으로 감싸므로(wrapLabels) 쓰지 않아도 된다. 직접 감싼 ButtonLabel은
+// 요소라서 다시 감싸지 않는다.
 function ButtonLabel({ className, children, ...props }: React.ComponentProps<'span'>) {
   return (
     <span
