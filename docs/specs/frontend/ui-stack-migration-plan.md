@@ -268,6 +268,10 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 어드민 배너·감사 기록 구현(2026-10-31): `admin/banner`(이미지·텍스트·버튼 섹션)와 `admin/audit`의 `@mantine/core`를 걷었다.
   - 배너 활성화 `Switch`는 Mantine 라벨 배치(트랙 뒤 12px, 15px·줄 높이 20px)로 그린다. 버튼 섹션 `Group grow`는 칸마다 flex-grow 1·최대 폭 50% - 8px다.
   - 감사 기록 배지는 Mantine Badge처럼 `overflow: hidden`인 grid라 휴대폰 폭에서 줄어들고, 글자 칸은 `style.css` 보정(`overflow: visible`)처럼 좌우 여백으로 넘쳐 보인다(ui Badge 기본 `shrink-0`이면 휴대폰 1장이 달랐다).
+- 어드민 판매자·소비자 구현(2026-10-31): `admin/stores`(목록·필터·수수료율 입력)와 `admin/users`의 `@mantine/core`를 걷었다.
+  - 카드·표 전환은 Mantine `hiddenFrom`·`visibleFrom="sm"`과 같은 48em 경계(`min-[48em]:hidden!`·`max-[47.99375em]:hidden!`)다. 필터 줄의 `Field`는 기본 `w-full`이라 `w-auto`로 Mantine 입력 상자처럼 둔다(없으면 태블릿·PC에서 칸이 줄마다 떨어졌다).
+  - 수수료율 입력은 `Input` xs + 오른쪽 17px 칸(Mantine NumberInput `--ni-right-section-width-xs`)이다. 소수 둘째 자리·100 초과 거부·방향키 0.5는 Mantine NumberInput과 같게 받는다. 새로고침(Mantine light gray `loading`)은 `admin/_components/RefreshButton`.
+  - `packages/ui` 추가: Button `outline-destructive`(Mantine outline red). 촬영 목록에 판매자 전체·검색 결과 없음·수수료율 입력·소비자 정지 확인창을 더했다.
 - 어드민 환불 확인창 구현(2026-10-31): `admin/orders`의 `RefundConfirmModal`(강제환불)·`PostDeliveryRefundModal`(배송 후 환불)의 `@mantine/core`를 걷었다. 주문 표·필터(검색 Select)·알림은 다음 PR이다.
   - `Dialog`: 안쪽 `data-autofocus` 요소가 열릴 때 첫 초점이다(Mantine Modal 약속). #712 뒤 `ConfirmModal`이 `Dialog`가 되면서 두 확인창의 사유·메모 입력칸 첫 초점이 닫기 버튼으로 바뀌었던 것을 되돌린다.
   - `Textarea` autosize: Mantine Autosize와 같이 숨긴 textarea의 정수 `scrollHeight`로 글 높이·한 줄 높이를 잰다(자리표시가 있으면 빈 칸도 자리표시로 잰다). 줄 높이 계산값(15px × 1.55 = 23.25)을 곱하면 Mantine(한 줄 23)보다 0.5px 커져 확인창 전체가 반 픽셀 움직였다.
