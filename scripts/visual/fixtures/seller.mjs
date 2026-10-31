@@ -1605,7 +1605,14 @@ export const screens = [
   { id: 'admin-audit', group: '어드민', title: '감사 기록', path: '/admin/audit' },
   { id: 'hub-detail', group: '판매자', title: '거점 상세', path: '/hubs/hub-0001' },
   { id: 'hub-edit', group: '판매자', title: '거점 수정', path: '/hubs/hub-0001/edit' },
-  { id: 'hub-pickup', group: '판매자', title: '거점 픽업', path: '/hubs/hub-0001/pickup' },
+  // 주문 ID(orderId) 없이 연 거점 픽업 주소 — 화면은 "주문 주소가 올바르지 않습니다" 안내다(#687 처음부터 그랬다).
+  // 코드 입력 정상 화면은 hub-pickup-order가 찍는다. 이전 촬영과 이어 비교하도록 id는 그대로 둔다.
+  {
+    id: 'hub-pickup',
+    group: '판매자',
+    title: '거점 픽업 · 주문 없는 주소(안내)',
+    path: '/hubs/hub-0001/pickup',
+  },
   {
     id: 'hub-detail-inactive',
     group: '판매자',
@@ -2269,28 +2276,19 @@ export const scenarioRoutes = {
 };
 
 /**
- * UI 교체 대조 화면(ui-stack-migration-plan.md §6 P1·P2a, `shots.mjs --set compare`).
- * 왼쪽 Mantine, 오른쪽 @greenhub/ui를 같은 칸에 그린다. main에는 없는 화면이라 전·후 비교(screens)에 넣지 않는다.
- * 앱은 하네스·dev:local(GREENHUB_LOCAL_RUNTIME=true + next dev)에서만 이 주소를 연다(apps/seller/src/lib/local-preview.ts).
+ * 창 초점 검사 화면(`focus-trap.mjs --set overlays`). 앱 화면이 아직 쓰지 않는 @greenhub/ui 창(Sheet)을 버튼으로 연다.
+ * main 화면 목록(screens)에 넣지 않는다. 앱은 하네스·dev:local(GREENHUB_LOCAL_RUNTIME=true + next dev)에서만
+ * 이 주소를 연다(apps/seller/src/lib/local-preview.ts).
  */
-export const compareScreens = [
-  { id: 'ui-compare', group: 'UI 대조', title: '컴포넌트 대조', path: '/dev/ui-compare' },
-  ...[
-    ['modal', 'Mantine Modal'],
-    ['dialog', '@greenhub/ui Dialog'],
-    ['drawer', 'Mantine Drawer(bottom)'],
-    ['sheet', '@greenhub/ui Sheet(bottom)'],
-    ['select', 'Mantine Select 목록(묶음·고른 항목)'],
-    ['uiselect', '@greenhub/ui Select 목록(묶음·고른 항목)'],
-  ].map(([open, title]) => ({
-    id: `ui-compare-${open}`,
-    group: 'UI 대조',
-    title,
-    path: `/dev/ui-compare?open=${open}`,
+export const overlayScreens = [
+  {
+    id: 'modal-overlay-sheet',
+    group: '창 검사',
+    title: '@greenhub/ui Sheet(bottom)',
+    path: '/dev/overlays',
     viewport: true,
-    // Select 목록은 사람이 누른 것처럼 연다(Mantine은 이때 입력칸에 초점이 남는다).
-    ...(open.endsWith('select') ? { steps: [{ clickSelector: 'main input:not([type=hidden])' }] } : {}),
-  })),
+    steps: [{ click: '시트 열기' }],
+  },
 ];
 
 /**

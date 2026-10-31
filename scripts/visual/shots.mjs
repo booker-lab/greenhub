@@ -3,7 +3,6 @@
 //   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3202] [--set benchmark]
 //                                 [--viewports mobile,tablet,desktop] [--resume]
 //     --set benchmark  fixtures의 benchmarkScreens(팔도감 벤치마킹 비교 화면)를 찍는다
-//     --set compare    fixtures의 compareScreens(UI 교체 대조 화면: Mantine ↔ @greenhub/ui)를 찍는다
 //     --resume         같은 --label의 끊긴 촬영을 이어 찍는다. 기록이 있는 화면은 건너뛰고, --only로 고른 화면은 다시 찍는다.
 //                      기준 시각·화면 폭·--set이 같아야 한다(서버를 다시 띄웠다면 같은 --now로).
 //
@@ -28,6 +27,7 @@ import {
   upsertShot,
   writeJsonAtomic,
 } from './manifest-store.mjs';
+import { waitForExpectedPath } from './navigation.mjs';
 import { expectedPathOf, shotProblems } from './soundness.mjs';
 import { runSteps } from './steps.mjs';
 
@@ -99,7 +99,7 @@ const outDir = option('out', path.join(os.tmpdir(), 'greenhub-visual', appName, 
 const fixture = await import(`./fixtures/${appName}.mjs`);
 const { browserStorage, wishStorage } = fixture;
 const screenSet = option('set', '');
-const SCREEN_SETS = { benchmark: 'benchmarkScreens', compare: 'compareScreens' };
+const SCREEN_SETS = { benchmark: 'benchmarkScreens' };
 if (screenSet && !SCREEN_SETS[screenSet]) {
   console.error(
     `❌ 지원하지 않는 화면 묶음: ${screenSet} (가능: ${Object.keys(SCREEN_SETS).join(', ')})`,
@@ -332,6 +332,16 @@ async function shootOnce(context, screen, viewportName) {
     await page.waitForTimeout(800);
   }
   const stepNote = screen.steps ? await runSteps(page, screen.steps, { apiBase }) : null;
+  // 의도한 이동(expectPath)이 있으면 그 주소에 도착할 때까지 기다린다(navigation.mjs). 시간 안에 도착하지 않으면
+  // 기다리기만 멈추고 그대로 찍는다 — 판정(주소 다름)은 soundness.mjs가 그대로 한다.
+  if (screen.expectPath) {
+    await waitForExpectedPath(page, screen.expectPath, {
+      settle: async () => {
+        await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+        await page.waitForTimeout(800);
+      },
+    });
+  }
   const png = await capture(page, { viewportOnly: screen.viewport === true });
   captured = true;
   // 접근성 의미(역할·이름·상태)를 남긴다. 링크가 버튼이 되는 것 같은 회귀는 픽셀이 같아도 여기서 드러난다.
