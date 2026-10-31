@@ -29,6 +29,9 @@ const buttonVariants = cva(
         // Mantine light·subtle color="red"·"yellow"(노랑 light는 theme.ts가 경고 토큰으로 바꾼 값).
         'light-destructive': 'bg-[#ffe3e3] text-[#c92a2a] hover:bg-[#ffc9c9]',
         'subtle-destructive': 'bg-transparent text-[#c92a2a] hover:bg-[#ffe3e3]',
+        // Mantine outline color="red"(red-6 테두리·글자).
+        'outline-destructive':
+          'border-[#fa5252] bg-transparent text-[#fa5252] hover:bg-[#fa5252]/5',
         'light-warning': 'bg-[#fff4cc] text-[#7a5b00]',
         // Mantine outline yellow·green(yellow-6·green-6 테두리·글자), light green(green-1 면·green-9 글자).
         'outline-warning': 'border-[#fab005] bg-transparent text-[#fab005] hover:bg-[#fab005]/5',
