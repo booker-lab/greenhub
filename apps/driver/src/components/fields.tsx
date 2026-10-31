@@ -110,10 +110,11 @@ export function PasswordField({
         />
       </div>
       <div className="absolute top-px right-px bottom-px z-[1] flex w-10 items-center justify-center rounded-r-[32px] text-[#868e96]">
+        {/* Mantine은 Tab으로 가지 않는 버튼이었지만, 키보드·읽기 도구로도 비밀번호를 볼 수 있게 초점을 받는다. */}
         <button
           type="button"
-          tabIndex={-1}
-          aria-hidden="true"
+          aria-label={reveal ? '비밀번호 숨기기' : '비밀번호 보기'}
+          aria-pressed={reveal}
           onClick={() => setReveal((value) => !value)}
           className="relative flex size-[28px] min-h-[28px] min-w-[28px] cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 leading-none text-[#212529] hover:bg-[#f1f3f5]"
         >
