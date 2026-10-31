@@ -2,6 +2,7 @@
 
 import { Button } from '@greenhub/ui/components/button';
 import { CheckIcon } from '@greenhub/ui/components/checkbox';
+import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import {
   Dialog,
   DialogBody,
@@ -43,48 +44,6 @@ const REQUIRED = (
     {' *'}
   </span>
 );
-
-function RadioItem({
-  name,
-  label,
-  checked,
-  onChange,
-}: {
-  name: string;
-  label: string;
-  checked: boolean;
-  onChange: () => void;
-}) {
-  const id = useId();
-  return (
-    <div className="flex [-webkit-tap-highlight-color:transparent]">
-      <div className="relative order-1 size-5">
-        <input
-          id={id}
-          type="radio"
-          name={name}
-          checked={checked}
-          onChange={onChange}
-          className="peer relative m-0 flex size-5 cursor-default appearance-none items-center justify-center rounded-[20px] border border-solid border-[#ced4da] bg-white transition-[background-color,border-color] duration-100 ease-[ease] checked:border-primary checked:bg-primary [-webkit-tap-highlight-color:transparent]"
-        />
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 5 5"
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-1/2 size-2 text-white opacity-0 transition-[opacity,transform] duration-[100ms,200ms] ease-[ease] [transform:scale(0.2)_translateY(10px)] [translate:-50%_-50%] peer-checked:opacity-100 peer-checked:[transform:scale(1)]"
-        >
-          <circle cx="2.5" cy="2.5" r="2.5" fill="currentColor" />
-        </svg>
-      </div>
-      <div className="order-2 inline-flex cursor-default flex-col text-sm/[20px] [-webkit-tap-highlight-color:transparent]">
-        <label htmlFor={id} className="block cursor-default ps-3 text-inherit">
-          {label}
-        </label>
-      </div>
-    </div>
-  );
-}
 
 /** Mantine Checkbox sm(비활성 표시 포함). @greenhub/ui Checkbox와 같은 모양에 disabled만 더했다. */
 function HoldCheckbox({
@@ -319,19 +278,18 @@ export function DeliveryHoldModal({
               <div id={reasonLabelId} className={GROUP_LABEL}>
                 보류 유형
               </div>
-              <div role="radiogroup" aria-labelledby={reasonLabelId}>
+              <RadioGroup
+                aria-labelledby={reasonLabelId}
+                name={reasonName}
+                value={reasonCode}
+                onValueChange={changeReason}
+              >
                 <div className="mt-2.5 flex flex-col gap-2.5">
                   {Object.entries(HOLD_REASON_LABEL).map(([value, label]) => (
-                    <RadioItem
-                      key={value}
-                      name={reasonName}
-                      label={label}
-                      checked={reasonCode === value}
-                      onChange={() => changeReason(value)}
-                    />
+                    <RadioItem key={value} value={value} label={label} />
                   ))}
                 </div>
-              </div>
+              </RadioGroup>
             </div>
             <Field>
               <FieldLabel htmlFor={messageId}>
