@@ -3,7 +3,7 @@
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { ChevronLeft, Store } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -186,7 +186,7 @@ export default function OnboardingPage() {
         await update({ storeId: data.storeId });
       } else {
         await apiJson(`/stores/${storeId}`, token, { method: 'PATCH', body });
-        notifications.show({ color: 'brand', message: '사업자 정보를 저장했어요.' });
+        notify({ color: 'brand', message: '사업자 정보를 저장했어요.' });
         router.push('/settings');
         return;
       }
