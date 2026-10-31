@@ -18,7 +18,8 @@ export const EMULATOR = {
 
 const endpoint = ({ host, port }) => `${host}:${port}`;
 
-function portInUse(port, host) {
+/** 그 주소에 이미 열린 서버가 있는지 본다(start.mjs의 동시 실행 검사도 쓴다). */
+export function portInUse(port, host) {
   return new Promise((resolve) => {
     const socket = net.connect({ port, host });
     socket.once('connect', () => {

@@ -1,9 +1,13 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { Alert, Box, Button, Stack, TextInput } from '@mantine/core';
+import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
+import { Button } from '@greenhub/ui/components/button';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
+import { Loader } from '@greenhub/ui/components/loader';
 import { Save } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { type CSSProperties, useEffect, useId, useMemo, useState } from 'react';
 import type {
   CreateSaleRoundInput,
   SaleRoundItemInput,
@@ -26,6 +30,12 @@ import {
   ProductsSection,
   ScheduleSection,
 } from './RoundForm.sections';
+
+// ① 외형 유지(UI 교체 P4): Mantine Stack(md 16px)·Alert·TextInput·Button(md, 저장 중 loading)과 같은 값.
+// 저장 중은 Mantine Button loading처럼 면색을 그대로 두고 글자·아이콘을 숨긴 채, 흐린 흰 덮개 위 가운데에
+// 흰 원(높이 42 ÷ 1.8)을 돌린다.
+const SAVE_LOADING =
+  "disabled:bg-primary disabled:text-white before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-xl before:bg-white/15 before:blur-[12px] before:content-[''] [&>svg]:translate-y-full [&>svg]:opacity-0 [&_[data-slot=button-label]]:translate-y-full [&_[data-slot=button-label]]:opacity-0";
 
 export interface RoundFormProductLink {
   productId: string;
@@ -89,6 +99,7 @@ export function RoundForm({
   const [draft, setDraft] = useState(() => createDraft(round));
   const [submitting, setSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const nameId = useId();
   const [saveFeedback, setSaveFeedback] = useState<CopyFeedback | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<CopyFeedback | null>(null);
   const busy = disabled || submitting;
@@ -241,30 +252,38 @@ export function RoundForm({
         void submit();
       }}
     >
-      <Stack gap="md">
+      <div className="flex flex-col items-stretch justify-start gap-4">
         {readOnly && (
-          <Alert color="gray" title="고칠 수 없는 회차예요" role="status">
-            회차 내용은 판매 시작 전에만 고칠 수 있어요. 아래는 저장된 내용이에요.
+          <Alert variant="secondary" role="status">
+            <AlertTitle>고칠 수 없는 회차예요</AlertTitle>
+            <AlertDescription>
+              회차 내용은 판매 시작 전에만 고칠 수 있어요. 아래는 저장된 내용이에요.
+            </AlertDescription>
           </Alert>
         )}
         {saveFeedback && (
           <Alert
-            color={saveFeedback.kind === 'success' ? 'brand' : 'red'}
-            title={saveFeedback.kind === 'success' ? '저장 완료' : '저장 실패'}
+            variant={saveFeedback.kind === 'success' ? 'default' : 'destructive'}
             role={saveFeedback.kind === 'success' ? 'status' : 'alert'}
           >
-            {saveFeedback.message}
+            <AlertTitle>{saveFeedback.kind === 'success' ? '저장 완료' : '저장 실패'}</AlertTitle>
+            <AlertDescription>{saveFeedback.message}</AlertDescription>
           </Alert>
         )}
 
         <FormSection title="회차 기본 정보">
-          <TextInput
-            label="회차 이름"
-            value={draft.name}
-            onChange={(event) => changeDraft('name', event.currentTarget.value)}
-            disabled={locked}
-            required
-          />
+          <Field>
+            <FieldLabel htmlFor={nameId} required>
+              회차 이름
+            </FieldLabel>
+            <Input
+              id={nameId}
+              value={draft.name}
+              onChange={(event) => changeDraft('name', event.currentTarget.value)}
+              disabled={locked}
+              required
+            />
+          </Field>
         </FormSection>
         <ScheduleSection
           draft={draft}
@@ -306,26 +325,46 @@ export function RoundForm({
         />
 
         {validationErrors.length > 0 && (
-          <Alert color="red" title="입력 내용을 확인해 주세요" role="alert">
-            <Box component="ul" m={0} pl="md">
-              {validationErrors.map((error) => (
-                <li key={error}>{error}</li>
-              ))}
-            </Box>
+          <Alert variant="destructive" role="alert">
+            <AlertTitle>입력 내용을 확인해 주세요</AlertTitle>
+            <AlertDescription>
+              <ul className="m-0 pl-4">
+                {validationErrors.map((error) => (
+                  <li key={error}>{error}</li>
+                ))}
+              </ul>
+            </AlertDescription>
           </Alert>
         )}
         {!readOnly && (
           <Button
             type="submit"
             size="md"
-            leftSection={<Save size={18} />}
-            loading={submitting}
             disabled={busy}
+            data-loading={submitting || undefined}
+            className={submitting ? SAVE_LOADING : undefined}
           >
+            {submitting && (
+              <span
+                aria-hidden
+                className="absolute top-1/2 left-1/2 z-[1] [transform:translate(-50%,calc(-50%+1px))] will-change-transform"
+              >
+                <Loader
+                  color="#ffffff"
+                  style={
+                    {
+                      '--loader-size': 'calc(42px / 1.8)',
+                      '--loader-border': 'calc(42px / 1.8 / 8)',
+                    } as CSSProperties
+                  }
+                />
+              </span>
+            )}
+            <Save className="size-[18px]" data-icon="inline-start" />
             회차 저장
           </Button>
         )}
-      </Stack>
+      </div>
     </form>
   );
 }

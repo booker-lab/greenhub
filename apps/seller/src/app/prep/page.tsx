@@ -1,17 +1,8 @@
 'use client';
 
 import type { SaleRound } from '@greenhub/shared';
-import {
-  Alert,
-  Box,
-  Button,
-  Container,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  UnstyledButton,
-} from '@mantine/core';
+import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
+import { Button } from '@greenhub/ui/components/button';
 import { ChevronRight, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -30,16 +21,25 @@ import { apiJson } from '@/lib/api';
 import { aggregatePrep, type PrepLine } from '@/lib/prep';
 import { isPurchaseListRound } from '@/lib/round-purchase-list';
 
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px, shadow xs)·
+// Group·Stack·Text(p, 여백 0, 줄 높이 1.55)·UnstyledButton·Alert light(제목 있음)와 같은 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+
 function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accent?: boolean }) {
   return (
-    <Group
-      justify="space-between"
-      wrap="nowrap"
-      py={10}
+    <div
+      className="flex flex-row flex-nowrap items-center justify-between gap-4 py-2.5"
       style={index > 0 ? { borderTop: '1px solid var(--color-border)' } : undefined}
     >
-      <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
-        <Text
+      <div
+        className="flex flex-row flex-nowrap items-center justify-start gap-1.5"
+        style={{ minWidth: 0 }}
+      >
+        <p
+          className={TEXT}
           style={{
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text)',
@@ -47,14 +47,18 @@ function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accen
           }}
         >
           {line.productName}
-        </Text>
+        </p>
         {line.selectionLabel && (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
             ({line.selectionLabel})
-          </Text>
+          </p>
         )}
-      </Group>
-      <Text
+      </div>
+      <p
+        className={TEXT}
         style={{
           fontSize: 'var(--font-size-md)',
           fontWeight: 'var(--fw-bold)',
@@ -63,8 +67,8 @@ function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accen
         }}
       >
         {line.quantity}개
-      </Text>
-    </Group>
+      </p>
+    </div>
   );
 }
 
@@ -113,30 +117,32 @@ function RoundPurchaseSection({ rounds, loading }: { rounds: SaleRound[]; loadin
   if (loading || (activeIds.length === 0 && !failed)) return null;
 
   return (
-    <Stack gap="md" mb="md">
+    <div className="mb-4 flex flex-col gap-4">
       {failed && (
-        <Alert color="yellow" title="회차 구매 목록 일부를 불러오지 못했습니다" role="alert">
-          회차 화면에서 다시 확인해 주세요.
+        <Alert variant="warning" role="alert">
+          <AlertTitle>회차 구매 목록 일부를 불러오지 못했습니다</AlertTitle>
+          <AlertDescription>회차 화면에서 다시 확인해 주세요.</AlertDescription>
         </Alert>
       )}
       {details.map((round) => (
-        <Box key={round.id}>
+        <div key={round.id}>
           <RoundPurchaseListCard round={round} title={`${round.name} 구매 목록`} />
-          <Group justify="flex-end" mt={4}>
-            <UnstyledButton component={Link} href={`/sale-rounds/${round.id}`}>
-              <Group gap={2}>
-                <Text
+          <div className="mt-1 flex flex-row flex-wrap items-center justify-end gap-4">
+            <Link href={`/sale-rounds/${round.id}`} className={UNSTYLED_BUTTON}>
+              <div className="flex flex-row flex-wrap items-center justify-start gap-0.5">
+                <p
+                  className={TEXT}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   회차 보기
-                </Text>
+                </p>
                 <ChevronRight size={14} color="var(--color-text-secondary)" />
-              </Group>
-            </UnstyledButton>
-          </Group>
-        </Box>
+              </div>
+            </Link>
+          </div>
+        </div>
       ))}
-    </Stack>
+    </div>
   );
 }
 
@@ -187,43 +193,39 @@ export default function PrepPage() {
         }
       />
 
-      <Container size="sm" px="md" py="md">
+      <div className="mx-auto max-w-[720px] px-4 py-4">
         {!!storeId && productsView === 'READ_FAILED' && !isConnecting && (
-          <Alert color="red" title="상품 정보를 불러오지 못했습니다" role="alert" mb="md">
-            <Stack gap="xs">
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>
-                준비 수량의 상품 이름이 &lsquo;상품 정보 없음&rsquo;으로 표시될 수 있습니다. 수량
-                자체는 주문 기준으로 집계됩니다.
-              </Text>
-              <Button
-                size="xs"
-                variant="light"
-                color="red"
-                leftSection={<RefreshCcw size={14} />}
-                onClick={retryProducts}
-              >
-                상품 다시 조회
-              </Button>
-            </Stack>
+          <Alert variant="destructive" role="alert" className="mb-4">
+            <AlertTitle>상품 정보를 불러오지 못했습니다</AlertTitle>
+            <AlertDescription>
+              <div className="flex flex-col gap-2.5">
+                <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
+                  준비 수량의 상품 이름이 &lsquo;상품 정보 없음&rsquo;으로 표시될 수 있습니다. 수량
+                  자체는 주문 기준으로 집계됩니다.
+                </p>
+                <Button size="xs" variant="light-destructive" onClick={retryProducts}>
+                  <RefreshCcw className="size-3.5" data-icon="inline-start" />
+                  상품 다시 조회
+                </Button>
+              </div>
+            </AlertDescription>
           </Alert>
         )}
 
         {!!storeId && productsView === 'STALE' && !isConnecting && (
-          <Alert color="yellow" title="최신 상품 정보를 확인하지 못했습니다" role="alert" mb="md">
-            <Stack gap="xs">
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>
-                이전 상품 이름으로 표시합니다. 준비 수량 자체는 주문 기준으로 집계됩니다.
-              </Text>
-              <Button
-                size="xs"
-                variant="light"
-                color="yellow"
-                leftSection={<RefreshCcw size={14} />}
-                onClick={retryProducts}
-              >
-                상품 다시 조회
-              </Button>
-            </Stack>
+          <Alert variant="warning" role="alert" className="mb-4">
+            <AlertTitle>최신 상품 정보를 확인하지 못했습니다</AlertTitle>
+            <AlertDescription>
+              <div className="flex flex-col gap-2.5">
+                <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
+                  이전 상품 이름으로 표시합니다. 준비 수량 자체는 주문 기준으로 집계됩니다.
+                </p>
+                <Button size="xs" variant="light-warning" onClick={retryProducts}>
+                  <RefreshCcw className="size-3.5" data-icon="inline-start" />
+                  상품 다시 조회
+                </Button>
+              </div>
+            </AlertDescription>
           </Alert>
         )}
 
@@ -235,35 +237,37 @@ export default function PrepPage() {
           today.length === 0 &&
           delayed.length === 0 &&
           (showsRoundPurchaseList ? (
-            <Text
-              ta="center"
-              py="md"
+            <p
+              className={`${TEXT} py-4 text-center`}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               회차 주문 외에는 오늘 준비할 물량이 없습니다
-            </Text>
+            </p>
           ) : (
             <EmptyState text="오늘 준비할 물량이 없습니다" />
           ))}
 
         {!isConnecting && (today.length > 0 || delayed.length > 0) && (
-          <Stack gap="md">
+          <div className="flex flex-col gap-4">
             {today.length > 0 && (
-              <Paper radius="lg" shadow="xs" p="md">
-                <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>
+              <div className={PAPER}>
+                <p
+                  className={TEXT}
+                  style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}
+                >
                   오늘 준비 물량 ({todayLabel})
-                </Text>
-                <Box mt="sm">
+                </p>
+                <div className="mt-3">
                   {today.map((line, i) => (
                     <PrepRow key={line.productId} line={line} index={i} />
                   ))}
-                </Box>
-                <Group
-                  justify="flex-end"
-                  pt={10}
+                </div>
+                <div
+                  className="flex flex-row flex-wrap items-center justify-end gap-4 pt-2.5"
                   style={{ borderTop: '1px solid var(--color-border)' }}
                 >
-                  <Text
+                  <p
+                    className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
@@ -271,19 +275,15 @@ export default function PrepPage() {
                     }}
                   >
                     {today.length}개 상품 · 총 {todayTotal}개
-                  </Text>
-                </Group>
-              </Paper>
+                  </p>
+                </div>
+              </div>
             )}
 
             {delayed.length > 0 && (
-              <Paper
-                radius="lg"
-                shadow="xs"
-                p="md"
-                style={{ border: '1px solid var(--color-danger)' }}
-              >
-                <Text
+              <div className={PAPER} style={{ border: '1px solid var(--color-danger)' }}>
+                <p
+                  className={TEXT}
                   style={{
                     fontSize: 'var(--font-size-md)',
                     fontWeight: 'var(--fw-bold)',
@@ -291,15 +291,15 @@ export default function PrepPage() {
                   }}
                 >
                   🔴 발송 지연 (배송일 경과)
-                </Text>
-                <Box mt="sm">
+                </p>
+                <div className="mt-3">
                   {delayed.map((line, i) => (
                     <PrepRow key={line.productId} line={line} index={i} accent />
                   ))}
-                </Box>
-                <UnstyledButton
-                  component={Link}
+                </div>
+                <Link
                   href="/orders?tab=ACTION_REQUIRED"
+                  className={UNSTYLED_BUTTON}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
@@ -309,21 +309,22 @@ export default function PrepPage() {
                     borderTop: '1px solid var(--color-border)',
                   }}
                 >
-                  <Text
+                  <p
+                    className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
                     }}
                   >
                     주문 관리에서 처리하기
-                  </Text>
+                  </p>
                   <ChevronRight size={14} color="var(--color-text-secondary)" />
-                </UnstyledButton>
-              </Paper>
+                </Link>
+              </div>
             )}
-          </Stack>
+          </div>
         )}
-      </Container>
+      </div>
     </PageShell>
   );
 }

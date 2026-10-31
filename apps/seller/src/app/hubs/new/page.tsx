@@ -1,26 +1,23 @@
 'use client';
 
-import {
-  ActionIcon,
-  Box,
-  Button,
-  Container,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { ApiError, apiJson } from '@/lib/api';
+
+// ① 외형 유지(UI 교체 P4): Mantine Container(xs 540px)·Group·ActionIcon·Title order 2·Paper(lg·sm·lg)·Stack·
+// TextInput(radius xl)·Text·Button과 같은 값을 Tailwind와 @greenhub/ui로 그린다.
+// 라벨은 Mantine처럼 inline-block이고, 필수 칸은 직접 붙인 빨간 "*" 뒤에 required 별표가 한 번 더 붙는다(지금 화면 그대로).
+const TEXT = 'm-0 p-0 text-base font-normal';
 
 export default function NewHubPage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const formId = useId();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -62,117 +59,121 @@ export default function NewHubPage() {
   }
 
   return (
-    <Box
-      component="main"
+    <main
       style={{
         minHeight: '100vh',
         backgroundColor: 'var(--color-surface-muted)',
         padding: '32px 16px',
       }}
     >
-      <Container size="xs">
-        <Group gap="sm" mb="lg">
-          <ActionIcon variant="subtle" color="gray" onClick={() => router.back()}>
-            <ChevronLeft size={20} />
-          </ActionIcon>
-          <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
+      <div className="mx-auto max-w-[540px] px-4">
+        <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-3">
+          <Button size="icon-sm" variant="ghost" className="size-7" onClick={() => router.back()}>
+            <ChevronLeft className="size-5" />
+          </Button>
+          <h2
+            className="m-0 leading-[1.35] font-extrabold"
+            style={{ fontSize: 'var(--font-size-xl)' }}
+          >
             거점 등록
-          </Title>
-        </Group>
+          </h2>
+        </div>
 
-        <Paper radius="lg" shadow="sm" p="lg">
+        <div className="block rounded-[16px] bg-white p-5 shadow-mantine-sm">
           <form onSubmit={handleSubmit}>
-            <Stack gap="md">
-              <TextInput
-                label={
-                  <>
-                    거점 이름{' '}
-                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
-                      *
-                    </Text>
-                  </>
-                }
-                name="name"
-                value={form.name}
-                onChange={handleChange}
-                required
-                placeholder="예: 강남 거점"
-                radius="xl"
-              />
+            <div className="flex flex-col items-stretch justify-start gap-4">
+              <Field>
+                <FieldLabel htmlFor={`${formId}-name`} className="inline-block" required>
+                  거점 이름{' '}
+                  <span className={TEXT} style={{ color: 'var(--color-danger)' }}>
+                    *
+                  </span>
+                </FieldLabel>
+                <Input
+                  id={`${formId}-name`}
+                  name="name"
+                  value={form.name}
+                  onChange={handleChange}
+                  required
+                  placeholder="예: 강남 거점"
+                  className="rounded-xl"
+                />
+              </Field>
 
-              <TextInput
-                label={
-                  <>
-                    주소{' '}
-                    <Text component="span" style={{ color: 'var(--color-danger)' }}>
-                      *
-                    </Text>
-                  </>
-                }
-                name="address"
-                value={form.address}
-                onChange={handleChange}
-                required
-                placeholder="거점 주소"
-                radius="xl"
-              />
+              <Field>
+                <FieldLabel htmlFor={`${formId}-address`} className="inline-block" required>
+                  주소{' '}
+                  <span className={TEXT} style={{ color: 'var(--color-danger)' }}>
+                    *
+                  </span>
+                </FieldLabel>
+                <Input
+                  id={`${formId}-address`}
+                  name="address"
+                  value={form.address}
+                  onChange={handleChange}
+                  required
+                  placeholder="거점 주소"
+                  className="rounded-xl"
+                />
+              </Field>
 
-              <TextInput
-                label={
-                  <>
-                    상세 주소{' '}
-                    <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>
-                      (선택)
-                    </Text>
-                  </>
-                }
-                name="addressDetail"
-                value={form.addressDetail}
-                onChange={handleChange}
-                placeholder="동/호수, 층 등"
-                radius="xl"
-              />
+              <Field>
+                <FieldLabel htmlFor={`${formId}-addressDetail`} className="inline-block">
+                  상세 주소{' '}
+                  <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+                    (선택)
+                  </span>
+                </FieldLabel>
+                <Input
+                  id={`${formId}-addressDetail`}
+                  name="addressDetail"
+                  value={form.addressDetail}
+                  onChange={handleChange}
+                  placeholder="동/호수, 층 등"
+                  className="rounded-xl"
+                />
+              </Field>
 
-              <TextInput
-                label={
-                  <>
-                    운영 시간{' '}
-                    <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>
-                      (선택)
-                    </Text>
-                  </>
-                }
-                name="operatingHours"
-                value={form.operatingHours}
-                onChange={handleChange}
-                placeholder="예: 09:00~18:00"
-                radius="xl"
-              />
+              <Field>
+                <FieldLabel htmlFor={`${formId}-operatingHours`} className="inline-block">
+                  운영 시간{' '}
+                  <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+                    (선택)
+                  </span>
+                </FieldLabel>
+                <Input
+                  id={`${formId}-operatingHours`}
+                  name="operatingHours"
+                  value={form.operatingHours}
+                  onChange={handleChange}
+                  placeholder="예: 09:00~18:00"
+                  className="rounded-xl"
+                />
+              </Field>
 
               {error && (
-                <Text
+                <p
+                  className={`${TEXT} text-center`}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-                  ta="center"
                 >
                   {error}
-                </Text>
+                </p>
               )}
 
               <Button
                 type="submit"
                 disabled={loading}
-                fullWidth
                 size="md"
-                radius="xl"
-                mt="xs"
+                className="mt-2.5 w-full"
                 style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 {loading ? '등록 중...' : '거점 등록'}
               </Button>
-            </Stack>
+            </div>
           </form>
-        </Paper>
-      </Container>
-    </Box>
+        </div>
+      </div>
+    </main>
   );
 }

@@ -248,21 +248,15 @@ importers:
 
   apps/driver:
     dependencies:
+      '@base-ui/react':
+        specifier: 1.9.0
+        version: 1.9.0(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@greenhub/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@greenhub/ui':
         specifier: workspace:*
         version: link:../../packages/ui
-      '@mantine/core':
-        specifier: ^9.7.3
-        version: 9.7.3(@mantine/hooks@9.7.3(react@19.3.1))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@mantine/hooks':
-        specifier: ^9.7.3
-        version: 9.7.3(react@19.3.1)
-      '@mantine/notifications':
-        specifier: ^9.7.3
-        version: 9.7.3(@mantine/core@9.7.3(@mantine/hooks@9.7.3(react@19.3.1))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@mantine/hooks@9.7.3(react@19.3.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       firebase:
         specifier: ^12.11.0
         version: 12.19.0
@@ -278,6 +272,9 @@ importers:
       react-dom:
         specifier: 19.3.1
         version: 19.3.1(react@19.3.1)
+      tw-animate-css:
+        specifier: 1.4.0
+        version: 1.4.0
     devDependencies:
       '@ducanh2912/next-pwa':
         specifier: ^10.2.9
@@ -285,6 +282,9 @@ importers:
       '@next/bundle-analyzer':
         specifier: ^16.4.2
         version: 16.4.2
+      '@tailwindcss/postcss':
+        specifier: 4.3.3
+        version: 4.3.3
       '@types/node':
         specifier: ^20
         version: 20.19.37
@@ -294,12 +294,9 @@ importers:
       '@types/react-dom':
         specifier: ^19.3.0
         version: 19.3.0(@types/react@19.3.0)
-      postcss-preset-mantine:
-        specifier: ^1.18.0
-        version: 1.18.0(postcss@8.5.29)
-      postcss-simple-vars:
-        specifier: ^7.0.1
-        version: 7.0.1(postcss@8.5.29)
+      tailwindcss:
+        specifier: 4.3.3
+        version: 4.3.3
       typescript:
         specifier: ^5
         version: 5.9.3

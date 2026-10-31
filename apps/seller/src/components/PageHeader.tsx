@@ -1,11 +1,20 @@
 'use client';
 
-import type { MantineSize } from '@mantine/core';
-import { ActionIcon, Box, Container, Group, Title } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { ChevronLeft, Home } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
+
+// ① 외형 유지(UI 교체 P4): Mantine Container 폭(xs 540·sm 720·md 960·lg 1140, 좌우 16px),
+// Group(가운데 정렬·gap sm 12px), Title order 3(22px·800·1.4), ActionIcon(28px, subtle gray = ghost)과 같은 값.
+const CONTAINER_WIDTH = {
+  xs: 'max-w-[540px]',
+  sm: 'max-w-[720px]',
+  md: 'max-w-[960px]',
+  lg: 'max-w-[1140px]',
+  xl: 'max-w-[1320px]',
+} as const;
 
 interface PageHeaderProps {
   title: string;
@@ -13,7 +22,7 @@ interface PageHeaderProps {
   onBack?: () => void;
   /** 우측 영역 (액션 버튼·상태 표시 등). */
   right?: ReactNode;
-  containerSize?: MantineSize;
+  containerSize?: keyof typeof CONTAINER_WIDTH;
   /** false면 sticky 해제 (기본 true). */
   sticky?: boolean;
 }
@@ -31,8 +40,7 @@ export function PageHeader({
   const showHome = pathname !== '/';
 
   return (
-    <Box
-      component="header"
+    <header
       style={{
         backgroundColor: 'var(--color-bg)',
         borderBottom: '1px solid var(--color-border)',
@@ -40,26 +48,31 @@ export function PageHeader({
         ...(sticky ? { position: 'sticky', top: 0, zIndex: 10 } : {}),
       }}
     >
-      <Container size={containerSize}>
-        <Group justify="space-between" wrap="nowrap">
-          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+      <div className={`mx-auto px-4 ${CONTAINER_WIDTH[containerSize]}`}>
+        <div className="flex flex-row flex-nowrap items-center justify-between gap-4">
+          <div className="flex min-w-0 flex-row flex-nowrap items-center justify-start gap-3">
             {onBack && (
-              <ActionIcon variant="subtle" color="gray" onClick={onBack}>
-                <ChevronLeft size={20} />
-              </ActionIcon>
+              <Button variant="ghost" size="icon-sm" className="size-7" onClick={onBack}>
+                <ChevronLeft size={20} className="size-5" />
+              </Button>
             )}
-            <Title order={3} style={{ minWidth: 0 }}>
-              {title}
-            </Title>
+            <h3 className="m-0 min-w-0 text-[22px] leading-[1.4] font-extrabold">{title}</h3>
             {showHome && (
-              <ActionIcon component={Link} href="/" variant="subtle" color="gray" aria-label="홈">
-                <Home size={20} />
-              </ActionIcon>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-7"
+                aria-label="홈"
+                nativeButton={false}
+                render={<Link href="/" />}
+              >
+                <Home size={20} className="size-5" />
+              </Button>
             )}
-          </Group>
+          </div>
           {right}
-        </Group>
-      </Container>
-    </Box>
+        </div>
+      </div>
+    </header>
   );
 }

@@ -1,16 +1,6 @@
 'use client';
 
 import type { SaleType } from '@greenhub/shared';
-import {
-  Box,
-  Container,
-  Group,
-  Paper,
-  SimpleGrid,
-  Stack,
-  Text,
-  UnstyledButton,
-} from '@mantine/core';
 import { useSession } from 'next-auth/react';
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import { useFirebaseReady } from '@/app/providers';
@@ -50,6 +40,16 @@ import {
   mergeActiveAndArchivedOrders,
 } from './orders-view-model';
 
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px, shadow xs)·
+// Group·Stack·SimpleGrid·Text(p, 여백 0, 줄 높이 1.55)·UnstyledButton과 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+const CONTAINER = 'mx-auto max-w-[720px] px-4';
+const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
+const GROUP = 'flex flex-row flex-wrap items-center justify-start';
+const GROUP_NOWRAP_BETWEEN = 'flex flex-row flex-nowrap items-center justify-between gap-2.5';
+
 function PriorityItem({
   label,
   count,
@@ -64,7 +64,9 @@ function PriorityItem({
   onClick: () => void;
 }) {
   return (
-    <UnstyledButton
+    <button
+      type="button"
+      className={UNSTYLED_BUTTON}
       onClick={onClick}
       aria-label={`${label} ${count.toLocaleString()}건 확인`}
       style={{
@@ -76,8 +78,9 @@ function PriorityItem({
         textAlign: 'left',
       }}
     >
-      <Group justify="space-between" gap="xs" wrap="nowrap">
-        <Text
+      <div className={GROUP_NOWRAP_BETWEEN}>
+        <p
+          className={TEXT}
           style={{
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-bold)',
@@ -85,8 +88,9 @@ function PriorityItem({
           }}
         >
           {label}
-        </Text>
-        <Text
+        </p>
+        <p
+          className={TEXT}
           style={{
             fontSize: 'var(--font-size-xl)',
             fontWeight: 'var(--fw-bold)',
@@ -94,15 +98,15 @@ function PriorityItem({
           }}
         >
           {count.toLocaleString()}건
-        </Text>
-      </Group>
-      <Text
-        mt={4}
+        </p>
+      </div>
+      <p
+        className={`${TEXT} mt-1`}
         style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
       >
         {description}
-      </Text>
-    </UnstyledButton>
+      </p>
+    </button>
   );
 }
 
@@ -249,14 +253,16 @@ export default function OrdersPage() {
       <PageHeader
         title="주문 관리"
         right={
-          <Group gap="xs" align="center">
+          <div className={`${GROUP} gap-2.5`}>
             <ConnectionStatus
               loading={loading || refreshing}
               error={error}
               firebaseReady={firebaseReady}
               source="api"
             />
-            <UnstyledButton
+            <button
+              type="button"
+              className={UNSTYLED_BUTTON}
               onClick={refresh}
               disabled={loading || refreshing}
               aria-label="주문 목록 새로고침"
@@ -267,16 +273,15 @@ export default function OrdersPage() {
                 borderRadius: 99,
                 backgroundColor:
                   loading || refreshing ? 'var(--color-surface-muted)' : 'var(--color-primary)',
-                color:
-                  loading || refreshing ? 'var(--color-text-disabled)' : 'var(--color-bg)',
+                color: loading || refreshing ? 'var(--color-text-disabled)' : 'var(--color-bg)',
                 opacity: loading || refreshing ? 0.7 : 1,
                 cursor: loading || refreshing ? 'default' : 'pointer',
                 flexShrink: 0,
               }}
             >
               {loading || refreshing ? '새로고침 중...' : '새로고침'}
-            </UnstyledButton>
-          </Group>
+            </button>
+          </div>
         }
       />
       <RoundDeadlineStrip
@@ -287,15 +292,18 @@ export default function OrdersPage() {
 
       {/* 회차 상세 "이 회차 주문"에서 들어오면 그 회차 주문만 보여 준다. */}
       {roundFilter && (
-        <Container size="sm" px="md" pt="md">
-          <Paper radius="lg" shadow="xs" p="sm">
-            <Group justify="space-between" gap="xs" wrap="nowrap">
-              <Text
+        <div className={`${CONTAINER} pt-4`}>
+          <div className={`${PAPER} p-3`}>
+            <div className={GROUP_NOWRAP_BETWEEN}>
+              <p
+                className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 {roundFilterName ?? '선택한 회차'} 주문만 보고 있어요
-              </Text>
-              <UnstyledButton
+              </p>
+              <button
+                type="button"
+                className={UNSTYLED_BUTTON}
                 onClick={clearRoundFilter}
                 style={{
                   padding: '6px 14px',
@@ -307,40 +315,44 @@ export default function OrdersPage() {
                 }}
               >
                 모든 주문 보기
-              </UnstyledButton>
-            </Group>
-          </Paper>
-        </Container>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {!loading && (
-        <Container size="sm" px="md" pt="md">
-          <Paper radius="lg" shadow="xs" p="md">
-            <Group justify="space-between" align="flex-end" mb="sm">
-              <Box>
-                <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+        <div className={`${CONTAINER} pt-4`}>
+          <div className={`${PAPER} p-4`}>
+            <div className="mb-3 flex flex-row flex-wrap items-end justify-between gap-4">
+              <div>
+                <p
+                  className={TEXT}
+                  style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+                >
                   업무 우선순위
-                </Text>
-                <Text
-                  mt={2}
+                </p>
+                <p
+                  className={`${TEXT} mt-0.5`}
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     color: 'var(--color-text-secondary)',
                   }}
                 >
                   선택한 판매 유형의 확인할 주문입니다.
-                </Text>
-              </Box>
-              <Text
+                </p>
+              </div>
+              <p
+                className={TEXT}
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-text-disabled)',
                 }}
               >
                 항목을 누르면 확인 필요 목록으로 이동
-              </Text>
-            </Group>
-            <SimpleGrid cols={{ base: 1, xs: 2 }} spacing="xs">
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-2.5 min-[36em]:grid-cols-2">
               <PriorityItem
                 label="배송 보류"
                 count={priorityCounts.deliveryHeld}
@@ -355,9 +367,9 @@ export default function OrdersPage() {
                 urgent={priorityCounts.actionRequired > 0}
                 onClick={handleActionRequiredEntry}
               />
-            </SimpleGrid>
-          </Paper>
-        </Container>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 판매 유형 토글 — 일반/공구 1차 분기. 공동구매가 없는 회차 판매 가게에는 숨긴다. */}
@@ -373,16 +385,18 @@ export default function OrdersPage() {
 
       {/* 날짜 범위 필터 — 일반 토글에서만 노출 (공구는 1차 미노출) */}
       {saleType === 'normal' && (
-        <Box
+        <div
           style={{
             backgroundColor: 'var(--color-bg)',
             borderBottom: '1px solid var(--color-border)',
           }}
         >
-          <Container size="sm" py="xs">
-            <Group gap="xs">
+          <div className={`${CONTAINER} py-2.5`}>
+            <div className={`${GROUP} gap-2.5`}>
               {DATE_PRESETS.map((p) => (
-                <UnstyledButton
+                <button
+                  type="button"
+                  className={UNSTYLED_BUTTON}
                   key={p.key}
                   onClick={() => setDatePreset(p.key)}
                   style={{
@@ -396,12 +410,12 @@ export default function OrdersPage() {
                   }}
                 >
                   {p.label}
-                </UnstyledButton>
+                </button>
               ))}
-            </Group>
+            </div>
 
             {datePreset === 'custom' && (
-              <Group gap="xs" mt="xs" align="center">
+              <div className={`${GROUP} mt-2.5 gap-2.5`}>
                 <input
                   type="date"
                   value={customFrom}
@@ -414,7 +428,9 @@ export default function OrdersPage() {
                     color: 'var(--color-text)',
                   }}
                 />
-                <Text style={{ color: 'var(--color-text-disabled)' }}>~</Text>
+                <p className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+                  ~
+                </p>
                 <input
                   type="date"
                   value={customTo}
@@ -427,19 +443,19 @@ export default function OrdersPage() {
                     color: 'var(--color-text)',
                   }}
                 />
-              </Group>
+              </div>
             )}
 
             {customInvalid && (
-              <Text
+              <p
+                className={`${TEXT} mt-1`}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-                mt={4}
               >
                 시작일이 종료일보다 늦습니다
-              </Text>
+              </p>
             )}
-          </Container>
-        </Box>
+          </div>
+        </div>
       )}
 
       {/* 상태 탭 */}
@@ -466,16 +482,18 @@ export default function OrdersPage() {
 
       {/* SubFilter — ACTION_REQUIRED 탭의 배송 보류 격리 / IN_DELIVERY 탭 선택 시에만 렌더링 */}
       {activeTab === 'ACTION_REQUIRED' && (
-        <Box
+        <div
           style={{
             backgroundColor: 'var(--color-surface-muted)',
             borderBottom: '1px solid var(--color-border)',
             padding: '6px 0',
           }}
         >
-          <Container size="sm">
-            <Group gap={0}>
-              <UnstyledButton
+          <div className={CONTAINER}>
+            <div className={`${GROUP} gap-0`}>
+              <button
+                type="button"
+                className={UNSTYLED_BUTTON}
                 onClick={() => setHeldOnly(false)}
                 aria-pressed={!heldOnly}
                 style={{
@@ -488,8 +506,10 @@ export default function OrdersPage() {
                 }}
               >
                 전체
-              </UnstyledButton>
-              <UnstyledButton
+              </button>
+              <button
+                type="button"
+                className={UNSTYLED_BUTTON}
                 onClick={() => setHeldOnly(true)}
                 aria-pressed={heldOnly}
                 style={{
@@ -502,23 +522,25 @@ export default function OrdersPage() {
                 }}
               >
                 배송 보류
-              </UnstyledButton>
-            </Group>
-          </Container>
-        </Box>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {activeTab === 'IN_DELIVERY' && (
-        <Box
+        <div
           style={{
             backgroundColor: 'var(--color-surface-muted)',
             borderBottom: '1px solid var(--color-border)',
             padding: '6px 0',
           }}
         >
-          <Container size="sm">
-            <Group gap={0}>
+          <div className={CONTAINER}>
+            <div className={`${GROUP} gap-0`}>
               {IN_DELIVERY_SUBFILTERS.map((sf) => (
-                <UnstyledButton
+                <button
+                  type="button"
+                  className={UNSTYLED_BUTTON}
                   key={sf.key}
                   onClick={() => setSubFilter(sf.key)}
                   style={{
@@ -531,29 +553,32 @@ export default function OrdersPage() {
                   }}
                 >
                   {sf.label}
-                </UnstyledButton>
+                </button>
               ))}
-            </Group>
-          </Container>
-        </Box>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 주문 목록 — 날짜 그룹 섹션 */}
-      <Container size="sm" px="md" py="md">
-        <Stack gap="lg">
+      <div className={`${CONTAINER} py-4`}>
+        <div className="flex flex-col gap-5">
           {(listLoading || (saleType === 'group' && !firebaseReady)) && <LoadingState />}
 
           {archiveView && archive.error && (
-            <Paper radius="lg" shadow="xs" p="md" role="alert">
-              <Group justify="space-between" gap="xs" wrap="nowrap">
-                <Text
+            <div className={`${PAPER} p-4`} role="alert">
+              <div className={GROUP_NOWRAP_BETWEEN}>
+                <p
+                  className={TEXT}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   {archive.loaded
                     ? '끝난 주문을 더 불러오지 못했습니다.'
                     : '끝난 주문을 불러오지 못했습니다.'}
-                </Text>
-                <UnstyledButton
+                </p>
+                <button
+                  type="button"
+                  className={UNSTYLED_BUTTON}
                   onClick={archive.loaded ? archive.loadMore : archive.refresh}
                   style={{
                     padding: '6px 14px',
@@ -565,16 +590,18 @@ export default function OrdersPage() {
                   }}
                 >
                   다시 시도
-                </UnstyledButton>
-              </Group>
-            </Paper>
+                </button>
+              </div>
+            </div>
           )}
 
           {!loading && error && orders.length === 0 && (
             <EmptyState
               text={error}
               action={
-                <UnstyledButton
+                <button
+                  type="button"
+                  className={UNSTYLED_BUTTON}
                   onClick={refresh}
                   style={{
                     padding: '6px 14px',
@@ -585,20 +612,23 @@ export default function OrdersPage() {
                   }}
                 >
                   다시 시도
-                </UnstyledButton>
+                </button>
               }
             />
           )}
 
           {!loading && error && orders.length > 0 && (
-            <Paper radius="lg" shadow="xs" p="md">
-              <Group justify="space-between" gap="xs" wrap="nowrap">
-                <Text
+            <div className={`${PAPER} p-4`}>
+              <div className={GROUP_NOWRAP_BETWEEN}>
+                <p
+                  className={TEXT}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   최신 주문을 불러오지 못했습니다. 이전 목록을 표시합니다.
-                </Text>
-                <UnstyledButton
+                </p>
+                <button
+                  type="button"
+                  className={UNSTYLED_BUTTON}
                   onClick={refresh}
                   style={{
                     padding: '6px 14px',
@@ -610,56 +640,57 @@ export default function OrdersPage() {
                   }}
                 >
                   다시 시도
-                </UnstyledButton>
-              </Group>
-            </Paper>
+                </button>
+              </div>
+            </div>
           )}
 
           {/* 공구 배송일 auxiliary metadata — core 주문 목록과 분리.
               실패해도 주문 목록을 숨기거나 정상 empty로 속이지 않고,
               saleType/activeTab/filter state를 보존한 채 작은 warning/retry만 노출한다. */}
-          {!loading &&
-            firebaseReady &&
-            saleType === 'group' &&
-            groupConfigs.error && (
-              <Paper radius="lg" shadow="xs" p="md">
-                <Group justify="space-between" gap="xs" wrap="nowrap">
-                  <Text
-                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-                  >
-                    {groupConfigs.isStale
-                      ? '공구 배송일 정보를 새로 불러오지 못했습니다. 이전 정보를 표시합니다.'
-                      : '공구 배송일 정보를 불러오지 못했습니다. 주문 목록은 그대로 표시됩니다.'}
-                  </Text>
-                  <UnstyledButton
-                    onClick={groupConfigs.retry}
-                    aria-label="공구 배송일 다시 불러오기"
-                    style={{
-                      padding: '6px 14px',
-                      fontSize: 'var(--font-size-sm)',
-                      borderRadius: 99,
-                      backgroundColor: 'var(--color-primary)',
-                      color: 'var(--color-bg)',
-                      flexShrink: 0,
-                    }}
-                  >
-                    다시 시도
-                  </UnstyledButton>
-                </Group>
-              </Paper>
-            )}
+          {!loading && firebaseReady && saleType === 'group' && groupConfigs.error && (
+            <div className={`${PAPER} p-4`}>
+              <div className={GROUP_NOWRAP_BETWEEN}>
+                <p
+                  className={TEXT}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  {groupConfigs.isStale
+                    ? '공구 배송일 정보를 새로 불러오지 못했습니다. 이전 정보를 표시합니다.'
+                    : '공구 배송일 정보를 불러오지 못했습니다. 주문 목록은 그대로 표시됩니다.'}
+                </p>
+                <button
+                  type="button"
+                  className={UNSTYLED_BUTTON}
+                  onClick={groupConfigs.retry}
+                  aria-label="공구 배송일 다시 불러오기"
+                  style={{
+                    padding: '6px 14px',
+                    fontSize: 'var(--font-size-sm)',
+                    borderRadius: 99,
+                    backgroundColor: 'var(--color-primary)',
+                    color: 'var(--color-bg)',
+                    flexShrink: 0,
+                  }}
+                >
+                  다시 시도
+                </button>
+              </div>
+            </div>
+          )}
 
           {!loading &&
             firebaseReady &&
             saleType === 'group' &&
             !groupConfigs.error &&
             groupConfigs.loading && (
-              <Text
+              <p
+                className={TEXT}
                 aria-live="polite"
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 공구 배송일 정보를 불러오는 중입니다…
-              </Text>
+              </p>
             )}
 
           {!listLoading &&
@@ -703,7 +734,9 @@ export default function OrdersPage() {
             ))}
 
           {archiveView && archive.loaded && archive.hasMore && (
-            <UnstyledButton
+            <button
+              type="button"
+              className={UNSTYLED_BUTTON}
               onClick={archive.loadMore}
               disabled={archive.loading}
               aria-busy={archive.loading}
@@ -713,14 +746,16 @@ export default function OrdersPage() {
                 fontSize: 'var(--font-size-sm)',
                 borderRadius: 99,
                 backgroundColor: 'var(--color-surface-muted)',
-                color: archive.loading ? 'var(--color-text-disabled)' : 'var(--color-text-secondary)',
+                color: archive.loading
+                  ? 'var(--color-text-disabled)'
+                  : 'var(--color-text-secondary)',
               }}
             >
               {archive.loading ? '불러오는 중...' : '지난 주문 더 보기'}
-            </UnstyledButton>
+            </button>
           )}
-        </Stack>
-      </Container>
+        </div>
+      </div>
     </PageShell>
   );
 }

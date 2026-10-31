@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Group, Loader, Paper, Text } from '@mantine/core';
+import { Loader } from '@greenhub/ui/components/loader';
 import Image from 'next/image';
 import { useRef, useState } from 'react';
 import { getFirebaseStorage } from '@/lib/firebase';
@@ -11,6 +11,9 @@ import {
   PRODUCT_IMAGE_ENCODE,
   reencodeImageToJpeg,
 } from './image-reencode';
+
+// ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·그림자 xs·안쪽 16)·Text(p, 여백 0)·Group(간격 10) 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
 
 interface ImageUploadProps {
   storeId: string;
@@ -75,23 +78,26 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
   }
 
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Text
+    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+      <p
+        className={`${TEXT} mb-2.5`}
         style={{
           fontSize: 'var(--font-size-sm)',
           fontWeight: 'var(--fw-medium)',
           color: 'var(--color-text-disabled)',
         }}
-        mb="xs"
       >
         사진{' '}
-        <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>
+        <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
           ({images.length}/5 · 첫 번째가 대표 사진)
-        </Text>
-      </Text>
-      <Group gap="xs" style={{ overflowX: 'auto', paddingBottom: 4, flexWrap: 'nowrap' }}>
+        </span>
+      </p>
+      <div
+        className="flex flex-row flex-wrap items-center justify-start gap-2.5"
+        style={{ overflowX: 'auto', paddingBottom: 4, flexWrap: 'nowrap' }}
+      >
         {images.map((url, idx) => (
-          <Box
+          <div
             key={url}
             style={{
               position: 'relative',
@@ -105,7 +111,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
           >
             <Image fill src={url} alt="" sizes="80px" style={{ objectFit: 'cover' }} />
             {idx === 0 ? (
-              <Box
+              <div
                 style={{
                   position: 'absolute',
                   bottom: 4,
@@ -119,10 +125,9 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                 }}
               >
                 대표
-              </Box>
+              </div>
             ) : (
-              <Box
-                component="button"
+              <button
                 type="button"
                 onClick={() => setAsMain(idx)}
                 style={{
@@ -141,9 +146,9 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                 }}
               >
                 대표 설정
-              </Box>
+              </button>
             )}
-            <Box
+            <div
               style={{
                 position: 'absolute',
                 top: 4,
@@ -161,9 +166,8 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
               }}
             >
               {idx + 1}
-            </Box>
-            <Box
-              component="button"
+            </div>
+            <button
               type="button"
               onClick={() => remove(idx)}
               style={{
@@ -184,12 +188,11 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
               }}
             >
               ✕
-            </Box>
-          </Box>
+            </button>
+          </div>
         ))}
         {images.length < 5 && (
-          <Box
-            component="button"
+          <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading}
@@ -211,7 +214,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
             }}
           >
             {uploading ? (
-              <Loader size="xs" color="var(--color-primary)" />
+              <Loader size="xs" />
             ) : (
               <>
                 <svg
@@ -229,9 +232,9 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                 <span>사진 추가</span>
               </>
             )}
-          </Box>
+          </button>
         )}
-      </Group>
+      </div>
       <input
         ref={fileInputRef}
         type="file"
@@ -243,6 +246,6 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
           e.target.value = '';
         }}
       />
-    </Paper>
+    </div>
   );
 }

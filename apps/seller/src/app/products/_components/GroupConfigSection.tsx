@@ -1,11 +1,15 @@
 'use client';
 
-import { Box, Button, Group, Text } from '@mantine/core';
+import { Button, ButtonLabel } from '@greenhub/ui/components/button';
 
 const GROUP_DELIVERY_METHODS = [
   { value: 'direct', label: '꽃차 직배송' },
   { value: 'parcel', label: '택배' },
 ] as const;
+
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Group(간격 10) 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const GROUP = 'flex flex-row flex-wrap items-center justify-start gap-2.5';
 
 interface GroupConfigForm {
   minQuantity: string;
@@ -24,7 +28,7 @@ interface Props {
 
 export default function GroupConfigSection({ visible, config, setGroupConfig }: Props) {
   return (
-    <Box
+    <div
       style={{
         overflow: 'hidden',
         maxHeight: visible ? 600 : 0,
@@ -32,15 +36,15 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         marginTop: visible ? 16 : 0,
       }}
     >
-      <Box style={{ borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
-        <Group gap="xs" mb="sm">
-          <Box style={{ flex: 1 }}>
-            <Text
+      <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 16 }}>
+        <div className={`${GROUP} mb-3`}>
+          <div style={{ flex: 1 }}>
+            <p
+              className={`${TEXT} mb-1`}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              mb={4}
             >
               최소 수량
-            </Text>
+            </p>
             <input
               type="number"
               placeholder="10"
@@ -55,14 +59,14 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
                 fontSize: 'var(--font-size-sm)',
               }}
             />
-          </Box>
-          <Box style={{ flex: 1 }}>
-            <Text
+          </div>
+          <div style={{ flex: 1 }}>
+            <p
+              className={`${TEXT} mb-1`}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              mb={4}
             >
               목표 수량
-            </Text>
+            </p>
             <input
               type="number"
               placeholder="50"
@@ -77,15 +81,15 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
                 fontSize: 'var(--font-size-sm)',
               }}
             />
-          </Box>
-        </Group>
-        <Box mb="sm">
-          <Text
+          </div>
+        </div>
+        <div className="mb-3">
+          <p
+            className={`${TEXT} mb-1`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            mb={4}
           >
             1인 최대 구매 수량
-          </Text>
+          </p>
           <input
             type="number"
             placeholder="5"
@@ -100,15 +104,15 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
               fontSize: 'var(--font-size-sm)',
             }}
           />
-        </Box>
+        </div>
 
-        <Box mb="sm">
-          <Text
+        <div className="mb-3">
+          <p
+            className={`${TEXT} mb-1`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            mb={4}
           >
             모집 마감일시
-          </Text>
+          </p>
           <input
             type="datetime-local"
             value={config.recruitDeadline}
@@ -121,15 +125,15 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
               fontSize: 'var(--font-size-sm)',
             }}
           />
-        </Box>
+        </div>
 
-        <Box mb="sm">
-          <Text
+        <div className="mb-3">
+          <p
+            className={`${TEXT} mb-1`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            mb={4}
           >
             배송 예정일
-          </Text>
+          </p>
           <input
             type="date"
             value={config.groupDeliveryDate}
@@ -142,26 +146,23 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
               fontSize: 'var(--font-size-sm)',
             }}
           />
-        </Box>
+        </div>
 
-        <Box>
-          <Text
+        <div>
+          <p
+            className={`${TEXT} mb-1`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            mb={4}
           >
             배송 수단
-          </Text>
-          <Group gap="xs">
+          </p>
+          <div className={GROUP}>
             {GROUP_DELIVERY_METHODS.map(({ value, label }) => (
               <Button
                 key={value}
                 type="button"
                 onClick={() => setGroupConfig('groupDeliveryMethod', value as 'direct' | 'parcel')}
-                flex={1}
-                size="sm"
-                radius="xl"
-                variant="outline"
-                color="gray"
+                className="flex-1"
+                variant="outline-gray"
                 style={
                   config.groupDeliveryMethod === value
                     ? {
@@ -172,12 +173,12 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
                     : {}
                 }
               >
-                {label}
+                <ButtonLabel>{label}</ButtonLabel>
               </Button>
             ))}
-          </Group>
-        </Box>
-      </Box>
-    </Box>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

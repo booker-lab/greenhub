@@ -1,6 +1,8 @@
 import Image from 'next/image';
 import { signIn } from '@/auth';
-import { Box, Divider, PasswordInput, Stack, Button, Text, TextInput, Title, Alert, Paper } from '@mantine/core';
+import { AppButton } from '@/components/app-button';
+import { PasswordField, TextField } from '@/components/fields';
+import { text } from '@/components/look';
 import { resolveDriverLoginNotice } from './login-notice';
 
 async function localCredentialSignIn(formData: FormData) {
@@ -25,7 +27,7 @@ export default async function LoginPage({
     process.env.GREENHUB_LOCAL_RUNTIME === 'true' && process.env.NODE_ENV !== 'production';
 
   return (
-    <Box
+    <div
       style={{
         minHeight: '100dvh',
         display: 'flex',
@@ -35,10 +37,11 @@ export default async function LoginPage({
         padding: '0 16px',
       }}
     >
-      <Box w="100%" style={{ maxWidth: 400 }}>
-        <Paper radius="lg" shadow="sm" p="xl">
+      <div className="w-full" style={{ maxWidth: 400 }}>
+        {/* 카드: 모서리 16·안쪽 32. 그림자 대신 연한 선으로 구역을 나눈다(design-standard.md §4, 2026-10-31 사용자 결정). */}
+        <div className="rounded-[16px] bg-white p-8" style={{ border: 'var(--border)' }}>
           {/* 로고 */}
-          <Stack align="center" gap="xs" mb="xl">
+          <div className="mb-8 flex flex-col items-center gap-2.5">
             <Image
               src="/icons/icon-192x192.png"
               alt="그린러브 기사 앱 아이콘"
@@ -46,8 +49,8 @@ export default async function LoginPage({
               height={64}
               style={{ borderRadius: 16, display: 'block' }}
             />
-            <Title
-              order={2}
+            <h2
+              className="m-0 leading-[1.35]"
               style={{
                 fontFamily: 'var(--font-brand)',
                 fontSize: 30,
@@ -57,23 +60,38 @@ export default async function LoginPage({
               }}
             >
               Green Love
-            </Title>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            </h2>
+            <p
+              className={text}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               기사 계정으로 로그인하세요
-            </Text>
-          </Stack>
+            </p>
+          </div>
 
           {/* 승인 대기·로그인 거절·관리자 계정·로그인 실패 안내 */}
           {notice && (
-            <Alert color={notice.kind === 'failed' ? 'red' : 'yellow'} radius="md" mb="md">
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
-                mb={4}
-              >
-                {notice.title}
-              </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{notice.body}</Text>
-            </Alert>
+            // ① 외형 유지: Mantine Alert(light, radius md). 빨강은 Mantine red light, 노랑은 theme.ts의 경고 토큰이다.
+            <div
+              role="alert"
+              className={
+                notice.kind === 'failed'
+                  ? 'relative mb-4 overflow-hidden rounded-[8px] border border-transparent bg-[#ffe3e3] p-4 text-[#c92a2a]'
+                  : 'relative mb-4 overflow-hidden rounded-[8px] border border-transparent bg-status-warning p-4 text-status-warning-foreground'
+              }
+            >
+              <div className="overflow-hidden text-sm/[1.55] text-ellipsis text-black">
+                <p
+                  className={`${text} mb-1`}
+                  style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+                >
+                  {notice.title}
+                </p>
+                <p className={text} style={{ fontSize: 'var(--font-size-sm)' }}>
+                  {notice.body}
+                </p>
+              </div>
+            </div>
           )}
 
           {/* 카카오 로그인 */}
@@ -83,56 +101,52 @@ export default async function LoginPage({
               await signIn('kakao', { redirectTo: '/board' });
             }}
           >
-            <Button
+            <AppButton
               type="submit"
               fullWidth
               size="md"
-              radius="xl"
               style={{ backgroundColor: '#FEE500', color: '#191919' }}
               leftSection={
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="#191919" aria-hidden="true" focusable="false">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="#191919"
+                  aria-hidden="true"
+                  focusable="false"
+                  className="size-5"
+                >
                   <path d="M12 3C6.477 3 2 6.477 2 10.9c0 2.776 1.548 5.217 3.906 6.72l-.994 3.71a.25.25 0 00.375.274L9.43 19.28A11.6 11.6 0 0012 19.8c5.523 0 10-3.477 10-7.9S17.523 3 12 3z" />
                 </svg>
               }
             >
               카카오로 시작하기
-            </Button>
+            </AppButton>
           </form>
 
           {/* 로컬 파일럿 전용: 승인된 드라이버 Credentials 진입 */}
           {showLocalCredentials && (
             <form action={localCredentialSignIn}>
-              <Stack gap="sm" mt="md">
-                <Divider label="또는" labelPosition="center" />
-                <TextInput
-                  type="email"
-                  name="email"
-                  placeholder="이메일"
-                  required
-                  radius="xl"
-                  size="md"
-                />
-                <PasswordInput
-                  name="password"
-                  placeholder="비밀번호"
-                  required
-                  radius="xl"
-                  size="md"
-                />
-                <Button
+              <div className="mt-4 flex flex-col gap-3">
+                {/* ① 외형 유지: Mantine Divider(label 가운데) */}
+                <div className="flex items-center text-xs/[1.55] whitespace-nowrap text-[#868e96] before:me-2.5 before:h-px before:flex-1 before:border-t before:border-[#dee2e6] before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-[#dee2e6] after:content-['']">
+                  또는
+                </div>
+                <TextField type="email" name="email" placeholder="이메일" required size="md" />
+                <PasswordField name="password" placeholder="비밀번호" required />
+                <AppButton
                   type="submit"
                   fullWidth
                   size="md"
-                  radius="xl"
                   style={{ backgroundColor: 'var(--color-primary)' }}
                 >
                   로그인
-                </Button>
-              </Stack>
+                </AppButton>
+              </div>
             </form>
           )}
-        </Paper>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }

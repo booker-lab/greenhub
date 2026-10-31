@@ -1,9 +1,10 @@
 'use client';
 
-import { Badge, Group, Paper, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Badge } from '@greenhub/ui/components/badge';
 import type { SettlementStatus, Summary } from '../_constants';
 import { STATUS_COLOR, STATUS_LABEL } from '../_constants';
 import { toKRW } from '../_lib';
+import { LIGHT_BADGE } from './status-badge';
 
 interface DailySummaryTabProps {
   selectedDate: string;
@@ -15,6 +16,11 @@ interface DailySummaryTabProps {
   summaryError: string;
 }
 
+// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg·p lg·shadow xs)·Group·Stack(gap sm)·Text·
+// SimpleGrid(2열·간격 md)·Badge light radius xl과 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const ROW = 'flex flex-row flex-wrap items-center justify-between gap-4';
+
 export function DailySummaryTab({
   selectedDate,
   setSelectedDate,
@@ -25,11 +31,14 @@ export function DailySummaryTab({
   summaryError,
 }: DailySummaryTabProps) {
   return (
-    <Paper radius="lg" p="lg" shadow="xs">
-      <Group justify="space-between" align="center" mb="md">
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+    <div className="block rounded-[16px] bg-white p-5 shadow-mantine-xs">
+      <div className={`${ROW} mb-4`}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        >
           {selectedDateLabel}
-        </Text>
+        </p>
         <input
           type="date"
           value={selectedDate}
@@ -43,61 +52,75 @@ export function DailySummaryTab({
             color: 'var(--color-text-secondary)',
           }}
         />
-      </Group>
+      </div>
       {summaryLoading ? (
-        <Text
+        <p
+          className={`${TEXT} py-4 text-center`}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          ta="center"
-          py="md"
         >
           불러오는 중...
-        </Text>
+        </p>
       ) : summaryError ? (
-        <Text
+        <p
+          className={`${TEXT} py-4 text-center`}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-          ta="center"
-          py="md"
         >
           {summaryError}
-        </Text>
+        </p>
       ) : (
-        <Stack gap="sm">
-          <Group justify="space-between">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+        <div className="flex flex-col items-stretch justify-start gap-3">
+          <div className={ROW}>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               완료 건수
-            </Text>
-            <Text style={{ fontWeight: 'var(--fw-medium)' }}>{summary?.count ?? 0}건</Text>
-          </Group>
-          <Group justify="space-between">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            </p>
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+              {summary?.count ?? 0}건
+            </p>
+          </div>
+          <div className={ROW}>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               총 매출
-            </Text>
-            <Text style={{ fontWeight: 'var(--fw-medium)' }}>
+            </p>
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
               {toKRW(summary?.totalAmount ?? 0)}
-            </Text>
-          </Group>
-          <Group justify="space-between">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            </p>
+          </div>
+          <div className={ROW}>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               플랫폼 수수료
-            </Text>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            </p>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
               −{toKRW(summary?.totalPlatformFee ?? 0)}
-            </Text>
-          </Group>
+            </p>
+          </div>
           {/* 디자인 기준 §5: 판매자 요약 숫자는 연두 상자 */}
-          <Group
-            justify="space-between"
-            align="center"
-            p="md"
+          <div
+            className={`${ROW} p-4`}
             style={{
               background: 'var(--color-primary-surface)',
               borderRadius: 'var(--radius-tag)',
             }}
           >
-            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+            <p
+              className={TEXT}
+              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+            >
               정산 예정
-            </Text>
-            <Text
+            </p>
+            <p
+              className={TEXT}
               style={{
                 fontSize: 'var(--font-size-xl)',
                 fontWeight: 'var(--fw-extrabold)',
@@ -106,25 +129,28 @@ export function DailySummaryTab({
               }}
             >
               {toKRW(summary?.totalNetAmount ?? 0)}
-            </Text>
-          </Group>
+            </p>
+          </div>
           {summary && summary.count > 0 && (
-            <SimpleGrid
-              cols={2}
-              mt="xs"
+            <div
+              className="mt-2.5 grid grid-cols-2 gap-4"
               style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8 }}
             >
               {(Object.entries(summary.byStatus) as [SettlementStatus, number][])
                 .filter(([, v]) => v > 0)
                 .map(([status, count]) => (
-                  <Badge key={status} color={STATUS_COLOR[status]} variant="light" radius="xl">
+                  <Badge
+                    key={status}
+                    variant={LIGHT_BADGE[STATUS_COLOR[status]] ?? 'secondary'}
+                    className="rounded-[32px]"
+                  >
                     {STATUS_LABEL[status]} {count}건
                   </Badge>
                 ))}
-            </SimpleGrid>
+            </div>
           )}
-        </Stack>
+        </div>
       )}
-    </Paper>
+    </div>
   );
 }

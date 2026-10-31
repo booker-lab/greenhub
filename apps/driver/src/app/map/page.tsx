@@ -10,7 +10,10 @@ import {
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
 import { buildOrderMapLink, pickNextDeliveryStop } from './_lib/map-navigation-link';
-import { Box, Stack, Text, Title, Badge, Button } from '@mantine/core';
+import { Badge } from '@greenhub/ui/components/badge';
+import { cn } from '@greenhub/ui/lib/utils';
+import { AppButton } from '@/components/app-button';
+import { badgeDark, badgeSize, text, titleH4 } from '@/components/look';
 
 type Order = {
   id: string;
@@ -191,10 +194,9 @@ export default function MapPage() {
   const nextStopLink = nextStop ? buildOrderMapLink(nextStop) : null;
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       {/* 헤더 */}
-      <Box
-        component="header"
+      <header
         style={{
           position: 'sticky',
           top: 0,
@@ -204,20 +206,18 @@ export default function MapPage() {
           padding: '16px',
         }}
       >
-        <Title order={4}>오늘 배송 경로</Title>
-        <Text
+        <h4 className={titleH4}>오늘 배송 경로</h4>
+        <p
+          className={cn(text, 'mt-0.5')}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          mt={2}
         >
           총 {orders.length}건
-        </Text>
-      </Box>
+        </p>
+      </header>
 
       {/* 지도 플레이스홀더 */}
-      <Box
-        mx="md"
-        mt="md"
-        h={192}
+      <div
+        className="mx-4 mt-4 h-48"
         style={{
           borderRadius: 16,
           backgroundColor: 'var(--color-surface-muted)',
@@ -227,7 +227,7 @@ export default function MapPage() {
           justifyContent: 'center',
         }}
       >
-        <Stack align="center" gap={4}>
+        <div className="flex flex-col items-center gap-1">
           <svg
             width="40"
             height="40"
@@ -244,84 +244,85 @@ export default function MapPage() {
               d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
             />
           </svg>
-          <Text
-            ta="center"
+          <p
+            className={cn(text, 'text-center')}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             배송지마다 ‘지도’를 누르면 카카오맵에서 길안내가 열려요.
-          </Text>
-        </Stack>
-      </Box>
+          </p>
+        </div>
+      </div>
 
       {/* 경유지 목록 */}
-      <Box style={{ flex: 1, padding: '16px' }}>
+      <div style={{ flex: 1, padding: '16px' }}>
         {loading ? (
-          <Box
+          <div
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 128 }}
           >
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            <p
+              className={text}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
               배송 경로를 불러오는 중입니다
-            </Text>
-          </Box>
+            </p>
+          </div>
         ) : authRequired ? (
-          <Stack align="center" justify="center" h={128} gap="xs">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+          <div className="flex h-32 flex-col items-center justify-center gap-2.5">
+            <p
+              className={text}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+            >
               로그인이 필요합니다. 세션을 다시 확인해 주세요.
-            </Text>
-            <Button
-              variant="outline"
-              color="brand"
-              radius="xl"
-              onClick={() => setReloadKey((key) => key + 1)}
-            >
+            </p>
+            <AppButton tone="brand-outline" onClick={() => setReloadKey((key) => key + 1)}>
               다시 시도
-            </Button>
-          </Stack>
+            </AppButton>
+          </div>
         ) : error && !hasSuccessfulRead ? (
-          <Stack align="center" justify="center" h={128} gap="xs">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
-              {error}
-            </Text>
-            <Button
-              variant="outline"
-              color="brand"
-              radius="xl"
-              onClick={() => setReloadKey((key) => key + 1)}
+          <div className="flex h-32 flex-col items-center justify-center gap-2.5">
+            <p
+              className={text}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
             >
+              {error}
+            </p>
+            <AppButton tone="brand-outline" onClick={() => setReloadKey((key) => key + 1)}>
               다시 시도
-            </Button>
-          </Stack>
+            </AppButton>
+          </div>
         ) : sorted.length === 0 ? (
-          <Box
+          <div
             style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 128 }}
           >
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            <p
+              className={text}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
               오늘 배송 주문이 없습니다
-            </Text>
-          </Box>
+            </p>
+          </div>
         ) : (
-          <Stack gap="xs">
+          <div className="flex flex-col gap-2.5">
             {refreshing && (
-              <Text
+              <p
+                className={text}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 최신 정보를 확인하는 중입니다…
-              </Text>
+              </p>
             )}
             {error && (
-              <Stack align="center" justify="center" gap="xs">
-                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
-                  {error} (이전 경로 표시 중)
-                </Text>
-                <Button
-                  variant="outline"
-                  color="brand"
-                  radius="xl"
-                  onClick={() => setReloadKey((key) => key + 1)}
+              <div className="flex flex-col items-center justify-center gap-2.5">
+                <p
+                  className={text}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
                 >
+                  {error} (이전 경로 표시 중)
+                </p>
+                <AppButton tone="brand-outline" onClick={() => setReloadKey((key) => key + 1)}>
                   다시 시도
-                </Button>
-              </Stack>
+                </AppButton>
+              </div>
             )}
             {sorted.map((order, idx) => {
               const addr =
@@ -331,7 +332,7 @@ export default function MapPage() {
               // stale(error) 상태에서는 목록 행 지도 링크도 fail-closed로 숨긴다.
               const mapLink = error ? null : buildOrderMapLink(order);
               return (
-                <Box
+                <div
                   key={order.id}
                   style={{
                     display: 'flex',
@@ -343,7 +344,7 @@ export default function MapPage() {
                     padding: '12px 16px',
                   }}
                 >
-                  <Box
+                  <div
                     style={{
                       width: 24,
                       height: 24,
@@ -359,56 +360,52 @@ export default function MapPage() {
                     }}
                   >
                     {idx + 1}
-                  </Box>
-                  <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Text
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p
+                      className={cn(text, 'truncate')}
                       style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
-                      truncate="end"
                     >
                       {order.buyerName ?? '소비자'}
-                    </Text>
-                    <Text
+                    </p>
+                    <p
+                      className={cn(text, 'truncate')}
                       style={{
                         fontSize: 'var(--font-size-sm)',
                         color: 'var(--color-text-disabled)',
                       }}
-                      truncate="end"
                     >
                       {addr}
-                    </Text>
-                  </Box>
+                    </p>
+                  </div>
                   <Badge
-                    size="xs"
-                    color={order.status === 'DELIVERING' ? 'dark' : 'yellow'}
-                    variant="light"
+                    variant={order.status === 'DELIVERING' ? 'default' : 'warning'}
+                    className={cn(badgeSize.xs, order.status === 'DELIVERING' && badgeDark.light)}
                   >
                     {order.status === 'DELIVERING' ? '배송 중' : '수거 대기'}
                   </Badge>
                   {mapLink && (
-                    <Button
-                      component="a"
+                    <AppButton
                       href={mapLink.href}
                       target="_blank"
                       rel="noopener noreferrer"
                       size="xs"
-                      radius="xl"
-                      variant="light"
-                      color="brand"
+                      tone="brand-light"
                       aria-label={`${idx + 1}번 배송지 카카오맵에서 열기`}
                     >
                       지도
-                    </Button>
+                    </AppButton>
                   )}
-                </Box>
+                </div>
               );
             })}
-          </Stack>
+          </div>
         )}
-      </Box>
+      </div>
 
       {/* 다음 배송지 길안내 버튼: error/stale에서는 fail-closed로 비활성화한다 */}
       {sorted.length > 0 && !loading && !authRequired && !error && hasSuccessfulRead && (
-        <Box
+        <div
           style={{
             position: 'sticky',
             bottom: 'calc(72px + env(safe-area-inset-bottom))',
@@ -416,25 +413,23 @@ export default function MapPage() {
           }}
         >
           {nextStopLink ? (
-            <Button
-              component="a"
+            <AppButton
               href={nextStopLink.href}
               target="_blank"
               rel="noopener noreferrer"
               fullWidth
               size="lg"
-              radius="xl"
-              color="brand"
             >
               다음 배송지 카카오맵에서 열기
-            </Button>
+            </AppButton>
           ) : (
-            <Stack gap="xs">
-              <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+            <div className="flex flex-col gap-2.5">
+              <AppButton fullWidth size="lg" tone="gray" disabled>
                 다음 배송지 카카오맵에서 열기
-              </Button>
+              </AppButton>
               {nextStop ? (
-                <Text
+                <p
+                  className={text}
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     color: 'var(--color-danger)',
@@ -442,9 +437,10 @@ export default function MapPage() {
                   }}
                 >
                   다음 배송지 주소가 없어 지도를 열 수 없습니다. 목록에서 주소를 확인해 주세요.
-                </Text>
+                </p>
               ) : (
-                <Text
+                <p
+                  className={text}
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     color: 'var(--color-text-secondary)',
@@ -452,25 +448,26 @@ export default function MapPage() {
                   }}
                 >
                   아직 배송 중인 주문이 없습니다. 수거하고 배송을 시작하면 열 수 있습니다.
-                </Text>
+                </p>
               )}
-            </Stack>
+            </div>
           )}
-        </Box>
+        </div>
       )}
       {sorted.length > 0 && error && hasSuccessfulRead && (
-        <Box
+        <div
           style={{
             position: 'sticky',
             bottom: 'calc(72px + env(safe-area-inset-bottom))',
             padding: '0 16px 16px',
           }}
         >
-          <Stack gap="xs">
-            <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+          <div className="flex flex-col gap-2.5">
+            <AppButton fullWidth size="lg" tone="gray" disabled>
               다음 배송지 카카오맵에서 열기
-            </Button>
-            <Text
+            </AppButton>
+            <p
+              className={text}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 color: 'var(--color-danger)',
@@ -479,10 +476,10 @@ export default function MapPage() {
             >
               최신 경로 확인에 실패해 길안내를 열 수 없습니다. 다시 시도 후 최신 경로에서 열어
               주세요.
-            </Text>
-          </Stack>
-        </Box>
+            </p>
+          </div>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }

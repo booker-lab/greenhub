@@ -131,6 +131,18 @@ export const routes = [
   ],
 ];
 
+/** 화면별 상황(shots.mjs가 그 화면을 열 때만 고른다). */
+export const scenarioRoutes = {
+  // 주문 다시 읽기를 0.8초 늦춘다. 처음 열 때도 늦지만 화면은 같다.
+  'slow-order-read': [
+    [
+      'GET',
+      /^\/driver\/orders\/order-prep-1$/,
+      () => ({ body: ORDERS.find((o) => o.id === 'order-prep-1'), delay: 800 }),
+    ],
+  ],
+};
+
 /** 자동 캡처 대상 화면. 지도 화면의 카카오맵은 외부 스크립트라 하네스에서는 그려지지 않는다. */
 export const screens = [
   { id: 'login', group: '기사', title: '로그인', path: '/login', auth: false },
@@ -181,12 +193,14 @@ export const screens = [
   },
   // 알림(toast): 가짜 API는 상태 변경 PATCH에 200 {}을 돌려준다. 앱은 ACK(orderId·status)가 맞지 않으므로
   // 다시 보내지 않고 주문을 다시 읽는다(불확실 수렴). 다시 읽어도 준비 중이라 "확실하지 않음"·"아직 처리되지 않음"
-  // 두 알림이 뜬다(apps/driver/src/app/board/[orderId]/page.tsx).
+  // 두 알림이 뜬다(apps/driver/src/app/board/[orderId]/page.tsx). 두 알림이 거의 같이 뜨면 쌓이는 위치가
+  // 캡처마다 소수점 픽셀만큼 달라져서(운영 빌드에서 확인), 다시 읽기를 늦춰 첫 알림이 자리 잡은 뒤 둘째가 뜨게 한다.
   {
     id: 'toast-status-uncertain',
     group: '기사',
     title: '알림 · 상태 변경 확인 못 함',
     path: '/board/order-prep-1',
+    scenario: 'slow-order-read',
     steps: [{ click: '수거 완료 / 배송 시작' }],
     viewport: true,
   },
