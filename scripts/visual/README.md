@@ -94,6 +94,8 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 - **렌더 결정성**: 브라우저는 `--disable-partial-raster`로 띄운다. Chromium이 바뀐 영역만 다시 래스터하면 그리는 이력에 따라 글자·둥근 모서리의 안티앨리어싱이 채널 2~40만큼 달라져, 같은 커밋 두 번 촬영이 브라우저 컨텍스트마다 약 5~15% 어긋났다(2026-10-30 기사 화면 실측). 끄면 20번 중 20번 같았다.
 - `next dev`는 힙 사용량이 상한(시스템 메모리의 50%)의 80%를 넘으면 스스로 재시작한다("Server is approaching the used memory threshold, restarting..."). 한 서버로 여러 번 연달아 찍다가 재시작하면, 그 사이 찍힌 화면은 연결 오류나 덜 그려진 상태(로딩)가 된다. `start.mjs`가 재시작 횟수를 `dev-restarts.txt`에 적고 `shots.mjs`가 재시작이 걸친 화면과 그 바로 다음 화면을 정상 판정에서 뺀다("next dev 메모리 재시작 중·직후 촬영"). 그 화면만 `--only`로 다시 찍는다. 세 앱 서버와 에뮬레이터를 한 컨테이너에서 같이 띄우면 더 자주 일어난다. 그래서 `start.mjs seller`는 다른 앱 하네스가 떠 있으면 시작하지 않는다(`--allow-concurrent`로 무시). 판매자가 떠 있을 때 다른 앱을 띄우면 경고만 한다.
 - 캡처는 `%TEMP%\greenhub-visual\<app>\shots\<label>\`에 PNG와 `manifest.json`으로 남는다.
+  - `manifest.json`은 화면마다 원자적으로(임시 파일 → 이름 바꾸기) 저장한다. 촬영이 끊기면 그때까지의 기록이 `complete: false`로 남고, `diff.mjs`·`parity.mjs`는 끝나지 않은 묶음을 비교하지 않는다(일부만 같다고 통과시키지 않는다).
+  - 끊긴 촬영은 서버를 같은 `--now`로 띄운 뒤 `shots.mjs <app> --label <같은 label> --resume`으로 이어 찍는다. 기록이 있는 화면은 건너뛴다. `--resume --only <id,...>`는 고른 화면만 같은 묶음 안에서 다시 찍는다(next dev 재시작이 걸친 화면 등). 기준 시각·화면 폭·`--set`이 다르면 이어 찍지 않는다.
   - `manifest.json`에는 화면별 최종 주소, 콘솔 오류, fixture가 없는 API 경로가 함께 기록된다.
 - 작업 전 화면은 main worktree에서 같은 명령을 `--label before`로 찍는다.
 - Claude가 `<폴더>`를 claude.ai 아티팩트로 게시한다(`db` 기능 사용).
