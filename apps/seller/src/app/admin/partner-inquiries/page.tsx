@@ -1,7 +1,6 @@
 'use client';
 
 import type { PartnerInquiryContactedRequest, PartnerInquiryItem } from '@greenhub/shared';
-import { Stack, Text, Title } from '@mantine/core';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -87,13 +86,14 @@ export default function AdminPartnerInquiriesPage() {
     setDeleteTarget(null);
   };
 
+  // ① 외형 유지(UI 교체 P2b): Mantine Stack(gap sm)·Title order 3(22px·800·줄 높이 1.4)·Text sm.
   return (
-    <Stack gap="sm">
-      <Title order={3}>입점 문의</Title>
-      <Text size="sm" c="var(--color-text-secondary)">
+    <div className="flex flex-col gap-3">
+      <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">입점 문의</h3>
+      <p className="m-0 p-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
         받은 날부터 1년 동안만 보관해요. 연락처는 입점 상담에만 써 주세요. 문의한 분이 지워 달라고
         하면 바로 삭제해 주세요.
-      </Text>
+      </p>
       {loadFailed ? (
         <AdminFetchError
           title="입점 문의를 불러오지 못했습니다."
@@ -131,6 +131,6 @@ export default function AdminPartnerInquiriesPage() {
           if (busyId === null) setDeleteTarget(null);
         }}
       />
-    </Stack>
+    </div>
   );
 }

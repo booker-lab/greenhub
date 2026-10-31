@@ -2,23 +2,18 @@
 
 import type { RedeliveryPaymentActionability } from '@greenhub/shared';
 import { apiPathSegment, readRouteParam } from '@greenhub/shared';
-import {
-  Anchor,
-  Badge,
-  Box,
-  Button,
-  Card,
-  Group,
-  Loader,
-  Stack,
-  Text,
-  UnstyledButton,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Card } from '@greenhub/ui/components/card';
+import { toast } from '@greenhub/ui/components/toast';
+import { cn } from '@greenhub/ui/lib/utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { AppButton } from '@/components/app-button';
+import { TOAST_WARNING } from '@/components/app-toaster';
+import { badgeLightVariant, badgeSize, card, text } from '@/components/look';
+import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
 import { isApiTimeoutError } from '@/lib/api-timeout';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
@@ -105,7 +100,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const orderId = readRouteParam(rawOrderId);
   if (!orderId) {
     return (
-      <Box
+      <div
         style={{
           minHeight: '100dvh',
           display: 'flex',
@@ -113,20 +108,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           justifyContent: 'center',
         }}
       >
-        <Stack align="center" gap="sm" px="md">
-          <Text style={{ color: 'var(--color-text-disabled)' }} ta="center">
+        <div className="flex flex-col items-center gap-3 px-4">
+          <p className={cn(text, 'text-center')} style={{ color: 'var(--color-text-disabled)' }}>
             주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해 주세요.
-          </Text>
-          <Anchor
-            component={Link}
+          </p>
+          <Link
             href="/board"
             replace
+            className={cn(text, 'cursor-pointer no-underline hover:underline')}
             style={{ color: 'var(--color-primary-dark)', fontSize: 'var(--font-size-sm)' }}
           >
             배송 목록으로
-          </Anchor>
-        </Stack>
-      </Box>
+          </Link>
+        </div>
+      </div>
     );
   }
   return <OrderDetail orderId={orderId} />;
@@ -336,23 +331,23 @@ function OrderDetail({ orderId }: { orderId: string }) {
       if (!isCommandCurrent()) return;
       const result = resolveDriverStatusCommandReadback({ requestedStatus: status, readback });
       if (result === 'APPLIED') {
-        notifications.show({ message: STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE });
+        toast.add({ description: STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE });
         if (isDriverTerminalCommandStatus(status)) router.replace('/board?tab=delivering');
         return;
       }
       if (result === 'LEFT_DRIVER_SCOPE') {
         // 완료 전이 요청 뒤 상세 404: 완료 ACK 경로와 같이 목록 조회로 수렴한다.
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE,
         });
         router.replace('/board?tab=delivering');
         return;
       }
       if (result === 'NOT_APPLIED') {
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE,
         });
       }
     };
@@ -402,9 +397,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
         // 403/409 + STATE_CONFLICT: 로그인 상실이 아니다. 같은 command를 자동
         // 재전송하지 않고 authoritative GET으로 수렴한다 (기존 409 race convergence 재사용).
         if (recovery === 'STATE_CONFLICT') {
-          notifications.show({
-            color: 'yellow',
-            message: '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.',
+          toast.add({
+            type: TOAST_WARNING,
+            description: '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.',
           });
           await readDetail(token);
           return;
@@ -424,9 +419,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
         // F/G: 403/409 STATE·AUTHORITY·NOT_FOUND 이외 4xx·5xx ACK-uncertain.
         // 같은 PATCH를 자동 재전송하지 않고 UNCERTAIN을 보존한 채 authoritative
         // GET으로 수렴한다. fresh GET 성공이 warning을 해소하기 전에는 fail-closed다.
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
         });
         setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
         settleUncertainReadback(await readDetail(token));
@@ -438,9 +433,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
         result = (await res.json()) as { orderId?: unknown; status?: unknown };
       } catch {
         if (!isCommandCurrent()) return;
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
         });
         setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
         settleUncertainReadback(await readDetail(token));
@@ -449,9 +444,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
       if (!isCommandCurrent()) return;
       // C: 2xx이지만 ACK orderId/status mismatch. 자동 resend 없이 GET 수렴한다.
       if (!isDriverOrderStatusAck(result, orderId, status)) {
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
         });
         setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
         settleUncertainReadback(await readDetail(token));
@@ -504,9 +499,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
       // 않고 UNCERTAIN을 보존한 채 authoritative GET으로 수렴한다. same-command 재시도 유도 copy 금지.
       // 시간 초과는 서버가 상태를 저장한 뒤 알림 발송을 기다리는 중일 수 있어 이미 처리됐을 수 있다.
       if (!isCommandCurrent()) return;
-      notifications.show({
-        color: 'yellow',
-        message: isApiTimeoutError(cause)
+      toast.add({
+        type: TOAST_WARNING,
+        description: isApiTimeoutError(cause)
           ? STATUS_TIMEOUT_CONVERGENCE_MESSAGE
           : STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
       });
@@ -526,7 +521,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
 
   if (readLoading) {
     return (
-      <Box
+      <div
         style={{
           minHeight: '100dvh',
           display: 'flex',
@@ -534,8 +529,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
           justifyContent: 'center',
         }}
       >
-        <Loader color="brand" />
-      </Box>
+        <Spinner />
+      </div>
     );
   }
 
@@ -547,7 +542,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
           ? '주문 정보를 불러오지 못했습니다'
           : '주문을 찾을 수 없습니다';
     return (
-      <Box
+      <div
         style={{
           minHeight: '100dvh',
           display: 'flex',
@@ -555,31 +550,23 @@ function OrderDetail({ orderId }: { orderId: string }) {
           justifyContent: 'center',
         }}
       >
-        <Stack align="center" gap="sm">
-          <Text style={{ color: 'var(--color-text-disabled)' }}>{message}</Text>
+        <div className="flex flex-col items-center gap-3">
+          <p className={text} style={{ color: 'var(--color-text-disabled)' }}>
+            {message}
+          </p>
           {readError?.kind === 'FETCH_ERROR' && (
-            <Button
-              variant="outline"
-              color="brand"
-              radius="xl"
-              onClick={() => setReadKey((key) => key + 1)}
-            >
+            <AppButton tone="brand-outline" onClick={() => setReadKey((key) => key + 1)}>
               다시 시도
-            </Button>
+            </AppButton>
           )}
           {readError?.kind === 'AUTH_ERROR' && (
             // 같은 토큰으로 재조회해도 401/403이 반복되므로 세션을 정리하고 로그인으로 보낸다.
-            <Button
-              variant="outline"
-              color="brand"
-              radius="xl"
-              onClick={() => void signOut({ redirectTo: '/login' })}
-            >
+            <AppButton tone="brand-outline" onClick={() => void signOut({ redirectTo: '/login' })}>
               다시 로그인
-            </Button>
+            </AppButton>
           )}
-        </Stack>
-      </Box>
+        </div>
+      </div>
     );
   }
 
@@ -617,10 +604,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
     : '시간 미정';
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
       {/* 헤더 */}
-      <Box
-        component="header"
+      <header
         style={{
           position: 'sticky',
           top: 0,
@@ -633,8 +619,10 @@ function OrderDetail({ orderId }: { orderId: string }) {
           gap: 12,
         }}
       >
-        <UnstyledButton
+        <button
+          type="button"
           onClick={() => router.back()}
+          className="cursor-pointer appearance-none border-0 bg-transparent text-start text-base no-underline"
           style={{ color: 'var(--color-text-secondary)', padding: 4 }}
           aria-label="뒤로가기"
         >
@@ -654,13 +642,14 @@ function OrderDetail({ orderId }: { orderId: string }) {
               d="M15 19l-7-7 7-7"
             />
           </svg>
-        </UnstyledButton>
-        <Group gap="xs">
-          <Badge color="brand" variant="light" size="sm">
+        </button>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <Badge variant="light" className={badgeSize.sm}>
             {METHOD_LABEL[order.deliveryMethod] ?? order.deliveryMethod}
           </Badge>
           {isDelivering && (
-            <Text
+            <p
+              className={text}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
@@ -668,10 +657,11 @@ function OrderDetail({ orderId }: { orderId: string }) {
               }}
             >
               배송 중
-            </Text>
+            </p>
           )}
           {isHeld && (
-            <Text
+            <p
+              className={text}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
@@ -679,74 +669,71 @@ function OrderDetail({ orderId }: { orderId: string }) {
               }}
             >
               배송 보류
-            </Text>
+            </p>
           )}
-        </Group>
-      </Box>
+        </div>
+      </header>
 
       {/* 본문 */}
-      <Box component="main" style={{ flex: 1, padding: '24px 16px' }}>
-        <Stack gap="md">
+      <main style={{ flex: 1, padding: '24px 16px' }}>
+        <div className="flex flex-col gap-4">
           {readRefreshing && (
-            <Text
+            <p
+              className={text}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               최신 정보를 확인하는 중입니다…
-            </Text>
+            </p>
           )}
           {readError && (
-            <Card radius="xl" withBorder p="md">
-              <Stack gap="xs">
-                <Text
+            <Card className={card}>
+              <div className="flex flex-col gap-2.5">
+                <p
+                  className={text}
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     color: 'var(--color-danger)',
                   }}
                 >
                   {readError.message} (이전 정보 표시 중)
-                </Text>
+                </p>
                 {readError.kind === 'FETCH_ERROR' && (
-                  <Button
-                    variant="outline"
-                    color="brand"
-                    radius="xl"
-                    onClick={() => setReadKey((key) => key + 1)}
-                  >
+                  <AppButton tone="brand-outline" onClick={() => setReadKey((key) => key + 1)}>
                     다시 확인
-                  </Button>
+                  </AppButton>
                 )}
-              </Stack>
+              </div>
             </Card>
           )}
           {readbackWarning && (
-            <Card radius="xl" withBorder p="md">
-              <Stack gap="xs">
-                <Text
+            <Card className={card}>
+              <div className="flex flex-col gap-2.5">
+                <p
+                  className={text}
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     color: 'var(--color-danger)',
                   }}
                 >
                   {readbackWarning}
-                </Text>
-                <Button
-                  variant="outline"
-                  color="brand"
-                  radius="xl"
+                </p>
+                <AppButton
+                  tone="brand-outline"
                   onClick={() => {
                     const token = session?.user.accessToken;
                     if (token) void readDetail(token);
                   }}
                 >
                   상태 다시 확인
-                </Button>
-              </Stack>
+                </AppButton>
+              </div>
             </Card>
           )}
           {/* 주문 정보 */}
-          <Card radius="xl" withBorder p="md">
-            <Stack gap="sm">
-              <Text
+          <Card className={card}>
+            <div className="flex flex-col gap-3">
+              <p
+                className={text}
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: 'var(--fw-bold)',
@@ -754,7 +741,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 }}
               >
                 주문 정보
-              </Text>
+              </p>
               {itemLines ? (
                 <InfoLinesRow label="상품" lines={itemLines} />
               ) : (
@@ -773,27 +760,28 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 />
               )}
               {mapLink && (
-                <Button
-                  component="a"
+                <AppButton
                   href={mapLink.href}
                   target="_blank"
                   rel="noopener noreferrer"
-                  variant="light"
+                  tone="brand-light"
                   size="sm"
                   fullWidth
                 >
                   카카오맵에서 {mapLink.kind === 'route' ? '길찾기' : '주소 보기'}
-                </Button>
+                </AppButton>
               )}
               {isPreparing && <InfoRow label="소비자" value={order.buyerName ?? '-'} />}
               {order.requestNote?.trim() && (
-                <Stack gap={2}>
-                  <Text
+                <div className="flex flex-col gap-0.5">
+                  <p
+                    className={text}
                     style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
                   >
                     요청사항
-                  </Text>
-                  <Text
+                  </p>
+                  <p
+                    className={text}
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       fontWeight: 'var(--fw-medium)',
@@ -802,16 +790,17 @@ function OrderDetail({ orderId }: { orderId: string }) {
                     }}
                   >
                     {order.requestNote.trim()}
-                  </Text>
-                </Stack>
+                  </p>
+                </div>
               )}
-            </Stack>
+            </div>
           </Card>
 
           {/* 연락처 */}
-          <Card radius="xl" withBorder p="md">
-            <Stack gap="sm">
-              <Text
+          <Card className={card}>
+            <div className="flex flex-col gap-3">
+              <p
+                className={text}
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: 'var(--fw-bold)',
@@ -819,7 +808,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 }}
               >
                 연락처
-              </Text>
+              </p>
               {isPreparing && order.sellerPhone && (
                 <ContactRow label="판매자" phone={order.sellerPhone} />
               )}
@@ -829,33 +818,36 @@ function OrderDetail({ orderId }: { orderId: string }) {
               {isDelivering && isHub && order.sellerPhone && (
                 <ContactRow label="판매자" phone={order.sellerPhone} />
               )}
-            </Stack>
+            </div>
           </Card>
 
           {isHeld && order.deliveryHold && <DeliveryHoldCard hold={order.deliveryHold} />}
 
           {paymentPresentation && (
-            <Card radius="xl" withBorder p="md">
-              <Stack gap="xs">
-                <Group justify="space-between" align="center">
-                  <Text style={{ fontWeight: 'var(--fw-bold)' }}>재배송비 결제</Text>
-                  <Badge color={paymentPresentation.color} variant="light">
+            <Card className={card}>
+              <div className="flex flex-col gap-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <p className={text} style={{ fontWeight: 'var(--fw-bold)' }}>
+                    재배송비 결제
+                  </p>
+                  <Badge variant={badgeLightVariant[paymentPresentation.color]}>
                     {paymentPresentation.label}
                   </Badge>
-                </Group>
-                <Text
+                </div>
+                <p
+                  className={text}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   {paymentPresentation.description}
-                </Text>
-              </Stack>
+                </p>
+              </div>
             </Card>
           )}
-        </Stack>
-      </Box>
+        </div>
+      </main>
 
       {/* 하단 CTA */}
-      <Box
+      <div
         style={{
           position: 'sticky',
           bottom: 'calc(72px + env(safe-area-inset-bottom))',
@@ -865,48 +857,42 @@ function OrderDetail({ orderId }: { orderId: string }) {
         {isHeld &&
           isRoundDirect &&
           (deliveryStartAllowed ? (
-            <Button
+            <AppButton
               fullWidth
               size="lg"
-              radius="xl"
-              color="brand"
               loading={loading}
               disabled={loading || !commandsAllowed}
               onClick={() => updateStatus('DELIVERING')}
             >
               배송 재개
-            </Button>
+            </AppButton>
           ) : (
-            <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+            <AppButton fullWidth size="lg" tone="gray" disabled>
               {paymentPresentation?.label ?? '배송 재개 불가'}
-            </Button>
+            </AppButton>
           ))}
         {(isPreparing || isDelivering) && isRoundDirect && (
-          <Stack gap="xs">
+          <div className="flex flex-col gap-2.5">
             {isPreparing &&
               (deliveryStartAllowed ? (
-                <Button
-                  fullWidth
-                  size="lg"
-                  radius="xl"
-                  color="brand"
+                <AppButton
+              fullWidth
+              size="lg"
                   loading={loading}
                   disabled={loading || !commandsAllowed}
                   onClick={() => updateStatus('DELIVERING')}
                 >
                   수거 완료 / 배송 시작
-                </Button>
+                </AppButton>
               ) : (
-                <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+                <AppButton fullWidth size="lg" tone="gray" disabled>
                   {paymentPresentation?.label ?? '배송 시작 불가'}
-                </Button>
+                </AppButton>
               ))}
             {isDelivering && (
-              <Button
-                fullWidth
-                size="lg"
-                radius="xl"
-                color="brand"
+              <AppButton
+              fullWidth
+              size="lg"
                 loading={loading}
                 disabled={!commandsAllowed}
                 onClick={() =>
@@ -914,69 +900,61 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 }
               >
                 배송 완료 사진 촬영
-              </Button>
+              </AppButton>
             )}
             {holdEntryVisible && (
-              <Button
+              <AppButton
                 fullWidth
                 size="lg"
-                radius="xl"
-                color="red"
-                variant="outline"
+                tone="red-outline"
                 disabled={loading || !commandsAllowed}
                 onClick={() => setHoldOpened(true)}
               >
                 배송 보류
-              </Button>
+              </AppButton>
             )}
-          </Stack>
+          </div>
         )}
         {isPreparing &&
           !isRoundDirect &&
           (deliveryStartAllowed ? (
-            <Button
+            <AppButton
               fullWidth
               size="lg"
-              radius="xl"
-              color="brand"
               loading={loading}
               disabled={loading || !commandsAllowed}
               onClick={() => updateStatus('DELIVERING')}
             >
               수거 완료 / 배송 시작
-            </Button>
+            </AppButton>
           ) : (
-            <Button fullWidth size="lg" radius="xl" color="gray" disabled>
+            <AppButton fullWidth size="lg" tone="gray" disabled>
               {paymentPresentation?.label ?? '배송 시작 불가'}
-            </Button>
+            </AppButton>
           ))}
         {isDelivering && !isHub && !isRoundDirect && (
-          <Button
-            fullWidth
-            size="lg"
-            radius="xl"
-            color="brand"
+          <AppButton
+              fullWidth
+              size="lg"
             loading={loading}
             disabled={loading || !commandsAllowed}
             onClick={() => updateStatus('DELIVERED')}
           >
             배송 완료
-          </Button>
+          </AppButton>
         )}
         {isDelivering && isHub && (
-          <Button
-            fullWidth
-            size="lg"
-            radius="xl"
-            color="brand"
+          <AppButton
+              fullWidth
+              size="lg"
             loading={loading}
             disabled={!commandsAllowed}
             onClick={() => router.push(`/board/${encodeURIComponent(orderId)}/photo`)}
           >
             거점 도착
-          </Button>
+          </AppButton>
         )}
-      </Box>
+      </div>
 
       {isRoundDirect && (
         <DeliveryHoldModal
@@ -1030,7 +1008,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
           }}
         />
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -1040,9 +1018,10 @@ function DeliveryHoldCard({ hold }: { hold: DeliveryHold }) {
       ? `${hold.redeliveryFee.toLocaleString('ko-KR')}원`
       : '없음';
   return (
-    <Card radius="xl" withBorder p="md">
-      <Stack gap="sm">
-        <Text
+    <Card className={card}>
+      <div className="flex flex-col gap-3">
+        <p
+          className={text}
           style={{
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-bold)',
@@ -1050,7 +1029,7 @@ function DeliveryHoldCard({ hold }: { hold: DeliveryHold }) {
           }}
         >
           배송 보류
-        </Text>
+        </p>
         <InfoRow label="보류 유형" value={HOLD_REASON_LABEL[hold.reasonCode]} />
         <InfoRow label="보류 사유" value={hold.reasonMessage} />
         <InfoRow label="책임" value={hold.customerResponsible ? '고객 책임' : '판매자 책임'} />
@@ -1061,7 +1040,7 @@ function DeliveryHoldCard({ hold }: { hold: DeliveryHold }) {
         {hold.nextDeliveryAt && (
           <InfoRow label="새 배송 예정" value={formatSchedule(hold.nextDeliveryAt)} />
         )}
-      </Stack>
+      </div>
     </Card>
   );
 }
@@ -1080,57 +1059,57 @@ function formatSchedule(value: string) {
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <Group justify="space-between" align="flex-start">
-      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <p className={text} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
         {label}
-      </Text>{' '}
-      <Text
+      </p>{' '}
+      <p
+        className={cn(text, 'text-right')}
         style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', maxWidth: '60%' }}
-        ta="right"
       >
         {value}
-      </Text>
-    </Group>
+      </p>
+    </div>
   );
 }
 
 // 여러 줄 값(상품별 줄 등)을 InfoRow와 같은 모양으로 한 줄씩 보인다.
 function InfoLinesRow({ label, lines }: { label: string; lines: string[] }) {
   return (
-    <Group justify="space-between" align="flex-start">
-      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <p className={text} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
         {label}
-      </Text>{' '}
-      <Stack gap={2} style={{ maxWidth: '60%' }}>
+      </p>{' '}
+      <div className="flex flex-col gap-0.5" style={{ maxWidth: '60%' }}>
         {lines.map((line, index) => (
-          <Text
+          <p
             // biome-ignore lint/suspicious/noArrayIndexKey: 줄은 받은 순서 그대로 고정 — reorder 없음
             key={index}
+            className={cn(text, 'text-right')}
             style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
-            ta="right"
           >
             {line}
-          </Text>
+          </p>
         ))}
-      </Stack>
-    </Group>
+      </div>
+    </div>
   );
 }
 
 function ContactRow({ label, phone }: { label: string; phone: string }) {
   return (
-    <Group justify="space-between" align="center">
-      <Stack gap={2}>
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col gap-0.5">
+        <p className={text} style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
           {label}
-        </Text>
-        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>
+        </p>
+        <p className={text} style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>
           {phone}
-        </Text>
-      </Stack>
-      <Anchor
-        component="a"
+        </p>
+      </div>
+      <a
         href={`tel:${phone}`}
+        className={cn(text, 'cursor-pointer')}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -1161,7 +1140,7 @@ function ContactRow({ label, phone }: { label: string; phone: string }) {
           />
         </svg>
         {label}에게 전화
-      </Anchor>
-    </Group>
+      </a>
+    </div>
   );
 }

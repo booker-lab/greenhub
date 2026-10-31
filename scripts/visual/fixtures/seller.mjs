@@ -89,11 +89,86 @@ const SELLER_ORDERS = [
     packageLabel: '김그린',
   }),
   roundOrder('order-round-preparing', '20261001-000003', 'PREPARING', [['빅립', 30000, 2]]),
-  roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]]),
+  // 배송 보류 주문(주문 상세 보류 운영·재배송비 결제 패널, UI 교체 P4).
+  roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]], {
+    deliveryHold: {
+      heldAt: '2026-10-05T23:30:00.000Z',
+      reasonCode: 'CUSTOMER_UNREACHABLE',
+      reasonMessage: '받는 분 연락이 닿지 않아 문 앞에 둘 수 없음',
+      customerResponsible: true,
+      redeliveryFee: 5000,
+      nextContactAt: '2026-10-06T01:00:00.000Z',
+      nextDeliveryAt: '2026-10-07T00:00:00.000Z',
+      resolvedAt: null,
+    },
+    redeliveryPayment: {
+      required: true,
+      holdAt: '2026-10-05T23:30:00.000Z',
+      chargeId: 'charge-visual-0001',
+      status: 'PENDING',
+      canPay: true,
+      paid: false,
+      requiresRecovery: false,
+    },
+  }),
   roundOrder('order-round-pending', '20261001-000005', 'PENDING', [
     ['빅립', 30000, 1],
     ['만천홍', 25000, 1],
   ]),
+  // 주문 목록 탭별 카드(UI 교체 P4): 배송 중·거점 도착(픽업 코드)·공동구매 모집 중(예전 방식 가게에서만 보인다).
+  sellerOrder('order-delivering', '20260928-000103', {
+    status: 'DELIVERING',
+    buyerName: '박배송',
+    deliveryPhone: '010-3456-7890',
+  }),
+  sellerOrder('order-hub-arrived', '20260928-000104', {
+    status: 'HUB_ARRIVED',
+    deliveryMethod: 'hub',
+    hubId: 'hub-0001',
+    pickupCode: '482915',
+    buyerName: '최픽업',
+    deliveryPhone: '010-4567-8901',
+  }),
+  // 오늘 배송 주문(준비 물량 "오늘 준비 물량" 칸, UI 교체 P4). 기준 시각(한국 0시)의 날짜다.
+  sellerOrder('order-today', '20260928-000106', {
+    buyerName: '한오늘',
+    deliveryPhone: '010-6789-0123',
+    requestedDeliveryDate: new Date(Date.parse(hoursFromNow(12)) + 9 * 3600_000)
+      .toISOString()
+      .slice(0, 10),
+  }),
+  sellerOrder('order-recruiting', '20260928-000105', {
+    status: 'RECRUITING',
+    saleType: 'group',
+    productId: 'product-1',
+    buyerName: '정공구',
+    deliveryPhone: '010-5678-9012',
+  }),
+];
+
+// 끝난 주문(완료·취소 탭, scope=archive): 첫 쪽 뒤에 다음 쪽이 있다. 다음 쪽은 늦게 답해 "불러오는 중"을 찍는다.
+const ARCHIVED_ORDERS = [
+  sellerOrder('order-delivered', '20260920-000201', {
+    status: 'DELIVERED',
+    buyerName: '김완료',
+    createdAt: '2026-09-20T01:00:00.000Z',
+    updatedAt: '2026-09-22T01:00:00.000Z',
+  }),
+  sellerOrder('order-cancelled', '20260921-000202', {
+    status: 'CANCELLED',
+    buyerName: '이취소',
+    cancelReason: '손님 요청',
+    createdAt: '2026-09-21T01:00:00.000Z',
+    updatedAt: '2026-09-21T05:00:00.000Z',
+  }),
+];
+const ARCHIVED_ORDERS_MORE = [
+  sellerOrder('order-delivered-old', '20260910-000203', {
+    status: 'REVIEWED',
+    buyerName: '오구매',
+    createdAt: '2026-09-10T01:00:00.000Z',
+    updatedAt: '2026-09-12T01:00:00.000Z',
+  }),
 ];
 
 function roundOrder(id, orderNumber, status, items, extra = {}) {
@@ -145,6 +220,46 @@ const SELLER_SETTLEMENTS = [
     status: 'paid',
     settledAt: '2026-09-27T15:00:00.000Z',
   },
+  // UI 교체 P4: 상태별 배지 색(대기·확정·취소)과 "더 보기"를 찍는다.
+  {
+    id: 'settle-0002',
+    orderId: 'order-settle-0002-abcdef',
+    totalAmount: 25000,
+    platformFee: 2500,
+    netAmount: 22500,
+    status: 'confirmed',
+    settledAt: '2026-09-26T15:00:00.000Z',
+  },
+  {
+    id: 'settle-0003',
+    orderId: 'order-settle-0003-abcdef',
+    totalAmount: 18000,
+    platformFee: 1800,
+    netAmount: 16200,
+    status: 'pending',
+    settledAt: '2026-09-25T15:00:00.000Z',
+  },
+  {
+    id: 'settle-0004',
+    orderId: 'order-settle-0004-abcdef',
+    totalAmount: 12000,
+    platformFee: 1200,
+    netAmount: 10800,
+    status: 'cancelled',
+    settledAt: '2026-09-24T15:00:00.000Z',
+  },
+];
+// 정산 "더 보기" 다음 쪽. 불러오는 중 모양을 찍도록 늦게 답한다.
+const SELLER_SETTLEMENTS_MORE = [
+  {
+    id: 'settle-0005',
+    orderId: 'order-settle-0005-abcdef',
+    totalAmount: 15000,
+    platformFee: 1500,
+    netAmount: 13500,
+    status: 'paid',
+    settledAt: '2026-09-23T15:00:00.000Z',
+  },
 ];
 
 // ── 어드민 주문: 회차(R-)·일반(L-) 주문을 상태별로 한 건씩 ──
@@ -166,6 +281,7 @@ const ADMIN_ORDERS = [
   adminOrder('R-HELD', 'DELIVERY_HELD', true),
   adminOrder('R-ACCEPTED', 'ACCEPTED', true),
   adminOrder('R-DELIVERING', 'DELIVERING', true),
+  adminOrder('R-DELIVERED', 'DELIVERED', true),
   adminOrder('R-CANCELLED', 'CANCELLED', true),
   adminOrder('L-RECRUITING', 'RECRUITING', false),
   adminOrder('L-ACCEPTED', 'ACCEPTED', false),
@@ -174,6 +290,16 @@ const ADMIN_ORDERS = [
   adminOrder('L-DELIVERING', 'DELIVERING', false),
   adminOrder('L-DELIVERED', 'DELIVERED', false),
   adminOrder('L-CANCELLED', 'CANCELLED', false),
+  // 배송 완료 회차 주문(배송 후 환불 버튼)·고객·상품·가게 이름·요청사항, 환불 진행 중·실패 배지.
+  {
+    ...adminOrder('R-DELIVERED-NOTE', 'DELIVERED', true),
+    buyerName: '김그린',
+    productSummary: '동양란 만천홍 외 1개',
+    storeName: '디어 오키드',
+    requestNote: '리본 문구: 개업을 축하합니다\n보내는 분: 그린상사 임직원 일동\n오전 중 배송 부탁드립니다\n문 앞에 두세요',
+  },
+  { ...adminOrder('R-REFUNDING', 'CANCELLED', true), cancellationStatus: 'REFUNDING' },
+  { ...adminOrder('R-REFUND-FAILED', 'CANCELLED', true), cancellationStatus: 'REFUND_FAILED' },
 ];
 
 const ADMIN_SETTLEMENTS = [
@@ -188,6 +314,73 @@ const ADMIN_SETTLEMENTS = [
     settledAt: '2026-09-27T15:00:00.000Z',
     confirmedAt: '2026-09-27T15:00:00.000Z',
     paidAt: null,
+  },
+  // 상태별 배지·회수 필요(빨강 채움)·지급 보류(주황)·가게 이름·주문번호.
+  {
+    id: 'admin-settle-0002',
+    storeId: STORE_ID,
+    storeName: '디어 오키드',
+    orderId: 'order-settle-0002-abcdef',
+    orderNumber: 'R-SETTLE-PENDING',
+    totalAmount: 52000,
+    platformFee: 5200,
+    netAmount: 46800,
+    status: 'pending',
+    settledAt: '2026-09-28T15:00:00.000Z',
+  },
+  {
+    id: 'admin-settle-0003',
+    storeId: 'store-pending-0002',
+    storeName: '새싹 농원',
+    orderId: 'order-settle-0003-abcdef',
+    orderNumber: 'R-SETTLE-HOLD',
+    totalAmount: 41000,
+    platformFee: 4100,
+    netAmount: 36900,
+    status: 'confirmed',
+    holdReason: 'PROVIDER_REVERSAL',
+    settledAt: '2026-09-26T15:00:00.000Z',
+    confirmedAt: '2026-09-26T15:00:00.000Z',
+  },
+  {
+    id: 'admin-settle-0004',
+    storeId: STORE_ID,
+    storeName: '디어 오키드',
+    orderId: 'order-settle-0004-abcdef',
+    orderNumber: 'R-SETTLE-RECOVERY',
+    totalAmount: 28000,
+    platformFee: 2800,
+    netAmount: 25200,
+    status: 'paid',
+    recoveryRequired: true,
+    recoveryAmount: 25200,
+    settledAt: '2026-09-20T15:00:00.000Z',
+    paidAt: '2026-09-22T01:00:00.000Z',
+  },
+  {
+    id: 'admin-settle-0005',
+    storeId: STORE_ID,
+    orderId: 'order-settle-0005-abcdef',
+    totalAmount: 19000,
+    platformFee: 1900,
+    netAmount: 17100,
+    status: 'cancelled',
+    settledAt: '2026-09-18T15:00:00.000Z',
+  },
+];
+// 정산 "더 보기" 다음 쪽. 불러오는 중 모양을 찍도록 늦게 답한다.
+const ADMIN_SETTLEMENTS_MORE = [
+  {
+    id: 'admin-settle-0006',
+    storeId: STORE_ID,
+    storeName: '디어 오키드',
+    orderId: 'order-settle-0006-abcdef',
+    totalAmount: 15000,
+    platformFee: 1500,
+    netAmount: 13500,
+    status: 'paid',
+    settledAt: '2026-09-10T15:00:00.000Z',
+    paidAt: '2026-09-12T01:00:00.000Z',
   },
 ];
 
@@ -228,10 +421,22 @@ const ADMIN_INVITES = [
     expiresAt: '2026-01-01T00:00:00.000Z',
     createdAt: '2025-12-25T00:00:00.000Z',
   },
+  // 취소된 초대(취소됨 배지)와 받는 사람을 지정한 초대(UI 교체 P2b).
+  {
+    token: 'REVOKED4',
+    createdBy: user.id,
+    usedAt: null,
+    usedBy: null,
+    revokedAt: '2026-09-15T00:00:00.000Z',
+    revokedBy: user.id,
+    recipientEmail: 'new.seller@example.test',
+    expiresAt: '2026-12-31T00:00:00.000Z',
+    createdAt: '2026-09-14T00:00:00.000Z',
+  },
 ];
 
 // ── 회차: 예정·진행·마감·임시저장 한 건씩. 일정은 파일럿 첫 회차(목 10:00 오픈 → 일 24:00 마감) 형태 ──
-function saleRound(id, name, status, schedule, counters = {}) {
+function saleRound(id, name, status, schedule, counters = {}, overrides = {}) {
   return {
     id,
     storeId: STORE_ID,
@@ -261,6 +466,7 @@ function saleRound(id, name, status, schedule, counters = {}) {
     completedAt: null,
     createdAt: '2026-09-28T15:00:00.000Z',
     updatedAt: '2026-09-28T15:00:00.000Z',
+    ...overrides,
   };
 }
 const SALE_ROUNDS = [
@@ -311,6 +517,66 @@ const SALE_ROUNDS = [
     deliveryStartAt: hoursFromNow(264),
     deliveryEndAt: hoursFromNow(273),
   }),
+  // 회차 상태 분기(배송 완료·취소·취소 멈춤)도 목록·상세에서 보이게 한 건씩 둔다(UI 교체 P4).
+  saleRound(
+    'round-completed',
+    '9월 22일 배송 회차',
+    'COMPLETED',
+    {
+      orderOpenAt: '2026-09-17T01:00:00.000Z',
+      orderCloseAt: '2026-09-20T15:00:00.000Z',
+      auctionAt: '2026-09-20T22:00:00.000Z',
+      deliveryStartAt: '2026-09-21T15:00:00.000Z',
+      deliveryEndAt: '2026-09-22T00:00:00.000Z',
+    },
+    { orderedDeliveryAddresses: 12, orderedItemQuantity: 20 },
+    { closeReason: 'CAPACITY', completedAt: '2026-09-22T09:00:00.000Z' },
+  ),
+  saleRound(
+    'round-cancelled',
+    '9월 15일 배송 회차',
+    'CANCELLED',
+    {
+      orderOpenAt: '2026-09-10T01:00:00.000Z',
+      orderCloseAt: '2026-09-13T15:00:00.000Z',
+      auctionAt: '2026-09-13T22:00:00.000Z',
+      deliveryStartAt: '2026-09-14T15:00:00.000Z',
+      deliveryEndAt: '2026-09-15T00:00:00.000Z',
+    },
+    {},
+    {
+      cancellation: {
+        status: 'COMPLETED',
+        reason: '경매 일정 취소',
+        failedOrderId: null,
+        updatedAt: '2026-09-12T03:00:00.000Z',
+        completedAt: '2026-09-12T03:00:00.000Z',
+      },
+      cancelledAt: '2026-09-12T03:00:00.000Z',
+    },
+  ),
+  saleRound(
+    'round-cancel-stuck',
+    '11월 17일 배송 회차',
+    'SCHEDULED',
+    {
+      orderOpenAt: hoursFromNow(322),
+      orderCloseAt: hoursFromNow(408),
+      auctionAt: hoursFromNow(415),
+      deliveryStartAt: hoursFromNow(432),
+      deliveryEndAt: hoursFromNow(441),
+    },
+    {},
+    {
+      cancellation: {
+        status: 'LOCAL_FAILED',
+        reason: '경매 일정 취소',
+        failedOrderId: null,
+        updatedAt: '2026-10-29T03:00:00.000Z',
+        completedAt: null,
+      },
+    },
+  ),
 ];
 // 상품별 수량은 회차 counters 합계와 맞춘다(판매 중 11개·결제 중 2개, 마감 27개).
 const ROUND_ITEM_QUANTITIES = {
@@ -378,14 +644,50 @@ const OPERATION_ISSUES = [
     'order-no-contact',
     '2026-10-06T02:30:00.000Z',
   ),
-  operationIssue(
-    'issue-visual-0003',
-    'AUTO_REFUND_FAILED',
-    'warning',
-    'RESOLVED',
-    'order-with-contact',
-    '2026-10-05T09:00:00.000Z',
-  ),
+  // 보류 주문의 자동 환불 실패(환불 재시도 버튼)와 조치 기록(UI 교체 P4).
+  {
+    ...operationIssue(
+      'issue-visual-0004',
+      'AUTO_REFUND_FAILED',
+      'critical',
+      'OPEN',
+      'order-round-held',
+      '2026-10-06T03:00:00.000Z',
+    ),
+    actions: [
+      {
+        actorId: 'admin-visual-0001',
+        actionType: 'RETRY_REFUND',
+        performedAt: '2026-10-06T02:40:00.000Z',
+        status: 'FAILED',
+        failureReason: '결제사 응답 지연',
+      },
+      {
+        actorId: 'admin-visual-0001',
+        actionType: 'RESEND_SMS',
+        performedAt: '2026-10-06T02:50:00.000Z',
+        status: 'SUCCEEDED',
+      },
+    ],
+  },
+  // 사람이 메모와 함께 닫은 기록(운영 확인 전체 탭의 해결 경위, UI 교체 P4).
+  {
+    ...operationIssue(
+      'issue-visual-0003',
+      'AUTO_REFUND_FAILED',
+      'warning',
+      'RESOLVED',
+      'order-with-contact',
+      '2026-10-05T09:00:00.000Z',
+    ),
+    resolution: {
+      method: 'MANUAL',
+      actorId: 'admin-visual-0001',
+      actorRole: 'admin',
+      memo: '결제사 화면에서 환불 완료를 확인했어요',
+      resolvedAt: '2026-10-05T09:00:00.000Z',
+    },
+  },
 ];
 
 // ── 어드민 기사·배너 ──
@@ -692,6 +994,20 @@ const STORE_REVIEWS = [
   ['review-2', 'product-1', 5, '도자기 화분으로 골랐는데 선물하기 좋네요.', '정*호', '2026-09-23T05:00:00.000Z'],
   ['review-3', 'product-2', 4, '반쯤 핀 상태로 와서 일주일 뒤에 활짝 폈어요.', '최*은', '2026-09-16T08:00:00.000Z'],
 ].map(([id, productId, rating, text, authorName, createdAt]) => ({ id, productId, rating, text, authorName, createdAt }));
+// 판매자가 숨긴 후기(숨김 배지·사유, UI 교체 P4).
+STORE_REVIEWS.push({
+  id: 'review-4',
+  productId: 'product-1',
+  rating: 1,
+  text: '다른 가게 홍보 글입니다',
+  authorName: '광*고',
+  createdAt: '2026-09-10T02:00:00.000Z',
+  hidden: true,
+  hiddenReasonCode: 'spam',
+  hiddenNote: '다른 가게 홍보',
+  hiddenByRole: 'seller',
+  hiddenAt: '2026-09-11T03:00:00.000Z',
+});
 const benchmarkRoutes = [
   ['GET', /^\/stores\/[^/]+\/reviews$/, () => ({ body: STORE_REVIEWS })],
   [
@@ -728,14 +1044,76 @@ const benchmarkRoutes = [
           message: '호접란 2,000분 규모로 재배합니다. 주 1회 납품 가능합니다.',
           createdAt: '2026-10-02T05:00:00.000Z',
         },
+        // UI 교체 P2b: 연락 전·이메일 연락처 카드(배지·링크 모양).
+        {
+          id: 'inquiry-2',
+          farmName: '제주 동백정원',
+          region: '제주 서귀포',
+          contact: 'camellia@example.test',
+          message: '동백 분재를 소량 납품하고 싶습니다.\n사진은 메일로 보내 드릴게요.',
+          contactedAt: null,
+          createdAt: '2026-10-01T02:00:00.000Z',
+        },
       ],
+    }),
+  ],
+  // 숨긴 후기(/admin/reviews, 기능 플래그 reviews). 사진은 외부 주소라 넣지 않는다.
+  [
+    'GET',
+    /^\/admin\/reviews\/hidden$/,
+    () => ({
+      body: {
+        reviews: [
+          {
+            id: 'hidden-review-1',
+            productId: 'product-1',
+            storeId: 'store-visual-0001',
+            storeName: '디어 오키드',
+            productName: '호접란 화이트',
+            rating: 1,
+            text: '연락처 010-0000-0000으로 전화 주세요. 꽃이 금방 시들었어요.',
+            authorName: '김*린',
+            createdAt: '2026-10-03T01:00:00.000Z',
+            hidden: true,
+            hiddenReasonCode: 'privacy',
+            hiddenNote: '전화번호가 적혀 있음',
+            hiddenAt: '2026-10-03T05:00:00.000Z',
+            hiddenByRole: 'seller',
+          },
+          {
+            id: 'hidden-review-2',
+            productId: 'product-2',
+            storeId: 'store-visual-0001',
+            storeName: '디어 오키드',
+            productName: null,
+            rating: 2,
+            text: '광고 문구',
+            authorName: '이*수',
+            createdAt: '2026-10-02T01:00:00.000Z',
+            hidden: true,
+            hiddenAt: '2026-10-02T03:00:00.000Z',
+            hiddenByRole: 'admin',
+          },
+        ],
+        hasMore: true,
+        limit: 100,
+      },
     }),
   ],
 ];
 
 export const routes = [
   ...benchmarkRoutes,
-  ['GET', /^\/stores\/[^/]+\/orders$/, () => ({ body: SELLER_ORDERS })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/orders$/,
+    ({ url }) => {
+      if (url.searchParams.get('scope') !== 'archive') return { body: SELLER_ORDERS };
+      return url.searchParams.get('cursor')
+        ? { body: { orders: ARCHIVED_ORDERS_MORE, hasMore: false, nextCursor: null }, delay: 8000 }
+        : { body: { orders: ARCHIVED_ORDERS, hasMore: true, nextCursor: 'visual-archive-2' } };
+    },
+  ],
   // 홈의 끝난 주문 건수(완료·취소 탭). 주문 상세 경로보다 먼저 둔다(summary를 주문 id로 읽지 않게).
   [
     'GET',
@@ -746,32 +1124,73 @@ export const routes = [
     'GET',
     /^\/stores\/[^/]+\/orders\/([^/]+)$/,
     ({ params: [id] }) => {
-      const o = [...SELLER_ORDERS, ...DETAIL_ONLY_ORDERS].find((x) => x.id === id);
+      const o = [
+        ...SELLER_ORDERS,
+        ...DETAIL_ONLY_ORDERS,
+        ...ARCHIVED_ORDERS,
+        ...ARCHIVED_ORDERS_MORE,
+      ].find((x) => x.id === id);
       return o ? { body: o } : { status: 404, body: { message: '주문 없음' } };
     },
   ],
+  // 배송 후 환불 가능 여부(주문 상세, UI 교체 P4): 배송 완료는 기간 안, 구매 확정은 정산 지급 뒤라 막힘.
+  [
+    'GET',
+    /^\/stores\/[^/]+\/orders\/([^/]+)\/post-delivery-refund$/,
+    ({ params: [id] }) => ({
+      body:
+        id === 'order-delivered'
+          ? { eligible: true, reason: 'OK', deadline: '2026-11-05T14:59:00.000Z', amount: 33000 }
+          : { eligible: false, reason: 'SETTLEMENT_PAID', deadline: null, amount: 33000 },
+    }),
+  ],
   ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
+  // 조치(문자 재발송·환불 재시도) 뒤 앱이 기록 한 건을 다시 읽는다.
+  [
+    'GET',
+    /^\/stores\/[^/]+\/operation-issues\/([^/]+)$/,
+    ({ params: [id] }) => {
+      const issue = OPERATION_ISSUES.find((i) => i.id === id);
+      return issue ? { body: issue } : { status: 404, body: { message: '기록 없음' } };
+    },
+  ],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements\/summary$/,
     ({ url }) => ({
       body: {
         date: url.searchParams.get('date') ?? '2026-09-28',
-        count: 1,
-        totalAmount: 33000,
-        totalPlatformFee: 3300,
-        totalNetAmount: 29700,
-        byStatus: { pending: 0, confirmed: 0, paid: 1, cancelled: 0 },
+        count: 4,
+        totalAmount: 88000,
+        totalPlatformFee: 8800,
+        totalNetAmount: 79200,
+        byStatus: { pending: 1, confirmed: 1, paid: 1, cancelled: 1 },
       },
     }),
   ],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements$/,
-    ({ url }) => ({ body: { settlements: byStatus(SELLER_SETTLEMENTS, url) } }),
+    ({ url }) =>
+      url.searchParams.get('cursor')
+        ? { body: { settlements: byStatus(SELLER_SETTLEMENTS_MORE, url), hasMore: false }, delay: 8000 }
+        : {
+            body: {
+              settlements: byStatus(SELLER_SETTLEMENTS, url),
+              hasMore: true,
+              nextCursor: 'visual-more',
+            },
+          },
   ],
   ['GET', /^\/admin\/orders$/, ({ url }) => ({ body: { orders: byStatus(ADMIN_ORDERS, url) } })],
-  ['GET', /^\/admin\/settlements$/, () => ({ body: { settlements: ADMIN_SETTLEMENTS } })],
+  [
+    'GET',
+    /^\/admin\/settlements$/,
+    ({ url }) =>
+      url.searchParams.get('cursor')
+        ? { body: { settlements: ADMIN_SETTLEMENTS_MORE, hasMore: false }, delay: 8000 }
+        : { body: { settlements: ADMIN_SETTLEMENTS, hasMore: true, nextCursor: 'visual-more' } },
+  ],
   // 합계 카드는 같은 목록에서 계산한다(서버 계산과 같은 모양).
   ['GET', /^\/admin\/settlements\/summary$/, () => ({ body: adminSettlementsSummary() })],
   // 새로고침 시 '불러오는 중...'을 볼 수 있게 약간 늦춘다.
@@ -789,7 +1208,15 @@ export const routes = [
         : { status: 404, body: { message: '회차 없음' } };
     },
   ],
-  ['GET', /^\/admin\/drivers$/, () => ({ body: { drivers: ADMIN_DRIVERS } })],
+  // 공용 더 보기(LoadMoreFooter)를 찍으려고 다음 쪽이 있다고 답한다. 다음 쪽은 늦게 답해 불러오는 중을 찍는다.
+  [
+    'GET',
+    /^\/admin\/drivers$/,
+    ({ url }) =>
+      url.searchParams.get('cursor')
+        ? { body: { drivers: [], hasMore: false }, delay: 8000 }
+        : { body: { drivers: ADMIN_DRIVERS, hasMore: true, nextCursor: 'visual-more' } },
+  ],
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
   ['GET', /^\/stores\/[^/]+\/delivery-config$/, () => ({ body: DELIVERY_CONFIG })],
   // 설정 · 배송비 화면은 판매자 전용 조회 경로를 쓴다.
@@ -916,6 +1343,91 @@ export const screens = [
   { id: 'home', group: '판매자', title: '홈', path: '/', firestore: true },
   { id: 'onboarding', group: '판매자', title: '사업자 프로필 수정', path: '/onboarding' },
   { id: 'orders', group: '판매자', title: '주문 목록', path: '/orders' },
+  // 주문 목록 상태별(UI 교체 P4): 탭·하위 필터·날짜 직접 입력·검색·회차 필터·끝난 주문 더 보기·공동구매 모집.
+  {
+    id: 'orders-held',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 배송 보류만',
+    path: '/orders',
+    steps: [{ clickSelector: 'button[aria-label^="배송 보류 "]' }],
+  },
+  {
+    id: 'orders-waiting',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 대기 중 탭',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("대기 중")' }],
+  },
+  {
+    id: 'orders-in-delivery',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 배송 중 탭(픽업 코드)',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("배송 중")' }],
+  },
+  {
+    id: 'orders-in-delivery-hub',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 배송 중 탭 · 거점 도착',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("배송 중")' }, { click: '거점 도착' }],
+  },
+  {
+    id: 'orders-done',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 완료 탭(더 보기)',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("완료")' }],
+  },
+  {
+    id: 'orders-done-loading',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 완료 탭 · 더 불러오는 중',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("완료")' }, { click: '지난 주문 더 보기' }],
+  },
+  {
+    id: 'orders-cancelled',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 취소 탭',
+    path: '/orders',
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("취소")' }],
+  },
+  {
+    id: 'orders-date-custom',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 날짜 직접 입력',
+    path: '/orders',
+    steps: [{ click: '직접 입력' }],
+  },
+  {
+    id: 'orders-search-empty',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 검색 결과 없음',
+    path: '/orders',
+    steps: [{ fill: { label: '주문 검색', value: '없는손님' } }],
+  },
+  {
+    id: 'orders-search-phone',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 전화번호 검색(찾지 못함)',
+    path: '/orders',
+    steps: [{ fill: { label: '주문 검색', value: '010-1234-5678' } }],
+  },
+  {
+    id: 'orders-round-filter',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 회차 주문만',
+    path: '/orders?round=round-open',
+  },
+  {
+    id: 'orders-group',
+    group: '판매자 · 주문 목록',
+    title: '주문 목록 · 공동구매(예전 방식 가게)',
+    path: '/orders',
+    scenario: 'legacy-store',
+    steps: [{ click: '공동구매' }],
+  },
   {
     id: 'order-contact',
     group: '판매자',
@@ -952,6 +1464,41 @@ export const screens = [
     firestore: true,
   },
   {
+    id: 'sale-round-closed',
+    group: '판매자',
+    title: '회차 상세 · 주문 마감',
+    path: '/sale-rounds/round-closed',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-draft',
+    group: '판매자',
+    title: '회차 상세 · 작성 중',
+    path: '/sale-rounds/round-draft',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-completed',
+    group: '판매자',
+    title: '회차 상세 · 배송 완료',
+    path: '/sale-rounds/round-completed',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-cancelled',
+    group: '판매자',
+    title: '회차 상세 · 취소',
+    path: '/sale-rounds/round-cancelled',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-cancel-stuck',
+    group: '판매자',
+    title: '회차 상세 · 취소 멈춤',
+    path: '/sale-rounds/round-cancel-stuck',
+    firestore: true,
+  },
+  {
     id: 'sale-round-new',
     group: '판매자',
     title: '새 회차',
@@ -961,6 +1508,28 @@ export const screens = [
   { id: 'products', group: '판매자', title: '상품 목록', path: '/products', firestore: true },
   { id: 'product-new', group: '판매자', title: '상품 등록', path: '/products/new' },
   { id: 'product-edit', group: '판매자', title: '상품 수정', path: '/products/product-1/edit' },
+  // 상품 등록 품종 선택 Select 열린 목록(카테고리 난, 묶음·자리표시), 하나 고른 뒤 다시 연 목록(체크·지우기 버튼).
+  {
+    id: 'product-new-variety-open',
+    group: '판매자 · 목록',
+    title: '상품 등록 · 품종 목록 열림',
+    path: '/products/new',
+    steps: [{ click: '난' }, { clickSelector: 'input[placeholder="품종 선택 (선택사항)"]' }],
+    viewport: true,
+  },
+  {
+    id: 'product-new-variety-picked-open',
+    group: '판매자 · 목록',
+    title: '상품 등록 · 품종 고른 뒤 목록 열림',
+    path: '/products/new',
+    steps: [
+      { click: '난' },
+      { clickSelector: 'input[placeholder="품종 선택 (선택사항)"]' },
+      { clickSelector: '[role="option"]:has-text("만천홍")' },
+      { clickSelector: 'input[placeholder="품종 선택 (선택사항)"]' },
+    ],
+    viewport: true,
+  },
   // 상품 폼 2~5단계는 주소로 열 수 없어 수정 화면에서 "다음"을 n-1번 누른다.
   ...[2, 3, 4, 5].map((step) => ({
     id: `product-edit-step${step}`,
@@ -993,6 +1562,22 @@ export const screens = [
     path: '/settlements',
     click: '주문별 상세',
   },
+  {
+    id: 'settlements-period-list',
+    group: '판매자',
+    title: '정산 · 기간별 조회 결과',
+    path: '/settlements',
+    click: '기간별 조회',
+    steps: [{ click: '조회' }],
+  },
+  {
+    id: 'settlements-orders-load-more',
+    group: '판매자',
+    title: '정산 · 주문별 상세 더 보기 불러오는 중',
+    path: '/settlements',
+    click: '주문별 상세',
+    steps: [{ click: '더 보기' }],
+  },
   { id: 'settings', group: '판매자', title: '설정', path: '/settings' },
   {
     id: 'settings-delivery',
@@ -1021,6 +1606,18 @@ export const screens = [
   { id: 'hub-detail', group: '판매자', title: '거점 상세', path: '/hubs/hub-0001' },
   { id: 'hub-edit', group: '판매자', title: '거점 수정', path: '/hubs/hub-0001/edit' },
   { id: 'hub-pickup', group: '판매자', title: '거점 픽업', path: '/hubs/hub-0001/pickup' },
+  {
+    id: 'hub-detail-inactive',
+    group: '판매자',
+    title: '거점 상세 · 비활성',
+    path: '/hubs/hub-0002',
+  },
+  {
+    id: 'hub-pickup-order',
+    group: '판매자',
+    title: '거점 픽업 · 코드 입력',
+    path: '/hubs/hub-0001/pickup?orderId=order-hub-1',
+  },
   { id: 'hub-new', group: '판매자', title: '거점 추가', path: '/hubs/new' },
   {
     id: 'settings-option-stocks',
@@ -1049,6 +1646,189 @@ export const screens = [
     auth: false,
   },
   { id: 'login-error', group: '판매자', title: '로그인 오류', path: '/login/error', auth: false },
+  // 주문 상세 상태별(UI 교체 P4): 보류 운영·재배송비·자동 환불 실패 기록, 준비 중, 거점 도착(픽업 코드),
+  // 준비 시작 폼(시각 고름·회차 주문).
+  {
+    id: 'order-held',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 배송 보류(보류 운영·운영 기록)',
+    path: '/orders/order-round-held',
+  },
+  {
+    id: 'order-preparing',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 준비 중',
+    path: '/orders/order-round-preparing',
+  },
+  {
+    id: 'order-hub-arrived',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 거점 도착(픽업 코드)',
+    path: '/orders/order-hub-arrived',
+  },
+  {
+    id: 'order-prepare-form',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 준비 시작(수거 시각 고름)',
+    path: '/orders/order-with-contact',
+    steps: [{ click: '준비 시작' }, { click: '오늘 오후 4시' }],
+  },
+  {
+    id: 'order-round-prepare-form',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 회차 주문 준비 시작',
+    path: '/orders/order-round-multi',
+    steps: [{ click: '준비 시작' }],
+  },
+  // 주문 상세 동작 버튼 — 누른 뒤 화면과 가짜 API 요청 기록(mock-api.log)을 main과 비교한다.
+  {
+    id: 'order-prepare-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 준비 시작 확인 누름',
+    path: '/orders/order-with-contact',
+    steps: [{ click: '준비 시작' }, { click: '오늘 오후 4시' }, { click: '준비 시작 확인' }],
+  },
+  {
+    id: 'order-round-prepare-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 회차 주문 준비 시작 확인 누름',
+    path: '/orders/order-round-multi',
+    steps: [{ click: '준비 시작' }, { click: '준비 시작 확인' }],
+  },
+  {
+    id: 'order-ops-resend',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 문자 재발송 누름',
+    path: '/orders/order-no-contact',
+    steps: [{ click: '문자 재발송' }],
+  },
+  {
+    id: 'order-ops-retry-refund',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 환불 재시도 누름',
+    path: '/orders/order-round-held',
+    // 조치 기록에도 '환불 재시도' 글자가 있어 버튼을 고른다.
+    steps: [{ clickSelector: 'button:has-text("환불 재시도")' }],
+  },
+  // 주문 상세 끝난 주문(UI 교체 P4): 배송 중 안내, 배송 후 환불(가능·막힘), 취소 사유.
+  {
+    id: 'order-delivering',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 배송 중(취소·환불 안내)',
+    path: '/orders/order-delivering',
+  },
+  {
+    id: 'order-delivered',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 배송 완료(배송 후 환불)',
+    path: '/orders/order-delivered',
+  },
+  {
+    id: 'order-reviewed',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 구매 확정(직접 환불 막힘)',
+    path: '/orders/order-delivered-old',
+  },
+  {
+    id: 'order-cancelled',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 취소(취소 사유)',
+    path: '/orders/order-cancelled',
+  },
+  {
+    id: 'modal-order-cancel-short',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 강제 취소(사유 5자 미만)',
+    path: '/orders/order-with-contact',
+    steps: [{ click: '강제 취소' }, { fill: '짧음' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-order-cancel-held',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 보류 주문 취소·환불',
+    path: '/orders/order-round-held',
+    steps: [{ click: '주문 취소·환불' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-order-post-delivery-refund',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 후 환불',
+    path: '/orders/order-delivered',
+    steps: [{ click: '배송 후 환불' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-order-post-delivery-refund-filled',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 후 환불(사유·메모 입력)',
+    path: '/orders/order-delivered',
+    steps: [
+      { click: '배송 후 환불' },
+      { click: '꽃 상함' },
+      { fill: { label: '메모 (손님에게는 보이지 않아요)', value: '꽃잎이 시들어 도착' } },
+    ],
+    viewport: true,
+  },
+  // 확인창 동작 버튼 — 누른 뒤 화면과 가짜 API 요청 기록(mock-api.log)을 main과 비교한다.
+  {
+    id: 'order-cancel-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 강제 취소 확정 누름',
+    path: '/orders/order-with-contact',
+    steps: [{ click: '강제 취소' }, { fill: '손님이 취소를 요청함' }, { click: '취소 확정' }],
+  },
+  {
+    id: 'order-post-delivery-refund-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 배송 후 환불 확정 누름',
+    path: '/orders/order-delivered',
+    steps: [
+      { click: '배송 후 환불' },
+      { click: '꽃 상함' },
+      { fill: { label: '메모 (손님에게는 보이지 않아요)', value: '꽃잎이 시들어 도착' } },
+      { click: '전액 환불 확정' },
+    ],
+  },
+  // 운영 확인(UI 교체 P4): 전체 탭(해결 경위), 해결로 닫기 창(빈 메모·입력), 해결로 닫기 누름(요청 비교).
+  {
+    id: 'operations-all',
+    group: '판매자 · 운영 확인',
+    title: '운영 확인 · 전체',
+    path: '/operations',
+    steps: [{ clickSelector: 'button:has-text("전체")' }],
+  },
+  {
+    id: 'modal-operations-resolve',
+    group: '판매자 · 모달',
+    title: '운영 확인 · 해결로 닫기',
+    path: '/operations',
+    steps: [{ clickSelector: 'button:has-text("해결로 닫기")' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-operations-resolve-filled',
+    group: '판매자 · 모달',
+    title: '운영 확인 · 해결로 닫기(메모 입력)',
+    path: '/operations',
+    steps: [
+      { clickSelector: 'button:has-text("해결로 닫기")' },
+      { fill: { label: '닫는 이유 메모', value: '고객과 통화해 배송 사진을 다시 확인했어요' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'operations-resolve-submit',
+    group: '판매자 · 운영 확인 동작',
+    title: '운영 확인 · 해결로 닫기 누름',
+    path: '/operations',
+    steps: [
+      { clickSelector: 'button:has-text("해결로 닫기")' },
+      { fill: { label: '닫는 이유 메모', value: '고객과 통화해 배송 사진을 다시 확인했어요' } },
+      { clickSelector: '[role="dialog"] button:has-text("해결로 닫기")' },
+    ],
+  },
   // 모달이 열린 상태 — 같이 쓰는 기간의 CSS 우선순위 회귀는 열린 상태에서 드러난다(P2a 판정 범위).
   {
     id: 'modal-order-hold',
@@ -1058,12 +1838,255 @@ export const screens = [
     steps: [{ click: '배송 보류' }],
     viewport: true,
   },
+  // 배송 보류 창 입력(UI 교체 P4): 고객 책임인데 재배송비 없음(안내), 모두 입력, 보류 저장 누름(요청 비교).
+  {
+    id: 'modal-order-hold-customer',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 보류(고객 책임·재배송비 안내)',
+    path: '/orders/order-round-preparing',
+    steps: [{ click: '배송 보류' }, { click: '고객 연락 불가' }, { click: '고객 책임' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-order-hold-filled',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 보류(모두 입력)',
+    path: '/orders/order-round-preparing',
+    steps: [
+      { click: '배송 보류' },
+      { click: '고객 연락 불가' },
+      { click: '고객 책임' },
+      { fill: { label: '보류 사유', value: '받는 분 연락이 닿지 않음' } },
+      { fill: { label: '재배송비', value: '5000' } },
+      { fill: { label: '다음 연락 예정', value: '2026-10-06T10:00' } },
+      { fill: { label: '새 배송 예정', value: '2026-10-07T09:00' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'order-hold-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 배송 보류 저장 누름',
+    path: '/orders/order-round-preparing',
+    steps: [
+      { click: '배송 보류' },
+      { click: '고객 연락 불가' },
+      { click: '고객 책임' },
+      { fill: { label: '보류 사유', value: '받는 분 연락이 닿지 않음' } },
+      { fill: { label: '재배송비', value: '5000' } },
+      { fill: { label: '새 배송 예정', value: '2026-10-07T09:00' } },
+      { click: '보류 저장' },
+    ],
+  },
   {
     id: 'modal-order-cancel',
     group: '판매자 · 모달',
     title: '주문 상세 · 강제 취소',
     path: '/orders/order-with-contact',
     steps: [{ click: '강제 취소' }],
+    viewport: true,
+  },
+  // 어드민 주문 필터 — 가게 검색 Select(열림·거름·맞는 가게 없음), 상태 Select 열림, 고른 상태의 주문 없음.
+  {
+    id: 'admin-orders-store-open',
+    group: '어드민 · 필터',
+    title: '주문 · 가게 선택 열림',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'input[aria-label="가게 선택"]' }],
+    viewport: true,
+  },
+  {
+    id: 'admin-orders-store-search',
+    group: '어드민 · 필터',
+    title: '주문 · 가게 검색',
+    path: '/admin/orders',
+    steps: [
+      { clickSelector: 'input[aria-label="가게 선택"]' },
+      { fill: { label: '가게 선택', value: '농원' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'admin-orders-store-nothing',
+    group: '어드민 · 필터',
+    title: '주문 · 가게 검색 · 맞는 가게 없음',
+    path: '/admin/orders',
+    steps: [
+      { clickSelector: 'input[aria-label="가게 선택"]' },
+      { fill: { label: '가게 선택', value: '없는 가게' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'admin-orders-status-open',
+    group: '어드민 · 필터',
+    title: '주문 · 상태 선택 열림',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'input[aria-label="주문 상태"]' }],
+    viewport: true,
+  },
+  {
+    id: 'admin-orders-empty',
+    group: '어드민 · 필터',
+    title: '주문 · 고른 상태의 주문 없음',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'input[aria-label="주문 상태"]' }, { click: '리뷰완료' }],
+  },
+  // 어드민 기사 승인·정지 확인창(ConfirmModal, 정지는 사유 입력칸 포함). 기본 탭은 승인 대기다.
+  {
+    id: 'modal-driver-approve',
+    group: '어드민 · 모달',
+    title: '기사 · 승인 확인',
+    path: '/admin/drivers',
+    steps: [{ click: '승인' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-driver-suspend',
+    group: '어드민 · 모달',
+    title: '기사 · 정지 확인(사유)',
+    path: '/admin/drivers',
+    steps: [{ click: '정지' }],
+    viewport: true,
+  },
+  // 어드민 판매자·소비자(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  {
+    id: 'admin-stores-all',
+    group: '어드민',
+    title: '판매자 · 전체(치운 판매자 포함)',
+    path: '/admin/stores?status=all',
+  },
+  {
+    id: 'admin-stores-no-match',
+    group: '어드민',
+    title: '판매자 · 검색 결과 없음',
+    path: '/admin/stores?keyword=%EC%97%86%EB%8A%94%EA%B0%80%EA%B2%8C',
+  },
+  {
+    // 검색어 입력 → 300ms 뒤 URL 반영(지연 호출, P6-b @mantine/hooks 걷어 내기).
+    id: 'admin-stores-search',
+    group: '어드민',
+    title: '판매자 · 검색어 입력',
+    path: '/admin/stores',
+    steps: [{ fill: { label: '판매자 검색', value: '농원' } }],
+  },
+  {
+    id: 'admin-stores-commission-edit',
+    group: '어드민',
+    title: '판매자 · 수수료율 입력',
+    path: '/admin/stores',
+    steps: [{ clickSelector: 'button:has-text("수수료 설정"):visible' }],
+  },
+  {
+    // 상태 Select 열린 목록(Mantine Combobox ↔ Base UI Select, #719 열린 목록 기본값).
+    id: 'admin-stores-status-open',
+    group: '어드민',
+    title: '판매자 · 상태 고르기 열림',
+    path: '/admin/stores',
+    steps: [{ clickSelector: 'input[readonly]:visible' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-user-suspend',
+    group: '어드민 · 모달',
+    title: '소비자 · 정지 확인(사유)',
+    path: '/admin/users',
+    steps: [{ clickSelector: 'button:has-text("정지"):visible' }],
+    viewport: true,
+  },
+  // 어드민 초대(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  // 링크 복사는 헤드리스에서도 성공해 그 행 버튼이 '복사됨!'이 된다(직접 복사 창은 열리지 않는다).
+  {
+    id: 'modal-invite-revoke',
+    group: '어드민 · 모달',
+    title: '초대 · 취소 확인',
+    path: '/admin/invite',
+    steps: [{ clickSelector: 'button:has-text("취소"):visible' }],
+    viewport: true,
+  },
+  {
+    id: 'admin-invite-copied',
+    group: '어드민',
+    title: '초대 · 링크 복사됨',
+    path: '/admin/invite',
+    steps: [{ clickSelector: 'button:has-text("링크 복사"):visible' }],
+    viewport: true,
+  },
+  // 어드민 정산 — 가게 검색 Select(열림·맞는 가게 없음·고른 뒤 지우기 버튼), 더 보기 불러오는 중.
+  {
+    id: 'admin-settlements-store-open',
+    group: '어드민 · 필터',
+    title: '정산 · 가게 선택 열림',
+    path: '/admin/settlements',
+    steps: [{ clickSelector: 'input[aria-label="가게"]' }],
+    viewport: true,
+  },
+  {
+    id: 'admin-settlements-store-nothing',
+    group: '어드민 · 필터',
+    title: '정산 · 가게 검색 · 맞는 가게 없음',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'input[aria-label="가게"]' },
+      { fill: { label: '가게', value: '없는 가게' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'admin-settlements-store-picked',
+    group: '어드민 · 필터',
+    title: '정산 · 가게 고름(지우기 버튼)',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'input[aria-label="가게"]' },
+      { clickSelector: '[role="option"]:has-text("새싹 농원")' },
+    ],
+  },
+  {
+    id: 'admin-settlements-load-more',
+    group: '어드민 · 필터',
+    title: '정산 · 더 보기 불러오는 중',
+    path: '/admin/settlements',
+    steps: [{ click: '더 보기' }],
+  },
+  // 어드민 주문 환불 확인창. 강제환불은 사유 입력칸, 배송 후 환불은 메모 입력칸이 첫 초점(data-autofocus)이다.
+  {
+    id: 'modal-admin-refund',
+    group: '어드민 · 모달',
+    title: '주문 · 강제환불 확인',
+    path: '/admin/orders',
+    // 모바일 카드와 PC 표가 같은 버튼을 함께 그리고 하나만 보이므로 보이는 버튼을 누른다.
+    steps: [{ clickSelector: 'button:has-text("강제환불"):visible' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-admin-post-delivery-refund',
+    group: '어드민 · 모달',
+    title: '주문 · 배송 후 환불 확인',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'button:has-text("배송 후 환불"):visible' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-admin-post-delivery-refund-filled',
+    group: '어드민 · 모달',
+    title: '주문 · 배송 후 환불(사유·메모 입력)',
+    path: '/admin/orders',
+    steps: [
+      { clickSelector: 'button:has-text("배송 후 환불"):visible' },
+      { click: '꽃 상함' },
+      { fill: { label: '메모 (손님에게는 보이지 않음, 필수)', value: '꽃잎이 상해 도착' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-round-copy',
+    group: '판매자 · 모달',
+    title: '회차 목록 · 이전 회차 복사',
+    path: '/sale-rounds',
+    steps: [
+      { clickSelector: '[data-testid="sale-round-round-open"] button:has-text("이전 회차 복사")' },
+    ],
     viewport: true,
   },
   {
@@ -1075,6 +2098,16 @@ export const screens = [
     steps: [{ click: '회차 취소' }],
     viewport: true,
   },
+  // 공용 ConfirmModal의 dark 확인 버튼(Mantine filled dark). 회차 상세 "주문 마감" 확인창.
+  {
+    id: 'modal-round-close',
+    group: '판매자 · 모달',
+    title: '회차 상세 · 주문 마감 확인',
+    path: '/sale-rounds/round-open',
+    firestore: true,
+    steps: [{ clickSelector: 'button:has-text("주문 마감"):visible' }],
+    viewport: true,
+  },
   {
     // 수정 화면 상품은 직접 편집한 내용으로 보므로 다시 생성하기가 확인 모달을 연다.
     id: 'modal-product-regenerate',
@@ -1084,10 +2117,35 @@ export const screens = [
     steps: [...Array.from({ length: 3 }, () => ({ click: '다음' })), { click: '다시 생성하기' }],
     viewport: true,
   },
+  // UI 교체 P4 앱 틀: 공용 LoadingState·EmptyState·LoadMoreFooter(더 보기·불러오는 중).
+  {
+    id: 'sale-rounds-loading',
+    group: '판매자 · 상태',
+    title: '회차 목록 · 불러오는 중',
+    path: '/sale-rounds',
+    scenario: 'rounds-slow',
+  },
+  {
+    id: 'sale-rounds-empty',
+    group: '판매자 · 상태',
+    title: '회차 목록 · 없음',
+    path: '/sale-rounds',
+    scenario: 'rounds-empty',
+  },
+  {
+    id: 'admin-drivers-load-more',
+    group: '어드민 · 필터',
+    title: '기사 · 더 보기 불러오는 중',
+    path: '/admin/drivers',
+    steps: [{ click: '더 보기' }],
+  },
 ];
 
 /** 화면별 상황(shots.mjs가 화면을 열 때 /__scenario로 고른다). 그 경로를 기본 경로 앞에 끼운다. */
 export const scenarioRoutes = {
+  // 공용 LoadingState·EmptyState(회차 목록이 늦게 오거나 비었을 때).
+  'rounds-slow': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] }, delay: 8000 })]],
+  'rounds-empty': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] } })]],
   'legacy-store': [
     [
       'GET',
@@ -1159,11 +2217,21 @@ export const benchmarkScreens = [
     features: ['reviews'],
   },
   {
+    // 후기 숨기기 사유 고르기(UI 교체 P4).
+    id: 'bm-seller-review-hide',
+    group: '판매자',
+    title: '고객 반응 · 후기 숨기기 사유',
+    path: '/reactions',
+    steps: [{ click: '숨기기' }, { click: '욕설·비방' }],
+    features: ['reviews'],
+  },
+  {
     id: 'bm-seller-restock',
     group: '판매자',
     title: '고객 반응 · 알림 신청',
     path: '/reactions',
     clicks: ['알림 신청'],
+    steps: [{ click: '알림 신청' }],
     features: ['restock-alert'],
   },
   {
@@ -1172,6 +2240,7 @@ export const benchmarkScreens = [
     title: '고객 반응 · 찾는 상품',
     path: '/reactions',
     clicks: ['찾는 상품'],
+    steps: [{ click: '찾는 상품' }],
     features: ['product-request'],
   },
   {
@@ -1187,5 +2256,30 @@ export const benchmarkScreens = [
     title: '관리자 · 입점 문의',
     path: '/admin/partner-inquiries',
     features: ['partner-inquiry'],
+  },
+  {
+    id: 'bm-admin-partner-delete',
+    group: '관리자',
+    title: '관리자 · 입점 문의 · 삭제 확인',
+    path: '/admin/partner-inquiries',
+    features: ['partner-inquiry'],
+    steps: [{ click: '삭제' }],
+    viewport: true,
+  },
+  {
+    id: 'bm-admin-reviews',
+    group: '관리자',
+    title: '관리자 · 숨긴 후기',
+    path: '/admin/reviews',
+    features: ['reviews'],
+  },
+  {
+    id: 'bm-admin-reviews-unhide',
+    group: '관리자',
+    title: '관리자 · 숨긴 후기 · 숨김 해제 확인',
+    path: '/admin/reviews',
+    features: ['reviews'],
+    steps: [{ click: '숨김 해제' }],
+    viewport: true,
   },
 ];

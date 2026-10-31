@@ -17,15 +17,31 @@ const badgeVariants = cva(
         outline: 'border-primary bg-transparent text-brand-ink',
         // Mantine variant="outline" color="gray"(gray-6 테두리·글자).
         'outline-gray': 'border-[#868e96] bg-transparent text-[#868e96]',
+        // Mantine variant="outline" color="yellow"·"red"(yellow-6·red-6 테두리·글자).
+        'outline-warning': 'border-[#fab005] bg-transparent text-[#fab005]',
+        'outline-destructive': 'border-[#fa5252] bg-transparent text-[#fa5252]',
         warning: 'bg-status-warning text-status-warning-foreground',
         secondary: 'bg-[#f1f3f5] text-[#212529]',
         destructive: 'bg-[#ffe3e3] text-[#c92a2a]',
+        // Mantine filled red(red-6 면·흰 글자), light orange(orange-1 면·orange-9 글자).
+        'destructive-filled': 'bg-[#fa5252] text-white',
+        'light-orange': 'bg-[#ffe8cc] text-[#d9480f]',
+        // Mantine light dark·green(dark-1 면·dark-9 글자, green-1 면·green-9 글자).
+        'light-dark': 'bg-[#b8b8b8] text-[#141414]',
+        'light-green': 'bg-[#d3f9d8] text-[#2b8a3e]',
         ghost: 'bg-transparent text-foreground hover:bg-muted',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
+      },
+      // Mantine Badge size(기본 md). sm = 높이 18·좌우 8·10px, xs = 높이 16·좌우 6·9px(줄 높이는 높이 - 2px).
+      size: {
+        md: '',
+        sm: 'h-[18px] px-2 text-[10px] leading-4',
+        xs: 'h-4 px-1.5 text-[9px] leading-[14px]',
       },
     },
     defaultVariants: {
       variant: 'default',
+      size: 'md',
     },
   },
 );
@@ -33,6 +49,7 @@ const badgeVariants = cva(
 function Badge({
   className,
   variant = 'default',
+  size = 'md',
   render,
   ...props
 }: useRender.ComponentProps<'span'> & VariantProps<typeof badgeVariants>) {
@@ -40,7 +57,7 @@ function Badge({
     defaultTagName: 'span',
     props: mergeProps<'span'>(
       {
-        className: cn(badgeVariants({ variant }), className),
+        className: cn(badgeVariants({ variant, size }), className),
       },
       props,
     ),
