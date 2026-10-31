@@ -2,7 +2,7 @@
 
 import type { Product } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { Switch } from '@greenhub/ui/components/switch';
 import { RefreshCcw } from 'lucide-react';
 import Image from 'next/image';
@@ -63,9 +63,9 @@ export default function ProductsPage() {
       <PageHeader
         title="상품 관리"
         right={
-          <Button render={<Link href="/products/new" />} nativeButton={false} size="xs">
+          <ButtonLink render={<Link href="/products/new" />} size="xs">
             + 등록
-          </Button>
+          </ButtonLink>
         }
       />
 
@@ -308,14 +308,13 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             </p>
           )}
           <div className="mt-2.5 flex flex-row flex-wrap items-center justify-start gap-2.5">
-            <Button
+            <ButtonLink
               render={<Link href={`/products/${product.id}/edit`} />}
-              nativeButton={false}
               size="xs"
               variant="ghost"
             >
               수정
-            </Button>
+            </ButtonLink>
             {inUse && product.isActive && (
               <Button
                 size="xs"
