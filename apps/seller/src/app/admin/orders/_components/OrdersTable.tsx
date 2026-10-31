@@ -163,10 +163,9 @@ export function OrdersTable({
   return (
     <>
       {/* 모바일(<sm): 카드 리스트 — 마지막 컬럼(금액·강제환불) 잘림 방지 */}
-      <div className="flex flex-col gap-3 min-[48em]:hidden" role="list" aria-label="주문 목록">
+      <ul className="m-0 flex list-none flex-col gap-3 p-0 min-[48em]:hidden" aria-label="주문 목록">
         {orders.map((order) => (
-          <div
-            role="listitem"
+          <li
             key={order.id}
             className={`${PAPER} rounded-[8px] px-4 py-3`}
             style={{ border: '1px solid var(--color-border)' }}
@@ -215,9 +214,9 @@ export function OrdersTable({
                 </Button>
               )}
             </div>
-          </div>
+          </li>
         ))}
-      </div>
+      </ul>
 
       {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
       <div
