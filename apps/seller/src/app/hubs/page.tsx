@@ -1,8 +1,8 @@
 'use client';
 
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button } from '@greenhub/ui/components/button';
-import { notifications } from '@mantine/notifications';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
+import { notify } from '@/components/AppToaster';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -64,7 +64,7 @@ export default function HubsPage() {
       });
       setHubs((prev) => prev.map((h) => (h.id === hub.id ? { ...h, isActive: !hub.isActive } : h)));
     } catch (e) {
-      notifications.show({
+      notify({
         color: 'red',
         title: '거점 상태 변경 실패',
         message: e instanceof ApiError ? e.message : '거점 상태 변경에 실패했습니다',
@@ -94,15 +94,14 @@ export default function HubsPage() {
       <PageHeader
         title="거점 관리"
         right={
-          <Button
+          <ButtonLink
             render={<Link href="/hubs/new" />}
-            nativeButton={false}
             size="xs"
             className="rounded-[8px]"
             style={{ backgroundColor: 'var(--color-primary)' }}
           >
             + 거점 등록
-          </Button>
+          </ButtonLink>
         }
       />
 

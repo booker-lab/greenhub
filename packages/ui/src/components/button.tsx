@@ -1,4 +1,6 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button';
+import { mergeProps } from '@base-ui/react/merge-props';
+import { useRender } from '@base-ui/react/use-render';
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
 import { Children } from 'react';
@@ -115,6 +117,34 @@ function Button({
   );
 }
 
+// 페이지 이동·전화 걸기처럼 링크인 것은 Button이 아니라 ButtonLink로 그린다.
+// Base UI Button은 nativeButton={false}이면 그린 a에도 role="button"을 붙여(useButton) 보조기술·테스트가 링크를
+// 버튼으로 읽는다. ButtonLink는 Base UI Button을 거치지 않으므로 a 요소의 링크 의미(role=link·href)가 그대로다.
+// 외형은 Button과 같은 클래스·data-slot·글자 칸(wrapLabels)이다. 링크에는 비활성 상태가 없으니 disabled는 받지 않는다.
+// Next.js Link는 render={<Link href="..." />}, 그 밖의 주소(tel: 등)는 href로 준다.
+function ButtonLink({
+  className,
+  variant = 'default',
+  size = 'default',
+  render,
+  children,
+  ...props
+}: Omit<useRender.ComponentProps<'a'>, 'children'> &
+  VariantProps<typeof buttonVariants> & { children?: React.ReactNode }) {
+  return useRender({
+    defaultTagName: 'a',
+    render,
+    props: mergeProps<'a'>(
+      {
+        'data-slot': 'button',
+        className: cn(buttonVariants({ variant, size, className })),
+        children: wrapLabels(children),
+      } as React.ComponentProps<'a'>,
+      props,
+    ),
+  });
+}
+
 // ① 외형 유지: Mantine Button 안쪽(inner·label) 구조. 버튼보다 긴 내용(두 줄 글자 등)을 Mantine처럼
 // 왼쪽부터 그리고 오른쪽을 자르고, 글자 위치도 Mantine과 같은 반올림으로 놓는다.
 // 글자만 있는 보통 버튼은 Button이 글자 칸으로 감싸므로(wrapLabels) 쓰지 않아도 된다. 직접 감싼 ButtonLabel은
@@ -139,4 +169,4 @@ function ButtonLabel({ className, children, ...props }: React.ComponentProps<'sp
   );
 }
 
-export { Button, ButtonLabel, buttonVariants };
+export { Button, ButtonLabel, ButtonLink, buttonVariants };

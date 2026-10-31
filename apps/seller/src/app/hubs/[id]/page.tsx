@@ -2,7 +2,7 @@
 
 import { apiPathSegment, readRouteParam } from '@greenhub/shared';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button } from '@greenhub/ui/components/button';
+import { ButtonLink } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -117,15 +117,14 @@ export default function HubDetailPage() {
         onBack={() => router.back()}
         right={
           hub ? (
-            <Button
+            <ButtonLink
               render={<Link href={`/hubs/${encodeURIComponent(hubId)}/edit`} />}
-              nativeButton={false}
               size="xs"
               variant="secondary"
               className="rounded-[8px]"
             >
               수정
-            </Button>
+            </ButtonLink>
           ) : undefined
         }
       />
