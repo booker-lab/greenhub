@@ -258,6 +258,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 상품 등록·수정 폼 2(2026-10-31): 4·5단계(`AIPreviewPanel`·`Step5Pricing`·`GroupConfigSection`·`ProductExtrasSection`)의 `@mantine/core`를 걷었다. 상품 폼에 Mantine이 남지 않는다.
   - `packages/ui` 추가: `NumberInput`(천 단위 구분·범위는 칸을 떠날 때 맞춤), `Checkbox`(Mantine처럼 모양을 지운 checkbox input + 체크 svg, 모서리 radius sm 4px), `Chip`(숨은 input + label, text-box-trim, 마우스 올림 색), `NativeSelect`(label을 주면 라벨 → 칸, 줄 높이 = 높이 - 2px), Button `outline-warning`·`outline-green`·`light-green`. `Textarea` autosize는 화면이 살아나기 전에도 minRows 높이다(rows). 다시 생성 확인 모달은 `Dialog`(Mantine Modal xs = 320px)다.
   - 버튼 글자가 칸의 소수점 위치에 따라 1열 어긋나는 곳(묶음 삭제·+ 선택지·+ 옵션 묶음 추가)은 `ButtonLabel`로 맞췄다. select 글자도 줄 높이를 Mantine과 같게 해야 세로 1px 어긋남이 없다.
+  - 로컬 증명(#694 하네스, 기준 `main` e93322d, 기준 시각 2026-10-31T00:00+09:00): 판매자 147장 정상 촬영 147, `diff.mjs --tolerance 1` 144장 같음. 남은 차이는 `modal-product-regenerate`(Mantine Modal → Dialog) 3장뿐이다: 390에서 65픽셀(채널 차이 최대 44, 닫기 X와 새로 생성 버튼 모서리), 768·1280에서 각 3픽셀(채널 6, 버튼 오른쪽 가장자리). 대화상자·버튼 위치와 크기는 소수점까지 같고(대화상자 y 424.75, 버튼 오른쪽 528) 가장자리 안티앨리어싱만 다르다(P2a 대조의 Modal↔Dialog 차이와 같은 종류). 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 875개.
   - 기능 플래그 뒤 `ProductExtrasSection`은 하네스를 `NEXT_PUBLIC_GREENHUB_FEATURES=size-info,care-guide,option-sheet,quality-guarantee,plant-search`로 띄워 기준·비교 모두 `product-edit-step5`·`product-edit-step5-group` 6장을 찍어 같음을 확인했다. "다음"을 누른 마우스가 5단계의 칩 위에 남아 Mantine hover 색이 찍히므로 Chip hover도 같아야 한다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
