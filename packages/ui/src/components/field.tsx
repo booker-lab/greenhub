@@ -98,17 +98,32 @@ function FieldContent({ className, ...props }: React.ComponentProps<'div'>) {
   );
 }
 
-function FieldLabel({ className, ...props }: React.ComponentProps<typeof Label>) {
+// required: Mantine InputWrapper의 필수 표시(라벨 글자 뒤 " *", 오류색 red-6, aria-hidden). 이때 라벨은 Mantine처럼
+// inline-block이라 별표가 글자와 한 칸 띄어 붙는다. 입력칸의 required는 호출부가 준다.
+function FieldLabel({
+  className,
+  required = false,
+  children,
+  ...props
+}: React.ComponentProps<typeof Label> & { required?: boolean }) {
   return (
     <Label
       data-slot="field-label"
       className={cn(
         'group/field-label peer/field-label inline-flex w-fit gap-2 text-sm leading-[1.55] font-semibold group-data-[disabled=true]/field:opacity-50',
         'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-input has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 *:data-[slot=field]:p-2.5',
+        required && 'inline-block',
         className,
       )}
       {...props}
-    />
+    >
+      {children}
+      {required && (
+        <span data-slot="field-required" aria-hidden="true" className="text-[#fa5252]">
+          {' *'}
+        </span>
+      )}
+    </Label>
   );
 }
 
