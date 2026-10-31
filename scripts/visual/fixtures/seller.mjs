@@ -421,10 +421,22 @@ const ADMIN_INVITES = [
     expiresAt: '2026-01-01T00:00:00.000Z',
     createdAt: '2025-12-25T00:00:00.000Z',
   },
+  // 취소된 초대(취소됨 배지)와 받는 사람을 지정한 초대(UI 교체 P2b).
+  {
+    token: 'REVOKED4',
+    createdBy: user.id,
+    usedAt: null,
+    usedBy: null,
+    revokedAt: '2026-09-15T00:00:00.000Z',
+    revokedBy: user.id,
+    recipientEmail: 'new.seller@example.test',
+    expiresAt: '2026-12-31T00:00:00.000Z',
+    createdAt: '2026-09-14T00:00:00.000Z',
+  },
 ];
 
 // ── 회차: 예정·진행·마감·임시저장 한 건씩. 일정은 파일럿 첫 회차(목 10:00 오픈 → 일 24:00 마감) 형태 ──
-function saleRound(id, name, status, schedule, counters = {}) {
+function saleRound(id, name, status, schedule, counters = {}, overrides = {}) {
   return {
     id,
     storeId: STORE_ID,
@@ -454,6 +466,7 @@ function saleRound(id, name, status, schedule, counters = {}) {
     completedAt: null,
     createdAt: '2026-09-28T15:00:00.000Z',
     updatedAt: '2026-09-28T15:00:00.000Z',
+    ...overrides,
   };
 }
 const SALE_ROUNDS = [
@@ -504,6 +517,66 @@ const SALE_ROUNDS = [
     deliveryStartAt: hoursFromNow(264),
     deliveryEndAt: hoursFromNow(273),
   }),
+  // 회차 상태 분기(배송 완료·취소·취소 멈춤)도 목록·상세에서 보이게 한 건씩 둔다(UI 교체 P4).
+  saleRound(
+    'round-completed',
+    '9월 22일 배송 회차',
+    'COMPLETED',
+    {
+      orderOpenAt: '2026-09-17T01:00:00.000Z',
+      orderCloseAt: '2026-09-20T15:00:00.000Z',
+      auctionAt: '2026-09-20T22:00:00.000Z',
+      deliveryStartAt: '2026-09-21T15:00:00.000Z',
+      deliveryEndAt: '2026-09-22T00:00:00.000Z',
+    },
+    { orderedDeliveryAddresses: 12, orderedItemQuantity: 20 },
+    { closeReason: 'CAPACITY', completedAt: '2026-09-22T09:00:00.000Z' },
+  ),
+  saleRound(
+    'round-cancelled',
+    '9월 15일 배송 회차',
+    'CANCELLED',
+    {
+      orderOpenAt: '2026-09-10T01:00:00.000Z',
+      orderCloseAt: '2026-09-13T15:00:00.000Z',
+      auctionAt: '2026-09-13T22:00:00.000Z',
+      deliveryStartAt: '2026-09-14T15:00:00.000Z',
+      deliveryEndAt: '2026-09-15T00:00:00.000Z',
+    },
+    {},
+    {
+      cancellation: {
+        status: 'COMPLETED',
+        reason: '경매 일정 취소',
+        failedOrderId: null,
+        updatedAt: '2026-09-12T03:00:00.000Z',
+        completedAt: '2026-09-12T03:00:00.000Z',
+      },
+      cancelledAt: '2026-09-12T03:00:00.000Z',
+    },
+  ),
+  saleRound(
+    'round-cancel-stuck',
+    '11월 17일 배송 회차',
+    'SCHEDULED',
+    {
+      orderOpenAt: hoursFromNow(322),
+      orderCloseAt: hoursFromNow(408),
+      auctionAt: hoursFromNow(415),
+      deliveryStartAt: hoursFromNow(432),
+      deliveryEndAt: hoursFromNow(441),
+    },
+    {},
+    {
+      cancellation: {
+        status: 'LOCAL_FAILED',
+        reason: '경매 일정 취소',
+        failedOrderId: null,
+        updatedAt: '2026-10-29T03:00:00.000Z',
+        completedAt: null,
+      },
+    },
+  ),
 ];
 // 상품별 수량은 회차 counters 합계와 맞춘다(판매 중 11개·결제 중 2개, 마감 27개).
 const ROUND_ITEM_QUANTITIES = {
@@ -947,7 +1020,60 @@ const benchmarkRoutes = [
           message: '호접란 2,000분 규모로 재배합니다. 주 1회 납품 가능합니다.',
           createdAt: '2026-10-02T05:00:00.000Z',
         },
+        // UI 교체 P2b: 연락 전·이메일 연락처 카드(배지·링크 모양).
+        {
+          id: 'inquiry-2',
+          farmName: '제주 동백정원',
+          region: '제주 서귀포',
+          contact: 'camellia@example.test',
+          message: '동백 분재를 소량 납품하고 싶습니다.\n사진은 메일로 보내 드릴게요.',
+          contactedAt: null,
+          createdAt: '2026-10-01T02:00:00.000Z',
+        },
       ],
+    }),
+  ],
+  // 숨긴 후기(/admin/reviews, 기능 플래그 reviews). 사진은 외부 주소라 넣지 않는다.
+  [
+    'GET',
+    /^\/admin\/reviews\/hidden$/,
+    () => ({
+      body: {
+        reviews: [
+          {
+            id: 'hidden-review-1',
+            productId: 'product-1',
+            storeId: 'store-visual-0001',
+            storeName: '디어 오키드',
+            productName: '호접란 화이트',
+            rating: 1,
+            text: '연락처 010-0000-0000으로 전화 주세요. 꽃이 금방 시들었어요.',
+            authorName: '김*린',
+            createdAt: '2026-10-03T01:00:00.000Z',
+            hidden: true,
+            hiddenReasonCode: 'privacy',
+            hiddenNote: '전화번호가 적혀 있음',
+            hiddenAt: '2026-10-03T05:00:00.000Z',
+            hiddenByRole: 'seller',
+          },
+          {
+            id: 'hidden-review-2',
+            productId: 'product-2',
+            storeId: 'store-visual-0001',
+            storeName: '디어 오키드',
+            productName: null,
+            rating: 2,
+            text: '광고 문구',
+            authorName: '이*수',
+            createdAt: '2026-10-02T01:00:00.000Z',
+            hidden: true,
+            hiddenAt: '2026-10-02T03:00:00.000Z',
+            hiddenByRole: 'admin',
+          },
+        ],
+        hasMore: true,
+        limit: 100,
+      },
     }),
   ],
 ];
@@ -1314,6 +1440,41 @@ export const screens = [
     firestore: true,
   },
   {
+    id: 'sale-round-closed',
+    group: '판매자',
+    title: '회차 상세 · 주문 마감',
+    path: '/sale-rounds/round-closed',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-draft',
+    group: '판매자',
+    title: '회차 상세 · 작성 중',
+    path: '/sale-rounds/round-draft',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-completed',
+    group: '판매자',
+    title: '회차 상세 · 배송 완료',
+    path: '/sale-rounds/round-completed',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-cancelled',
+    group: '판매자',
+    title: '회차 상세 · 취소',
+    path: '/sale-rounds/round-cancelled',
+    firestore: true,
+  },
+  {
+    id: 'sale-round-cancel-stuck',
+    group: '판매자',
+    title: '회차 상세 · 취소 멈춤',
+    path: '/sale-rounds/round-cancel-stuck',
+    firestore: true,
+  },
+  {
     id: 'sale-round-new',
     group: '판매자',
     title: '새 회차',
@@ -1421,6 +1582,18 @@ export const screens = [
   { id: 'hub-detail', group: '판매자', title: '거점 상세', path: '/hubs/hub-0001' },
   { id: 'hub-edit', group: '판매자', title: '거점 수정', path: '/hubs/hub-0001/edit' },
   { id: 'hub-pickup', group: '판매자', title: '거점 픽업', path: '/hubs/hub-0001/pickup' },
+  {
+    id: 'hub-detail-inactive',
+    group: '판매자',
+    title: '거점 상세 · 비활성',
+    path: '/hubs/hub-0002',
+  },
+  {
+    id: 'hub-pickup-order',
+    group: '판매자',
+    title: '거점 픽업 · 코드 입력',
+    path: '/hubs/hub-0001/pickup?orderId=order-hub-1',
+  },
   { id: 'hub-new', group: '판매자', title: '거점 추가', path: '/hubs/new' },
   {
     id: 'settings-option-stocks',
@@ -1711,6 +1884,24 @@ export const screens = [
     steps: [{ clickSelector: 'button:has-text("정지"):visible' }],
     viewport: true,
   },
+  // 어드민 초대(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  // 링크 복사는 헤드리스에서도 성공해 그 행 버튼이 '복사됨!'이 된다(직접 복사 창은 열리지 않는다).
+  {
+    id: 'modal-invite-revoke',
+    group: '어드민 · 모달',
+    title: '초대 · 취소 확인',
+    path: '/admin/invite',
+    steps: [{ clickSelector: 'button:has-text("취소"):visible' }],
+    viewport: true,
+  },
+  {
+    id: 'admin-invite-copied',
+    group: '어드민',
+    title: '초대 · 링크 복사됨',
+    path: '/admin/invite',
+    steps: [{ clickSelector: 'button:has-text("링크 복사"):visible' }],
+    viewport: true,
+  },
   // 어드민 정산 — 가게 검색 Select(열림·맞는 가게 없음·고른 뒤 지우기 버튼), 더 보기 불러오는 중.
   {
     id: 'admin-settlements-store-open',
@@ -1775,6 +1966,16 @@ export const screens = [
       { clickSelector: 'button:has-text("배송 후 환불"):visible' },
       { click: '꽃 상함' },
       { fill: { label: '메모 (손님에게는 보이지 않음, 필수)', value: '꽃잎이 상해 도착' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-round-copy',
+    group: '판매자 · 모달',
+    title: '회차 목록 · 이전 회차 복사',
+    path: '/sale-rounds',
+    steps: [
+      { clickSelector: '[data-testid="sale-round-round-open"] button:has-text("이전 회차 복사")' },
     ],
     viewport: true,
   },
@@ -1934,5 +2135,30 @@ export const benchmarkScreens = [
     title: '관리자 · 입점 문의',
     path: '/admin/partner-inquiries',
     features: ['partner-inquiry'],
+  },
+  {
+    id: 'bm-admin-partner-delete',
+    group: '관리자',
+    title: '관리자 · 입점 문의 · 삭제 확인',
+    path: '/admin/partner-inquiries',
+    features: ['partner-inquiry'],
+    steps: [{ click: '삭제' }],
+    viewport: true,
+  },
+  {
+    id: 'bm-admin-reviews',
+    group: '관리자',
+    title: '관리자 · 숨긴 후기',
+    path: '/admin/reviews',
+    features: ['reviews'],
+  },
+  {
+    id: 'bm-admin-reviews-unhide',
+    group: '관리자',
+    title: '관리자 · 숨긴 후기 · 숨김 해제 확인',
+    path: '/admin/reviews',
+    features: ['reviews'],
+    steps: [{ click: '숨김 해제' }],
+    viewport: true,
   },
 ];

@@ -1,6 +1,5 @@
 'use client';
 
-import { Container, Stack } from '@mantine/core';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
@@ -78,8 +77,9 @@ export default function Home() {
         }
       />
 
-      <Container size="sm" py="md">
-        <Stack gap="md">
+      {/* ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·py md, Stack gap md. */}
+      <div className="mx-auto max-w-[720px] px-4 py-4">
+        <div className="flex flex-col items-stretch justify-start gap-4">
           <TodayTasksCard
             orders={orders}
             products={products}
@@ -102,8 +102,8 @@ export default function Home() {
             hasLoaded={productsHasLoaded}
             onRetry={retryProducts}
           />
-        </Stack>
-      </Container>
+        </div>
+      </div>
     </PageShell>
   );
 }

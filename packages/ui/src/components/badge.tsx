@@ -32,9 +32,16 @@ const badgeVariants = cva(
         ghost: 'bg-transparent text-foreground hover:bg-muted',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
+      // Mantine Badge size(기본 md). sm = 높이 18·좌우 8·10px, xs = 높이 16·좌우 6·9px(줄 높이는 높이 - 2px).
+      size: {
+        md: '',
+        sm: 'h-[18px] px-2 text-[10px] leading-4',
+        xs: 'h-4 px-1.5 text-[9px] leading-[14px]',
+      },
     },
     defaultVariants: {
       variant: 'default',
+      size: 'md',
     },
   },
 );
@@ -42,6 +49,7 @@ const badgeVariants = cva(
 function Badge({
   className,
   variant = 'default',
+  size = 'md',
   render,
   ...props
 }: useRender.ComponentProps<'span'> & VariantProps<typeof badgeVariants>) {
@@ -49,7 +57,7 @@ function Badge({
     defaultTagName: 'span',
     props: mergeProps<'span'>(
       {
-        className: cn(badgeVariants({ variant }), className),
+        className: cn(badgeVariants({ variant, size }), className),
       },
       props,
     ),
