@@ -277,6 +277,11 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - `Textarea` autosize: Mantine Autosize와 같이 숨긴 textarea의 정수 `scrollHeight`로 글 높이·한 줄 높이를 잰다(자리표시가 있으면 빈 칸도 자리표시로 잰다). 줄 높이 계산값(15px × 1.55 = 23.25)을 곱하면 Mantine(한 줄 23)보다 0.5px 커져 확인창 전체가 반 픽셀 움직였다.
   - 배송 후 환불 사유 라디오는 Mantine Radio(sm) 계산값으로 화면 안에 그린다(기사 앱 `RadioGroupField`와 같은 값).
   - 촬영 목록에 `modal-admin-refund`·`modal-admin-post-delivery-refund`·`modal-admin-post-delivery-refund-filled`(사유·메모 입력)를, 어드민 주문 fixture에 회차 배송 완료 주문(`R-DELIVERED`)을 더했다. 기준은 Mantine 확인창이 남은 `main` e93322d(#712 전)에 같은 fixture를 넣고 찍었다(#712는 그 커밋과 판매자 153장이 같음을 증명했다).
+- 어드민 초대·숨긴 후기·입점 문의 구현(2026-10-31): `admin/invite`(발급·내역·직접 복사 창)·`admin/reviews`·`admin/partner-inquiries`의 `@mantine/core`를 걷었다. 직접 복사 창·숨김 해제 창의 `data-autofocus` 첫 초점은 #714 `Dialog` 약속을 쓴다.
+  - `packages/ui` 추가(새 파일·새 변형): `LoadingButton`(Mantine Button `loading`: 변형 색 위 흰 15% 막, 글자 칸 opacity 0·translateY(100%), 가운데 Loader 높이 ÷ 1.8), Button 크기 `compact-xs`·`compact-sm`·변형 `plain`(Mantine `default`), Badge `light-orange`·`light-green`.
+  - 받는 사람 이메일 필수 표시(*)는 Mantine 라벨처럼 글자 바로 뒤 공백 + red-6 별표다. 판매자 앱은 Mantine `Anchor.css`를 넣지 않아 입점 문의 연락처 링크가 브라우저 기본 링크색이고, 그대로 둔다.
+  - Text 기본 클래스에 `font-normal`을 두면 Tailwind 순서상 `font-bold`를 이긴다(`font-semibold`는 이긴다). 굵은 글자를 함께 쓰는 곳에서는 넣지 않는다.
+  - 촬영 목록: 초대 취소 확인창·링크 복사됨(헤드리스에서도 복사가 성공해 직접 복사 창은 열리지 않는다), 취소된 초대·받는 사람 지정 초대 fixture. 기능 플래그 화면은 benchmarkScreens에 숨긴 후기·숨김 해제 확인창·입점 문의 삭제 확인창과 연락 전·이메일 입점 문의를 더했다(`NEXT_PUBLIC_GREENHUB_FEATURES=reviews,partner-inquiry`로 띄워 찍는다).
 - 어드민 주문 구현(2026-10-31): `admin/orders`의 목록(카드·표·배지·강제환불·배송 후 환불 버튼)·필터·머리 글자에서 `@mantine/core`를 걷었다. `@mantine/notifications`와 공용 `LoadMoreFooter`(기사 탭과 같이 씀)는 남았다. 환불 확인창은 #714에서 바꿨다.
   - `packages/ui` 추가: `SearchableSelect`(Base UI Combobox. Mantine Select searchable과 같은 동작: 고른 이름이면 전체 목록, 글자로 거름, 맞는 항목 없음 글자, 닫히면 고른 이름으로 되돌림, 고른 항목 다시 누르면 고름 풀기, clearable), Badge `outline-warning`·`outline-destructive`, Button `outline-destructive`, `Select`의 `itemClassName`·`inlinePopup`(기본값은 그대로).
   - 열린 목록이 Mantine과 같으려면 셋이 필요했다. 항목 줄 높이는 Mantine처럼 본문 1.55(기존 `Select`는 `text-sm`의 1.45라 항목이 1px 낮다), 목록을 body가 아니라 칸 상자 안에 top·left로 둔다(Base UI가 body 위치를 정수 픽셀로 반올림해 칸이 소수점 위치면 글자가 1px 어긋난다), Base UI가 위치 상자에 붙이는 `will-change: transform`을 끈다(따로 합성되면 2배 화면에서 글자가 1px 어긋난다).
