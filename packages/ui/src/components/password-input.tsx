@@ -10,6 +10,7 @@ import { cn } from '../lib/utils';
 // 버튼은 Tab으로 가지 않는다(Mantine visibilityToggleFocusable false). 기사 앱 PasswordField(P3)와 같은 값이다.
 // size="sm": 소비자 앱 Mantine PasswordInput 기본(size sm, theme 기본 radius 16). 높이 36·좌우 12px·15px 글자,
 // 오른쪽 34px 칸, 눈 모양 버튼 26px(그림 칸 24px·그림 20px). 소비자 로그인 화면에서 계산값을 맞췄다.
+// sm은 접근성 트리도 소비자 Mantine과 같게 그림(svg)을 숨기지 않는다(md는 지금처럼 aria-hidden).
 const passwordSizeClassName = {
   md: {
     box: 'h-[42px] min-h-[42px] rounded-[32px] ps-[14px] pe-10 text-base leading-[40px]',
@@ -75,7 +76,7 @@ function PasswordInput({
           )}
         >
           <span className={cn('flex items-center justify-center', sized.iconBox)}>
-            <PasswordToggleIcon reveal={reveal} className={sized.icon} />
+            <PasswordToggleIcon reveal={reveal} className={sized.icon} hidden={size === 'md'} />
           </span>
         </button>
       </div>
@@ -84,7 +85,15 @@ function PasswordInput({
 }
 
 // Mantine PasswordToggleIcon과 같은 그림.
-function PasswordToggleIcon({ reveal, className }: { reveal: boolean; className: string }) {
+function PasswordToggleIcon({
+  reveal,
+  className,
+  hidden,
+}: {
+  reveal: boolean;
+  className: string;
+  hidden: boolean;
+}) {
   const stroke = {
     fill: 'none',
     stroke: 'currentColor',
@@ -93,11 +102,12 @@ function PasswordToggleIcon({ reveal, className }: { reveal: boolean; className:
     strokeWidth: '16',
   } as const;
   return (
+    // biome-ignore lint/a11y/noSvgWithoutTitle: 버튼 이름(aria-label)이 있는 장식 그림이다. sm은 Mantine과 같은 접근성 트리를 위해 숨기지 않는다.
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 256 256"
       className={className}
-      aria-hidden="true"
+      aria-hidden={hidden ? 'true' : undefined}
     >
       <path fill="none" d="M0 0h256v256H0z" />
       {reveal ? (
