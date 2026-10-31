@@ -14,7 +14,7 @@ interface OrdersFiltersProps {
 }
 
 // ① 외형 유지(UI 교체 P2b): Mantine Group gap sm·mb md, Select size sm·radius md(8px)와 같은 값.
-// 상태 목록은 Mantine 기본 높이 220, 항목 줄 높이는 Mantine처럼 본문 1.55이고, 칸의 소수점 위치를 따른다.
+// 상태 목록은 Mantine 기본 높이 220이다.
 export function OrdersFilters({
   storeFilter,
   statusFilter,
@@ -42,8 +42,6 @@ export function OrdersFilters({
           data={buildStatusOptions()}
           maxDropdownHeight={220}
           className="rounded-[8px]"
-          itemClassName="leading-[1.55]"
-          inlinePopup
         />
       </div>
     </div>

@@ -1046,6 +1046,28 @@ export const screens = [
   { id: 'products', group: '판매자', title: '상품 목록', path: '/products', firestore: true },
   { id: 'product-new', group: '판매자', title: '상품 등록', path: '/products/new' },
   { id: 'product-edit', group: '판매자', title: '상품 수정', path: '/products/product-1/edit' },
+  // 상품 등록 품종 선택 Select 열린 목록(카테고리 난, 묶음·자리표시), 하나 고른 뒤 다시 연 목록(체크·지우기 버튼).
+  {
+    id: 'product-new-variety-open',
+    group: '판매자 · 목록',
+    title: '상품 등록 · 품종 목록 열림',
+    path: '/products/new',
+    steps: [{ click: '난' }, { clickSelector: 'input[placeholder="품종 선택 (선택사항)"]' }],
+    viewport: true,
+  },
+  {
+    id: 'product-new-variety-picked-open',
+    group: '판매자 · 목록',
+    title: '상품 등록 · 품종 고른 뒤 목록 열림',
+    path: '/products/new',
+    steps: [
+      { click: '난' },
+      { clickSelector: 'input[placeholder="품종 선택 (선택사항)"]' },
+      { clickSelector: '[role="option"]:has-text("만천홍")' },
+      { clickSelector: 'input[placeholder="품종 선택 (선택사항)"]' },
+    ],
+    viewport: true,
+  },
   // 상품 폼 2~5단계는 주소로 열 수 없어 수정 화면에서 "다음"을 n-1번 누른다.
   ...[2, 3, 4, 5].map((step) => ({
     id: `product-edit-step${step}`,
