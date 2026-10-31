@@ -49,13 +49,16 @@ import {
   Modal,
   NativeSelect as MNativeSelect,
   NumberInput as MNumberInput,
+  Paper,
   Select as MSelect,
+  Stack as MStack,
   Switch as MSwitch,
   Text,
   Textarea as MTextarea,
   TextInput,
   Title,
 } from '@mantine/core';
+import { AdminFetchError } from '@/app/admin/_components/AdminFetchError';
 import { ChevronLeft, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
@@ -492,6 +495,43 @@ export function UiCompare({ open }: { open?: string }) {
               <AlertTitle>최신 정보를 확인하지 못했습니다</AlertTitle>
               <AlertDescription>이전 목록을 표시합니다.</AlertDescription>
             </Alert>
+          }
+        />
+      </Section>
+
+      <Section title="어드민 틀 · 조회 실패(화면 촬영에 없는 상태)">
+        <Row
+          name="AdminFetchError"
+          mantine={
+            <Paper
+              radius="lg"
+              shadow="xs"
+              style={{ border: '1px solid var(--color-border)', overflow: 'hidden', width: '100%' }}
+            >
+              <MStack gap="sm" align="center" py={64} px="md">
+                <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+                  숨긴 후기를 불러오지 못했습니다.
+                </Text>
+                <Text
+                  ta="center"
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                >
+                  숨긴 후기 조회 중 오류 발생
+                </Text>
+                <MButton size="sm" variant="outline" radius="md">
+                  다시 조회
+                </MButton>
+              </MStack>
+            </Paper>
+          }
+          ui={
+            <div style={{ width: '100%' }}>
+              <AdminFetchError
+                title="숨긴 후기를 불러오지 못했습니다."
+                detail="숨긴 후기 조회 중 오류 발생"
+                onRetry={() => {}}
+              />
+            </div>
           }
         />
       </Section>
