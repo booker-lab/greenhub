@@ -1010,17 +1010,19 @@ export function UiCompare({ open }: { open?: string }) {
         <Row
           name="LoadMoreFooter 더 보기 실패(다시 시도)"
           mantine={
-            <MStack align="center" gap={4} mt="md" style={{ width: '100%' }}>
-              <Text
-                role="alert"
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-              >
-                드라이버 목록을 더 불러오지 못했습니다.
-              </Text>
-              <MButton variant="light" color="gray" radius="md">
-                다시 시도
-              </MButton>
-            </MStack>
+            <div style={{ width: '100%' }}>
+              <MStack align="center" gap={4} mt="md">
+                <Text
+                  role="alert"
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+                >
+                  드라이버 목록을 더 불러오지 못했습니다.
+                </Text>
+                <MButton variant="light" color="gray" radius="md">
+                  다시 시도
+                </MButton>
+              </MStack>
+            </div>
           }
           ui={
             <div style={{ width: '100%' }}>
