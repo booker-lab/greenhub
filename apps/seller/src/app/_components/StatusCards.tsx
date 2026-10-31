@@ -1,7 +1,7 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { Button, Group, Stack, Text, UnstyledButton } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { ChevronRight, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment } from 'react';
@@ -13,6 +13,12 @@ import {
   resolveDashboardSummaryAmountText,
   resolveDashboardSummaryView,
 } from '@/hooks/useDashboardSummary.recovery';
+
+// ① 외형 유지(UI 교체 P4): Mantine Text·Group·Stack·UnstyledButton·Button과 같은 값을 Tailwind로 그린다.
+// Group은 가로 flex(줄바꿈, 가운데 정렬), Stack은 세로 flex(늘임)이고 gap xs는 10px, lg는 20px이다.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 
 // ─── 주문 처리 현황 카드 ──────────────────────────────────────────
 
@@ -37,7 +43,7 @@ export function OrderStatusCard({
 }) {
   return (
     <DashboardCard title="주문 처리 현황" moreHref="/orders">
-      <Group gap={2} align="flex-start" wrap="nowrap">
+      <div className="flex flex-row flex-nowrap items-start justify-start gap-0.5">
         {PIPELINE.map((step, i) => {
           const count = groupCounts[step.group];
           const accent = step.group === 'ACTION_REQUIRED' && (count ?? 0) > 0;
@@ -50,9 +56,10 @@ export function OrderStatusCard({
                   style={{ flexShrink: 0, marginTop: 8 }}
                 />
               )}
-              <UnstyledButton component={Link} href={step.href} style={{ flex: 1, minWidth: 0 }}>
-                <Stack gap={2} align="center">
-                  <Text
+              <Link href={step.href} className={UNSTYLED_BUTTON} style={{ flex: 1, minWidth: 0 }}>
+                <div className="flex flex-col items-center justify-start gap-0.5">
+                  <p
+                    className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-2xl)',
                       fontWeight: 'var(--fw-bold)',
@@ -61,8 +68,9 @@ export function OrderStatusCard({
                     }}
                   >
                     {count ?? '—'}
-                  </Text>
-                  <Text
+                  </p>
+                  <p
+                    className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-disabled)',
@@ -70,14 +78,15 @@ export function OrderStatusCard({
                     }}
                   >
                     {step.label}
-                  </Text>
-                </Stack>
-              </UnstyledButton>
+                  </p>
+                </div>
+              </Link>
             </Fragment>
           );
         })}
-      </Group>
-      <Text
+      </div>
+      <p
+        className={TEXT}
         style={{
           fontSize: 'var(--font-size-sm)',
           color: 'var(--color-text-disabled)',
@@ -85,7 +94,7 @@ export function OrderStatusCard({
         }}
       >
         취소 {groupCounts.CANCELLED ?? '—'}건
-      </Text>
+      </p>
     </DashboardCard>
   );
 }
@@ -121,9 +130,12 @@ export function SettlementCard({
   if (view === 'LOADING') {
     return (
       <DashboardCard title="정산 현황" moreHref="/settlements">
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        >
           불러오는 중…
-        </Text>
+        </p>
       </DashboardCard>
     );
   }
@@ -131,12 +143,16 @@ export function SettlementCard({
   if (view === 'READ_FAILED') {
     return (
       <DashboardCard title="정산 현황" moreHref="/settlements">
-        <Stack gap="xs">
-          <Group justify="space-between">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+        <div className="flex flex-col items-stretch justify-start gap-2.5">
+          <div className="flex flex-row flex-wrap items-center justify-between gap-4">
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               오늘 정산 예정
-            </Text>
-            <Text
+            </p>
+            <p
+              className={TEXT}
               style={{
                 fontSize: 'var(--font-size-md)',
                 fontWeight: 'var(--fw-bold)',
@@ -144,27 +160,22 @@ export function SettlementCard({
               }}
             >
               —
-            </Text>
-          </Group>
-          <Text
+            </p>
+          </div>
+          <p
+            className={TEXT}
             role="alert"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             {error ?? '정산 정보를 불러오지 못했습니다.'}
-          </Text>
+          </p>
           {onRetry && (
-            <Button
-              size="xs"
-              variant="light"
-              color="red"
-              leftSection={<RefreshCcw size={14} />}
-              onClick={onRetry}
-              style={{ alignSelf: 'flex-start' }}
-            >
+            <Button size="xs" variant="light-destructive" onClick={onRetry} className="self-start">
+              <RefreshCcw className="size-3.5" data-icon="inline-start" />
               다시 조회
             </Button>
           )}
-        </Stack>
+        </div>
       </DashboardCard>
     );
   }
@@ -172,11 +183,15 @@ export function SettlementCard({
   const isStale = view === 'STALE';
   return (
     <DashboardCard title="정산 현황" moreHref="/settlements">
-      <Group justify="space-between">
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+      <div className="flex flex-row flex-wrap items-center justify-between gap-4">
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        >
           오늘 정산 예정
-        </Text>
-        <Text
+        </p>
+        <p
+          className={TEXT}
           style={{
             fontSize: 'var(--font-size-md)',
             fontWeight: 'var(--fw-bold)',
@@ -184,29 +199,24 @@ export function SettlementCard({
           }}
         >
           {amountText}
-        </Text>
-      </Group>
+        </p>
+      </div>
       {isStale && (
-        <Stack gap="xs" mt="xs">
-          <Text
+        <div className="mt-2.5 flex flex-col items-stretch justify-start gap-2.5">
+          <p
+            className={TEXT}
             role="alert"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             최신 정보를 확인하지 못했습니다. 이전 정보입니다.
-          </Text>
+          </p>
           {onRetry && (
-            <Button
-              size="xs"
-              variant="light"
-              color="yellow"
-              leftSection={<RefreshCcw size={14} />}
-              onClick={onRetry}
-              style={{ alignSelf: 'flex-start' }}
-            >
+            <Button size="xs" variant="light-warning" onClick={onRetry} className="self-start">
+              <RefreshCcw className="size-3.5" data-icon="inline-start" />
               다시 조회
             </Button>
           )}
-        </Stack>
+        </div>
       )}
     </DashboardCard>
   );
@@ -232,9 +242,12 @@ export function ProductStatusCard({
   if (!hasLoaded && loading) {
     return (
       <DashboardCard title="상품 현황" moreHref="/products">
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        >
           불러오는 중…
-        </Text>
+        </p>
       </DashboardCard>
     );
   }
@@ -242,26 +255,21 @@ export function ProductStatusCard({
   if (error && !hasLoaded) {
     return (
       <DashboardCard title="상품 현황" moreHref="/products">
-        <Stack gap="xs">
-          <Text
+        <div className="flex flex-col items-stretch justify-start gap-2.5">
+          <p
+            className={TEXT}
             role="alert"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             상품 정보를 불러오지 못했습니다.
-          </Text>
+          </p>
           {onRetry && (
-            <Button
-              size="xs"
-              variant="light"
-              color="red"
-              leftSection={<RefreshCcw size={14} />}
-              onClick={onRetry}
-              style={{ alignSelf: 'flex-start' }}
-            >
+            <Button size="xs" variant="light-destructive" onClick={onRetry} className="self-start">
+              <RefreshCcw className="size-3.5" data-icon="inline-start" />
               다시 조회
             </Button>
           )}
-        </Stack>
+        </div>
       </DashboardCard>
     );
   }
@@ -271,21 +279,33 @@ export function ProductStatusCard({
   const isStale = hasLoaded && error !== null;
   return (
     <DashboardCard title="상품 현황" moreHref="/products">
-      <Group gap="lg">
-        <Group gap={6}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+      <div className="flex flex-row flex-wrap items-center justify-start gap-5">
+        <div className="flex flex-row flex-wrap items-center justify-start gap-1.5">
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
             판매 중
-          </Text>
-          <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>
+          </p>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}
+          >
             {activeCount}
-          </Text>
-        </Group>
-        <Text style={{ color: 'var(--color-text-disabled)' }}>·</Text>
-        <Group gap={6}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          </p>
+        </div>
+        <p className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+          ·
+        </p>
+        <div className="flex flex-row flex-wrap items-center justify-start gap-1.5">
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
             비활성
-          </Text>
-          <Text
+          </p>
+          <p
+            className={TEXT}
             style={{
               fontSize: 'var(--font-size-md)',
               fontWeight: 'var(--fw-bold)',
@@ -293,30 +313,25 @@ export function ProductStatusCard({
             }}
           >
             {inactiveCount}
-          </Text>
-        </Group>
-      </Group>
+          </p>
+        </div>
+      </div>
       {isStale && (
-        <Stack gap="xs" mt="xs">
-          <Text
+        <div className="mt-2.5 flex flex-col items-stretch justify-start gap-2.5">
+          <p
+            className={TEXT}
             role="alert"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             최신 정보를 확인하지 못했습니다. 이전 수치입니다.
-          </Text>
+          </p>
           {onRetry && (
-            <Button
-              size="xs"
-              variant="light"
-              color="yellow"
-              leftSection={<RefreshCcw size={14} />}
-              onClick={onRetry}
-              style={{ alignSelf: 'flex-start' }}
-            >
+            <Button size="xs" variant="light-warning" onClick={onRetry} className="self-start">
+              <RefreshCcw className="size-3.5" data-icon="inline-start" />
               다시 조회
             </Button>
           )}
-        </Stack>
+        </div>
       )}
     </DashboardCard>
   );
