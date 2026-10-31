@@ -282,6 +282,9 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 합계 카드의 role group은 로컬 E2E가 이름으로 찾으므로 그대로 두고 biome `useSemanticElements`만 사유와 함께 끈다.
   - 촬영 목록에 정산 필터 화면 4개(가게 목록 열림·맞는 가게 없음·가게 고름·더 보기 불러오는 중)를 더하고, 정산 fixture에 상태별·회수 필요·지급 보류 데이터와 다음 쪽(늦게 답함)을 넣었다. 주문 PR과 같은 fixture로 찍었다.
   - 로컬 증명(#694 하네스, 판매자 단독, 기준 `main` 94211c2 + 같은 fixture, 기준 시각 2026-10-31T00:00+09:00): 판매자 189장 정상 촬영 189, `diff.mjs --tolerance 1` 189장 같음(허용 목록 없음, 더 보기 불러오는 중 포함), 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 879개. 운영 빌드는 증명하지 않았다.
+- Select 열린 목록 바로잡기(2026-10-31): 어드민 주문 작업에서 찾은 기존 `Select` 열린 목록의 1px 차이를 기본값에서 고쳤다. 항목 줄 높이를 Mantine 본문 1.55로 두고(`text-sm`의 1.45라 항목이 1px 낮았다), `Select`·`SearchableSelect` 목록을 Mantine처럼 body에 두되 입력칸 아래 8px을 문서 좌표 top·left로 준다(`packages/ui/src/lib/use-document-anchor.ts`). Base UI Positioner는 위치를 transform으로 주며 정수 픽셀로 반올림하고 `will-change: transform`을 붙여, 칸이 소수점 위치면 글자가 1px 어긋났다. 칸 안에 두던 `inlinePopup`은 조상 overflow에 잘릴 수 있어 걷었다.
+  - 촬영 목록에 상품 등록 품종 Select 목록 열림·고른 뒤 열림(`product-new-variety-open`·`product-new-variety-picked-open`)을 더했다. 이 두 화면과 주문 상태 목록 열림은 Mantine 시절 `main`(b697d67, #710 직전)에 지금 하네스를 얹어 찍은 기준과 같다.
+  - 로컬 증명(기준 시각 2026-10-31T00:00+09:00): Mantine 시절 기준과 9장 같음(지금 `main` be10e7c는 품종 목록 6장이 달랐다). 판매자 195장 정상 촬영 195, 기준 `main` be10e7c + 같은 fixture와 `diff.mjs --tolerance 1` 189장 같음·품종 목록 6장만 다름(위의 바로잡음, 허용 목록 없음). 대조 화면의 Mantine·`@greenhub/ui` Select 열린 목록 캡처는 세 폭 모두 0픽셀 차이(전에는 390에서 19픽셀), 대조 행 세 폭 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 879개. 운영 빌드는 증명하지 않았다.
 
 ### P3. 기사 앱 (12개 파일)
 - 기사 앱을 연결하고 1단계만 한다(`design-direction.md` D4 미확정). 연결 방식은 P2a와 같다.

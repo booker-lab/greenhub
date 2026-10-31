@@ -3,6 +3,7 @@
 import { Combobox as ComboboxPrimitive } from '@base-ui/react/combobox';
 import { useEffect, useRef, useState } from 'react';
 
+import { popupPositionClassName, useDocumentAnchor } from '../lib/use-document-anchor';
 import { cn } from '../lib/utils';
 import { CloseIcon } from './close-button';
 import { type InputSize, inputClassName, inputSizeClassName } from './input';
@@ -14,8 +15,7 @@ import { OptionCheck, SelectChevron, type SelectItem } from './select';
 // - 맞는 항목이 없으면 nothingFoundMessage를 gray-6 가운데 글자로 보인다.
 // - 닫히면(초점을 잃으면) 입력 글자를 고른 항목 이름으로 되돌린다.
 // - 고른 항목을 다시 누르면 고름을 푼다(allowDeselect). clearable이고 값이 있으면 지우기 버튼을 둔다.
-// 목록은 입력칸 상자 안에 절대 위치(입력칸 아래 8px)로 그린다. body에 그리면 Base UI가 위치를 정수 픽셀로
-// 반올림해, 입력칸이 소수점 위치에 있을 때 Mantine(반올림 없음)과 글자가 1px 어긋난다.
+// 목록 자리는 Select처럼 Mantine과 같은 문서 좌표로 준다(useDocumentAnchor).
 
 const CHEVRON_SIZE = { xs: 'size-3.5', sm: 'size-[18px]', md: 'size-5' } as const;
 const CLEAR_SIZE = { xs: 'size-[18px]', sm: 'size-[22px]', md: 'size-7' } as const;
@@ -71,6 +71,7 @@ function SearchableSelect({
   // Mantine은 방향키로 옮긴 항목만 주색으로 칠한다(마우스는 gray-0, 막 열었을 때 고른 항목은 칠하지 않음).
   const [keyboardHighlight, setKeyboardHighlight] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const anchor = useDocumentAnchor(rootRef);
 
   useEffect(() => {
     latestLabelRef.current = selectedLabel;
@@ -101,7 +102,8 @@ function SearchableSelect({
         if (details.reason === 'input-change') setSearch(next);
       }}
       onOpenChange={(open) => {
-        if (!open) setSearch(latestLabelRef.current);
+        if (open) anchor.measure();
+        else setSearch(latestLabelRef.current);
       }}
       onItemHighlighted={(item, details) =>
         setKeyboardHighlight(item !== undefined && details.reason === 'keyboard')
@@ -151,11 +153,10 @@ function SearchableSelect({
           <SelectChevron className={CHEVRON_SIZE[size]} />
         </div>
       </div>
-      <ComboboxPrimitive.Portal container={rootRef}>
-        {/* 위치를 transform이 아니라 top·left로 주고, Base UI가 붙이는 will-change: transform을 끈다.
-            따로 합성된 층으로 그리면 2배 화면에서 글자가 1px 어긋난다. */}
+      <ComboboxPrimitive.Portal>
         <ComboboxPrimitive.Positioner
-          className="top-[calc(100%+8px)]! left-0! z-50 transform-none! outline-none will-change-auto!"
+          className={cn('z-50 outline-none', popupPositionClassName)}
+          style={anchor.style}
           positionMethod="absolute"
           side="bottom"
           sideOffset={8}
