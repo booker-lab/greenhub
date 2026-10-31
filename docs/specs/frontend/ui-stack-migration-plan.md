@@ -331,6 +331,8 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 판매자 앱 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-2`): 판매자 앱에는 사이드바·모바일 메뉴가 없고 하단 탭(`BottomNav`)이 틀이다. `BottomNav`·`ConnectionStatus`(머리 오른쪽 연결 상태)의 `@mantine/core`를 걷었다(UnstyledButton 링크·Stack·Group·Text 계산값). `layout.tsx`의 `ColorSchemeScript`·`providers.tsx`의 `MantineProvider`는 Mantine 화면이 남아 있는 동안 둔다.
   - 로컬 증명(판매자 단독, 허용 목록 없음): `main` 1423448 merge 뒤 기준 `main` 1423448 + 같은 fixture와 351장 같음. 이어 `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture(기준 시각 2026-11-01T00:00+09:00)와 그 사이 바뀐 화면 81장(주문 목록·홈·준비·운영 확인·초대·배송 보류·어드민 판매자)과 기능 플래그를 켠 고객 반응 4화면 12장이 같음. 대조 행 세 폭 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
 - 다음 회차가 잡혀 있으면, 회차 운영 동선 묶음(어드민 기사 승인·환불 포함)은 끝까지 교체된 상태로만 그 회차의 마지막 출시에 넣는다. 판매자 대표가 실제 계정으로 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
+- 어드민 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-3`): 어드민 `layout.tsx`(머리·관리자 콘솔 글자·셀러 화면 링크·ADMIN 배지·본문 칸)·`AdminNav`·`AdminLogoutButton`·`AdminFetchError`의 `@mantine/core`를 걷었다. Mantine Container lg(1140px)·Group·Text·Badge light red(= `destructive`)·Paper(radius lg·shadow xs)·Button outline radius md 계산값이다. 조회 실패 화면은 실패 응답이 콘솔 오류라 촬영 판정에 걸리므로 대조 화면 행으로 본다.
+  - 로컬 증명(판매자 단독, `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture, 기준 시각 2026-11-01T00:00+09:00): 375장 정상 촬영, `diff.mjs --tolerance 1` 375장 같음(허용 목록 없음), 대조 행 세 폭 같음(조회 실패 행 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
 
 ### P5. 소비자 앱 (51개 파일)
 - 첫 PR에서 소비자 앱을 연결한다(P2a 방식).
