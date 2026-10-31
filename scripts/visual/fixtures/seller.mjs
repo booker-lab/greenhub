@@ -1301,6 +1301,43 @@ export const screens = [
     steps: [{ click: '정지' }],
     viewport: true,
   },
+  // 어드민 판매자·소비자(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  {
+    id: 'admin-stores-all',
+    group: '어드민',
+    title: '판매자 · 전체(치운 판매자 포함)',
+    path: '/admin/stores?status=all',
+  },
+  {
+    id: 'admin-stores-no-match',
+    group: '어드민',
+    title: '판매자 · 검색 결과 없음',
+    path: '/admin/stores?keyword=%EC%97%86%EB%8A%94%EA%B0%80%EA%B2%8C',
+  },
+  {
+    id: 'admin-stores-commission-edit',
+    group: '어드민',
+    title: '판매자 · 수수료율 입력',
+    path: '/admin/stores',
+    steps: [{ clickSelector: 'button:has-text("수수료 설정"):visible' }],
+  },
+  {
+    // 상태 Select 열린 목록(Mantine Combobox ↔ Base UI Select, #719 열린 목록 기본값).
+    id: 'admin-stores-status-open',
+    group: '어드민',
+    title: '판매자 · 상태 고르기 열림',
+    path: '/admin/stores',
+    steps: [{ clickSelector: 'input[readonly]:visible' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-user-suspend',
+    group: '어드민 · 모달',
+    title: '소비자 · 정지 확인(사유)',
+    path: '/admin/users',
+    steps: [{ clickSelector: 'button:has-text("정지"):visible' }],
+    viewport: true,
+  },
   // 어드민 정산 — 가게 검색 Select(열림·맞는 가게 없음·고른 뒤 지우기 버튼), 더 보기 불러오는 중.
   {
     id: 'admin-settlements-store-open',
