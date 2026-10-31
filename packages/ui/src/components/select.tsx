@@ -234,4 +234,4 @@ function Select({
   );
 }
 
-export { Select, SelectChevron };
+export { OptionCheck, Select, SelectChevron };
