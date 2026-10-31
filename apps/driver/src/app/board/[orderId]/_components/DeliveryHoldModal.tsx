@@ -1,20 +1,29 @@
 'use client';
 
 import { apiPathSegment } from '@greenhub/shared';
+import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
+import { CloseIcon, closeButtonClassName } from '@greenhub/ui/components/close-button';
+import { cn } from '@greenhub/ui/lib/utils';
 import {
-  Button,
-  Checkbox,
-  Group,
-  Modal,
-  NumberInput,
-  Radio,
-  Stack,
-  Text,
-  Textarea,
-  TextInput,
-} from '@mantine/core';
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+} from '@greenhub/ui/components/dialog';
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
+import { AppButton } from '@/components/app-button';
+import {
+  CheckboxField,
+  NumberField,
+  RadioGroupField,
+  TextareaField,
+  TextField,
+} from '@/components/fields';
+import { text } from '@/components/look';
 import { apiFetch } from '@/lib/api';
 import {
   deliveryHoldResponsibilityFeeHint,
@@ -297,70 +306,96 @@ export function DeliveryHoldModal({
   }
 
   return (
-    <Modal opened={opened} onClose={onClose} title="배송 보류 기록" centered>
-      <Stack gap="md">
-        <Radio.Group label="보류 유형" value={reasonCode} onChange={changeReason}>
-          <Stack gap="xs" mt="xs">
-            {Object.entries(HOLD_REASON_LABEL).map(([value, label]) => (
-              <Radio key={value} value={value} label={label} />
-            ))}
-          </Stack>
-        </Radio.Group>
-        <Textarea
-          label="보류 사유"
-          value={reasonMessage}
-          onChange={(event) => setReasonMessage(event.currentTarget.value)}
-          required
-          autosize
-          minRows={2}
-        />
-        <Checkbox
-          label="고객 책임"
-          checked={customerResponsible}
-          disabled={isWeather}
-          onChange={(event) => setCustomerResponsible(event.currentTarget.checked)}
-        />
-        <NumberInput
-          label="재배송비"
-          value={redeliveryFee}
-          disabled={isWeather}
-          min={0}
-          step={1000}
-          suffix="원"
-          onChange={setRedeliveryFee}
-        />
-        {responsibilityFeeHint && (
-          <Text c="red" size="sm">
-            {responsibilityFeeHint}
-          </Text>
-        )}
-        <TextInput
-          label="다음 연락 예정"
-          type="datetime-local"
-          value={nextContactAt}
-          onChange={(event) => setNextContactAt(event.currentTarget.value)}
-        />
-        <TextInput
-          label="새 배송 예정"
-          type="datetime-local"
-          value={nextDeliveryAt}
-          onChange={(event) => setNextDeliveryAt(event.currentTarget.value)}
-        />
-        {error && <Text c="red">{error}</Text>}
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose} disabled={loading}>
-            취소
-          </Button>
-          <Button
-            color="red"
-            onClick={submit}
-            loading={loading}
-            disabled={loading || responsibilityFeeHint !== null}
+    <Dialog
+      open={opened}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogPortal>
+        {/* 머리·닫기·본문은 packages/ui Dialog(Mantine Modal 구조)를 쓴다. 하단 탭(z 100) 위를 덮도록 Mantine과 같은
+            z 200을 써야 하는데 DialogContent는 오버레이·뷰포트 z가 50으로 고정이라 풀어서 둔다. 가운데 정렬은 flex
+            뷰포트 대신 m-auto로 한다(flex로 두면 Mantine 화면과 라디오 원 가장자리 안티앨리어싱이 1~4 다르게 그려진다). */}
+        <DialogOverlay className="z-[200]" />
+        <DialogPrimitive.Popup
+          data-slot="dialog-content"
+          className="fixed inset-0 z-[200] m-auto flex h-fit max-h-[90dvh] w-[min(440px,90vw)] flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none"
+        >
+          <DialogHeader>
+            <DialogTitle className="m-0 p-0 text-black">배송 보류 기록</DialogTitle>
+          </DialogHeader>
+          {/* preflight 없이 연결한 앱이라 버튼 기본 테두리·여백을 지운다. */}
+          <DialogClose
+            aria-label="닫기"
+            className={cn(closeButtonClassName, 'appearance-none border-0 p-0')}
           >
-            배송 보류 저장
-          </Button>
-        </Group>
-      </Stack>
-    </Modal>
+            <CloseIcon />
+          </DialogClose>
+          <DialogBody>
+            <div className="flex flex-col gap-4">
+              <RadioGroupField
+                label="보류 유형"
+                value={reasonCode}
+                onChange={changeReason}
+                options={Object.entries(HOLD_REASON_LABEL).map(([value, label]) => ({
+                  value,
+                  label,
+                }))}
+              />
+              <TextareaField
+                label="보류 사유"
+                value={reasonMessage}
+                onChange={(event) => setReasonMessage(event.currentTarget.value)}
+                required
+              />
+              <CheckboxField
+                label="고객 책임"
+                checked={customerResponsible}
+                disabled={isWeather}
+                onChange={setCustomerResponsible}
+              />
+              <NumberField
+                label="재배송비"
+                value={redeliveryFee}
+                disabled={isWeather}
+                min={0}
+                step={1000}
+                suffix="원"
+                onChange={setRedeliveryFee}
+              />
+              {responsibilityFeeHint && (
+                <p className={`${text} text-sm/[1.45] text-[#fa5252]`}>{responsibilityFeeHint}</p>
+              )}
+              <TextField
+                label="다음 연락 예정"
+                type="datetime-local"
+                value={nextContactAt}
+                onChange={(event) => setNextContactAt(event.currentTarget.value)}
+              />
+              <TextField
+                label="새 배송 예정"
+                type="datetime-local"
+                value={nextDeliveryAt}
+                onChange={(event) => setNextDeliveryAt(event.currentTarget.value)}
+              />
+              {error && <p className={`${text} text-[#fa5252]`}>{error}</p>}
+              <div className="flex flex-wrap items-center justify-end gap-4">
+                <AppButton tone="default" onClick={onClose} disabled={loading}>
+                  취소
+                </AppButton>
+                <AppButton
+                  tone="red"
+                  onClick={submit}
+                  loading={loading}
+                  disabled={loading || responsibilityFeeHint !== null}
+                >
+                  배송 보류 저장
+                </AppButton>
+              </div>
+            </div>
+          </DialogBody>
+        </DialogPrimitive.Popup>
+      </DialogPortal>
+    </Dialog>
   );
 }

@@ -1,12 +1,16 @@
 'use client';
 
-import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
-import { useDebouncedCallback } from '@mantine/hooks';
+import { Button } from '@greenhub/ui/components/button';
 import { notifications } from '@mantine/notifications';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import type { AdminStore } from '@/hooks/useAdmin';
-import { classifyAdminCommandError, describeAdminCommandOutcome, useAdminStores } from '@/hooks/useAdmin';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import {
+  classifyAdminCommandError,
+  describeAdminCommandOutcome,
+  useAdminStores,
+} from '@/hooks/useAdmin';
 import { StoresFilters } from './_components/StoresFilters';
 import { StoresTable } from './_components/StoresTable';
 import {
@@ -137,7 +141,11 @@ export default function AdminStoresClient() {
       setEditId(null);
       setRateInput('');
       const presentation = describeAdminCommandOutcome(outcome, '수수료율 변경');
-      notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
+      notifications.show({
+        color: 'yellow',
+        title: presentation.title,
+        message: presentation.message,
+      });
       return;
     }
     // rejected: 서버 reason 보존 + 편집 유지(수정 가능). unknown: 재확인 우선 + 편집 유지.
@@ -188,7 +196,11 @@ export default function AdminStoresClient() {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
         const presentation = describeAdminCommandOutcome(classified, '치우기');
-        notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
+        notifications.show({
+          color: 'yellow',
+          title: presentation.title,
+          message: presentation.message,
+        });
         return;
       }
       // 기록 가드(400) 등 차단 사유를 서버 메시지 그대로 안내
@@ -221,7 +233,11 @@ export default function AdminStoresClient() {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
         const presentation = describeAdminCommandOutcome(classified, '복구');
-        notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
+        notifications.show({
+          color: 'yellow',
+          title: presentation.title,
+          message: presentation.message,
+        });
         return;
       }
       notifications.show({
@@ -242,30 +258,31 @@ export default function AdminStoresClient() {
   const isFetchError = readState === 'FETCH_ERROR';
 
   return (
-    <Box>
-      <Group justify="space-between" mb="md">
-        <Title order={4}>
+    <div>
+      {/* ① 외형 유지(UI 교체 P2b): Mantine Group·Title order 4(18px·800·줄 높이 1.45)·Text·Paper와 같은 값. */}
+      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">
           판매자 목록{' '}
           {error === null && (
-            <Text
-              component="span"
+            <span
+              className="m-0 p-0 text-base font-normal"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               ({visible.length})
-            </Text>
+            </span>
           )}
-        </Title>
-      </Group>
+        </h4>
+      </div>
 
       {/* 가게별 수수료율은 정산을 만들 때 그 가게 요율로 계산한다(결정 ②, BACKLOG STORE-COMMISSION-RATE-UNUSED).
           이미 만든 정산은 다시 계산하지 않는다. */}
-      <Text
-        mb="sm"
+      <p
+        className="m-0 mb-3 p-0 text-base"
         style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
       >
         수수료율은 다음에 만들어지는 정산부터 적용됩니다. 설정하지 않은 가게는 기본{' '}
         {DEFAULT_COMMISSION_PERCENT}%로 정산하며, 이미 만든 정산은 바뀌지 않습니다.
-      </Text>
+      </p>
 
       <StoresFilters
         keyword={view.keyword}
@@ -279,26 +296,28 @@ export default function AdminStoresClient() {
       />
 
       {isFetchError ? (
-        <Paper
-          radius="lg"
-          shadow="xs"
+        <div
+          className="block rounded-[16px] bg-white shadow-mantine-xs"
           style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
         >
-          <Stack gap="sm" align="center" py={64} px="md">
-            <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+          <div className="flex flex-col items-center gap-3 px-4 py-16">
+            <p
+              className="m-0 p-0 text-base"
+              style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}
+            >
               판매자 목록을 불러오지 못했습니다.
-            </Text>
-            <Text
-              ta="center"
+            </p>
+            <p
+              className="m-0 p-0 text-center text-base"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               {error}
-            </Text>
-            <Button onClick={reload} size="sm" variant="outline" radius="md">
+            </p>
+            <Button onClick={reload} variant="outline" className="rounded-[8px]">
               다시 조회
             </Button>
-          </Stack>
-        </Paper>
+          </div>
+        </div>
       ) : (
         <StoresTable
           stores={visible}
@@ -318,6 +337,6 @@ export default function AdminStoresClient() {
           onSortChange={(sort) => updateView({ sort })}
         />
       )}
-    </Box>
+    </div>
   );
 }

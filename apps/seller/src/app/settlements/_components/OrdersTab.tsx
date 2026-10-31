@@ -1,6 +1,5 @@
 'use client';
 
-import { Box, Group, Stack, Text, UnstyledButton } from '@mantine/core';
 import { useState } from 'react';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import type { Settlement, SettlementFilterKey, SettlementStatus } from '../_constants';
@@ -20,6 +19,11 @@ interface OrdersTabProps {
   onLoadMore: () => void;
 }
 
+// ① 외형 유지(UI 교체 P4): Mantine Stack(gap xs)·Text·Box·Group·UnstyledButton과 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+
 export function OrdersTab({
   settlements,
   listLoading,
@@ -37,7 +41,7 @@ export function OrdersTab({
   };
 
   return (
-    <Stack gap="xs">
+    <div className="flex flex-col items-stretch justify-start gap-2.5">
       <SegmentedTabs<SettlementFilterKey>
         tabs={SETTLEMENT_FILTER_TABS}
         value={activeStatus}
@@ -46,24 +50,24 @@ export function OrdersTab({
       />
 
       {listLoading ? (
-        <Text
+        <p
+          className={`${TEXT} py-20 text-center`}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          ta="center"
-          py={80}
         >
           불러오는 중...
-        </Text>
+        </p>
       ) : settlements.length === 0 ? (
-        <Box
-          py={80}
-          style={{ textAlign: 'center', color: 'var(--color-text-disabled)' }}
-        >
-          <Text style={{ fontSize: 'var(--font-size-sm)' }}>정산 완료된 주문이 없습니다</Text>
-        </Box>
+        <div className="py-20" style={{ textAlign: 'center', color: 'var(--color-text-disabled)' }}>
+          <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
+            정산 완료된 주문이 없습니다
+          </p>
+        </div>
       ) : (
         <>
-          <Group justify="flex-end" px={4}>
-            <UnstyledButton
+          <div className="flex flex-row flex-wrap items-center justify-end gap-4 px-1">
+            <button
+              type="button"
+              className={UNSTYLED_BUTTON}
               onClick={() => downloadCSV(settlements, '', '')}
               style={{
                 fontSize: 'var(--font-size-sm)',
@@ -72,8 +76,8 @@ export function OrdersTab({
               }}
             >
               CSV 다운로드
-            </UnstyledButton>
-          </Group>
+            </button>
+          </div>
           {settlements.map((s) => (
             <SettlementListItem key={s.id} settlement={s} showFee />
           ))}
@@ -87,6 +91,6 @@ export function OrdersTab({
           )}
         </>
       )}
-    </Stack>
+    </div>
   );
 }

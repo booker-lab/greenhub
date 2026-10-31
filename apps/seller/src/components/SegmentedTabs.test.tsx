@@ -1,4 +1,3 @@
-import { Group } from '@mantine/core';
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import { SegmentedTabs } from './SegmentedTabs';
@@ -14,7 +13,7 @@ function isElement(node: ReactNode): node is ReactElement<{ children?: ReactNode
   return typeof node === 'object' && node !== null && 'props' in node;
 }
 
-/** 렌더 트리(DOM 불필요)에서 탭 버튼을 감싼 Group 요소를 찾는다. */
+/** 렌더 트리(DOM 불필요)에서 탭 버튼 목록을 바로 감싼 묶음 요소를 찾는다. */
 function findGroup(node: ReactNode): ReactElement<GroupProps> | null {
   if (Array.isArray(node)) {
     for (const child of node) {
@@ -24,7 +23,7 @@ function findGroup(node: ReactNode): ReactElement<GroupProps> | null {
     return null;
   }
   if (!isElement(node)) return null;
-  if (node.type === Group) return node as ReactElement<GroupProps>;
+  if (Array.isArray(node.props.children)) return node as ReactElement<GroupProps>;
   return findGroup(node.props.children);
 }
 
