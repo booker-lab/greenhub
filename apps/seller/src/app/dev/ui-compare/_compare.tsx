@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
-import { Input } from '@greenhub/ui/components/input';
+import { Input, InputSection } from '@greenhub/ui/components/input';
 import { Loader } from '@greenhub/ui/components/loader';
 import { NativeSelect } from '@greenhub/ui/components/native-select';
 import { NumberInput } from '@greenhub/ui/components/number-input';
@@ -62,6 +62,7 @@ import { AdminFetchError } from '@/app/admin/_components/AdminFetchError';
 import { ChevronLeft, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { LoadMoreFooter } from '@/app/admin/_components/LoadMoreFooter';
 
 // 행마다 왼쪽 Mantine, 오른쪽 @greenhub/ui를 같은 칸 크기로 그린다. 촬영해 두 칸을 눈과 픽셀로 비교한다.
 // 짝은 판매자 앱이 실제로 쓰는 Mantine props(theme.ts 기본값 포함)를 기준으로 고른다.
@@ -1026,6 +1027,147 @@ export function UiCompare({ open }: { open?: string }) {
             <Button variant="outline-green">
               <ButtonLabel>+ 옵션 묶음 추가</ButtonLabel>
             </Button>
+          }
+        />
+        <Row
+          name="Button xs outline red md ↔ outline-destructive"
+          mantine={
+            <MButton size="xs" variant="outline" color="red" radius="md">
+              정지
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="outline-destructive" className="rounded-[8px]">
+              정지
+            </Button>
+          }
+        />
+        <Row
+          name="Button xs subtle red ↔ subtle-destructive"
+          mantine={
+            <MButton size="xs" variant="subtle" color="red">
+              치우기
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="subtle-destructive">
+              치우기
+            </Button>
+          }
+        />
+        <Row
+          name="NumberInput xs sm % ↔ Input xs + 17px 칸"
+          mantine={
+            <MNumberInput
+              value="5"
+              onChange={() => {}}
+              rightSection="%"
+              size="xs"
+              radius="sm"
+              w={104}
+            />
+          }
+          ui={
+            <div className="relative w-[104px]">
+              <Input value="5" onChange={() => {}} size="xs" className="rounded-[4px] pe-[17px]" />
+              <InputSection side="right" size="xs" className="w-[17px] rounded-e-[4px]">
+                %
+              </InputSection>
+            </div>
+          }
+        />
+        <Row
+          name="TextInput sm md label ↔ Field + Input"
+          mantine={
+            <TextInput
+              label="판매자 검색"
+              placeholder="상호·대표자·전화번호"
+              radius="md"
+              size="sm"
+              style={{ width: 200 }}
+            />
+          }
+          ui={
+            <Field style={{ width: 200 }}>
+              <FieldLabel htmlFor="compare-stores-keyword">판매자 검색</FieldLabel>
+              <Input
+                id="compare-stores-keyword"
+                placeholder="상호·대표자·전화번호"
+                className="rounded-[8px]"
+              />
+            </Field>
+          }
+        />
+        <Row
+          name="Select sm md label ↔ Field + Select"
+          mantine={
+            <MSelect
+              label="상태"
+              value="current"
+              data={[{ value: 'current', label: '활성' }]}
+              radius="md"
+              size="sm"
+              style={{ width: 120 }}
+            />
+          }
+          ui={
+            <Field style={{ width: 120 }}>
+              <FieldLabel htmlFor="compare-stores-status">상태</FieldLabel>
+              <Select
+                id="compare-stores-status"
+                value="current"
+                onValueChange={() => {}}
+                data={[{ value: 'current', label: '활성' }]}
+                className="rounded-[8px]"
+              />
+            </Field>
+          }
+        />
+      </Section>
+
+      <Section title="앱 틀 · 화면 촬영에 없는 상태">
+        <Row
+          name="ConfirmModal 확인 버튼 filled dark ↔ default + dark-6"
+          mantine={
+            <MButton color="dark" style={{ fontWeight: 'var(--fw-medium)' }}>
+              마감 확인
+            </MButton>
+          }
+          ui={
+            <Button
+              className="bg-[#2e2e2e] hover:bg-[#242424]"
+              style={{ fontWeight: 'var(--fw-medium)' }}
+            >
+              마감 확인
+            </Button>
+          }
+        />
+        <Row
+          name="LoadMoreFooter 더 보기 실패(다시 시도)"
+          mantine={
+            <div style={{ width: '100%' }}>
+              <MStack align="center" gap={4} mt="md">
+                <Text
+                  role="alert"
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+                >
+                  드라이버 목록을 더 불러오지 못했습니다.
+                </Text>
+                <MButton variant="light" color="gray" radius="md">
+                  다시 시도
+                </MButton>
+              </MStack>
+            </div>
+          }
+          ui={
+            <div style={{ width: '100%' }}>
+              <LoadMoreFooter
+                hasMore
+                loadingMore={false}
+                moreError="드라이버 목록을 더 불러오지 못했습니다."
+                onLoadMore={() => {}}
+              />
+            </div>
           }
         />
       </Section>

@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import type { Settlement } from '../_constants';
 import { downloadCSV } from '../_lib';
 import { LoadMoreSettlements } from './LoadMoreSettlements';
@@ -21,6 +21,12 @@ interface PeriodTabProps {
   onLoadMore: () => void;
 }
 
+// ① 외형 유지(UI 교체 P4): Mantine Stack·Paper(radius lg·p lg·shadow xs)·Group·Text·UnstyledButton,
+// Button size md(radius xl, 꽉 찬 폭)와 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+
 export function PeriodTab({
   from,
   setFrom,
@@ -36,16 +42,16 @@ export function PeriodTab({
   onLoadMore,
 }: PeriodTabProps) {
   return (
-    <Stack gap="md">
-      <Paper radius="lg" p="lg" shadow="xs">
-        <Text
+    <div className="flex flex-col items-stretch justify-start gap-4">
+      <div className="block rounded-[16px] bg-white p-5 shadow-mantine-xs">
+        <p
+          className={`${TEXT} mb-4`}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          mb="md"
         >
           조회 기간을 선택하세요
-        </Text>
+        </p>
         {/* 두 날짜 칸이 한 줄에 나란히 오게(좁은 화면에서 줄바꿈되며 "~"만 남던 문제) */}
-        <Group gap="xs" mb="md" wrap="nowrap">
+        <div className="mb-4 flex flex-row flex-nowrap items-center justify-start gap-2.5">
           <input
             type="date"
             value={from}
@@ -60,7 +66,9 @@ export function PeriodTab({
               fontVariantNumeric: 'tabular-nums',
             }}
           />
-          <Text style={{ color: 'var(--color-text-disabled)' }}>~</Text>
+          <p className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+            ~
+          </p>
           <input
             type="date"
             value={to}
@@ -75,32 +83,39 @@ export function PeriodTab({
               fontVariantNumeric: 'tabular-nums',
             }}
           />
-        </Group>
+        </div>
         <Button
           onClick={() => onSearch(from, to)}
           disabled={listLoading}
-          fullWidth
           size="md"
-          radius="xl"
+          className="w-full"
           style={{ backgroundColor: 'var(--color-primary)' }}
         >
           {listLoading ? '조회 중...' : '조회'}
         </Button>
-      </Paper>
+      </div>
 
       {listError && (
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} ta="center">
+        <p
+          className={`${TEXT} text-center`}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+        >
           {listError}
-        </Text>
+        </p>
       )}
 
       {settlements.length > 0 && (
-        <Stack gap="xs">
-          <Group justify="space-between" px={4}>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        <div className="flex flex-col items-stretch justify-start gap-2.5">
+          <div className="flex flex-row flex-wrap items-center justify-between gap-4 px-1">
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
               {settlements.length}건 조회됨{hasMore ? ' (더 있음)' : ''}
-            </Text>
-            <UnstyledButton
+            </p>
+            <button
+              type="button"
+              className={UNSTYLED_BUTTON}
               onClick={() => downloadCSV(settlements, from, to)}
               style={{
                 fontSize: 'var(--font-size-sm)',
@@ -109,8 +124,8 @@ export function PeriodTab({
               }}
             >
               CSV 다운로드
-            </UnstyledButton>
-          </Group>
+            </button>
+          </div>
           {settlements.map((s) => (
             <SettlementListItem key={s.id} settlement={s} />
           ))}
@@ -122,8 +137,8 @@ export function PeriodTab({
               onLoadMore={onLoadMore}
             />
           )}
-        </Stack>
+        </div>
       )}
-    </Stack>
+    </div>
   );
 }

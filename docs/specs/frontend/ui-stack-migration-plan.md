@@ -265,6 +265,13 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - `Dialog` 본문 상자에 `will-change: opacity`를 준다(Mantine은 열림 전환 때문에 본문을 따로 합성해 그린다. 없으면 확인창 안 버튼 둥근 모서리의 안티앨리어싱이 세 폭 모두 달랐다). 닫기 버튼을 본문보다 앞(DOM 순서)에 두어 Mantine처럼 첫 초점이 닫기 버튼에 간다(확인 버튼이 첫 초점이면 Enter 한 번에 승인·정지된다). 닫기 버튼을 머리 안으로 옮기는 처리는 #694 하네스(`--disable-partial-raster`)로 다시 재 보니 필요 없어 넣지 않았다.
   - `Button`: 글자를 Mantine 글자 칸과 같은 `span`으로 감싼다(`text-box-trim: trim-both`·`text-box-edge: cap alphabetic`, 글자를 대문자 높이 기준으로 가운데에 둔다). 없으면 글자 가장자리 픽셀이 Mantine과 달랐다.
   - 촬영 목록에 기사 승인·정지 확인창(`modal-driver-approve`·`modal-driver-suspend`)을 더했다. 기준은 같은 fixture로 `main`을 찍었다.
+- 어드민 배너·감사 기록 구현(2026-10-31): `admin/banner`(이미지·텍스트·버튼 섹션)와 `admin/audit`의 `@mantine/core`를 걷었다.
+  - 배너 활성화 `Switch`는 Mantine 라벨 배치(트랙 뒤 12px, 15px·줄 높이 20px)로 그린다. 버튼 섹션 `Group grow`는 칸마다 flex-grow 1·최대 폭 50% - 8px다.
+  - 감사 기록 배지는 Mantine Badge처럼 `overflow: hidden`인 grid라 휴대폰 폭에서 줄어들고, 글자 칸은 `style.css` 보정(`overflow: visible`)처럼 좌우 여백으로 넘쳐 보인다(ui Badge 기본 `shrink-0`이면 휴대폰 1장이 달랐다).
+- 어드민 판매자·소비자 구현(2026-10-31): `admin/stores`(목록·필터·수수료율 입력)와 `admin/users`의 `@mantine/core`를 걷었다.
+  - 카드·표 전환은 Mantine `hiddenFrom`·`visibleFrom="sm"`과 같은 48em 경계(`min-[48em]:hidden!`·`max-[47.99375em]:hidden!`)다. 필터 줄의 `Field`는 기본 `w-full`이라 `w-auto`로 Mantine 입력 상자처럼 둔다(없으면 태블릿·PC에서 칸이 줄마다 떨어졌다).
+  - 수수료율 입력은 `Input` xs + 오른쪽 17px 칸(Mantine NumberInput `--ni-right-section-width-xs`)이다. 소수 둘째 자리·100 초과 거부·방향키 0.5는 Mantine NumberInput과 같게 받는다. 새로고침(Mantine light gray `loading`)은 `admin/_components/RefreshButton`.
+  - `packages/ui` 추가: Button `outline-destructive`(Mantine outline red). 촬영 목록에 판매자 전체·검색 결과 없음·수수료율 입력·소비자 정지 확인창을 더했다.
 - 어드민 환불 확인창 구현(2026-10-31): `admin/orders`의 `RefundConfirmModal`(강제환불)·`PostDeliveryRefundModal`(배송 후 환불)의 `@mantine/core`를 걷었다. 주문 표·필터(검색 Select)·알림은 다음 PR이다.
   - `Dialog`: 안쪽 `data-autofocus` 요소가 열릴 때 첫 초점이다(Mantine Modal 약속). #712 뒤 `ConfirmModal`이 `Dialog`가 되면서 두 확인창의 사유·메모 입력칸 첫 초점이 닫기 버튼으로 바뀌었던 것을 되돌린다.
   - `Textarea` autosize: Mantine Autosize와 같이 숨긴 textarea의 정수 `scrollHeight`로 글 높이·한 줄 높이를 잰다(자리표시가 있으면 빈 칸도 자리표시로 잰다). 줄 높이 계산값(15px × 1.55 = 23.25)을 곱하면 Mantine(한 줄 23)보다 0.5px 커져 확인창 전체가 반 픽셀 움직였다.
@@ -311,6 +318,10 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - ② 실제 기사 계정의 도착 사진 업로드·완료 처리·서비스워커는 운영 배포 직전 출시 E2E용 exact Preview에서 사용자가 휴대폰으로 확인한 뒤 배포를 승인한다. PR마다 Preview를 쓰지 않는다(`AGENTS.md` §0-9).
 
 ### P4. 판매자 앱 틀·회차·주문·준비·재고·정산
+- 공용 틀 부품 구현(2026-10-31, 브랜치 `claude/ui-p4-frame`): `PageHeader`·`PageShell`·`SegmentedTabs`·`StateViews`(LoadingState·EmptyState)·어드민 `LoadMoreFooter`의 `@mantine/core`를 걷었다. Mantine Container(xs 540·sm 720·md 960·lg 1140·xl 1320, 좌우 16px)·Group·Stack·Title order 3(22px·800·1.4)·ActionIcon(28px subtle gray = `ghost` `size-7`, svg는 `size-5`)·Badge xs(16px·좌우 6·9px·줄 높이 14, filled gray-6·red-6)·Loader sm 계산값을 옮겼다. `LoadMoreFooter` 불러오는 중은 정산 `LoadMoreButton`과 같은 Mantine loading 모양(덮개·따로 합성되는 원)이다. `SegmentedTabs`의 이름 있는 group은 spread로 역할을 줘 biome 규칙을 끄지 않았다.
+  - 공용 `ConfirmModal` 회귀 바로잡기: #712에서 확인 버튼 색 표에 `dark`가 빠져 회차 상세 "주문 마감" 확인창이 빨강이었다. Mantine 9 light 계산값(filled dark-6 `#2e2e2e`, 마우스 올림 dark-7)을 더하고 gray·green 마우스 올림도 Mantine 값(gray-7·green-7)으로 두었다. `confirmColor`는 `ConfirmColor`(brand·red·gray·green·dark) 유니온이라 모르는 값은 타입 검사에서 걸린다.
+  - 촬영 목록 추가: 회차 목록 불러오는 중·없음(`sale-rounds-loading`·`sale-rounds-empty`, scenario `rounds-slow`·`rounds-empty`), 어드민 기사 더 보기 불러오는 중(`admin-drivers-load-more`, 기사 목록이 다음 쪽이 있다고 답함), 주문 마감 확인창(`modal-round-close`). 더 보기 실패·dark 확인 버튼은 대조 화면 행으로 본다(실패 응답은 콘솔 오류라 촬영 판정에 걸린다).
+  - 로컬 증명(판매자 단독, 기준 시각 2026-10-31T00:00+09:00): `main` fc16129를 merge한 뒤 기준 `main` fc16129 + 같은 fixture 264장과 `diff.mjs --tolerance 1` 261장 같음, `modal-round-close` 3장만 `main`(빨강)과 다르고 Mantine 시절 e93322d + 같은 fixture와 같음(허용 목록 없음). 그 뒤 #726·#716을 merge하고 로그인·로그인 오류·onboarding·어드민 배너·감사 기록 15장을 `main` 69919ed + 같은 fixture와 다시 찍어 같음. 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0(fc16129 merge 뒤), 단위 테스트 881개. 운영 빌드는 증명하지 않았다.
 - 앱 틀(사이드바·상단바) → 회차·주문·준비 → 재고 → 정산 순서로 나눈다.
 - 다음 회차가 잡혀 있으면, 회차 운영 동선 묶음(어드민 기사 승인·환불 포함)은 끝까지 교체된 상태로만 그 회차의 마지막 출시에 넣는다. 판매자 대표가 실제 계정으로 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
 - 어드민 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-3`): 어드민 `layout.tsx`(머리·관리자 콘솔 글자·셀러 화면 링크·ADMIN 배지·본문 칸)·`AdminNav`·`AdminLogoutButton`·`AdminFetchError`의 `@mantine/core`를 걷었다. Mantine Container lg(1140px)·Group·Text·Badge light red(= `destructive`)·Paper(radius lg·shadow xs)·Button outline radius md 계산값이다. 조회 실패 화면은 실패 응답이 콘솔 오류라 촬영 판정에 걸리므로 대조 화면 행으로 본다.
