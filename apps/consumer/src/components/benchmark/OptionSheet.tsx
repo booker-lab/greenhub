@@ -2,13 +2,16 @@
 
 import type { ProductOptionGroup } from '@greenhub/shared';
 import { Button } from '@greenhub/ui/components/button';
+import { CloseIcon, closeButtonClassName } from '@greenhub/ui/components/close-button';
+import { DialogOverlay, DialogPopup, DialogPortal } from '@greenhub/ui/components/dialog';
 import {
   Sheet,
   SheetBody,
-  SheetContent,
+  SheetClose,
   SheetHeader,
   SheetTitle,
 } from '@greenhub/ui/components/sheet';
+import { cn } from '@greenhub/ui/lib/utils';
 import { useEffect, useState } from 'react';
 import {
   choiceRemaining,
@@ -109,7 +112,12 @@ export default function OptionSheet({
   const unitPrice = basePrice + (selection?.priceDelta ?? 0);
 
   // ① 외형 유지: Mantine Drawer(bottom·size auto·radius lg, 제목 800·lg, 최대 높이 85dvh)를 packages/ui Sheet로 그린다.
-  // Sheet 본체(DialogPopup)가 Tab·Shift+Tab을 시트 안에 가두고 aria-modal="true"를 붙인다.
+  // 하단 고정 바(ProductCTABar z 100) 위를 덮도록 Mantine Drawer와 같은 z 200을 써야 하는데 SheetContent는 배경·본체
+  // z가 50으로 고정이라, 기사 배송 보류 창처럼 Portal·배경·본체를 풀어서 둔다. 본체 클래스는 SheetContent(side bottom)와 같되,
+  // 폭은 Mantine에서 content를 flex 0 0 auto로 덮어쓴 결과대로 내용 폭(max-content, 화면 폭 이하)이고 왼쪽에 붙는다.
+  // Mantine 본체는 Transition(slide-up, entered)의 transform·backface-visibility로 따로 합성된다. 같게 두지 않으면 위 모서리
+  // 안티앨리어싱이 달라진다. 열고 닫는 움직임은 Tailwind translate(transform과 별개 속성)가 맡는다.
+  // 본체는 SheetContent와 같은 DialogPopup이라 Tab·Shift+Tab이 시트 안에서만 돌고 aria-modal="true"가 붙는다.
   // Esc·바깥 누르기로 닫히면 onClose를 부른다(Mantine Drawer와 같다).
   return (
     <Sheet
@@ -118,140 +126,156 @@ export default function OptionSheet({
         if (!next) onClose();
       }}
     >
-      <SheetContent side="bottom" className="max-h-[85dvh]">
-        <SheetHeader>
-          <SheetTitle className="text-lg leading-none font-extrabold">옵션 고르기</SheetTitle>
-        </SheetHeader>
-        <SheetBody>
-          {/* Mantine Stack(gap lg 20px, 아래 여백 md 16px) */}
-          <div className="flex flex-col items-stretch justify-start gap-5 pb-4">
-            {groups.map((group) => (
-              <fieldset key={group.id} style={{ border: 0, margin: 0, padding: 0 }}>
-                <legend className={`${TEXT_SM} mb-2 font-extrabold`}>{group.name}</legend>
-                <div className="flex flex-col items-stretch justify-start gap-1.5">
-                  {group.choices.map((choice) => {
-                    const selected = picked[group.id] === choice.id;
-                    const soldOut = isChoiceSoldOut(availability, choice.id);
-                    const stockLabel = choiceStockLabel(choiceRemaining(availability, choice.id));
-                    return (
-                      <button
-                        key={choice.id}
-                        type="button"
-                        aria-pressed={selected}
-                        disabled={soldOut}
-                        onClick={() =>
-                          setPicked((current) => ({ ...current, [group.id]: choice.id }))
-                        }
-                        style={{
-                          alignItems: 'center',
-                          background: selected ? 'var(--color-primary-surface)' : 'var(--color-bg)',
-                          border: selected ? '2px solid var(--color-primary)' : 'var(--border)',
-                          borderRadius: 'var(--radius-sm)',
-                          color: soldOut ? 'var(--color-text-disabled)' : 'var(--color-text)',
-                          cursor: soldOut ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          fontSize: 'var(--font-size-sm)',
-                          gap: 8,
-                          fontWeight: selected ? 800 : 400,
-                          justifyContent: 'space-between',
-                          minHeight: 'var(--touch-target)',
-                          padding: '0 14px',
-                          textAlign: 'left',
-                        }}
-                      >
-                        <span>
-                          {choice.label}
-                          {stockLabel && (
-                            <span
-                              style={{
-                                color: soldOut
-                                  ? 'var(--color-text-disabled)'
-                                  : 'var(--color-danger)',
-                                fontSize: 'var(--font-size-xs)',
-                                fontWeight: 700,
-                                marginLeft: 6,
-                              }}
-                            >
-                              {stockLabel}
-                            </span>
-                          )}
-                        </span>
-                        <span style={{ fontVariantNumeric: 'tabular-nums' }}>
-                          {choice.priceDelta > 0
-                            ? `+${choice.priceDelta.toLocaleString()}원`
-                            : '추가 금액 없음'}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </fieldset>
-            ))}
+      <DialogPortal>
+        <DialogOverlay className="z-[200]" />
+        <DialogPopup
+          data-slot="sheet-content"
+          data-side="bottom"
+          className="fixed bottom-0 left-0 z-[200] flex h-auto w-max max-w-full [transform:translateY(0)] backface-hidden max-h-[85dvh] flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] transition duration-200 ease-in-out outline-none data-ending-style:translate-y-10 data-ending-style:opacity-0 data-starting-style:translate-y-10 data-starting-style:opacity-0"
+        >
+          <SheetHeader>
+            <SheetTitle className="text-lg leading-none font-extrabold">옵션 고르기</SheetTitle>
+          </SheetHeader>
+          <SheetBody>
+            {/* Mantine Stack(gap lg 20px, 아래 여백 md 16px) */}
+            <div className="flex flex-col items-stretch justify-start gap-5 pb-4">
+              {groups.map((group) => (
+                <fieldset key={group.id} style={{ border: 0, margin: 0, padding: 0 }}>
+                  <legend className={`${TEXT_SM} mb-2 font-extrabold`}>{group.name}</legend>
+                  <div className="flex flex-col items-stretch justify-start gap-1.5">
+                    {group.choices.map((choice) => {
+                      const selected = picked[group.id] === choice.id;
+                      const soldOut = isChoiceSoldOut(availability, choice.id);
+                      const stockLabel = choiceStockLabel(choiceRemaining(availability, choice.id));
+                      return (
+                        <button
+                          key={choice.id}
+                          type="button"
+                          aria-pressed={selected}
+                          disabled={soldOut}
+                          onClick={() =>
+                            setPicked((current) => ({ ...current, [group.id]: choice.id }))
+                          }
+                          style={{
+                            alignItems: 'center',
+                            background: selected
+                              ? 'var(--color-primary-surface)'
+                              : 'var(--color-bg)',
+                            border: selected ? '2px solid var(--color-primary)' : 'var(--border)',
+                            borderRadius: 'var(--radius-sm)',
+                            color: soldOut ? 'var(--color-text-disabled)' : 'var(--color-text)',
+                            cursor: soldOut ? 'not-allowed' : 'pointer',
+                            display: 'flex',
+                            fontSize: 'var(--font-size-sm)',
+                            gap: 8,
+                            fontWeight: selected ? 800 : 400,
+                            justifyContent: 'space-between',
+                            minHeight: 'var(--touch-target)',
+                            padding: '0 14px',
+                            textAlign: 'left',
+                          }}
+                        >
+                          <span>
+                            {choice.label}
+                            {stockLabel && (
+                              <span
+                                style={{
+                                  color: soldOut
+                                    ? 'var(--color-text-disabled)'
+                                    : 'var(--color-danger)',
+                                  fontSize: 'var(--font-size-xs)',
+                                  fontWeight: 700,
+                                  marginLeft: 6,
+                                }}
+                              >
+                                {stockLabel}
+                              </span>
+                            )}
+                          </span>
+                          <span style={{ fontVariantNumeric: 'tabular-nums' }}>
+                            {choice.priceDelta > 0
+                              ? `+${choice.priceDelta.toLocaleString()}원`
+                              : '추가 금액 없음'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </fieldset>
+              ))}
 
-            {/* Mantine Group(justify space-between, 줄바꿈 없음, gap md 16px) */}
-            <div className="flex flex-row flex-nowrap items-center justify-between gap-4">
-              <p className={`${TEXT_SM} font-extrabold`}>수량</p>
-              <div
-                className="flex flex-row flex-nowrap items-center justify-start gap-1"
-                style={{
-                  background: 'var(--color-surface-muted)',
-                  borderRadius: 'var(--radius-full)',
-                }}
-              >
-                <button
-                  type="button"
-                  className={QUANTITY_BUTTON}
-                  aria-label="수량 줄이기"
-                  onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+              {/* Mantine Group(justify space-between, 줄바꿈 없음, gap md 16px) */}
+              <div className="flex flex-row flex-nowrap items-center justify-between gap-4">
+                <p className={`${TEXT_SM} font-extrabold`}>수량</p>
+                <div
+                  className="flex flex-row flex-nowrap items-center justify-start gap-1"
+                  style={{
+                    background: 'var(--color-surface-muted)',
+                    borderRadius: 'var(--radius-full)',
+                  }}
                 >
-                  −
-                </button>
+                  <button
+                    type="button"
+                    className={QUANTITY_BUTTON}
+                    aria-label="수량 줄이기"
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                  >
+                    −
+                  </button>
+                  <p
+                    className={`${TEXT_MD} w-8 text-center font-extrabold`}
+                    aria-live="polite"
+                    style={{ fontVariantNumeric: 'tabular-nums' }}
+                  >
+                    {quantity}
+                  </p>
+                  <button
+                    type="button"
+                    className={QUANTITY_BUTTON}
+                    aria-label="수량 늘리기"
+                    disabled={quantity >= maxQuantity}
+                    onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Mantine Group(justify space-between, 줄바꿈 허용, gap md 16px) */}
+              <div className="flex flex-row flex-wrap items-center justify-between gap-4">
+                <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
+                  {overStock
+                    ? maxQuantity > 0
+                      ? `고른 옵션은 ${maxQuantity}개까지 담을 수 있어요`
+                      : '고른 옵션이 품절이에요'
+                    : (selection?.label ?? '옵션을 골라 주세요')}
+                </p>
                 <p
-                  className={`${TEXT_MD} w-8 text-center font-extrabold`}
-                  aria-live="polite"
+                  className={`${TEXT_LG} font-extrabold`}
                   style={{ fontVariantNumeric: 'tabular-nums' }}
                 >
-                  {quantity}
+                  {(unitPrice * quantity).toLocaleString()}원
                 </p>
-                <button
-                  type="button"
-                  className={QUANTITY_BUTTON}
-                  aria-label="수량 늘리기"
-                  disabled={quantity >= maxQuantity}
-                  onClick={() => setQuantity((q) => Math.min(maxQuantity, q + 1))}
-                >
-                  +
-                </button>
               </div>
-            </div>
 
-            {/* Mantine Group(justify space-between, 줄바꿈 허용, gap md 16px) */}
-            <div className="flex flex-row flex-wrap items-center justify-between gap-4">
-              <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
-                {overStock
-                  ? maxQuantity > 0
-                    ? `고른 옵션은 ${maxQuantity}개까지 담을 수 있어요`
-                    : '고른 옵션이 품절이에요'
-                  : (selection?.label ?? '옵션을 골라 주세요')}
-              </p>
-              <p
-                className={`${TEXT_LG} font-extrabold`}
-                style={{ fontVariantNumeric: 'tabular-nums' }}
+              <Button
+                size="lg"
+                disabled={!selection}
+                onClick={() => selection && onConfirm(selection, quantity, intent)}
               >
-                {(unitPrice * quantity).toLocaleString()}원
-              </p>
+                {intent === 'cart' ? '장바구니 담기' : '바로 구매'}
+              </Button>
             </div>
-
-            <Button
-              size="lg"
-              disabled={!selection}
-              onClick={() => selection && onConfirm(selection, quantity, intent)}
-            >
-              {intent === 'cart' ? '장바구니 담기' : '바로 구매'}
-            </Button>
-          </div>
-        </SheetBody>
-      </SheetContent>
+          </SheetBody>
+          {/* preflight 없이 연결한 앱이라 버튼 기본 테두리·여백을 지운다. */}
+          <SheetClose
+            aria-label="닫기"
+            className={cn(closeButtonClassName, 'appearance-none border-0 p-0')}
+          >
+            <CloseIcon />
+          </SheetClose>
+        </DialogPopup>
+      </DialogPortal>
     </Sheet>
   );
 }
