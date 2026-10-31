@@ -129,6 +129,14 @@ const SELLER_ORDERS = [
     buyerName: '최픽업',
     deliveryPhone: '010-4567-8901',
   }),
+  // 오늘 배송 주문(준비 물량 "오늘 준비 물량" 칸, UI 교체 P4). 기준 시각(한국 0시)의 날짜다.
+  sellerOrder('order-today', '20260928-000106', {
+    buyerName: '한오늘',
+    deliveryPhone: '010-6789-0123',
+    requestedDeliveryDate: new Date(Date.parse(hoursFromNow(12)) + 9 * 3600_000)
+      .toISOString()
+      .slice(0, 10),
+  }),
   sellerOrder('order-recruiting', '20260928-000105', {
     status: 'RECRUITING',
     saleType: 'group',
