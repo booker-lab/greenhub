@@ -211,6 +211,15 @@ Object.assign(env, {
   VISUAL_GUARD_LOG: logs.guard,
 });
 if (prod) env.NODE_EXTRA_CA_CERTS = apiCaFile;
+// 소비자 결제 버튼은 PortOne 공개 설정(상점 ID·채널 키)이 없으면 주문 요청 전에 멈춘다(lib/portone-config.ts).
+// 운영과 무관한 가짜 값을 넣는다. 결제창은 shots.mjs가 화면마다 stub으로 바꾸고(screen.portone),
+// 외부 요청은 브라우저·서버 모두 막혀 있다. 카카오페이 채널만 넣어 결제 수단 목록은 기본(카카오페이)과 같다.
+if (appName === 'consumer') {
+  Object.assign(env, {
+    NEXT_PUBLIC_PORTONE_STORE_ID: 'store-visual-harness',
+    NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY: 'channel-key-visual-harness-kakaopay',
+  });
+}
 
 // 에뮬레이터를 쓰면 앱을 로컬 Firebase 계약(project·bucket·에뮬레이터 주소 고정)으로 띄운다.
 if (useEmulator) {
