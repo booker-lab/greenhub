@@ -2,7 +2,9 @@
 
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import type * as React from 'react';
+import { useRef } from 'react';
 
+import { popupPositionClassName, useDocumentAnchor } from '../lib/use-document-anchor';
 import { cn } from '../lib/utils';
 import { CloseIcon } from './close-button';
 import { type InputSize, inputClassName, inputSizeClassName } from './input';
@@ -13,6 +15,7 @@ import { type InputSize, inputClassName, inputSizeClassName } from './input';
 // 묶음 이름은 글자 0.85배·gray-6·600 + 오른쪽 가는 선, 항목은 크기별 여백·글자. 고른 항목은 앞에 흐린 체크(0.4).
 // 마우스를 올리면 gray-0, 방향키로 옮기면(focus-visible) Mantine data-combobox-selected처럼 주색 면·흰 글자다.
 // 목록이 열려 있는 동안 닫힌 칸은 Mantine(초점이 입력칸에 남음)처럼 주색 테두리다.
+// 항목 글자 줄 높이는 Mantine처럼 본문 1.55이고, 목록 자리는 Mantine처럼 문서 좌표로 준다(useDocumentAnchor).
 
 export interface SelectItem {
   value: string;
@@ -32,9 +35,9 @@ const COMBINED_INPUT_PADDING = { xs: 'pe-[41px]', sm: 'pe-[50px]', md: 'pe-15' }
 const SECTION_WIDTH = { xs: 'w-7', sm: 'w-[34px]', md: 'w-10' } as const;
 const SECTION_INPUT_PADDING = { xs: 'pe-7', sm: 'pe-[34px]', md: 'pe-10' } as const;
 const OPTION_CLASS = {
-  xs: 'px-2 py-1 text-xs',
-  sm: 'px-2.5 py-1.5 text-sm',
-  md: 'px-3 py-2 text-base',
+  xs: 'px-2 py-1 text-xs leading-[1.55]',
+  sm: 'px-2.5 py-1.5 text-sm leading-[1.55]',
+  md: 'px-3 py-2 text-base leading-[1.55]',
 } as const;
 const GROUP_LABEL_CLASS = {
   xs: 'px-2 py-1 text-[calc(13px*0.85)]',
@@ -91,6 +94,7 @@ function Select({
   clearable = false,
   size = 'sm',
   className,
+  itemClassName,
   maxDropdownHeight = 250,
   id,
   'aria-label': ariaLabel,
@@ -105,6 +109,8 @@ function Select({
   size?: InputSize;
   /** 닫힌 입력칸 클래스(모서리 등) */
   className?: string;
+  /** 목록 항목 클래스(줄 높이 등) */
+  itemClassName?: string;
   maxDropdownHeight?: number;
   id?: string;
   'aria-label'?: string;
@@ -117,6 +123,8 @@ function Select({
   const items = groups.flatMap((g) => g.items);
   const labels = Object.fromEntries(items.map((item) => [item.value, item.label]));
   const showClear = clearable && value != null;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const anchor = useDocumentAnchor(rootRef, { measureOnMount: defaultOpen });
 
   return (
     <SelectPrimitive.Root
@@ -125,8 +133,11 @@ function Select({
       onValueChange={(next) => onValueChange((next as string | null) ?? null)}
       modal={false}
       defaultOpen={defaultOpen}
+      onOpenChange={(open) => {
+        if (open) anchor.measure();
+      }}
     >
-      <div data-slot="select-root" className="relative">
+      <div ref={rootRef} data-slot="select-root" className="relative">
         {/* Mantine처럼 닫힌 칸을 읽기 전용 input으로 그린다. 글자 위치가 입력칸과 같아진다
             (button 안 span은 칸의 소수점 위치에 따라 1px 어긋났다). */}
         <SelectPrimitive.Trigger
@@ -179,7 +190,9 @@ function Select({
       </div>
       <SelectPrimitive.Portal>
         <SelectPrimitive.Positioner
-          className="z-50 outline-none"
+          className={cn('z-50 outline-none', popupPositionClassName)}
+          style={anchor.style}
+          positionMethod="absolute"
           side="bottom"
           sideOffset={8}
           alignItemWithTrigger={false}
@@ -202,6 +215,7 @@ function Select({
                     className={cn(
                       'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-[#f8f9fa] focus-visible:bg-primary focus-visible:text-white',
                       OPTION_CLASS[size],
+                      itemClassName,
                     )}
                   >
                     <SelectPrimitive.ItemIndicator className="contents">
@@ -234,4 +248,4 @@ function Select({
   );
 }
 
-export { Select, SelectChevron };
+export { OptionCheck, Select, SelectChevron };

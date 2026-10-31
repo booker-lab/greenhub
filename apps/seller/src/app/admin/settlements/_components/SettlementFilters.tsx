@@ -1,6 +1,6 @@
 'use client';
 
-import { Group, Select } from '@mantine/core';
+import { SearchableSelect } from '@greenhub/ui/components/searchable-select';
 
 interface SettlementFiltersProps {
   storeFilter: string;
@@ -30,22 +30,22 @@ export function SettlementFilters({
   onFromChange,
   onToChange,
 }: SettlementFiltersProps) {
+  // ① 외형 유지(UI 교체 P2b): Mantine Group gap sm·mb md, Select size sm·radius md(8px)와 같은 값.
   return (
-    <Group gap="sm" mb="md" style={{ flexWrap: 'wrap' }}>
+    <div className="mb-4 flex flex-row flex-wrap items-center justify-start gap-3">
       {/* 가게는 이름으로 고른다(관리자 판매자 목록). 비우면 전체 가게. */}
-      <Select
-        placeholder={storesLoading ? '가게 불러오는 중…' : '전체 가게'}
-        aria-label="가게"
-        data={storeOptions}
-        value={storeFilter || null}
-        onChange={(value) => onStoreChange(value ?? '')}
-        searchable
-        clearable
-        nothingFoundMessage="일치하는 가게가 없습니다"
-        style={{ flex: 1, minWidth: 160 }}
-        radius="md"
-        size="sm"
-      />
+      <div style={{ flex: 1, minWidth: 160 }}>
+        <SearchableSelect
+          placeholder={storesLoading ? '가게 불러오는 중…' : '전체 가게'}
+          aria-label="가게"
+          data={storeOptions}
+          value={storeFilter || null}
+          onValueChange={(value) => onStoreChange(value ?? '')}
+          clearable
+          nothingFoundMessage="일치하는 가게가 없습니다"
+          className="rounded-[8px]"
+        />
+      </div>
       <input
         type="date"
         aria-label="시작일"
@@ -60,6 +60,6 @@ export function SettlementFilters({
         onChange={(e) => onToChange(e.target.value)}
         style={dateInputStyle}
       />
-    </Group>
+    </div>
   );
 }
