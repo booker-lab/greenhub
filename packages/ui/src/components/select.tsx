@@ -2,6 +2,7 @@
 
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import type * as React from 'react';
+import { useRef } from 'react';
 
 import { cn } from '../lib/utils';
 import { CloseIcon } from './close-button';
@@ -91,6 +92,8 @@ function Select({
   clearable = false,
   size = 'sm',
   className,
+  itemClassName,
+  inlinePopup = false,
   maxDropdownHeight = 250,
   id,
   'aria-label': ariaLabel,
@@ -105,6 +108,13 @@ function Select({
   size?: InputSize;
   /** 닫힌 입력칸 클래스(모서리 등) */
   className?: string;
+  /** 목록 항목 클래스(줄 높이 등) */
+  itemClassName?: string;
+  /**
+   * 목록을 body가 아니라 닫힌 칸 상자 안에 절대 위치(칸 아래 8px)로 그린다. body에 그리면 Base UI가 위치를 정수 픽셀로
+   * 반올림해, 칸이 소수점 위치에 있을 때 Mantine(반올림 없음)과 글자가 1px 어긋난다.
+   */
+  inlinePopup?: boolean;
   maxDropdownHeight?: number;
   id?: string;
   'aria-label'?: string;
@@ -117,6 +127,7 @@ function Select({
   const items = groups.flatMap((g) => g.items);
   const labels = Object.fromEntries(items.map((item) => [item.value, item.label]));
   const showClear = clearable && value != null;
+  const rootRef = useRef<HTMLDivElement>(null);
 
   return (
     <SelectPrimitive.Root
@@ -126,7 +137,7 @@ function Select({
       modal={false}
       defaultOpen={defaultOpen}
     >
-      <div data-slot="select-root" className="relative">
+      <div ref={rootRef} data-slot="select-root" className="relative">
         {/* Mantine처럼 닫힌 칸을 읽기 전용 input으로 그린다. 글자 위치가 입력칸과 같아진다
             (button 안 span은 칸의 소수점 위치에 따라 1px 어긋났다). */}
         <SelectPrimitive.Trigger
@@ -177,9 +188,15 @@ function Select({
           <SelectChevron className={CHEVRON_SIZE[size]} />
         </div>
       </div>
-      <SelectPrimitive.Portal>
+      <SelectPrimitive.Portal container={inlinePopup ? rootRef : undefined}>
         <SelectPrimitive.Positioner
-          className="z-50 outline-none"
+          className={cn(
+            'z-50 outline-none',
+            // transform이 아니라 top·left로 두고 will-change: transform을 끈다(따로 합성된 층은 2배 화면에서
+            // 글자를 1px 어긋나게 한다).
+            inlinePopup && 'top-[calc(100%+8px)]! left-0! transform-none! will-change-auto!',
+          )}
+          positionMethod={inlinePopup ? 'absolute' : undefined}
           side="bottom"
           sideOffset={8}
           alignItemWithTrigger={false}
@@ -202,6 +219,7 @@ function Select({
                     className={cn(
                       'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-[#f8f9fa] focus-visible:bg-primary focus-visible:text-white',
                       OPTION_CLASS[size],
+                      itemClassName,
                     )}
                   >
                     <SelectPrimitive.ItemIndicator className="contents">
@@ -234,4 +252,4 @@ function Select({
   );
 }
 
-export { Select, SelectChevron };
+export { OptionCheck, Select, SelectChevron };
