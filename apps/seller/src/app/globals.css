@@ -1,8 +1,7 @@
-/* UI 교체 P2a(docs/specs/frontend/ui-stack-migration-plan.md §6 P2) — Mantine과 같이 쓰는 동안의 layer 순서.
-   - Tailwind는 preflight 없이 theme·utilities만 연결한다. preflight(base)는 Mantine 화면을 바꾸므로 넣지 않는다.
-   - Mantine CSS는 모두 layer(mantine)에 넣는다. 앞 layer(theme·base)는 Mantine에 지고, utilities는 Mantine을 이긴다.
-   - layer 밖의 규칙(이 파일 아래쪽 :root·body)은 모든 layer를 이긴다. */
-@layer theme, base, mantine, components, utilities;
+/* UI 교체(ui-stack-migration-plan.md §6 P6): 판매자 앱은 Mantine을 걷어냈다. Tailwind는 preflight 없이 연결하고
+   (preflight 전환은 세 앱을 같이 하는 P6에서 한다), Mantine이 깔던 기본 규칙 중 화면에 쓰이던 것만 base layer에 둔다(기사 앱과 같다).
+   layer 밖의 규칙(이 파일 아래쪽 :root·body)은 모든 layer를 이긴다. */
+@layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/utilities.css" layer(utilities);
 @import "tw-animate-css";
@@ -13,65 +12,16 @@
    브라우저는 화면에 나온 글자 범위의 조각만 받는다(전체 2MB 한 파일 대신). */
 @import "@greenhub/ui/fonts/pretendard.css";
 
-/* Mantine v9 — 선택적 CSS import (사용 컴포넌트만) */
-@import "@mantine/core/styles/global.css" layer(mantine);
-@import "@mantine/core/styles/baseline.css" layer(mantine);
-@import "@mantine/core/styles/default-css-variables.css" layer(mantine);
-
-/* 내부 공통 의존 */
-@import "@mantine/core/styles/ScrollArea.css" layer(mantine);
-@import "@mantine/core/styles/VisuallyHidden.css" layer(mantine);
-@import "@mantine/core/styles/UnstyledButton.css" layer(mantine);
-@import "@mantine/core/styles/InlineInput.css" layer(mantine);
-@import "@mantine/core/styles/Input.css" layer(mantine);
-@import "@mantine/core/styles/PasswordInput.css" layer(mantine);
-@import "@mantine/core/styles/Paper.css" layer(mantine);
-@import "@mantine/core/styles/CloseButton.css" layer(mantine);
-@import "@mantine/core/styles/Overlay.css" layer(mantine);
-@import "@mantine/core/styles/ModalBase.css" layer(mantine);
-
-/* 사용 컴포넌트 */
-/* 2026-10-03 누락 보완: 아이콘 버튼(수량·닫기 등), 숫자 입력(가격·수량) */
-@import "@mantine/core/styles/ActionIcon.css" layer(mantine);
-@import "@mantine/core/styles/NumberInput.css" layer(mantine);
-@import "@mantine/core/styles/Alert.css" layer(mantine);
-@import "@mantine/core/styles/Badge.css" layer(mantine);
-@import "@mantine/core/styles/Button.css" layer(mantine);
-@import "@mantine/core/styles/Card.css" layer(mantine);
-/* 2026-10-10: 주문 상세 배송 보류 창의 보류 유형·고객 책임 */
-@import "@mantine/core/styles/Checkbox.css" layer(mantine);
-@import "@mantine/core/styles/Popover.css" layer(mantine);
-@import "@mantine/core/styles/Combobox.css" layer(mantine);
-@import "@mantine/core/styles/Container.css" layer(mantine);
-@import "@mantine/core/styles/Divider.css" layer(mantine);
-@import "@mantine/core/styles/Group.css" layer(mantine);
-@import "@mantine/core/styles/Loader.css" layer(mantine);
-@import "@mantine/core/styles/Modal.css" layer(mantine);
-/* 2026-10-31: UI 교체 대조 화면(dev/ui-compare)의 Drawer ↔ Sheet. 운영 화면은 Drawer를 쓰지 않는다. */
-@import "@mantine/core/styles/Drawer.css" layer(mantine);
-@import "@mantine/core/styles/Notification.css" layer(mantine);
-@import "@mantine/core/styles/Pill.css" layer(mantine);
-@import "@mantine/core/styles/PillsInput.css" layer(mantine);
-@import "@mantine/core/styles/Progress.css" layer(mantine);
-@import "@mantine/core/styles/Radio.css" layer(mantine);
-@import "@mantine/core/styles/SimpleGrid.css" layer(mantine);
-@import "@mantine/core/styles/Stack.css" layer(mantine);
-@import "@mantine/core/styles/Switch.css" layer(mantine);
-@import "@mantine/core/styles/Chip.css" layer(mantine);
-@import "@mantine/core/styles/FloatingIndicator.css" layer(mantine);
-@import "@mantine/core/styles/SegmentedControl.css" layer(mantine);
-@import "@mantine/core/styles/Text.css" layer(mantine);
-@import "@mantine/core/styles/Title.css" layer(mantine);
-
-/* Mantine 보정(Badge 한글 잘림 등)과 공용 변수. Mantine 다음 순서를 지키려고 같은 layer에 둔다. */
-@import "@greenhub/ui/style.css" layer(mantine);
+/* 공용 변수(--color-* 등)와 터치 규칙. Mantine을 쓰던 동안의 자리(base와 components 사이 layer)처럼 layer 밖 규칙
+   (tokens.css·아래 :root·body)에 지도록 base layer에 둔다. 안의 Badge 보정(.m_5add502a)은 판매자 화면에 걸리지 않는다. */
+@import "@greenhub/ui/style.css" layer(base);
 
 /* @import는 모두 위에 둔다(@import 뒤에 다른 규칙이 오면 무효). */
 
 /* 클래스 탐색: Tailwind는 node_modules(워크스페이스 링크 포함)를 보지 않으므로 공용 컴포넌트 경로를 직접 준다. */
 @source "../../../../packages/ui/src";
 
-/* ① 외형 유지 동안 Mantine 화면을 Tailwind로 옮길 때 쓰는 Mantine 값(@mantine/core default-css-variables).
+/* ① 외형 유지 동안 Mantine 화면을 Tailwind로 옮길 때 쓴 Mantine 값(@mantine/core default-css-variables).
    ② 방향 적용 때 design-direction.md 값으로 바꾸거나 지운다. */
 @theme {
   --shadow-mantine-xs: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
@@ -80,7 +30,50 @@
     rgba(0, 0, 0, 0.04) 0 7px 7px -5px;
 }
 
-/* preflight 대신 남는 빈틈만 새 컴포넌트(data-slot)에 좁혀 채운다. Mantine 화면에는 걸리지 않는다.
+/* Mantine 기본 규칙(@mantine/core baseline.css)과 MantineProvider 테마 값(theme.ts)을 옮긴 것이다(① 외형 유지).
+   글꼴 Pretendard 16px·줄 높이 1.55·검정 글자, 상자 크기는 테두리 포함, 입력·버튼은 부모 글꼴을 쓴다.
+   바탕색(Mantine body 흰색)은 아래 layer 밖 body 규칙이 정한다. */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  button,
+  select {
+    text-transform: none;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-family);
+    font-size: var(--font-size-md);
+    line-height: 1.55;
+    color: #000;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  @media screen and (max-device-width: 31.25em) {
+    body {
+      -webkit-text-size-adjust: 100%;
+    }
+  }
+}
+
+/* preflight 대신 남는 빈틈만 새 컴포넌트(data-slot)에 좁혀 채운다.
    - 테두리: preflight가 없으면 border-width 유틸리티만으로는 style이 none·색이 currentColor로 남는다.
    - button·input: 브라우저 기본 글꼴·배경·테두리·여백. */
 @layer base {
