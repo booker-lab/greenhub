@@ -1,6 +1,7 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button } from '@greenhub/ui/components/button';
 import type { AdminOrder } from '@/hooks/useAdmin';
 import {
   cancellationBadge,
@@ -28,13 +29,23 @@ interface OrdersTableProps {
   onRetry: () => void;
 }
 
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(흰 면, shadow xs)·Group·Stack과 같은 값.
+// 카드 목록·표는 Mantine hiddenFrom·visibleFrom sm(48em)과 같은 폭에서 바뀐다.
+const TEXT = 'm-0 p-0 text-base';
+const PAPER = 'block bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.1)]';
+const GROUP = 'flex flex-row flex-wrap items-center';
+
+// Mantine Badge color → @greenhub/ui Badge 변형(light·outline).
+const LIGHT_BADGE = { red: 'destructive', brand: 'light', yellow: 'warning' } as const;
+const OUTLINE_BADGE = { red: 'outline-destructive', yellow: 'outline-warning' } as const;
+
 // 요청사항은 표 폭을 넓히지 않도록 주문번호 아래 작은 글씨로 최대 3줄만 보여준다.
 export function RequestNote({ note }: { note?: string | null }) {
   const text = note?.trim();
   if (!text) return null;
   return (
-    <Text
-      lineClamp={3}
+    <p
+      className={`${TEXT} line-clamp-3`}
       title={text}
       style={{
         fontSize: 'var(--font-size-xs)',
@@ -45,7 +56,7 @@ export function RequestNote({ note }: { note?: string | null }) {
       }}
     >
       요청: {text}
-    </Text>
+    </p>
   );
 }
 
@@ -58,25 +69,31 @@ const metaText = {
 export function StatusBadges({ order }: { order: AdminOrder }) {
   const cancel = cancellationBadge(order.cancellationStatus);
   return (
-    <Group gap={4} wrap="wrap">
-      <Badge color={getStatusColor(order.status)} variant="light" radius="xl">
+    <div className={`${GROUP} justify-start gap-1`}>
+      <Badge
+        variant={LIGHT_BADGE[getStatusColor(order.status) as keyof typeof LIGHT_BADGE]}
+        className="rounded-[32px]"
+      >
         {STATUS_LABEL[order.status] ?? order.status}
       </Badge>
       {cancel && (
-        <Badge color={cancel.color} variant="outline" radius="xl">
+        <Badge
+          variant={OUTLINE_BADGE[cancel.color as keyof typeof OUTLINE_BADGE]}
+          className="rounded-[32px]"
+        >
           {cancel.label}
         </Badge>
       )}
-    </Group>
+    </div>
   );
 }
 
 // 고객 이름 · 상품 요약 — 표·카드 공용. 고객 전화·주소는 목록에 싣지 않는다.
 export function BuyerAndProduct({ order }: { order: AdminOrder }) {
   return (
-    <Text style={metaText}>
+    <p className={TEXT} style={metaText}>
       {order.buyerName?.trim() || '—'} · {order.productSummary?.trim() || '—'}
-    </Text>
+    </p>
   );
 }
 
@@ -99,95 +116,88 @@ export function OrdersTable({
 
   if (readState === 'LOADING') {
     return (
-      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+      <p className={`${TEXT} py-20 text-center`} style={{ color: 'var(--color-text-disabled)' }}>
         불러오는 중...
-      </Text>
+      </p>
     );
   }
 
   // 조회 실패는 성공-empty와 구조적으로 구분 — "주문이 없습니다."로 collapse 금지.
   if (readState === 'FETCH_ERROR') {
     return (
-      <Paper
-        radius="lg"
-        shadow="xs"
+      <div
+        className={`${PAPER} rounded-[16px]`}
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
       >
-        <Stack gap="sm" align="center" py={64} px="md">
-          <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+        <div className="flex flex-col items-center gap-3 px-4 py-16">
+          <p className={TEXT} style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
             주문 목록을 불러오지 못했습니다.
-          </Text>
-          <Text
-            ta="center"
+          </p>
+          <p
+            className={`${TEXT} text-center`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             {error}
-          </Text>
-          <Button onClick={onRetry} size="sm" variant="outline" radius="md">
+          </p>
+          <Button onClick={onRetry} variant="outline" className="rounded-[8px]">
             다시 조회
           </Button>
-        </Stack>
-      </Paper>
+        </div>
+      </div>
     );
   }
 
   if (readState === 'EMPTY') {
     return (
-      <Paper
-        radius="lg"
-        shadow="xs"
+      <div
+        className={`${PAPER} rounded-[16px]`}
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
       >
-        <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>
+        <p className={`${TEXT} py-16 text-center`} style={{ color: 'var(--color-text-disabled)' }}>
           주문이 없습니다.
-        </Text>
-      </Paper>
+        </p>
+      </div>
     );
   }
 
   return (
     <>
       {/* 모바일(<sm): 카드 리스트 — 마지막 컬럼(금액·강제환불) 잘림 방지 */}
-      <Stack gap="sm" hiddenFrom="sm" role="list" aria-label="주문 목록">
+      <ul className="m-0 flex list-none flex-col gap-3 p-0 min-[48em]:hidden" aria-label="주문 목록">
         {orders.map((order) => (
-          <Paper
-            role="listitem"
+          <li
             key={order.id}
-            radius="md"
-            px="md"
-            py="sm"
-            shadow="xs"
+            className={`${PAPER} rounded-[8px] px-4 py-3`}
             style={{ border: '1px solid var(--color-border)' }}
           >
-            <Group justify="space-between" mb="xs">
-              <Text
+            <div className={`${GROUP} mb-2.5 justify-between gap-4`}>
+              <p
+                className={`${TEXT} font-mono`}
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-text-disabled)',
                 }}
-                ff="monospace"
               >
                 {order.orderNumber ?? `${order.id.slice(0, 12)}…`}
-              </Text>
+              </p>
               <StatusBadges order={order} />
-            </Group>
-            <Text style={metaText} mb={2}>
+            </div>
+            <p className={`${TEXT} mb-0.5`} style={metaText}>
               {formatOrderedAt(order.createdAt)} · {storeLabel(order)}
-            </Text>
+            </p>
             <BuyerAndProduct order={order} />
             <RequestNote note={order.requestNote} />
-            <Group justify="space-between" align="center" mt="xs">
-              <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+            <div className={`${GROUP} mt-2.5 justify-between gap-4`}>
+              <p className={TEXT} style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
                 ₩{order.totalAmount.toLocaleString()}
-              </Text>
+              </p>
               {isRefundable(order) && (
                 <Button
                   onClick={() => onRefund(order)}
                   disabled={processingIds.has(order.id)}
                   size="xs"
-                  variant="outline"
-                  color="red"
-                  radius="md"
+                  variant="outline-destructive"
+                  className="rounded-[8px]"
                 >
                   {processingIds.has(order.id) ? '처리중…' : '강제환불'}
                 </Button>
@@ -197,91 +207,73 @@ export function OrdersTable({
                   onClick={() => onPostDeliveryRefund(order)}
                   disabled={processingIds.has(order.id)}
                   size="xs"
-                  variant="outline"
-                  color="red"
-                  radius="md"
+                  variant="outline-destructive"
+                  className="rounded-[8px]"
                 >
                   {processingIds.has(order.id) ? '처리중…' : '배송 후 환불'}
                 </Button>
               )}
-            </Group>
-          </Paper>
+            </div>
+          </li>
         ))}
-      </Stack>
+      </ul>
 
       {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
-      <Paper
-        radius="lg"
-        shadow="xs"
+      <div
+        className={`${PAPER} rounded-[16px] max-[47.99375em]:hidden`}
         style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        visibleFrom="sm"
       >
-        <Box
-          component="table"
+        <table
           style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
         >
-          <Box
-            component="thead"
+          <thead
             style={{
               backgroundColor: 'var(--color-surface-muted)',
               borderBottom: '1px solid var(--color-border)',
             }}
           >
             <tr>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                주문일시
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                주문번호
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                고객 · 상품
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                가게
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                상태
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'right' }}>
-                금액
-              </Box>
-              <Box component="th" style={{ padding: '12px 16px' }} />
+              <th style={{ ...thBase, textAlign: 'left' }}>주문일시</th>
+              <th style={{ ...thBase, textAlign: 'left' }}>주문번호</th>
+              <th style={{ ...thBase, textAlign: 'left' }}>고객 · 상품</th>
+              <th style={{ ...thBase, textAlign: 'left' }}>가게</th>
+              <th style={{ ...thBase, textAlign: 'left' }}>상태</th>
+              <th style={{ ...thBase, textAlign: 'right' }}>금액</th>
+              <th style={{ padding: '12px 16px' }} />
             </tr>
-          </Box>
-          <Box component="tbody">
+          </thead>
+          <tbody>
             {orders.map((order) => (
-              <Box
-                component="tr"
-                key={order.id}
-                style={{ borderTop: '1px solid var(--color-border)' }}
-              >
-                <Box component="td" style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                  <Text style={metaText}>{formatOrderedAt(order.createdAt)}</Text>
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Text
+              <tr key={order.id} style={{ borderTop: '1px solid var(--color-border)' }}>
+                <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                  <p className={TEXT} style={metaText}>
+                    {formatOrderedAt(order.createdAt)}
+                  </p>
+                </td>
+                <td style={{ padding: '12px 16px' }}>
+                  <p
+                    className={`${TEXT} font-mono`}
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-disabled)',
                     }}
-                    ff="monospace"
                   >
                     {order.orderNumber ?? `${order.id.slice(0, 12)}…`}
-                  </Text>
+                  </p>
                   <RequestNote note={order.requestNote} />
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
+                </td>
+                <td style={{ padding: '12px 16px' }}>
                   <BuyerAndProduct order={order} />
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Text style={metaText}>{storeLabel(order)}</Text>
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
+                </td>
+                <td style={{ padding: '12px 16px' }}>
+                  <p className={TEXT} style={metaText}>
+                    {storeLabel(order)}
+                  </p>
+                </td>
+                <td style={{ padding: '12px 16px' }}>
                   <StatusBadges order={order} />
-                </Box>
-                <Box
-                  component="td"
+                </td>
+                <td
                   style={{
                     padding: '12px 16px',
                     textAlign: 'right',
@@ -289,16 +281,15 @@ export function OrdersTable({
                   }}
                 >
                   ₩{order.totalAmount.toLocaleString()}
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
+                </td>
+                <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                   {isRefundable(order) && (
                     <Button
                       onClick={() => onRefund(order)}
                       disabled={processingIds.has(order.id)}
                       size="xs"
-                      variant="outline"
-                      color="red"
-                      radius="md"
+                      variant="outline-destructive"
+                      className="rounded-[8px]"
                     >
                       {processingIds.has(order.id) ? '처리중…' : '강제환불'}
                     </Button>
@@ -308,19 +299,18 @@ export function OrdersTable({
                       onClick={() => onPostDeliveryRefund(order)}
                       disabled={processingIds.has(order.id)}
                       size="xs"
-                      variant="outline"
-                      color="red"
-                      radius="md"
+                      variant="outline-destructive"
+                      className="rounded-[8px]"
                     >
                       {processingIds.has(order.id) ? '처리중…' : '배송 후 환불'}
                     </Button>
                   )}
-                </Box>
-              </Box>
+                </td>
+              </tr>
             ))}
-          </Box>
-        </Box>
-      </Paper>
+          </tbody>
+        </table>
+      </div>
     </>
   );
 }
