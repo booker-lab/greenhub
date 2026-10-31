@@ -1,6 +1,5 @@
 'use client';
 
-import { Group } from '@mantine/core';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { type AdminNavItem, isAdminNavActive } from './navItems';
@@ -9,7 +8,11 @@ import { type AdminNavItem, isAdminNavActive } from './navItems';
 export function AdminNav({ items }: { items: AdminNavItem[] }) {
   const pathname = usePathname();
   return (
-    <Group component="nav" aria-label="관리자 메뉴" gap={4} style={{ flexWrap: 'nowrap' }}>
+    // ① 외형 유지(UI 교체 P4): Mantine Group(gap 4·가운데·줄바꿈 없음)과 같은 값.
+    <nav
+      aria-label="관리자 메뉴"
+      className="flex flex-row flex-nowrap items-center justify-start gap-1"
+    >
       {items.map((item) => {
         const active = isAdminNavActive(pathname, item.href);
         return (
@@ -32,6 +35,6 @@ export function AdminNav({ items }: { items: AdminNavItem[] }) {
           </Link>
         );
       })}
-    </Group>
+    </nav>
   );
 }

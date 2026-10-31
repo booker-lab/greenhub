@@ -6,7 +6,7 @@ import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
@@ -237,7 +237,7 @@ export default function StoreProfileSettingsPage() {
                 setError(null);
                 try {
                   await apiJson(`/stores/${storeId}`, token, { method: 'PATCH', body: JSON.stringify(body) });
-                  notifications.show({ message: '저장했어요' });
+                  notify({ message: '저장했어요' });
                 } catch (e) {
                   setError(e instanceof Error ? e.message : '저장하지 못했어요.');
                 } finally {

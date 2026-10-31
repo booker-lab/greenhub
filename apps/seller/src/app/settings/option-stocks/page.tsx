@@ -4,7 +4,7 @@ import type { OptionStock } from '@greenhub/shared';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
@@ -172,7 +172,7 @@ export default function OptionStocksSettingsPage() {
       );
       if (stock) setStocks((current) => upsertStock(current, stock));
       setForm({ name: '', quantity: '' });
-      notifications.show({ message: '재고를 추가했어요' });
+      notify({ message: '재고를 추가했어요' });
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : '추가하지 못했어요.');
     } finally {
@@ -190,10 +190,10 @@ export default function OptionStocksSettingsPage() {
         }),
       );
       if (stock) setStocks((current) => upsertStock(current, stock));
-      notifications.show({ message: '재고를 저장했어요' });
+      notify({ message: '재고를 저장했어요' });
       return true;
     } catch (e) {
-      notifications.show({
+      notify({
         color: 'red',
         message: e instanceof Error ? e.message : '저장하지 못했어요.',
       });
