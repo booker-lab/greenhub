@@ -6,10 +6,11 @@ import { contactHref, formatInquiryDate } from '../_lib';
 // 입점 문의 한 건: 농가·지역·받은 날·처리 상태, 누를 수 있는 연락처, 내용, 연락함 표시·삭제 버튼.
 
 // ① 외형 유지(UI 교체 P2b): Mantine Paper(lg·xs·md)·Group·Text(기본 16px·1.55, sm 15px·1.45)·Badge light(radius sm)·
-// Anchor(주색, 올리면 밑줄)·Button compact-sm(radius xl)과 같은 값.
-const TEXT = 'm-0 p-0 text-base font-normal';
-const TEXT_SM = 'm-0 p-0 text-sm font-normal';
+// Anchor·Button compact-sm(radius xl)과 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const TEXT_SM = 'm-0 p-0 text-sm';
 
+// 판매자 앱은 Mantine Anchor.css를 넣지 않아 Anchor가 Text(밑줄 없음) + 브라우저 기본 링크색이다. 그대로 둔다.
 export interface PartnerInquiryCardProps {
   item: PartnerInquiryItem;
   busy: boolean;
@@ -58,7 +59,7 @@ export function PartnerInquiryCard({
       {href ? (
         <a
           href={href}
-          className={`${TEXT_SM} mt-0.5 block cursor-pointer text-[var(--mantine-color-anchor)] no-underline hover:underline`}
+          className={`${TEXT_SM} mt-0.5 block no-underline`}
           style={{ overflowWrap: 'anywhere' }}
         >
           {item.contact}

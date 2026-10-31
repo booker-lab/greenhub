@@ -1150,7 +1150,7 @@ export const screens = [
     viewport: true,
   },
   // 어드민 초대(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
-  // 헤드리스 브라우저는 클립보드 쓰기 권한이 없어 링크 복사가 실패하고 직접 복사 창이 열린다.
+  // 링크 복사는 헤드리스에서도 성공해 그 행 버튼이 '복사됨!'이 된다(직접 복사 창은 열리지 않는다).
   {
     id: 'modal-invite-revoke',
     group: '어드민 · 모달',
@@ -1160,9 +1160,9 @@ export const screens = [
     viewport: true,
   },
   {
-    id: 'modal-invite-manual-copy',
-    group: '어드민 · 모달',
-    title: '초대 · 링크 직접 복사',
+    id: 'admin-invite-copied',
+    group: '어드민',
+    title: '초대 · 링크 복사됨',
     path: '/admin/invite',
     steps: [{ clickSelector: 'button:has-text("링크 복사"):visible' }],
     viewport: true,

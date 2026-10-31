@@ -5,8 +5,8 @@ import { hiddenReasonLabel, hiddenSummary } from '../../../reactions/_lib';
 // 관리자 콘솔 숨긴 후기 한 건: 가게·상품·별점·내용·사유·설명·숨긴 사람/시각과 숨김 해제 버튼.
 
 // ① 외형 유지(UI 교체 P2b): Mantine Paper(lg·xs·md)·Group·Stack·Text(기본 16px·1.55, sm 15px·1.45)·Button light compact-sm과 같은 값.
-const TEXT = 'm-0 p-0 text-base font-normal';
-const TEXT_SM = 'm-0 p-0 text-sm font-normal';
+const TEXT = 'm-0 p-0 text-base';
+const TEXT_SM = 'm-0 p-0 text-sm';
 const SECONDARY = { color: 'var(--color-text-secondary)' };
 
 const day = (iso: string) =>
