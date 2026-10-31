@@ -34,6 +34,8 @@ const buttonVariants = cva(
         'outline-warning': 'border-[#fab005] bg-transparent text-[#fab005] hover:bg-[#fab005]/5',
         'outline-green': 'border-[#40c057] bg-transparent text-[#40c057] hover:bg-[#40c057]/5',
         'light-green': 'bg-[#d3f9d8] text-[#2b8a3e]',
+        // Mantine variant="default"(흰 면·gray-4 테두리·검정 글자, 올리면 gray-0).
+        plain: 'border-[#ced4da] bg-white text-black hover:bg-[#f8f9fa]',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
       size: {
@@ -43,6 +45,9 @@ const buttonVariants = cva(
         sm: 'h-7.5 px-3.5 text-xs leading-none has-data-[icon=inline-start]:ps-[calc(14px/1.5)] has-data-[icon=inline-end]:pe-[calc(14px/1.5)]',
         md: 'h-10.5 px-5.5 text-base leading-none has-data-[icon=inline-start]:ps-[calc(22px/1.5)] has-data-[icon=inline-end]:pe-[calc(22px/1.5)]',
         lg: 'h-12.5 px-6.5 text-lg leading-none has-data-[icon=inline-start]:ps-[calc(26px/1.5)] has-data-[icon=inline-end]:pe-[calc(26px/1.5)]',
+        // Mantine compact-xs(높이 22·좌우 7px·13px)·compact-sm(높이 26·좌우 8px·15px).
+        'compact-xs': 'h-[22px] px-[7px] text-xs leading-none',
+        'compact-sm': 'h-[26px] px-2 text-sm leading-none',
         icon: 'size-9',
         'icon-xs': 'size-6 [&_svg:not([class*=size-])]:size-3',
         'icon-sm': 'size-7.5',

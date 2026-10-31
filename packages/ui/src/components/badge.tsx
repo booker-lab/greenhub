@@ -20,6 +20,10 @@ const badgeVariants = cva(
         warning: 'bg-status-warning text-status-warning-foreground',
         secondary: 'bg-[#f1f3f5] text-[#212529]',
         destructive: 'bg-[#ffe3e3] text-[#c92a2a]',
+        // Mantine light orange(orange-1 면·orange-9 글자).
+        'light-orange': 'bg-[#ffe8cc] text-[#d9480f]',
+        // Mantine light green(green-1 면·green-9 글자).
+        'light-green': 'bg-[#d3f9d8] text-[#2b8a3e]',
         ghost: 'bg-transparent text-foreground hover:bg-muted',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
