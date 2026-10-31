@@ -257,7 +257,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 대조 화면: 상품 폼 입력 부품 행(입력칸 md·xl, Select 자리표시·값, Textarea, autosize, Loader, Badge 버튼, 두 줄·잘리는 버튼)과 Select 열린 목록(`?open=select|uiselect`, 하네스가 입력칸을 실제로 누름). 행은 390·768·1280에서 모두 같다. 열린 목록은 768·1280에서 0, 390에서 체크 아이콘 안티앨리어싱 19픽셀(채널 차이 4 이하)이다.
 - 어드민 기사 승인 구현(2026-10-31): `admin/drivers`(목록·탭·배지·배송 중 안내창)와 공용 `ConfirmModal`·`SuspendReasonMessage`의 `@mantine/core`를 걷었다.
   - `ConfirmModal`은 `Dialog`로 그린다. Mantine `confirmColor`(brand·red·gray·green)는 같은 색의 Button으로 옮긴다. 이 컴포넌트를 쓰는 화면(회차 취소·주문·정산·소비자·어드민 여러 곳)의 확인창이 함께 바뀐다.
-  - `Dialog`를 Mantine Modal 구조에 더 가깝게 바꿨다. 닫기 버튼은 `DialogHeader` 안 flex 끝에 두고(본문 상자에 `position`을 주면 안쪽 버튼 모서리가 다르게 그려졌다), 본문 상자에 `will-change: opacity`를 준다(Mantine은 열림 전환 때문에 본문을 따로 합성해 그린다. 없으면 모바일 2배율에서 버튼 위 모서리 한 줄이 달랐다). 닫기 버튼이 첫 초점이고, 안쪽에 `data-autofocus` 요소가 있으면 그 요소가 첫 초점이다(Mantine 약속. 강제환불 사유 입력칸이 이것으로 Enter 한 번에 환불되지 않게 한다).
+  - `Dialog` 본문 상자에 `will-change: opacity`를 준다(Mantine은 열림 전환 때문에 본문을 따로 합성해 그린다. 없으면 확인창 안 버튼 둥근 모서리의 안티앨리어싱이 세 폭 모두 달랐다). 닫기 버튼을 본문보다 앞(DOM 순서)에 두어 Mantine처럼 첫 초점이 닫기 버튼에 간다(확인 버튼이 첫 초점이면 Enter 한 번에 승인·정지된다). 닫기 버튼을 머리 안으로 옮기는 처리는 #694 하네스(`--disable-partial-raster`)로 다시 재 보니 필요 없어 넣지 않았다.
   - `Button`: 글자를 Mantine 글자 칸과 같은 `span`으로 감싼다(`text-box-trim: trim-both`·`text-box-edge: cap alphabetic`, 글자를 대문자 높이 기준으로 가운데에 둔다). 없으면 글자 가장자리 픽셀이 Mantine과 달랐다.
   - 촬영 목록에 기사 승인·정지 확인창(`modal-driver-approve`·`modal-driver-suspend`)을 더했다. 기준은 같은 fixture로 `main`을 찍었다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.

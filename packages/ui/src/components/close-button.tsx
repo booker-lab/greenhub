@@ -24,8 +24,8 @@ function CloseIcon({ style, ...props }: React.ComponentProps<'svg'>) {
 }
 
 // ① 외형 유지: Mantine CloseButton(28px, 모서리 16, gray-7, 마우스를 올리면 gray-0, 초점 시 주색 2px 외곽선).
-// Dialog는 머리 안 flex 끝(margin-left auto)에, Sheet는 머리 자리에 absolute로 둔다.
+// Modal·Drawer 머리(60px, 오른쪽 11px) 가운데에 오도록 위치까지 둔다(Dialog·Sheet 공용).
 const closeButtonClassName =
-  'inline-flex size-7 cursor-pointer items-center justify-center rounded-lg bg-transparent text-[#495057] outline-none select-none hover:bg-[#f8f9fa] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid';
+  'absolute top-4 right-[11px] z-20 inline-flex size-7 cursor-pointer items-center justify-center rounded-lg bg-transparent text-[#495057] outline-none select-none hover:bg-[#f8f9fa] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid';
 
 export { CloseIcon, closeButtonClassName };
