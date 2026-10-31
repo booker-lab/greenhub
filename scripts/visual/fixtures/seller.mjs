@@ -228,6 +228,18 @@ const ADMIN_INVITES = [
     expiresAt: '2026-01-01T00:00:00.000Z',
     createdAt: '2025-12-25T00:00:00.000Z',
   },
+  // 취소된 초대(취소됨 배지)와 받는 사람을 지정한 초대(UI 교체 P2b).
+  {
+    token: 'REVOKED4',
+    createdBy: user.id,
+    usedAt: null,
+    usedBy: null,
+    revokedAt: '2026-09-15T00:00:00.000Z',
+    revokedBy: user.id,
+    recipientEmail: 'new.seller@example.test',
+    expiresAt: '2026-12-31T00:00:00.000Z',
+    createdAt: '2026-09-14T00:00:00.000Z',
+  },
 ];
 
 // ── 회차: 예정·진행·마감·임시저장 한 건씩. 일정은 파일럿 첫 회차(목 10:00 오픈 → 일 24:00 마감) 형태 ──
@@ -728,7 +740,60 @@ const benchmarkRoutes = [
           message: '호접란 2,000분 규모로 재배합니다. 주 1회 납품 가능합니다.',
           createdAt: '2026-10-02T05:00:00.000Z',
         },
+        // UI 교체 P2b: 연락 전·이메일 연락처 카드(배지·링크 모양).
+        {
+          id: 'inquiry-2',
+          farmName: '제주 동백정원',
+          region: '제주 서귀포',
+          contact: 'camellia@example.test',
+          message: '동백 분재를 소량 납품하고 싶습니다.\n사진은 메일로 보내 드릴게요.',
+          contactedAt: null,
+          createdAt: '2026-10-01T02:00:00.000Z',
+        },
       ],
+    }),
+  ],
+  // 숨긴 후기(/admin/reviews, 기능 플래그 reviews). 사진은 외부 주소라 넣지 않는다.
+  [
+    'GET',
+    /^\/admin\/reviews\/hidden$/,
+    () => ({
+      body: {
+        reviews: [
+          {
+            id: 'hidden-review-1',
+            productId: 'product-1',
+            storeId: 'store-visual-0001',
+            storeName: '디어 오키드',
+            productName: '호접란 화이트',
+            rating: 1,
+            text: '연락처 010-0000-0000으로 전화 주세요. 꽃이 금방 시들었어요.',
+            authorName: '김*린',
+            createdAt: '2026-10-03T01:00:00.000Z',
+            hidden: true,
+            hiddenReasonCode: 'privacy',
+            hiddenNote: '전화번호가 적혀 있음',
+            hiddenAt: '2026-10-03T05:00:00.000Z',
+            hiddenByRole: 'seller',
+          },
+          {
+            id: 'hidden-review-2',
+            productId: 'product-2',
+            storeId: 'store-visual-0001',
+            storeName: '디어 오키드',
+            productName: null,
+            rating: 2,
+            text: '광고 문구',
+            authorName: '이*수',
+            createdAt: '2026-10-02T01:00:00.000Z',
+            hidden: true,
+            hiddenAt: '2026-10-02T03:00:00.000Z',
+            hiddenByRole: 'admin',
+          },
+        ],
+        hasMore: true,
+        limit: 100,
+      },
     }),
   ],
 ];
@@ -1083,6 +1148,24 @@ export const screens = [
     steps: [{ click: '정지' }],
     viewport: true,
   },
+  // 어드민 초대(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  // 헤드리스 브라우저는 클립보드 쓰기 권한이 없어 링크 복사가 실패하고 직접 복사 창이 열린다.
+  {
+    id: 'modal-invite-revoke',
+    group: '어드민 · 모달',
+    title: '초대 · 취소 확인',
+    path: '/admin/invite',
+    steps: [{ clickSelector: 'button:has-text("취소"):visible' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-invite-manual-copy',
+    group: '어드민 · 모달',
+    title: '초대 · 링크 직접 복사',
+    path: '/admin/invite',
+    steps: [{ clickSelector: 'button:has-text("링크 복사"):visible' }],
+    viewport: true,
+  },
   {
     id: 'modal-round-cancel',
     group: '판매자 · 모달',
@@ -1204,5 +1287,30 @@ export const benchmarkScreens = [
     title: '관리자 · 입점 문의',
     path: '/admin/partner-inquiries',
     features: ['partner-inquiry'],
+  },
+  {
+    id: 'bm-admin-partner-delete',
+    group: '관리자',
+    title: '관리자 · 입점 문의 · 삭제 확인',
+    path: '/admin/partner-inquiries',
+    features: ['partner-inquiry'],
+    steps: [{ click: '삭제' }],
+    viewport: true,
+  },
+  {
+    id: 'bm-admin-reviews',
+    group: '관리자',
+    title: '관리자 · 숨긴 후기',
+    path: '/admin/reviews',
+    features: ['reviews'],
+  },
+  {
+    id: 'bm-admin-reviews-unhide',
+    group: '관리자',
+    title: '관리자 · 숨긴 후기 · 숨김 해제 확인',
+    path: '/admin/reviews',
+    features: ['reviews'],
+    steps: [{ click: '숨김 해제' }],
+    viewport: true,
   },
 ];

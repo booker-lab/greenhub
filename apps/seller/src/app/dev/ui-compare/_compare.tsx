@@ -23,6 +23,7 @@ import {
 import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { Loader } from '@greenhub/ui/components/loader';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { NativeSelect } from '@greenhub/ui/components/native-select';
 import { NumberInput } from '@greenhub/ui/components/number-input';
 import { Select } from '@greenhub/ui/components/select';
@@ -943,6 +944,102 @@ export function UiCompare({ open }: { open?: string }) {
             <Button variant="outline-green">
               <ButtonLabel>+ 옵션 묶음 추가</ButtonLabel>
             </Button>
+          }
+        />
+        <Row
+          name="Button compact-xs outline md ↔ outline compact-xs"
+          mantine={
+            <MButton size="compact-xs" variant="outline" radius="md">
+              링크 복사
+            </MButton>
+          }
+          ui={
+            <Button size="compact-xs" variant="outline" className="rounded-[8px]">
+              링크 복사
+            </Button>
+          }
+        />
+        <Row
+          name="Button compact-xs subtle red md ↔ subtle-destructive"
+          mantine={
+            <MButton size="compact-xs" variant="subtle" color="red" radius="md">
+              취소
+            </MButton>
+          }
+          ui={
+            <Button size="compact-xs" variant="subtle-destructive" className="rounded-[8px]">
+              취소
+            </Button>
+          }
+        />
+        <Row
+          name="Button compact-xs subtle red loading ↔ LoadingButton"
+          mantine={
+            <MButton size="compact-xs" variant="subtle" color="red" radius="md" loading>
+              취소
+            </MButton>
+          }
+          ui={
+            <LoadingButton
+              size="compact-xs"
+              variant="subtle-destructive"
+              className="rounded-[8px]"
+              loading
+            >
+              취소
+            </LoadingButton>
+          }
+        />
+        <Row
+          name="Button compact-sm light ↔ light compact-sm"
+          mantine={
+            <MButton size="compact-sm" variant="light">
+              숨김 해제
+            </MButton>
+          }
+          ui={
+            <Button size="compact-sm" variant="light">
+              숨김 해제
+            </Button>
+          }
+        />
+        <Row
+          name="Button compact-sm default ↔ plain"
+          mantine={
+            <MButton size="compact-sm" variant="default">
+              연락 전으로 되돌리기
+            </MButton>
+          }
+          ui={
+            <Button size="compact-sm" variant="plain">
+              연락 전으로 되돌리기
+            </Button>
+          }
+        />
+        <Row
+          name="Badge light orange ↔ light-orange"
+          mantine={
+            <MBadge variant="light" color="orange" radius="xl">
+              취소됨
+            </MBadge>
+          }
+          ui={
+            <Badge variant="light-orange" className="rounded-[32px]">
+              취소됨
+            </Badge>
+          }
+        />
+        <Row
+          name="Badge light green sm ↔ light-green"
+          mantine={
+            <MBadge variant="light" color="green" radius="sm">
+              연락함
+            </MBadge>
+          }
+          ui={
+            <Badge variant="light-green" className="rounded-[4px]">
+              연락함
+            </Badge>
           }
         />
       </Section>
