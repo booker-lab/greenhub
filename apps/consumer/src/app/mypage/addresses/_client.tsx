@@ -4,12 +4,24 @@ import type { SavedAddress } from '@greenhub/shared';
 import { AlertDescription, Alert as UiAlert } from '@greenhub/ui/components/alert';
 import { Badge as UiBadge } from '@greenhub/ui/components/badge';
 import { Button as UiButton } from '@greenhub/ui/components/button';
-// 배송지 추가·수정 창은 공용 Dialog의 초점 가두기·aria-modal 수정이 들어온 뒤 바꾼다(그때까지 Mantine Modal).
-import { Alert, Button, Modal, Stack, Text, TextInput } from '@mantine/core';
+import { CloseIcon, closeButtonClassName } from '@greenhub/ui/components/close-button';
+import {
+  Dialog,
+  DialogBody,
+  DialogClose,
+  DialogHeader,
+  DialogOverlay,
+  DialogPopup,
+  DialogPortal,
+  DialogTitle,
+} from '@greenhub/ui/components/dialog';
+import { FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import type { AddressFormData } from '@/hooks/useAddresses';
 import { useAddresses } from '@/hooks/useAddresses';
 
@@ -124,57 +136,119 @@ function AddressFormModal({
     }
   }
 
+  // ① 외형 유지: Mantine Modal(md 440px, 위에서 시작, radius md 8px, 제목 굵게·lg)·Stack(gap sm 12px)·
+  // TextInput(radius md 8px)·Alert(red light, 안쪽 xs 10px)·Button(fullWidth, 위 여백 xs 10px)과 같은 값.
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={initial.label ? '배송지 수정' : '배송지 추가'}
-      radius="md"
-      styles={{ title: { fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' } }}
+    <Dialog
+      open={opened}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <form onSubmit={handleSubmit}>
-        <Stack gap="sm">
-          <TextInput
-            label="이름 *"
-            placeholder="예: 집, 회사"
-            value={form.label}
-            onChange={(e) => set('label', e.target.value)}
-            radius="md"
-          />
-          <TextInput
-            label="우편번호 *"
-            placeholder="예: 06232"
-            value={form.zipCode}
-            onChange={(e) => set('zipCode', e.target.value)}
-            radius="md"
-          />
-          <TextInput
-            label="주소 *"
-            placeholder="예: 서울 강남구 테헤란로 152"
-            value={form.address}
-            onChange={(e) => set('address', e.target.value)}
-            radius="md"
-          />
-          <TextInput
-            label="상세 주소"
-            placeholder="예: 5층 502호"
-            value={form.addressDetail}
-            onChange={(e) => set('addressDetail', e.target.value)}
-            radius="md"
-          />
+      {/* 하단 탭(z 100) 위를 덮도록 Mantine Modal과 같은 z 200을 쓴다. DialogContent는 오버레이·뷰포트 z가 50으로
+          고정이라, 같은 구조·클래스(위에서 시작하는 뷰포트, 닫기 버튼을 본문 앞에)로 풀어서 z만 바꾼다(기사 배송 보류 창과 같은 방식).
+          창 본체는 DialogContent와 같은 DialogPopup이라 Tab 순회가 창 안에서만 돌고 aria-modal이 붙는다. */}
+      <DialogPortal>
+        <DialogOverlay className="z-[200]" />
+        <div
+          data-slot="dialog-viewport"
+          className="pointer-events-none fixed inset-0 z-[200] flex items-start justify-center px-[5vw] py-[5dvh]"
+        >
+          <DialogPopup
+            data-slot="dialog-content"
+            className="pointer-events-auto relative flex max-h-[90dvh] w-[440px] max-w-full flex-col overflow-y-auto rounded-[8px] bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none will-change-[opacity] duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+          >
+            <DialogClose
+              data-slot="dialog-close"
+              aria-label="닫기"
+              className={closeButtonClassName}
+            >
+              <CloseIcon />
+            </DialogClose>
+            <DialogHeader className="rounded-t-[8px]">
+              <DialogTitle
+                style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}
+              >
+                {initial.label ? '배송지 수정' : '배송지 추가'}
+              </DialogTitle>
+            </DialogHeader>
+            <DialogBody>
+              <form onSubmit={handleSubmit}>
+                <div className="flex flex-col gap-3">
+                  <AddressField
+                    label="이름 *"
+                    placeholder="예: 집, 회사"
+                    value={form.label}
+                    onChange={(value) => set('label', value)}
+                  />
+                  <AddressField
+                    label="우편번호 *"
+                    placeholder="예: 06232"
+                    value={form.zipCode}
+                    onChange={(value) => set('zipCode', value)}
+                  />
+                  <AddressField
+                    label="주소 *"
+                    placeholder="예: 서울 강남구 테헤란로 152"
+                    value={form.address}
+                    onChange={(value) => set('address', value)}
+                  />
+                  <AddressField
+                    label="상세 주소"
+                    placeholder="예: 5층 502호"
+                    value={form.addressDetail}
+                    onChange={(value) => set('addressDetail', value)}
+                  />
 
-          {fieldError && (
-            <Alert color="red" variant="light" p="xs">
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>{fieldError}</Text>
-            </Alert>
-          )}
+                  {fieldError && (
+                    <UiAlert role="alert" variant="destructive" className="p-2.5">
+                      <AlertDescription>
+                        <p className={TEXT} style={SMALL_TEXT_STYLE}>
+                          {fieldError}
+                        </p>
+                      </AlertDescription>
+                    </UiAlert>
+                  )}
 
-          <Button type="submit" fullWidth color="brand" radius="xl" loading={saving} mt="xs">
-            저장
-          </Button>
-        </Stack>
-      </form>
-    </Modal>
+                  <LoadingButton type="submit" className="mt-2.5 w-full" loading={saving}>
+                    저장
+                  </LoadingButton>
+                </div>
+              </form>
+            </DialogBody>
+          </DialogPopup>
+        </div>
+      </DialogPortal>
+    </Dialog>
+  );
+}
+
+// Mantine TextInput(label + 입력칸)과 같은 구조: 감싸는 상자는 역할 없는 div, 라벨은 inline-block.
+function AddressField({
+  label,
+  placeholder,
+  value,
+  onChange,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const id = useId();
+  return (
+    <div>
+      <FieldLabel htmlFor={id} className="inline-block">
+        {label}
+      </FieldLabel>
+      <Input
+        id={id}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-[8px]"
+      />
+    </div>
   );
 }
 
