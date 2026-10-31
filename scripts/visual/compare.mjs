@@ -5,6 +5,9 @@
 // - 기준 시각·화면 폭 목록이 다르면 비교하지 않는다(같은 조건에서 찍은 캡처만 비교한다).
 // - 픽셀이 하나라도 다르면 차이다. 의도한 차이는 허용 목록에 화면·폭·영역·사유로만 적을 수 있고,
 //   그 영역 밖의 차이는 0이어야 한다. 크기가 다르면 영역 대신 "full"로만 허용한다.
+// - 끊긴 촬영(manifest complete: false)은 비교하지 않는다.
+
+import { incompleteReason } from './manifest-store.mjs';
 
 /**
  * 허용 목록 JSON을 검증한다. 형식이 틀리면 예외로 멈춘다(넘기지 않는다).
@@ -131,6 +134,13 @@ export function compareRuns(
   { tolerance = 0 } = {},
 ) {
   const problems = [];
+  // 끊긴 촬영(complete: false)은 일부 화면만 있어 비교하지 않는다(예전에는 manifest가 없어 실패했다).
+  for (const reason of [
+    incompleteReason(beforeRun, 'before'),
+    incompleteReason(afterRun, 'after'),
+  ]) {
+    if (reason) problems.push(reason);
+  }
   if (!beforeRun.visualNow || beforeRun.visualNow !== afterRun.visualNow) {
     problems.push(
       `기준 시각이 다릅니다: before ${beforeRun.visualNow ?? '(없음)'} · after ${afterRun.visualNow ?? '(없음)'}`,

@@ -2,14 +2,13 @@
 
 import type { OperationIssueActionType, OperationIssueStatus, Order } from '@greenhub/shared';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button } from '@greenhub/ui/components/button';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import {
   getAllowedOperationAction,
   ISSUE_DESCRIPTIONS,
   ISSUE_LABELS,
   type OrderOperationIssue,
 } from '../operation-issues';
-import { BUTTON_LOADING, ButtonLoader } from './ButtonLoading';
 import { Row } from './OrderRow';
 
 // ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, shadow xs)·Group·Stack·Text(p, 여백 0, 줄 높이 1.55)와 같은 값.
@@ -204,17 +203,16 @@ function IssueCard({
 
       {allowedAction && (
         <>
-          <Button
+          <LoadingButton
+            measured
             variant={actionVariant}
-            className={`mt-3 w-full ${actionLoading ? BUTTON_LOADING[actionVariant] : ''}`}
+            className="mt-3 w-full"
+            loading={actionLoading}
             disabled={actionIssueId !== null}
-            data-loading={actionLoading || undefined}
-            aria-busy={actionLoading || undefined}
             onClick={() => void onAction(issue)}
           >
-            {actionLoading && <ButtonLoader variant={actionVariant} height={36} />}
             {ACTION_LABELS[allowedAction]}
-          </Button>
+          </LoadingButton>
           <p
             className={`${TEXT} text-center mt-1`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
@@ -316,18 +314,16 @@ export function OrderOperationsSection({
               서버가 반환한 운영 기록과 허용 조치만 표시합니다.
             </p>
           </div>
-          <Button
+          <LoadingButton
+            measured
             size="xs"
             variant="ghost"
-            className={loading ? BUTTON_LOADING.ghost : undefined}
-            disabled={loading || actionIssueId !== null}
-            data-loading={loading || undefined}
-            aria-busy={loading || undefined}
+            loading={loading}
+            disabled={actionIssueId !== null}
             onClick={() => void onReload()}
           >
-            {loading && <ButtonLoader variant="ghost" height={30} />}
             새로고침
-          </Button>
+          </LoadingButton>
         </div>
 
         {error && (
