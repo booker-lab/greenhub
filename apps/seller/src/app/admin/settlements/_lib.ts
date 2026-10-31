@@ -61,6 +61,16 @@ export function orderLabel(s: Pick<AdminSettlement, 'orderId' | 'orderNumber'>):
   return s.orderNumber || s.orderId;
 }
 
+/**
+ * 지급 완료로 기록할 수 있는지. 확정(confirmed)이고 보류 사유가 없으며 정산 계좌가 있어야 한다.
+ * 계좌 없이 다른 수단으로 지급하는 것은 허용하지 않는다(2026-10-30 사용자 결정). 서버 markAsPaid도 같은 조건으로 거절한다.
+ */
+export function canPay(
+  s: Pick<AdminSettlement, 'status' | 'holdReason' | 'payoutAccount'>,
+): boolean {
+  return s.status === 'confirmed' && !s.holdReason && Boolean(s.payoutAccount);
+}
+
 /** 정산 계좌 한 줄. 지급 확인창에서 관리자가 입금할 때 본다. */
 export function describePayoutAccount(account: AdminPayoutAccount | null | undefined): string {
   if (!account) return '정산 계좌: 미등록 — 판매자에게 앱 설정 > 정산 계좌 등록을 요청하세요.';
@@ -90,6 +100,8 @@ export function describePayConfirm(
     `지급액: ${toKRW(s.netAmount)}`,
     describePayoutAccount(s.payoutAccount),
     '',
-    '이 계좌로 입금한 뒤 지급 완료 처리하시겠습니까?',
+    s.payoutAccount
+      ? '이 계좌로 입금한 뒤 지급 완료 처리하시겠습니까?'
+      : '입금할 계좌가 없어 지급 완료로 기록할 수 없습니다.',
   ].join('\n');
 }

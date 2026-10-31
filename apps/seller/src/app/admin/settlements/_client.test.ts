@@ -32,6 +32,7 @@ describe('AdminSettlementsClient 배선', () => {
     expect(source).toContain('await markAsPaid(payTarget.id)');
     expect(source).toContain('describePayConfirm(payTarget)');
     expect(source).toContain('onConfirm={runPay}');
+    expect(source).toContain('confirmDisabled={payTarget !== null && !canPay(payTarget)}');
     expect(source).toContain('describeAdminCommandOutcome(outcome,');
   });
 });

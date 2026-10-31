@@ -166,6 +166,7 @@ const ADMIN_ORDERS = [
   adminOrder('R-HELD', 'DELIVERY_HELD', true),
   adminOrder('R-ACCEPTED', 'ACCEPTED', true),
   adminOrder('R-DELIVERING', 'DELIVERING', true),
+  adminOrder('R-DELIVERED', 'DELIVERED', true),
   adminOrder('R-CANCELLED', 'CANCELLED', true),
   adminOrder('L-RECRUITING', 'RECRUITING', false),
   adminOrder('L-ACCEPTED', 'ACCEPTED', false),
@@ -176,7 +177,7 @@ const ADMIN_ORDERS = [
   adminOrder('L-CANCELLED', 'CANCELLED', false),
   // 배송 완료 회차 주문(배송 후 환불 버튼)·고객·상품·가게 이름·요청사항, 환불 진행 중·실패 배지.
   {
-    ...adminOrder('R-DELIVERED', 'DELIVERED', true),
+    ...adminOrder('R-DELIVERED-NOTE', 'DELIVERED', true),
     buyerName: '김그린',
     productSummary: '동양란 만천홍 외 1개',
     storeName: '디어 오키드',
@@ -1249,6 +1250,36 @@ export const screens = [
     title: '정산 · 더 보기 불러오는 중',
     path: '/admin/settlements',
     steps: [{ click: '더 보기' }],
+  },
+  // 어드민 주문 환불 확인창. 강제환불은 사유 입력칸, 배송 후 환불은 메모 입력칸이 첫 초점(data-autofocus)이다.
+  {
+    id: 'modal-admin-refund',
+    group: '어드민 · 모달',
+    title: '주문 · 강제환불 확인',
+    path: '/admin/orders',
+    // 모바일 카드와 PC 표가 같은 버튼을 함께 그리고 하나만 보이므로 보이는 버튼을 누른다.
+    steps: [{ clickSelector: 'button:has-text("강제환불"):visible' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-admin-post-delivery-refund',
+    group: '어드민 · 모달',
+    title: '주문 · 배송 후 환불 확인',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'button:has-text("배송 후 환불"):visible' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-admin-post-delivery-refund-filled',
+    group: '어드민 · 모달',
+    title: '주문 · 배송 후 환불(사유·메모 입력)',
+    path: '/admin/orders',
+    steps: [
+      { clickSelector: 'button:has-text("배송 후 환불"):visible' },
+      { click: '꽃 상함' },
+      { fill: { label: '메모 (손님에게는 보이지 않음, 필수)', value: '꽃잎이 상해 도착' } },
+    ],
+    viewport: true,
   },
   {
     id: 'modal-round-cancel',
