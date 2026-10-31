@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@greenhub/ui/components/button';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
@@ -64,7 +64,7 @@ export default function AdminSettlementsClient() {
       if (outcome.kind === 'confirmed' && outcome.reconciled) return;
       // stale은 완료+재조회 copy를 사용한다. rejected는 서버 reason 보존, unknown은 재확인 우선.
       const presentation = describeAdminCommandOutcome(outcome, '지급');
-      notifications.show({
+      notify({
         color: outcome.kind === 'rejected' ? 'red' : 'yellow',
         title: presentation.title,
         message: presentation.message,

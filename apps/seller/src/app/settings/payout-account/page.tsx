@@ -4,7 +4,7 @@ import { Autocomplete } from '@greenhub/ui/components/autocomplete';
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
@@ -85,7 +85,7 @@ export default function PayoutAccountSettingsPage() {
       const account = readMaskedPayoutAccount(response);
       setSaved(account);
       setForm((current) => ({ ...current, accountNumber: '' }));
-      notifications.show({ message: '정산 계좌를 저장했어요' });
+      notify({ message: '정산 계좌를 저장했어요' });
     } catch (e) {
       setError(e instanceof Error ? e.message : '저장하지 못했어요.');
     } finally {
