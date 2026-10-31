@@ -1605,7 +1605,14 @@ export const screens = [
   { id: 'admin-audit', group: '어드민', title: '감사 기록', path: '/admin/audit' },
   { id: 'hub-detail', group: '판매자', title: '거점 상세', path: '/hubs/hub-0001' },
   { id: 'hub-edit', group: '판매자', title: '거점 수정', path: '/hubs/hub-0001/edit' },
-  { id: 'hub-pickup', group: '판매자', title: '거점 픽업', path: '/hubs/hub-0001/pickup' },
+  // 주문 ID(orderId) 없이 연 거점 픽업 주소 — 화면은 "주문 주소가 올바르지 않습니다" 안내다(#687 처음부터 그랬다).
+  // 코드 입력 정상 화면은 hub-pickup-order가 찍는다. 이전 촬영과 이어 비교하도록 id는 그대로 둔다.
+  {
+    id: 'hub-pickup',
+    group: '판매자',
+    title: '거점 픽업 · 주문 없는 주소(안내)',
+    path: '/hubs/hub-0001/pickup',
+  },
   {
     id: 'hub-detail-inactive',
     group: '판매자',
