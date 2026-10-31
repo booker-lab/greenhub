@@ -83,13 +83,18 @@ const only = option('only', '')?.split(',').filter(Boolean) ?? [];
 const label = option('label', 'current');
 const fixture = await import(`./fixtures/${appName}.mjs`);
 // --set compare: UI 교체 대조 화면(fixture compareScreens). 주소(?open=…)로 창을 여는 화면도 검사한다.
+// --set benchmark: 소비자 benchmarkScreens(기능 토글 화면, 옵션 시트 등). 서버는 NEXT_PUBLIC_GREENHUB_FEATURES=all로 띄운다.
+//   기본 묶음처럼 steps가 있는 화면만 본다.
+const SCREEN_SETS = { compare: 'compareScreens', benchmark: 'benchmarkScreens' };
 const screenSet = option('set', '');
-if (screenSet && screenSet !== 'compare') {
-  console.error(`❌ 지원하지 않는 화면 묶음: ${screenSet} (가능: compare)`);
+if (screenSet && !SCREEN_SETS[screenSet]) {
+  console.error(
+    `❌ 지원하지 않는 화면 묶음: ${screenSet} (가능: ${Object.keys(SCREEN_SETS).join(', ')})`,
+  );
   process.exit(1);
 }
-const screens = (screenSet ? (fixture.compareScreens ?? []) : fixture.screens).filter(
-  (s) => (screenSet || s.steps) && (!only.length || only.includes(s.id)),
+const screens = (screenSet ? (fixture[SCREEN_SETS[screenSet]] ?? []) : fixture.screens).filter(
+  (s) => (screenSet === 'compare' || s.steps) && (!only.length || only.includes(s.id)),
 );
 const missingIds = only.filter((id) => !screens.some((s) => s.id === id));
 if (missingIds.length) {
