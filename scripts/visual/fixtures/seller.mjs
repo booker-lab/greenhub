@@ -2213,6 +2213,8 @@ export const screens = [
   },
   {
     id: 'operations-resolve-loading',
+    // 처리 중에는 Esc·바깥 누름으로 닫지 않는다(앱 onOpenChange가 막는다, Mantine closeOnEscape={!처리 중}과 같다).
+    closeBlocked: '처리 중 닫기 막음',
     group: '판매자 · 불러오는 중 버튼',
     title: '운영 확인 · 해결로 닫기 처리 중',
     path: '/operations',
@@ -2226,6 +2228,8 @@ export const screens = [
   },
   {
     id: 'modal-round-copy-loading',
+    // 처리 중에는 Esc·바깥 누름으로 닫지 않는다(앱 onOpenChange가 막는다, Mantine closeOnEscape={!처리 중}과 같다).
+    closeBlocked: '처리 중 닫기 막음',
     group: '판매자 · 불러오는 중 버튼',
     title: '회차 목록 · 이전 회차 복사 처리 중',
     path: '/sale-rounds',

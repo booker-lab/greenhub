@@ -10,6 +10,7 @@
 //   - 창이 열린 직후 첫 초점은 창 안 data-autofocus 요소, 없으면 창 안 첫 Tab 대상이다(Mantine Modal과 같은 약속).
 //   - 창에 aria-modal="true"가 있고, 본문(data-slot=dialog-body·sheet-body)이 있으면 aria-describedby가 창 안 요소를 가리킨다.
 //   - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다(--set compare처럼 주소로 연 창은 여는 요소가 없어 빼고 기록한다).
+//     fixture 화면에 closeBlocked(사유 글자)가 있으면 반대로, 처리 중이라 Esc로 닫히지 않고 초점이 창 안에 남아야 한다.
 // 결과: %TEMP%/greenhub-visual/<app>/focus/<label>.json
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -340,6 +341,19 @@ async function checkScreen(context, screen) {
     // 주소로 연 창(대조 화면)은 여는 요소가 없고 닫기 처리기도 없어(open 고정) 닫기·복귀를 검사하지 않는다.
     if (openedByUrl) {
       result.closeCheck = '주소로 연 창: 닫기·초점 복귀 검사 안 함';
+      return result;
+    }
+    // 처리 중 창(closeBlocked): Esc로 닫히지 않고 초점이 창 안에 남아야 한다(Mantine closeOnEscape={!처리 중}과 같은 약속).
+    if (screen.closeBlocked) {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      result.closeCheck = `닫기 막음: ${screen.closeBlocked}`;
+      if (!(await page.evaluate(() => !!window.__openDialog__())))
+        problems.push('처리 중인데 Esc로 창이 닫힘');
+      else {
+        const after = await activeState(page);
+        if (!after.inside) problems.push(`Esc 뒤 초점이 창 밖(${after.what})`);
+      }
       return result;
     }
     // Esc로 닫고 초점이 창을 연 요소로 돌아오는지.
