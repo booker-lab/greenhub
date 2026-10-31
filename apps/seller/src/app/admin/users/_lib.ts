@@ -1,5 +1,6 @@
 // 어드민 소비자(users) 화면 표시용 순수 함수 (#CL-55 §E T1).
 import { toDateStrKST } from '@greenhub/shared';
+import type { ConfirmColor } from '@/components/ConfirmModal';
 
 /** 값이 없을 때 표시하는 자리표시자 */
 export const EMPTY_FIELD = '—';
@@ -37,7 +38,7 @@ export function describeUserSuspendConfirm(target: {
   name: string;
   email: string;
   currentlySuspended: boolean;
-}): { title: string; message: string; confirmLabel: string; confirmColor: string } {
+}): { title: string; message: string; confirmLabel: string; confirmColor: ConfirmColor } {
   // 타입은 string이지만 옛 문서에 필드가 없을 수 있어 ?.로 방어한다.
   const who = `${target.name?.trim() || EMPTY_FIELD} (${target.email?.trim() || EMPTY_FIELD})`;
   if (target.currentlySuspended) {
