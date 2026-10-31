@@ -199,8 +199,9 @@ function BackButton({ onClick, className }: { onClick: () => void; className: st
 }
 
 // Mantine Stepper(size sm·vertical·color brand) 계산값: 아이콘 36px 원(테두리 2px gray-2, 완료 = 주색 면·흰 체크,
-// 진행 = 주색 테두리, 모서리 1000px — rounded-full(무한대)로 두면 원 가장자리 안티앨리어싱이 달라진다), 단계 최소 높이
-// 36 + 32 + 5, 단계 사이 5px, 세로 연결선 2px, 라벨 15px·600·줄 높이 1.
+// 진행 = 주색 테두리, 모서리 Mantine과 같은 1000px), 단계 최소 높이 36 + 32 + 5, 단계 사이 5px, 세로 연결선 2px,
+// 라벨 15px·600·줄 높이 1. rounded-full(무한대) 모서리와 아래 완료 아이콘 스타일 없이 그렸을 때는 원 가장자리
+// 안티앨리어싱이 Mantine과 달랐고, 둘을 Mantine과 같게 둔 뒤 촬영이 같아졌다.
 const STEP_OUTLINE = '#e9ecef';
 const STEP_COLOR = 'var(--mantine-color-brand-filled, #00a65a)';
 
@@ -227,7 +228,7 @@ function DeliverySteps({ labels, active }: { labels: string[]; active: number })
               >
                 {completed ? (
                   // Mantine은 완료 아이콘을 Transition(pop, entered)으로 감싸 아래 스타일이 붙는다.
-                  // transform·backface-visibility가 아이콘을 따로 합성하므로 같게 둔다(빼면 체크·원 가장자리 픽셀이 달라진다).
+                  // transform·backface-visibility가 아이콘을 따로 합성하므로 같게 둔다.
                   <span
                     className="absolute inset-0 flex items-center justify-center text-white"
                     style={{
