@@ -1,18 +1,8 @@
 'use client';
 
-import {
-  ActionIcon,
-  Box,
-  Button,
-  Container,
-  Divider,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  TextInput,
-  Title,
-} from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
 import { notifications } from '@mantine/notifications';
 import { ChevronLeft, Store } from 'lucide-react';
 import Image from 'next/image';
@@ -28,6 +18,34 @@ import {
   reencodeImageToJpeg,
 } from '../products/_components/image-reencode';
 import { useTokenRef } from '@/lib/use-token-ref';
+
+// ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Group·Stack·Paper(radius lg·shadow sm·p lg)·
+// Title order 2(줄 높이 1.35·800)·Text·Divider·TextInput(radius xl, 필수 표시 *)·ActionIcon subtle gray와 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-[#dee2e6]';
+
+/** Mantine TextInput(size sm, radius xl). 필수면 라벨 뒤에 빨간 *를 붙인다(Mantine withAsterisk). */
+function TextField({
+  label,
+  required,
+  name,
+  ...props
+}: Omit<React.ComponentProps<'input'>, 'size'> & { label: React.ReactNode; name: string }) {
+  const id = `onboarding-${name}`;
+  return (
+    <Field>
+      <FieldLabel htmlFor={id} className="inline-block">
+        {label}
+        {required && (
+          <span aria-hidden="true" className="text-[#fa5252]">
+            {' *'}
+          </span>
+        )}
+      </FieldLabel>
+      <Input id={id} name={name} required={required} className="rounded-[32px]" {...props} />
+    </Field>
+  );
+}
 
 export default function OnboardingPage() {
   const { data: session, update } = useSession();
@@ -181,42 +199,49 @@ export default function OnboardingPage() {
   }
 
   return (
-    <Box
-      component="main"
-      style={{ minHeight: '100vh', backgroundColor: 'var(--color-bg)', padding: '32px 16px' }}
-    >
-      <Container size="xs">
+    <main style={{ minHeight: '100vh', backgroundColor: 'var(--color-bg)', padding: '32px 16px' }}>
+      <div className="mx-auto max-w-[540px] px-4">
         {isEdit ? (
-          <Group gap="sm" mb="lg" wrap="nowrap">
-            <ActionIcon
-              variant="subtle"
-              color="gray"
+          <div className="mb-5 flex flex-row flex-nowrap items-center justify-start gap-3">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="size-7"
               onClick={() => router.push('/settings')}
               aria-label="설정으로 돌아가기"
             >
-              <ChevronLeft size={20} />
-            </ActionIcon>
-            <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
+              <ChevronLeft size={20} className="size-5" />
+            </Button>
+            <h2
+              className="m-0 leading-[1.35] font-extrabold"
+              style={{ fontSize: 'var(--font-size-xl)' }}
+            >
               사업자 프로필 수정
-            </Title>
-          </Group>
+            </h2>
+          </div>
         ) : (
-          <Stack align="center" gap="xs" mb="xl">
-            <Title order={2} style={{ fontSize: 'var(--font-size-xl)' }}>
+          <div className="mb-8 flex flex-col items-center justify-start gap-2.5">
+            <h2
+              className="m-0 leading-[1.35] font-extrabold"
+              style={{ fontSize: 'var(--font-size-xl)' }}
+            >
               사업자 정보 등록
-            </Title>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            </h2>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               서비스 시작 전 한 번만 입력합니다
-            </Text>
-          </Stack>
+            </p>
+          </div>
         )}
 
-        <Paper radius="lg" shadow="sm" p="lg">
+        <div className="block rounded-[16px] bg-white p-5 shadow-mantine-sm">
           <form onSubmit={handleSubmit}>
-            <Stack gap="md">
+            <div className="flex flex-col items-stretch justify-start gap-4">
               {/* 로고 업로드 */}
-              <Stack align="center" gap="xs" pb="xs">
-                <Box
+              <div className="flex flex-col items-center justify-start gap-2.5 pb-2.5">
+                <div
                   style={{
                     width: 80,
                     height: 80,
@@ -241,9 +266,10 @@ export default function OnboardingPage() {
                   ) : (
                     <Store size={32} color="var(--color-text-disabled)" aria-hidden="true" />
                   )}
-                </Box>
+                </div>
                 <label style={{ cursor: 'pointer' }}>
-                  <Text
+                  <p
+                    className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-primary-dark)',
@@ -251,7 +277,7 @@ export default function OnboardingPage() {
                     }}
                   >
                     {logoUploading ? '업로드 중...' : '로고 사진 선택'}
-                  </Text>
+                  </p>
                   <input
                     type="file"
                     accept="image/*"
@@ -260,100 +286,94 @@ export default function OnboardingPage() {
                     disabled={logoUploading}
                   />
                 </label>
-                <Text
+                <p
+                  className={TEXT}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
                 >
                   선택 사항 · JPG, PNG, WebP 권장
-                </Text>
-              </Stack>
+                </p>
+              </div>
 
-              <Divider />
+              <hr className={DIVIDER} />
 
-              <TextInput
+              <TextField
                 label="상호명"
                 name="name"
                 value={form.name}
                 onChange={handleChange}
                 required
                 placeholder="예: 디어 오키드"
-                radius="xl"
               />
 
-              <TextInput
+              <TextField
                 label="대표자명"
                 name="ceoName"
                 value={form.ceoName}
                 onChange={handleChange}
                 required
                 placeholder="예: 홍길동"
-                radius="xl"
               />
 
-              <TextInput
+              <TextField
                 label="연락처"
                 name="phone"
                 value={form.phone}
                 onChange={handleChange}
                 required
                 placeholder="010-0000-0000"
-                radius="xl"
               />
 
-              <TextInput
+              <TextField
                 label="소재지"
                 name="address"
                 value={form.address}
                 onChange={handleChange}
                 required
                 placeholder="사업장 주소"
-                radius="xl"
               />
 
-              <Divider />
+              <hr className={DIVIDER} />
 
-              <TextInput
+              <TextField
                 label={
                   <>
                     사업자등록번호{' '}
-                    <Text
-                      component="span"
+                    <span
+                      className="m-0 p-0 text-base font-normal"
                       style={{ color: 'var(--color-text-disabled)', fontWeight: 400 }}
                     >
                       (선택)
-                    </Text>
+                    </span>
                   </>
                 }
                 name="businessNumber"
                 value={form.businessNumber}
                 onChange={handleChange}
                 placeholder="000-00-00000"
-                radius="xl"
               />
 
               {error && (
-                <Text
+                <p
+                  className={`${TEXT} text-center`}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-                  ta="center"
                 >
                   {error}
-                </Text>
+                </p>
               )}
 
               <Button
                 type="submit"
                 disabled={loading}
-                fullWidth
                 size="md"
-                radius="xl"
-                mt="xs"
+                className="mt-2.5 w-full"
                 style={{ backgroundColor: 'var(--color-primary)' }}
               >
                 {loading ? '저장 중...' : isEdit ? '저장' : '저장 후 시작하기'}
               </Button>
-            </Stack>
+            </div>
           </form>
-        </Paper>
-      </Container>
-    </Box>
+        </div>
+      </div>
+    </main>
   );
 }

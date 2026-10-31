@@ -38,8 +38,8 @@ export default async function LoginPage({
       }}
     >
       <div className="w-full" style={{ maxWidth: 400 }}>
-        {/* ① 외형 유지: Mantine Paper(radius lg, shadow sm, p xl) */}
-        <div className="rounded-[16px] bg-white p-8 shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_10px_15px_-5px,rgba(0,0,0,0.04)_0_7px_7px_-5px]">
+        {/* 카드: 모서리 16·안쪽 32. 그림자 대신 연한 선으로 구역을 나눈다(design-standard.md §4, 2026-10-31 사용자 결정). */}
+        <div className="rounded-[16px] bg-white p-8" style={{ border: 'var(--border)' }}>
           {/* 로고 */}
           <div className="mb-8 flex flex-col items-center gap-2.5">
             <Image

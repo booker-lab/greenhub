@@ -212,6 +212,46 @@ const SELLER_SETTLEMENTS = [
     status: 'paid',
     settledAt: '2026-09-27T15:00:00.000Z',
   },
+  // UI 교체 P4: 상태별 배지 색(대기·확정·취소)과 "더 보기"를 찍는다.
+  {
+    id: 'settle-0002',
+    orderId: 'order-settle-0002-abcdef',
+    totalAmount: 25000,
+    platformFee: 2500,
+    netAmount: 22500,
+    status: 'confirmed',
+    settledAt: '2026-09-26T15:00:00.000Z',
+  },
+  {
+    id: 'settle-0003',
+    orderId: 'order-settle-0003-abcdef',
+    totalAmount: 18000,
+    platformFee: 1800,
+    netAmount: 16200,
+    status: 'pending',
+    settledAt: '2026-09-25T15:00:00.000Z',
+  },
+  {
+    id: 'settle-0004',
+    orderId: 'order-settle-0004-abcdef',
+    totalAmount: 12000,
+    platformFee: 1200,
+    netAmount: 10800,
+    status: 'cancelled',
+    settledAt: '2026-09-24T15:00:00.000Z',
+  },
+];
+// 정산 "더 보기" 다음 쪽. 불러오는 중 모양을 찍도록 늦게 답한다.
+const SELLER_SETTLEMENTS_MORE = [
+  {
+    id: 'settle-0005',
+    orderId: 'order-settle-0005-abcdef',
+    totalAmount: 15000,
+    platformFee: 1500,
+    netAmount: 13500,
+    status: 'paid',
+    settledAt: '2026-09-23T15:00:00.000Z',
+  },
 ];
 
 // ── 어드민 주문: 회차(R-)·일반(L-) 주문을 상태별로 한 건씩 ──
@@ -947,24 +987,42 @@ export const routes = [
     }),
   ],
   ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
+  // 조치(문자 재발송·환불 재시도) 뒤 앱이 기록 한 건을 다시 읽는다.
+  [
+    'GET',
+    /^\/stores\/[^/]+\/operation-issues\/([^/]+)$/,
+    ({ params: [id] }) => {
+      const issue = OPERATION_ISSUES.find((i) => i.id === id);
+      return issue ? { body: issue } : { status: 404, body: { message: '기록 없음' } };
+    },
+  ],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements\/summary$/,
     ({ url }) => ({
       body: {
         date: url.searchParams.get('date') ?? '2026-09-28',
-        count: 1,
-        totalAmount: 33000,
-        totalPlatformFee: 3300,
-        totalNetAmount: 29700,
-        byStatus: { pending: 0, confirmed: 0, paid: 1, cancelled: 0 },
+        count: 4,
+        totalAmount: 88000,
+        totalPlatformFee: 8800,
+        totalNetAmount: 79200,
+        byStatus: { pending: 1, confirmed: 1, paid: 1, cancelled: 1 },
       },
     }),
   ],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements$/,
-    ({ url }) => ({ body: { settlements: byStatus(SELLER_SETTLEMENTS, url) } }),
+    ({ url }) =>
+      url.searchParams.get('cursor')
+        ? { body: { settlements: byStatus(SELLER_SETTLEMENTS_MORE, url), hasMore: false }, delay: 8000 }
+        : {
+            body: {
+              settlements: byStatus(SELLER_SETTLEMENTS, url),
+              hasMore: true,
+              nextCursor: 'visual-more',
+            },
+          },
   ],
   ['GET', /^\/admin\/orders$/, ({ url }) => ({ body: { orders: byStatus(ADMIN_ORDERS, url) } })],
   [
@@ -992,7 +1050,15 @@ export const routes = [
         : { status: 404, body: { message: '회차 없음' } };
     },
   ],
-  ['GET', /^\/admin\/drivers$/, () => ({ body: { drivers: ADMIN_DRIVERS } })],
+  // 공용 더 보기(LoadMoreFooter)를 찍으려고 다음 쪽이 있다고 답한다. 다음 쪽은 늦게 답해 불러오는 중을 찍는다.
+  [
+    'GET',
+    /^\/admin\/drivers$/,
+    ({ url }) =>
+      url.searchParams.get('cursor')
+        ? { body: { drivers: [], hasMore: false }, delay: 8000 }
+        : { body: { drivers: ADMIN_DRIVERS, hasMore: true, nextCursor: 'visual-more' } },
+  ],
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
   ['GET', /^\/stores\/[^/]+\/delivery-config$/, () => ({ body: DELIVERY_CONFIG })],
   // 설정 · 배송비 화면은 판매자 전용 조회 경로를 쓴다.
@@ -1303,6 +1369,22 @@ export const screens = [
     path: '/settlements',
     click: '주문별 상세',
   },
+  {
+    id: 'settlements-period-list',
+    group: '판매자',
+    title: '정산 · 기간별 조회 결과',
+    path: '/settlements',
+    click: '기간별 조회',
+    steps: [{ click: '조회' }],
+  },
+  {
+    id: 'settlements-orders-load-more',
+    group: '판매자',
+    title: '정산 · 주문별 상세 더 보기 불러오는 중',
+    path: '/settlements',
+    click: '주문별 상세',
+    steps: [{ click: '더 보기' }],
+  },
   { id: 'settings', group: '판매자', title: '설정', path: '/settings' },
   {
     id: 'settings-delivery',
@@ -1420,7 +1502,8 @@ export const screens = [
     group: '판매자 · 주문 상세 동작',
     title: '주문 상세 · 환불 재시도 누름',
     path: '/orders/order-round-held',
-    steps: [{ click: '환불 재시도' }],
+    // 조치 기록에도 '환불 재시도' 글자가 있어 버튼을 고른다.
+    steps: [{ clickSelector: 'button:has-text("환불 재시도")' }],
   },
   // 주문 상세 끝난 주문(UI 교체 P4): 배송 중 안내, 배송 후 환불(가능·막힘), 취소 사유.
   {
@@ -1583,6 +1666,43 @@ export const screens = [
     steps: [{ click: '정지' }],
     viewport: true,
   },
+  // 어드민 판매자·소비자(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  {
+    id: 'admin-stores-all',
+    group: '어드민',
+    title: '판매자 · 전체(치운 판매자 포함)',
+    path: '/admin/stores?status=all',
+  },
+  {
+    id: 'admin-stores-no-match',
+    group: '어드민',
+    title: '판매자 · 검색 결과 없음',
+    path: '/admin/stores?keyword=%EC%97%86%EB%8A%94%EA%B0%80%EA%B2%8C',
+  },
+  {
+    id: 'admin-stores-commission-edit',
+    group: '어드민',
+    title: '판매자 · 수수료율 입력',
+    path: '/admin/stores',
+    steps: [{ clickSelector: 'button:has-text("수수료 설정"):visible' }],
+  },
+  {
+    // 상태 Select 열린 목록(Mantine Combobox ↔ Base UI Select, #719 열린 목록 기본값).
+    id: 'admin-stores-status-open',
+    group: '어드민',
+    title: '판매자 · 상태 고르기 열림',
+    path: '/admin/stores',
+    steps: [{ clickSelector: 'input[readonly]:visible' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-user-suspend',
+    group: '어드민 · 모달',
+    title: '소비자 · 정지 확인(사유)',
+    path: '/admin/users',
+    steps: [{ clickSelector: 'button:has-text("정지"):visible' }],
+    viewport: true,
+  },
   // 어드민 정산 — 가게 검색 Select(열림·맞는 가게 없음·고른 뒤 지우기 버튼), 더 보기 불러오는 중.
   {
     id: 'admin-settlements-store-open',
@@ -1659,6 +1779,16 @@ export const screens = [
     steps: [{ click: '회차 취소' }],
     viewport: true,
   },
+  // 공용 ConfirmModal의 dark 확인 버튼(Mantine filled dark). 회차 상세 "주문 마감" 확인창.
+  {
+    id: 'modal-round-close',
+    group: '판매자 · 모달',
+    title: '회차 상세 · 주문 마감 확인',
+    path: '/sale-rounds/round-open',
+    firestore: true,
+    steps: [{ clickSelector: 'button:has-text("주문 마감"):visible' }],
+    viewport: true,
+  },
   {
     // 수정 화면 상품은 직접 편집한 내용으로 보므로 다시 생성하기가 확인 모달을 연다.
     id: 'modal-product-regenerate',
@@ -1668,10 +1798,35 @@ export const screens = [
     steps: [...Array.from({ length: 3 }, () => ({ click: '다음' })), { click: '다시 생성하기' }],
     viewport: true,
   },
+  // UI 교체 P4 앱 틀: 공용 LoadingState·EmptyState·LoadMoreFooter(더 보기·불러오는 중).
+  {
+    id: 'sale-rounds-loading',
+    group: '판매자 · 상태',
+    title: '회차 목록 · 불러오는 중',
+    path: '/sale-rounds',
+    scenario: 'rounds-slow',
+  },
+  {
+    id: 'sale-rounds-empty',
+    group: '판매자 · 상태',
+    title: '회차 목록 · 없음',
+    path: '/sale-rounds',
+    scenario: 'rounds-empty',
+  },
+  {
+    id: 'admin-drivers-load-more',
+    group: '어드민 · 필터',
+    title: '기사 · 더 보기 불러오는 중',
+    path: '/admin/drivers',
+    steps: [{ click: '더 보기' }],
+  },
 ];
 
 /** 화면별 상황(shots.mjs가 화면을 열 때 /__scenario로 고른다). 그 경로를 기본 경로 앞에 끼운다. */
 export const scenarioRoutes = {
+  // 공용 LoadingState·EmptyState(회차 목록이 늦게 오거나 비었을 때).
+  'rounds-slow': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] }, delay: 8000 })]],
+  'rounds-empty': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] } })]],
   'legacy-store': [
     [
       'GET',
