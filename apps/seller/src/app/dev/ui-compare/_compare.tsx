@@ -161,6 +161,16 @@ const BADGES = [
   { name: 'light yellow ↔ warning', m: { variant: 'light', color: 'yellow' }, ui: 'warning' },
   { name: 'light gray ↔ secondary', m: { variant: 'light', color: 'gray' }, ui: 'secondary' },
   { name: 'light red ↔ destructive', m: { variant: 'light', color: 'red' }, ui: 'destructive' },
+  {
+    name: 'outline yellow ↔ outline-warning',
+    m: { variant: 'outline', color: 'yellow' },
+    ui: 'outline-warning',
+  },
+  {
+    name: 'outline red ↔ outline-destructive',
+    m: { variant: 'outline', color: 'red' },
+    ui: 'outline-destructive',
+  },
 ] as const;
 
 const MODAL_TITLE = '주문 취소';
@@ -410,6 +420,19 @@ export function UiCompare({ open }: { open?: string }) {
           }
         />
         <Row
+          name="Button xs outline red radius md"
+          mantine={
+            <MButton size="xs" variant="outline" color="red" radius="md">
+              강제환불
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="outline-destructive" className="rounded-[8px]">
+              강제환불
+            </Button>
+          }
+        />
+        <Row
           name="Button 확인·취소 flex 1"
           mantine={
             <div style={{ display: 'flex', gap: 10, width: '100%' }}>
@@ -522,6 +545,24 @@ export function UiCompare({ open }: { open?: string }) {
           name="Badge 영문 (대문자)"
           mantine={<MBadge variant="light">new</MBadge>}
           ui={<Badge variant="light">new</Badge>}
+        />
+        <Row
+          name="Badge filled red ↔ destructive-filled"
+          mantine={
+            <MBadge color="red" variant="filled">
+              회수 필요 ₩25,200
+            </MBadge>
+          }
+          ui={<Badge variant="destructive-filled">회수 필요 ₩25,200</Badge>}
+        />
+        <Row
+          name="Badge light orange ↔ light-orange"
+          mantine={
+            <MBadge color="orange" variant="light">
+              지급 보류
+            </MBadge>
+          }
+          ui={<Badge variant="light-orange">지급 보류</Badge>}
         />
       </Section>
 

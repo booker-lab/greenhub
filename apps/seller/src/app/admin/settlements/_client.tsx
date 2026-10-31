@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -75,29 +75,30 @@ export default function AdminSettlementsClient() {
   };
 
   return (
-    <Box>
-      <Group justify="space-between" mb="md">
-        <Title order={4}>
+    <div>
+      {/* ① 외형 유지(UI 교체 P2b): Mantine Group(mb md)·Title order 4(18px·800·줄 높이 1.45)·Text·Paper 값. */}
+      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">
           정산 목록{' '}
           {!loading && error === null && summary && (
-            <Text
-              component="span"
+            <span
+              className="m-0 p-0 text-base font-normal"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               ({summary.count})
-            </Text>
+            </span>
           )}
-        </Title>
-      </Group>
+        </h4>
+      </div>
 
-      <Box mb="sm">
+      <div className="mb-3">
         <SegmentedTabs<AdminSettlementFilterKey>
           tabs={ADMIN_SETTLEMENT_FILTER_TABS}
           value={statusFilter}
           onChange={setStatusFilter}
           layout="scroll"
         />
-      </Box>
+      </div>
 
       <SettlementFilters
         storeFilter={storeFilter}
@@ -111,26 +112,28 @@ export default function AdminSettlementsClient() {
       />
 
       {error !== null && !loading ? (
-        <Paper
-          radius="lg"
-          shadow="xs"
+        <div
+          className="block rounded-[16px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.1)]"
           style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
         >
-          <Stack gap="sm" align="center" py={64} px="md">
-            <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+          <div className="flex flex-col items-center gap-3 px-4 py-16">
+            <p
+              className="m-0 p-0 text-base"
+              style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}
+            >
               정산 목록을 불러오지 못했습니다.
-            </Text>
-            <Text
-              ta="center"
+            </p>
+            <p
+              className="m-0 p-0 text-center text-base"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               {error}
-            </Text>
-            <Button onClick={reload} size="sm" variant="outline" radius="md">
+            </p>
+            <Button onClick={reload} variant="outline" className="rounded-[8px]">
               다시 조회
             </Button>
-          </Stack>
-        </Paper>
+          </div>
+        </div>
       ) : (
         <>
           <SummaryCards summary={summary} loading={summaryLoading} error={summaryError} />
@@ -165,6 +168,6 @@ export default function AdminSettlementsClient() {
           if (processingId === null) setPayTarget(null);
         }}
       />
-    </Box>
+    </div>
   );
 }
