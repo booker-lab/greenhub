@@ -8,6 +8,7 @@
 //     --prod   next dev 대신 운영 빌드(next build && next start)로 띄운다. 운영 빌드는 로컬 로그인이 꺼지므로
 //              shots.mjs가 이 실행기의 AUTH_SECRET으로 Auth.js 세션 쿠키를 직접 만들어 로그인한다.
 //              가짜 API는 https://127.0.0.2(1회용 자체 서명 인증서)로 연다. README "운영 빌드로 찍기".
+//     --allow-concurrent  다른 앱 하네스가 떠 있어도 판매자를 띄운다(기본은 거부, 아래 "동시 실행").
 //
 // 안전장치: 앱의 .env 파일 값(운영 API·Firebase·비밀값)을 전부 빈 값으로 덮고,
 // next dev 프로세스의 외부 연결을 node-guard.cjs로 막는다. 운영 데이터에 닿지 않는다.
@@ -24,6 +25,7 @@ import {
   assertEmulatorPortsFree,
   EMULATOR,
   emulatorCustomToken,
+  portInUse,
   seedFirestore,
   startEmulators,
   waitForEmulators,
@@ -97,6 +99,26 @@ if (!app) fail(`지원하지 않는 앱: ${appName} (가능: ${Object.keys(APPS)
 
 const host = phone ? tailscaleAddress() : '127.0.0.1';
 if (!host) fail('Tailscale 주소(100.x)를 찾지 못했습니다. Tailscale이 켜져 있는지 확인하세요.');
+
+// 동시 실행: 판매자(에뮬레이터 포함)를 다른 앱 하네스와 한 컴퓨터에서 같이 띄우면 next dev가 메모리 상한의 80%에
+// 더 빨리 닿아 촬영 도중 스스로 재시작한다(2026-10-30, 세 앱 동시 촬영에서 판매자만 두 번 재시작). 판매자는 혼자 띄운다.
+const otherHarnesses = [];
+for (const [name, other] of Object.entries(APPS)) {
+  if (name !== appName && (await portInUse(other.port, '127.0.0.1'))) {
+    otherHarnesses.push(`${name}(${other.port})`);
+  }
+}
+if (otherHarnesses.length) {
+  const message = `다른 앱 하네스가 떠 있습니다: ${otherHarnesses.join(', ')}.`;
+  if (appName === 'seller' && !args.includes('--allow-concurrent')) {
+    fail(
+      `${message} 판매자는 혼자 띄웁니다(촬영 도중 next dev 메모리 재시작이 잦아짐). 끄고 다시 실행하거나 --allow-concurrent를 주세요.`,
+    );
+  }
+  if (otherHarnesses.some((h) => h.startsWith('seller'))) {
+    console.warn(`⚠️ ${message} 판매자 촬영 중이면 판매자 next dev 메모리 재시작이 잦아집니다.`);
+  }
+}
 
 const appDir = path.join(ROOT, app.dir);
 const appUrl = `http://${host}:${app.port}`;
