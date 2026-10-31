@@ -54,7 +54,7 @@
 | 세 앱 Vercel 운영 env `NEXT_PUBLIC_API_URL` | 운영 API 주소 | C7 |
 | PortOne 콘솔 웹훅 주소 | 운영 API 주소 | C7(사용자) |
 | ALIGO 허용 IP, `ALIGO_OUTBOUND_PROXY_URL`(Fixie) | 고정 송신 IP | C5·C8 |
-| aT 화훼유통정보 접속 IP, `FLOWER_AUCTION_OUTBOUND_PROXY_URL`(Fixie) | 고정 송신 IP(경매 시세 수집) | C5·C8 |
+| aT 화훼유통정보 접속 IP(`34.64.250.181` 하나만 등록), Cloud Run의 `FLOWER_AUCTION_API_KEY` | 고정 송신 IP(경매 시세 수집, 전환 뒤 시작) | C5·C7 |
 | `apps/consumer/src/app/privacy/page.tsx` §4·§5, `docs/specs/legal/consumer-legal-documents.md` | 처리위탁·국외 처리(Railway, 미국 캘리포니아) | C7 |
 
 ## 목표 구성
@@ -156,7 +156,7 @@
 
 ### C8. 정리 — 첫 회차(11/10) 뒤
 
-- Fixie를 없앤다. `ALIGO_OUTBOUND_PROXY_URL`·`FLOWER_AUCTION_OUTBOUND_PROXY_URL`을 지우고, ALIGO·aT 화훼유통정보 접속 IP에서 Fixie IP를 지우고, Fixie를 해지한다.
+- Fixie를 없앤다. `ALIGO_OUTBOUND_PROXY_URL`을 지우고, ALIGO에서 Fixie IP를 지우고, Fixie를 해지한다.
 - 스테이징 API도 Cloud Run으로 옮길지 정한다. 지금 Railway 스테이징은 `main`에서 자동 배포된다.
 - Railway 해지 여부를 정하고, Railway 전용 스크립트·workflow와 `RAILWAY_*` 호환 코드를 정리한다.
 - `docs/memory.md`·`docs/URLS.md`·`docs/devops/toolchain.md`에 현행 사실을 옮긴다.

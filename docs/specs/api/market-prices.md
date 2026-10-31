@@ -10,9 +10,8 @@ aT 화훼공판장 경락가격을 매일 받아 저장하고, 판매자가 회�
 
 - 출처: aT 화훼유통정보시스템 경락가격 OpenAPI(`kind=f001`). 요청 변수 `serviceKey`·`baseDate`(YYYY-MM-DD)·`flowerGubn`(1 절화, 2 관엽, 3 난, 4 춘란)·`dataType=json`.
 - 신청(2026-10-30): 서비스 "화훼가격정보" 일자별 경매정보, 자동 승인, 일일 3,000건, **승인일로부터 20개월 활용**(만료 전 연장 신청), 이용허락범위 **제작자 표시** — 시세를 보여 주는 판매자 화면마다 "출처: aT 화훼유통정보"를 붙인다(`MARKET_PRICE_SOURCE`). 요청 주소와 요청 변수는 aT 샘플 URL(`/api/returnData.api?kind=f001&serviceKey=…&baseDate=…&flowerGubn=…&dataType=json&countPerPage=…`)과 일치함을 확인했다. 데이터는 aT화훼공판장(양재) 것만이다.
-- 환경 변수: `FLOWER_AUCTION_API_KEY`(없으면 수집하지 않음), `FLOWER_AUCTION_API_URL`(선택, 기본 `https://flower.at.or.kr/api/returnData.api`), `FLOWER_AUCTION_OUTBOUND_PROXY_URL`(선택, 고정 IP HTTP 프록시).
-- 접속 IP: aT는 신청 때 등록한 접속 IP에서 온 호출만 받는다. Railway는 송신 IP가 고정되지 않으므로 운영은 ALIGO와 같은 Fixie 고정 IP 프록시를 `FLOWER_AUCTION_OUTBOUND_PROXY_URL`에 넣고 Fixie IP를 aT에 등록한다. Cloud Run은 고정 송신 IP(`api-cloud-run-runbook.md` R7)로 바로 나가므로 이 값을 넣지 않고 그 IP를 등록한다. 값이 없으면 직접 호출하고, 형식이 틀리면(`http`·`https`가 아님) 직접 호출로 우회하지 않고 매 호출을 실패로 남긴다. 프록시 URL은 인증 정보를 담으므로 로그에 남기지 않는다.
-- 해외 IP 접속 여부: 2026-10-30 미국 송신 IP의 이 세션에서 `flower.at.or.kr:443`이 TLS 응답 없이 끊겼다. 해외 IP 차단인지는 확인하지 못했다. Fixie(해외 IP)를 거친 호출이 실제로 되는지는 키 발급 뒤 확인한다.
+- 환경 변수: `FLOWER_AUCTION_API_KEY`(없으면 수집하지 않음), `FLOWER_AUCTION_API_URL`(선택, 기본 `https://flower.at.or.kr/api/returnData.api`).
+- 접속 IP: aT는 신청 때 등록한 접속 IP 하나에서 온 호출만 받는다. 등록 IP는 Cloud Run 고정 송신 IP `34.64.250.181`(`api-cloud-run-runbook.md` R7)이다. Railway는 송신 IP가 고정되지 않아 aT를 부를 수 없으므로, **Cloud Run 전환 전에는 Railway에 `FLOWER_AUCTION_API_KEY`를 넣지 않는다**(넣지 않으면 수집을 건너뛴다). 송신 고정 IP를 바꾸면 aT 접속 IP도 함께 바꾼다.
 - 예약: `MarketPricesService.runScheduledIngest`, 매일 21:10 KST(`@Cron`, Cloud Scheduler 작업 이름 `market-prices-ingest`). 오늘 포함 최근 3일 × 4부류를 받아 같은 날·등급은 덮어쓴다. `jobLeases/market-prices-ingest`로 하루 한 번만 완료로 남기며, 일부 날·부류를 못 받으면 받은 만큼 저장하고 완료로 남기지 않는다.
 - **응답 형식은 실제 응답으로 아직 확인하지 않았다.** 응답 항목 이름은 `flower-auction.client.ts`의 `RESPONSE_FIELDS`(`saleDate`·`pumName`·`goodName`·`lvNm`·`maxAmt`·`minAmt`·`avgAmt`·`totAmt`·`totQty`) 한 곳에 있다. 결과 코드가 정상이 아니거나, 줄 목록을 못 찾거나, 줄이 있는데 하나도 못 읽거나, 다른 경매일이 섞이거나, 1000줄이 꽉 차서 오면 그 날·부류는 저장하지 않고 실패한다. 0원·빈 시세를 저장하지 않는다. 첫 수집 뒤 로그(`[MarketPrices]`)로 행 수·실패를 확인한다.
 

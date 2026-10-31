@@ -1,6 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { ProxyAgent, fetch as undiciFetch } from 'undici';
 import { FLOWER_MARKET_GUBN_LABELS, type FlowerMarketGubn, MARKET_NAME_MAX_LENGTH } from '@greenhub/shared';
 import { ISO_DATE_PATTERN, type MarketAuctionRow } from './market-price.fields';
 
@@ -37,32 +36,6 @@ export type FlowerAuctionFetch = (url: string, init: { signal: AbortSignal }) =>
 }>;
 
 export const FLOWER_AUCTION_FETCH = Symbol('FLOWER_AUCTION_FETCH');
-
-export const FLOWER_AUCTION_PROXY_CONFIG_ERROR = 'aT 송신 프록시 설정이 올바르지 않습니다.';
-
-/**
- * aT는 신청 때 등록한 접속 IP에서 온 호출만 받는다. 호스팅의 송신 IP가 고정되지 않을 때는
- * FLOWER_AUCTION_OUTBOUND_PROXY_URL(고정 IP HTTP 프록시, 운영은 ALIGO와 같은 Fixie)로 aT 호출만 보낸다.
- * 값이 없으면 직접 호출하고, 형식이 잘못되면 직접 호출로 우회하지 않고 매 호출을 거부한다.
- * 프록시 URL에는 인증 정보가 들어 있으므로 오류·로그에 원문을 남기지 않는다.
- */
-export function resolveFlowerAuctionFetch(rawProxyUrl: string | undefined): FlowerAuctionFetch {
-  const raw = (rawProxyUrl ?? '').trim();
-  if (!raw) return (url, init) => fetch(url, init);
-  let parsed: URL | null = null;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    parsed = null;
-  }
-  if (!parsed || (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') || !parsed.hostname) {
-    return async () => {
-      throw new Error(FLOWER_AUCTION_PROXY_CONFIG_ERROR);
-    };
-  }
-  const dispatcher = new ProxyAgent(raw);
-  return (url, init) => undiciFetch(url, { ...init, dispatcher });
-}
 
 /** "1,234"·" 1234 " 같은 숫자 문자열도 받는다. 숫자가 아니면 null. */
 function toAmount(value: unknown): number | null {
