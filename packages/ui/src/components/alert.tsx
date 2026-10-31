@@ -15,6 +15,8 @@ const alertVariants = cva(
         default: 'bg-[#d2f2df] text-[#005c32]',
         destructive: 'bg-[#ffe3e3] text-[#c92a2a]',
         warning: 'bg-[#fff4cc] text-[#7a5b00]',
+        // Mantine light gray(gray-1 면·gray-9 글자).
+        gray: 'bg-[#f1f3f5] text-[#212529]',
       },
     },
     defaultVariants: {
