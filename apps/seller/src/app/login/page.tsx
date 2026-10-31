@@ -1,4 +1,3 @@
-import { Box, Container, Paper, Stack, Text, Title } from '@mantine/core';
 import Image from 'next/image';
 import { LoginForm } from './_form';
 
@@ -11,9 +10,10 @@ export default function LoginPage() {
     process.env.E2E_TEST === 'true' ||
     (process.env.GREENHUB_LOCAL_RUNTIME === 'true' && process.env.NODE_ENV !== 'production');
 
+  // ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Paper(radius lg·shadow sm·p xl)·
+  // Stack(가운데·gap xs·mb xl)·Title order 2(줄 높이 1.35)·Text(m-0 p-0)와 같은 값.
   return (
-    <Box
-      component="main"
+    <main
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -23,9 +23,9 @@ export default function LoginPage() {
         padding: '0 16px',
       }}
     >
-      <Container size="xs" w="100%">
-        <Paper radius="lg" shadow="sm" p="xl">
-          <Stack align="center" gap="xs" mb="xl">
+      <div className="mx-auto w-full max-w-[540px] px-4">
+        <div className="block rounded-[16px] bg-white p-8 shadow-mantine-sm">
+          <div className="mb-8 flex flex-col items-center justify-start gap-2.5">
             <Image
               src="/icons/icon-192x192.png"
               alt="그린러브 판매자 앱 아이콘"
@@ -33,8 +33,8 @@ export default function LoginPage() {
               height={64}
               style={{ borderRadius: 16, display: 'block' }}
             />
-            <Title
-              order={2}
+            <h2
+              className="m-0 leading-[1.35]"
               style={{
                 fontFamily: 'var(--font-brand)',
                 fontSize: 30,
@@ -44,15 +44,18 @@ export default function LoginPage() {
               }}
             >
               Green Love
-            </Title>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            </h2>
+            <p
+              className="m-0 p-0 text-base"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               판매자 계정으로 로그인하세요
-            </Text>
-          </Stack>
+            </p>
+          </div>
 
           <LoginForm showCredentials={showCredentials} />
-        </Paper>
-      </Container>
-    </Box>
+        </div>
+      </div>
+    </main>
   );
 }
