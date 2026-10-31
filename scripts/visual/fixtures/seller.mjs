@@ -1257,6 +1257,15 @@ export const screens = [
     steps: [{ clickSelector: 'button:has-text("수수료 설정"):visible' }],
   },
   {
+    // 상태 Select 열린 목록(Mantine Combobox ↔ Base UI Select, #719 열린 목록 기본값).
+    id: 'admin-stores-status-open',
+    group: '어드민',
+    title: '판매자 · 상태 고르기 열림',
+    path: '/admin/stores',
+    steps: [{ clickSelector: '#stores-status' }],
+    viewport: true,
+  },
+  {
     id: 'modal-user-suspend',
     group: '어드민 · 모달',
     title: '소비자 · 정지 확인(사유)',
