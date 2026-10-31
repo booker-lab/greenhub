@@ -3,7 +3,7 @@
 import type { SaleRound, SaleRoundStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { AlertTriangle, CalendarDays, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -210,14 +210,13 @@ function RoundSummary({ round }: { round: SellerSaleRound }) {
             </p>
           </div>
           {attentionCount > 0 && (
-            <Button
+            <ButtonLink
               render={<Link href="/orders?tab=ACTION_REQUIRED" />}
-              nativeButton={false}
               size="xs"
               variant="light-destructive"
             >
               확인 필요 {attentionCount.toLocaleString()}건
-            </Button>
+            </ButtonLink>
           )}
         </div>
         <div className="grid grid-cols-3 gap-2.5">
@@ -531,9 +530,9 @@ export default function SaleRoundDetailPage({ params }: { params: Promise<{ id: 
             icon={<CalendarDays size={48} strokeWidth={1.5} />}
             text="올바른 회차를 찾을 수 없습니다"
             action={
-              <Button render={<Link href="/sale-rounds" />} nativeButton={false} variant="light">
+              <ButtonLink render={<Link href="/sale-rounds" />} variant="light">
                 회차 목록으로
-              </Button>
+              </ButtonLink>
             }
           />
         ) : (

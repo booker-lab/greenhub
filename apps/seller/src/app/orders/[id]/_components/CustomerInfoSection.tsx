@@ -1,7 +1,7 @@
 'use client';
 
 import type { Order } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
+import { ButtonLink } from '@greenhub/ui/components/button';
 import { displayBuyerName, displayBuyerPhone, displayRequestNote, toTelHref } from '../_lib';
 import { Row } from './OrderRow';
 
@@ -52,16 +52,15 @@ export function CustomerInfoSection({ order }: { order: Order }) {
           </div>
         )}
         {telHref && (
-          <Button
-            render={<a href={telHref} />}
-            nativeButton={false}
+          <ButtonLink
+            href={telHref}
             variant="light"
             size="md"
             className="mt-2.5 w-full hover:bg-[#a6e5c0]"
             style={{ fontWeight: 'var(--fw-medium)' }}
           >
             전화 걸기
-          </Button>
+          </ButtonLink>
         )}
       </div>
     </div>

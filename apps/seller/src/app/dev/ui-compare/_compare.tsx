@@ -2,7 +2,7 @@
 
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button, ButtonLabel } from '@greenhub/ui/components/button';
+import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
 import { Chip } from '@greenhub/ui/components/chip';
 import {
@@ -369,14 +369,9 @@ export function UiCompare({ open }: { open?: string }) {
             </MButton>
           }
           ui={
-            <Button
-              render={<Link href="/products" />}
-              nativeButton={false}
-              size="xs"
-              variant="ghost"
-            >
+            <ButtonLink render={<Link href="/products" />} size="xs" variant="ghost">
               수정
-            </Button>
+            </ButtonLink>
           }
         />
         <Row
@@ -387,9 +382,9 @@ export function UiCompare({ open }: { open?: string }) {
             </MButton>
           }
           ui={
-            <Button render={<Link href="/products/new" />} nativeButton={false} size="xs">
+            <ButtonLink render={<Link href="/products/new" />} size="xs">
               + 등록
-            </Button>
+            </ButtonLink>
           }
         />
         <Row
