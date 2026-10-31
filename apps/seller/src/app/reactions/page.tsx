@@ -25,7 +25,7 @@ const TABS: Array<{ value: Tab; label: string; feature: Parameters<typeof isFeat
 
 // ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Stack(gap sm = 12px)·
 // Paper(radius lg = 16px, shadow xs, p md)·Group·Text(p, 여백 0; size sm = 15px·1.45, 기본 16px·1.55)와 같은 값.
-const TEXT = 'm-0 p-0 font-normal';
+const TEXT = 'm-0 p-0';
 const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
 
 const day = (iso: string) =>

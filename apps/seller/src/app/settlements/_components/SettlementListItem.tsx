@@ -1,59 +1,77 @@
 'use client';
 
-import { Badge, Group, Paper, Stack, Text } from '@mantine/core';
+import { Badge } from '@greenhub/ui/components/badge';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import type { Settlement } from '../_constants';
 import { STATUS_COLOR, STATUS_LABEL } from '../_constants';
 import { toDateStr, toKRW } from '../_lib';
+import { LIGHT_BADGE } from './status-badge';
 
 interface SettlementListItemProps {
   settlement: Settlement;
   showFee?: boolean;
 }
 
+// ① 외형 유지(UI 교체 P4): Mantine Paper(radius md 8px·px md·py sm·shadow xs)·Group·Stack·Text,
+// Badge size xs(높이 16·좌우 6·9px·줄 높이 14)와 같은 값.
+const TEXT = 'm-0 p-0 text-base';
+const GROUP = 'flex flex-row flex-wrap items-center';
+const muted = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' };
+
 export function SettlementListItem({ settlement: s, showFee }: SettlementListItemProps) {
   return (
     // 정산에는 사람이 읽을 주문번호가 없어(orderId만 있음) 잘린 ID 대신 그 주문 상세로 가는 카드로 둔다.
-    <Paper
-      component={Link}
+    <Link
       href={`/orders/${encodeURIComponent(s.orderId)}`}
-      radius="md"
-      px="md"
-      py="sm"
-      shadow="xs"
+      className="block rounded-[8px] bg-white px-4 py-3 no-underline shadow-mantine-xs outline-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
       style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}
     >
-      <Group justify="space-between" mb={4}>
-        <Group gap={2} style={{ color: 'var(--color-primary-dark)' }}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
+      <div className={`${GROUP} mb-1 justify-between gap-4`}>
+        <div
+          className={`${GROUP} justify-start gap-0.5`}
+          style={{ color: 'var(--color-primary-dark)' }}
+        >
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+          >
             주문 보기
-          </Text>
+          </p>
           <ChevronRight size={16} aria-hidden />
-        </Group>
-        <Badge color={STATUS_COLOR[s.status]} variant="light" size="xs" radius="xl">
+        </div>
+        <Badge
+          variant={LIGHT_BADGE[STATUS_COLOR[s.status]] ?? 'secondary'}
+          className="h-4 rounded-[32px] px-1.5 text-[9px] leading-[14px]"
+        >
           {STATUS_LABEL[s.status]}
         </Badge>
-      </Group>
-      <Group justify="space-between">
+      </div>
+      <div className={`${GROUP} justify-between gap-4`}>
         {showFee ? (
-          <Stack gap={0}>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          <div className="flex flex-col items-stretch justify-start gap-0">
+            <p className={TEXT} style={muted}>
               {toDateStr(s.settledAt)}
-            </Text>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            </p>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            >
               수수료 {toKRW(s.platformFee)}
-            </Text>
-          </Stack>
+            </p>
+          </div>
         ) : (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          <p className={TEXT} style={muted}>
             {toDateStr(s.settledAt)}
-          </Text>
+          </p>
         )}
-        <Text style={{ fontWeight: 'var(--fw-bold)', fontVariantNumeric: 'tabular-nums' }}>
+        <p
+          className={TEXT}
+          style={{ fontWeight: 'var(--fw-bold)', fontVariantNumeric: 'tabular-nums' }}
+        >
           {toKRW(s.netAmount)}
-        </Text>
-      </Group>
-    </Paper>
+        </p>
+      </div>
+    </Link>
   );
 }

@@ -36,10 +36,11 @@ export interface ReviewCardProps {
 // Text size="sm"은 15px·줄 높이 1.45(text-sm), 기본은 16px·1.55다. Badge filled gray sm(높이 18·10px·좌우 8),
 // Button compact-sm(높이 26·좌우 8·15px), variant default(흰 면·gray-4 테두리·검정 글자),
 // Radio.Group(라벨 600 + 필수 표시 red-6)·Radio sm은 어드민 배송 후 환불 확인창(#714)과 같은 계산값이다.
-const TEXT = 'm-0 p-0 font-normal';
+const TEXT = 'm-0 p-0';
 const TEXT_MD = `${TEXT} text-base`;
 const TEXT_SM = `${TEXT} text-sm`;
-const COMPACT_SM = 'h-[26px] px-2 text-[15px]';
+// text-[15px]를 주면 cn(tailwind-merge)이 Button의 leading-none을 지우므로 줄 높이 1을 다시 준다(Mantine 줄 높이 1).
+const COMPACT_SM = 'h-[26px] px-2 text-[15px] leading-none';
 const DEFAULT_BUTTON = 'border-[#ced4da] bg-white text-black hover:bg-[#f8f9fa]';
 const GROUP_LABEL =
   'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-black';
