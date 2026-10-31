@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Button, Container, Group, Stack, Text, Title } from '@mantine/core';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { notFound, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -37,6 +37,12 @@ function formatPurchaseDay(millis: number) {
     : KST_DAY_WITH_YEAR.format(date);
 }
 
+// ① 외형 유지(UI 교체 P5): Mantine Container sm(720px, 좌우 md 16·위 lg 20·아래 100)·Title h1(줄 높이 1.3)·
+// Text(p, 크기 prop이 없어 줄 높이 1.55, 글자 크기만 style로 바꿈)·Group·Stack(gap sm 12·md 16)·
+// Button(radius xl, default xs = plain xs)과 같은 값.
+const TITLE = 'm-0 text-[22px] leading-[1.3] font-extrabold';
+const TEXT = 'm-0 p-0 leading-[1.55]';
+
 const mutedTextStyle = {
   color: 'var(--color-text-secondary)',
   fontSize: 'var(--font-size-sm)',
@@ -54,63 +60,65 @@ function PurchaseHistoryContent() {
 
   if (status === 'loading' || !session) {
     return (
-      <Box py={60} ta="center">
-        <Text style={{ color: 'var(--color-text-disabled)' }}>로딩 중...</Text>
-      </Box>
+      <div className="py-[60px] text-center">
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-md)', color: 'var(--color-text-disabled)' }}
+        >
+          로딩 중...
+        </p>
+      </div>
     );
   }
 
   return (
-    <Container size="sm" px="md" pt="lg" pb={100}>
-      <Title order={1} style={{ fontSize: 22, fontWeight: 800 }}>
-        구매한 꽃
-      </Title>
-      <Text mt={4} mb="md" style={mutedTextStyle}>
+    <div className="mx-auto max-w-[720px] px-4 pt-5 pb-[100px]">
+      <h1 className={TITLE}>구매한 꽃</h1>
+      <p className={`${TEXT} mt-1 mb-4`} style={mutedTextStyle}>
         지금까지 산 꽃을 최근에 산 순서로 모았어요. 취소·환불됐거나 결제가 끝나지 않은 주문은 빼요.
-      </Text>
+      </p>
 
       {loading && entries.length === 0 && (
-        <Text
-          ta="center"
-          py="lg"
+        <p
+          className={`${TEXT} py-5 text-center`}
           style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
         >
           불러오는 중...
-        </Text>
+        </p>
       )}
 
       {error && (
-        <Group justify="space-between" align="center" mb="sm">
-          <Text style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>
+        <div className="mb-3 flex flex-row flex-wrap items-center justify-between gap-4">
+          <p
+            className={TEXT}
+            style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}
+          >
             주문 내역을 불러오지 못했습니다.
-          </Text>
-          <Button variant="default" size="xs" radius="xl" onClick={refetch}>
+          </p>
+          <Button variant="plain" size="xs" onClick={refetch}>
             다시 시도
           </Button>
-        </Group>
+        </div>
       )}
 
       {!loading && !error && entries.length === 0 && (
-        <Stack align="center" py={40} gap="md">
-          <Text style={mutedTextStyle}>아직 구매한 꽃이 없어요.</Text>
-          <Button component={Link} href="/" radius="xl">
-            이번 회차 보러 가기
-          </Button>
-        </Stack>
+        <div className="flex flex-col items-center gap-4 py-10">
+          <p className={TEXT} style={mutedTextStyle}>
+            아직 구매한 꽃이 없어요.
+          </p>
+          <ButtonLink render={<Link href="/" />}>이번 회차 보러 가기</ButtonLink>
+        </div>
       )}
 
       {entries.length > 0 && (
-        <Stack gap="sm" data-testid="purchase-history-list">
+        <div className="flex flex-col gap-3" data-testid="purchase-history-list">
           {entries.map((entry) => (
-            <Group
+            <div
               key={entry.productId}
-              gap={12}
-              wrap="nowrap"
-              align="center"
-              p="sm"
+              className="flex flex-row flex-nowrap items-center justify-start gap-3 p-3"
               style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius)' }}
             >
-              <Box
+              <div
                 style={{
                   position: 'relative',
                   width: 56,
@@ -129,12 +137,11 @@ function PurchaseHistoryContent() {
                   sizes="56px"
                   style={{ objectFit: 'cover' }}
                 />
-              </Box>
-              <Box style={{ flex: 1, minWidth: 0 }}>
-                <Text
-                  component={Link}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Link
                   href={`/products/${encodeURIComponent(entry.productId)}`}
-                  lineClamp={1}
+                  className={`${TEXT} line-clamp-1 text-ellipsis`}
                   style={{
                     color: 'var(--color-text)',
                     fontSize: 'var(--font-size-md)',
@@ -143,18 +150,18 @@ function PurchaseHistoryContent() {
                   }}
                 >
                   {entry.productName}
-                </Text>
-                <Text mt={2} style={mutedTextStyle}>
+                </Link>
+                <p className={`${TEXT} mt-0.5`} style={mutedTextStyle}>
                   {entry.lastPurchasedAt !== null
                     ? `마지막 구매 ${formatPurchaseDay(entry.lastPurchasedAt)} · `
                     : ''}
                   {entry.orderCount}번 주문
-                </Text>
-              </Box>
-            </Group>
+                </p>
+              </div>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
-    </Container>
+    </div>
   );
 }
