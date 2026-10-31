@@ -51,9 +51,12 @@ function DialogContent({
   children,
   showCloseButton = true,
   initialFocus,
+  align = 'center',
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
+  /** 세로 위치. center는 Mantine Modal centered, top은 Mantine 기본(위 5dvh에서 시작)이다. */
+  align?: 'center' | 'top';
 }) {
   // Mantine Modal과 같은 약속: 안쪽에 data-autofocus 요소가 있으면 열릴 때 그 요소가 첫 초점이다
   // (강제환불 사유 입력칸 등). 없으면 Base UI 기본(첫 초점 가능 요소 = 닫기 버튼).
@@ -64,7 +67,10 @@ function DialogContent({
       <DialogOverlay />
       <DialogPrimitive.Viewport
         data-slot="dialog-viewport"
-        className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-[5vw] py-[5dvh]"
+        className={cn(
+          'pointer-events-none fixed inset-0 z-50 flex items-center justify-center px-[5vw] py-[5dvh]',
+          align === 'top' && 'items-start',
+        )}
       >
         <DialogPrimitive.Popup
           ref={popupRef}
