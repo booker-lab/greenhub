@@ -30,6 +30,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
+import { copyFormFieldChange } from './copy-form';
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -519,11 +520,7 @@ export default function SaleRoundsPage() {
                   <Input
                     id={`${copyFieldId}-name`}
                     value={copyForm.name}
-                    onChange={(event) =>
-                      setCopyForm((current) =>
-                        current ? { ...current, name: event.currentTarget.value } : current,
-                      )
-                    }
+                    onChange={copyFormFieldChange(setCopyForm, 'name')}
                     disabled={copying}
                     required
                   />
@@ -537,11 +534,7 @@ export default function SaleRoundsPage() {
                     type="datetime-local"
                     className={DATETIME_INPUT}
                     value={copyForm.orderOpenAt}
-                    onChange={(event) =>
-                      setCopyForm((current) =>
-                        current ? { ...current, orderOpenAt: event.currentTarget.value } : current,
-                      )
-                    }
+                    onChange={copyFormFieldChange(setCopyForm, 'orderOpenAt')}
                     disabled={copying}
                     required
                   />
@@ -555,11 +548,7 @@ export default function SaleRoundsPage() {
                     type="datetime-local"
                     className={DATETIME_INPUT}
                     value={copyForm.orderCloseAt}
-                    onChange={(event) =>
-                      setCopyForm((current) =>
-                        current ? { ...current, orderCloseAt: event.currentTarget.value } : current,
-                      )
-                    }
+                    onChange={copyFormFieldChange(setCopyForm, 'orderCloseAt')}
                     disabled={copying}
                     required
                   />
