@@ -1,6 +1,5 @@
 'use client';
 
-import { Paper, SimpleGrid, Text } from '@mantine/core';
 import type { AdminSettlementsSummary } from '@/hooks/useAdmin';
 import { toKRW } from '../_lib';
 
@@ -10,6 +9,9 @@ interface SummaryCardsProps {
   loading: boolean;
   error: string | null;
 }
+
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(흰 면, radius lg, p md)·SimpleGrid(간격 md, sm = 48em) 값.
+const TEXT = 'm-0 p-0 text-base';
 
 const labelStyle = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' };
 const valueStyle = { fontSize: 'var(--font-size-lg)', fontWeight: 'var(--fw-bold)' };
@@ -26,23 +28,28 @@ function Card({
   color?: string;
 }) {
   return (
-    <Paper
+    // biome-ignore lint/a11y/useSemanticElements: 입력 묶음(fieldset)이 아닌 합계 카드다. 로컬 E2E가 role group 이름으로 찾는다.
+    <div
       role="group"
       aria-label={label}
-      radius="lg"
+      className="block rounded-[16px] bg-white p-4"
       style={{ border: '1px solid var(--color-border)' }}
-      p="md"
     >
-      <Text style={labelStyle} mb={4}>
+      <p className={`${TEXT} mb-1`} style={labelStyle}>
         {label}
-      </Text>
-      <Text style={{ ...valueStyle, ...(color ? { color } : {}) }}>{value}</Text>
+      </p>
+      <p className={TEXT} style={{ ...valueStyle, ...(color ? { color } : {}) }}>
+        {value}
+      </p>
       {sub && (
-        <Text style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}
+        >
           {sub}
-        </Text>
+        </p>
       )}
-    </Paper>
+    </div>
   );
 }
 
@@ -50,20 +57,25 @@ function Card({
 export function SummaryCards({ summary, loading, error }: SummaryCardsProps) {
   if (error !== null && !loading) {
     return (
-      <Text mb="md" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+      <p
+        className={`${TEXT} mb-4`}
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+      >
         합계를 불러오지 못했습니다. ({error})
-      </Text>
+      </p>
     );
   }
   if (!summary) return null;
   const pending = loading ? '…' : undefined;
   return (
     <>
-      <SimpleGrid
+      {/* biome-ignore lint/a11y/useSemanticElements: 입력 묶음(fieldset)이 아닌 합계 카드 묶음이다. 로컬 E2E가 role group 이름으로 찾는다. */}
+      <div
         role="group"
         aria-label="정산 합계"
-        cols={{ base: 2, sm: summary.recovery.count > 0 ? 4 : 3 }}
-        mb="md"
+        className={`mb-4 grid grid-cols-2 gap-4 ${
+          summary.recovery.count > 0 ? 'min-[48em]:grid-cols-4' : 'min-[48em]:grid-cols-3'
+        }`}
       >
         <Card
           label="지급 대기"
@@ -89,11 +101,14 @@ export function SummaryCards({ summary, loading, error }: SummaryCardsProps) {
             color="var(--color-danger)"
           />
         )}
-      </SimpleGrid>
+      </div>
       {summary.truncated && (
-        <Text mb="sm" style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-danger)' }}>
+        <p
+          className={`${TEXT} mb-3`}
+          style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-danger)' }}
+        >
           정산이 너무 많아 합계가 일부만 계산됐습니다. 기간이나 가게를 좁혀 주세요.
-        </Text>
+        </p>
       )}
     </>
   );
