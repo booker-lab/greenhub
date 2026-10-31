@@ -89,7 +89,28 @@ const SELLER_ORDERS = [
     packageLabel: '김그린',
   }),
   roundOrder('order-round-preparing', '20261001-000003', 'PREPARING', [['빅립', 30000, 2]]),
-  roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]]),
+  // 배송 보류 주문(주문 상세 보류 운영·재배송비 결제 패널, UI 교체 P4).
+  roundOrder('order-round-held', '20261001-000004', 'DELIVERY_HELD', [['만천홍', 25000, 1]], {
+    deliveryHold: {
+      heldAt: '2026-10-05T23:30:00.000Z',
+      reasonCode: 'CUSTOMER_UNREACHABLE',
+      reasonMessage: '받는 분 연락이 닿지 않아 문 앞에 둘 수 없음',
+      customerResponsible: true,
+      redeliveryFee: 5000,
+      nextContactAt: '2026-10-06T01:00:00.000Z',
+      nextDeliveryAt: '2026-10-07T00:00:00.000Z',
+      resolvedAt: null,
+    },
+    redeliveryPayment: {
+      required: true,
+      holdAt: '2026-10-05T23:30:00.000Z',
+      chargeId: 'charge-visual-0001',
+      status: 'PENDING',
+      canPay: true,
+      paid: false,
+      requiresRecovery: false,
+    },
+  }),
   roundOrder('order-round-pending', '20261001-000005', 'PENDING', [
     ['빅립', 30000, 1],
     ['만천홍', 25000, 1],
@@ -542,6 +563,32 @@ const OPERATION_ISSUES = [
     'order-no-contact',
     '2026-10-06T02:30:00.000Z',
   ),
+  // 보류 주문의 자동 환불 실패(환불 재시도 버튼)와 조치 기록(UI 교체 P4).
+  {
+    ...operationIssue(
+      'issue-visual-0004',
+      'AUTO_REFUND_FAILED',
+      'critical',
+      'OPEN',
+      'order-round-held',
+      '2026-10-06T03:00:00.000Z',
+    ),
+    actions: [
+      {
+        actorId: 'admin-visual-0001',
+        actionType: 'RETRY_REFUND',
+        performedAt: '2026-10-06T02:40:00.000Z',
+        status: 'FAILED',
+        failureReason: '결제사 응답 지연',
+      },
+      {
+        actorId: 'admin-visual-0001',
+        actionType: 'RESEND_SMS',
+        performedAt: '2026-10-06T02:50:00.000Z',
+        status: 'SUCCEEDED',
+      },
+    ],
+  },
   operationIssue(
     'issue-visual-0003',
     'AUTO_REFUND_FAILED',
@@ -929,6 +976,15 @@ export const routes = [
     },
   ],
   ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
+  // 조치(문자 재발송·환불 재시도) 뒤 앱이 기록 한 건을 다시 읽는다.
+  [
+    'GET',
+    /^\/stores\/[^/]+\/operation-issues\/([^/]+)$/,
+    ({ params: [id] }) => {
+      const issue = OPERATION_ISSUES.find((i) => i.id === id);
+      return issue ? { body: issue } : { status: 404, body: { message: '기록 없음' } };
+    },
+  ],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements\/summary$/,
@@ -1374,6 +1430,70 @@ export const screens = [
     auth: false,
   },
   { id: 'login-error', group: '판매자', title: '로그인 오류', path: '/login/error', auth: false },
+  // 주문 상세 상태별(UI 교체 P4): 보류 운영·재배송비·자동 환불 실패 기록, 준비 중, 거점 도착(픽업 코드),
+  // 준비 시작 폼(시각 고름·회차 주문).
+  {
+    id: 'order-held',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 배송 보류(보류 운영·운영 기록)',
+    path: '/orders/order-round-held',
+  },
+  {
+    id: 'order-preparing',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 준비 중',
+    path: '/orders/order-round-preparing',
+  },
+  {
+    id: 'order-hub-arrived',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 거점 도착(픽업 코드)',
+    path: '/orders/order-hub-arrived',
+  },
+  {
+    id: 'order-prepare-form',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 준비 시작(수거 시각 고름)',
+    path: '/orders/order-with-contact',
+    steps: [{ click: '준비 시작' }, { click: '오늘 오후 4시' }],
+  },
+  {
+    id: 'order-round-prepare-form',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 회차 주문 준비 시작',
+    path: '/orders/order-round-multi',
+    steps: [{ click: '준비 시작' }],
+  },
+  // 주문 상세 동작 버튼 — 누른 뒤 화면과 가짜 API 요청 기록(mock-api.log)을 main과 비교한다.
+  {
+    id: 'order-prepare-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 준비 시작 확인 누름',
+    path: '/orders/order-with-contact',
+    steps: [{ click: '준비 시작' }, { click: '오늘 오후 4시' }, { click: '준비 시작 확인' }],
+  },
+  {
+    id: 'order-round-prepare-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 회차 주문 준비 시작 확인 누름',
+    path: '/orders/order-round-multi',
+    steps: [{ click: '준비 시작' }, { click: '준비 시작 확인' }],
+  },
+  {
+    id: 'order-ops-resend',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 문자 재발송 누름',
+    path: '/orders/order-no-contact',
+    steps: [{ click: '문자 재발송' }],
+  },
+  {
+    id: 'order-ops-retry-refund',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 환불 재시도 누름',
+    path: '/orders/order-round-held',
+    // 조치 기록에도 '환불 재시도' 글자가 있어 버튼을 고른다.
+    steps: [{ clickSelector: 'button:has-text("환불 재시도")' }],
+  },
   // 모달이 열린 상태 — 같이 쓰는 기간의 CSS 우선순위 회귀는 열린 상태에서 드러난다(P2a 판정 범위).
   {
     id: 'modal-order-hold',
