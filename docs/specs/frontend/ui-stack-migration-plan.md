@@ -274,6 +274,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - `packages/ui` 추가: `SearchableSelect`(Base UI Combobox. Mantine Select searchable과 같은 동작: 고른 이름이면 전체 목록, 글자로 거름, 맞는 항목 없음 글자, 닫히면 고른 이름으로 되돌림, 고른 항목 다시 누르면 고름 풀기, clearable), Badge `outline-warning`·`outline-destructive`, Button `outline-destructive`, `Select`의 `itemClassName`·`inlinePopup`(기본값은 그대로).
   - 열린 목록이 Mantine과 같으려면 셋이 필요했다. 항목 줄 높이는 Mantine처럼 본문 1.55(기존 `Select`는 `text-sm`의 1.45라 항목이 1px 낮다), 목록을 body가 아니라 칸 상자 안에 top·left로 둔다(Base UI가 body 위치를 정수 픽셀로 반올림해 칸이 소수점 위치면 글자가 1px 어긋난다), Base UI가 위치 상자에 붙이는 `will-change: transform`을 끈다(따로 합성되면 2배 화면에서 글자가 1px 어긋난다).
   - 촬영 목록에 주문 필터 화면 5개(가게 목록 열림·검색·맞는 가게 없음·상태 목록 열림·고른 상태의 주문 없음)를 더하고, 어드민 주문 fixture에 배송 완료 회차·요청사항·환불 진행 중·실패 주문을 넣었다. 정산 PR과 같은 fixture로 찍었다.
+  - 로컬 증명(#694 하네스, 판매자 단독, 기준 `main` 94211c2 + 같은 fixture, 기준 시각 2026-10-31T00:00+09:00): 판매자 189장 정상 촬영 189, `diff.mjs --tolerance 1` 189장 같음(허용 목록 없음), 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 879개. 운영 빌드는 증명하지 않았다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
 
 ### P3. 기사 앱 (12개 파일)
