@@ -50,6 +50,7 @@ import {
   NativeSelect as MNativeSelect,
   NumberInput as MNumberInput,
   Select as MSelect,
+  Stack as MStack,
   Switch as MSwitch,
   Text,
   Textarea as MTextarea,
@@ -59,6 +60,7 @@ import {
 import { AlertTriangle, ChevronLeft, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { LoadMoreFooter } from '@/app/admin/_components/LoadMoreFooter';
 
 // 행마다 왼쪽 Mantine, 오른쪽 @greenhub/ui를 같은 칸 크기로 그린다. 촬영해 두 칸을 눈과 픽셀로 비교한다.
 // 짝은 판매자 앱이 실제로 쓰는 Mantine props(theme.ts 기본값 포함)를 기준으로 고른다.
@@ -1130,6 +1132,53 @@ export function UiCompare({ open }: { open?: string }) {
                 className="rounded-[8px]"
               />
             </Field>
+          }
+        />
+      </Section>
+
+      <Section title="앱 틀 · 화면 촬영에 없는 상태">
+        <Row
+          name="ConfirmModal 확인 버튼 filled dark ↔ default + dark-6"
+          mantine={
+            <MButton color="dark" style={{ fontWeight: 'var(--fw-medium)' }}>
+              마감 확인
+            </MButton>
+          }
+          ui={
+            <Button
+              className="bg-[#2e2e2e] hover:bg-[#242424]"
+              style={{ fontWeight: 'var(--fw-medium)' }}
+            >
+              마감 확인
+            </Button>
+          }
+        />
+        <Row
+          name="LoadMoreFooter 더 보기 실패(다시 시도)"
+          mantine={
+            <div style={{ width: '100%' }}>
+              <MStack align="center" gap={4} mt="md">
+                <Text
+                  role="alert"
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+                >
+                  드라이버 목록을 더 불러오지 못했습니다.
+                </Text>
+                <MButton variant="light" color="gray" radius="md">
+                  다시 시도
+                </MButton>
+              </MStack>
+            </div>
+          }
+          ui={
+            <div style={{ width: '100%' }}>
+              <LoadMoreFooter
+                hasMore
+                loadingMore={false}
+                moreError="드라이버 목록을 더 불러오지 못했습니다."
+                onLoadMore={() => {}}
+              />
+            </div>
           }
         />
       </Section>

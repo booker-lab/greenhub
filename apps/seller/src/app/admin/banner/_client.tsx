@@ -1,6 +1,7 @@
 'use client';
 
-import { Box, Button, Group, Paper, Stack, Switch, Text, Title } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
+import { Switch } from '@greenhub/ui/components/switch';
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { type AdminBanner, useAdminBanner } from '@/hooks/useAdmin';
@@ -100,101 +101,121 @@ export default function AdminBannerClient() {
     // "저장 완료" 표시는 ok confirmed success에서만 설정된다.
   };
 
+  // ① 외형 유지(UI 교체 P2b): Mantine Text·Group·Title order 4(18px·800·줄 높이 1.45)·Paper·Stack·Switch(label)와 같은 값.
   if (loading) {
     return (
-      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+      <p
+        className="m-0 p-0 py-20 text-center text-base"
+        style={{ color: 'var(--color-text-disabled)' }}
+      >
         불러오는 중...
-      </Text>
+      </p>
     );
   }
 
   // read failure 상태에서는 기본 빈 form을 authoritative current state처럼 편집/저장하게 하지 않는다.
   if (error !== null) {
     return (
-      <Box>
-        <Group justify="space-between" mb="md">
-          <Title order={4}>히어로 배너 관리</Title>
-        </Group>
-        <Paper
-          radius="lg"
-          shadow="xs"
+      <div>
+        <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+          <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">히어로 배너 관리</h4>
+        </div>
+        <div
+          className="block rounded-[16px] bg-white shadow-mantine-xs"
           style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
         >
-          <Stack gap="sm" align="center" py={64} px="md">
-            <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+          <div className="flex flex-col items-center gap-3 px-4 py-16">
+            <p
+              className="m-0 p-0 text-base"
+              style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}
+            >
               배너 정보를 불러오지 못했습니다.
-            </Text>
-            <Text
-              ta="center"
+            </p>
+            <p
+              className="m-0 p-0 text-center text-base"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               {error}
-            </Text>
-            <Button onClick={reload} size="sm" variant="outline" radius="md">
+            </p>
+            <Button onClick={reload} variant="outline" className="rounded-[8px]">
               다시 조회
             </Button>
-          </Stack>
-        </Paper>
-      </Box>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Box>
-      <Group justify="space-between" mb="md">
-        <Title order={4}>히어로 배너 관리</Title>
-        <Switch
-          label="배너 활성화"
-          checked={form.isActive ?? true}
-          onChange={(e) => setForm({ ...form, isActive: e.currentTarget.checked })}
-        />
-      </Group>
+    <div>
+      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">히어로 배너 관리</h4>
+        {/* Mantine Switch label(오른쪽): 트랙 뒤 12px, 15px·줄 높이 20px 글자. */}
+        <div className="relative">
+          <div className="flex [-webkit-tap-highlight-color:transparent]">
+            <Switch
+              id="banner-active"
+              checked={form.isActive ?? true}
+              onCheckedChange={(checked) => setForm({ ...form, isActive: checked })}
+            />
+            <div className="order-2 inline-flex flex-col text-sm leading-[20px]">
+              <label htmlFor="banner-active" className="ps-3 text-inherit">
+                배너 활성화
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {banner === null && (
-        <Text
-          mb="md"
+        <p
+          className="m-0 mb-4 p-0 text-base"
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
         >
           현재 설정된 배너가 없습니다. 아래 양식으로 새 배너를 등록하세요.
-        </Text>
+        </p>
       )}
 
       {saveError !== null && (
-        <Paper
-          radius="lg"
-          shadow="xs"
-          mb="md"
-          p="md"
+        <div
+          className="mb-4 block rounded-[16px] bg-white p-4 shadow-mantine-xs"
           style={{ border: '1px solid var(--color-danger)' }}
         >
-          <Stack gap="xs" align="center">
-            <Text style={{ fontWeight: 500, color: 'var(--color-danger)' }}>
+          <div className="flex flex-col items-center gap-2.5">
+            <p
+              className="m-0 p-0 text-base"
+              style={{ fontWeight: 500, color: 'var(--color-danger)' }}
+            >
               배너 저장에 실패했습니다.
-            </Text>
-            <Text
-              ta="center"
+            </p>
+            <p
+              className="m-0 p-0 text-center text-base"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               {saveError} 입력 내용은 그대로 보존되어 있으니 다시 시도해 주세요.
-            </Text>
-            <Button onClick={handleSave} size="sm" variant="outline" radius="md" disabled={saving}>
+            </p>
+            <Button
+              onClick={handleSave}
+              variant="outline"
+              className="rounded-[8px]"
+              disabled={saving}
+            >
               다시 저장
             </Button>
-          </Stack>
-        </Paper>
+          </div>
+        </div>
       )}
 
       {uploadError !== null && (
-        <Text
-          mb="md"
-          ta="center"
+        <p
+          className="m-0 mb-4 p-0 text-center text-base"
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
         >
           {uploadError} 기존 이미지는 그대로 유지됩니다.
-        </Text>
+        </p>
       )}
 
-      <Stack gap="md">
+      <div className="flex flex-col gap-4">
         <BannerImageSection
           imageUrl={form.imageUrl}
           uploading={uploading}
@@ -207,12 +228,11 @@ export default function AdminBannerClient() {
           onClick={handleSave}
           disabled={saving}
           size="md"
-          radius="xl"
           style={{ backgroundColor: saved ? 'var(--color-primary-light)' : 'var(--color-primary)' }}
         >
           {saving ? '저장 중...' : saved ? '저장 완료!' : '저장하기'}
         </Button>
-      </Stack>
-    </Box>
+      </div>
+    </div>
   );
 }

@@ -1,13 +1,15 @@
 'use client';
 
-import { Box, Group, Loader, Stack, Text } from '@mantine/core';
+import { Loader } from '@greenhub/ui/components/loader';
 import type { ReactNode } from 'react';
+
+// ① 외형 유지(UI 교체 P4): Mantine Loader sm(22px, 주색)·Group(가운데·py 80)·Stack(gap md 16px)·Text와 같은 값.
 
 /** 로딩 스피너. fullPage=true면 화면 전체 중앙 정렬. */
 export function LoadingState({ fullPage = false }: { fullPage?: boolean }) {
   if (fullPage) {
     return (
-      <Box
+      <div
         style={{
           minHeight: '100vh',
           backgroundColor: 'var(--color-surface-muted)',
@@ -16,14 +18,14 @@ export function LoadingState({ fullPage = false }: { fullPage?: boolean }) {
           justifyContent: 'center',
         }}
       >
-        <Loader size="sm" color="brand" />
-      </Box>
+        <Loader size="sm" />
+      </div>
     );
   }
   return (
-    <Group justify="center" py={80}>
-      <Loader size="sm" color="brand" />
-    </Group>
+    <div className="flex flex-row flex-wrap items-center justify-center gap-4 py-20">
+      <Loader size="sm" />
+    </div>
   );
 }
 
@@ -38,10 +40,15 @@ export function EmptyState({
   action?: ReactNode;
 }) {
   return (
-    <Stack align="center" justify="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+    <div
+      className="flex flex-col items-center justify-center gap-4 py-20"
+      style={{ color: 'var(--color-text-disabled)' }}
+    >
       {icon}
-      <Text style={{ fontSize: 'var(--font-size-sm)' }}>{text}</Text>
+      <p className="m-0 p-0 font-normal" style={{ fontSize: 'var(--font-size-sm)' }}>
+        {text}
+      </p>
       {action}
-    </Stack>
+    </div>
   );
 }
