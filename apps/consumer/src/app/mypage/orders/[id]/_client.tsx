@@ -3,13 +3,12 @@
 import type { OrderStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Button, ButtonLabel } from '@greenhub/ui/components/button';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
-import { SegmentedControl } from '@mantine/core';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ReactNode, use, useEffect, useId, useState } from 'react';
 import OrderDetailExtras from '@/components/benchmark/OrderDetailExtras';
+import { LoadingButton } from '@/components/LoadingButton';
 import {
   ORDER_STATUS_POLL_INTERVAL_MS,
   ORDER_STATUS_POLL_MAX_MS,
@@ -78,6 +77,84 @@ function getTimelineSteps(order: OrderDetailView): OrderStatus[] {
 
 // ① 외형 유지(UI 교체 P5): Mantine Alert(light·radius lg)와 같은 접근성 구조. role=alert, 제목이 있으면
 // 제목으로 이름을 붙이고(aria-labelledby), 본문은 aria-describedby로 잇는다.
+// Mantine SegmentedControl(fullWidth·size sm·withItemsBorders·theme 기본 반경 16px) 계산값과 DOM.
+// 바깥 div role=radiogroup, 항목마다 숨긴 input type=radio(name 공유, id = name-value) + label(htmlFor).
+// 바탕 gray-1·안쪽 여백 4px, 글자 15px·600·줄 높이 1.55·좌우 10px·위아래 3px, 기본 gray-7, 고른 항목 검정,
+// 고른 항목 아래 흰 면 + shadow-xs(모서리 16 - 4 = 12px), 항목 사이 1px gray-3 구분선(첫 항목·고른 항목 앞뒤는 없음).
+// 비활성이면 글자 gray-5·not-allowed. Mantine은 흰 면(FloatingIndicator)을 JS로 고른 항목 위치에 옮기지만,
+// 정지 상태의 위치·크기는 고른 항목(label)과 같으므로 그 항목 안의 면으로 그린다.
+// 주의: 소비자 globals.css는 Mantine SegmentedControl.css를 불러오지 않아 교체 전 화면은 이 값이 아니라
+// 스타일 없는 모양(브라우저 기본 라디오)이었다.
+function SegmentedChoice<T extends string>({
+  value,
+  onChange,
+  data,
+  disabled,
+  className,
+  'aria-label': ariaLabel,
+}: {
+  value: T;
+  onChange: (value: T) => void;
+  data: { value: T; label: string }[];
+  disabled?: boolean;
+  className?: string;
+  'aria-label': string;
+}) {
+  const name = useId();
+  const activeIndex = data.findIndex((item) => item.value === value);
+  return (
+    <div
+      role="radiogroup"
+      aria-label={ariaLabel}
+      data-disabled={disabled || undefined}
+      className={`relative flex flex-row overflow-hidden rounded-[16px] bg-[#f1f3f5] p-1 ${className ?? ''}`}
+    >
+      {data.map((item, index) => {
+        const selected = item.value === value;
+        const separator = index > 0 && !selected && index - 1 !== activeIndex;
+        const id = `${name}-${item.value}`;
+        return (
+          <div key={item.value} className="relative z-[2] flex-1">
+            {separator && (
+              <span aria-hidden className="absolute top-0 bottom-0 left-0 w-px bg-[#dee2e6]" />
+            )}
+            <input
+              type="radio"
+              name={name}
+              value={item.value}
+              id={id}
+              checked={selected}
+              disabled={disabled}
+              onChange={() => onChange(item.value)}
+              className="peer absolute h-0 w-0 overflow-hidden whitespace-nowrap opacity-0"
+            />
+            <label
+              htmlFor={id}
+              data-active={(selected && !disabled) || undefined}
+              data-disabled={disabled || undefined}
+              className={`relative block cursor-pointer overflow-hidden rounded-[12px] px-2.5 py-[3px] text-center text-[15px] leading-[1.55] font-semibold text-ellipsis whitespace-nowrap select-none [-webkit-tap-highlight-color:transparent] peer-focus-visible:outline-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid ${
+                disabled
+                  ? 'cursor-not-allowed text-[#adb5bd]'
+                  : selected
+                    ? 'text-black'
+                    : 'text-[#495057] [@media(hover:hover)]:hover:text-black'
+              }`}
+            >
+              {selected && (
+                <span
+                  aria-hidden
+                  className="absolute inset-0 z-[-1] rounded-[12px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.1)]"
+                />
+              )}
+              <span className="relative">{item.label}</span>
+            </label>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function DetailAlert({
   variant,
   title,
@@ -937,9 +1014,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                   detail.redeliveryPayment.canPay && (
                     <>
                       {PAYMENT_METHOD_OPTIONS.length > 1 && (
-                        <SegmentedControl
-                          mt="xs"
-                          fullWidth
+                        <SegmentedChoice
+                          className="mt-2.5"
                           aria-label="재배송비 결제 수단"
                           value={redeliveryMethod}
                           onChange={(value) => setRedeliveryMethod(value as PortonePaymentMethod)}

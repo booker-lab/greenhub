@@ -10,7 +10,6 @@ import { Button } from '@greenhub/ui/components/button';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
 import { Field, FieldDescription, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
 import {
   type ComponentProps,
@@ -24,6 +23,7 @@ import GiftFields, { type GiftState } from '@/components/benchmark/GiftFields';
 import PackageLabelFields, {
   type PackageLabelState,
 } from '@/components/benchmark/PackageLabelFields';
+import { LoadingButton } from '@/components/LoadingButton';
 import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
 import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';

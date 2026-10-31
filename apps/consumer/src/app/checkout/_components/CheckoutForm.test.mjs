@@ -70,7 +70,7 @@ const requireForTest = (specifier) => {
     specifier === '@greenhub/ui/components/checkbox' ||
     specifier === '@greenhub/ui/components/field' ||
     specifier === '@greenhub/ui/components/input' ||
-    specifier === '@greenhub/ui/components/loading-button' ||
+    specifier === '@/components/LoadingButton' ||
     specifier === '@greenhub/ui/components/textarea'
   ) {
     return {};

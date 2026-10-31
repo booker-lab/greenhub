@@ -77,11 +77,23 @@ function killTree(child) {
 
 const args = process.argv.slice(2);
 const nowIndex = args.indexOf('--now');
-// --now 값은 앱 이름이 아니다. --now가 없을 때(nowIndex = -1) 첫 인자를 빼지 않도록 nowIndex를 먼저 본다.
-const appName =
-  args.find((a, i) => !a.startsWith('--') && (nowIndex === -1 || i !== nowIndex + 1)) ?? 'seller';
+// --now·--payment-methods 뒤의 값은 앱 이름이 아니다.
+const optionValueIndexes = new Set(
+  ['--now', '--payment-methods']
+    .map((flag) => args.indexOf(flag))
+    .filter((i) => i > -1)
+    .map((i) => i + 1),
+);
+const appName = args.find((a, i) => !a.startsWith('--') && !optionValueIndexes.has(i)) ?? 'seller';
 const phone = args.includes('--phone');
 const prod = args.includes('--prod');
+// --payment-methods all: 소비자 결제 수단을 카카오페이·네이버페이·카드 셋으로 띄운다(가짜 채널 키).
+// 결제 수단 목록은 빌드 때 정해지므로 기본 촬영(카카오페이 하나)과 다른 서버다. fixture paymentMethodScreens용.
+const paymentMethodsIndex = args.indexOf('--payment-methods');
+const paymentMethods = paymentMethodsIndex > -1 ? args[paymentMethodsIndex + 1] : 'default';
+if (!['default', 'all'].includes(paymentMethods)) {
+  fail(`--payment-methods는 all만 받습니다: ${paymentMethods}`);
+}
 if (prod && phone) fail('--prod와 --phone은 함께 쓸 수 없습니다.');
 // 운영 빌드는 API 주소로 HTTPS이면서 'localhost'·'127.0.0.1'이 아닌 주소만 받는다
 // (packages/shared/src/api-base-url.ts). 루프백 대역의 다른 주소를 쓴다.
@@ -220,6 +232,19 @@ if (appName === 'consumer') {
     NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY: 'channel-key-visual-harness-kakaopay',
   });
 }
+if (paymentMethods === 'all') {
+  if (appName !== 'consumer') fail('--payment-methods는 consumer에서만 씁니다.');
+  Object.assign(env, {
+    NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY: 'channel-key-visual-harness-naverpay',
+    NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: 'channel-key-visual-harness-card',
+  });
+} else if (appName === 'consumer') {
+  // 바깥 셸에 채널 키가 있어도 기본 촬영은 카카오페이 하나로 고정한다.
+  Object.assign(env, {
+    NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY: '',
+    NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: '',
+  });
+}
 
 // 에뮬레이터를 쓰면 앱을 로컬 Firebase 계약(project·bucket·에뮬레이터 주소 고정)으로 띄운다.
 if (useEmulator) {
@@ -255,6 +280,7 @@ fs.writeFileSync(
     authSecret: prod ? authSecret : null,
     apiCertSpki,
     visualNow: visualNowIso,
+    paymentMethods,
   }),
 );
 

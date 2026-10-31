@@ -7,9 +7,9 @@ import {
   REVIEW_TEXT_MAX_LENGTH,
 } from '@greenhub/shared';
 import { Button } from '@greenhub/ui/components/button';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { LoadingButton } from '@/components/LoadingButton';
 import { HideOnErrorImage } from '@/components/ResilientImage';
 import {
   BenchmarkApiError,

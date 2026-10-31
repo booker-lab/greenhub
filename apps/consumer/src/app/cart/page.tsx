@@ -1,7 +1,7 @@
 'use client';
 import { Alert } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button, ButtonLabel, buttonVariants } from '@greenhub/ui/components/button';
+import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -418,9 +418,9 @@ export default function CartPage() {
             장바구니가 비어있습니다.
           </p>
           {/* 링크 의미(a)를 유지한다: Mantine Button component={Link}와 같은 모양 */}
-          <Link href="/" className={buttonVariants({ size: 'md' })}>
+          <ButtonLink render={<Link href="/" />} size="md">
             <ButtonLabel>쇼핑하러 가기</ButtonLabel>
-          </Link>
+          </ButtonLink>
         </div>
       </div>
     );
@@ -651,16 +651,14 @@ export default function CartPage() {
                                 </p>
                               ))}
                               {/* 링크 의미(a)를 유지한다: Mantine Button component={Link} light orange xs */}
-                              <Link
-                                href={productHref}
-                                className={buttonVariants({
-                                  variant: 'light',
-                                  size: 'xs',
-                                  className: 'mt-1 bg-[#ffe8cc] text-[#d9480f]',
-                                })}
+                              <ButtonLink
+                                render={<Link href={productHref} />}
+                                variant="light"
+                                size="xs"
+                                className="mt-1 bg-[#ffe8cc] text-[#d9480f]"
                               >
                                 <ButtonLabel>다시 선택하기</ButtonLabel>
-                              </Link>
+                              </ButtonLink>
                             </div>
                           </div>
                         </Alert>
