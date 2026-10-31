@@ -276,6 +276,12 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 촬영 목록에 주문 필터 화면 5개(가게 목록 열림·검색·맞는 가게 없음·상태 목록 열림·고른 상태의 주문 없음)를 더하고, 어드민 주문 fixture에 배송 완료 회차·요청사항·환불 진행 중·실패 주문을 넣었다. 정산 PR과 같은 fixture로 찍었다.
   - 로컬 증명(#694 하네스, 판매자 단독, 기준 `main` 94211c2 + 같은 fixture, 기준 시각 2026-10-31T00:00+09:00): 판매자 189장 정상 촬영 189, `diff.mjs --tolerance 1` 189장 같음(허용 목록 없음), 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 879개. 운영 빌드는 증명하지 않았다.
 - 판매자 단위 테스트 중 Mantine 컴포넌트 자체에 묶인 것(`SegmentedTabs.test.tsx`의 `Group` 탐색, `ReviewCard.test.tsx`)은 그 화면을 바꿀 때 같이 고친다.
+- 어드민 정산 구현(2026-10-31): `admin/settlements`의 목록(카드·표·상태·회수 필요·지급 보류 배지·지급처리)·가게 검색 필터·합계 카드·더 보기·머리 글자·조회 실패 상자에서 `@mantine/core`를 걷었다. 공용 `SegmentedTabs`·`ConfirmModal`과 `@mantine/notifications`는 남았다.
+  - 가게 검색은 주문 PR의 `SearchableSelect`(clearable)를 쓴다. `packages/ui` 추가: Badge `destructive-filled`(filled red)·`light-orange`.
+  - 더 보기 불러오는 중은 Mantine Button loading처럼 면색을 두고 글자를 숨기며, 흐린 흰 덮개(`::before` 15%·blur 12px)와 따로 합성되는 원(`will-change: transform`)이 있어야 같다.
+  - 합계 카드의 role group은 로컬 E2E가 이름으로 찾으므로 그대로 두고 biome `useSemanticElements`만 사유와 함께 끈다.
+  - 촬영 목록에 정산 필터 화면 4개(가게 목록 열림·맞는 가게 없음·가게 고름·더 보기 불러오는 중)를 더하고, 정산 fixture에 상태별·회수 필요·지급 보류 데이터와 다음 쪽(늦게 답함)을 넣었다. 주문 PR과 같은 fixture로 찍었다.
+  - 로컬 증명(#694 하네스, 판매자 단독, 기준 `main` 94211c2 + 같은 fixture, 기준 시각 2026-10-31T00:00+09:00): 판매자 189장 정상 촬영 189, `diff.mjs --tolerance 1` 189장 같음(허용 목록 없음, 더 보기 불러오는 중 포함), 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 879개. 운영 빌드는 증명하지 않았다.
 
 ### P3. 기사 앱 (12개 파일)
 - 기사 앱을 연결하고 1단계만 한다(`design-direction.md` D4 미확정). 연결 방식은 P2a와 같다.
