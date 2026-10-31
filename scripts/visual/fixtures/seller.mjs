@@ -1320,6 +1320,16 @@ export const screens = [
     steps: [{ click: '회차 취소' }],
     viewport: true,
   },
+  // 공용 ConfirmModal의 dark 확인 버튼(Mantine filled dark). 회차 상세 "주문 마감" 확인창.
+  {
+    id: 'modal-round-close',
+    group: '판매자 · 모달',
+    title: '회차 상세 · 주문 마감 확인',
+    path: '/sale-rounds/round-open',
+    firestore: true,
+    steps: [{ clickSelector: 'button:has-text("주문 마감"):visible' }],
+    viewport: true,
+  },
   {
     // 수정 화면 상품은 직접 편집한 내용으로 보므로 다시 생성하기가 확인 모달을 연다.
     id: 'modal-product-regenerate',

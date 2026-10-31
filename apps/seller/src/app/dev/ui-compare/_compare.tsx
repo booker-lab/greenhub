@@ -992,6 +992,22 @@ export function UiCompare({ open }: { open?: string }) {
 
       <Section title="앱 틀 · 화면 촬영에 없는 상태">
         <Row
+          name="ConfirmModal 확인 버튼 filled dark ↔ default + dark-6"
+          mantine={
+            <MButton color="dark" style={{ fontWeight: 'var(--fw-medium)' }}>
+              마감 확인
+            </MButton>
+          }
+          ui={
+            <Button
+              className="bg-[#2e2e2e] hover:bg-[#242424]"
+              style={{ fontWeight: 'var(--fw-medium)' }}
+            >
+              마감 확인
+            </Button>
+          }
+        />
+        <Row
           name="LoadMoreFooter 더 보기 실패(다시 시도)"
           mantine={
             <MStack align="center" gap={4} mt="md" style={{ width: '100%' }}>
