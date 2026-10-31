@@ -2131,10 +2131,105 @@ export const screens = [
     path: '/admin/drivers',
     steps: [{ click: '더 보기' }],
   },
+  // 불러오는 중 버튼(UI 교체 P6): 화면을 연 뒤 상황을 바꿔 다음 요청을 오래 걸리게 하고 버튼을 누른 채 찍는다.
+  {
+    id: 'settings-option-stocks-add-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '설정 · 옵션 재고 · 더하기 누름',
+    path: '/settings/option-stocks',
+    steps: [
+      { fill: { label: '새로 출력한 개수', value: '5' } },
+      { scenario: 'slow-writes' },
+      { click: '더하기' },
+    ],
+  },
+  {
+    id: 'settings-option-stocks-remaining-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '설정 · 옵션 재고 · 맞추기 누름',
+    path: '/settings/option-stocks',
+    steps: [
+      { fill: { label: '실제 남은 개수', value: '3' } },
+      { scenario: 'slow-writes' },
+      { click: '맞추기' },
+    ],
+  },
+  {
+    id: 'order-ops-retry-refund-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '주문 상세 · 환불 재시도 처리 중',
+    path: '/orders/order-round-held',
+    steps: [{ scenario: 'slow-writes' }, { clickSelector: 'button:has-text("환불 재시도")' }],
+  },
+  {
+    id: 'order-ops-reload-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '주문 상세 · 운영 기록 새로고침 중',
+    path: '/orders/order-round-held',
+    steps: [{ scenario: 'slow-operation-issues' }, { click: '새로고침' }],
+  },
+  {
+    id: 'operations-reload-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '운영 확인 · 다시 조회 중',
+    path: '/operations',
+    steps: [
+      { scenario: 'slow-operation-issues' },
+      { clickSelector: 'button[aria-label="운영 기록 다시 조회"]' },
+    ],
+  },
+  {
+    id: 'operations-resolve-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '운영 확인 · 해결로 닫기 처리 중',
+    path: '/operations',
+    steps: [
+      { clickSelector: 'button:has-text("해결로 닫기")' },
+      { fill: { label: '닫는 이유 메모', value: '고객과 통화해 배송 사진을 다시 확인했어요' } },
+      { scenario: 'slow-writes' },
+      { clickSelector: '[role="dialog"] button:has-text("해결로 닫기")' },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-round-copy-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '회차 목록 · 이전 회차 복사 처리 중',
+    path: '/sale-rounds',
+    steps: [
+      { clickSelector: '[data-testid="sale-round-round-open"] button:has-text("이전 회차 복사")' },
+      { scenario: 'slow-writes' },
+      { click: '회차 복사' },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'sale-round-draft-saving',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '회차 상세 · 작성 중 · 저장 처리 중',
+    path: '/sale-rounds/round-draft',
+    firestore: true,
+    steps: [{ scenario: 'slow-writes' }, { click: '회차 저장' }],
+    viewport: true,
+  },
 ];
 
 /** 화면별 상황(shots.mjs가 화면을 열 때 /__scenario로 고른다). 그 경로를 기본 경로 앞에 끼운다. */
 export const scenarioRoutes = {
+  // 불러오는 중 버튼: 쓰기 요청은 60초 뒤에야 답한다(찍고 페이지를 닫으면 취소된다). 요청 본문은 mock-api.log에 남는다.
+  'slow-writes': ['POST', 'PATCH', 'PUT', 'DELETE'].map((method) => [
+    method,
+    /^\/.+$/,
+    () => ({ body: {}, delay: 60_000 }),
+  ]),
+  // 운영 기록 다시 조회 중(목록 조회만 60초 지연).
+  'slow-operation-issues': [
+    [
+      'GET',
+      /^\/stores\/[^/]+\/operation-issues$/,
+      () => ({ body: { items: OPERATION_ISSUES }, delay: 60_000 }),
+    ],
+  ],
   // 공용 LoadingState·EmptyState(회차 목록이 늦게 오거나 비었을 때).
   'rounds-slow': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] }, delay: 8000 })]],
   'rounds-empty': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] } })]],
@@ -2192,6 +2287,14 @@ export const benchmarkScreens = [
     features: ['seller-store', 'quality-guarantee', 'demand-signals'],
   },
   {
+    id: 'bm-seller-store-profile-saving',
+    group: '판매자',
+    title: '가게 소개·품질 보장 설정 · 저장 처리 중',
+    path: '/settings/store-profile',
+    steps: [{ scenario: 'slow-writes' }, { click: '저장' }],
+    features: ['seller-store', 'quality-guarantee', 'demand-signals'],
+  },
+  {
     id: 'bm-seller-product-extras',
     group: '판매자',
     title: '상품 수정 · 마지막 단계(추가 정보)',
@@ -2215,6 +2318,19 @@ export const benchmarkScreens = [
     title: '고객 반응 · 후기 숨기기 사유',
     path: '/reactions',
     steps: [{ click: '숨기기' }, { click: '욕설·비방' }],
+    features: ['reviews'],
+  },
+  {
+    id: 'bm-seller-review-hide-loading',
+    group: '판매자',
+    title: '고객 반응 · 후기 숨기기 확인 처리 중',
+    path: '/reactions',
+    steps: [
+      { click: '숨기기' },
+      { click: '욕설·비방' },
+      { scenario: 'slow-writes' },
+      { click: '숨기기 확인' },
+    ],
     features: ['reviews'],
   },
   {

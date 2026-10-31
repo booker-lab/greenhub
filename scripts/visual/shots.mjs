@@ -213,6 +213,13 @@ async function runSteps(page, steps) {
       const target = page.locator(step.clickSelector).first();
       if (!(await target.isVisible().catch(() => false))) return `누를 대상 없음: ${step.clickSelector}`;
       await target.click();
+    } else if (step.scenario) {
+      // 화면을 연 뒤에 가짜 API 상황을 바꾼다(예: 다음 쓰기 요청만 오래 걸리게 해 불러오는 중 버튼을 찍는다).
+      const res = await fetch(`${apiBase}/__scenario?name=${encodeURIComponent(step.scenario)}`, {
+        method: 'POST',
+      });
+      if (!res.ok) return `없는 상황: ${step.scenario}`;
+      continue;
     } else if (typeof step.fill === 'string') {
       await page.getByRole('textbox').first().fill(step.fill);
     } else if (step.fill) {

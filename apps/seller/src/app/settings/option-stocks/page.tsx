@@ -3,6 +3,7 @@
 import type { OptionStock } from '@greenhub/shared';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { notifications } from '@mantine/notifications';
 import { useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
@@ -20,7 +21,6 @@ import {
   toRemainingBody,
   upsertStock,
 } from './_lib';
-import { LoadingButton } from '../_components/LoadingButton';
 
 // 옵션 재고(직접 출력한 화분 등). 상품 옵션 선택지에 연결하면 주문할 때마다 줄고, 결제 전 취소·환불이면
 // 돌아온다. 남은 개수가 모자라면 손님 주문을 받지 않는다.
@@ -96,6 +96,7 @@ function StockRow({
             style={{ flex: 1 }}
           />
           <LoadingButton
+            measured
             variant="light-green"
             loading={busy === 'add'}
             onClick={() => submit('add')}
@@ -113,6 +114,7 @@ function StockRow({
             style={{ flex: 1 }}
           />
           <LoadingButton
+            measured
             variant="secondary"
             loading={busy === 'remaining'}
             onClick={() => submit('remaining')}
@@ -255,7 +257,7 @@ export default function OptionStocksSettingsPage() {
                     {createError}
                   </p>
                 )}
-                <LoadingButton size="md" loading={creating} onClick={create}>
+                <LoadingButton measured size="md" loading={creating} onClick={create}>
                   추가
                 </LoadingButton>
               </div>

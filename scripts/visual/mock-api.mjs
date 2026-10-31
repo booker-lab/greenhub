@@ -142,7 +142,14 @@ export function startMockApi({
       if (!match) continue;
       const out = handle({ url, params: match.slice(1).map(decodeURIComponent), body });
       const status = out.status ?? 200;
-      record({ kind: isWrite ? 'write' : 'read', method: m, path: p, query: url.search, status });
+      record({
+        kind: isWrite ? 'write' : 'read',
+        method: m,
+        path: p,
+        query: url.search,
+        status,
+        ...(isWrite ? { body: body.slice(0, 500) } : {}),
+      });
       return send(req, res, status, out.body, out.delay ?? 0);
     }
 

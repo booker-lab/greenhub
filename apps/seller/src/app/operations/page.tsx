@@ -3,10 +3,10 @@
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
 import { Button } from '@greenhub/ui/components/button';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { CheckCircle2, ChevronRight, RefreshCcw, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { BUTTON_LOADING, ButtonLoader } from '@/app/orders/[id]/_components/ButtonLoading';
 import { ISSUE_DESCRIPTIONS, ISSUE_LABELS } from '@/app/orders/[id]/operation-issues';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
@@ -144,19 +144,16 @@ export default function OperationsPage() {
       <PageHeader
         title="운영 확인"
         right={
-          <Button
+          <LoadingButton
+            measured
             size="xs"
             variant="ghost"
             onClick={() => void reload()}
-            disabled={loading}
-            data-loading={loading || undefined}
-            aria-busy={loading || undefined}
-            className={loading ? BUTTON_LOADING.ghost : undefined}
+            loading={loading}
             aria-label="운영 기록 다시 조회"
           >
-            {loading && <ButtonLoader variant="ghost" height={30} />}
             <RefreshCcw size={16} />
-          </Button>
+          </LoadingButton>
         }
       />
       <div className="mx-auto max-w-[720px] px-4 py-4">
