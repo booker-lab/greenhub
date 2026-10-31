@@ -4,7 +4,7 @@ import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
 // 정산 라벨/색 SSOT = @greenhub/shared (F-1/S4).
 import { STATUS_COLOR, STATUS_LABEL } from '@greenhub/shared';
 import type { AdminSettlement } from '@/hooks/useAdmin';
-import { HOLD_REASON_LABEL, orderLabel, storeLabel, toDateStr, toKRW } from '../_lib';
+import { canPay, HOLD_REASON_LABEL, orderLabel, storeLabel, toDateStr, toKRW } from '../_lib';
 
 interface SettlementTableProps {
   settlements: AdminSettlement[];
@@ -42,7 +42,7 @@ function StatusBadges({ s }: { s: AdminSettlement }) {
   );
 }
 
-/** 지급처리 버튼 — 확정(confirmed)만. 보류 사유가 있으면 서버가 거절하므로 누르지 못하게 둔다. */
+/** 지급처리 버튼 — 확정(confirmed)만. 보류 사유가 있거나 정산 계좌가 없으면 서버가 거절하므로 누르지 못하게 둔다. */
 function PayButton({
   s,
   processingId,
@@ -56,12 +56,12 @@ function PayButton({
   return (
     <Button
       onClick={() => onPay(s.id)}
-      disabled={processingId === s.id || Boolean(s.holdReason)}
+      disabled={processingId === s.id || !canPay(s)}
       size="xs"
       variant="outline"
       radius="md"
     >
-      {processingId === s.id ? '처리중…' : '지급처리'}
+      {processingId === s.id ? '처리중…' : s.payoutAccount ? '지급처리' : '계좌 미등록'}
     </Button>
   );
 }
