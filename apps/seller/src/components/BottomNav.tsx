@@ -1,6 +1,5 @@
 'use client';
 
-import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { isAdminPath } from './AppShell';
@@ -25,9 +24,9 @@ export default function BottomNav() {
   // 어드민 콘솔은 자체 상단 탭이 있어 판매자 하단 탭을 숨긴다
   if (isAdminPath(pathname)) return null;
 
+  // ① 외형 유지(UI 교체 P4): Mantine UnstyledButton(링크)·Stack(가운데·gap 2·높이 100%)·Text와 같은 값.
   return (
-    <Box
-      component="nav"
+    <nav
       style={{
         position: 'fixed',
         bottom: 0,
@@ -42,22 +41,23 @@ export default function BottomNav() {
         justifyContent: 'center',
       }}
     >
-      <Box style={{ maxWidth: 480, width: '100%', display: 'flex' }}>
+      <div style={{ maxWidth: 480, width: '100%', display: 'flex' }}>
         {SELLER_BOTTOM_NAV_ITEMS.map((tab) => {
           const isActive = isBottomNavItemActive(pathname, tab.href);
           const Icon = tab.icon;
 
           return (
-            <UnstyledButton
+            <Link
               key={tab.href}
-              component={Link}
               href={tab.href}
               aria-current={isActive ? 'page' : undefined}
+              className="cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline"
               style={{ flex: 1 }}
             >
-              <Stack align="center" justify="center" gap={2} h="100%">
+              <div className="flex h-full flex-col items-center justify-center gap-0.5">
                 <Icon active={isActive} />
-                <Text
+                <p
+                  className="m-0 p-0 font-normal"
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     fontWeight: 'var(--fw-medium)',
@@ -65,13 +65,13 @@ export default function BottomNav() {
                   }}
                 >
                   {tab.label}
-                </Text>
-              </Stack>
-            </UnstyledButton>
+                </p>
+              </div>
+            </Link>
           );
         })}
-      </Box>
-    </Box>
+      </div>
+    </nav>
   );
 }
 

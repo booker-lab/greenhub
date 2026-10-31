@@ -8,10 +8,11 @@ const serverDataSource = await readFile(new URL('./product-server.ts', import.me
 const layoutSource = await readFile(new URL('./layout.tsx', import.meta.url), 'utf8');
 
 test('round 쿼리는 단일 문자열만 허용하고 임의 기본 회차를 만들지 않는다', () => {
-  assert.match(source, /roundQuery: string \| string\[\] \| undefined;/);
-  assert.match(source, /const roundId = readRoundId\(roundQuery\);/);
-  assert.match(serverPageSource, /roundQuery=\{query\.round\}/);
-  assert.match(source, /typeof value !== 'string'/);
+  // 상품 화면은 정적(ISR)이라 회차 쿼리는 서버가 아니라 브라우저 주소에서 읽는다.
+  assert.match(source, /function readRoundId\(values: string\[\]\)/);
+  assert.match(source, /if \(values\.length !== 1\) return null;/);
+  assert.match(source, /const roundId = readRoundId\(searchParams\.getAll\('round'\)\);/);
+  assert.doesNotMatch(serverPageSource, /searchParams/);
   assert.match(source, /value\.trim\(\)/);
   assert.match(source, /value\.length/);
   assert.doesNotMatch(source, /round-(?:open|current|default)/);
@@ -133,9 +134,11 @@ test('서버 단서로 상품·매장·품종 조회를 함께 시작하되, 화
   // 서버 화면은 메타데이터와 같은 요청 안의 상품 조회를 재사용해 매장·품종 ID만 넘긴다.
   assert.doesNotMatch(serverPageSource, /'use client'/);
   assert.match(serverPageSource, /loadProductHint\(id\)/);
+  assert.match(serverPageSource, /<ProductDetailClient id=\{id\} hint=\{hint\} \/>/);
+  // 빌드 때 미리 만드는 상품 없이, 처음 열릴 때 만들어 재검증 주기마다 다시 만든다(ISR).
   assert.match(
     serverPageSource,
-    /<ProductDetailClient id=\{id\} roundQuery=\{query\.round\} hint=\{hint\} \/>/,
+    /export async function generateStaticParams\(\)[\s\S]*?\{\s*return \[\];\s*\}/,
   );
   assert.match(serverDataSource, /export const fetchCachedProduct = cache\(/);
   assert.match(layoutSource, /fetchCachedProduct\(id\)/);

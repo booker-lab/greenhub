@@ -1,4 +1,4 @@
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import { isInviteTokenFormat } from '@/lib/seller-invite';
@@ -78,14 +78,9 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
               <p className={TEXT} style={textSm}>
                 링크 주소가 잘렸거나 잘못된 초대예요. 관리자에게 새 초대 링크를 요청해 주세요.
               </p>
-              <Button
-                render={<a href="/login" />}
-                nativeButton={false}
-                variant="outline"
-                className="w-full"
-              >
+              <ButtonLink href="/login" variant="outline" className="w-full">
                 로그인 화면으로
-              </Button>
+              </ButtonLink>
             </div>
           )}
         </div>

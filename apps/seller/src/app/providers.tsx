@@ -3,9 +3,9 @@
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
 import { theme } from '@greenhub/ui';
 import { MantineProvider } from '@mantine/core';
-import { Notifications } from '@mantine/notifications';
 import { getSession, SessionProvider, signOut, useSession } from 'next-auth/react';
 import { createContext, useContext, useEffect, useRef } from 'react';
+import { AppToaster } from '@/components/AppToaster';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { startSessionKeepAlive } from '@/lib/session-keepalive';
@@ -87,12 +87,13 @@ function SessionAuthorityRecheck() {
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MantineProvider theme={theme}>
-      <Notifications position="top-right" autoClose={4000} />
-      <SessionProvider>
-        <SessionKeepAlive />
-        <SessionAuthorityRecheck />
-        <TokenErrorGuard>{children}</TokenErrorGuard>
-      </SessionProvider>
+      <AppToaster>
+        <SessionProvider>
+          <SessionKeepAlive />
+          <SessionAuthorityRecheck />
+          <TokenErrorGuard>{children}</TokenErrorGuard>
+        </SessionProvider>
+      </AppToaster>
     </MantineProvider>
   );
 }

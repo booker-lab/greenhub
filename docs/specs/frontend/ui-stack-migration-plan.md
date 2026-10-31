@@ -328,7 +328,15 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - 촬영 목록 추가: 회차 목록 불러오는 중·없음(`sale-rounds-loading`·`sale-rounds-empty`, scenario `rounds-slow`·`rounds-empty`), 어드민 기사 더 보기 불러오는 중(`admin-drivers-load-more`, 기사 목록이 다음 쪽이 있다고 답함), 주문 마감 확인창(`modal-round-close`). 더 보기 실패·dark 확인 버튼은 대조 화면 행으로 본다(실패 응답은 콘솔 오류라 촬영 판정에 걸린다).
   - 로컬 증명(판매자 단독, 기준 시각 2026-10-31T00:00+09:00): `main` fc16129를 merge한 뒤 기준 `main` fc16129 + 같은 fixture 264장과 `diff.mjs --tolerance 1` 261장 같음, `modal-round-close` 3장만 `main`(빨강)과 다르고 Mantine 시절 e93322d + 같은 fixture와 같음(허용 목록 없음). 그 뒤 #726·#716을 merge하고 로그인·로그인 오류·onboarding·어드민 배너·감사 기록 15장을 `main` 69919ed + 같은 fixture와 다시 찍어 같음. 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0(fc16129 merge 뒤), 단위 테스트 881개. 운영 빌드는 증명하지 않았다.
 - 앱 틀(사이드바·상단바) → 회차·주문·준비 → 재고 → 정산 순서로 나눈다.
+- 판매자 앱 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-2`): 판매자 앱에는 사이드바·모바일 메뉴가 없고 하단 탭(`BottomNav`)이 틀이다. `BottomNav`·`ConnectionStatus`(머리 오른쪽 연결 상태)의 `@mantine/core`를 걷었다(UnstyledButton 링크·Stack·Group·Text 계산값). `layout.tsx`의 `ColorSchemeScript`·`providers.tsx`의 `MantineProvider`는 Mantine 화면이 남아 있는 동안 둔다.
+  - 로컬 증명(판매자 단독, 허용 목록 없음): `main` 1423448 merge 뒤 기준 `main` 1423448 + 같은 fixture와 351장 같음. 이어 `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture(기준 시각 2026-11-01T00:00+09:00)와 그 사이 바뀐 화면 81장(주문 목록·홈·준비·운영 확인·초대·배송 보류·어드민 판매자)과 기능 플래그를 켠 고객 반응 4화면 12장이 같음. 대조 행 세 폭 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
 - 다음 회차가 잡혀 있으면, 회차 운영 동선 묶음(어드민 기사 승인·환불 포함)은 끝까지 교체된 상태로만 그 회차의 마지막 출시에 넣는다. 판매자 대표가 실제 계정으로 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
+- 어드민 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-3`): 어드민 `layout.tsx`(머리·관리자 콘솔 글자·셀러 화면 링크·ADMIN 배지·본문 칸)·`AdminNav`·`AdminLogoutButton`·`AdminFetchError`의 `@mantine/core`를 걷었다. Mantine Container lg(1140px)·Group·Text·Badge light red(= `destructive`)·Paper(radius lg·shadow xs)·Button outline radius md 계산값이다. 조회 실패 화면은 실패 응답이 콘솔 오류라 촬영 판정에 걸리므로 대조 화면 행으로 본다.
+  - 로컬 증명(판매자 단독, `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture, 기준 시각 2026-11-01T00:00+09:00): 375장 정상 촬영, `diff.mjs --tolerance 1` 375장 같음(허용 목록 없음), 대조 행 세 폭 같음(조회 실패 행 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
+- 알림 전환 구현(2026-11-01, 브랜치 `claude/ui-p4-frame-4`): 판매자 앱 전체의 `@mantine/notifications`를 `packages/ui` toast 관리자(Base UI Toast)로 바꿨다. 판매자 `components/AppToaster.tsx`가 예전 Mantine Notifications(top-right, autoClose 4000)와 같은 모양으로 그린다: 오른쪽 위 16px, 폭 440px까지, 알림 사이 16px, 흰 바탕·16px 모서리·그림자 lg, 왼쪽 색 막대(brand 주색·red-6·yellow-6·green-6), 제목 15px·500·gray-9, 제목이 있으면 설명 gray-6, 4초 뒤 닫힘, 오래된 알림이 위, 오른쪽에서 들고 나는 250ms 전환. 기사 앱 `AppToaster`(P3)와 같은 방식이다.
+  - `notify({ color, title, message, autoClose })`는 `notifications.show`와 같은 인자라 호출처 13개 파일(설정 4·거점·온보딩·어드민 주문·정산·기사·판매자·소비자·초대 2)은 이름만 바꿨다. `autoClose: false`는 `timeout: 0`이다. `MantineProvider` 안의 `Notifications`, `globals.css`의 `@mantine/notifications` CSS, `next.config.ts` 최적화 목록, seller 의존성 `@mantine/notifications`를 걷었고 seller에 `@base-ui/react`(1.9.0, `packages/ui`와 같은 설치본)를 더했다.
+  - 촬영 목록 추가: 옵션 재고 저장 알림(`toast-option-stock-saved`, 제목 없는 주색)·기사 승인 결과 알림(`toast-driver-approve`, 제목 있는 노랑). 기준도 같은 fixture로 찍었다.
+  - 로컬 증명(판매자 단독, `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture, 기준 시각 2026-11-01T00:00+09:00): 381장 정상 촬영, `diff.mjs --tolerance 1` 381장 같음(알림 화면 6장 포함, 허용 목록 없음), 대조 행 세 폭 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
 
 ### P5. 소비자 앱 (51개 파일)
 - 첫 PR에서 소비자 앱을 연결한다(P2a 방식).
@@ -403,7 +411,7 @@ C의 규칙:
 
 | # | 결정 | 확정 내용 |
 |---|---|---|
-| M1 | 화면 변경을 같이 할지(§7) | C. 화면별 2단계. ①은 정상 촬영 판정·시각 고정·픽셀 비교·영역 사유로 판정하고, Mantine 보정이나 shadcn 기본값에서 생긴 차이는 사유로 넘기지 않으며, Taste를 쓰지 않는다. ②는 `design-direction.md`를 방향으로 삼아(`draw.mjs` 미사용은 의도한 이탈) 첫 회차 배송 뒤에만 한다 |
+| M1 | 화면 변경을 같이 할지(§7) | C. 화면별 2단계. ①은 정상 촬영 판정·시각 고정·픽셀 비교·영역 사유로 판정하고, Mantine 보정이나 shadcn 기본값에서 생긴 차이는 사유로 넘기지 않으며, Taste를 쓰지 않는다. ②는 `design-direction.md`를 방향으로 삼아(`draw.mjs` 미사용은 의도한 이탈) 한다. 시작 시점은 아래 "결정 변경 (2026-11-01)"을 따른다(첫 회차 배송을 기다리지 않음) |
 | M2 | 동결(§8) | **2026-10-30 다시 정함**: 첫 회차를 교체 뒤로 미루고, 카카오페이 심사·LIVE 결제 전환·실결제 확인 전까지 소비자 앱 화면만 묶는다(상태 `consumer-freeze`). 다음 회차부터는 회차 기준 동결(`pre-candidate`·`candidate`)을 다시 쓴다. 처음 확정안(첫 회차 전 P0·P0.5만, 12/2부터 P1)은 §11에 남긴다 |
 | M3 | 교체 순서(§6) | **2026-10-30 다시 정함**: P1 `packages/ui` → P2a 판매자 연결 → P2b 설정·상품·어드민 → P4 판매자 틀·회차·주문·준비·재고·정산, P1 뒤 P3 기사는 P2와 병렬, P5 소비자는 소비자 동결이 풀린 뒤, P6 정리. 단계마다 증명이 끝나는 대로 병합한다 |
 | M4 | 스킬을 저장소에 넣을지 | Taste Skill만, ② 단계(방향 적용)를 시작할 때 넣는다(`evals` 제외, `.taste-skill/`은 `.gitignore`, `--no-sandbox` 셸 래퍼 포함). 쓰임은 ② 단계의 권고 검수로 한정한다. UI UX Pro Max는 넣지 않는다: `ui-styling` 하위 스킬이 Radix `asChild`·Tailwind v3 설정·HSL 값을 전제하고, 핵심 `shadcn.csv`도 모든 base에 `sonner`를 권해(:32-34) `-b base`의 Toast와 어긋나며, native select 금지(:21)·다크 모드 필수(:7)가 우리 결정과 다르다. `design` 스킬은 외부 이미지 API 키를 쓰고, `--persist`는 두 번째 디자인 기준 문서를 만든다 |
@@ -475,3 +483,10 @@ C의 규칙:
 
 3라운드 뒤 확정한 M2·M3은 "첫 회차(11/22 주문, 12/1 배송)를 지킨다"를 전제로 했다. 사용자가 같은 날 "회차를 생각하지 않고, 심사에 지장이 없다면 교체를 먼저 끝낸 뒤 회차를 진행한다"로 전제를 바꿨다. 심사자가 보는 화면은 소비자 앱이므로 소비자 앱만 심사·LIVE·실결제 확인 전까지 묶고, 나머지는 단계마다 증명이 끝나는 대로 병합하기로 했다. P2·P3은 브랜치를 나눠 병렬로 진행한다. 회차 일정 변경 자체는 운영 데이터라 사용자가 한다.
 
+### 결정 변경 (2026-11-01)
+
+M1의 "② 방향 적용은 첫 회차 배송 뒤에만 한다"를 사용자가 바꿨다. ①의 진행 속도를 보고 첫 회차 배송을 기다리지 않고 ②를 시작한다.
+
+- 관리자·판매자: ②를 지금 시작해 증명이 끝나는 대로 `main`에 병합한다. 확정된 D7(관리자)·D2·D3(`design-direction.md` §8)만 적용한다. D4(기사)·D5는 아직 결정 전이라 하지 않는다.
+- 소비자: ①과 ②(D1 도감 타일 등)를 브랜치에서 미리 준비만 한다. §8 소비자 동결은 그대로라, 병합·배포는 사용자가 심사·LIVE 전환·실결제 확인이 끝났다고 알린 뒤에 한다. 버튼 색 `#007A43` 같은 전체 값도 동결이 풀린 뒤다.
+- 같은 화면에서는 ①(외형 유지)과 ②를 계속 별도 PR로 낸다(§7). 각 PR은 자기 기준 `main`과 비교해 증명한다.

@@ -14,8 +14,6 @@
 @import "@greenhub/ui/fonts/pretendard.css";
 
 /* Mantine v9 — 선택적 CSS import (사용 컴포넌트만) */
-/* layout.tsx가 JS로 import하던 것을 layer 안으로 옮겼다. 순서는 예전처럼 core보다 앞이다. */
-@import "@mantine/notifications/styles.css" layer(mantine);
 @import "@mantine/core/styles/global.css" layer(mantine);
 @import "@mantine/core/styles/baseline.css" layer(mantine);
 @import "@mantine/core/styles/default-css-variables.css" layer(mantine);

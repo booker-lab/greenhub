@@ -3,7 +3,7 @@ import { auth } from '@/auth';
 import { buildContentSecurityPolicy, createCspNonce } from '@/lib/content-security-policy';
 
 // 요청마다 nonce를 만들어 요청 헤더로 넘긴다. Next는 요청의 CSP 헤더에서 nonce를 읽어
-// 자기 스크립트에 붙이고, 루트 layout은 x-nonce를 읽어 인라인 스크립트에 붙인다.
+// 자기 스크립트에 붙인다(동적 렌더링 화면만 가능하다).
 // 응답에는 같은 정책을 Report-Only로만 보낸다(차단하지 않고 /api/csp-report로 보고만 받는다).
 function continueWithCsp(request: NextRequest): NextResponse {
   const nonce = createCspNonce();
@@ -80,14 +80,8 @@ export const config = {
     '/cart',
     '/checkout/:path*',
     '/order/:path*',
-    // 그 밖의 페이지 문서에는 CSP nonce만 붙인다. API, Next 내부 경로, 확장자가 있는
-    // 정적 파일(sw.js·workbox-*.js·manifest.json·아이콘·글꼴 등)과 프리페치 요청은 제외한다.
-    {
-      source: '/((?!api/|_next/|.*\\.\\w+$).*)',
-      missing: [
-        { type: 'header', key: 'next-router-prefetch' },
-        { type: 'header', key: 'purpose', value: 'prefetch' },
-      ],
-    },
+    // 로그인 화면(동적 렌더링)에는 CSP nonce만 붙인다. 홈·상품·약관 등 공개 화면은 정적으로
+    // 만들어 CDN에서 바로 응답하므로 proxy를 거치지 않는다(nonce를 붙일 수 없어 Report-Only도 보내지 않는다).
+    '/login',
   ],
 };
