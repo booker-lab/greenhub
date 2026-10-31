@@ -1,18 +1,9 @@
 'use client';
 
 import type { SaleRound, SaleRoundStatus } from '@greenhub/shared';
-import {
-  Alert,
-  Badge,
-  Box,
-  Button,
-  Container,
-  Group,
-  Paper,
-  SimpleGrid,
-  Stack,
-  Text,
-} from '@mantine/core';
+import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button } from '@greenhub/ui/components/button';
 import { AlertTriangle, CalendarDays, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -46,13 +37,33 @@ import { RoundCancelModal } from './RoundCancelModal';
 import { RoundForm } from './RoundForm';
 import { RoundOrdersSection } from './RoundOrdersSection';
 
-const STATUS_META: Record<SaleRoundStatus, { label: string; color: string }> = {
-  DRAFT: { label: '작성 중', color: 'gray' },
-  SCHEDULED: { label: '판매 예정', color: 'yellow' },
-  OPEN: { label: '판매 중', color: 'brand' },
-  CLOSED: { label: '주문 마감', color: 'dark' },
-  COMPLETED: { label: '배송 완료', color: 'gray' },
-  CANCELLED: { label: '취소', color: 'red' },
+// 상태 배지는 Mantine Badge light의 색(gray·yellow·brand·dark·red)과 같은 변형이다.
+const STATUS_META: Record<
+  SaleRoundStatus,
+  {
+    label: string;
+    badge: 'secondary' | 'warning' | 'light' | 'light-dark' | 'destructive';
+  }
+> = {
+  DRAFT: { label: '작성 중', badge: 'secondary' },
+  SCHEDULED: { label: '판매 예정', badge: 'warning' },
+  OPEN: { label: '판매 중', badge: 'light' },
+  CLOSED: { label: '주문 마감', badge: 'light-dark' },
+  COMPLETED: { label: '배송 완료', badge: 'secondary' },
+  CANCELLED: { label: '취소', badge: 'destructive' },
+};
+
+// ① 외형 유지(UI 교체 P4): Mantine Paper·Text·Group·Stack·SimpleGrid·Container·Alert·Badge·Button과 같은 값을
+// Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16·그림자 xs.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
+const COLUMN = 'flex flex-col items-stretch justify-start';
+
+// 상태 변경 버튼: 예약은 Mantine filled brand, 마감은 outline dark, 완료는 outline brand와 같은 변형이다.
+const ACTION_BUTTON_VARIANT: Record<RoundAction, 'default' | 'outline-dark' | 'outline'> = {
+  schedule: 'default',
+  close: 'outline-dark',
+  complete: 'outline',
 };
 
 const CLOSE_REASON_LABEL = {
@@ -112,26 +123,24 @@ function ErrorState({
   onRetry: () => void;
 }) {
   return (
-    <Paper role="alert" radius="lg" shadow="xs" p="xl">
-      <Stack align="center" gap="sm">
+    <div role="alert" className={`${PAPER} p-8`}>
+      <div className="flex flex-col items-center justify-start gap-3">
         <AlertTriangle size={36} color="var(--color-danger)" />
-        <Text style={{ fontWeight: 'var(--fw-bold)' }}>{title}</Text>
-        <Text
-          ta="center"
+        <p className={TEXT} style={{ fontWeight: 'var(--fw-bold)' }}>
+          {title}
+        </p>
+        <p
+          className={`${TEXT} text-center`}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           {message}
-        </Text>
-        <Button
-          variant="light"
-          color="red"
-          leftSection={<RefreshCcw size={16} />}
-          onClick={onRetry}
-        >
+        </p>
+        <Button variant="light-destructive" onClick={onRetry}>
+          <RefreshCcw className="size-4" data-icon="inline-start" />
           다시 조회
         </Button>
-      </Stack>
-    </Paper>
+      </div>
+    </div>
   );
 }
 
@@ -147,14 +156,15 @@ function SummaryStat({
   alert?: boolean;
 }) {
   return (
-    <Box
-      p="sm"
+    <div
+      className="p-3"
       style={{
         background: alert ? 'var(--color-danger-surface)' : 'var(--color-primary-surface)',
         borderRadius: 'var(--radius-tag)',
       }}
     >
-      <Text
+      <p
+        className={TEXT}
         style={{
           fontSize: 'var(--font-size-xs)',
           fontWeight: 'var(--fw-bold)',
@@ -162,10 +172,11 @@ function SummaryStat({
         }}
       >
         {label}
-      </Text>
-      <Text
-        mt={2}
+      </p>
+      <p
+        className={TEXT}
         style={{
+          marginTop: 2,
           fontSize: 'var(--font-size-lg)',
           fontWeight: 'var(--fw-extrabold)',
           fontVariantNumeric: 'tabular-nums',
@@ -173,8 +184,8 @@ function SummaryStat({
         }}
       >
         {value}
-      </Text>
-    </Box>
+      </p>
+    </div>
   );
 }
 
@@ -184,37 +195,32 @@ function RoundSummary({ round }: { round: SellerSaleRound }) {
     round.counters.heldOrderCount + (round.cancellation?.status === 'LOCAL_FAILED' ? 1 : 0);
 
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Stack gap="md">
-        <Group justify="space-between" align="flex-start">
-          <Box>
-            <Group gap="xs">
-              <Badge color={status.color} variant="light">
-                {status.label}
-              </Badge>
+    <div className={`${PAPER} p-4`}>
+      <div className={`${COLUMN} gap-4`}>
+        <div className="flex flex-row flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex flex-row flex-wrap items-center justify-start gap-2.5">
+              <Badge variant={status.badge}>{status.label}</Badge>
               {round.closeReason && (
-                <Badge color="gray" variant="outline">
-                  {CLOSE_REASON_LABEL[round.closeReason]}
-                </Badge>
+                <Badge variant="outline-gray">{CLOSE_REASON_LABEL[round.closeReason]}</Badge>
               )}
-            </Group>
-            <Text mt={6} style={{ fontWeight: 'var(--fw-bold)' }}>
+            </div>
+            <p className={TEXT} style={{ marginTop: 6, fontWeight: 'var(--fw-bold)' }}>
               {round.name}
-            </Text>
-          </Box>
+            </p>
+          </div>
           {attentionCount > 0 && (
             <Button
-              component={Link}
-              href="/orders?tab=ACTION_REQUIRED"
+              render={<Link href="/orders?tab=ACTION_REQUIRED" />}
+              nativeButton={false}
               size="xs"
-              variant="light"
-              color="red"
+              variant="light-destructive"
             >
               확인 필요 {attentionCount.toLocaleString()}건
             </Button>
           )}
-        </Group>
-        <SimpleGrid cols={3} spacing="xs">
+        </div>
+        <div className="grid grid-cols-3 gap-2.5">
           <SummaryStat
             label="주문 배송지"
             value={`${round.counters.orderedDeliveryAddresses.toLocaleString()} / ${round.limits.maxDeliveryAddresses.toLocaleString()}`}
@@ -228,9 +234,9 @@ function RoundSummary({ round }: { round: SellerSaleRound }) {
             value={`${round.counters.heldOrderCount.toLocaleString()}건`}
             alert={round.counters.heldOrderCount > 0}
           />
-        </SimpleGrid>
-      </Stack>
-    </Paper>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -275,10 +281,13 @@ function RoundEditor({
   }
 
   return (
-    <Stack gap="md">
+    <div className={`${COLUMN} gap-4`}>
       {pageData.products.length === 0 && (
-        <Alert color="yellow" title="현재 스토어 상품이 없습니다">
-          기존 회차 상품은 확인할 수 있지만 새 상품을 추가할 수 없습니다.
+        <Alert variant="warning" role="alert">
+          <AlertTitle>현재 스토어 상품이 없습니다</AlertTitle>
+          <AlertDescription>
+            기존 회차 상품은 확인할 수 있지만 새 상품을 추가할 수 없습니다.
+          </AlertDescription>
         </Alert>
       )}
       <RoundForm
@@ -289,7 +298,7 @@ function RoundEditor({
         disabled={disabled}
         readOnly={!isRoundEditable(round)}
       />
-    </Stack>
+    </div>
   );
 }
 
@@ -411,25 +420,26 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
 
   return (
     <>
-      <Stack gap="md">
+      <div className={`${COLUMN} gap-4`}>
         <RoundDeadlineStrip round={round} rounded />
         <RoundSummary round={round} />
         {showsRoundOrders(round.status) && <RoundOrdersSection round={round} />}
         {isPurchaseListRound(round) && <RoundPurchaseListCard round={round} />}
         {actionSuccess && (
-          <Alert color="brand" title="상태 변경 완료" role="status">
-            {actionSuccess}
+          <Alert role="status">
+            <AlertTitle>상태 변경 완료</AlertTitle>
+            <AlertDescription>{actionSuccess}</AlertDescription>
           </Alert>
         )}
         {actionError && (
-          <Alert color="red" title="상태 변경 실패" role="alert">
-            {actionError}
+          <Alert variant="destructive" role="alert">
+            <AlertTitle>상태 변경 실패</AlertTitle>
+            <AlertDescription>{actionError}</AlertDescription>
           </Alert>
         )}
         {availableAction && (
           <Button
-            variant={availableAction === 'schedule' ? 'filled' : 'outline'}
-            color={ACTION_META[availableAction].color}
+            variant={ACTION_BUTTON_VARIANT[availableAction]}
             onClick={() => {
               clearOperationError();
               setActionError(null);
@@ -441,20 +451,25 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
           </Button>
         )}
         {cancelProgress === 'RUNNING' && (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
             회차 취소를 처리하고 있어요. 몇 분 뒤 새로고침해서 확인해 주세요.
-          </Text>
+          </p>
         )}
         {cancelProgress === 'STUCK' && !cancelAction && (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+          >
             회차 취소가 끝나지 않았어요. 관리자 계정에서 &lsquo;회차 취소 다시 진행&rsquo;을 눌러야
             해요.
-          </Text>
+          </p>
         )}
         {cancelAction && (
           <Button
-            variant="subtle"
-            color="red"
+            variant="subtle-destructive"
             onClick={() => {
               clearOperationError();
               setActionError(null);
@@ -472,7 +487,7 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
           onSave={handleSave}
           onRetry={onRetry}
         />
-      </Stack>
+      </div>
 
       {action && (
         <ConfirmModal
@@ -510,13 +525,13 @@ export default function SaleRoundDetailPage({ params }: { params: Promise<{ id: 
   return (
     <PageShell>
       <PageHeader title="판매 회차 상세" onBack={() => router.push('/sale-rounds')} />
-      <Container size="sm" px="md" py="md">
+      <div className="mx-auto max-w-[720px] px-4 py-4">
         {!roundId ? (
           <EmptyState
             icon={<CalendarDays size={48} strokeWidth={1.5} />}
             text="올바른 회차를 찾을 수 없습니다"
             action={
-              <Button component={Link} href="/sale-rounds" variant="light">
+              <Button render={<Link href="/sale-rounds" />} nativeButton={false} variant="light">
                 회차 목록으로
               </Button>
             }
@@ -528,7 +543,7 @@ export default function SaleRoundDetailPage({ params }: { params: Promise<{ id: 
             onRetry={() => setReloadKey((current) => current + 1)}
           />
         )}
-      </Container>
+      </div>
     </PageShell>
   );
 }
