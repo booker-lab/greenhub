@@ -1,6 +1,6 @@
 'use client';
 
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { useMemo, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
@@ -69,7 +69,7 @@ export default function DriversClient() {
       if (outcome.kind === 'confirmed' && outcome.reconciled) return;
       // rejected는 서버 reason 보존, unknown/stale은 재확인 우선 + blind retry 금지.
       const presentation = describeAdminCommandOutcome(outcome, actionLabel);
-      notifications.show({
+      notify({
         color: outcome.kind === 'rejected' ? 'red' : 'yellow',
         title: presentation.title,
         message: presentation.message,

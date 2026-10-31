@@ -1,6 +1,6 @@
 'use client';
 
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { copyText } from './_clipboard';
 import { buildInviteLink } from './_lib';
@@ -30,7 +30,7 @@ export function useTokenCopy() {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (result === 'failed') {
       setCopiedToken(null);
-      notifications.show({
+      notify({
         color: 'red',
         title: '초대 링크를 복사하지 못했습니다',
         message:
