@@ -13,7 +13,7 @@ import {
 } from '@greenhub/ui/components/dialog';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { Loader } from '@greenhub/ui/components/loader';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Progress } from '@greenhub/ui/components/progress';
 import {
   AlertTriangle,
@@ -25,7 +25,7 @@ import {
   RefreshCcw,
 } from 'lucide-react';
 import Link from 'next/link';
-import { type CSSProperties, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
@@ -58,11 +58,8 @@ const TEXT = 'm-0 p-0 text-base font-normal';
 const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
 const ROW = 'flex flex-row flex-wrap items-center';
 const COLUMN = 'flex flex-col items-stretch justify-start';
-// Mantine Button loading(filled): 면색을 그대로 두고 글자를 숨긴 채, 흐린 흰 덮개 위 가운데에 흰 원(높이 ÷ 1.8)을 돌린다.
 // datetime 입력칸은 Mantine 입력칸 줄 높이(높이 - 2px = 34px)를 준다. text-sm 1.45로 두면 날짜 글자가 소수점만큼 어긋난다.
 const DATETIME_INPUT = 'leading-[34px]';
-const FILLED_LOADING =
-  "disabled:bg-primary disabled:text-white before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-xl before:bg-white/15 before:blur-[12px] before:content-[''] [&_[data-slot=button-label]]:translate-y-full [&_[data-slot=button-label]]:opacity-0";
 
 const CLOSE_REASON_LABEL = {
   SCHEDULE_ENDED: '일정 마감',
@@ -552,27 +549,14 @@ export default function SaleRoundsPage() {
                   </Alert>
                 )}
                 <div className={`${ROW} justify-start gap-2.5`}>
-                  <Button
-                    className={`flex-1 ${copying ? FILLED_LOADING : ''}`}
+                  <LoadingButton
+                    measured
+                    className="flex-1"
                     onClick={() => void handleCopy()}
-                    disabled={copying}
-                    data-loading={copying || undefined}
+                    loading={copying}
                   >
-                    {copying && (
-                      <span
-                        aria-hidden
-                        className="absolute top-1/2 left-1/2 [transform:translate(-50%,calc(-50%+1px))] will-change-transform"
-                      >
-                        <Loader
-                          color="#ffffff"
-                          style={
-                            { '--loader-size': '20px', '--loader-border': '2.5px' } as CSSProperties
-                          }
-                        />
-                      </span>
-                    )}
                     회차 복사
-                  </Button>
+                  </LoadingButton>
                   <Button
                     className="flex-1"
                     variant="outline-gray"

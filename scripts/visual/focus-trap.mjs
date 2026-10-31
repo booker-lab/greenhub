@@ -290,7 +290,7 @@ async function checkScreen(context, screen) {
       const openerHandle = locator
         ? await locator.elementHandle({ timeout: 2_000 }).catch(() => null)
         : null;
-      const note = await runSteps(page, [step]);
+      const note = await runSteps(page, [step], { apiBase });
       if (note) {
         problems.push(`steps 실패: ${note}`);
         return result;

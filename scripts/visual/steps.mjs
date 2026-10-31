@@ -1,8 +1,11 @@
 // 화면 안 동작(steps) 실행기 — shots.mjs(촬영)와 focus-trap.mjs(창 초점 순회 검사)가 함께 쓴다.
 // fixture 화면의 steps 형식은 README "자동 캡처와 확인판"을 따른다.
 
-/** steps: 찍기 전에 차례로 누르거나 적는다. 누를 글자가 없으면(기능이 꺼진 화면) 거기서 멈춘다. */
-export async function runSteps(page, steps) {
+/**
+ * steps: 찍기 전에 차례로 누르거나 적는다. 누를 글자가 없으면(기능이 꺼진 화면) 거기서 멈춘다.
+ * apiBase: 가짜 API 주소. scenario 단계(화면을 연 뒤 가짜 API 상황 바꾸기)에 쓴다.
+ */
+export async function runSteps(page, steps, { apiBase } = {}) {
   for (const step of steps) {
     if (step.click) {
       const target = page.getByText(step.click, { exact: true }).first();
@@ -14,6 +17,14 @@ export async function runSteps(page, steps) {
       if (!(await target.isVisible().catch(() => false)))
         return `누를 대상 없음: ${step.clickSelector}`;
       await target.click();
+    } else if (step.scenario) {
+      // 화면을 연 뒤에 가짜 API 상황을 바꾼다(예: 다음 쓰기 요청만 오래 걸리게 해 불러오는 중 버튼을 찍는다).
+      if (!apiBase) return `상황을 바꿀 가짜 API 주소 없음: ${step.scenario}`;
+      const res = await fetch(`${apiBase}/__scenario?name=${encodeURIComponent(step.scenario)}`, {
+        method: 'POST',
+      });
+      if (!res.ok) return `없는 상황: ${step.scenario}`;
+      continue;
     } else if (step.waitPath) {
       // 앱이 스스로 주소를 바꾸는 동작(결제 완료 뒤 router.replace 등)을 기다린다. next dev는 처음 여는 화면을
       // 그때 컴파일하므로 넉넉히 기다린다. 끝내 바뀌지 않으면 도착 주소 판정이 실패로 잡는다.

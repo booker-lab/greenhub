@@ -2,9 +2,9 @@ import { type ManagedReview, REVIEW_HIDE_REASON_MAX_LENGTH } from '@greenhub/sha
 import { Badge } from '@greenhub/ui/components/badge';
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
-import { useId } from 'react';
-import { BUTTON_LOADING, ButtonLoader } from '../../orders/[id]/_components/ButtonLoading';
+import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import { HIDE_POLICY_NOTE, HIDE_REASON_OPTIONS, hiddenReasonLabel, hiddenSummary } from '../_lib';
 
 // 후기 한 건. 숨기기(사유 고르기·설명 선택)와 숨김 상태를 보여준다. 상태는 부모(page)가 가진다.
@@ -44,48 +44,6 @@ const COMPACT_SM = 'h-[26px] px-2 text-[15px] leading-none';
 const DEFAULT_BUTTON = 'border-[#ced4da] bg-white text-black hover:bg-[#f8f9fa]';
 const GROUP_LABEL =
   'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-black';
-
-export function RadioItem({
-  name,
-  label,
-  checked,
-  onChange,
-}: {
-  name: string;
-  label: string;
-  checked: boolean;
-  onChange: () => void;
-}) {
-  const id = useId();
-  return (
-    <div className="flex [-webkit-tap-highlight-color:transparent]">
-      <div className="relative order-1 size-5">
-        <input
-          id={id}
-          type="radio"
-          name={name}
-          checked={checked}
-          onChange={onChange}
-          className="peer relative m-0 flex size-5 cursor-default appearance-none items-center justify-center rounded-[20px] border border-solid border-[#ced4da] bg-white transition-[background-color,border-color] duration-100 ease-[ease] checked:border-primary checked:bg-primary [-webkit-tap-highlight-color:transparent]"
-        />
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 5 5"
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-1/2 size-2 text-white opacity-0 transition-[opacity,transform] duration-[100ms,200ms] ease-[ease] [transform:scale(0.2)_translateY(10px)] [translate:-50%_-50%] peer-checked:opacity-100 peer-checked:[transform:scale(1)]"
-        >
-          <circle cx="2.5" cy="2.5" r="2.5" fill="currentColor" />
-        </svg>
-      </div>
-      <div className="order-2 inline-flex cursor-default flex-col text-sm/[20px] [-webkit-tap-highlight-color:transparent]">
-        <label htmlFor={id} className="block cursor-default ps-3 text-inherit">
-          {label}
-        </label>
-      </div>
-    </div>
-  );
-}
 
 export function ReviewCard({
   review,
@@ -188,19 +146,19 @@ export function ReviewCard({
                   {' *'}
                 </span>
               </div>
-              <div role="radiogroup" aria-labelledby={reasonLabelId} aria-required>
+              <RadioGroup
+                aria-labelledby={reasonLabelId}
+                name={reasonName}
+                value={reasonCode}
+                onValueChange={onReasonChange}
+                required
+              >
                 <div className="mt-1 flex flex-col gap-1.5">
                   {HIDE_REASON_OPTIONS.map((option) => (
-                    <RadioItem
-                      key={option.value}
-                      name={reasonName}
-                      label={option.label}
-                      checked={reasonCode === option.value}
-                      onChange={() => onReasonChange(option.value)}
-                    />
+                    <RadioItem key={option.value} value={option.value} label={option.label} />
                   ))}
                 </div>
-              </div>
+              </RadioGroup>
             </div>
             <Field>
               <FieldLabel htmlFor={noteId}>설명(선택)</FieldLabel>
@@ -223,17 +181,17 @@ export function ReviewCard({
               >
                 취소
               </Button>
-              <Button
+              <LoadingButton
+                measured
                 variant="destructive"
-                className={`${COMPACT_SM} ${busy ? BUTTON_LOADING.destructive : ''}`}
-                disabled={busy || !reasonCode}
-                data-loading={busy || undefined}
-                aria-busy={busy || undefined}
+                className={COMPACT_SM}
+                buttonHeight={26}
+                loading={busy}
+                disabled={!reasonCode}
                 onClick={onConfirmHide}
               >
-                {busy && <ButtonLoader variant="destructive" height={26} />}
                 숨기기 확인
-              </Button>
+              </LoadingButton>
             </div>
           </div>
         ) : (

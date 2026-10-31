@@ -8,6 +8,7 @@ import {
 } from '@greenhub/shared';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
+import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import { useId } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import type { AdminOrder } from '@/hooks/useAdmin';
@@ -88,19 +89,22 @@ export function PostDeliveryRefundModal({
             <div id={reasonLabelId} className={GROUP_LABEL}>
               환불 사유
             </div>
-            <div role="radiogroup" aria-labelledby={reasonLabelId}>
+            <RadioGroup
+              aria-labelledby={reasonLabelId}
+              name={reasonName}
+              value={reasonCode}
+              onValueChange={onReasonCodeChange}
+            >
               <div className="mt-1.5 flex flex-col gap-1.5">
                 {POST_DELIVERY_REFUND_REASON_CODES.map((code) => (
                   <RadioItem
                     key={code}
-                    name={reasonName}
+                    value={code}
                     label={POST_DELIVERY_REFUND_REASON_LABEL[code]}
-                    checked={reasonCode === code}
-                    onChange={() => onReasonCodeChange(code)}
                   />
                 ))}
               </div>
-            </div>
+            </RadioGroup>
           </div>
           <Field>
             <FieldLabel htmlFor={memoId}>메모 (손님에게는 보이지 않음, 필수)</FieldLabel>
@@ -138,45 +142,3 @@ export function PostDeliveryRefundModal({
 // 고르면 주색 바탕·흰 점, 글자 14px/20px·왼쪽 12px) 값. 기사 앱 RadioGroupField와 같은 계산값이다.
 const GROUP_LABEL =
   'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-black';
-
-function RadioItem({
-  name,
-  label,
-  checked,
-  onChange,
-}: {
-  name: string;
-  label: string;
-  checked: boolean;
-  onChange: () => void;
-}) {
-  const id = useId();
-  return (
-    <div className="flex [-webkit-tap-highlight-color:transparent]">
-      <div className="relative order-1 size-5">
-        <input
-          id={id}
-          type="radio"
-          name={name}
-          checked={checked}
-          onChange={onChange}
-          className="peer relative m-0 flex size-5 cursor-default appearance-none items-center justify-center rounded-[20px] border border-solid border-[#ced4da] bg-white transition-[background-color,border-color] duration-100 ease-[ease] checked:border-primary checked:bg-primary [-webkit-tap-highlight-color:transparent]"
-        />
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 5 5"
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-1/2 size-2 text-white opacity-0 transition-[opacity,transform] duration-[100ms,200ms] ease-[ease] [transform:scale(0.2)_translateY(10px)] [translate:-50%_-50%] peer-checked:opacity-100 peer-checked:[transform:scale(1)]"
-        >
-          <circle cx="2.5" cy="2.5" r="2.5" fill="currentColor" />
-        </svg>
-      </div>
-      <div className="order-2 inline-flex cursor-default flex-col text-sm/[20px] [-webkit-tap-highlight-color:transparent]">
-        <label htmlFor={id} className="block cursor-default ps-3 text-inherit">
-          {label}
-        </label>
-      </div>
-    </div>
-  );
-}
