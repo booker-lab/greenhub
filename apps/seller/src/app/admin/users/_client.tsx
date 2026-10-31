@@ -1,12 +1,13 @@
 'use client';
 
-import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
 import type { AdminUser } from '@/hooks/useAdmin';
 import { describeAdminCommandOutcome, useAdminUsers } from '@/hooks/useAdmin';
+import { RefreshButton } from '../_components/RefreshButton';
 import { UsersTable } from './_components/UsersTable';
 import { describeUserSuspendConfirm } from './_lib';
 
@@ -59,61 +60,65 @@ export default function AdminUsersClient() {
 
   const confirm = pending ? describeUserSuspendConfirm(pending) : null;
 
+  // ① 외형 유지(UI 교체 P2b): Mantine Text·Group·Title order 4(18px·800·줄 높이 1.45)·Paper와 같은 값.
   if (loading) {
     return (
-      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+      <p
+        className="m-0 p-0 py-20 text-center text-base"
+        style={{ color: 'var(--color-text-disabled)' }}
+      >
         불러오는 중...
-      </Text>
+      </p>
     );
   }
 
   if (error !== null && !loading) {
     return (
-      <Box>
-        <Group justify="space-between" mb="md">
-          <Title order={4}>소비자 계정</Title>
-        </Group>
-        <Paper
-          radius="lg"
-          shadow="xs"
+      <div>
+        <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+          <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">소비자 계정</h4>
+        </div>
+        <div
+          className="block rounded-[16px] bg-white shadow-mantine-xs"
           style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
         >
-          <Stack gap="sm" align="center" py={64} px="md">
-            <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+          <div className="flex flex-col items-center gap-3 px-4 py-16">
+            <p
+              className="m-0 p-0 text-base"
+              style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}
+            >
               소비자 목록을 불러오지 못했습니다.
-            </Text>
-            <Text
-              ta="center"
+            </p>
+            <p
+              className="m-0 p-0 text-center text-base"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
             >
               {error}
-            </Text>
-            <Button onClick={reload} size="sm" variant="outline" radius="md">
+            </p>
+            <Button onClick={reload} variant="outline" className="rounded-[8px]">
               다시 조회
             </Button>
-          </Stack>
-        </Paper>
-      </Box>
+          </div>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Box>
-      <Group justify="space-between" mb="md">
-        <Title order={4}>
+    <div>
+      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">
           소비자 계정{' '}
-          <Text
-            component="span"
+          <span
+            className="m-0 p-0 text-base font-normal"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             ({users.length})
-          </Text>
-        </Title>
+          </span>
+        </h4>
         {/* 새로고침 — stores 탭(StoresFilters)과 같은 버튼 형태, hook reload 재사용 */}
-        <Button variant="light" color="gray" radius="md" loading={loading} onClick={reload}>
-          새로고침
-        </Button>
-      </Group>
+        <RefreshButton loading={loading} onClick={reload} />
+      </div>
 
       <UsersTable users={users} processingId={processingId} onToggle={handleToggle} />
 
@@ -135,6 +140,6 @@ export default function AdminUsersClient() {
           if (processingId === null) setPending(null);
         }}
       />
-    </Box>
+    </div>
   );
 }

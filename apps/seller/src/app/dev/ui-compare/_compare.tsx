@@ -21,7 +21,7 @@ import {
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
 import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
-import { Input } from '@greenhub/ui/components/input';
+import { Input, InputSection } from '@greenhub/ui/components/input';
 import { Loader } from '@greenhub/ui/components/loader';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { NativeSelect } from '@greenhub/ui/components/native-select';
@@ -1081,6 +1081,100 @@ export function UiCompare({ open }: { open?: string }) {
             <Badge variant="light-green" className="rounded-[4px]">
               연락함
             </Badge>
+          }
+        />
+        <Row
+          name="Button xs outline red md ↔ outline-destructive"
+          mantine={
+            <MButton size="xs" variant="outline" color="red" radius="md">
+              정지
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="outline-destructive" className="rounded-[8px]">
+              정지
+            </Button>
+          }
+        />
+        <Row
+          name="Button xs subtle red ↔ subtle-destructive"
+          mantine={
+            <MButton size="xs" variant="subtle" color="red">
+              치우기
+            </MButton>
+          }
+          ui={
+            <Button size="xs" variant="subtle-destructive">
+              치우기
+            </Button>
+          }
+        />
+        <Row
+          name="NumberInput xs sm % ↔ Input xs + 17px 칸"
+          mantine={
+            <MNumberInput
+              value="5"
+              onChange={() => {}}
+              rightSection="%"
+              size="xs"
+              radius="sm"
+              w={104}
+            />
+          }
+          ui={
+            <div className="relative w-[104px]">
+              <Input value="5" onChange={() => {}} size="xs" className="rounded-[4px] pe-[17px]" />
+              <InputSection side="right" size="xs" className="w-[17px] rounded-e-[4px]">
+                %
+              </InputSection>
+            </div>
+          }
+        />
+        <Row
+          name="TextInput sm md label ↔ Field + Input"
+          mantine={
+            <TextInput
+              label="판매자 검색"
+              placeholder="상호·대표자·전화번호"
+              radius="md"
+              size="sm"
+              style={{ width: 200 }}
+            />
+          }
+          ui={
+            <Field style={{ width: 200 }}>
+              <FieldLabel htmlFor="compare-stores-keyword">판매자 검색</FieldLabel>
+              <Input
+                id="compare-stores-keyword"
+                placeholder="상호·대표자·전화번호"
+                className="rounded-[8px]"
+              />
+            </Field>
+          }
+        />
+        <Row
+          name="Select sm md label ↔ Field + Select"
+          mantine={
+            <MSelect
+              label="상태"
+              value="current"
+              data={[{ value: 'current', label: '활성' }]}
+              radius="md"
+              size="sm"
+              style={{ width: 120 }}
+            />
+          }
+          ui={
+            <Field style={{ width: 120 }}>
+              <FieldLabel htmlFor="compare-stores-status">상태</FieldLabel>
+              <Select
+                id="compare-stores-status"
+                value="current"
+                onValueChange={() => {}}
+                data={[{ value: 'current', label: '활성' }]}
+                className="rounded-[8px]"
+              />
+            </Field>
           }
         />
       </Section>
