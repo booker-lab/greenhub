@@ -174,6 +174,16 @@ const ADMIN_ORDERS = [
   adminOrder('L-DELIVERING', 'DELIVERING', false),
   adminOrder('L-DELIVERED', 'DELIVERED', false),
   adminOrder('L-CANCELLED', 'CANCELLED', false),
+  // 배송 완료 회차 주문(배송 후 환불 버튼)·고객·상품·가게 이름·요청사항, 환불 진행 중·실패 배지.
+  {
+    ...adminOrder('R-DELIVERED', 'DELIVERED', true),
+    buyerName: '김그린',
+    productSummary: '동양란 만천홍 외 1개',
+    storeName: '디어 오키드',
+    requestNote: '리본 문구: 개업을 축하합니다\n보내는 분: 그린상사 임직원 일동\n오전 중 배송 부탁드립니다\n문 앞에 두세요',
+  },
+  { ...adminOrder('R-REFUNDING', 'CANCELLED', true), cancellationStatus: 'REFUNDING' },
+  { ...adminOrder('R-REFUND-FAILED', 'CANCELLED', true), cancellationStatus: 'REFUND_FAILED' },
 ];
 
 const ADMIN_SETTLEMENTS = [
@@ -188,6 +198,73 @@ const ADMIN_SETTLEMENTS = [
     settledAt: '2026-09-27T15:00:00.000Z',
     confirmedAt: '2026-09-27T15:00:00.000Z',
     paidAt: null,
+  },
+  // 상태별 배지·회수 필요(빨강 채움)·지급 보류(주황)·가게 이름·주문번호.
+  {
+    id: 'admin-settle-0002',
+    storeId: STORE_ID,
+    storeName: '디어 오키드',
+    orderId: 'order-settle-0002-abcdef',
+    orderNumber: 'R-SETTLE-PENDING',
+    totalAmount: 52000,
+    platformFee: 5200,
+    netAmount: 46800,
+    status: 'pending',
+    settledAt: '2026-09-28T15:00:00.000Z',
+  },
+  {
+    id: 'admin-settle-0003',
+    storeId: 'store-pending-0002',
+    storeName: '새싹 농원',
+    orderId: 'order-settle-0003-abcdef',
+    orderNumber: 'R-SETTLE-HOLD',
+    totalAmount: 41000,
+    platformFee: 4100,
+    netAmount: 36900,
+    status: 'confirmed',
+    holdReason: 'PROVIDER_REVERSAL',
+    settledAt: '2026-09-26T15:00:00.000Z',
+    confirmedAt: '2026-09-26T15:00:00.000Z',
+  },
+  {
+    id: 'admin-settle-0004',
+    storeId: STORE_ID,
+    storeName: '디어 오키드',
+    orderId: 'order-settle-0004-abcdef',
+    orderNumber: 'R-SETTLE-RECOVERY',
+    totalAmount: 28000,
+    platformFee: 2800,
+    netAmount: 25200,
+    status: 'paid',
+    recoveryRequired: true,
+    recoveryAmount: 25200,
+    settledAt: '2026-09-20T15:00:00.000Z',
+    paidAt: '2026-09-22T01:00:00.000Z',
+  },
+  {
+    id: 'admin-settle-0005',
+    storeId: STORE_ID,
+    orderId: 'order-settle-0005-abcdef',
+    totalAmount: 19000,
+    platformFee: 1900,
+    netAmount: 17100,
+    status: 'cancelled',
+    settledAt: '2026-09-18T15:00:00.000Z',
+  },
+];
+// 정산 "더 보기" 다음 쪽. 불러오는 중 모양을 찍도록 늦게 답한다.
+const ADMIN_SETTLEMENTS_MORE = [
+  {
+    id: 'admin-settle-0006',
+    storeId: STORE_ID,
+    storeName: '디어 오키드',
+    orderId: 'order-settle-0006-abcdef',
+    totalAmount: 15000,
+    platformFee: 1500,
+    netAmount: 13500,
+    status: 'paid',
+    settledAt: '2026-09-10T15:00:00.000Z',
+    paidAt: '2026-09-12T01:00:00.000Z',
   },
 ];
 
@@ -771,7 +848,14 @@ export const routes = [
     ({ url }) => ({ body: { settlements: byStatus(SELLER_SETTLEMENTS, url) } }),
   ],
   ['GET', /^\/admin\/orders$/, ({ url }) => ({ body: { orders: byStatus(ADMIN_ORDERS, url) } })],
-  ['GET', /^\/admin\/settlements$/, () => ({ body: { settlements: ADMIN_SETTLEMENTS } })],
+  [
+    'GET',
+    /^\/admin\/settlements$/,
+    ({ url }) =>
+      url.searchParams.get('cursor')
+        ? { body: { settlements: ADMIN_SETTLEMENTS_MORE, hasMore: false }, delay: 8000 }
+        : { body: { settlements: ADMIN_SETTLEMENTS, hasMore: true, nextCursor: 'visual-more' } },
+  ],
   // 합계 카드는 같은 목록에서 계산한다(서버 계산과 같은 모양).
   ['GET', /^\/admin\/settlements\/summary$/, () => ({ body: adminSettlementsSummary() })],
   // 새로고침 시 '불러오는 중...'을 볼 수 있게 약간 늦춘다.
@@ -1066,6 +1150,52 @@ export const screens = [
     steps: [{ click: '강제 취소' }],
     viewport: true,
   },
+  // 어드민 주문 필터 — 가게 검색 Select(열림·거름·맞는 가게 없음), 상태 Select 열림, 고른 상태의 주문 없음.
+  {
+    id: 'admin-orders-store-open',
+    group: '어드민 · 필터',
+    title: '주문 · 가게 선택 열림',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'input[aria-label="가게 선택"]' }],
+    viewport: true,
+  },
+  {
+    id: 'admin-orders-store-search',
+    group: '어드민 · 필터',
+    title: '주문 · 가게 검색',
+    path: '/admin/orders',
+    steps: [
+      { clickSelector: 'input[aria-label="가게 선택"]' },
+      { fill: { label: '가게 선택', value: '농원' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'admin-orders-store-nothing',
+    group: '어드민 · 필터',
+    title: '주문 · 가게 검색 · 맞는 가게 없음',
+    path: '/admin/orders',
+    steps: [
+      { clickSelector: 'input[aria-label="가게 선택"]' },
+      { fill: { label: '가게 선택', value: '없는 가게' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'admin-orders-status-open',
+    group: '어드민 · 필터',
+    title: '주문 · 상태 선택 열림',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'input[aria-label="주문 상태"]' }],
+    viewport: true,
+  },
+  {
+    id: 'admin-orders-empty',
+    group: '어드민 · 필터',
+    title: '주문 · 고른 상태의 주문 없음',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'input[aria-label="주문 상태"]' }, { click: '리뷰완료' }],
+  },
   // 어드민 기사 승인·정지 확인창(ConfirmModal, 정지는 사유 입력칸 포함). 기본 탭은 승인 대기다.
   {
     id: 'modal-driver-approve',
@@ -1082,6 +1212,43 @@ export const screens = [
     path: '/admin/drivers',
     steps: [{ click: '정지' }],
     viewport: true,
+  },
+  // 어드민 정산 — 가게 검색 Select(열림·맞는 가게 없음·고른 뒤 지우기 버튼), 더 보기 불러오는 중.
+  {
+    id: 'admin-settlements-store-open',
+    group: '어드민 · 필터',
+    title: '정산 · 가게 선택 열림',
+    path: '/admin/settlements',
+    steps: [{ clickSelector: 'input[aria-label="가게"]' }],
+    viewport: true,
+  },
+  {
+    id: 'admin-settlements-store-nothing',
+    group: '어드민 · 필터',
+    title: '정산 · 가게 검색 · 맞는 가게 없음',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'input[aria-label="가게"]' },
+      { fill: { label: '가게', value: '없는 가게' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'admin-settlements-store-picked',
+    group: '어드민 · 필터',
+    title: '정산 · 가게 고름(지우기 버튼)',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'input[aria-label="가게"]' },
+      { clickSelector: '[role="option"]:has-text("새싹 농원")' },
+    ],
+  },
+  {
+    id: 'admin-settlements-load-more',
+    group: '어드민 · 필터',
+    title: '정산 · 더 보기 불러오는 중',
+    path: '/admin/settlements',
+    steps: [{ click: '더 보기' }],
   },
   {
     id: 'modal-round-cancel',
