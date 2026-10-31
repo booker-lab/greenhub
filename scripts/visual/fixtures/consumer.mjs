@@ -926,13 +926,22 @@ export const screens = [
     expectPath: '/',
     auth: false,
   },
-  { id: 'not-found', group: '안내', title: '없는 주소(404 안내)', path: '/no-such-page', auth: false },
+  {
+    id: 'not-found',
+    group: '안내',
+    title: '없는 주소(404 안내)',
+    path: '/no-such-page',
+    auth: false,
+    expectedErrors: ['status of 404 \\(Not Found\\).*/no-such-page'],
+  },
   {
     id: 'render-error',
     group: '안내',
     title: '화면 오류 안내(error.tsx)',
     path: '/mypage',
     scenario: 'render-error',
+    // 일부러 금액을 뺀 주문이라 React가 렌더 예외를 콘솔에 남긴다(error.tsx가 받는다).
+    expectedErrors: ["Cannot read properties of undefined \\(reading 'toLocaleString'\\)"],
   },
   { id: 'terms', group: '안내', title: '이용약관', path: '/terms', auth: false },
   { id: 'privacy', group: '안내', title: '개인정보처리방침', path: '/privacy', auth: false },
