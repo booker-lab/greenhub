@@ -18,7 +18,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { use, useEffect, useRef, useState } from 'react';
-import { ConfirmModal } from '@/components/ConfirmModal';
+import { type ConfirmColor, ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { RoundDeadlineStrip } from '@/components/RoundDeadlineStrip';
@@ -68,7 +68,7 @@ const ACTION_META: Record<
     title: string;
     message: string;
     confirmLabel: string;
-    color: string;
+    color: ConfirmColor;
   }
 > = {
   schedule: {
