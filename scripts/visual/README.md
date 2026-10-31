@@ -130,6 +130,23 @@ node scripts/visual/parity.mjs consumer --before before --after after --allow pa
 - 화면·폭마다 `writes`·`portoneCalls`·`storage`·`aria`를 비교한다. 결제마다 새로 만드는 UUID와 실제 시각(ISO)은 자리표시로 바꿔 비교한다.
 - 통과 조건: 모두 같거나, 다른 항목이 허용 목록(`{ "screen", "viewport"?, "kind", "reason" }`, kind는 위 넷 중 하나)에 사유와 함께 있다. 한쪽에만 있는 화면·기록·정상 촬영 판정 실패는 실패다. 판정은 `parity.spec.mjs`(`node --test scripts/visual/parity.spec.mjs`).
 
+## 창 초점 순회 검사
+
+```bash
+node scripts/visual/focus-trap.mjs seller                          # steps로 여는 창 전부, 세 폭
+node scripts/visual/focus-trap.mjs driver --only modal-hold --viewports desktop
+```
+
+- 서버를 띄운 채로 실행한다(next dev만, `--prod`는 지원하지 않는다). steps가 있는 화면 중 steps 뒤에 창(`role=dialog`·`alertdialog`)이 열린 화면을 검사한다. id가 `modal-`로 시작하는데 창이 열리지 않으면 실패다.
+- 판정(하나라도 어기면 종료 코드 1):
+  - 창이 열린 뒤 초점을 받은 요소(`focusin`)가 모두 창 안이다. 다음 프레임에 창 안으로 돌아가는 Base UI 초점 가드(`span[data-base-ui-focus-guard]`)가 잠깐 받은 초점도 실패로 센다.
+  - Tab만, Shift+Tab만 눌러 각각 출발 요소로 돌아온다(한 바퀴). 누를 때마다 두 프레임 뒤 초점이 창 안이다.
+  - 창이 열린 직후 첫 초점은 창 안 `data-autofocus` 요소, 없으면 창 안 첫 Tab 대상이다.
+  - 창에 `aria-modal="true"`가 있고, 본문(`data-slot=dialog-body`)이 있으면 `aria-describedby`가 창 안 요소를 가리킨다.
+  - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다.
+- 결과: `%TEMP%\greenhub-visual\<app>\focus\<label>.json`(화면·폭마다 Tab·Shift+Tab으로 거친 요소 목록 포함).
+- 실측(2026-11-01): Base UI 교체 직후 `main`(b9c2f5a)은 판매자 창 21개 모두 실패했다(창마다 초점 가드 2번, `aria-modal`·`aria-describedby` 없음). 원인과 수정은 `packages/ui/src/components/dialog.tsx` `DialogPopup` 주석.
+
 ## 작업 전·후 픽셀 비교
 
 ```bash
@@ -159,6 +176,8 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `apps.mjs` | 앱별 포트 등 공통 설정 |
 | `clock.mjs` | 기준 시각(캡처 시계·fixture 일정) |
 | `shots.mjs` | 화면 자동 캡처(Playwright, `apps/e2e`의 설치본 사용) |
+| `steps.mjs` | 화면 안 동작(steps) 실행기(`shots.mjs`·`focus-trap.mjs` 공용) |
+| `focus-trap.mjs` | 창 초점 순회·aria-modal·초점 복귀 검사 |
 | `soundness.mjs` | 정상 촬영 판정 |
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
 | `parity.mjs` | 작업 전·후 쓰기 요청·결제창 인자·저장소·접근성 트리 비교(`parity.spec.mjs`) |
