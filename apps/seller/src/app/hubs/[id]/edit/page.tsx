@@ -1,14 +1,20 @@
 'use client';
 
 import { apiPathSegment, readRouteParam } from '@greenhub/shared';
-import { Button, Container, Paper, Stack, Text, TextInput } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
+
+// ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Paper(lg·sm·lg)·Stack(md)·TextInput(radius xl)·Text·Button과 같은 값.
+// 라벨은 Mantine처럼 inline-block이다(글자 뒤에 붙인 "(선택)"과 사이가 한 칸). 필수 칸은 Mantine처럼 직접 붙인 빨간 "*" 뒤에 required 별표가 한 번 더 붙는다(지금 화면 그대로).
+const TEXT = 'm-0 p-0 text-base font-normal';
 
 const INVALID_HUB_ADDRESS_MESSAGE =
   '거점 주소가 올바르지 않습니다. 거점 목록에서 다시 선택해 주세요.';
@@ -27,9 +33,9 @@ function RequiredLabel({ children }: { children: string }) {
   return (
     <>
       {children}{' '}
-      <Text component="span" style={{ color: 'var(--color-danger)' }}>
+      <span className={TEXT} style={{ color: 'var(--color-danger)' }}>
         *
-      </Text>
+      </span>
     </>
   );
 }
@@ -39,9 +45,9 @@ function OptionalLabel({ children }: { children: string }) {
   return (
     <>
       {children}{' '}
-      <Text component="span" style={{ color: 'var(--color-text-disabled)' }}>
+      <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
         (선택)
-      </Text>
+      </span>
     </>
   );
 }
@@ -50,6 +56,7 @@ export default function EditHubPage() {
   const { data: session } = useSession();
   const params = useParams();
   const router = useRouter();
+  const formId = useId();
   // 경로 파라미터는 형식을 검사한 원래 ID로 읽는다. 맞지 않으면 요청하지 않는다.
   const hubId = readRouteParam(params.id);
 
@@ -125,80 +132,101 @@ export default function EditHubPage() {
     <PageShell>
       <PageHeader title="거점 수정" onBack={() => router.back()} />
 
-      <Container size="sm" px="md" py="md">
+      <div className="mx-auto max-w-[720px] px-4 py-4">
         {!hubId ? (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+          >
             {INVALID_HUB_ADDRESS_MESSAGE}
-          </Text>
+          </p>
         ) : loading ? (
           <LoadingState />
         ) : (
-          <Paper radius="lg" shadow="sm" p="lg">
+          <div className="block rounded-[16px] bg-white p-5 shadow-mantine-sm">
             <form onSubmit={handleSubmit}>
-              <Stack gap="md">
-                <TextInput
-                  label={<RequiredLabel>거점 이름</RequiredLabel>}
-                  name="name"
-                  value={form.name}
-                  onChange={handleChange}
-                  required
-                  placeholder="예: 강남 거점"
-                  radius="xl"
-                />
+              <div className="flex flex-col items-stretch justify-start gap-4">
+                <Field>
+                  <FieldLabel htmlFor={`${formId}-name`} required>
+                    <RequiredLabel>거점 이름</RequiredLabel>
+                  </FieldLabel>
+                  <Input
+                    id={`${formId}-name`}
+                    name="name"
+                    value={form.name}
+                    onChange={handleChange}
+                    required
+                    placeholder="예: 강남 거점"
+                    className="rounded-xl"
+                  />
+                </Field>
 
-                <TextInput
-                  label={<RequiredLabel>주소</RequiredLabel>}
-                  name="address"
-                  value={form.address}
-                  onChange={handleChange}
-                  required
-                  placeholder="거점 주소"
-                  radius="xl"
-                />
+                <Field>
+                  <FieldLabel htmlFor={`${formId}-address`} required>
+                    <RequiredLabel>주소</RequiredLabel>
+                  </FieldLabel>
+                  <Input
+                    id={`${formId}-address`}
+                    name="address"
+                    value={form.address}
+                    onChange={handleChange}
+                    required
+                    placeholder="거점 주소"
+                    className="rounded-xl"
+                  />
+                </Field>
 
-                <TextInput
-                  label={<OptionalLabel>상세 주소</OptionalLabel>}
-                  name="addressDetail"
-                  value={form.addressDetail}
-                  onChange={handleChange}
-                  placeholder="동/호수, 층 등"
-                  radius="xl"
-                />
+                <Field>
+                  <FieldLabel className="inline-block" htmlFor={`${formId}-addressDetail`}>
+                    <OptionalLabel>상세 주소</OptionalLabel>
+                  </FieldLabel>
+                  <Input
+                    id={`${formId}-addressDetail`}
+                    name="addressDetail"
+                    value={form.addressDetail}
+                    onChange={handleChange}
+                    placeholder="동/호수, 층 등"
+                    className="rounded-xl"
+                  />
+                </Field>
 
-                <TextInput
-                  label={<OptionalLabel>운영 시간</OptionalLabel>}
-                  name="operatingHours"
-                  value={form.operatingHours}
-                  onChange={handleChange}
-                  placeholder="예: 09:00~18:00"
-                  radius="xl"
-                />
+                <Field>
+                  <FieldLabel className="inline-block" htmlFor={`${formId}-operatingHours`}>
+                    <OptionalLabel>운영 시간</OptionalLabel>
+                  </FieldLabel>
+                  <Input
+                    id={`${formId}-operatingHours`}
+                    name="operatingHours"
+                    value={form.operatingHours}
+                    onChange={handleChange}
+                    placeholder="예: 09:00~18:00"
+                    className="rounded-xl"
+                  />
+                </Field>
 
                 {error && (
-                  <Text
+                  <p
+                    className={`${TEXT} text-center`}
                     style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
-                    ta="center"
                   >
                     {error}
-                  </Text>
+                  </p>
                 )}
 
                 <Button
                   type="submit"
                   disabled={saving}
-                  fullWidth
                   size="md"
-                  radius="xl"
-                  mt="xs"
+                  className="mt-2.5 w-full"
                   style={{ backgroundColor: 'var(--color-primary)' }}
                 >
                   {saving ? '저장 중...' : '변경 저장'}
                 </Button>
-              </Stack>
+              </div>
             </form>
-          </Paper>
+          </div>
         )}
-      </Container>
+      </div>
     </PageShell>
   );
 }
