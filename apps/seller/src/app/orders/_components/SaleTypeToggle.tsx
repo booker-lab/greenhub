@@ -1,7 +1,6 @@
 'use client';
 
 import type { SaleType } from '@greenhub/shared';
-import { Box, Container, Group, UnstyledButton } from '@mantine/core';
 
 interface Props {
   value: SaleType;
@@ -13,23 +12,30 @@ const OPTIONS: { key: SaleType; label: string }[] = [
   { key: 'group', label: '공동구매' },
 ];
 
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px, py xs = 10px)·Group(gap 0)·
+// UnstyledButton과 같은 값.
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+
 export function SaleTypeToggle({ value, onChange }: Props) {
   return (
-    <Box
+    <div
       style={{
         backgroundColor: 'var(--color-bg)',
         borderBottom: '1px solid var(--color-border)',
       }}
     >
-      <Container size="sm" py="xs">
-        <Group gap={0}>
+      <div className="mx-auto max-w-[720px] px-4 py-2.5">
+        <div className="flex flex-row flex-wrap items-center justify-start gap-0">
           {OPTIONS.map((opt) => {
             const active = value === opt.key;
             return (
-              <UnstyledButton
+              <button
+                type="button"
                 key={opt.key}
                 data-testid={`sale-type-toggle-${opt.key}`}
                 onClick={() => onChange(opt.key)}
+                className={UNSTYLED_BUTTON}
                 style={{
                   flex: 1,
                   padding: '10px 16px',
@@ -42,11 +48,11 @@ export function SaleTypeToggle({ value, onChange }: Props) {
                 }}
               >
                 {opt.label}
-              </UnstyledButton>
+              </button>
             );
           })}
-        </Group>
-      </Container>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }
