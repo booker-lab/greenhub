@@ -1,7 +1,7 @@
 'use client';
 
 import type { PostDeliveryRefundReasonCode } from '@greenhub/shared';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { useRef, useState } from 'react';
 import {
   type AdminOrder,
@@ -86,7 +86,7 @@ export default function AdminOrdersClient() {
       const outcome = await command(target);
       if (outcome.recovery) {
         // 이미 지급한 정산의 주문 — 판매자에게 돌려받을 금액은 닫을 때까지 남긴다.
-        notifications.show({
+        notify({
           color: 'red',
           autoClose: false,
           title: '환불 완료 · 판매자 회수 필요',
@@ -96,7 +96,7 @@ export default function AdminOrdersClient() {
       if (outcome.kind === 'confirmed' && outcome.reconciled) return;
       // stale은 완료+재조회 copy를 사용한다. rejected는 서버 reason 보존, unknown은 재확인 우선.
       const presentation = describeAdminCommandOutcome(outcome, '환불');
-      notifications.show({
+      notify({
         color: outcome.kind === 'rejected' ? 'red' : 'yellow',
         title: presentation.title,
         message: `주문 ${describeRefundTarget(target).orderLabel} — ${presentation.message}`,

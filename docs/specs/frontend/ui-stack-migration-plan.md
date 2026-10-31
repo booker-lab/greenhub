@@ -333,6 +333,10 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 다음 회차가 잡혀 있으면, 회차 운영 동선 묶음(어드민 기사 승인·환불 포함)은 끝까지 교체된 상태로만 그 회차의 마지막 출시에 넣는다. 판매자 대표가 실제 계정으로 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
 - 어드민 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-3`): 어드민 `layout.tsx`(머리·관리자 콘솔 글자·셀러 화면 링크·ADMIN 배지·본문 칸)·`AdminNav`·`AdminLogoutButton`·`AdminFetchError`의 `@mantine/core`를 걷었다. Mantine Container lg(1140px)·Group·Text·Badge light red(= `destructive`)·Paper(radius lg·shadow xs)·Button outline radius md 계산값이다. 조회 실패 화면은 실패 응답이 콘솔 오류라 촬영 판정에 걸리므로 대조 화면 행으로 본다.
   - 로컬 증명(판매자 단독, `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture, 기준 시각 2026-11-01T00:00+09:00): 375장 정상 촬영, `diff.mjs --tolerance 1` 375장 같음(허용 목록 없음), 대조 행 세 폭 같음(조회 실패 행 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
+- 알림 전환 구현(2026-11-01, 브랜치 `claude/ui-p4-frame-4`): 판매자 앱 전체의 `@mantine/notifications`를 `packages/ui` toast 관리자(Base UI Toast)로 바꿨다. 판매자 `components/AppToaster.tsx`가 예전 Mantine Notifications(top-right, autoClose 4000)와 같은 모양으로 그린다: 오른쪽 위 16px, 폭 440px까지, 알림 사이 16px, 흰 바탕·16px 모서리·그림자 lg, 왼쪽 색 막대(brand 주색·red-6·yellow-6·green-6), 제목 15px·500·gray-9, 제목이 있으면 설명 gray-6, 4초 뒤 닫힘, 오래된 알림이 위, 오른쪽에서 들고 나는 250ms 전환. 기사 앱 `AppToaster`(P3)와 같은 방식이다.
+  - `notify({ color, title, message, autoClose })`는 `notifications.show`와 같은 인자라 호출처 13개 파일(설정 4·거점·온보딩·어드민 주문·정산·기사·판매자·소비자·초대 2)은 이름만 바꿨다. `autoClose: false`는 `timeout: 0`이다. `MantineProvider` 안의 `Notifications`, `globals.css`의 `@mantine/notifications` CSS, `next.config.ts` 최적화 목록, seller 의존성 `@mantine/notifications`를 걷었고 seller에 `@base-ui/react`(1.9.0, `packages/ui`와 같은 설치본)를 더했다.
+  - 촬영 목록 추가: 옵션 재고 저장 알림(`toast-option-stock-saved`, 제목 없는 주색)·기사 승인 결과 알림(`toast-driver-approve`, 제목 있는 노랑). 기준도 같은 fixture로 찍었다.
+  - 로컬 증명(판매자 단독, `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture, 기준 시각 2026-11-01T00:00+09:00): 381장 정상 촬영, `diff.mjs --tolerance 1` 381장 같음(알림 화면 6장 포함, 허용 목록 없음), 대조 행 세 폭 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
 
 ### P5. 소비자 앱 (51개 파일)
 - 첫 PR에서 소비자 앱을 연결한다(P2a 방식).
