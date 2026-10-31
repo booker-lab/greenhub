@@ -1101,6 +1101,17 @@ export const routes = [
       return o ? { body: o } : { status: 404, body: { message: '주문 없음' } };
     },
   ],
+  // 배송 후 환불 가능 여부(주문 상세, UI 교체 P4): 배송 완료는 기간 안, 구매 확정은 정산 지급 뒤라 막힘.
+  [
+    'GET',
+    /^\/stores\/[^/]+\/orders\/([^/]+)\/post-delivery-refund$/,
+    ({ params: [id] }) => ({
+      body:
+        id === 'order-delivered'
+          ? { eligible: true, reason: 'OK', deadline: '2026-11-05T14:59:00.000Z', amount: 33000 }
+          : { eligible: false, reason: 'SETTLEMENT_PAID', deadline: null, amount: 33000 },
+    }),
+  ],
   ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
   // 조치(문자 재발송·환불 재시도) 뒤 앱이 기록 한 건을 다시 읽는다.
   [
@@ -1666,6 +1677,87 @@ export const screens = [
     path: '/orders/order-round-held',
     // 조치 기록에도 '환불 재시도' 글자가 있어 버튼을 고른다.
     steps: [{ clickSelector: 'button:has-text("환불 재시도")' }],
+  },
+  // 주문 상세 끝난 주문(UI 교체 P4): 배송 중 안내, 배송 후 환불(가능·막힘), 취소 사유.
+  {
+    id: 'order-delivering',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 배송 중(취소·환불 안내)',
+    path: '/orders/order-delivering',
+  },
+  {
+    id: 'order-delivered',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 배송 완료(배송 후 환불)',
+    path: '/orders/order-delivered',
+  },
+  {
+    id: 'order-reviewed',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 구매 확정(직접 환불 막힘)',
+    path: '/orders/order-delivered-old',
+  },
+  {
+    id: 'order-cancelled',
+    group: '판매자 · 주문 상세',
+    title: '주문 상세 · 취소(취소 사유)',
+    path: '/orders/order-cancelled',
+  },
+  {
+    id: 'modal-order-cancel-short',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 강제 취소(사유 5자 미만)',
+    path: '/orders/order-with-contact',
+    steps: [{ click: '강제 취소' }, { fill: '짧음' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-order-cancel-held',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 보류 주문 취소·환불',
+    path: '/orders/order-round-held',
+    steps: [{ click: '주문 취소·환불' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-order-post-delivery-refund',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 후 환불',
+    path: '/orders/order-delivered',
+    steps: [{ click: '배송 후 환불' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-order-post-delivery-refund-filled',
+    group: '판매자 · 모달',
+    title: '주문 상세 · 배송 후 환불(사유·메모 입력)',
+    path: '/orders/order-delivered',
+    steps: [
+      { click: '배송 후 환불' },
+      { click: '꽃 상함' },
+      { fill: { label: '메모 (손님에게는 보이지 않아요)', value: '꽃잎이 시들어 도착' } },
+    ],
+    viewport: true,
+  },
+  // 확인창 동작 버튼 — 누른 뒤 화면과 가짜 API 요청 기록(mock-api.log)을 main과 비교한다.
+  {
+    id: 'order-cancel-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 강제 취소 확정 누름',
+    path: '/orders/order-with-contact',
+    steps: [{ click: '강제 취소' }, { fill: '손님이 취소를 요청함' }, { click: '취소 확정' }],
+  },
+  {
+    id: 'order-post-delivery-refund-submit',
+    group: '판매자 · 주문 상세 동작',
+    title: '주문 상세 · 배송 후 환불 확정 누름',
+    path: '/orders/order-delivered',
+    steps: [
+      { click: '배송 후 환불' },
+      { click: '꽃 상함' },
+      { fill: { label: '메모 (손님에게는 보이지 않아요)', value: '꽃잎이 시들어 도착' } },
+      { click: '전액 환불 확정' },
+    ],
   },
   // 모달이 열린 상태 — 같이 쓰는 기간의 CSS 우선순위 회귀는 열린 상태에서 드러난다(P2a 판정 범위).
   {
