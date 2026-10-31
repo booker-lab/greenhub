@@ -85,6 +85,7 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
+- 불러오는 중 버튼처럼 누른 뒤 응답을 기다리는 상태는 `steps`에 `{ scenario: '<이름>' }`을 넣어 화면을 연 뒤에 가짜 API 상황을 바꾸고(예: 셀러 `slow-writes` = 쓰기 요청 60초 지연) 버튼을 누른다. 찍고 나면 페이지를 닫으므로 기다리던 요청은 취소된다(`ERR_ABORTED`, 정상 판정 제외).
 - 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 대조 화면 `ui-compare-select`).
 - 버튼은 `{ press: '<접근성 이름>', nth }`(글자가 기호뿐이거나 같은 이름이 여러 곳인 버튼), 체크박스는 `{ check: '<접근성 이름>' }`, 앱이 스스로 주소를 바꾸는 동작(결제 완료 뒤 이동 등)은 `{ waitPath: '/order/success' }`로 기다린다.
 - **결제창 stub**(`portone: 'success' | 'cancel'`): 소비자 결제 화면은 PortOne SDK가 `window.PortOne`이 이미 있으면 CDN 스크립트를 불러오지 않는 점을 이용해 stub을 넣는다(로컬 E2E `installPortOneBrowserStub`과 같은 방식). `success`는 결제 완료, `cancel`은 결제창 취소 응답을 돌려주고, 넘긴 인자를 `manifest.json`의 `portoneCalls`에 남긴다. `start.mjs consumer`는 가짜 PortOne 공개 설정(상점 ID·카카오페이 채널 키)을 넣는다. 외부 요청은 그대로 막혀 있어 실제 결제창·결제는 일어나지 않는다.

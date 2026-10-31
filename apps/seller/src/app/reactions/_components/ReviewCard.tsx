@@ -2,9 +2,9 @@ import { type ManagedReview, REVIEW_HIDE_REASON_MAX_LENGTH } from '@greenhub/sha
 import { Badge } from '@greenhub/ui/components/badge';
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
 import { useId } from 'react';
-import { BUTTON_LOADING, ButtonLoader } from '../../orders/[id]/_components/ButtonLoading';
 import { HIDE_POLICY_NOTE, HIDE_REASON_OPTIONS, hiddenReasonLabel, hiddenSummary } from '../_lib';
 
 // 후기 한 건. 숨기기(사유 고르기·설명 선택)와 숨김 상태를 보여준다. 상태는 부모(page)가 가진다.
@@ -223,17 +223,17 @@ export function ReviewCard({
               >
                 취소
               </Button>
-              <Button
+              <LoadingButton
+                measured
                 variant="destructive"
-                className={`${COMPACT_SM} ${busy ? BUTTON_LOADING.destructive : ''}`}
-                disabled={busy || !reasonCode}
-                data-loading={busy || undefined}
-                aria-busy={busy || undefined}
+                className={COMPACT_SM}
+                buttonHeight={26}
+                loading={busy}
+                disabled={!reasonCode}
                 onClick={onConfirmHide}
               >
-                {busy && <ButtonLoader variant="destructive" height={26} />}
                 숨기기 확인
-              </Button>
+              </LoadingButton>
             </div>
           </div>
         ) : (

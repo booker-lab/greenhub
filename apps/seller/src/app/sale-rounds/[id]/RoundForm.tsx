@@ -2,12 +2,11 @@
 
 import type { Product } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { Loader } from '@greenhub/ui/components/loader';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Save } from 'lucide-react';
-import { type CSSProperties, useEffect, useId, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
 import type {
   CreateSaleRoundInput,
   SaleRoundItemInput,
@@ -32,10 +31,7 @@ import {
 } from './RoundForm.sections';
 
 // ① 외형 유지(UI 교체 P4): Mantine Stack(md 16px)·Alert·TextInput·Button(md, 저장 중 loading)과 같은 값.
-// 저장 중은 Mantine Button loading처럼 면색을 그대로 두고 글자·아이콘을 숨긴 채, 흐린 흰 덮개 위 가운데에
-// 흰 원(높이 42 ÷ 1.8)을 돌린다.
-const SAVE_LOADING =
-  "disabled:bg-primary disabled:text-white before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-xl before:bg-white/15 before:blur-[12px] before:content-[''] [&>svg]:translate-y-full [&>svg]:opacity-0 [&_[data-slot=button-label]]:translate-y-full [&_[data-slot=button-label]]:opacity-0";
+// 저장 중은 LoadingButton measured(글자·아이콘을 숨긴 Mantine Button loading 실측 모양)다.
 
 export interface RoundFormProductLink {
   productId: string;
@@ -337,32 +333,17 @@ export function RoundForm({
           </Alert>
         )}
         {!readOnly && (
-          <Button
+          <LoadingButton
+            measured
+            hideIcons
             type="submit"
             size="md"
+            loading={submitting}
             disabled={busy}
-            data-loading={submitting || undefined}
-            className={submitting ? SAVE_LOADING : undefined}
           >
-            {submitting && (
-              <span
-                aria-hidden
-                className="absolute top-1/2 left-1/2 z-[1] [transform:translate(-50%,calc(-50%+1px))] will-change-transform"
-              >
-                <Loader
-                  color="#ffffff"
-                  style={
-                    {
-                      '--loader-size': 'calc(42px / 1.8)',
-                      '--loader-border': 'calc(42px / 1.8 / 8)',
-                    } as CSSProperties
-                  }
-                />
-              </span>
-            )}
             <Save className="size-[18px]" data-icon="inline-start" />
             회차 저장
-          </Button>
+          </LoadingButton>
         )}
       </div>
     </form>
