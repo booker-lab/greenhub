@@ -936,6 +936,15 @@ export const routes = [
     },
   ],
   ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
+  // 조치(문자 재발송·환불 재시도) 뒤 앱이 기록 한 건을 다시 읽는다.
+  [
+    'GET',
+    /^\/stores\/[^/]+\/operation-issues\/([^/]+)$/,
+    ({ params: [id] }) => {
+      const issue = OPERATION_ISSUES.find((i) => i.id === id);
+      return issue ? { body: issue } : { status: 404, body: { message: '기록 없음' } };
+    },
+  ],
   [
     'GET',
     /^\/stores\/[^/]+\/settlements\/summary$/,
@@ -1409,7 +1418,8 @@ export const screens = [
     group: '판매자 · 주문 상세 동작',
     title: '주문 상세 · 환불 재시도 누름',
     path: '/orders/order-round-held',
-    steps: [{ click: '환불 재시도' }],
+    // 조치 기록에도 '환불 재시도' 글자가 있어 버튼을 고른다.
+    steps: [{ clickSelector: 'button:has-text("환불 재시도")' }],
   },
   // 모달이 열린 상태 — 같이 쓰는 기간의 CSS 우선순위 회귀는 열린 상태에서 드러난다(P2a 판정 범위).
   {
