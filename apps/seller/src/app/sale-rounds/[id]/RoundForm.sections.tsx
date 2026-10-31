@@ -46,7 +46,10 @@ export interface CopyFeedback {
 const TEXT = 'm-0 p-0 text-base font-normal';
 const ROW = 'flex flex-row flex-wrap items-center';
 const COLUMN = 'flex flex-col items-stretch justify-start';
-const BORDER_PAPER = 'block rounded-[8px] border border-solid border-[#dee2e6] bg-white p-3';
+// 테두리 Paper는 그림자를 따로 주지 않았지만 Mantine 그림자가 CSS 변수(--paper-shadow)라 바깥 FormSection Paper의
+// 그림자 xs를 물려받아 그려진다(촬영 실측). 그래서 같은 그림자를 준다.
+const BORDER_PAPER =
+  'block rounded-[8px] border border-solid border-[#dee2e6] bg-white p-3 shadow-mantine-xs';
 
 // Mantine NumberInput 값(숫자 또는 글자)을 @greenhub/ui NumberInput 값(숫자 또는 빈 칸)으로 옮긴다.
 function toNumberValue(value: NumericValue): number | '' {
@@ -121,9 +124,11 @@ export function ScheduleSection({
             <FieldLabel htmlFor={`${id}-${key}`} required>
               {label}
             </FieldLabel>
+            {/* Mantine 입력칸 줄 높이(높이 - 2px = 34px). text-sm 1.45로 두면 날짜 글자가 소수점만큼 어긋난다. */}
             <Input
               id={`${id}-${key}`}
               type="datetime-local"
+              className="leading-[34px]"
               value={draft[key]}
               onChange={(event) => onChange(key, event.currentTarget.value)}
               disabled={busy}
