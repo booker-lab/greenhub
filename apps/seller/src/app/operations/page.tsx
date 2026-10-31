@@ -1,9 +1,12 @@
 'use client';
 
-import { Alert, Badge, Button, Container, Group, Paper, Stack, Text } from '@mantine/core';
+import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button } from '@greenhub/ui/components/button';
 import { CheckCircle2, ChevronRight, RefreshCcw, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
+import { BUTTON_LOADING, ButtonLoader } from '@/app/orders/[id]/_components/ButtonLoading';
 import { ISSUE_DESCRIPTIONS, ISSUE_LABELS } from '@/app/orders/[id]/operation-issues';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
@@ -22,6 +25,11 @@ const SEVERITY_META = {
   warning: { label: '주의', color: 'yellow' },
   info: { label: '참고', color: 'gray' },
 } as const;
+
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px, shadow xs)·
+// Group·Stack·Text(p, 여백 0, 줄 높이 1.55)·Badge light(모서리 16px)·Button xs·Alert light(제목 있음)와 같은 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const LIGHT_BADGE = { red: 'destructive', yellow: 'warning', gray: 'secondary' } as const;
 
 const STATUS_LABELS = { OPEN: '확인 필요', RESOLVED: '해결', DISMISSED: '종료' } as const;
 
@@ -46,76 +54,79 @@ function IssueRow({
   const open = issue.status === 'OPEN';
   const resolution = issue.resolution;
   return (
-    <Paper
-      radius="lg"
-      shadow="xs"
-      p="md"
+    <div
+      className="block rounded-[16px] bg-white p-4 shadow-mantine-xs"
       style={
         open && issue.severity === 'critical'
           ? { border: '1px solid var(--color-danger)' }
           : undefined
       }
     >
-      <Group justify="space-between" align="flex-start" wrap="nowrap" gap="sm">
-        <Stack gap={4} style={{ minWidth: 0 }}>
-          <Group gap={6}>
-            <Badge color={open ? severity.color : 'gray'} variant="light">
+      <div className="flex flex-row flex-nowrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1" style={{ minWidth: 0 }}>
+          <div className="flex flex-row flex-wrap items-center justify-start gap-1.5">
+            <Badge variant={LIGHT_BADGE[open ? severity.color : 'gray']} className="rounded-[16px]">
               {open ? severity.label : STATUS_LABELS[issue.status]}
             </Badge>
-            <Text style={{ fontWeight: 'var(--fw-bold)' }}>{ISSUE_LABELS[issue.type]}</Text>
-          </Group>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-bold)' }}>
+              {ISSUE_LABELS[issue.type]}
+            </p>
+          </div>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
             {ISSUE_DESCRIPTIONS[issue.type]}
-          </Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          </p>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
             {formatDateTime(issue.updatedAt)}
-          </Text>
+          </p>
           {resolution && (
-            <Stack
-              gap={2}
-              mt={4}
-              p="xs"
+            <div
+              className="mt-1 flex flex-col gap-0.5 p-2.5"
               style={{
                 borderRadius: 'var(--radius-sm)',
                 backgroundColor: 'var(--color-surface-muted)',
               }}
             >
-              <Text
+              <p
+                className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 {manualResolverLabel(resolution)}가 직접 닫았어요 ·{' '}
                 {formatDateTime(resolution.resolvedAt)}
-              </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)', wordBreak: 'break-word' }}>
+              </p>
+              <p
+                className={TEXT}
+                style={{ fontSize: 'var(--font-size-sm)', wordBreak: 'break-word' }}
+              >
                 {resolution.memo}
-              </Text>
-            </Stack>
+              </p>
+            </div>
           )}
-        </Stack>
-        <Stack gap={6} align="flex-end" style={{ flexShrink: 0 }}>
+        </div>
+        <div className="flex flex-col items-end gap-1.5" style={{ flexShrink: 0 }}>
           <Button
-            component={Link}
-            href={`/orders/${encodeURIComponent(issue.orderId)}`}
+            render={<Link href={`/orders/${encodeURIComponent(issue.orderId)}`} />}
+            nativeButton={false}
             size="xs"
             variant="light"
-            rightSection={<ChevronRight size={14} />}
           >
             주문 보기
+            <ChevronRight className="size-3.5" data-icon="inline-end" />
           </Button>
           {canResolve && (
-            <Button
-              size="xs"
-              variant="subtle"
-              color="gray"
-              leftSection={<CheckCircle2 size={14} />}
-              onClick={() => onResolve(issue)}
-            >
+            <Button size="xs" variant="ghost" onClick={() => onResolve(issue)}>
+              <CheckCircle2 className="size-3.5" data-icon="inline-start" />
               해결로 닫기
             </Button>
           )}
-        </Stack>
-      </Group>
-    </Paper>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -135,23 +146,29 @@ export default function OperationsPage() {
         right={
           <Button
             size="xs"
-            variant="subtle"
-            color="gray"
+            variant="ghost"
             onClick={() => void reload()}
-            loading={loading}
+            disabled={loading}
+            data-loading={loading || undefined}
+            aria-busy={loading || undefined}
+            className={loading ? BUTTON_LOADING.ghost : undefined}
             aria-label="운영 기록 다시 조회"
           >
+            {loading && <ButtonLoader variant="ghost" height={30} />}
             <RefreshCcw size={16} />
           </Button>
         }
       />
-      <Container size="sm" px="md" py="md">
-        <Stack gap="md">
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+      <div className="mx-auto max-w-[720px] px-4 py-4">
+        <div className="flex flex-col gap-4">
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
             결제·환불·고객 연락·배송 사진에서 자동으로 끝내지 못한 일을 모아 보여 줘요. 조치(환불
             재시도·문자 재발송)는 각 주문 화면에서 하고, 직접 처리를 마친 기록은 메모를 남기고
             &quot;해결로 닫기&quot;로 닫아 주세요.
-          </Text>
+          </p>
           <SegmentedTabs<IssueTab>
             value={tab}
             onChange={setTab}
@@ -166,8 +183,9 @@ export default function OperationsPage() {
             ]}
           />
           {error && (
-            <Alert color="red" title="운영 기록을 불러오지 못했습니다" role="alert">
-              {error}
+            <Alert variant="destructive" role="alert">
+              <AlertTitle>운영 기록을 불러오지 못했습니다</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
           {loading && !hasLoaded && <LoadingState />}
@@ -185,8 +203,8 @@ export default function OperationsPage() {
               onResolve={setResolving}
             />
           ))}
-        </Stack>
-      </Container>
+        </div>
+      </div>
       <ResolveIssueModal
         issue={resolving}
         onClose={() => setResolving(null)}
