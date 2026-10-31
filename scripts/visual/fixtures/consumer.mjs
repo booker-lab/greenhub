@@ -519,17 +519,106 @@ const benchmarkRoutes = [
  * - scheduled: 판매 중·지난 회차 없이 다음 회차만 예정된 주(오픈 알림·빈 지난 회차 숨김).
  */
 export const scenarioRoutes = {
+  // 주문 생성 거절(서버 확정 거절 4xx): 결제 화면의 오류 안내(role=alert)를 찍는다.
+  'order-reject': [
+    [
+      'POST',
+      /^\/stores\/[^/]+\/orders$/,
+      () => ({ status: 409, body: { message: '회차 판매 수량이 모두 찼습니다. 장바구니를 다시 확인해 주세요.' } }),
+    ],
+  ],
+  // 주문 생성 응답을 늦춘다: 결제 버튼의 처리 중 상태(비활성·"처리 중...")를 찍는다.
+  'order-slow': [
+    [
+      'POST',
+      /^\/stores\/[^/]+\/orders$/,
+      ({ body }) => ({ ...createOrderResponse(body), delay: 30_000 }),
+    ],
+  ],
   scheduled: [
     [
       'GET',
       /^\/stores\/[^/]+\/sale-rounds\/public$/,
-      () => ({ body: { items: SALE_ROUNDS.filter((round) => round.status === 'SCHEDULED') } }),
+      ({ url }) => ({
+        body: {
+          items: publicRoundList(
+            url,
+            SALE_ROUNDS.filter((round) => round.status === 'SCHEDULED'),
+          ),
+        },
+      }),
     ],
   ],
 };
 
 const notFound = (message) => ({ status: 404, body: { message } });
 const publicRounds = SALE_ROUNDS;
+
+/** 공개 회차 상세(상품 포함). 상세 경로와 목록 `?include=items` 응답이 같은 모양을 쓴다. */
+function publicRoundDetail(round) {
+  // 비교 기능(demand-signals): showDemandSignals 가게만 API가 붙여 준다.
+  const items = roundItems(round).map((item) => {
+    const previousRoundPrice =
+      round.status === 'OPEN' ? PREVIOUS_ROUND_PRICES[item.productId] : undefined;
+    return {
+      ...item,
+      demand: { remainingQuantity: Math.max(0, item.saleLimitQuantity - item.orderedQuantity) },
+      ...(previousRoundPrice === undefined ? {} : { previousRoundPrice }),
+    };
+  });
+  return { ...round, items, demand: { buyerCount: round.counters.orderedDeliveryAddresses } };
+}
+
+/**
+ * 공개 회차 목록. 앱은 `?include=items&past=N`으로 판매 예정·판매 중 전부와 최신 지난 회차 N개를
+ * 상품까지 한 번에 받는다(API sale-rounds.controller `include=items`). 그 밖에는 회차만 준다.
+ */
+function publicRoundList(url, rounds) {
+  if (url.searchParams.get('include') !== 'items') return rounds;
+  const past = Number(url.searchParams.get('past') ?? 0);
+  const live = rounds.filter((r) => r.status === 'SCHEDULED' || r.status === 'OPEN');
+  const closed = rounds
+    .filter((r) => r.status === 'CLOSED' || r.status === 'COMPLETED')
+    .sort((a, b) => b.schedule.orderOpenAt.localeCompare(a.schedule.orderOpenAt))
+    .slice(0, past);
+  return [...live, ...closed].map(publicRoundDetail);
+}
+
+/**
+ * 주문 생성(POST /stores/:storeId/orders) 응답. 결제 버튼을 누른 화면이 이 응답으로 결제창(PortOne stub)을 연다.
+ * 금액은 앱이 보낸 회차 상품·옵션으로 계산한다(앱은 장바구니 금액과 다르면 결제창을 열지 않는다).
+ * orderId는 주문 완료·주문 상세 화면이 읽는 기존 주문을 돌려준다(결제 완료 뒤 이동 화면을 그대로 찍는다).
+ */
+function createOrderResponse(body) {
+  let request = {};
+  try {
+    request = JSON.parse(body || '{}');
+  } catch {
+    /* 빈 본문 */
+  }
+  const lines = Array.isArray(request.roundItems)
+    ? request.roundItems
+    : [{ roundItemId: null, productId: request.productId, quantity: request.quantity }];
+  let amount = 0;
+  const names = [];
+  for (const line of lines) {
+    const index = line.roundItemId
+      ? Number(String(line.roundItemId).split('-item-')[1]) - 1
+      : PRODUCTS.findIndex((p) => p.id === line.productId);
+    const product = PRODUCTS[index];
+    if (!product) continue;
+    const delta = (product.options ?? [])
+      .flatMap((group) => group.choices)
+      .filter((choice) => (line.optionChoiceIds ?? []).includes(choice.id))
+      .reduce((sum, choice) => sum + choice.priceDelta, 0);
+    amount += (product.price + delta) * Number(line.quantity ?? 0);
+    names.push(product.name);
+  }
+  const name = names.length > 1 ? `${names[0]} 외 ${names.length - 1}건` : (names[0] ?? '주문');
+  return {
+    body: { orderId: 'order-round-accepted', portonePaymentParams: { name, amount } },
+  };
+}
 
 /** [메서드, 경로 정규식, 처리 함수] — 첫 일치가 응답한다. 처리 함수는 { status?, body, delay? }를 돌려준다. */
 export const routes = [
@@ -574,6 +663,7 @@ export const routes = [
       };
     },
   ],
+  ['POST', /^\/stores\/[^/]+\/orders$/, ({ body }) => createOrderResponse(body)],
   // 홈·하단 메뉴·상품 상세: 일반 상품만 둔다(공동구매 목록은 비움).
   [
     'GET',
@@ -593,30 +683,17 @@ export const routes = [
     /^\/stores\/([^/]+)\/public-profile$/,
     ({ params: [id] }) => (id === STORE_ID ? { body: PUBLIC_PROFILE } : notFound('스토어 없음')),
   ],
-  ['GET', /^\/stores\/[^/]+\/sale-rounds\/public$/, () => ({ body: { items: publicRounds } })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/sale-rounds\/public$/,
+    ({ url }) => ({ body: { items: publicRoundList(url, publicRounds) } }),
+  ],
   [
     'GET',
     /^\/stores\/[^/]+\/sale-rounds\/public\/([^/]+)$/,
     ({ params: [id] }) => {
       const round = publicRounds.find((r) => r.id === id);
-      if (!round) return notFound('회차 없음');
-      // 비교 기능(demand-signals): showDemandSignals 가게만 API가 붙여 준다.
-      const items = roundItems(round).map((item) => {
-        const previousRoundPrice =
-          round.status === 'OPEN' ? PREVIOUS_ROUND_PRICES[item.productId] : undefined;
-        return {
-          ...item,
-          demand: { remainingQuantity: Math.max(0, item.saleLimitQuantity - item.orderedQuantity) },
-          ...(previousRoundPrice === undefined ? {} : { previousRoundPrice }),
-        };
-      });
-      return {
-        body: {
-          ...round,
-          items,
-          demand: { buyerCount: round.counters.orderedDeliveryAddresses },
-        },
-      };
+      return round ? { body: publicRoundDetail(round) } : notFound('회차 없음');
     },
   ],
   ['GET', /^\/banner$/, () => ({ body: BANNER })],
@@ -678,6 +755,120 @@ export const screens = [
     group: '구매',
     title: '주문 완료',
     path: '/order/success?orderId=order-round-accepted',
+  },
+  // ── 결제 동선 단계(UI 교체 P5): 누르고 적은 뒤의 화면·쓰기 요청 본문·결제창 호출 인자·접근성 의미를 남긴다 ──
+  {
+    id: 'product-quantity',
+    group: '결제 동선',
+    title: '상품 상세 · 수량 2개',
+    path: '/products/product-1?round=round-open',
+    steps: [{ press: '수량 늘리기' }],
+  },
+  {
+    // 상단 바 장바구니 아이콘도 이름이 '장바구니'라 두 번째(아래 담기 버튼)를 누른다.
+    id: 'product-add-to-cart',
+    group: '결제 동선',
+    title: '상품 상세 · 장바구니 담기 → 장바구니',
+    path: '/products/product-1?round=round-open',
+    expectPath: '/cart',
+    steps: [{ press: '수량 늘리기' }, { press: '장바구니', nth: 1 }, { waitPath: '/cart' }],
+  },
+  {
+    id: 'cart-quantity',
+    group: '결제 동선',
+    title: '장바구니 · 첫 상품 수량 늘림',
+    path: '/cart',
+    storage: true,
+    steps: [{ press: '동양란 빅립 수량 늘리기' }],
+  },
+  {
+    id: 'cart-to-checkout',
+    group: '결제 동선',
+    title: '장바구니 → 결제',
+    path: '/cart',
+    storage: true,
+    expectPath: '/checkout',
+    steps: [{ press: '2개 상품 한 번에 결제' }, { waitPath: '/checkout' }],
+  },
+  {
+    id: 'checkout-request-note',
+    group: '결제 동선',
+    title: '결제 · 요청사항 입력',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [{ fill: { label: '요청사항 (선택)', value: '받는 분 김그린 010-0000-0000 / 문구: 개업을 축하합니다' } }],
+  },
+  {
+    id: 'checkout-ready',
+    group: '결제 동선',
+    title: '결제 · 결제 버튼 직전(변경 확인)',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [{ check: '상품·가격·회차 변경 내용을 확인했습니다.' }],
+  },
+  {
+    id: 'checkout-processing',
+    group: '결제 동선',
+    title: '결제 · 처리 중(주문 생성 응답 대기)',
+    path: '/checkout?from=cart',
+    storage: true,
+    scenario: 'order-slow',
+    portone: 'success',
+    steps: [
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+    ],
+  },
+  {
+    id: 'checkout-rejected',
+    group: '결제 동선',
+    title: '결제 · 주문 생성 거절 안내',
+    path: '/checkout?from=cart',
+    storage: true,
+    scenario: 'order-reject',
+    portone: 'success',
+    expectedErrors: ['status of 409 \\(Conflict\\).*/stores/store-visual-0001/orders\\)$'],
+    steps: [
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+    ],
+  },
+  {
+    id: 'checkout-pay-cancelled',
+    group: '결제 동선',
+    title: '결제 · 결제창 취소 안내',
+    path: '/checkout?from=cart',
+    storage: true,
+    portone: 'cancel',
+    steps: [
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+    ],
+  },
+  {
+    // 결제 완료 응답을 받으면 주문 완료 화면으로 바꾼다(router.replace).
+    id: 'checkout-paid',
+    group: '결제 동선',
+    title: '결제 · 결제 완료 → 주문 완료',
+    path: '/checkout?from=cart',
+    storage: true,
+    portone: 'success',
+    expectPath: '/order/success',
+    steps: [
+      { fill: { label: '요청사항 (선택)', value: '문 앞에 두세요' } },
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+      { waitPath: '/order/success' },
+    ],
+  },
+  {
+    // 상품 상세 '바로 구매'는 그 상품 하나로 결제 화면을 연다.
+    id: 'product-buy-now',
+    group: '결제 동선',
+    title: '상품 상세 → 바로 구매',
+    path: '/products/product-1?round=round-open',
+    expectPath: '/checkout',
+    steps: [{ press: '바로 구매' }, { waitPath: '/checkout' }],
   },
   { id: 'mypage', group: 'MY', title: 'MY', path: '/mypage' },
   {
@@ -866,6 +1057,69 @@ export const benchmarkScreens = [
       { fill: { label: '카드 문구', value: '늘 고마워요. 건강하세요!' } },
     ],
     features: ['gift'],
+  },
+  {
+    id: 'bm-checkout-package-label',
+    group: '구매',
+    title: '결제 · 포장 라벨 문구 넣기',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [{ click: '문구 넣기' }, { fill: { label: '라벨 문구', value: '祝 開業 그린상회' } }],
+    features: ['option-sheet'],
+  },
+  {
+    // 선물을 채워 결제까지 진행한다. 주문 생성 본문의 gift와 결제창 인자를 남긴다.
+    // 선물을 켜면 포장 라벨 칸은 보내는 분 이름으로 합쳐져 보이지 않는다(#705).
+    id: 'bm-checkout-gift-paid',
+    group: '구매',
+    title: '결제 · 선물 → 결제 완료',
+    path: '/checkout?from=cart',
+    storage: true,
+    portone: 'success',
+    expectPath: '/order/success',
+    steps: [
+      { click: '선물로 보내요' },
+      { fill: { label: '이름', value: '박엄마', nth: 0 } },
+      { fill: { label: '이름', value: '김그린', nth: 1 } },
+      { fill: { label: '카드 문구', value: '늘 고마워요. 건강하세요!' } },
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+      { waitPath: '/order/success' },
+    ],
+    features: ['gift'],
+  },
+  {
+    // 포장 라벨 문구를 넣고 결제까지 진행한다. 주문 생성 본문의 packageLabel을 남긴다.
+    id: 'bm-checkout-label-paid',
+    group: '구매',
+    title: '결제 · 포장 라벨 → 결제 완료',
+    path: '/checkout?from=cart',
+    storage: true,
+    portone: 'success',
+    expectPath: '/order/success',
+    steps: [
+      { click: '문구 넣기' },
+      { fill: { label: '라벨 문구', value: '祝 開業 그린상회' } },
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+      { waitPath: '/order/success' },
+    ],
+    features: ['option-sheet'],
+  },
+  {
+    // 옵션 시트에서 토퍼를 고르고 담는다. 장바구니에 담긴 옵션(optionChoiceIds)을 저장소 기록으로 남긴다.
+    id: 'bm-product-options-added',
+    group: '상품',
+    title: '상품 상세 · 옵션 골라 담기 → 장바구니',
+    path: '/products/product-1?round=round-open',
+    expectPath: '/cart',
+    steps: [
+      { click: '장바구니' },
+      { click: '祝 開業' },
+      { click: '장바구니 담기' },
+      { waitPath: '/cart' },
+    ],
+    features: ['option-sheet'],
   },
   {
     id: 'bm-success',
