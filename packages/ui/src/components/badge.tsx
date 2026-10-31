@@ -26,7 +26,8 @@ const badgeVariants = cva(
         // Mantine filled red(red-6 면·흰 글자), light orange(orange-1 면·orange-9 글자).
         'destructive-filled': 'bg-[#fa5252] text-white',
         'light-orange': 'bg-[#ffe8cc] text-[#d9480f]',
-        // Mantine light green(green-1 면·green-9 글자).
+        // Mantine light dark·green(dark-1 면·dark-9 글자, green-1 면·green-9 글자).
+        'light-dark': 'bg-[#b8b8b8] text-[#141414]',
         'light-green': 'bg-[#d3f9d8] text-[#2b8a3e]',
         ghost: 'bg-transparent text-foreground hover:bg-muted',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
