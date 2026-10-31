@@ -68,7 +68,10 @@ export function AdminShell({
             >
               <MenuIcon />
             </SheetTrigger>
-            <SheetContent side="left" className="max-w-[320px] rounded-none bg-frame">
+            <SheetContent
+              side="left"
+              className="rounded-none bg-frame data-[side=left]:max-w-[320px]"
+            >
               <SheetHeader className="bg-frame">
                 <SheetTitle>
                   <Brand />

@@ -51,7 +51,7 @@ export function AdminNav({
                         ADMIN_TODO_PROBLEM[item.todo] ? 'text-destructive' : 'text-foreground'
                       }`}
                     >
-                      <span className="sr-only">처리할 일 </span>
+                      <span className="sr-only">{', 처리할 일 '}</span>
                       {todo}
                     </span>
                   )}
