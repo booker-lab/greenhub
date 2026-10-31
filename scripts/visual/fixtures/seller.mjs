@@ -874,7 +874,15 @@ export const routes = [
         : { status: 404, body: { message: '회차 없음' } };
     },
   ],
-  ['GET', /^\/admin\/drivers$/, () => ({ body: { drivers: ADMIN_DRIVERS } })],
+  // 공용 더 보기(LoadMoreFooter)를 찍으려고 다음 쪽이 있다고 답한다. 다음 쪽은 늦게 답해 불러오는 중을 찍는다.
+  [
+    'GET',
+    /^\/admin\/drivers$/,
+    ({ url }) =>
+      url.searchParams.get('cursor')
+        ? { body: { drivers: [], hasMore: false }, delay: 8000 }
+        : { body: { drivers: ADMIN_DRIVERS, hasMore: true, nextCursor: 'visual-more' } },
+  ],
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
   ['GET', /^\/stores\/[^/]+\/delivery-config$/, () => ({ body: DELIVERY_CONFIG })],
   // 설정 · 배송비 화면은 판매자 전용 조회 경로를 쓴다.
@@ -1321,10 +1329,35 @@ export const screens = [
     steps: [...Array.from({ length: 3 }, () => ({ click: '다음' })), { click: '다시 생성하기' }],
     viewport: true,
   },
+  // UI 교체 P4 앱 틀: 공용 LoadingState·EmptyState·LoadMoreFooter(더 보기·불러오는 중).
+  {
+    id: 'sale-rounds-loading',
+    group: '판매자 · 상태',
+    title: '회차 목록 · 불러오는 중',
+    path: '/sale-rounds',
+    scenario: 'rounds-slow',
+  },
+  {
+    id: 'sale-rounds-empty',
+    group: '판매자 · 상태',
+    title: '회차 목록 · 없음',
+    path: '/sale-rounds',
+    scenario: 'rounds-empty',
+  },
+  {
+    id: 'admin-drivers-load-more',
+    group: '어드민 · 필터',
+    title: '기사 · 더 보기 불러오는 중',
+    path: '/admin/drivers',
+    steps: [{ click: '더 보기' }],
+  },
 ];
 
 /** 화면별 상황(shots.mjs가 화면을 열 때 /__scenario로 고른다). 그 경로를 기본 경로 앞에 끼운다. */
 export const scenarioRoutes = {
+  // 공용 LoadingState·EmptyState(회차 목록이 늦게 오거나 비었을 때).
+  'rounds-slow': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] }, delay: 8000 })]],
+  'rounds-empty': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] } })]],
   'legacy-store': [
     [
       'GET',
