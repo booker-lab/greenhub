@@ -1,7 +1,6 @@
 'use client';
 
 import type { ManagedReview, ProductRequestItem, RestockSummaryItem } from '@greenhub/shared';
-import { Container, Group, Paper, Stack, Text } from '@mantine/core';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -23,6 +22,11 @@ const TABS: Array<{ value: Tab; label: string; feature: Parameters<typeof isFeat
   { value: 'restock', label: '알림 신청', feature: 'restock-alert' },
   { value: 'requests', label: '찾는 상품', feature: 'product-request' },
 ];
+
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Stack(gap sm = 12px)·
+// Paper(radius lg = 16px, shadow xs, p md)·Group·Text(p, 여백 0; size sm = 15px·1.45, 기본 16px·1.55)와 같은 값.
+const TEXT = 'm-0 p-0 font-normal';
+const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
 
 const day = (iso: string) =>
   new Date(iso).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
@@ -94,8 +98,8 @@ export default function ReactionsPage() {
   return (
     <PageShell>
       <PageHeader title="고객 반응" />
-      <Container size="sm" px="md" py="md">
-        <Stack gap="sm">
+      <div className="mx-auto max-w-[720px] px-4 py-4">
+        <div className="flex flex-col gap-3">
           {tabs.length > 1 && (
             <SegmentedTabs<Tab>
               value={tab}
@@ -111,11 +115,11 @@ export default function ReactionsPage() {
               <EmptyState text="아직 후기가 없어요" />
             ) : (
               <>
-                <Text fw={700}>
+                <p className={`${TEXT} text-base font-bold`}>
                   {summary.average === null ? '보이는 후기 없음' : `평균 ★ ${summary.average}`} ·{' '}
                   {summary.count}개
                   {summary.hiddenCount > 0 ? ` (숨김 ${summary.hiddenCount}개 제외)` : ''}
-                </Text>
+                </p>
                 {reviews.map((review) => (
                   <ReviewCard
                     key={review.id}
@@ -146,18 +150,23 @@ export default function ReactionsPage() {
               <EmptyState text="알림 신청이 아직 없어요" />
             ) : (
               <>
-                <Text size="sm" c="var(--color-text-secondary)">
+                <p className={`${TEXT} text-sm`} style={{ color: 'var(--color-text-secondary)' }}>
                   다음 회차에 다시 올리면 좋을 상품이에요. 알림은 아직 자동으로 보내지 않아요.
-                </Text>
+                </p>
                 {restock.map((item) => (
-                  <Paper key={item.productId} radius="lg" shadow="xs" p="md">
-                    <Group justify="space-between">
-                      <Text fw={700}>{item.productName ?? '삭제된 상품'}</Text>
-                      <Text fw={800} c="var(--color-primary-dark)">
+                  <div key={item.productId} className={PAPER}>
+                    <div className="flex flex-row flex-wrap items-center justify-between gap-4">
+                      <p className={`${TEXT} text-base font-bold`}>
+                        {item.productName ?? '삭제된 상품'}
+                      </p>
+                      <p
+                        className={`${TEXT} text-base font-extrabold`}
+                        style={{ color: 'var(--color-primary-dark)' }}
+                      >
                         {item.count}명
-                      </Text>
-                    </Group>
-                  </Paper>
+                      </p>
+                    </div>
+                  </div>
                 ))}
               </>
             ))}
@@ -169,18 +178,21 @@ export default function ReactionsPage() {
               <EmptyState text="찾는 상품 제안이 아직 없어요" />
             ) : (
               requests.map((request) => (
-                <Paper key={request.id} radius="lg" shadow="xs" p="md">
-                  <Group justify="space-between" wrap="nowrap">
-                    <Text size="sm">{request.text}</Text>
-                    <Text size="sm" c="var(--color-text-secondary)" style={{ flexShrink: 0 }}>
+                <div key={request.id} className={PAPER}>
+                  <div className="flex flex-row flex-nowrap items-center justify-between gap-4">
+                    <p className={`${TEXT} text-sm`}>{request.text}</p>
+                    <p
+                      className={`${TEXT} text-sm`}
+                      style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}
+                    >
                       {day(request.createdAt)}
-                    </Text>
-                  </Group>
-                </Paper>
+                    </p>
+                  </div>
+                </div>
               ))
             ))}
-        </Stack>
-      </Container>
+        </div>
+      </div>
     </PageShell>
   );
 }
