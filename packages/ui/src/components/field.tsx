@@ -76,10 +76,12 @@ function Field({
   orientation = 'vertical',
   ...props
 }: React.ComponentProps<'div'> & VariantProps<typeof fieldVariants>) {
+  // 접근성 유지: Mantine InputWrapper처럼 역할 없는 div다. registry 원본의 role="group"은 이름이 없어 읽기 도구가
+  // 입력칸마다 '그룹'을 반복했다. 판매자 Field는 모두 라벨 하나·입력칸 하나라 묶음 의미가 없다. 여러 컨트롤을 묶을
+  // 때는 FieldSet(fieldset·legend)이나 RadioGroup·CheckboxGroup의 역할을 쓰거나, 호출부가 role="group"과
+  // aria-labelledby를 함께 준다.
   return (
-    // biome-ignore lint/a11y/useSemanticElements: registry 원본 구조. fieldset은 FieldSet이 맡는다.
     <div
-      role="group"
       data-slot="field"
       data-orientation={orientation}
       className={cn(fieldVariants({ orientation }), className)}
