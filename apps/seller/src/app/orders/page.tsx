@@ -40,13 +40,26 @@ import {
   mergeActiveAndArchivedOrders,
 } from './orders-view-model';
 
-// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px, shadow xs)·
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px)·
 // Group·Stack·SimpleGrid·Text(p, 여백 0, 줄 높이 1.55)·UnstyledButton과 같은 값.
 const TEXT = 'm-0 p-0 text-base';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 const CONTAINER = 'mx-auto max-w-[720px] px-4';
-const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-white';
+// ② 디자인 방향(D2·§3.2): 카드는 그림자 없이 틀(--frame) 위 흰 면, 선택 칩은 초록 면 대신 검정 테두리·굵기.
+// 칩 띠(검색·날짜·보조 필터)는 틀과 같은 --frame이고 띠 사이 선을 긋지 않는다(D3).
+function chipStyle(selected: boolean, idleBackground: string) {
+  return {
+    padding: '6px 14px',
+    fontSize: 'var(--font-size-sm)',
+    borderRadius: 99,
+    border: `1px solid ${selected ? 'var(--color-text)' : 'transparent'}`,
+    backgroundColor: selected ? 'var(--color-bg)' : idleBackground,
+    color: selected ? 'var(--color-text)' : 'var(--color-text-secondary)',
+    fontWeight: selected ? 'var(--fw-bold)' : undefined,
+  } as const;
+}
 const GROUP = 'flex flex-row flex-wrap items-center justify-start';
 const GROUP_NOWRAP_BETWEEN = 'flex flex-row flex-nowrap items-center justify-between gap-2.5';
 
@@ -73,8 +86,7 @@ function PriorityItem({
         width: '100%',
         padding: 14,
         borderRadius: 12,
-        border: `1px solid ${urgent ? 'var(--color-danger)' : 'var(--color-border)'}`,
-        backgroundColor: urgent ? 'var(--color-danger-surface)' : 'var(--color-bg)',
+        backgroundColor: urgent ? 'var(--color-danger-surface)' : 'var(--frame)',
         textAlign: 'left',
       }}
     >
@@ -385,12 +397,7 @@ export default function OrdersPage() {
 
       {/* 날짜 범위 필터 — 일반 토글에서만 노출 (공구는 1차 미노출) */}
       {saleType === 'normal' && (
-        <div
-          style={{
-            backgroundColor: 'var(--color-bg)',
-            borderBottom: '1px solid var(--color-border)',
-          }}
-        >
+        <div style={{ backgroundColor: 'var(--frame)' }}>
           <div className={`${CONTAINER} py-2.5`}>
             <div className={`${GROUP} gap-2.5`}>
               {DATE_PRESETS.map((p) => (
@@ -400,12 +407,7 @@ export default function OrdersPage() {
                   key={p.key}
                   onClick={() => setDatePreset(p.key)}
                   style={{
-                    padding: '6px 14px',
-                    fontSize: 'var(--font-size-sm)',
-                    borderRadius: 99,
-                    backgroundColor:
-                      datePreset === p.key ? 'var(--color-primary)' : 'var(--color-surface-muted)',
-                    color: datePreset === p.key ? 'var(--color-bg)' : 'var(--color-text-secondary)',
+                    ...chipStyle(datePreset === p.key, 'var(--color-surface-muted)'),
                     transition: 'all 0.15s',
                   }}
                 >
@@ -485,8 +487,7 @@ export default function OrdersPage() {
       {activeTab === 'ACTION_REQUIRED' && (
         <div
           style={{
-            backgroundColor: 'var(--color-surface-muted)',
-            borderBottom: '1px solid var(--color-border)',
+            backgroundColor: 'var(--frame)',
             padding: '6px 0',
           }}
         >
@@ -497,14 +498,7 @@ export default function OrdersPage() {
                 className={UNSTYLED_BUTTON}
                 onClick={() => setHeldOnly(false)}
                 aria-pressed={!heldOnly}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: 'var(--font-size-sm)',
-                  borderRadius: 99,
-                  backgroundColor: !heldOnly ? 'var(--color-primary)' : 'transparent',
-                  color: !heldOnly ? 'var(--color-bg)' : 'var(--color-text-secondary)',
-                  transition: 'all 0.15s',
-                }}
+                style={{ ...chipStyle(!heldOnly, 'transparent'), transition: 'all 0.15s' }}
               >
                 전체
               </button>
@@ -513,14 +507,7 @@ export default function OrdersPage() {
                 className={UNSTYLED_BUTTON}
                 onClick={() => setHeldOnly(true)}
                 aria-pressed={heldOnly}
-                style={{
-                  padding: '6px 14px',
-                  fontSize: 'var(--font-size-sm)',
-                  borderRadius: 99,
-                  backgroundColor: heldOnly ? 'var(--color-primary)' : 'transparent',
-                  color: heldOnly ? 'var(--color-bg)' : 'var(--color-text-secondary)',
-                  transition: 'all 0.15s',
-                }}
+                style={{ ...chipStyle(heldOnly, 'transparent'), transition: 'all 0.15s' }}
               >
                 배송 보류
               </button>
@@ -531,8 +518,7 @@ export default function OrdersPage() {
       {activeTab === 'IN_DELIVERY' && (
         <div
           style={{
-            backgroundColor: 'var(--color-surface-muted)',
-            borderBottom: '1px solid var(--color-border)',
+            backgroundColor: 'var(--frame)',
             padding: '6px 0',
           }}
         >
@@ -545,11 +531,7 @@ export default function OrdersPage() {
                   key={sf.key}
                   onClick={() => setSubFilter(sf.key)}
                   style={{
-                    padding: '6px 14px',
-                    fontSize: 'var(--font-size-sm)',
-                    borderRadius: 99,
-                    backgroundColor: subFilter === sf.key ? 'var(--color-primary)' : 'transparent',
-                    color: subFilter === sf.key ? 'var(--color-bg)' : 'var(--color-text-secondary)',
+                    ...chipStyle(subFilter === sf.key, 'transparent'),
                     transition: 'all 0.15s',
                   }}
                 >

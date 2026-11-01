@@ -25,6 +25,12 @@ type Props<T extends string> = {
    * 지정하지 않으면 지금 모양(브랜드 2px 밑줄 + 배지)을 그대로 쓴다.
    */
   variant?: 'default' | 'underline';
+  /**
+   * paper: 어드민 흰 종이 안에 놓는 탭(design-direction.md §5 어드민 "상태 탭"). 바깥 상자에 틀 색을 칠하지 않고
+   * 가운데 720px 폭 제한·좌우 16px을 두지 않으며, 탭 줄 아래에 1px rule 선을 긋는다.
+   * 지정하지 않으면 지금 모양(틀 색 바탕·720px 가운데)을 그대로 쓴다.
+   */
+  surface?: 'frame' | 'paper';
 };
 
 // ① 외형 유지(UI 교체 P4): Mantine Container sm(720px·좌우 16px)·Group(gap 0)·UnstyledButton·Badge xs와 같은 값.
@@ -41,10 +47,12 @@ export function SegmentedTabs<T extends string>({
   layout = 'flex',
   ariaLabel,
   variant = 'default',
+  surface = 'frame',
 }: Props<T>) {
   const underline = variant === 'underline';
+  const paper = surface === 'paper';
   const containerStyle: CSSProperties = {
-    backgroundColor: 'var(--frame)',
+    ...(paper ? { borderBottom: '1px solid var(--rule)' } : { backgroundColor: 'var(--frame)' }),
     ...(sticky ? { position: 'sticky', top: topOffset, zIndex: 10 } : {}),
   };
 
@@ -56,7 +64,7 @@ export function SegmentedTabs<T extends string>({
 
   return (
     <div style={containerStyle}>
-      <div className="mx-auto max-w-[720px] px-4">
+      <div className={paper ? undefined : 'mx-auto max-w-[720px] px-4'}>
         <div
           className="flex flex-row flex-wrap items-center justify-start gap-0"
           style={groupStyle}

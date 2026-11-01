@@ -1,5 +1,5 @@
 // 어드민 정산 화면 공용 유틸 (F-2/S5).
-import { SETTLEMENT_STATUSES, STATUS_LABEL, type SettlementStatus } from '@greenhub/shared';
+import { SETTLEMENT_STATUSES, type SettlementStatus } from '@greenhub/shared';
 import type {
   AdminPayoutAccount,
   AdminSettlement,
@@ -35,25 +35,136 @@ export function toDateStr(ts: unknown): string {
   return SETTLED_AT_FORMAT_KST.format(date);
 }
 
-export function toKRW(n: number): string {
-  return `₩${n.toLocaleString('ko-KR')}`;
+// 어드민 정산 상태 이름(design-direction.md §5 어드민 "정산"): pending은 "지급 대기"와 헷갈리지 않게 "회차 마감 전",
+// 지급할 차례인 confirmed는 "지급 대기"로 쓴다. 판매자 화면 이름(shared STATUS_LABEL)은 바꾸지 않는다.
+export const ADMIN_SETTLEMENT_STATUS_LABEL: Record<SettlementStatus, string> = {
+  pending: '회차 마감 전',
+  confirmed: '지급 대기',
+  paid: '지급 완료',
+  cancelled: '취소',
+};
+
+/** 상태 점의 색 — 끝난 상태(지급 완료·취소)는 회색, 나머지 검정. 문제(계좌 미등록·회수 필요)는 따로 빨강으로 쓴다. */
+export function settlementStatusTone(status: SettlementStatus): 'done' | 'default' {
+  return status === 'paid' || status === 'cancelled' ? 'done' : 'default';
 }
 
-// 정산 상태 탭 — '전체' + shared 정산 상태 4개(판매자 정산 #245와 같은 방식, 라벨은 shared SSOT).
+// 정산 상태 탭 — '전체' + 정산 상태 4개. 상태별 건수 조회가 없어 탭에 숫자를 쓰지 않는다.
 export type AdminSettlementFilterKey = 'all' | SettlementStatus;
 
 export const ADMIN_SETTLEMENT_FILTER_TABS: { key: AdminSettlementFilterKey; label: string }[] = [
   { key: 'all', label: '전체' },
-  ...SETTLEMENT_STATUSES.map((status) => ({ key: status, label: STATUS_LABEL[status] })),
+  ...(['confirmed', 'pending', 'paid', 'cancelled'] as const)
+    .filter((status) => SETTLEMENT_STATUSES.includes(status))
+    .map((status) => ({ key: status, label: ADMIN_SETTLEMENT_STATUS_LABEL[status] })),
 ];
+
+/** 금액 표기 — "48,000원". */
+export function toWon(n: number): string {
+  return `${n.toLocaleString('ko-KR')}원`;
+}
+
+/** 정산일 — 비교하는 열이라 KST `2026-11-28` 한 형식(D7 "날짜"). 읽을 수 없으면 null. */
+export function toDateOnly(ts: unknown): string | null {
+  let millis: number | null = null;
+  if (typeof ts === 'string' && ts.trim() !== '') millis = new Date(ts).getTime();
+  else if (ts && typeof ts === 'object' && '_seconds' in ts) {
+    const seconds = (ts as { _seconds: unknown })._seconds;
+    if (typeof seconds === 'number') millis = seconds * 1000;
+  }
+  if (millis === null || Number.isNaN(millis)) return null;
+  const kst = new Date(millis + 9 * 60 * 60 * 1000);
+  const pad = (v: number) => String(v).padStart(2, '0');
+  return `${kst.getUTCFullYear()}-${pad(kst.getUTCMonth() + 1)}-${pad(kst.getUTCDate())}`;
+}
+
+/** 계좌번호 가림 — 끝 4자리만 남기고 나머지 숫자를 *로 바꾼다(하이픈은 둔다). 전체 번호는 "복사"가 복사한다. */
+export function maskAccountNumber(accountNumber: string): string {
+  const digits = accountNumber.replace(/\D/g, '').length;
+  let seen = 0;
+  return accountNumber.replace(/\d/g, (d) => {
+    seen += 1;
+    return seen > digits - 4 ? d : '*';
+  });
+}
+
+/**
+ * 가게별 묶음 — 불러온 정산 행을 가게 단위로 모은다(첫 등장 순서 유지).
+ * 묶음 합계는 이체할 돈만 센다: 그 가게의 불러온 지급 대기(confirmed) 행의 합이다. 지급 완료·취소·회차 마감 전 행은 섞지 않는다.
+ */
+export interface SettlementStoreGroup {
+  storeId: string;
+  storeName: string;
+  payoutAccount: AdminPayoutAccount | null;
+  rows: AdminSettlement[];
+  /** 지급 대기(confirmed) 행 수. */
+  payableCount: number;
+  totalAmount: number;
+  platformFee: number;
+  netAmount: number;
+}
+
+export function groupSettlementsByStore(rows: readonly AdminSettlement[]): SettlementStoreGroup[] {
+  const groups = new Map<string, SettlementStoreGroup>();
+  const named = new Set<string>();
+  for (const row of rows) {
+    let group = groups.get(row.storeId);
+    if (!group) {
+      group = {
+        storeId: row.storeId,
+        storeName: storeLabel(row),
+        payoutAccount: null,
+        rows: [],
+        payableCount: 0,
+        totalAmount: 0,
+        platformFee: 0,
+        netAmount: 0,
+      };
+      groups.set(row.storeId, group);
+    }
+    group.rows.push(row);
+    // 이름·계좌가 없는 행(옛 정산, 지급 대상이 아닌 행)이 먼저 와도 같은 가게의 다른 행 값으로 채운다.
+    if (row.storeName && !named.has(row.storeId)) {
+      named.add(row.storeId);
+      group.storeName = row.storeName;
+    }
+    group.payoutAccount ??= row.payoutAccount ?? null;
+    if (row.status !== 'confirmed') continue;
+    group.payableCount += 1;
+    group.totalAmount += row.totalAmount;
+    group.platformFee += row.platformFee;
+    group.netAmount += row.netAmount;
+  }
+  return [...groups.values()];
+}
+
+/** 숫자 띠의 불러온 행 기준 칸 — 계좌가 없어 못 보내는 지급 대기, 결제사 취소 확인 중인 지급 보류. */
+export function summarizeLoadedBlocks(rows: readonly AdminSettlement[]): {
+  noAccount: { count: number; netAmount: number };
+  held: { count: number; netAmount: number };
+} {
+  const noAccount = { count: 0, netAmount: 0 };
+  const held = { count: 0, netAmount: 0 };
+  for (const row of rows) {
+    if (row.status !== 'confirmed') continue;
+    if (row.holdReason) {
+      held.count += 1;
+      held.netAmount += row.netAmount;
+    } else if (!row.payoutAccount) {
+      noAccount.count += 1;
+      noAccount.netAmount += row.netAmount;
+    }
+  }
+  return { noAccount, held };
+}
 
 export const HOLD_REASON_LABEL: Record<AdminSettlementHoldReason, string> = {
   PROVIDER_REVERSAL: '지급 보류 · 결제사 취소·분쟁 확인 중',
 };
 
-/** 가게 표시 — 이름이 있으면 이름, 없으면 가게 ID 앞 8자. */
+/** 가게 표시 — 잘린 시스템 id를 보여 주지 않는다(D7 "식별"). 이름이 없으면 "이름 없는 가게". */
 export function storeLabel(s: Pick<AdminSettlement, 'storeId' | 'storeName'>): string {
-  return s.storeName || `${s.storeId.slice(0, 8)}…`;
+  return s.storeName || '이름 없는 가게';
 }
 
 /** 주문 표시 — 주문번호가 없는 옛 정산은 주문 ID. */
@@ -71,12 +182,6 @@ export function canPay(
   return s.status === 'confirmed' && !s.holdReason && Boolean(s.payoutAccount);
 }
 
-/** 정산 계좌 한 줄. 지급 확인창에서 관리자가 입금할 때 본다. */
-export function describePayoutAccount(account: AdminPayoutAccount | null | undefined): string {
-  if (!account) return '정산 계좌: 미등록 — 판매자에게 앱 설정 > 정산 계좌 등록을 요청하세요.';
-  return `입금 계좌: ${account.bankName} ${account.accountNumber} (예금주 ${account.accountHolder})`;
-}
-
 /** 가게 선택 목록 — 이름순, 이름이 없으면 ID. */
 export function toStoreOptions(stores: Array<{ id: string; name?: string | null }>) {
   return stores
@@ -84,24 +189,73 @@ export function toStoreOptions(stores: Array<{ id: string; name?: string | null 
     .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
 }
 
+/** 지급 확인창 내용(design-direction.md §5 어드민 "위험 동작 확인창"). 확인창 틀은 _components/PayConfirmDialog. */
+export interface PayConfirmView {
+  /** 동작 + 대상. */
+  title: string;
+  /** 대상 정보 — 가게·주문·입금 계좌·예금주. */
+  facts: { label: string; value: string }[];
+  /** 돈의 흐름 — 거래액 · 수수료 · 지급액. */
+  flow: { label: string; value: string }[];
+  /** 기록할 수 없는 이유. null이면 기록할 수 있다(canPay와 같은 조건). */
+  blocked: string | null;
+  /** 스스로 확인하는 체크 문구. */
+  checkLabel: string;
+  confirmLabel: string;
+}
+
 /**
- * 지급 확인창 문구 — 어느 가게·주문에 얼마를 어느 계좌로 지급 완료 표시하는지 보여 준다.
+ * 지급 확인창 내용 — 어느 가게·주문에 얼마를 어느 계좌로 지급 완료 기록하는지 보여 준다.
  * 가게 이름이 없으면 가게 ID 전체, 주문번호가 없는 옛 정산은 주문 ID를 보인다.
+ * 계좌번호는 은행 앱과 대조해야 하므로 확인창에서는 가리지 않는다.
  */
 export function describePayConfirm(
   s: Pick<
     AdminSettlement,
-    'storeId' | 'storeName' | 'orderId' | 'orderNumber' | 'netAmount' | 'payoutAccount'
+    | 'storeId'
+    | 'storeName'
+    | 'orderId'
+    | 'orderNumber'
+    | 'totalAmount'
+    | 'platformFee'
+    | 'platformFeeRate'
+    | 'netAmount'
+    | 'payoutAccount'
+    | 'status'
+    | 'holdReason'
   >,
-): string {
-  return [
-    s.storeName ? `가게: ${s.storeName}` : `가게 ID: ${s.storeId}`,
-    s.orderNumber ? `주문번호: ${s.orderNumber}` : `주문 ID: ${s.orderId}`,
-    `지급액: ${toKRW(s.netAmount)}`,
-    describePayoutAccount(s.payoutAccount),
-    '',
-    s.payoutAccount
-      ? '이 계좌로 입금한 뒤 지급 완료 처리하시겠습니까?'
-      : '입금할 계좌가 없어 지급 완료로 기록할 수 없습니다.',
-  ].join('\n');
+): PayConfirmView {
+  const store = s.storeName?.trim();
+  const account = s.payoutAccount;
+  const rate =
+    typeof s.platformFeeRate === 'number' ? ` (${Math.round(s.platformFeeRate * 1000) / 10}%)` : '';
+  const facts = [
+    store ? { label: '가게', value: store } : { label: '가게 ID', value: s.storeId },
+    s.orderNumber
+      ? { label: '주문번호', value: s.orderNumber }
+      : { label: '주문 ID', value: s.orderId },
+    account
+      ? { label: '입금 계좌', value: `${account.bankName} ${account.accountNumber}` }
+      : { label: '정산 계좌', value: '미등록' },
+  ];
+  if (account) facts.push({ label: '예금주', value: account.accountHolder });
+  let blocked: string | null = null;
+  if (s.status !== 'confirmed') blocked = '지급 대기 정산만 지급 완료로 기록할 수 있습니다.';
+  else if (s.holdReason) blocked = '결제사 취소·분쟁을 확인하는 중이라 기록할 수 없습니다.';
+  else if (!account) {
+    blocked =
+      '입금할 계좌가 없어 지급 완료로 기록할 수 없습니다. 판매자에게 앱 설정 > 정산 계좌 등록을 요청하세요.';
+  }
+  return {
+    title: store ? `${store} 정산 1건 지급 완료 기록` : '정산 1건 지급 완료 기록',
+    facts,
+    flow: [
+      { label: '거래액', value: toWon(s.totalAmount) },
+      { label: '플랫폼 수수료', value: `−${toWon(s.platformFee)}${rate}` },
+      { label: '지급액', value: toWon(s.netAmount) },
+    ],
+    blocked,
+    checkLabel: `은행 앱에서 이 계좌로 ${toWon(s.netAmount)} 이체를 마쳤습니다`,
+    confirmLabel: `${toWon(s.netAmount)} 지급 완료 기록`,
+  };
 }
