@@ -2,19 +2,21 @@
 
 import { useState } from 'react';
 import { notify } from '@/components/AppToaster';
-import { ConfirmModal } from '@/components/ConfirmModal';
-import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
+import { normalizeSuspendReason, SuspendReasonField } from '@/components/SuspendReasonMessage';
 import type { AdminUser } from '@/hooks/useAdmin';
 import { describeAdminCommandOutcome, useAdminUsers } from '@/hooks/useAdmin';
+import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
 import { AdminListError, AdminListNotice, AdminPageHeader } from '../_components/adminList';
 import { RefreshButton } from '../_components/RefreshButton';
 import { UsersTable } from './_components/UsersTable';
-import { describeUserSuspendConfirm } from './_lib';
+import { describeUserSuspendConfirm, suspendActionLabel } from './_lib';
 
 interface PendingUserAction {
   userId: string;
   name: string;
   email: string;
+  phone?: string;
+  createdAt?: unknown;
   currentlySuspended: boolean;
 }
 
@@ -26,7 +28,7 @@ export default function AdminUsersClient() {
 
   const runPending = async () => {
     if (!pending) return;
-    const actionLabel = describeUserSuspendConfirm(pending).confirmLabel;
+    const actionLabel = suspendActionLabel(pending.currentlySuspended);
     setProcessingId(pending.userId);
     try {
       const outcome = await toggleSuspend(
@@ -54,6 +56,8 @@ export default function AdminUsersClient() {
       userId: user.id,
       name: user.name,
       email: user.email,
+      phone: user.phone,
+      createdAt: user.createdAt,
       currentlySuspended: !!user.suspended,
     });
   };
@@ -95,24 +99,20 @@ export default function AdminUsersClient() {
 
       <UsersTable users={users} processingId={processingId} onToggle={handleToggle} />
 
-      <ConfirmModal
-        opened={pending !== null}
+      <AdminConfirmDialog
+        open={pending !== null}
         title={confirm?.title ?? ''}
-        message={
-          <SuspendReasonMessage
-            message={confirm?.message ?? ''}
-            reason={reason}
-            onReasonChange={setReason}
-          />
-        }
-        confirmLabel={confirm?.confirmLabel}
-        confirmColor={confirm?.confirmColor}
+        lead={confirm?.lead}
+        facts={confirm?.facts}
+        confirmLabel={confirm?.confirmLabel ?? ''}
         loading={processingId !== null}
         onConfirm={runPending}
         onClose={() => {
           if (processingId === null) setPending(null);
         }}
-      />
+      >
+        <SuspendReasonField reason={reason} onReasonChange={setReason} />
+      </AdminConfirmDialog>
     </div>
   );
 }

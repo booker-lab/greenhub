@@ -142,8 +142,8 @@ describe('useAdminInvite hook recovery wiring', () => {
 describe('초대 취소 화면 배선', () => {
   it('행 버튼은 확인 창만 열고, 확인한 뒤에만 revoke를 호출한다', () => {
     expect(source).toContain('onRevoke={setPendingRevoke}');
-    expect(source).toContain('<ConfirmModal');
-    expect(source).toContain('opened={pendingRevoke !== null}');
+    expect(source).toContain('<AdminConfirmDialog');
+    expect(source).toContain('open={pendingRevoke !== null}');
     expect(source).toContain('onConfirm={runRevoke}');
     expect(source).toContain('await revoke(pendingRevoke)');
     expect(source).not.toContain('onRevoke={revoke}');

@@ -63,7 +63,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
         items={[
           {
             key: 'suspend',
-            label: user.suspended ? '정지 풀기…' : `${suspendActionLabel(false)}…`,
+            label: `${suspendActionLabel(!!user.suspended)}…`,
             onSelect: () => onToggle(user),
           },
         ]}

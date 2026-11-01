@@ -1,9 +1,11 @@
 'use client';
 
 import { ButtonLink } from '@greenhub/ui/components/button';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { notify } from '@/components/AppToaster';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import type { AdminStore } from '@/hooks/useAdmin';
@@ -13,6 +15,7 @@ import {
   useAdminStores,
 } from '@/hooks/useAdmin';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
 import { AdminListError, AdminPageHeader } from '../_components/adminList';
 import { StoresFilters } from './_components/StoresFilters';
 import { StoresTable } from './_components/StoresTable';
@@ -22,7 +25,7 @@ import {
   DEFAULT_SORT,
   DEFAULT_STATUS_FILTER,
   describeArchiveConfirm,
-  describeArchiveRecordsPrompt,
+  describeArchiveRecordsConfirm,
   describeCommissionSaved,
   describeRestoreConfirm,
   filterStores,
@@ -172,17 +175,31 @@ export default function AdminStoresClient() {
     setRateInput('');
   };
 
-  const handleArchive = async (store: AdminStore) => {
-    if (!window.confirm(describeArchiveConfirm(store))) return;
+  // 정리하기·복구 확인창(design-direction.md §5 어드민 "위험 동작 확인창"). 정리하기는 서버가 412(주문·정산 기록 있음)를
+  // 돌려주면 같은 창이 가게 ID 앞 8자리 입력 단계로 바뀌고, 입력값을 실어 한 번 더 보낸다. 닫으면 아무것도 보내지 않는다.
+  const prefixInputId = useId();
+  const [storeAction, setStoreAction] = useState<{
+    store: AdminStore;
+    step: 'archive' | 'records' | 'restore';
+  } | null>(null);
+  const [typedPrefix, setTypedPrefix] = useState('');
+  const [storeActionBusy, setStoreActionBusy] = useState(false);
+
+  const handleArchive = (store: AdminStore) => setStoreAction({ store, step: 'archive' });
+  const handleRestore = (store: AdminStore) => setStoreAction({ store, step: 'restore' });
+  const closeStoreAction = () => {
+    if (storeActionBusy) return;
+    setStoreAction(null);
+    setTypedPrefix('');
+  };
+
+  const runArchive = async (store: AdminStore, typed: string | null) => {
+    setStoreActionBusy(true);
     try {
-      const reconciliation = await archiveStore(store.id).catch((e: unknown) => {
-        // 주문·정산 기록이 있는 판매자(412) — 가게 ID 앞 8자리를 받아 한 번 더 보낸다.
-        const classified = classifyAdminCommandError(e);
-        if (classified.kind !== 'rejected' || classified.status !== 412) throw e;
-        const typed = window.prompt(describeArchiveRecordsPrompt(store));
-        return typed === null ? null : archiveStore(store.id, typed);
-      });
-      if (reconciliation === null) return;
+      const reconciliation =
+        typed === null ? await archiveStore(store.id) : await archiveStore(store.id, typed);
+      setStoreAction(null);
+      setTypedPrefix('');
       if (!reconciliation.reconciled) {
         // COMMAND CONFIRMED + RECONCILIATION FAILED — 실패로 표현하지 않고 중복 실행을 유도하지 않는다.
         notify({
@@ -199,6 +216,14 @@ export default function AdminStoresClient() {
       });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
+      // 주문·정산 기록이 있는 판매자(412) — 가게 ID 앞 8자리를 받는 단계로 넘어간다.
+      if (typed === null && classified.kind === 'rejected' && classified.status === 412) {
+        setTypedPrefix('');
+        setStoreAction({ store, step: 'records' });
+        return;
+      }
+      setStoreAction(null);
+      setTypedPrefix('');
       if (classified.kind === 'unknown') {
         const presentation = describeAdminCommandOutcome(classified, '정리하기');
         notify({
@@ -214,13 +239,16 @@ export default function AdminStoresClient() {
         title: '정리할 수 없습니다',
         message: e instanceof Error ? e.message : '판매자를 정리하는 중 오류가 발생했습니다.',
       });
+    } finally {
+      setStoreActionBusy(false);
     }
   };
 
-  const handleRestore = async (store: AdminStore) => {
-    if (!window.confirm(describeRestoreConfirm(store))) return;
+  const runRestore = async (store: AdminStore) => {
+    setStoreActionBusy(true);
     try {
       const reconciliation = await restoreStore(store.id);
+      setStoreAction(null);
       if (!reconciliation.reconciled) {
         notify({
           color: 'yellow',
@@ -235,6 +263,7 @@ export default function AdminStoresClient() {
         message: `${store.name || '이름 없는 가게'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
       });
     } catch (e) {
+      setStoreAction(null);
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
         const presentation = describeAdminCommandOutcome(classified, '복구');
@@ -250,8 +279,19 @@ export default function AdminStoresClient() {
         title: '복구할 수 없습니다',
         message: e instanceof Error ? e.message : '판매자 복구 중 오류가 발생했습니다.',
       });
+    } finally {
+      setStoreActionBusy(false);
     }
   };
+
+  const records =
+    storeAction?.step === 'records' ? describeArchiveRecordsConfirm(storeAction.store) : null;
+  const storeConfirm = !storeAction
+    ? null
+    : storeAction.step === 'restore'
+      ? describeRestoreConfirm(storeAction.store)
+      : (records ?? describeArchiveConfirm(storeAction.store));
+  const prefixMatches = records !== null && typedPrefix === records.prefix;
 
   const filtered = filterStores(stores, { keyword: view.keyword, status: view.status });
   const visible = sortStores(filtered, view.sort);
@@ -329,6 +369,51 @@ export default function AdminStoresClient() {
           onSortChange={(sort) => updateView({ sort })}
         />
       )}
+
+      <AdminConfirmDialog
+        open={storeAction !== null}
+        title={storeConfirm?.title ?? ''}
+        lead={storeConfirm?.lead}
+        facts={storeConfirm?.facts}
+        confirmLabel={storeConfirm?.confirmLabel ?? ''}
+        confirmDisabled={records !== null && !prefixMatches}
+        disabledHint={
+          records
+            ? `가게 ID 앞 8자리 ${records.prefix}를 그대로 입력하면 버튼이 켜집니다.`
+            : undefined
+        }
+        loading={storeActionBusy}
+        initialFocus={records ? 'field' : 'close'}
+        onConfirm={() => {
+          if (!storeAction) return;
+          if (storeAction.step === 'restore') void runRestore(storeAction.store);
+          else if (storeAction.step === 'archive') void runArchive(storeAction.store, null);
+          else if (prefixMatches) void runArchive(storeAction.store, typedPrefix);
+        }}
+        onClose={closeStoreAction}
+      >
+        {storeConfirm?.note && (
+          <p className="m-0 text-[13px] leading-[18px] text-[var(--color-text-secondary)]">
+            {storeConfirm.note}
+          </p>
+        )}
+        {records && (
+          <Field>
+            <FieldLabel htmlFor={prefixInputId}>가게 ID 앞 8자리</FieldLabel>
+            <Input
+              id={prefixInputId}
+              value={typedPrefix}
+              maxLength={8}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setTypedPrefix(event.currentTarget.value)}
+              disabled={storeActionBusy}
+              className="rounded-[8px] font-mono"
+              data-autofocus
+            />
+          </Field>
+        )}
+      </AdminConfirmDialog>
     </div>
   );
 }
