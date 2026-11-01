@@ -23,7 +23,12 @@ describe('AdminStoresClient read-error recovery wiring', () => {
 
   it('initial read failure → error state를 표시한다', () => {
     expect(
-      getAdminStoresReadState({ loading: false, error: FETCH_ERROR_MESSAGE, stores: [], visible: [] }),
+      getAdminStoresReadState({
+        loading: false,
+        error: FETCH_ERROR_MESSAGE,
+        stores: [],
+        visible: [],
+      }),
     ).toBe('FETCH_ERROR');
     expect(source).toContain('판매자 목록을 불러오지 못했습니다.');
     expect(source).toContain('{error}');
@@ -31,11 +36,16 @@ describe('AdminStoresClient read-error recovery wiring', () => {
 
   it('read failure ≠ unfiltered empty', () => {
     expect(
-      getAdminStoresReadState({ loading: false, error: FETCH_ERROR_MESSAGE, stores: [], visible: [] }),
+      getAdminStoresReadState({
+        loading: false,
+        error: FETCH_ERROR_MESSAGE,
+        stores: [],
+        visible: [],
+      }),
     ).toBe('FETCH_ERROR');
-    expect(
-      getAdminStoresReadState({ loading: false, error: null, stores: [], visible: [] }),
-    ).toBe('EMPTY_UNFILTERED');
+    expect(getAdminStoresReadState({ loading: false, error: null, stores: [], visible: [] })).toBe(
+      'EMPTY_UNFILTERED',
+    );
     // _client 자체가 빈 판매자 copy를 렌더하지 않는다 — 실패 표현은 error 분기가 소유한다.
     expect(source).not.toContain('등록된 판매자가 없습니다.');
     // 조회 실패에서는 0건 수로 표시하지 않는다.

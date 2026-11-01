@@ -3,7 +3,7 @@
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 import { buildRoundPurchaseList } from '@/lib/round-purchase-list';
 
-// ① 외형 유지(UI 교체 P4): Mantine Paper(lg·xs·md)·Group·Text와 같은 값을 Tailwind로 그린다.
+// ② 디자인 방향(D2): 그림자 없이 흰 면만 남긴다. 목록 행 사이 선은 유지한다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 
 // 회차 구매 목록(경매에서 살 상품별 수량). 수량은 서버 회차 상품 집계를 그대로 쓴다.
@@ -17,7 +17,7 @@ export function RoundPurchaseListCard({
   const list = buildRoundPurchaseList(round);
 
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4">
       <p className={TEXT} style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>
         {title}
       </p>
