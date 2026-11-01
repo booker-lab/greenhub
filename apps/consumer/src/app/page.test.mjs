@@ -40,5 +40,5 @@ test('배너는 상품 목록 위에, 운영 관계 안내는 상품 목록과 f
 });
 
 test('고정 하단 navigation 위에서 footer 마지막 줄까지 접근할 여백을 둔다', () => {
-  assert.match(pageSource, /<Container[^>]*pb=\{96\}/);
+  assert.match(pageSource, /max-w-\[720px\][^"]*pb-24/);
 });
