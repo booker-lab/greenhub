@@ -169,7 +169,7 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `soundness.mjs` | 정상 촬영 판정 |
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
 | `parity.mjs` | 작업 전·후 쓰기 요청·결제창 인자·저장소·접근성 트리 비교(`parity.spec.mjs`) |
-| `aria-snapshot.mjs` | 경로 안내를 뺀 접근성 트리 촬영(`aria-snapshot.spec.mjs`, Chromium 필요) |
+| `aria-snapshot.mjs` | 경로 안내를 뺀 접근성 트리 촬영. 감추기·되돌리기 로직은 `aria-snapshot.spec.mjs`(가짜 document, CI), 실제 Chromium 확인은 `aria-snapshot.browser-check.mjs`(로컬 전용, CI는 브라우저가 없어 `.spec`이 아닌 이름) |
 | `report.mjs` · `report-template.html` | 캡처 결과로 확인판 HTML 생성 |
 
 ## 안전장치

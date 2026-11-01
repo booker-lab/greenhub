@@ -1,103 +1,92 @@
-// appAriaSnapshot이 Next.js 경로 안내만 빼고 앱이 그린 alert는 남기는지 실제 Chromium으로 확인한다.
-// 실행: GREENHUB_VISUAL_CHROMIUM=<chrome 경로> node --test scripts/visual/aria-snapshot.spec.mjs
+// aria-snapshot.mjs의 경로 안내 감추기·되돌리기 로직을 가짜 document로 검증한다(브라우저 없이 CI에서 돈다).
+// 실제 Chromium ariaSnapshot에서 경로 안내만 빠지는지는 aria-snapshot.browser-check.mjs(로컬 전용)가 본다.
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { createRequire } from 'node:module';
-import path from 'node:path';
-import { after, before, describe, it } from 'node:test';
-import { fileURLToPath } from 'node:url';
-import { ARIA_EXCLUDED_TAGS, appAriaSnapshot } from './aria-snapshot.mjs';
+import { describe, it } from 'node:test';
+import {
+  ARIA_EXCLUDED_TAGS,
+  ARIA_HIDDEN_MARK,
+  hideExcludedHosts,
+  restoreExcludedHosts,
+} from './aria-snapshot.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const { chromium } = createRequire(path.join(ROOT, 'apps/e2e/package.json'))('@playwright/test');
+/** 속성과 shadow root만 흉내 낸 요소. */
+function element(tag, attrs = {}, shadowText) {
+  const attributes = new Map(Object.entries(attrs));
+  return {
+    tag,
+    attributes,
+    getAttribute: (name) => (attributes.has(name) ? attributes.get(name) : null),
+    setAttribute: (name, value) => attributes.set(name, String(value)),
+    removeAttribute: (name) => attributes.delete(name),
+    shadowRoot:
+      shadowText === undefined
+        ? null
+        : {
+            querySelector: (selector) =>
+              selector === '[role="alert"],[aria-live]' ? { textContent: shadowText } : null,
+          },
+  };
+}
 
-// Next.js가 붙이는 경로 안내와 같은 모양: body 끝의 <next-route-announcer> + shadow root 안 role=alert·aria-live 요소.
-const PAGE = (announcerAttrs = '') => `<!doctype html><html><head><title>t</title></head><body>
-  <main>
-    <h1>주문 결제</h1>
-    <div role="alert">결제 수단을 골라 주세요</div>
-    <button>결제하기</button>
-  </main>
-  <next-route-announcer ${announcerAttrs}></next-route-announcer>
-  <script>
-    // setContent는 같은 창에 문서를 다시 쓰므로 최상위 const를 두면 두 번째부터 재선언 오류가 난다. 블록으로 감싼다.
-    {
-      const host = document.querySelector('next-route-announcer');
-      const root = host.attachShadow({ mode: 'open' });
-      const live = document.createElement('div');
-      live.setAttribute('aria-live', 'assertive');
-      live.setAttribute('role', 'alert');
-      live.textContent = '결제 확인 중...';
-      root.appendChild(live);
+/** 태그 이름과 [속성] 선택자만 아는 가짜 document. */
+function fakeDocument(elements) {
+  return {
+    querySelectorAll(selector) {
+      const attr = /^\[([^\]=]+)\]$/.exec(selector)?.[1];
+      return attr
+        ? elements.filter((el) => el.attributes.has(attr))
+        : elements.filter((el) => el.tag === selector);
+    },
+  };
+}
+
+const options = (doc) => ({ tags: ARIA_EXCLUDED_TAGS, mark: ARIA_HIDDEN_MARK, doc });
+
+describe('aria-snapshot: 경로 안내만 감추고 되돌린다', () => {
+  it('경로 안내만 aria-hidden으로 감추고 그때 글자를 돌려준다. 앱이 그린 alert는 손대지 않는다', () => {
+    const appAlert = element('div', { role: 'alert' });
+    const announcer = element('next-route-announcer', {}, '  결제 확인 중...  ');
+    const doc = fakeDocument([appAlert, announcer]);
+
+    const texts = hideExcludedHosts(options(doc));
+
+    assert.deepEqual(texts, ['결제 확인 중...']);
+    assert.equal(announcer.getAttribute('aria-hidden'), 'true');
+    assert.deepEqual([...appAlert.attributes], [['role', 'alert']]);
+  });
+
+  it('되돌리면 없던 aria-hidden은 지우고 표시도 남기지 않는다', () => {
+    const announcer = element('next-route-announcer', {}, '');
+    const doc = fakeDocument([announcer]);
+    hideExcludedHosts(options(doc));
+    restoreExcludedHosts(options(doc));
+    assert.deepEqual([...announcer.attributes], []);
+  });
+
+  it('원래 있던 aria-hidden 값은 되돌린 뒤에도 그대로다', () => {
+    const announcer = element('next-route-announcer', { 'aria-hidden': 'false' }, '');
+    const doc = fakeDocument([announcer]);
+    hideExcludedHosts(options(doc));
+    assert.equal(announcer.getAttribute('aria-hidden'), 'true');
+    restoreExcludedHosts(options(doc));
+    assert.deepEqual([...announcer.attributes], [['aria-hidden', 'false']]);
+  });
+
+  it('shadow root가 없거나 경로 안내가 없으면 빈 글자·빈 목록이다', () => {
+    assert.deepEqual(hideExcludedHosts(options(fakeDocument([element('next-route-announcer')]))), [
+      '',
+    ]);
+    assert.deepEqual(
+      hideExcludedHosts(options(fakeDocument([element('div', { role: 'alert' })]))),
+      [],
+    );
+  });
+
+  it('브라우저 page.evaluate로 넘길 수 있게 바깥 변수를 쓰지 않는다', () => {
+    // evaluate는 함수 글자만 보내므로 모듈 안 이름(ARIA_*, HIDDEN_MARK 등)을 쓰면 브라우저에서 깨진다.
+    for (const fn of [hideExcludedHosts, restoreExcludedHosts]) {
+      assert.doesNotMatch(fn.toString(), /ARIA_|HIDDEN_MARK/);
     }
-  </script>
-</body></html>`;
-
-// CI(script specs)에는 Playwright 브라우저가 설치돼 있지 않다. 브라우저가 없으면 사유를 밝히고 건너뛴다.
-// 화면 확인 하네스를 쓰는 로컬(GREENHUB_VISUAL_CHROMIUM 또는 Playwright 설치본)에서는 반드시 돈다.
-const browserPath = process.env.GREENHUB_VISUAL_CHROMIUM || chromium.executablePath();
-const skip = fs.existsSync(browserPath)
-  ? false
-  : `Chromium 없음(${browserPath}). GREENHUB_VISUAL_CHROMIUM을 주고 로컬에서 돌린다.`;
-
-describe('aria-snapshot: Next.js 경로 안내만 빼고 찍는다', { skip }, () => {
-  let browser;
-  let page;
-  before(async () => {
-    browser = await chromium.launch(
-      process.env.GREENHUB_VISUAL_CHROMIUM
-        ? { executablePath: process.env.GREENHUB_VISUAL_CHROMIUM }
-        : {},
-    );
-    page = await browser.newPage();
-  });
-  after(async () => {
-    await browser?.close();
-  });
-
-  it('빼지 않으면 경로 안내가 alert로 접근성 트리에 나온다(시험 페이지가 Next와 같은 모양인지 확인)', async () => {
-    await page.setContent(PAGE());
-    const raw = await page.locator('body').ariaSnapshot();
-    assert.match(raw, /alert: 결제 확인 중\.\.\./);
-  });
-
-  it('경로 안내는 빠지고 앱이 그린 alert·제목·버튼은 남는다', async () => {
-    await page.setContent(PAGE());
-    // 시험 페이지가 이번에도 경로 안내를 실제로 만들었는지 먼저 확인한다.
-    assert.match(await page.locator('body').ariaSnapshot(), /alert: 결제 확인 중\.\.\./);
-    const { aria, routeAnnouncer } = await appAriaSnapshot(page);
-    assert.doesNotMatch(aria, /결제 확인 중/);
-    assert.match(aria, /- alert: 결제 수단을 골라 주세요/);
-    assert.match(aria, /- heading "주문 결제"/);
-    assert.match(aria, /- button "결제하기"/);
-    assert.deepEqual(routeAnnouncer, ['결제 확인 중...']);
-  });
-
-  it('찍은 뒤 경로 안내의 aria-hidden을 원래대로 되돌린다(없던 것은 지우고, 있던 값은 남긴다)', async () => {
-    await page.setContent(PAGE());
-    await appAriaSnapshot(page);
-    const state = await page.evaluate(() => {
-      const host = document.querySelector('next-route-announcer');
-      return { hidden: host.getAttribute('aria-hidden'), marks: host.getAttributeNames() };
-    });
-    assert.deepEqual(state, { hidden: null, marks: [] });
-
-    await page.setContent(PAGE('aria-hidden="false"'));
-    await appAriaSnapshot(page);
-    const kept = await page.evaluate(() =>
-      document
-        .querySelector('next-route-announcer')
-        .getAttributeNames()
-        .map((n) => [n, document.querySelector('next-route-announcer').getAttribute(n)]),
-    );
-    assert.deepEqual(kept, [['aria-hidden', 'false']]);
-  });
-
-  it('경로 안내가 없는 화면은 그대로 찍고 빈 목록을 남긴다', async () => {
-    await page.setContent('<!doctype html><body><div role="alert">앱 알림</div></body>');
-    const { aria, routeAnnouncer } = await appAriaSnapshot(page);
-    assert.match(aria, /- alert: 앱 알림/);
-    assert.deepEqual(routeAnnouncer, []);
   });
 
   it('빼는 요소는 경로 안내 하나뿐이다', () => {
