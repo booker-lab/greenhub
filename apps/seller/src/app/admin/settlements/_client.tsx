@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@greenhub/ui/components/button';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { notify } from '@/components/AppToaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -26,7 +27,9 @@ import {
 
 export default function AdminSettlementsClient() {
   const [statusFilter, setStatusFilter] = useState<AdminSettlementFilterKey>('all');
-  const [storeFilter, setStoreFilter] = useState('');
+  // 판매자 화면 ⋮ "정산 보기"는 ?store=<가게 id>로 그 가게를 골라 연다.
+  const initialStore = useSearchParams().get('store') ?? '';
+  const [storeFilter, setStoreFilter] = useState(initialStore);
   const [fromFilter, setFromFilter] = useState('');
   const [toFilter, setToFilter] = useState('');
   const { stores, loading: storesLoading } = useAdminStores();

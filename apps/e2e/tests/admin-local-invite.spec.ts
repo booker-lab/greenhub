@@ -21,15 +21,22 @@ import {
 // 카카오 로그인으로 가입하는 나머지 흐름은 로컬 E2E로 열 수 없어 API 통합 테스트가 덮는다(apps/e2e/README.md).
 
 // 화면(invite/_lib formatKstDateTime)과 같은 표기.
-const KST_DATE_TIME = new Intl.DateTimeFormat('ko-KR', {
+// 어드민 날짜 표기(design-direction.md §5 "날짜") — 한국 시간 "2026-11-01 09:00".
+const KST_PARTS = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Seoul',
   year: 'numeric',
-  month: 'numeric',
-  day: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
   hour: '2-digit',
   minute: '2-digit',
-  hour12: false,
+  hourCycle: 'h23',
 });
+const KST_DATE_TIME = {
+  format(date: Date): string {
+    const p = Object.fromEntries(KST_PARTS.formatToParts(date).map((x) => [x.type, x.value]));
+    return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+  },
+};
 
 declare global {
   interface Window {

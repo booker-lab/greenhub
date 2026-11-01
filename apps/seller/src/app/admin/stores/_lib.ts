@@ -1,19 +1,20 @@
 import type { StoreStatus } from '@greenhub/shared';
 import type { AdminStore } from '@/hooks/useAdmin';
 
-// 판매자 상태 라벨/색 — stores 탭 표현 SSOT(테이블·카드 공용).
+// 판매자 상태 라벨·점 색 — stores 화면 표현 SSOT(표·휴대폰 행 공용).
 // 키는 shared StoreStatus union(invited|active|archived)과 정확히 일치.
-// 호출부(StoresTable)는 `?? store.status` 폴백을 유지해 미래 union 확장 시 안전망 제공.
+// 호출부는 `?? store.status` 폴백을 유지해 미래 union 확장 시 안전망 제공.
+// ② 방향(design-direction.md §5 어드민 "판매자"): "치우기"는 "정리하기"로 부른다. 정리한 판매자는 끝난 상태라 회색 점.
 export const STATUS_LABEL: Record<StoreStatus, string> = {
-  active: '운영중',
+  active: '운영 중',
   invited: '초대됨',
-  archived: '치움',
+  archived: '정리됨',
 };
 
-export const STATUS_COLOR: Record<StoreStatus, string> = {
-  active: 'brand',
-  invited: 'yellow',
-  archived: 'gray',
+export const STATUS_TONE: Record<StoreStatus, 'default' | 'done'> = {
+  active: 'default',
+  invited: 'default',
+  archived: 'done',
 };
 
 export type StoreStatusFilter = 'all' | 'current' | StoreStatus;
@@ -37,13 +38,29 @@ export interface StoreSort {
 export const DEFAULT_STATUS_FILTER: StoreStatusFilter = 'current';
 export const DEFAULT_SORT: StoreSort = { key: 'name', direction: 'asc' };
 
+// 상태 탭 순서 — 기본 보기(정리하지 않은 판매자)를 맨 앞에 둔다. 전체는 정리한 판매자까지 포함한다.
 export const STATUS_FILTER_OPTIONS: { value: StoreStatusFilter; label: string }[] = [
-  { value: 'all', label: '전체' },
-  { value: 'current', label: '활성' },
-  { value: 'invited', label: STATUS_LABEL.invited },
+  { value: 'current', label: '운영·초대' },
   { value: 'active', label: STATUS_LABEL.active },
+  { value: 'invited', label: STATUS_LABEL.invited },
   { value: 'archived', label: STATUS_LABEL.archived },
+  { value: 'all', label: '전체' },
 ];
+
+/** 탭마다 붙일 건수 — 받은 판매자 전체에서 검색어만 적용해 센다(상태 탭을 바꿔도 숫자가 흔들리지 않게). */
+export function countStoresByFilter(
+  stores: AdminStore[],
+  keyword: string,
+): Record<StoreStatusFilter, number> {
+  const counts = { all: 0, current: 0, invited: 0, active: 0, archived: 0 } as Record<
+    StoreStatusFilter,
+    number
+  >;
+  for (const option of STATUS_FILTER_OPTIONS) {
+    counts[option.value] = filterStores(stores, { keyword, status: option.value }).length;
+  }
+  return counts;
+}
 
 export const SORT_OPTIONS: { value: StoreSortValue; label: string }[] = [
   { value: 'name:asc', label: '이름 ↑' },
@@ -99,33 +116,33 @@ export function filterStores(stores: AdminStore[], filters: StoreFilters): Admin
   });
 }
 
-/** 대표자·연락처 한 줄. 둘 다 없으면 자리표시자. */
+/** 대표자·연락처 한 줄. 둘 다 없으면 "대표·연락처 미등록". */
 export function formatStoreContact(store: Pick<AdminStore, 'ceoName' | 'phone'>): string {
   const parts = [store.ceoName?.trim(), store.phone?.trim()].filter(Boolean);
-  return parts.length > 0 ? parts.join(' · ') : '—';
+  return parts.length > 0 ? parts.join(' · ') : '대표·연락처 미등록';
 }
 
-/** 치우기 확인창 — 실제 동작(손님 화면 숨김·새 주문 차단, 로그인 유지, 기록 있으면 ID 확인)을 알린다. */
+/** 정리하기 확인창 — 실제 동작(손님 화면 숨김·새 주문 차단, 로그인 유지, 기록 있으면 ID 확인)을 알린다. */
 export function describeArchiveConfirm(store: Pick<AdminStore, 'name'>): string {
   const label = store.name?.trim() || '(미설정)';
   return [
-    `${label} 판매자를 치울까요?`,
-    '치우면 손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다. 판매자는 계속 로그인할 수 있고, 복구하면 치우기 전 상태로 돌아갑니다.',
-    '주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 치워집니다. 기록은 지워지지 않습니다.',
+    `${label} 판매자를 정리할까요?`,
+    '정리하면 손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다. 판매자는 계속 로그인할 수 있고, 복구하면 정리하기 전 상태로 돌아갑니다.',
+    '주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다. 기록은 지워지지 않습니다.',
   ].join('\n');
 }
 
-/** 가게 ID 확인 입력값 — 기록 있는 판매자를 치울 때 서버가 비교하는 앞 8자리. */
+/** 가게 ID 확인 입력값 — 기록 있는 판매자를 정리할 때 서버가 비교하는 앞 8자리. */
 export function storeIdConfirmPrefix(storeId: string): string {
   return storeId.slice(0, 8);
 }
 
-/** 기록 있는 판매자 치우기 입력창 — 이름이 깨져 있어도 ID로 대상을 확인하게 한다. */
+/** 기록 있는 판매자 정리하기 입력창 — 이름이 깨져 있어도 ID로 대상을 확인하게 한다. */
 export function describeArchiveRecordsPrompt(store: Pick<AdminStore, 'id' | 'name'>): string {
   const label = store.name?.trim() || '(미설정)';
   return [
     `${label} 판매자는 주문·정산 기록이 있습니다.`,
-    `그래도 치우려면 가게 ID 앞 8자리 "${storeIdConfirmPrefix(store.id)}"를 입력하세요.`,
+    `그래도 정리하려면 가게 ID 앞 8자리 "${storeIdConfirmPrefix(store.id)}"를 입력하세요.`,
     '주문·정산 기록은 그대로 남고, 복구하면 다시 손님 화면에 보입니다.',
   ].join('\n');
 }
@@ -211,9 +228,11 @@ export function rateToInput(rate: number | undefined): string {
   return rate === undefined ? '' : String(rateToPercent(rate));
 }
 
-// 수수료율 표시 문자열 — 미설정 시 기본 수수료율로 정산됨을 함께 보인다.
-export function formatRate(rate: number | undefined): string {
-  return rate !== undefined ? `${rateToPercent(rate)}%` : `기본 ${DEFAULT_COMMISSION_PERCENT}%`;
+// 수수료율 표시 — 숫자는 모두 같은 크기로 쓰고, 설정하지 않은 가게에만 회색 "기본"을 붙인다("5% 기본").
+export function formatRate(rate: number | undefined): { percent: string; isDefault: boolean } {
+  return rate !== undefined
+    ? { percent: `${rateToPercent(rate)}%`, isDefault: false }
+    : { percent: `${DEFAULT_COMMISSION_PERCENT}%`, isDefault: true };
 }
 
 /** 수수료율 저장 성공 안내 — 다음 정산부터 적용되고 이미 만든 정산은 바뀌지 않는다. */
