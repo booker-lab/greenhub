@@ -15,7 +15,7 @@ import { Textarea } from '@greenhub/ui/components/textarea';
 import { useState } from 'react';
 
 // ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·그림자 xs·안쪽 16)·Text(p, 여백 0)·Group·Stack 값.
-const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-white p-4';
 const TEXT = 'm-0 p-0 text-base font-normal';
 const LABEL_STYLE = {
   fontSize: 'var(--font-size-sm)',
