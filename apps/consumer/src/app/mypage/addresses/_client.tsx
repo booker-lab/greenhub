@@ -210,7 +210,12 @@ function AddressFormModal({
                     </UiAlert>
                   )}
 
-                  <LoadingButton type="submit" className="mt-2.5 w-full" loading={saving}>
+                  {/* hover는 Mantine Button(brand-7)과 같게 둔다(packages/ui 기본은 primary/90으로 더 옅다). */}
+                  <LoadingButton
+                    type="submit"
+                    className="mt-2.5 w-full hover:bg-[#008a4b]"
+                    loading={saving}
+                  >
                     저장
                   </LoadingButton>
                 </div>
