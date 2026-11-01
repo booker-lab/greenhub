@@ -17,11 +17,11 @@ import { apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import { useTokenRef } from '@/lib/use-token-ref';
 
-// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·Paper(radius lg·shadow xs·p md)·
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·Paper(radius lg·p md; 그림자는 ② D2로 걷음)·
 // Stack(gap sm)·Text(sm = 15px·줄 높이 1.45)·TextInput·Textarea(autosize, 라벨)·Checkbox green(green-6)과 같은 값.
 const TEXT = 'm-0 p-0 text-base';
 const TEXT_SM = 'm-0 p-0 text-sm';
-const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-white p-4';
 const STACK = 'flex flex-col items-stretch justify-start gap-3';
 const GREEN = '#40c057';
 
