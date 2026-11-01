@@ -1,5 +1,5 @@
 {
-  "stage": "consumer-freeze",
+  "stage": "open",
   "candidateSha": null,
-  "note": "UI 교체(Mantine → shadcn/ui) 동결 상태. 기준: docs/specs/frontend/ui-stack-migration-plan.md §8(2026-10-30 사용자 결정: 첫 회차를 교체 뒤로 미루고, 카카오페이 심사·LIVE 결제 전환·실결제 확인 전까지 소비자 앱 화면만 묶는다). 검사: scripts/release/freeze-guard.mjs. 심사·LIVE·실결제 확인이 끝나면 open으로 바꾸는 커밋을 병합한다. 다음 회차 일정을 잡으면 그 회차 기준으로 pre-candidate·candidate를 다시 쓴다."
+  "note": "UI 교체(Mantine → shadcn/ui) 동결 상태. 기준: docs/specs/frontend/ui-stack-migration-plan.md §8. 2026-11-01 사용자 결정으로 소비자 동결(consumer-freeze)을 풀었다(카카오페이 심사·LIVE 결제 전환·실결제 확인 전이지만 소비자 교체 병합을 진행). 병합은 배포가 아니며, 소비자 화면이 바뀐 SHA의 운영 배포는 따로 사용자 승인으로만 한다. 검사: scripts/release/freeze-guard.mjs. 다음 회차 일정을 잡으면 그 회차 기준으로 pre-candidate·candidate를 다시 쓴다."
 }
