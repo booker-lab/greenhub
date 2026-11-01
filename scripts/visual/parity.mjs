@@ -113,6 +113,23 @@ export function compareParity(beforeRecords, afterRecords, allowances = []) {
       results.push({ screen, viewport, status: 'missing', side: before ? 'after' : 'before' });
       continue;
     }
+    // 접근성 트리를 다른 방식으로 찍은 두 기록(경로 안내를 뺀 쪽과 안 뺀 쪽)은 aria를 비교할 수 없다.
+    const excludesBefore = JSON.stringify(before.ariaExcludes ?? []);
+    const excludesAfter = JSON.stringify(after.ariaExcludes ?? []);
+    if (excludesBefore !== excludesAfter) {
+      results.push({
+        screen,
+        viewport,
+        status: 'different',
+        differences: [
+          {
+            kind: 'aria',
+            reason: `접근성 트리를 다른 방식으로 찍음(before 제외 ${excludesBefore}, after 제외 ${excludesAfter}). 두 묶음을 같은 shots.mjs로 다시 찍으세요.`,
+          },
+        ],
+      });
+      continue;
+    }
     const differences = [];
     for (const kind of PARITY_KINDS) {
       const prepare = (value) =>
@@ -198,6 +215,8 @@ function readRecords(shotsRoot, label) {
       portoneCalls: shot.portoneCalls,
       storage: shot.storage,
       aria: fs.readFileSync(path.join(dir, shot.aria), 'utf8'),
+      // 접근성 트리에서 뺀 요소(aria-snapshot.mjs). 예전 shots.mjs로 찍은 기록은 빼지 않았다(빈 목록).
+      ariaExcludes: shot.ariaExcludes ?? [],
       sound: shot.sound,
     };
   }

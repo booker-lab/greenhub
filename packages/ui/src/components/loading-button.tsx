@@ -5,7 +5,8 @@ import { Button } from './button';
 import { Loader } from './loader';
 
 // ① 외형 유지: Mantine Button loading. 변형 색은 그대로 두고(비활성 회색이 아님) 위에 흰 15% 막을 덮고,
-// 글자를 아래로 내려 감춘 뒤 가운데에 글자색 Loader(버튼 높이 ÷ 1.8)를 둔다. 누를 수 없고 커서는 not-allowed다.
+// 글자를 아래로 내려 감춘 뒤 가운데에 글자색 Loader(버튼 높이 ÷ 1.8)를 둔다. 누를 수 없고, Mantine(loading = disabled)처럼
+// 마우스를 올려도 색이 바뀌지 않는다(pointer-events: none).
 // loading이 아니면 Button과 같다.
 const LOADER_PX = {
   default: 20,
@@ -93,7 +94,7 @@ function LoadingButton({
       data-loading=""
       aria-busy
       className={cn(
-        "cursor-not-allowed before:absolute before:-inset-px before:rounded-[inherit] before:bg-white/15 before:content-['']",
+        "pointer-events-none cursor-not-allowed before:absolute before:-inset-px before:rounded-[inherit] before:bg-white/15 before:content-['']",
         className,
       )}
       {...props}

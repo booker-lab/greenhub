@@ -167,4 +167,24 @@ describe('parity: 작업 전·후 동작·접근성 비교', () => {
       ],
     );
   });
+  it('경로 안내를 뺀 묶음과 안 뺀 묶음은 aria가 같아도 비교하지 않고 실패로 본다', () => {
+    const excluded = record({ ariaExcludes: ['next-route-announcer'] });
+    const legacy = record({ ariaExcludes: [] });
+    const [result] = compareParity({ 'x@mobile': legacy }, { 'x@mobile': excluded });
+    assert.equal(result.status, 'different');
+    assert.equal(result.differences[0].kind, 'aria');
+    assert.match(result.differences[0].reason, /다른 방식으로 찍음/);
+  });
+
+  it('같은 방식으로 찍은 묶음은 앱이 그린 alert 차이를 그대로 잡는다', () => {
+    const ariaExcludes = ['next-route-announcer'];
+    const a = record({
+      ariaExcludes,
+      aria: '- button "결제하기"\n- alert: 결제 수단을 골라 주세요',
+    });
+    const b = record({ ariaExcludes, aria: '- button "결제하기"\n- alert' });
+    const [result] = compareParity({ 'x@mobile': a }, { 'x@mobile': b });
+    assert.equal(result.status, 'different');
+    assert.equal(result.differences[0].kind, 'aria');
+  });
 });
