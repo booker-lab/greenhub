@@ -41,7 +41,7 @@ describe('홈 오늘 할 일', () => {
     const newOrders = tasks.find((task) => task.key === 'new');
     expect(newOrders).toEqual({
       key: 'new',
-      dot: 'var(--color-primary)',
+      dot: 'var(--color-text)',
       label: '신규 주문 2건 처리하기',
       href: '/orders?tab=ACTION_REQUIRED',
     });
@@ -70,7 +70,7 @@ describe('홈 오늘 할 일', () => {
     expect(tasks).toEqual([
       {
         key: 'round-prepare',
-        dot: 'var(--color-primary)',
+        dot: 'var(--color-text)',
         label: '준비 시작 대기 2건',
         href: '/sale-rounds/round-1',
       },
@@ -99,7 +99,7 @@ describe('홈 오늘 할 일', () => {
       expect(buildTodayTasks({ orders, today })).toEqual([
         {
           key: 'round-delivery',
-          dot: 'var(--color-primary)',
+          dot: 'var(--color-text)',
           label: '배송할 회차 주문 3건',
           href: '/sale-rounds/round-1',
         },
