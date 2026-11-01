@@ -486,6 +486,8 @@ try {
     const todo = pending.filter((p) => p.viewport === viewportName).map((p) => p.screen);
     if (todo.length === 0) continue;
     const authed = await newContext(browser, viewportName);
+    // 앞 폭의 마지막 화면이 고른 상황(예: 로그인 실패)이 가짜 계정 로그인에 남지 않게 기본 경로로 돌린다.
+    await fetch(`${apiBase}/__scenario?name=`, { method: 'POST' });
     await login(authed);
     const guest = await newContext(browser, viewportName);
     for (const screen of todo) {
