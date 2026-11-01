@@ -1,0 +1,9381 @@
+{
+  "app": "seller",
+  "before": {
+    "label": "before-b",
+    "gitSha": "d9c051b",
+    "visualNow": "2026-10-31T15:00:00.000Z"
+  },
+  "after": {
+    "label": "after-b",
+    "gitSha": "b4475dd",
+    "visualNow": "2026-10-31T15:00:00.000Z"
+  },
+  "tolerance": 1,
+  "ok": false,
+  "problems": [
+    "orders(mobile): diff",
+    "orders-held(mobile): diff",
+    "orders-waiting(mobile): diff",
+    "orders-in-delivery(mobile): diff",
+    "orders-in-delivery-hub(mobile): diff",
+    "orders-done(mobile): diff",
+    "orders-done-loading(mobile): diff",
+    "orders-cancelled(mobile): diff",
+    "orders-date-custom(mobile): diff",
+    "orders-search-empty(mobile): diff",
+    "orders-search-phone(mobile): diff",
+    "orders-round-filter(mobile): diff",
+    "orders-group(mobile): diff",
+    "order-contact(mobile): diff",
+    "order-no-contact(mobile): diff",
+    "order-round(mobile): diff",
+    "order-held(mobile): diff",
+    "order-preparing(mobile): diff",
+    "order-hub-arrived(mobile): diff",
+    "order-prepare-form(mobile): diff",
+    "order-round-prepare-form(mobile): diff",
+    "order-prepare-submit(mobile): diff",
+    "order-round-prepare-submit(mobile): diff",
+    "order-ops-resend(mobile): diff",
+    "order-ops-retry-refund(mobile): diff",
+    "order-delivering(mobile): diff",
+    "order-delivered(mobile): diff",
+    "order-reviewed(mobile): diff",
+    "order-cancelled(mobile): diff",
+    "modal-order-cancel-short(mobile): diff",
+    "modal-order-cancel-held(mobile): diff",
+    "modal-order-post-delivery-refund(mobile): diff",
+    "modal-order-post-delivery-refund-filled(mobile): diff",
+    "order-cancel-submit(mobile): diff",
+    "order-post-delivery-refund-submit(mobile): diff",
+    "modal-order-hold(mobile): diff",
+    "modal-order-hold-customer(mobile): diff",
+    "modal-order-hold-filled(mobile): diff",
+    "order-hold-submit(mobile): diff",
+    "modal-order-cancel(mobile): diff",
+    "order-ops-retry-refund-loading(mobile): diff",
+    "order-ops-reload-loading(mobile): diff",
+    "orders(tablet): diff",
+    "orders-held(tablet): diff",
+    "orders-waiting(tablet): diff",
+    "orders-in-delivery(tablet): diff",
+    "orders-in-delivery-hub(tablet): diff",
+    "orders-done(tablet): diff",
+    "orders-done-loading(tablet): diff",
+    "orders-cancelled(tablet): diff",
+    "orders-date-custom(tablet): diff",
+    "orders-search-empty(tablet): diff",
+    "orders-search-phone(tablet): diff",
+    "orders-round-filter(tablet): diff",
+    "orders-group(tablet): diff",
+    "order-contact(tablet): diff",
+    "order-no-contact(tablet): diff",
+    "order-round(tablet): diff",
+    "order-held(tablet): diff",
+    "order-preparing(tablet): diff",
+    "order-hub-arrived(tablet): diff",
+    "order-prepare-form(tablet): diff",
+    "order-round-prepare-form(tablet): diff",
+    "order-prepare-submit(tablet): diff",
+    "order-round-prepare-submit(tablet): diff",
+    "order-ops-resend(tablet): diff",
+    "order-ops-retry-refund(tablet): diff",
+    "order-delivering(tablet): diff",
+    "order-delivered(tablet): diff",
+    "order-reviewed(tablet): diff",
+    "order-cancelled(tablet): diff",
+    "modal-order-cancel-short(tablet): diff",
+    "modal-order-cancel-held(tablet): diff",
+    "modal-order-post-delivery-refund(tablet): diff",
+    "modal-order-post-delivery-refund-filled(tablet): diff",
+    "order-cancel-submit(tablet): diff",
+    "order-post-delivery-refund-submit(tablet): diff",
+    "modal-order-hold(tablet): diff",
+    "modal-order-hold-customer(tablet): diff",
+    "modal-order-hold-filled(tablet): diff",
+    "order-hold-submit(tablet): diff",
+    "modal-order-cancel(tablet): diff",
+    "order-ops-retry-refund-loading(tablet): diff",
+    "order-ops-reload-loading(tablet): diff",
+    "orders(desktop): diff",
+    "orders-held(desktop): diff",
+    "orders-waiting(desktop): diff",
+    "orders-in-delivery(desktop): diff",
+    "orders-in-delivery-hub(desktop): diff",
+    "orders-done(desktop): diff",
+    "orders-done-loading(desktop): diff",
+    "orders-cancelled(desktop): diff",
+    "orders-date-custom(desktop): diff",
+    "orders-search-empty(desktop): diff",
+    "orders-search-phone(desktop): diff",
+    "orders-round-filter(desktop): diff",
+    "orders-group(desktop): diff",
+    "order-contact(desktop): diff",
+    "order-no-contact(desktop): diff",
+    "order-round(desktop): diff",
+    "order-held(desktop): diff",
+    "order-preparing(desktop): diff",
+    "order-hub-arrived(desktop): diff",
+    "order-prepare-form(desktop): diff",
+    "order-round-prepare-form(desktop): diff",
+    "order-prepare-submit(desktop): diff",
+    "order-round-prepare-submit(desktop): diff",
+    "order-ops-resend(desktop): diff",
+    "order-ops-retry-refund(desktop): diff",
+    "order-delivering(desktop): diff",
+    "order-delivered(desktop): diff",
+    "order-reviewed(desktop): diff",
+    "order-cancelled(desktop): diff",
+    "modal-order-cancel-short(desktop): diff",
+    "modal-order-cancel-held(desktop): diff",
+    "modal-order-post-delivery-refund(desktop): diff",
+    "modal-order-post-delivery-refund-filled(desktop): diff",
+    "order-cancel-submit(desktop): diff",
+    "order-post-delivery-refund-submit(desktop): diff",
+    "modal-order-hold(desktop): diff",
+    "modal-order-hold-customer(desktop): diff",
+    "modal-order-hold-filled(desktop): diff",
+    "order-hold-submit(desktop): diff",
+    "modal-order-cancel(desktop): diff",
+    "order-ops-retry-refund-loading(desktop): diff",
+    "order-ops-reload-loading(desktop): diff"
+  ],
+  "unusedAllowances": [],
+  "screens": [
+    {
+      "id": "login",
+      "viewport": "mobile",
+      "file": "login-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "home",
+      "viewport": "mobile",
+      "file": "home-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1846
+        ],
+        "after": [
+          780,
+          1846
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1846
+    },
+    {
+      "id": "onboarding",
+      "viewport": "mobile",
+      "file": "onboarding-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "orders",
+      "viewport": "mobile",
+      "file": "orders-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          5882
+        ],
+        "after": [
+          780,
+          5880
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 5880
+    },
+    {
+      "id": "orders-held",
+      "viewport": "mobile",
+      "file": "orders-held-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2130
+        ],
+        "after": [
+          780,
+          2128
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2128
+    },
+    {
+      "id": "orders-waiting",
+      "viewport": "mobile",
+      "file": "orders-waiting-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2032
+        ],
+        "after": [
+          780,
+          2028
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2028
+    },
+    {
+      "id": "orders-in-delivery",
+      "viewport": "mobile",
+      "file": "orders-in-delivery-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2764
+        ],
+        "after": [
+          780,
+          2762
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2762
+    },
+    {
+      "id": "orders-in-delivery-hub",
+      "viewport": "mobile",
+      "file": "orders-in-delivery-hub-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2306
+        ],
+        "after": [
+          780,
+          2304
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2304
+    },
+    {
+      "id": "orders-done",
+      "viewport": "mobile",
+      "file": "orders-done-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2152
+        ],
+        "after": [
+          780,
+          2148
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2148
+    },
+    {
+      "id": "orders-done-loading",
+      "viewport": "mobile",
+      "file": "orders-done-loading-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2152
+        ],
+        "after": [
+          780,
+          2148
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2148
+    },
+    {
+      "id": "orders-cancelled",
+      "viewport": "mobile",
+      "file": "orders-cancelled-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2152
+        ],
+        "after": [
+          780,
+          2148
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2148
+    },
+    {
+      "id": "orders-date-custom",
+      "viewport": "mobile",
+      "file": "orders-date-custom-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          5980
+        ],
+        "after": [
+          780,
+          5978
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 5978
+    },
+    {
+      "id": "orders-search-empty",
+      "viewport": "mobile",
+      "file": "orders-search-empty-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2094
+        ],
+        "after": [
+          780,
+          2092
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2092
+    },
+    {
+      "id": "orders-search-phone",
+      "viewport": "mobile",
+      "file": "orders-search-phone-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2196
+        ],
+        "after": [
+          780,
+          2194
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2194
+    },
+    {
+      "id": "orders-round-filter",
+      "viewport": "mobile",
+      "file": "orders-round-filter-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          4352
+        ],
+        "after": [
+          780,
+          4350
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 4350
+    },
+    {
+      "id": "orders-group",
+      "viewport": "mobile",
+      "file": "orders-group-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2200
+        ],
+        "after": [
+          780,
+          2192
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2192
+    },
+    {
+      "id": "order-contact",
+      "viewport": "mobile",
+      "file": "order-contact-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          3466
+        ],
+        "after": [
+          780,
+          3458
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 3458
+    },
+    {
+      "id": "order-no-contact",
+      "viewport": "mobile",
+      "file": "order-no-contact-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          3054
+        ],
+        "after": [
+          780,
+          3050
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 3050
+    },
+    {
+      "id": "order-round",
+      "viewport": "mobile",
+      "file": "order-round-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2704
+        ],
+        "after": [
+          780,
+          2704
+        ]
+      },
+      "diffCount": 48862,
+      "unexplainedCount": 48862,
+      "bbox": {
+        "x": 28,
+        "y": 226,
+        "width": 724,
+        "height": 1924
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2704
+    },
+    {
+      "id": "prep",
+      "viewport": "mobile",
+      "file": "prep-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          2328
+        ],
+        "after": [
+          780,
+          2328
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2328
+    },
+    {
+      "id": "operations",
+      "viewport": "mobile",
+      "file": "operations-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "sale-rounds",
+      "viewport": "mobile",
+      "file": "sale-rounds-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          5308
+        ],
+        "after": [
+          780,
+          5308
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 5308
+    },
+    {
+      "id": "sale-round-open",
+      "viewport": "mobile",
+      "file": "sale-round-open-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          8528
+        ],
+        "after": [
+          780,
+          8528
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 8528
+    },
+    {
+      "id": "sale-round-scheduled",
+      "viewport": "mobile",
+      "file": "sale-round-scheduled-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          7006
+        ],
+        "after": [
+          780,
+          7006
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 7006
+    },
+    {
+      "id": "sale-round-closed",
+      "viewport": "mobile",
+      "file": "sale-round-closed-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          7956
+        ],
+        "after": [
+          780,
+          7956
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 7956
+    },
+    {
+      "id": "sale-round-draft",
+      "viewport": "mobile",
+      "file": "sale-round-draft-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          6990
+        ],
+        "after": [
+          780,
+          6990
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 6990
+    },
+    {
+      "id": "sale-round-completed",
+      "viewport": "mobile",
+      "file": "sale-round-completed-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          7140
+        ],
+        "after": [
+          780,
+          7140
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 7140
+    },
+    {
+      "id": "sale-round-cancelled",
+      "viewport": "mobile",
+      "file": "sale-round-cancelled-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          7140
+        ],
+        "after": [
+          780,
+          7140
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 7140
+    },
+    {
+      "id": "sale-round-cancel-stuck",
+      "viewport": "mobile",
+      "file": "sale-round-cancel-stuck-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          7148
+        ],
+        "after": [
+          780,
+          7148
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 7148
+    },
+    {
+      "id": "sale-round-new",
+      "viewport": "mobile",
+      "file": "sale-round-new-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          6980
+        ],
+        "after": [
+          780,
+          6980
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 6980
+    },
+    {
+      "id": "products",
+      "viewport": "mobile",
+      "file": "products-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "product-new",
+      "viewport": "mobile",
+      "file": "product-new-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "product-edit",
+      "viewport": "mobile",
+      "file": "product-edit-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "product-new-variety-open",
+      "viewport": "mobile",
+      "file": "product-new-variety-open-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "product-new-variety-picked-open",
+      "viewport": "mobile",
+      "file": "product-new-variety-picked-open-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "product-edit-step2",
+      "viewport": "mobile",
+      "file": "product-edit-step2-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          2304
+        ],
+        "after": [
+          780,
+          2304
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2304
+    },
+    {
+      "id": "product-edit-step3",
+      "viewport": "mobile",
+      "file": "product-edit-step3-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "product-edit-step4",
+      "viewport": "mobile",
+      "file": "product-edit-step4-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "product-edit-step5",
+      "viewport": "mobile",
+      "file": "product-edit-step5-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1912
+        ],
+        "after": [
+          780,
+          1912
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1912
+    },
+    {
+      "id": "product-edit-step5-group",
+      "viewport": "mobile",
+      "file": "product-edit-step5-group-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          2994
+        ],
+        "after": [
+          780,
+          2994
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2994
+    },
+    {
+      "id": "settlements",
+      "viewport": "mobile",
+      "file": "settlements-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "settlements-period",
+      "viewport": "mobile",
+      "file": "settlements-period-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "settlements-orders",
+      "viewport": "mobile",
+      "file": "settlements-orders-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "settlements-period-list",
+      "viewport": "mobile",
+      "file": "settlements-period-list-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "settlements-orders-load-more",
+      "viewport": "mobile",
+      "file": "settlements-orders-load-more-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "settings",
+      "viewport": "mobile",
+      "file": "settings-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "settings-delivery",
+      "viewport": "mobile",
+      "file": "settings-delivery-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          2488
+        ],
+        "after": [
+          780,
+          2488
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2488
+    },
+    {
+      "id": "settings-daily-caps",
+      "viewport": "mobile",
+      "file": "settings-daily-caps-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "hubs",
+      "viewport": "mobile",
+      "file": "hubs-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "admin-orders",
+      "viewport": "mobile",
+      "file": "admin-orders-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          5750
+        ],
+        "after": [
+          780,
+          5750
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 5750
+    },
+    {
+      "id": "admin-settlements",
+      "viewport": "mobile",
+      "file": "admin-settlements-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          3352
+        ],
+        "after": [
+          780,
+          3352
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 3352
+    },
+    {
+      "id": "admin-users",
+      "viewport": "mobile",
+      "file": "admin-users-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "admin-invite",
+      "viewport": "mobile",
+      "file": "admin-invite-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          2156
+        ],
+        "after": [
+          780,
+          2156
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2156
+    },
+    {
+      "id": "admin-stores",
+      "viewport": "mobile",
+      "file": "admin-stores-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "admin-drivers",
+      "viewport": "mobile",
+      "file": "admin-drivers-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "admin-banner",
+      "viewport": "mobile",
+      "file": "admin-banner-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1922
+        ],
+        "after": [
+          780,
+          1922
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1922
+    },
+    {
+      "id": "admin-audit",
+      "viewport": "mobile",
+      "file": "admin-audit-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "hub-detail",
+      "viewport": "mobile",
+      "file": "hub-detail-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "hub-edit",
+      "viewport": "mobile",
+      "file": "hub-edit-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "hub-pickup",
+      "viewport": "mobile",
+      "file": "hub-pickup-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "hub-detail-inactive",
+      "viewport": "mobile",
+      "file": "hub-detail-inactive-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "hub-pickup-order",
+      "viewport": "mobile",
+      "file": "hub-pickup-order-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "hub-new",
+      "viewport": "mobile",
+      "file": "hub-new-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "settings-option-stocks",
+      "viewport": "mobile",
+      "file": "settings-option-stocks-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1956
+        ],
+        "after": [
+          780,
+          1956
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1956
+    },
+    {
+      "id": "settings-payout-account",
+      "viewport": "mobile",
+      "file": "settings-payout-account-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "invite-token",
+      "viewport": "mobile",
+      "file": "invite-token-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "invite-token-invalid",
+      "viewport": "mobile",
+      "file": "invite-token-invalid-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "login-error",
+      "viewport": "mobile",
+      "file": "login-error-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "order-held",
+      "viewport": "mobile",
+      "file": "order-held-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          4356
+        ],
+        "after": [
+          780,
+          4352
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 4352
+    },
+    {
+      "id": "order-preparing",
+      "viewport": "mobile",
+      "file": "order-preparing-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2644
+        ],
+        "after": [
+          780,
+          2644
+        ]
+      },
+      "diffCount": 47492,
+      "unexplainedCount": 47492,
+      "bbox": {
+        "x": 28,
+        "y": 226,
+        "width": 724,
+        "height": 1864
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2644
+    },
+    {
+      "id": "order-hub-arrived",
+      "viewport": "mobile",
+      "file": "order-hub-arrived-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2628
+        ],
+        "after": [
+          780,
+          2628
+        ]
+      },
+      "diffCount": 55326,
+      "unexplainedCount": 55326,
+      "bbox": {
+        "x": 28,
+        "y": 226,
+        "width": 724,
+        "height": 1898
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2628
+    },
+    {
+      "id": "order-prepare-form",
+      "viewport": "mobile",
+      "file": "order-prepare-form-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          3720
+        ],
+        "after": [
+          780,
+          3712
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 3712
+    },
+    {
+      "id": "order-round-prepare-form",
+      "viewport": "mobile",
+      "file": "order-round-prepare-form-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2924
+        ],
+        "after": [
+          780,
+          2924
+        ]
+      },
+      "diffCount": 57718,
+      "unexplainedCount": 57718,
+      "bbox": {
+        "x": 28,
+        "y": 226,
+        "width": 724,
+        "height": 2352
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2924
+    },
+    {
+      "id": "order-prepare-submit",
+      "viewport": "mobile",
+      "file": "order-prepare-submit-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          3466
+        ],
+        "after": [
+          780,
+          3458
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 3458
+    },
+    {
+      "id": "order-round-prepare-submit",
+      "viewport": "mobile",
+      "file": "order-round-prepare-submit-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2704
+        ],
+        "after": [
+          780,
+          2704
+        ]
+      },
+      "diffCount": 47297,
+      "unexplainedCount": 47297,
+      "bbox": {
+        "x": 28,
+        "y": 126,
+        "width": 724,
+        "height": 1896
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2704
+    },
+    {
+      "id": "order-ops-resend",
+      "viewport": "mobile",
+      "file": "order-ops-resend-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          3124
+        ],
+        "after": [
+          780,
+          3120
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 3120
+    },
+    {
+      "id": "order-ops-retry-refund",
+      "viewport": "mobile",
+      "file": "order-ops-retry-refund-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          4426
+        ],
+        "after": [
+          780,
+          4422
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 4422
+    },
+    {
+      "id": "order-delivering",
+      "viewport": "mobile",
+      "file": "order-delivering-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2594
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "order-delivered",
+      "viewport": "mobile",
+      "file": "order-delivered-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2574
+        ],
+        "after": [
+          780,
+          2574
+        ]
+      },
+      "diffCount": 47537,
+      "unexplainedCount": 47537,
+      "bbox": {
+        "x": 28,
+        "y": 226,
+        "width": 724,
+        "height": 1748
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2574
+    },
+    {
+      "id": "order-reviewed",
+      "viewport": "mobile",
+      "file": "order-reviewed-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2478
+        ],
+        "after": [
+          780,
+          2478
+        ]
+      },
+      "diffCount": 47533,
+      "unexplainedCount": 47533,
+      "bbox": {
+        "x": 28,
+        "y": 226,
+        "width": 724,
+        "height": 1748
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2478
+    },
+    {
+      "id": "order-cancelled",
+      "viewport": "mobile",
+      "file": "order-cancelled-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2522
+        ],
+        "after": [
+          780,
+          2522
+        ]
+      },
+      "diffCount": 45680,
+      "unexplainedCount": 45680,
+      "bbox": {
+        "x": 28,
+        "y": 226,
+        "width": 724,
+        "height": 1950
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2522
+    },
+    {
+      "id": "modal-order-cancel-short",
+      "viewport": "mobile",
+      "file": "modal-order-cancel-short-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 13874,
+      "unexplainedCount": 13874,
+      "bbox": {
+        "x": 29,
+        "y": 237,
+        "width": 722,
+        "height": 1068
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-order-cancel-held",
+      "viewport": "mobile",
+      "file": "modal-order-cancel-held-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 13874,
+      "unexplainedCount": 13874,
+      "bbox": {
+        "x": 29,
+        "y": 237,
+        "width": 722,
+        "height": 1068
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-order-post-delivery-refund",
+      "viewport": "mobile",
+      "file": "modal-order-post-delivery-refund-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 8946,
+      "unexplainedCount": 8946,
+      "bbox": {
+        "x": 29,
+        "y": 126,
+        "width": 722,
+        "height": 961
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-order-post-delivery-refund-filled",
+      "viewport": "mobile",
+      "file": "modal-order-post-delivery-refund-filled-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 8946,
+      "unexplainedCount": 8946,
+      "bbox": {
+        "x": 29,
+        "y": 126,
+        "width": 722,
+        "height": 961
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "order-cancel-submit",
+      "viewport": "mobile",
+      "file": "order-cancel-submit-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          3466
+        ],
+        "after": [
+          780,
+          3458
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 3458
+    },
+    {
+      "id": "order-post-delivery-refund-submit",
+      "viewport": "mobile",
+      "file": "order-post-delivery-refund-submit-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2574
+        ],
+        "after": [
+          780,
+          2574
+        ]
+      },
+      "diffCount": 45972,
+      "unexplainedCount": 45972,
+      "bbox": {
+        "x": 28,
+        "y": 126,
+        "width": 724,
+        "height": 1720
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2574
+    },
+    {
+      "id": "operations-all",
+      "viewport": "mobile",
+      "file": "operations-all-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          2188
+        ],
+        "after": [
+          780,
+          2188
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 2188
+    },
+    {
+      "id": "modal-operations-resolve",
+      "viewport": "mobile",
+      "file": "modal-operations-resolve-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-operations-resolve-filled",
+      "viewport": "mobile",
+      "file": "modal-operations-resolve-filled-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "operations-resolve-submit",
+      "viewport": "mobile",
+      "file": "operations-resolve-submit-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "modal-order-hold",
+      "viewport": "mobile",
+      "file": "modal-order-hold-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 6007,
+      "unexplainedCount": 6007,
+      "bbox": {
+        "x": 29,
+        "y": 237,
+        "width": 722,
+        "height": 1058
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-order-hold-customer",
+      "viewport": "mobile",
+      "file": "modal-order-hold-customer-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 6007,
+      "unexplainedCount": 6007,
+      "bbox": {
+        "x": 29,
+        "y": 237,
+        "width": 722,
+        "height": 1058
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-order-hold-filled",
+      "viewport": "mobile",
+      "file": "modal-order-hold-filled-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 6007,
+      "unexplainedCount": 6007,
+      "bbox": {
+        "x": 29,
+        "y": 237,
+        "width": 722,
+        "height": 1058
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "order-hold-submit",
+      "viewport": "mobile",
+      "file": "order-hold-submit-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          2644
+        ],
+        "after": [
+          780,
+          2644
+        ]
+      },
+      "diffCount": 47492,
+      "unexplainedCount": 47492,
+      "bbox": {
+        "x": 28,
+        "y": 226,
+        "width": 724,
+        "height": 1864
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 2644
+    },
+    {
+      "id": "modal-order-cancel",
+      "viewport": "mobile",
+      "file": "modal-order-cancel-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 13874,
+      "unexplainedCount": 13874,
+      "bbox": {
+        "x": 29,
+        "y": 237,
+        "width": 722,
+        "height": 1068
+      },
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-orders-store-open",
+      "viewport": "mobile",
+      "file": "admin-orders-store-open-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-orders-store-search",
+      "viewport": "mobile",
+      "file": "admin-orders-store-search-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-orders-store-nothing",
+      "viewport": "mobile",
+      "file": "admin-orders-store-nothing-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-orders-status-open",
+      "viewport": "mobile",
+      "file": "admin-orders-status-open-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-orders-empty",
+      "viewport": "mobile",
+      "file": "admin-orders-empty-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "modal-driver-approve",
+      "viewport": "mobile",
+      "file": "modal-driver-approve-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-driver-suspend",
+      "viewport": "mobile",
+      "file": "modal-driver-suspend-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-stores-all",
+      "viewport": "mobile",
+      "file": "admin-stores-all-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1904
+        ],
+        "after": [
+          780,
+          1904
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1904
+    },
+    {
+      "id": "admin-stores-no-match",
+      "viewport": "mobile",
+      "file": "admin-stores-no-match-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "admin-stores-search",
+      "viewport": "mobile",
+      "file": "admin-stores-search-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "admin-stores-commission-edit",
+      "viewport": "mobile",
+      "file": "admin-stores-commission-edit-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "admin-stores-status-open",
+      "viewport": "mobile",
+      "file": "admin-stores-status-open-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-user-suspend",
+      "viewport": "mobile",
+      "file": "modal-user-suspend-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-invite-revoke",
+      "viewport": "mobile",
+      "file": "modal-invite-revoke-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-invite-copied",
+      "viewport": "mobile",
+      "file": "admin-invite-copied-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-settlements-store-open",
+      "viewport": "mobile",
+      "file": "admin-settlements-store-open-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-settlements-store-nothing",
+      "viewport": "mobile",
+      "file": "admin-settlements-store-nothing-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-settlements-store-picked",
+      "viewport": "mobile",
+      "file": "admin-settlements-store-picked-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          3352
+        ],
+        "after": [
+          780,
+          3352
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 3352
+    },
+    {
+      "id": "admin-settlements-load-more",
+      "viewport": "mobile",
+      "file": "admin-settlements-load-more-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          3352
+        ],
+        "after": [
+          780,
+          3352
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 3352
+    },
+    {
+      "id": "modal-admin-refund",
+      "viewport": "mobile",
+      "file": "modal-admin-refund-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-admin-post-delivery-refund",
+      "viewport": "mobile",
+      "file": "modal-admin-post-delivery-refund-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-admin-post-delivery-refund-filled",
+      "viewport": "mobile",
+      "file": "modal-admin-post-delivery-refund-filled-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-round-copy",
+      "viewport": "mobile",
+      "file": "modal-round-copy-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-round-cancel",
+      "viewport": "mobile",
+      "file": "modal-round-cancel-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-round-close",
+      "viewport": "mobile",
+      "file": "modal-round-close-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-product-regenerate",
+      "viewport": "mobile",
+      "file": "modal-product-regenerate-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "sale-rounds-loading",
+      "viewport": "mobile",
+      "file": "sale-rounds-loading-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "sale-rounds-empty",
+      "viewport": "mobile",
+      "file": "sale-rounds-empty-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "toast-option-stock-saved",
+      "viewport": "mobile",
+      "file": "toast-option-stock-saved-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "toast-driver-approve",
+      "viewport": "mobile",
+      "file": "toast-driver-approve-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "admin-drivers-load-more",
+      "viewport": "mobile",
+      "file": "admin-drivers-load-more-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "settings-option-stocks-add-loading",
+      "viewport": "mobile",
+      "file": "settings-option-stocks-add-loading-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1956
+        ],
+        "after": [
+          780,
+          1956
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1956
+    },
+    {
+      "id": "settings-option-stocks-remaining-loading",
+      "viewport": "mobile",
+      "file": "settings-option-stocks-remaining-loading-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1956
+        ],
+        "after": [
+          780,
+          1956
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1956
+    },
+    {
+      "id": "order-ops-retry-refund-loading",
+      "viewport": "mobile",
+      "file": "order-ops-retry-refund-loading-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          4356
+        ],
+        "after": [
+          780,
+          4352
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 4352
+    },
+    {
+      "id": "order-ops-reload-loading",
+      "viewport": "mobile",
+      "file": "order-ops-reload-loading-mobile.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          780,
+          4356
+        ],
+        "after": [
+          780,
+          4352
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 4352
+    },
+    {
+      "id": "operations-reload-loading",
+      "viewport": "mobile",
+      "file": "operations-reload-loading-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1816
+        ],
+        "after": [
+          780,
+          1816
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1816
+    },
+    {
+      "id": "operations-resolve-loading",
+      "viewport": "mobile",
+      "file": "operations-resolve-loading-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "modal-round-copy-loading",
+      "viewport": "mobile",
+      "file": "modal-round-copy-loading-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "sale-round-draft-saving",
+      "viewport": "mobile",
+      "file": "sale-round-draft-saving-mobile.png",
+      "status": "same",
+      "size": {
+        "before": [
+          780,
+          1688
+        ],
+        "after": [
+          780,
+          1688
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 780,
+      "height": 1688
+    },
+    {
+      "id": "login",
+      "viewport": "tablet",
+      "file": "login-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "home",
+      "viewport": "tablet",
+      "file": "home-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "onboarding",
+      "viewport": "tablet",
+      "file": "onboarding-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "orders",
+      "viewport": "tablet",
+      "file": "orders-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          2820
+        ],
+        "after": [
+          768,
+          2819
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2819
+    },
+    {
+      "id": "orders-held",
+      "viewport": "tablet",
+      "file": "orders-held-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 83006,
+      "unexplainedCount": 83006,
+      "bbox": {
+        "x": 144,
+        "y": 126,
+        "width": 480,
+        "height": 741
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "orders-waiting",
+      "viewport": "tablet",
+      "file": "orders-waiting-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 61611,
+      "unexplainedCount": 61611,
+      "bbox": {
+        "x": 144,
+        "y": 126,
+        "width": 480,
+        "height": 693
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "orders-in-delivery",
+      "viewport": "tablet",
+      "file": "orders-in-delivery-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1262
+        ],
+        "after": [
+          768,
+          1261
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1261
+    },
+    {
+      "id": "orders-in-delivery-hub",
+      "viewport": "tablet",
+      "file": "orders-in-delivery-hub-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 87515,
+      "unexplainedCount": 87515,
+      "bbox": {
+        "x": 144,
+        "y": 126,
+        "width": 480,
+        "height": 830
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "orders-done",
+      "viewport": "tablet",
+      "file": "orders-done-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 61105,
+      "unexplainedCount": 61105,
+      "bbox": {
+        "x": 144,
+        "y": 126,
+        "width": 480,
+        "height": 749
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "orders-done-loading",
+      "viewport": "tablet",
+      "file": "orders-done-loading-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 60931,
+      "unexplainedCount": 60931,
+      "bbox": {
+        "x": 144,
+        "y": 126,
+        "width": 480,
+        "height": 749
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "orders-cancelled",
+      "viewport": "tablet",
+      "file": "orders-cancelled-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 60627,
+      "unexplainedCount": 60627,
+      "bbox": {
+        "x": 144,
+        "y": 126,
+        "width": 480,
+        "height": 749
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "orders-date-custom",
+      "viewport": "tablet",
+      "file": "orders-date-custom-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          2870
+        ],
+        "after": [
+          768,
+          2869
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2869
+    },
+    {
+      "id": "orders-search-empty",
+      "viewport": "tablet",
+      "file": "orders-search-empty-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 70473,
+      "unexplainedCount": 70473,
+      "bbox": {
+        "x": 144,
+        "y": 126,
+        "width": 480,
+        "height": 636
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "orders-search-phone",
+      "viewport": "tablet",
+      "file": "orders-search-phone-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 83567,
+      "unexplainedCount": 83567,
+      "bbox": {
+        "x": 144,
+        "y": 126,
+        "width": 480,
+        "height": 663
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "orders-round-filter",
+      "viewport": "tablet",
+      "file": "orders-round-filter-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          2045
+        ],
+        "after": [
+          768,
+          2044
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2044
+    },
+    {
+      "id": "orders-group",
+      "viewport": "tablet",
+      "file": "orders-group-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 118029,
+      "unexplainedCount": 118029,
+      "bbox": {
+        "x": 144,
+        "y": 126,
+        "width": 480,
+        "height": 822
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "order-contact",
+      "viewport": "tablet",
+      "file": "order-contact-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1663
+        ],
+        "after": [
+          768,
+          1659
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1659
+    },
+    {
+      "id": "order-no-contact",
+      "viewport": "tablet",
+      "file": "order-no-contact-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1458
+        ],
+        "after": [
+          768,
+          1456
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1456
+    },
+    {
+      "id": "order-round",
+      "viewport": "tablet",
+      "file": "order-round-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1306
+        ],
+        "after": [
+          768,
+          1306
+        ]
+      },
+      "diffCount": 13924,
+      "unexplainedCount": 13924,
+      "bbox": {
+        "x": 158,
+        "y": 113,
+        "width": 452,
+        "height": 916
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1306
+    },
+    {
+      "id": "prep",
+      "viewport": "tablet",
+      "file": "prep-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1118
+        ],
+        "after": [
+          768,
+          1118
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1118
+    },
+    {
+      "id": "operations",
+      "viewport": "tablet",
+      "file": "operations-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "sale-rounds",
+      "viewport": "tablet",
+      "file": "sale-rounds-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          2251
+        ],
+        "after": [
+          768,
+          2251
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2251
+    },
+    {
+      "id": "sale-round-open",
+      "viewport": "tablet",
+      "file": "sale-round-open-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          3433
+        ],
+        "after": [
+          768,
+          3433
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 3433
+    },
+    {
+      "id": "sale-round-scheduled",
+      "viewport": "tablet",
+      "file": "sale-round-scheduled-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          2695
+        ],
+        "after": [
+          768,
+          2695
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2695
+    },
+    {
+      "id": "sale-round-closed",
+      "viewport": "tablet",
+      "file": "sale-round-closed-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          3148
+        ],
+        "after": [
+          768,
+          3148
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 3148
+    },
+    {
+      "id": "sale-round-draft",
+      "viewport": "tablet",
+      "file": "sale-round-draft-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          2687
+        ],
+        "after": [
+          768,
+          2687
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2687
+    },
+    {
+      "id": "sale-round-completed",
+      "viewport": "tablet",
+      "file": "sale-round-completed-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          2763
+        ],
+        "after": [
+          768,
+          2763
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2763
+    },
+    {
+      "id": "sale-round-cancelled",
+      "viewport": "tablet",
+      "file": "sale-round-cancelled-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          2763
+        ],
+        "after": [
+          768,
+          2763
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2763
+    },
+    {
+      "id": "sale-round-cancel-stuck",
+      "viewport": "tablet",
+      "file": "sale-round-cancel-stuck-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          2767
+        ],
+        "after": [
+          768,
+          2767
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2767
+    },
+    {
+      "id": "sale-round-new",
+      "viewport": "tablet",
+      "file": "sale-round-new-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          2599
+        ],
+        "after": [
+          768,
+          2599
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2599
+    },
+    {
+      "id": "products",
+      "viewport": "tablet",
+      "file": "products-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "product-new",
+      "viewport": "tablet",
+      "file": "product-new-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "product-edit",
+      "viewport": "tablet",
+      "file": "product-edit-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "product-new-variety-open",
+      "viewport": "tablet",
+      "file": "product-new-variety-open-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "product-new-variety-picked-open",
+      "viewport": "tablet",
+      "file": "product-new-variety-picked-open-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "product-edit-step2",
+      "viewport": "tablet",
+      "file": "product-edit-step2-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1122
+        ],
+        "after": [
+          768,
+          1122
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1122
+    },
+    {
+      "id": "product-edit-step3",
+      "viewport": "tablet",
+      "file": "product-edit-step3-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "product-edit-step4",
+      "viewport": "tablet",
+      "file": "product-edit-step4-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "product-edit-step5",
+      "viewport": "tablet",
+      "file": "product-edit-step5-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "product-edit-step5-group",
+      "viewport": "tablet",
+      "file": "product-edit-step5-group-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1497
+        ],
+        "after": [
+          768,
+          1497
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1497
+    },
+    {
+      "id": "settlements",
+      "viewport": "tablet",
+      "file": "settlements-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settlements-period",
+      "viewport": "tablet",
+      "file": "settlements-period-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settlements-orders",
+      "viewport": "tablet",
+      "file": "settlements-orders-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settlements-period-list",
+      "viewport": "tablet",
+      "file": "settlements-period-list-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settlements-orders-load-more",
+      "viewport": "tablet",
+      "file": "settlements-orders-load-more-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settings",
+      "viewport": "tablet",
+      "file": "settings-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settings-delivery",
+      "viewport": "tablet",
+      "file": "settings-delivery-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settings-daily-caps",
+      "viewport": "tablet",
+      "file": "settings-daily-caps-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "hubs",
+      "viewport": "tablet",
+      "file": "hubs-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-orders",
+      "viewport": "tablet",
+      "file": "admin-orders-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          2155
+        ],
+        "after": [
+          768,
+          2155
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2155
+    },
+    {
+      "id": "admin-settlements",
+      "viewport": "tablet",
+      "file": "admin-settlements-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1207
+        ],
+        "after": [
+          768,
+          1207
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1207
+    },
+    {
+      "id": "admin-users",
+      "viewport": "tablet",
+      "file": "admin-users-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-invite",
+      "viewport": "tablet",
+      "file": "admin-invite-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-stores",
+      "viewport": "tablet",
+      "file": "admin-stores-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-drivers",
+      "viewport": "tablet",
+      "file": "admin-drivers-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-banner",
+      "viewport": "tablet",
+      "file": "admin-banner-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-audit",
+      "viewport": "tablet",
+      "file": "admin-audit-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "hub-detail",
+      "viewport": "tablet",
+      "file": "hub-detail-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "hub-edit",
+      "viewport": "tablet",
+      "file": "hub-edit-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "hub-pickup",
+      "viewport": "tablet",
+      "file": "hub-pickup-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "hub-detail-inactive",
+      "viewport": "tablet",
+      "file": "hub-detail-inactive-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "hub-pickup-order",
+      "viewport": "tablet",
+      "file": "hub-pickup-order-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "hub-new",
+      "viewport": "tablet",
+      "file": "hub-new-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settings-option-stocks",
+      "viewport": "tablet",
+      "file": "settings-option-stocks-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settings-payout-account",
+      "viewport": "tablet",
+      "file": "settings-payout-account-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "invite-token",
+      "viewport": "tablet",
+      "file": "invite-token-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "invite-token-invalid",
+      "viewport": "tablet",
+      "file": "invite-token-invalid-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "login-error",
+      "viewport": "tablet",
+      "file": "login-error-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "order-held",
+      "viewport": "tablet",
+      "file": "order-held-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          2109
+        ],
+        "after": [
+          768,
+          2107
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2107
+    },
+    {
+      "id": "order-preparing",
+      "viewport": "tablet",
+      "file": "order-preparing-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1276
+        ],
+        "after": [
+          768,
+          1276
+        ]
+      },
+      "diffCount": 13584,
+      "unexplainedCount": 13584,
+      "bbox": {
+        "x": 158,
+        "y": 113,
+        "width": 452,
+        "height": 886
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1276
+    },
+    {
+      "id": "order-hub-arrived",
+      "viewport": "tablet",
+      "file": "order-hub-arrived-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1244
+        ],
+        "after": [
+          768,
+          1244
+        ]
+      },
+      "diffCount": 15915,
+      "unexplainedCount": 15915,
+      "bbox": {
+        "x": 158,
+        "y": 113,
+        "width": 452,
+        "height": 903
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1244
+    },
+    {
+      "id": "order-prepare-form",
+      "viewport": "tablet",
+      "file": "order-prepare-form-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1791
+        ],
+        "after": [
+          768,
+          1787
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1787
+    },
+    {
+      "id": "order-round-prepare-form",
+      "viewport": "tablet",
+      "file": "order-round-prepare-form-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1393
+        ],
+        "after": [
+          768,
+          1393
+        ]
+      },
+      "diffCount": 16406,
+      "unexplainedCount": 16406,
+      "bbox": {
+        "x": 158,
+        "y": 113,
+        "width": 452,
+        "height": 1107
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1393
+    },
+    {
+      "id": "order-prepare-submit",
+      "viewport": "tablet",
+      "file": "order-prepare-submit-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1663
+        ],
+        "after": [
+          768,
+          1659
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1659
+    },
+    {
+      "id": "order-round-prepare-submit",
+      "viewport": "tablet",
+      "file": "order-round-prepare-submit-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1306
+        ],
+        "after": [
+          768,
+          1306
+        ]
+      },
+      "diffCount": 13446,
+      "unexplainedCount": 13446,
+      "bbox": {
+        "x": 158,
+        "y": 63,
+        "width": 452,
+        "height": 902
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1306
+    },
+    {
+      "id": "order-ops-resend",
+      "viewport": "tablet",
+      "file": "order-ops-resend-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1493
+        ],
+        "after": [
+          768,
+          1491
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1491
+    },
+    {
+      "id": "order-ops-retry-refund",
+      "viewport": "tablet",
+      "file": "order-ops-retry-refund-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          2144
+        ],
+        "after": [
+          768,
+          2142
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2142
+    },
+    {
+      "id": "order-delivering",
+      "viewport": "tablet",
+      "file": "order-delivering-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1228
+        ],
+        "after": [
+          768,
+          1228
+        ]
+      },
+      "diffCount": 13613,
+      "unexplainedCount": 13613,
+      "bbox": {
+        "x": 158,
+        "y": 113,
+        "width": 452,
+        "height": 886
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1228
+    },
+    {
+      "id": "order-delivered",
+      "viewport": "tablet",
+      "file": "order-delivered-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1241
+        ],
+        "after": [
+          768,
+          1241
+        ]
+      },
+      "diffCount": 13595,
+      "unexplainedCount": 13595,
+      "bbox": {
+        "x": 158,
+        "y": 113,
+        "width": 452,
+        "height": 828
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1241
+    },
+    {
+      "id": "order-reviewed",
+      "viewport": "tablet",
+      "file": "order-reviewed-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1193
+        ],
+        "after": [
+          768,
+          1193
+        ]
+      },
+      "diffCount": 13612,
+      "unexplainedCount": 13612,
+      "bbox": {
+        "x": 158,
+        "y": 113,
+        "width": 452,
+        "height": 828
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1193
+    },
+    {
+      "id": "order-cancelled",
+      "viewport": "tablet",
+      "file": "order-cancelled-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1215
+        ],
+        "after": [
+          768,
+          1215
+        ]
+      },
+      "diffCount": 13128,
+      "unexplainedCount": 13128,
+      "bbox": {
+        "x": 158,
+        "y": 113,
+        "width": 452,
+        "height": 929
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1215
+    },
+    {
+      "id": "modal-order-cancel-short",
+      "viewport": "tablet",
+      "file": "modal-order-cancel-short-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 3682,
+      "unexplainedCount": 3682,
+      "bbox": {
+        "x": 159,
+        "y": 119,
+        "width": 450,
+        "height": 722
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-order-cancel-held",
+      "viewport": "tablet",
+      "file": "modal-order-cancel-held-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 3650,
+      "unexplainedCount": 3650,
+      "bbox": {
+        "x": 159,
+        "y": 119,
+        "width": 450,
+        "height": 722
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-order-post-delivery-refund",
+      "viewport": "tablet",
+      "file": "modal-order-post-delivery-refund-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 3555,
+      "unexplainedCount": 3555,
+      "bbox": {
+        "x": 159,
+        "y": 63,
+        "width": 450,
+        "height": 660
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-order-post-delivery-refund-filled",
+      "viewport": "tablet",
+      "file": "modal-order-post-delivery-refund-filled-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 3555,
+      "unexplainedCount": 3555,
+      "bbox": {
+        "x": 159,
+        "y": 63,
+        "width": 450,
+        "height": 660
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "order-cancel-submit",
+      "viewport": "tablet",
+      "file": "order-cancel-submit-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1663
+        ],
+        "after": [
+          768,
+          1659
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1659
+    },
+    {
+      "id": "order-post-delivery-refund-submit",
+      "viewport": "tablet",
+      "file": "order-post-delivery-refund-submit-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1241
+        ],
+        "after": [
+          768,
+          1241
+        ]
+      },
+      "diffCount": 13117,
+      "unexplainedCount": 13117,
+      "bbox": {
+        "x": 158,
+        "y": 63,
+        "width": 452,
+        "height": 814
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1241
+    },
+    {
+      "id": "operations-all",
+      "viewport": "tablet",
+      "file": "operations-all-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "modal-operations-resolve",
+      "viewport": "tablet",
+      "file": "modal-operations-resolve-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-operations-resolve-filled",
+      "viewport": "tablet",
+      "file": "modal-operations-resolve-filled-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "operations-resolve-submit",
+      "viewport": "tablet",
+      "file": "operations-resolve-submit-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "modal-order-hold",
+      "viewport": "tablet",
+      "file": "modal-order-hold-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 2190,
+      "unexplainedCount": 2190,
+      "bbox": {
+        "x": 159,
+        "y": 114,
+        "width": 450,
+        "height": 727
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-order-hold-customer",
+      "viewport": "tablet",
+      "file": "modal-order-hold-customer-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 1456,
+      "unexplainedCount": 1456,
+      "bbox": {
+        "x": 159,
+        "y": 114,
+        "width": 450,
+        "height": 727
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-order-hold-filled",
+      "viewport": "tablet",
+      "file": "modal-order-hold-filled-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 2190,
+      "unexplainedCount": 2190,
+      "bbox": {
+        "x": 159,
+        "y": 114,
+        "width": 450,
+        "height": 727
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "order-hold-submit",
+      "viewport": "tablet",
+      "file": "order-hold-submit-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1276
+        ],
+        "after": [
+          768,
+          1276
+        ]
+      },
+      "diffCount": 13584,
+      "unexplainedCount": 13584,
+      "bbox": {
+        "x": 158,
+        "y": 113,
+        "width": 452,
+        "height": 886
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1276
+    },
+    {
+      "id": "modal-order-cancel",
+      "viewport": "tablet",
+      "file": "modal-order-cancel-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 3682,
+      "unexplainedCount": 3682,
+      "bbox": {
+        "x": 159,
+        "y": 119,
+        "width": 450,
+        "height": 722
+      },
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-orders-store-open",
+      "viewport": "tablet",
+      "file": "admin-orders-store-open-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-orders-store-search",
+      "viewport": "tablet",
+      "file": "admin-orders-store-search-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-orders-store-nothing",
+      "viewport": "tablet",
+      "file": "admin-orders-store-nothing-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-orders-status-open",
+      "viewport": "tablet",
+      "file": "admin-orders-status-open-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-orders-empty",
+      "viewport": "tablet",
+      "file": "admin-orders-empty-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "modal-driver-approve",
+      "viewport": "tablet",
+      "file": "modal-driver-approve-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-driver-suspend",
+      "viewport": "tablet",
+      "file": "modal-driver-suspend-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-stores-all",
+      "viewport": "tablet",
+      "file": "admin-stores-all-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-stores-no-match",
+      "viewport": "tablet",
+      "file": "admin-stores-no-match-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-stores-search",
+      "viewport": "tablet",
+      "file": "admin-stores-search-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-stores-commission-edit",
+      "viewport": "tablet",
+      "file": "admin-stores-commission-edit-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "admin-stores-status-open",
+      "viewport": "tablet",
+      "file": "admin-stores-status-open-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-user-suspend",
+      "viewport": "tablet",
+      "file": "modal-user-suspend-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-invite-revoke",
+      "viewport": "tablet",
+      "file": "modal-invite-revoke-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-invite-copied",
+      "viewport": "tablet",
+      "file": "admin-invite-copied-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-settlements-store-open",
+      "viewport": "tablet",
+      "file": "admin-settlements-store-open-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-settlements-store-nothing",
+      "viewport": "tablet",
+      "file": "admin-settlements-store-nothing-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-settlements-store-picked",
+      "viewport": "tablet",
+      "file": "admin-settlements-store-picked-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1207
+        ],
+        "after": [
+          768,
+          1207
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1207
+    },
+    {
+      "id": "admin-settlements-load-more",
+      "viewport": "tablet",
+      "file": "admin-settlements-load-more-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1207
+        ],
+        "after": [
+          768,
+          1207
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1207
+    },
+    {
+      "id": "modal-admin-refund",
+      "viewport": "tablet",
+      "file": "modal-admin-refund-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-admin-post-delivery-refund",
+      "viewport": "tablet",
+      "file": "modal-admin-post-delivery-refund-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-admin-post-delivery-refund-filled",
+      "viewport": "tablet",
+      "file": "modal-admin-post-delivery-refund-filled-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-round-copy",
+      "viewport": "tablet",
+      "file": "modal-round-copy-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-round-cancel",
+      "viewport": "tablet",
+      "file": "modal-round-cancel-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-round-close",
+      "viewport": "tablet",
+      "file": "modal-round-close-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-product-regenerate",
+      "viewport": "tablet",
+      "file": "modal-product-regenerate-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "sale-rounds-loading",
+      "viewport": "tablet",
+      "file": "sale-rounds-loading-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "sale-rounds-empty",
+      "viewport": "tablet",
+      "file": "sale-rounds-empty-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "toast-option-stock-saved",
+      "viewport": "tablet",
+      "file": "toast-option-stock-saved-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "toast-driver-approve",
+      "viewport": "tablet",
+      "file": "toast-driver-approve-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "admin-drivers-load-more",
+      "viewport": "tablet",
+      "file": "admin-drivers-load-more-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settings-option-stocks-add-loading",
+      "viewport": "tablet",
+      "file": "settings-option-stocks-add-loading-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "settings-option-stocks-remaining-loading",
+      "viewport": "tablet",
+      "file": "settings-option-stocks-remaining-loading-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "order-ops-retry-refund-loading",
+      "viewport": "tablet",
+      "file": "order-ops-retry-refund-loading-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          2109
+        ],
+        "after": [
+          768,
+          2107
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2107
+    },
+    {
+      "id": "order-ops-reload-loading",
+      "viewport": "tablet",
+      "file": "order-ops-reload-loading-tablet.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          768,
+          2109
+        ],
+        "after": [
+          768,
+          2107
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 2107
+    },
+    {
+      "id": "operations-reload-loading",
+      "viewport": "tablet",
+      "file": "operations-reload-loading-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1088
+        ],
+        "after": [
+          768,
+          1088
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1088
+    },
+    {
+      "id": "operations-resolve-loading",
+      "viewport": "tablet",
+      "file": "operations-resolve-loading-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "modal-round-copy-loading",
+      "viewport": "tablet",
+      "file": "modal-round-copy-loading-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "sale-round-draft-saving",
+      "viewport": "tablet",
+      "file": "sale-round-draft-saving-tablet.png",
+      "status": "same",
+      "size": {
+        "before": [
+          768,
+          1024
+        ],
+        "after": [
+          768,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 768,
+      "height": 1024
+    },
+    {
+      "id": "login",
+      "viewport": "desktop",
+      "file": "login-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "home",
+      "viewport": "desktop",
+      "file": "home-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          923
+        ],
+        "after": [
+          1280,
+          923
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 923
+    },
+    {
+      "id": "onboarding",
+      "viewport": "desktop",
+      "file": "onboarding-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "orders",
+      "viewport": "desktop",
+      "file": "orders-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          2820
+        ],
+        "after": [
+          1280,
+          2819
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2819
+    },
+    {
+      "id": "orders-held",
+      "viewport": "desktop",
+      "file": "orders-held-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          944
+        ],
+        "after": [
+          1280,
+          943
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 943
+    },
+    {
+      "id": "orders-waiting",
+      "viewport": "desktop",
+      "file": "orders-waiting-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          896
+        ],
+        "after": [
+          1280,
+          894
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 894
+    },
+    {
+      "id": "orders-in-delivery",
+      "viewport": "desktop",
+      "file": "orders-in-delivery-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1262
+        ],
+        "after": [
+          1280,
+          1261
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1261
+    },
+    {
+      "id": "orders-in-delivery-hub",
+      "viewport": "desktop",
+      "file": "orders-in-delivery-hub-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1033
+        ],
+        "after": [
+          1280,
+          1032
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1032
+    },
+    {
+      "id": "orders-done",
+      "viewport": "desktop",
+      "file": "orders-done-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          955
+        ],
+        "after": [
+          1280,
+          953
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 953
+    },
+    {
+      "id": "orders-done-loading",
+      "viewport": "desktop",
+      "file": "orders-done-loading-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          955
+        ],
+        "after": [
+          1280,
+          953
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 953
+    },
+    {
+      "id": "orders-cancelled",
+      "viewport": "desktop",
+      "file": "orders-cancelled-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          955
+        ],
+        "after": [
+          1280,
+          953
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 953
+    },
+    {
+      "id": "orders-date-custom",
+      "viewport": "desktop",
+      "file": "orders-date-custom-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          2870
+        ],
+        "after": [
+          1280,
+          2869
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2869
+    },
+    {
+      "id": "orders-search-empty",
+      "viewport": "desktop",
+      "file": "orders-search-empty-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          927
+        ],
+        "after": [
+          1280,
+          926
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 926
+    },
+    {
+      "id": "orders-search-phone",
+      "viewport": "desktop",
+      "file": "orders-search-phone-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          954
+        ],
+        "after": [
+          1280,
+          953
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 953
+    },
+    {
+      "id": "orders-round-filter",
+      "viewport": "desktop",
+      "file": "orders-round-filter-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          2045
+        ],
+        "after": [
+          1280,
+          2044
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2044
+    },
+    {
+      "id": "orders-group",
+      "viewport": "desktop",
+      "file": "orders-group-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1025
+        ],
+        "after": [
+          1280,
+          1023
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1023
+    },
+    {
+      "id": "order-contact",
+      "viewport": "desktop",
+      "file": "order-contact-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1663
+        ],
+        "after": [
+          1280,
+          1659
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1659
+    },
+    {
+      "id": "order-no-contact",
+      "viewport": "desktop",
+      "file": "order-no-contact-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1458
+        ],
+        "after": [
+          1280,
+          1456
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1456
+    },
+    {
+      "id": "order-round",
+      "viewport": "desktop",
+      "file": "order-round-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1306
+        ],
+        "after": [
+          1280,
+          1306
+        ]
+      },
+      "diffCount": 13924,
+      "unexplainedCount": 13924,
+      "bbox": {
+        "x": 414,
+        "y": 113,
+        "width": 452,
+        "height": 916
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1306
+    },
+    {
+      "id": "prep",
+      "viewport": "desktop",
+      "file": "prep-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          1118
+        ],
+        "after": [
+          1280,
+          1118
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1118
+    },
+    {
+      "id": "operations",
+      "viewport": "desktop",
+      "file": "operations-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "sale-rounds",
+      "viewport": "desktop",
+      "file": "sale-rounds-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          2251
+        ],
+        "after": [
+          1280,
+          2251
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2251
+    },
+    {
+      "id": "sale-round-open",
+      "viewport": "desktop",
+      "file": "sale-round-open-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          3433
+        ],
+        "after": [
+          1280,
+          3433
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 3433
+    },
+    {
+      "id": "sale-round-scheduled",
+      "viewport": "desktop",
+      "file": "sale-round-scheduled-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          2695
+        ],
+        "after": [
+          1280,
+          2695
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2695
+    },
+    {
+      "id": "sale-round-closed",
+      "viewport": "desktop",
+      "file": "sale-round-closed-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          3148
+        ],
+        "after": [
+          1280,
+          3148
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 3148
+    },
+    {
+      "id": "sale-round-draft",
+      "viewport": "desktop",
+      "file": "sale-round-draft-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          2687
+        ],
+        "after": [
+          1280,
+          2687
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2687
+    },
+    {
+      "id": "sale-round-completed",
+      "viewport": "desktop",
+      "file": "sale-round-completed-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          2763
+        ],
+        "after": [
+          1280,
+          2763
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2763
+    },
+    {
+      "id": "sale-round-cancelled",
+      "viewport": "desktop",
+      "file": "sale-round-cancelled-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          2763
+        ],
+        "after": [
+          1280,
+          2763
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2763
+    },
+    {
+      "id": "sale-round-cancel-stuck",
+      "viewport": "desktop",
+      "file": "sale-round-cancel-stuck-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          2767
+        ],
+        "after": [
+          1280,
+          2767
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2767
+    },
+    {
+      "id": "sale-round-new",
+      "viewport": "desktop",
+      "file": "sale-round-new-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          2599
+        ],
+        "after": [
+          1280,
+          2599
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2599
+    },
+    {
+      "id": "products",
+      "viewport": "desktop",
+      "file": "products-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "product-new",
+      "viewport": "desktop",
+      "file": "product-new-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "product-edit",
+      "viewport": "desktop",
+      "file": "product-edit-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "product-new-variety-open",
+      "viewport": "desktop",
+      "file": "product-new-variety-open-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "product-new-variety-picked-open",
+      "viewport": "desktop",
+      "file": "product-new-variety-picked-open-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "product-edit-step2",
+      "viewport": "desktop",
+      "file": "product-edit-step2-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          1122
+        ],
+        "after": [
+          1280,
+          1122
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1122
+    },
+    {
+      "id": "product-edit-step3",
+      "viewport": "desktop",
+      "file": "product-edit-step3-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "product-edit-step4",
+      "viewport": "desktop",
+      "file": "product-edit-step4-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "product-edit-step5",
+      "viewport": "desktop",
+      "file": "product-edit-step5-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          956
+        ],
+        "after": [
+          1280,
+          956
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 956
+    },
+    {
+      "id": "product-edit-step5-group",
+      "viewport": "desktop",
+      "file": "product-edit-step5-group-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          1497
+        ],
+        "after": [
+          1280,
+          1497
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1497
+    },
+    {
+      "id": "settlements",
+      "viewport": "desktop",
+      "file": "settlements-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "settlements-period",
+      "viewport": "desktop",
+      "file": "settlements-period-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "settlements-orders",
+      "viewport": "desktop",
+      "file": "settlements-orders-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "settlements-period-list",
+      "viewport": "desktop",
+      "file": "settlements-period-list-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          869
+        ],
+        "after": [
+          1280,
+          869
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 869
+    },
+    {
+      "id": "settlements-orders-load-more",
+      "viewport": "desktop",
+      "file": "settlements-orders-load-more-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "settings",
+      "viewport": "desktop",
+      "file": "settings-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "settings-delivery",
+      "viewport": "desktop",
+      "file": "settings-delivery-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          1044
+        ],
+        "after": [
+          1280,
+          1044
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1044
+    },
+    {
+      "id": "settings-daily-caps",
+      "viewport": "desktop",
+      "file": "settings-daily-caps-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "hubs",
+      "viewport": "desktop",
+      "file": "hubs-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "admin-orders",
+      "viewport": "desktop",
+      "file": "admin-orders-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          1511
+        ],
+        "after": [
+          1280,
+          1511
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1511
+    },
+    {
+      "id": "admin-settlements",
+      "viewport": "desktop",
+      "file": "admin-settlements-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          967
+        ],
+        "after": [
+          1280,
+          967
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 967
+    },
+    {
+      "id": "admin-users",
+      "viewport": "desktop",
+      "file": "admin-users-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "admin-invite",
+      "viewport": "desktop",
+      "file": "admin-invite-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          880
+        ],
+        "after": [
+          1280,
+          880
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 880
+    },
+    {
+      "id": "admin-stores",
+      "viewport": "desktop",
+      "file": "admin-stores-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "admin-drivers",
+      "viewport": "desktop",
+      "file": "admin-drivers-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "admin-banner",
+      "viewport": "desktop",
+      "file": "admin-banner-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          977
+        ],
+        "after": [
+          1280,
+          977
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 977
+    },
+    {
+      "id": "admin-audit",
+      "viewport": "desktop",
+      "file": "admin-audit-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "hub-detail",
+      "viewport": "desktop",
+      "file": "hub-detail-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "hub-edit",
+      "viewport": "desktop",
+      "file": "hub-edit-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "hub-pickup",
+      "viewport": "desktop",
+      "file": "hub-pickup-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "hub-detail-inactive",
+      "viewport": "desktop",
+      "file": "hub-detail-inactive-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "hub-pickup-order",
+      "viewport": "desktop",
+      "file": "hub-pickup-order-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "hub-new",
+      "viewport": "desktop",
+      "file": "hub-new-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "settings-option-stocks",
+      "viewport": "desktop",
+      "file": "settings-option-stocks-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          957
+        ],
+        "after": [
+          1280,
+          957
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 957
+    },
+    {
+      "id": "settings-payout-account",
+      "viewport": "desktop",
+      "file": "settings-payout-account-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "invite-token",
+      "viewport": "desktop",
+      "file": "invite-token-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "invite-token-invalid",
+      "viewport": "desktop",
+      "file": "invite-token-invalid-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "login-error",
+      "viewport": "desktop",
+      "file": "login-error-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "order-held",
+      "viewport": "desktop",
+      "file": "order-held-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          2109
+        ],
+        "after": [
+          1280,
+          2107
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2107
+    },
+    {
+      "id": "order-preparing",
+      "viewport": "desktop",
+      "file": "order-preparing-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1276
+        ],
+        "after": [
+          1280,
+          1276
+        ]
+      },
+      "diffCount": 13584,
+      "unexplainedCount": 13584,
+      "bbox": {
+        "x": 414,
+        "y": 113,
+        "width": 452,
+        "height": 886
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1276
+    },
+    {
+      "id": "order-hub-arrived",
+      "viewport": "desktop",
+      "file": "order-hub-arrived-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1244
+        ],
+        "after": [
+          1280,
+          1244
+        ]
+      },
+      "diffCount": 15915,
+      "unexplainedCount": 15915,
+      "bbox": {
+        "x": 414,
+        "y": 113,
+        "width": 452,
+        "height": 903
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1244
+    },
+    {
+      "id": "order-prepare-form",
+      "viewport": "desktop",
+      "file": "order-prepare-form-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1791
+        ],
+        "after": [
+          1280,
+          1787
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1787
+    },
+    {
+      "id": "order-round-prepare-form",
+      "viewport": "desktop",
+      "file": "order-round-prepare-form-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1393
+        ],
+        "after": [
+          1280,
+          1393
+        ]
+      },
+      "diffCount": 16406,
+      "unexplainedCount": 16406,
+      "bbox": {
+        "x": 414,
+        "y": 113,
+        "width": 452,
+        "height": 1107
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1393
+    },
+    {
+      "id": "order-prepare-submit",
+      "viewport": "desktop",
+      "file": "order-prepare-submit-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1663
+        ],
+        "after": [
+          1280,
+          1659
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1659
+    },
+    {
+      "id": "order-round-prepare-submit",
+      "viewport": "desktop",
+      "file": "order-round-prepare-submit-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1306
+        ],
+        "after": [
+          1280,
+          1306
+        ]
+      },
+      "diffCount": 13446,
+      "unexplainedCount": 13446,
+      "bbox": {
+        "x": 414,
+        "y": 63,
+        "width": 452,
+        "height": 902
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1306
+    },
+    {
+      "id": "order-ops-resend",
+      "viewport": "desktop",
+      "file": "order-ops-resend-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1493
+        ],
+        "after": [
+          1280,
+          1491
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1491
+    },
+    {
+      "id": "order-ops-retry-refund",
+      "viewport": "desktop",
+      "file": "order-ops-retry-refund-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          2144
+        ],
+        "after": [
+          1280,
+          2142
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2142
+    },
+    {
+      "id": "order-delivering",
+      "viewport": "desktop",
+      "file": "order-delivering-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1228
+        ],
+        "after": [
+          1280,
+          1228
+        ]
+      },
+      "diffCount": 13613,
+      "unexplainedCount": 13613,
+      "bbox": {
+        "x": 414,
+        "y": 113,
+        "width": 452,
+        "height": 886
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1228
+    },
+    {
+      "id": "order-delivered",
+      "viewport": "desktop",
+      "file": "order-delivered-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1241
+        ],
+        "after": [
+          1280,
+          1241
+        ]
+      },
+      "diffCount": 13595,
+      "unexplainedCount": 13595,
+      "bbox": {
+        "x": 414,
+        "y": 113,
+        "width": 452,
+        "height": 828
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1241
+    },
+    {
+      "id": "order-reviewed",
+      "viewport": "desktop",
+      "file": "order-reviewed-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1193
+        ],
+        "after": [
+          1280,
+          1193
+        ]
+      },
+      "diffCount": 13612,
+      "unexplainedCount": 13612,
+      "bbox": {
+        "x": 414,
+        "y": 113,
+        "width": 452,
+        "height": 828
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1193
+    },
+    {
+      "id": "order-cancelled",
+      "viewport": "desktop",
+      "file": "order-cancelled-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1215
+        ],
+        "after": [
+          1280,
+          1215
+        ]
+      },
+      "diffCount": 13128,
+      "unexplainedCount": 13128,
+      "bbox": {
+        "x": 414,
+        "y": 113,
+        "width": 452,
+        "height": 929
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1215
+    },
+    {
+      "id": "modal-order-cancel-short",
+      "viewport": "desktop",
+      "file": "modal-order-cancel-short-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 1914,
+      "unexplainedCount": 1914,
+      "bbox": {
+        "x": 415,
+        "y": 119,
+        "width": 450,
+        "height": 498
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-order-cancel-held",
+      "viewport": "desktop",
+      "file": "modal-order-cancel-held-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 1914,
+      "unexplainedCount": 1914,
+      "bbox": {
+        "x": 415,
+        "y": 119,
+        "width": 450,
+        "height": 498
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-order-post-delivery-refund",
+      "viewport": "desktop",
+      "file": "modal-order-post-delivery-refund-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 1787,
+      "unexplainedCount": 1787,
+      "bbox": {
+        "x": 415,
+        "y": 63,
+        "width": 450,
+        "height": 436
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-order-post-delivery-refund-filled",
+      "viewport": "desktop",
+      "file": "modal-order-post-delivery-refund-filled-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 1787,
+      "unexplainedCount": 1787,
+      "bbox": {
+        "x": 415,
+        "y": 63,
+        "width": 450,
+        "height": 436
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "order-cancel-submit",
+      "viewport": "desktop",
+      "file": "order-cancel-submit-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1663
+        ],
+        "after": [
+          1280,
+          1659
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1659
+    },
+    {
+      "id": "order-post-delivery-refund-submit",
+      "viewport": "desktop",
+      "file": "order-post-delivery-refund-submit-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1241
+        ],
+        "after": [
+          1280,
+          1241
+        ]
+      },
+      "diffCount": 13117,
+      "unexplainedCount": 13117,
+      "bbox": {
+        "x": 414,
+        "y": 63,
+        "width": 452,
+        "height": 814
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1241
+    },
+    {
+      "id": "operations-all",
+      "viewport": "desktop",
+      "file": "operations-all-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          1024
+        ],
+        "after": [
+          1280,
+          1024
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 1024
+    },
+    {
+      "id": "modal-operations-resolve",
+      "viewport": "desktop",
+      "file": "modal-operations-resolve-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-operations-resolve-filled",
+      "viewport": "desktop",
+      "file": "modal-operations-resolve-filled-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "operations-resolve-submit",
+      "viewport": "desktop",
+      "file": "operations-resolve-submit-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "modal-order-hold",
+      "viewport": "desktop",
+      "file": "modal-order-hold-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 1001,
+      "unexplainedCount": 1001,
+      "bbox": {
+        "x": 415,
+        "y": 119,
+        "width": 450,
+        "height": 498
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-order-hold-customer",
+      "viewport": "desktop",
+      "file": "modal-order-hold-customer-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 1001,
+      "unexplainedCount": 1001,
+      "bbox": {
+        "x": 415,
+        "y": 119,
+        "width": 450,
+        "height": 498
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-order-hold-filled",
+      "viewport": "desktop",
+      "file": "modal-order-hold-filled-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 1001,
+      "unexplainedCount": 1001,
+      "bbox": {
+        "x": 415,
+        "y": 119,
+        "width": 450,
+        "height": 498
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "order-hold-submit",
+      "viewport": "desktop",
+      "file": "order-hold-submit-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          1276
+        ],
+        "after": [
+          1280,
+          1276
+        ]
+      },
+      "diffCount": 13584,
+      "unexplainedCount": 13584,
+      "bbox": {
+        "x": 414,
+        "y": 113,
+        "width": 452,
+        "height": 886
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 1276
+    },
+    {
+      "id": "modal-order-cancel",
+      "viewport": "desktop",
+      "file": "modal-order-cancel-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 1914,
+      "unexplainedCount": 1914,
+      "bbox": {
+        "x": 415,
+        "y": 119,
+        "width": 450,
+        "height": 498
+      },
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-orders-store-open",
+      "viewport": "desktop",
+      "file": "admin-orders-store-open-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-orders-store-search",
+      "viewport": "desktop",
+      "file": "admin-orders-store-search-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-orders-store-nothing",
+      "viewport": "desktop",
+      "file": "admin-orders-store-nothing-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-orders-status-open",
+      "viewport": "desktop",
+      "file": "admin-orders-status-open-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-orders-empty",
+      "viewport": "desktop",
+      "file": "admin-orders-empty-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "modal-driver-approve",
+      "viewport": "desktop",
+      "file": "modal-driver-approve-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-driver-suspend",
+      "viewport": "desktop",
+      "file": "modal-driver-suspend-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-stores-all",
+      "viewport": "desktop",
+      "file": "admin-stores-all-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "admin-stores-no-match",
+      "viewport": "desktop",
+      "file": "admin-stores-no-match-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "admin-stores-search",
+      "viewport": "desktop",
+      "file": "admin-stores-search-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "admin-stores-commission-edit",
+      "viewport": "desktop",
+      "file": "admin-stores-commission-edit-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "admin-stores-status-open",
+      "viewport": "desktop",
+      "file": "admin-stores-status-open-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-user-suspend",
+      "viewport": "desktop",
+      "file": "modal-user-suspend-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-invite-revoke",
+      "viewport": "desktop",
+      "file": "modal-invite-revoke-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-invite-copied",
+      "viewport": "desktop",
+      "file": "admin-invite-copied-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-settlements-store-open",
+      "viewport": "desktop",
+      "file": "admin-settlements-store-open-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-settlements-store-nothing",
+      "viewport": "desktop",
+      "file": "admin-settlements-store-nothing-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-settlements-store-picked",
+      "viewport": "desktop",
+      "file": "admin-settlements-store-picked-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          967
+        ],
+        "after": [
+          1280,
+          967
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 967
+    },
+    {
+      "id": "admin-settlements-load-more",
+      "viewport": "desktop",
+      "file": "admin-settlements-load-more-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          967
+        ],
+        "after": [
+          1280,
+          967
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 967
+    },
+    {
+      "id": "modal-admin-refund",
+      "viewport": "desktop",
+      "file": "modal-admin-refund-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-admin-post-delivery-refund",
+      "viewport": "desktop",
+      "file": "modal-admin-post-delivery-refund-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-admin-post-delivery-refund-filled",
+      "viewport": "desktop",
+      "file": "modal-admin-post-delivery-refund-filled-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-round-copy",
+      "viewport": "desktop",
+      "file": "modal-round-copy-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-round-cancel",
+      "viewport": "desktop",
+      "file": "modal-round-cancel-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-round-close",
+      "viewport": "desktop",
+      "file": "modal-round-close-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-product-regenerate",
+      "viewport": "desktop",
+      "file": "modal-product-regenerate-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "sale-rounds-loading",
+      "viewport": "desktop",
+      "file": "sale-rounds-loading-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "sale-rounds-empty",
+      "viewport": "desktop",
+      "file": "sale-rounds-empty-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "toast-option-stock-saved",
+      "viewport": "desktop",
+      "file": "toast-option-stock-saved-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "toast-driver-approve",
+      "viewport": "desktop",
+      "file": "toast-driver-approve-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "admin-drivers-load-more",
+      "viewport": "desktop",
+      "file": "admin-drivers-load-more-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "settings-option-stocks-add-loading",
+      "viewport": "desktop",
+      "file": "settings-option-stocks-add-loading-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          957
+        ],
+        "after": [
+          1280,
+          957
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 957
+    },
+    {
+      "id": "settings-option-stocks-remaining-loading",
+      "viewport": "desktop",
+      "file": "settings-option-stocks-remaining-loading-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          957
+        ],
+        "after": [
+          1280,
+          957
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 957
+    },
+    {
+      "id": "order-ops-retry-refund-loading",
+      "viewport": "desktop",
+      "file": "order-ops-retry-refund-loading-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          2109
+        ],
+        "after": [
+          1280,
+          2107
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2107
+    },
+    {
+      "id": "order-ops-reload-loading",
+      "viewport": "desktop",
+      "file": "order-ops-reload-loading-desktop.png",
+      "status": "diff",
+      "size": {
+        "before": [
+          1280,
+          2109
+        ],
+        "after": [
+          1280,
+          2107
+        ]
+      },
+      "diffCount": null,
+      "unexplainedCount": null,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 2107
+    },
+    {
+      "id": "operations-reload-loading",
+      "viewport": "desktop",
+      "file": "operations-reload-loading-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          864
+        ],
+        "after": [
+          1280,
+          864
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 864
+    },
+    {
+      "id": "operations-resolve-loading",
+      "viewport": "desktop",
+      "file": "operations-resolve-loading-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "modal-round-copy-loading",
+      "viewport": "desktop",
+      "file": "modal-round-copy-loading-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "id": "sale-round-draft-saving",
+      "viewport": "desktop",
+      "file": "sale-round-draft-saving-desktop.png",
+      "status": "same",
+      "size": {
+        "before": [
+          1280,
+          800
+        ],
+        "after": [
+          1280,
+          800
+        ]
+      },
+      "diffCount": 0,
+      "unexplainedCount": 0,
+      "bbox": null,
+      "reasons": [],
+      "width": 1280,
+      "height": 800
+    }
+  ]
+}
