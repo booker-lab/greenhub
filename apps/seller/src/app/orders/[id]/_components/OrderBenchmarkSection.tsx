@@ -4,7 +4,7 @@ import type { Order } from '@greenhub/shared';
 import { isFeatureOn } from '@/lib/features';
 import { Row } from './OrderRow';
 
-// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, shadow xs, p md)·Stack·Text(p, 여백 0, 줄 높이 1.55)와 같은 값.
+// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, p md; 그림자는 ② D2로 걷음)·Stack·Text(p, 여백 0, 줄 높이 1.55)와 같은 값.
 const TEXT = 'm-0 p-0 text-base font-normal';
 
 // 팔도감 벤치마킹 비교 기능의 주문 정보: 포장할 때 볼 옵션(축하 토퍼 등), 포장 라벨 문구, 선물 카드.
@@ -27,7 +27,7 @@ export function OrderBenchmarkSection({ order }: { order: Order }) {
   } as const;
 
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4">
       <div className="flex flex-col gap-1.5">
         {optionLines.length > 0 && (
           <>

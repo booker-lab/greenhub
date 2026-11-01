@@ -112,6 +112,7 @@ node scripts/visual/parity.mjs consumer --before before --after after --allow pa
 
 - 픽셀이 같아도 동작이 바뀔 수 있다(주문 요청 본문, 결제창 인자, 링크가 버튼이 되는 역할 변화). UI 교체 PR은 `diff.mjs`와 함께 이 비교도 통과해야 한다.
 - 화면·폭마다 `writes`·`portoneCalls`·`storage`·`aria`를 비교한다. 결제마다 새로 만드는 UUID와 실제 시각(ISO)은 자리표시로 바꿔 비교한다.
+- `aria`에서 Next.js 경로 안내(`next-route-announcer`의 alert)는 찍을 때 뺀다. 이동 시점에 따라 글자가 채워지거나 비는 Next 요소라 가짜 차이만 만든다(`aria-snapshot.mjs`). 앱이 그린 alert는 그대로 비교하고, 경로 안내 글자는 `manifest.json`의 `routeAnnouncer`에 따로 남는다. 빼기 전 `shots.mjs`로 찍은 묶음과는 aria를 비교하지 않고 실패로 본다(같은 `shots.mjs`로 다시 찍는다).
 - 통과 조건: 모두 같거나, 다른 항목이 허용 목록(`{ "screen", "viewport"?, "kind", "reason" }`, kind는 위 넷 중 하나)에 사유와 함께 있다. 한쪽에만 있는 화면·기록·정상 촬영 판정 실패는 실패다. 판정은 `parity.spec.mjs`(`node --test scripts/visual/parity.spec.mjs`).
 
 ## 창 초점 순회 검사
@@ -130,6 +131,7 @@ node scripts/visual/focus-trap.mjs seller --set overlays          # 앱 화면�
   - 창에 `aria-modal="true"`가 있고, 본문(`data-slot=dialog-body`·`sheet-body`)이 있으면 `aria-describedby`가 창 안 요소를 가리킨다.
   - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다. 화면을 열 때 이미 열려 있던 창은 여는 요소가 없어 이 항목만 빼고 결과에 기록한다.
     - fixture 화면에 `closeBlocked: '<사유>'`가 있으면(처리 중 창: 해결로 닫기·회차 복사 처리 중) 반대로 Esc로 닫히지 않고 초점이 창 안에 남아야 한다. 앱이 처리 중 닫기를 막는 약속(Mantine `closeOnEscape={!처리 중}`과 같음)을 검사한다.
+    - ⋮ 메뉴 항목처럼 창이 열리면 사라지는 요소로 연 창은 fixture 화면에 `returnFocus: '<선택자>'`를 두어, 닫은 뒤 초점이 그 요소(메뉴 버튼)로 돌아오는지 본다.
 - `--set overlays`는 판매자 `/dev/overlays`(fixture `overlayScreens`)다. 앱 화면이 아직 쓰지 않는 `Sheet`를 버튼으로 열어 같은 판정을 한다. 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열리고 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`). 실제 화면이 Sheet를 쓰면 그 화면 fixture의 steps로 옮기고 지운다.
 - 결과: `%TEMP%\greenhub-visual\<app>\focus\<label>.json`(화면·폭마다 Tab·Shift+Tab으로 거친 요소 목록 포함).
 - 실측(2026-11-01): Base UI 교체 직후 `main`(b9c2f5a)은 판매자 창 21개 모두 실패했다(창마다 초점 가드 2번, `aria-modal`·`aria-describedby` 없음). 원인과 수정은 `packages/ui/src/components/dialog.tsx` `DialogPopup` 주석.
@@ -168,6 +170,7 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `soundness.mjs` | 정상 촬영 판정 |
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
 | `parity.mjs` | 작업 전·후 쓰기 요청·결제창 인자·저장소·접근성 트리 비교(`parity.spec.mjs`) |
+| `aria-snapshot.mjs` | 경로 안내를 뺀 접근성 트리 촬영. 감추기·되돌리기 로직은 `aria-snapshot.spec.mjs`(가짜 document, CI), 실제 Chromium 확인은 `aria-snapshot.browser-check.mjs`(로컬 전용, CI는 브라우저가 없어 `.spec`이 아닌 이름) |
 | `report.mjs` · `report-template.html` | 캡처 결과로 확인판 HTML 생성 |
 
 ## 안전장치
