@@ -18,6 +18,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { APPS, DEV_RESTARTS_FILE, RUNTIME_FILE } from './apps.mjs';
+import { ARIA_EXCLUDED_TAGS, appAriaSnapshot } from './aria-snapshot.mjs';
 import { VISUAL_NOW_ENV } from './clock.mjs';
 import {
   expectedKeys,
@@ -345,10 +346,8 @@ async function shootOnce(context, screen, viewportName) {
   const png = await capture(page, { viewportOnly: screen.viewport === true });
   captured = true;
   // 접근성 의미(역할·이름·상태)를 남긴다. 링크가 버튼이 되는 것 같은 회귀는 픽셀이 같아도 여기서 드러난다.
-  const aria = await page
-    .locator('body')
-    .ariaSnapshot({ timeout: 10_000 })
-    .catch((e) => `ariaSnapshot 실패: ${e.message}`);
+  // Next.js 경로 안내(next-route-announcer)는 타이밍에 따라 글자가 들어갔다 빠져 빼고 찍는다(aria-snapshot.mjs).
+  const { aria, routeAnnouncer } = await appAriaSnapshot(page);
   const portoneCalls = screen.portone
     ? await page.evaluate(() => window.__VISUAL_PORTONE_CALLS__ ?? []).catch(() => null)
     : undefined;
@@ -383,6 +382,8 @@ async function shootOnce(context, screen, viewportName) {
     storage,
     ...(portoneCalls !== undefined ? { portoneCalls } : {}),
     aria: `${screen.id}-${viewportName}.aria.yml`,
+    ariaExcludes: ARIA_EXCLUDED_TAGS,
+    routeAnnouncer,
     // expectedErrors: 화면이 일부러 만든 오류 응답(주문 거절 409 등)에 브라우저가 남기는 리소스 오류 줄만 뺀다.
     errors: [...new Set(errors)].filter(
       (text) => !(screen.expectedErrors ?? []).some((pattern) => new RegExp(pattern).test(text)),
