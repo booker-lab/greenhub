@@ -2,8 +2,6 @@
 
 import { useEffect, useRef } from 'react';
 import { SessionProvider, useSession, signOut } from 'next-auth/react';
-import { MantineProvider } from '@mantine/core';
-import { theme } from '@greenhub/ui';
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 
@@ -45,11 +43,9 @@ function SessionAuthorityRecheck() {
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <MantineProvider theme={theme}>
-      <SessionProvider>
-        <SessionAuthorityRecheck />
-        <TokenErrorGuard>{children}</TokenErrorGuard>
-      </SessionProvider>
-    </MantineProvider>
+    <SessionProvider>
+      <SessionAuthorityRecheck />
+      <TokenErrorGuard>{children}</TokenErrorGuard>
+    </SessionProvider>
   );
 }

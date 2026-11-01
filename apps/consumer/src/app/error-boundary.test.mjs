@@ -49,7 +49,7 @@ test('global-error.tsx: root layout을 대신하므로 html과 body를 직접 �
   const globalErrorSource = source('global-error.tsx');
   assert.match(globalErrorSource, /<html lang="ko">/);
   assert.match(globalErrorSource, /<body[\s>]/);
-  // root layout·Providers가 없는 상태라 Mantine·next/link에 기대지 않는다
+  // root layout·Providers가 없는 상태라 UI 라이브러리·next/link에 기대지 않는다
   assert.doesNotMatch(globalErrorSource, /@mantine\/core/);
   assert.doesNotMatch(globalErrorSource, /next\/link/);
 });
