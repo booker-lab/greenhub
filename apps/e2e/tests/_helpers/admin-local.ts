@@ -273,3 +273,8 @@ export async function pickSelectOption(
 export function krw(amount: number): string {
   return `₩${amount.toLocaleString('ko-KR')}`;
 }
+
+/** 어드민 ② 목록·합계의 금액 표기("48,000원"). 확인창은 아직 krw(₩) 표기다. */
+export function won(amount: number): string {
+  return `${amount.toLocaleString('ko-KR')}원`;
+}
