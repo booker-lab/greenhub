@@ -1,5 +1,7 @@
 # 성능 최적화 6순위 — Mantine CSS Treeshaking
 
+> **역사 자료(2026-11-02)**: UI 교체 P6(`docs/specs/frontend/ui-stack-migration-plan.md` §6)로 세 앱과 `packages/ui`에서 Mantine을 모두 걷어냈다. 이 문서의 대상 코드는 더 이상 없다.
+
 > 작성: 2026-04-27 / 수정: 2026-04-28
 > 목표: Consumer/Seller/Driver 전체 CSS 번들 -20~30KB + Pretendard 폰트 self-hosting (PWA SW 에러 해소)
 
