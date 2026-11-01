@@ -112,6 +112,7 @@ node scripts/visual/parity.mjs consumer --before before --after after --allow pa
 
 - 픽셀이 같아도 동작이 바뀔 수 있다(주문 요청 본문, 결제창 인자, 링크가 버튼이 되는 역할 변화). UI 교체 PR은 `diff.mjs`와 함께 이 비교도 통과해야 한다.
 - 화면·폭마다 `writes`·`portoneCalls`·`storage`·`aria`를 비교한다. 결제마다 새로 만드는 UUID와 실제 시각(ISO)은 자리표시로 바꿔 비교한다.
+- `aria`에서 Next.js 경로 안내(`next-route-announcer`의 alert)는 찍을 때 뺀다. 이동 시점에 따라 글자가 채워지거나 비는 Next 요소라 가짜 차이만 만든다(`aria-snapshot.mjs`). 앱이 그린 alert는 그대로 비교하고, 경로 안내 글자는 `manifest.json`의 `routeAnnouncer`에 따로 남는다. 빼기 전 `shots.mjs`로 찍은 묶음과는 aria를 비교하지 않고 실패로 본다(같은 `shots.mjs`로 다시 찍는다).
 - 통과 조건: 모두 같거나, 다른 항목이 허용 목록(`{ "screen", "viewport"?, "kind", "reason" }`, kind는 위 넷 중 하나)에 사유와 함께 있다. 한쪽에만 있는 화면·기록·정상 촬영 판정 실패는 실패다. 판정은 `parity.spec.mjs`(`node --test scripts/visual/parity.spec.mjs`).
 
 ## 창 초점 순회 검사
@@ -168,6 +169,7 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `soundness.mjs` | 정상 촬영 판정 |
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
 | `parity.mjs` | 작업 전·후 쓰기 요청·결제창 인자·저장소·접근성 트리 비교(`parity.spec.mjs`) |
+| `aria-snapshot.mjs` | 경로 안내를 뺀 접근성 트리 촬영(`aria-snapshot.spec.mjs`, Chromium 필요) |
 | `report.mjs` · `report-template.html` | 캡처 결과로 확인판 HTML 생성 |
 
 ## 안전장치
