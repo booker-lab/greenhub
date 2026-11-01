@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { compareParity, normalizeVolatile, parseParityAllowances } from './parity.mjs';
+import {
+  compareParity,
+  normalizeStorage,
+  normalizeVolatile,
+  parseParityAllowances,
+} from './parity.mjs';
 
 const record = (overrides = {}) => ({
   writes: [{ method: 'POST', path: '/stores/s/orders', query: '', body: '{"quantity":1}' }],
@@ -8,6 +13,30 @@ const record = (overrides = {}) => ({
   storage: { localStorage: { greenhub_cart: '[]' }, sessionStorage: {} },
   aria: '- link "홈":\n  - /url: /\n- button "결제하기"',
   ...overrides,
+});
+
+// 판매자 하네스가 남기는 Firebase 에뮬레이터 로그인 기록과 같은 모양(서명 없는 토큰, 실행마다 시각만 다름).
+const b64 = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
+const firebaseUser = ({ at, role = 'admin' }) =>
+  JSON.stringify({
+    uid: 'admin-visual-0001',
+    emailVerified: false,
+    isAnonymous: false,
+    providerData: [],
+    stsTokenManager: {
+      refreshToken: 'eyJfQXV0aEVtdWxhdG9yUmVmcmVzaFRva2VuIjoiRE8gTk9UIE1PRElGWSJ9',
+      accessToken: `${b64({ alg: 'none', typ: 'JWT' })}.${b64({ role, storeId: 'store-visual-0001', auth_time: at, user_id: 'admin-visual-0001', iat: at, exp: at + 3600, aud: 'greenhub-local' })}.`,
+      expirationTime: 1793462400000,
+    },
+    createdAt: String(at * 1000 - 40000),
+    lastLoginAt: String(at * 1000),
+    apiKey: 'visual-harness-fake-key',
+    appName: '[DEFAULT]',
+  });
+const FIREBASE_KEY = 'firebase:authUser:visual-harness-fake-key:[DEFAULT]';
+const sellerStorage = (user, local = {}) => ({
+  localStorage: local,
+  sessionStorage: { [FIREBASE_KEY]: user },
 });
 
 describe('parity: 작업 전·후 동작·접근성 비교', () => {
@@ -35,6 +64,43 @@ describe('parity: 작업 전·후 동작·접근성 비교', () => {
     const [result] = compareParity({ 'x@mobile': a }, { 'x@mobile': b });
     assert.equal(result.status, 'same');
     assert.equal(normalizeVolatile('2026-10-31T00:00:00+09:00'), '<time>');
+  });
+
+  it('판매자 Firebase 에뮬레이터 로그인 기록은 로그인·토큰 시각만 달라도 같음', () => {
+    const a = record({ storage: sellerStorage(firebaseUser({ at: 1793495830 })) });
+    const b = record({ storage: sellerStorage(firebaseUser({ at: 1793496282 })) });
+    const [result] = compareParity({ 'x@mobile': a }, { 'x@mobile': b });
+    assert.equal(result.status, 'same');
+    const normalized = JSON.parse(normalizeStorage(a.storage).sessionStorage[FIREBASE_KEY]);
+    assert.equal(normalized.lastLoginAt, '<time>');
+    assert.match(normalized.stsTokenManager.accessToken, /"iat":"<time>"/);
+    assert.match(normalized.stsTokenManager.accessToken, /"role":"admin"/);
+  });
+
+  it('로그인 기록의 시각이 아닌 값(토큰 클레임)이 다르면 차이로 잡는다', () => {
+    const a = record({ storage: sellerStorage(firebaseUser({ at: 1793495830 })) });
+    const b = record({ storage: sellerStorage(firebaseUser({ at: 1793496282, role: 'seller' })) });
+    const [result] = compareParity({ 'x@mobile': a }, { 'x@mobile': b });
+    assert.equal(result.status, 'different');
+    assert.deepEqual(
+      result.differences.map((d) => d.kind),
+      ['storage'],
+    );
+  });
+
+  it('로그인 기록 밖의 저장소 차이(상품 임시 저장 유무)는 그대로 잡는다', () => {
+    const a = record({ storage: sellerStorage(firebaseUser({ at: 1793495830 })) });
+    const b = record({
+      storage: sellerStorage(firebaseUser({ at: 1793496282 }), {
+        product_draft_new: '{"name":"x"}',
+      }),
+    });
+    const [result] = compareParity({ 'x@mobile': a }, { 'x@mobile': b });
+    assert.equal(result.status, 'different');
+    assert.deepEqual(
+      result.differences.map((d) => d.kind),
+      ['storage'],
+    );
   });
 
   it('주문 요청 본문의 값 하나가 달라도 차이로 잡는다', () => {
