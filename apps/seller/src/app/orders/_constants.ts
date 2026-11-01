@@ -54,34 +54,23 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   REVIEWED: '구매 확정',
 };
 
-export const STATUS_COLOR: Record<OrderStatus, string> = {
-  ACCEPTED: 'brand',
-  CONFIRMED: 'brand',
-  RECRUITING: 'brand',
-  DELIVERY_HELD: 'red',
-  PREPARING: 'yellow',
-  DELIVERING: 'dark',
-  HUB_ARRIVED: 'dark',
-  CANCELLED: 'red',
-  PENDING: 'gray',
-  DELIVERED: 'gray',
-  PICKED_UP: 'gray',
-  REVIEWED: 'gray',
-};
-
-export const ACCENT_BORDER: Record<OrderStatus, string> = {
-  ACCEPTED: 'var(--color-primary)',
-  CONFIRMED: 'var(--color-primary)',
-  RECRUITING: 'var(--color-primary)',
-  DELIVERY_HELD: 'var(--color-danger)',
-  PREPARING: 'var(--color-deadline)',
-  DELIVERING: 'var(--color-text-secondary)',
-  HUB_ARRIVED: 'var(--color-text-secondary)',
-  CANCELLED: 'var(--color-danger)',
-  PENDING: 'var(--color-text-disabled)',
-  DELIVERED: 'var(--color-border)',
-  PICKED_UP: 'var(--color-border)',
-  REVIEWED: 'var(--color-border)',
+/**
+ * 주문 상태 점 + 글자 색(2026-11-01 사용자 결정, design-direction §5 "부딪히는 것" 3번).
+ * 문제=빨강(배송 보류), 끝남=회색(취소·결제 대기·완료), 나머지 검정. 이전의 상태 배지 면·카드 왼쪽 4px 띠를 대신한다.
+ */
+export const STATUS_TONE: Record<OrderStatus, 'default' | 'problem' | 'done'> = {
+  ACCEPTED: 'default',
+  CONFIRMED: 'default',
+  RECRUITING: 'default',
+  DELIVERY_HELD: 'problem',
+  PREPARING: 'default',
+  DELIVERING: 'default',
+  HUB_ARRIVED: 'default',
+  CANCELLED: 'done',
+  PENDING: 'done',
+  DELIVERED: 'done',
+  PICKED_UP: 'done',
+  REVIEWED: 'done',
 };
 
 export const DELIVERY_LABEL: Record<string, string> = {

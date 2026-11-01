@@ -5,7 +5,7 @@ import { Button } from '@greenhub/ui/components/button';
 import { isRoundOrder } from '@/lib/round-purchase-list';
 import { makePreparedAtOptions } from '../_lib';
 
-// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, shadow xs, p md)·Group(gap xs = 10px)·
+// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, p md; 그림자는 ② D2로 걷음)·Group(gap xs = 10px)·
 // Text(p, 여백 0, 줄 높이 1.55)와 같은 값. 안쪽 Text(span)는 바깥 크기를 물려받지 않고 16px로 돌아간다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 const GROUP = 'flex flex-row flex-wrap items-center justify-start gap-2.5';
@@ -34,7 +34,7 @@ export function PrepareForm({
   const roundOrder = isRoundOrder(order);
 
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4">
       <p
         className={`${TEXT} mb-3`}
         style={{
