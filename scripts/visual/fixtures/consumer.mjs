@@ -519,6 +519,18 @@ const benchmarkRoutes = [
  * - scheduled: 판매 중·지난 회차 없이 다음 회차만 예정된 주(오픈 알림·빈 지난 회차 숨김).
  */
 export const scenarioRoutes = {
+  // 기능 플래그 화면(UI 교체 P5 E 묶음): 입점 문의 거절·구매 내역 빈 상태·조회 실패.
+  'partner-reject': [
+    [
+      'POST',
+      /^\/partner-inquiries$/,
+      () => ({ status: 400, body: { message: '연락처 형식을 확인해 주세요.' } }),
+    ],
+  ],
+  'purchase-history-empty': [['GET', /^\/orders$/, () => ({ body: [] })]],
+  'purchase-history-error': [
+    ['GET', /^\/orders$/, () => ({ status: 500, body: { message: '서버 오류' } })],
+  ],
   // 주문 생성 거절(서버 확정 거절 4xx): 결제 화면의 오류 안내(role=alert)를 찍는다.
   'order-reject': [
     [
@@ -1306,5 +1318,81 @@ export const benchmarkScreens = [
     path: '/partner',
     auth: false,
     features: ['partner-inquiry'],
+  },
+  // 기능 플래그 화면(UI 교체 P5 E 묶음): 입점 문의 입력·보낸 뒤·거절, 찜·구매한 꽃 빈 상태·조회 실패.
+  {
+    id: 'bm-partner-filled',
+    group: '가게·안내',
+    title: '입점 문의 · 입력과 동의',
+    path: '/partner',
+    auth: false,
+    features: ['partner-inquiry'],
+    steps: [
+      { fill: { label: '농가·화원 이름', value: '푸른난원' } },
+      { fill: { label: '지역', value: '경기 용인' } },
+      { fill: { label: '연락처', value: '010-0000-0000' } },
+      { fill: { label: '소개와 문의 내용', value: '동양란을 30년째 기르고 있습니다.\n입점 상담을 받고 싶어요.' } },
+      { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
+    ],
+  },
+  {
+    id: 'bm-partner-done',
+    group: '가게·안내',
+    title: '입점 문의 · 보낸 뒤',
+    path: '/partner',
+    auth: false,
+    features: ['partner-inquiry'],
+    steps: [
+      { fill: { label: '농가·화원 이름', value: '푸른난원' } },
+      { fill: { label: '지역', value: '경기 용인' } },
+      { fill: { label: '연락처', value: '010-0000-0000' } },
+      { fill: { label: '소개와 문의 내용', value: '동양란을 30년째 기르고 있습니다.\n입점 상담을 받고 싶어요.' } },
+      { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
+      { click: '문의 보내기' },
+    ],
+    // 보낸 뒤 화면으로 바뀔 때 Mantine Container(p·pb 함께 쓰던 style)가 남기는 React 개발 경고(수정 전 화면만).
+    expectedErrors: ['Removing paddingBottom padding'],
+  },
+  {
+    id: 'bm-partner-error',
+    group: '가게·안내',
+    title: '입점 문의 · 보내기 실패',
+    path: '/partner',
+    auth: false,
+    scenario: 'partner-reject',
+    features: ['partner-inquiry'],
+    steps: [
+      { fill: { label: '농가·화원 이름', value: '푸른난원' } },
+      { fill: { label: '지역', value: '경기 용인' } },
+      { fill: { label: '연락처', value: '010-0000-0000' } },
+      { fill: { label: '소개와 문의 내용', value: '동양란을 30년째 기르고 있습니다.\n입점 상담을 받고 싶어요.' } },
+      { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
+      { click: '문의 보내기' },
+    ],
+    expectedErrors: ['status of 400 \\(Bad Request\\).*/partner-inquiries'],
+  },
+  {
+    id: 'bm-wishlist-empty',
+    group: 'MY',
+    title: 'MY · 이번 회차 찜 없음',
+    path: '/mypage/wishlist',
+    features: ['wishlist'],
+  },
+  {
+    id: 'bm-purchase-history-empty',
+    group: 'MY',
+    title: 'MY · 구매한 꽃 없음',
+    path: '/mypage/purchase-history',
+    scenario: 'purchase-history-empty',
+    features: ['purchase-history'],
+  },
+  {
+    id: 'bm-purchase-history-error',
+    group: 'MY',
+    title: 'MY · 구매한 꽃 조회 실패',
+    path: '/mypage/purchase-history',
+    scenario: 'purchase-history-error',
+    features: ['purchase-history'],
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/orders'],
   },
 ];
