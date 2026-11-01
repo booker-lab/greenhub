@@ -46,7 +46,6 @@ export function OrderStatusCard({
       <div className="flex flex-row flex-nowrap items-start justify-start gap-0.5">
         {PIPELINE.map((step, i) => {
           const count = groupCounts[step.group];
-          const accent = step.group === 'ACTION_REQUIRED' && (count ?? 0) > 0;
           return (
             <Fragment key={step.group}>
               {i > 0 && (
@@ -64,7 +63,7 @@ export function OrderStatusCard({
                       fontSize: 'var(--font-size-2xl)',
                       fontWeight: 'var(--fw-bold)',
                       lineHeight: 1,
-                      color: accent ? 'var(--color-primary-dark)' : 'var(--color-text)',
+                      color: 'var(--color-text)',
                     }}
                   >
                     {count ?? '—'}
@@ -195,7 +194,7 @@ export function SettlementCard({
           style={{
             fontSize: 'var(--font-size-md)',
             fontWeight: 'var(--fw-bold)',
-            color: 'var(--color-primary-dark)',
+            color: 'var(--color-text)',
           }}
         >
           {amountText}
@@ -309,7 +308,7 @@ export function ProductStatusCard({
             style={{
               fontSize: 'var(--font-size-md)',
               fontWeight: 'var(--fw-bold)',
-              color: inactiveCount > 0 ? 'var(--color-status-warning-text)' : 'var(--color-text)',
+              color: 'var(--color-text)',
             }}
           >
             {inactiveCount}

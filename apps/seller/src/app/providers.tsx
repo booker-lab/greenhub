@@ -1,8 +1,6 @@
 'use client';
 
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
-import { theme } from '@greenhub/ui';
-import { MantineProvider } from '@mantine/core';
 import { getSession, SessionProvider, signOut, useSession } from 'next-auth/react';
 import { createContext, useContext, useEffect, useRef } from 'react';
 import { AppToaster } from '@/components/AppToaster';
@@ -86,14 +84,12 @@ function SessionAuthorityRecheck() {
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <MantineProvider theme={theme}>
-      <AppToaster>
-        <SessionProvider>
-          <SessionKeepAlive />
-          <SessionAuthorityRecheck />
-          <TokenErrorGuard>{children}</TokenErrorGuard>
-        </SessionProvider>
-      </AppToaster>
-    </MantineProvider>
+    <AppToaster>
+      <SessionProvider>
+        <SessionKeepAlive />
+        <SessionAuthorityRecheck />
+        <TokenErrorGuard>{children}</TokenErrorGuard>
+      </SessionProvider>
+    </AppToaster>
   );
 }

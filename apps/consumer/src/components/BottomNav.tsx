@@ -2,7 +2,6 @@
 
 import type { Product, SalesMode } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
-import { Box, Stack, Text, UnstyledButton } from '@mantine/core';
 import { Home, LayoutGrid, ShoppingCart, User, Users } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -27,6 +26,11 @@ const LEGACY_TABS = [
   { href: '/cart', label: '장바구니', Icon: ShoppingCart, showBadge: true },
   { href: '/mypage', label: 'MY', Icon: User, showBadge: false },
 ] as const;
+
+// ① 외형 유지(UI 교체 P5): Mantine UnstyledButton(component=Link, 초점 링 mantine-focus-auto)·Stack(가운데, gap 2,
+// 높이 100%)·Text(p, 줄 높이 1.55)와 같은 값.
+const TAB_LINK =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-[16px] text-inherit no-underline touch-manipulation [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid';
 
 const HIDDEN_PATHS = ['/checkout', '/order/success', '/products/'];
 
@@ -109,8 +113,7 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
   const tabs = storeMode.salesMode === 'round_direct' ? ROUND_DIRECT_TABS : LEGACY_TABS;
 
   return (
-    <Box
-      component="nav"
+    <nav
       style={{
         position: 'fixed',
         bottom: 0,
@@ -123,28 +126,25 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
-      <Box style={{ display: 'flex', maxWidth: 430, margin: '0 auto', height: '100%' }}>
+      <div style={{ display: 'flex', maxWidth: 430, margin: '0 auto', height: '100%' }}>
         {tabs.map((tab) => {
           const isActive = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href);
           const { Icon } = tab;
 
           return (
-            <UnstyledButton key={tab.href} component={Link} href={tab.href} style={{ flex: 1 }}>
-              <Stack
-                align="center"
-                justify="center"
-                gap={2}
-                h="100%"
+            <Link key={tab.href} href={tab.href} className={TAB_LINK} style={{ flex: 1 }}>
+              <div
+                className="flex h-full flex-col items-center justify-center gap-0.5"
                 style={{ position: 'relative' }}
               >
-                <Box style={{ position: 'relative', display: 'inline-flex' }}>
+                <div style={{ position: 'relative', display: 'inline-flex' }}>
                   <Icon
                     size={24}
                     strokeWidth={isActive ? 2.2 : 1.8}
                     color={isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)'}
                   />
                   {tab.showBadge && visibleItemCount > 0 && (
-                    <Box
+                    <div
                       style={{
                         position: 'absolute',
                         top: -6,
@@ -163,10 +163,11 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
                       }}
                     >
                       {visibleItemCount > 99 ? '99+' : visibleItemCount}
-                    </Box>
+                    </div>
                   )}
-                </Box>
-                <Text
+                </div>
+                <p
+                  className="m-0 p-0 leading-[1.55]"
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     fontWeight: isActive ? 'var(--fw-extrabold)' : 'var(--fw-medium)',
@@ -174,12 +175,12 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
                   }}
                 >
                   {tab.label}
-                </Text>
-              </Stack>
-            </UnstyledButton>
+                </p>
+              </div>
+            </Link>
           );
         })}
-      </Box>
-    </Box>
+      </div>
+    </nav>
   );
 }
