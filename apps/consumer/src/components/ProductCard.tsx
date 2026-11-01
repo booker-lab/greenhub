@@ -1,8 +1,7 @@
 'use client';
 
-import type React from 'react';
+import { Progress } from '@greenhub/ui/components/progress';
 import Link from 'next/link';
-import { Card, Box, Progress } from '@mantine/core';
 import { getGroupBuyStatus, type Product } from '@greenhub/shared';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 
@@ -16,14 +15,18 @@ const categoryLabels: Record<string, string> = {
   foliage: '관엽',
 };
 
+// ① 외형 유지(UI 교체 P5): Mantine Card(component=Link, radius 16, 흰 면·검정 글자, 위치 relative, outline 0이라
+// 초점 링 없음)·Box p xs(10)·Progress sm(높이 5)·radius xl(32)·위 6과 같은 값.
+const CARD_LINK =
+  'relative block overflow-hidden rounded-[16px] bg-white text-black no-underline outline-none touch-manipulation [-webkit-tap-highlight-color:transparent]';
+
 export default function ProductCard({ product }: ProductCardProps) {
   const imgSrc = product.images?.[0] ?? PRODUCT_IMAGE_FALLBACK;
 
   return (
-    <Card
-      component={Link}
+    <Link
       href={`/products/${product.id}`}
-      p={0}
+      className={CARD_LINK}
       style={{
         overflow: 'hidden',
         display: 'block',
@@ -31,7 +34,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         border: 'var(--border)',
       }}
     >
-      <Box
+      <div
         style={{
           position: 'relative',
           aspectRatio: '4/5',
@@ -47,9 +50,9 @@ export default function ProductCard({ product }: ProductCardProps) {
           sizes="(max-width: 600px) 50vw, 33vw"
           style={{ objectFit: 'cover' }}
         />
-      </Box>
+      </div>
 
-      <Box p="xs">
+      <div className="p-2.5">
         <div style={{ display: 'flex', gap: 4, marginBottom: 4, flexWrap: 'wrap' }}>
           <span
             style={{
@@ -139,19 +142,9 @@ export default function ProductCard({ product }: ProductCardProps) {
                     : `${currentQuantity}/${targetQuantity}개 모집 중`;
             return (
               <>
-                <Progress
-                  value={pct}
-                  size="sm"
-                  mt={6}
-                  radius="xl"
-                  style={
-                    {
-                      '--progress-color': done
-                        ? 'var(--color-text-disabled)'
-                        : 'var(--color-primary)',
-                    } as React.CSSProperties
-                  }
-                />
+                {/* 지금 화면과 같게 구간은 늘 주색이다. 교체 전 코드가 준 --progress-color는 Mantine이 읽지 않는
+                    변수(구간 색은 --progress-section-color)라 마감·완료여도 회색이 되지 않았다. */}
+                <Progress value={pct} className="mt-1.5 h-[5px] rounded-[32px]" />
                 <p
                   style={{
                     fontSize: 'var(--font-size-sm)',
@@ -166,7 +159,7 @@ export default function ProductCard({ product }: ProductCardProps) {
               </>
             );
           })()}
-      </Box>
-    </Card>
+      </div>
+    </Link>
   );
 }
