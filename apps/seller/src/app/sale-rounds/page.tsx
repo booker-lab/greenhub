@@ -2,7 +2,6 @@
 
 import type { SaleRound, SaleRoundSchedule, SaleRoundStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Badge } from '@greenhub/ui/components/badge';
 import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import {
   Dialog,
@@ -15,6 +14,7 @@ import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Progress } from '@greenhub/ui/components/progress';
+import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import {
   AlertTriangle,
   CalendarDays,
@@ -35,27 +35,28 @@ import { copyFormFieldChange } from './copy-form';
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
-// 상태 배지는 Mantine Badge light의 색(gray·yellow·brand·dark·red)과 같은 변형이다.
+// ② 상태는 배지 면 대신 점 + 글자(StatusDot, 2026-11-01 결정): 끝났거나 멈춘 상태(작성 중·배송 완료·취소)=회색,
+// 나머지 검정. 이전 Badge의 회색(secondary)·빨강(취소) 면을 주문 상태와 같은 규칙으로 옮겼다.
 const STATUS_META: Record<
   SaleRoundStatus,
   {
     label: string;
-    badge: 'secondary' | 'warning' | 'light' | 'light-dark' | 'destructive';
+    tone: StatusDotTone;
   }
 > = {
-  DRAFT: { label: '작성 중', badge: 'secondary' },
-  SCHEDULED: { label: '판매 예정', badge: 'warning' },
-  OPEN: { label: '판매 중', badge: 'light' },
-  CLOSED: { label: '주문 마감', badge: 'light-dark' },
-  COMPLETED: { label: '배송 완료', badge: 'secondary' },
-  CANCELLED: { label: '취소', badge: 'destructive' },
+  DRAFT: { label: '작성 중', tone: 'done' },
+  SCHEDULED: { label: '판매 예정', tone: 'default' },
+  OPEN: { label: '판매 중', tone: 'default' },
+  CLOSED: { label: '주문 마감', tone: 'default' },
+  COMPLETED: { label: '배송 완료', tone: 'done' },
+  CANCELLED: { label: '취소', tone: 'done' },
 };
 
 // ① 외형 유지(UI 교체 P4): Mantine Paper·Text·Group·Stack·SimpleGrid·Progress·Modal·TextInput과 같은 값을
-// Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16·그림자 xs,
+// Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16(그림자는 ② D2로 걷음),
 // Group = 가로 flex(줄바꿈, 가운데 정렬), Stack = 세로 flex(늘임), 간격 xs 10·sm 12·md 16px.
 const TEXT = 'm-0 p-0 text-base font-normal';
-const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-white';
 const ROW = 'flex flex-row flex-wrap items-center';
 const COLUMN = 'flex flex-col items-stretch justify-start';
 // datetime 입력칸은 Mantine 입력칸 줄 높이(높이 - 2px = 34px)를 준다. text-sm 1.45로 두면 날짜 글자가 소수점만큼 어긋난다.
@@ -198,9 +199,9 @@ function RoundCard({ round, onCopy }: { round: SaleRound; onCopy: (round: SaleRo
         <div className="flex flex-row flex-nowrap items-start justify-between gap-4">
           <div style={{ minWidth: 0 }}>
             <div className={`${ROW} mb-1 justify-start gap-2.5`}>
-              <Badge variant={status.badge}>{status.label}</Badge>
+              <StatusDot tone={status.tone}>{status.label}</StatusDot>
               {round.closeReason && (
-                <Badge variant="outline-gray">{CLOSE_REASON_LABEL[round.closeReason]}</Badge>
+                <StatusDot tone="done">{CLOSE_REASON_LABEL[round.closeReason]}</StatusDot>
               )}
             </div>
             <p className={`${TEXT} line-clamp-2`} style={{ fontWeight: 'var(--fw-bold)' }}>
@@ -264,9 +265,7 @@ function RoundCard({ round, onCopy }: { round: SaleRound; onCopy: (round: SaleRo
           className={`${ROW} justify-between gap-2.5 p-3`}
           style={{
             borderRadius: 12,
-            backgroundColor: requiresAttention
-              ? 'var(--color-danger-surface)'
-              : 'var(--color-surface-muted)',
+            backgroundColor: requiresAttention ? 'var(--color-danger-surface)' : 'var(--frame)',
           }}
         >
           <div>

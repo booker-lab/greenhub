@@ -1955,13 +1955,14 @@ export const screens = [
     steps: [{ clickSelector: 'button[aria-label="주문 R-ACCEPTED 동작 더 보기"]:visible' }],
     viewport: true,
   },
-  // 어드민 기사 승인·정지 확인창(ConfirmModal, 정지는 사유 입력칸 포함). 기본 탭은 승인 대기다.
+  // 어드민 기사 승인·정지 확인창(ConfirmModal, 정지는 사유 입력칸 포함).
+  // 승인은 표 위 승인 대기 상자의 "승인…", 정지는 표 행 끝 ⋮ 메뉴(D7)에서 연다.
   {
     id: 'modal-driver-approve',
     group: '어드민 · 모달',
     title: '기사 · 승인 확인',
     path: '/admin/drivers',
-    steps: [{ click: '승인' }],
+    steps: [{ clickSelector: 'button[aria-label="기사 이대기 승인"]' }],
     viewport: true,
   },
   {
@@ -1969,10 +1970,23 @@ export const screens = [
     group: '어드민 · 모달',
     title: '기사 · 정지 확인(사유)',
     path: '/admin/drivers',
-    steps: [{ click: '정지' }],
+    steps: [
+      { clickSelector: 'button[aria-label="기사 박배송 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("정지")' },
+    ],
+    // 메뉴 항목은 창이 열리면 사라지므로 닫은 뒤 초점은 ⋮ 메뉴 버튼으로 돌아와야 한다(focus-trap returnFocus).
+    returnFocus: 'button[aria-label="기사 박배송 동작 더 보기"]:visible',
     viewport: true,
   },
-  // 어드민 판매자·소비자(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  {
+    id: 'admin-drivers-row-menu',
+    group: '어드민 · 필터',
+    title: '기사 · 행 ⋮ 메뉴 열림',
+    path: '/admin/drivers',
+    steps: [{ clickSelector: 'button[aria-label="기사 최정지 동작 더 보기"]:visible' }],
+    viewport: true,
+  },
+  // 어드민 판매자·소비자. 표와 휴대폰 행이 같은 버튼을 함께 그려 보이는 것만 누른다.
   {
     id: 'admin-stores-all',
     group: '어드민',
@@ -1991,22 +2005,50 @@ export const screens = [
     group: '어드민',
     title: '판매자 · 검색어 입력',
     path: '/admin/stores',
-    steps: [{ fill: { label: '판매자 검색', value: '농원' } }],
+    steps: [{ fill: { label: '이 목록에서 찾기', value: '농원' } }],
   },
   {
     id: 'admin-stores-commission-edit',
     group: '어드민',
     title: '판매자 · 수수료율 입력',
     path: '/admin/stores',
-    steps: [{ clickSelector: 'button:has-text("수수료 설정"):visible' }],
+    steps: [
+      { clickSelector: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("수수료 바꾸기")' },
+    ],
   },
   {
-    // 상태 Select 열린 목록(Mantine Combobox ↔ Base UI Select, #719 열린 목록 기본값).
-    id: 'admin-stores-status-open',
-    group: '어드민',
-    title: '판매자 · 상태 고르기 열림',
+    // 상태 Select를 숫자 탭으로 바꿨으므로(D7) 열린 목록 대신 행 끝 ⋮ 메뉴를 찍는다.
+    id: 'admin-stores-row-menu',
+    group: '어드민 · 필터',
+    title: '판매자 · 행 ⋮ 메뉴 열림',
     path: '/admin/stores',
-    steps: [{ clickSelector: 'input[readonly]:visible' }],
+    steps: [{ clickSelector: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible' }],
+    viewport: true,
+  },
+  // 어드민 판매자 정리하기·복구 확인창(② D7). 행 끝 ⋮ 메뉴에서 열고, 닫으면 초점은 ⋮ 메뉴 버튼으로 돌아온다.
+  {
+    id: 'modal-store-archive',
+    group: '어드민 · 모달',
+    title: '판매자 · 정리하기 확인',
+    path: '/admin/stores',
+    steps: [
+      { clickSelector: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("정리하기")' },
+    ],
+    returnFocus: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible',
+    viewport: true,
+  },
+  {
+    id: 'modal-store-restore',
+    group: '어드민 · 모달',
+    title: '판매자 · 복구 확인',
+    path: '/admin/stores?status=all',
+    steps: [
+      { clickSelector: 'button[aria-label="판매자 정리된 가게 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("복구하기")' },
+    ],
+    returnFocus: 'button[aria-label="판매자 정리된 가게 동작 더 보기"]:visible',
     viewport: true,
   },
   {
@@ -2014,17 +2056,25 @@ export const screens = [
     group: '어드민 · 모달',
     title: '소비자 · 정지 확인(사유)',
     path: '/admin/users',
-    steps: [{ clickSelector: 'button:has-text("정지"):visible' }],
+    steps: [
+      { clickSelector: 'button[aria-label="소비자 김그린 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("정지")' },
+    ],
+    returnFocus: 'button[aria-label="소비자 김그린 동작 더 보기"]:visible',
     viewport: true,
   },
-  // 어드민 초대(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  // 어드민 초대. 표와 휴대폰 행이 같은 버튼을 함께 그려 보이는 것만 누른다. 취소는 유효 행의 ⋮ 메뉴에 있다.
   // 링크 복사는 헤드리스에서도 성공해 그 행 버튼이 '복사됨!'이 된다(직접 복사 창은 열리지 않는다).
   {
     id: 'modal-invite-revoke',
     group: '어드민 · 모달',
     title: '초대 · 취소 확인',
     path: '/admin/invite',
-    steps: [{ clickSelector: 'button:has-text("취소"):visible' }],
+    steps: [
+      { clickSelector: 'button[aria-label="초대 VALID001 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("초대 취소")' },
+    ],
+    returnFocus: 'button[aria-label="초대 VALID001 동작 더 보기"]:visible',
     viewport: true,
   },
   {
@@ -2071,6 +2121,28 @@ export const screens = [
     title: '정산 · 더 보기 불러오는 중',
     path: '/admin/settlements',
     steps: [{ click: '더 보기' }],
+  },
+  // 어드민 정산 지급 완료 기록 확인창(② D7). 이체 확인 체크가 처음 초점이고, 체크하기 전에는 확정이 꺼져 있다.
+  {
+    id: 'modal-admin-pay',
+    group: '어드민 · 모달',
+    title: '정산 · 지급 완료 기록 확인',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible' },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-admin-pay-checked',
+    group: '어드민 · 모달',
+    title: '정산 · 지급 완료 기록(이체 확인 체크)',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible' },
+      { clickSelector: '[role="dialog"] input[type="checkbox"]' },
+    ],
+    viewport: true,
   },
   // 어드민 주문 환불 확인창. 강제환불은 사유 입력칸, 배송 후 환불은 메모 입력칸이 첫 초점(data-autofocus)이다.
   {
@@ -2162,8 +2234,9 @@ export const screens = [
     path: '/sale-rounds',
     scenario: 'rounds-empty',
   },
-  // UI 교체 P4 알림 전환: 오른쪽 위 알림(제목 없는 주색, 제목 있는 노랑). 가짜 API가 쓰기에 200 {}을 돌려줘
-  // 재고 저장은 성공 알림, 기사 승인은 "확인 못 함" 알림이 뜬다.
+  // UI 교체 P4 알림 전환: 오른쪽 위 알림(제목 없는 주색, 제목 있는 노랑). 재고 저장은 가짜 API가 쓰기에 200 {}을
+  // 돌려줘 성공 알림이 뜬다. 기사 승인은 200 {} + 다시 조회 성공이면 설계상 알림이 없으므로(admin/drivers/_client.tsx
+  // runPending의 confirmed·reconciled), 승인 요청에 503을 돌려줘 "결과를 확인할 수 없습니다" 노랑 알림(unknown)을 띄운다.
   {
     id: 'toast-option-stock-saved',
     group: '알림',
@@ -2177,8 +2250,13 @@ export const screens = [
     group: '알림',
     title: '기사 · 승인 결과 알림',
     path: '/admin/drivers',
-    steps: [{ click: '승인' }, { clickSelector: '[role=dialog] button:has-text("승인")' }],
+    scenario: 'driver-approve-unknown',
+    steps: [
+      { clickSelector: 'button[aria-label="기사 이대기 승인"]' },
+      { clickSelector: '[role=dialog] button:has-text("승인")' },
+    ],
     viewport: true,
+    expectedErrors: ['status of 503 \\(Service Unavailable\\).*/admin/drivers/[^/]+/approve\\)$'],
   },
   {
     id: 'admin-drivers-load-more',
@@ -2222,7 +2300,13 @@ export const screens = [
     group: '판매자 · 불러오는 중 버튼',
     title: '주문 상세 · 운영 기록 새로고침 중',
     path: '/orders/order-round-held',
-    steps: [{ scenario: 'slow-operation-issues' }, { click: '새로고침' }],
+    // 이 화면에는 "새로고침" 버튼이 둘(주문 머리·운영 기록 칸)이라 글자로 누르면 머리 쪽이 눌린다. 운영 기록 칸 버튼을 고른다.
+    steps: [
+      { scenario: 'slow-operation-issues' },
+      {
+        clickSelector: 'div:has(> p:text-is("연락·환불·분쟁 기록")) + button:has-text("새로고침")',
+      },
+    ],
   },
   {
     id: 'operations-reload-loading',
@@ -2292,6 +2376,15 @@ export const scenarioRoutes = {
   ],
   // 공용 LoadingState·EmptyState(회차 목록이 늦게 오거나 비었을 때).
   'rounds-slow': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] }, delay: 8000 })]],
+  // 기사 승인 결과 알림: 승인 요청만 503(서버 오류)이라 앱이 결과를 확정하지 못한다(unknown → 노랑 알림).
+  // 목록 조회는 그대로다.
+  'driver-approve-unknown': [
+    [
+      'PATCH',
+      /^\/admin\/drivers\/[^/]+\/approve$/,
+      () => ({ status: 503, body: { message: '일시적인 서버 오류입니다.' } }),
+    ],
+  ],
   'rounds-empty': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] } })]],
   'legacy-store': [
     [

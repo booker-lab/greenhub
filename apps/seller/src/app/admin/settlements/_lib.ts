@@ -35,10 +35,6 @@ export function toDateStr(ts: unknown): string {
   return SETTLED_AT_FORMAT_KST.format(date);
 }
 
-export function toKRW(n: number): string {
-  return `₩${n.toLocaleString('ko-KR')}`;
-}
-
 // 어드민 정산 상태 이름(design-direction.md §5 어드민 "정산"): pending은 "지급 대기"와 헷갈리지 않게 "회차 마감 전",
 // 지급할 차례인 confirmed는 "지급 대기"로 쓴다. 판매자 화면 이름(shared STATUS_LABEL)은 바꾸지 않는다.
 export const ADMIN_SETTLEMENT_STATUS_LABEL: Record<SettlementStatus, string> = {
@@ -186,12 +182,6 @@ export function canPay(
   return s.status === 'confirmed' && !s.holdReason && Boolean(s.payoutAccount);
 }
 
-/** 정산 계좌 한 줄. 지급 확인창에서 관리자가 입금할 때 본다. */
-export function describePayoutAccount(account: AdminPayoutAccount | null | undefined): string {
-  if (!account) return '정산 계좌: 미등록 — 판매자에게 앱 설정 > 정산 계좌 등록을 요청하세요.';
-  return `입금 계좌: ${account.bankName} ${account.accountNumber} (예금주 ${account.accountHolder})`;
-}
-
 /** 가게 선택 목록 — 이름순, 이름이 없으면 ID. */
 export function toStoreOptions(stores: Array<{ id: string; name?: string | null }>) {
   return stores
@@ -199,24 +189,73 @@ export function toStoreOptions(stores: Array<{ id: string; name?: string | null 
     .sort((a, b) => a.label.localeCompare(b.label, 'ko'));
 }
 
+/** 지급 확인창 내용(design-direction.md §5 어드민 "위험 동작 확인창"). 확인창 틀은 _components/PayConfirmDialog. */
+export interface PayConfirmView {
+  /** 동작 + 대상. */
+  title: string;
+  /** 대상 정보 — 가게·주문·입금 계좌·예금주. */
+  facts: { label: string; value: string }[];
+  /** 돈의 흐름 — 거래액 · 수수료 · 지급액. */
+  flow: { label: string; value: string }[];
+  /** 기록할 수 없는 이유. null이면 기록할 수 있다(canPay와 같은 조건). */
+  blocked: string | null;
+  /** 스스로 확인하는 체크 문구. */
+  checkLabel: string;
+  confirmLabel: string;
+}
+
 /**
- * 지급 확인창 문구 — 어느 가게·주문에 얼마를 어느 계좌로 지급 완료 표시하는지 보여 준다.
+ * 지급 확인창 내용 — 어느 가게·주문에 얼마를 어느 계좌로 지급 완료 기록하는지 보여 준다.
  * 가게 이름이 없으면 가게 ID 전체, 주문번호가 없는 옛 정산은 주문 ID를 보인다.
+ * 계좌번호는 은행 앱과 대조해야 하므로 확인창에서는 가리지 않는다.
  */
 export function describePayConfirm(
   s: Pick<
     AdminSettlement,
-    'storeId' | 'storeName' | 'orderId' | 'orderNumber' | 'netAmount' | 'payoutAccount'
+    | 'storeId'
+    | 'storeName'
+    | 'orderId'
+    | 'orderNumber'
+    | 'totalAmount'
+    | 'platformFee'
+    | 'platformFeeRate'
+    | 'netAmount'
+    | 'payoutAccount'
+    | 'status'
+    | 'holdReason'
   >,
-): string {
-  return [
-    s.storeName ? `가게: ${s.storeName}` : `가게 ID: ${s.storeId}`,
-    s.orderNumber ? `주문번호: ${s.orderNumber}` : `주문 ID: ${s.orderId}`,
-    `지급액: ${toKRW(s.netAmount)}`,
-    describePayoutAccount(s.payoutAccount),
-    '',
-    s.payoutAccount
-      ? '이 계좌로 입금한 뒤 지급 완료 처리하시겠습니까?'
-      : '입금할 계좌가 없어 지급 완료로 기록할 수 없습니다.',
-  ].join('\n');
+): PayConfirmView {
+  const store = s.storeName?.trim();
+  const account = s.payoutAccount;
+  const rate =
+    typeof s.platformFeeRate === 'number' ? ` (${Math.round(s.platformFeeRate * 1000) / 10}%)` : '';
+  const facts = [
+    store ? { label: '가게', value: store } : { label: '가게 ID', value: s.storeId },
+    s.orderNumber
+      ? { label: '주문번호', value: s.orderNumber }
+      : { label: '주문 ID', value: s.orderId },
+    account
+      ? { label: '입금 계좌', value: `${account.bankName} ${account.accountNumber}` }
+      : { label: '정산 계좌', value: '미등록' },
+  ];
+  if (account) facts.push({ label: '예금주', value: account.accountHolder });
+  let blocked: string | null = null;
+  if (s.status !== 'confirmed') blocked = '지급 대기 정산만 지급 완료로 기록할 수 있습니다.';
+  else if (s.holdReason) blocked = '결제사 취소·분쟁을 확인하는 중이라 기록할 수 없습니다.';
+  else if (!account) {
+    blocked =
+      '입금할 계좌가 없어 지급 완료로 기록할 수 없습니다. 판매자에게 앱 설정 > 정산 계좌 등록을 요청하세요.';
+  }
+  return {
+    title: store ? `${store} 정산 1건 지급 완료 기록` : '정산 1건 지급 완료 기록',
+    facts,
+    flow: [
+      { label: '거래액', value: toWon(s.totalAmount) },
+      { label: '플랫폼 수수료', value: `−${toWon(s.platformFee)}${rate}` },
+      { label: '지급액', value: toWon(s.netAmount) },
+    ],
+    blocked,
+    checkLabel: `은행 앱에서 이 계좌로 ${toWon(s.netAmount)} 이체를 마쳤습니다`,
+    confirmLabel: `${toWon(s.netAmount)} 지급 완료 기록`,
+  };
 }
