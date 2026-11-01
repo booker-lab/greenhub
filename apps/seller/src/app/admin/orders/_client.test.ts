@@ -70,15 +70,20 @@ describe('AdminOrdersClient read recovery wiring', () => {
     expect(source).not.toContain('setProcessingId(null)');
   });
 
-  it('기존 filter 배선을 변경하지 않는다', () => {
+  it('가게는 선택칸, 상태는 표 위 탭 한 줄로 거른다(D7)', () => {
     expect(source).toContain('<OrdersFilters');
     expect(source).toContain('storeFilter={storeFilter}');
-    expect(source).toContain('statusFilter={statusFilter}');
     expect(source).toContain('onStoreChange={setStoreFilter}');
-    expect(source).toContain('onStatusChange={setStatusFilter}');
     // 가게는 ID 입력 대신 판매자 목록 이름으로 고른다.
-    expect(source).toContain('storeOptions={buildStoreOptions(stores)}');
+    expect(source).toContain('const storeOptions = buildStoreOptions(stores);');
+    expect(source).toContain('storeOptions={storeOptions}');
     expect(source).toContain('storeId: storeFilter || undefined');
+    // 상태 탭은 판매자와 같은 밑줄 탭(variant="underline")이고 서버 상태 필터로 보낸다.
+    expect(source).toContain('tabs={ORDER_STATUS_TABS}');
+    expect(source).toContain('value={statusFilter}');
+    expect(source).toContain('onChange={setStatusFilter}');
+    expect(source).toContain('variant="underline"');
+    expect(source).toContain('status: statusFilter || undefined');
   });
 
   it('서버가 더 있다고 알리면 더 보기로 이어 받는다(조회 실패 중에는 감춘다)', () => {

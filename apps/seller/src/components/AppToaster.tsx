@@ -44,6 +44,9 @@ export function notify({
   });
 }
 
+// 예전 Mantine Notification은 색(종류)과 상관없이 role=alert였다(바로 읽힘). Base UI 기본은 role=dialog·aria-modal=false다.
+const ALERT_ROLE = { role: 'alert', 'aria-modal': undefined } as const;
+
 function ToastList() {
   const { toasts } = ToastPrimitive.useToastManager();
   // Base UI는 새 알림을 앞에 둔다. Mantine 목록처럼 오래된 알림을 위에 그린다.
@@ -51,6 +54,7 @@ function ToastList() {
     <ToastPrimitive.Root
       key={item.id}
       toast={item}
+      {...ALERT_ROLE}
       className="relative flex cursor-default items-center overflow-hidden rounded-[16px] bg-white py-2.5 ps-[22px] pe-2.5 [box-shadow:0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_28px_23px_-7px,rgba(0,0,0,0.04)_0_12px_12px_-7px] [transform:translateX(0)_translate3d(0px,0,0)] [touch-action:pan-y] outline-none max-h-[200px] [transition-duration:250ms,250ms,250ms] [transition-property:opacity,transform,max-height] [transition-timing-function:cubic-bezier(.51,.3,0,1.21),cubic-bezier(.51,.3,0,1.21),linear] before:absolute before:start-1 before:top-4 before:bottom-4 before:block before:w-1.5 before:rounded-[16px] before:bg-(--toast-bar) before:content-[''] data-ending-style:[transform:translateX(100%)_translate3d(0px,0,0)] data-ending-style:max-h-0 data-ending-style:opacity-0 data-starting-style:[transform:translateX(100%)_translate3d(0px,0,0)] data-starting-style:max-h-0 data-starting-style:opacity-0"
       style={
         {
@@ -67,8 +71,10 @@ function ToastList() {
           className={`m-0 overflow-hidden text-sm/[1.45] font-normal text-ellipsis ${item.title ? 'text-[#868e96]' : 'text-black'}`}
         />
       </div>
+      {/* Base UI는 알림이 펼쳐지지 않았으면 닫기 버튼을 aria-hidden으로 숨기면서 Tab은 받는다. 읽기 도구에도 보이게 둔다. */}
       <ToastPrimitive.Close
         aria-label="닫기"
+        aria-hidden={false}
         className="relative inline-flex size-7 min-h-7 min-w-7 cursor-pointer appearance-none items-center justify-center rounded-[16px] border-0 bg-transparent p-0 leading-none text-[#495057] select-none hover:bg-[#f8f9fa]"
       >
         <CloseIcon style={{ width: 16, height: 16 }} />
@@ -82,7 +88,10 @@ export function AppToaster({ children }: { children: React.ReactNode }) {
     <ToastProvider toastManager={toast} timeout={4000} limit={5}>
       {children}
       <ToastPrimitive.Portal>
-        <ToastPrimitive.Viewport className="fixed top-4 right-4 z-[200] w-[calc(100%-32px)] max-w-[440px] outline-none">
+        <ToastPrimitive.Viewport
+          aria-label="알림"
+          className="fixed top-4 right-4 z-[200] w-[calc(100%-32px)] max-w-[440px] outline-none"
+        >
           <ToastList />
         </ToastPrimitive.Viewport>
       </ToastPrimitive.Portal>

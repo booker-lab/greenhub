@@ -548,6 +548,18 @@ const benchmarkRoutes = [
  * - scheduled: 판매 중·지난 회차 없이 다음 회차만 예정된 주(오픈 알림·빈 지난 회차 숨김).
  */
 export const scenarioRoutes = {
+  // 기능 플래그 화면(UI 교체 P5 E 묶음): 입점 문의 거절·구매 내역 빈 상태·조회 실패.
+  'partner-reject': [
+    [
+      'POST',
+      /^\/partner-inquiries$/,
+      () => ({ status: 400, body: { message: '연락처 형식을 확인해 주세요.' } }),
+    ],
+  ],
+  'purchase-history-empty': [['GET', /^\/orders$/, () => ({ body: [] })]],
+  'purchase-history-error': [
+    ['GET', /^\/orders$/, () => ({ status: 500, body: { message: '서버 오류' } })],
+  ],
   // 주문 생성 거절(서버 확정 거절 4xx): 결제 화면의 오류 안내(role=alert)를 찍는다.
   'order-reject': [
     [
@@ -562,6 +574,23 @@ export const scenarioRoutes = {
       'POST',
       /^\/stores\/[^/]+\/orders$/,
       ({ body }) => ({ ...createOrderResponse(body), delay: 30_000 }),
+    ],
+  ],
+  // MY 빈 상태·조회 실패(UI 교체 P5 마이페이지 묶음): 주문·배송지·알림 목록이 비었거나 조회가 실패한 화면.
+  'mypage-empty': [['GET', /^\/orders$/, () => ({ body: [] })]],
+  'mypage-error': [['GET', /^\/orders$/, () => ({ status: 500, body: { message: '서버 오류' } })]],
+  'addresses-empty': [['GET', /^\/auth\/me$/, () => ({ body: { ...ME, savedAddresses: [] } })]],
+  'addresses-error': [['GET', /^\/auth\/me$/, () => ({ status: 500, body: { message: '서버 오류' } })]],
+  'notifications-empty': [['GET', /^\/notifications\/me$/, () => ({ body: { items: [] } })]],
+  'notifications-error': [
+    ['GET', /^\/notifications\/me$/, () => ({ status: 500, body: { message: '서버 오류' } })],
+  ],
+  // 공용 틀(UI 교체 P5 A 묶음): 화면 오류 안내(app/error.tsx). 금액이 빠진 주문은 MY 주문 카드가 그리다 예외를 던진다.
+  'render-error': [
+    [
+      'GET',
+      /^\/orders$/,
+      () => ({ body: [{ id: 'order-broken', status: 'ACCEPTED', createdAt: '2026-10-30T01:00:00.000Z' }] }),
     ],
   ],
   scheduled: [
@@ -927,6 +956,90 @@ export const screens = [
     path: '/mypage/notifications/settings',
   },
   { id: 'withdraw', group: 'MY', title: '회원 탈퇴', path: '/mypage/withdraw' },
+  {
+    id: 'withdraw-checked',
+    group: 'MY',
+    title: '회원 탈퇴 · 확인 체크',
+    path: '/mypage/withdraw',
+    steps: [{ check: '위 내용을 확인했고 탈퇴합니다.' }],
+  },
+  { id: 'mypage-empty', group: 'MY', title: 'MY · 주문 없음', path: '/mypage', scenario: 'mypage-empty' },
+  {
+    id: 'mypage-error',
+    group: 'MY',
+    title: 'MY · 주문 조회 실패',
+    path: '/mypage',
+    scenario: 'mypage-error',
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/orders\\?'],
+  },
+  {
+    id: 'addresses-empty',
+    group: 'MY',
+    title: '배송지 · 없음',
+    path: '/mypage/addresses',
+    scenario: 'addresses-empty',
+  },
+  {
+    id: 'addresses-error',
+    group: 'MY',
+    title: '배송지 · 조회 실패',
+    path: '/mypage/addresses',
+    scenario: 'addresses-error',
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/auth/me\\)$'],
+  },
+  // 배송지 추가·수정 창(UI 교체 P5 마이페이지 묶음): 열린 창을 지금 보이는 화면으로 찍는다.
+  {
+    id: 'modal-address-add',
+    group: 'MY',
+    title: '배송지 · 추가 창',
+    path: '/mypage/addresses',
+    steps: [{ click: '+ 배송지 추가' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-address-filled',
+    group: 'MY',
+    title: '배송지 · 추가 창(입력)',
+    path: '/mypage/addresses',
+    steps: [
+      { click: '+ 배송지 추가' },
+      { fill: { label: '이름 *', value: '부모님 댁' } },
+      { fill: { label: '우편번호 *', value: '48058' } },
+      { fill: { label: '주소 *', value: '부산 해운대구 센텀중앙로 79' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-address-error',
+    group: 'MY',
+    title: '배송지 · 추가 창(필수 입력 안내)',
+    path: '/mypage/addresses',
+    steps: [{ click: '+ 배송지 추가' }, { click: '저장' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-address-edit',
+    group: 'MY',
+    title: '배송지 · 수정 창',
+    path: '/mypage/addresses',
+    steps: [{ click: '수정' }],
+    viewport: true,
+  },
+  {
+    id: 'notifications-empty',
+    group: 'MY',
+    title: '알림 · 없음',
+    path: '/mypage/notifications',
+    scenario: 'notifications-empty',
+  },
+  {
+    id: 'notifications-error',
+    group: 'MY',
+    title: '알림 · 조회 실패',
+    path: '/mypage/notifications',
+    scenario: 'notifications-error',
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/notifications/me'],
+  },
   { id: 'category', group: '찾기', title: '상품 탭', path: '/category', auth: false },
   { id: 'search', group: '찾기', title: '검색', path: '/search', auth: false },
   {
@@ -946,6 +1059,23 @@ export const screens = [
     path: '/groupbuy',
     expectPath: '/',
     auth: false,
+  },
+  {
+    id: 'not-found',
+    group: '안내',
+    title: '없는 주소(404 안내)',
+    path: '/no-such-page',
+    auth: false,
+    expectedErrors: ['status of 404 \\(Not Found\\).*/no-such-page'],
+  },
+  {
+    id: 'render-error',
+    group: '안내',
+    title: '화면 오류 안내(error.tsx)',
+    path: '/mypage',
+    scenario: 'render-error',
+    // 일부러 금액을 뺀 주문이라 React가 렌더 예외를 콘솔에 남긴다(error.tsx가 받는다).
+    expectedErrors: ["Cannot read properties of undefined \\(reading 'toLocaleString'\\)"],
   },
   { id: 'terms', group: '안내', title: '이용약관', path: '/terms', auth: false },
   { id: 'privacy', group: '안내', title: '개인정보처리방침', path: '/privacy', auth: false },
@@ -1217,6 +1347,82 @@ export const benchmarkScreens = [
     path: '/partner',
     auth: false,
     features: ['partner-inquiry'],
+  },
+  // 기능 플래그 화면(UI 교체 P5 E 묶음): 입점 문의 입력·보낸 뒤·거절, 찜·구매한 꽃 빈 상태·조회 실패.
+  {
+    id: 'bm-partner-filled',
+    group: '가게·안내',
+    title: '입점 문의 · 입력과 동의',
+    path: '/partner',
+    auth: false,
+    features: ['partner-inquiry'],
+    steps: [
+      { fill: { label: '농가·화원 이름', value: '푸른난원' } },
+      { fill: { label: '지역', value: '경기 용인' } },
+      { fill: { label: '연락처', value: '010-0000-0000' } },
+      { fill: { label: '소개와 문의 내용', value: '동양란을 30년째 기르고 있습니다.\n입점 상담을 받고 싶어요.' } },
+      { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
+    ],
+  },
+  {
+    id: 'bm-partner-done',
+    group: '가게·안내',
+    title: '입점 문의 · 보낸 뒤',
+    path: '/partner',
+    auth: false,
+    features: ['partner-inquiry'],
+    steps: [
+      { fill: { label: '농가·화원 이름', value: '푸른난원' } },
+      { fill: { label: '지역', value: '경기 용인' } },
+      { fill: { label: '연락처', value: '010-0000-0000' } },
+      { fill: { label: '소개와 문의 내용', value: '동양란을 30년째 기르고 있습니다.\n입점 상담을 받고 싶어요.' } },
+      { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
+      { click: '문의 보내기' },
+    ],
+    // 보낸 뒤 화면으로 바뀔 때 Mantine Container(p·pb 함께 쓰던 style)가 남기는 React 개발 경고(수정 전 화면만).
+    expectedErrors: ['Removing paddingBottom padding'],
+  },
+  {
+    id: 'bm-partner-error',
+    group: '가게·안내',
+    title: '입점 문의 · 보내기 실패',
+    path: '/partner',
+    auth: false,
+    scenario: 'partner-reject',
+    features: ['partner-inquiry'],
+    steps: [
+      { fill: { label: '농가·화원 이름', value: '푸른난원' } },
+      { fill: { label: '지역', value: '경기 용인' } },
+      { fill: { label: '연락처', value: '010-0000-0000' } },
+      { fill: { label: '소개와 문의 내용', value: '동양란을 30년째 기르고 있습니다.\n입점 상담을 받고 싶어요.' } },
+      { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
+      { click: '문의 보내기' },
+    ],
+    expectedErrors: ['status of 400 \\(Bad Request\\).*/partner-inquiries'],
+  },
+  {
+    id: 'bm-wishlist-empty',
+    group: 'MY',
+    title: 'MY · 이번 회차 찜 없음',
+    path: '/mypage/wishlist',
+    features: ['wishlist'],
+  },
+  {
+    id: 'bm-purchase-history-empty',
+    group: 'MY',
+    title: 'MY · 구매한 꽃 없음',
+    path: '/mypage/purchase-history',
+    scenario: 'purchase-history-empty',
+    features: ['purchase-history'],
+  },
+  {
+    id: 'bm-purchase-history-error',
+    group: 'MY',
+    title: 'MY · 구매한 꽃 조회 실패',
+    path: '/mypage/purchase-history',
+    scenario: 'purchase-history-error',
+    features: ['purchase-history'],
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/orders'],
   },
 ];
 

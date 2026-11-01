@@ -1,8 +1,8 @@
 'use client';
 
 import { apiPathSegment, readRouteParam } from '@greenhub/shared';
-import { Badge } from '@greenhub/ui/components/badge';
 import { ButtonLink } from '@greenhub/ui/components/button';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -13,11 +13,11 @@ import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Stack·Group·Paper·Text·Badge·Button과 같은 값을 Tailwind와
-// @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16·그림자 xs·윤곽선 없음.
-// 주문 카드는 Mantine Paper component="button"처럼 같은 button 요소라 브라우저 기본 테두리도 그대로다.
+// @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16·윤곽선 없음(그림자는 ② D2로 걷음).
+// 주문 카드는 button 요소라 ① 단계에서는 브라우저 기본 테두리를 그대로 뒀지만, ② D2(바깥 테두리 없음)에 맞춰 걷는다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 const PAPER =
-  'block rounded-[16px] bg-white no-underline shadow-mantine-xs outline-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+  'block rounded-[16px] bg-white no-underline outline-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 const CONTAINER = 'mx-auto max-w-[720px] px-4 py-4';
 
 const INVALID_HUB_ADDRESS_MESSAGE =
@@ -147,14 +147,13 @@ export default function HubDetailPage() {
               {/* 거점 정보 카드 */}
               <div className={`${PAPER} p-4`}>
                 <div className="flex flex-col items-stretch justify-start gap-2.5">
-                  <Badge
-                    variant={hub.isActive ? 'light-green' : 'secondary'}
-                    size="sm"
-                    className="rounded-[32px]"
+                  {/* ② 상태는 배지 면 대신 점 + 글자(2026-11-01 결정): 비활성=회색, 운영 중=검정. */}
+                  <StatusDot
+                    tone={hub.isActive ? 'default' : 'done'}
                     style={{ alignSelf: 'flex-start' }}
                   >
                     {hub.isActive ? '운영 중' : '비활성'}
-                  </Badge>
+                  </StatusDot>
                   <p
                     className={TEXT}
                     style={{
@@ -240,7 +239,7 @@ export default function HubDetailPage() {
                       <button
                         type="button"
                         key={orderId(order)}
-                        className={`${PAPER} p-4`}
+                        className={`${PAPER} border-0 p-4`}
                         onClick={() =>
                           router.push(
                             `/hubs/${encodeURIComponent(hubId)}/pickup?orderId=${encodeURIComponent(orderId(order))}`,
@@ -251,9 +250,7 @@ export default function HubDetailPage() {
                         <div className="flex flex-row flex-wrap items-center justify-between gap-2.5">
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div className="mb-1 flex flex-row flex-wrap items-center justify-start gap-2.5">
-                              <Badge variant="warning" size="xs" className="rounded-[32px]">
-                                픽업 대기
-                              </Badge>
+                              <StatusDot size={13}>픽업 대기</StatusDot>
                               <p
                                 className={TEXT}
                                 style={{

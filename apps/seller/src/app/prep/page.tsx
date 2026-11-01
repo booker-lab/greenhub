@@ -21,12 +21,12 @@ import { apiJson } from '@/lib/api';
 import { aggregatePrep, type PrepLine } from '@/lib/prep';
 import { isPurchaseListRound } from '@/lib/round-purchase-list';
 
-// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px, shadow xs)·
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px; 그림자는 ② D2로 걷음)·
 // Group·Stack·Text(p, 여백 0, 줄 높이 1.55)·UnstyledButton·Alert light(제목 있음)와 같은 값.
 const TEXT = 'm-0 p-0 text-base font-normal';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
-const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-white p-4';
 
 function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accent?: boolean }) {
   return (
@@ -220,7 +220,8 @@ export default function PrepPage() {
                 <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
                   이전 상품 이름으로 표시합니다. 준비 수량 자체는 주문 기준으로 집계됩니다.
                 </p>
-                <Button size="xs" variant="light-warning" onClick={retryProducts}>
+                {/* ② "이전 정보" 재조회는 노란 면 대신 중립 외곽선(2026-11-01 결정: 노랑은 마감에만). */}
+                <Button size="xs" variant="outline-gray" onClick={retryProducts}>
                   <RefreshCcw className="size-3.5" data-icon="inline-start" />
                   상품 다시 조회
                 </Button>
@@ -281,7 +282,8 @@ export default function PrepPage() {
             )}
 
             {delayed.length > 0 && (
-              <div className={PAPER} style={{ border: '1px solid var(--color-danger)' }}>
+              // ② 문제 상자는 빨강 1px 테두리 대신 빨강 연한 면(design-direction §3.1·§3.2, 주문 우선순위 상자와 같은 규칙).
+              <div className={PAPER} style={{ backgroundColor: 'var(--color-danger-surface)' }}>
                 <p
                   className={TEXT}
                   style={{
@@ -290,7 +292,7 @@ export default function PrepPage() {
                     color: 'var(--color-danger)',
                   }}
                 >
-                  🔴 발송 지연 (배송일 경과)
+                  발송 지연 (배송일 경과)
                 </p>
                 <div className="mt-3">
                   {delayed.map((line, i) => (

@@ -1,30 +1,34 @@
 'use client';
 
-import { notify } from '@/components/AppToaster';
 import { useMemo, useState } from 'react';
-import { ConfirmModal } from '@/components/ConfirmModal';
-import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
+import { notify } from '@/components/AppToaster';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
+import { normalizeSuspendReason, SuspendReasonField } from '@/components/SuspendReasonMessage';
 import {
   type AdminCommandOutcome,
-  type DriverStatus,
   describeActiveDeliveryWarning,
+  describeAdminCommandOutcome,
   useAdminDrivers,
 } from '@/hooks/useAdmin';
+import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
+import { AdminPageHeader } from '../_components/adminList';
+import { useAdminTodoCountsValue } from '../_components/adminTodoContext';
 import { LoadMoreFooter } from '../_components/LoadMoreFooter';
-import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
 import { ActiveDeliveryNotice } from './_components/ActiveDeliveryNotice';
 import { DriverList } from './_components/DriverList';
+import { PendingDrivers } from './_components/PendingDrivers';
 import {
-  ACTION_META,
+  DRIVER_ACTION_LABEL,
+  DRIVER_TABLE_TABS,
   type DriverAction,
+  type DriverTableTab,
   describeDriverConfirm,
   filterByTab,
   type PendingAction,
-  STATUS_TABS,
 } from './_lib';
 
 export default function DriversClient() {
-  const [tab, setTab] = useState<DriverStatus>('pending');
+  const [tab, setTab] = useState<DriverTableTab>('all');
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [reason, setReason] = useState('');
@@ -44,11 +48,12 @@ export default function DriversClient() {
   } = useAdminDrivers();
 
   const drivers = useMemo(() => filterByTab(allDrivers, tab), [allDrivers, tab]);
+  const pendingDrivers = useMemo(() => filterByTab(allDrivers, 'pending'), [allDrivers]);
+  const todo = useAdminTodoCountsValue();
 
   const runPending = async () => {
     if (!pending) return;
-    const actionLabel =
-      pending.action === 'approve' ? '승인' : pending.action === 'suspend' ? '정지' : '정지 해제';
+    const actionLabel = DRIVER_ACTION_LABEL[pending.action];
     setProcessingId(pending.userId);
     try {
       let outcome: AdminCommandOutcome;
@@ -82,38 +87,69 @@ export default function DriversClient() {
   const handleAction = (userId: string, action: DriverAction) => {
     setReason('');
     const driver = allDrivers.find((d) => d.id === userId);
-    setPending({ userId, name: driver?.name ?? '', email: driver?.email ?? null, action });
+    setPending({
+      userId,
+      name: driver?.name ?? '',
+      email: driver?.email ?? null,
+      phone: driver?.phone ?? null,
+      createdAt: driver?.createdAt,
+      action,
+    });
   };
 
-  const pendingMeta = pending ? ACTION_META[pending.action] : null;
+  const confirm = pending ? describeDriverConfirm(pending) : null;
+
+  const ready = !loading && error === null;
+  const activeCount = filterByTab(allDrivers, 'approved').length;
+  const suspendedCount = filterByTab(allDrivers, 'suspended').length;
+  const tabs = DRIVER_TABLE_TABS.map((t) => ({
+    key: t.value,
+    label: t.label,
+    count: ready ? filterByTab(allDrivers, t.value).length : undefined,
+  }));
 
   return (
     <div>
-      {/* ① 외형 유지(UI 교체 P2b): Mantine Title order 4(18px·800·줄 높이 1.45)·UnstyledButton 값. */}
-      <h4 className="m-0 mb-4 text-[18px] leading-[1.45] font-extrabold">드라이버 관리</h4>
+      {/* ② 방향(design-direction.md §5 어드민 "기사", §8 D7): 명사 하나의 h1과 지금 기준 한 줄.
+          회차 배송지 수는 데이터가 없어 활동 중·정지 인원만 쓴다(불러온 기사 기준). */}
+      <AdminPageHeader
+        title="기사"
+        subline={
+          ready ? (
+            <>
+              활동 중 {activeCount}명 · 정지 {suspendedCount}명
+              {hasMore ? ' · 불러온 기사 기준' : ''}
+            </>
+          ) : undefined
+        }
+      />
 
-      {/* 탭 */}
-      <div className="mb-4" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <div className="flex flex-row flex-wrap items-center justify-start gap-1">
-          {STATUS_TABS.map((t) => (
-            <button
-              type="button"
-              key={t.value}
-              onClick={() => setTab(t.value)}
-              className="cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
-              style={{
-                padding: '8px 16px',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 500,
-                borderBottom: `2px solid ${tab === t.value ? 'var(--color-primary)' : 'transparent'}`,
-                marginBottom: -1,
-                color: tab === t.value ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
-              }}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+      {ready && (
+        <PendingDrivers
+          drivers={pendingDrivers}
+          // 다 받았으면 불러온 수가 정확하다(사이드바 수는 승인 뒤 다시 세지 않는다).
+          // 더 받을 기사가 있으면 사이드바와 같은 서버 건수를 쓴다.
+          count={
+            hasMore
+              ? Math.max(todo.drivers?.count ?? 0, pendingDrivers.length)
+              : pendingDrivers.length
+          }
+          more={hasMore && (todo.drivers?.more ?? false)}
+          processingId={processingId}
+          onApprove={(userId) => handleAction(userId, 'approve')}
+        />
+      )}
+
+      <div className="mb-2">
+        <SegmentedTabs<DriverTableTab>
+          tabs={tabs}
+          value={tab}
+          onChange={setTab}
+          layout="scroll"
+          variant="underline"
+          surface="paper"
+          ariaLabel="기사 상태"
+        />
       </div>
 
       <DriverList
@@ -135,30 +171,23 @@ export default function DriversClient() {
         />
       )}
 
-      <ConfirmModal
-        opened={pending !== null}
-        title={pendingMeta?.title ?? ''}
-        message={
-          !pending ? (
-            ''
-          ) : pending.action === 'approve' ? (
-            describeDriverConfirm(pending)
-          ) : (
-            <SuspendReasonMessage
-              message={describeDriverConfirm(pending)}
-              reason={reason}
-              onReasonChange={setReason}
-            />
-          )
-        }
-        confirmLabel={pendingMeta?.confirmLabel}
-        confirmColor={pendingMeta?.confirmColor}
+      {/* 승인은 입력이 없어 처음 초점이 닫기다(Enter 한 번에 승인되지 않게). 정지·정지 풀기는 사유(선택)를 받는다. */}
+      <AdminConfirmDialog
+        open={pending !== null}
+        title={confirm?.title ?? ''}
+        lead={confirm?.lead}
+        facts={confirm?.facts}
+        confirmLabel={confirm?.confirmLabel ?? ''}
         loading={processingId !== null}
         onConfirm={runPending}
         onClose={() => {
           if (processingId === null) setPending(null);
         }}
-      />
+      >
+        {pending && pending.action !== 'approve' && (
+          <SuspendReasonField reason={reason} onReasonChange={setReason} />
+        )}
+      </AdminConfirmDialog>
 
       <ActiveDeliveryNotice message={deliveryWarning} onClose={() => setDeliveryWarning(null)} />
     </div>

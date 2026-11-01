@@ -1,7 +1,7 @@
 'use client';
 
 import type { SaleRoundItem } from '@greenhub/shared';
-import { Box, Button, Container, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { notFound, useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
@@ -14,6 +14,14 @@ import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { isFeatureOn } from '@/lib/features';
 import { cartAddFailureMessage, roundItemCartInput, roundProductHref } from '@/lib/round-quick-add';
 import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
+
+// ① 외형 유지(UI 교체 P5): Mantine Container sm(720px, 좌우 md 16·위 lg 20·아래 100)·Title h1(줄 높이 1.3)·
+// Text(p, 크기 지정 없으면 md·줄 높이 1.55, sm은 줄 높이 1.45)·Stack·SimpleGrid(2열, 12)·Box(sm 12)·
+// Button(radius xl, sm = 기본 36·light gray = secondary)과 같은 값.
+const TITLE = 'm-0 text-[22px] leading-[1.3] font-extrabold';
+const TEXT = 'm-0 p-0 leading-[1.55]';
+const SMALL_TEXT = 'm-0 p-0 leading-[1.45]';
+const SMALL = { fontSize: 'var(--font-size-sm)' } as const;
 
 // 이번 회차 찜(wishlist, 벤치마킹 비교 기능). 이 브라우저에만, 이번 회차에만 남는다.
 // 기능이 꺼져 있으면 없는 화면이다.
@@ -32,47 +40,57 @@ function WishlistContent() {
   const [message, setMessage] = useState<string | null>(null);
   const loading = productsLoading || roundsLoading;
 
-  const items = (currentRound?.items ?? []).filter((item: SaleRoundItem) => wishlist.ids.has(item.productId));
+  const items = (currentRound?.items ?? []).filter((item: SaleRoundItem) =>
+    wishlist.ids.has(item.productId),
+  );
   const canBuy = currentRound?.status === 'OPEN';
 
   return (
-    <Container size="sm" px="md" pt="lg" pb={100}>
-      <Title order={1} style={{ fontSize: 22, fontWeight: 800 }}>
-        이번 회차 찜
-      </Title>
-      <Text mt={4} mb="md" size="sm" c="var(--color-text-secondary)">
+    <div className="mx-auto max-w-[720px] px-4 pt-5 pb-[100px]">
+      <h1 className={TITLE}>이번 회차 찜</h1>
+      <p
+        className={`${SMALL_TEXT} mt-1 mb-4`}
+        style={{ ...SMALL, color: 'var(--color-text-secondary)' }}
+      >
         {currentRound ? `${currentRound.name} · ` : ''}이 휴대폰에만 남고, 회차가 끝나면 비워져요.
-      </Text>
+      </p>
 
       {!loading && items.length === 0 ? (
-        <Stack align="center" py={40} gap="md">
-          <Text c="var(--color-text-secondary)">이번 회차에 찜한 꽃이 없어요.</Text>
-          <Button component={Link} href="/" radius="xl">
-            이번 회차 보러 가기
-          </Button>
-        </Stack>
+        <div className="flex flex-col items-center gap-4 py-10">
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-md)', color: 'var(--color-text-secondary)' }}
+          >
+            이번 회차에 찜한 꽃이 없어요.
+          </p>
+          <ButtonLink render={<Link href="/" />}>이번 회차 보러 가기</ButtonLink>
+        </div>
       ) : (
-        <SimpleGrid cols={2} spacing={12}>
+        <div className="grid grid-cols-2 gap-3">
           {items.map((item) => (
-            <Box key={item.id} p="sm" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
-              <Text
-                component={Link}
+            <div
+              key={item.id}
+              className="p-3"
+              style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}
+            >
+              <Link
                 href={`/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(item.roundId)}`}
-                fw={800}
-                size="sm"
-                lineClamp={2}
-                style={{ color: 'var(--color-text)', textDecoration: 'none' }}
+                className={`${SMALL_TEXT} line-clamp-2 text-ellipsis`}
+                style={{
+                  ...SMALL,
+                  fontWeight: 800,
+                  color: 'var(--color-text)',
+                  textDecoration: 'none',
+                }}
               >
                 {item.productNameSnapshot}
-              </Text>
-              <Text size="sm" fw={800} mt={2}>
+              </Link>
+              <p className={`${SMALL_TEXT} mt-0.5`} style={{ ...SMALL, fontWeight: 800 }}>
                 {item.roundPrice.toLocaleString('ko-KR')}원
-              </Text>
-              <Stack gap={6} mt={8}>
+              </p>
+              <div className="mt-2 flex flex-col gap-1.5">
                 {canBuy && item.status === 'ACTIVE' && (
                   <Button
-                    size="sm"
-                    radius="xl"
                     onClick={async () => {
                       // 옵션(화분 등)을 골라야 하는 상품은 담지 않고 상품 화면의 옵션 시트로 보낸다.
                       if (await fetchNeedsOptionChoice(item.productId)) {
@@ -81,34 +99,40 @@ function WishlistContent() {
                       }
                       const result = addItem(roundItemCartInput(item));
                       setMessage(
-                        result.ok ? `${item.productNameSnapshot}을 담았어요` : cartAddFailureMessage(result.reason),
+                        result.ok
+                          ? `${item.productNameSnapshot}을 담았어요`
+                          : cartAddFailureMessage(result.reason),
                       );
                     }}
                   >
                     장바구니 담기
                   </Button>
                 )}
-                <Button size="sm" radius="xl" variant="light" color="gray" onClick={() => wishlist.toggle(item.productId)}>
+                <Button variant="secondary" onClick={() => wishlist.toggle(item.productId)}>
                   찜 해제
                 </Button>
-              </Stack>
-            </Box>
+              </div>
+            </div>
           ))}
-        </SimpleGrid>
+        </div>
       )}
 
       {message && (
-        <Text role="status" size="sm" mt="sm" c="var(--color-primary-dark)">
+        <p
+          role="status"
+          className={`${SMALL_TEXT} mt-3`}
+          style={{ ...SMALL, color: 'var(--color-primary-dark)' }}
+        >
           {message}
-        </Text>
+        </p>
       )}
 
-      <Box mt="xl">
+      <div className="mt-8">
         <KakaoChannelCta
           title="다음 회차 소식은 카카오톡 채널로 받아 보세요"
           description="찜은 회차가 바뀌면 이어지지 않아요. 채널을 추가하면 새 회차가 열릴 때 알려드려요."
         />
-      </Box>
-    </Container>
+      </div>
+    </div>
   );
 }

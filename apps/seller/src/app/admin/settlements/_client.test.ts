@@ -21,8 +21,9 @@ describe('AdminSettlementsClient 배선', () => {
     expect(source).toContain('to: toFilter || undefined');
   });
 
-  it('합계는 서버 합계를 쓰고, 더 보기는 hasMore일 때만 보인다', () => {
-    expect(source).toContain('<SummaryCards summary={summary}');
+  it('합계는 서버 합계를 쓰고(계좌 없음·보류만 불러온 행), 더 보기는 hasMore일 때만 보인다', () => {
+    expect(source).toMatch(/<SummaryCards\s+summary=\{summary\}/);
+    expect(source).toContain('loadedRows={settlements}');
     expect(source).not.toContain('sumPayable');
     expect(source).toContain('{hasMore && (');
     expect(source).toContain('onLoadMore={loadMore}');
@@ -30,9 +31,9 @@ describe('AdminSettlementsClient 배선', () => {
 
   it('지급 확인·처리 경로를 유지한다', () => {
     expect(source).toContain('await markAsPaid(payTarget.id)');
-    expect(source).toContain('describePayConfirm(payTarget)');
+    expect(source).toContain('<PayConfirmDialog');
+    expect(source).toContain('target={payTarget}');
     expect(source).toContain('onConfirm={runPay}');
-    expect(source).toContain('confirmDisabled={payTarget !== null && !canPay(payTarget)}');
     expect(source).toContain('describeAdminCommandOutcome(outcome,');
   });
 });

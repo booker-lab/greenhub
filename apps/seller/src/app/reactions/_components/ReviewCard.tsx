@@ -1,8 +1,8 @@
 import { type ManagedReview, REVIEW_HIDE_REASON_MAX_LENGTH } from '@greenhub/shared';
-import { Badge } from '@greenhub/ui/components/badge';
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { Textarea } from '@greenhub/ui/components/textarea';
 import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import { HIDE_POLICY_NOTE, HIDE_REASON_OPTIONS, hiddenReasonLabel, hiddenSummary } from '../_lib';
@@ -66,8 +66,9 @@ export function ReviewCard({
   const noteId = `review-${review.id}-note`;
   return (
     <div
-      className="block rounded-[16px] bg-white p-4 shadow-mantine-xs"
-      style={review.hidden ? { background: 'var(--color-surface-muted)' } : undefined}
+      className="block rounded-[16px] bg-white p-4"
+      // ② 숨긴 후기는 그림자 없이 틀 색(--frame) 면으로 구분한다(D2·D3).
+      style={review.hidden ? { background: 'var(--frame)' } : undefined}
     >
       <div className="flex flex-row flex-nowrap items-center justify-between gap-4">
         <div className="flex flex-row flex-nowrap items-center justify-start gap-1.5">
@@ -80,12 +81,9 @@ export function ReviewCard({
             {'★'.repeat(review.rating)}
           </p>
           {review.hidden && (
-            <Badge
-              variant="secondary"
-              className="h-[18px] rounded-[16px] bg-[#868e96] px-2 text-[10px] leading-4 text-white"
-            >
+            <StatusDot tone="done" size={13}>
               숨김
-            </Badge>
+            </StatusDot>
           )}
         </div>
         <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>

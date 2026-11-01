@@ -14,7 +14,7 @@ interface Props {
 
 export default function SellerNoteInput({ value, onChange }: Props) {
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4">
       <p
         className={`${TEXT} mb-1`}
         style={{
