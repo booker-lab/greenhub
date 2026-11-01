@@ -2,13 +2,18 @@
 
 import { useState } from 'react';
 import { notify } from '@/components/AppToaster';
-import { ConfirmModal } from '@/components/ConfirmModal';
 import { describeListCap, type IssuedInvite, useAdminInvite } from '@/hooks/useAdmin';
+import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
 import { AdminPageHeader } from '../_components/adminList';
 import { InviteGenerator } from './_components/InviteGenerator';
 import { InviteHistoryTable } from './_components/InviteHistoryTable';
 import { ManualCopyModal } from './_components/ManualCopyModal';
-import { buildInviteLink, describeInviteRevokeOutcome, parseInviteRecipientEmail } from './_lib';
+import {
+  buildInviteLink,
+  describeInviteRevokeConfirm,
+  describeInviteRevokeOutcome,
+  parseInviteRecipientEmail,
+} from './_lib';
 import { useTokenCopy } from './_useTokenCopy';
 
 export default function AdminInviteClient() {
@@ -63,6 +68,13 @@ export default function AdminInviteClient() {
     }
   };
 
+  const revokeConfirm = pendingRevoke
+    ? describeInviteRevokeConfirm(
+        pendingRevoke,
+        invites.find((inv) => inv.token === pendingRevoke),
+      )
+    : null;
+
   const handleCopy = () => {
     if (!lastToken) return;
     void copy(lastToken.token);
@@ -103,13 +115,13 @@ export default function AdminInviteClient() {
         </p>
       )}
       <ManualCopyModal link={manualLink} onClose={closeManual} />
-      <ConfirmModal
-        opened={pendingRevoke !== null}
-        title="초대 취소"
-        message={`토큰 ${pendingRevoke ?? ''} 초대를 취소할까요?\n취소한 초대 링크로는 가입할 수 없고, 되돌릴 수 없어요.`}
+      <AdminConfirmDialog
+        open={pendingRevoke !== null}
+        title={revokeConfirm?.title ?? ''}
+        lead="취소한 초대 링크로는 가입할 수 없습니다."
+        facts={revokeConfirm?.facts}
+        warning="되돌릴 수 없습니다. 다시 초대하려면 새 링크를 만들어야 합니다."
         confirmLabel="초대 취소"
-        cancelLabel="닫기"
-        confirmColor="red"
         loading={revokingToken !== null}
         onConfirm={runRevoke}
         onClose={() => {

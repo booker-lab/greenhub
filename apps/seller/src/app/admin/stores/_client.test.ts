@@ -138,10 +138,14 @@ describe('AdminStoresClient read-error recovery wiring', () => {
     expect(source).toContain('onCancelEdit={handleCancelEdit}');
     // archive/restore 경로와 기존 서버 오류 notification을 유지한다.
     expect(source).toContain('archiveStore(store.id)');
-    // 기록 있는 판매자(412)는 가게 ID 앞 8자리를 받아 다시 보낸다. 입력을 취소하면 아무것도 보내지 않는다.
-    expect(source).toContain("classified.kind !== 'rejected' || classified.status !== 412");
-    expect(source).toContain('window.prompt(describeArchiveRecordsPrompt(store))');
-    expect(source).toContain('typed === null ? null : archiveStore(store.id, typed)');
+    // 기록 있는 판매자(412)는 같은 확인창에서 가게 ID 앞 8자리를 받아 다시 보낸다. 닫으면 아무것도 보내지 않는다.
+    expect(source).toContain("classified.kind === 'rejected' && classified.status === 412");
+    expect(source).toContain(
+      'typed === null ? await archiveStore(store.id) : await archiveStore(store.id, typed)',
+    );
+    expect(source).toContain('void runArchive(storeAction.store, typedPrefix)');
+    expect(source).not.toContain('window.confirm');
+    expect(source).not.toContain('window.prompt');
     expect(source).toContain('restoreStore(store.id)');
     expect(source).toContain('onArchive={handleArchive}');
     expect(source).toContain('onRestore={handleRestore}');
