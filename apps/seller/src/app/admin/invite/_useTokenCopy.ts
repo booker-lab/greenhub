@@ -1,7 +1,7 @@
 'use client';
 
-import { notify } from '@/components/AppToaster';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { copyText } from './_clipboard';
 import { buildInviteLink } from './_lib';
 

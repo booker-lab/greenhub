@@ -1,8 +1,9 @@
 'use client';
 
-import type { PostDeliveryRefundReasonCode } from '@greenhub/shared';
-import { notify } from '@/components/AppToaster';
+import type { OrderStatus, PostDeliveryRefundReasonCode } from '@greenhub/shared';
 import { useRef, useState } from 'react';
+import { notify } from '@/components/AppToaster';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
 import {
   type AdminOrder,
   describeAdminCommandOutcome,
@@ -10,16 +11,24 @@ import {
   useAdminOrders,
   useAdminStores,
 } from '@/hooks/useAdmin';
+import { AdminAttentionLine, AdminPageHeader, ProblemCount } from '../_components/adminList';
+import { useAdminTodoCountsValue } from '../_components/adminTodoContext';
 import { LoadMoreFooter } from '../_components/LoadMoreFooter';
 import { OrdersFilters } from './_components/OrdersFilters';
 import { OrdersTable } from './_components/OrdersTable';
 import { PostDeliveryRefundModal } from './_components/PostDeliveryRefundModal';
 import { RefundConfirmModal } from './_components/RefundConfirmModal';
-import { buildStoreOptions, describeRefundTarget, normalizeRefundReason } from './_lib';
+import {
+  buildStoreOptions,
+  describeOrderAttention,
+  describeRefundTarget,
+  normalizeRefundReason,
+  ORDER_STATUS_TABS,
+} from './_lib';
 
 export default function AdminOrdersClient() {
   const [storeFilter, setStoreFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'' | OrderStatus>('');
   // 가게는 판매자 목록에서 이름으로 고른다(겹친 응답은 훅이 최신만 반영).
   const { stores } = useAdminStores();
   const {
@@ -107,29 +116,82 @@ export default function AdminOrdersClient() {
     }
   };
 
+  const storeOptions = buildStoreOptions(stores);
+  const storeName = storeOptions.find((option) => option.value === storeFilter)?.label;
+  const todo = useAdminTodoCountsValue();
+  const attention = describeOrderAttention(todo.orders, !loading && error === null ? orders : []);
+  const loadedLabel = `불러온 ${orders.length}건${hasMore ? ' · 더 있음' : ''}`;
+
   return (
     <div>
-      {/* ① 외형 유지(UI 교체 P2b): Mantine Group(mb md)·Title order 4(18px·800·줄 높이 1.45)·Text span 값. */}
-      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
-        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">
-          전체 주문{' '}
-          <span
-            className="m-0 p-0 text-base font-normal"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          >
-            ({orders.length}
-            {hasMore ? '+' : ''})
-          </span>
-        </h4>
-      </div>
+      {/* ② 방향(design-direction.md §5 어드민 "주문", §8 D7): 명사 하나의 h1과 지금 기준 한 줄. */}
+      <AdminPageHeader
+        title="주문"
+        subline={
+          <>
+            {storeFilter ? storeName : '전체 가게'}
+            {!loading && error === null && <> · {loadedLabel}</>}
+          </>
+        }
+      />
+
+      {attention && (
+        <AdminAttentionLine>
+          확인할 주문{' '}
+          <ProblemCount>
+            {attention.total}
+            {attention.heldMore ? '+' : ''}
+          </ProblemCount>
+          건
+          {attention.held !== null && (
+            <>
+              {' '}
+              · 배송 보류 {attention.held}
+              {attention.heldMore ? '+' : ''}
+            </>
+          )}
+          {attention.refundFailed > 0 && (
+            <>
+              {' '}
+              · 환불 실패 {attention.refundFailed}
+              <span className="text-[var(--color-text-secondary)]">
+                {' '}
+                (불러온 {orders.length}건 기준)
+              </span>
+            </>
+          )}
+          {attention.held !== null && attention.held > 0 && statusFilter !== 'DELIVERY_HELD' && (
+            <>
+              {' · '}
+              <button
+                type="button"
+                onClick={() => setStatusFilter('DELIVERY_HELD')}
+                className="cursor-pointer border-0 bg-transparent p-0 text-[15px] font-bold text-foreground underline underline-offset-4"
+              >
+                배송 보류만 보기
+              </button>
+            </>
+          )}
+        </AdminAttentionLine>
+      )}
 
       <OrdersFilters
         storeFilter={storeFilter}
-        statusFilter={statusFilter}
-        storeOptions={buildStoreOptions(stores)}
+        storeOptions={storeOptions}
         onStoreChange={setStoreFilter}
-        onStatusChange={setStatusFilter}
       />
+
+      <div className="mb-2">
+        <SegmentedTabs<'' | OrderStatus>
+          tabs={ORDER_STATUS_TABS}
+          value={statusFilter}
+          onChange={setStatusFilter}
+          layout="scroll"
+          variant="underline"
+          surface="paper"
+          ariaLabel="주문 상태"
+        />
+      </div>
 
       <OrdersTable
         orders={orders}
@@ -140,6 +202,12 @@ export default function AdminOrdersClient() {
         onPostDeliveryRefund={openDeliveredRefund}
         onRetry={reload}
       />
+
+      {error === null && !loading && orders.length > 0 && (
+        <p className="m-0 mt-3 text-[13px] leading-[18px] text-[var(--color-text-secondary)] [word-break:keep-all]">
+          배송 완료 주문은 행 끝 ⋮의 "배송 후 환불…"로 환불합니다.
+        </p>
+      )}
 
       {error === null && !loading && (
         <LoadMoreFooter

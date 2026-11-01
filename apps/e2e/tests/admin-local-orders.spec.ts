@@ -17,6 +17,7 @@ import {
   rowOrListItem,
   seedDocs,
   visible,
+  won,
 } from './_helpers/admin-local';
 
 // 어드민 주문(#593·#576) — 목록 칸(주문일시·고객·상품·가게)·가게 이름 Select·더 보기·강제환불 확인창.
@@ -115,6 +116,12 @@ test.describe('어드민 로컬 — 주문', () => {
     await loginLocalAdmin(page, admin as LocalAdmin);
   });
 
+  const maskName = (name: string) => {
+    const chars = Array.from(name);
+    return chars.length <= 2
+      ? `${chars[0]}*`
+      : `${chars[0]}${'*'.repeat(chars.length - 2)}${chars[chars.length - 1]}`;
+  };
   const orderNumbers = (page: Page) =>
     visible(page.getByText(new RegExp(`^${fx.orderPrefix}`), { exact: true }));
   // 데스크톱은 표의 행, 모바일은 카드 — 주문번호로 한 줄을 집는다.
@@ -124,27 +131,28 @@ test.describe('어드민 로컬 — 주문', () => {
     });
 
   async function openStoreOrders(page: Page) {
-    await openAdminPage(page, '/admin/orders', '전체 주문');
+    await openAdminPage(page, '/admin/orders', '전체 가게');
     await pickSelectOption(
       page,
       page.getByRole('combobox', { name: '가게 선택', exact: true }),
       fx.storeName,
       { search: true },
     );
-    await expect(page.getByText('전체 주문 (50+)')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('불러온 50건 · 더 있음')).toBeVisible({ timeout: 30_000 });
   }
 
   test('가게 이름으로 고르면 그 가게 주문만, 50건 뒤 더 보기로 이어 받는다', async ({ page }) => {
     await openStoreOrders(page);
 
     await expect(orderNumbers(page)).toHaveCount(50);
-    await visible(page.getByRole('button', { name: '더 보기' })).click();
-    await expect(page.getByText('전체 주문 (51)')).toBeVisible();
+    await visible(page.getByRole('button', { name: '더 보기', exact: true })).click();
+    await expect(page.getByText('불러온 51건', { exact: false })).toBeVisible();
+    await expect(page.getByText('더 있음')).toHaveCount(0);
     await expect(orderNumbers(page)).toHaveCount(51);
-    await expect(page.getByRole('button', { name: '더 보기' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '더 보기', exact: true })).toHaveCount(0);
   });
 
-  test('목록 칸 — 주문일시·주문번호·고객 이름·상품·가게 이름·금액을 보여 준다', async ({
+  test('목록 칸 — 주문 시각·주문번호·가린 고객 이름·상품·가게 이름·금액을 보여 준다', async ({
     page,
   }) => {
     await openStoreOrders(page);
@@ -152,10 +160,13 @@ test.describe('어드민 로컬 — 주문', () => {
     const row = orderRow(page, fx.refund.orderNumber);
     await expect(row).toHaveCount(1);
     await expect(row).toContainText('2026-10-20 12:04');
-    await expect(row).toContainText(`${fx.refund.buyerName} · ${fx.refund.productName}`);
+    // 목록은 개인정보를 가린다(첫 글자와 끝 글자만, design-direction.md §5 어드민 "식별").
+    await expect(row).toContainText(maskName(fx.refund.buyerName));
+    await expect(row).not.toContainText(fx.refund.buyerName);
+    await expect(row).toContainText(fx.refund.productName);
     await expect(row).toContainText(fx.storeName);
     await expect(row).toContainText('접수됨');
-    await expect(row).toContainText(krw(fx.refund.amount));
+    await expect(row).toContainText(won(fx.refund.amount));
 
     const roundRow = orderRow(page, fx.round.orderNumber);
     await expect(roundRow).toContainText(`${fx.round.firstProduct} 외 1개`);
@@ -172,7 +183,11 @@ test.describe('어드민 로컬 — 주문', () => {
     });
     await openStoreOrders(page);
 
-    await orderRow(page, fx.refund.orderNumber).getByRole('button', { name: '강제환불' }).click();
+    // 정상 주문의 환불은 행 끝 ⋮ 메뉴 안에 있다(처리가 필요한 배송 보류 행만 보이는 "환불" 글자 버튼).
+    await orderRow(page, fx.refund.orderNumber)
+      .getByRole('button', { name: `주문 ${fx.refund.orderNumber} 동작 더 보기` })
+      .click();
+    await page.getByRole('menuitem', { name: '환불…' }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByText('강제환불', { exact: true })).toBeVisible();
     await expect(dialog).toContainText(`주문번호 ${fx.refund.orderNumber}`);
@@ -184,7 +199,7 @@ test.describe('어드민 로컬 — 주문', () => {
     await expect(dialog).toBeHidden();
     // 목록을 다시 받아도 주문은 그대로다(확인창 취소는 서버에 아무것도 보내지 않는다).
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByText('전체 주문')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('전체 가게').first()).toBeVisible({ timeout: 30_000 });
     expect(refundRequests).toEqual([]);
     const stored = await readDoc(`orders/${fx.refund.id}`);
     expect(stored?.status).toBe('ACCEPTED');

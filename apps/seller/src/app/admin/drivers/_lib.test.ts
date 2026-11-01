@@ -23,9 +23,9 @@ describe('getAdminDriversReadState', () => {
   });
 
   it('성공 + 1건 이상은 HAS_RESULTS를 반환한다', () => {
-    expect(
-      getAdminDriversReadState({ loading: false, error: null, drivers: [driver('d1')] }),
-    ).toBe('HAS_RESULTS');
+    expect(getAdminDriversReadState({ loading: false, error: null, drivers: [driver('d1')] })).toBe(
+      'HAS_RESULTS',
+    );
   });
 
   it('loading + error는 LOADING을 우선한다', () => {
