@@ -350,6 +350,15 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - `design-standard.md`의 값 정본 표기(`theme.ts`)를 새 위치로 바꾸고, 앱별 `AGENTS.md`의 글꼴 크기 예외 표를 새 컴포넌트 이름으로 갱신한다.
 - `docs/specs/perf/mantine-treeshaking.md`는 역사 자료로 표시한다.
 - 판매자 P6(2026-11-01): 대조 화면(`/dev/ui-compare`, `scripts/visual/compare-cells.mjs`, `shots.mjs --set compare`)은 판매자 화면 교체(P4)가 끝나 판정할 짝이 없어 지웠다. 위 P2·P4 기록의 대조 화면 판정은 그때의 증거로 남긴다. 앱 화면이 아직 쓰지 않는 `Sheet`의 창 초점 검사는 판매자 `/dev/overlays`(`focus-trap.mjs --set overlays`, 버튼으로 열어 Esc 뒤 초점 복귀까지 검사)로 옮겼다.
+- 판매자 P6 Mantine 의존 제거(2026-11-01): `apps/seller`에서 `@mantine/core`·`@mantine/hooks`·`postcss-preset-mantine`·`postcss-simple-vars`, `MantineProvider`·`ColorSchemeScript`, `next.config.ts`의 Mantine `optimizePackageImports`, `globals.css`의 `mantine` layer와 Mantine CSS import를 걷었다. postcss는 기사 앱과 같게 `@tailwindcss/postcss`만 쓴다. preflight는 켜지 않았다(세 앱 공용 P6).
+  - 옮긴 규칙: main 93be55b 판매자 135화면(390)에서 mantine layer·MantineProvider style 규칙 중 실제 요소에 걸린 것만 셌다. 컴포넌트 규칙(`.m_*`)과 `global.css`는 0건이었다. 걸린 것은 `baseline.css`(`:root` color-scheme, `*` box-sizing, body 글꼴 `--font-family`·16px·1.55·#000·margin 0·font-smoothing, 입력·버튼 `font: inherit`, `button,select` text-transform)와 아무도 참조하지 않는 `--mantine-*` 변수 정의다. baseline만 기사 앱과 같은 내용으로 `@layer base`에 옮겼다. `@greenhub/ui/style.css`는 mantine layer 자리(base와 components 사이, layer 밖 규칙에 짐) 대신 `layer(base)`로 넣는다.
+  - 루트 layout은 `headers()` 대신 `await connection()`으로 요청마다 그린다. Next가 요청 CSP 헤더의 nonce를 자기 스크립트에 붙이려면 동적 렌더링이어야 한다.
+  - 로컬 증명(기준 `main` d9c051b, 기준 시각 2026-11-01T00:00+09:00, 허용 목록 없음):
+    - 판매자 405장 `diff.mjs --tolerance 1` 모두 같음. `parity.mjs`는 쓰기 요청·접근성 트리가 모두 같다. storage는 에뮬레이터가 실행마다 새로 발급하는 `firebase:authUser` 토큰과, 끊긴 촬영을 `--resume`으로 새 브라우저 문맥에서 이어 찍어 앞 화면이 남기던 `product_draft_*`가 없는 것만 다르다.
+    - `focus-trap.mjs`: main과 같은 결과(창 69개 중 처리 중 창 6개 실패, P6-a에서 수정). `--set overlays` 통과.
+    - 같은 경로·CI build 설정 빌드: 소비자 185개·기사 137개 정적 산출물 해시가 같고, 판매자 경로 표가 같다(모두 ƒ). 운영 빌드 `/login`의 스크립트 28개가 Report-Only CSP nonce와 일치한다(main과 같음).
+    - 소비자 99장·기사 36장 촬영이 main과 같다.
+    - 판매자 운영 CSS 241,582B(gzip 46,130B) → 119,473B(28,233B), JS 합 2,849,415B(844,008B) → 2,822,912B(836,528B).
 
 ## 7. 화면 변경을 같이 할지
 
