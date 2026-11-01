@@ -3,6 +3,7 @@
 //   node scripts/visual/shots.mjs [app] [--label after] [--only id,id] [--base http://127.0.0.1:3202] [--set benchmark]
 //                                 [--viewports mobile,tablet,desktop] [--resume]
 //     --set benchmark  fixtures의 benchmarkScreens(팔도감 벤치마킹 비교 화면)를 찍는다
+//     --set payment-methods  fixtures의 paymentMethodScreens(결제 수단 여러 개, start.mjs --payment-methods all 서버)
 //     --resume         같은 --label의 끊긴 촬영을 이어 찍는다. 기록이 있는 화면은 건너뛰고, --only로 고른 화면은 다시 찍는다.
 //                      기준 시각·화면 폭·--set이 같아야 한다(서버를 다시 띄웠다면 같은 --now로).
 //
@@ -100,12 +101,29 @@ const outDir = option('out', path.join(os.tmpdir(), 'greenhub-visual', appName, 
 const fixture = await import(`./fixtures/${appName}.mjs`);
 const { browserStorage, wishStorage } = fixture;
 const screenSet = option('set', '');
-const SCREEN_SETS = { benchmark: 'benchmarkScreens' };
+const SCREEN_SETS = {
+  benchmark: 'benchmarkScreens',
+  'payment-methods': 'paymentMethodScreens',
+};
+// 화면 묶음마다 서버를 띄운 결제 수단 설정(start.mjs --payment-methods)이 맞아야 한다.
+// 결제 수단 목록은 빌드 때 정해지므로 다른 설정의 서버로 찍으면 화면이 달라진다.
+const SET_PAYMENT_METHODS = { 'payment-methods': 'all' };
 if (screenSet && !SCREEN_SETS[screenSet]) {
   console.error(
     `❌ 지원하지 않는 화면 묶음: ${screenSet} (가능: ${Object.keys(SCREEN_SETS).join(', ')})`,
   );
   process.exit(1);
+}
+{
+  const wanted = SET_PAYMENT_METHODS[screenSet] ?? 'default';
+  const actual = runtime.paymentMethods ?? 'default';
+  if (wanted !== actual) {
+    console.error(
+      `❌ 결제 수단 설정이 다른 서버입니다(서버 ${actual}, 이 묶음 ${wanted}). ` +
+        `node scripts/visual/start.mjs ${appName}${wanted === 'all' ? ' --payment-methods all' : ''} 로 다시 띄우세요.`,
+    );
+    process.exit(1);
+  }
 }
 const allScreens = screenSet ? (fixture[SCREEN_SETS[screenSet]] ?? []) : fixture.screens;
 const screens = only.length ? allScreens.filter((s) => only.includes(s.id)) : allScreens;

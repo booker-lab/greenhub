@@ -1,5 +1,4 @@
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
-import { Box, Group, Stack, Text, Title } from '@mantine/core';
 import { formatOrderCloseLabel, formatRoundTime } from '@/lib/round-schedule-label';
 
 interface RoundPurchasePanelProps {
@@ -41,16 +40,15 @@ export default function RoundPurchasePanel({
   ].filter((step): step is { label: string; value: string } => step !== null);
 
   return (
-    <Box
-      component="section"
-      px="md"
-      pt="lg"
-      pb="xs"
+    // ① 외형 유지(UI 교체 P5): Mantine Box(px md·pt lg·pb xs)·Group·Stack·Text(16/1.55, sm 15/1.45)·
+    // Title order 1(줄 높이 1.3) 계산값.
+    <section
+      className="px-4 pt-5 pb-2.5"
       aria-labelledby="round-purchase-title"
       data-round-state={state}
       data-round-purchasable={isPurchasable}
     >
-      <Group gap={8} wrap="nowrap">
+      <div className="flex flex-row flex-nowrap items-center justify-start gap-2">
         <span
           style={{
             ...statusTone,
@@ -63,9 +61,9 @@ export default function RoundPurchasePanel({
         >
           {statusLabel}
         </span>
-        <Text
+        <p
           id="round-purchase-title"
-          truncate
+          className="m-0 truncate p-0 leading-[1.55] font-normal"
           style={{
             color: 'var(--color-primary-dark)',
             fontSize: 'var(--font-size-sm)',
@@ -74,12 +72,11 @@ export default function RoundPurchasePanel({
         >
           {closed ? '마감된 회차' : notOpenYet ? '판매 예정 회차' : '이번 주 판매 회차'} ·{' '}
           {round.name}
-        </Text>
-      </Group>
+        </p>
+      </div>
 
-      <Title
-        order={1}
-        mt={10}
+      <h1
+        className="m-0 mt-2.5"
         style={{
           color: 'var(--color-text)',
           fontSize: 22,
@@ -89,12 +86,13 @@ export default function RoundPurchasePanel({
         }}
       >
         {item.productNameSnapshot}
-      </Title>
-      <Group gap={8} align="baseline" mt={6}>
-        <Text size="sm" c="var(--color-text-secondary)">
+      </h1>
+      <div className="mt-1.5 flex flex-row flex-wrap items-baseline justify-start gap-2">
+        <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-text-secondary)' }}>
           회차 가격
-        </Text>
-        <Text
+        </p>
+        <p
+          className="m-0 p-0 leading-[1.55] font-normal"
           style={{
             color: closed ? 'var(--color-text-secondary)' : 'var(--color-text)',
             fontSize: 24,
@@ -103,17 +101,14 @@ export default function RoundPurchasePanel({
           }}
         >
           {item.roundPrice.toLocaleString('ko-KR')}원
-        </Text>
-      </Group>
-      <Text size="sm" c="var(--color-text-secondary)">
+        </p>
+      </div>
+      <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-text-secondary)' }}>
         이 회차 주문에 적용되는 결제 기준 가격입니다.
-      </Text>
+      </p>
 
-      <Stack
-        component="ol"
-        gap={10}
-        mt="md"
-        p="md"
+      <ol
+        className="mt-4 flex flex-col items-stretch justify-start gap-2.5 p-4"
         aria-label="주문부터 배송까지"
         style={{
           background: closed ? 'var(--color-surface-muted)' : 'var(--color-primary-surface)',
@@ -123,15 +118,11 @@ export default function RoundPurchasePanel({
         }}
       >
         {steps.map((step) => (
-          <Group
+          <li
             key={step.label}
-            component="li"
-            justify="space-between"
-            align="flex-start"
-            wrap="nowrap"
-            gap="sm"
+            className="flex flex-row flex-nowrap items-start justify-between gap-3"
           >
-            <Group gap={8} wrap="nowrap">
+            <div className="flex flex-row flex-nowrap items-center justify-start gap-2">
               <span
                 aria-hidden
                 style={{
@@ -143,61 +134,74 @@ export default function RoundPurchasePanel({
                   width: 8,
                 }}
               />
-              <Text size="sm" fw="var(--fw-bold)" c="var(--color-text)">
+              <p
+                className="m-0 p-0 text-sm"
+                style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+              >
                 {step.label}
-              </Text>
-            </Group>
-            <Text
-              size="sm"
-              ta="right"
-              c="var(--color-text-secondary)"
-              style={{ fontVariantNumeric: 'tabular-nums' }}
+              </p>
+            </div>
+            <p
+              className="m-0 p-0 text-right text-sm font-normal"
+              style={{ color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}
             >
               {step.value}
-            </Text>
-          </Group>
+            </p>
+          </li>
         ))}
-      </Stack>
-    </Box>
+      </ol>
+    </section>
   );
 }
 
 /** 회차 상품의 필수 고지(배송 지역·기상 연기·청약철회). 상품 설명 아래, 구매 버튼 위에 둔다. */
 export function RoundPurchaseNotices() {
   return (
-    <Box component="section" aria-label="회차 배송·청약철회 안내" px="md" pb="xs">
-      <Stack gap={4}>
-        <Text size="sm" fw="var(--fw-extrabold)" c="var(--color-text)">
+    // ① 외형 유지(UI 교체 P5): Mantine Box(px md·pb xs·mt md·p md)·Stack(gap 4)·Text sm(15/1.45) 계산값.
+    <section aria-label="회차 배송·청약철회 안내" className="px-4 pb-2.5">
+      <div className="flex flex-col items-stretch justify-start gap-1">
+        <p
+          className="m-0 p-0 text-sm"
+          style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-text)' }}
+        >
           경기 이천 직접배송
-        </Text>
-        <Text size="sm" c="var(--color-text-secondary)">
+        </p>
+        <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-text-secondary)' }}>
           경기도 이천시 직접배송만 제공하며, 화요일 오전 9시까지 문 앞 배송합니다.
-        </Text>
-      </Stack>
+        </p>
+      </div>
 
-      <Box
-        mt="md"
-        p="md"
+      <div
+        className="mt-4 p-4"
         style={{ background: 'var(--color-deadline-surface)', borderRadius: 'var(--radius)' }}
       >
-        <Text size="sm" fw="var(--fw-bold)" c="var(--color-deadline-text)" mb={4}>
+        <p
+          className="m-0 mb-1 p-0 text-sm"
+          style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-deadline-text)' }}
+        >
           기상 상황에 따른 배송 연기
-        </Text>
-        <Text size="sm" c="var(--color-text-secondary)" style={{ lineHeight: 1.6 }}>
+        </p>
+        <p
+          className="m-0 p-0 text-sm font-normal"
+          style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6 }}
+        >
           안전한 배송이 어려운 기상 상황에는 배송이 연기될 수 있습니다. 판매자 책임으로 재배송비
           없이 새 배송 일정을 안내합니다.
-        </Text>
-      </Box>
+        </p>
+      </div>
 
-      <Box mt="md">
-        <Text size="sm" fw="var(--fw-bold)" mb={4}>
+      <div className="mt-4">
+        <p className="m-0 mb-1 p-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
           청약철회 제한 안내
-        </Text>
-        <Text size="sm" c="var(--color-text-secondary)" style={{ lineHeight: 1.6 }}>
+        </p>
+        <p
+          className="m-0 p-0 text-sm font-normal"
+          style={{ color: 'var(--color-text-secondary)', lineHeight: 1.6 }}
+        >
           주문 마감 후 경매 매입·배송 준비가 시작되었거나 생화의 상품 가치가 현저히 감소한 경우
           청약철회가 제한될 수 있습니다. 표시·광고 또는 계약 내용과 다르게 이행된 경우는 제외됩니다.
-        </Text>
-      </Box>
-    </Box>
+        </p>
+      </div>
+    </section>
   );
 }

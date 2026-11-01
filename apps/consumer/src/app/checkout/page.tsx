@@ -8,11 +8,17 @@ import type {
   Product,
   SaleType,
 } from '@greenhub/shared';
-import { Box, Button, Container, Text } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { useSession } from 'next-auth/react';
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { EMPTY_GIFT, type GiftState, giftPayload } from '@/components/benchmark/GiftFields';
+import {
+  EMPTY_PACKAGE_LABEL,
+  type PackageLabelState,
+  packageLabelPayload,
+} from '@/components/benchmark/PackageLabelFields';
 import {
   type CartItem,
   isRoundCartItem,
@@ -26,6 +32,7 @@ import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartValidationError } from '@/lib/cartValidation';
 import { pickCheckoutPrefill, prefillAddress, prefillPhone } from '@/lib/checkout-prefill';
+import { isFeatureOn } from '@/lib/features';
 import { isKoreanMobilePhone, ROUND_DELIVERY_PHONE_ERROR } from '@/lib/korean-mobile-phone';
 import {
   buildPaymentRedirectUrl,
@@ -38,15 +45,8 @@ import {
   buildPortonePayMethodRequest,
   readPortonePaymentConfiguration,
 } from '@/lib/portone-config';
-import CheckoutForm from './_components/CheckoutForm';
-import { EMPTY_GIFT, type GiftState, giftPayload } from '@/components/benchmark/GiftFields';
-import {
-  EMPTY_PACKAGE_LABEL,
-  type PackageLabelState,
-  packageLabelPayload,
-} from '@/components/benchmark/PackageLabelFields';
-import { isFeatureOn } from '@/lib/features';
 import { formatRoundTime } from '@/lib/round-schedule-label';
+import CheckoutForm from './_components/CheckoutForm';
 
 declare global {
   interface Window {
@@ -567,61 +567,63 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   return (
     <>
       {saleRounds.isRefreshing && (
-        <Container size="sm" px="md" pt="sm">
-          <Text size="sm" c="dimmed" ta="center" aria-live="polite">
+        // Mantine Container(sm 720px·px md·pt sm)·Text sm dimmed(gray-6) 계산값
+        <div className="mx-auto max-w-[720px] px-4 pt-3">
+          <p className="m-0 text-center text-sm text-[#868e96]" aria-live="polite">
             최신 회차 정보를 확인하는 중...
-          </Text>
-        </Container>
+          </p>
+        </div>
       )}
       {saleRounds.isStale && (
-        <Container size="sm" px="md" pt="sm">
-          <Box
-            p="sm"
+        // Mantine Container·Box(p sm)·Text sm·Button light xs(mt xs) 계산값
+        <div className="mx-auto max-w-[720px] px-4 pt-3">
+          <div
+            className="p-3"
             role="alert"
             style={{
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius)',
             }}
           >
-            <Text size="sm">최신 회차 정보를 불러오지 못했습니다. 이전 결과로는 결제할 수 없습니다.</Text>
+            <p className="m-0 text-sm">
+              최신 회차 정보를 불러오지 못했습니다. 이전 결과로는 결제할 수 없습니다.
+            </p>
             {saleRounds.error && (
-              <Text size="sm" c="dimmed" mt={4}>
-                {saleRounds.error}
-              </Text>
+              <p className="m-0 mt-1 text-sm text-[#868e96]">{saleRounds.error}</p>
             )}
-            <Button variant="light" size="xs" mt="xs" onClick={saleRounds.refetch}>
+            <Button variant="light" size="xs" className="mt-2.5" onClick={saleRounds.refetch}>
               다시 시도
             </Button>
-          </Box>
-        </Container>
+          </div>
+        </div>
       )}
       <CheckoutForm
-      items={cartItems}
-      totalAmount={totalAmount}
-      address={address}
-      onAddressChange={setAddress}
-      deliveryPhone={deliveryPhone}
-      onDeliveryPhoneChange={setDeliveryPhone}
-      deliveryPhoneError={deliveryPhoneValid ? null : ROUND_DELIVERY_PHONE_ERROR}
-      requestNote={requestNote}
-      onRequestNoteChange={setRequestNote}
-      paymentMethod={paymentMethod}
-      onPaymentMethodChange={setPaymentMethod}
-      isLoading={isLoading}
-      canPay={canPay && giftReady && packageLabelReady}
-      error={scheduleError ?? error}
-      onPay={requestPayment}
-      benchmark={{
-        arrivalLabel:
-          isFeatureOn('arrival-everywhere') && schedule
-            ? formatRoundTime(schedule.round.schedule.deliveryEndAt)
-            : null,
-        gift: isFeatureOn('gift') ? { value: gift, onChange: setGift } : undefined,
-        packageLabel: isFeatureOn('option-sheet')
-          ? { value: packageLabel, onChange: setPackageLabel }
-          : undefined,
-      }}
-    />
+        items={cartItems}
+        totalAmount={totalAmount}
+        address={address}
+        onAddressChange={setAddress}
+        deliveryPhone={deliveryPhone}
+        onDeliveryPhoneChange={setDeliveryPhone}
+        deliveryPhoneError={deliveryPhoneValid ? null : ROUND_DELIVERY_PHONE_ERROR}
+        requestNote={requestNote}
+        onRequestNoteChange={setRequestNote}
+        paymentMethod={paymentMethod}
+        onPaymentMethodChange={setPaymentMethod}
+        isLoading={isLoading}
+        canPay={canPay && giftReady && packageLabelReady}
+        error={scheduleError ?? error}
+        onPay={requestPayment}
+        benchmark={{
+          arrivalLabel:
+            isFeatureOn('arrival-everywhere') && schedule
+              ? formatRoundTime(schedule.round.schedule.deliveryEndAt)
+              : null,
+          gift: isFeatureOn('gift') ? { value: gift, onChange: setGift } : undefined,
+          packageLabel: isFeatureOn('option-sheet')
+            ? { value: packageLabel, onChange: setPackageLabel }
+            : undefined,
+        }}
+      />
     </>
   );
 }
@@ -639,16 +641,18 @@ function CartCheckoutContent() {
 
   if (cart.kind === 'loading') {
     return (
-      <Container size="sm" px="md" py="lg">
-        <Text>결제 상품을 확인하는 중...</Text>
-      </Container>
+      // Mantine Container(sm·px md·py lg)·Text 계산값
+      <div className="mx-auto max-w-[720px] px-4 py-5">
+        <p className="m-0 text-base">결제 상품을 확인하는 중...</p>
+      </div>
     );
   }
   if (cart.kind === 'invalid') {
     return (
-      <Container size="sm" px="md" py="lg">
-        <Text c="red">결제할 장바구니 정보를 확인할 수 없습니다.</Text>
-      </Container>
+      // Mantine Text c="red"(red-6) 계산값
+      <div className="mx-auto max-w-[720px] px-4 py-5">
+        <p className="m-0 text-base text-[#fa5252]">결제할 장바구니 정보를 확인할 수 없습니다.</p>
+      </div>
     );
   }
   return cart.kind === 'round' ? (
@@ -672,9 +676,9 @@ export default function CheckoutPage() {
       />
       <Suspense
         fallback={
-          <Container size="sm" px="md" py="lg">
-            <Text>로딩 중...</Text>
-          </Container>
+          <div className="mx-auto max-w-[720px] px-4 py-5">
+            <p className="m-0 text-base">로딩 중...</p>
+          </div>
         }
       >
         <CheckoutContent />

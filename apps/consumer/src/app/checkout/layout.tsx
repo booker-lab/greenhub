@@ -1,4 +1,3 @@
-import { Container } from '@mantine/core';
 import BusinessInfoFooter from '@/components/BusinessInfoFooter';
 
 // 로그인이 필요한 화면은 요청마다 서버에서 만든다. proxy가 요청마다 만든 CSP nonce를 Next가
@@ -10,9 +9,10 @@ export default function CheckoutLayout({ children }: { children: React.ReactNode
   return (
     <>
       {children}
-      <Container size="sm" px="md" pb="lg">
+      {/* Mantine Container size="sm" px="md" pb="lg": 최대 720px, 좌우 16px, 아래 20px, 가운데 정렬 */}
+      <div className="mx-auto max-w-[720px] px-4 pb-5">
         <BusinessInfoFooter />
-      </Container>
+      </div>
     </>
   );
 }

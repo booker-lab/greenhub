@@ -1,7 +1,7 @@
 // 창(Dialog) 초점 순회 검사 — start.mjs로 띄운 화면 확인 서버에서 fixture 화면의 steps로 창을 연 뒤,
 // Tab·Shift+Tab을 눌러 초점이 창 안에서만 도는지, Esc로 닫으면 초점이 여는 버튼으로 돌아오는지 본다.
 //
-//   node scripts/visual/focus-trap.mjs [app] [--only id,id] [--viewports mobile,tablet,desktop] [--label <이름>] [--set overlays]
+//   node scripts/visual/focus-trap.mjs [app] [--only id,id] [--viewports mobile,tablet,desktop] [--label <이름>] [--set overlays|benchmark]
 //
 // 대상: steps가 있는 화면 중 steps 뒤에 모달 창(role=dialog·alertdialog, aria-modal="false" 제외)이 열려 있는 화면. id가 modal-로 시작하는데
 // 창이 열리지 않으면 실패다. 판정(하나라도 어기면 종료 코드 1):
@@ -85,13 +85,18 @@ const only = option('only', '')?.split(',').filter(Boolean) ?? [];
 const label = option('label', 'current');
 const fixture = await import(`./fixtures/${appName}.mjs`);
 // --set overlays: 앱 화면이 아직 쓰지 않는 @greenhub/ui 창의 검사 화면(fixture overlayScreens).
+// --set benchmark: 소비자 benchmarkScreens(기능 토글 화면, 옵션 시트 등). 서버는 NEXT_PUBLIC_GREENHUB_FEATURES=all로 띄운다.
+//   기본 묶음처럼 steps가 있는 화면만 본다.
+const SCREEN_SETS = { overlays: 'overlayScreens', benchmark: 'benchmarkScreens' };
 const screenSet = option('set', '');
-if (screenSet && screenSet !== 'overlays') {
-  console.error(`❌ 지원하지 않는 화면 묶음: ${screenSet} (가능: overlays)`);
+if (screenSet && !SCREEN_SETS[screenSet]) {
+  console.error(
+    `❌ 지원하지 않는 화면 묶음: ${screenSet} (가능: ${Object.keys(SCREEN_SETS).join(', ')})`,
+  );
   process.exit(1);
 }
-const screens = (screenSet ? (fixture.overlayScreens ?? []) : fixture.screens).filter(
-  (s) => (screenSet || s.steps) && (!only.length || only.includes(s.id)),
+const screens = (screenSet ? (fixture[SCREEN_SETS[screenSet]] ?? []) : fixture.screens).filter(
+  (s) => (screenSet === 'overlays' || s.steps) && (!only.length || only.includes(s.id)),
 );
 const missingIds = only.filter((id) => !screens.some((s) => s.id === id));
 if (missingIds.length) {

@@ -1,16 +1,16 @@
 'use client';
 
-import { Box, Button, Paper, Stack, Text } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useState } from 'react';
+import type { OrderBenchmarkExtras } from '@/app/mypage/orders/[id]/_detail';
 import { useCart } from '@/hooks/useCart';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { isFeatureOn } from '@/lib/features';
 import { roundItemCartInput } from '@/lib/round-quick-add';
 import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
-import type { OrderBenchmarkExtras } from '@/app/mypage/orders/[id]/_detail';
 import OrderReviews from './OrderReviews';
 
 // MY 주문 상세의 벤치마킹 비교 기능: 옵션·선물 표시, 후기 쓰기, 다시 주문하기, 관리 안내.
@@ -73,36 +73,39 @@ export default function OrderDetailExtras({
   }
 
   return (
-    <Stack gap="md" mb="lg">
+    // ① 외형 유지(UI 교체 P5): Mantine Stack(gap md·mb lg)·Paper(p md)·Text sm·Button(outline lg) 값.
+    <div className="mb-5 flex flex-col gap-4">
       {(optionLines.length > 0 || showGift || packageLabel) && (
-        <Paper p="md" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
-          <Stack gap={4}>
+        <div className="p-4" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
+          <div className="flex flex-col gap-1">
             {optionLines.map((item) => (
-              <Text key={item.id} size="sm">
+              <p key={item.id} className="m-0 text-sm">
                 {nameOf(item.id)} · {item.optionLabel}
-              </Text>
+              </p>
             ))}
-            {packageLabel && <Text size="sm">포장 라벨 · {packageLabel}</Text>}
+            {packageLabel && <p className="m-0 text-sm">포장 라벨 · {packageLabel}</p>}
             {showGift && extras.gift && (
-              <Stack gap={2} mt={optionLines.length > 0 ? 6 : 0}>
-                <Text size="sm" fw={700}>
-                  선물
-                </Text>
-                <Text size="sm">받는 분 · {extras.gift.recipientName}</Text>
+              <div
+                className={`flex flex-col gap-0.5 ${optionLines.length > 0 ? 'mt-1.5' : 'mt-0'}`}
+              >
+                <p className="m-0 text-sm font-bold">선물</p>
+                <p className="m-0 text-sm">받는 분 · {extras.gift.recipientName}</p>
                 {extras.gift.recipientPhone && (
-                  <Text size="sm">받는 분 연락처 · {extras.gift.recipientPhone}</Text>
+                  <p className="m-0 text-sm">받는 분 연락처 · {extras.gift.recipientPhone}</p>
                 )}
-                <Text size="sm">
+                <p className="m-0 text-sm">
                   보내는 분 · {extras.gift.senderName}
-                  {isFeatureOn('option-sheet') && extras.packageLabel ? ' (포장 라벨로 붙여요)' : ''}
-                </Text>
+                  {isFeatureOn('option-sheet') && extras.packageLabel
+                    ? ' (포장 라벨로 붙여요)'
+                    : ''}
+                </p>
                 {extras.gift.cardMessage && (
-                  <Text size="sm">카드 문구 · "{extras.gift.cardMessage}"</Text>
+                  <p className="m-0 text-sm">카드 문구 · "{extras.gift.cardMessage}"</p>
                 )}
-              </Stack>
+              </div>
             )}
-          </Stack>
-        </Paper>
+          </div>
+        </div>
       )}
 
       {reviewsOn && token && (
@@ -118,14 +121,14 @@ export default function OrderDetailExtras({
       )}
 
       {isFeatureOn('care-guide') && REVIEWABLE.has(status) && (
-        <Paper
-          p="md"
+        <div
+          className="p-4"
           style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
         >
-          <Text fw={800} size="sm" c="var(--color-primary-dark)">
+          <p className="m-0 text-sm font-extrabold" style={{ color: 'var(--color-primary-dark)' }}>
             받은 꽃 관리 안내
-          </Text>
-          <Stack gap={2} mt={4}>
+          </p>
+          <div className="mt-1 flex flex-col gap-0.5">
             {extras.items.map((item) => (
               <Link
                 key={item.id}
@@ -135,16 +138,15 @@ export default function OrderDetailExtras({
                 {nameOf(item.id)} 관리법 보기 →
               </Link>
             ))}
-          </Stack>
-        </Paper>
+          </div>
+        </div>
       )}
 
       {reorderOn && (
-        <Box>
+        <div>
           <Button
-            fullWidth
+            className="w-full"
             variant="outline"
-            radius="xl"
             size="lg"
             disabled={reorderable.length === 0}
             onClick={async () => {
@@ -182,12 +184,12 @@ export default function OrderDetailExtras({
               : '이번 회차에는 같은 상품이 없어요'}
           </Button>
           {reorderMessage && (
-            <Text role="alert" size="sm" mt={6} c="var(--color-danger)">
+            <p role="alert" className="m-0 mt-1.5 text-sm" style={{ color: 'var(--color-danger)' }}>
               {reorderMessage}
-            </Text>
+            </p>
           )}
-        </Box>
+        </div>
       )}
-    </Stack>
+    </div>
   );
 }

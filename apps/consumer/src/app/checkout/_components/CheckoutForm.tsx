@@ -5,25 +5,28 @@ import {
   type DeliveryMethod,
   ORDER_REQUEST_NOTE_MAX_LENGTH,
 } from '@greenhub/shared';
+import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
+import { Button } from '@greenhub/ui/components/button';
+import { Checkbox } from '@greenhub/ui/components/checkbox';
+import { Field, FieldDescription, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
+import { Textarea } from '@greenhub/ui/components/textarea';
 import {
-  Alert,
-  Button,
-  Checkbox,
-  Container,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  Textarea,
-  TextInput,
-  Title,
-} from '@mantine/core';
-import { useEffect, useState } from 'react';
+  type ComponentProps,
+  type CSSProperties,
+  type ReactNode,
+  useEffect,
+  useId,
+  useState,
+} from 'react';
+import GiftFields, { type GiftState } from '@/components/benchmark/GiftFields';
+import PackageLabelFields, {
+  type PackageLabelState,
+} from '@/components/benchmark/PackageLabelFields';
+import { LoadingButton } from '@/components/LoadingButton';
 import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
 import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';
-import GiftFields, { type GiftState } from '@/components/benchmark/GiftFields';
-import PackageLabelFields, { type PackageLabelState } from '@/components/benchmark/PackageLabelFields';
 
 const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
@@ -73,6 +76,117 @@ function formatDeliveryDate(iso: string): string {
     day: 'numeric',
     weekday: 'short',
   });
+}
+
+// ① 외형 유지: Mantine TextInput·Textarea(InputWrapper)와 같은 구조·연결. 라벨(for) → 설명(p) → 입력칸 → 오류(p).
+// 입력칸은 오류·설명을 aria-describedby로 가리키고 오류가 있으면 aria-invalid다. Mantine 감싸개는 역할이 없는
+// div라 Field의 role="group"은 지운다. 필수 표시는 FieldLabel required(" *", aria-hidden)와 입력칸 required.
+function useFieldIds(description: ReactNode, error: ReactNode) {
+  const id = useId();
+  const descriptionId = description ? `${id}-description` : undefined;
+  const errorId = error ? `${id}-error` : undefined;
+  return {
+    id,
+    descriptionId,
+    errorId,
+    describedBy: [errorId, descriptionId].filter(Boolean).join(' ') || undefined,
+  };
+}
+
+function FieldFrame({
+  id,
+  label,
+  description,
+  descriptionId,
+  error,
+  errorId,
+  required,
+  style,
+  children,
+}: {
+  id: string;
+  label?: ReactNode;
+  description?: ReactNode;
+  descriptionId?: string;
+  error?: ReactNode;
+  errorId?: string;
+  required?: boolean;
+  style?: CSSProperties;
+  children: ReactNode;
+}) {
+  return (
+    // biome-ignore lint/a11y/useValidAriaRole: Field 기본 role="group"을 지워 Mantine 감싸개(역할 없는 div)와 같은 접근성 트리로 둔다.
+    <Field role={undefined} style={style}>
+      {label && (
+        <FieldLabel htmlFor={id} required={required}>
+          {label}
+        </FieldLabel>
+      )}
+      {description && (
+        <FieldDescription id={descriptionId} className="m-0">
+          {description}
+        </FieldDescription>
+      )}
+      {children}
+      {error && (
+        <p
+          id={errorId}
+          data-slot="field-error"
+          className="m-0 text-xs leading-[1.2] font-normal text-[#fa5252]"
+        >
+          {error}
+        </p>
+      )}
+    </Field>
+  );
+}
+
+function TextInput({
+  label,
+  description,
+  error,
+  required,
+  style,
+  ...props
+}: Omit<ComponentProps<typeof Input>, 'size'> & {
+  label?: ReactNode;
+  description?: ReactNode;
+  error?: ReactNode;
+}) {
+  const { id, descriptionId, errorId, describedBy } = useFieldIds(description, error);
+  return (
+    <FieldFrame
+      id={id}
+      label={label}
+      description={description}
+      descriptionId={descriptionId}
+      error={error}
+      errorId={errorId}
+      required={required}
+      style={style}
+    >
+      <Input
+        id={id}
+        required={required}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
+        {...props}
+      />
+    </FieldFrame>
+  );
+}
+
+function TextareaField({
+  label,
+  description,
+  ...props
+}: ComponentProps<typeof Textarea> & { label?: ReactNode; description?: ReactNode }) {
+  const { id, descriptionId, describedBy } = useFieldIds(description, null);
+  return (
+    <FieldFrame id={id} label={label} description={description} descriptionId={descriptionId}>
+      <Textarea id={id} aria-describedby={describedBy} {...props} />
+    </FieldFrame>
+  );
 }
 
 export default function CheckoutForm({
@@ -141,39 +255,39 @@ export default function CheckoutForm({
   const buttonLabel = isLoading ? '처리 중...' : paymentButtonLabel(paymentMethod);
 
   return (
-    <Container size="sm" px="md" py="lg">
-      <Title
-        order={1}
-        mb="lg"
+    // Mantine Container(sm 720px·px md·py lg)·Title order 1(줄 높이 1.3, mb lg) 계산값
+    <div className="mx-auto max-w-[720px] px-4 py-5">
+      <h1
+        className="m-0 mb-5 leading-[1.3]"
         style={{ fontSize: 22, fontWeight: 'var(--fw-extrabold)', letterSpacing: '-0.01em' }}
       >
         결제
-      </Title>
+      </h1>
 
       {/* 주문 요약: 회색 바탕 위 회색 글자는 대비가 약해 흰 카드·본문 색 글자로 둔다 */}
-      <Paper
-        p="md"
-        mb="xl"
-        withBorder
+      {/* Mantine Paper(p md·mb xl·withBorder = gray-3 1px) 계산값 */}
+      <div
+        className="mb-8 border border-solid border-[#dee2e6] p-4"
         style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius)' }}
       >
-        <Text
+        <p
+          className="m-0 mb-2.5 leading-[1.55]"
           style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}
-          mb="xs"
         >
           주문 정보
-        </Text>
+        </p>
         {items.length > 0 && (
-          <Text size="sm" c="var(--color-text-secondary)" mb="xs">
+          <p className="m-0 mb-2.5 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
             총 {items.reduce((sum, item) => sum + item.quantity, 0)}개 상품
-          </Text>
+          </p>
         )}
-        <Stack gap={4}>
+        <div className="flex flex-col gap-1">
           {items.length > 0
             ? items.map((item) => (
-                <Stack key={item.productId} gap={2}>
-                  <Group justify="space-between">
-                    <Text
+                <div key={item.productId} className="flex flex-col gap-0.5">
+                  <div className="flex flex-wrap items-center justify-between gap-4">
+                    <p
+                      className="m-0 leading-[1.55]"
                       style={{
                         fontSize: 'var(--font-size-sm)',
                         fontWeight: 'var(--fw-medium)',
@@ -182,8 +296,9 @@ export default function CheckoutForm({
                       }}
                     >
                       {item.name} × {item.quantity}
-                    </Text>
-                    <Text
+                    </p>
+                    <p
+                      className="m-0 leading-[1.55]"
                       style={{
                         fontSize: 'var(--font-size-sm)',
                         fontWeight: 'var(--fw-bold)',
@@ -191,94 +306,112 @@ export default function CheckoutForm({
                       }}
                     >
                       {(item.price * item.quantity).toLocaleString()}원
-                    </Text>
-                  </Group>
+                    </p>
+                  </div>
                   {item.optionLabel && (
-                    <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+                    <p
+                      className="m-0 leading-[1.55]"
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-secondary)',
+                      }}
+                    >
                       {item.optionLabel}
-                    </Text>
+                    </p>
                   )}
                   {item.requestedDeliveryDate && (
-                    <Text
+                    <p
+                      className="m-0 leading-[1.55]"
                       style={{
                         fontSize: 'var(--font-size-sm)',
                         color: 'var(--color-text-disabled)',
                       }}
                     >
                       배송 희망일 {formatDeliveryDate(item.requestedDeliveryDate)}
-                    </Text>
+                    </p>
                   )}
-                </Stack>
+                </div>
               ))
             : singleSummary && (
-                <Group justify="space-between">
-                  <Text
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <p
+                    className="m-0 leading-[1.55]"
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
                     }}
                   >
                     수량
-                  </Text>
-                  <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+                  </p>
+                  <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
                     {singleSummary.quantity}개
-                  </Text>
-                </Group>
+                  </p>
+                </div>
               )}
           {singleSummary && (
-            <Group justify="space-between">
-              <Text
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <p
+                className="m-0 leading-[1.55]"
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 배송 방법
-              </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+              </p>
+              <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
                 {DELIVERY_LABELS[singleSummary.deliveryMethod]}
-              </Text>
-            </Group>
+              </p>
+            </div>
           )}
           {singleSummary?.requestedDeliveryDate && (
-            <Group justify="space-between">
-              <Text
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <p
+                className="m-0 leading-[1.55]"
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 배송 희망일
-              </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+              </p>
+              <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
                 {formatDeliveryDate(singleSummary.requestedDeliveryDate)}
-              </Text>
-            </Group>
+              </p>
+            </div>
           )}
           {benchmark?.arrivalLabel && (
-            <Group justify="space-between">
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <p
+                className="m-0 leading-[1.55]"
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
                 도착
-              </Text>
-              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
+              </p>
+              <p
+                className="m-0 leading-[1.55]"
+                style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+              >
                 {benchmark.arrivalLabel}까지
-              </Text>
-            </Group>
+              </p>
+            </div>
           )}
           {(totalAmount === null || totalAmount > 0) && (
-            <Group
-              justify="space-between"
-              align="baseline"
-              mt={8}
-              pt={10}
+            <div
+              className="mt-2 flex flex-wrap items-baseline justify-between gap-4 pt-2.5"
               style={{ borderTop: '1px solid var(--color-border)' }}
             >
-              <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
+              <p
+                className="m-0 leading-[1.55]"
+                style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+              >
                 결제 금액
-              </Text>
+              </p>
               {totalAmount === null ? (
-                <Text
+                <p
+                  className="m-0 leading-[1.55]"
                   aria-live="polite"
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   금액 확인 중...
-                </Text>
+                </p>
               ) : (
-                <Text
+                <p
+                  className="m-0 leading-[1.55]"
                   style={{
                     fontSize: 22,
                     fontVariantNumeric: 'tabular-nums',
@@ -286,19 +419,22 @@ export default function CheckoutForm({
                   }}
                 >
                   {totalAmount.toLocaleString()}원
-                </Text>
+                </p>
               )}
-            </Group>
+            </div>
           )}
-        </Stack>
-      </Paper>
+        </div>
+      </div>
 
-      {/* 배송지 */}
-      <Stack gap="sm" mb="xl">
-        <Text style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}>
+      {/* 배송지: Mantine Stack(gap sm·mb xl) */}
+      <div className="mb-8 flex flex-col gap-3">
+        <p
+          className="m-0 leading-[1.55]"
+          style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}
+        >
           배송지
-        </Text>
-        <Group gap="xs" align="flex-end">
+        </p>
+        <div className="flex flex-wrap items-end justify-start gap-2.5">
           <TextInput
             style={{ flex: 1 }}
             label={isRoundCheckout ? '이천시 배송 가능 주소' : undefined}
@@ -311,10 +447,10 @@ export default function CheckoutForm({
                 : undefined
             }
           />
-          <Button variant="outline" color="gray" radius="xl" onClick={openAddressSearch}>
+          <Button variant="outline-gray" onClick={openAddressSearch}>
             주소 검색
           </Button>
-        </Group>
+        </div>
         <TextInput
           placeholder="상세 주소"
           value={address.addressDetail}
@@ -322,22 +458,22 @@ export default function CheckoutForm({
         />
         <TextInput placeholder="우편번호 (자동 입력)" value={address.zipCode} readOnly />
         {!giftOn && (
-        <TextInput
-          label={isRoundCheckout ? '배송 연락처 (필수)' : '연락처'}
-          description={
-            isRoundCheckout
-              ? '주문·결제·배송 안내를 위한 정보성 연락에 사용하며 마케팅 동의와 별개입니다.'
-              : undefined
-          }
-          placeholder="010-1234-5678"
-          type="tel"
-          value={deliveryPhone}
-          onChange={(e) => onDeliveryPhoneChange(e.target.value)}
-          onBlur={() => setDeliveryPhoneTouched(true)}
-          error={deliveryPhoneTouched && deliveryPhoneError ? deliveryPhoneError : undefined}
-          autoComplete="tel"
-          required
-        />
+          <TextInput
+            label={isRoundCheckout ? '배송 연락처 (필수)' : '연락처'}
+            description={
+              isRoundCheckout
+                ? '주문·결제·배송 안내를 위한 정보성 연락에 사용하며 마케팅 동의와 별개입니다.'
+                : undefined
+            }
+            placeholder="010-1234-5678"
+            type="tel"
+            value={deliveryPhone}
+            onChange={(e) => onDeliveryPhoneChange(e.target.value)}
+            onBlur={() => setDeliveryPhoneTouched(true)}
+            error={deliveryPhoneTouched && deliveryPhoneError ? deliveryPhoneError : undefined}
+            autoComplete="tel"
+            required
+          />
         )}
         {isRoundCheckout && benchmark?.gift && (
           // 선물하기(gift): 받는 분·보내는 분·카드 문구를 따로 받고, 배송 연락처는 받는 분 묶음으로 옮긴다.
@@ -355,7 +491,9 @@ export default function CheckoutForm({
                   value={deliveryPhone}
                   onChange={(e) => onDeliveryPhoneChange(e.target.value)}
                   onBlur={() => setDeliveryPhoneTouched(true)}
-                  error={deliveryPhoneTouched && deliveryPhoneError ? deliveryPhoneError : undefined}
+                  error={
+                    deliveryPhoneTouched && deliveryPhoneError ? deliveryPhoneError : undefined
+                  }
                   autoComplete="tel"
                   required
                 />
@@ -365,10 +503,13 @@ export default function CheckoutForm({
         )}
         {isRoundCheckout && benchmark?.packageLabel && !giftOn && (
           // 포장 라벨(무료): 선물이면 보내는 분 이름이 라벨이라 이 칸을 숨긴다.
-          <PackageLabelFields value={benchmark.packageLabel.value} onChange={benchmark.packageLabel.onChange} />
+          <PackageLabelFields
+            value={benchmark.packageLabel.value}
+            onChange={benchmark.packageLabel.onChange}
+          />
         )}
         {isRoundCheckout && onRequestNoteChange && (
-          <Textarea
+          <TextareaField
             label="요청사항 (선택)"
             description={
               benchmark?.gift
@@ -376,74 +517,85 @@ export default function CheckoutForm({
                     requestNote?.length ?? 0
                   }/${ORDER_REQUEST_NOTE_MAX_LENGTH})`
                 : `받는 분 성함·연락처, 선물 문구, 배송 요청을 적어 주세요. (${
-              requestNote?.length ?? 0
-            }/${ORDER_REQUEST_NOTE_MAX_LENGTH})`
+                    requestNote?.length ?? 0
+                  }/${ORDER_REQUEST_NOTE_MAX_LENGTH})`
             }
             placeholder={
-              benchmark?.gift ? '예) 경비실에 맡겨 주세요' : "예) 받는 분 김그린 010-0000-0000 / 문구: 개업을 축하합니다"
+              benchmark?.gift
+                ? '예) 경비실에 맡겨 주세요'
+                : '예) 받는 분 김그린 010-0000-0000 / 문구: 개업을 축하합니다'
             }
             value={requestNote ?? ''}
             onChange={(e) => onRequestNoteChange(e.target.value)}
             maxLength={ORDER_REQUEST_NOTE_MAX_LENGTH}
             autosize
             minRows={2}
-            maxRows={6}
           />
         )}
-      </Stack>
+      </div>
 
       {isRoundCheckout && (
-        <Stack gap="md" mb="xl">
-          <Paper p="md" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
-            <Text fw="var(--fw-extrabold)" size="sm" mb="xs">
+        <div className="mb-8 flex flex-col gap-4">
+          <div className="p-4" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
+            <p className="m-0 mb-2.5 text-sm" style={{ fontWeight: 'var(--fw-extrabold)' }}>
               필수 고지
-            </Text>
-            <Stack gap="xs">
-              <Text size="sm" fw="var(--fw-bold)" c="var(--color-primary-dark)">
+            </p>
+            <div className="flex flex-col gap-2.5">
+              <p
+                className="m-0 text-sm"
+                style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
+              >
                 경기도 이천시 직접배송만 제공하며 화요일 오전 9시까지 문 앞 배송합니다.
-              </Text>
-              <Text size="sm" c="var(--color-text-secondary)">
+              </p>
+              <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 안전한 배송이 어려운 기상 상황에는 배송이 연기될 수 있으며, 판매자 책임으로 재배송비
                 없이 새 배송 일정을 안내합니다.
-              </Text>
-              <Text size="sm" c="var(--color-text-secondary)">
+              </p>
+              <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 주문 마감 후 경매 매입·배송 준비가 시작되었거나 고객의 취급·시간 경과로 상품 가치가
                 현저히 감소한 경우 단순 변심 청약철회가 제한될 수 있습니다. 표시·광고 또는 계약
                 내용과 다르게 이행된 경우는 제외됩니다.
-              </Text>
-            </Stack>
-          </Paper>
+              </p>
+            </div>
+          </div>
 
-          <Paper
-            p="md"
+          <div
+            className="p-4"
             style={{ background: 'var(--color-deadline-surface)', borderRadius: 'var(--radius)' }}
           >
-            <Text size="sm" fw="var(--fw-extrabold)" c="var(--color-deadline-text)" mb={4}>
+            <p
+              className="m-0 mb-1 text-sm"
+              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-deadline-text)' }}
+            >
               결제 직전 확인
-            </Text>
-            <Text size="sm" c="var(--color-text-secondary)" mb="sm">
+            </p>
+            <p className="m-0 mb-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               상품 정보가 변경되면 상품·수량·회차 가격과 총 결제 금액을 다시 확인해야 합니다.
-            </Text>
+            </p>
             <Checkbox
               label="상품·가격·회차 변경 내용을 확인했습니다."
               checked={roundDetailsConfirmed}
-              onChange={(event) => setRoundDetailsConfirmed(event.currentTarget.checked)}
+              onCheckedChange={(checked) => setRoundDetailsConfirmed(checked)}
             />
-          </Paper>
-        </Stack>
+          </div>
+        </div>
       )}
 
-      {/* 결제 수단 */}
-      <Stack gap="xs" mb="xl">
-        <Text style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}>
+      {/* 결제 수단: Mantine Stack(gap xs·mb xl) */}
+      <div className="mb-8 flex flex-col gap-2.5">
+        <p
+          className="m-0 leading-[1.55]"
+          style={{ fontWeight: 'var(--fw-extrabold)', fontSize: 'var(--font-size-md)' }}
+        >
           결제 수단
-        </Text>
+        </p>
         {PAYMENT_METHOD_OPTIONS.map(({ method, label, dot }) => {
           const isSelected = paymentMethod === method;
           return (
-            <Paper
+            // biome-ignore lint/a11y/useKeyWithClickEvents lint/a11y/noStaticElementInteractions: Mantine Paper(div onClick) 구조 그대로(① 외형 유지)
+            <div
               key={method}
-              p="md"
+              className="block p-4"
               onClick={() => onPaymentMethodChange(method)}
               style={{
                 border: `2px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
@@ -465,30 +617,34 @@ export default function CheckoutForm({
                   width: 14,
                 }}
               />
-              <Text
+              <p
+                className="m-0 leading-[1.55]"
                 style={{
                   fontWeight: isSelected ? 'var(--fw-bold)' : 'var(--fw-medium)',
                   fontSize: 'var(--font-size-sm)',
                 }}
               >
                 {label}
-              </Text>
-            </Paper>
+              </p>
+            </div>
           );
         })}
-      </Stack>
+      </div>
 
       {error && (
-        <Alert color="red" variant="light" mb="sm">
-          <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
+        // Mantine Alert(light red·mb sm, role="alert") 계산값
+        <Alert variant="destructive" role="alert" className="mb-3">
+          <AlertDescription>
+            <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
+              {error}
+            </p>
+          </AlertDescription>
         </Alert>
       )}
 
-      <Button
-        fullWidth
+      <LoadingButton
         size="lg"
-        color="brand"
-        radius="xl"
+        className="w-full"
         disabled={!effectiveCanPay}
         loading={isLoading}
         onClick={() => {
@@ -496,7 +652,7 @@ export default function CheckoutForm({
         }}
       >
         {buttonLabel}
-      </Button>
-    </Container>
+      </LoadingButton>
+    </div>
   );
 }

@@ -1,13 +1,15 @@
 'use client';
 
 import type { OrderStatus } from '@greenhub/shared';
-import { Box, Button, Container, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { CircleAlert, CircleCheck, CircleX, Clock } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Suspense, useEffect, useRef, useState } from 'react';
+import OrderSuccessGuide from '@/components/benchmark/OrderSuccessGuide';
 import { useCart } from '@/hooks/useCart';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
+import { isFeatureOn } from '@/lib/features';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
 import {
   DEFAULT_PAYMENT_FAILURE_MESSAGE,
@@ -18,8 +20,6 @@ import {
   resolveOrderPaymentReturn,
   takePendingOrderPayment,
 } from '@/lib/payment-redirect';
-import OrderSuccessGuide from '@/components/benchmark/OrderSuccessGuide';
-import { isFeatureOn } from '@/lib/features';
 
 const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   PENDING: '결제 확인 중...',
@@ -242,9 +242,9 @@ const STATUS_ICON = { success: CircleCheck, waiting: Clock, danger: CircleX, ale
 function StatusMark({ tone, icon }: { tone: StatusTone; icon: keyof typeof STATUS_ICON }) {
   const Icon = STATUS_ICON[icon];
   return (
-    <Box
+    <div
       aria-hidden
-      mb={4}
+      className="mb-1"
       style={{
         ...STATUS_TONE[tone],
         alignItems: 'center',
@@ -256,7 +256,7 @@ function StatusMark({ tone, icon }: { tone: StatusTone; icon: keyof typeof STATU
       }}
     >
       <Icon size={36} strokeWidth={2.2} />
-    </Box>
+    </div>
   );
 }
 
@@ -270,10 +270,10 @@ const resultTitleStyle = {
 function OrderResultActions({ onOrders, onHome }: { onOrders: () => void; onHome: () => void }) {
   return (
     <>
-      <Button color="brand" radius="xl" size="lg" mt="lg" fullWidth onClick={onOrders}>
+      <Button size="lg" className="mt-5 w-full" onClick={onOrders}>
         주문 내역 보기
       </Button>
-      <Button variant="subtle" color="gray" radius="xl" size="md" fullWidth onClick={onHome}>
+      <Button variant="ghost" size="md" className="w-full" onClick={onHome}>
         홈으로
       </Button>
     </>
@@ -284,13 +284,16 @@ function ErrorState({ message, onHome }: { message: string; onHome: () => void }
   return (
     <>
       <StatusMark tone="danger" icon="alert" />
-      <Title order={1} style={resultTitleStyle}>
+      <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
         주문 정보를 불러올 수 없습니다
-      </Title>
-      <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>
+      </h1>
+      <p
+        className="m-0 leading-[1.55]"
+        style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+      >
         {message}
-      </Text>
-      <Button color="brand" radius="xl" size="lg" mt="md" fullWidth onClick={onHome}>
+      </p>
+      <Button size="lg" className="mt-4 w-full" onClick={onHome}>
         홈으로
       </Button>
     </>
@@ -372,31 +375,25 @@ function OrderSuccessContent() {
             : null);
 
   return (
-    <Container size="sm" px="md" py={60}>
-      <Stack align="center" gap="xs">
+    // Mantine Container(sm 720px·px md·py 60)·Stack(align center·gap xs 10px) 계산값
+    <div className="mx-auto max-w-[720px] px-4 py-[60px]">
+      <div className="flex flex-col items-center justify-start gap-2.5">
         {!!orderId && !errorMessage && (loading || isPending) && (
           <>
             <StatusMark tone="waiting" icon="waiting" />
-            <Title order={1} style={resultTitleStyle}>
+            <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
               결제 확인 중...
-            </Title>
-            <Text
+            </h1>
+            <p
+              className="m-0 text-center leading-[1.55]"
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-              ta="center"
             >
               {isPending && pollingExpired
                 ? '결제 확인이 늦어지고 있어요. 잠시 후 다시 확인해 주세요.'
                 : '잠시만 기다려주세요. 결제 완료 후 자동으로 업데이트됩니다.'}
-            </Text>
+            </p>
             {isPending && pollingExpired && (
-              <Button
-                color="brand"
-                radius="xl"
-                size="lg"
-                mt="md"
-                fullWidth
-                onClick={() => void refetch()}
-              >
+              <Button size="lg" className="mt-4 w-full" onClick={() => void refetch()}>
                 다시 확인
               </Button>
             )}
@@ -406,63 +403,68 @@ function OrderSuccessContent() {
         {successOrder && validOrder && (
           <>
             <StatusMark tone="success" icon="success" />
-            <Title order={1} style={resultTitleStyle}>
+            <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
               주문이 완료되었습니다
-            </Title>
-            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}>
+            </h1>
+            <p
+              className="m-0 text-base"
+              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
+            >
               {STATUS_LABELS[validOrder.status]}
-            </Text>
+            </p>
             {validOrder.status === 'RECRUITING' && (
-              <Text
+              <p
+                className="m-0 leading-[1.55]"
                 style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
               >
                 공동구매 목표 달성 시 주문이 확정됩니다.
-              </Text>
+              </p>
             )}
-            <Text
+            <p
+              className="m-0 mt-2.5 leading-[1.55]"
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-              mt="xs"
             >
               {successOrder.isRoundOrder ? '회차 주문번호' : '주문번호'}: {successOrder.orderNumber}
-            </Text>
+            </p>
 
             {successOrder.isRoundOrder && (
               <>
-                <Paper
-                  p="md"
-                  mt="lg"
-                  w="100%"
+                <div
+                  className="mt-5 w-full p-4"
                   style={{
                     background: 'var(--color-surface-muted)',
                     borderRadius: 'var(--radius)',
                   }}
                 >
-                  <Group justify="space-between" mb="sm">
-                    <Text fw="var(--fw-extrabold)">주문 상품</Text>
-                    <Text size="sm" c="var(--color-text-secondary)">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-4">
+                    <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-extrabold)' }}>
+                      주문 상품
+                    </p>
+                    <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                       총 {successOrder.items.length}개 상품 · {successOrder.totalQuantity}개
-                    </Text>
-                  </Group>
-                  <Stack gap="xs">
+                    </p>
+                  </div>
+                  <div className="flex flex-col gap-2.5">
                     {successOrder.items.map((item) => (
-                      <Group key={item.id} justify="space-between" align="flex-start">
-                        <Text size="sm">
+                      <div
+                        key={item.id}
+                        className="flex flex-wrap items-start justify-between gap-4"
+                      >
+                        <p className="m-0 text-sm">
                           {item.productName} × {item.quantity}
-                        </Text>
-                        <Text size="sm">{item.subtotalAmount.toLocaleString()}원</Text>
-                      </Group>
+                        </p>
+                        <p className="m-0 text-sm">{item.subtotalAmount.toLocaleString()}원</p>
+                      </div>
                     ))}
-                    <Group
-                      justify="space-between"
-                      align="baseline"
-                      mt="xs"
-                      pt={10}
+                    <div
+                      className="mt-2.5 flex flex-wrap items-baseline justify-between gap-4 pt-2.5"
                       style={{ borderTop: '1px solid var(--color-border)' }}
                     >
-                      <Text size="sm" fw="var(--fw-bold)">
+                      <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
                         결제 금액
-                      </Text>
-                      <Text
+                      </p>
+                      <p
+                        className="m-0 leading-[1.55]"
                         style={{
                           fontSize: 22,
                           fontVariantNumeric: 'tabular-nums',
@@ -470,32 +472,34 @@ function OrderSuccessContent() {
                         }}
                       >
                         {successOrder.totalAmount.toLocaleString()}원
-                      </Text>
-                    </Group>
-                  </Stack>
-                </Paper>
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
                 {isFeatureOn('order-success-guide') ? (
-                  <OrderSuccessGuide
-                    requestedDeliveryDate={order?.requestedDeliveryDate ?? null}
-                  />
+                  <OrderSuccessGuide requestedDeliveryDate={order?.requestedDeliveryDate ?? null} />
                 ) : (
-                <Paper
-                  p="md"
-                  mt="sm"
-                  w="100%"
-                  style={{
-                    background: 'var(--color-primary-surface)',
-                    borderRadius: 'var(--radius)',
-                  }}
-                >
-                  <Text fw="var(--fw-extrabold)" size="sm" c="var(--color-primary-dark)" mb={4}>
-                    화요일 배송 안내
-                  </Text>
-                  <Text size="sm">
-                    화요일 오전 9시까지 문 앞 배송합니다. 경기도 이천시 직접배송 주문입니다.
-                  </Text>
-                </Paper>
+                  <div
+                    className="mt-3 w-full p-4"
+                    style={{
+                      background: 'var(--color-primary-surface)',
+                      borderRadius: 'var(--radius)',
+                    }}
+                  >
+                    <p
+                      className="m-0 mb-1 text-sm"
+                      style={{
+                        fontWeight: 'var(--fw-extrabold)',
+                        color: 'var(--color-primary-dark)',
+                      }}
+                    >
+                      화요일 배송 안내
+                    </p>
+                    <p className="m-0 text-sm">
+                      화요일 오전 9시까지 문 앞 배송합니다. 경기도 이천시 직접배송 주문입니다.
+                    </p>
+                  </div>
                 )}
               </>
             )}
@@ -510,18 +514,21 @@ function OrderSuccessContent() {
         {isReceived && validOrder && !errorMessage && (
           <>
             <StatusMark tone="success" icon="success" />
-            <Title order={1} style={resultTitleStyle}>
+            <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
               주문이 접수되었습니다
-            </Title>
-            <Text style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}>
+            </h1>
+            <p
+              className="m-0 text-base"
+              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
+            >
               현재 상태: {STATUS_LABELS[validOrder.status] ?? '주문 진행 중'}
-            </Text>
-            <Text
+            </p>
+            <p
+              className="m-0 text-center leading-[1.55]"
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-              ta="center"
             >
               결제가 완료된 주문입니다. 진행 상황은 주문 내역에서 확인해 주세요.
-            </Text>
+            </p>
             <OrderResultActions
               onOrders={() => router.push('/mypage')}
               onHome={() => router.push('/')}
@@ -532,39 +539,33 @@ function OrderSuccessContent() {
         {isCancelled && validOrder && !errorMessage && (
           <>
             <StatusMark tone="danger" icon="danger" />
-            <Title order={1} style={resultTitleStyle}>
+            <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
               결제가 취소되었습니다
-            </Title>
-            <Text
+            </h1>
+            <p
+              className="m-0 text-center leading-[1.55]"
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-              ta="center"
             >
               {formatCancelReason(validOrder.cancelReason) ?? '결제 처리 중 오류가 발생했습니다.'}
-            </Text>
+            </p>
             {!isFeatureOn('payment-fail-stay') && (
-              <Text style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}>
+              <p
+                className="m-0 leading-[1.55]"
+                style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              >
                 잠시 후 홈 화면으로 이동합니다.
-              </Text>
+              </p>
             )}
             {/* 결제 실패 화면 유지(payment-fail-stay): 홈으로 보내는 대신 장바구니에서 다시 결제할 길을 준다. */}
             {isFeatureOn('payment-fail-stay') && (
               <>
-                <Button
-                  color="brand"
-                  radius="xl"
-                  size="lg"
-                  mt="lg"
-                  fullWidth
-                  onClick={() => router.push('/cart')}
-                >
+                <Button size="lg" className="mt-5 w-full" onClick={() => router.push('/cart')}>
                   장바구니에서 다시 결제하기
                 </Button>
                 <Button
-                  variant="subtle"
-                  color="gray"
-                  radius="xl"
+                  variant="ghost"
                   size="md"
-                  fullWidth
+                  className="w-full"
                   onClick={() => router.push('/')}
                 >
                   홈으로
@@ -577,54 +578,39 @@ function OrderSuccessContent() {
         {paymentFailure && (
           <>
             <StatusMark tone="danger" icon="danger" />
-            <Title order={1} style={resultTitleStyle}>
+            <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
               결제가 완료되지 않았습니다
-            </Title>
-            <Text
+            </h1>
+            <p
+              className="m-0 text-center leading-[1.55]"
               style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-              ta="center"
             >
               {paymentFailure.message ?? DEFAULT_PAYMENT_FAILURE_MESSAGE}
-            </Text>
+            </p>
             {retryPath && (
-              <Button
-                color="brand"
-                radius="xl"
-                size="lg"
-                mt="lg"
-                fullWidth
-                onClick={() => router.replace(retryPath)}
-              >
+              <Button size="lg" className="mt-5 w-full" onClick={() => router.replace(retryPath)}>
                 다시 결제하기
               </Button>
             )}
-            <Button
-              variant="subtle"
-              color="gray"
-              radius="xl"
-              size="md"
-              fullWidth
-              onClick={() => router.push('/')}
-            >
+            <Button variant="ghost" size="md" className="w-full" onClick={() => router.push('/')}>
               홈으로
             </Button>
           </>
         )}
 
         {unpaidItemCount > 0 && !errorMessage && (
-          <Text
+          <p
+            className="m-0 mt-4 text-center leading-[1.55]"
             style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-            ta="center"
-            mt="md"
           >
             장바구니의 다른 상품 {unpaidItemCount}개는 아직 결제되지 않았습니다. 장바구니에서 이어서
             결제해 주세요.
-          </Text>
+          </p>
         )}
 
         {errorMessage && <ErrorState message={errorMessage} onHome={() => router.push('/')} />}
-      </Stack>
-    </Container>
+      </div>
+    </div>
   );
 }
 
@@ -632,9 +618,9 @@ export default function OrderSuccessPage() {
   return (
     <Suspense
       fallback={
-        <Container size="sm" px="md" py={60}>
-          <Text ta="center">로딩 중...</Text>
-        </Container>
+        <div className="mx-auto max-w-[720px] px-4 py-[60px]">
+          <p className="m-0 text-center text-base">로딩 중...</p>
+        </div>
       }
     >
       <OrderSuccessContent />
