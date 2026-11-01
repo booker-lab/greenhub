@@ -39,6 +39,8 @@ function Brand() {
   return (
     <span className="flex items-baseline gap-2">
       <span className="font-brand text-lg font-extrabold text-brand-ink">Green Love</span>
+      {/* 접근성 이름이 "Green Love운영"으로 붙지 않게 공백 글자를 둔다(flex 안 공백은 그리지 않아 모양은 같다). */}
+      {' '}
       <span className="text-sm font-bold text-foreground">운영</span>
     </span>
   );
