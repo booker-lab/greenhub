@@ -19,17 +19,23 @@ const LOADER_PX = {
 
 // measured: 판매자 앱에서 Mantine 계산값과 실측으로 맞춘 모양(#718 정산 더 보기). 기본 모양과 네 가지가 다르다.
 // ① 덮개를 12px 흐리게(blur) ② 원을 1px 아래(translate(-50%, calc(-50% + 1px))) ③ 원을 따로 합성(will-change: transform)
-// ④ 원을 글자 앞에 두고, 마우스 올림 없이(pointer-events: none) 면·글자색은 변형 그대로 둔다.
-// 처리 중에도 버튼은 초점을 잃지 않는다(focusableWhenDisabled = aria-disabled, 진짜 disabled 아님). 진짜 disabled면
-// 누른 버튼에 있던 초점이 문서(body)로 빠져, 창 안에서 누르면 초점이 창 밖으로 나갔다(Mantine Button loading도 같았다).
-// 누름은 Base UI가 막는다. 진짜 disabled가 아니므로 Button의 disabled 회색도 걸리지 않는다.
+// ④ 원을 글자 앞에 두고, 버튼은 진짜 disabled(마우스 올림 없음)로 두되 면·글자색은 변형 그대로 둔다.
 // hideIcons를 주면 버튼 바로 아래 아이콘(svg)도 글자처럼 내려 감춘다(회차 저장). 주지 않으면 아이콘은 보인 채 남는다.
 const MEASURED =
-  "pointer-events-none before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-[inherit] before:bg-white/15 before:blur-[12px] before:content-[''] [&_[data-slot=button-label]]:translate-y-full [&_[data-slot=button-label]]:opacity-0";
+  "before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-[inherit] before:bg-white/15 before:blur-[12px] before:content-[''] [&_[data-slot=button-label]]:translate-y-full [&_[data-slot=button-label]]:opacity-0";
 const MEASURED_HIDE_ICONS = '[&>svg]:translate-y-full [&>svg]:opacity-0';
 
-// measured를 쓸 수 있는 변형(판매자 화면에서 Mantine과 실측으로 맞춘 것).
-type MeasuredVariant = 'default' | 'light' | 'light-green' | 'secondary' | 'ghost' | 'destructive';
+// measured에서 disabled 회색 대신 남길 변형별 면·글자색(Button 변형과 같은 값).
+const MEASURED_COLORS = {
+  default: 'disabled:bg-primary disabled:text-primary-foreground',
+  light: 'disabled:bg-[#d2f2df] disabled:text-[#005c32]',
+  'light-green': 'disabled:bg-[#d3f9d8] disabled:text-[#2b8a3e]',
+  secondary: 'disabled:bg-[#f1f3f5] disabled:text-[#212529]',
+  ghost: 'disabled:bg-transparent disabled:text-[#212529]',
+  destructive: 'disabled:bg-[#fa5252] disabled:text-white',
+} as const;
+
+type MeasuredVariant = keyof typeof MEASURED_COLORS;
 
 type LoadingButtonProps = React.ComponentProps<typeof Button> & {
   loading?: boolean;
@@ -67,14 +73,19 @@ function LoadingButton({
       ? buttonHeight / 1.8
       : (LOADER_PX[size as keyof typeof LOADER_PX] ?? LOADER_PX.default);
   if (measured) {
+    const variant = (props.variant ?? 'default') as MeasuredVariant;
     return (
       <Button
         size={size}
         disabled
-        focusableWhenDisabled
         data-loading=""
         aria-busy
-        className={cn(MEASURED, hideIcons && MEASURED_HIDE_ICONS, className)}
+        className={cn(
+          MEASURED,
+          hideIcons && MEASURED_HIDE_ICONS,
+          MEASURED_COLORS[variant],
+          className,
+        )}
         {...props}
       >
         <span

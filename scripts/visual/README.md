@@ -129,7 +129,10 @@ node scripts/visual/focus-trap.mjs seller --set overlays          # 앱 화면�
   - 창이 열린 직후 첫 초점은 창 안 `data-autofocus` 요소, 없으면 창 안 첫 Tab 대상이다.
   - 창에 `aria-modal="true"`가 있고, 본문(`data-slot=dialog-body`·`sheet-body`)이 있으면 `aria-describedby`가 창 안 요소를 가리킨다.
   - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다. 화면을 열 때 이미 열려 있던 창은 여는 요소가 없어 이 항목만 빼고 결과에 기록한다.
-    - fixture 화면에 `closeBlocked: '<사유>'`가 있으면(처리 중 창: 해결로 닫기·회차 복사 처리 중) 반대로 Esc로 닫히지 않고 초점이 창 안에 남아야 한다. 앱이 처리 중 닫기를 막는 약속(Mantine `closeOnEscape={!처리 중}`과 같음)을 검사한다.
+  - 기대한 예외: fixture 화면의 `focusExceptions`에 항목마다 사유를 적으면 그 화면의 그 항목만 판정을 바꾸고 결과 `exceptions`에 기록한다. 다른 항목은 그대로 강제한다.
+    - `initialFocusOnBody`: 순회 전 초점이 `body`여도 실패로 보지 않는다(`body`일 때만, 다른 창 밖 요소면 실패). 순회 검사는 창 안 첫 Tab 대상에서 출발해 그대로 한다.
+    - `escapeKeepsOpen`: Esc로 창이 닫히지 않아야 하고 Esc 뒤 초점이 창 안이어야 한다(닫히면 실패).
+    - 지금 쓰는 곳: 처리 중 창 `operations-resolve-loading`·`modal-round-copy-loading`. 처리 중 버튼이 disabled가 되어 초점이 body로 빠지고, 처리 중 닫기를 막는다. Mantine 시절에도 같았다(기존 동작, 접근성 개선 후보).
 - `--set overlays`는 판매자 `/dev/overlays`(fixture `overlayScreens`)다. 앱 화면이 아직 쓰지 않는 `Sheet`를 버튼으로 열어 같은 판정을 한다. 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열리고 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`). 실제 화면이 Sheet를 쓰면 그 화면 fixture의 steps로 옮기고 지운다.
 - 결과: `%TEMP%\greenhub-visual\<app>\focus\<label>.json`(화면·폭마다 Tab·Shift+Tab으로 거친 요소 목록 포함).
 - 실측(2026-11-01): Base UI 교체 직후 `main`(b9c2f5a)은 판매자 창 21개 모두 실패했다(창마다 초점 가드 2번, `aria-modal`·`aria-describedby` 없음). 원인과 수정은 `packages/ui/src/components/dialog.tsx` `DialogPopup` 주석.

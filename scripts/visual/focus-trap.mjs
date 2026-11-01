@@ -10,7 +10,10 @@
 //   - 창이 열린 직후 첫 초점은 창 안 data-autofocus 요소, 없으면 창 안 첫 Tab 대상이다(Mantine Modal과 같은 약속).
 //   - 창에 aria-modal="true"가 있고, 본문(data-slot=dialog-body·sheet-body)이 있으면 aria-describedby가 창 안 요소를 가리킨다.
 //   - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다(화면을 열 때 이미 열려 있던 창은 여는 요소가 없어 빼고 기록한다).
-//     fixture 화면에 closeBlocked(사유 글자)가 있으면 반대로, 처리 중이라 Esc로 닫히지 않고 초점이 창 안에 남아야 한다.
+//   - 기대한 예외(fixture focusExceptions, 항목마다 사유 글자): 그 화면의 그 항목만 판정을 바꾸고 나머지는 그대로 강제한다.
+//     initialFocusOnBody: 순회 전 초점이 body여도 실패로 보지 않고 기록한다(그때만, 다른 창 밖 요소면 실패).
+//       순회 검사는 창 안 첫 Tab 대상에서 출발해 그대로 한다.
+//     escapeKeepsOpen: Esc로 창이 닫히지 않아야 하고, Esc 뒤 초점이 창 안이어야 한다(닫히면 실패).
 // 결과: %TEMP%/greenhub-visual/<app>/focus/<label>.json
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -320,7 +323,23 @@ async function checkScreen(context, screen) {
       problems.push(`aria-describedby가 창 안 본문을 가리키지 않음(${aria.describedby})`);
     }
     // steps가 입력칸에 적은 뒤라면 초점이 그 칸에 있다. 창 안이 아니면 순회 전에 실패로 본다.
-    const before = await activeState(page);
+    const exceptions = screen.focusExceptions ?? {};
+    result.exceptions = [];
+    let before = await activeState(page);
+    if (!before.inside && exceptions.initialFocusOnBody && before.what === 'BODY') {
+      // 기대한 예외: 순회 전 초점 body. 나머지 순회 검사는 창 안 첫 Tab 대상에서 출발해 그대로 한다.
+      result.exceptions.push(`순회 전 초점 BODY: ${exceptions.initialFocusOnBody}`);
+      await page.evaluate(() => {
+        const dialog = window.__openDialog__();
+        const first = [
+          ...(dialog?.querySelectorAll(
+            'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])',
+          ) ?? []),
+        ].find((el) => !el.disabled && el.getClientRects().length > 0);
+        first?.focus();
+      });
+      before = await activeState(page);
+    }
     if (!before.inside) problems.push(`순회 전 초점이 창 밖(${before.what})`);
     else {
       await page.evaluate(() => {
@@ -343,13 +362,14 @@ async function checkScreen(context, screen) {
       result.closeCheck = '처음부터 열린 창: 닫기·초점 복귀 검사 안 함';
       return result;
     }
-    // 처리 중 창(closeBlocked): Esc로 닫히지 않고 초점이 창 안에 남아야 한다(Mantine closeOnEscape={!처리 중}과 같은 약속).
-    if (screen.closeBlocked) {
+    // 기대한 예외: Esc로 닫히지 않아야 하는 창(처리 중 닫기 막음). 닫히거나 초점이 창 밖이면 실패다.
+    if (exceptions.escapeKeepsOpen) {
       await page.keyboard.press('Escape');
       await page.waitForTimeout(500);
-      result.closeCheck = `닫기 막음: ${screen.closeBlocked}`;
+      result.exceptions.push(`Esc로 닫히지 않음: ${exceptions.escapeKeepsOpen}`);
+      result.closeCheck = 'Esc로 닫히지 않아야 하는 창';
       if (!(await page.evaluate(() => !!window.__openDialog__())))
-        problems.push('처리 중인데 Esc로 창이 닫힘');
+        problems.push('닫히지 않아야 하는데 Esc로 창이 닫힘');
       else {
         const after = await activeState(page);
         if (!after.inside) problems.push(`Esc 뒤 초점이 창 밖(${after.what})`);

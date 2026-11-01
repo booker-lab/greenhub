@@ -2213,8 +2213,12 @@ export const screens = [
   },
   {
     id: 'operations-resolve-loading',
-    // 처리 중에는 Esc·바깥 누름으로 닫지 않는다(앱 onOpenChange가 막는다, Mantine closeOnEscape={!처리 중}과 같다).
-    closeBlocked: '처리 중 닫기 막음',
+    // focus-trap 기대한 예외(이 두 항목만). Mantine 시절(기준 B)에도 같았다(검증 세션 4차, 2026-11-01).
+    focusExceptions: {
+      initialFocusOnBody:
+        '처리 중 버튼이 disabled가 되어 초점이 body로 빠진다(Mantine Button loading도 disabled). 접근성 개선 후보',
+      escapeKeepsOpen: '처리 중에는 앱이 닫기를 막는다(Mantine closeOnEscape={!처리 중}·onClose 무시와 같다)',
+    },
     group: '판매자 · 불러오는 중 버튼',
     title: '운영 확인 · 해결로 닫기 처리 중',
     path: '/operations',
@@ -2228,8 +2232,12 @@ export const screens = [
   },
   {
     id: 'modal-round-copy-loading',
-    // 처리 중에는 Esc·바깥 누름으로 닫지 않는다(앱 onOpenChange가 막는다, Mantine closeOnEscape={!처리 중}과 같다).
-    closeBlocked: '처리 중 닫기 막음',
+    // focus-trap 기대한 예외(이 두 항목만). Mantine 시절(기준 B)에도 같았다(검증 세션 4차, 2026-11-01).
+    focusExceptions: {
+      initialFocusOnBody:
+        '처리 중 버튼이 disabled가 되어 초점이 body로 빠진다(Mantine Button loading도 disabled). 접근성 개선 후보',
+      escapeKeepsOpen: '처리 중에는 앱이 닫기를 막는다(Mantine closeOnEscape={!처리 중}·onClose 무시와 같다)',
+    },
     group: '판매자 · 불러오는 중 버튼',
     title: '회차 목록 · 이전 회차 복사 처리 중',
     path: '/sale-rounds',
