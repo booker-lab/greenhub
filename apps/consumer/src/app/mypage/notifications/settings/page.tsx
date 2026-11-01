@@ -1,6 +1,9 @@
 'use client';
 
-import { Alert, Badge, Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
+import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button } from '@greenhub/ui/components/button';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -9,6 +12,12 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 
 const API_URL = getApiBaseUrl();
 const MARKETING_NOT_USED_IN_PILOT = true;
+
+// ① 외형 유지(UI 교체 P5): Mantine Group(gap xs 10)·Stack(px md·py lg·gap md 16)·Title order 2(줄 높이 1.35)·
+// Text size sm(15px·줄 높이 1.45)·Alert light gray·red·green·Paper(md 16, radius md 8, withBorder gray-3)·
+// Badge light green·gray·Button transparent(좌우 여백 0)·Button light red와 같은 값.
+const TEXT_SM = 'm-0 p-0 text-[15px] leading-[1.45]';
+const BOLD = { fontWeight: 'var(--fw-bold)' } as const;
 
 type MarketingChannel = 'alimtalk' | 'sms';
 
@@ -121,35 +130,66 @@ function MarketingChannelCard({
   onWithdraw: () => void;
 }) {
   return (
-    <Paper p="md" radius="md" withBorder>
-      <Group justify="space-between" align="flex-start" wrap="nowrap">
-        <Box>
-          <Text fw="var(--fw-bold)" size="sm">
+    <div className="rounded-[8px] border border-solid border-[#dee2e6] bg-white p-4">
+      <div className="flex flex-row flex-nowrap items-start justify-between gap-4">
+        <div>
+          <p className={TEXT_SM} style={BOLD}>
             {channel.title}
-          </Text>
-          <Text size="sm" c="var(--color-text-secondary)" mt={4}>
+          </p>
+          <p className={`${TEXT_SM} mt-1`} style={{ color: 'var(--color-text-secondary)' }}>
             {channel.description}
-          </Text>
-        </Box>
-        <Badge color={agreed ? 'green' : 'gray'} variant="light" style={{ flexShrink: 0 }}>
+          </p>
+        </div>
+        <Badge variant={agreed ? 'light-green' : 'secondary'} style={{ flexShrink: 0 }}>
           {agreed ? '동의함' : '동의하지 않음'}
         </Badge>
-      </Group>
+      </div>
 
       {agreed && (
-        <Button
-          fullWidth
-          mt="md"
-          color="red"
-          variant="light"
+        <LoadingButton
+          type="button"
+          variant="light-destructive"
+          className="mt-4 w-full"
           loading={pending}
           disabled={pending}
           onClick={onWithdraw}
         >
           {channel.title} 즉시 철회
-        </Button>
+        </LoadingButton>
       )}
-    </Paper>
+    </div>
+  );
+}
+
+function SettingsHeader({ onBack }: { onBack: () => void }) {
+  return (
+    <div
+      className="flex flex-row flex-wrap items-center justify-start gap-2.5 px-4 pt-5 pb-3"
+      style={{
+        position: 'sticky',
+        top: 0,
+        background: 'var(--color-bg)',
+        zIndex: 10,
+        borderBottom: '1px solid var(--color-border)',
+      }}
+    >
+      <Button
+        type="button"
+        aria-label="뒤로 가기"
+        variant="ghost"
+        className="px-0 hover:bg-transparent"
+        style={{ color: 'var(--color-text)' }}
+        onClick={onBack}
+      >
+        <ChevronLeft size={20} className="size-5" />
+      </Button>
+      <h2
+        className="m-0 leading-[1.35]"
+        style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}
+      >
+        마케팅 알림 설정
+      </h2>
+    </div>
   );
 }
 
@@ -158,48 +198,22 @@ export default function NotificationSettingsPage() {
 
   if (MARKETING_NOT_USED_IN_PILOT) {
     return (
-      <Box style={{ maxWidth: 480, margin: '0 auto', paddingBottom: 80 }}>
-        <Group
-          px="md"
-          pt="lg"
-          pb="sm"
-          gap="xs"
-          style={{
-            position: 'sticky',
-            top: 0,
-            background: 'var(--color-bg)',
-            zIndex: 10,
-            borderBottom: '1px solid var(--color-border)',
-          }}
-        >
-          <Button
-            aria-label="뒤로 가기"
-            variant="transparent"
-            style={{ color: 'var(--color-text)' }}
-            px={0}
-            onClick={() => router.back()}
-          >
-            <ChevronLeft size={20} />
-          </Button>
-          <Title
-            order={2}
-            style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}
-          >
-            마케팅 알림 설정
-          </Title>
-        </Group>
+      <div style={{ maxWidth: 480, margin: '0 auto', paddingBottom: 80 }}>
+        <SettingsHeader onBack={() => router.back()} />
 
-        <Stack px="md" py="lg" gap="md">
-          <Alert color="gray" variant="light">
-            <Text size="sm" fw="var(--fw-bold)" mb={4}>
-              파일럿에서는 마케팅 수신 동의와 설정을 운영하지 않습니다.
-            </Text>
-            <Text size="sm">
-              주문·결제·배송에 필요한 정보성 연락은 마케팅 동의와 별개로 계속 제공됩니다.
-            </Text>
+        <div className="flex flex-col items-stretch justify-start gap-4 px-4 py-5">
+          <Alert role="alert" variant="secondary">
+            <AlertDescription>
+              <p className={`${TEXT_SM} mb-1`} style={BOLD}>
+                파일럿에서는 마케팅 수신 동의와 설정을 운영하지 않습니다.
+              </p>
+              <p className={TEXT_SM}>
+                주문·결제·배송에 필요한 정보성 연락은 마케팅 동의와 별개로 계속 제공됩니다.
+              </p>
+            </AlertDescription>
           </Alert>
-        </Stack>
-      </Box>
+        </div>
+      </div>
     );
   }
 
@@ -272,75 +286,58 @@ function LegacyNotificationSettingsPage() {
   }
 
   return (
-    <Box style={{ maxWidth: 480, margin: '0 auto', paddingBottom: 80 }}>
-      <Group
-        px="md"
-        pt="lg"
-        pb="sm"
-        gap="xs"
-        style={{
-          position: 'sticky',
-          top: 0,
-          background: 'var(--color-bg)',
-          zIndex: 10,
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        <Button
-          aria-label="뒤로 가기"
-          variant="transparent"
-          style={{ color: 'var(--color-text)' }}
-          px={0}
-          onClick={() => router.back()}
-        >
-          <ChevronLeft size={20} />
-        </Button>
-        <Title order={2} style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}>
-          마케팅 알림 설정
-        </Title>
-      </Group>
+    <div style={{ maxWidth: 480, margin: '0 auto', paddingBottom: 80 }}>
+      <SettingsHeader onBack={() => router.back()} />
 
-      <Stack px="md" py="lg" gap="md">
-        <Paper p="md" radius="md" bg="var(--color-surface-muted)">
-          <Text size="sm" fw="var(--fw-bold)" mb={4}>
+      <div className="flex flex-col items-stretch justify-start gap-4 px-4 py-5">
+        <div className="rounded-[8px] p-4" style={{ background: 'var(--color-surface-muted)' }}>
+          <p className={`${TEXT_SM} mb-1`} style={BOLD}>
             정보성 연락은 계속 제공됩니다
-          </Text>
-          <Text size="sm" c="var(--color-text-secondary)">
+          </p>
+          <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
             주문·결제·배송을 위한 정보성 연락은 선택 마케팅과 별개이며, 마케팅 동의 여부와 관계없이
             필요한 안내를 받을 수 있습니다.
-          </Text>
-        </Paper>
+          </p>
+        </div>
 
-        <Text size="sm" c="var(--color-text-secondary)">
+        <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
           아래 상태는 로그인한 계정의 서버 저장값을 새로 확인한 결과입니다.
-        </Text>
+        </p>
 
         {loading && (
-          <Text ta="center" c="var(--color-text-disabled)" py="xl">
+          <p
+            className="m-0 p-0 py-8 text-center text-[16px] leading-[1.55]"
+            style={{ color: 'var(--color-text-disabled)' }}
+          >
             현재 동의 상태를 확인하는 중...
-          </Text>
+          </p>
         )}
 
         {error && (
-          <Alert color="red" variant="light">
-            <Stack gap="sm">
-              <Text size="sm">{error}</Text>
-              {!preferences && status === 'authenticated' && (
-                <Button
-                  variant="light"
-                  color="red"
-                  onClick={() => setReloadKey((value) => value + 1)}
-                >
-                  다시 확인
-                </Button>
-              )}
-            </Stack>
+          <Alert role="alert" variant="destructive">
+            <AlertDescription>
+              <div className="flex flex-col items-stretch justify-start gap-3">
+                <p className={TEXT_SM}>{error}</p>
+                {!preferences && status === 'authenticated' && (
+                  <Button
+                    type="button"
+                    variant="light-destructive"
+                    onClick={() => setReloadKey((value) => value + 1)}
+                  >
+                    다시 확인
+                  </Button>
+                )}
+              </div>
+            </AlertDescription>
           </Alert>
         )}
 
         {notice && (
-          <Alert color="green" variant="light">
-            <Text size="sm">{notice}</Text>
+          // Mantine Alert light green(green-1 면·green-9 글자).
+          <Alert role="alert" className="bg-[#d3f9d8] text-[#2b8a3e]">
+            <AlertDescription>
+              <p className={TEXT_SM}>{notice}</p>
+            </AlertDescription>
           </Alert>
         )}
 
@@ -357,12 +354,12 @@ function LegacyNotificationSettingsPage() {
           ))}
 
         {!loading && preferences && (
-          <Text size="sm" c="var(--color-text-disabled)">
+          <p className={TEXT_SM} style={{ color: 'var(--color-text-disabled)' }}>
             동의·철회 증거와 보관은 서버 정책에 따라 처리되며 이 화면은 해당 기록에 직접 접근하지
             않습니다.
-          </Text>
+          </p>
         )}
-      </Stack>
-    </Box>
+      </div>
+    </div>
   );
 }

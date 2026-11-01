@@ -26,8 +26,8 @@ import {
 // 판매자 정산 계좌(결정 ⑤). 판매자 본인·관리자만 보고, 관리자가 정산 지급할 때 이 계좌로 보낸다.
 // 저장된 계좌번호는 끝 4자리 외를 가려 보이고, 바꿀 때는 번호를 처음부터 다시 입력한다.
 
-// ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·그림자 xs·안쪽 16)와 Text(p, 여백 0) 값.
-const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+// ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·안쪽 16; 그림자는 ② D2로 걷음)와 Text(p, 여백 0) 값.
+const PAPER = 'block rounded-[16px] bg-white p-4';
 const TEXT = 'm-0 p-0 text-base';
 const TEXT_SM = 'm-0 p-0 text-sm';
 

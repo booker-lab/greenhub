@@ -24,7 +24,7 @@ import { resolveProductDeleteFailure } from './_deleteResult';
 
 type ProductFilter = 'all' | 'active' | 'inactive';
 
-// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(흰 바탕·모서리 16·그림자 xs·안쪽 16) 값.
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(흰 바탕·모서리 16·안쪽 16; 그림자는 ② D2로 걷음) 값.
 const TEXT = 'm-0 p-0 text-base';
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -122,7 +122,8 @@ export default function ProductsPage() {
                     이전 목록을 표시합니다. 상태 변경·삭제는 서버 기준으로 처리되며 목록이 오래된
                     상태일 수 있습니다.
                   </p>
-                  <Button size="xs" variant="light-warning" onClick={retry}>
+                  {/* ② "이전 목록" 재조회는 노란 면 대신 중립 외곽선(2026-11-01 결정: 노랑은 마감에만). */}
+                  <Button size="xs" variant="outline-gray" onClick={retry}>
                     <RefreshCcw className="size-3.5" data-icon="inline-start" />
                     다시 조회
                   </Button>
@@ -229,7 +230,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
   }
 
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4">
       <div className="flex flex-row flex-wrap items-start justify-start gap-3">
         {/* 이미지 */}
         <div
