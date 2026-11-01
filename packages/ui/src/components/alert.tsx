@@ -1,5 +1,6 @@
 import { cva, type VariantProps } from 'class-variance-authority';
 import type * as React from 'react';
+import { Children, cloneElement, isValidElement, useId } from 'react';
 
 import { cn } from '../lib/utils';
 import { CloseIcon } from './close-button';
@@ -28,6 +29,8 @@ const alertVariants = cva(
 
 // icon: Mantine Alert icon(20px 칸, 오른쪽 16px·위 1px, 줄 높이 1).
 // onClose: Mantine withCloseButton(본문 오른쪽 20px 투명 닫기 버튼, X 16px, 글자색). 제목은 오른쪽을 16px 비운다.
+// 접근성 유지: Mantine Alert처럼 역할 기본값은 alert이고(호출부 role="status" 등으로 바꾼다), 바로 아래 자식에
+// AlertTitle이 있으면 그 제목이 상자의 이름이 된다(aria-labelledby). 제목이 없으면 이름도 없다(Mantine과 같다).
 function Alert({
   className,
   variant,
@@ -35,6 +38,7 @@ function Alert({
   icon,
   onClose,
   closeButtonLabel,
+  role = 'alert',
   ...props
 }: React.ComponentProps<'div'> &
   VariantProps<typeof alertVariants> & {
@@ -42,9 +46,26 @@ function Alert({
     onClose?: () => void;
     closeButtonLabel?: string;
   }) {
+  const autoTitleId = useId();
+  let titleId: string | undefined;
+  const content = Children.map(children, (child) => {
+    if (
+      titleId !== undefined ||
+      !isValidElement<{ id?: string }>(child) ||
+      child.type !== AlertTitle
+    ) {
+      return child;
+    }
+    titleId = child.props.id ?? autoTitleId;
+    return child.props.id ? child : cloneElement(child, { id: titleId });
+  });
+
   return (
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: role은 alert(기본)·status로 둘 다 aria-labelledby를 받는다. 값이 변수라 린트가 못 본다.
     <div
       data-slot="alert"
+      role={role}
+      aria-labelledby={titleId}
       className={cn(
         alertVariants({ variant }),
         onClose && '[&_[data-slot=alert-title]]:pe-4',
@@ -61,7 +82,7 @@ function Alert({
             {icon}
           </div>
         )}
-        <div className="flex flex-1 flex-col gap-2.5">{children}</div>
+        <div className="flex flex-1 flex-col gap-2.5">{content}</div>
         {onClose && (
           <button
             type="button"

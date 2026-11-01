@@ -70,7 +70,8 @@
       "!**/dist",
       "!**/*.tsbuildinfo",
       "!**/apps/**/*/public/sw.js",
-      "!**/apps/**/*/public/workbox-*.js"
+      "!**/apps/**/*/public/workbox-*.js",
+      "!scripts/visual/taste-skill"
     ]
   }
 }
