@@ -2,20 +2,11 @@
 
 import type { Product, SaleRoundItem, SalesMode } from '@greenhub/shared';
 import { getGroupBuyStatus, normalizeSalesMode } from '@greenhub/shared';
-import {
-  Box,
-  Button,
-  Divider,
-  Group,
-  SimpleGrid,
-  Skeleton,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { type ReactNode, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import BlockSkeleton from '@/components/BlockSkeleton';
 import DeadlineSection from '@/components/DeadlineSection';
 import ProductCard from '@/components/ProductCard';
 import QuickAddToast, { type QuickAddToastState } from '@/components/QuickAddToast';
@@ -128,6 +119,21 @@ function visibleItems(round: PublicSaleRound) {
     .sort((a, b) => a.displayOrder - b.displayOrder);
 }
 
+// ① 외형 유지(UI 교체 P5): Mantine Box(div, component=Link면 a)·Stack(gap md 16·28·2·xl 32·4)·Group(gap md 16·8·
+// xs 10)·SimpleGrid cols 2(gap sm 12, 가로 12·세로 20)·Skeleton(radius md 8)·Divider(gray-3 1px, hr = separator 역할)·
+// Title order 2·4(줄 높이 1.35, 18px·1.45)·Text(p, 16px·1.55, size sm 15px·1.45, lineClamp)·Button light(sm·xs)와
+// 같은 값. text-sm은 tokens.css에서 Mantine size sm과 같은 크기·줄 높이다. Mantine Button은 vertical-align: middle이라
+// 블록 안에 놓인 버튼에는 align-middle을 준다.
+const TEXT = 'm-0 p-0 text-[16px] leading-[1.55]';
+const TEXT_SM = 'm-0 p-0 text-sm';
+const LINE_CLAMP_2 = 'line-clamp-2 text-ellipsis';
+const GRID = 'grid grid-cols-2 gap-3';
+const ALERT_STACK = 'flex flex-col items-center justify-start gap-3 py-12';
+const CENTER_STACK = 'flex flex-col items-center justify-start gap-4';
+const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-[#dee2e6]';
+const SECONDARY_COLOR = { color: 'var(--color-text-secondary)' } as const;
+const DISABLED_COLOR = { color: 'var(--color-text-disabled)' } as const;
+
 type TagTone = 'primary' | 'deadline' | 'muted';
 
 const TAG_TONE: Record<TagTone, { background: string; color: string }> = {
@@ -169,7 +175,7 @@ function RoundProductCard({
   const quickAdd = onQuickAdd && canQuickAdd(item, round.status, isPast) ? onQuickAdd : null;
 
   return (
-    <Box style={{ position: 'relative', minWidth: 0 }}>
+    <div style={{ position: 'relative', minWidth: 0 }}>
       <RoundProductCardLink
         href={href}
         item={item}
@@ -178,7 +184,7 @@ function RoundProductCard({
         tag={tag}
         dimmed={dimmed}
       />
-      <Box
+      <div
         style={{
           aspectRatio: '1/1',
           left: 0,
@@ -189,10 +195,10 @@ function RoundProductCard({
         }}
       >
         <CardWishButton productId={item.productId} roundId={round.id} name={item.productNameSnapshot} />
-      </Box>
+      </div>
       {quickAdd && (
         // 사진과 같은 정사각형 영역 위에 + 버튼을 겹친다(링크 안에 버튼을 넣지 않기 위해 형제로 둔다).
-        <Box
+        <div
           style={{
             aspectRatio: '1/1',
             left: 0,
@@ -242,9 +248,9 @@ function RoundProductCard({
               +
             </span>
           </button>
-        </Box>
+        </div>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -264,13 +270,12 @@ function RoundProductCardLink({
   dimmed: boolean;
 }) {
   return (
-    <Box
-      component={Link}
+    <Link
       href={href}
       aria-label={isPast ? `지난 회차 ${round.name} ${item.productNameSnapshot}` : undefined}
       style={{ display: 'block', minWidth: 0, color: 'inherit', textDecoration: 'none' }}
     >
-      <Box
+      <div
         style={{
           position: 'relative',
           aspectRatio: '1/1',
@@ -288,11 +293,10 @@ function RoundProductCardLink({
           sizes="(max-width: 600px) 50vw, 33vw"
           style={{ objectFit: 'cover' }}
         />
-      </Box>
+      </div>
       <CardSellerLine />
-      <Text
-        mt={isFeatureOn('seller-store') ? 2 : 8}
-        lineClamp={2}
+      <p
+        className={`${TEXT} ${LINE_CLAMP_2} ${isFeatureOn('seller-store') ? 'mt-0.5' : 'mt-2'}`}
         style={{
           color: 'var(--color-text)',
           fontSize: 'var(--font-size-sm)',
@@ -301,9 +305,9 @@ function RoundProductCardLink({
         }}
       >
         {item.productNameSnapshot}
-      </Text>
-      <Text
-        mt={2}
+      </p>
+      <p
+        className={`${TEXT} mt-0.5`}
         style={{
           color: 'var(--color-text)',
           fontSize: 'var(--font-size-md)',
@@ -313,7 +317,7 @@ function RoundProductCardLink({
       >
         {item.roundPrice.toLocaleString()}원
         <CardDiscount item={item} />
-      </Text>
+      </p>
       <CardMeta item={item} isPast={isPast} />
       {tag && (
         <span
@@ -330,7 +334,7 @@ function RoundProductCardLink({
           {tag.label}
         </span>
       )}
-    </Box>
+    </Link>
   );
 }
 
@@ -346,16 +350,16 @@ function RoundItems({
   const items = visibleItems(round);
   if (items.length === 0) {
     return (
-      <Stack align="center" py={32}>
-        <Text size="sm" c="var(--color-text-disabled)">
+      <div className={`${CENTER_STACK} py-8`}>
+        <p className={TEXT_SM} style={DISABLED_COLOR}>
           공개된 회차 상품이 없습니다.
-        </Text>
-      </Stack>
+        </p>
+      </div>
     );
   }
 
   return (
-    <SimpleGrid cols={2} spacing={12} verticalSpacing={20}>
+    <div className="grid grid-cols-2 gap-x-3 gap-y-5">
       {items.map((item) => (
         <RoundProductCard
           key={item.id}
@@ -365,7 +369,7 @@ function RoundItems({
           onQuickAdd={onQuickAdd}
         />
       ))}
-    </SimpleGrid>
+    </div>
   );
 }
 
@@ -414,159 +418,185 @@ function RoundDirectHome({
 
   if (loading) {
     return (
-      <Stack gap="md" aria-label="판매 회차 불러오는 중">
-        <Skeleton height={112} radius="md" />
-        <SimpleGrid cols={2} spacing="sm">
+      // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 교체 전(Mantine Stack·SimpleGrid·Container)과 같은 div의 aria-label이다. 역할 변경은 ② 단계에서 다룬다.
+      <div
+        className="flex flex-col items-stretch justify-start gap-4"
+        aria-label="판매 회차 불러오는 중"
+      >
+        <BlockSkeleton height={112} />
+        <div className={GRID}>
           {[...Array(4)].map((_, index) => (
-            <Skeleton key={index} height={260} radius="md" />
+            <BlockSkeleton key={index} height={260} />
           ))}
-        </SimpleGrid>
-      </Stack>
+        </div>
+      </div>
     );
   }
 
   if (status === 'error') {
     return (
-      <Stack align="center" py={48} gap="sm" role="alert">
-        <Text size="sm" c="var(--color-text-secondary)">
+      <div className={ALERT_STACK} role="alert">
+        <p className={TEXT_SM} style={SECONDARY_COLOR}>
           판매 회차를 불러오지 못했습니다.
-        </Text>
+        </p>
         {error && (
-          <Text size="sm" c="var(--color-text-disabled)">
+          <p className={TEXT_SM} style={DISABLED_COLOR}>
             {error}
-          </Text>
+          </p>
         )}
-        <Button variant="light" onClick={refetch}>
+        <Button type="button" variant="light" onClick={refetch}>
           다시 시도
         </Button>
-      </Stack>
+      </div>
     );
   }
 
   return (
-    <Stack gap={28}>
+    <div className="flex flex-col items-stretch justify-start gap-7">
       {isRefreshing && (
-        <Text size="sm" c="var(--color-text-secondary)" ta="center" aria-live="polite">
+        <p className={`${TEXT_SM} text-center`} style={SECONDARY_COLOR} aria-live="polite">
           최신 회차 정보를 확인하는 중...
-        </Text>
+        </p>
       )}
       {isStale && (
-        <Box
-          p="md"
+        <div
+          className="p-4"
           role="alert"
           style={{
             background: 'var(--color-deadline-surface)',
             borderRadius: 'var(--radius)',
           }}
         >
-          <Text size="sm" fw="var(--fw-bold)" c="var(--color-deadline-text)">
+          <p
+            className={TEXT_SM}
+            style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-deadline-text)' }}
+          >
             최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
-          </Text>
+          </p>
           {error && (
-            <Text size="sm" c="var(--color-text-secondary)" mt={4}>
+            <p className={`${TEXT_SM} mt-1`} style={SECONDARY_COLOR}>
               {error}
-            </Text>
+            </p>
           )}
-          <Button variant="light" size="xs" mt="xs" onClick={refetch}>
+          <Button
+            type="button"
+            variant="light"
+            size="xs"
+            className="mt-2.5 align-middle"
+            onClick={refetch}
+          >
             다시 시도
           </Button>
-        </Box>
+        </div>
       )}
-      <Box component="section" aria-labelledby="current-round-title">
-        <Group justify="space-between" align="baseline" gap="xs" wrap="nowrap">
-          <Title id="current-round-title" order={2} style={sectionTitleStyle}>
+      <section aria-labelledby="current-round-title">
+        <div className="flex flex-row flex-nowrap items-baseline justify-between gap-2.5">
+          <h2 id="current-round-title" className="m-0 leading-[1.35]" style={sectionTitleStyle}>
             {currentRound ? roundSectionTitle(currentRound.status) : '이번 주 판매'}
-          </Title>
+          </h2>
           {currentRound && (
-            <Text
-              ta="right"
+            <p
+              className={`${TEXT} text-right`}
               style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
               {currentRound.name}
               {currentRound.status === 'CLOSED' ? ' · 주문 마감' : ''}
-            </Text>
+            </p>
           )}
-        </Group>
-        <Stack
-          gap={2}
-          mt="sm"
-          mb="md"
-          p="md"
+        </div>
+        <div
+          className="mt-3 mb-4 flex flex-col items-stretch justify-start gap-0.5 p-4"
           style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
         >
           {currentRound?.status === 'SCHEDULED' && (
-            <Text size="sm" fw="var(--fw-extrabold)" c="var(--color-primary-dark)">
+            <p
+              className={TEXT_SM}
+              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-primary-dark)' }}
+            >
               {formatOrderOpenLabel(currentRound.schedule.orderOpenAt)}
-            </Text>
+            </p>
           )}
-          <Text size="sm" c="var(--color-text-secondary)">
+          <p className={TEXT_SM} style={SECONDARY_COLOR}>
             주문 마감{' '}
             {currentRound
               ? formatOrderCloseLabel(currentRound.schedule.orderCloseAt)
               : '일정 준비 중'}
-          </Text>
-          <Text size="sm" c="var(--color-text-secondary)">
+          </p>
+          <p className={TEXT_SM} style={SECONDARY_COLOR}>
             경기도 이천시 직접배송
-          </Text>
-          <Text mt={6} size="sm" fw="var(--fw-extrabold)" c="var(--color-primary-dark)">
+          </p>
+          <p
+            className={`${TEXT_SM} mt-1.5`}
+            style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-primary-dark)' }}
+          >
             화요일 오전 9시까지 문 앞 배송
-          </Text>
+          </p>
           {isFeatureOn('demand-signals') && currentRound?.demand && currentRound.demand.buyerCount > 0 && (
-            <Text mt={2} size="sm" fw="var(--fw-bold)" c="var(--color-text)">
+            <p
+              className={`${TEXT_SM} mt-0.5`}
+              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+            >
               이번 회차 {currentRound.demand.buyerCount}곳에서 주문했어요
-            </Text>
+            </p>
           )}
-        </Stack>
+        </div>
         {isFeatureOn('open-alert') && currentRound?.status === 'SCHEDULED' && (
-          <Box mb="md">
+          <div className="mb-4">
             <KakaoChannelCta />
-          </Box>
+          </div>
         )}
 
         {currentRound ? (
           <RoundItems round={currentRound} onQuickAdd={handleQuickAdd} />
         ) : (
-          <Stack align="center" py={40}>
-            <Text size="sm" c="var(--color-text-disabled)">
+          <div className={`${CENTER_STACK} py-10`}>
+            <p className={TEXT_SM} style={DISABLED_COLOR}>
               {isEmpty
                 ? '준비된 판매 회차가 없습니다.'
                 : '현재 판매 중이거나 예정된 회차가 없습니다.'}
-            </Text>
-          </Stack>
+            </p>
+          </div>
         )}
-      </Box>
+      </section>
 
       {!(isFeatureOn('hide-empty-past') && pastRounds.length === 0) && (
       <>
-      <Box aria-hidden mx={-16} style={{ height: 8, background: 'var(--color-surface-muted)' }} />
+      <div
+        aria-hidden
+        className="-mx-4"
+        style={{ height: 8, background: 'var(--color-surface-muted)' }}
+      />
 
-      <Box component="section" aria-labelledby="past-round-title">
-        <Title id="past-round-title" order={2} mb="md" style={sectionTitleStyle}>
+      <section aria-labelledby="past-round-title">
+        <h2 id="past-round-title" className="m-0 mb-4 leading-[1.35]" style={sectionTitleStyle}>
           지난 회차
-        </Title>
+        </h2>
         {pastRounds.length === 0 ? (
-          <Stack align="center" py={32}>
-            <Text size="sm" c="var(--color-text-disabled)">
+          <div className={`${CENTER_STACK} py-8`}>
+            <p className={TEXT_SM} style={DISABLED_COLOR}>
               아직 지난 회차가 없습니다.
-            </Text>
-          </Stack>
+            </p>
+          </div>
         ) : (
-          <Stack gap="xl">
+          <div className="flex flex-col items-stretch justify-start gap-8">
             {pastRounds.map((round) => (
-              <Box key={round.id}>
-                <Text size="sm" c="var(--color-text-secondary)" fw={700} mb={10}>
+              <div key={round.id}>
+                <p
+                  className={`${TEXT_SM} mb-2.5`}
+                  style={{ color: 'var(--color-text-secondary)', fontWeight: 700 }}
+                >
                   {round.name}
-                </Text>
+                </p>
                 <RoundItems round={round} isPast />
-              </Box>
+              </div>
             ))}
-          </Stack>
+          </div>
         )}
-      </Box>
+      </section>
       </>
       )}
       <QuickAddToast toast={toast} onClose={closeToast} />
-    </Stack>
+    </div>
   );
 }
 
@@ -584,24 +614,25 @@ function LegacyHomeProductList({
   return (
     <>
       {(groupLoading || activeGroupProducts.length > 0) && (
-        <Box mb="xl">
-          <Group justify="space-between" mb={12}>
-            <Group gap={8}>
-              <Text size="sm" fw={700} c="var(--color-text)">
+        <div className="mb-8">
+          <div className="mb-3 flex flex-row flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-row flex-wrap items-center justify-start gap-2">
+              <p className={TEXT_SM} style={{ fontWeight: 700, color: 'var(--color-text)' }}>
                 ⚡ 진행 중 공동구매
-              </Text>
+              </p>
               {!groupLoading && (
-                <Text
-                  size="sm"
-                  fw={500}
-                  c="var(--color-primary-dark)"
-                  bg="var(--color-primary-surface)"
-                  px={8}
+                <p
+                  className={`${TEXT_SM} px-2`}
+                  style={{
+                    fontWeight: 500,
+                    color: 'var(--color-primary-dark)',
+                    background: 'var(--color-primary-surface)',
+                  }}
                 >
                   {activeGroupProducts.length}
-                </Text>
+                </p>
               )}
-            </Group>
+            </div>
             <Link
               href="/groupbuy"
               style={{
@@ -613,11 +644,11 @@ function LegacyHomeProductList({
             >
               전체 보기 →
             </Link>
-          </Group>
+          </div>
           {groupLoading ? (
             <div style={{ display: 'flex', gap: 8 }}>
               {[...Array(3)].map((_, index) => (
-                <Skeleton key={index} height={200} radius="md" style={{ flex: 1 }} />
+                <BlockSkeleton key={index} height={200} style={{ flex: 1 }} />
               ))}
             </div>
           ) : (
@@ -628,7 +659,7 @@ function LegacyHomeProductList({
                   href={`/products/${product.id}`}
                   style={{ minWidth: 0, flex: 1, textDecoration: 'none' }}
                 >
-                  <Box
+                  <div
                     style={{
                       aspectRatio: '4/5',
                       overflow: 'hidden',
@@ -646,62 +677,71 @@ function LegacyHomeProductList({
                       sizes="(max-width: 600px) 33vw, 200px"
                       style={{ objectFit: 'cover' }}
                     />
-                  </Box>
-                  <Text size="sm" fw={700} c="var(--color-text)" lineClamp={2} mb={2}>
+                  </div>
+                  <p
+                    className={`${TEXT_SM} ${LINE_CLAMP_2} mb-0.5`}
+                    style={{ fontWeight: 700, color: 'var(--color-text)' }}
+                  >
                     {product.name}
-                  </Text>
-                  <Text size="sm" fw={500} c="var(--color-primary-dark)">
+                  </p>
+                  <p
+                    className={TEXT_SM}
+                    style={{ fontWeight: 500, color: 'var(--color-primary-dark)' }}
+                  >
                     {product.groupSummary
                       ? `${product.groupSummary.currentQuantity}/${product.groupSummary.targetQuantity}개`
                       : '모집 중'}
-                  </Text>
+                  </p>
                 </Link>
               ))}
             </div>
           )}
-        </Box>
+        </div>
       )}
       {!groupLoading && <DeadlineSection products={groupProducts} />}
-      <Box>
-        <Stack gap={4} mb="md">
-          <Title order={4} style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}>
+      <div>
+        <div className="mb-4 flex flex-col items-stretch justify-start gap-1">
+          <h4
+            className="m-0 text-[18px] leading-[1.45]"
+            style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
+          >
             전체 상품
-          </Title>
-          <Divider />
-        </Stack>
+          </h4>
+          <hr className={DIVIDER} />
+        </div>
         {loading && (
-          <SimpleGrid cols={2} spacing="sm">
+          <div className={GRID}>
             {[...Array(4)].map((_, index) => (
-              <Skeleton key={index} height={260} radius="md" />
+              <BlockSkeleton key={index} height={260} />
             ))}
-          </SimpleGrid>
+          </div>
         )}
         {!loading && error && (
-          <Stack align="center" py={48} gap="sm" role="alert">
-            <Text size="sm" c="var(--color-text-disabled)">
+          <div className={ALERT_STACK} role="alert">
+            <p className={TEXT_SM} style={DISABLED_COLOR}>
               {error}
-            </Text>
-            <Button variant="light" onClick={refetch} data-testid="products-retry">
+            </p>
+            <Button type="button" variant="light" onClick={refetch} data-testid="products-retry">
               다시 시도
             </Button>
-          </Stack>
+          </div>
         )}
         {!loading && !error && products.length === 0 && (
-          <Stack align="center" py={48}>
+          <div className={`${CENTER_STACK} py-12`}>
             <span style={{ fontSize: 'var(--font-size-xl)' }}>🌱</span>
-            <Text size="sm" c="var(--color-text-disabled)">
+            <p className={TEXT_SM} style={DISABLED_COLOR}>
               등록된 상품이 없습니다.
-            </Text>
-          </Stack>
+            </p>
+          </div>
         )}
         {!loading && products.length > 0 && (
-          <SimpleGrid cols={2} spacing="sm">
+          <div className={GRID}>
             {products.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
-          </SimpleGrid>
+          </div>
         )}
-      </Box>
+      </div>
     </>
   );
 }
@@ -790,19 +830,20 @@ function HomeProductListBody({
   let content: ReactNode;
   if (storeMode.status === 'loading') {
     content = (
-      <SimpleGrid cols={2} spacing={12} aria-label="판매 정보 불러오는 중">
+      // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 교체 전(Mantine Stack·SimpleGrid·Container)과 같은 div의 aria-label이다. 역할 변경은 ② 단계에서 다룬다.
+      <div className={GRID} aria-label="판매 정보 불러오는 중">
         {[...Array(4)].map((_, index) => (
-          <Skeleton key={index} height={260} radius="md" />
+          <BlockSkeleton key={index} height={260} />
         ))}
-      </SimpleGrid>
+      </div>
     );
   } else if (storeMode.status !== 'ready') {
     content = (
-      <Stack align="center" py={48} role="alert">
-        <Text size="sm" c="var(--color-text-secondary)">
+      <div className={`${CENTER_STACK} py-12`} role="alert">
+        <p className={TEXT_SM} style={SECONDARY_COLOR}>
           {storeProfileFailureMessage(storeMode.status)}
-        </Text>
-      </Stack>
+        </p>
+      </div>
     );
   } else if (storeMode.salesMode === 'round_direct') {
     content = (
@@ -831,10 +872,10 @@ function HomeProductListBody({
           schedule={saleRounds.currentRound.schedule}
         />
       )}
-      <Box px="md" pt="md">
+      <div className="px-4 pt-4">
         {banner}
         {content}
-      </Box>
+      </div>
     </>
   );
 }

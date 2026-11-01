@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Box } from '@mantine/core';
 import type { Product } from '@greenhub/shared';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 
@@ -38,6 +37,7 @@ function useCountdown(deadline: string | undefined) {
   return label;
 }
 
+// ① 외형 유지(UI 교체 P5): Mantine Box(div, component=Link면 a)·Box mb xl(32)과 같은 값.
 function DeadlineCard({ product }: { product: Product }) {
   const deadline = product.groupSummary?.recruitDeadline;
   const countdown = useCountdown(deadline);
@@ -45,12 +45,11 @@ function DeadlineCard({ product }: { product: Product }) {
   const pct = Math.min((currentQuantity / targetQuantity) * 100, 100);
 
   return (
-    <Box
-      component={Link}
+    <Link
       href={`/products/${product.id}`}
       style={{ textDecoration: 'none', flexShrink: 0, width: 140 }}
     >
-      <Box
+      <div
         style={{
           aspectRatio: '4/5',
           borderRadius: 'var(--radius-sm)',
@@ -68,7 +67,7 @@ function DeadlineCard({ product }: { product: Product }) {
           sizes="140px"
           style={{ objectFit: 'cover' }}
         />
-        <Box
+        <div
           style={{
             position: 'absolute',
             bottom: 0,
@@ -89,8 +88,8 @@ function DeadlineCard({ product }: { product: Product }) {
           >
             {countdown}
           </span>
-        </Box>
-      </Box>
+        </div>
+      </div>
 
       <p
         style={{
@@ -107,7 +106,7 @@ function DeadlineCard({ product }: { product: Product }) {
         {product.name}
       </p>
 
-      <Box
+      <div
         style={{
           height: 4,
           borderRadius: 'var(--radius-full)',
@@ -115,7 +114,7 @@ function DeadlineCard({ product }: { product: Product }) {
           overflow: 'hidden',
         }}
       >
-        <Box
+        <div
           style={{
             height: '100%',
             width: `${pct}%`,
@@ -123,7 +122,7 @@ function DeadlineCard({ product }: { product: Product }) {
             borderRadius: 'var(--radius-full)',
           }}
         />
-      </Box>
+      </div>
       <p
         style={{
           fontSize: 'var(--font-size-sm)',
@@ -135,7 +134,7 @@ function DeadlineCard({ product }: { product: Product }) {
       >
         {currentQuantity}/{targetQuantity}개
       </p>
-    </Box>
+    </Link>
   );
 }
 
@@ -154,7 +153,7 @@ export default function DeadlineSection({ products }: DeadlineSectionProps) {
   if (soon.length === 0) return null;
 
   return (
-    <Box mb="xl">
+    <div className="mb-8">
       <div
         style={{
           display: 'flex',
@@ -188,7 +187,7 @@ export default function DeadlineSection({ products }: DeadlineSectionProps) {
         </div>
       </div>
 
-      <Box
+      <div
         style={{
           display: 'flex',
           gap: 12,
@@ -201,7 +200,7 @@ export default function DeadlineSection({ products }: DeadlineSectionProps) {
         {soon.map((p) => (
           <DeadlineCard key={p.id} product={p} />
         ))}
-      </Box>
-    </Box>
+      </div>
+    </div>
   );
 }
