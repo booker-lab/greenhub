@@ -40,7 +40,7 @@ import {
   mergeActiveAndArchivedOrders,
 } from './orders-view-model';
 
-// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px, shadow xs)·
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px)·
 // Group·Stack·SimpleGrid·Text(p, 여백 0, 줄 높이 1.55)·UnstyledButton과 같은 값.
 const TEXT = 'm-0 p-0 text-base';
 const UNSTYLED_BUTTON =
