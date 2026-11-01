@@ -1,6 +1,7 @@
 // appAriaSnapshot이 Next.js 경로 안내만 빼고 앱이 그린 alert는 남기는지 실제 Chromium으로 확인한다.
 // 실행: GREENHUB_VISUAL_CHROMIUM=<chrome 경로> node --test scripts/visual/aria-snapshot.spec.mjs
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { after, before, describe, it } from 'node:test';
@@ -32,7 +33,14 @@ const PAGE = (announcerAttrs = '') => `<!doctype html><html><head><title>t</titl
   </script>
 </body></html>`;
 
-describe('aria-snapshot: Next.js 경로 안내만 빼고 찍는다', () => {
+// CI(script specs)에는 Playwright 브라우저가 설치돼 있지 않다. 브라우저가 없으면 사유를 밝히고 건너뛴다.
+// 화면 확인 하네스를 쓰는 로컬(GREENHUB_VISUAL_CHROMIUM 또는 Playwright 설치본)에서는 반드시 돈다.
+const browserPath = process.env.GREENHUB_VISUAL_CHROMIUM || chromium.executablePath();
+const skip = fs.existsSync(browserPath)
+  ? false
+  : `Chromium 없음(${browserPath}). GREENHUB_VISUAL_CHROMIUM을 주고 로컬에서 돌린다.`;
+
+describe('aria-snapshot: Next.js 경로 안내만 빼고 찍는다', { skip }, () => {
   let browser;
   let page;
   before(async () => {
