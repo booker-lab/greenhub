@@ -57,9 +57,30 @@ describe('DriversClient read recovery wiring', () => {
     expect(getAdminDriversReadState({ loading: false, error: null, drivers: [] })).toBe('EMPTY');
     // 탭별 필터 semantics를 변경하지 않는다.
     const all = [
-      { id: 'p', name: 'p', email: 'p@example.com', driverApproved: false, suspended: false, createdAt: '2026-09-01T00:00:00.000Z' },
-      { id: 'a', name: 'a', email: 'a@example.com', driverApproved: true, suspended: false, createdAt: '2026-09-01T00:00:00.000Z' },
-      { id: 's', name: 's', email: 's@example.com', driverApproved: true, suspended: true, createdAt: '2026-09-01T00:00:00.000Z' },
+      {
+        id: 'p',
+        name: 'p',
+        email: 'p@example.com',
+        driverApproved: false,
+        suspended: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+      {
+        id: 'a',
+        name: 'a',
+        email: 'a@example.com',
+        driverApproved: true,
+        suspended: false,
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
+      {
+        id: 's',
+        name: 's',
+        email: 's@example.com',
+        driverApproved: true,
+        suspended: true,
+        createdAt: '2026-09-01T00:00:00.000Z',
+      },
     ];
     expect(filterByTab(all, 'pending').map((d) => d.id)).toEqual(['p']);
     expect(filterByTab(all, 'approved').map((d) => d.id)).toEqual(['a']);

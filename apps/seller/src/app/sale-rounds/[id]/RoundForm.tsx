@@ -333,14 +333,7 @@ export function RoundForm({
           </Alert>
         )}
         {!readOnly && (
-          <LoadingButton
-            measured
-            hideIcons
-            type="submit"
-            size="md"
-            loading={submitting}
-            disabled={busy}
-          >
+          <LoadingButton measured type="submit" size="md" loading={submitting} disabled={busy}>
             <Save className="size-[18px]" data-icon="inline-start" />
             회차 저장
           </LoadingButton>

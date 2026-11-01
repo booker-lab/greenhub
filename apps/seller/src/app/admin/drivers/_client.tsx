@@ -1,17 +1,17 @@
 'use client';
 
-import { notify } from '@/components/AppToaster';
 import { useMemo, useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
 import {
   type AdminCommandOutcome,
   type DriverStatus,
   describeActiveDeliveryWarning,
+  describeAdminCommandOutcome,
   useAdminDrivers,
 } from '@/hooks/useAdmin';
 import { LoadMoreFooter } from '../_components/LoadMoreFooter';
-import { describeAdminCommandOutcome } from '@/hooks/useAdmin';
 import { ActiveDeliveryNotice } from './_components/ActiveDeliveryNotice';
 import { DriverList } from './_components/DriverList';
 import {
