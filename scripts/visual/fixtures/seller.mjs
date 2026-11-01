@@ -2091,6 +2091,8 @@ export const screens = [
       { clickSelector: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible' },
       { clickSelector: '[role="menuitem"]:has-text("배송 후 환불")' },
     ],
+    // 메뉴 항목은 창이 열리면 사라지므로 닫은 뒤 초점은 ⋮ 메뉴 버튼으로 돌아와야 한다(focus-trap returnFocus).
+    returnFocus: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible',
     viewport: true,
   },
   {
@@ -2104,6 +2106,7 @@ export const screens = [
       { click: '꽃 상함' },
       { fill: { label: '메모 (손님에게는 보이지 않음, 필수)', value: '꽃잎이 상해 도착' } },
     ],
+    returnFocus: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible',
     viewport: true,
   },
   {

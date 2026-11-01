@@ -11,6 +11,7 @@
 //   - 창에 aria-modal="true"가 있고, 본문(data-slot=dialog-body·sheet-body)이 있으면 aria-describedby가 창 안 요소를 가리킨다.
 //   - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다(화면을 열 때 이미 열려 있던 창은 여는 요소가 없어 빼고 기록한다).
 //     fixture 화면에 closeBlocked(사유 글자)가 있으면 반대로, 처리 중이라 Esc로 닫히지 않고 초점이 창 안에 남아야 한다.
+//     ⋮ 메뉴 항목처럼 창을 연 뒤 사라지는 요소로 연 창은 fixture returnFocus(선택자)로 돌아올 요소(메뉴 버튼)를 정한다.
 // 결과: %TEMP%/greenhub-visual/<app>/focus/<label>.json
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -361,12 +362,27 @@ async function checkScreen(context, screen) {
     await page
       .waitForFunction(() => !window.__openDialog__(), null, { timeout: 3_000 })
       .catch(() => {});
-    if (await page.evaluate(() => !!window.__openDialog__()))
+    if (await page.evaluate(() => !!window.__openDialog__())) {
       problems.push('Esc로 창이 닫히지 않음');
-    else if (!opener) problems.push('창을 연 요소를 찾지 못함');
-    else {
+      return result;
+    }
+    // 메뉴 항목처럼 창을 연 뒤 사라지는 요소로 연 창은 fixture returnFocus(선택자)가 돌아올 곳(메뉴 버튼)을 정한다.
+    const returnTarget = screen.returnFocus
+      ? await page
+          .locator(screen.returnFocus)
+          .first()
+          .elementHandle({ timeout: 2_000 })
+          .catch(() => null)
+      : opener;
+    if (!returnTarget) {
+      problems.push(
+        screen.returnFocus
+          ? `돌아올 요소(${screen.returnFocus})를 찾지 못함`
+          : '창을 연 요소를 찾지 못함',
+      );
+    } else {
       await page.waitForTimeout(300);
-      const returned = await opener.evaluate((el) => {
+      const returned = await returnTarget.evaluate((el) => {
         const target = el.closest('button,a,[tabindex],input') ?? el;
         return {
           ok: target === document.activeElement || target.contains(document.activeElement),
