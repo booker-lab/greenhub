@@ -1,4 +1,3 @@
-import { Container } from '@mantine/core';
 import type { Metadata } from 'next';
 import BusinessInfoFooter from '@/components/BusinessInfoFooter';
 import { buildProductShareMetadata } from '@/lib/share-metadata';
@@ -26,9 +25,13 @@ export default function ProductLayout({ children }: { children: React.ReactNode 
   return (
     <>
       {children}
-      <Container size="sm" px="md" pb="calc(120px + env(safe-area-inset-bottom))">
+      {/* Mantine Container size="sm" px="md": 최대 720px, 좌우 16px, 가운데 정렬 */}
+      <div
+        className="mx-auto max-w-[720px] px-4"
+        style={{ paddingBottom: 'calc(120px + env(safe-area-inset-bottom))' }}
+      >
         <BusinessInfoFooter />
-      </Container>
+      </div>
     </>
   );
 }

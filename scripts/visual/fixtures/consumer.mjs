@@ -363,6 +363,35 @@ const ORDERS = [
     updatedAt: '2026-10-01T06:40:00.000Z',
   }),
 ];
+// MY 주문 목록(/orders)에는 넣지 않고 주문 상세로만 여는 주문. 목록 화면(mypage)의 촬영 결과를 바꾸지 않는다.
+// - order-round-held: 고객 사유 배송 보류 + 재배송비 결제 대기(결제 수단 고르기·재배송비 결제 버튼).
+//   결제 수단이 2개 이상일 때만 결제 수단 고르기가 보이므로 paymentMethodScreens(--set payment-methods)에서 찍는다.
+const HELD_AT = '2026-09-29T01:30:00.000Z';
+const DETAIL_ONLY_ORDERS = [
+  roundOrder('order-round-held', '20260926-000040', ROUND_CLOSED, 'DELIVERY_HELD', [[2, 1]], {
+    createdAt: '2026-09-26T05:40:00.000Z',
+    updatedAt: HELD_AT,
+    deliveryHold: {
+      heldAt: HELD_AT,
+      reasonCode: 'CUSTOMER_UNREACHABLE',
+      reasonMessage: '받는 분과 연락이 닿지 않아 배송을 보류했습니다.',
+      customerResponsible: true,
+      redeliveryFee: 5000,
+      nextContactAt: null,
+      nextDeliveryAt: null,
+      resolvedAt: null,
+    },
+    redeliveryPayment: {
+      required: true,
+      holdAt: HELD_AT,
+      chargeId: null,
+      status: 'MISSING',
+      canPay: true,
+      paid: false,
+      requiresRecovery: false,
+    },
+  }),
+];
 
 // ── MY: 저장 배송지(/auth/me)·알림 ──
 const ME = {
@@ -732,7 +761,7 @@ export const routes = [
     'GET',
     /^\/orders\/([^/]+)$/,
     ({ params: [id] }) => {
-      const order = ORDERS.find((o) => o.id === id);
+      const order = ORDERS.find((o) => o.id === id) ?? DETAIL_ONLY_ORDERS.find((o) => o.id === id);
       return order ? { body: order } : notFound('주문 없음');
     },
   ],
@@ -1394,5 +1423,28 @@ export const benchmarkScreens = [
     scenario: 'purchase-history-error',
     features: ['purchase-history'],
     expectedErrors: ['status of 500 \\(Internal Server Error\\).*/orders'],
+  },
+];
+
+/**
+ * 결제 수단이 여러 개(카카오페이·네이버페이·카드)일 때만 보이는 화면.
+ * 결제 수단 목록은 빌드 때 채널 키로 정해지므로(apps/consumer/src/lib/payment-method-options.ts)
+ * `start.mjs consumer --payment-methods all`로 띄운 서버에서 `shots.mjs consumer --set payment-methods`로 찍는다.
+ * 기본 묶음(screens)은 카카오페이 하나라 이 화면들과 같은 서버로 찍지 않는다.
+ */
+export const paymentMethodScreens = [
+  {
+    id: 'checkout-payment-methods',
+    group: '결제 동선',
+    title: '결제 · 결제 수단 고르기(카카오페이·네이버페이·카드)',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [{ check: '상품·가격·회차 변경 내용을 확인했습니다.' }],
+  },
+  {
+    id: 'order-redelivery-fee',
+    group: 'MY',
+    title: '주문 상세 · 배송 보류 재배송비 결제(결제 수단 고르기)',
+    path: '/mypage/orders/order-round-held',
   },
 ];

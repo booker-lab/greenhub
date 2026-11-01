@@ -1,29 +1,19 @@
 'use client';
-import {
-  ActionIcon,
-  Alert,
-  Badge,
-  Box,
-  Button,
-  Container,
-  Group,
-  Paper,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core';
+import { Alert } from '@greenhub/ui/components/alert';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
+import { useEffect, useRef, useState } from 'react';
 import { CartArrivalLine, CartUpsell, IcheonPrecheck } from '@/components/benchmark/CartExtras';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
-import { isFeatureOn } from '@/lib/features';
-import { useEffect, useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartItemValidationIssues, getCartValidationError } from '@/lib/cartValidation';
+import { isFeatureOn } from '@/lib/features';
 import { formatOrderCloseLabel } from '@/lib/round-schedule-label';
 
 const API_URL = getApiBaseUrl();
@@ -43,7 +33,8 @@ function isPrice(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 // 장바구니에는 옵션을 고르는 칸이 없으므로, 옵션을 고르지 않고 담긴 상품은 상품 화면으로 돌아가게 안내한다.
-const OPTION_REQUIRED_REASON = '옵션을 골라야 하는 상품이에요. 상품 화면에서 옵션을 고른 뒤 다시 담아 주세요.';
+const OPTION_REQUIRED_REASON =
+  '옵션을 골라야 하는 상품이에요. 상품 화면에서 옵션을 고른 뒤 다시 담아 주세요.';
 // 서버 안내 중 해결 방법이 문장에 들어 있는 것(옵션 재고, 한 분당 수량, 이전 결제 시도)은 그대로 보여 준다.
 const ACTIONABLE_SERVER_REASON = /골라 주세요|한 분당|남았어요|다 팔렸어요|이전 결제 시도/;
 const HANGUL = /[가-힣]/;
@@ -315,43 +306,55 @@ function useRoundCartValidation(
   }, [accessToken, items, sessionStatus]);
   return validation;
 }
+// Mantine ActionIcon(size 36·subtle dark·radius xl) 계산값: UnstyledButton 위에 36px 정사각, 투명 1px 테두리,
+// dark-9 글자, 줄 높이 1, 글꼴은 물려받는다. 마우스를 올리면(hover 가능한 기기만) dark-light-hover(dark-2) 면.
+const QUANTITY_BUTTON =
+  'relative m-0 inline-flex size-9 min-h-9 min-w-9 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-[#141414] no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-[#828282]';
+
 function RoundValidationNotice({ validation }: { validation: RoundCartValidation | undefined }) {
   if (!validation) {
     return (
-      <Text mt={6} size="sm" c="var(--color-text-secondary)" role="status">
+      <p
+        className="m-0 mt-1.5 p-0 text-sm font-normal"
+        style={{ color: 'var(--color-text-secondary)' }}
+        role="status"
+      >
         서버에서 구매 가능 여부 확인 중
-      </Text>
+      </p>
     );
   }
   if (validation.status === 'eligible') {
     return (
-      <Text mt={6} size="xs" fw="var(--fw-bold)" c="var(--color-primary-dark)">
+      <p
+        className="m-0 mt-1.5 p-0 text-xs"
+        style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
+      >
         서버 확인 완료 · 같은 회차 상품
-      </Text>
+      </p>
     );
   }
   if (validation.status === 'price_changed') {
     return (
-      <Stack gap={2} mt={6} role="alert">
-        <Text size="sm" c="var(--color-danger)">
+      <div className="mt-1.5 flex flex-col gap-0.5" role="alert">
+        <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-danger)' }}>
           가격이 변경되었습니다: 현재 회차 가격{' '}
           {validation.currentUnitPrice.toLocaleString('ko-KR')}원
-        </Text>
-        <Text size="sm" c="var(--color-danger)">
+        </p>
+        <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-danger)' }}>
           결제 대상에서 제외되었습니다.
-        </Text>
-      </Stack>
+        </p>
+      </div>
     );
   }
   return (
-    <Stack gap={2} mt={6} role="alert">
-      <Text size="sm" c="var(--color-danger)">
+    <div className="mt-1.5 flex flex-col gap-0.5" role="alert">
+      <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-danger)' }}>
         {validation.reason}
-      </Text>
-      <Text size="sm" c="var(--color-danger)">
+      </p>
+      <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-danger)' }}>
         결제 대상에서 제외되었습니다.
-      </Text>
-    </Stack>
+      </p>
+    </div>
   );
 }
 export default function CartPage() {
@@ -390,9 +393,10 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <Container size="sm" px="md" py={64}>
-        <Stack align="center" gap="md">
-          <Box
+      // Mantine Container(sm 720px·px md·py 64)·Stack(align center·gap md) 계산값
+      <div className="mx-auto max-w-[720px] px-4 py-16">
+        <div className="flex flex-col items-center justify-start gap-4">
+          <div
             aria-hidden
             style={{
               alignItems: 'center',
@@ -406,20 +410,27 @@ export default function CartPage() {
             }}
           >
             <ShoppingBag size={32} strokeWidth={1.8} />
-          </Box>
-          <Text c="var(--color-text-secondary)">장바구니가 비어있습니다.</Text>
-          <Button component={Link} href="/" color="brand" radius="xl" size="md">
-            쇼핑하러 가기
-          </Button>
-        </Stack>
-      </Container>
+          </div>
+          <p
+            className="m-0 p-0 text-base font-normal"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            장바구니가 비어있습니다.
+          </p>
+          {/* 링크 의미(a)를 유지한다: Mantine Button component={Link}와 같은 모양 */}
+          <ButtonLink render={<Link href="/" />} size="md">
+            <ButtonLabel>쇼핑하러 가기</ButtonLabel>
+          </ButtonLink>
+        </div>
+      </div>
     );
   }
   return (
-    <Container size="sm" px="md" pt="lg" pb={100}>
-      <Group justify="space-between" align="center" mb="md">
-        <Title
-          order={1}
+    // Mantine Container(sm 720px·px md·pt lg·pb 100)·Group(mb md)·Title order 1(줄 높이 1.3) 계산값
+    <div className="mx-auto max-w-[720px] px-4 pt-5 pb-[100px]">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+        <h1
+          className="m-0 leading-[1.3]"
           style={{
             color: 'var(--color-text)',
             fontSize: 22,
@@ -428,42 +439,43 @@ export default function CartPage() {
           }}
         >
           장바구니
-        </Title>
-        <Button variant="subtle" color="gray" size="xs" radius="xl" onClick={clearCart}>
+        </h1>
+        <Button variant="ghost" size="xs" onClick={clearCart}>
           전체 삭제
         </Button>
-      </Group>
+      </div>
       {isRoundCart && (
-        <Stack gap="xs" mb="md">
-          <Box
-            p="md"
+        <div className="mb-4 flex flex-col gap-2.5">
+          <div
+            className="p-4"
             style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
           >
-            <Group justify="space-between" align="flex-start" wrap="nowrap">
-              <Box>
-                <Text fw="var(--fw-extrabold)" size="sm" c="var(--color-text)">
+            <div className="flex flex-nowrap items-start justify-between gap-4">
+              <div>
+                <p
+                  className="m-0 p-0 text-sm"
+                  style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-text)' }}
+                >
                   이번 주 판매
-                </Text>
-                <Text size="sm" c="var(--color-text-secondary)">
+                </p>
+                <p
+                  className="m-0 p-0 text-sm font-normal"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                >
                   같은 회차 상품을 서버에서 확인해 한 번에 결제합니다.
-                </Text>
-              </Box>
+                </p>
+              </div>
               {/* 비로그인 장바구니(guest-cart)는 서버 확인을 하지 않으므로 확인 표시를 두지 않는다. */}
               {!isGuest && (
-                <Badge
-                  color={isChecking ? 'gray' : 'brand'}
-                  variant={isChecking ? 'light' : 'filled'}
-                  style={{ flexShrink: 0 }}
-                >
+                <Badge variant={isChecking ? 'secondary' : 'default'} style={{ flexShrink: 0 }}>
                   {isChecking ? '확인 중' : '확인 완료'}
                 </Badge>
               )}
-            </Group>
-          </Box>
+            </div>
+          </div>
           {cartRound && (
-            <Box
-              px="md"
-              py="sm"
+            <div
+              className="px-4 py-3"
               style={{
                 background: 'var(--color-deadline-surface)',
                 borderRadius: 'var(--radius)',
@@ -474,20 +486,23 @@ export default function CartPage() {
             >
               {formatOrderCloseLabel(cartRound.schedule.orderCloseAt)} 결제해야 이번 회차로
               배송돼요.
-            </Box>
+            </div>
           )}
           {cartRound && <CartArrivalLine round={cartRound} />}
           {isGuest && (
-            <Box px="md" py="sm" style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}>
-              <Text size="sm" fw={700}>
+            <div
+              className="px-4 py-3"
+              style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
+            >
+              <p className="m-0 p-0 text-sm font-bold">
                 로그인하면 구매 가능 여부와 최신 가격을 확인하고 바로 주문할 수 있어요.
-              </Text>
-            </Box>
+              </p>
+            </div>
           )}
           <IcheonPrecheck />
-        </Stack>
+        </div>
       )}
-      <Stack gap="sm" mb="lg">
+      <div className="mb-5 flex flex-col gap-3">
         {items.map((item) => {
           const roundItem = isRoundCartItem(item) ? item : null;
           const itemIssues = roundItem ? [] : getCartItemValidationIssues(item);
@@ -503,19 +518,18 @@ export default function CartPage() {
                 candidate.id === roundItem.roundItemId && candidate.status === 'SOLD_OUT',
             ) === true;
           return (
-            <Box
+            <div
               key={cartItemKey(item)}
-              p="sm"
+              className="p-3"
               style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}
             >
-              <Group gap="md" align="flex-start" wrap="nowrap">
-                <Box
-                  component={Link}
+              <div className="flex flex-nowrap items-start justify-start gap-4">
+                <Link
                   href={productHref}
-                  w={76}
-                  h={76}
-                  bg="var(--color-surface-muted)"
                   style={{
+                    width: 76,
+                    height: 76,
+                    background: 'var(--color-surface-muted)',
                     flexShrink: 0,
                     borderRadius: 12,
                     overflow: 'hidden',
@@ -531,16 +545,15 @@ export default function CartPage() {
                     sizes="76px"
                     style={{ objectFit: 'cover' }}
                   />
-                </Box>
-                <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Group gap={4} justify="space-between" align="flex-start" wrap="nowrap">
-                    <Text
-                      component={Link}
+                </Link>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="flex flex-nowrap items-start justify-between gap-1">
+                    <Link
                       href={productHref}
-                      fw="var(--fw-extrabold)"
-                      c="var(--color-text)"
-                      size="sm"
+                      className="m-0 p-0 text-sm"
                       style={{
+                        fontWeight: 'var(--fw-extrabold)',
+                        color: 'var(--color-text)',
                         display: 'block',
                         minWidth: 0,
                         overflow: 'hidden',
@@ -550,19 +563,17 @@ export default function CartPage() {
                       }}
                     >
                       {item.name}
-                    </Text>
+                    </Link>
                     <Button
-                      variant="subtle"
-                      color="gray"
+                      variant="ghost"
                       size="compact-sm"
-                      radius="xl"
                       aria-label={`${item.name} 삭제`}
                       onClick={() => removeItem(item.productId)}
                       style={{ flexShrink: 0 }}
                     >
                       삭제
                     </Button>
-                  </Group>
+                  </div>
                   {roundItem ? (
                     <>
                       <span
@@ -580,12 +591,15 @@ export default function CartPage() {
                         회차 가격 {roundItem.roundPrice.toLocaleString('ko-KR')}원
                       </span>
                       {roundItem.optionLabel && (
-                        <Text size="sm" c="var(--color-text-secondary)" mt={4}>
+                        <p
+                          className="m-0 mt-1 p-0 text-sm font-normal"
+                          style={{ color: 'var(--color-text-secondary)' }}
+                        >
                           {roundItem.optionLabel}
                           {roundItem.optionPriceDelta
                             ? ` (+${roundItem.optionPriceDelta.toLocaleString('ko-KR')}원)`
                             : ''}
-                        </Text>
+                        </p>
                       )}
                       {soldOut && (
                         <span
@@ -609,136 +623,146 @@ export default function CartPage() {
                   ) : (
                     <>
                       {item.saleType === 'group' && (
-                        <Badge size="xs" color="brand" variant="light" mt={4}>
+                        <Badge size="xs" variant="light" className="mt-1">
                           공동구매
                         </Badge>
                       )}
                       {item.requestedDeliveryDate && (
-                        <Text size="sm" c="var(--color-text-disabled)" mt={4}>
+                        <p
+                          className="m-0 mt-1 p-0 text-sm font-normal"
+                          style={{ color: 'var(--color-text-disabled)' }}
+                        >
                           배송 희망일{' '}
                           {new Date(item.requestedDeliveryDate).toLocaleDateString('ko-KR', {
                             month: 'long',
                             day: 'numeric',
                             weekday: 'short',
                           })}
-                        </Text>
+                        </p>
                       )}
                       {itemIssues.length > 0 && (
-                        <Alert color="orange" variant="light" mt="sm" p="xs">
-                          <Stack gap={4}>
-                            {itemIssues.map((issue) => (
-                              <Text key={issue.code} size="sm">
-                                {issue.itemMessage}
-                              </Text>
-                            ))}
-                            <Button
-                              component={Link}
-                              href={productHref}
-                              size="xs"
-                              variant="light"
-                              color="orange"
-                              radius="xl"
-                              mt={4}
-                            >
-                              다시 선택하기
-                            </Button>
-                          </Stack>
+                        // Mantine Alert light orange(orange-1 면·orange-9 글자, p xs, 본문 검정 15px)
+                        <Alert role="alert" className="mt-3 bg-[#ffe8cc] p-2.5 text-[#d9480f]">
+                          <div className="overflow-hidden text-[15px] text-ellipsis text-black">
+                            <div className="flex flex-col gap-1">
+                              {itemIssues.map((issue) => (
+                                <p key={issue.code} className="m-0 p-0 text-sm font-normal">
+                                  {issue.itemMessage}
+                                </p>
+                              ))}
+                              {/* 링크 의미(a)를 유지한다: Mantine Button component={Link} light orange xs */}
+                              <ButtonLink
+                                render={<Link href={productHref} />}
+                                variant="light"
+                                size="xs"
+                                className="mt-1 bg-[#ffe8cc] text-[#d9480f]"
+                              >
+                                <ButtonLabel>다시 선택하기</ButtonLabel>
+                              </ButtonLink>
+                            </div>
+                          </div>
                         </Alert>
                       )}
                     </>
                   )}
-                  <Group justify="space-between" align="center" mt="sm" wrap="nowrap">
-                    <Group
-                      gap={2}
-                      wrap="nowrap"
-                      px={2}
+                  <div className="mt-3 flex flex-nowrap items-center justify-between gap-4">
+                    <div
+                      className="flex flex-nowrap items-center justify-start gap-0.5 px-0.5"
                       style={{
                         background: 'var(--color-surface-muted)',
                         borderRadius: 'var(--radius-full)',
                       }}
                     >
-                      <ActionIcon
-                        size={36}
-                        variant="subtle"
-                        color="dark"
-                        radius="xl"
+                      <button
+                        type="button"
+                        className={QUANTITY_BUTTON}
                         aria-label={`${item.name} 수량 줄이기`}
                         onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                       >
                         −
-                      </ActionIcon>
-                      <Text
-                        fw="var(--fw-extrabold)"
-                        size="sm"
-                        w={24}
-                        ta="center"
-                        style={{ fontVariantNumeric: 'tabular-nums' }}
+                      </button>
+                      <p
+                        className="m-0 w-6 p-0 text-center text-sm"
+                        style={{
+                          fontWeight: 'var(--fw-extrabold)',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
                       >
                         {item.quantity}
-                      </Text>
-                      <ActionIcon
-                        size={36}
-                        variant="subtle"
-                        color="dark"
-                        radius="xl"
+                      </p>
+                      <button
+                        type="button"
+                        className={QUANTITY_BUTTON}
                         aria-label={`${item.name} 수량 늘리기`}
                         onClick={() => updateQuantity(item.productId, item.quantity + 1)}
                       >
                         +
-                      </ActionIcon>
-                    </Group>
-                    <Text
-                      fw="var(--fw-extrabold)"
-                      c="var(--color-text)"
-                      style={{ fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
+                      </button>
+                    </div>
+                    <p
+                      className="m-0 p-0 text-base"
+                      style={{
+                        fontWeight: 'var(--fw-extrabold)',
+                        color: 'var(--color-text)',
+                        fontVariantNumeric: 'tabular-nums',
+                        whiteSpace: 'nowrap',
+                      }}
                     >
                       {(item.price * item.quantity).toLocaleString('ko-KR')}원
-                    </Text>
-                  </Group>
-                </Box>
-              </Group>
-            </Box>
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
           );
         })}
-      </Stack>
+      </div>
       {cartRound && <CartUpsell round={cartRound} items={items} />}
       {excludedCount > 0 && !isGuest && (
-        <Paper
-          p="sm"
-          mb="md"
+        <div
+          className="mb-4 p-3"
           role="alert"
           style={{ background: 'var(--color-danger-surface)', borderRadius: 'var(--radius)' }}
         >
-          <Text size="sm" fw="var(--fw-bold)" c="var(--color-danger)">
+          <p
+            className="m-0 p-0 text-sm"
+            style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-danger)' }}
+          >
             변경·마감·구매 불가 상품 {excludedCount}개는 장바구니에 남아 있으며 결제 대상에서
             제외됩니다.
-          </Text>
-        </Paper>
+          </p>
+        </div>
       )}
-      <Stack
-        gap={8}
-        p="md"
-        mb="md"
+      <div
+        className="mb-4 flex flex-col gap-2 p-4"
         style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
       >
-        <Group justify="space-between">
-          <Text size="sm" c="var(--color-text-secondary)">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <p
+            className="m-0 p-0 text-sm font-normal"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
             결제 대상 상품 수
-          </Text>
-          <Text size="sm" c="var(--color-text)" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          </p>
+          <p
+            className="m-0 p-0 text-sm font-normal"
+            style={{ color: 'var(--color-text)', fontVariantNumeric: 'tabular-nums' }}
+          >
             {isGuest ? items.reduce((sum, item) => sum + item.quantity, 0) : checkoutCount}개
-          </Text>
-        </Group>
-        <Group
-          justify="space-between"
-          align="baseline"
-          pt={10}
+          </p>
+        </div>
+        <div
+          className="flex flex-wrap items-baseline justify-between gap-4 pt-2.5"
           style={{ borderTop: '1px solid var(--color-border)' }}
         >
-          <Text size="sm" fw="var(--fw-bold)" c="var(--color-text)">
+          <p
+            className="m-0 p-0 text-sm"
+            style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+          >
             총 결제 금액
-          </Text>
-          <Text
+          </p>
+          <p
+            className="m-0 p-0 leading-[1.55]"
             style={{
               color: 'var(--color-text)',
               fontSize: 22,
@@ -747,25 +771,26 @@ export default function CartPage() {
             }}
           >
             {(isGuest ? guestAmount : checkoutAmount).toLocaleString('ko-KR')}원
-          </Text>
-        </Group>
-      </Stack>
+          </p>
+        </div>
+      </div>
       {hasLegacyValidationIssues && (
-        <Text mb="xs" ta="center" size="sm" c="var(--color-text-disabled)">
+        <p
+          className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
+          style={{ color: 'var(--color-text-disabled)' }}
+        >
           문제 있는 상품을 다시 선택하면 결제할 수 있어요.
-        </Text>
+        </p>
       )}
       {isGuest ? (
         // 비로그인 장바구니(guest-cart): 로그인한 뒤 같은 장바구니로 돌아온다.
-        <Button fullWidth size="lg" color="brand" radius="xl" onClick={handleCheckout}>
+        <Button size="lg" className="w-full" onClick={handleCheckout}>
           로그인하고 주문하기
         </Button>
       ) : (
         <Button
-          fullWidth
           size="lg"
-          color="brand"
-          radius="xl"
+          className="w-full"
           disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
           onClick={handleCheckout}
         >
@@ -776,6 +801,6 @@ export default function CartPage() {
               : '결제하기'}
         </Button>
       )}
-    </Container>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
-import { Box, Text, Title, Stack, Group, Badge, Divider, Paper, SimpleGrid } from '@mantine/core';
 import type { Product, Variety } from '@greenhub/shared';
+import { Badge } from '@greenhub/ui/components/badge';
 import { HideOnErrorImage } from '@/components/ResilientImage';
 import { isFeatureOn } from '@/lib/features';
 
@@ -56,11 +56,13 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
       : null,
   ].filter((c): c is { icon: string; label: string; value: string } => c !== null);
 
+  // Mantine Stack(gap 0·px md·pt lg)·Text(16/1.55)·Title order 2(26px·줄 높이 1.35)·Badge sm·Divider(gray-3)·
+  // Paper(radius md 8px·p md)·SimpleGrid(spacing xs 10px) 계산값
   return (
-    <Stack gap={0} px="md" pt="lg">
+    <div className="flex flex-col gap-0 px-4 pt-5">
       {headline && (
-        <Text
-          mb="xs"
+        <p
+          className="m-0 mb-2.5"
           style={{
             fontSize: 'var(--font-size-xl)',
             fontWeight: 'var(--fw-bold)',
@@ -69,30 +71,30 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
           }}
         >
           {headline}
-        </Text>
+        </p>
       )}
 
       {showSummary && (
         <>
-          <Stack gap="xs" mb="lg">
-            <Group gap="xs">
-              {isGroup && (
-                <Badge color="brand" variant="filled" size="sm">
-                  공동구매
-                </Badge>
-              )}
-              <Badge color="gray" variant="light" size="sm">
+          <div className="mb-5 flex flex-col gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              {isGroup && <Badge size="sm">공동구매</Badge>}
+              <Badge variant="secondary" size="sm">
                 {product.category === 'cut_flower'
                   ? '절화'
                   : product.category === 'orchid'
                     ? '난'
                     : '관엽'}
               </Badge>
-            </Group>
-            <Title order={2} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+            </div>
+            <h2
+              className="m-0 text-[26px] leading-[1.35]"
+              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+            >
               {product.name}
-            </Title>
-            <Text
+            </h2>
+            <p
+              className="m-0 leading-[1.55]"
               style={{
                 fontSize: 'var(--font-size-xl)',
                 fontWeight: 'var(--fw-bold)',
@@ -100,30 +102,32 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
               }}
             >
               {product.price.toLocaleString()}원
-            </Text>
-          </Stack>
+            </p>
+          </div>
 
-          <Divider mb="lg" />
+          <hr className="m-0 mb-5 h-0 border-0 border-t border-solid border-[#dee2e6]" />
         </>
       )}
 
       {careCards.length > 0 && (
-        <Paper
-          radius="md"
-          p="md"
-          mb="md"
+        <div
+          className="mb-4 rounded-[8px] p-4"
           style={{
             background: 'var(--color-surface-muted)',
             border: '1px solid var(--color-border)',
           }}
         >
-          <SimpleGrid cols={careCards.length} spacing="xs">
+          <div
+            className="grid gap-2.5"
+            style={{ gridTemplateColumns: `repeat(${careCards.length}, minmax(0, 1fr))` }}
+          >
             {careCards.map(({ icon, label, value }) => (
-              <Stack key={label} gap={4} align="center">
-                <Text size="xl" style={{ lineHeight: 1 }}>
+              <div key={label} className="flex flex-col items-center gap-1">
+                <p className="m-0 text-xl" style={{ lineHeight: 1 }}>
                   {icon}
-                </Text>
-                <Text
+                </p>
+                <p
+                  className="m-0 leading-[1.55]"
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     fontWeight: 'var(--fw-bold)',
@@ -131,31 +135,32 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
                   }}
                 >
                   {value}
-                </Text>
-                <Text
+                </p>
+                <p
+                  className="m-0 leading-[1.55]"
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
                 >
                   {label}
-                </Text>
-              </Stack>
+                </p>
+              </div>
             ))}
-          </SimpleGrid>
-        </Paper>
+          </div>
+        </div>
       )}
 
       {product.varietyId && (
-        <Box mb="lg">
-          <Text
+        <div className="mb-5">
+          <p
+            className="m-0 mb-3 leading-[1.55]"
             style={{
               fontWeight: 'var(--fw-bold)',
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text)',
             }}
-            mb="sm"
           >
             상품 정보
-          </Text>
-          <Stack gap={6}>
+          </p>
+          <div className="flex flex-col gap-1.5">
             {(
               [
                 variety ? ['품종', variety.name] : null,
@@ -167,20 +172,22 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
             )
               .filter((r): r is [string, string] => r !== null)
               .map(([label, value]) => (
-                <Group
+                <div
                   key={label}
-                  justify="space-between"
+                  className="flex flex-wrap items-center justify-between gap-4"
                   style={{ borderBottom: '1px solid var(--color-surface-muted)', paddingBottom: 6 }}
                 >
-                  <Text
+                  <p
+                    className="m-0 leading-[1.55]"
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
                     }}
                   >
                     {label}
-                  </Text>
-                  <Text
+                  </p>
+                  <p
+                    className="m-0 leading-[1.55]"
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       fontWeight: 'var(--fw-medium)',
@@ -188,30 +195,30 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
                     }}
                   >
                     {value}
-                  </Text>
-                </Group>
+                  </p>
+                </div>
               ))}
-          </Stack>
-        </Box>
+          </div>
+        </div>
       )}
 
       {description && (
-        <Text
+        <p
+          className="m-0 mb-5"
           style={{
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-secondary)',
             lineHeight: 1.7,
             whiteSpace: 'pre-line',
           }}
-          mb="lg"
         >
           {description}
-        </Text>
+        </p>
       )}
 
       {/* 상세 사진 정리(detail-images): 위 사진 넘김에 이미 나온 사진은 다시 보여주지 않는다. */}
       {(product.images?.length ?? 0) > 0 && !isFeatureOn('detail-images') && (
-        <Box mx={-16} mb="lg">
+        <div className="-mx-4 mb-5">
           {product.images?.map((src, i) => (
             <HideOnErrorImage
               key={i}
@@ -221,18 +228,19 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
               style={{ width: '100%', display: 'block' }}
             />
           ))}
-        </Box>
+        </div>
       )}
 
       {displayColors.length > 0 && !(isFeatureOn('detail-images') && product.varietyId) && (
-        <Group gap="xs" mb="lg" style={{ flexWrap: 'wrap' }}>
+        <div className="mb-5 flex flex-wrap items-center gap-2.5" style={{ flexWrap: 'wrap' }}>
           {displayColors.map((color) => (
-            <Badge key={color} variant="outline" color="gray" radius="xl" size="sm">
+            // Mantine Badge radius="xl"(32px)
+            <Badge key={color} variant="outline-gray" size="sm" className="rounded-[32px]">
               {color}
             </Badge>
           ))}
-        </Group>
+        </div>
       )}
-    </Stack>
+    </div>
   );
 }

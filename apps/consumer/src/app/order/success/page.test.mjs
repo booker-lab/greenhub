@@ -62,7 +62,7 @@ const requireForTest = (specifier) => {
     return { Fragment: Symbol('Fragment'), jsx: () => null, jsxs: () => null };
   }
   if (
-    specifier === '@mantine/core' ||
+    specifier === '@greenhub/ui/components/button' ||
     specifier === 'lucide-react' ||
     specifier === 'next/navigation' ||
     specifier === 'next-auth/react' ||

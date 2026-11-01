@@ -1,19 +1,10 @@
 'use client';
 
 import { type DeliveryMethod, getGroupBuyStatus, type Product } from '@greenhub/shared';
-import {
-  ActionIcon,
-  Badge,
-  Box,
-  Button,
-  Checkbox,
-  Divider,
-  Group,
-  Paper,
-  Progress,
-  Stack,
-  Text,
-} from '@mantine/core';
+import { Badge } from '@greenhub/ui/components/badge';
+import { Button } from '@greenhub/ui/components/button';
+import { Checkbox } from '@greenhub/ui/components/checkbox';
+import { Progress } from '@greenhub/ui/components/progress';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
@@ -36,9 +27,14 @@ interface Props {
   product: Product;
 }
 
+// Mantine ActionIcon(size lg 34px·variant default·radius md 8px) 계산값: 흰 면, gray-4 1px 테두리, 검정 글자,
+// 줄 높이 1, 글꼴은 물려받는다. hover(가능한 기기만) gray-0 면.
+const QUANTITY_BUTTON =
+  'relative m-0 inline-flex size-[34px] min-h-[34px] min-w-[34px] cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[8px] border border-solid border-[#ced4da] bg-white p-0 text-left leading-none text-black no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-[#f8f9fa]';
+
 function StoreInitialAvatar({ name }: { name: string }) {
   return (
-    <Box
+    <div
       style={{
         width: 44,
         height: 44,
@@ -53,7 +49,7 @@ function StoreInitialAvatar({ name }: { name: string }) {
       }}
     >
       {name.trim().charAt(0) || '그'}
-    </Box>
+    </div>
   );
 }
 
@@ -88,9 +84,8 @@ function GroupCountdownBadge({ deadline }: { deadline: string | undefined }) {
   if (!countdown) return null;
   return (
     <Badge
-      color="red"
-      variant="filled"
-      radius="xl"
+      variant="destructive-filled"
+      className="rounded-[32px]"
       style={{ fontFamily: 'monospace', fontSize: 13 }}
     >
       {countdown}
@@ -179,13 +174,14 @@ export default function LegacyProductActions({ product }: Props) {
   }
 
   return (
-    <Stack gap={0} px="md" pb={88}>
+    // ① 외형 유지(UI 교체 P5): Mantine Stack(gap 0·px md·pb 88)·Paper(radius md 8·lg 16, p md·lg)·Group·
+    // Text(16/1.55, span도 16/1.55)·Badge filled·Progress(xl 16px·radius xl)·Button·ActionIcon default·
+    // Checkbox·Divider 계산값. 예전 판매 화면이라 구성은 그대로 둔다(design-standard.md §5).
+    <div className="flex flex-col items-stretch justify-start gap-0 px-4 pb-[88px]">
       {/* 공동구매 실시간 현황 */}
       {isGroup && groupConfig && (
-        <Paper
-          radius="lg"
-          p="lg"
-          mb="lg"
+        <div
+          className="mb-5 block rounded-[16px] p-5"
           style={{
             border: `2px solid ${isGroupUnavailable ? 'var(--color-border)' : 'var(--color-primary)'}`,
             background: isGroupUnavailable
@@ -193,8 +189,9 @@ export default function LegacyProductActions({ product }: Props) {
               : 'var(--color-primary-surface)',
           }}
         >
-          <Group justify="space-between" mb="md">
-            <Text
+          <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
+            <p
+              className="m-0 p-0 text-base"
               style={{
                 fontWeight: 'var(--fw-bold)',
                 color: isGroupUnavailable
@@ -203,18 +200,17 @@ export default function LegacyProductActions({ product }: Props) {
               }}
             >
               ⚡ 공동구매 현황
-            </Text>
+            </p>
             {isGroupUnavailable ? (
-              <Badge color="gray" variant="filled" radius="xl">
-                {unavailableLabel}
-              </Badge>
+              <Badge className="rounded-[32px] bg-[#868e96] text-white">{unavailableLabel}</Badge>
             ) : (
               <GroupCountdownBadge deadline={groupConfig?.recruitDeadline} />
             )}
-          </Group>
+          </div>
 
-          <Box ta="center" mb="md">
-            <Text
+          <div className="mb-4 text-center">
+            <p
+              className="m-0 p-0"
               style={{
                 fontSize: 36,
                 fontWeight: 'var(--fw-bold)',
@@ -225,8 +221,8 @@ export default function LegacyProductActions({ product }: Props) {
               }}
             >
               {groupConfig.currentQuantity}
-              <Text
-                span
+              <span
+                className="m-0 p-0 leading-[1.55]"
                 style={{
                   fontSize: 18,
                   fontWeight: 'var(--fw-medium)',
@@ -235,29 +231,30 @@ export default function LegacyProductActions({ product }: Props) {
               >
                 {' '}
                 / {groupConfig.targetQuantity}개
-              </Text>
-            </Text>
-            <Text
+              </span>
+            </p>
+            <p
+              className="m-0 mt-1 p-0 leading-[1.55] font-normal"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              mt={4}
             >
               최소 {groupConfig.minQuantity}개 이상 모이면 확정
-            </Text>
-          </Box>
+            </p>
+          </div>
 
           <Progress
             value={Math.min((groupConfig.currentQuantity / groupConfig.minQuantity) * 100, 100)}
-            color={isGroupUnavailable ? 'gray' : 'brand'}
-            size="xl"
-            radius="xl"
-            mb="md"
+            className="mb-4 h-4 rounded-[32px]"
+            indicatorClassName={isGroupUnavailable ? 'bg-[#868e96]' : undefined}
           />
 
-          <Group justify="space-between">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          <div className="flex flex-row flex-wrap items-center justify-between gap-4">
+            <p
+              className="m-0 p-0 leading-[1.55] font-normal"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               마감{' '}
-              <Text
-                span
+              <span
+                className="m-0 p-0 text-base"
                 style={{
                   fontWeight: 'var(--fw-bold)',
                   color: isGroupUnavailable
@@ -271,12 +268,15 @@ export default function LegacyProductActions({ product }: Props) {
                   hour: '2-digit',
                   minute: '2-digit',
                 })}
-              </Text>
-            </Text>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              </span>
+            </p>
+            <p
+              className="m-0 p-0 leading-[1.55] font-normal"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               배송{' '}
-              <Text
-                span
+              <span
+                className="m-0 p-0 text-base"
                 style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
               >
                 {new Date(groupConfig.groupDeliveryDate).toLocaleDateString('ko-KR', {
@@ -284,79 +284,76 @@ export default function LegacyProductActions({ product }: Props) {
                   day: 'numeric',
                   weekday: 'short',
                 })}
-              </Text>
-            </Text>
-          </Group>
-        </Paper>
+              </span>
+            </p>
+          </div>
+        </div>
       )}
 
       {/* group config read failure: missing과 구분되는 recovery 상태. 구매 CTA는 fail-closed. */}
       {isGroupReadError && (
-        <Paper
-          radius="md"
-          p="md"
-          mb="lg"
+        <div
+          className="mb-5 block rounded-[8px] p-4"
           data-testid="group-config-error"
           style={{
             background: 'var(--color-caution-bg)',
             border: '1px solid var(--color-caution-border)',
           }}
         >
-          <Text
+          <p
+            className="m-0 mb-1 p-0 leading-[1.55]"
             style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text)',
               fontWeight: 'var(--fw-bold)',
             }}
-            mb={4}
           >
             공동구매 정보를 불러오지 못했습니다
-          </Text>
-          <Text
+          </p>
+          <p
+            className="m-0 mb-3 p-0 leading-[1.55] font-normal"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-            mb="sm"
           >
             네트워크 상태를 확인한 뒤 다시 시도해 주세요. 정보를 확인할 때까지 구매할 수 없습니다.
-          </Text>
+          </p>
           <Button
-            size="sm"
-            radius="md"
-            variant="default"
+            variant="plain"
+            className="rounded-[8px]"
             data-testid="group-config-retry"
             onClick={retryGroupConfig}
           >
             다시 시도
           </Button>
-        </Paper>
+        </div>
       )}
 
-      <Paper radius="md" p="md" mb="md" style={{ background: 'var(--color-surface-muted)' }}>
-        <Text
+      <div
+        className="mb-4 block rounded-[8px] p-4"
+        style={{ background: 'var(--color-surface-muted)' }}
+      >
+        <p
+          className="m-0 mb-3 p-0 leading-[1.55]"
           style={{
             fontWeight: 'var(--fw-bold)',
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text)',
           }}
-          mb="sm"
         >
           배송 방법
-        </Text>
-        <Group gap="xs">
+        </p>
+        <div className="flex flex-row flex-wrap items-center justify-start gap-2.5">
           {(['direct', 'hub', 'parcel'] as DeliveryMethod[]).map((method) => (
             <Button
               key={method}
-              size="sm"
-              radius="md"
-              variant={deliveryMethod === method ? 'filled' : 'default'}
-              color={deliveryMethod === method ? 'brand' : undefined}
-              style={{ flex: 1 }}
+              variant={deliveryMethod === method ? 'default' : 'plain'}
+              className="flex-1 rounded-[8px]"
               onClick={() => setDeliveryMethod(method)}
             >
               {deliveryLabels[method]}
             </Button>
           ))}
-        </Group>
-      </Paper>
+        </div>
+      </div>
 
       {/* 일반 상품 배송일 선택 — 공동구매는 groupConfig 고정, 택배는 슬롯 미검증이라 미노출 */}
       {needsDeliveryDate && (
@@ -367,60 +364,58 @@ export default function LegacyProductActions({ product }: Props) {
         />
       )}
 
-      <Paper radius="md" p="md" mb="lg" style={{ background: 'var(--color-surface-muted)' }}>
-        <Text
+      <div
+        className="mb-5 block rounded-[8px] p-4"
+        style={{ background: 'var(--color-surface-muted)' }}
+      >
+        <p
+          className="m-0 mb-3 p-0 leading-[1.55]"
           style={{
             fontWeight: 'var(--fw-bold)',
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text)',
           }}
-          mb="sm"
         >
           수량
-        </Text>
-        <Group gap="sm">
-          <ActionIcon
-            size="lg"
-            variant="default"
-            radius="md"
+        </p>
+        <div className="flex flex-row flex-wrap items-center justify-start gap-3">
+          <button
+            type="button"
+            className={QUANTITY_BUTTON}
             onClick={() => setQuantity(Math.max(1, quantity - 1))}
           >
             −
-          </ActionIcon>
-          <Text
+          </button>
+          <p
+            className="m-0 w-8 p-0 text-center leading-[1.55]"
             style={{ fontSize: 'var(--font-size-lg)', fontWeight: 'var(--fw-bold)' }}
-            w={32}
-            ta="center"
           >
             {quantity}
-          </Text>
-          <ActionIcon
-            size="lg"
-            variant="default"
-            radius="md"
+          </p>
+          <button
+            type="button"
+            className={QUANTITY_BUTTON}
             onClick={() => {
               const maxQty = isGroup && groupConfig ? groupConfig.maxPerPerson : 99;
               setQuantity(Math.min(maxQty, quantity + 1));
             }}
           >
             +
-          </ActionIcon>
-        </Group>
+          </button>
+        </div>
         {isGroup && groupConfig && (
-          <Text
+          <p
+            className="m-0 mt-1.5 p-0 leading-[1.55] font-normal"
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            mt={6}
           >
             1인 최대 {groupConfig.maxPerPerson}개까지 구매 가능
-          </Text>
+          </p>
         )}
-      </Paper>
+      </div>
 
       {isGroup && (
-        <Paper
-          radius="md"
-          p="md"
-          mb="lg"
+        <div
+          className="mb-5 block rounded-[8px] p-4"
           style={{
             background: 'var(--color-caution-bg)',
             border: '1px solid var(--color-caution-border)',
@@ -428,10 +423,10 @@ export default function LegacyProductActions({ product }: Props) {
         >
           <Checkbox
             checked={groupConsent}
-            onChange={(e) => setGroupConsent(e.currentTarget.checked)}
-            color="brand"
+            onCheckedChange={setGroupConsent}
             label={
-              <Text
+              <p
+                className="m-0 p-0 font-normal"
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-text-secondary)',
@@ -439,34 +434,35 @@ export default function LegacyProductActions({ product }: Props) {
                 }}
               >
                 공동구매{' '}
-                <Text span style={{ fontWeight: 'var(--fw-bold)' }}>
+                <span className="m-0 p-0 text-base" style={{ fontWeight: 'var(--fw-bold)' }}>
                   확정 이후 취소·환불이 불가
-                </Text>
+                </span>
                 함을 이해하고 동의합니다. (전자상거래법 제17조)
-              </Text>
+              </p>
             }
           />
-        </Paper>
+        </div>
       )}
 
-      <Divider mb="xl" />
-      <Box mb="xl">
+      {/* Mantine Divider: 1px gray-3 윗선, 역할 separator(가로) */}
+      <hr className="m-0 mb-8 h-0 border-0 border-t border-solid border-[#dee2e6]" />
+      <div className="mb-8">
         <GreenLoveBrandSection />
-      </Box>
+      </div>
 
       {store && (
-        <Box pt="xl" style={{ borderTop: '1px solid var(--color-border)' }}>
-          <Text
+        <div className="pt-8" style={{ borderTop: '1px solid var(--color-border)' }}>
+          <p
+            className="m-0 mb-3 p-0 leading-[1.55]"
             style={{
               fontWeight: 'var(--fw-bold)',
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-secondary)',
             }}
-            mb="sm"
           >
             판매자 정보
-          </Text>
-          <Group gap="sm" mb="sm">
+          </p>
+          <div className="mb-3 flex flex-row flex-wrap items-center justify-start gap-3">
             {store.logoUrl ? (
               <ResilientImage
                 src={store.logoUrl}
@@ -479,8 +475,9 @@ export default function LegacyProductActions({ product }: Props) {
             ) : (
               <StoreInitialAvatar name={store.name} />
             )}
-            <Box>
-              <Text
+            <div>
+              <p
+                className="m-0 p-0 leading-[1.55]"
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: 'var(--fw-bold)',
@@ -488,18 +485,24 @@ export default function LegacyProductActions({ product }: Props) {
                 }}
               >
                 {store.name}
-              </Text>
-            </Box>
-          </Group>
-          <Stack gap={4}>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col items-stretch justify-start gap-1">
+            <p
+              className="m-0 p-0 leading-[1.55] font-normal"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               📍 {PUBLIC_BUSINESS_INFO.address}
-            </Text>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            </p>
+            <p
+              className="m-0 p-0 leading-[1.55] font-normal"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               📞 {PUBLIC_BUSINESS_INFO.phone}
-            </Text>
-          </Stack>
-        </Box>
+            </p>
+          </div>
+        </div>
       )}
 
       <ProductCTABar
@@ -511,6 +514,6 @@ export default function LegacyProductActions({ product }: Props) {
         onAddToCart={handleAddToCart}
         onBuyNow={handleBuyNow}
       />
-    </Stack>
+    </div>
   );
 }

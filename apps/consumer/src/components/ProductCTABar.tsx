@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Button, Group, Text } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 
 interface Props {
   totalAmount: number;
@@ -35,8 +35,10 @@ export default function ProductCTABar({
         ? '공구 참여하기'
         : '바로 결제');
 
+  // ① 외형 유지(UI 교체 P5): Mantine Box·Group(justify space-between·mb 8, gap 8 nowrap)·
+  // Text(style 15px·줄 높이 1.55)·Button(lg 50px·radius xl, flex 1·2)과 같은 계산값.
   return (
-    <Box
+    <div
       style={{
         position: 'fixed',
         bottom: 0,
@@ -48,7 +50,7 @@ export default function ProductCTABar({
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
-      <Box
+      <div
         style={{
           maxWidth: 430,
           margin: '0 auto',
@@ -56,11 +58,15 @@ export default function ProductCTABar({
         }}
       >
         {/* 총 금액 */}
-        <Group justify="space-between" mb={8}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-4">
+          <p
+            className="m-0 p-0 leading-[1.55] font-normal"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
             총 금액
-          </Text>
-          <Text
+          </p>
+          <p
+            className="m-0 p-0 leading-[1.55]"
             style={{
               fontWeight: 'var(--fw-extrabold)',
               fontSize: 'var(--font-size-lg)',
@@ -69,15 +75,14 @@ export default function ProductCTABar({
             }}
           >
             {totalAmount.toLocaleString()}원
-          </Text>
-        </Group>
+          </p>
+        </div>
 
         {/* 버튼: 디자인 기준 §4 — 완전히 둥근 버튼, 보조는 외곽선 */}
-        <Group gap={8} style={{ flexWrap: 'nowrap' }}>
+        <div className="flex flex-nowrap items-center justify-start gap-2">
           <Button
-            flex={1}
+            className="flex-1"
             variant="outline"
-            radius="xl"
             size="lg"
             disabled={!canAddToCart}
             onClick={onAddToCart}
@@ -85,9 +90,8 @@ export default function ProductCTABar({
             {addToCartLabel}
           </Button>
           <Button
-            flex={2}
+            className="flex-[2]"
             size="lg"
-            radius="xl"
             disabled={!canBuy}
             onClick={onBuyNow}
             style={{
@@ -99,8 +103,8 @@ export default function ProductCTABar({
           >
             {ctaLabel}
           </Button>
-        </Group>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }

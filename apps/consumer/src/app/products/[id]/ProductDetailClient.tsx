@@ -2,7 +2,7 @@
 
 import type { Product, SaleRoundItem, SalesMode, Variety } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
-import { Box, Button, Container, Skeleton, Stack, Text } from '@mantine/core';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { notFound, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -221,6 +221,28 @@ function findCurrentRoundIdForProduct(product: Product, currentRound: PublicSale
   return resolveRoundProduct(product, currentRound.id, currentRound, []) ? currentRound.id : null;
 }
 
+// Mantine Skeleton(기본 모서리 16px, gray-3 면, 1.5초 깜빡임) 계산값. 면은 바탕(body) 위에 gray-3을 겹친다.
+// Mantine의 깜빡임(opacity 0.4↔1, 1500ms linear)은 같은 길이의 pulse(opacity 1↔0.5)로 그린다.
+function DetailSkeleton({
+  height,
+  width = '100%',
+  radius = 16,
+}: {
+  height: number;
+  width?: string;
+  radius?: number;
+}) {
+  return (
+    <div
+      className="relative overflow-hidden [transform:translateZ(0)]"
+      style={{ height, width, borderRadius: radius }}
+    >
+      <span className="absolute inset-0 z-10 bg-white" />
+      <span className="absolute inset-0 z-[11] animate-[pulse_1500ms_linear_infinite] bg-[#dee2e6]" />
+    </div>
+  );
+}
+
 function DetailStateFrame({
   label,
   message,
@@ -231,28 +253,31 @@ function DetailStateFrame({
   alert?: boolean;
 }) {
   return (
-    <Container size="sm" p={0}>
+    <div className="mx-auto max-w-[720px] p-0">
       <ProductTopBar />
-      <Stack
-        px="md"
-        pt="calc(76px + env(safe-area-inset-top))"
-        gap="md"
+      {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: Mantine Stack과 같은 마크업(role 없는 불러오는 중 상태에도 aria-label)을 유지한다(① 외형 유지) */}
+      <div
+        className="flex flex-col gap-4 px-4"
+        style={{ paddingTop: 'calc(76px + env(safe-area-inset-top))' }}
         role={alert ? 'alert' : undefined}
         aria-label={label}
       >
         {message ? (
-          <Text ta="center" py={48} c="var(--color-text-secondary)" size="sm">
+          <p
+            className="m-0 py-12 text-center text-sm"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
             {message}
-          </Text>
+          </p>
         ) : (
           <>
-            <Skeleton height={360} radius={0} />
-            <Skeleton height={32} width="70%" />
-            <Skeleton height={24} width="40%" />
+            <DetailSkeleton height={360} radius={0} />
+            <DetailSkeleton height={32} width="70%" />
+            <DetailSkeleton height={24} width="40%" />
           </>
         )}
-      </Stack>
-    </Container>
+      </div>
+    </div>
   );
 }
 
@@ -270,17 +295,16 @@ function RoundUnavailableProductDetail({
   message: string;
 }) {
   return (
-    <Container size="sm" p={0}>
+    <div className="mx-auto max-w-[720px] p-0">
       <ProductTopBar />
-      <Box
+      <div
         data-sales-mode="round_direct"
         data-round-state="unavailable"
         style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}
       >
         <ProductImages images={product.images ?? []} name={product.name} />
-        <Stack gap="sm" px="md" pt="lg">
-          <Text
-            component="h1"
+        <div className="flex flex-col gap-3 px-4 pt-5">
+          <h1
             style={{
               color: 'var(--color-text)',
               fontSize: 22,
@@ -290,14 +314,15 @@ function RoundUnavailableProductDetail({
             }}
           >
             {product.name}
-          </Text>
-          <Box
-            p="md"
+          </h1>
+          <div
+            className="p-4"
             role="status"
             aria-label={label}
             style={{ background: 'var(--color-deadline-surface)', borderRadius: 'var(--radius)' }}
           >
-            <Text
+            <p
+              className="m-0 leading-[1.55]"
               style={{
                 color: 'var(--color-deadline-text)',
                 fontSize: 'var(--font-size-md)',
@@ -305,26 +330,27 @@ function RoundUnavailableProductDetail({
               }}
             >
               {message}
-            </Text>
-            <Text mt={4} size="sm" c="var(--color-text-secondary)">
+            </p>
+            <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               회차마다 경매에서 고른 상품이 바뀌어요. 이번 주 판매 상품을 확인해 주세요.
-            </Text>
-            <Button component={Link} href="/" fullWidth mt="md" size="md">
+            </p>
+            {/* 링크 의미(a)를 유지한다: Mantine Button component={Link} fullWidth mt="md" size="md" */}
+            <ButtonLink render={<Link href="/" />} size="md" className="mt-4 w-full">
               이번 주 상품 보기
-            </Button>
-          </Box>
-        </Stack>
+            </ButtonLink>
+          </div>
+        </div>
         <ProductInfo product={product} variety={variety} showSummary={false} />
-      </Box>
-    </Container>
+      </div>
+    </div>
   );
 }
 
 function ProductDetailContent({ product, variety, roundProduct }: ProductDetailContentProps) {
   return (
-    <Container size="sm" p={0}>
+    <div className="mx-auto max-w-[720px] p-0">
       <ProductTopBar />
-      <Box
+      <div
         data-sales-mode={roundProduct ? 'round_direct' : 'legacy'}
         data-round-state={roundProduct?.state}
         style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}
@@ -348,8 +374,8 @@ function ProductDetailContent({ product, variety, roundProduct }: ProductDetailC
         ) : (
           <ProductActions product={product} />
         )}
-      </Box>
-    </Container>
+      </div>
+    </div>
   );
 }
 
@@ -395,29 +421,30 @@ function RoundDirectProductDetail({
   }
   if (saleRounds.status === 'error') {
     return (
-      <Container size="sm" p={0}>
+      <div className="mx-auto max-w-[720px] p-0">
         <ProductTopBar />
-        <Stack
-          px="md"
-          pt="calc(76px + env(safe-area-inset-top))"
-          gap="sm"
+        <div
+          className="flex flex-col items-center gap-3 px-4"
+          style={{ paddingTop: 'calc(76px + env(safe-area-inset-top))' }}
           role="alert"
           aria-label="판매 회차 조회 실패"
-          align="center"
         >
-          <Text ta="center" py={12} c="var(--color-text-secondary)" size="sm">
+          <p
+            className="m-0 text-center py-3 text-sm"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
             판매 회차를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
-          </Text>
+          </p>
           {saleRounds.error && (
-            <Text ta="center" c="var(--color-text-disabled)" size="sm">
+            <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-disabled)' }}>
               {saleRounds.error}
-            </Text>
+            </p>
           )}
           <Button variant="light" size="xs" onClick={saleRounds.refetch}>
             다시 시도
           </Button>
-        </Stack>
-      </Container>
+        </div>
+      </div>
     );
   }
 
@@ -442,32 +469,36 @@ function RoundDirectProductDetail({
   if (!roundProduct) {
     if (saleRounds.isStale) {
       return (
-        <Container size="sm" p={0}>
+        <div className="mx-auto max-w-[720px] p-0">
           <ProductTopBar />
-          <Stack
-            px="md"
-            pt="calc(76px + env(safe-area-inset-top))"
-            gap="sm"
+          <div
+            className="flex flex-col items-center gap-3 px-4"
+            style={{ paddingTop: 'calc(76px + env(safe-area-inset-top))' }}
             role="alert"
             aria-label="판매 회차 확인 실패"
-            align="center"
           >
-            <Text ta="center" c="var(--color-text-secondary)" size="sm">
+            <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
-            </Text>
+            </p>
             {saleRounds.error && (
-              <Text ta="center" c="var(--color-text-disabled)" size="sm">
+              <p
+                className="m-0 text-center text-sm"
+                style={{ color: 'var(--color-text-disabled)' }}
+              >
                 {saleRounds.error}
-              </Text>
+              </p>
             )}
             <Button variant="light" size="xs" onClick={saleRounds.refetch}>
               다시 시도
             </Button>
-            <Text ta="center" py={12} c="var(--color-text-secondary)" size="sm">
+            <p
+              className="m-0 text-center py-3 text-sm"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
               이 상품에 연결된 공개 판매 회차를 찾을 수 없습니다.
-            </Text>
-          </Stack>
-        </Container>
+            </p>
+          </div>
+        </div>
       );
     }
     return (
@@ -483,10 +514,12 @@ function RoundDirectProductDetail({
   if (saleRounds.isStale) {
     return (
       <>
-        <Container size="sm" px="md" pt="calc(52px + env(safe-area-inset-top))">
-          <Box
-            p="sm"
-            mt="sm"
+        <div
+          className="mx-auto max-w-[720px] px-4"
+          style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}
+        >
+          <div
+            className="mt-3 p-3"
             role="alert"
             style={{
               background: 'var(--color-primary-surface)',
@@ -494,19 +527,19 @@ function RoundDirectProductDetail({
               border: 'var(--border)',
             }}
           >
-            <Text size="sm" c="var(--color-text-secondary)">
+            <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
-            </Text>
+            </p>
             {saleRounds.error && (
-              <Text size="sm" c="var(--color-text-disabled)" mt={4}>
+              <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-disabled)' }}>
                 {saleRounds.error}
-              </Text>
+              </p>
             )}
-            <Button variant="light" size="xs" mt="xs" onClick={saleRounds.refetch}>
+            <Button variant="light" size="xs" className="mt-2.5" onClick={saleRounds.refetch}>
               다시 시도
             </Button>
-          </Box>
-        </Container>
+          </div>
+        </div>
         <ProductDetailContent product={product} variety={variety} roundProduct={roundProduct} />
       </>
     );
@@ -515,11 +548,18 @@ function RoundDirectProductDetail({
   if (saleRounds.isRefreshing) {
     return (
       <>
-        <Container size="sm" px="md" pt="calc(52px + env(safe-area-inset-top))">
-          <Text size="sm" c="var(--color-text-secondary)" ta="center" aria-live="polite">
+        <div
+          className="mx-auto max-w-[720px] px-4"
+          style={{ paddingTop: 'calc(52px + env(safe-area-inset-top))' }}
+        >
+          <p
+            className="m-0 text-center text-sm"
+            style={{ color: 'var(--color-text-secondary)' }}
+            aria-live="polite"
+          >
             최신 회차 정보를 확인하는 중...
-          </Text>
-        </Container>
+          </p>
+        </div>
         <ProductDetailContent product={product} variety={variety} roundProduct={roundProduct} />
       </>
     );
@@ -589,11 +629,5 @@ export default function ProductDetailClient({ id, hint }: ProductDetailClientPro
     return <ProductDetailContent product={product} variety={variety} roundProduct={null} />;
   }
 
-  return (
-    <RoundDirectProductDetail
-      key={storeMode.storeId}
-      product={product}
-      variety={variety}
-    />
-  );
+  return <RoundDirectProductDetail key={storeMode.storeId} product={product} variety={variety} />;
 }

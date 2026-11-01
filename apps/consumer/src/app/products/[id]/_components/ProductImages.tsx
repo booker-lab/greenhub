@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { Box } from '@mantine/core';
+import { useRef, useState } from 'react';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { isFeatureOn } from '@/lib/features';
 
@@ -18,7 +17,7 @@ export default function ProductImages({ images, name }: Props) {
 
   return (
     <>
-      <Box
+      <div
         ref={carouselRef}
         onScroll={(e) => {
           const el = e.currentTarget;
@@ -36,7 +35,7 @@ export default function ProductImages({ images, name }: Props) {
         }}
       >
         {displayImages.map((src, i) => (
-          <Box
+          <div
             key={i}
             style={{
               flexShrink: 0,
@@ -59,12 +58,12 @@ export default function ProductImages({ images, name }: Props) {
               loading={detailImages && i > 0 ? 'lazy' : undefined}
               style={{ objectFit: 'cover' }}
             />
-          </Box>
+          </div>
         ))}
-      </Box>
+      </div>
 
       {displayImages.length > 1 && (
-        <Box
+        <div
           style={{
             display: 'flex',
             gap: 6,
@@ -76,7 +75,8 @@ export default function ProductImages({ images, name }: Props) {
           }}
         >
           {displayImages.map((src, i) => (
-            <Box
+            // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: Mantine Box와 같은 마크업을 유지한다(① 외형 유지, 동작 변경 없음)
+            <div
               key={i}
               onClick={() => {
                 setActiveIdx(i);
@@ -106,9 +106,9 @@ export default function ProductImages({ images, name }: Props) {
                 sizes="56px"
                 style={{ objectFit: 'cover' }}
               />
-            </Box>
+            </div>
           ))}
-        </Box>
+        </div>
       )}
     </>
   );

@@ -1,7 +1,6 @@
 'use client';
 
 import type { SaleRoundItem } from '@greenhub/shared';
-import { Box, Group, Text } from '@mantine/core';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
@@ -21,9 +20,9 @@ export function CartArrivalLine({ round }: { round: PublicSaleRound }) {
   const arrival = formatRoundTime(round.schedule.deliveryEndAt);
   if (!arrival) return null;
   return (
-    <Box
-      px="md"
-      py="sm"
+    // Mantine Box px md·py sm 계산값
+    <div
+      className="px-4 py-3"
       style={{
         background: 'var(--color-primary-surface)',
         borderRadius: 'var(--radius)',
@@ -33,7 +32,7 @@ export function CartArrivalLine({ round }: { round: PublicSaleRound }) {
       }}
     >
       {arrival}까지 문 앞에 도착해요
-    </Box>
+    </div>
   );
 }
 
@@ -47,17 +46,22 @@ export function IcheonPrecheck() {
   const [result, setResult] = useState<{ address: string; ok: boolean } | null>(null);
   if (!isFeatureOn('icheon-precheck')) return null;
   return (
-    <Box p="md" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
-      <Script src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js" strategy="lazyOnload" />
-      <Group justify="space-between" wrap="nowrap" gap="sm">
-        <Box style={{ minWidth: 0 }}>
-          <Text size="sm" fw={800}>
-            우리 집도 배송되나요?
-          </Text>
-          <Text size="sm" c="var(--color-text-secondary)">
+    // Mantine Box p md·Group(nowrap·gap sm)·Text sm(15px/1.45) 계산값
+    <div className="p-4" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
+      <Script
+        src="https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js"
+        strategy="lazyOnload"
+      />
+      <div className="flex flex-nowrap items-center justify-between gap-3">
+        <div style={{ minWidth: 0 }}>
+          <p className="m-0 p-0 text-sm font-extrabold">우리 집도 배송되나요?</p>
+          <p
+            className="m-0 p-0 text-sm font-normal"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
             경기도 이천시만 직접 배송해요. 결제 전에 주소로 확인해 보세요.
-          </Text>
-        </Box>
+          </p>
+        </div>
         <button
           type="button"
           onClick={() => {
@@ -83,21 +87,19 @@ export function IcheonPrecheck() {
         >
           주소로 확인
         </button>
-      </Group>
+      </div>
       {result && (
-        <Text
+        <p
           role="status"
-          mt="sm"
-          size="sm"
-          fw={700}
-          c={result.ok ? 'var(--color-primary-dark)' : 'var(--color-danger)'}
+          className="m-0 mt-3 p-0 text-sm font-bold"
+          style={{ color: result.ok ? 'var(--color-primary-dark)' : 'var(--color-danger)' }}
         >
           {result.ok
             ? `${result.address} — 배송할 수 있어요.`
             : `${result.address} — 이천시 밖이라 이번 회차는 배송할 수 없어요.`}
-        </Text>
+        </p>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -113,30 +115,32 @@ export function CartUpsell({ round, items }: { round: PublicSaleRound; items: Ca
     .slice(0, 4);
   if (candidates.length === 0) return null;
   return (
-    <Box component="section" aria-labelledby="upsell-title" mb="lg">
-      <Text id="upsell-title" fw={800} size="md" mb="sm">
+    // Mantine Box mb lg·Text md(16px/1.55)·Text sm(15px/1.45)·lineClamp 2 계산값
+    <section aria-labelledby="upsell-title" className="mb-5">
+      <p id="upsell-title" className="m-0 mb-3 p-0 text-base font-extrabold">
         이번 회차 다른 꽃도 함께 받아 보세요
-      </Text>
-      <Box style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+      </p>
+      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
         {candidates.map((item) => (
-          <Box
+          <div
             key={item.id}
-            p="sm"
-            style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius-sm)', flex: '0 0 150px' }}
+            className="p-3"
+            style={{
+              background: 'var(--color-surface-muted)',
+              borderRadius: 'var(--radius-sm)',
+              flex: '0 0 150px',
+            }}
           >
-            <Text
-              component={Link}
+            <Link
               href={`/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(round.id)}`}
-              size="sm"
-              fw={700}
-              lineClamp={2}
+              className="m-0 line-clamp-2 p-0 text-sm font-bold text-ellipsis"
               style={{ color: 'var(--color-text)', textDecoration: 'none' }}
             >
               {item.productNameSnapshot}
-            </Text>
-            <Text size="sm" fw={800} mt={2}>
+            </Link>
+            <p className="m-0 mt-0.5 p-0 text-sm font-extrabold">
               {item.roundPrice.toLocaleString()}원
-            </Text>
+            </p>
             <button
               type="button"
               onClick={async () => {
@@ -146,7 +150,11 @@ export function CartUpsell({ round, items }: { round: PublicSaleRound; items: Ca
                   return;
                 }
                 const result = addItem(roundItemCartInput(item));
-                setMessage(result.ok ? `${item.productNameSnapshot}을 담았어요` : cartAddFailureMessage(result.reason));
+                setMessage(
+                  result.ok
+                    ? `${item.productNameSnapshot}을 담았어요`
+                    : cartAddFailureMessage(result.reason),
+                );
               }}
               style={{
                 background: 'var(--color-bg)',
@@ -162,14 +170,18 @@ export function CartUpsell({ round, items }: { round: PublicSaleRound; items: Ca
             >
               + 담기
             </button>
-          </Box>
+          </div>
         ))}
-      </Box>
+      </div>
       {message && (
-        <Text role="status" size="sm" mt={6} c="var(--color-primary-dark)">
+        <p
+          role="status"
+          className="m-0 mt-1.5 p-0 text-sm font-normal"
+          style={{ color: 'var(--color-primary-dark)' }}
+        >
           {message}
-        </Text>
+        </p>
       )}
-    </Box>
+    </section>
   );
 }

@@ -90,7 +90,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/features') return { isFeatureOn: () => false };
   if (specifier === '@/lib/round-schedule-label') return { formatRoundTime: () => null };
   if (
-    specifier === '@mantine/core' ||
+    specifier === '@greenhub/ui/components/button' ||
     specifier === 'next/navigation' ||
     specifier === 'next/script' ||
     specifier === 'next-auth/react' ||
