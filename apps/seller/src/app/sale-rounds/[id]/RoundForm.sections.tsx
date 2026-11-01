@@ -2,11 +2,11 @@
 
 import type { Product, SaleRoundDeliveryRegion } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Badge } from '@greenhub/ui/components/badge';
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { NumberInput } from '@greenhub/ui/components/number-input';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { Switch } from '@greenhub/ui/components/switch';
 import { Copy, Link2, PackagePlus, Trash2 } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
@@ -42,14 +42,13 @@ export interface CopyFeedback {
 
 // ① 외형 유지(UI 교체 P4): Mantine Paper·Title·Text·Group·Stack·SimpleGrid·TextInput·NumberInput·Switch·Alert와
 // 같은 값을 Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Title order 4 = h4(18px·800·1.45),
-// Paper = 흰 바탕·모서리 16·그림자 xs(테두리 Paper는 gray-3 1px·모서리 8), SimpleGrid 간격 16px(sm = 48em부터 여러 칸).
+// Paper = 흰 바탕·모서리 16(그림자는 ② D2로 걷음, 하위 카드는 --frame 면·모서리 8), SimpleGrid 간격 16px(sm = 48em부터 여러 칸).
 const TEXT = 'm-0 p-0 text-base font-normal';
 const ROW = 'flex flex-row flex-wrap items-center';
 const COLUMN = 'flex flex-col items-stretch justify-start';
-// 테두리 Paper는 그림자를 따로 주지 않았지만 Mantine 그림자가 CSS 변수(--paper-shadow)라 바깥 FormSection Paper의
-// 그림자 xs를 물려받아 그려진다(촬영 실측). 그래서 같은 그림자를 준다.
-const BORDER_PAPER =
-  'block rounded-[8px] border border-solid border-[#dee2e6] bg-white p-3 shadow-mantine-xs';
+// ② 디자인 방향(D2): 흰 카드 안의 하위 카드는 그림자·1px 테두리 대신 --frame 면이다(주문 상세 기록 카드와 같은 규칙).
+// 안의 입력칸 선은 유지한다.
+const BORDER_PAPER = 'block rounded-[8px] bg-[var(--frame)] p-3';
 
 // Mantine NumberInput 값(숫자 또는 글자)을 @greenhub/ui NumberInput 값(숫자 또는 빈 칸)으로 옮긴다.
 function toNumberValue(value: NumericValue): number | '' {
@@ -69,7 +68,7 @@ export function FormSection({
   children: ReactNode;
 }) {
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4">
       <div className={`${COLUMN} gap-4`}>
         <div>
           <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">{title}</h4>
@@ -373,7 +372,7 @@ export function ProductsSection({
                 <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
                   {product.name}
                 </p>
-                {!product.isActive && <Badge variant="secondary">비활성</Badge>}
+                {!product.isActive && <StatusDot tone="done">비활성</StatusDot>}
               </div>
               <p
                 className={TEXT}

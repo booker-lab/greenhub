@@ -7,8 +7,8 @@ import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
-import { useOrders } from '@/hooks/useOrders';
 import { requestOrderStatusChange } from '@/hooks/useOrderStatusUpdate';
+import { useOrders } from '@/hooks/useOrders';
 import {
   type BulkPrepareOutcome,
   buildRoundOrderStats,
@@ -103,7 +103,7 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
   const showBulkButton = canBulkPrepare(round.status, targets.length);
 
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4">
       <div className="flex flex-col items-stretch justify-start gap-3">
         <div className="flex flex-row flex-wrap items-baseline justify-between gap-4">
           <p
