@@ -12,7 +12,7 @@
  * 구간(stage):
  *   open             동결 없음.
  *   consumer-freeze  소비자 앱 화면만 묶는다(카카오페이 심사·LIVE 결제 확인 전, 2026-10-30 사용자 결정).
- *                    apps/consumer의 교체 흔적과, 소비자 화면 값을 바꾸는 공용 파일(theme.ts·style.css) 수정을 막는다.
+ *                    apps/consumer의 교체 흔적과, 소비자 화면 값을 바꾸는 공용 파일(styles/base.css, 예전 theme.ts·style.css) 수정을 막는다.
  *   pre-candidate    교체 코드(shadcn·Tailwind·Base UI 흔적)를 main에 넣지 않는다.
  *   candidate      위 + 프런트 앱을 다시 빌드하게 하는 변경은 수정·revert(라벨 freeze-fix)만.
  *                  배포는 상태 파일의 후보 SHA이거나 그 뒤의 SHA이고, 그 사이에 교체 코드가 없어야 한다.
@@ -27,10 +27,8 @@ export const STATE_FILE = 'docs/release/ui-migration-freeze.json';
 export const STAGES = Object.freeze(['open', 'consumer-freeze', 'pre-candidate', 'candidate']);
 
 // consumer-freeze에서 막는 공용 파일: 소비자 화면의 색·글자·보정 값을 바꾼다.
-export const CONSUMER_SHARED_FILES = Object.freeze([
-  'packages/ui/src/theme.ts',
-  'packages/ui/src/style.css',
-]);
+// UI 교체 P6에서 theme.ts를 지우고 style.css를 styles/base.css로 옮겼다.
+export const CONSUMER_SHARED_FILES = Object.freeze(['packages/ui/src/styles/base.css']);
 export const FIX_LABEL = 'freeze-fix';
 
 // 교체 작업만 만드는 경로. 동결 중에는 이 경로를 바꾸는 PR을 막는다.

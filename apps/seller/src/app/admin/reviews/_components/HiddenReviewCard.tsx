@@ -29,7 +29,7 @@ export interface HiddenReviewCardProps {
 export function HiddenReviewCard({ review, busy, error, onUnhide }: HiddenReviewCardProps) {
   const reason = hiddenReasonLabel(review) ?? '사유 없음';
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4 shadow-paper-xs">
       <div className="flex flex-row flex-nowrap items-start justify-between gap-4">
         <div className="flex flex-col gap-0">
           <p className={`${TEXT} font-bold`}>{review.storeName ?? review.storeId}</p>

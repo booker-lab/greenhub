@@ -13,8 +13,8 @@
 @import "@greenhub/ui/fonts/pretendard.css";
 
 /* 공용 변수(--color-* 등)와 터치 규칙. Mantine을 쓰던 동안의 자리(base와 components 사이 layer)처럼 layer 밖 규칙
-   (tokens.css·아래 :root·body)에 지도록 base layer에 둔다. 안의 Badge 보정(.m_5add502a)은 판매자 화면에 걸리지 않는다. */
-@import "@greenhub/ui/style.css" layer(base);
+   (tokens.css·아래 :root·body)에 지도록 base layer에 둔다. */
+@import "@greenhub/ui/styles/base.css" layer(base);
 
 /* @import는 모두 위에 둔다(@import 뒤에 다른 규칙이 오면 무효). */
 
@@ -24,8 +24,8 @@
 /* ① 외형 유지 동안 Mantine 화면을 Tailwind로 옮길 때 쓴 Mantine 값(@mantine/core default-css-variables).
    ② 방향 적용 때 design-direction.md 값으로 바꾸거나 지운다. */
 @theme {
-  --shadow-mantine-xs: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
-  --shadow-mantine-sm:
+  --shadow-paper-xs: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.1);
+  --shadow-paper-sm:
     0 1px 3px rgba(0, 0, 0, 0.05), rgba(0, 0, 0, 0.05) 0 10px 15px -5px,
     rgba(0, 0, 0, 0.04) 0 7px 7px -5px;
 }

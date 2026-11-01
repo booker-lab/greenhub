@@ -40,10 +40,10 @@ test('Mantine CSS를 import하지 않는다', () => {
   assert.doesNotMatch(css, /layer\(mantine\)/);
 });
 
-test('공용 style.css는 base layer로 넣는다(layer 밖 토큰·body 규칙에 진다)', () => {
+test('공용 styles/base.css는 base layer로 넣는다(layer 밖 토큰·body 규칙에 진다)', () => {
   assert.deepEqual(
-    imports.find((i) => i.path === '@greenhub/ui/style.css'),
-    { path: '@greenhub/ui/style.css', rest: 'layer(base)' },
+    imports.find((i) => i.path === '@greenhub/ui/styles/base.css'),
+    { path: '@greenhub/ui/styles/base.css', rest: 'layer(base)' },
   );
   assert.deepEqual(
     imports.find((i) => i.path === '@greenhub/ui/styles/tokens.css'),

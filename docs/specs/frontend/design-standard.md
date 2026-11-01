@@ -1,7 +1,7 @@
 # 그린러브 디자인 기준
 
 > 2026-10-03 사용자 확정. 파일럿(2026-11-01) 전 프런트 개편의 시각 계약이다.
-> 값의 정본은 `packages/ui/src/style.css`(CSS 변수)와 `packages/ui/src/theme.ts`(Mantine 테마)이고, 이 문서는 각 값을 **어디에 쓰는지**를 정한다.
+> 값의 정본은 `packages/ui/src/styles/base.css`(공용 CSS 변수)와 `packages/ui/src/styles/tokens.css`(Tailwind·shadcn 의미 변수)이고(UI 교체 P6에서 `style.css`·`theme.ts`를 옮김), 이 문서는 각 값을 **어디에 쓰는지**를 정한다.
 > 확정 시안: https://claude.ai/artifact/SGYHNJGqPpGQCT9BsVYYpG (소비자 홈·상품 상세·장바구니, 판매자 주문)
 
 ## 1. 방향

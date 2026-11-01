@@ -121,7 +121,7 @@ export default function AdminBannerClient() {
           <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">히어로 배너 관리</h4>
         </div>
         <div
-          className="block rounded-[16px] bg-white shadow-mantine-xs"
+          className="block rounded-[16px] bg-white shadow-paper-xs"
           style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
         >
           <div className="flex flex-col items-center gap-3 px-4 py-16">
@@ -178,7 +178,7 @@ export default function AdminBannerClient() {
 
       {saveError !== null && (
         <div
-          className="mb-4 block rounded-[16px] bg-white p-4 shadow-mantine-xs"
+          className="mb-4 block rounded-[16px] bg-white p-4 shadow-paper-xs"
           style={{ border: '1px solid var(--color-danger)' }}
         >
           <div className="flex flex-col items-center gap-2.5">

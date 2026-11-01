@@ -15,7 +15,7 @@ interface BannerTextSectionProps {
 export function BannerTextSection({ form, setForm }: BannerTextSectionProps) {
   return (
     <div
-      className="block rounded-[16px] bg-white p-5 shadow-mantine-xs"
+      className="block rounded-[16px] bg-white p-5 shadow-paper-xs"
       style={{ border: '1px solid var(--color-border)' }}
     >
       <p
