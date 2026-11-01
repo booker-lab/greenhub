@@ -2,8 +2,8 @@
 
 import type { SaleRound, SaleRoundStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Badge } from '@greenhub/ui/components/badge';
 import { Button, ButtonLink } from '@greenhub/ui/components/button';
+import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { AlertTriangle, CalendarDays, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -37,26 +37,27 @@ import { RoundCancelModal } from './RoundCancelModal';
 import { RoundForm } from './RoundForm';
 import { RoundOrdersSection } from './RoundOrdersSection';
 
-// 상태 배지는 Mantine Badge light의 색(gray·yellow·brand·dark·red)과 같은 변형이다.
+// ② 상태는 배지 면 대신 점 + 글자(StatusDot, 2026-11-01 결정): 끝났거나 멈춘 상태(작성 중·배송 완료·취소)=회색,
+// 나머지 검정. 이전 Badge의 회색(secondary)·빨강(취소) 면을 주문 상태와 같은 규칙으로 옮겼다.
 const STATUS_META: Record<
   SaleRoundStatus,
   {
     label: string;
-    badge: 'secondary' | 'warning' | 'light' | 'light-dark' | 'destructive';
+    tone: StatusDotTone;
   }
 > = {
-  DRAFT: { label: '작성 중', badge: 'secondary' },
-  SCHEDULED: { label: '판매 예정', badge: 'warning' },
-  OPEN: { label: '판매 중', badge: 'light' },
-  CLOSED: { label: '주문 마감', badge: 'light-dark' },
-  COMPLETED: { label: '배송 완료', badge: 'secondary' },
-  CANCELLED: { label: '취소', badge: 'destructive' },
+  DRAFT: { label: '작성 중', tone: 'done' },
+  SCHEDULED: { label: '판매 예정', tone: 'default' },
+  OPEN: { label: '판매 중', tone: 'default' },
+  CLOSED: { label: '주문 마감', tone: 'default' },
+  COMPLETED: { label: '배송 완료', tone: 'done' },
+  CANCELLED: { label: '취소', tone: 'done' },
 };
 
 // ① 외형 유지(UI 교체 P4): Mantine Paper·Text·Group·Stack·SimpleGrid·Container·Alert·Badge·Button과 같은 값을
-// Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16·그림자 xs.
+// Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16(그림자는 ② D2로 걷음).
 const TEXT = 'm-0 p-0 text-base font-normal';
-const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-white';
 const COLUMN = 'flex flex-col items-stretch justify-start';
 
 // 상태 변경 버튼: 예약은 Mantine filled brand, 마감은 outline dark, 완료는 outline brand와 같은 변형이다.
@@ -200,9 +201,9 @@ function RoundSummary({ round }: { round: SellerSaleRound }) {
         <div className="flex flex-row flex-wrap items-start justify-between gap-4">
           <div>
             <div className="flex flex-row flex-wrap items-center justify-start gap-2.5">
-              <Badge variant={status.badge}>{status.label}</Badge>
+              <StatusDot tone={status.tone}>{status.label}</StatusDot>
               {round.closeReason && (
-                <Badge variant="outline-gray">{CLOSE_REASON_LABEL[round.closeReason]}</Badge>
+                <StatusDot tone="done">{CLOSE_REASON_LABEL[round.closeReason]}</StatusDot>
               )}
             </div>
             <p className={TEXT} style={{ marginTop: 6, fontWeight: 'var(--fw-bold)' }}>
