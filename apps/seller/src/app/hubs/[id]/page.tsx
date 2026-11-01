@@ -14,7 +14,7 @@ import { ApiError, apiJson } from '@/lib/api';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Stack·Group·Paper·Text·Badge·Button과 같은 값을 Tailwind와
 // @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16·윤곽선 없음(그림자는 ② D2로 걷음).
-// 주문 카드는 Mantine Paper component="button"처럼 같은 button 요소라 브라우저 기본 테두리도 그대로다.
+// 주문 카드는 button 요소라 ① 단계에서는 브라우저 기본 테두리를 그대로 뒀지만, ② D2(바깥 테두리 없음)에 맞춰 걷는다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 const PAPER =
   'block rounded-[16px] bg-white no-underline outline-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
@@ -239,7 +239,7 @@ export default function HubDetailPage() {
                       <button
                         type="button"
                         key={orderId(order)}
-                        className={`${PAPER} p-4`}
+                        className={`${PAPER} border-0 p-4`}
                         onClick={() =>
                           router.push(
                             `/hubs/${encodeURIComponent(hubId)}/pickup?orderId=${encodeURIComponent(orderId(order))}`,
