@@ -1,7 +1,7 @@
 'use client';
 
 import type { Order, OrderStatus } from '@greenhub/shared';
-import { Box, Button, Container, Group, Stack, Text, Title, UnstyledButton } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import { ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
@@ -41,6 +41,14 @@ const STATUS_COLORS: Partial<Record<OrderStatus, StatusColorKey>> = {
   CANCELLED: { bg: 'var(--color-danger-surface)', text: 'var(--color-danger)' },
   REVIEWED: { bg: 'var(--color-surface-muted)', text: 'var(--color-text-secondary)' },
 };
+
+// ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 md 16)·Stack·Group(gap md 16 기본, wrap)·
+// Title order 1·2(줄 높이 1.3·1.35)·Text(p, 줄 높이 1.55)·UnstyledButton·Button default xs(radius xl)와 같은 값.
+const TEXT = 'm-0 p-0 leading-[1.55]';
+// Mantine UnstyledButton(+ 초점 링 mantine-focus-auto)과 같은 초기화. 모양은 각 버튼의 style이 준다.
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-[16px] text-inherit no-underline touch-manipulation [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid';
+const DEFAULT_BUTTON_XS = { variant: 'plain', size: 'xs' } as const;
 
 const sectionTitleStyle = {
   color: 'var(--color-text)',
@@ -135,9 +143,11 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
   const summary = readOrderListSummary(order);
 
   return (
-    <UnstyledButton
+    <button
+      type="button"
       onClick={onClick}
       data-testid="order-card"
+      className={UNSTYLED_BUTTON}
       style={{
         display: 'block',
         width: '100%',
@@ -147,8 +157,8 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         padding: '16px',
       }}
     >
-      <Group justify="space-between" mb={8}>
-        <Box
+      <div className="mb-2 flex flex-row flex-wrap items-center justify-between gap-4">
+        <div
           style={{
             fontSize: 12,
             fontWeight: 'var(--fw-bold)',
@@ -159,13 +169,16 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
           }}
         >
           {label}
-        </Box>
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        </div>
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        >
           {formatDate(order.createdAt)}
-        </Text>
-      </Group>
-      <Group gap={12} align="flex-start" wrap="nowrap">
-        <Box
+        </p>
+      </div>
+      <div className="flex flex-row flex-nowrap items-start justify-start gap-3">
+        <div
           style={{
             position: 'relative',
             width: 64,
@@ -184,15 +197,15 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
             sizes="64px"
             style={{ objectFit: 'cover' }}
           />
-        </Box>
-        <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text
+        </div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p
+            className={`${TEXT} mb-1`}
             style={{
               fontSize: 'var(--font-size-sm)',
               fontWeight: 'var(--fw-bold)',
               color: 'var(--color-text)',
             }}
-            mb={4}
           >
             {order.saleType === 'group' ? '[공동구매] ' : ''}
             {order.deliveryMethod === 'hub'
@@ -200,27 +213,31 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
               : order.deliveryMethod === 'parcel'
                 ? '택배'
                 : '직배송'}
-          </Text>
+          </p>
           {summary && (
-            <Text
+            <p
+              className={`${TEXT} mb-1`}
               style={{
                 fontSize: 'var(--font-size-md)',
                 fontWeight: 'var(--fw-extrabold)',
                 color: 'var(--color-text)',
               }}
-              mb={4}
             >
               {summary.representativeName}
               {summary.additionalProductCount > 0 ? ` 외 ${summary.additionalProductCount}개` : ''}
-            </Text>
+            </p>
           )}
-          <Group justify="space-between" align="baseline">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          <div className="flex flex-row flex-wrap items-baseline justify-between gap-4">
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               {summary
                 ? `상품 ${summary.productCount}종 · 총 수량 ${summary.totalQuantity}개`
                 : `수량 ${order.quantity}개`}
-            </Text>
-            <Text
+            </p>
+            <p
+              className={TEXT}
               style={{
                 fontSize: 'var(--font-size-md)',
                 fontVariantNumeric: 'tabular-nums',
@@ -229,11 +246,11 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
               }}
             >
               {order.totalAmount.toLocaleString('ko-KR')}원
-            </Text>
-          </Group>
-        </Box>
-      </Group>
-    </UnstyledButton>
+            </p>
+          </div>
+        </div>
+      </div>
+    </button>
   );
 }
 
@@ -250,114 +267,112 @@ export default function MyPageClient() {
 
   if (status === 'loading') {
     return (
-      <Box py={60} ta="center">
-        <Text style={{ color: 'var(--color-text-disabled)' }}>로딩 중...</Text>
-      </Box>
+      <div className="py-[60px] text-center">
+        <p className={`${TEXT} text-[16px]`} style={{ color: 'var(--color-text-disabled)' }}>
+          로딩 중...
+        </p>
+      </div>
     );
   }
 
   if (!session) return null;
 
+  const disabledTextStyle = {
+    color: 'var(--color-text-disabled)',
+    fontSize: 'var(--font-size-sm)',
+  } as const;
+  const dangerTextStyle = {
+    color: 'var(--color-danger)',
+    fontSize: 'var(--font-size-sm)',
+  } as const;
+
   return (
-    <Container size="sm" px="md" pt="lg" pb={80}>
+    <div className="mx-auto max-w-[720px] px-4 pt-5 pb-20">
       {/* 프로필 */}
-      <Box
-        mb="xl"
-        p="lg"
+      <div
+        className="mb-8 p-5"
         style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
       >
-        <Group justify="space-between" align="flex-start">
-          <Box>
-            <Title
-              order={1}
+        <div className="flex flex-row flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1
+              className="m-0 mb-1 leading-[1.3]"
               style={{
                 color: 'var(--color-text)',
                 fontSize: 20,
                 fontWeight: 'var(--fw-extrabold)',
               }}
-              mb={4}
             >
               {session.user?.name ?? '사용자'}
-            </Title>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+            </h1>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               {session.user?.email}
-            </Text>
-          </Box>
+            </p>
+          </div>
           <Button
-            variant="default"
-            size="xs"
-            radius="xl"
+            type="button"
+            {...DEFAULT_BUTTON_XS}
             onClick={() => signOut({ callbackUrl: '/' })}
           >
             로그아웃
           </Button>
-        </Group>
-      </Box>
+        </div>
+      </div>
 
       {/* 주문 내역 */}
-      <Box mb="xl">
-        <Title order={2} mb="md" style={sectionTitleStyle}>
+      <div className="mb-8">
+        <h2 className="m-0 mb-4 leading-[1.35]" style={sectionTitleStyle}>
           주문 내역
-        </Title>
+        </h2>
         {loading && orders.length === 0 && (
-          <Text
-            ta="center"
-            style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-            py="lg"
-          >
+          <p className={`${TEXT} py-5 text-center`} style={disabledTextStyle}>
             불러오는 중...
-          </Text>
+          </p>
         )}
         {!loading && error && orders.length === 0 && (
-          <Stack gap="xs" py="xs">
-            <Text style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>
+          <div className="flex flex-col items-stretch justify-start gap-2.5 py-2.5">
+            <p className={TEXT} style={dangerTextStyle}>
               주문 내역을 불러올 수 없습니다.
-            </Text>
+            </p>
             <Button
-              variant="default"
-              size="xs"
-              radius="xl"
+              type="button"
+              {...DEFAULT_BUTTON_XS}
               onClick={refetch}
               data-testid="orders-retry"
             >
               다시 시도
             </Button>
-          </Stack>
+          </div>
         )}
         {!loading && !error && orders.length === 0 && (
-          <Text
-            ta="center"
-            style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-            py="xl"
-          >
+          <p className={`${TEXT} py-8 text-center`} style={disabledTextStyle}>
             주문 내역이 없습니다.
-          </Text>
+          </p>
         )}
         {orders.length > 0 && (
-          <Stack gap="sm">
+          <div className="flex flex-col items-stretch justify-start gap-3">
             {loading && (
-              <Text
-                ta="center"
-                style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
-              >
+              <p className={`${TEXT} text-center`} style={disabledTextStyle}>
                 업데이트 중...
-              </Text>
+              </p>
             )}
             {error && (
-              <Group justify="space-between" align="center">
-                <Text style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}>
+              <div className="flex flex-row flex-wrap items-center justify-between gap-4">
+                <p className={TEXT} style={dangerTextStyle}>
                   최신 주문 내역을 불러오지 못했습니다.
-                </Text>
+                </p>
                 <Button
-                  variant="default"
-                  size="xs"
-                  radius="xl"
+                  type="button"
+                  {...DEFAULT_BUTTON_XS}
                   onClick={refetch}
                   data-testid="orders-retry"
                 >
                   다시 시도
                 </Button>
-              </Group>
+              </div>
             )}
             {orders.map((order) => (
               <OrderCard
@@ -366,16 +381,16 @@ export default function MyPageClient() {
                 onClick={() => router.push(`/mypage/orders/${order.id}`)}
               />
             ))}
-          </Stack>
+          </div>
         )}
-      </Box>
+      </div>
 
       {/* 메뉴 */}
-      <Box mb="xl">
-        <Title order={2} mb="md" style={sectionTitleStyle}>
+      <div className="mb-8">
+        <h2 className="m-0 mb-4 leading-[1.35]" style={sectionTitleStyle}>
           내 정보
-        </Title>
-        <Stack gap="xs">
+        </h2>
+        <div className="flex flex-col items-stretch justify-start gap-2.5">
           {/* 벤치마킹 비교 기능: 이번 회차 찜(wishlist) */}
           {isFeatureOn('wishlist') && (
             <MenuLink label="이번 회차 찜" onClick={() => router.push('/mypage/wishlist')} />
@@ -384,8 +399,10 @@ export default function MyPageClient() {
           {isFeatureOn('purchase-history') && (
             <MenuLink label="구매한 꽃" onClick={() => router.push('/mypage/purchase-history')} />
           )}
-          <UnstyledButton
+          <button
+            type="button"
             onClick={() => router.push('/mypage/notifications')}
+            className={UNSTYLED_BUTTON}
             style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -398,7 +415,8 @@ export default function MyPageClient() {
               padding: '14px 16px',
             }}
           >
-            <Text
+            <p
+              className={TEXT}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
@@ -406,11 +424,13 @@ export default function MyPageClient() {
               }}
             >
               알림 내역
-            </Text>
+            </p>
             <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
-          </UnstyledButton>
-          <UnstyledButton
+          </button>
+          <button
+            type="button"
             onClick={() => router.push('/mypage/addresses')}
+            className={UNSTYLED_BUTTON}
             style={{
               display: 'flex',
               justifyContent: 'space-between',
@@ -423,7 +443,8 @@ export default function MyPageClient() {
               padding: '14px 16px',
             }}
           >
-            <Text
+            <p
+              className={TEXT}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
@@ -431,28 +452,30 @@ export default function MyPageClient() {
               }}
             >
               배송지 목록 · 추가 · 수정
-            </Text>
+            </p>
             <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
-          </UnstyledButton>
+          </button>
           <MenuLink label="회원 탈퇴" onClick={() => router.push('/mypage/withdraw')} />
-        </Stack>
-      </Box>
+        </div>
+      </div>
 
       {/* 앱 설치 */}
-      <Box>
-        <Title order={2} mb="md" style={sectionTitleStyle}>
+      <div>
+        <h2 className="m-0 mb-4 leading-[1.35]" style={sectionTitleStyle}>
           앱 설치
-        </Title>
+        </h2>
         <A2HSButton />
-      </Box>
-    </Container>
+      </div>
+    </div>
   );
 }
 
 function MenuLink({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <UnstyledButton
+    <button
+      type="button"
       onClick={onClick}
+      className={UNSTYLED_BUTTON}
       style={{
         alignItems: 'center',
         background: 'var(--color-bg)',
@@ -465,10 +488,17 @@ function MenuLink({ label, onClick }: { label: string; onClick: () => void }) {
         width: '100%',
       }}
     >
-      <Text style={{ color: 'var(--color-text)', fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>
+      <p
+        className={TEXT}
+        style={{
+          color: 'var(--color-text)',
+          fontSize: 'var(--font-size-sm)',
+          fontWeight: 'var(--fw-medium)',
+        }}
+      >
         {label}
-      </Text>
+      </p>
       <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
-    </UnstyledButton>
+    </button>
   );
 }
