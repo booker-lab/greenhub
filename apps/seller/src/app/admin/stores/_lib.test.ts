@@ -54,10 +54,10 @@ describe('parseRate (% 단위 입력 → 0~1 저장값)', () => {
 
 describe('수수료율 표시', () => {
   it('저장값을 % 숫자로 보이고 미설정은 기본 5%로 보인다', () => {
-    expect(formatRate(0.05)).toBe('5%');
-    expect(formatRate(0.075)).toBe('7.5%');
-    expect(formatRate(0)).toBe('0%');
-    expect(formatRate(undefined)).toBe('기본 5%');
+    expect(formatRate(0.05)).toEqual({ percent: '5%', isDefault: false });
+    expect(formatRate(0.075)).toEqual({ percent: '7.5%', isDefault: false });
+    expect(formatRate(0)).toEqual({ percent: '0%', isDefault: false });
+    expect(formatRate(undefined)).toEqual({ percent: '5%', isDefault: true });
   });
 
   it('편집칸 초기값은 % 숫자, 미설정이면 빈칸이다', () => {
@@ -177,7 +177,7 @@ describe('getAdminStoresReadState', () => {
   });
 });
 
-describe('판매자 검색·연락처·치우기 안내', () => {
+describe('판매자 검색·연락처·정리하기 안내', () => {
   const stores = [
     { id: 's-1', name: '난플렉스', status: 'active', ceoName: '김대표', phone: '010-1234-5678' },
     { id: 's-2', name: '하늘정원', status: 'invited' },
@@ -196,16 +196,16 @@ describe('판매자 검색·연락처·치우기 안내', () => {
 
   it('대표자·연락처 한 줄, 둘 다 없으면 자리표시자', () => {
     expect(formatStoreContact(stores[0])).toBe('김대표 · 010-1234-5678');
-    expect(formatStoreContact(stores[1])).toBe('—');
+    expect(formatStoreContact(stores[1])).toBe('대표·연락처 미등록');
   });
 
-  it('치우기 확인창은 실제 동작(숨김·주문 차단·로그인 유지·기록 있으면 불가)을 알린다', () => {
+  it('정리하기 확인창은 실제 동작(숨김·주문 차단·로그인 유지·기록 있으면 불가)을 알린다', () => {
     const message = describeArchiveConfirm({ name: '난플렉스' });
-    expect(message).toContain('난플렉스 판매자를 치울까요?');
+    expect(message).toContain('난플렉스 판매자를 정리할까요?');
     expect(message).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다');
     expect(message).toContain('계속 로그인할 수 있고');
     expect(message).toContain(
-      '기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 치워집니다',
+      '기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다',
     );
     expect(message).not.toContain('보존됩니다');
   });

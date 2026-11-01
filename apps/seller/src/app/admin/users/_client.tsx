@@ -1,12 +1,12 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { useState } from 'react';
 import { notify } from '@/components/AppToaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
 import type { AdminUser } from '@/hooks/useAdmin';
 import { describeAdminCommandOutcome, useAdminUsers } from '@/hooks/useAdmin';
+import { AdminListError, AdminListNotice, AdminPageHeader } from '../_components/adminList';
 import { RefreshButton } from '../_components/RefreshButton';
 import { UsersTable } from './_components/UsersTable';
 import { describeUserSuspendConfirm } from './_lib';
@@ -60,65 +60,38 @@ export default function AdminUsersClient() {
 
   const confirm = pending ? describeUserSuspendConfirm(pending) : null;
 
-  // ① 외형 유지(UI 교체 P2b): Mantine Text·Group·Title order 4(18px·800·줄 높이 1.45)·Paper와 같은 값.
+  // ② 방향(design-direction.md §5 어드민, §8 D7): 명사 하나의 h1과 지금 기준 한 줄, 다른 목록과 같은 표.
+  const ready = !loading && error === null;
+  const suspendedCount = users.filter((user) => user.suspended).length;
+  const header = (
+    <AdminPageHeader
+      title="소비자"
+      subline={ready ? `가입 ${users.length}명 · 정지 ${suspendedCount}명` : undefined}
+      action={<RefreshButton loading={loading} onClick={reload} />}
+    />
+  );
+
   if (loading) {
     return (
-      <p
-        className="m-0 p-0 py-20 text-center text-base"
-        style={{ color: 'var(--color-text-disabled)' }}
-      >
-        불러오는 중...
-      </p>
+      <div>
+        {header}
+        <AdminListNotice>불러오는 중...</AdminListNotice>
+      </div>
     );
   }
 
-  if (error !== null && !loading) {
+  if (error !== null) {
     return (
       <div>
-        <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
-          <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">소비자 계정</h4>
-        </div>
-        <div
-          className="block rounded-[16px] bg-white shadow-mantine-xs"
-          style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        >
-          <div className="flex flex-col items-center gap-3 px-4 py-16">
-            <p
-              className="m-0 p-0 text-base"
-              style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}
-            >
-              소비자 목록을 불러오지 못했습니다.
-            </p>
-            <p
-              className="m-0 p-0 text-center text-base"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
-              {error}
-            </p>
-            <Button onClick={reload} variant="outline" className="rounded-[8px]">
-              다시 조회
-            </Button>
-          </div>
-        </div>
+        {header}
+        <AdminListError title="소비자 목록을 불러오지 못했습니다." error={error} onRetry={reload} />
       </div>
     );
   }
 
   return (
     <div>
-      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
-        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">
-          소비자 계정{' '}
-          <span
-            className="m-0 p-0 text-base font-normal"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          >
-            ({users.length})
-          </span>
-        </h4>
-        {/* 새로고침 — stores 탭(StoresFilters)과 같은 버튼 형태, hook reload 재사용 */}
-        <RefreshButton loading={loading} onClick={reload} />
-      </div>
+      {header}
 
       <UsersTable users={users} processingId={processingId} onToggle={handleToggle} />
 

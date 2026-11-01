@@ -7,7 +7,8 @@ import { type ChangeEvent, useId } from 'react';
 import type { IssuedInvite } from '@/hooks/useAdmin';
 import { formatKstDateTime, INVITE_RECIPIENT_EMAIL_MAX_LENGTH } from '../_lib';
 
-// ① 외형 유지(UI 교체 P2b): Mantine Paper(lg·xs·lg)·Text(16px·줄 높이 1.55)·Box·Group·TextInput·Button과 같은 값.
+// ② 방향(design-direction.md §5 어드민, §8 D7): 쉬는 상자에 그림자·색 면을 쓰지 않고 1px rule 테두리만 둔다.
+// 입력칸·버튼은 ① 외형(Mantine TextInput·Button과 같은 값)을 유지한다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 
 interface RecipientEmailInputProps {
@@ -90,14 +91,8 @@ export function InviteGenerator({
   const recipientMissing = recipientEmail.trim() === '';
 
   return (
-    <div
-      className="mb-8 block rounded-[16px] bg-white p-5 shadow-mantine-xs"
-      style={{ border: '1px solid var(--color-border)' }}
-    >
-      <p
-        className={`${TEXT} mb-4`}
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-      >
+    <div className="mb-8 block rounded-[8px] border border-rule bg-white p-4 min-[641px]:p-5">
+      <p className={`${TEXT} mb-4 text-[15px] leading-[22px] text-[var(--color-text-secondary)]`}>
         판매자 초대 링크를 만듭니다. 링크는 발급 후 <strong>72시간</strong> 동안 한 번만 쓸 수 있고,
         받는 분이 링크를 열어 카카오로 로그인하면 판매자로 가입돼요.
       </p>
@@ -114,24 +109,13 @@ export function InviteGenerator({
         disabled={generating}
       />
 
-      <Button
-        onClick={onGenerate}
-        disabled={generating || recipientMissing}
-        size="md"
-        style={{ backgroundColor: 'var(--color-primary)' }}
-      >
+      <Button onClick={onGenerate} disabled={generating || recipientMissing} size="md">
         {generating ? '만드는 중…' : '새 초대 링크 만들기'}
       </Button>
 
       {/* 발급 command 실패는 성공과 구분해 사용자에게 알린다. 성공한 경우에만 lastToken이 갱신되므로 이 블록은 이전 성공 토큰을 덮어쓰지 않는다. */}
       {generateError !== null && (
-        <div
-          className="mt-4 p-4"
-          style={{
-            border: '1px solid var(--color-border)',
-            borderRadius: 12,
-          }}
-        >
+        <div className="mt-4 rounded-[8px] border border-rule p-4">
           <p
             className={`${TEXT} mb-1`}
             style={{
@@ -144,7 +128,7 @@ export function InviteGenerator({
           </p>
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             {generateError}
           </p>
@@ -152,20 +136,13 @@ export function InviteGenerator({
       )}
 
       {lastToken && (
-        <div
-          className="mt-4 p-4"
-          style={{
-            backgroundColor: 'var(--color-primary-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 12,
-          }}
-        >
+        <div className="mt-4 rounded-[8px] border border-rule p-4">
           <p
             className={`${TEXT} mb-2.5`}
             style={{
               fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-primary-dark)',
-              fontWeight: 'var(--fw-medium)',
+              color: 'var(--color-text)',
+              fontWeight: 'var(--fw-bold)',
             }}
           >
             생성된 초대 링크
@@ -179,7 +156,7 @@ export function InviteGenerator({
                 wordBreak: 'break-all',
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
-                color: 'var(--color-primary-dark)',
+                color: 'var(--color-text)',
               }}
             >
               {lastLink ?? lastToken.token}
@@ -190,14 +167,14 @@ export function InviteGenerator({
           </div>
           <p
             className={`${TEXT} mt-2.5`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             만료: {formatKstDateTime(lastToken.expiresAt)}
           </p>
           {lastToken.recipientEmail && (
             <p
               className={`${TEXT} mt-1`}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               받는 사람: {lastToken.recipientEmail}
             </p>

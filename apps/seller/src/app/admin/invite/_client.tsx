@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { notify } from '@/components/AppToaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { describeListCap, type IssuedInvite, useAdminInvite } from '@/hooks/useAdmin';
+import { AdminPageHeader } from '../_components/adminList';
 import { InviteGenerator } from './_components/InviteGenerator';
 import { InviteHistoryTable } from './_components/InviteHistoryTable';
 import { ManualCopyModal } from './_components/ManualCopyModal';
@@ -67,12 +68,10 @@ export default function AdminInviteClient() {
     void copy(lastToken.token);
   };
 
-  // ① 외형 유지(UI 교체 P2b): Mantine Group·Title order 4(18px·800·줄 높이 1.45)·Text와 같은 값.
+  // ② 방향(design-direction.md §5 어드민, §8 D7): 명사 하나의 h1과 지금 기준 한 줄, 발급 내역은 다른 목록과 같은 표.
   return (
     <div>
-      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
-        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">판매자 초대 링크</h4>
-      </div>
+      <AdminPageHeader title="초대" subline="판매자 초대 링크를 만들고 발급한 링크를 확인합니다." />
 
       <InviteGenerator
         generating={generating}
@@ -87,16 +86,7 @@ export default function AdminInviteClient() {
         onCopy={handleCopy}
       />
 
-      <p
-        className="m-0 mb-3 p-0 text-base"
-        style={{
-          fontSize: 'var(--font-size-sm)',
-          fontWeight: 'var(--fw-medium)',
-          color: 'var(--color-text-secondary)',
-        }}
-      >
-        발급 내역
-      </p>
+      <h2 className="m-0 mb-1 text-[18px] leading-[26px] font-bold text-foreground">발급 내역</h2>
       <InviteHistoryTable
         invites={invites}
         loading={loading}
@@ -108,7 +98,7 @@ export default function AdminInviteClient() {
         onRevoke={setPendingRevoke}
       />
       {cap !== null && !loading && error === null && (
-        <p className="m-0 mt-2.5 p-0 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+        <p className="m-0 mt-3 text-[13px] leading-[18px] text-[var(--color-text-secondary)]">
           {describeListCap(cap)}
         </p>
       )}
