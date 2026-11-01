@@ -2208,7 +2208,13 @@ export const screens = [
     group: '판매자 · 불러오는 중 버튼',
     title: '주문 상세 · 운영 기록 새로고침 중',
     path: '/orders/order-round-held',
-    steps: [{ scenario: 'slow-operation-issues' }, { click: '새로고침' }],
+    // 이 화면에는 "새로고침" 버튼이 둘(주문 머리·운영 기록 칸)이라 글자로 누르면 머리 쪽이 눌린다. 운영 기록 칸 버튼을 고른다.
+    steps: [
+      { scenario: 'slow-operation-issues' },
+      {
+        clickSelector: 'div:has(> p:text-is("연락·환불·분쟁 기록")) + button:has-text("새로고침")',
+      },
+    ],
   },
   {
     id: 'operations-reload-loading',
