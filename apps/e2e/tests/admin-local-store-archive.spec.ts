@@ -170,7 +170,7 @@ test.describe('어드민 로컬 — 판매자 정리하기·복구', () => {
     ).json()) as { items: Array<{ id: string }> };
     expect(products.items.map((item) => item.id)).toContain(fx.productId);
 
-    await openAdminPage(page, '/admin/stores', '판매자');
+    await openAdminPage(page, '/admin/stores', '이 목록에서 찾기');
     await page.getByLabel('이 목록에서 찾기').fill(fx.storeName);
     await expect(storeRow(page)).toHaveCount(1, { timeout: 30_000 });
 

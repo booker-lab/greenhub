@@ -80,7 +80,7 @@ test.describe('어드민 로컬 — 기사·판매자 연락처', () => {
   });
 
   test('기사 승인 대기 상자 — 이름·전화(전화 걸기 링크)·신청일을 보여 준다', async ({ page }) => {
-    await openAdminPage(page, '/admin/drivers', '기사');
+    await openAdminPage(page, '/admin/drivers', '활동 중');
 
     // 시드 기사는 미승인이라 표 위 승인 대기 상자(D7)에 보인다. 상자는 이메일 대신 연락처·신청일을 쓴다.
     const box = page.getByRole('region', { name: /승인 대기/ });
@@ -95,7 +95,7 @@ test.describe('어드민 로컬 — 기사·판매자 연락처', () => {
   });
 
   test('판매자 탭 — 대표자·연락처(전화 걸기 링크)를 보여 준다', async ({ page }) => {
-    await openAdminPage(page, '/admin/stores', '판매자');
+    await openAdminPage(page, '/admin/stores', '이 목록에서 찾기');
 
     await page.getByLabel('이 목록에서 찾기').fill(store.name);
     await expect(visible(page.getByText(store.name))).toHaveCount(1, { timeout: 30_000 });
