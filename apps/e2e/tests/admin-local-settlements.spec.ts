@@ -7,7 +7,6 @@ import {
   type DocData,
   deleteDocs,
   deleteLocalAdmin,
-  krw,
   type LocalAdmin,
   loginLocalAdmin,
   newRunId,
@@ -204,22 +203,29 @@ test.describe('어드민 로컬 — 정산', () => {
     await visible(
       page.getByRole('button', { name: `주문 ${fx.payOrderNumber} 지급 완료 기록` }),
     ).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('정산 지급 처리')).toBeVisible();
-    await expect(dialog).toContainText(`가게: ${fx.storeName}`);
-    await expect(dialog).toContainText(`주문번호: ${fx.payOrderNumber}`);
-    await expect(dialog).toContainText(`지급액: ${krw(PAY.net)}`);
+    // ② 확인창(D7): 제목 = 동작 + 대상, 대상 정보(가게·주문·입금 계좌 전체 번호·예금주), 돈의 흐름(거래액 − 수수료 = 지급액).
+    const dialog = page.getByRole('dialog', { name: `${fx.storeName} 정산 1건 지급 완료 기록` });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(`주문번호${fx.payOrderNumber}`);
     const { bankName, accountNumber, accountHolder } = fx.account;
-    await expect(dialog).toContainText(
-      `입금 계좌: ${bankName} ${accountNumber} (예금주 ${accountHolder})`,
-    );
+    await expect(dialog).toContainText(`입금 계좌${bankName} ${accountNumber}`);
+    await expect(dialog).toContainText(`예금주${accountHolder}`);
+    await expect(dialog).toContainText(`거래액${won(PAY.net + PAY.fee)}`);
+    await expect(dialog).toContainText(`플랫폼 수수료−${won(PAY.fee)}`);
+    await expect(dialog).toContainText(`지급액${won(PAY.net)}`);
+    // 이체를 마쳤다고 체크하기 전에는 기록 버튼이 꺼져 있다(체크는 비운 채 열린다).
+    const confirm = dialog.getByRole('button', { name: `${won(PAY.net)} 지급 완료 기록` });
+    await expect(confirm).toBeDisabled();
+    await dialog
+      .getByRole('checkbox', { name: `은행 앱에서 이 계좌로 ${won(PAY.net)} 이체를 마쳤습니다` })
+      .check();
 
     const payResponse = page.waitForResponse(
       (res) =>
         res.url().endsWith(`/admin/settlements/${fx.payId}/pay`) &&
         res.request().method() === 'PATCH',
     );
-    await dialog.getByRole('button', { name: '지급 완료', exact: true }).click();
+    await confirm.click();
     expect((await payResponse).status()).toBe(200);
     await expect(dialog).toBeHidden();
     expect((await readDoc(`settlements/${fx.payId}`))?.status).toBe('paid');

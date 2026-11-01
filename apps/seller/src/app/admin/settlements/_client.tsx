@@ -4,7 +4,6 @@ import { Button } from '@greenhub/ui/components/button';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { notify } from '@/components/AppToaster';
-import { ConfirmModal } from '@/components/ConfirmModal';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import {
   type AdminSettlement,
@@ -14,14 +13,13 @@ import {
 } from '@/hooks/useAdmin';
 import { AdminPageHeader } from '../_components/adminList';
 import { LoadMoreButton } from './_components/LoadMoreButton';
+import { PayConfirmDialog } from './_components/PayConfirmDialog';
 import { SettlementFilters } from './_components/SettlementFilters';
 import { SettlementTable } from './_components/SettlementTable';
 import { SummaryCards } from './_components/SummaryCards';
 import {
   ADMIN_SETTLEMENT_FILTER_TABS,
   type AdminSettlementFilterKey,
-  canPay,
-  describePayConfirm,
   toStoreOptions,
 } from './_lib';
 
@@ -154,14 +152,9 @@ export default function AdminSettlementsClient() {
         </>
       )}
 
-      <ConfirmModal
-        opened={payTarget !== null}
-        title="정산 지급 처리"
-        message={payTarget ? describePayConfirm(payTarget) : ''}
-        confirmLabel="지급 완료"
-        confirmColor="brand"
+      <PayConfirmDialog
+        target={payTarget}
         loading={processingId !== null}
-        confirmDisabled={payTarget !== null && !canPay(payTarget)}
         onConfirm={runPay}
         onClose={() => {
           if (processingId === null) setPayTarget(null);

@@ -142,23 +142,32 @@ test.describe('어드민 로컬 — 판매자 정리하기·복구', () => {
       has: page.getByText(fx.storeName, { exact: true }),
     });
 
-  /** 행 끝 ⋮ 메뉴 항목을 누르고 window.confirm 문구를 받아 승인한 뒤, 해당 PATCH 응답을 기다린다. */
-  async function confirmRowAction(page: Page, menuItem: string, action: 'archive' | 'restore') {
-    let confirmMessage = '';
-    page.once('dialog', async (dialog) => {
-      confirmMessage = dialog.message();
-      await dialog.accept();
-    });
+  /**
+   * 행 끝 ⋮ 메뉴 항목을 눌러 확인창(② D7, 제목 = 동작 + 대상)을 열고, 확인창 글자를 받아 둔 뒤 확정하고
+   * 해당 PATCH 응답을 기다린다.
+   */
+  async function confirmRowAction(
+    page: Page,
+    menuItem: string,
+    action: 'archive' | 'restore',
+    dialogTitle: string,
+    confirmLabel: string,
+  ) {
+    await storeRow(page)
+      .getByRole('button', { name: `판매자 ${fx.storeName} 동작 더 보기`, exact: true })
+      .click();
+    await page.getByRole('menuitem', { name: menuItem, exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: dialogTitle });
+    await expect(dialog).toBeVisible();
+    const confirmMessage = (await dialog.textContent()) ?? '';
     const response = page.waitForResponse(
       (res) =>
         res.url().endsWith(`/admin/stores/${fx.storeId}/${action}`) &&
         res.request().method() === 'PATCH',
     );
-    await storeRow(page)
-      .getByRole('button', { name: `판매자 ${fx.storeName} 동작 더 보기`, exact: true })
-      .click();
-    await page.getByRole('menuitem', { name: menuItem, exact: true }).click();
+    await dialog.getByRole('button', { name: confirmLabel, exact: true }).click();
     expect((await response).status()).toBe(200);
+    await expect(dialog).toBeHidden();
     return confirmMessage;
   }
 
@@ -174,8 +183,14 @@ test.describe('어드민 로컬 — 판매자 정리하기·복구', () => {
     await page.getByLabel('이 목록에서 찾기').fill(fx.storeName);
     await expect(storeRow(page)).toHaveCount(1, { timeout: 30_000 });
 
-    const archiveMessage = await confirmRowAction(page, '정리하기…', 'archive');
-    expect(archiveMessage).toContain(`${fx.storeName} 판매자를 정리할까요?`);
+    const archiveMessage = await confirmRowAction(
+      page,
+      '정리하기…',
+      'archive',
+      `${fx.storeName} 판매자 정리하기`,
+      `${fx.storeName} 정리하기`,
+    );
+    expect(archiveMessage).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다.');
     expect(archiveMessage).toContain(
       '주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다.',
     );
@@ -190,8 +205,14 @@ test.describe('어드민 로컬 — 판매자 정리하기·복구', () => {
       .getByRole('button', { name: /^전체/ })
       .click();
     await expect(storeRow(page)).toContainText('정리됨', { timeout: 15_000 });
-    const restoreMessage = await confirmRowAction(page, '복구하기…', 'restore');
-    expect(restoreMessage).toContain(`${fx.storeName} 판매자를 복구할까요?`);
+    const restoreMessage = await confirmRowAction(
+      page,
+      '복구하기…',
+      'restore',
+      `${fx.storeName} 판매자 복구`,
+      `${fx.storeName} 복구`,
+    );
+    expect(restoreMessage).toContain('복구하면 손님 화면에 다시 보이고 새 주문을 받습니다.');
     await expect(storeRow(page)).toContainText('운영 중', { timeout: 15_000 });
     const restored = await readDoc(`stores/${fx.storeId}`);
     expect(restored?.status).toBe('active');

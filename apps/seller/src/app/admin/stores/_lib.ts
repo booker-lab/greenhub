@@ -122,14 +122,42 @@ export function formatStoreContact(store: Pick<AdminStore, 'ceoName' | 'phone'>)
   return parts.length > 0 ? parts.join(' · ') : '대표·연락처 미등록';
 }
 
-/** 정리하기 확인창 — 실제 동작(손님 화면 숨김·새 주문 차단, 로그인 유지, 기록 있으면 ID 확인)을 알린다. */
-export function describeArchiveConfirm(store: Pick<AdminStore, 'name'>): string {
-  const label = store.name?.trim() || '(미설정)';
+/** 정리하기·복구 확인창 내용(design-direction.md §5 어드민 "위험 동작 확인창"). 확인창 틀은 AdminConfirmDialog. */
+export interface StoreConfirmView {
+  title: string;
+  lead: string;
+  facts: { label: string; value: string }[];
+  /** 결과 아래 회색 안내(있을 때만). */
+  note?: string;
+  confirmLabel: string;
+}
+
+function storeLabel(store: Pick<AdminStore, 'name'>): string {
+  return store.name?.trim() || '(미설정)';
+}
+
+function storeFacts(
+  store: Pick<AdminStore, 'name' | 'ceoName' | 'phone' | 'status'>,
+): { label: string; value: string }[] {
   return [
-    `${label} 판매자를 정리할까요?`,
-    '정리하면 손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다. 판매자는 계속 로그인할 수 있고, 복구하면 정리하기 전 상태로 돌아갑니다.',
-    '주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다. 기록은 지워지지 않습니다.',
-  ].join('\n');
+    { label: '상호', value: storeLabel(store) },
+    { label: '대표 · 연락처', value: formatStoreContact(store) },
+    { label: '상태', value: STATUS_LABEL[store.status] ?? store.status },
+  ];
+}
+
+/** 정리하기 확인창 — 무엇이 일어나는지(숨김·주문 차단·로그인 유지)와 기록 있는 판매자의 추가 확인을 알린다. */
+export function describeArchiveConfirm(
+  store: Pick<AdminStore, 'name' | 'ceoName' | 'phone' | 'status'>,
+): StoreConfirmView {
+  const label = storeLabel(store);
+  return {
+    title: `${label} 판매자 정리하기`,
+    lead: '정리하면 손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다. 판매자는 계속 로그인할 수 있고, 복구하면 정리하기 전 상태로 돌아갑니다.',
+    facts: storeFacts(store),
+    note: '주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다. 기록은 지워지지 않습니다.',
+    confirmLabel: `${label} 정리하기`,
+  };
 }
 
 /** 가게 ID 확인 입력값 — 기록 있는 판매자를 정리할 때 서버가 비교하는 앞 8자리. */
@@ -137,20 +165,35 @@ export function storeIdConfirmPrefix(storeId: string): string {
   return storeId.slice(0, 8);
 }
 
-/** 기록 있는 판매자 정리하기 입력창 — 이름이 깨져 있어도 ID로 대상을 확인하게 한다. */
-export function describeArchiveRecordsPrompt(store: Pick<AdminStore, 'id' | 'name'>): string {
-  const label = store.name?.trim() || '(미설정)';
-  return [
-    `${label} 판매자는 주문·정산 기록이 있습니다.`,
-    `그래도 정리하려면 가게 ID 앞 8자리 "${storeIdConfirmPrefix(store.id)}"를 입력하세요.`,
-    '주문·정산 기록은 그대로 남고, 복구하면 다시 손님 화면에 보입니다.',
-  ].join('\n');
+/** 기록 있는 판매자 정리하기(서버 412 뒤) — 이름이 깨져 있어도 가게 ID로 대상을 확인하게 한다. */
+export function describeArchiveRecordsConfirm(
+  store: Pick<AdminStore, 'id' | 'name'>,
+): StoreConfirmView & { prefix: string } {
+  const label = storeLabel(store);
+  const prefix = storeIdConfirmPrefix(store.id);
+  return {
+    title: `${label} 판매자 정리하기`,
+    lead: `${label} 판매자는 주문·정산 기록이 있습니다. 주문·정산 기록은 그대로 남고, 복구하면 다시 손님 화면에 보입니다.`,
+    facts: [
+      { label: '상호', value: label },
+      { label: '가게 ID', value: store.id },
+    ],
+    confirmLabel: `${label} 정리하기`,
+    prefix,
+  };
 }
 
 /** 복구 확인창 — 복구하면 손님 화면에 다시 보이고 주문을 받는다. */
-export function describeRestoreConfirm(store: Pick<AdminStore, 'name'>): string {
-  const label = store.name?.trim() || '(미설정)';
-  return `${label} 판매자를 복구할까요?\n복구하면 손님 화면에 다시 보이고 새 주문을 받습니다.`;
+export function describeRestoreConfirm(
+  store: Pick<AdminStore, 'name' | 'ceoName' | 'phone' | 'status'>,
+): StoreConfirmView {
+  const label = storeLabel(store);
+  return {
+    title: `${label} 판매자 복구`,
+    lead: '복구하면 손님 화면에 다시 보이고 새 주문을 받습니다.',
+    facts: storeFacts(store),
+    confirmLabel: `${label} 복구`,
+  };
 }
 
 export function sortStores(stores: AdminStore[], sort: StoreSort): AdminStore[] {

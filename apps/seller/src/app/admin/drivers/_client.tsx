@@ -2,15 +2,15 @@
 
 import { useMemo, useState } from 'react';
 import { notify } from '@/components/AppToaster';
-import { ConfirmModal } from '@/components/ConfirmModal';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
-import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
+import { normalizeSuspendReason, SuspendReasonField } from '@/components/SuspendReasonMessage';
 import {
   type AdminCommandOutcome,
   describeActiveDeliveryWarning,
   describeAdminCommandOutcome,
   useAdminDrivers,
 } from '@/hooks/useAdmin';
+import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
 import { AdminPageHeader } from '../_components/adminList';
 import { useAdminTodoCountsValue } from '../_components/adminTodoContext';
 import { LoadMoreFooter } from '../_components/LoadMoreFooter';
@@ -18,7 +18,7 @@ import { ActiveDeliveryNotice } from './_components/ActiveDeliveryNotice';
 import { DriverList } from './_components/DriverList';
 import { PendingDrivers } from './_components/PendingDrivers';
 import {
-  ACTION_META,
+  DRIVER_ACTION_LABEL,
   DRIVER_TABLE_TABS,
   type DriverAction,
   type DriverTableTab,
@@ -53,8 +53,7 @@ export default function DriversClient() {
 
   const runPending = async () => {
     if (!pending) return;
-    const actionLabel =
-      pending.action === 'approve' ? '승인' : pending.action === 'suspend' ? '정지' : '정지 해제';
+    const actionLabel = DRIVER_ACTION_LABEL[pending.action];
     setProcessingId(pending.userId);
     try {
       let outcome: AdminCommandOutcome;
@@ -88,10 +87,17 @@ export default function DriversClient() {
   const handleAction = (userId: string, action: DriverAction) => {
     setReason('');
     const driver = allDrivers.find((d) => d.id === userId);
-    setPending({ userId, name: driver?.name ?? '', email: driver?.email ?? null, action });
+    setPending({
+      userId,
+      name: driver?.name ?? '',
+      email: driver?.email ?? null,
+      phone: driver?.phone ?? null,
+      createdAt: driver?.createdAt,
+      action,
+    });
   };
 
-  const pendingMeta = pending ? ACTION_META[pending.action] : null;
+  const confirm = pending ? describeDriverConfirm(pending) : null;
 
   const ready = !loading && error === null;
   const activeCount = filterByTab(allDrivers, 'approved').length;
@@ -165,30 +171,23 @@ export default function DriversClient() {
         />
       )}
 
-      <ConfirmModal
-        opened={pending !== null}
-        title={pendingMeta?.title ?? ''}
-        message={
-          !pending ? (
-            ''
-          ) : pending.action === 'approve' ? (
-            describeDriverConfirm(pending)
-          ) : (
-            <SuspendReasonMessage
-              message={describeDriverConfirm(pending)}
-              reason={reason}
-              onReasonChange={setReason}
-            />
-          )
-        }
-        confirmLabel={pendingMeta?.confirmLabel}
-        confirmColor={pendingMeta?.confirmColor}
+      {/* 승인은 입력이 없어 처음 초점이 닫기다(Enter 한 번에 승인되지 않게). 정지·정지 풀기는 사유(선택)를 받는다. */}
+      <AdminConfirmDialog
+        open={pending !== null}
+        title={confirm?.title ?? ''}
+        lead={confirm?.lead}
+        facts={confirm?.facts}
+        confirmLabel={confirm?.confirmLabel ?? ''}
         loading={processingId !== null}
         onConfirm={runPending}
         onClose={() => {
           if (processingId === null) setPending(null);
         }}
-      />
+      >
+        {pending && pending.action !== 'approve' && (
+          <SuspendReasonField reason={reason} onReasonChange={setReason} />
+        )}
+      </AdminConfirmDialog>
 
       <ActiveDeliveryNotice message={deliveryWarning} onClose={() => setDeliveryWarning(null)} />
     </div>

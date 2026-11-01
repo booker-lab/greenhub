@@ -31,9 +31,9 @@ describe('AdminSettlementsClient 배선', () => {
 
   it('지급 확인·처리 경로를 유지한다', () => {
     expect(source).toContain('await markAsPaid(payTarget.id)');
-    expect(source).toContain('describePayConfirm(payTarget)');
+    expect(source).toContain('<PayConfirmDialog');
+    expect(source).toContain('target={payTarget}');
     expect(source).toContain('onConfirm={runPay}');
-    expect(source).toContain('confirmDisabled={payTarget !== null && !canPay(payTarget)}');
     expect(source).toContain('describeAdminCommandOutcome(outcome,');
   });
 });

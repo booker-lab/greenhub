@@ -2,8 +2,9 @@ import { describe, expect, it } from 'vitest';
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
   describeArchiveConfirm,
-  describeArchiveRecordsPrompt,
+  describeArchiveRecordsConfirm,
   describeCommissionSaved,
+  describeRestoreConfirm,
   filterStores,
   formatRate,
   formatStoreContact,
@@ -199,23 +200,41 @@ describe('판매자 검색·연락처·정리하기 안내', () => {
     expect(formatStoreContact(stores[1])).toBe('대표·연락처 미등록');
   });
 
-  it('정리하기 확인창은 실제 동작(숨김·주문 차단·로그인 유지·기록 있으면 불가)을 알린다', () => {
-    const message = describeArchiveConfirm({ name: '난플렉스' });
-    expect(message).toContain('난플렉스 판매자를 정리할까요?');
-    expect(message).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다');
-    expect(message).toContain('계속 로그인할 수 있고');
-    expect(message).toContain(
+  it('정리하기 확인창은 실제 동작(숨김·주문 차단·로그인 유지·기록 있으면 ID 확인)을 알린다', () => {
+    const view = describeArchiveConfirm({
+      name: '난플렉스',
+      ceoName: '김대표',
+      phone: '010-1234-5678',
+      status: 'active',
+    });
+    expect(view.title).toBe('난플렉스 판매자 정리하기');
+    expect(view.lead).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다');
+    expect(view.lead).toContain('계속 로그인할 수 있고');
+    expect(view.note).toContain(
       '기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다',
     );
-    expect(message).not.toContain('보존됩니다');
+    expect(view.facts).toEqual([
+      { label: '상호', value: '난플렉스' },
+      { label: '대표 · 연락처', value: '김대표 · 010-1234-5678' },
+      { label: '상태', value: '운영 중' },
+    ]);
+    expect(view.confirmLabel).toBe('난플렉스 정리하기');
   });
 
-  it('기록 있는 판매자 입력창은 가게 ID 앞 8자리를 보여 준다(이름이 비어도 ID로 확인)', () => {
+  it('기록 있는 판매자 단계는 가게 ID 앞 8자리를 받는다(이름이 비어도 ID로 확인)', () => {
     const store = { id: '9b2cb652-ff77-46b9-a773-e1efa78fb763', name: '' };
     expect(storeIdConfirmPrefix(store.id)).toBe('9b2cb652');
-    const message = describeArchiveRecordsPrompt(store);
-    expect(message).toContain('(미설정) 판매자는 주문·정산 기록이 있습니다.');
-    expect(message).toContain('"9b2cb652"');
-    expect(message).toContain('기록은 그대로 남고');
+    const view = describeArchiveRecordsConfirm(store);
+    expect(view.prefix).toBe('9b2cb652');
+    expect(view.lead).toContain('(미설정) 판매자는 주문·정산 기록이 있습니다.');
+    expect(view.lead).toContain('기록은 그대로 남고');
+    expect(view.facts).toContainEqual({ label: '가게 ID', value: store.id });
+  });
+
+  it('복구 확인창은 다시 보이고 주문을 받는다고 알린다', () => {
+    const view = describeRestoreConfirm({ name: '난플렉스', status: 'archived' });
+    expect(view.title).toBe('난플렉스 판매자 복구');
+    expect(view.lead).toContain('손님 화면에 다시 보이고 새 주문을 받습니다');
+    expect(view.confirmLabel).toBe('난플렉스 복구');
   });
 });

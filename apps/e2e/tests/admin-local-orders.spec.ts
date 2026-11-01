@@ -7,7 +7,6 @@ import {
   type DocData,
   deleteDocs,
   deleteLocalAdmin,
-  krw,
   type LocalAdmin,
   loginLocalAdmin,
   newRunId,
@@ -188,14 +187,23 @@ test.describe('어드민 로컬 — 주문', () => {
       .getByRole('button', { name: `주문 ${fx.refund.orderNumber} 동작 더 보기` })
       .click();
     await page.getByRole('menuitem', { name: '환불…' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('강제환불', { exact: true })).toBeVisible();
-    await expect(dialog).toContainText(`주문번호 ${fx.refund.orderNumber}`);
-    await expect(dialog).toContainText(`환불 금액 ${krw(fx.refund.amount)} (결제 금액 전액)`);
+    // ② 확인창(D7): 제목 = 동작 + 대상, 대상 정보(가게·가린 주문자), 돈의 흐름(배송 전이라 아직 정산 전), 빨간 경고 한 줄.
+    const dialog = page.getByRole('dialog', { name: `주문 ${fx.refund.orderNumber} 환불` });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(fx.storeName);
+    await expect(dialog).toContainText(maskName(fx.refund.buyerName));
+    await expect(dialog).toContainText(`주문자에게 돌려줄 금액${won(fx.refund.amount)}`);
+    await expect(dialog).toContainText('가게 정산아직 정산 전');
     await expect(dialog).toContainText('결제한 금액 전액을 바로 환불합니다. 되돌릴 수 없습니다.');
-    await expect(dialog.getByRole('button', { name: '전액 환불' })).toBeVisible();
+    // 되돌릴 수 없음을 확인하기 전에는 확정 버튼이 꺼져 있다(체크는 비운 채 열린다).
+    const confirm = dialog.getByRole('button', { name: `${won(fx.refund.amount)} 전액 환불` });
+    await expect(confirm).toBeDisabled();
+    const ack = dialog.getByRole('checkbox', { name: '되돌릴 수 없음을 확인했습니다' });
+    await expect(ack).not.toBeChecked();
+    await ack.check();
+    await expect(confirm).toBeEnabled();
 
-    await dialog.getByRole('button', { name: '취소' }).click();
+    await dialog.getByRole('button', { name: '닫기', exact: true }).click();
     await expect(dialog).toBeHidden();
     // 목록을 다시 받아도 주문은 그대로다(확인창 취소는 서버에 아무것도 보내지 않는다).
     await page.reload({ waitUntil: 'domcontentloaded' });

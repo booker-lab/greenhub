@@ -2026,6 +2026,31 @@ export const screens = [
     steps: [{ clickSelector: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible' }],
     viewport: true,
   },
+  // 어드민 판매자 정리하기·복구 확인창(② D7). 행 끝 ⋮ 메뉴에서 열고, 닫으면 초점은 ⋮ 메뉴 버튼으로 돌아온다.
+  {
+    id: 'modal-store-archive',
+    group: '어드민 · 모달',
+    title: '판매자 · 정리하기 확인',
+    path: '/admin/stores',
+    steps: [
+      { clickSelector: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("정리하기")' },
+    ],
+    returnFocus: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible',
+    viewport: true,
+  },
+  {
+    id: 'modal-store-restore',
+    group: '어드민 · 모달',
+    title: '판매자 · 복구 확인',
+    path: '/admin/stores?status=all',
+    steps: [
+      { clickSelector: 'button[aria-label="판매자 정리된 가게 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("복구하기")' },
+    ],
+    returnFocus: 'button[aria-label="판매자 정리된 가게 동작 더 보기"]:visible',
+    viewport: true,
+  },
   {
     id: 'modal-user-suspend',
     group: '어드민 · 모달',
@@ -2096,6 +2121,28 @@ export const screens = [
     title: '정산 · 더 보기 불러오는 중',
     path: '/admin/settlements',
     steps: [{ click: '더 보기' }],
+  },
+  // 어드민 정산 지급 완료 기록 확인창(② D7). 이체 확인 체크가 처음 초점이고, 체크하기 전에는 확정이 꺼져 있다.
+  {
+    id: 'modal-admin-pay',
+    group: '어드민 · 모달',
+    title: '정산 · 지급 완료 기록 확인',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible' },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-admin-pay-checked',
+    group: '어드민 · 모달',
+    title: '정산 · 지급 완료 기록(이체 확인 체크)',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible' },
+      { clickSelector: '[role="dialog"] input[type="checkbox"]' },
+    ],
+    viewport: true,
   },
   // 어드민 주문 환불 확인창. 강제환불은 사유 입력칸, 배송 후 환불은 메모 입력칸이 첫 초점(data-autofocus)이다.
   {

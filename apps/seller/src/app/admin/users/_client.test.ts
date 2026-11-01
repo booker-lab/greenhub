@@ -68,7 +68,7 @@ describe('AdminUsersClient 조회 실패/복구 배선', () => {
       /await toggleSuspend\(\s*pending\.userId,\s*!pending\.currentlySuspended,/,
     );
     expect(source).toContain('setPending(null)');
-    expect(source).toContain('opened={pending !== null}');
+    expect(source).toContain('open={pending !== null}');
     expect(source).toContain('onConfirm={runPending}');
     expect(source).toContain('onToggle={handleToggle}');
   });
