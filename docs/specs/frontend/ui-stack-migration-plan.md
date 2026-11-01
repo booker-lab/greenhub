@@ -144,8 +144,8 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 | P2 | 판매자 앱 연결(P2a) → 판매자 비회차 화면(P2b) | P1 뒤 |
 | P3 | 기사 앱 | P1 뒤(P2와 병렬) |
 | P4 | 판매자 앱 틀·회차·주문·준비·재고·정산 | P2a 뒤 |
-| P5 | 소비자 앱 | 소비자 동결이 풀린 뒤(§8) |
-| P6 | 정리 | 마지막 |
+| P5 | 소비자 앱 | 완료(2026-11-01~02, #756·#753·#767·#771·#751·#786·#787) |
+| P6 | 정리 | Mantine 제거 완료(2026-11-02: 판매자 #747·#754·#761·#775, 소비자 #788, `packages/ui` 정리). preflight 전환은 사람 결정 대기(아래 P6 기록) |
 
 ### P0. 사전 준비 (Mantine 상태에서)
 - `.mantine-*` 클래스로 요소를 찾던 E2E를 역할·이름 기반 선택자로 바꾼다. Mantine 클래스 이름은 교체와 함께 사라지기 때문이다.
@@ -359,6 +359,13 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
     - 같은 경로·CI build 설정 빌드: 소비자 185개·기사 137개 정적 산출물 해시가 같고, 판매자 경로 표가 같다(모두 ƒ). 운영 빌드 `/login`의 스크립트 28개가 Report-Only CSP nonce와 일치한다(main과 같음).
     - 소비자 99장·기사 36장 촬영이 main과 같다.
     - 판매자 운영 CSS 241,582B(gzip 46,130B) → 119,473B(28,233B), JS 합 2,849,415B(844,008B) → 2,822,912B(836,528B).
+- 소비자 P6 Mantine 의존 제거(2026-11-02, #788): `apps/consumer`에서 `@mantine/core`·`@mantine/hooks`·`postcss-preset-mantine`·`postcss-simple-vars`, `MantineProvider`·`mantineHtmlProps`, `next.config.ts`의 Mantine `optimizePackageImports`, `globals.css`의 `mantine` layer와 Mantine CSS import를 걷었다. 남은 Mantine 화면 부품 `KakaoChannelCta`는 같은 계산값의 `section`·`p`로 바꿨다. Mantine baseline 규칙은 판매자·기사와 같은 내용으로 base layer에 옮겼고, 루트 layout은 요청 헤더를 읽지 않는 정적 렌더링 그대로다.
+  - 로컬 증명(기준 `main` 3d112a7, 기준 시각 2026-11-02T00:00+09:00, 허용 목록 없음, `--tolerance 1`): dev 기본 141장·benchmark 96장·결제 수단 6장, 운영 빌드(`--prod`) 기본 141장 중 138장의 diff·parity(writes·portoneCalls·storage·aria)가 모두 같다. 운영 빌드의 `login-error` 3장은 기준·작업본 모두 E2E 이메일 입력칸이 없어 정상 판정에서 빠지고 dev에서 같다. focus-trap 결과가 main과 같다(기본 창 33개·benchmark 창 15개, main과 같은 실패 포함). 옵션 시트 `aria-describedby`의 useId 값만 바뀌었다. 운영 빌드 `prerender-manifest.json` 경로(#703)가 같다.
+  - 소비자 운영 CSS 208,897B(gzip 41,491B) → 118,935B(27,733B).
+- 공용 정리(2026-11-02): `packages/ui`의 `theme.ts`·`index.ts`와 `"."`·`./theme`·`./style.css` export, `@mantine/core`·`@mantine/hooks` peer·dev 의존을 지웠다(쓰는 곳 0). 이로써 저장소에 `@mantine/*` 의존이 없다. `style.css`는 세 앱이 공용 변수(`--color-*`·`--font-*`·`--radius`·`--border` 등)와 터치 규칙 때문에 쓰고 있어, 값 그대로 `src/styles/base.css`(`./styles/base.css`)로 옮기고 Mantine Badge 보정(`.m_5add502a`)만 덜었다. 세 앱은 예전과 같은 자리로 import한다(판매자·소비자 `layer(base)`, 기사 layer 밖).
+  - `scripts/check-css-vars.mjs`의 `--mantine` 예외를 뺐다. 소비자 주문 상세의 `var(--mantine-color-brand-*, 값)`은 같은 색 값으로, 판매자 `shadow-mantine-xs`·`sm` 토큰은 `shadow-paper-xs`·`sm`으로 이름만 바꿨다(값 그대로). `freeze-guard.mjs`의 소비자 공용 파일 목록, `tokens.spec.mjs`, `design-standard.md`의 값 정본 표기를 `styles/base.css`로 맞췄다. `docs/specs/perf/mantine-treeshaking.md`는 역사 자료로 표시했다. 소비자 `AGENTS.md` 글꼴 예외 표에서 지금 코드에 없는 Stepper 12px 줄을 지웠다.
+  - 로컬 증명(기준 #788 head c9f6fd0 = `main` 3782886, 기준 시각 2026-11-02T00:00+09:00, 허용 목록 없음, `--tolerance 1`, next dev만, 운영 빌드 촬영은 미증명): 판매자 423장·기사 36장·소비자 기본 141장의 diff·parity가 모두 같다. 같은 경로·CI build 설정 빌드의 정적 산출물 해시 비교는 아래 PR 본문에 적었다.
+- preflight 전환 조사(2026-11-02, 사람 결정 대기): Tailwind preflight를 켜면 세 앱 모두 화면이 바뀐다. 목록 글머리(`ol, ul { list-style: none }`, 소비자 약관 등 9곳), 줄 안 아이콘(`svg { display: block }`), 제목 크기·굵기(`h1~h6 inherit`, 소비자 52·판매자 21·기사 5곳), 링크 색·밑줄(`a { color: inherit }`), 전체 여백·테두리 초기화, 입력칸 안내 글자 색(`::placeholder`), 표(`border-collapse`)·`hr`이 달라진다. §7 ①에서는 이런 차이를 사유로 넘길 수 없어, 차이 0을 지키려면 세 앱 수십 개 파일에 보정 클래스를 넣어야 한다. 그래서 PR을 열지 않았다. 제안: (A) ①에서는 지금 방식(data-slot에만 거는 초기화 + baseline을 옮긴 base layer)을 유지하고, 화면별 ② 방향 적용 PR에서 preflight를 켠다. (B) 앱별 preflight PR에서 보정 클래스를 넣고 전체 촬영으로 차이 0을 증명한다.
 
 ## 7. 화면 변경을 같이 할지
 
