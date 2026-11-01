@@ -9,6 +9,7 @@ import { getAdminStoresReadState } from './_lib';
 // READ-ONLY인 StoresTable/_lib의 기존 동작 자체는 각자의 focused test가 소유한다.
 
 const source = readFileSync(new URL('./_client.tsx', import.meta.url), 'utf8');
+const listSource = readFileSync(new URL('../_components/adminList.tsx', import.meta.url), 'utf8');
 
 const FETCH_ERROR_MESSAGE = '판매자 목록 조회 중 오류 발생';
 
@@ -76,9 +77,11 @@ describe('AdminStoresClient read-error recovery wiring', () => {
   it('retry wiring을 보존한다(기존 reload 경로 재사용)', () => {
     // 기존 수동 reload UI 경로를 그대로 사용한다.
     expect(source).toContain('onReload={reload}');
-    // 오류 상태의 명시적 재시도도 동일한 authoritative reload에 연결된다.
-    expect(source).toContain('<Button onClick={reload}');
-    expect(source).toContain('다시 조회');
+    // 오류 상태의 명시적 재시도도 동일한 authoritative reload에 연결된다(공통 AdminListError).
+    expect(source).toContain('<AdminListError');
+    expect(source).toContain('onRetry={reload}');
+    expect(listSource).toContain('<Button onClick={onRetry}');
+    expect(listSource).toContain('다시 조회');
     // 새 refresh 함수를 만들지 않는다.
     expect(source).not.toMatch(/const\s+(retry|refresh|refetch)\s*=/);
   });
@@ -87,6 +90,9 @@ describe('AdminStoresClient read-error recovery wiring', () => {
     // Filters는 error 분기 밖에서 항상 유지된다.
     expect(source).toContain('<StoresFilters');
     expect(source.indexOf('<StoresFilters')).toBeLessThan(source.indexOf('isFetchError ?'));
+    // 상태 탭(SegmentedTabs)도 error 분기 밖에서 항상 유지된다.
+    expect(source).toContain('<SegmentedTabs<StoreStatusFilter>');
+    expect(source.indexOf('<SegmentedTabs')).toBeLessThan(source.indexOf('isFetchError ?'));
     // 기존 query 동기화 경로를 유지한다.
     expect(source).toContain("searchParams.get('keyword')");
     expect(source).toContain('parseStatusFilter');
@@ -95,7 +101,7 @@ describe('AdminStoresClient read-error recovery wiring', () => {
     expect(source).toContain(
       'onKeywordChange={(keyword) => updateView({ keyword }, { debounceUrl: true })}',
     );
-    expect(source).toContain('onStatusChange={(status) => updateView({ status })}');
+    expect(source).toContain('onChange={(status) => updateView({ status })}');
     expect(source).toContain('onSortChange={(sort) => updateView({ sort })}');
     // error 분기는 필터를 초기화하지 않는다.
     const errorBranch = source.slice(
@@ -139,7 +145,7 @@ describe('AdminStoresClient read-error recovery wiring', () => {
     expect(source).toContain('restoreStore(store.id)');
     expect(source).toContain('onArchive={handleArchive}');
     expect(source).toContain('onRestore={handleRestore}');
-    expect(source).toContain('치울 수 없습니다');
+    expect(source).toContain('정리할 수 없습니다');
     expect(source).toContain('복구할 수 없습니다');
     // 성공 분기의 테이블 배선을 가로채지 않는다.
     expect(source).toContain('stores={visible}');

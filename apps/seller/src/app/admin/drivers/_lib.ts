@@ -36,19 +36,34 @@ export const ACTION_META: Record<
   },
 };
 
-export const STATUS_TABS: { value: DriverStatus; label: string }[] = [
+// ② 방향(design-direction.md §5 어드민 "기사"): 승인 대기는 표 위 요약 상자로 빼고, 표는 전체 · 활동 중 · 정지 탭이다.
+export type DriverTableTab = 'all' | 'approved' | 'suspended';
+
+export const DRIVER_TABLE_TABS: { value: DriverTableTab; label: string }[] = [
   { value: 'all', label: '전체' },
-  { value: 'pending', label: '승인 대기' },
-  { value: 'approved', label: '승인 완료' },
-  { value: 'suspended', label: '정지됨' },
+  { value: 'approved', label: '활동 중' },
+  { value: 'suspended', label: '정지' },
 ];
 
-// 탭별 드라이버 필터 — 승인/정지 상태 조합.
+/** 승인 대기 — 아직 승인되지 않았고 정지되지 않은 기사. */
+export function isPendingDriver(driver: AdminDriver): boolean {
+  return !driver.driverApproved && !driver.suspended;
+}
+
+// 탭별 기사 필터 — 승인/정지 상태 조합. 'pending'은 요약 상자가 쓴다.
 export function filterByTab(drivers: AdminDriver[], tab: DriverStatus): AdminDriver[] {
-  if (tab === 'pending') return drivers.filter((d) => !d.driverApproved && !d.suspended);
+  if (tab === 'pending') return drivers.filter(isPendingDriver);
   if (tab === 'approved') return drivers.filter((d) => d.driverApproved && !d.suspended);
   if (tab === 'suspended') return drivers.filter((d) => d.suspended);
-  return drivers;
+  // 표의 '전체'는 승인 대기를 뺀 기사(승인 대기는 위 요약 상자에 있다).
+  return drivers.filter((d) => !isPendingDriver(d));
+}
+
+/** 신청한 지 며칠째인지 — 한국 날짜 기준. 오늘 신청이면 0. 날짜를 읽을 수 없으면 null. */
+export function waitingDays(createdAt: Date | null, now: Date = new Date()): number | null {
+  if (!createdAt) return null;
+  const day = (d: Date) => Math.floor((d.getTime() + 9 * 60 * 60 * 1000) / 86_400_000);
+  return Math.max(0, day(now) - day(createdAt));
 }
 
 // Admin 드라이버 목록 read state — 조회 실패와 성공-empty의 구조적 구분.

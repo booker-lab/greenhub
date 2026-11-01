@@ -11,15 +11,14 @@ import {
   loginLocalAdmin,
   newRunId,
   openAdminPage,
-  pickSelectOption,
   readDoc,
   rowOrListItem,
   seedDocs,
 } from './_helpers/admin-local';
 
-// 어드민 판매자 치우기(#593 결정 ③) — 기록 없는 가게를 치우면 손님 공개 API(가게 소개·회차·상품)가 404,
+// 어드민 판매자 정리하기(#593 결정 ③, ② D7에서 "치우기"→"정리하기") — 기록 없는 가게를 정리하면 손님 공개 API(가게 소개·회차·상품)가 404,
 // 복구하면 다시 보인다. 실제 API + 에뮬레이터(pnpm dev:local)에서 이 spec 전용 가게로 본다.
-test.describe('어드민 로컬 — 판매자 치우기·복구', () => {
+test.describe('어드민 로컬 — 판매자 정리하기·복구', () => {
   test.skip(!adminLocalEnabled(), ADMIN_LOCAL_SKIP_REASON);
 
   let admin: LocalAdmin | null = null;
@@ -143,8 +142,8 @@ test.describe('어드민 로컬 — 판매자 치우기·복구', () => {
       has: page.getByText(fx.storeName, { exact: true }),
     });
 
-  /** 행 버튼을 누르고 window.confirm 문구를 받아 승인한 뒤, 해당 PATCH 응답을 기다린다. */
-  async function confirmRowAction(page: Page, button: string, action: 'archive' | 'restore') {
+  /** 행 끝 ⋮ 메뉴 항목을 누르고 window.confirm 문구를 받아 승인한 뒤, 해당 PATCH 응답을 기다린다. */
+  async function confirmRowAction(page: Page, menuItem: string, action: 'archive' | 'restore') {
     let confirmMessage = '';
     page.once('dialog', async (dialog) => {
       confirmMessage = dialog.message();
@@ -155,12 +154,15 @@ test.describe('어드민 로컬 — 판매자 치우기·복구', () => {
         res.url().endsWith(`/admin/stores/${fx.storeId}/${action}`) &&
         res.request().method() === 'PATCH',
     );
-    await storeRow(page).getByRole('button', { name: button, exact: true }).click();
+    await storeRow(page)
+      .getByRole('button', { name: `판매자 ${fx.storeName} 동작 더 보기`, exact: true })
+      .click();
+    await page.getByRole('menuitem', { name: menuItem, exact: true }).click();
     expect((await response).status()).toBe(200);
     return confirmMessage;
   }
 
-  test('치우면 손님 공개 API가 404, 복구하면 다시 200이다', async ({ page }) => {
+  test('정리하면 손님 공개 API가 404, 복구하면 다시 200이다', async ({ page }) => {
     // 시드 직후 — 손님에게 보인다.
     expect(await publicStatuses()).toEqual(allStatuses(200));
     const products = (await (
@@ -168,24 +170,29 @@ test.describe('어드민 로컬 — 판매자 치우기·복구', () => {
     ).json()) as { items: Array<{ id: string }> };
     expect(products.items.map((item) => item.id)).toContain(fx.productId);
 
-    await openAdminPage(page, '/admin/stores', '판매자 목록');
-    await page.getByLabel('판매자 검색').fill(fx.storeName);
+    await openAdminPage(page, '/admin/stores', '판매자');
+    await page.getByLabel('이 목록에서 찾기').fill(fx.storeName);
     await expect(storeRow(page)).toHaveCount(1, { timeout: 30_000 });
 
-    const archiveMessage = await confirmRowAction(page, '치우기', 'archive');
-    expect(archiveMessage).toContain(`${fx.storeName} 판매자를 치울까요?`);
-    expect(archiveMessage).toContain('주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 치워집니다.');
-    // 기본 보기(활성)에서는 치운 판매자가 빠진다.
+    const archiveMessage = await confirmRowAction(page, '정리하기…', 'archive');
+    expect(archiveMessage).toContain(`${fx.storeName} 판매자를 정리할까요?`);
+    expect(archiveMessage).toContain(
+      '주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다.',
+    );
+    // 기본 보기(운영·초대)에서는 정리한 판매자가 빠진다.
     await expect(page.getByText('조건에 맞는 판매자가 없습니다.')).toBeVisible({ timeout: 15_000 });
     expect((await readDoc(`stores/${fx.storeId}`))?.status).toBe('archived');
     expect(await publicStatuses()).toEqual(allStatuses(404));
 
-    // 상태를 '전체'로 바꾸면 '치움'으로 보이고 복구할 수 있다.
-    await pickSelectOption(page, page.getByRole('combobox', { name: '상태', exact: true }), '전체');
-    await expect(storeRow(page)).toContainText('치움', { timeout: 15_000 });
-    const restoreMessage = await confirmRowAction(page, '복구', 'restore');
+    // 상태 탭을 '전체'로 바꾸면 '정리됨'으로 보이고 복구할 수 있다.
+    await page
+      .getByRole('group', { name: '판매자 상태' })
+      .getByRole('button', { name: /^전체/ })
+      .click();
+    await expect(storeRow(page)).toContainText('정리됨', { timeout: 15_000 });
+    const restoreMessage = await confirmRowAction(page, '복구하기…', 'restore');
     expect(restoreMessage).toContain(`${fx.storeName} 판매자를 복구할까요?`);
-    await expect(storeRow(page)).toContainText('운영중', { timeout: 15_000 });
+    await expect(storeRow(page)).toContainText('운영 중', { timeout: 15_000 });
     const restored = await readDoc(`stores/${fx.storeId}`);
     expect(restored?.status).toBe('active');
     expect(restored?.archivedAt).toBeUndefined();

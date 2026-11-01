@@ -1,9 +1,11 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
+import { ButtonLink } from '@greenhub/ui/components/button';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { notify } from '@/components/AppToaster';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
   classifyAdminCommandError,
@@ -11,9 +13,11 @@ import {
   useAdminStores,
 } from '@/hooks/useAdmin';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { AdminListError, AdminPageHeader } from '../_components/adminList';
 import { StoresFilters } from './_components/StoresFilters';
 import { StoresTable } from './_components/StoresTable';
 import {
+  countStoresByFilter,
   DEFAULT_COMMISSION_PERCENT,
   DEFAULT_SORT,
   DEFAULT_STATUS_FILTER,
@@ -28,6 +32,7 @@ import {
   parseSort,
   parseStatusFilter,
   rateToInput,
+  STATUS_FILTER_OPTIONS,
   type StoreSort,
   type StoreStatusFilter,
   sortStores,
@@ -182,20 +187,20 @@ export default function AdminStoresClient() {
         // COMMAND CONFIRMED + RECONCILIATION FAILED — 실패로 표현하지 않고 중복 실행을 유도하지 않는다.
         notify({
           color: 'yellow',
-          title: '치우기는 완료됐으나 목록 확인 실패',
+          title: '정리는 완료됐으나 목록 확인 실패',
           message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
         });
         return;
       }
       notify({
         color: 'brand',
-        title: '판매자를 치웠습니다',
-        message: `${store.name || '(미설정)'} — 손님 화면에서 숨고 새 주문을 받지 않습니다.`,
+        title: '판매자를 정리했습니다',
+        message: `${store.name || '이름 없는 가게'} — 손님 화면에서 숨고 새 주문을 받지 않습니다.`,
       });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
-        const presentation = describeAdminCommandOutcome(classified, '치우기');
+        const presentation = describeAdminCommandOutcome(classified, '정리하기');
         notify({
           color: 'yellow',
           title: presentation.title,
@@ -206,8 +211,8 @@ export default function AdminStoresClient() {
       // 기록 가드(400) 등 차단 사유를 서버 메시지 그대로 안내
       notify({
         color: 'red',
-        title: '치울 수 없습니다',
-        message: e instanceof Error ? e.message : '판매자를 치우는 중 오류가 발생했습니다.',
+        title: '정리할 수 없습니다',
+        message: e instanceof Error ? e.message : '판매자를 정리하는 중 오류가 발생했습니다.',
       });
     }
   };
@@ -227,7 +232,7 @@ export default function AdminStoresClient() {
       notify({
         color: 'brand',
         title: '판매자를 복구했습니다',
-        message: `${store.name || '(미설정)'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
+        message: `${store.name || '이름 없는 가게'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
       });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
@@ -257,67 +262,51 @@ export default function AdminStoresClient() {
   const readState = getAdminStoresReadState({ loading, error, stores, visible });
   const isFetchError = readState === 'FETCH_ERROR';
 
+  const counts = countStoresByFilter(stores, view.keyword);
+  const statusTabs = STATUS_FILTER_OPTIONS.map((option) => ({
+    key: option.value,
+    label: option.label,
+    count: !loading && error === null ? counts[option.value] : undefined,
+  }));
+
   return (
     <div>
-      {/* ① 외형 유지(UI 교체 P2b): Mantine Group·Title order 4(18px·800·줄 높이 1.45)·Text·Paper와 같은 값. */}
-      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
-        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">
-          판매자 목록{' '}
-          {error === null && (
-            <span
-              className="m-0 p-0 text-base font-normal"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
-              ({visible.length})
-            </span>
-          )}
-        </h4>
-      </div>
-
+      {/* ② 방향(design-direction.md §5 어드민 "판매자", §8 D7): 명사 하나의 h1, 지금 기준 한 줄, 주요 버튼은 초대 링크 만들기. */}
       {/* 가게별 수수료율은 정산을 만들 때 그 가게 요율로 계산한다(결정 ②, BACKLOG STORE-COMMISSION-RATE-UNUSED).
           이미 만든 정산은 다시 계산하지 않는다. */}
-      <p
-        className="m-0 mb-3 p-0 text-base"
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-      >
-        수수료율은 다음에 만들어지는 정산부터 적용됩니다. 설정하지 않은 가게는 기본{' '}
-        {DEFAULT_COMMISSION_PERCENT}%로 정산하며, 이미 만든 정산은 바뀌지 않습니다.
-      </p>
+      <AdminPageHeader
+        title="판매자"
+        subline={`수수료율은 다음에 만들어지는 정산부터 적용됩니다. 설정하지 않은 가게는 기본 ${DEFAULT_COMMISSION_PERCENT}%로 정산하며, 이미 만든 정산은 바뀌지 않습니다.`}
+        action={
+          <ButtonLink render={<Link href="/admin/invite" />} className="rounded-[8px]">
+            초대 링크 만들기
+          </ButtonLink>
+        }
+      />
 
       <StoresFilters
         keyword={view.keyword}
-        status={view.status}
         sort={view.sort}
         loading={loading}
         onKeywordChange={(keyword) => updateView({ keyword }, { debounceUrl: true })}
-        onStatusChange={(status) => updateView({ status })}
         onSortChange={(sort) => updateView({ sort })}
         onReload={reload}
       />
 
+      <div className="mb-2">
+        <SegmentedTabs<StoreStatusFilter>
+          tabs={statusTabs}
+          value={view.status}
+          onChange={(status) => updateView({ status })}
+          layout="scroll"
+          variant="underline"
+          surface="paper"
+          ariaLabel="판매자 상태"
+        />
+      </div>
+
       {isFetchError ? (
-        <div
-          className="block rounded-[16px] bg-white shadow-mantine-xs"
-          style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        >
-          <div className="flex flex-col items-center gap-3 px-4 py-16">
-            <p
-              className="m-0 p-0 text-base"
-              style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}
-            >
-              판매자 목록을 불러오지 못했습니다.
-            </p>
-            <p
-              className="m-0 p-0 text-center text-base"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
-              {error}
-            </p>
-            <Button onClick={reload} variant="outline" className="rounded-[8px]">
-              다시 조회
-            </Button>
-          </div>
-        </div>
+        <AdminListError title="판매자 목록을 불러오지 못했습니다." error={error} onRetry={reload} />
       ) : (
         <StoresTable
           stores={visible}
@@ -333,6 +322,9 @@ export default function AdminStoresClient() {
           onSave={handleSave}
           onArchive={handleArchive}
           onRestore={handleRestore}
+          onOpenSettlements={(store) =>
+            router.push(`/admin/settlements?store=${encodeURIComponent(store.id)}`)
+          }
           onResetFilters={resetFilters}
           onSortChange={(sort) => updateView({ sort })}
         />

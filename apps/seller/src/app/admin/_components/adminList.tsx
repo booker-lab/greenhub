@@ -1,4 +1,14 @@
+import { Button } from '@greenhub/ui/components/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuDotsIcon,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@greenhub/ui/components/dropdown-menu';
 import type { ReactNode } from 'react';
+
+export { formatAdminDate, formatAdminDateTime, parseAdminTime } from './adminFormat';
 
 // 어드민 목록 화면 공통 규칙(design-direction.md §5 어드민 "모든 목록 화면의 규칙", §8 D7).
 // - 머리: h1은 명사 하나(24px, 휴대폰 22px), 그 아래 15px 한 줄로 지금 기준을 쓴다.
@@ -76,4 +86,66 @@ export function maskPersonName(name: string | null | undefined): string | null {
 /** 금액 표기 — "48,000원". 0도 "0원"으로 쓴다. */
 export function formatWon(amount: number): string {
   return `${amount.toLocaleString('ko-KR')}원`;
+}
+
+/** 값이 없을 때 쓰는 회색 "–"(빈 열 전체를 채우지 않고 그 칸에만). */
+export function AdminMissing() {
+  return <span className="text-[var(--color-text-secondary)]">–</span>;
+}
+
+export interface AdminRowMenuItem {
+  key: string;
+  label: string;
+  onSelect: () => void;
+}
+
+/** 행 끝 ⋮ 메뉴(44px). 항목이 없으면 같은 폭의 빈 자리를 둬 끝선을 맞춘다. */
+export function AdminRowMenu({ label, items }: { label: string; items: AdminRowMenuItem[] }) {
+  if (items.length === 0) return <span className="block size-11" aria-hidden="true" />;
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger aria-label={`${label} 동작 더 보기`}>
+        <DropdownMenuDotsIcon />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        {items.map((item) => (
+          <DropdownMenuItem key={item.key} onClick={item.onSelect}>
+            {item.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** 목록 자리의 한 줄 안내(불러오는 중·빈 목록). */
+export function AdminListNotice({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-[8px] border border-rule px-4 py-16 text-center text-[15px] text-[var(--color-text-secondary)]">
+      {children}
+    </div>
+  );
+}
+
+/** 조회 실패 — 빈 목록과 구분하고 다시 조회 버튼을 둔다. */
+export function AdminListError({
+  title,
+  error,
+  onRetry,
+}: {
+  title: string;
+  error: string | null;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 rounded-[8px] border border-rule px-4 py-16">
+      <p className="m-0 text-[15px] font-medium text-foreground">{title}</p>
+      {error && (
+        <p className="m-0 text-center text-[13px] text-[var(--color-text-secondary)]">{error}</p>
+      )}
+      <Button onClick={onRetry} variant="outline" className="rounded-[8px]">
+        다시 조회
+      </Button>
+    </div>
+  );
 }
