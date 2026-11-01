@@ -1,7 +1,7 @@
 'use client';
 
-import { notify } from '@/components/AppToaster';
 import { useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { describeListCap, type IssuedInvite, useAdminInvite } from '@/hooks/useAdmin';
 import { InviteGenerator } from './_components/InviteGenerator';

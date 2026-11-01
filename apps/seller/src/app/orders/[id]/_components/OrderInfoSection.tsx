@@ -1,28 +1,17 @@
 'use client';
 
 import type { GroupProductConfig, Order } from '@greenhub/shared';
-import { Badge } from '@greenhub/ui/components/badge';
-import { DELIVERY_LABEL, STATUS_COLOR, STATUS_LABEL } from '../../_constants';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
+import { DELIVERY_LABEL, STATUS_LABEL, STATUS_TONE } from '../../_constants';
 import { formatDeadlineCountdown, resolveOrderItemLines, toDate } from '../_lib';
 import { CustomerInfoSection } from './CustomerInfoSection';
 import { OrderBenchmarkSection } from './OrderBenchmarkSection';
 import { Row } from './OrderRow';
 
-// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, shadow xs)·Group·Stack·Text(p, 여백 0, 줄 높이 1.55)와 같은 값.
+// ② 디자인 방향(D2·2026-11-01 결정): 카드는 그림자 없이 틀 위 흰 면, 상태는 점 + 글자(StatusDot).
+// 나머지(radius lg = 16px·Group·Stack·Text)는 ① 값을 유지한다.
 const TEXT = 'm-0 p-0 text-base font-normal';
-const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
-
-// Mantine Badge light color(STATUS_COLOR) → @greenhub/ui Badge 변형.
-const LIGHT_BADGE: Record<
-  string,
-  'light' | 'destructive' | 'warning' | 'light-dark' | 'secondary'
-> = {
-  brand: 'light',
-  red: 'destructive',
-  yellow: 'warning',
-  dark: 'light-dark',
-  gray: 'secondary',
-};
+const PAPER = 'block rounded-[16px] bg-white';
 
 interface OrderInfoSectionProps {
   order: Order;
@@ -37,9 +26,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
     <>
       <div className={`${PAPER} p-4`}>
         <div className="mb-3 flex flex-row flex-wrap items-center justify-between gap-4">
-          <Badge variant={LIGHT_BADGE[STATUS_COLOR[order.status]]} className="rounded-[32px]">
-            {STATUS_LABEL[order.status]}
-          </Badge>
+          <StatusDot tone={STATUS_TONE[order.status]}>{STATUS_LABEL[order.status]}</StatusDot>
           <p
             className={TEXT}
             style={{
@@ -202,7 +189,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           ) : (
             order.pickupCode && (
               <div
-                className="mt-2.5 block rounded-[8px] bg-white p-3 shadow-mantine-xs"
+                className="mt-2.5 block rounded-[8px] bg-white p-3"
                 style={{ backgroundColor: 'var(--color-primary-surface)', textAlign: 'center' }}
               >
                 <p

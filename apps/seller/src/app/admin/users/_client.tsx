@@ -1,8 +1,8 @@
 'use client';
 
 import { Button } from '@greenhub/ui/components/button';
-import { notify } from '@/components/AppToaster';
 import { useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
 import type { AdminUser } from '@/hooks/useAdmin';

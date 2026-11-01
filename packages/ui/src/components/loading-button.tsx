@@ -24,10 +24,15 @@ const LOADER_PX = {
 // 처리 중에도 버튼은 초점을 잃지 않는다(focusableWhenDisabled = aria-disabled, 진짜 disabled 아님). 진짜 disabled면
 // 누른 버튼에 있던 초점이 문서(body)로 빠져, 창 안에서 누르면 초점이 창 밖으로 나갔다(Mantine Button loading도 같았다).
 // 누름은 Base UI가 막는다. 진짜 disabled가 아니므로 Button의 disabled 회색도 걸리지 않는다.
-// hideIcons를 주면 버튼 바로 아래 아이콘(svg)도 글자처럼 내려 감춘다(회차 저장). 주지 않으면 아이콘은 보인 채 남는다.
+// 버튼 바로 아래 아이콘(svg)도 글자처럼 내려 감춘다. Mantine Button loading은 글자·아이콘이 든 안쪽 칸(inner)을 통째로
+// 내려 감추므로 아이콘만 남는 일이 없다(운영 확인 새로고침 아이콘이 원 뒤에 보이던 차이).
 const MEASURED =
-  "pointer-events-none before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-[inherit] before:bg-white/15 before:blur-[12px] before:content-[''] [&_[data-slot=button-label]]:translate-y-full [&_[data-slot=button-label]]:opacity-0";
-const MEASURED_HIDE_ICONS = '[&>svg]:translate-y-full [&>svg]:opacity-0';
+  "pointer-events-none before:pointer-events-none before:absolute before:inset-[-1px] before:rounded-[inherit] before:bg-white/15 before:blur-[12px] before:content-[''] [&_[data-slot=button-label]]:translate-y-full [&_[data-slot=button-label]]:opacity-0 [&>svg]:translate-y-full [&>svg]:opacity-0";
+// ③의 따로 합성은 창(role=dialog) 밖에서만 한다. Mantine Modal 안의 Button loading 원은 따로 합성되지 않은 모양이고(실측),
+// 창 안에서 원을 따로 합성하면 촬영(Playwright animations: 'disabled')이 무한 회전을 취소해도 합성 층에 돌던 각도가
+// 남아 찍혔다(회차 복사·해결로 닫기 처리 중). 창 밖은 따로 합성해야 Mantine과 같고 취소도 반영된다.
+const MEASURED_LOADER =
+  'absolute top-1/2 left-1/2 [transform:translate(-50%,calc(-50%+1px))] will-change-transform [[role=dialog]_&]:will-change-auto';
 
 // measured를 쓸 수 있는 변형(판매자 화면에서 Mantine과 실측으로 맞춘 것).
 type MeasuredVariant = 'default' | 'light' | 'light-green' | 'secondary' | 'ghost' | 'destructive';
@@ -36,10 +41,7 @@ type LoadingButtonProps = React.ComponentProps<typeof Button> & {
   loading?: boolean;
   /** 버튼 높이를 className으로 바꾼 경우의 실제 높이(px). 원 크기 = 높이 ÷ 1.8. 주지 않으면 size로 정한다. */
   buttonHeight?: number;
-} & (
-    | { measured?: false; hideIcons?: never }
-    | { measured: true; variant?: MeasuredVariant; hideIcons?: boolean }
-  );
+} & ({ measured?: false } | { measured: true; variant?: MeasuredVariant });
 
 function loaderStyle(px: number) {
   return { '--loader-size': `${px}px`, '--loader-border': `${px / 8}px` } as React.CSSProperties;
@@ -51,7 +53,6 @@ function LoadingButton({
   size = 'default',
   buttonHeight,
   measured,
-  hideIcons,
   className,
   children,
   ...props
@@ -75,13 +76,10 @@ function LoadingButton({
         focusableWhenDisabled
         data-loading=""
         aria-busy
-        className={cn(MEASURED, hideIcons && MEASURED_HIDE_ICONS, className)}
+        className={cn(MEASURED, className)}
         {...props}
       >
-        <span
-          aria-hidden
-          className="absolute top-1/2 left-1/2 [transform:translate(-50%,calc(-50%+1px))] will-change-transform"
-        >
+        <span aria-hidden className={MEASURED_LOADER}>
           <Loader color="currentColor" style={loaderStyle(px)} />
         </span>
         {children}

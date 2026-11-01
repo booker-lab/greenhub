@@ -13,7 +13,11 @@ describe('정산 지급 확인창 문구', () => {
       ...base,
       storeName: '난플렉스',
       orderNumber: 'ORD-77',
-      payoutAccount: { bankName: '국민은행', accountHolder: '김그린', accountNumber: '110-123-456789' },
+      payoutAccount: {
+        bankName: '국민은행',
+        accountHolder: '김그린',
+        accountNumber: '110-123-456789',
+      },
     }).split('\n');
     expect(lines).toContain('가게: 난플렉스');
     expect(lines).toContain('주문번호: ORD-77');
@@ -32,7 +36,11 @@ describe('정산 지급 확인창 문구', () => {
 });
 
 describe('지급 가능 여부', () => {
-  const account = { bankName: '국민은행', accountHolder: '김그린', accountNumber: '110-123-456789' };
+  const account = {
+    bankName: '국민은행',
+    accountHolder: '김그린',
+    accountNumber: '110-123-456789',
+  };
 
   it('확정이고 보류가 없고 계좌가 있으면 지급할 수 있다', () => {
     expect(canPay({ status: 'confirmed', holdReason: null, payoutAccount: account })).toBe(true);
