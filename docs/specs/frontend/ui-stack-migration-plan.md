@@ -349,6 +349,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 세 앱과 `packages/ui`에서 `@mantine/*`, `postcss-preset-mantine`, `postcss-simple-vars`, `theme.ts`, `style.css`의 Mantine 보정, 두 앱 `next.config.ts`의 `@mantine/notifications` 설정을 제거한다. 앱 CSS를 CLI `globals.css`(preflight 포함)로 바꾸고, §4에서 기존 이름에 맞춰 둔 값(`--border` 묶음 값 등)을 shadcn 방식으로 정리한다.
 - `design-standard.md`의 값 정본 표기(`theme.ts`)를 새 위치로 바꾸고, 앱별 `AGENTS.md`의 글꼴 크기 예외 표를 새 컴포넌트 이름으로 갱신한다.
 - `docs/specs/perf/mantine-treeshaking.md`는 역사 자료로 표시한다.
+- 판매자 P6(2026-11-01): 대조 화면(`/dev/ui-compare`, `scripts/visual/compare-cells.mjs`, `shots.mjs --set compare`)은 판매자 화면 교체(P4)가 끝나 판정할 짝이 없어 지웠다. 위 P2·P4 기록의 대조 화면 판정은 그때의 증거로 남긴다. 앱 화면이 아직 쓰지 않는 `Sheet`의 창 초점 검사는 판매자 `/dev/overlays`(`focus-trap.mjs --set overlays`, 버튼으로 열어 Esc 뒤 초점 복귀까지 검사)로 옮겼다.
 
 ## 7. 화면 변경을 같이 할지
 

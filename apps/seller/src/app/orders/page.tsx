@@ -478,6 +478,7 @@ export default function OrdersPage() {
         sticky
         layout="scroll"
         ariaLabel="주문 상태"
+        variant="underline"
       />
 
       {/* SubFilter — ACTION_REQUIRED 탭의 배송 보류 격리 / IN_DELIVERY 탭 선택 시에만 렌더링 */}
