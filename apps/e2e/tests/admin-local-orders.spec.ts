@@ -145,11 +145,11 @@ test.describe('어드민 로컬 — 주문', () => {
     await openStoreOrders(page);
 
     await expect(orderNumbers(page)).toHaveCount(50);
-    await visible(page.getByRole('button', { name: '더 보기' })).click();
+    await visible(page.getByRole('button', { name: '더 보기', exact: true })).click();
     await expect(page.getByText('불러온 51건', { exact: false })).toBeVisible();
     await expect(page.getByText('더 있음')).toHaveCount(0);
     await expect(orderNumbers(page)).toHaveCount(51);
-    await expect(page.getByRole('button', { name: '더 보기' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '더 보기', exact: true })).toHaveCount(0);
   });
 
   test('목록 칸 — 주문 시각·주문번호·가린 고객 이름·상품·가게 이름·금액을 보여 준다', async ({
