@@ -314,6 +314,8 @@ const ADMIN_SETTLEMENTS = [
     settledAt: '2026-09-27T15:00:00.000Z',
     confirmedAt: '2026-09-27T15:00:00.000Z',
     paidAt: null,
+    // 지급 대상 행에만 오는 정산 계좌(지급 완료 기록 버튼·가린 번호·복사).
+    payoutAccount: { bankName: '국민은행', accountHolder: '디어오키드', accountNumber: '123456-01-987654' },
   },
   // 상태별 배지·회수 필요(빨강 채움)·지급 보류(주황)·가게 이름·주문번호.
   {
@@ -1930,20 +1932,28 @@ export const screens = [
     ],
     viewport: true,
   },
+  // ② 방향(D7): 주문 상태는 표 위 탭 한 줄이다(상태 선택 Select를 없앴다).
   {
-    id: 'admin-orders-status-open',
+    id: 'admin-orders-tab-held',
     group: '어드민 · 필터',
-    title: '주문 · 상태 선택 열림',
+    title: '주문 · 배송 보류 탭',
     path: '/admin/orders',
-    steps: [{ clickSelector: 'input[aria-label="주문 상태"]' }],
-    viewport: true,
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("배송 보류")' }],
   },
   {
     id: 'admin-orders-empty',
     group: '어드민 · 필터',
     title: '주문 · 고른 상태의 주문 없음',
     path: '/admin/orders',
-    steps: [{ clickSelector: 'input[aria-label="주문 상태"]' }, { click: '리뷰완료' }],
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("준비 중")' }],
+  },
+  {
+    id: 'admin-orders-row-menu',
+    group: '어드민 · 필터',
+    title: '주문 · 행 ⋮ 메뉴 열림',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'button[aria-label="주문 R-ACCEPTED 동작 더 보기"]:visible' }],
+    viewport: true,
   },
   // 어드민 기사 승인·정지 확인창(ConfirmModal, 정지는 사유 입력칸 포함). 기본 탭은 승인 대기다.
   {
@@ -2068,8 +2078,8 @@ export const screens = [
     group: '어드민 · 모달',
     title: '주문 · 강제환불 확인',
     path: '/admin/orders',
-    // 모바일 카드와 PC 표가 같은 버튼을 함께 그리고 하나만 보이므로 보이는 버튼을 누른다.
-    steps: [{ clickSelector: 'button:has-text("강제환불"):visible' }],
+    // 휴대폰 행과 PC 표가 같은 버튼을 함께 그리고 하나만 보이므로 보이는 버튼을 누른다(배송 보류 행의 "환불").
+    steps: [{ clickSelector: 'button[aria-label="주문 R-HELD 환불"]:visible' }],
     viewport: true,
   },
   {
@@ -2077,7 +2087,10 @@ export const screens = [
     group: '어드민 · 모달',
     title: '주문 · 배송 후 환불 확인',
     path: '/admin/orders',
-    steps: [{ clickSelector: 'button:has-text("배송 후 환불"):visible' }],
+    steps: [
+      { clickSelector: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("배송 후 환불")' },
+    ],
     viewport: true,
   },
   {
@@ -2086,7 +2099,8 @@ export const screens = [
     title: '주문 · 배송 후 환불(사유·메모 입력)',
     path: '/admin/orders',
     steps: [
-      { clickSelector: 'button:has-text("배송 후 환불"):visible' },
+      { clickSelector: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("배송 후 환불")' },
       { click: '꽃 상함' },
       { fill: { label: '메모 (손님에게는 보이지 않음, 필수)', value: '꽃잎이 상해 도착' } },
     ],

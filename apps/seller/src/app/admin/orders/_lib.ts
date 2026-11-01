@@ -3,25 +3,38 @@ import { type OrderStatus, POST_DELIVERY_REFUNDABLE_STATUSES } from '@greenhub/s
 // 주문 상태 라벨/색 — orders 탭 표현 SSOT(테이블·카드·필터 공용).
 // Record<OrderStatus>라 공유 상태가 늘면 라벨 누락을 컴파일 단계에서 잡는다.
 export const STATUS_LABEL: Record<OrderStatus, string> = {
-  PENDING: '결제대기',
-  RECRUITING: '모집중',
+  PENDING: '결제 대기',
+  RECRUITING: '모집 중',
   ACCEPTED: '접수됨',
   CONFIRMED: '확정',
-  PREPARING: '준비중',
-  DELIVERING: '배달중',
+  PREPARING: '준비 중',
+  DELIVERING: '배송 중',
   DELIVERY_HELD: '배송 보류',
-  HUB_ARRIVED: '거점도착',
-  PICKED_UP: '픽업완료',
-  DELIVERED: '배달완료',
-  REVIEWED: '리뷰완료',
-  CANCELLED: '취소됨',
+  HUB_ARRIVED: '거점 도착',
+  PICKED_UP: '픽업 완료',
+  DELIVERED: '배송 완료',
+  REVIEWED: '후기 작성',
+  CANCELLED: '취소',
 };
 
-export function getStatusColor(status: OrderStatus): string {
-  if (status === 'CANCELLED' || status === 'DELIVERY_HELD') return 'red';
-  if (status === 'DELIVERED' || status === 'REVIEWED') return 'brand';
-  return 'yellow';
+// 상태 점의 색(design-direction.md §5 어드민 "상태"): 문제(배송 보류)=빨강, 끝남(취소·결제 대기)=회색, 나머지 검정.
+export function getStatusTone(status: OrderStatus): 'problem' | 'done' | 'default' {
+  if (status === 'DELIVERY_HELD') return 'problem';
+  if (status === 'CANCELLED' || status === 'PENDING') return 'done';
+  return 'default';
 }
+
+// 상태 탭 — 서버 상태 필터는 한 상태만 받는다(GET /admin/orders?status=). 묶음 탭과 상태별 건수는 API가 없어
+// 탭에 숫자를 쓰지 않는다(API 제안: 상태별 건수·묶음 필터). 그 밖 상태는 "전체"에서만 보인다.
+export const ORDER_STATUS_TABS: ReadonlyArray<{ key: '' | OrderStatus; label: string }> = [
+  { key: '', label: '전체' },
+  { key: 'DELIVERY_HELD', label: '배송 보류' },
+  { key: 'PENDING', label: '결제 대기' },
+  { key: 'PREPARING', label: '준비 중' },
+  { key: 'DELIVERING', label: '배송 중' },
+  { key: 'DELIVERED', label: '배송 완료' },
+  { key: 'CANCELLED', label: '취소' },
+];
 
 // 강제환불 버튼 노출 — 서버(admin.service forceRefund)가 허용하는 상태와 같게 유지한다.
 // 회차 주문(schemaVersion 2 + roundId): round-order-lifecycle.service claimCancellation 허용 상태.
@@ -81,14 +94,6 @@ export function getAdminOrdersReadState(args: {
   return 'HAS_RESULTS';
 }
 
-// 상태 필터 Select 옵션 — '전체' + 전 상태.
-export function buildStatusOptions(): { value: string; label: string }[] {
-  return [
-    { value: '', label: '전체 상태' },
-    ...Object.entries(STATUS_LABEL).map(([k, v]) => ({ value: k, label: v })),
-  ];
-}
-
 // 강제환불 확인창 대상 표시 — 운영자가 어느 주문을 얼마 환불하는지 눈으로 확인하게 한다.
 // 주문번호가 없는 옛 주문은 목록처럼 줄이지 않고 전체 id를 보여 준다(오인 방지).
 export function describeRefundTarget(order: {
@@ -129,24 +134,64 @@ export function formatOrderedAt(createdAt: unknown): string {
   )}:${pad(kst.getUTCMinutes())}`;
 }
 
-// 취소 진행 상태 배지 — 환불이 진행 중이거나 실패해 사람이 봐야 하는 주문만 표시한다.
-// COMPLETED(취소 끝)와 값 없음은 배지를 그리지 않는다(상태 배지 '취소됨'으로 충분).
-const CANCELLATION_BADGE: Record<string, { label: string; color: string }> = {
-  REFUNDING: { label: '환불 진행 중', color: 'yellow' },
-  REFUND_FAILED: { label: '환불 실패', color: 'red' },
-  LOCAL_PENDING: { label: '취소 처리 중', color: 'yellow' },
-  LOCAL_FAILED: { label: '취소 마무리 실패', color: 'red' },
+// 취소 진행 상태 — 환불이 진행 중이거나 실패해 사람이 봐야 하는 주문만 상태 옆에 점 + 글자로 더한다.
+// COMPLETED(취소 끝)와 값 없음은 그리지 않는다(상태 '취소'로 충분). 실패는 문제(빨강)다.
+const CANCELLATION_STATE: Record<string, { label: string; tone: 'problem' | 'default' }> = {
+  REFUNDING: { label: '환불 진행 중', tone: 'default' },
+  REFUND_FAILED: { label: '환불 실패', tone: 'problem' },
+  LOCAL_PENDING: { label: '취소 처리 중', tone: 'default' },
+  LOCAL_FAILED: { label: '취소 마무리 실패', tone: 'problem' },
 };
 
-export function cancellationBadge(
+export function cancellationState(
   status: string | null | undefined,
-): { label: string; color: string } | null {
-  return status ? (CANCELLATION_BADGE[status] ?? null) : null;
+): { label: string; tone: 'problem' | 'default' } | null {
+  return status ? (CANCELLATION_STATE[status] ?? null) : null;
 }
 
-/** 가게 이름 — 이름이 없으면 id 앞자리로 대신한다. */
+// 확인할 일 줄 — 불러온 행 중 배송 보류·환불 실패(취소 마무리 실패 포함) 건수. 둘 다 0이면 null(줄을 그리지 않음).
+export function countOrderAttention(
+  orders: ReadonlyArray<{ status: OrderStatus; cancellationStatus?: string | null }>,
+): { held: number; refundFailed: number } | null {
+  let held = 0;
+  let refundFailed = 0;
+  for (const order of orders) {
+    if (order.status === 'DELIVERY_HELD') held += 1;
+    if (cancellationState(order.cancellationStatus)?.tone === 'problem') refundFailed += 1;
+  }
+  return held + refundFailed > 0 ? { held, refundFailed } : null;
+}
+
+// 행 동작(design-direction.md §5 어드민 "행 동작"·"적용 때 정한 것"):
+// - 처리가 필요한 행(환불할 수 있는 배송 보류)에만 보이는 글자 버튼 "환불"을 둔다. 환불 실패는 표시만 한다(다시 시도 동작 없음).
+// - 그 밖의 환불(결제 전 주문은 "주문 취소…")과 배송 완료 회차 주문의 "배송 후 환불…"은 행 끝 ⋮ 메뉴에 넣는다.
+export type OrderRowAction = 'refund' | 'post-delivery-refund';
+
+export function orderRowActions(order: {
+  status: OrderStatus;
+  schemaVersion?: number;
+  roundId?: string | null;
+  postDeliveryRefund?: unknown;
+}): {
+  primary: OrderRowAction | null;
+  menu: Array<{ action: OrderRowAction; label: string }>;
+} {
+  const refundable = isRefundable(order);
+  const primary: OrderRowAction | null =
+    refundable && order.status === 'DELIVERY_HELD' ? 'refund' : null;
+  const menu: Array<{ action: OrderRowAction; label: string }> = [];
+  if (refundable && primary === null) {
+    menu.push({ action: 'refund', label: order.status === 'PENDING' ? '주문 취소…' : '환불…' });
+  }
+  if (isPostDeliveryRefundable(order)) {
+    menu.push({ action: 'post-delivery-refund', label: '배송 후 환불…' });
+  }
+  return { primary, menu };
+}
+
+/** 가게 이름 — 잘린 시스템 id를 보여 주지 않는다(D7 "식별"). 이름이 없으면 "이름 없는 가게". */
 export function storeLabel(order: { storeId: string; storeName?: string | null }): string {
-  return order.storeName?.trim() || `${order.storeId.slice(0, 8)}…`;
+  return order.storeName?.trim() || '이름 없는 가게';
 }
 
 // 가게 선택 옵션 — '전체 가게' + 이름순. 치운 가게는 이름 뒤에 표시해 구분한다.

@@ -1,15 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-  buildStatusOptions,
   buildStoreOptions,
-  cancellationBadge,
+  cancellationState,
+  countOrderAttention,
   describeRefundTarget,
   formatOrderedAt,
   getAdminOrdersReadState,
-  getStatusColor,
+  getStatusTone,
   isPostDeliveryRefundable,
   isRefundable,
   normalizeRefundReason,
+  ORDER_STATUS_TABS,
+  orderRowActions,
   REFUND_REASON_MAX_LENGTH,
   STATUS_LABEL,
   storeLabel,
@@ -106,11 +108,72 @@ describe('isRefundable — 서버 강제환불 허용 상태와 일치', () => {
   });
 });
 
-describe('주문 상태 라벨·필터 옵션', () => {
-  it('배송 보류(DELIVERY_HELD)를 라벨·빨강 색·필터 옵션에 포함한다', () => {
+describe('주문 상태 라벨·점 색·탭', () => {
+  it('배송 보류는 문제(빨강), 취소·결제 대기는 끝남(회색), 나머지는 검정이다', () => {
     expect(STATUS_LABEL.DELIVERY_HELD).toBe('배송 보류');
-    expect(getStatusColor('DELIVERY_HELD')).toBe('red');
-    expect(buildStatusOptions()).toContainEqual({ value: 'DELIVERY_HELD', label: '배송 보류' });
+    expect(getStatusTone('DELIVERY_HELD')).toBe('problem');
+    expect(getStatusTone('CANCELLED')).toBe('done');
+    expect(getStatusTone('PENDING')).toBe('done');
+    expect(getStatusTone('ACCEPTED')).toBe('default');
+  });
+
+  it('상태 탭은 전체 + 서버가 거를 수 있는 단일 상태다(배송 보류를 둘째에 둔다)', () => {
+    expect(ORDER_STATUS_TABS.map((tab) => tab.key)).toEqual([
+      '',
+      'DELIVERY_HELD',
+      'PENDING',
+      'PREPARING',
+      'DELIVERING',
+      'DELIVERED',
+      'CANCELLED',
+    ]);
+    for (const tab of ORDER_STATUS_TABS.slice(1)) {
+      expect(tab.label).toBe(STATUS_LABEL[tab.key as keyof typeof STATUS_LABEL]);
+    }
+  });
+});
+
+describe('행 동작 — 처리가 필요한 행만 글자 버튼, 나머지는 ⋮', () => {
+  const round = { schemaVersion: 2, roundId: 'round-1' };
+  it('환불할 수 있는 배송 보류만 "환불" 글자 버튼이다', () => {
+    expect(orderRowActions({ ...round, status: 'DELIVERY_HELD' })).toEqual({
+      primary: 'refund',
+      menu: [],
+    });
+  });
+
+  it('결제 전 주문의 동작 이름은 "주문 취소…", 그 밖의 환불은 "환불…"이고 ⋮에 넣는다', () => {
+    expect(orderRowActions({ ...round, status: 'PENDING' })).toEqual({
+      primary: null,
+      menu: [{ action: 'refund', label: '주문 취소…' }],
+    });
+    expect(orderRowActions({ ...round, status: 'ACCEPTED' }).menu).toEqual([
+      { action: 'refund', label: '환불…' },
+    ]);
+  });
+
+  it('배송 완료 회차 주문은 ⋮에 "배송 후 환불…"을 두고, 환불할 수 없으면 동작이 없다', () => {
+    expect(orderRowActions({ ...round, status: 'DELIVERED' }).menu).toEqual([
+      { action: 'post-delivery-refund', label: '배송 후 환불…' },
+    ]);
+    expect(orderRowActions({ ...round, status: 'DELIVERING' })).toEqual({
+      primary: null,
+      menu: [],
+    });
+  });
+});
+
+describe('확인할 일 줄', () => {
+  it('불러온 행의 배송 보류·환불 실패(취소 마무리 실패 포함)를 세고, 없으면 null', () => {
+    expect(
+      countOrderAttention([
+        { status: 'DELIVERY_HELD' },
+        { status: 'CANCELLED', cancellationStatus: 'REFUND_FAILED' },
+        { status: 'CANCELLED', cancellationStatus: 'LOCAL_FAILED' },
+        { status: 'CANCELLED', cancellationStatus: 'REFUNDING' },
+      ]),
+    ).toEqual({ held: 1, refundFailed: 2 });
+    expect(countOrderAttention([{ status: 'ACCEPTED' }])).toBeNull();
   });
 });
 
@@ -152,7 +215,11 @@ describe('isPostDeliveryRefundable', () => {
   it('옛 일반 주문과 이미 배송 후 환불한 주문은 숨긴다', () => {
     expect(isPostDeliveryRefundable({ status: 'DELIVERED', schemaVersion: 1 })).toBe(false);
     expect(
-      isPostDeliveryRefundable({ ...round, status: 'DELIVERED', postDeliveryRefund: { memo: 'x' } }),
+      isPostDeliveryRefundable({
+        ...round,
+        status: 'DELIVERED',
+        postDeliveryRefund: { memo: 'x' },
+      }),
     ).toBe(false);
   });
 });
@@ -165,16 +232,16 @@ describe('주문 목록 칸 표시', () => {
     expect(formatOrderedAt('not-a-date')).toBe('—');
   });
 
-  it('환불 진행·실패만 배지를 그린다', () => {
-    expect(cancellationBadge('REFUNDING')).toEqual({ label: '환불 진행 중', color: 'yellow' });
-    expect(cancellationBadge('REFUND_FAILED')).toEqual({ label: '환불 실패', color: 'red' });
-    expect(cancellationBadge('COMPLETED')).toBeNull();
-    expect(cancellationBadge(null)).toBeNull();
+  it('환불 진행·실패만 상태를 더하고, 실패는 문제(빨강)다', () => {
+    expect(cancellationState('REFUNDING')).toEqual({ label: '환불 진행 중', tone: 'default' });
+    expect(cancellationState('REFUND_FAILED')).toEqual({ label: '환불 실패', tone: 'problem' });
+    expect(cancellationState('COMPLETED')).toBeNull();
+    expect(cancellationState(null)).toBeNull();
   });
 
-  it('가게 이름이 없으면 id 앞자리로 대신한다', () => {
+  it('가게 이름이 없으면 잘린 id 대신 "이름 없는 가게"로 쓴다', () => {
     expect(storeLabel({ storeId: 'store-abcdef12', storeName: '난플렉스' })).toBe('난플렉스');
-    expect(storeLabel({ storeId: 'store-abcdef12', storeName: null })).toBe('store-ab…');
+    expect(storeLabel({ storeId: 'store-abcdef12', storeName: null })).toBe('이름 없는 가게');
   });
 
   it('가게 선택은 전체 가게 + 이름순이고 치운 가게를 표시한다', () => {
