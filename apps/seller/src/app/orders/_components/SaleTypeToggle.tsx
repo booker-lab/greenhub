@@ -19,12 +19,8 @@ const UNSTYLED_BUTTON =
 
 export function SaleTypeToggle({ value, onChange }: Props) {
   return (
-    <div
-      style={{
-        backgroundColor: 'var(--color-bg)',
-        borderBottom: '1px solid var(--color-border)',
-      }}
-    >
+    // ② 디자인 방향(D3): 칩·검색 띠는 틀과 같은 --frame이고 띠 사이 선을 긋지 않는다.
+    <div style={{ backgroundColor: 'var(--frame)' }}>
       <div className="mx-auto max-w-[720px] px-4 py-2.5">
         <div className="flex flex-row flex-wrap items-center justify-start gap-0">
           {OPTIONS.map((opt) => {
@@ -42,7 +38,8 @@ export function SaleTypeToggle({ value, onChange }: Props) {
                   textAlign: 'center',
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: active ? 700 : 400,
-                  borderBottom: `2px solid ${active ? 'var(--color-text)' : 'transparent'}`,
+                  // 선택 표시는 판매자 탭 규칙과 같은 검정 3px 밑줄·굵게(design-direction §5).
+                  borderBottom: `3px solid ${active ? 'var(--color-text)' : 'transparent'}`,
                   color: active ? 'var(--color-text)' : 'var(--color-text-secondary)',
                   transition: 'all 0.15s',
                 }}
