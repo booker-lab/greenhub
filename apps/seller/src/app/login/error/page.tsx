@@ -12,7 +12,7 @@ export default async function SignInErrorPage({
   const { error } = await searchParams;
   const notice = describeSignInError(Array.isArray(error) ? error[0] : error);
 
-  // ① 외형 유지(UI 교체 P4): Mantine Container size xs·Paper(radius lg·shadow sm·p xl)·Stack(gap md)·
+  // ① 외형 유지(UI 교체 P4): Mantine Container size xs·Paper(radius lg·p xl; 그림자는 ② D2로 걷음)·Stack(gap md)·
   // Title order 3(22px·줄 높이 1.4·800)·Text·Button outline(radius xl, 꽉 찬 폭)과 같은 값.
   return (
     <main
@@ -26,7 +26,7 @@ export default async function SignInErrorPage({
       }}
     >
       <div className="mx-auto w-full max-w-[540px] px-4">
-        <div className="block rounded-[16px] bg-white p-8 shadow-mantine-sm">
+        <div className="block rounded-[16px] bg-white p-8">
           <div className="flex flex-col items-stretch justify-start gap-4">
             <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">{notice.title}</h3>
             <p

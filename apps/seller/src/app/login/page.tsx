@@ -10,7 +10,7 @@ export default function LoginPage() {
     process.env.E2E_TEST === 'true' ||
     (process.env.GREENHUB_LOCAL_RUNTIME === 'true' && process.env.NODE_ENV !== 'production');
 
-  // ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Paper(radius lg·shadow sm·p xl)·
+  // ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Paper(radius lg·p xl; 그림자는 ② D2로 걷음)·
   // Stack(가운데·gap xs·mb xl)·Title order 2(줄 높이 1.35)·Text(m-0 p-0)와 같은 값.
   return (
     <main
@@ -24,7 +24,7 @@ export default function LoginPage() {
       }}
     >
       <div className="mx-auto w-full max-w-[540px] px-4">
-        <div className="block rounded-[16px] bg-white p-8 shadow-mantine-sm">
+        <div className="block rounded-[16px] bg-white p-8">
           <div className="mb-8 flex flex-col items-center justify-start gap-2.5">
             <Image
               src="/icons/icon-192x192.png"
