@@ -209,8 +209,9 @@ export function SettlementCard({
           >
             최신 정보를 확인하지 못했습니다. 이전 정보입니다.
           </p>
+          {/* ② "이전 정보" 재조회는 노란 면 대신 중립 외곽선(2026-11-01 결정: 노랑은 마감에만). */}
           {onRetry && (
-            <Button size="xs" variant="light-warning" onClick={onRetry} className="self-start">
+            <Button size="xs" variant="outline-gray" onClick={onRetry} className="self-start">
               <RefreshCcw className="size-3.5" data-icon="inline-start" />
               다시 조회
             </Button>
@@ -324,8 +325,9 @@ export function ProductStatusCard({
           >
             최신 정보를 확인하지 못했습니다. 이전 수치입니다.
           </p>
+          {/* ② "이전 정보" 재조회는 노란 면 대신 중립 외곽선(2026-11-01 결정: 노랑은 마감에만). */}
           {onRetry && (
-            <Button size="xs" variant="light-warning" onClick={onRetry} className="self-start">
+            <Button size="xs" variant="outline-gray" onClick={onRetry} className="self-start">
               <RefreshCcw className="size-3.5" data-icon="inline-start" />
               다시 조회
             </Button>
