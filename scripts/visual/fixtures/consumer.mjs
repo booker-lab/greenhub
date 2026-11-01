@@ -548,6 +548,10 @@ const benchmarkRoutes = [
  * - scheduled: 판매 중·지난 회차 없이 다음 회차만 예정된 주(오픈 알림·빈 지난 회차 숨김).
  */
 export const scenarioRoutes = {
+  // 로그인 오류 화면: 가짜 API가 자격 정보 실패(401)를 돌려준다.
+  'login-failed': [
+    ['POST', /^\/auth\/login$/, () => ({ status: 401, body: { message: 'Invalid credentials' } })],
+  ],
   // 기능 플래그 화면(UI 교체 P5 E 묶음): 입점 문의 거절·구매 내역 빈 상태·조회 실패.
   'partner-reject': [
     [
@@ -805,6 +809,19 @@ export const screens = [
     title: '로그인 (이메일 칸은 하네스 전용)',
     path: '/login',
     auth: false,
+  },
+  {
+    id: 'login-error',
+    group: '둘러보기',
+    title: '로그인 · 이메일 로그인 실패 (하네스 전용 칸)',
+    path: '/login',
+    auth: false,
+    scenario: 'login-failed',
+    steps: [
+      { fill: { label: '이메일', value: 'wrong@example.com' } },
+      { fill: { label: '비밀번호', value: 'wrong-password' } },
+      { click: '로그인' },
+    ],
   },
   { id: 'cart', group: '구매', title: '장바구니', path: '/cart', storage: true },
   { id: 'checkout', group: '구매', title: '결제', path: '/checkout?from=cart', storage: true },

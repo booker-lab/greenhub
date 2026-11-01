@@ -1,12 +1,24 @@
 'use client';
 
-import { Alert, Button, Divider, PasswordInput, Stack, Text, TextInput } from '@mantine/core';
+import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
+import { Button } from '@greenhub/ui/components/button';
+import { FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { PasswordInput } from '@greenhub/ui/components/password-input';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
-import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { isFeatureOn } from '@/lib/features';
 import { isOrderCallback, safeCallbackPath } from './_callback-url';
+
+// ① 외형 유지(UI 교체 P5): Mantine Stack(gap sm 12)·Button lg(radius xl)·Divider(가운데 글자 xs)·
+// TextInput·PasswordInput(sm, radius 16, 라벨 15px·600과 필수 " *")·Alert light red(p sm 12)와 같은 값.
+// 입력칸 묶음은 Field(role="group")를 쓰지 않고 div + 라벨(htmlFor)로 둬 접근성 이름("이메일"·"비밀번호")을 그대로 둔다.
+const DIVIDER =
+  "flex items-center text-xs/[1.55] whitespace-nowrap text-[#868e96] before:me-2.5 before:h-px before:flex-1 before:border-t before:border-[#dee2e6] before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-[#dee2e6] after:content-['']";
+const FIELD_LABEL = 'cursor-default text-[15px]';
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const searchParams = useSearchParams();
@@ -19,6 +31,8 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const emailId = useId();
+  const passwordId = useId();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,11 +61,11 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const forOrder = isFeatureOn('guest-cart') && isOrderCallback(rawCallbackUrl, origin);
 
   return (
-    <Stack gap="sm">
+    <div className="flex flex-col items-stretch justify-start gap-3">
       {forOrder && (
-        <Text
+        <p
           role="status"
-          ta="center"
+          className="m-0 text-center leading-[1.55]"
           style={{
             background: 'var(--color-primary-surface)',
             borderRadius: 'var(--radius)',
@@ -62,12 +76,12 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
           }}
         >
           주문하려면 로그인이 필요해요. 장바구니는 그대로 남아 있어요.
-        </Text>
+        </p>
       )}
       <Button
-        fullWidth
-        radius="xl"
+        type="button"
         size="lg"
+        className="w-full"
         style={{ backgroundColor: '#FEE500', color: '#000000' }}
         onClick={() => signIn('kakao', { callbackUrl: resolveCallbackUrl() })}
       >
@@ -76,36 +90,54 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
 
       {showCredentials && (
         <>
-          <Divider label="또는" labelPosition="center" />
+          {/* biome-ignore lint/a11y/useSemanticElements: 글자를 품은 구분선이라 hr로 그릴 수 없다(Mantine Divider와 같은 div). */}
+          <div role="separator">
+            <span className={DIVIDER}>또는</span>
+          </div>
 
           <form onSubmit={handleSubmit}>
-            <Stack gap="sm">
-              <TextInput
-                label="이메일"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@email.com"
-              />
-              <PasswordInput
-                label="비밀번호"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="비밀번호 입력"
-              />
+            <div className="flex flex-col items-stretch justify-start gap-3">
+              <div>
+                <FieldLabel htmlFor={emailId} required className={FIELD_LABEL}>
+                  이메일
+                </FieldLabel>
+                <Input
+                  id={emailId}
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="example@email.com"
+                />
+              </div>
+              <div>
+                <FieldLabel htmlFor={passwordId} required className={FIELD_LABEL}>
+                  비밀번호
+                </FieldLabel>
+                <PasswordInput
+                  id={passwordId}
+                  size="sm"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="비밀번호 입력"
+                />
+              </div>
 
               {error && (
-                <Alert color="red" variant="light" p="sm">
-                  <Text style={{ fontSize: 'var(--font-size-sm)' }}>{error}</Text>
+                <Alert role="alert" variant="destructive" className="p-3">
+                  <AlertDescription>
+                    <p className="m-0 p-0" style={{ fontSize: 'var(--font-size-sm)' }}>
+                      {error}
+                    </p>
+                  </AlertDescription>
                 </Alert>
               )}
 
-              <Button type="submit" loading={loading} fullWidth color="brand" size="lg" mt="xs">
+              <LoadingButton type="submit" loading={loading} size="lg" className="mt-2.5 w-full">
                 로그인
-              </Button>
-            </Stack>
+              </LoadingButton>
+            </div>
           </form>
         </>
       )}
@@ -122,6 +154,6 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
           로그인 없이 더 둘러보기
         </Link>
       )}
-    </Stack>
+    </div>
   );
 }
