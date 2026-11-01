@@ -2162,8 +2162,9 @@ export const screens = [
     path: '/sale-rounds',
     scenario: 'rounds-empty',
   },
-  // UI 교체 P4 알림 전환: 오른쪽 위 알림(제목 없는 주색, 제목 있는 노랑). 가짜 API가 쓰기에 200 {}을 돌려줘
-  // 재고 저장은 성공 알림, 기사 승인은 "확인 못 함" 알림이 뜬다.
+  // UI 교체 P4 알림 전환: 오른쪽 위 알림(제목 없는 주색, 제목 있는 노랑). 재고 저장은 가짜 API가 쓰기에 200 {}을
+  // 돌려줘 성공 알림이 뜬다. 기사 승인은 200 {} + 다시 조회 성공이면 설계상 알림이 없으므로(admin/drivers/_client.tsx
+  // runPending의 confirmed·reconciled), 승인 요청에 503을 돌려줘 "결과를 확인할 수 없습니다" 노랑 알림(unknown)을 띄운다.
   {
     id: 'toast-option-stock-saved',
     group: '알림',
@@ -2177,8 +2178,10 @@ export const screens = [
     group: '알림',
     title: '기사 · 승인 결과 알림',
     path: '/admin/drivers',
+    scenario: 'driver-approve-unknown',
     steps: [{ click: '승인' }, { clickSelector: '[role=dialog] button:has-text("승인")' }],
     viewport: true,
+    expectedErrors: ['status of 503 \\(Service Unavailable\\).*/admin/drivers/[^/]+/approve\\)$'],
   },
   {
     id: 'admin-drivers-load-more',
@@ -2222,7 +2225,13 @@ export const screens = [
     group: '판매자 · 불러오는 중 버튼',
     title: '주문 상세 · 운영 기록 새로고침 중',
     path: '/orders/order-round-held',
-    steps: [{ scenario: 'slow-operation-issues' }, { click: '새로고침' }],
+    // 이 화면에는 "새로고침" 버튼이 둘(주문 머리·운영 기록 칸)이라 글자로 누르면 머리 쪽이 눌린다. 운영 기록 칸 버튼을 고른다.
+    steps: [
+      { scenario: 'slow-operation-issues' },
+      {
+        clickSelector: 'div:has(> p:text-is("연락·환불·분쟁 기록")) + button:has-text("새로고침")',
+      },
+    ],
   },
   {
     id: 'operations-reload-loading',
@@ -2292,6 +2301,15 @@ export const scenarioRoutes = {
   ],
   // 공용 LoadingState·EmptyState(회차 목록이 늦게 오거나 비었을 때).
   'rounds-slow': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] }, delay: 8000 })]],
+  // 기사 승인 결과 알림: 승인 요청만 503(서버 오류)이라 앱이 결과를 확정하지 못한다(unknown → 노랑 알림).
+  // 목록 조회는 그대로다.
+  'driver-approve-unknown': [
+    [
+      'PATCH',
+      /^\/admin\/drivers\/[^/]+\/approve$/,
+      () => ({ status: 503, body: { message: '일시적인 서버 오류입니다.' } }),
+    ],
+  ],
   'rounds-empty': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] } })]],
   'legacy-store': [
     [
