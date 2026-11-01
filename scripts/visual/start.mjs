@@ -284,20 +284,51 @@ fs.writeFileSync(
   }),
 );
 
+/**
+ * 명령을 비동기로 돌려 출력(stdout·stderr)을 logFile에 쓴다. { proc, done }을 돌려주고 done은 종료 코드로 끝난다.
+ * 그동안 이 프로세스의 이벤트 루프(가짜 API)는 돈다.
+ */
+function runToLog(command, args, { cwd, env: childEnv, logFile }) {
+  const out = fs.createWriteStream(logFile);
+  const proc = spawn(command, args, { cwd, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+  proc.stdout.pipe(out, { end: false });
+  proc.stderr.pipe(out, { end: false });
+  const done = new Promise((resolve) => {
+    proc.on('error', (error) => {
+      out.end(`${error.stack ?? error}\n`);
+      resolve(1);
+    });
+    proc.on('close', (code) => out.end(() => resolve(code ?? 1)));
+  });
+  return { proc, done };
+}
+
 const nextBin = createRequire(path.join(appDir, 'package.json')).resolve('next/dist/bin/next');
 if (prod) {
   // 앱 package.json의 build와 같은 명령이다. 산출물(.next)·next가 고치는 next-env.d.ts는 커밋하지 않는다.
+  // 빌드는 비동기로 돌린다. 같은 프로세스의 가짜 API가 빌드 중에도 응답해야, 빌드 때 미리 그리는 정적 화면
+  // (소비자 홈 ○ / 의 배너 /banner 조회 등)이 가짜 데이터로 구워진다. spawnSync로 돌리면 이 프로세스의 이벤트
+  // 루프가 멈춰 가짜 API가 응답하지 못하고, 정적 화면이 데이터 없이 구워졌다가 ISR 갱신(60초) 뒤에야 같아졌다.
   console.log(`⏳ ${appName} 운영 빌드 중… (로그: ${logs.build})`);
-  const build = spawnSync(process.execPath, [nextBin, 'build', '--webpack'], {
+  const build = runToLog(process.execPath, [nextBin, 'build', '--webpack'], {
     cwd: appDir,
     env,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
+    logFile: logs.build,
   });
-  fs.writeFileSync(logs.build, `${build.stdout ?? ''}${build.stderr ?? ''}`);
-  if (build.status !== 0) {
+  // 빌드 중에 끝내면(Ctrl+C·종료 신호) 빌드 프로세스를 남기지 않는다. 운영 빌드는 에뮬레이터를 쓰지 않는다.
+  const stopBuild = () => {
+    killTree(build.proc);
     mock.close();
-    fail(`운영 빌드 실패(code=${build.status}). 로그: ${logs.build}`);
+    process.exit(0);
+  };
+  process.once('SIGINT', stopBuild);
+  process.once('SIGTERM', stopBuild);
+  const buildCode = await build.done;
+  process.off('SIGINT', stopBuild);
+  process.off('SIGTERM', stopBuild);
+  if (buildCode !== 0) {
+    mock.close();
+    fail(`운영 빌드 실패(code=${buildCode}). 로그: ${logs.build}`);
   }
 }
 const child = spawn(

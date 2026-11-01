@@ -47,6 +47,7 @@ export function OrdersTab({
         value={activeStatus}
         onChange={handleChange}
         layout="scroll"
+        variant="underline"
       />
 
       {listLoading ? (

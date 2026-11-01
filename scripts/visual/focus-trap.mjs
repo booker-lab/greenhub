@@ -1,7 +1,7 @@
 // 창(Dialog) 초점 순회 검사 — start.mjs로 띄운 화면 확인 서버에서 fixture 화면의 steps로 창을 연 뒤,
 // Tab·Shift+Tab을 눌러 초점이 창 안에서만 도는지, Esc로 닫으면 초점이 여는 버튼으로 돌아오는지 본다.
 //
-//   node scripts/visual/focus-trap.mjs [app] [--only id,id] [--viewports mobile,tablet,desktop] [--label <이름>] [--set compare]
+//   node scripts/visual/focus-trap.mjs [app] [--only id,id] [--viewports mobile,tablet,desktop] [--label <이름>] [--set overlays|benchmark]
 //
 // 대상: steps가 있는 화면 중 steps 뒤에 모달 창(role=dialog·alertdialog, aria-modal="false" 제외)이 열려 있는 화면. id가 modal-로 시작하는데
 // 창이 열리지 않으면 실패다. 판정(하나라도 어기면 종료 코드 1):
@@ -9,7 +9,8 @@
 //   - Tab만 눌러 출발 요소로 돌아오고(한 바퀴), Shift+Tab만 눌러도 돌아온다. 누를 때마다 두 프레임 뒤 초점이 창 안이다.
 //   - 창이 열린 직후 첫 초점은 창 안 data-autofocus 요소, 없으면 창 안 첫 Tab 대상이다(Mantine Modal과 같은 약속).
 //   - 창에 aria-modal="true"가 있고, 본문(data-slot=dialog-body·sheet-body)이 있으면 aria-describedby가 창 안 요소를 가리킨다.
-//   - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다(--set compare처럼 주소로 연 창은 여는 요소가 없어 빼고 기록한다).
+//   - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다(화면을 열 때 이미 열려 있던 창은 여는 요소가 없어 빼고 기록한다).
+//     fixture 화면에 closeBlocked(사유 글자)가 있으면 반대로, 처리 중이라 Esc로 닫히지 않고 초점이 창 안에 남아야 한다.
 // 결과: %TEMP%/greenhub-visual/<app>/focus/<label>.json
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
@@ -82,10 +83,10 @@ for (const name of viewportNames) {
 const only = option('only', '')?.split(',').filter(Boolean) ?? [];
 const label = option('label', 'current');
 const fixture = await import(`./fixtures/${appName}.mjs`);
-// --set compare: UI 교체 대조 화면(fixture compareScreens). 주소(?open=…)로 창을 여는 화면도 검사한다.
+// --set overlays: 앱 화면이 아직 쓰지 않는 @greenhub/ui 창의 검사 화면(fixture overlayScreens).
 // --set benchmark: 소비자 benchmarkScreens(기능 토글 화면, 옵션 시트 등). 서버는 NEXT_PUBLIC_GREENHUB_FEATURES=all로 띄운다.
 //   기본 묶음처럼 steps가 있는 화면만 본다.
-const SCREEN_SETS = { compare: 'compareScreens', benchmark: 'benchmarkScreens' };
+const SCREEN_SETS = { overlays: 'overlayScreens', benchmark: 'benchmarkScreens' };
 const screenSet = option('set', '');
 if (screenSet && !SCREEN_SETS[screenSet]) {
   console.error(
@@ -94,7 +95,7 @@ if (screenSet && !SCREEN_SETS[screenSet]) {
   process.exit(1);
 }
 const screens = (screenSet ? (fixture[SCREEN_SETS[screenSet]] ?? []) : fixture.screens).filter(
-  (s) => (screenSet === 'compare' || s.steps) && (!only.length || only.includes(s.id)),
+  (s) => (screenSet === 'overlays' || s.steps) && (!only.length || only.includes(s.id)),
 );
 const missingIds = only.filter((id) => !screens.some((s) => s.id === id));
 if (missingIds.length) {
@@ -281,7 +282,7 @@ async function checkScreen(context, screen) {
       if (!first.ok) problems.push(`첫 초점이 ${first.expected}가 아니라 ${first.actual}`);
     };
     let opener = null;
-    // 주소(?open=…)로 이미 열린 창. 여는 요소가 없으므로 닫기·초점 복귀는 검사하지 않는다(아래).
+    // 화면을 열 때 이미 열려 있던 창. 여는 요소가 없으므로 닫기·초점 복귀는 검사하지 않는다(아래).
     const openedByUrl = await page.evaluate(() => !!window.__openDialog__());
     if (openedByUrl) await checkInitialFocus();
     for (const step of screen.steps ?? []) {
@@ -342,9 +343,22 @@ async function checkScreen(context, screen) {
       if (escaped.length)
         problems.push(`창 밖으로 간 초점 ${escaped.length}번: ${[...new Set(escaped)].join(', ')}`);
     }
-    // 주소로 연 창(대조 화면)은 여는 요소가 없고 닫기 처리기도 없어(open 고정) 닫기·복귀를 검사하지 않는다.
+    // 화면을 열 때 이미 열려 있던 창은 여는 요소가 없어 닫기·복귀를 검사하지 않는다.
     if (openedByUrl) {
-      result.closeCheck = '주소로 연 창: 닫기·초점 복귀 검사 안 함';
+      result.closeCheck = '처음부터 열린 창: 닫기·초점 복귀 검사 안 함';
+      return result;
+    }
+    // 처리 중 창(closeBlocked): Esc로 닫히지 않고 초점이 창 안에 남아야 한다(Mantine closeOnEscape={!처리 중}과 같은 약속).
+    if (screen.closeBlocked) {
+      await page.keyboard.press('Escape');
+      await page.waitForTimeout(500);
+      result.closeCheck = `닫기 막음: ${screen.closeBlocked}`;
+      if (!(await page.evaluate(() => !!window.__openDialog__())))
+        problems.push('처리 중인데 Esc로 창이 닫힘');
+      else {
+        const after = await activeState(page);
+        if (!after.inside) problems.push(`Esc 뒤 초점이 창 밖(${after.what})`);
+      }
       return result;
     }
     // Esc로 닫고 초점이 창을 연 요소로 돌아오는지.
