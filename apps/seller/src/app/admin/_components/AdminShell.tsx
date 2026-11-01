@@ -12,6 +12,7 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { AdminLogoutButton } from './AdminLogoutButton';
 import { AdminNav } from './AdminNav';
+import { AdminTodoCountsContext } from './adminTodoContext';
 import type { AdminNavGroup } from './navItems';
 import { useAdminTodoCounts } from './useAdminTodoCounts';
 
@@ -38,6 +39,8 @@ function Brand() {
   return (
     <span className="flex items-baseline gap-2">
       <span className="font-brand text-lg font-extrabold text-brand-ink">Green Love</span>
+      {/* 접근성 이름이 "Green Love운영"으로 붙지 않게 공백 글자를 둔다(flex 안 공백은 그리지 않아 모양은 같다). */}
+      {' '}
       <span className="text-sm font-bold text-foreground">운영</span>
     </span>
   );
@@ -100,7 +103,9 @@ export function AdminShell({
         <main
           className={`min-w-0 flex-1 rounded-[12px] border border-rule bg-card p-4 min-[1101px]:p-6`}
         >
-          {children}
+          <AdminTodoCountsContext.Provider value={counts}>
+            {children}
+          </AdminTodoCountsContext.Provider>
         </main>
       </div>
     </div>

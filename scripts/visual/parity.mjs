@@ -7,7 +7,8 @@
 // - portoneCalls: 결제창(PortOne stub)에 넘긴 인자(screen.portone이 있는 화면).
 // - storage: 찍기 직전 브라우저 저장소(장바구니 담기 등 서버에 보내지 않는 동작의 결과).
 // - aria: 접근성 트리(역할·이름·상태). 링크가 버튼이 되는 회귀는 픽셀이 같아도 여기서 드러난다.
-// 결제마다 새로 만드는 값(UUID)과 실제 시각(ISO 시각)은 자리표시로 바꿔 비교한다.
+// 결제마다 새로 만드는 값(UUID)과 실제 시각(ISO 시각)은 자리표시로 바꿔 비교한다. 판매자 저장소의 Firebase 에뮬레이터
+// 로그인 기록(firebase:authUser:… 키)은 로그인 시각(createdAt·lastLoginAt)과 토큰 시각(iat·exp·auth_time)만 바꾼다.
 // 통과 조건: 모든 항목이 같거나, 다른 항목이 허용 목록에 사유와 함께 있다. 한쪽에만 있는 화면·기록이 없는 화면은
 // 실패다(기록이 없으면 아무것도 증명하지 못한다). 실패하면 종료 코드 1이다.
 //
@@ -27,6 +28,61 @@ const ISO_TIME = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d
 /** 실행마다 달라지는 값(UUID·실제 시각)을 자리표시로 바꾼다. */
 export function normalizeVolatile(text) {
   return String(text).replace(UUID, '<uuid>').replace(ISO_TIME, '<time>');
+}
+
+const FIREBASE_AUTH_USER_KEY = /^firebase:authUser:/;
+const FIREBASE_USER_TIME_FIELDS = ['createdAt', 'lastLoginAt'];
+const JWT_TIME_CLAIMS = ['iat', 'exp', 'auth_time'];
+
+/** 서명 없는 에뮬레이터 토큰(헤더.본문.서명)의 시각 클레임만 자리표시로 바꾼다. 다른 클레임(역할·가게)은 그대로 비교한다. */
+function normalizeJwtTimes(token) {
+  if (typeof token !== 'string') return token;
+  const [header, payload, ...rest] = token.split('.');
+  if (!payload || rest.length !== 1) return token;
+  let claims;
+  try {
+    claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+  } catch {
+    return token;
+  }
+  if (!claims || typeof claims !== 'object') return token;
+  for (const claim of JWT_TIME_CLAIMS) if (claim in claims) claims[claim] = '<time>';
+  return `${header}.${JSON.stringify(claims)}.${rest[0]}`;
+}
+
+/**
+ * 저장소 기록에서 Firebase 에뮬레이터 로그인 기록의 실행마다 바뀌는 시각만 자리표시로 바꾼다.
+ * 그 밖의 키(장바구니·상품 임시 저장 등)와 로그인 기록의 다른 값(uid·클레임·갱신 토큰)은 그대로 둔다.
+ */
+export function normalizeStorage(storage) {
+  if (!storage || typeof storage !== 'object') return storage;
+  const out = {};
+  for (const [area, entries] of Object.entries(storage)) {
+    if (!entries || typeof entries !== 'object') {
+      out[area] = entries;
+      continue;
+    }
+    out[area] = {};
+    for (const [key, value] of Object.entries(entries)) {
+      out[area][key] = FIREBASE_AUTH_USER_KEY.test(key) ? normalizeFirebaseUser(value) : value;
+    }
+  }
+  return out;
+}
+
+function normalizeFirebaseUser(value) {
+  let user;
+  try {
+    user = JSON.parse(value);
+  } catch {
+    return value;
+  }
+  if (!user || typeof user !== 'object') return value;
+  for (const field of FIREBASE_USER_TIME_FIELDS) if (field in user) user[field] = '<time>';
+  if (user.stsTokenManager && typeof user.stsTokenManager === 'object') {
+    user.stsTokenManager.accessToken = normalizeJwtTimes(user.stsTokenManager.accessToken);
+  }
+  return JSON.stringify(user);
 }
 
 export function parseParityAllowances(entries) {
@@ -57,10 +113,31 @@ export function compareParity(beforeRecords, afterRecords, allowances = []) {
       results.push({ screen, viewport, status: 'missing', side: before ? 'after' : 'before' });
       continue;
     }
+    // 접근성 트리를 다른 방식으로 찍은 두 기록(경로 안내를 뺀 쪽과 안 뺀 쪽)은 aria를 비교할 수 없다.
+    const excludesBefore = JSON.stringify(before.ariaExcludes ?? []);
+    const excludesAfter = JSON.stringify(after.ariaExcludes ?? []);
+    if (excludesBefore !== excludesAfter) {
+      results.push({
+        screen,
+        viewport,
+        status: 'different',
+        differences: [
+          {
+            kind: 'aria',
+            reason: `접근성 트리를 다른 방식으로 찍음(before 제외 ${excludesBefore}, after 제외 ${excludesAfter}). 두 묶음을 같은 shots.mjs로 다시 찍으세요.`,
+          },
+        ],
+      });
+      continue;
+    }
     const differences = [];
     for (const kind of PARITY_KINDS) {
-      const a = before[kind] === undefined ? undefined : normalizeVolatile(serialize(before[kind]));
-      const b = after[kind] === undefined ? undefined : normalizeVolatile(serialize(after[kind]));
+      const prepare = (value) =>
+        value === undefined
+          ? undefined
+          : normalizeVolatile(serialize(kind === 'storage' ? normalizeStorage(value) : value));
+      const a = prepare(before[kind]);
+      const b = prepare(after[kind]);
       if (a === undefined && b === undefined) continue;
       if (a === undefined || b === undefined) {
         differences.push({
@@ -138,6 +215,8 @@ function readRecords(shotsRoot, label) {
       portoneCalls: shot.portoneCalls,
       storage: shot.storage,
       aria: fs.readFileSync(path.join(dir, shot.aria), 'utf8'),
+      // 접근성 트리에서 뺀 요소(aria-snapshot.mjs). 예전 shots.mjs로 찍은 기록은 빼지 않았다(빈 목록).
+      ariaExcludes: shot.ariaExcludes ?? [],
       sound: shot.sound,
     };
   }

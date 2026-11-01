@@ -1,9 +1,9 @@
 'use client';
 
 import { Button } from '@greenhub/ui/components/button';
-import { notify } from '@/components/AppToaster';
+import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
-import { ConfirmModal } from '@/components/ConfirmModal';
+import { notify } from '@/components/AppToaster';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import {
   type AdminSettlement,
@@ -11,21 +11,23 @@ import {
   useAdminSettlements,
   useAdminStores,
 } from '@/hooks/useAdmin';
+import { AdminPageHeader } from '../_components/adminList';
 import { LoadMoreButton } from './_components/LoadMoreButton';
+import { PayConfirmDialog } from './_components/PayConfirmDialog';
 import { SettlementFilters } from './_components/SettlementFilters';
 import { SettlementTable } from './_components/SettlementTable';
 import { SummaryCards } from './_components/SummaryCards';
 import {
   ADMIN_SETTLEMENT_FILTER_TABS,
   type AdminSettlementFilterKey,
-  canPay,
-  describePayConfirm,
   toStoreOptions,
 } from './_lib';
 
 export default function AdminSettlementsClient() {
   const [statusFilter, setStatusFilter] = useState<AdminSettlementFilterKey>('all');
-  const [storeFilter, setStoreFilter] = useState('');
+  // 판매자 화면 ⋮ "정산 보기"는 ?store=<가게 id>로 그 가게를 골라 연다.
+  const initialStore = useSearchParams().get('store') ?? '';
+  const [storeFilter, setStoreFilter] = useState(initialStore);
   const [fromFilter, setFromFilter] = useState('');
   const [toFilter, setToFilter] = useState('');
   const { stores, loading: storesLoading } = useAdminStores();
@@ -76,20 +78,20 @@ export default function AdminSettlementsClient() {
 
   return (
     <div>
-      {/* ① 외형 유지(UI 교체 P2b): Mantine Group(mb md)·Title order 4(18px·800·줄 높이 1.45)·Text·Paper 값. */}
-      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
-        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">
-          정산 목록{' '}
-          {!loading && error === null && summary && (
-            <span
-              className="m-0 p-0 text-base font-normal"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
-              ({summary.count})
-            </span>
-          )}
-        </h4>
-      </div>
+      {/* ② 방향(design-direction.md §5 어드민 "정산", §8 D7): 명사 하나의 h1과 지금 기준 한 줄. 기록은 돈을 보내지 않는다. */}
+      <AdminPageHeader
+        title="정산"
+        subline={
+          <>
+            {!loading && error === null && summary && (
+              <>
+                <span className="tabular-nums">정산 {summary.count}건</span> ·{' '}
+              </>
+            )}
+            지급 완료 기록은 돈을 보내지 않습니다. 은행 앱에서 이체를 마친 뒤 기록하세요.
+          </>
+        }
+      />
 
       <div className="mb-3">
         <SegmentedTabs<AdminSettlementFilterKey>
@@ -97,6 +99,9 @@ export default function AdminSettlementsClient() {
           value={statusFilter}
           onChange={setStatusFilter}
           layout="scroll"
+          variant="underline"
+          surface="paper"
+          ariaLabel="정산 상태"
         />
       </div>
 
@@ -112,31 +117,23 @@ export default function AdminSettlementsClient() {
       />
 
       {error !== null && !loading ? (
-        <div
-          className="block rounded-[16px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.1)]"
-          style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        >
-          <div className="flex flex-col items-center gap-3 px-4 py-16">
-            <p
-              className="m-0 p-0 text-base"
-              style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}
-            >
-              정산 목록을 불러오지 못했습니다.
-            </p>
-            <p
-              className="m-0 p-0 text-center text-base"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
-              {error}
-            </p>
-            <Button onClick={reload} variant="outline" className="rounded-[8px]">
-              다시 조회
-            </Button>
-          </div>
+        <div className="flex flex-col items-center gap-3 rounded-[8px] border border-rule px-4 py-16">
+          <p className="m-0 text-[15px] font-medium text-foreground">
+            정산 목록을 불러오지 못했습니다.
+          </p>
+          <p className="m-0 text-center text-[13px] text-[var(--color-text-secondary)]">{error}</p>
+          <Button onClick={reload} variant="outline" className="rounded-[8px]">
+            다시 조회
+          </Button>
         </div>
       ) : (
         <>
-          <SummaryCards summary={summary} loading={summaryLoading} error={summaryError} />
+          <SummaryCards
+            summary={summary}
+            loading={summaryLoading}
+            error={summaryError}
+            loadedRows={settlements}
+          />
 
           <SettlementTable
             settlements={settlements}
@@ -155,14 +152,9 @@ export default function AdminSettlementsClient() {
         </>
       )}
 
-      <ConfirmModal
-        opened={payTarget !== null}
-        title="정산 지급 처리"
-        message={payTarget ? describePayConfirm(payTarget) : ''}
-        confirmLabel="지급 완료"
-        confirmColor="brand"
+      <PayConfirmDialog
+        target={payTarget}
         loading={processingId !== null}
-        confirmDisabled={payTarget !== null && !canPay(payTarget)}
         onConfirm={runPay}
         onClose={() => {
           if (processingId === null) setPayTarget(null);

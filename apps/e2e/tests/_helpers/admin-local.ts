@@ -269,7 +269,7 @@ export async function pickSelectOption(
   await page.getByRole('option', { name: optionName, exact: true }).click();
 }
 
-/** 원화 표기(화면 toKRW·toLocaleString과 같은 모양). */
-export function krw(amount: number): string {
-  return `₩${amount.toLocaleString('ko-KR')}`;
+/** 어드민 ② 목록·합계·확인창의 금액 표기("48,000원"). */
+export function won(amount: number): string {
+  return `${amount.toLocaleString('ko-KR')}원`;
 }

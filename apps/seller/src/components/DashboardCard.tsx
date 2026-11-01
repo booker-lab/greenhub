@@ -12,8 +12,8 @@ interface DashboardCardProps {
   children: ReactNode;
 }
 
-// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg·shadow xs·p md)·Group(space-between, mb sm)·Text·
-// UnstyledButton과 같은 값을 Tailwind로 그린다.
+// ② 디자인 방향(D2): 그림자와 바깥 테두리 없이 옅은 틀(bg-frame) 위 흰 면으로만 구역을 나눈다.
+// 나머지(radius lg·p md·Group space-between mb sm·Text·UnstyledButton)는 ① 값을 유지한다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 
 /** 홈 대시보드 카드 — 제목 + 선택적 "더보기 >" 링크 + 본문. */
@@ -24,7 +24,7 @@ export function DashboardCard({
   children,
 }: DashboardCardProps) {
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4">
       <div className="mb-3 flex flex-row flex-wrap items-center justify-between gap-4">
         <p
           className={TEXT}

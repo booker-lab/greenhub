@@ -1,6 +1,5 @@
-import { ColorSchemeScript } from '@mantine/core';
 import type { Metadata, Viewport } from 'next';
-import { headers } from 'next/headers';
+import { connection } from 'next/server';
 import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
 import Providers from './providers';
@@ -31,13 +30,11 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // proxy가 요청마다 만든 CSP nonce. 인라인 색상 모드 스크립트에 붙인다.
-  const nonce = (await headers()).get('x-nonce') ?? undefined;
+  // 요청마다 그린다. proxy가 요청 CSP 헤더에 넣은 nonce를 Next가 자기 스크립트에 붙이려면 동적 렌더링이어야 한다
+  // (Mantine 색상 모드 스크립트에 nonce를 넘기려고 요청 헤더를 읽던 동안과 같은 렌더링 방식).
+  await connection();
   return (
-    <html lang="ko" suppressHydrationWarning>
-      <head>
-        <ColorSchemeScript nonce={nonce} />
-      </head>
+    <html lang="ko">
       <body>
         <Providers>
           <AppShell>{children}</AppShell>
