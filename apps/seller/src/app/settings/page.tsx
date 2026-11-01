@@ -12,7 +12,7 @@ import { logout } from '@/lib/logout';
 import { benchmarkSettingsLinks, operationSettingsFor } from './settings-links';
 
 // ① 외형 유지(UI 교체 P2b): Mantine Paper·Text·UnstyledButton과 같은 값을 Tailwind로 그린다.
-// Text = p(16px·줄 높이 1.55·여백 0), UnstyledButton = 배경·테두리·여백 없는 16px 왼쪽 정렬, Paper = 흰 바탕 + 모서리·그림자.
+// Text = p(16px·줄 높이 1.55·여백 0), UnstyledButton = 배경·테두리·여백 없는 16px 왼쪽 정렬, Paper = 흰 바탕 + 모서리(그림자는 ② D2로 걷음).
 const TEXT = 'm-0 p-0 text-base font-normal';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
@@ -20,10 +20,7 @@ const UNSTYLED_BUTTON =
 /** 설정 섹션 카드 — 작은 회색 라벨 헤더 + 행 목록. */
 function SectionCard({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div
-      className="block overflow-hidden rounded-[16px] bg-white shadow-mantine-xs"
-      style={{ overflow: 'hidden' }}
-    >
+    <div className="block overflow-hidden rounded-[16px] bg-white" style={{ overflow: 'hidden' }}>
       <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <p
           className={TEXT}

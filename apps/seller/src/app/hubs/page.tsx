@@ -1,7 +1,7 @@
 'use client';
 
-import { Badge } from '@greenhub/ui/components/badge';
 import { Button, ButtonLink } from '@greenhub/ui/components/button';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { notify } from '@/components/AppToaster';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -13,7 +13,7 @@ import { EmptyState, LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Stack·Group·Paper·Text·UnstyledButton·Badge·Button과 같은 값을
-// Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16·그림자 xs.
+// Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16(그림자는 ② D2로 걷음).
 const TEXT = 'm-0 p-0 text-base font-normal';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
@@ -157,7 +157,7 @@ export default function HubsPage() {
         ) : (
           <div className="flex flex-col items-stretch justify-start gap-3">
             {hubs.map((hub) => (
-              <div key={hub.id} className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+              <div key={hub.id} className="block rounded-[16px] bg-white p-4">
                 <div className="flex flex-row flex-wrap items-start justify-between gap-2.5">
                   <Link
                     href={`/hubs/${hub.id}`}
@@ -171,14 +171,14 @@ export default function HubsPage() {
                       >
                         {hub.name}
                       </p>
-                      <Badge
-                        variant={hub.isActive ? 'light-green' : 'secondary'}
-                        size="xs"
-                        className="rounded-[32px]"
+                      {/* ② 상태는 배지 면 대신 점 + 글자(2026-11-01 결정): 비활성=회색, 운영 중=검정. */}
+                      <StatusDot
+                        tone={hub.isActive ? 'default' : 'done'}
+                        size={13}
                         style={{ flexShrink: 0 }}
                       >
                         {hub.isActive ? '운영 중' : '비활성'}
-                      </Badge>
+                      </StatusDot>
                     </div>
                     <p
                       className={`${TEXT} truncate`}

@@ -79,7 +79,7 @@ export default function NewHubPage() {
           </h2>
         </div>
 
-        <div className="block rounded-[16px] bg-white p-5 shadow-mantine-sm">
+        <div className="block rounded-[16px] bg-white p-5">
           <form onSubmit={handleSubmit}>
             <div className="flex flex-col items-stretch justify-start gap-4">
               <Field>

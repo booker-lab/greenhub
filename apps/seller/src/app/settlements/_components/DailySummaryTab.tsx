@@ -1,10 +1,10 @@
 'use client';
 
-import { Badge } from '@greenhub/ui/components/badge';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { SettlementStatus, Summary } from '../_constants';
-import { STATUS_COLOR, STATUS_LABEL } from '../_constants';
+import { STATUS_LABEL } from '../_constants';
 import { toKRW } from '../_lib';
-import { LIGHT_BADGE } from './status-badge';
+import { settlementStatusTone } from './status-badge';
 
 interface DailySummaryTabProps {
   selectedDate: string;
@@ -31,7 +31,7 @@ export function DailySummaryTab({
   summaryError,
 }: DailySummaryTabProps) {
   return (
-    <div className="block rounded-[16px] bg-white p-5 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-5">
       <div className={`${ROW} mb-4`}>
         <p
           className={TEXT}
@@ -125,7 +125,8 @@ export function DailySummaryTab({
                 fontSize: 'var(--font-size-xl)',
                 fontWeight: 'var(--fw-extrabold)',
                 fontVariantNumeric: 'tabular-nums',
-                color: 'var(--color-primary-dark)',
+                // ② 요약 금액은 초록 대신 검정 굵은 글자(판매자 홈과 같은 규칙, 초록은 행동에만).
+                color: 'var(--color-text)',
               }}
             >
               {toKRW(summary?.totalNetAmount ?? 0)}
@@ -139,13 +140,9 @@ export function DailySummaryTab({
               {(Object.entries(summary.byStatus) as [SettlementStatus, number][])
                 .filter(([, v]) => v > 0)
                 .map(([status, count]) => (
-                  <Badge
-                    key={status}
-                    variant={LIGHT_BADGE[STATUS_COLOR[status]] ?? 'secondary'}
-                    className="rounded-[32px]"
-                  >
+                  <StatusDot key={status} tone={settlementStatusTone(status)}>
                     {STATUS_LABEL[status]} {count}건
-                  </Badge>
+                  </StatusDot>
                 ))}
             </div>
           )}
