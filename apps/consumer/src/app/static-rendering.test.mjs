@@ -8,9 +8,9 @@ test('루트 layout은 요청 헤더를 읽지 않아 공개 화면을 정적으
   const layout = await read('./layout.tsx');
   assert.doesNotMatch(layout, /next\/headers/);
   assert.doesNotMatch(layout, /headers\(\)|cookies\(\)/);
-  // 인라인 색상 모드 스크립트(nonce 필요) 대신 html 속성으로 밝은 모드를 고정한다.
+  // 밝은 모드 하나뿐이라 인라인 색상 모드 스크립트(nonce 필요)를 두지 않는다.
   assert.doesNotMatch(layout, /ColorSchemeScript/);
-  assert.match(layout, /<html lang="ko" \{\.\.\.mantineHtmlProps\}>/);
+  assert.match(layout, /<html lang="ko">/);
 });
 
 test('로그인이 필요한 화면은 nonce CSP를 쓰도록 동적 렌더링을 유지한다', async () => {
