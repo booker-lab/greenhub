@@ -86,7 +86,7 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
 - 불러오는 중 버튼처럼 누른 뒤 응답을 기다리는 상태는 `steps`에 `{ scenario: '<이름>' }`을 넣어 화면을 연 뒤에 가짜 API 상황을 바꾸고(예: 셀러 `slow-writes` = 쓰기 요청 60초 지연) 버튼을 누른다. 찍고 나면 페이지를 닫으므로 기다리던 요청은 취소된다(`ERR_ABORTED`, 정상 판정 제외).
-- 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 대조 화면 `ui-compare-select`).
+- 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 상품 폼의 Select 입력칸).
 - 버튼은 `{ press: '<접근성 이름>', nth }`(글자가 기호뿐이거나 같은 이름이 여러 곳인 버튼), 체크박스는 `{ check: '<접근성 이름>' }`, 앱이 스스로 주소를 바꾸는 동작(결제 완료 뒤 이동 등)은 `{ waitPath: '/order/success' }`로 기다린다.
 - **결제창 stub**(`portone: 'success' | 'cancel'`): 소비자 결제 화면은 PortOne SDK가 `window.PortOne`이 이미 있으면 CDN 스크립트를 불러오지 않는 점을 이용해 stub을 넣는다(로컬 E2E `installPortOneBrowserStub`과 같은 방식). `success`는 결제 완료, `cancel`은 결제창 취소 응답을 돌려주고, 넘긴 인자를 `manifest.json`의 `portoneCalls`에 남긴다. `start.mjs consumer`는 가짜 PortOne 공개 설정(상점 ID·카카오페이 채널 키)을 넣는다. 외부 요청은 그대로 막혀 있어 실제 결제창·결제는 일어나지 않는다.
 - 화면이 일부러 만든 오류 응답(주문 거절 409 등)에 브라우저가 남기는 리소스 오류 줄은 `expectedErrors: ['<정규식>']`로만 뺀다.
@@ -102,23 +102,6 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 - Claude가 `<폴더>`를 claude.ai 아티팩트로 게시한다(`db` 기능 사용).
   - 사람이 화면마다 괜찮음/고칠 것과 메모를 남긴다.
   - 판정은 `verdicts` 컬렉션(문서 id `<label>__<screen id>`)에 저장되고, Claude가 읽어 다음 수정을 정한다.
-
-## UI 교체 대조 화면(판매자)
-
-Mantine을 걷어내는 동안(`docs/specs/frontend/ui-stack-migration-plan.md` P1·P2a) `@greenhub/ui` 컴포넌트가 같은 크기의 Mantine과 같은 모양인지 본다.
-
-```bash
-node scripts/visual/shots.mjs seller --label compare --set compare   # 대조 화면과 Modal·Dialog·Drawer·Sheet 열린 상태(fixture compareScreens)
-node scripts/visual/compare-cells.mjs --viewport 390                 # 짝마다 위치·크기·계산된 스타일·픽셀 비교(390·768·1280)
-```
-
-- 화면은 판매자 앱 `/dev/ui-compare`다. 행마다 왼쪽 Mantine, 오른쪽 `@greenhub/ui`를 그린다. 짝은 판매자 앱이 실제로 쓰는 props(`theme.ts` 기본값 포함)로 고른다.
-- 열린 상태는 `?open=modal|dialog|drawer|sheet|select|uiselect`. Select 목록 둘은 입력칸을 실제로 눌러 연다. Modal은 `ConfirmModal`, Drawer는 소비자 `OptionSheet`와 같은 설정이다. 두 캡처는 같은 화면 위에 열리므로 캡처끼리 그대로 비교한다.
-- 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열린다. 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`).
-- `compare-cells.mjs`는 같은 순서의 부품(칸의 첫 요소·button·input·svg·글자)을 짝지어 칸 안 위치·크기와 면·테두리·모서리·글꼴·색을 비교한다. 줄 높이·여백은 글자 위치로 드러나므로 따로 보지 않는다.
-  - 픽셀은 같은 자리에서 비교한다. 오른쪽 칸을 찍고, 그 칸을 왼쪽(Mantine) 내용의 복제로 바꿔 다시 찍는다. 같은 Mantine 버튼도 가로 위치가 다른 칸에 놓으면 모서리 안티앨리어싱이 15픽셀 달라지기 때문이다(2026-10-31 실측).
-  - textarea·select는 입력칸처럼 상자·글꼴을 비교하고, 안의 글자(option 포함)는 픽셀로만 본다(글자 노드 범위 좌표가 화면 위치가 아니다).
-  - 채널 허용치는 1(`diff.mjs --tolerance 1`과 같다). 차이 있는 행이 있으면 종료 코드 1이다. `--out <폴더>`로 칸 이미지를 남긴다.
 
 ## 작업 전·후 동작·접근성 비교
 
@@ -136,7 +119,7 @@ node scripts/visual/parity.mjs consumer --before before --after after --allow pa
 ```bash
 node scripts/visual/focus-trap.mjs seller                          # steps로 여는 창 전부, 세 폭
 node scripts/visual/focus-trap.mjs driver --only modal-hold --viewports desktop
-node scripts/visual/focus-trap.mjs seller --set compare           # UI 교체 대조 화면(?open=dialog·sheet 등 주소로 연 창 포함)
+node scripts/visual/focus-trap.mjs seller --set overlays          # 앱 화면이 아직 쓰지 않는 @greenhub/ui 창(Sheet) 검사 화면
 ```
 
 - 서버를 띄운 채로 실행한다(next dev만, `--prod`는 지원하지 않는다). steps가 있는 화면 중 steps 뒤에 창(`role=dialog`·`alertdialog`)이 열린 화면을 검사한다. id가 `modal-`로 시작하는데 창이 열리지 않으면 실패다.
@@ -145,7 +128,9 @@ node scripts/visual/focus-trap.mjs seller --set compare           # UI 교체 �
   - Tab만, Shift+Tab만 눌러 각각 출발 요소로 돌아온다(한 바퀴). 누를 때마다 두 프레임 뒤 초점이 창 안이다.
   - 창이 열린 직후 첫 초점은 창 안 `data-autofocus` 요소, 없으면 창 안 첫 Tab 대상이다.
   - 창에 `aria-modal="true"`가 있고, 본문(`data-slot=dialog-body`·`sheet-body`)이 있으면 `aria-describedby`가 창 안 요소를 가리킨다.
-  - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다. 주소로 연 창(`--set compare`)은 여는 요소가 없고 닫기 처리기도 없어 이 항목만 빼고 결과에 기록한다.
+  - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다. 화면을 열 때 이미 열려 있던 창은 여는 요소가 없어 이 항목만 빼고 결과에 기록한다.
+    - fixture 화면에 `closeBlocked: '<사유>'`가 있으면(처리 중 창: 해결로 닫기·회차 복사 처리 중) 반대로 Esc로 닫히지 않고 초점이 창 안에 남아야 한다. 앱이 처리 중 닫기를 막는 약속(Mantine `closeOnEscape={!처리 중}`과 같음)을 검사한다.
+- `--set overlays`는 판매자 `/dev/overlays`(fixture `overlayScreens`)다. 앱 화면이 아직 쓰지 않는 `Sheet`를 버튼으로 열어 같은 판정을 한다. 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열리고 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`). 실제 화면이 Sheet를 쓰면 그 화면 fixture의 steps로 옮기고 지운다.
 - 결과: `%TEMP%\greenhub-visual\<app>\focus\<label>.json`(화면·폭마다 Tab·Shift+Tab으로 거친 요소 목록 포함).
 - 실측(2026-11-01): Base UI 교체 직후 `main`(b9c2f5a)은 판매자 창 21개 모두 실패했다(창마다 초점 가드 2번, `aria-modal`·`aria-describedby` 없음). 원인과 수정은 `packages/ui/src/components/dialog.tsx` `DialogPopup` 주석.
 
@@ -184,7 +169,6 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
 | `parity.mjs` | 작업 전·후 쓰기 요청·결제창 인자·저장소·접근성 트리 비교(`parity.spec.mjs`) |
 | `report.mjs` · `report-template.html` | 캡처 결과로 확인판 HTML 생성 |
-| `compare-cells.mjs` | UI 교체 대조 화면의 짝 비교(위치·스타일·픽셀) |
 
 ## 안전장치
 
