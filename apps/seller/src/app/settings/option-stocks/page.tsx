@@ -31,7 +31,7 @@ const onlyDigits = (value: string) => value.replace(/[^0-9]/g, '');
 // Stack·Group(gap xs·아래 맞춤)·Text(sm = 15px·줄 높이 1.45)·TextInput(라벨)과 같은 값.
 const TEXT = 'm-0 p-0 text-base';
 const TEXT_SM = 'm-0 p-0 text-sm';
-const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-white p-4';
 const ROW = 'flex flex-row flex-nowrap items-end justify-start gap-2.5';
 
 /** Mantine TextInput(label)과 같은 흐름: 라벨 → 입력칸. */
