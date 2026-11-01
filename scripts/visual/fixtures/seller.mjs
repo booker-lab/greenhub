@@ -1212,10 +1212,16 @@ export const routes = [
   [
     'GET',
     /^\/admin\/drivers$/,
-    ({ url }) =>
-      url.searchParams.get('cursor')
+    ({ url }) => {
+      // 어드민 사이드바 할 일 수(승인 대기)는 status=pending으로 묻는다. API와 같은 기준(미승인·미정지)으로 거른다.
+      if (url.searchParams.get('status') === 'pending') {
+        const drivers = ADMIN_DRIVERS.filter((d) => !d.driverApproved && !d.suspended);
+        return { body: { drivers, total: drivers.length, hasMore: false, nextCursor: null } };
+      }
+      return url.searchParams.get('cursor')
         ? { body: { drivers: [], hasMore: false }, delay: 8000 }
-        : { body: { drivers: ADMIN_DRIVERS, hasMore: true, nextCursor: 'visual-more' } },
+        : { body: { drivers: ADMIN_DRIVERS, hasMore: true, nextCursor: 'visual-more' } };
+    },
   ],
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
   ['GET', /^\/stores\/[^/]+\/delivery-config$/, () => ({ body: DELIVERY_CONFIG })],
