@@ -25,7 +25,7 @@ const requireForTest = (specifier) => {
     return { Fragment: Symbol('Fragment'), jsx: () => null, jsxs: () => null };
   }
   if (
-    specifier === '@mantine/core' ||
+    specifier === '@greenhub/ui/components/button' ||
     specifier === 'lucide-react' ||
     specifier === 'next-auth/react' ||
     specifier === 'next/navigation' ||
@@ -144,7 +144,7 @@ test('배송 보류 상태와 서버 상품 요약을 주문 카드에 명확히
 
 test('MY 내 정보는 알림 내역은 제공하지만 파일럿 마케팅 설정 진입은 제공하지 않는다', () => {
   assert.match(source, /router\.push\('\/mypage\/notifications'\)/);
-  assert.match(source, />\s*알림 내역\s*<\/Text>/s);
+  assert.match(source, />\s*알림 내역\s*<\/p>/s);
   assert.doesNotMatch(source, /router\.push\('\/mypage\/notifications\/settings'\)/);
   assert.doesNotMatch(source, /마케팅 알림 설정/);
 });
