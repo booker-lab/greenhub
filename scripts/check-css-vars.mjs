@@ -14,9 +14,9 @@ export const SOURCE_ROOTS = [
   'packages/ui/src',
 ];
 
-// 이 저장소 밖에서 정의되는 변수: Mantine 런타임, Base UI Toast가 요소에 넣는 런타임 변수,
+// 이 저장소 밖에서 정의되는 변수: Base UI Toast가 요소에 넣는 런타임 변수,
 // Tailwind 테마(tailwindcss/theme.css)의 간격 단위.
-export const EXTERNAL_PREFIXES = ['--mantine', '--toast-', '--spacing'];
+export const EXTERNAL_PREFIXES = ['--toast-', '--spacing'];
 
 function listSources(dir) {
   const out = [];

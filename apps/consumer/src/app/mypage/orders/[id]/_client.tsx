@@ -203,7 +203,7 @@ function BackButton({ onClick, className }: { onClick: () => void; className: st
 // 라벨 15px·600·줄 높이 1. rounded-full(무한대) 모서리와 아래 완료 아이콘 스타일 없이 그렸을 때는 원 가장자리
 // 안티앨리어싱이 Mantine과 달랐고, 둘을 Mantine과 같게 둔 뒤 촬영이 같아졌다.
 const STEP_OUTLINE = '#e9ecef';
-const STEP_COLOR = 'var(--mantine-color-brand-filled, #00a65a)';
+const STEP_COLOR = '#00a65a';
 
 function DeliverySteps({ labels, active }: { labels: string[]; active: number }) {
   return (
@@ -1079,7 +1079,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <div className="mb-5 rounded-lg border border-solid border-[#dee2e6] bg-white p-5 text-center">
           <p
             className="m-0 text-sm"
-            style={{ fontWeight: 'var(--fw-bold)', color: 'var(--mantine-color-brand-8, #007a43)' }}
+            style={{ fontWeight: 'var(--fw-bold)', color: '#007a43' }}
           >
             픽업 코드
           </p>

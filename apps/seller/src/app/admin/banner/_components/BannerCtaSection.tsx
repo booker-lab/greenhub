@@ -18,7 +18,7 @@ const GROW =
 export function BannerCtaSection({ form, setForm }: BannerCtaSectionProps) {
   return (
     <div
-      className="block rounded-[16px] bg-white p-5 shadow-mantine-xs"
+      className="block rounded-[16px] bg-white p-5 shadow-paper-xs"
       style={{ border: '1px solid var(--color-border)' }}
     >
       <p
