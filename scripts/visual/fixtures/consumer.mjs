@@ -1232,6 +1232,8 @@ export const benchmarkScreens = [
       { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
       { click: '문의 보내기' },
     ],
+    // 보낸 뒤 화면으로 바뀔 때 Mantine Container(p·pb 함께 쓰던 style)가 남기는 React 개발 경고(수정 전 화면만).
+    expectedErrors: ['Removing paddingBottom padding'],
   },
   {
     id: 'bm-partner-error',
