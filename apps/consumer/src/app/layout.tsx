@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import { mantineHtmlProps } from '@mantine/core';
 import Providers from './providers';
 import BottomNav from '@/components/BottomNav';
 import { enabledFeatureKeys } from '@/lib/features';
@@ -46,15 +45,14 @@ export const viewport: Viewport = {
 };
 
 // 루트 layout은 요청 헤더를 읽지 않는다. 읽으면 모든 화면이 요청마다 서버에서 만들어져 공개 화면을
-// CDN에 둘 수 없다. 색상 모드는 밝은 모드 하나뿐이라(전환 기능 없음) 인라인 색상 모드 스크립트 대신
-// html 속성(data-mantine-color-scheme="light")으로 고정한다. 인라인 스크립트가 없으므로 nonce도 필요 없다.
+// CDN에 둘 수 없다. 색상 모드는 밝은 모드 하나뿐이라(전환 기능 없음) 색상 모드 스크립트·속성을 두지 않는다.
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ko" {...mantineHtmlProps}>
+    <html lang="ko">
       <head>
         {/* 빌드 때 켜진 기능 토글 키(쉼표 목록, 꺼짐이면 빈 값). E2E가 배포 빌드의 토글을 읽는다. */}
         <meta name="greenhub-features" content={enabledFeatureKeys().join(',')} />
