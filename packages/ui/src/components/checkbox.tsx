@@ -40,6 +40,7 @@ function Checkbox({
   color = 'var(--color-primary)',
   className,
   id,
+  'data-testid': testId,
 }: {
   checked: boolean;
   onCheckedChange: (checked: boolean) => void;
@@ -48,6 +49,8 @@ function Checkbox({
   color?: string;
   className?: string;
   id?: string;
+  /** Mantine Checkbox처럼 input에 붙는 시험용 id. */
+  'data-testid'?: string;
 }) {
   const autoId = useId();
   const inputId = id ?? autoId;
@@ -64,6 +67,7 @@ function Checkbox({
           checked={checked}
           onChange={(event) => onCheckedChange(event.currentTarget.checked)}
           data-slot="checkbox"
+          data-testid={testId}
           className={cn(
             'peer m-0 block cursor-pointer appearance-none rounded-[4px] border border-[#ced4da] bg-white p-0 transition-[border-color,background-color] duration-100 outline-none [-webkit-tap-highlight-color:transparent] checked:border-(--checkbox-color) checked:bg-(--checkbox-color) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--checkbox-color) focus-visible:outline-solid',
             BOX[size],
@@ -82,4 +86,4 @@ function Checkbox({
   );
 }
 
-export { CheckIcon, Checkbox };
+export { Checkbox, CheckIcon };

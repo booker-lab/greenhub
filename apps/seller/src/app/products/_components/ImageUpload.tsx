@@ -78,7 +78,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
   }
 
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4">
       <p
         className={`${TEXT} mb-2.5`}
         style={{

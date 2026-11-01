@@ -45,9 +45,9 @@ interface Props {
   availableStemTypes?: string[];
 }
 
-// ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·그림자 xs·안쪽 16)·Text(p, 여백 0)·
+// ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·안쪽 16; 그림자는 ② D2로 걷음)·Text(p, 여백 0)·
 // Group(간격 10)·Stack 값. 안쪽 Text(span)는 Mantine처럼 16px·400으로 돌아간다.
-const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-white p-4';
 const TEXT = 'm-0 p-0 text-base font-normal';
 const GROUP = 'flex flex-row flex-wrap items-center justify-start gap-2.5';
 const LABEL_STYLE = {
@@ -56,10 +56,12 @@ const LABEL_STYLE = {
   color: 'var(--color-text-disabled)',
 } as const;
 
+// ② 디자인 방향(§3.2): 선택 표시는 초록 면 대신 흰 바탕 + 검정 1px 테두리 + 굵은 검정 글자(주문 선택 칩과 같은 규칙).
 const activeStyle = {
-  backgroundColor: 'var(--color-primary)',
-  borderColor: 'var(--color-primary)',
-  color: 'white',
+  backgroundColor: 'var(--color-bg)',
+  borderColor: 'var(--color-text)',
+  color: 'var(--color-text)',
+  fontWeight: 'var(--fw-bold)',
 };
 
 export default function TouchSelector({ value, onChange, availableStemTypes }: Props) {
@@ -106,7 +108,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
                     className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
-                      color: value.stemType === v ? 'white' : 'var(--color-text-disabled)',
+                      color: 'var(--color-text-disabled)',
                     }}
                   >
                     {desc}
@@ -134,11 +136,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
               variant="outline-gray"
               style={{
                 cursor: 'pointer',
-                backgroundColor: value.colors.includes(color)
-                  ? 'var(--color-primary-surface)'
-                  : undefined,
-                color: value.colors.includes(color) ? 'var(--color-primary-dark)' : undefined,
-                borderColor: value.colors.includes(color) ? 'var(--color-primary)' : undefined,
+                ...(value.colors.includes(color) ? activeStyle : {}),
               }}
             >
               {color}
