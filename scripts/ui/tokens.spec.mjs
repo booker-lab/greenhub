@@ -1,7 +1,7 @@
 // packages/ui 토큰 계약 검사 — UI 교체 P1(docs/specs/frontend/ui-stack-migration-plan.md §4·P1).
 // Mantine과 같이 쓰는 동안 새 토큰이 지금 화면을 바꾸지 않는지 확인한다.
 // - 앱이 import할 tokens.css에 preflight(`@import "tailwindcss"`)와 `--border` 색 정의가 없다.
-// - Tailwind로 실제 컴파일했을 때 style.css와 이름이 같은 변수가 다른 값으로 나오지 않는다.
+// - Tailwind로 실제 컴파일했을 때 style.css와 이름이 같은 변수가 다른 값으로 나오지 않는다(예전 style.css, P6부터 styles/base.css).
 // - 글자 크기·줄 높이·모서리 유틸리티가 지금 화면 값과 같다.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const UI = path.join(ROOT, 'packages/ui');
 const TOKENS = path.join(UI, 'src/styles/tokens.css');
-const LEGACY = path.join(UI, 'src/style.css');
+const LEGACY = path.join(UI, 'src/styles/base.css');
 const requireFromUi = createRequire(path.join(UI, 'package.json'));
 
 const tokensText = readFileSync(TOKENS, 'utf8');
@@ -79,7 +79,7 @@ describe('Tailwind 컴파일 결과', () => {
     'rounded-full',
   ];
 
-  it('style.css와 이름이 같은 변수는 같은 값만 낸다', async () => {
+  it('base.css(예전 style.css)와 이름이 같은 변수는 같은 값만 낸다', async () => {
     const css = await compile(utilities);
     const emitted = declarations(css);
     const clashes = [];

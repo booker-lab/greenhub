@@ -8,7 +8,7 @@
 
 - `image-optimization.md` — 당시 `next/image` 전환 계획과 2026-04 Lighthouse baseline
 - `bundle-optimization.md` — 당시 번들 분석·HeroBanner SSR 전환 제안
-- `mantine-treeshaking.md` — 당시 Mantine tree-shaking 검토
+- `mantine-treeshaking.md` — 당시 Mantine tree-shaking 검토(역사 자료, P6에서 Mantine 제거)
 - `redirect-optimization.md` — 당시 redirect/렌더링 최적화 검토
 
 문서 안의 `현재`, `필수`, `진행 금지`, 성능 수치, 파일 줄번호, 실행 명령은 **작성 당시 기준**이다. `docs/memory.md` 또는 `docs/BACKLOG.md`가 명시적으로 재활성화하지 않는 한 현재 지시로 승계하지 않는다.

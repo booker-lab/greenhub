@@ -19,7 +19,7 @@ const TEXT = 'm-0 p-0 text-base font-normal';
 export function AdminFetchError({ title, detail, onRetry }: AdminFetchErrorProps) {
   return (
     <div
-      className="block rounded-[16px] bg-white shadow-mantine-xs"
+      className="block rounded-[16px] bg-white shadow-paper-xs"
       style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
     >
       <div className="flex flex-col items-center justify-start gap-3 px-4 py-16">

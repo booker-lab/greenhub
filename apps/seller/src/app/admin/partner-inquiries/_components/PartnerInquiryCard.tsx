@@ -29,7 +29,7 @@ export function PartnerInquiryCard({
   const contacted = item.contactedAt !== null;
   const href = contactHref(item.contact);
   return (
-    <div className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
+    <div className="block rounded-[16px] bg-white p-4 shadow-paper-xs">
       <div className="flex flex-row flex-nowrap items-center justify-between gap-2.5">
         {/* 휴대폰에서 긴 농가 이름이 날짜를 밀어내지 않게 한 줄 말줄임 */}
         <p

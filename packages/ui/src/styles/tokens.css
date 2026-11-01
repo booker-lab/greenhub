@@ -2,13 +2,13 @@
  * Greenhub 디자인 토큰 — Tailwind v4 · shadcn 의미 변수 (UI 교체 P1, docs/specs/frontend/ui-stack-migration-plan.md §4)
  *
  * Mantine과 같이 쓰는 동안 앱은 `@import "tailwindcss"`(preflight 포함) 대신 이 파일을 import한다(P2a의 layer 순서).
- * 값은 현행 packages/ui/src/style.css·theme.ts와 같다. 값을 바꿀 때는 두 파일을 한 PR에서 같이 바꾼다
+ * 값은 packages/ui/src/styles/base.css(예전 style.css·theme.ts 값)와 같다. 값을 바꿀 때는 두 파일을 한 PR에서 같이 바꾼다
  * (소비자 동결 중에는 바꾸지 않는다, §8).
  *
  * 이름 충돌(§4):
- * - `--border`는 정의하지 않는다. 현행 style.css의 `--border`는 색이 아니라 `1px solid …` 묶음 값이고 앱 40곳이 쓴다.
+ * - `--border`는 정의하지 않는다. base.css의 `--border`는 색이 아니라 `1px solid …` 묶음 값이고 앱 40곳이 쓴다.
  *   테두리 색 유틸리티(`border-border`)는 `--color-border`를 현행과 같은 값으로 직접 둔다.
- * - `--color-*`·`--radius-sm`처럼 style.css와 이름이 같은 테마 변수는 같은 값만 쓴다.
+ * - `--color-*`·`--radius-sm`처럼 base.css와 이름이 같은 테마 변수는 같은 값만 쓴다.
  * - 줄 높이는 Mantine 기본(xs 1.4·sm 1.45·md 1.55·lg 1.6·xl 1.65)과 같게 둔다.
  *
  * ① 외형 유지 값: `--input`(Mantine 입력칸 테두리 gray-4)·`--card-border`(Mantine Paper·Card 테두리 gray-3)는

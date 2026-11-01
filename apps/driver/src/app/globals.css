@@ -1,5 +1,5 @@
 /* UI 교체(ui-stack-migration-plan.md P3): 기사 앱은 Mantine을 걷어냈다. Tailwind는 preflight 없이 연결하고
-   (preflight 전환은 P6에서 세 앱을 같이 한다), Mantine이 깔던 기본 규칙 중 화면에 쓰이던 것만 base layer에 둔다.
+   (preflight는 화면별 ② 방향 적용에서 다룬다, 2026-11-02 결정), Mantine이 깔던 기본 규칙 중 화면에 쓰이던 것만 base layer에 둔다.
    layer 밖 규칙(아래 body 등)은 모든 layer를 이긴다. */
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
@@ -22,7 +22,7 @@
   font-display: swap;
 }
 
-@import "@greenhub/ui/style.css";
+@import "@greenhub/ui/styles/base.css";
 
 /* Mantine 기본 규칙(baseline.css)과 MantineProvider 테마 값(theme.ts)을 옮긴 것이다(① 외형 유지).
    글꼴 Pretendard 16px·줄 높이 1.55·검정 글자, 상자 크기는 테두리 포함, 입력·버튼은 부모 글꼴을 쓴다. */
