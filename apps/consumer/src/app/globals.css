@@ -1,5 +1,5 @@
 /* UI 교체(ui-stack-migration-plan.md §6 P6): 소비자 앱은 Mantine을 걷어냈다(판매자·기사 앱과 같은 방식). Tailwind는 preflight 없이 연결하고
-   (preflight 전환은 세 앱을 같이 하는 P6에서 한다), Mantine이 깔던 기본 규칙 중 화면에 쓰이던 것만 base layer에 둔다.
+   (preflight는 화면별 ② 방향 적용에서 다룬다, 2026-11-02 결정), Mantine이 깔던 기본 규칙 중 화면에 쓰이던 것만 base layer에 둔다.
    layer 밖의 규칙(이 파일 아래쪽 body)은 모든 layer를 이긴다. */
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
