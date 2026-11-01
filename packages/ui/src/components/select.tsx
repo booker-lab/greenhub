@@ -2,7 +2,7 @@
 
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import type * as React from 'react';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { popupPositionClassName, useDocumentAnchor } from '../lib/use-document-anchor';
 import { cn } from '../lib/utils';
@@ -16,6 +16,16 @@ import { type InputSize, inputClassName, inputSizeClassName } from './input';
 // 마우스를 올리면 gray-0, 방향키로 옮기면(focus-visible) Mantine data-combobox-selected처럼 주색 면·흰 글자다.
 // 목록이 열려 있는 동안 닫힌 칸은 Mantine(초점이 입력칸에 남음)처럼 주색 테두리다.
 // 항목 글자 줄 높이는 Mantine처럼 본문 1.55이고, 목록 자리는 Mantine처럼 문서 좌표로 준다(useDocumentAnchor).
+
+/**
+ * 열린 목록(listbox)의 접근성 이름. Mantine Combobox 드롭다운은 입력칸 라벨에 묶여(aria-labelledby) 라벨 이름을
+ * 가졌다. aria-label을 받았으면 그 값을, 아니면 닫힌 칸(input)에 연결된 label 글자를 쓴다.
+ */
+export function listboxLabel(root: HTMLElement | null, ariaLabel?: string): string | undefined {
+  if (ariaLabel) return ariaLabel;
+  const input = root?.querySelector('input');
+  return input?.labels?.[0]?.textContent?.trim() || undefined;
+}
 
 export interface SelectItem {
   value: string;
@@ -125,6 +135,11 @@ function Select({
   const showClear = clearable && value != null;
   const rootRef = useRef<HTMLDivElement>(null);
   const anchor = useDocumentAnchor(rootRef, { measureOnMount: defaultOpen });
+  const [listLabel, setListLabel] = useState(ariaLabel);
+  // 처음부터 열린 목록(defaultOpen)은 onOpenChange가 불리지 않으므로 붙은 뒤 한 번 읽는다.
+  useEffect(() => {
+    if (defaultOpen) setListLabel(listboxLabel(rootRef.current, ariaLabel));
+  }, [defaultOpen, ariaLabel]);
 
   return (
     <SelectPrimitive.Root
@@ -134,7 +149,9 @@ function Select({
       modal={false}
       defaultOpen={defaultOpen}
       onOpenChange={(open) => {
-        if (open) anchor.measure();
+        if (!open) return;
+        anchor.measure();
+        setListLabel(listboxLabel(rootRef.current, ariaLabel));
       }}
     >
       <div ref={rootRef} data-slot="select-root" className="relative">
@@ -203,6 +220,7 @@ function Select({
             className="w-(--anchor-width) rounded-lg border border-[#e9ecef] bg-white p-1 text-black outline-none"
           >
             <SelectPrimitive.List
+              aria-label={listLabel}
               className="overflow-y-auto"
               style={{ maxHeight: maxDropdownHeight }}
             >

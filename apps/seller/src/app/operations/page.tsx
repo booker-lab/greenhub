@@ -166,6 +166,7 @@ export default function OperationsPage() {
             &quot;해결로 닫기&quot;로 닫아 주세요.
           </p>
           <SegmentedTabs<IssueTab>
+            variant="underline"
             value={tab}
             onChange={setTab}
             tabs={[
