@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildStoreOptions,
   cancellationState,
-  countOrderAttention,
+  describeOrderAttention,
   describeRefundTarget,
   formatOrderedAt,
   getAdminOrdersReadState,
@@ -164,16 +164,30 @@ describe('행 동작 — 처리가 필요한 행만 글자 버튼, 나머지는 
 });
 
 describe('확인할 일 줄', () => {
-  it('불러온 행의 배송 보류·환불 실패(취소 마무리 실패 포함)를 세고, 없으면 null', () => {
+  it('배송 보류는 서버 건수, 환불 실패(취소 마무리 실패 포함)는 불러온 행에서 센다', () => {
     expect(
-      countOrderAttention([
-        { status: 'DELIVERY_HELD' },
-        { status: 'CANCELLED', cancellationStatus: 'REFUND_FAILED' },
-        { status: 'CANCELLED', cancellationStatus: 'LOCAL_FAILED' },
-        { status: 'CANCELLED', cancellationStatus: 'REFUNDING' },
+      describeOrderAttention({ count: 2, more: false }, [
+        { cancellationStatus: 'REFUND_FAILED' },
+        { cancellationStatus: 'LOCAL_FAILED' },
+        { cancellationStatus: 'REFUNDING' },
+        {},
       ]),
-    ).toEqual({ held: 1, refundFailed: 2 });
-    expect(countOrderAttention([{ status: 'ACCEPTED' }])).toBeNull();
+    ).toEqual({ held: 2, heldMore: false, refundFailed: 2, total: 4 });
+  });
+
+  it('배송 보류 건수를 아직 모르면 그 부분을 빼고, 쓸 것이 없으면 null', () => {
+    expect(describeOrderAttention(undefined, [{ cancellationStatus: 'REFUND_FAILED' }])).toEqual({
+      held: null,
+      heldMore: false,
+      refundFailed: 1,
+      total: 1,
+    });
+    expect(describeOrderAttention({ count: 0, more: false }, [{}])).toBeNull();
+    expect(describeOrderAttention(null, [])).toBeNull();
+  });
+
+  it('서버가 더 있다고 알리면 표시용 "더 있음"을 넘긴다', () => {
+    expect(describeOrderAttention({ count: 100, more: true }, [])?.heldMore).toBe(true);
   });
 });
 

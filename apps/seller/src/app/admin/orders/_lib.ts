@@ -149,17 +149,21 @@ export function cancellationState(
   return status ? (CANCELLATION_STATE[status] ?? null) : null;
 }
 
-// 확인할 일 줄 — 불러온 행 중 배송 보류·환불 실패(취소 마무리 실패 포함) 건수. 둘 다 0이면 null(줄을 그리지 않음).
-export function countOrderAttention(
-  orders: ReadonlyArray<{ status: OrderStatus; cancellationStatus?: string | null }>,
-): { held: number; refundFailed: number } | null {
-  let held = 0;
+// 확인할 일 줄(2026-11-01 조정 결정): 배송 보류는 사이드바와 같은 서버 건수(GET /admin/orders?status=DELIVERY_HELD),
+// 환불 실패(취소 마무리 실패 포함)는 상태 필터가 없어 불러온 행에서 센다. 배송 보류 건수를 아직 모르거나(조회 중·실패)
+// 둘 다 0이면 그 부분을 쓰지 않고, 쓸 것이 없으면 null(줄을 그리지 않음).
+export function describeOrderAttention(
+  heldCount: { count: number; more: boolean } | null | undefined,
+  orders: ReadonlyArray<{ cancellationStatus?: string | null }>,
+): { held: number | null; heldMore: boolean; refundFailed: number; total: number } | null {
   let refundFailed = 0;
   for (const order of orders) {
-    if (order.status === 'DELIVERY_HELD') held += 1;
     if (cancellationState(order.cancellationStatus)?.tone === 'problem') refundFailed += 1;
   }
-  return held + refundFailed > 0 ? { held, refundFailed } : null;
+  const held = heldCount ? heldCount.count : null;
+  const total = (held ?? 0) + refundFailed;
+  if (total === 0) return null;
+  return { held, heldMore: heldCount?.more === true, refundFailed, total };
 }
 
 // 행 동작(design-direction.md §5 어드민 "행 동작"·"적용 때 정한 것"):

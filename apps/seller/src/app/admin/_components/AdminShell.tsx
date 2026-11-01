@@ -12,6 +12,7 @@ import { usePathname } from 'next/navigation';
 import { type ReactNode, useState } from 'react';
 import { AdminLogoutButton } from './AdminLogoutButton';
 import { AdminNav } from './AdminNav';
+import { AdminTodoCountsContext } from './adminTodoContext';
 import type { AdminNavGroup } from './navItems';
 import { useAdminTodoCounts } from './useAdminTodoCounts';
 
@@ -100,7 +101,9 @@ export function AdminShell({
         <main
           className={`min-w-0 flex-1 rounded-[12px] border border-rule bg-card p-4 min-[1101px]:p-6`}
         >
-          {children}
+          <AdminTodoCountsContext.Provider value={counts}>
+            {children}
+          </AdminTodoCountsContext.Provider>
         </main>
       </div>
     </div>

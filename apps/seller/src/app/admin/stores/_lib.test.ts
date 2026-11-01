@@ -90,9 +90,9 @@ function store(id: string) {
 
 describe('getAdminStoresReadState', () => {
   it('조회 중에는 LOADING을 반환한다', () => {
-    expect(
-      getAdminStoresReadState({ loading: true, error: null, stores: [], visible: [] }),
-    ).toBe('LOADING');
+    expect(getAdminStoresReadState({ loading: true, error: null, stores: [], visible: [] })).toBe(
+      'LOADING',
+    );
   });
 
   it('loading + error는 LOADING을 우선한다(재시도 중 error 잔존)', () => {
@@ -128,9 +128,9 @@ describe('getAdminStoresReadState', () => {
       }),
     ).toBe('FETCH_ERROR');
     // 성공 + 0건만 실제 0건이다.
-    expect(
-      getAdminStoresReadState({ loading: false, error: null, stores: [], visible: [] }),
-    ).toBe('EMPTY_UNFILTERED');
+    expect(getAdminStoresReadState({ loading: false, error: null, stores: [], visible: [] })).toBe(
+      'EMPTY_UNFILTERED',
+    );
   });
 
   it('read failure ≠ filtered empty', () => {
@@ -204,7 +204,9 @@ describe('판매자 검색·연락처·치우기 안내', () => {
     expect(message).toContain('난플렉스 판매자를 치울까요?');
     expect(message).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다');
     expect(message).toContain('계속 로그인할 수 있고');
-    expect(message).toContain('기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 치워집니다');
+    expect(message).toContain(
+      '기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 치워집니다',
+    );
     expect(message).not.toContain('보존됩니다');
   });
 

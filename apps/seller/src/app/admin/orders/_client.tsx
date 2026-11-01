@@ -12,6 +12,7 @@ import {
   useAdminStores,
 } from '@/hooks/useAdmin';
 import { AdminAttentionLine, AdminPageHeader, ProblemCount } from '../_components/adminList';
+import { useAdminTodoCountsValue } from '../_components/adminTodoContext';
 import { LoadMoreFooter } from '../_components/LoadMoreFooter';
 import { OrdersFilters } from './_components/OrdersFilters';
 import { OrdersTable } from './_components/OrdersTable';
@@ -19,7 +20,7 @@ import { PostDeliveryRefundModal } from './_components/PostDeliveryRefundModal';
 import { RefundConfirmModal } from './_components/RefundConfirmModal';
 import {
   buildStoreOptions,
-  countOrderAttention,
+  describeOrderAttention,
   describeRefundTarget,
   normalizeRefundReason,
   ORDER_STATUS_TABS,
@@ -117,7 +118,8 @@ export default function AdminOrdersClient() {
 
   const storeOptions = buildStoreOptions(stores);
   const storeName = storeOptions.find((option) => option.value === storeFilter)?.label;
-  const attention = !loading && error === null ? countOrderAttention(orders) : null;
+  const todo = useAdminTodoCountsValue();
+  const attention = describeOrderAttention(todo.orders, !loading && error === null ? orders : []);
   const loadedLabel = `불러온 ${orders.length}건${hasMore ? ' · 더 있음' : ''}`;
 
   return (
@@ -135,13 +137,30 @@ export default function AdminOrdersClient() {
 
       {attention && (
         <AdminAttentionLine>
-          확인할 주문 <ProblemCount>{attention.held + attention.refundFailed}</ProblemCount>건 ·
-          배송 보류 {attention.held} · 환불 실패 {attention.refundFailed}
-          <span className="text-[var(--color-text-secondary)]">
-            {' '}
-            (불러온 {orders.length}건 기준)
-          </span>
-          {attention.held > 0 && statusFilter !== 'DELIVERY_HELD' && (
+          확인할 주문{' '}
+          <ProblemCount>
+            {attention.total}
+            {attention.heldMore ? '+' : ''}
+          </ProblemCount>
+          건
+          {attention.held !== null && (
+            <>
+              {' '}
+              · 배송 보류 {attention.held}
+              {attention.heldMore ? '+' : ''}
+            </>
+          )}
+          {attention.refundFailed > 0 && (
+            <>
+              {' '}
+              · 환불 실패 {attention.refundFailed}
+              <span className="text-[var(--color-text-secondary)]">
+                {' '}
+                (불러온 {orders.length}건 기준)
+              </span>
+            </>
+          )}
+          {attention.held !== null && attention.held > 0 && statusFilter !== 'DELIVERY_HELD' && (
             <>
               {' · '}
               <button
