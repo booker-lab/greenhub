@@ -2,22 +2,11 @@
 
 import type { Category, ColorOption, Product, SaleRoundItem, SaleType, SalesMode } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
-import {
-  Box,
-  Button,
-  Container,
-  Divider,
-  Group,
-  SimpleGrid,
-  Skeleton,
-  Stack,
-  Text,
-  Title,
-  UnstyledButton,
-} from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import BlockSkeleton from '@/components/BlockSkeleton';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
@@ -57,6 +46,25 @@ const COLOR_CHIPS: { label: string; value: ColorOption; hex: string }[] = [
   { label: '그레이', value: '그레이', hex: '#A0AEC0' },
 ];
 const SKELETON_KEYS = ['first', 'second', 'third', 'fourth'];
+
+// ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 md 16·아래 96)·Box·Stack(gap md 16·sm 12·xl 32)·
+// Group(gap 0·12, 한 줄)·SimpleGrid cols 2(gap sm 12)·Skeleton(radius md 8)·Divider(gray-3 1px, hr = separator 역할)·
+// Title order 3·4(22px·1.4, 18px·1.45)·Text(p, size xs 13px·1.4·sm 15px·1.45·xl 20px·1.65, lineClamp)·
+// UnstyledButton·Button light(sm·xs)와 같은 값. text-xs·sm·xl은 tokens.css에서 Mantine과 같은 크기·줄 높이다.
+// Mantine Button은 vertical-align: middle이라 블록 안에 놓인 버튼에는 align-middle을 준다.
+const TEXT_XS = 'm-0 p-0 text-xs';
+const TEXT_SM = 'm-0 p-0 text-sm';
+const TEXT_XL = 'm-0 p-0 text-xl';
+const LINE_CLAMP_2 = 'line-clamp-2 text-ellipsis';
+const GRID = 'grid grid-cols-2 gap-3';
+const ALERT_STACK = 'flex flex-col items-center justify-start gap-3 py-12';
+const EMPTY_STACK = 'flex flex-col items-center justify-start gap-4 py-16';
+const SECTION_TITLE = 'm-0 mb-4 text-[18px] leading-[1.45]';
+const SECTION_TITLE_STYLE = { color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' } as const;
+const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-[#dee2e6]';
+// Mantine UnstyledButton(+ 초점 링 mantine-focus-auto)과 같은 초기화. 모양은 각 버튼의 style이 준다.
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-[16px] text-inherit no-underline touch-manipulation [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid';
 
 type StoreModeStatus = 'loading' | 'ready' | StoreProfileFailure;
 
@@ -150,8 +158,7 @@ function RoundProductCard({
   const href = `/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(round.id)}`;
 
   return (
-    <Box
-      component={Link}
+    <Link
       href={href}
       aria-label={`${label} ${item.productNameSnapshot}`}
       style={{
@@ -163,7 +170,7 @@ function RoundProductCard({
         borderRadius: 'var(--radius)',
       }}
     >
-      <Box
+      <div
         style={{
           position: 'relative',
           aspectRatio: '4/5',
@@ -178,25 +185,31 @@ function RoundProductCard({
           sizes="(max-width: 600px) 50vw, 33vw"
           style={{ objectFit: 'cover' }}
         />
-      </Box>
-      <Box p="xs">
-        <Text size="xs" fw={700} c="var(--color-primary-dark)" mb={4}>
+      </div>
+      <div className="p-2.5">
+        <p
+          className={`${TEXT_XS} mb-1`}
+          style={{ fontWeight: 700, color: 'var(--color-primary-dark)' }}
+        >
           {label}
-        </Text>
+        </p>
         <CardSellerLine />
-        <Text size="sm" fw={500} c="var(--color-text)" lineClamp={2}>
+        <p
+          className={`${TEXT_SM} ${LINE_CLAMP_2}`}
+          style={{ fontWeight: 500, color: 'var(--color-text)' }}
+        >
           {item.productNameSnapshot}
-        </Text>
-        <Text size="sm" c="var(--color-text-disabled)" mt={6}>
+        </p>
+        <p className={`${TEXT_SM} mt-1.5`} style={{ color: 'var(--color-text-disabled)' }}>
           회차 가격
-        </Text>
-        <Text size="sm" fw={700} c="var(--color-text-secondary)">
+        </p>
+        <p className={TEXT_SM} style={{ fontWeight: 700, color: 'var(--color-text-secondary)' }}>
           {item.roundPrice.toLocaleString()}원
           <CardDiscount item={item} />
-        </Text>
+        </p>
         <CardMeta item={item} isPast={isPast} />
-      </Box>
-    </Box>
+      </div>
+    </Link>
   );
 }
 
@@ -214,32 +227,36 @@ function RoundDirectCategory({
   const card = useHomeCardContext(currentRound?.storeId ?? null, products, currentRound?.id ?? null);
   if (loading) {
     return (
-      <Stack gap="md" aria-label="판매 회차 불러오는 중">
-        <Skeleton height={72} radius="md" />
-        <SimpleGrid cols={2} spacing="sm">
+      // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 교체 전(Mantine Stack·SimpleGrid·Container)과 같은 div의 aria-label이다. 역할 변경은 ② 단계에서 다룬다.
+      <div
+        className="flex flex-col items-stretch justify-start gap-4"
+        aria-label="판매 회차 불러오는 중"
+      >
+        <BlockSkeleton height={72} />
+        <div className={GRID}>
           {SKELETON_KEYS.map((key) => (
-            <Skeleton key={key} height={260} radius="md" />
+            <BlockSkeleton key={key} height={260} />
           ))}
-        </SimpleGrid>
-      </Stack>
+        </div>
+      </div>
     );
   }
 
   if (status === 'error') {
     return (
-      <Stack align="center" py={48} gap="sm" role="alert">
-        <Text size="sm" c="var(--color-text-secondary)">
+      <div className={ALERT_STACK} role="alert">
+        <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
           판매 회차를 불러오지 못했습니다.
-        </Text>
+        </p>
         {error && (
-          <Text size="sm" c="var(--color-text-disabled)">
+          <p className={TEXT_SM} style={{ color: 'var(--color-text-disabled)' }}>
             {error}
-          </Text>
+          </p>
         )}
-        <Button variant="light" onClick={refetch}>
+        <Button type="button" variant="light" onClick={refetch}>
           다시 시도
         </Button>
-      </Stack>
+      </div>
     );
   }
 
@@ -251,26 +268,30 @@ function RoundDirectCategory({
 
   if (currentItems.length === 0 && pastRoundItems.length === 0) {
     return (
-      <Stack align="center" py={64}>
-        <Text size="xl">🌱</Text>
-        <Text size="sm" c="var(--color-text-disabled)">
+      <div className={EMPTY_STACK}>
+        <p className={TEXT_XL}>🌱</p>
+        <p className={TEXT_SM} style={{ color: 'var(--color-text-disabled)' }}>
           현재 또는 지난 판매 회차에 판매 중인 호접란이 없습니다.
-        </Text>
-      </Stack>
+        </p>
+      </div>
     );
   }
 
   return (
     <BenchmarkCardProvider value={card}>
-    <Stack gap="xl">
+    <div className="flex flex-col items-stretch justify-start gap-8">
       {isRefreshing && (
-        <Text size="sm" c="var(--color-text-secondary)" ta="center" aria-live="polite">
+        <p
+          className={`${TEXT_SM} text-center`}
+          style={{ color: 'var(--color-text-secondary)' }}
+          aria-live="polite"
+        >
           최신 회차 정보를 확인하는 중...
-        </Text>
+        </p>
       )}
       {isStale && (
-        <Box
-          p="sm"
+        <div
+          className="p-3"
           role="alert"
           style={{
             background: 'var(--color-primary-surface)',
@@ -278,81 +299,83 @@ function RoundDirectCategory({
             border: 'var(--border)',
           }}
         >
-          <Text size="sm" c="var(--color-text-secondary)">
+          <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
             최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
-          </Text>
+          </p>
           {error && (
-            <Text size="sm" c="var(--color-text-disabled)" mt={4}>
+            <p className={`${TEXT_SM} mt-1`} style={{ color: 'var(--color-text-disabled)' }}>
               {error}
-            </Text>
+            </p>
           )}
-          <Button variant="light" size="xs" mt="xs" onClick={refetch}>
+          <Button
+            type="button"
+            variant="light"
+            size="xs"
+            className="mt-2.5 align-middle"
+            onClick={refetch}
+          >
             다시 시도
           </Button>
-        </Box>
+        </div>
       )}
-      <Box component="section" aria-labelledby="current-category-round">
-        <Title
-          id="current-category-round"
-          order={4}
-          mb="md"
-          style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
-        >
+      <section aria-labelledby="current-category-round">
+        <h4 id="current-category-round" className={SECTION_TITLE} style={SECTION_TITLE_STYLE}>
           {currentRound?.status === 'SCHEDULED' ? '판매 예정 회차' : '이번 주 회차'}
-        </Title>
+        </h4>
         {currentRound && currentItems.length > 0 ? (
-          <Stack gap="sm">
-            <Text size="sm" fw={700} c="var(--color-text-secondary)">
+          <div className="flex flex-col items-stretch justify-start gap-3">
+            <p
+              className={TEXT_SM}
+              style={{ fontWeight: 700, color: 'var(--color-text-secondary)' }}
+            >
               {currentRound.name}
               {currentRound.status === 'CLOSED' ? ' · 주문 마감' : ''}
-            </Text>
-            <SimpleGrid cols={2} spacing="sm">
+            </p>
+            <div className={GRID}>
               {currentItems.map((item) => (
                 <RoundProductCard key={item.id} item={item} round={currentRound} isPast={false} />
               ))}
-            </SimpleGrid>
-          </Stack>
+            </div>
+          </div>
         ) : (
-          <Text size="sm" c="var(--color-text-disabled)" py="md">
+          <p className={`${TEXT_SM} py-4`} style={{ color: 'var(--color-text-disabled)' }}>
             현재 회차에 판매 중인 호접란이 없습니다.
-          </Text>
+          </p>
         )}
-      </Box>
+      </section>
 
-      <Divider />
+      <hr className={DIVIDER} />
 
-      <Box component="section" aria-labelledby="past-category-round">
-        <Title
-          id="past-category-round"
-          order={4}
-          mb="md"
-          style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
-        >
+      <section aria-labelledby="past-category-round">
+        <h4 id="past-category-round" className={SECTION_TITLE} style={SECTION_TITLE_STYLE}>
           지난 회차
-        </Title>
+        </h4>
         {pastRoundItems.length > 0 ? (
-          <Stack gap="xl">
+          <div className="flex flex-col items-stretch justify-start gap-8">
             {pastRoundItems.map(({ round, items }) => (
-              <Box key={round.id}>
-                <Text size="sm" fw={700} c="var(--color-text-secondary)" mb="sm">
+              <div key={round.id}>
+                <p
+                  className={`${TEXT_SM} mb-3`}
+                  style={{ fontWeight: 700, color: 'var(--color-text-secondary)' }}
+                >
                   {round.name}
-                </Text>
-                <SimpleGrid cols={2} spacing="sm">
+                </p>
+                <div className={GRID}>
                   {items.map((item) => (
                     <RoundProductCard key={item.id} item={item} round={round} isPast />
                   ))}
-                </SimpleGrid>
-              </Box>
+                </div>
+              </div>
             ))}
-          </Stack>
+          </div>
         ) : (
-          <Text size="sm" c="var(--color-text-disabled)" py="md">
+          <p className={`${TEXT_SM} py-4`} style={{ color: 'var(--color-text-disabled)' }}>
             지난 회차에 공개된 호접란이 없습니다.
-          </Text>
+          </p>
         )}
-      </Box>
+      </section>
       {isFeatureOn('product-request') && <ProductRequestBox storeId={currentRound?.storeId ?? null} />}
-    </Stack>
+    </div>
     </BenchmarkCardProvider>
   );
 }
@@ -378,14 +401,16 @@ function LegacyCategory({
 }) {
   return (
     <>
-      <Box pb="sm" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
-        <Group gap={0} wrap="nowrap">
+      <div className="pb-3" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
+        <div className="flex flex-row flex-nowrap items-center justify-start gap-0">
           {TABS.map((tab, index) => {
             const isActive = selectedTab === index;
             return (
-              <UnstyledButton
+              <button
+                type="button"
                 key={tab.label}
                 onClick={() => setSelectedTab(index)}
+                className={UNSTYLED_BUTTON}
                 style={{
                   flexShrink: 0,
                   padding: '8px 16px',
@@ -396,21 +421,23 @@ function LegacyCategory({
                 }}
               >
                 {tab.label}
-              </UnstyledButton>
+              </button>
             );
           })}
-        </Group>
-        <Divider />
-      </Box>
+        </div>
+        <hr className={DIVIDER} />
+      </div>
 
-      <Box py="sm" mb="sm" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
-        <Group gap={12} wrap="nowrap">
+      <div className="mb-3 py-3" style={{ overflowX: 'auto', scrollbarWidth: 'none' }}>
+        <div className="flex flex-row flex-nowrap items-center justify-start gap-3">
           {COLOR_CHIPS.map((chip) => {
             const isActive = selectedColors.includes(chip.value);
             return (
-              <UnstyledButton
+              <button
+                type="button"
                 key={chip.value}
                 onClick={() => toggleColor(chip.value)}
+                className={UNSTYLED_BUTTON}
                 style={{
                   flexShrink: 0,
                   display: 'flex',
@@ -419,7 +446,7 @@ function LegacyCategory({
                   gap: 5,
                 }}
               >
-                <Box
+                <div
                   style={{
                     width: 30,
                     height: 30,
@@ -432,56 +459,61 @@ function LegacyCategory({
                     outlineOffset: 2,
                   }}
                 />
-                <Text
-                  size="sm"
-                  c={isActive ? 'var(--color-text)' : 'var(--color-text-disabled)'}
-                  fw={isActive ? 700 : 500}
+                <p
+                  className={TEXT_SM}
+                  style={{
+                    color: isActive ? 'var(--color-text)' : 'var(--color-text-disabled)',
+                    fontWeight: isActive ? 700 : 500,
+                  }}
                 >
                   {chip.label}
-                </Text>
-              </UnstyledButton>
+                </p>
+              </button>
             );
           })}
-        </Group>
-      </Box>
+        </div>
+      </div>
 
-      <Divider mb="md" />
+      <hr className={`${DIVIDER} mb-4`} />
 
       {loading && (
-        <SimpleGrid cols={2} spacing="sm">
+        <div className={GRID}>
           {SKELETON_KEYS.map((key) => (
-            <Skeleton key={key} height={260} radius="md" />
+            <BlockSkeleton key={key} height={260} />
           ))}
-        </SimpleGrid>
+        </div>
       )}
       {!loading && error && (
-        <Stack align="center" py={48} gap="sm" role="alert">
-          <Text ta="center" c="var(--color-text-disabled)" size="sm">
+        <div className={ALERT_STACK} role="alert">
+          <p className={`${TEXT_SM} text-center`} style={{ color: 'var(--color-text-disabled)' }}>
             {error}
-          </Text>
-          <Button variant="light" onClick={refetch} data-testid="products-retry">
+          </p>
+          <Button type="button" variant="light" onClick={refetch} data-testid="products-retry">
             다시 시도
           </Button>
-        </Stack>
+        </div>
       )}
       {!loading && !error && products.length === 0 && (
-        <Stack align="center" py={64}>
-          <Text size="xl">🌱</Text>
-          <Text size="sm" c="var(--color-text-disabled)">
+        <div className={EMPTY_STACK}>
+          <p className={TEXT_XL}>🌱</p>
+          <p className={TEXT_SM} style={{ color: 'var(--color-text-disabled)' }}>
             해당 카테고리 상품이 없습니다.
-          </Text>
-        </Stack>
+          </p>
+        </div>
       )}
       {!loading && products.length > 0 && (
         <>
-          <Text size="sm" c="var(--color-text-disabled)" fw={500} mb="sm">
+          <p
+            className={`${TEXT_SM} mb-3`}
+            style={{ color: 'var(--color-text-disabled)', fontWeight: 500 }}
+          >
             {products.length}개 상품
-          </Text>
-          <SimpleGrid cols={2} spacing="sm">
+          </p>
+          <div className={GRID}>
             {products.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
-          </SimpleGrid>
+          </div>
         </>
       )}
     </>
@@ -532,32 +564,36 @@ export default function CategoryPage() {
   );
   if (storeMode.status === 'loading') {
     content = (
-      <SimpleGrid cols={2} spacing="sm" aria-label="판매 정보 불러오는 중">
+      // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 교체 전(Mantine Stack·SimpleGrid·Container)과 같은 div의 aria-label이다. 역할 변경은 ② 단계에서 다룬다.
+      <div className={GRID} aria-label="판매 정보 불러오는 중">
         {SKELETON_KEYS.map((key) => (
-          <Skeleton key={key} height={260} radius="md" />
+          <BlockSkeleton key={key} height={260} />
         ))}
-      </SimpleGrid>
+      </div>
     );
   } else if (storeMode.status !== 'ready') {
     content = (
-      <Stack align="center" py={48} role="alert">
-        <Text size="sm" c="var(--color-text-secondary)">
+      <div className="flex flex-col items-center justify-start gap-4 py-12" role="alert">
+        <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
           {storeProfileFailureMessage(storeMode.status)}
-        </Text>
-      </Stack>
+        </p>
+      </div>
     );
   } else if (storeMode.salesMode === 'round_direct') {
     content = <RoundDirectCategory products={products} {...saleRounds} />;
   }
 
   return (
-    <Container size="sm" pb={96}>
-      <Box px="md" pt="lg" pb="md">
-        <Title order={3} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+    <div className="mx-auto max-w-[720px] px-4 pb-24">
+      <div className="px-4 pt-5 pb-4">
+        <h3
+          className="m-0 text-[22px] leading-[1.4]"
+          style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+        >
           상품
-        </Title>
-      </Box>
-      <Box px="md">{content}</Box>
-    </Container>
+        </h3>
+      </div>
+      <div className="px-4">{content}</div>
+    </div>
   );
 }

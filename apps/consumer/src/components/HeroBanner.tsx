@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { Box } from '@mantine/core';
 import ResilientImage from '@/components/ResilientImage';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 
@@ -40,8 +39,9 @@ export default async function HeroBanner() {
 
   return (
     // 글자와 사진을 나란히 놓는다. 사진을 글자 밑에 깔면 좁은 화면에서 제목·버튼이 사진 위로 겹친다.
-    <Box
-      mb="lg"
+    // ① 외형 유지(UI 교체 P5): Mantine Box(div, 아래 lg 20)와 같은 값.
+    <div
+      className="mb-5"
       style={{
         display: 'flex',
         borderRadius: 'var(--radius)',
@@ -50,7 +50,7 @@ export default async function HeroBanner() {
         minHeight: 200,
       }}
     >
-      <Box style={{ flex: '1 1 0', minWidth: 0, padding: '24px 16px 24px 20px' }}>
+      <div style={{ flex: '1 1 0', minWidth: 0, padding: '24px 16px 24px 20px' }}>
         {banner.tagText && (
           <span
             style={{
@@ -139,7 +139,7 @@ export default async function HeroBanner() {
             </Link>
           )}
         </div>
-      </Box>
+      </div>
 
       {banner.imageUrl && (
         <div style={{ position: 'relative', flex: '0 0 40%' }}>
@@ -153,6 +153,6 @@ export default async function HeroBanner() {
           />
         </div>
       )}
-    </Box>
+    </div>
   );
 }

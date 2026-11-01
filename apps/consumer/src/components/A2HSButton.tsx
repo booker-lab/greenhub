@@ -1,7 +1,7 @@
 'use client';
 
+import { Button } from '@greenhub/ui/components/button';
 import { useEffect, useState } from 'react';
-import { Button } from '@mantine/core';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -28,8 +28,10 @@ export default function A2HSButton() {
     if (outcome === 'accepted') setPrompt(null);
   };
 
+  // ① 외형 유지(UI 교체 P5): Mantine Button filled brand sm(높이 36·좌우 18)·fullWidth(block, 너비 100%)·
+  // radius md(8px)와 같은 값.
   return (
-    <Button fullWidth color="brand" radius="md" onClick={handleInstall}>
+    <Button type="button" className="flex w-full rounded-[8px]" onClick={handleInstall}>
       홈 화면에 추가
     </Button>
   );

@@ -2,10 +2,11 @@
 
 import type { Product, SalesMode } from '@greenhub/shared';
 import { getGroupBuyStatus, normalizeSalesMode } from '@greenhub/shared';
-import { Box, Button, Container, SimpleGrid, Skeleton, Stack, Text } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import BlockSkeleton from '@/components/BlockSkeleton';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 import {
@@ -14,6 +15,19 @@ import {
   type StoreProfileFailure,
   storeProfileFailureMessage,
 } from '@/lib/public-store-profile';
+
+// ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 md 16·위 lg 20·아래 80)·Stack(gap md 16·sm 12)·
+// SimpleGrid cols 2(gap sm 12)·Skeleton(높이 260, radius md 8)·Box(mb xl 32·p lg 20)·Text(p, 16px·줄 높이 1.55,
+// size xl은 20px·1.65)·Button light(sm)와 같은 값.
+const CONTAINER = 'mx-auto max-w-[720px] px-4 pt-5 pb-20';
+const TEXT = 'm-0 p-0 text-[16px] leading-[1.55]';
+const ALERT_STACK = 'flex flex-col items-center justify-start gap-3 py-12';
+const EMPTY_STACK = 'flex flex-col items-center justify-start gap-4 py-16';
+const GRID = 'grid grid-cols-2 gap-3';
+const DISABLED_TEXT_STYLE = {
+  fontSize: 'var(--font-size-sm)',
+  color: 'var(--color-text-disabled)',
+} as const;
 
 type StoreModeStatus = 'loading' | 'ready' | StoreProfileFailure;
 
@@ -101,47 +115,49 @@ export default function GroupBuyPage() {
     storeMode.status === 'error' || storeMode.status === 'unavailable' ? storeMode.status : null;
   if (discoveryError || storeFailure) {
     return (
-      <Container size="sm" px="md" pt="lg" pb={80}>
-        <Stack align="center" py={48} gap="sm" role="alert">
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+      <div className={CONTAINER}>
+        <div className={ALERT_STACK} role="alert">
+          <p className={TEXT} style={DISABLED_TEXT_STYLE}>
             {storeProfileFailureMessage(!discoveryError && storeFailure ? storeFailure : 'error')}
-          </Text>
+          </p>
           {discoveryError && (
-            <Button variant="light" onClick={refetchDiscovery} data-testid="products-retry">
+            <Button
+              type="button"
+              variant="light"
+              onClick={refetchDiscovery}
+              data-testid="products-retry"
+            >
               다시 시도
             </Button>
           )}
-        </Stack>
-      </Container>
+        </div>
+      </div>
     );
   }
 
   if (storeMode.status !== 'ready' || storeMode.salesMode === 'round_direct') {
     return (
-      <Container
-        size="sm"
-        px="md"
-        pt="lg"
-        pb={80}
+      // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 교체 전(Mantine Stack·SimpleGrid·Container)과 같은 div의 aria-label이다. 역할 변경은 ② 단계에서 다룬다.
+      <div
+        className={CONTAINER}
         aria-label={
           storeMode.salesMode === 'round_direct' ? '홈으로 이동 중' : '판매 정보 불러오는 중'
         }
       >
-        <SimpleGrid cols={2} spacing="sm">
+        <div className={GRID}>
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} height={260} radius="md" />
+            <BlockSkeleton key={i} height={260} />
           ))}
-        </SimpleGrid>
-      </Container>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Container size="sm" px="md" pt="lg" pb={80}>
+    <div className={CONTAINER}>
       {/* 히어로 배너 — 플랫 미니멀 */}
-      <Box
-        mb="xl"
-        p="lg"
+      <div
+        className="mb-8 p-5"
         style={{
           backgroundColor: 'var(--color-primary-surface)',
           borderRadius: 'var(--radius)',
@@ -191,43 +207,43 @@ export default function GroupBuyPage() {
         >
           현재 {loading ? '...' : `${active.length}개`} 공구 진행 중
         </p>
-      </Box>
+      </div>
 
       {loading && (
-        <SimpleGrid cols={2} spacing="sm">
+        <div className={GRID}>
           {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} height={260} radius="md" />
+            <BlockSkeleton key={i} height={260} />
           ))}
-        </SimpleGrid>
+        </div>
       )}
 
       {!loading && error && (
-        <Stack align="center" py={48} gap="sm" role="alert">
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        <div className={ALERT_STACK} role="alert">
+          <p className={TEXT} style={DISABLED_TEXT_STYLE}>
             {error}
-          </Text>
-          <Button variant="light" onClick={refetch} data-testid="products-retry">
+          </p>
+          <Button type="button" variant="light" onClick={refetch} data-testid="products-retry">
             다시 시도
           </Button>
-        </Stack>
+        </div>
       )}
 
       {!loading && !error && active.length === 0 && closed.length === 0 && (
-        <Stack align="center" py={64}>
-          <Text size="xl">🌱</Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+        <div className={EMPTY_STACK}>
+          <p className="m-0 p-0 text-[20px] leading-[1.65]">🌱</p>
+          <p className={TEXT} style={DISABLED_TEXT_STYLE}>
             진행 중인 공동구매가 없습니다.
-          </Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          </p>
+          <p className={TEXT} style={DISABLED_TEXT_STYLE}>
             <Link href="/" style={{ color: 'inherit' }}>
               전체 상품 보기
             </Link>
-          </Text>
-        </Stack>
+          </p>
+        </div>
       )}
 
       {!loading && active.length > 0 && (
-        <Box mb="xl">
+        <div className="mb-8">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span
               style={{
@@ -251,16 +267,16 @@ export default function GroupBuyPage() {
               {active.length}
             </span>
           </div>
-          <SimpleGrid cols={2} spacing="sm">
+          <div className={GRID}>
             {active.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
-          </SimpleGrid>
-        </Box>
+          </div>
+        </div>
       )}
 
       {!loading && closed.length > 0 && (
-        <Box>
+        <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
             <span
               style={{
@@ -284,13 +300,13 @@ export default function GroupBuyPage() {
               {closed.length}
             </span>
           </div>
-          <SimpleGrid cols={2} spacing="sm" style={{ opacity: 0.6 }}>
+          <div className={GRID} style={{ opacity: 0.6 }}>
             {closed.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}
-          </SimpleGrid>
-        </Box>
+          </div>
+        </div>
       )}
-    </Container>
+    </div>
   );
 }
