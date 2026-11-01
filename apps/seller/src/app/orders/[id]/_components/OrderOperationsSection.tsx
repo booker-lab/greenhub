@@ -1,7 +1,7 @@
 'use client';
 
 import type { OperationIssueActionType, OperationIssueStatus, Order } from '@greenhub/shared';
-import { Badge } from '@greenhub/ui/components/badge';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import {
   getAllowedOperationAction,
@@ -11,19 +11,18 @@ import {
 } from '../operation-issues';
 import { Row } from './OrderRow';
 
-// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, shadow xs)·Group·Stack·Text(p, 여백 0, 줄 높이 1.55)와 같은 값.
-// 배지는 Mantine Badge light(모서리 = 기본 반경 16px). 안쪽 Paper(기록 카드·조치 기록)는 바깥 Paper의
-// --paper-shadow를 물려받아 같은 그림자(xs)가 진다.
+// ② 디자인 방향(D2·2026-11-01 결정): 카드는 그림자·바깥 테두리 없이 흰 면. 흰 카드 안의 기록 카드는 테두리 대신
+// --frame 면, 그 안 조치 기록은 흰 면이다. 상태는 점 + 글자(StatusDot). 나머지는 ① 값(radius·Group·Stack·Text) 유지.
 const TEXT = 'm-0 p-0 text-base font-normal';
-const PAPER = 'block rounded-[16px] bg-white shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-white';
 const GROUP_BETWEEN = 'flex flex-row flex-wrap items-center justify-between gap-4';
 
-// Mantine Badge light color → @greenhub/ui Badge 변형.
-const LIGHT_BADGE: Record<string, 'light' | 'destructive' | 'warning' | 'secondary'> = {
-  brand: 'light',
-  red: 'destructive',
-  yellow: 'warning',
-  gray: 'secondary',
+// 상태는 배지 면 대신 점 + 글자(2026-11-01 결정): 문제(빨강)=problem, 끝남(회색)=done, 나머지=검정.
+const TONE: Record<string, 'default' | 'problem' | 'done'> = {
+  brand: 'default',
+  red: 'problem',
+  yellow: 'default',
+  gray: 'done',
 };
 
 const STATUS_LABELS: Record<OperationIssueStatus, string> = {
@@ -88,9 +87,7 @@ function RedeliveryPaymentPanel({ payment }: { payment: Order['redeliveryPayment
         <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
           재배송비 결제
         </p>
-        <Badge variant={LIGHT_BADGE[presentation.color]} className="rounded-[16px]">
-          {presentation.label}
-        </Badge>
+        <StatusDot tone={TONE[presentation.color]}>{presentation.label}</StatusDot>
       </div>
       <p
         className={TEXT}
@@ -132,7 +129,7 @@ function IssueCard({
   ].filter((row): row is [string, string] => typeof row[1] === 'string');
 
   return (
-    <div className="block rounded-[8px] border border-solid border-[#dee2e6] bg-white p-3 shadow-mantine-xs">
+    <div className="block rounded-[8px] p-3" style={{ backgroundColor: 'var(--frame)' }}>
       <div className="flex flex-row flex-wrap items-start justify-between gap-2.5">
         <div className="flex flex-col gap-0.5" style={{ flex: 1 }}>
           <p
@@ -148,9 +145,7 @@ function IssueCard({
             {ISSUE_DESCRIPTIONS[issue.type]}
           </p>
         </div>
-        <Badge variant={LIGHT_BADGE[issueColor(issue)]} className="rounded-[16px]">
-          {STATUS_LABELS[issue.status]}
-        </Badge>
+        <StatusDot tone={TONE[issueColor(issue)]}>{STATUS_LABELS[issue.status]}</StatusDot>
       </div>
 
       <div className="mt-3 flex flex-col gap-1">
@@ -175,19 +170,16 @@ function IssueCard({
           {issue.actions.map((action) => (
             <div
               key={`${action.actorId}-${action.performedAt}-${action.actionType}-${action.status}`}
-              className="block rounded-[4px] bg-white p-2.5 shadow-mantine-xs"
+              className="block rounded-[4px] bg-white p-2.5"
               style={{ backgroundColor: 'var(--color-surface-muted)' }}
             >
               <div className="flex flex-row flex-wrap items-center justify-between gap-2.5">
                 <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
                   {ACTION_LABELS[action.actionType]}
                 </p>
-                <Badge
-                  variant={action.status === 'SUCCEEDED' ? 'light' : 'destructive'}
-                  className="rounded-[16px]"
-                >
+                <StatusDot tone={action.status === 'SUCCEEDED' ? 'done' : 'problem'}>
                   {action.status === 'SUCCEEDED' ? '성공' : '실패'}
-                </Badge>
+                </StatusDot>
               </div>
               <p
                 className={`${TEXT} mt-0.5`}
@@ -252,12 +244,9 @@ export function OrderOperationsSection({
             <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
               배송 보류 운영
             </p>
-            <Badge
-              variant={order.status === 'DELIVERY_HELD' ? 'destructive' : 'secondary'}
-              className="rounded-[16px]"
-            >
+            <StatusDot tone={order.status === 'DELIVERY_HELD' ? 'problem' : 'done'}>
               {order.status === 'DELIVERY_HELD' ? '조치 중' : '해소 기록'}
-            </Badge>
+            </StatusDot>
           </div>
           <div className="flex flex-col gap-1.5">
             <Row label="보류 사유" value={order.deliveryHold.reasonMessage} />

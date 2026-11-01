@@ -2,37 +2,18 @@
 
 import type { Order } from '@greenhub/shared';
 import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
-import { Badge } from '@greenhub/ui/components/badge';
 import { Button } from '@greenhub/ui/components/button';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { useRouter } from 'next/navigation';
 import { memo } from 'react';
-import {
-  ACCENT_BORDER,
-  DELIVERY_LABEL,
-  formatRelativeTime,
-  STATUS_COLOR,
-  STATUS_LABEL,
-} from '../_constants';
+import { DELIVERY_LABEL, formatRelativeTime, STATUS_LABEL, STATUS_TONE } from '../_constants';
 import { displayBuyerName, summarizeOrderProducts } from '../[id]/_lib';
 
-// ① 외형 유지(UI 교체 P4): Mantine Paper(radius md = 8px, shadow xs)·Group·Text(p, 여백 0, 줄 높이 1.55)와 같은 값.
-// Mantine Button size="sm"(높이 36)은 @greenhub/ui Button 기본 크기다. 안쪽 Paper(픽업 코드)는 그림자를 따로 주지 않아도
-// 바깥 Paper의 --paper-shadow를 물려받아 같은 그림자(xs)가 진다.
+// ② 디자인 방향(D2·2026-11-01 결정): 카드는 그림자·왼쪽 상태 띠 없이 틀 위 흰 면이고, 상태는 점 + 글자(StatusDot)다.
+// 나머지(radius md = 8px·Group·Text·Button 기본 크기 36)는 ① 값을 유지한다.
 const TEXT = 'm-0 p-0 text-base';
 const CLAMP1 = 'line-clamp-1 text-ellipsis';
 const PAPER = 'block rounded-[8px] bg-white';
-
-// Mantine Badge light color(STATUS_COLOR) → @greenhub/ui Badge 변형.
-const LIGHT_BADGE: Record<
-  string,
-  'light' | 'destructive' | 'warning' | 'light-dark' | 'secondary'
-> = {
-  brand: 'light',
-  red: 'destructive',
-  yellow: 'warning',
-  dark: 'light-dark',
-  gray: 'secondary',
-};
 
 // 검색·필터로 목록이 다시 계산돼도 같은 주문 객체의 카드는 다시 그리지 않는다.
 export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
@@ -45,15 +26,13 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
     // biome-ignore lint/a11y/useKeyWithClickEvents: 외형 유지 교체(UI 교체 P4) — Mantine Paper 카드 클릭 동작을 그대로 옮긴다. 키보드는 카드 안 버튼·상세 링크로 간다.
     // biome-ignore lint/a11y/noStaticElementInteractions: 위와 같다.
     <div
-      className={`${PAPER} p-4 shadow-mantine-xs`}
-      style={{ cursor: 'pointer', borderLeft: `4px solid ${ACCENT_BORDER[order.status]}` }}
+      className={`${PAPER} p-4`}
+      style={{ cursor: 'pointer' }}
       onClick={() => router.push(`/orders/${order.id}`)}
     >
-      {/* 상단: 상태 뱃지 + 시간 */}
+      {/* 상단: 상태(점 + 글자) + 시간 */}
       <div className="mb-2.5 flex flex-row flex-wrap items-center justify-between gap-4">
-        <Badge variant={LIGHT_BADGE[STATUS_COLOR[order.status]]} className="rounded-[32px]">
-          {STATUS_LABEL[order.status]}
-        </Badge>
+        <StatusDot tone={STATUS_TONE[order.status]}>{STATUS_LABEL[order.status]}</StatusDot>
         <p
           className={TEXT}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
@@ -152,7 +131,7 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
         // biome-ignore lint/a11y/useKeyWithClickEvents: 카드 클릭을 막는 픽업 코드 상자다(Mantine Paper 그대로).
         // biome-ignore lint/a11y/noStaticElementInteractions: 위와 같다.
         <div
-          className={`${PAPER} mt-2.5 p-3 text-center shadow-mantine-xs`}
+          className={`${PAPER} mt-2.5 p-3 text-center`}
           style={{ background: 'var(--color-primary-surface)' }}
           onClick={(e) => e.stopPropagation()}
         >
