@@ -13,8 +13,8 @@ const TABS = [
         width="24"
         height="24"
         fill="none"
-        stroke={active ? 'var(--color-primary)' : 'var(--color-text-disabled)'}
-        strokeWidth={active ? 2.2 : 2}
+        stroke={active ? 'var(--color-text)' : 'var(--driver-text-muted)'}
+        strokeWidth={active ? 2.4 : 1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
         viewBox="0 0 24 24"
@@ -33,8 +33,8 @@ const TABS = [
         width="24"
         height="24"
         fill="none"
-        stroke={active ? 'var(--color-primary)' : 'var(--color-text-disabled)'}
-        strokeWidth={active ? 2.2 : 2}
+        stroke={active ? 'var(--color-text)' : 'var(--driver-text-muted)'}
+        strokeWidth={active ? 2.4 : 1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
         viewBox="0 0 24 24"
@@ -53,8 +53,8 @@ const TABS = [
         width="24"
         height="24"
         fill="none"
-        stroke={active ? 'var(--color-primary)' : 'var(--color-text-disabled)'}
-        strokeWidth={active ? 2.2 : 2}
+        stroke={active ? 'var(--color-text)' : 'var(--driver-text-muted)'}
+        strokeWidth={active ? 2.4 : 1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
         viewBox="0 0 24 24"
@@ -81,7 +81,7 @@ export default function BottomNav() {
         right: 0,
         zIndex: 100,
         backgroundColor: 'var(--color-bg)',
-        borderTop: 'var(--border)',
+        boxShadow: 'var(--driver-bar-shadow)',
         height: 'calc(72px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
         display: 'flex',
@@ -95,6 +95,7 @@ export default function BottomNav() {
             <Link
               key={tab.href}
               href={tab.href}
+              aria-current={active ? 'page' : undefined}
               className="flex-1 cursor-pointer text-inherit no-underline"
             >
               <div className="flex h-full flex-col items-center justify-center gap-1">
@@ -103,8 +104,8 @@ export default function BottomNav() {
                   className={text}
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    fontWeight: active ? 'var(--fw-bold)' : 'var(--fw-medium)',
-                    color: active ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
+                    fontWeight: active ? 'var(--fw-bold)' : 'var(--fw-regular)',
+                    color: active ? 'var(--color-text)' : 'var(--driver-text-muted)',
                   }}
                 >
                   {tab.label}

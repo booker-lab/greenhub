@@ -173,7 +173,8 @@ test.describe('드라이버 디자인 시스템 — 인증 화면 (세션 주입
     expect(violation).toHaveLength(0)
   })
 
-  test('배송 보드 — BottomNav borderTop 적용 (boxShadow 제거)', async ({ page }) => {
+  // 기사 ② 방향(design-direction.md §3.1·§6): 하단 바는 위쪽 1px 선 대신 고정 바 그림자로 본문과 나눈다.
+  test('배송 보드 — BottomNav 위쪽 선 없이 고정 바 그림자', async ({ page }) => {
     await page.goto(`${BASE}/board`)
     await page.waitForLoadState('networkidle')
     // 인라인 style이 아니라 계산된 스타일로 본다(Tailwind 클래스로 옮겨도 같은 판정).
@@ -188,8 +189,8 @@ test.describe('드라이버 디자인 시스템 — 인증 화면 (세션 주입
       }
     })
     expect(result.hasNav).toBe(true)
-    expect(result.hasBorderTop).toBe(true)
-    expect(result.hasBoxShadow).toBe(false)
+    expect(result.hasBorderTop).toBe(false)
+    expect(result.hasBoxShadow).toBe(true)
   })
 
   test('지도 페이지 — 렌더링', async ({ page }) => {
