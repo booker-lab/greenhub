@@ -65,6 +65,99 @@ describe('PortoneClient V2 진단', () => {
     jest.useRealTimers();
   });
 
+  describe('실연동·테스트 웹훅 시크릿', () => {
+    const LIVE_SECRET = Buffer.from('live-secret');
+    const TEST_SECRET = Buffer.from('test-mode-secret');
+    const toWhsec = (secret: Buffer) => `whsec_${secret.toString('base64')}`;
+    const makeClient = (values: Record<string, string>) =>
+      new PortoneClient({
+        get: jest.fn((key: string, fallback: string) => values[key] ?? fallback),
+      } as unknown as ConfigService);
+    const sign = (secret: Buffer, id: string, timestamp: string, body: Buffer) =>
+      crypto
+        .createHmac('sha256', secret)
+        .update(`${id}.${timestamp}.${body.toString()}`)
+        .digest('base64');
+    const body = Buffer.from('{"type":"Transaction.Paid"}');
+    const now = () => String(Math.floor(Date.now() / 1000));
+
+    it('두 시크릿을 모두 두면 실연동·테스트 어느 쪽 서명이든 통과한다', () => {
+      const client = makeClient({
+        PORTONE_WEBHOOK_SECRET: toWhsec(LIVE_SECRET),
+        PORTONE_WEBHOOK_SECRET_TEST: toWhsec(TEST_SECRET),
+      });
+      const ts = now();
+      expect(() =>
+        client.verifyWebhookSignature(
+          'webhook-1',
+          ts,
+          body,
+          `v1,${sign(LIVE_SECRET, 'webhook-1', ts, body)}`,
+        ),
+      ).not.toThrow();
+      expect(() =>
+        client.verifyWebhookSignature(
+          'webhook-2',
+          ts,
+          body,
+          `v1,${sign(TEST_SECRET, 'webhook-2', ts, body)}`,
+        ),
+      ).not.toThrow();
+    });
+
+    it('테스트 시크릿이 없으면 테스트 모드 서명은 거절한다(기존 동작)', () => {
+      const client = makeClient({ PORTONE_WEBHOOK_SECRET: toWhsec(LIVE_SECRET) });
+      const ts = now();
+      expect(() =>
+        client.verifyWebhookSignature(
+          'webhook-1',
+          ts,
+          body,
+          `v1,${sign(TEST_SECRET, 'webhook-1', ts, body)}`,
+        ),
+      ).toThrow(UnauthorizedException);
+    });
+
+    it('어느 시크릿과도 맞지 않는 서명·변조된 본문은 거절한다', () => {
+      const client = makeClient({
+        PORTONE_WEBHOOK_SECRET: toWhsec(LIVE_SECRET),
+        PORTONE_WEBHOOK_SECRET_TEST: toWhsec(TEST_SECRET),
+      });
+      const ts = now();
+      const other = Buffer.from('other-secret');
+      expect(() =>
+        client.verifyWebhookSignature(
+          'webhook-1',
+          ts,
+          body,
+          `v1,${sign(other, 'webhook-1', ts, body)}`,
+        ),
+      ).toThrow(UnauthorizedException);
+      const tampered = Buffer.from('{"type":"Transaction.Cancelled"}');
+      expect(() =>
+        client.verifyWebhookSignature(
+          'webhook-1',
+          ts,
+          tampered,
+          `v1,${sign(TEST_SECRET, 'webhook-1', ts, body)}`,
+        ),
+      ).toThrow(UnauthorizedException);
+    });
+
+    it('테스트 시크릿만 있고 실연동 시크릿이 비어 있어도 테스트 서명은 확인한다', () => {
+      const client = makeClient({ PORTONE_WEBHOOK_SECRET_TEST: toWhsec(TEST_SECRET) });
+      const ts = now();
+      expect(() =>
+        client.verifyWebhookSignature(
+          'webhook-1',
+          ts,
+          body,
+          `v1,${sign(TEST_SECRET, 'webhook-1', ts, body)}`,
+        ),
+      ).not.toThrow();
+    });
+  });
+
   it('PORTONE_V2_SECRET을 PortOne 인증 형식으로 전달한다', async () => {
     const fetchMock = jest.fn().mockResolvedValue(
       new Response(
