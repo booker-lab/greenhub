@@ -2,6 +2,7 @@
 
 import type { Order, OrderStatus } from '@greenhub/shared';
 import { Button } from '@greenhub/ui/components/button';
+import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
@@ -26,20 +27,13 @@ const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   REVIEWED: '구매 확정',
 };
 
-type StatusColorKey = { bg: string; text: string };
-const STATUS_COLORS: Partial<Record<OrderStatus, StatusColorKey>> = {
-  PENDING: { bg: 'var(--color-surface-muted)', text: 'var(--color-text-secondary)' },
-  RECRUITING: { bg: 'var(--color-status-info-bg)', text: 'var(--color-status-info-text)' },
-  CONFIRMED: { bg: 'var(--color-status-info-bg)', text: 'var(--color-status-info-text)' },
-  ACCEPTED: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary-dark)' },
-  PREPARING: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary-dark)' },
-  DELIVERING: { bg: 'var(--color-status-warning-bg)', text: 'var(--color-status-warning-text)' },
-  DELIVERY_HELD: { bg: 'var(--color-danger-surface)', text: 'var(--color-danger)' },
-  HUB_ARRIVED: { bg: 'var(--color-status-warning-bg)', text: 'var(--color-status-warning-text)' },
-  PICKED_UP: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary-dark)' },
-  DELIVERED: { bg: 'var(--color-primary-surface)', text: 'var(--color-primary-dark)' },
-  CANCELLED: { bg: 'var(--color-danger-surface)', text: 'var(--color-danger)' },
-  REVIEWED: { bg: 'var(--color-surface-muted)', text: 'var(--color-text-secondary)' },
+// ② 방향(design-standard §5, 판매자 주문 상태와 같은 규칙): 상태는 배지 면 없이 점 + 글자. 문제=빨강, 끝났거나 멈춘 상태=회색, 나머지 검정.
+const STATUS_TONES: Partial<Record<OrderStatus, StatusDotTone>> = {
+  PENDING: 'done',
+  DELIVERY_HELD: 'problem',
+  DELIVERED: 'done',
+  CANCELLED: 'done',
+  REVIEWED: 'done',
 };
 
 // ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 md 16)·Stack·Group(gap md 16 기본, wrap)·
@@ -135,10 +129,7 @@ function readOrderListSummary(value: unknown): OrderListSummary | null {
 }
 
 function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
-  const colorScheme = STATUS_COLORS[order.status] ?? {
-    bg: 'var(--color-surface-muted)',
-    text: 'var(--color-text-secondary)',
-  };
+  const tone = STATUS_TONES[order.status] ?? 'default';
   const label = STATUS_LABELS[order.status] ?? order.status;
   const summary = readOrderListSummary(order);
 
@@ -151,25 +142,15 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
       style={{
         display: 'block',
         width: '100%',
-        background: 'var(--color-bg)',
-        border: '1px solid var(--color-border)',
+        background: 'var(--color-surface-muted)',
         borderRadius: 'var(--radius)',
         padding: '16px',
       }}
     >
       <div className="mb-2 flex flex-row flex-wrap items-center justify-between gap-4">
-        <div
-          style={{
-            fontSize: 12,
-            fontWeight: 'var(--fw-bold)',
-            color: colorScheme.text,
-            background: colorScheme.bg,
-            padding: '3px 10px',
-            borderRadius: 'var(--radius-full)',
-          }}
-        >
+        <StatusDot tone={tone} size={13} className="font-bold">
           {label}
-        </div>
+        </StatusDot>
         <p
           className={TEXT}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
@@ -186,7 +167,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
             flexShrink: 0,
             overflow: 'hidden',
             borderRadius: 12,
-            background: 'var(--color-surface-muted)',
+            background: 'var(--color-bg)',
           }}
         >
           <ResilientImage
@@ -291,7 +272,7 @@ export default function MyPageClient() {
       {/* 프로필 */}
       <div
         className="mb-8 p-5"
-        style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
+        style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
       >
         <div className="flex flex-row flex-wrap items-start justify-between gap-4">
           <div>
@@ -408,8 +389,7 @@ export default function MyPageClient() {
               justifyContent: 'space-between',
               alignItems: 'center',
               width: '100%',
-              background: 'var(--color-bg)',
-              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface-muted)',
               borderRadius: 'var(--radius)',
               minHeight: 'var(--touch-target)',
               padding: '14px 16px',
@@ -436,8 +416,7 @@ export default function MyPageClient() {
               justifyContent: 'space-between',
               alignItems: 'center',
               width: '100%',
-              background: 'var(--color-bg)',
-              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface-muted)',
               borderRadius: 'var(--radius)',
               minHeight: 'var(--touch-target)',
               padding: '14px 16px',
@@ -478,8 +457,7 @@ function MenuLink({ label, onClick }: { label: string; onClick: () => void }) {
       className={UNSTYLED_BUTTON}
       style={{
         alignItems: 'center',
-        background: 'var(--color-bg)',
-        border: '1px solid var(--color-border)',
+        background: 'var(--color-surface-muted)',
         borderRadius: 'var(--radius)',
         display: 'flex',
         justifyContent: 'space-between',

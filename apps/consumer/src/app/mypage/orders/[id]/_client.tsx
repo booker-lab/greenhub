@@ -3,6 +3,7 @@
 import type { OrderStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Button, ButtonLabel } from '@greenhub/ui/components/button';
+import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -136,14 +137,14 @@ function SegmentedChoice<T extends string>({
                 disabled
                   ? 'cursor-not-allowed text-[#adb5bd]'
                   : selected
-                    ? 'text-black'
+                    ? 'font-bold text-black'
                     : 'text-[#495057] [@media(hover:hover)]:hover:text-black'
               }`}
             >
               {selected && (
                 <span
                   aria-hidden
-                  className="absolute inset-0 z-[-1] rounded-[12px] bg-white shadow-[0_1px_3px_rgba(0,0,0,0.05),0_1px_2px_rgba(0,0,0,0.1)]"
+                  className="absolute inset-0 z-[-1] rounded-[12px] border-2 border-solid border-[var(--color-text)] bg-white"
                 />
               )}
               <span className="relative">{item.label}</span>
@@ -831,7 +832,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     detail.status === 'REVIEWED' ? steps.length : Math.max(0, steps.indexOf(detail.status));
   const paymentIsDone = detail.redeliveryPayment.paid;
   // 배송 보류·취소는 문제 상태라 빨강 계열 배지로 보인다
-  const isProblemStatus = detail.status === 'DELIVERY_HELD' || detail.status === 'CANCELLED';
+  // ② 방향(design-standard §5): 상태는 점 + 글자. 배송 보류=빨강, 취소·결제 대기·완료=회색, 나머지 검정.
+  const statusTone: StatusDotTone =
+    detail.status === 'DELIVERY_HELD'
+      ? 'problem'
+      : detail.status === 'CANCELLED' ||
+          detail.status === 'PENDING' ||
+          detail.status === 'DELIVERED' ||
+          detail.status === 'REVIEWED'
+        ? 'done'
+        : 'default';
 
   return (
     // ① 외형 유지(UI 교체 P5): Mantine Container(sm·px md·pt lg·pb 80)·Paper·Group·Stack·Text·Title·Alert·
@@ -871,22 +881,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             주문번호: {detail.orderNumber}
           </p>
         </div>
-        <p
-          className="m-0 leading-[1.55]"
-          style={{
-            background: isProblemStatus
-              ? 'var(--color-danger-surface)'
-              : 'var(--color-primary-surface)',
-            borderRadius: 'var(--radius-full)',
-            color: isProblemStatus ? 'var(--color-danger)' : 'var(--color-primary-dark)',
-            flexShrink: 0,
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-extrabold)',
-            padding: '4px 12px',
-          }}
-        >
+        <StatusDot tone={statusTone} className="shrink-0 font-extrabold">
           {STATUS_LABELS[detail.status]}
-        </p>
+        </StatusDot>
       </div>
 
       <div
@@ -951,7 +948,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         extras={readOrderBenchmarkExtras(order)}
       />
 
-      <div className="mb-5 rounded-lg border border-solid border-[#dee2e6] bg-white p-4">
+      <div className="mb-5 rounded-[var(--radius)] bg-[var(--color-surface-muted)] p-4">
         <div className="flex flex-col gap-2.5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
@@ -1060,7 +1057,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {detail.deliveryPhotoUrl && (
-        <div className="mb-5 rounded-lg border border-solid border-[#dee2e6] bg-white p-4">
+        <div className="mb-5 rounded-[var(--radius)] bg-[var(--color-surface-muted)] p-4">
           <p className="m-0 mb-3 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
             배송 완료 사진
           </p>
@@ -1076,11 +1073,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {showPickupCode && (
-        <div className="mb-5 rounded-lg border border-solid border-[#dee2e6] bg-white p-5 text-center">
-          <p
-            className="m-0 text-sm"
-            style={{ fontWeight: 'var(--fw-bold)', color: '#007a43' }}
-          >
+        <div className="mb-5 rounded-[var(--radius)] bg-[var(--color-surface-muted)] p-5 text-center">
+          <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)', color: '#007a43' }}>
             픽업 코드
           </p>
           <p
