@@ -22,7 +22,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-[#008a4b]',
+        default: 'bg-primary text-primary-foreground hover:bg-[#006638]',
         outline: 'border-primary bg-transparent text-brand-ink hover:bg-primary/5',
         // Mantine variant="outline" color="gray"(gray-6 테두리·글자, 대조 화면 계산값).
         'outline-gray': 'border-[#868e96] bg-transparent text-[#868e96] hover:bg-[#868e96]/5',

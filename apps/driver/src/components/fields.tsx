@@ -18,7 +18,7 @@ const SIZE = {
 } as const;
 
 const inputBase =
-  'block w-full min-w-0 cursor-text appearance-none rounded-[16px] border border-solid border-[#ced4da] bg-white text-start text-black transition-[border-color] duration-100 ease-[ease] outline-none placeholder:text-[#adb5bd] placeholder:opacity-100 focus:border-primary disabled:cursor-not-allowed disabled:bg-[#e9ecef] disabled:text-[#adb5bd] disabled:opacity-60 [-webkit-tap-highlight-color:transparent]';
+  'block w-full min-w-0 cursor-text appearance-none rounded-[16px] border border-solid border-[#ced4da] bg-white text-start text-black transition-[border-color] duration-100 ease-[ease] outline-none placeholder:text-[#adb5bd] placeholder:opacity-100 focus:border-brand disabled:cursor-not-allowed disabled:bg-[#e9ecef] disabled:text-[#adb5bd] disabled:opacity-60 [-webkit-tap-highlight-color:transparent]';
 
 const labelClass =
   'inline-flex cursor-default text-sm/[1.55] font-semibold break-words text-black select-auto';
@@ -99,7 +99,7 @@ export function PasswordField({
   const [reveal, setReveal] = useState(false);
   return (
     <div className="relative">
-      <div className="relative h-[42px] min-h-[42px] cursor-text overflow-hidden rounded-[32px] border border-solid border-[#ced4da] bg-white ps-[14px] pe-10 text-base leading-[40px] text-black transition-[border-color] duration-100 ease-[ease] focus-within:border-primary">
+      <div className="relative h-[42px] min-h-[42px] cursor-text overflow-hidden rounded-[32px] border border-solid border-[#ced4da] bg-white ps-[14px] pe-10 text-base leading-[40px] text-black transition-[border-color] duration-100 ease-[ease] focus-within:border-brand">
         <input
           type={reveal ? 'text' : 'password'}
           className={cn(
@@ -401,7 +401,7 @@ function InlineControl({
           onChange={onChange}
           className={cn(
             'peer m-0 size-5 cursor-default appearance-none border border-solid border-[#ced4da] bg-white transition-[background-color,border-color] duration-100 ease-[ease] [-webkit-tap-highlight-color:transparent]',
-            'checked:border-primary checked:bg-primary disabled:cursor-not-allowed disabled:border-[#dee2e6] disabled:bg-[#e9ecef]',
+            'checked:border-brand checked:bg-brand disabled:cursor-not-allowed disabled:border-[#dee2e6] disabled:bg-[#e9ecef]',
             isRadio
               ? 'relative flex items-center justify-center rounded-[20px]'
               : 'block rounded-[4px] p-0',

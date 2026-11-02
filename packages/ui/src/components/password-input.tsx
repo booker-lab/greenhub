@@ -41,7 +41,7 @@ function PasswordInput({
     <div data-slot="password-input" className="relative">
       <div
         className={cn(
-          'relative cursor-text overflow-hidden border border-solid border-[#ced4da] bg-white text-black transition-[border-color] duration-100 ease-[ease] focus-within:border-primary',
+          'relative cursor-text overflow-hidden border border-solid border-[#ced4da] bg-white text-black transition-[border-color] duration-100 ease-[ease] focus-within:border-brand',
           sized.box,
         )}
       >
