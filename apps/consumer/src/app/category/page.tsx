@@ -1,13 +1,12 @@
 'use client';
 
-import type { Category, ColorOption, Product, SaleRoundItem, SaleType, SalesMode } from '@greenhub/shared';
+import type { Category, ColorOption, Product, SaleType, SalesMode } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
 import { Button } from '@greenhub/ui/components/button';
-import Image from 'next/image';
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import BlockSkeleton from '@/components/BlockSkeleton';
 import ProductCard from '@/components/ProductCard';
+import RoundTileGrid from '@/components/RoundTile';
 import { useProducts } from '@/hooks/useProducts';
 import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
 import {
@@ -16,7 +15,7 @@ import {
   fetchPublicStoreProfile,
   storeProfileFailureMessage,
 } from '@/lib/public-store-profile';
-import { CardDiscount, CardMeta, CardSellerLine, BenchmarkCardProvider } from '@/components/benchmark/CardExtras';
+import { BenchmarkCardProvider } from '@/components/benchmark/CardExtras';
 import ProductRequestBox from '@/components/benchmark/ProductRequestBox';
 import { useHomeCardContext } from '@/components/HomeProductList';
 import { isFeatureOn } from '@/lib/features';
@@ -49,13 +48,11 @@ const SKELETON_KEYS = ['first', 'second', 'third', 'fourth'];
 
 // ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 md 16·아래 96)·Box·Stack(gap md 16·sm 12·xl 32)·
 // Group(gap 0·12, 한 줄)·SimpleGrid cols 2(gap sm 12)·Skeleton(radius md 8)·Divider(gray-3 1px, hr = separator 역할)·
-// Title order 3·4(22px·1.4, 18px·1.45)·Text(p, size xs 13px·1.4·sm 15px·1.45·xl 20px·1.65, lineClamp)·
-// UnstyledButton·Button light(sm·xs)와 같은 값. text-xs·sm·xl은 tokens.css에서 Mantine과 같은 크기·줄 높이다.
+// Title order 3·4(22px·1.4, 18px·1.45)·Text(p, size sm 15px·1.45·xl 20px·1.65)·
+// UnstyledButton·Button light(sm·xs)와 같은 값. text-sm·xl은 tokens.css에서 Mantine과 같은 크기·줄 높이다.
 // Mantine Button은 vertical-align: middle이라 블록 안에 놓인 버튼에는 align-middle을 준다.
-const TEXT_XS = 'm-0 p-0 text-xs';
 const TEXT_SM = 'm-0 p-0 text-sm';
 const TEXT_XL = 'm-0 p-0 text-xl';
-const LINE_CLAMP_2 = 'line-clamp-2 text-ellipsis';
 const GRID = 'grid grid-cols-2 gap-3';
 const ALERT_STACK = 'flex flex-col items-center justify-start gap-3 py-12';
 const EMPTY_STACK = 'flex flex-col items-center justify-start gap-4 py-16';
@@ -138,79 +135,11 @@ function visibleOrchidItems(round: PublicSaleRound, productById: Map<string, Pro
     });
 }
 
-/** 카드 라벨. 상품 탭 회차 라벨(category-round-label)이 켜지면 판매 예정 회차를 따로 부른다. */
+/** 타일 링크의 접근 이름 앞말. 상품 탭 회차 라벨(category-round-label)이 켜지면 판매 예정 회차를 따로 부른다. */
 function roundCardLabel(round: PublicSaleRound, isPast: boolean): string {
   if (isPast) return '지난 회차';
   if (isFeatureOn('category-round-label') && round.status === 'SCHEDULED') return '판매 예정';
   return '이번 주 회차';
-}
-
-function RoundProductCard({
-  item,
-  round,
-  isPast,
-}: {
-  item: SaleRoundItem;
-  round: PublicSaleRound;
-  isPast: boolean;
-}) {
-  const label = roundCardLabel(round, isPast);
-  const href = `/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(round.id)}`;
-
-  return (
-    <Link
-      href={href}
-      aria-label={`${label} ${item.productNameSnapshot}`}
-      style={{
-        display: 'block',
-        overflow: 'hidden',
-        color: 'inherit',
-        textDecoration: 'none',
-        border: 'var(--border)',
-        borderRadius: 'var(--radius)',
-      }}
-    >
-      <div
-        style={{
-          position: 'relative',
-          aspectRatio: '4/5',
-          overflow: 'hidden',
-          background: 'var(--color-border)',
-        }}
-      >
-        <Image
-          fill
-          src={item.productImageUrlSnapshot ?? '/images/product-placeholder.png'}
-          alt={item.productNameSnapshot}
-          sizes="(max-width: 600px) 50vw, 33vw"
-          style={{ objectFit: 'cover' }}
-        />
-      </div>
-      <div className="p-2.5">
-        <p
-          className={`${TEXT_XS} mb-1`}
-          style={{ fontWeight: 700, color: 'var(--color-primary-dark)' }}
-        >
-          {label}
-        </p>
-        <CardSellerLine />
-        <p
-          className={`${TEXT_SM} ${LINE_CLAMP_2}`}
-          style={{ fontWeight: 500, color: 'var(--color-text)' }}
-        >
-          {item.productNameSnapshot}
-        </p>
-        <p className={`${TEXT_SM} mt-1.5`} style={{ color: 'var(--color-text-disabled)' }}>
-          회차 가격
-        </p>
-        <p className={TEXT_SM} style={{ fontWeight: 700, color: 'var(--color-text-secondary)' }}>
-          {item.roundPrice.toLocaleString()}원
-          <CardDiscount item={item} />
-        </p>
-        <CardMeta item={item} isPast={isPast} />
-      </div>
-    </Link>
-  );
 }
 
 function RoundDirectCategory({
@@ -331,11 +260,11 @@ function RoundDirectCategory({
               {currentRound.name}
               {currentRound.status === 'CLOSED' ? ' · 주문 마감' : ''}
             </p>
-            <div className={GRID}>
-              {currentItems.map((item) => (
-                <RoundProductCard key={item.id} item={item} round={currentRound} isPast={false} />
-              ))}
-            </div>
+            <RoundTileGrid
+              items={currentItems}
+              round={currentRound}
+              tileLabel={(item) => `${roundCardLabel(currentRound, false)} ${item.productNameSnapshot}`}
+            />
           </div>
         ) : (
           <p className={`${TEXT_SM} py-4`} style={{ color: 'var(--color-text-disabled)' }}>
@@ -360,11 +289,12 @@ function RoundDirectCategory({
                 >
                   {round.name}
                 </p>
-                <div className={GRID}>
-                  {items.map((item) => (
-                    <RoundProductCard key={item.id} item={item} round={round} isPast />
-                  ))}
-                </div>
+                <RoundTileGrid
+                  items={items}
+                  round={round}
+                  isPast
+                  tileLabel={(item) => `${roundCardLabel(round, true)} ${item.productNameSnapshot}`}
+                />
               </div>
             ))}
           </div>

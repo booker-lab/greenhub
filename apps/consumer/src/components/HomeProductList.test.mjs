@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const source = await readFile(new URL('./HomeProductList.tsx', import.meta.url), 'utf8');
+const tileSource = await readFile(new URL('./RoundTile.tsx', import.meta.url), 'utf8');
 
 test('홈 진입의 당근 유입 캡처는 client effect 안에서만 실행한다', () => {
   assert.match(source, /useEffect\(\(\) => \{\s*captureAcquisition\(\);\s*\}, \[\]\);/s);
@@ -35,8 +36,9 @@ test('round_direct 홈은 useSaleRounds 정본과 요구된 안내 순서를 사
 });
 
 test('회차 상품 링크는 productId와 roundId를 함께 보존한다', () => {
+  assert.match(source, /<RoundTileGrid/);
   assert.match(
-    source,
+    tileSource,
     /products\/\$\{encodeURIComponent\(item\.productId\)\}\?round=\$\{encodeURIComponent\(round\.id\)\}/,
   );
 });
