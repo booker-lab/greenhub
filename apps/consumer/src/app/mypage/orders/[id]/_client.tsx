@@ -881,9 +881,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             주문번호: {detail.orderNumber}
           </p>
         </div>
-        <StatusDot tone={statusTone} className="shrink-0 font-extrabold">
-          {STATUS_LABELS[detail.status]}
-        </StatusDot>
+        {/* 접근성 트리의 문단(p)을 유지한다. */}
+        <p className="m-0 shrink-0 leading-[1.55]">
+          <StatusDot tone={statusTone} className="font-extrabold">
+            {STATUS_LABELS[detail.status]}
+          </StatusDot>
+        </p>
       </div>
 
       <div
