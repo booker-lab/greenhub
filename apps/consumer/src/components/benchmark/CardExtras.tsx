@@ -7,7 +7,7 @@ import { priceDropFromPreviousRound, previousRoundDropLabel } from '@/lib/benchm
 import { isFeatureOn } from '@/lib/features';
 
 // 회차 상품 카드에 붙는 벤치마킹 비교 기능(지난 회차 대비 가격·별점·판매자·보장·남은 수량·
-// 이번 회차 찜).
+// 이번 회차 찜). 도감 타일(RoundTile.tsx)은 남은 수량을 가격 줄 오른쪽에 직접 쓰므로 여기서는 끈다.
 // 크기 정보는 카드에 두지 않고 상품 상세에서만 보여 준다.
 // 홈·상품 탭이 Provider로 상품 원본과 통계를 넘기고, 카드는 기능 토글이 켜진 것만 그린다.
 
@@ -61,15 +61,24 @@ export function CardDiscount({ item }: { item: SaleRoundItem }) {
   );
 }
 
-/** 가격 아래 별점·보장·남은 수량. */
-export function CardMeta({ item, isPast }: { item: SaleRoundItem; isPast: boolean }) {
+/** 가격 아래 별점·보장·남은 수량. showLowStock=false면 남은 수량 태그를 그리지 않는다(도감 타일이 따로 쓴다). */
+export function CardMeta({
+  item,
+  isPast,
+  showLowStock = true,
+}: {
+  item: SaleRoundItem;
+  isPast: boolean;
+  showLowStock?: boolean;
+}) {
   const ctx = useBenchmarkCard();
   const product = ctx?.productsById.get(item.productId);
   const review = ctx?.reviewStats[item.productId];
   const showRating = isFeatureOn('reviews') && review && review.count > 0;
   const guaranteed =
     isFeatureOn('quality-guarantee') && product?.guaranteed && ctx?.storeProfile?.guarantee?.enabled;
-  const remaining = isFeatureOn('demand-signals') && !isPast ? item.demand?.remainingQuantity : undefined;
+  const remaining =
+    showLowStock && isFeatureOn('demand-signals') && !isPast ? item.demand?.remainingQuantity : undefined;
   const lowStock = typeof remaining === 'number' && remaining > 0 && remaining <= 5;
   if (!showRating && !guaranteed && !lowStock) return null;
   return (
