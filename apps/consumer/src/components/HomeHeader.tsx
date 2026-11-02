@@ -2,10 +2,11 @@ import { Bell, Search, ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { isFeatureOn } from '@/lib/features';
 
-// 홈 맨 위 초록 머리띠(docs/specs/frontend/design-standard.md §5). 다른 화면에는 쓰지 않는다.
+// 홈 맨 위 흰 머리띠(docs/specs/frontend/design-standard.md §5, design-direction.md §2): 흰 바탕에 초록 로고,
+// 검정 아이콘, 연회색 검색창. 다른 화면에는 쓰지 않는다.
 const iconLinkStyle = {
   alignItems: 'center',
-  color: 'var(--color-bg)',
+  color: 'var(--color-text)',
   display: 'inline-flex',
   height: 'var(--touch-target)',
   justifyContent: 'center',
@@ -19,8 +20,8 @@ export default function HomeHeader() {
     <header
       style={{
         alignItems: 'center',
-        background: 'var(--color-primary)',
-        color: 'var(--color-bg)',
+        background: 'var(--color-bg)',
+        color: 'var(--color-text)',
         display: 'flex',
         justifyContent: 'space-between',
         padding: '8px 8px 8px 16px',
@@ -28,6 +29,7 @@ export default function HomeHeader() {
     >
       <h1
         style={{
+          color: 'var(--color-primary-dark)',
           fontFamily: 'var(--font-brand)',
           fontSize: 24,
           fontWeight: 800,
@@ -49,13 +51,13 @@ export default function HomeHeader() {
     </header>
     {search && (
       // 식물 이름 검색(plant-search): 디자인 기준 §5 머리띠 검색창. 누르면 검색 화면으로 간다.
-      <div style={{ background: 'var(--color-primary)', padding: '0 16px 12px' }}>
+      <div style={{ background: 'var(--color-bg)', padding: '0 16px 12px' }}>
         <Link
           href="/search"
           aria-label="꽃 이름으로 찾기"
           style={{
             alignItems: 'center',
-            background: 'var(--color-bg)',
+            background: 'var(--color-surface-muted)',
             borderRadius: 'var(--radius-full)',
             color: 'var(--color-text-secondary)',
             display: 'flex',
