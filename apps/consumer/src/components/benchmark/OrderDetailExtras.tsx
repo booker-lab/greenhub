@@ -76,7 +76,10 @@ export default function OrderDetailExtras({
     // ① 외형 유지(UI 교체 P5): Mantine Stack(gap md·mb lg)·Paper(p md)·Text sm·Button(outline lg) 값.
     <div className="mb-5 flex flex-col gap-4">
       {(optionLines.length > 0 || showGift || packageLabel) && (
-        <div className="p-4" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
+        <div
+          className="p-4"
+          style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
+        >
           <div className="flex flex-col gap-1">
             {optionLines.map((item) => (
               <p key={item.id} className="m-0 text-sm">
@@ -123,9 +126,9 @@ export default function OrderDetailExtras({
       {isFeatureOn('care-guide') && REVIEWABLE.has(status) && (
         <div
           className="p-4"
-          style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
+          style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
         >
-          <p className="m-0 text-sm font-extrabold" style={{ color: 'var(--color-primary-dark)' }}>
+          <p className="m-0 text-sm font-extrabold" style={{ color: 'var(--color-text)' }}>
             받은 꽃 관리 안내
           </p>
           <div className="mt-1 flex flex-col gap-0.5">

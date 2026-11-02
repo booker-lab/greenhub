@@ -71,7 +71,7 @@ function WishlistContent() {
             <div
               key={item.id}
               className="p-3"
-              style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}
+              style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
             >
               <Link
                 href={`/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(item.roundId)}`}

@@ -49,36 +49,37 @@ const TEMPLATE_LABELS: Record<NotificationTemplateCode, string> = {
   GROUP_DELIVERED: '공동구매 배송 완료',
 };
 
-type NoticeTone = 'success' | 'waiting' | 'danger';
+type NoticeTone = 'neutral' | 'waiting' | 'danger';
 
 const NOTICE_TONE: Record<NoticeTone, { background: string; color: string }> = {
-  success: { background: 'var(--color-primary-surface)', color: 'var(--color-primary-dark)' },
+  // ② 방향(design-standard §5): 초록은 행동에만, 노랑은 마감에만. 일반 알림은 연회색 원 + 검정 아이콘이다.
+  neutral: { background: 'var(--color-surface-muted)', color: 'var(--color-text)' },
   waiting: { background: 'var(--color-deadline-surface)', color: 'var(--color-deadline-text)' },
   danger: { background: 'var(--color-danger-surface)', color: 'var(--color-danger)' },
 };
 
 // 알림 종류별 선 아이콘과 색(디자인 기준: 이모지 대신 색 원 + 선 아이콘)
 const TEMPLATE_ICONS: Record<NotificationTemplateCode, { Icon: LucideIcon; tone: NoticeTone }> = {
-  ORDER_ACCEPTED: { Icon: CircleCheck, tone: 'success' },
-  ORDER_PREPARING: { Icon: Package, tone: 'success' },
-  ORDER_DELIVERING: { Icon: Truck, tone: 'success' },
+  ORDER_ACCEPTED: { Icon: CircleCheck, tone: 'neutral' },
+  ORDER_PREPARING: { Icon: Package, tone: 'neutral' },
+  ORDER_DELIVERING: { Icon: Truck, tone: 'neutral' },
   ORDER_DELIVERY_HELD: { Icon: CirclePause, tone: 'danger' },
   ORDER_REDELIVERY_PAYMENT_REQUESTED: { Icon: CreditCard, tone: 'danger' },
-  ORDER_REDELIVERY_SCHEDULED: { Icon: CalendarClock, tone: 'waiting' },
-  ORDER_HUB_ARRIVED: { Icon: MapPin, tone: 'success' },
-  ORDER_DELIVERED: { Icon: PackageCheck, tone: 'success' },
+  ORDER_REDELIVERY_SCHEDULED: { Icon: CalendarClock, tone: 'neutral' },
+  ORDER_HUB_ARRIVED: { Icon: MapPin, tone: 'neutral' },
+  ORDER_DELIVERED: { Icon: PackageCheck, tone: 'neutral' },
   ORDER_CANCELLED: { Icon: CircleX, tone: 'danger' },
-  ROUND_ORDER_CONFIRMED: { Icon: CircleCheck, tone: 'success' },
+  ROUND_ORDER_CONFIRMED: { Icon: CircleCheck, tone: 'neutral' },
   OPERATION_ISSUE_CREATED: { Icon: TriangleAlert, tone: 'danger' },
   CUSTOMER_NOTICE_FAILED: { Icon: BellOff, tone: 'danger' },
-  GROUP_JOINED: { Icon: Users, tone: 'success' },
+  GROUP_JOINED: { Icon: Users, tone: 'neutral' },
   GROUP_DEADLINE_SOON: { Icon: AlarmClock, tone: 'waiting' },
-  GROUP_CONFIRMED: { Icon: CircleCheck, tone: 'success' },
+  GROUP_CONFIRMED: { Icon: CircleCheck, tone: 'neutral' },
   GROUP_CANCELLED_LACK: { Icon: CircleX, tone: 'danger' },
   GROUP_CANCELLED_SELF: { Icon: CircleX, tone: 'danger' },
-  GROUP_PREPARING: { Icon: Package, tone: 'success' },
-  GROUP_DELIVERING: { Icon: Truck, tone: 'success' },
-  GROUP_DELIVERED: { Icon: PackageCheck, tone: 'success' },
+  GROUP_PREPARING: { Icon: Package, tone: 'neutral' },
+  GROUP_DELIVERING: { Icon: Truck, tone: 'neutral' },
+  GROUP_DELIVERED: { Icon: PackageCheck, tone: 'neutral' },
 };
 
 // ① 외형 유지(UI 교체 P5): Mantine Group(gap xs 10, wrap)·Stack·Text(p, 줄 높이 1.55, size xl은 20px·1.65)·
@@ -91,7 +92,7 @@ const DISABLED_TEXT_STYLE = {
 } as const;
 const SMALL_TEXT_STYLE = { fontSize: 'var(--font-size-sm)' } as const;
 
-const DEFAULT_ICON = { Icon: Bell, tone: 'success' as NoticeTone };
+const DEFAULT_ICON = { Icon: Bell, tone: 'neutral' as NoticeTone };
 
 function formatDate(iso: string | null): string {
   if (!iso) return '';
@@ -142,7 +143,7 @@ function NotificationItem({
         display: 'flex',
         gap: 12,
         padding: '14px 16px',
-        background: isRead ? 'var(--color-bg)' : 'var(--color-primary-surface)',
+        background: 'var(--color-bg)',
         borderBottom: '1px solid var(--color-border)',
         cursor: notification.orderId ? 'pointer' : 'default',
       }}
@@ -211,7 +212,7 @@ function NotificationItem({
             width: 7,
             height: 7,
             borderRadius: '50%',
-            background: 'var(--color-primary)',
+            background: 'var(--color-text)',
             flexShrink: 0,
             marginTop: 6,
           }}

@@ -2,7 +2,6 @@
 
 import type { SavedAddress } from '@greenhub/shared';
 import { AlertDescription, Alert as UiAlert } from '@greenhub/ui/components/alert';
-import { Badge as UiBadge } from '@greenhub/ui/components/badge';
 import { Button as UiButton } from '@greenhub/ui/components/button';
 import { CloseIcon, closeButtonClassName } from '@greenhub/ui/components/close-button';
 import {
@@ -48,7 +47,7 @@ function AddressCard({
   onSetDefault: () => void;
 }) {
   return (
-    <div className="rounded-[16px] border border-solid border-[#dee2e6] bg-white p-4">
+    <div className="rounded-[16px] bg-[var(--color-surface-muted)] p-4">
       <div className="mb-2.5 flex flex-row flex-wrap items-start justify-between gap-4">
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="mb-1 flex flex-row flex-wrap items-center justify-start gap-2.5">
@@ -58,10 +57,11 @@ function AddressCard({
             >
               {addr.label}
             </p>
+            {/* ② 방향(design-standard §5): 초록 면은 행동에만. 기본 표시는 연회색 면 위 흰 태그 + 검정 굵은 글자 */}
             {addr.isDefault && (
-              <UiBadge size="xs" variant="light">
+              <span className="rounded-[var(--radius-tag)] bg-white px-2 text-[13px] leading-5 font-bold text-[var(--color-text)]">
                 기본
-              </UiBadge>
+              </span>
             )}
           </div>
           <p
@@ -210,11 +210,7 @@ function AddressFormModal({
                     </UiAlert>
                   )}
 
-                  <LoadingButton
-                    type="submit"
-                    className="mt-2.5 w-full"
-                    loading={saving}
-                  >
+                  <LoadingButton type="submit" className="mt-2.5 w-full" loading={saving}>
                     저장
                   </LoadingButton>
                 </div>
