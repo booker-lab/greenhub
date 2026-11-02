@@ -44,7 +44,7 @@ export default function GlobalError({
               padding: '0 24px',
               border: 'none',
               borderRadius: 9999,
-              backgroundColor: '#00A65A',
+              backgroundColor: '#007A43', // 흰 글자 버튼 면은 --primary(design-standard §2)
               color: '#FFFFFF',
               fontSize: 15,
               fontWeight: 700,
