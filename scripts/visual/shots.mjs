@@ -4,6 +4,8 @@
 //                                 [--viewports mobile,tablet,desktop] [--resume]
 //     --set benchmark  fixtures의 benchmarkScreens(팔도감 벤치마킹 비교 화면)를 찍는다
 //     --set payment-methods  fixtures의 paymentMethodScreens(결제 수단 여러 개, start.mjs --payment-methods all 서버)
+//     --color-scheme dark  브라우저 색 구성(prefers-color-scheme)을 어둡게 해서 찍는다(기본 light). 다크 모드(D5) 촬영용.
+//                      manifest에 남고, 색 구성이 다른 묶음끼리는 이어 찍기·diff·parity를 하지 않는다. label은 따로 둔다.
 //     --resume         같은 --label의 끊긴 촬영을 이어 찍는다. 기록이 있는 화면은 건너뛰고, --only로 고른 화면은 다시 찍는다.
 //                      기준 시각·화면 폭·--set이 같아야 한다(서버를 다시 띄웠다면 같은 --now로).
 //
@@ -94,6 +96,11 @@ for (const name of viewportNames) {
     process.exit(1);
   }
 }
+const colorScheme = option('color-scheme', 'light');
+if (!['light', 'dark'].includes(colorScheme)) {
+  console.error(`❌ --color-scheme은 light 또는 dark입니다: ${colorScheme}`);
+  process.exit(1);
+}
 const label = option('label', 'current');
 const only = option('only', '')?.split(',').filter(Boolean) ?? [];
 const outDir = option('out', path.join(os.tmpdir(), 'greenhub-visual', appName, 'shots', label));
@@ -159,6 +166,7 @@ async function newContext(browser, viewportName) {
     ...VIEWPORTS[viewportName],
     locale: 'ko-KR',
     timezoneId: 'Asia/Seoul',
+    colorScheme,
   });
   // 브라우저에서도 로컬 밖으로 나가는 요청은 막는다.
   await context.route('**/*', (route) => {
@@ -439,6 +447,7 @@ const freshManifest = {
   visualNow: runtime.visualNow,
   viewports: viewportNames,
   set: screenSet || null,
+  colorScheme,
   // 이 묶음이 찍기로 한 화면(id@폭). 모두 기록되면 complete: true가 된다.
   expected: expectedKeys(screens, viewportNames),
   complete: false,

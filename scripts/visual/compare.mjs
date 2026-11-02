@@ -7,7 +7,7 @@
 //   그 영역 밖의 차이는 0이어야 한다. 크기가 다르면 영역 대신 "full"로만 허용한다.
 // - 끊긴 촬영(manifest complete: false)은 비교하지 않는다.
 
-import { incompleteReason } from './manifest-store.mjs';
+import { colorSchemeOf, incompleteReason } from './manifest-store.mjs';
 
 /**
  * 허용 목록 JSON을 검증한다. 형식이 틀리면 예외로 멈춘다(넘기지 않는다).
@@ -144,6 +144,11 @@ export function compareRuns(
   if (!beforeRun.visualNow || beforeRun.visualNow !== afterRun.visualNow) {
     problems.push(
       `기준 시각이 다릅니다: before ${beforeRun.visualNow ?? '(없음)'} · after ${afterRun.visualNow ?? '(없음)'}`,
+    );
+  }
+  if (colorSchemeOf(beforeRun) !== colorSchemeOf(afterRun)) {
+    problems.push(
+      `색 구성이 다릅니다: before ${colorSchemeOf(beforeRun)} · after ${colorSchemeOf(afterRun)}`,
     );
   }
   const vpBefore = [...(beforeRun.viewports ?? [])].sort().join(',');
