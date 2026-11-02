@@ -130,7 +130,7 @@ function MarketingChannelCard({
   onWithdraw: () => void;
 }) {
   return (
-    <div className="rounded-[8px] border border-solid border-[#dee2e6] bg-white p-4">
+    <div className="rounded-[var(--radius)] bg-[var(--color-surface-muted)] p-4">
       <div className="flex flex-row flex-nowrap items-start justify-between gap-4">
         <div>
           <p className={TEXT_SM} style={BOLD}>
