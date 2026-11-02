@@ -322,6 +322,8 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - ① 병합 전: 사용자가 `scripts/visual/start.mjs driver --phone`(Tailscale, 가짜 데이터)으로 화면·입력·알림을 휴대폰에서 확인한다(PR 본문 체크리스트).
   - ② 실제 기사 계정의 도착 사진 업로드·완료 처리·서비스워커는 운영 배포 직전 출시 E2E용 exact Preview에서 사용자가 휴대폰으로 확인한 뒤 배포를 승인한다. PR마다 Preview를 쓰지 않는다(`AGENTS.md` §0-9).
 
+- **기사 ② 완료**(2026-11-03, `design-direction.md` §8 D4, 2026-11-02 사용자 확정): D4-1 배송판·하단 바(#799), D4-2 주문 상세·완료 동선(#800). 규칙은 `design-standard.md` §5 "기사 앱"으로 옮겼다. 동작(목록·상세 조회, 상태 명령, 사진 업로드, 보류, 서비스워커)은 바꾸지 않았고, 기사 API에 없는 값(끝낸 배송 수·소요 시간·회차 날짜·경로 순번·상품 사진)은 화면에서 뺐다. 로컬 증명은 PR마다 기준 `main`(D4-2는 D4-1 head)과 같은 fixture로 39장 diff·parity·focus-trap, `driver-design-system.spec` 26 통과다. 실제 휴대폰 확인(도착 사진·완료·보류·한 손 조작)은 출시 회차 Preview에서 사용자가 한다.
+
 ### P4. 판매자 앱 틀·회차·주문·준비·재고·정산
 - 공용 틀 부품 구현(2026-10-31, 브랜치 `claude/ui-p4-frame`): `PageHeader`·`PageShell`·`SegmentedTabs`·`StateViews`(LoadingState·EmptyState)·어드민 `LoadMoreFooter`의 `@mantine/core`를 걷었다. Mantine Container(xs 540·sm 720·md 960·lg 1140·xl 1320, 좌우 16px)·Group·Stack·Title order 3(22px·800·1.4)·ActionIcon(28px subtle gray = `ghost` `size-7`, svg는 `size-5`)·Badge xs(16px·좌우 6·9px·줄 높이 14, filled gray-6·red-6)·Loader sm 계산값을 옮겼다. `LoadMoreFooter` 불러오는 중은 정산 `LoadMoreButton`과 같은 Mantine loading 모양(덮개·따로 합성되는 원)이다. `SegmentedTabs`의 이름 있는 group은 spread로 역할을 줘 biome 규칙을 끄지 않았다.
   - 공용 `ConfirmModal` 회귀 바로잡기: #712에서 확인 버튼 색 표에 `dark`가 빠져 회차 상세 "주문 마감" 확인창이 빨강이었다. Mantine 9 light 계산값(filled dark-6 `#2e2e2e`, 마우스 올림 dark-7)을 더하고 gray·green 마우스 올림도 Mantine 값(gray-7·green-7)으로 두었다. `confirmColor`는 `ConfirmColor`(brand·red·gray·green·dark) 유니온이라 모르는 값은 타입 검사에서 걸린다.
@@ -509,6 +511,13 @@ M1의 "② 방향 적용은 첫 회차 배송 뒤에만 한다"를 사용자가 
 - 소비자: ①과 ②(D1 도감 타일 등)를 브랜치에서 미리 준비만 한다. §8 소비자 동결은 그대로라, 병합·배포는 사용자가 심사·LIVE 전환·실결제 확인이 끝났다고 알린 뒤에 한다. 버튼 색 `#007A43` 같은 전체 값도 동결이 풀린 뒤다.
 - 같은 화면에서는 ①(외형 유지)과 ②를 계속 별도 PR로 낸다(§7). 각 PR은 자기 기준 `main`과 비교해 증명한다.
 
+### 결정 변경 (2026-11-02)
+
+사용자가 `design-direction.md` §8의 D4·D5를 확정했다.
+
+- D4(기사 앱 무채색 틀 + 초록 행동 버튼): 제안대로 바꾼다. 기사 앱 ②를 시작한다. 실제 휴대폰 확인 조건(P3)은 그대로다.
+- D5(다크 모드): 지원한다. 이 문서의 "다크 모드 없음"을 전제로 한 줄(§3 알림의 `sonner`·`next-themes` 제외 이유, §5 `MantineProvider · ColorSchemeScript` 행)은 다크 모드를 적용하는 PR이 함께 고친다. 순서는 어두운 색 값·전환 방식 시안 → 사용자 확인 → 공용 토큰(`packages/ui`) → 앱별 적용이며, 진행 중인 ② PR과 같은 파일을 동시에 고치지 않도록 공용 토큰 변경은 ② 병합 뒤에 한다.
+
 ### 소비자 ② 완료 (2026-11-02)
 
 소비자 동결이 풀린 뒤 ② 방향 적용을 화면 묶음별 PR 여섯 개로 마쳤다. 병합은 배포가 아니고, 운영 배포는 사용자가 SHA를 붙여 따로 승인한다.
@@ -520,4 +529,4 @@ M1의 "② 방향 적용은 첫 회차 배송 뒤에만 한다"를 사용자가 
 - (e1) 마이페이지 #794
 - (e2) 장바구니·로그인·공개 화면 #795
 
-하지 않은 것: D4(기사)·D5(다크 모드), preflight 켜기, 사진 배경 제거. 판매자 화면에 남아 있던 `var(--color-primary)` 버튼 면도 같은 날 `--primary`로 맞췄다(`design-standard.md` §2).
+이 묶음에서 하지 않은 것: preflight 켜기, 사진 배경 제거. D4(기사)·D5(다크 모드)는 위 "결정 변경 (2026-11-02)"을 따른다. 판매자 화면에 남아 있던 `var(--color-primary)` 버튼 면도 같은 날 `--primary`로 맞췄다(`design-standard.md` §2).

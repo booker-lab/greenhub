@@ -101,7 +101,7 @@ test('보류·준비 주문 상세는 결제 의미에 따라 배송 시작·재
     detailSource,
     /isDriverOrderStatusAck\(result,\s*orderId,\s*status\)/,
   );
-  assert.match(detailSource, /배송 완료 사진 촬영/);
+  assert.match(detailSource, /도착 사진 찍고 완료/);
 });
 
 test('Driver Card는 결제 대기·완료·운영 확인 상태를 표시한다', () => {
@@ -610,7 +610,7 @@ test('5. success [orders] → refresh failure는 이전 목록 + warning을 유�
   );
   assert.match(boardSource, /최신 주문을 불러오지 못했습니다\. 기존 목록을 보여줍니다/);
   assert.match(boardSource, /\(이전 목록 표시 중\)/);
-  assert.match(boardSource, /orders\.map\(\(order\)/);
+  assert.match(boardSource, /<OrderList key=\{tab\} orders=\{orders\}/);
   // refresh 실패는 list를 지우지 않는다: stale 분기에는 setPreparing([])이 없다.
   // 401·403 authority loss는 별도 분기로 먼저 clear되므로 stale 판정은 공유 helper를 거친다.
   const catchBlock = boardSource.slice(boardSource.indexOf('.catch('), boardSource.indexOf('.finally('));
@@ -854,7 +854,7 @@ test('16. 같은 scope의 network/5xx 실패는 stale을 유지한다 (PR #110/#
   assert.equal(failed5xx.hasSuccess, true);
   // Board stale 분기는 이전 목록 렌더를 유지한다.
   assert.match(boardSource, /\(이전 목록 표시 중\)/);
-  assert.match(boardSource, /orders\.map\(\(order\)/);
+  assert.match(boardSource, /<OrderList key=\{tab\} orders=\{orders\}/);
 });
 
 test('17. user/token A → B 전환은 새 fetch 완료 전에 A 데이터를 동기 clear한다', () => {
