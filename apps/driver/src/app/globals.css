@@ -29,6 +29,11 @@
 @layer base {
   :root {
     color-scheme: light;
+    /* 기사 ② 방향(design-direction.md §6 "한 손 배송 목록"). 햇빛 아래에서 읽도록 보조 글자도 거의 검정(흰 바탕 대비 9.7:1),
+       전화·길 찾기는 연회색 면(초록 주요 버튼만 칠한 면이 되게), 화면 아래 고정 바는 위쪽 선 대신 옅은 그림자다. */
+    --driver-text-muted: #3F4642;
+    --driver-action-surface: #E4EAE6;
+    --driver-bar-shadow: 0 -4px 16px rgba(17, 17, 17, 0.06);
   }
 
   *,
