@@ -218,7 +218,7 @@ export default function EditHubPage() {
                   disabled={saving}
                   size="md"
                   className="mt-2.5 w-full"
-                  style={{ backgroundColor: 'var(--color-primary)' }}
+                  style={{ backgroundColor: 'var(--primary)' }}
                 >
                   {saving ? '저장 중...' : '변경 저장'}
                 </Button>

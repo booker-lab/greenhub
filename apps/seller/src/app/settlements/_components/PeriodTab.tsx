@@ -89,7 +89,7 @@ export function PeriodTab({
           disabled={listLoading}
           size="md"
           className="w-full"
-          style={{ backgroundColor: 'var(--color-primary)' }}
+          style={{ backgroundColor: 'var(--primary)' }}
         >
           {listLoading ? '조회 중...' : '조회'}
         </Button>

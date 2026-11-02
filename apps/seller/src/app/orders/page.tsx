@@ -567,7 +567,7 @@ export default function OrdersPage() {
                     padding: '6px 14px',
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     color: 'var(--color-bg)',
                     flexShrink: 0,
                   }}
@@ -590,7 +590,7 @@ export default function OrdersPage() {
                     padding: '6px 14px',
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     color: 'var(--color-bg)',
                   }}
                 >
@@ -617,7 +617,7 @@ export default function OrdersPage() {
                     padding: '6px 14px',
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     color: 'var(--color-bg)',
                     flexShrink: 0,
                   }}
@@ -651,7 +651,7 @@ export default function OrdersPage() {
                     padding: '6px 14px',
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     color: 'var(--color-bg)',
                     flexShrink: 0,
                   }}
