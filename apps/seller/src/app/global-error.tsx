@@ -31,7 +31,7 @@ export default function GlobalError({
           }}
         >
           <h1 style={{ fontSize: 18, margin: '0 0 12px' }}>잠시 문제가 생겼어요</h1>
-          <p style={{ fontSize: 15, color: '#6B716E', margin: '0 0 24px' }}>
+          <p style={{ fontSize: 15, color: '#696F6C', margin: '0 0 24px' }}>
             화면을 불러오는 중에 문제가 생겼어요.
             <br />
             잠시 뒤 다시 시도해 주세요.
@@ -59,11 +59,11 @@ export default function GlobalError({
               홈으로 가기
             </a>
           </p>
-          <p style={{ fontSize: 15, color: '#6B716E', margin: '24px 0 0' }}>
+          <p style={{ fontSize: 15, color: '#696F6C', margin: '24px 0 0' }}>
             계속 같은 화면이 나오면 아래 오류 번호와 함께 운영팀에 알려 주세요.
           </p>
           {error.digest ? (
-            <p style={{ fontSize: 15, color: '#6B716E', margin: '12px 0 0' }}>
+            <p style={{ fontSize: 15, color: '#696F6C', margin: '12px 0 0' }}>
               오류 번호 {error.digest}
             </p>
           ) : null}

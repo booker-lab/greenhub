@@ -14,7 +14,7 @@ export type StatusDotTone = 'default' | 'problem' | 'done';
 const TONE_TEXT: Record<StatusDotTone, string> = {
   default: 'text-foreground',
   problem: 'text-destructive',
-  // --color-text-secondary(#6B716E): 흰 종이·틀 바탕 위 대비 4.5:1 이상. --color-text-disabled는 대비가 모자라 쓰지 않는다.
+  // --color-text-secondary(#696F6C): 흰 종이·틀 바탕 위 대비 4.5:1 이상. --color-text-disabled는 대비가 모자라 쓰지 않는다.
   done: 'text-[var(--color-text-secondary)]',
 };
 
