@@ -154,7 +154,7 @@ export default function HubPickupPage() {
                 onClick={() => router.push(`/hubs/${hubId}`)}
                 size="md"
                 className="mt-4"
-                style={{ backgroundColor: 'var(--color-primary)' }}
+                style={{ backgroundColor: 'var(--primary)' }}
               >
                 거점으로 돌아가기
               </Button>
@@ -260,7 +260,7 @@ export default function HubPickupPage() {
                 disabled={!isFilled || loading}
                 size="lg"
                 className="w-full max-w-[320px]"
-                style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}
+                style={{ backgroundColor: 'var(--primary)', fontWeight: 'var(--fw-medium)' }}
               >
                 {loading ? '확인 중...' : '픽업 확인'}
               </Button>

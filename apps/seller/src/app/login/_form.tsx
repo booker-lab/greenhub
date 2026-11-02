@@ -103,7 +103,7 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
                 disabled={loading}
                 size="md"
                 className="w-full"
-                style={{ backgroundColor: 'var(--color-primary)' }}
+                style={{ backgroundColor: 'var(--primary)' }}
               >
                 {loading ? '로그인 중...' : '로그인'}
               </Button>

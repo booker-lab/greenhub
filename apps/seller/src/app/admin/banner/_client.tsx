@@ -228,7 +228,7 @@ export default function AdminBannerClient() {
           onClick={handleSave}
           disabled={saving}
           size="md"
-          style={{ backgroundColor: saved ? 'var(--color-primary-light)' : 'var(--color-primary)' }}
+          style={{ backgroundColor: saved ? 'var(--color-primary-light)' : 'var(--primary)' }}
         >
           {saving ? '저장 중...' : saved ? '저장 완료!' : '저장하기'}
         </Button>

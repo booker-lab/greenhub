@@ -358,7 +358,7 @@ export default function DailyCapsPage() {
                 onClick={() => saveCap(editing)}
                 disabled={saving}
                 className="flex-1"
-                style={{ backgroundColor: 'var(--color-primary)' }}
+                style={{ backgroundColor: 'var(--primary)' }}
               >
                 {saving ? '저장 중...' : '저장'}
               </Button>

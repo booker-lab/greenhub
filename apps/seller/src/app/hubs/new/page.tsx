@@ -166,7 +166,7 @@ export default function NewHubPage() {
                 disabled={loading}
                 size="md"
                 className="mt-2.5 w-full"
-                style={{ backgroundColor: 'var(--color-primary)' }}
+                style={{ backgroundColor: 'var(--primary)' }}
               >
                 {loading ? '등록 중...' : '거점 등록'}
               </Button>

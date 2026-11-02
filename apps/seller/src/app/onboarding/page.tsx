@@ -366,7 +366,7 @@ export default function OnboardingPage() {
                 disabled={loading}
                 size="md"
                 className="mt-2.5 w-full"
-                style={{ backgroundColor: 'var(--color-primary)' }}
+                style={{ backgroundColor: 'var(--primary)' }}
               >
                 {loading ? '저장 중...' : isEdit ? '저장' : '저장 후 시작하기'}
               </Button>

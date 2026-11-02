@@ -103,7 +103,7 @@ export function PrepareForm({
           size="md"
           className="flex-1"
           style={{
-            backgroundColor: 'var(--color-primary)',
+            backgroundColor: 'var(--primary)',
             fontWeight: 'var(--fw-medium)',
           }}
         >

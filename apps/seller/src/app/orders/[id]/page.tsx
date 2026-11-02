@@ -413,7 +413,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   size="md"
                   className="w-full"
                   style={{
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     fontWeight: 'var(--fw-medium)',
                   }}
                 >
@@ -427,7 +427,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   size="md"
                   className="w-full"
                   style={{
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     fontWeight: 'var(--fw-medium)',
                   }}
                 >
@@ -444,7 +444,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   size="md"
                   className="w-full"
                   style={{
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     fontWeight: 'var(--fw-medium)',
                   }}
                 >

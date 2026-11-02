@@ -333,7 +333,7 @@ export default function DeliverySettingsPage() {
             size="md"
             className="w-full"
             style={{
-              backgroundColor: saved ? 'var(--color-status-info-text)' : 'var(--color-primary)',
+              backgroundColor: saved ? 'var(--color-status-info-text)' : 'var(--primary)',
             }}
           >
             {saving ? '저장 중...' : saved ? '저장 완료!' : '저장'}
