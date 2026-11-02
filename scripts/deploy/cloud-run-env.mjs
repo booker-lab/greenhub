@@ -124,6 +124,8 @@ export const EXCLUDED_KEYS = Object.freeze({
   ROUND_DIRECT_E2E_SHARED_SECRET: '비운영 E2E 전용',
   ROUND_DIRECT_E2E_ALLOWED_FIREBASE_PROJECTS: '비운영 E2E 전용',
   ROUND_DIRECT_E2E_PORTONE_FIXTURES_JSON: '비운영 E2E 전용',
+  PORTONE_WEBHOOK_SECRET_TEST:
+    'LIVE 전환 전 임시(테스트 모드 웹훅 시크릿, 선택). Railway 운영에만 두고 Cloud Run 예비 서버로는 아직 옮기지 않음(예비 서버 전환 전에 필요하면 SECRET_KEYS로 옮긴다)',
 });
 
 const NAME_PATTERN = /^[A-Z][A-Z0-9_]{1,254}$/;
