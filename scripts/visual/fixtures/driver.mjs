@@ -197,7 +197,7 @@ export const screens = [
     group: '기사',
     title: '배송 보류 모달',
     path: '/board/order-deliv-1',
-    steps: [{ click: '배송 보류' }],
+    steps: [{ click: '부재·문제 알리기' }],
     viewport: true,
   },
   {

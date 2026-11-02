@@ -101,7 +101,7 @@ test('보류·준비 주문 상세는 결제 의미에 따라 배송 시작·재
     detailSource,
     /isDriverOrderStatusAck\(result,\s*orderId,\s*status\)/,
   );
-  assert.match(detailSource, /배송 완료 사진 촬영/);
+  assert.match(detailSource, /도착 사진 찍고 완료/);
 });
 
 test('Driver Card는 결제 대기·완료·운영 확인 상태를 표시한다', () => {

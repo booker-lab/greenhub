@@ -66,6 +66,6 @@ test('목록 카드와 상세는 상품 줄을 우선하고 없으면 기존 표
   assert.match(cardSource, /itemLines\s*\?\s*itemLines\.map\(/);
   assert.match(
     detailSource,
-    /itemLines \? \(\s*<InfoLinesRow label="상품" lines=\{itemLines\} \/>/,
+    /itemLines \? \(\s*<ItemLines lines=\{itemLines\} \/>/,
   );
 });
