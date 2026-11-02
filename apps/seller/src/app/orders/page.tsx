@@ -284,7 +284,7 @@ export default function OrdersPage() {
                 fontSize: 'var(--font-size-sm)',
                 borderRadius: 99,
                 backgroundColor:
-                  loading || refreshing ? 'var(--color-surface-muted)' : 'var(--color-primary)',
+                  loading || refreshing ? 'var(--color-surface-muted)' : 'var(--primary)',
                 color: loading || refreshing ? 'var(--color-text-disabled)' : 'var(--color-bg)',
                 opacity: loading || refreshing ? 0.7 : 1,
                 cursor: loading || refreshing ? 'default' : 'pointer',
