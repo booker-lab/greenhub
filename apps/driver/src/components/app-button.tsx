@@ -15,8 +15,8 @@ const SIZE = {
 } as const;
 
 const TONE = {
-  brand: 'bg-primary text-white hover:bg-[#008a4b]',
-  'brand-outline': 'border-primary bg-transparent text-[#007a43] hover:bg-[rgba(0,166,90,0.05)]',
+  brand: 'bg-primary text-white hover:bg-[#006638]',
+  'brand-outline': 'border-primary bg-transparent text-[#007a43] hover:bg-primary/5',
   'brand-light': 'bg-[#d2f2df] text-[#005c32] hover:bg-[#a6e5c0]',
   red: 'bg-[#fa5252] text-white hover:bg-[#f03e3e]',
   'red-outline': 'border-[#fa5252] bg-transparent text-[#fa5252] hover:bg-[rgba(250,82,82,0.05)]',

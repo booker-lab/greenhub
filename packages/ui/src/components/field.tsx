@@ -113,7 +113,7 @@ function FieldLabel({
       data-slot="field-label"
       className={cn(
         'group/field-label peer/field-label inline-flex w-fit gap-2 text-sm leading-[1.55] font-semibold group-data-[disabled=true]/field:opacity-50',
-        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-input has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 *:data-[slot=field]:p-2.5',
+        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-input has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-data-checked:border-brand/30 has-data-checked:bg-brand/5 *:data-[slot=field]:p-2.5',
         required && 'inline-block',
         className,
       )}

@@ -172,7 +172,7 @@ function Select({
           className={cn(
             inputClassName,
             inputSizeClassName[size],
-            'cursor-pointer caret-transparent data-popup-open:border-primary',
+            'cursor-pointer caret-transparent data-popup-open:border-brand',
             showClear ? COMBINED_INPUT_PADDING[size] : SECTION_INPUT_PADDING[size],
             className,
           )}

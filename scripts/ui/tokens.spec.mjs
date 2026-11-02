@@ -65,6 +65,23 @@ describe('tokens.css 원문', () => {
   });
 });
 
+// 버튼 면을 #007A43으로 바꾸면서(design-direction.md §2, 2026-11-02) Tailwind theme layer의 `--color-primary`(= `--primary`)와
+// base.css의 `--color-primary`(#00A65A, 면 전용 예전 이름)가 값이 갈렸다. 세 앱은 base.css를 theme layer보다 뒤(base layer 또는
+// layer 밖)에 두므로 `var(--color-primary)`는 계속 #00A65A이고, `bg-primary`는 `var(--primary)`를 바로 읽는다(@theme inline).
+const INTENDED_CLASHES = new Set(['--color-primary']);
+
+describe('세 앱 globals.css', () => {
+  it('base.css를 theme layer보다 뒤(base layer 또는 layer 밖)에 둔다', () => {
+    for (const app of ['consumer', 'seller', 'driver']) {
+      const text = readFileSync(path.join(ROOT, `apps/${app}/src/app/globals.css`), 'utf8');
+      assert.match(text, /^@layer theme, base,/m, app);
+      const line = text.split('\n').find((l) => l.includes('@greenhub/ui/styles/base.css'));
+      assert.ok(line, `${app}: base.css import 없음`);
+      assert.match(line, /base\.css"(\s+layer\(base\))?;/, app);
+    }
+  });
+});
+
 describe('Tailwind 컴파일 결과', () => {
   const utilities = [
     'bg-primary',
@@ -85,6 +102,7 @@ describe('Tailwind 컴파일 결과', () => {
     const clashes = [];
     for (const [name, legacyValue] of legacy) {
       if (!emitted.has(name)) continue;
+      if (INTENDED_CLASHES.has(name)) continue;
       const value = resolve(emitted.get(name));
       if (value !== resolve(legacyValue)) clashes.push(`${name}: ${value} (현행 ${legacyValue})`);
     }
@@ -118,6 +136,9 @@ describe('Tailwind 컴파일 결과', () => {
     const css = await compile(utilities);
     assert.match(css, /\.bg-primary\s*\{[^}]*background-color:\s*var\(--primary\)/);
     assert.match(css, /\.border-border\s*\{[^}]*border-color:\s*#ecefed/i);
-    assert.equal(resolve('var(--primary)'), legacy.get('--color-primary').toLowerCase());
+    // 버튼 면은 #007A43(design-direction.md §2, 2026-11-02 적용)이라 예전 초록 글자 값과 같고,
+    // 예전 면 색 #00A65A는 --brand로 남는다.
+    assert.equal(resolve('var(--primary)'), legacy.get('--color-primary-dark').toLowerCase());
+    assert.equal(resolve('var(--brand)'), legacy.get('--color-primary').toLowerCase());
   });
 });

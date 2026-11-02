@@ -58,7 +58,7 @@ export default function NotFound() {
             minHeight: 'var(--touch-target)',
             padding: '0 24px',
             borderRadius: 'var(--radius-full)',
-            backgroundColor: 'var(--color-primary)',
+            backgroundColor: 'var(--primary)',
             color: 'var(--color-bg)',
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-bold)',

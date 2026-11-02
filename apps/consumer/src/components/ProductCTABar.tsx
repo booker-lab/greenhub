@@ -95,9 +95,7 @@ export default function ProductCTABar({
             disabled={!canBuy}
             onClick={onBuyNow}
             style={{
-              backgroundColor: isUnavailable
-                ? 'var(--color-text-disabled)'
-                : 'var(--color-primary)',
+              backgroundColor: isUnavailable ? 'var(--color-text-disabled)' : 'var(--primary)',
               color: 'var(--color-bg)',
             }}
           >
