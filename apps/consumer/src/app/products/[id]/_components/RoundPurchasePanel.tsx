@@ -1,5 +1,5 @@
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
-import { formatOrderCloseLabel, formatRoundTime } from '@/lib/round-schedule-label';
+import { formatOrderCloseLabel, formatRoundDay, formatRoundTime } from '@/lib/round-schedule-label';
 
 interface RoundPurchasePanelProps {
   round: SaleRound;
@@ -8,7 +8,7 @@ interface RoundPurchasePanelProps {
   isPurchasable: boolean;
 }
 
-// 상품 상세 사진 바로 아래의 회차 요약(디자인 기준 §5): 상태 태그 → 상품명·회차 가격 → 배송 흐름.
+// 상품 상세 사진 바로 아래의 회차 요약(디자인 기준 §5): 상품명 → 언제·어디서 한 줄 → 회차 가격 → 배송 흐름.
 // 상품명은 회차에 올린 시점의 이름(productNameSnapshot)을 쓴다. 필수 고지는 아래 RoundPurchaseNotices.
 export default function RoundPurchasePanel({
   round,
@@ -18,14 +18,18 @@ export default function RoundPurchasePanel({
 }: RoundPurchasePanelProps) {
   const closed = state === 'closed';
   const soldOut = state === 'sold_out';
-  const roundStateLabel = closed ? '판매 마감' : '판매 예정';
-  const statusLabel = isPurchasable ? '구매 가능' : soldOut ? '품절' : roundStateLabel;
   const notOpenYet = !closed && round.status === 'SCHEDULED';
-  const statusTone = isPurchasable
-    ? { background: 'var(--color-primary-surface)', color: 'var(--color-primary-dark)' }
-    : closed || soldOut
-      ? { background: 'var(--color-surface-muted)', color: 'var(--color-text-secondary)' }
-      : { background: 'var(--color-deadline-surface)', color: 'var(--color-deadline-text)' };
+  // 구매할 수 없을 때만 이유를 18px 줄 앞에 붙인다(제목 위 상태 태그·회차 이름 라벨은 두지 않는다, 방향 §4.3).
+  const statusLabel = isPurchasable
+    ? null
+    : soldOut
+      ? '품절'
+      : closed
+        ? '판매 마감'
+        : notOpenYet
+          ? '판매 예정 회차'
+          : '구매 불가';
+  const deliveryDay = formatRoundDay(round.schedule.deliveryEndAt);
 
   const steps = [
     notOpenYet
@@ -40,54 +44,44 @@ export default function RoundPurchasePanel({
   ].filter((step): step is { label: string; value: string } => step !== null);
 
   return (
-    // ① 외형 유지(UI 교체 P5): Mantine Box(px md·pt lg·pb xs)·Group·Stack·Text(16/1.55, sm 15/1.45)·
-    // Title order 1(줄 높이 1.3) 계산값.
+    // ② 상세 첫 화면(design-direction.md §4.3): 상품 이름 30px → 18px 한 줄(언제·어디서) → 가격 → 배송 흐름.
     <section
       className="px-4 pt-5 pb-2.5"
       aria-labelledby="round-purchase-title"
       data-round-state={state}
       data-round-purchasable={isPurchasable}
     >
-      <div className="flex flex-row flex-nowrap items-center justify-start gap-2">
-        <span
-          style={{
-            ...statusTone,
-            borderRadius: 'var(--radius-tag)',
-            flexShrink: 0,
-            fontSize: 'var(--font-size-xs)',
-            fontWeight: 'var(--fw-bold)',
-            padding: '2px 8px',
-          }}
-        >
-          {statusLabel}
-        </span>
-        <p
-          id="round-purchase-title"
-          className="m-0 truncate p-0 leading-[1.55] font-normal"
-          style={{
-            color: 'var(--color-primary-dark)',
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-bold)',
-          }}
-        >
-          {closed ? '마감된 회차' : notOpenYet ? '판매 예정 회차' : '이번 주 판매 회차'} ·{' '}
-          {round.name}
-        </p>
-      </div>
-
       <h1
-        className="m-0 mt-2.5"
+        id="round-purchase-title"
+        className="m-0"
         style={{
           color: 'var(--color-text)',
-          fontSize: 22,
+          fontSize: 30,
           fontWeight: 'var(--fw-extrabold)',
           letterSpacing: '-0.01em',
-          lineHeight: 1.3,
+          lineHeight: 1.25,
+          textWrap: 'balance',
         }}
       >
         {item.productNameSnapshot}
       </h1>
-      <div className="mt-1.5 flex flex-row flex-wrap items-baseline justify-start gap-2">
+      <p
+        className="m-0 mt-2 p-0"
+        style={{
+          color: 'var(--color-text-secondary)',
+          fontSize: 'var(--font-size-lg)',
+          lineHeight: 1.45,
+        }}
+      >
+        {statusLabel && (
+          <span style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}>
+            {statusLabel} ·{' '}
+          </span>
+        )}
+        {deliveryDay ? `${deliveryDay} 문 앞 도착` : '화요일 오전 9시까지 문 앞 도착'} · 경기도
+        이천시 직접 배송
+      </p>
+      <div className="mt-3 flex flex-row flex-wrap items-baseline justify-start gap-2">
         <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-text-secondary)' }}>
           회차 가격
         </p>
