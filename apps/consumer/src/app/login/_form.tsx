@@ -67,9 +67,9 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
           role="status"
           className="m-0 text-center leading-[1.55]"
           style={{
-            background: 'var(--color-primary-surface)',
+            background: 'var(--color-surface-muted)',
             borderRadius: 'var(--radius)',
-            color: 'var(--color-primary-dark)',
+            color: 'var(--color-text)',
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-bold)',
             padding: '12px 16px',

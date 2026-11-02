@@ -70,6 +70,7 @@ const requireForTest = (specifier) => {
     specifier === 'next-auth/react' ||
     specifier === '@greenhub/ui/components/alert' ||
     specifier === '@greenhub/ui/components/badge' ||
+    specifier === '@greenhub/ui/components/status-dot' ||
     specifier === '@greenhub/ui/components/button' ||
     specifier === 'lucide-react' ||
     specifier === '@/hooks/useSaleRounds' ||
