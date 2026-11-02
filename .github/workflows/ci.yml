@@ -235,14 +235,14 @@ jobs:
       # 전체 이력은 `secret-scan-scheduled.yml`이 매주 검사한다.
       - name: Secret scan (changed range)
         if: github.event_name != 'workflow_dispatch'
-        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+        uses: trufflesecurity/trufflehog@31ce31ee1abbcc7dc8eee5764c17121c3044c8b2 # v3.99.7
         with:
           version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
           extra_args: --results=verified,unverified,unknown --config=.trufflehog.yml --exclude-paths=.github/trufflehog-exclude-paths.txt
       # 수동 실행은 범위 없이 전체 이력을 검사하므로 지금처럼 검증된 값만 실패로 본다.
       - name: Secret scan (manual run, full history, verified only)
         if: github.event_name == 'workflow_dispatch'
-        uses: trufflesecurity/trufflehog@e76dff8a7e57d6df0c60ad8cbf5d5cba505a8fc9 # v3.99.2
+        uses: trufflesecurity/trufflehog@31ce31ee1abbcc7dc8eee5764c17121c3044c8b2 # v3.99.7
         with:
           version: 3.99.2@sha256:47a84bc18a0d04a165498bbbd3bacfd84176661cbc91f8e0f85467f6a771e99a
           extra_args: --only-verified
