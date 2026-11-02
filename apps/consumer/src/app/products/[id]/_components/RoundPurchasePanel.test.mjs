@@ -43,15 +43,16 @@ test('청약철회 제한 조건과 계약 불이행 예외를 함께 고지한�
 
 test('현재와 마감 상태를 구분하고 구매 불가 상태를 구매 가능으로 표시하지 않는다', () => {
   assert.match(panelSource, /state === 'closed'/);
-  assert.match(panelSource, /isPurchasable \? '구매 가능'/);
-  assert.match(panelSource, /closed \? '판매 마감' : '판매 예정'/);
+  // 구매할 수 있으면 상태 글자를 붙이지 않고, 구매할 수 없을 때만 이유를 18px 줄 앞에 붙인다.
+  assert.match(panelSource, /const statusLabel = isPurchasable\s*\?\s*null/);
+  assert.match(panelSource, /closed\s*\?\s*'판매 마감'/);
   assert.match(panelSource, /data-round-purchasable=\{isPurchasable\}/);
 });
 
 test('수량이 찬 현재 회차 상품은 판매 마감이 아니라 품절로 표시한다', () => {
   assert.match(panelSource, /state: 'current' \| 'closed' \| 'sold_out'/);
   assert.match(panelSource, /const soldOut = state === 'sold_out'/);
-  assert.match(panelSource, /soldOut \? '품절'/);
+  assert.match(panelSource, /soldOut\s*\?\s*'품절'/);
   // 품절은 회차가 끝난 것이 아니므로 제목은 현재·예정 회차 문구를 유지한다.
   assert.match(panelSource, /const notOpenYet = !closed && round\.status === 'SCHEDULED'/);
   assert.match(pageSource, /const isSoldOut = isCurrentRound && item\.status === 'SOLD_OUT'/);
@@ -72,4 +73,13 @@ test('상품 상세은 Task 4.8이 검증한 회차 상품 구조를 패널에 �
     pageSource,
     /<RoundPurchasePanel\s+round=\{roundProduct\.round\}\s+item=\{roundProduct\.item\}\s+state=\{roundProduct\.state\}\s+isPurchasable=\{roundProduct\.isPurchasable\}\s+\/>/s,
   );
+});
+
+test('상세 첫 화면은 이름 30px 제목 아래 18px 한 줄로 언제·어디서 오는지 쓴다', () => {
+  assert.match(panelSource, /fontSize: 30/);
+  assert.match(panelSource, /formatRoundDay\(round\.schedule\.deliveryEndAt\)/);
+  assert.match(panelSource, /문 앞 도착` : '화요일 오전 9시까지 문 앞 도착'\} · 경기도\s+이천시 직접 배송/);
+  assert.match(panelSource, /fontSize: 'var\(--font-size-lg\)'/);
+  // 제목 위 상태 태그·회차 이름 라벨은 두지 않는다(design-direction.md §4.3).
+  assert.doesNotMatch(panelSource, /round\.name/);
 });

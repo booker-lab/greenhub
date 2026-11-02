@@ -581,7 +581,8 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
             className="p-3"
             role="alert"
             style={{
-              border: '1px solid var(--color-border)',
+              // ② 테두리 상자 대신 연회색 면(design-direction.md §3.1).
+              background: 'var(--color-surface-muted)',
               borderRadius: 'var(--radius)',
             }}
           >
@@ -589,7 +590,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
               최신 회차 정보를 불러오지 못했습니다. 이전 결과로는 결제할 수 없습니다.
             </p>
             {saleRounds.error && (
-              <p className="m-0 mt-1 text-sm text-[#868e96]">{saleRounds.error}</p>
+              <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{saleRounds.error}</p>
             )}
             <Button variant="light" size="xs" className="mt-2.5" onClick={saleRounds.refetch}>
               다시 시도

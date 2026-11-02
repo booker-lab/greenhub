@@ -264,11 +264,11 @@ export default function CheckoutForm({
         결제
       </h1>
 
-      {/* 주문 요약: 회색 바탕 위 회색 글자는 대비가 약해 흰 카드·본문 색 글자로 둔다 */}
-      {/* Mantine Paper(p md·mb xl·withBorder = gray-3 1px) 계산값 */}
+      {/* 주문 요약: ② 테두리 상자 대신 연회색 면(design-direction.md §3.1·§4.3). 설명 글자 #6B716E는 연회색
+          면 위에서도 대비 4.5:1 이상이고, 상품 이름·금액은 본문 색이다. */}
       <div
-        className="mb-8 border border-solid border-[#dee2e6] p-4"
-        style={{ background: 'var(--color-bg)', borderRadius: 'var(--radius)' }}
+        className="mb-8 p-4"
+        style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
       >
         <p
           className="m-0 mb-2.5 leading-[1.55]"
@@ -598,9 +598,10 @@ export default function CheckoutForm({
               className="block p-4"
               onClick={() => onPaymentMethodChange(method)}
               style={{
-                border: `2px solid ${isSelected ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                // ② 선택 표시는 초록 면 대신 검정 테두리·굵은 글자(design-direction.md §3.2).
+                border: `2px solid ${isSelected ? 'var(--color-text)' : 'var(--color-border)'}`,
                 borderRadius: 'var(--radius)',
-                background: isSelected ? 'var(--color-primary-surface)' : 'var(--color-bg)',
+                background: 'var(--color-bg)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
