@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
+const tileSource = await readFile(new URL('../../components/RoundTile.tsx', import.meta.url), 'utf8');
 
 test('공개 상품의 storeId와 공개 스토어 salesMode로 상품 화면을 분기한다', () => {
   assert.match(source, /product\.storeId/);
@@ -19,12 +20,14 @@ test('round_direct 상품 화면은 useSaleRounds의 현재·지난 회차에서
   assert.match(source, /item\.status !== 'HIDDEN'/);
 });
 
-test('회차 상품 링크는 productId와 roundId를 보존하고 회차 가격을 표시한다', () => {
+test('회차 상품은 홈과 같은 도감 타일로 그리고 링크는 productId와 roundId를 보존한다', () => {
+  assert.match(source, /<RoundTileGrid/);
+  assert.doesNotMatch(source, /function RoundProductCard/);
   assert.match(
-    source,
+    tileSource,
     /products\/\$\{encodeURIComponent\(item\.productId\)\}\?round=\$\{encodeURIComponent\(round\.id\)\}/,
   );
-  assert.match(source, /회차 가격/);
+  assert.match(tileSource, /item\.roundPrice/);
   assert.match(source, /이번 주 회차/);
   assert.match(source, /지난 회차/);
 });
