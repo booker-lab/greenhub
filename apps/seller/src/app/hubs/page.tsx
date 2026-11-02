@@ -98,7 +98,7 @@ export default function HubsPage() {
             render={<Link href="/hubs/new" />}
             size="xs"
             className="rounded-[8px]"
-            style={{ backgroundColor: 'var(--color-primary)' }}
+            style={{ backgroundColor: 'var(--primary)' }}
           >
             + 거점 등록
           </ButtonLink>

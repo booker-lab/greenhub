@@ -116,7 +116,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                   position: 'absolute',
                   bottom: 4,
                   left: 4,
-                  backgroundColor: 'var(--color-primary)',
+                  backgroundColor: 'var(--primary)',
                   color: 'white',
                   fontSize: 'var(--font-size-xs)',
                   fontWeight: 700,
