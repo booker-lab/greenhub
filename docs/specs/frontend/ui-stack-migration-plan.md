@@ -322,6 +322,8 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - ① 병합 전: 사용자가 `scripts/visual/start.mjs driver --phone`(Tailscale, 가짜 데이터)으로 화면·입력·알림을 휴대폰에서 확인한다(PR 본문 체크리스트).
   - ② 실제 기사 계정의 도착 사진 업로드·완료 처리·서비스워커는 운영 배포 직전 출시 E2E용 exact Preview에서 사용자가 휴대폰으로 확인한 뒤 배포를 승인한다. PR마다 Preview를 쓰지 않는다(`AGENTS.md` §0-9).
 
+- **기사 ② 완료**(2026-11-03, `design-direction.md` §8 D4, 2026-11-02 사용자 확정): D4-1 배송판·하단 바(#799), D4-2 주문 상세·완료 동선(이 문서 기록 PR). 규칙은 `design-standard.md` §5 "기사 앱"으로 옮겼다. 동작(목록·상세 조회, 상태 명령, 사진 업로드, 보류, 서비스워커)은 바꾸지 않았고, 기사 API에 없는 값(끝낸 배송 수·소요 시간·회차 날짜·경로 순번·상품 사진)은 화면에서 뺐다. 로컬 증명은 PR마다 기준 `main`(D4-2는 D4-1 head)과 같은 fixture로 39장 diff·parity·focus-trap, `driver-design-system.spec` 26 통과다. 실제 휴대폰 확인(도착 사진·완료·보류·한 손 조작)은 출시 회차 Preview에서 사용자가 한다.
+
 ### P4. 판매자 앱 틀·회차·주문·준비·재고·정산
 - 공용 틀 부품 구현(2026-10-31, 브랜치 `claude/ui-p4-frame`): `PageHeader`·`PageShell`·`SegmentedTabs`·`StateViews`(LoadingState·EmptyState)·어드민 `LoadMoreFooter`의 `@mantine/core`를 걷었다. Mantine Container(xs 540·sm 720·md 960·lg 1140·xl 1320, 좌우 16px)·Group·Stack·Title order 3(22px·800·1.4)·ActionIcon(28px subtle gray = `ghost` `size-7`, svg는 `size-5`)·Badge xs(16px·좌우 6·9px·줄 높이 14, filled gray-6·red-6)·Loader sm 계산값을 옮겼다. `LoadMoreFooter` 불러오는 중은 정산 `LoadMoreButton`과 같은 Mantine loading 모양(덮개·따로 합성되는 원)이다. `SegmentedTabs`의 이름 있는 group은 spread로 역할을 줘 biome 규칙을 끄지 않았다.
   - 공용 `ConfirmModal` 회귀 바로잡기: #712에서 확인 버튼 색 표에 `dark`가 빠져 회차 상세 "주문 마감" 확인창이 빨강이었다. Mantine 9 light 계산값(filled dark-6 `#2e2e2e`, 마우스 올림 dark-7)을 더하고 gray·green 마우스 올림도 Mantine 값(gray-7·green-7)으로 두었다. `confirmColor`는 `ConfirmColor`(brand·red·gray·green·dark) 유니온이라 모르는 값은 타입 검사에서 걸린다.

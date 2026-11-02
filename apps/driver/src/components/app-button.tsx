@@ -12,6 +12,8 @@ const SIZE = {
   sm: { root: 'h-9 px-[18px] text-sm', withLeft: 'ps-[12px]', loader: 36 / 1.8 },
   md: { root: 'h-[42px] px-[22px] text-base', withLeft: 'ps-[calc(22px/1.5)]', loader: 42 / 1.8 },
   lg: { root: 'h-[50px] px-[26px] text-lg', withLeft: 'ps-[calc(26px/1.5)]', loader: 50 / 1.8 },
+  /** 기사 ② 주요 행동 버튼(design-direction.md §6): 높이 56px·굵은 18px. */
+  xl: { root: 'h-14 px-7 text-lg font-bold', withLeft: 'ps-[calc(28px/1.5)]', loader: 56 / 1.8 },
 } as const;
 
 const TONE = {
