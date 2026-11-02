@@ -63,21 +63,15 @@ export default function ProductImages({ images, name }: Props) {
       </div>
 
       {displayImages.length > 1 && (
-        <div
-          style={{
-            display: 'flex',
-            gap: 6,
-            padding: '8px 12px',
-            overflowX: 'auto',
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            background: 'var(--color-surface-muted)',
-          }}
-        >
-          {displayImages.map((src, i) => (
-            // biome-ignore lint/a11y/noStaticElementInteractions lint/a11y/useKeyWithClickEvents: Mantine Box와 같은 마크업을 유지한다(① 외형 유지, 동작 변경 없음)
-            <div
+        // ② 사진 장수는 사진 아래 점으로 보여 준다(design-direction.md §4.3). 지금 사진은 검정 점(§3.2 선택 표시),
+        // 나머지는 회색 점이다. 점마다 터치 영역 44px 높이의 버튼이라 눌러서 그 사진으로 넘길 수 있다.
+        <div className="flex flex-row items-center justify-center" style={{ height: 44 }}>
+          {displayImages.map((_, i) => (
+            <button
               key={i}
+              type="button"
+              aria-label={`${i + 1}번째 사진 보기`}
+              aria-current={activeIdx === i ? 'true' : undefined}
               onClick={() => {
                 setActiveIdx(i);
                 carouselRef.current?.scrollTo({
@@ -85,28 +79,20 @@ export default function ProductImages({ images, name }: Props) {
                   behavior: 'smooth',
                 });
               }}
-              style={{
-                flexShrink: 0,
-                width: 56,
-                height: 56,
-                borderRadius: 'var(--radius-sm)',
-                overflow: 'hidden',
-                cursor: 'pointer',
-                border:
-                  activeIdx === i ? '2px solid var(--color-primary)' : '2px solid transparent',
-                transition: 'border-color 0.15s',
-                position: 'relative',
-              }}
+              className="flex cursor-pointer items-center justify-center border-0 bg-transparent p-0 focus-visible:outline-2 focus-visible:outline-offset-[-4px] focus-visible:outline-primary focus-visible:outline-solid"
+              style={{ width: 20, height: 44 }}
             >
-              <ResilientImage
-                fill
-                src={src}
-                fallbackSrc={PRODUCT_IMAGE_FALLBACK}
-                alt={`${name} 썸네일 ${i + 1}`}
-                sizes="56px"
-                style={{ objectFit: 'cover' }}
+              <span
+                aria-hidden
+                style={{
+                  background: activeIdx === i ? 'var(--color-text)' : 'var(--color-text-disabled)',
+                  borderRadius: 'var(--radius-full)',
+                  display: 'block',
+                  height: 7,
+                  width: 7,
+                }}
               />
-            </div>
+            </button>
           ))}
         </div>
       )}
