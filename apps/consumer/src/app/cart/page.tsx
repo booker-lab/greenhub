@@ -1,6 +1,7 @@
 'use client';
 import { Alert } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
@@ -448,7 +449,7 @@ export default function CartPage() {
         <div className="mb-4 flex flex-col gap-2.5">
           <div
             className="p-4"
-            style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
+            style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
           >
             <div className="flex flex-nowrap items-start justify-between gap-4">
               <div>
@@ -467,9 +468,10 @@ export default function CartPage() {
               </div>
               {/* 비로그인 장바구니(guest-cart)는 서버 확인을 하지 않으므로 확인 표시를 두지 않는다. */}
               {!isGuest && (
-                <Badge variant={isChecking ? 'secondary' : 'default'} style={{ flexShrink: 0 }}>
+                // ② 방향(design-standard §5): 상태는 배지 면 없이 점 + 글자. 확인 중=회색, 확인 완료=검정.
+                <StatusDot tone={isChecking ? 'done' : 'default'} className="shrink-0 font-bold">
                   {isChecking ? '확인 중' : '확인 완료'}
-                </Badge>
+                </StatusDot>
               )}
             </div>
           </div>
@@ -502,7 +504,8 @@ export default function CartPage() {
           <IcheonPrecheck />
         </div>
       )}
-      <div className="mb-5 flex flex-col gap-3">
+      {/* ② 방향(design-standard §4·§5): 테두리 카드 대신 줄 목록. 카드 안에 연회색 요소(사진 바탕·수량 조절)가 많아 면 대신 줄 사이 선으로 나눈다. */}
+      <div className="mb-5 flex flex-col">
         {items.map((item) => {
           const roundItem = isRoundCartItem(item) ? item : null;
           const itemIssues = roundItem ? [] : getCartItemValidationIssues(item);
@@ -520,8 +523,7 @@ export default function CartPage() {
           return (
             <div
               key={cartItemKey(item)}
-              className="p-3"
-              style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}
+              className="border-0 border-solid border-[var(--color-border)] py-3 not-first:border-t"
             >
               <div className="flex flex-nowrap items-start justify-start gap-4">
                 <Link
@@ -578,9 +580,9 @@ export default function CartPage() {
                     <>
                       <span
                         style={{
-                          background: 'var(--color-primary-surface)',
+                          background: 'var(--color-surface-muted)',
                           borderRadius: 'var(--radius-tag)',
-                          color: 'var(--color-primary-dark)',
+                          color: 'var(--color-text)',
                           display: 'inline-block',
                           fontSize: 'var(--font-size-xs)',
                           fontWeight: 'var(--fw-bold)',
