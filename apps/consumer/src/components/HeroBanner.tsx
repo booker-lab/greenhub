@@ -109,7 +109,7 @@ export default async function HeroBanner() {
                 padding: '0 20px',
                 borderRadius: 'var(--radius-full)',
                 backgroundColor: 'var(--primary)',
-                color: 'var(--color-bg)',
+                color: 'var(--primary-foreground)',
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
                 textDecoration: 'none',
