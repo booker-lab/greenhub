@@ -13,7 +13,7 @@ import { displayBuyerName, summarizeOrderProducts } from '../[id]/_lib';
 // 나머지(radius md = 8px·Group·Text·Button 기본 크기 36)는 ① 값을 유지한다.
 const TEXT = 'm-0 p-0 text-base';
 const CLAMP1 = 'line-clamp-1 text-ellipsis';
-const PAPER = 'block rounded-[8px] bg-white';
+const PAPER = 'block rounded-[8px] bg-card';
 
 // 검색·필터로 목록이 다시 계산돼도 같은 주문 객체의 카드는 다시 그리지 않는다.
 export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {

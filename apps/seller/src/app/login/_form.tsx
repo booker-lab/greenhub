@@ -11,7 +11,7 @@ import { postLoginPath } from '@/lib/admin-landing';
 // ① 외형 유지(UI 교체 P4): Mantine Stack(gap md·sm)·Button md(radius xl, 꽉 찬 폭, 왼쪽 그림)·
 // Divider(가운데 글자)·TextInput·PasswordInput md(radius xl)·Text와 같은 값.
 const DIVIDER =
-  "flex items-center text-xs/[1.55] whitespace-nowrap text-[#868e96] before:me-2.5 before:h-px before:flex-1 before:border-t before:border-[#dee2e6] before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-[#dee2e6] after:content-['']";
+  "flex items-center text-xs/[1.55] whitespace-nowrap text-ui-gray-6 before:me-2.5 before:h-px before:flex-1 before:border-t before:border-ui-gray-3 before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-ui-gray-3 after:content-['']";
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const router = useRouter();

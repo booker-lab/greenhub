@@ -17,7 +17,7 @@ import { ApiError, apiJson } from '@/lib/api';
 // 주문 카드는 button 요소라 ① 단계에서는 브라우저 기본 테두리를 그대로 뒀지만, ② D2(바깥 테두리 없음)에 맞춰 걷는다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 const PAPER =
-  'block rounded-[16px] bg-white no-underline outline-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
+  'block rounded-[16px] bg-card no-underline outline-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 const CONTAINER = 'mx-auto max-w-[720px] px-4 py-4';
 
 const INVALID_HUB_ADDRESS_MESSAGE =

@@ -60,7 +60,7 @@ export default function NotFound() {
             padding: '0 24px',
             borderRadius: 'var(--radius-full)',
             backgroundColor: 'var(--primary)',
-            color: 'var(--color-bg)',
+            color: 'var(--primary-foreground)',
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-bold)',
             textDecoration: 'none',

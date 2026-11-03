@@ -56,7 +56,7 @@ function IssueRow({
   const resolution = issue.resolution;
   return (
     <div
-      className="block rounded-[16px] bg-white p-4"
+      className="block rounded-[16px] bg-card p-4"
       // ② 문제 상자는 빨강 1px 테두리 대신 빨강 연한 면(design-direction §3.1·§3.2).
       style={
         open && issue.severity === 'critical'

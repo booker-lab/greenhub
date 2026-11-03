@@ -95,6 +95,8 @@
   --ui-dark-light: #b8b8b8;
   --ui-dark-light-text: #141414;
   --ui-dark-light-hover: #828282;
+  /* 채운 dark 면(판매자 확인 버튼 dark-6)의 마우스 올림(dark-7). 어둠에서는 면이 밝아지므로 함께 밝다. */
+  --ui-dark-filled-hover: #242424;
 
   /* 화면 아래 고정 바(하단 탭·구매 바)의 위쪽 그림자. 어둠에서는 그림자가 보이지 않아 위쪽 1px 선으로 바꾼다(§9.1). */
   --bar-shadow: 0 -4px 16px rgba(17, 17, 17, 0.06);
@@ -166,6 +168,7 @@
   --color-ui-dark-light: var(--ui-dark-light);
   --color-ui-dark-light-text: var(--ui-dark-light-text);
   --color-ui-dark-light-hover: var(--ui-dark-light-hover);
+  --color-ui-dark-filled-hover: var(--ui-dark-filled-hover);
 
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-brand: 'Nunito', 'Pretendard Variable', Pretendard, system-ui, sans-serif;

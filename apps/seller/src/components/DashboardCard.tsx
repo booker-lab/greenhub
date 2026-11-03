@@ -24,7 +24,7 @@ export function DashboardCard({
   children,
 }: DashboardCardProps) {
   return (
-    <div className="block rounded-[16px] bg-white p-4">
+    <div className="block rounded-[16px] bg-card p-4">
       <div className="mb-3 flex flex-row flex-wrap items-center justify-between gap-4">
         <p
           className={TEXT}

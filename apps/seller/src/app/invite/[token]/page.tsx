@@ -36,7 +36,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
       }}
     >
       <div className="mx-auto w-full max-w-[540px] px-4">
-        <div className="block rounded-[16px] bg-white p-8">
+        <div className="block rounded-[16px] bg-card p-8">
           <div className="mb-5 flex flex-col items-center justify-start gap-2.5">
             <Image
               src="/icons/icon-192x192.png"

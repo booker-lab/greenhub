@@ -22,7 +22,7 @@ import { useTokenRef } from '@/lib/use-token-ref';
 // ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Group·Stack·Paper(radius lg·p lg; 그림자는 ② D2로 걷음)·
 // Title order 2(줄 높이 1.35·800)·Text·Divider·TextInput(radius xl, 필수 표시 *)·ActionIcon subtle gray와 같은 값.
 const TEXT = 'm-0 p-0 text-base';
-const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-[#dee2e6]';
+const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-ui-gray-3';
 
 /** Mantine TextInput(size sm, radius xl). 필수면 라벨 뒤에 빨간 *를 붙인다(Mantine withAsterisk). */
 function TextField({
@@ -37,7 +37,7 @@ function TextField({
       <FieldLabel htmlFor={id} className="inline-block">
         {label}
         {required && (
-          <span aria-hidden="true" className="text-[#fa5252]">
+          <span aria-hidden="true" className="text-ui-red">
             {' *'}
           </span>
         )}
@@ -236,7 +236,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        <div className="block rounded-[16px] bg-white p-5">
+        <div className="block rounded-[16px] bg-card p-5">
           <form onSubmit={handleSubmit}>
             <div className="flex flex-col items-stretch justify-start gap-4">
               {/* 로고 업로드 */}

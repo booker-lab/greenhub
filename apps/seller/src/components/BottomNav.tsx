@@ -34,7 +34,7 @@ export default function BottomNav() {
         right: 0,
         zIndex: 50,
         backgroundColor: 'var(--frame)',
-        boxShadow: '0 -4px 16px rgba(17,17,17,0.06)',
+        boxShadow: 'var(--bar-shadow)',
         height: 'calc(64px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
         display: 'flex',

@@ -11,7 +11,7 @@ import { currentMonthKST } from './_lib';
 
 // ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(그림자는 ② D2로 걷음)·UnstyledButton·SimpleGrid(7칸, 간격 16) 값.
 const TEXT = 'm-0 p-0 text-base';
-const PAPER = 'block rounded-[16px] bg-white';
+const PAPER = 'block rounded-[16px] bg-card';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 const GRID7 = 'grid grid-cols-7 gap-4';

@@ -24,7 +24,7 @@ export function SettlementListItem({ settlement: s, showFee }: SettlementListIte
     // 정산에는 사람이 읽을 주문번호가 없어(orderId만 있음) 잘린 ID 대신 그 주문 상세로 가는 카드로 둔다.
     <Link
       href={`/orders/${encodeURIComponent(s.orderId)}`}
-      className="block rounded-[8px] bg-white px-4 py-3 no-underline outline-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
+      className="block rounded-[8px] bg-card px-4 py-3 no-underline outline-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
       style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}
     >
       <div className={`${GROUP} mb-1 justify-between gap-4`}>
