@@ -1,3 +1,4 @@
+import { THEME_INIT_SCRIPT_CSP_SOURCE } from '@greenhub/shared';
 import { describe, expect, it } from 'vitest';
 import { buildContentSecurityPolicy } from './content-security-policy';
 
@@ -19,10 +20,11 @@ const production = directives(
 );
 
 describe('판매자 앱 CSP 정책', () => {
-  it('스크립트는 요청 nonce와 strict-dynamic으로만 허용하고 운영에서는 eval을 넣지 않는다', () => {
+  it('스크립트는 요청 nonce·색상 모드 고정 스크립트 해시·strict-dynamic으로만 허용하고 운영에서는 eval을 넣지 않는다', () => {
     expect(production.get('script-src')).toEqual([
       "'self'",
       "'nonce-abc123=='",
+      THEME_INIT_SCRIPT_CSP_SOURCE,
       "'strict-dynamic'",
     ]);
     expect(production.get('default-src')).toEqual(["'self'"]);

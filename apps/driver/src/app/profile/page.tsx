@@ -2,6 +2,7 @@ import { auth, signOut } from '@/auth';
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
 import { Card } from '@greenhub/ui/components/card';
+import { ThemePreferenceControl } from '@greenhub/ui/components/theme-preference';
 import { cn } from '@greenhub/ui/lib/utils';
 import { AppButton } from '@/components/app-button';
 import { card, text, titleH4 } from '@/components/look';
@@ -116,6 +117,9 @@ export default async function ProfilePage() {
                 </p>
               </div>
             </div>
+            <div className="border-t border-ui-gray-3" />
+            {/* 다크 모드 직접 전환(D5-b): 밤에 어둡게 맞춘 휴대폰을 낮 야외에서 밝게 쓰는 등 기기 설정과 따로 정한다 */}
+            <ThemePreferenceControl className="px-4 py-2" />
             <div className="border-t border-ui-gray-3" />
             <div className="flex flex-wrap items-center justify-between gap-4 p-4">
               <p

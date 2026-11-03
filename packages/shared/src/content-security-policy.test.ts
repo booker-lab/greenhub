@@ -5,6 +5,7 @@ import {
   createCspNonce,
   resolveCspApiOrigin,
 } from './content-security-policy.js';
+import { THEME_INIT_SCRIPT_CSP_SOURCE } from './theme-preference';
 
 function directives(policy: string): Map<string, string[]> {
   return new Map(
@@ -33,7 +34,7 @@ describe('CSP 정책 공통 틀', () => {
     ).toBe(
       [
         "default-src 'self'",
-        "script-src 'self' 'nonce-abc123==' 'strict-dynamic'",
+        `script-src 'self' 'nonce-abc123==' ${THEME_INIT_SCRIPT_CSP_SOURCE} 'strict-dynamic'`,
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob: https://img.example.test",
         "font-src 'self' data:",

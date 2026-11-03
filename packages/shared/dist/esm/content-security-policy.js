@@ -9,6 +9,7 @@
  * 각 앱 `lib/content-security-policy.ts`가 AppContentSecurityPolicy로 정한다.
  * API origin은 NEXT_PUBLIC_API_URL(각 앱 lib/api-base-url.ts와 같은 값)에서 만든다.
  */
+import { THEME_INIT_SCRIPT_CSP_SOURCE } from './theme-preference.js';
 export const CSP_REPORT_PATH = '/api/csp-report';
 const DEVELOPMENT_API_ORIGIN = 'http://localhost:3000';
 /** 요청마다 새로 만드는 128비트 nonce(base64). */
@@ -50,6 +51,8 @@ export function buildContentSecurityPolicy(app, { nonce, nodeEnv, apiUrl }) {
             [
                 "'self'",
                 `'nonce-${nonce}'`,
+                // 루트 layout <head>의 색 구성 고정 스크립트(D5-b). layout은 요청 헤더를 읽지 않아 nonce 대신 해시로 허용한다.
+                THEME_INIT_SCRIPT_CSP_SOURCE,
                 "'strict-dynamic'",
                 ...(isDevelopment ? ["'unsafe-eval'"] : []),
             ],

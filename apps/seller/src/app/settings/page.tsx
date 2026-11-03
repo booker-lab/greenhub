@@ -1,5 +1,6 @@
 'use client';
 
+import { ThemePreferenceControl } from '@greenhub/ui/components/theme-preference';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -120,6 +121,11 @@ export default function SettingsPage() {
               ))}
             </SectionCard>
           )}
+
+          {/* 다크 모드 직접 전환(D5-b, design-direction.md §9.3) */}
+          <SectionCard label="화면">
+            <ThemePreferenceControl className="px-4 py-2" />
+          </SectionCard>
 
           <SectionCard label="정보">
             <div className="flex flex-row flex-wrap items-center justify-between gap-4 p-4">

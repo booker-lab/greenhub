@@ -3,6 +3,7 @@
 import type { Order, OrderStatus } from '@greenhub/shared';
 import { Button } from '@greenhub/ui/components/button';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
+import { ThemePreferenceControl } from '@greenhub/ui/components/theme-preference';
 import { ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
@@ -434,6 +435,8 @@ export default function MyPageClient() {
             </p>
             <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
           </button>
+          {/* 다크 모드 직접 전환(D5-b, design-direction.md §9.3): 다른 메뉴 줄과 같은 면 위 한 줄 */}
+          <ThemePreferenceControl className="rounded-(--radius) bg-(--color-surface-muted) py-1 ps-4 pe-1" />
           <MenuLink label="회원 탈퇴" onClick={() => router.push('/mypage/withdraw')} />
         </div>
       </div>

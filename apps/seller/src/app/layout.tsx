@@ -1,3 +1,4 @@
+import { THEME_INIT_SCRIPT } from '@greenhub/shared';
 import type { Metadata, Viewport } from 'next';
 import { connection } from 'next/server';
 import AppShell from '@/components/AppShell';
@@ -38,7 +39,15 @@ export default async function RootLayout({
   // (Mantine 색상 모드 스크립트에 nonce를 넘기려고 요청 헤더를 읽던 동안과 같은 렌더링 방식).
   await connection();
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
+      <head>
+        {/* 다크 모드 직접 전환(D5-b, design-direction.md §9.3): 저장된 밝게·어둡게를 칠하기 전에 <html data-theme>으로
+            적용한다. 고정 글자라 CSP(Report-Only)는 해시로 허용한다(@greenhub/shared theme-preference.ts). */}
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: 고정 문자열(사용자 입력 없음)이고 CSP 해시로 허용한다
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
+      </head>
       <body>
         <Providers>
           <AppShell>{children}</AppShell>

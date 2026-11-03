@@ -1,8 +1,9 @@
+import { THEME_INIT_SCRIPT } from '@greenhub/shared';
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
-import Providers from './providers';
 import BottomNav from '@/components/BottomNav';
 import { decodeInitialSession, INITIAL_SESSION_HEADER } from '@/lib/initial-session';
+import Providers from './providers';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -38,7 +39,15 @@ export default async function RootLayout({
   // proxy가 보호 경로에서 이미 확인한 기사 세션. 없으면(공개 경로) 화면이 예전처럼 직접 조회한다.
   const initialSession = decodeInitialSession(requestHeaders.get(INITIAL_SESSION_HEADER));
   return (
-    <html lang="ko">
+    <html lang="ko" suppressHydrationWarning>
+      <head>
+        {/* 다크 모드 직접 전환(D5-b, design-direction.md §9.3): 저장된 밝게·어둡게를 칠하기 전에 <html data-theme>으로
+            적용한다. 고정 글자라 CSP(Report-Only)는 해시로 허용한다(@greenhub/shared theme-preference.ts). */}
+        <script
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: 고정 문자열(사용자 입력 없음)이고 CSP 해시로 허용한다
+          dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }}
+        />
+      </head>
       <body>
         <Providers session={initialSession}>
           <div

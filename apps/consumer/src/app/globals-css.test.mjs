@@ -70,8 +70,12 @@ test('다크 모드 토큰(dark.css)은 base.css 뒤에 layer 없이 import한�
   const paths = imports.map((i) => i.path);
   const dark = imports.find((i) => i.path === '@greenhub/ui/styles/dark.css');
   assert.deepEqual(dark, { path: '@greenhub/ui/styles/dark.css', rest: '' });
-  assert.ok(paths.indexOf('@greenhub/ui/styles/dark.css') > paths.indexOf('@greenhub/ui/styles/base.css'));
-  assert.ok(paths.indexOf('@greenhub/ui/styles/dark.css') > paths.indexOf('@greenhub/ui/styles/tokens.css'));
+  assert.ok(
+    paths.indexOf('@greenhub/ui/styles/dark.css') > paths.indexOf('@greenhub/ui/styles/base.css'),
+  );
+  assert.ok(
+    paths.indexOf('@greenhub/ui/styles/dark.css') > paths.indexOf('@greenhub/ui/styles/tokens.css'),
+  );
 });
 
 test('@import는 다른 규칙보다 앞에 있다(뒤에 오면 무효)', () => {
@@ -116,4 +120,35 @@ test('layout·providers는 Mantine을 쓰지 않는다(CSS·ColorSchemeScript·M
     assert.ok(!source.includes('ColorSchemeScript'), name);
     assert.ok(!source.includes('mantineHtmlProps'), name);
   }
+});
+
+/** `선택자 {` 바로 뒤부터 짝이 맞는 `}`까지의 선언(주석 제외)을 정렬해 돌려준다. */
+function declarationsOf(source, selector) {
+  const text = source.replace(/\/\*[\s\S]*?\*\//g, '');
+  const start = text.indexOf(`${selector} {`);
+  assert.ok(start >= 0, selector);
+  const end = text.indexOf('}', start);
+  return text
+    .slice(start + selector.length + 2, end)
+    .split(';')
+    .map((d) => d.trim())
+    .filter(Boolean)
+    .sort();
+}
+
+test('dark.css: 기기 설정 어둠(밝게를 고르지 않음)과 직접 고른 어둠(D5-b)의 값이 같다', async () => {
+  const dark = await readFile(
+    new URL('../../../../packages/ui/src/styles/dark.css', import.meta.url),
+    'utf8',
+  );
+  assert.match(
+    dark,
+    /@media \(prefers-color-scheme: dark\) \{\s*:root:not\(\[data-theme="light"\]\) \{/,
+  );
+  const system = declarationsOf(dark, ':root:not([data-theme="light"])');
+  const chosen = declarationsOf(dark, ':root[data-theme="dark"]');
+  assert.ok(system.length > 50);
+  assert.deepEqual(chosen, system);
+  assert.ok(system.includes('color-scheme: dark'));
+  assert.deepEqual(declarationsOf(dark, ':root[data-theme="light"]'), ['color-scheme: light']);
 });

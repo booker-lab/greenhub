@@ -35,3 +35,4 @@ __exportStar(require("./auth-runtime.js"), exports);
 __exportStar(require("./session-authority.js"), exports);
 __exportStar(require("./content-security-policy.js"), exports);
 __exportStar(require("./csp-report.js"), exports);
+__exportStar(require("./theme-preference.js"), exports);
