@@ -9,7 +9,7 @@ export const text = 'm-0 p-0 text-base/[1.55] font-normal';
 export const titleH4 = 'm-0 text-lg/[1.45] font-extrabold';
 
 /** Mantine Card(radius xl, withBorder, p md). 글자색은 Mantine 본문색(#000)이다. */
-export const card = 'relative gap-0 rounded-[32px] text-black';
+export const card = 'relative gap-0 rounded-[32px] text-ui-ink';
 
 /** Mantine Badge 크기(높이·좌우 여백·글자). md는 packages/ui Badge 기본값과 같다. */
 export const badgeSize = {
@@ -30,8 +30,9 @@ export type BadgeColor = keyof typeof badgeLightVariant;
 
 /** packages/ui Badge에 없는 Mantine dark 색(light: 회색 바탕 + 검정 글자, filled: 짙은 회색 바탕 + 흰 글자). */
 export const badgeDark = {
-  light: 'bg-[#b8b8b8] text-[#141414]',
-  filled: 'bg-[#2e2e2e] text-white',
+  light: 'bg-ui-dark-light text-ui-dark-light-text',
+  // 다크 모드(D5): dark 면은 어둠에서 밝아지므로 글자를 종이 색(밝음 흰색)으로 둔다.
+  filled: 'bg-ui-dark text-background',
 } as const;
 
 /** Mantine Badge circle(xs): 정사각형, 좌우 여백 2px. */

@@ -18,7 +18,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#00A65A',
+  // 다크 모드(D5, design-direction.md §9.3): 기기 설정을 따르는 정적 메타 두 값. 어둠은 기사 바탕(#121212)이다.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#00A65A' },
+    { media: '(prefers-color-scheme: dark)', color: '#121212' },
+  ],
   width: 'device-width',
   initialScale: 1,
   minimumScale: 1,
