@@ -80,7 +80,7 @@ describe('manifest-store: 화면마다 중간 저장·이어 찍기', () => {
     assert.equal(pendingShots(SCREENS, VIEWPORTS, m).length, 4);
   });
 
-  it('기준 시각·화면 폭·화면 묶음·앱이 다르면 이어 찍지 않는다', () => {
+  it('기준 시각·화면 폭·화면 묶음·앱·색 구성이 다르면 이어 찍지 않는다', () => {
     const prev = fresh({ shots: [shot('a', 'mobile')] });
     assert.equal(resumeManifest(null, fresh()).manifest, null);
     for (const extra of [
@@ -88,6 +88,7 @@ describe('manifest-store: 화면마다 중간 저장·이어 찍기', () => {
       { viewports: ['mobile'] },
       { set: 'benchmark' },
       { app: 'driver' },
+      { colorScheme: 'dark' },
     ]) {
       const r = resumeManifest(prev, fresh(extra));
       assert.equal(r.manifest, null, JSON.stringify(extra));

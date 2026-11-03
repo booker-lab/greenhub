@@ -18,7 +18,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { incompleteReason } from './manifest-store.mjs';
+import { colorSchemeOf, incompleteReason } from './manifest-store.mjs';
 
 export const PARITY_KINDS = ['writes', 'portoneCalls', 'storage', 'aria'];
 
@@ -248,6 +248,11 @@ async function main() {
     if (before.manifest.visualNow !== after.manifest.visualNow) {
       throw new Error(
         `기준 시각이 다릅니다: ${before.manifest.visualNow} / ${after.manifest.visualNow}`,
+      );
+    }
+    if (colorSchemeOf(before.manifest) !== colorSchemeOf(after.manifest)) {
+      throw new Error(
+        `색 구성이 다릅니다: ${colorSchemeOf(before.manifest)} / ${colorSchemeOf(after.manifest)}`,
       );
     }
     const results = compareParity(before.records, after.records, allowances);

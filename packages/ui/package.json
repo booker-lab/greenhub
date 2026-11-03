@@ -9,7 +9,8 @@
     "./lib/utils": "./src/lib/utils.ts",
     "./styles/tokens.css": "./src/styles/tokens.css",
     "./styles/shadcn-tailwind.css": "./src/styles/shadcn-tailwind.css",
-    "./styles/base.css": "./src/styles/base.css"
+    "./styles/base.css": "./src/styles/base.css",
+    "./styles/dark.css": "./src/styles/dark.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
