@@ -16,7 +16,7 @@
 | `@base-ui/react` | 1.9.0 | 옛 이름 `@base-ui-components/react`는 deprecated |
 | `cn` / `class-variance-authority` / `shadcn` | P1에서 확인 / 0.7.1 / 4.23.0 | 2026-10-27 문서 원본의 수동 설치는 `shadcn class-variance-authority cn lucide-react tw-animate-css`다(`installation/manual.mdx`). `cn()`은 `tailwind-merge`가 아니라 `cn` 패키지를 쓰고, `shadcn` 패키지도 실행 의존성(`shadcn/tailwind.css`)이다. 실제 목록은 P1의 CLI 출력으로 확정한다 |
 | `tw-animate-css` | 1.4.0 | shadcn 기본 애니메이션. `shadcn/tailwind.css`(열림·닫힘 변형)와 함께 import한다 |
-| (알림) | — | `-b base`의 알림은 shadcn `toast`(Base UI Toast, `@base-ui/react`)다. Base UI 문서 목록에 `sonner`는 없다. radix·aria용 `sonner`는 `next-themes`를 같이 설치하므로 쓰지 않는다(§5 다크 모드 없음). 호출은 `toast.add(...)`다(`components/base/toast.mdx`) |
+| (알림) | — | `-b base`의 알림은 shadcn `toast`(Base UI Toast, `@base-ui/react`)다. Base UI 문서 목록에 `sonner`는 없다. radix·aria용 `sonner`는 `next-themes`를 같이 설치하므로 쓰지 않는다. 다크 모드(D5, 판매자·어드민·기사 앱)는 `next-themes` 없이 고정 인라인 스크립트와 CSP 해시로 전환한다(`design-standard.md` §2.1, `design-direction.md` §9.3). 호출은 `toast.add(...)`다(`components/base/toast.mdx`) |
 | `lucide-react` | 1.63.0 | 이미 consumer·seller가 사용 중 |
 | 비교: `@mantine/core` | 9.7.4 | 현행 |
 
@@ -130,7 +130,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 | List | `ul`·`ol` | |
 | `@mantine/notifications` | shadcn `toast`(Base UI Toast) | 17개 파일. `notifications.show(...)`를 `toast.add(...)`로 파일마다 바꾼다 |
 | `@mantine/hooks` | 직접 작성하거나 React 기본 API | 2개 파일 |
-| MantineProvider · ColorSchemeScript | 제거 | 다크 모드를 지원하지 않으므로 `next-themes`도 넣지 않는다 |
+| MantineProvider · ColorSchemeScript | 제거 | 다크 모드(D5, 판매자·어드민·기사 앱. 소비자는 밝은 화면만)는 `dark.css` 미디어 쿼리와 `<html data-theme>`(루트 layout `<head>`의 고정 인라인 스크립트 `COLOR_SCHEME_SCRIPT`, CSP sha256 해시)로 한다. `next-themes`는 넣지 않는다(`design-standard.md` §2.1) |
 
 ## 6. 단계
 
@@ -530,3 +530,15 @@ M1의 "② 방향 적용은 첫 회차 배송 뒤에만 한다"를 사용자가 
 - (e2) 장바구니·로그인·공개 화면 #795
 
 이 묶음에서 하지 않은 것: preflight 켜기, 사진 배경 제거. D4(기사)·D5(다크 모드)는 위 "결정 변경 (2026-11-02)"을 따른다. 판매자 화면에 남아 있던 `var(--color-primary)` 버튼 면도 같은 날 `--primary`로 맞췄다(`design-standard.md` §2).
+
+### D5 다크 모드 완료 (2026-11-03)
+
+`design-direction.md` §9(D5-a·D5-b·D5-c, 2026-11-02 확정)를 판매자·어드민·기사 앱에 적용했다. 소비자 앱은 2026-11-03 사용자 결정("다크모드는 소비자앱에서는 필요없다")으로 밝은 화면만 쓴다. 규칙은 `design-standard.md` §2.1로 옮겼다. 병합은 배포가 아니고, 운영 배포는 사용자가 SHA를 붙여 따로 승인한다.
+
+- 밝은 모드 색 정리 #803
+- 공용 어둠 토큰 `packages/ui/src/styles/dark.css`, `shots.mjs --color-scheme dark` #804
+- 공용 부품 `--ui-*` 토큰 #805
+- 소비자 #806(2026-11-03 사용자 결정으로 소비자는 다크 모드를 끄고 밝은 화면만 쓴다, #810) · 기사(무채색) #807 · 판매자·어드민 #808
+- 직접 전환 "화면 모드: 시스템 / 밝게 / 어둡게"(판매자 설정·기사 내 정보, `localStorage` + `<head>` 인라인 스크립트 + CSP 해시) #809
+
+남은 일(사용자 결정 전에는 하지 않는다): 어둠 전용 상품 사진 둘레 흰 6% 안쪽 선(`design-direction.md` §9.1), 판매자·기사 `global-error.tsx` 다크 모드. viewport `themeColor`가 직접 고른 모드를 따르게 하는 것은 하지 않기로 했다(#809).
