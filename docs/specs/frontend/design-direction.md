@@ -516,6 +516,7 @@ API 제안(이번 적용 범위 밖, 따로 판단): 할 일 요약 조회(환�
 | `--brand-surface` · `--accent` · `--color-primary-surface` | `#E9F9EF` | `#10301F` | 위 초록 글자 7.3 | 배송 흐름 상자, 요약 숫자 바탕 |
 | `--deadline` | `#FFD43B` | `#F2C21D` | 띠 위 글자 `#2A2100` 9.5 | 마감 띠. 어둠에서 눈부심을 줄인다 |
 | `--deadline-surface` · `--status-warning` · `--color-caution-bg` | `#FFF4CC` | `#2B2410` | 위 글자 `#FFD866` 11.2 · `#F2C94C` 9.7 | 마감 안내 상자, 경고 |
+| `--status-info-foreground` · `--color-status-info-text` | `#3F4642` | `#C4CCC8` | 면 9.0 | 정보 상자 글자(2026-11-03 조정 세션 확정, 밝음 면 위 8.7과 같은 자리) |
 | `--destructive` · `--color-danger`(글자·점) | `#D92D20` | `#FF7366` | 종이 6.6 | 문제 상태 점 + 글자 |
 | `--destructive-surface` · `--color-danger-surface` | `#FDE8E6` | `#3A1714` | 위 글자 `#FF8A7E` 7.0 | 배송 보류 상자. 빨강 채운 버튼 면은 `#D92D20` 유지(흰 글자 4.8) |
 | `--color-border` · `--rule` · `--card-border` | `#ECEFED` · `#E3E8E5` · `#DEE2E6` | `#262E2A` · `#2E3632` · `#2E3632` | 1.3 · 1.4 | 구분선(비글자 3:1 대상 아님. 밝음도 1.1~1.3) |
@@ -556,7 +557,7 @@ API 제안(이번 적용 범위 밖, 따로 판단): 할 일 요약 조회(환�
 
 공용 토큰 변경은 진행 중인 ② PR이 병합된 뒤에 한다(`ui-stack-migration-plan.md` "결정 변경 (2026-11-02)").
 
-1. **공용 토큰**(`packages/ui`, 약 25파일): `base.css`·`tokens.css`에 어두운 값, `--color-border` 변수화, 마감 글자 토큰 분리, `packages/ui` variant의 Mantine 색 값을 토큰으로, `ui-stack-migration-plan.md`의 "다크 모드 없음" 문장 정정. 증명: 세 앱 밝은 모드 촬영 diff 0, 단위 테스트(`globals-css` 포함).
+1. **공용 토큰**: 어두운 값은 `packages/ui/src/styles/dark.css` 한 곳에 둔다. 앱은 그 앱의 하드코딩 색을 옮긴 3번 PR에서 이 파일을 import하므로, 그 전까지 어둠에서도 밝은 화면 그대로다(반쯤 어두운 화면을 배포하지 않는다, 2026-11-03 결정). 처음 계획(`packages/ui`, 약 25파일): `base.css`·`tokens.css`에 어두운 값, `--color-border` 변수화, 마감 글자 토큰 분리, `packages/ui` variant의 Mantine 색 값을 토큰으로, `ui-stack-migration-plan.md`의 "다크 모드 없음" 문장 정정. 증명: 세 앱 밝은 모드 촬영 diff 0, 단위 테스트(`globals-css` 포함).
 2. **`scripts/visual` 색 구성 옵션**: `shots.mjs --color-scheme dark`(브라우저 `colorScheme`만 바꾸고 촬영 묶음을 따로 둔다). 1과 같은 PR이거나 바로 앞이다. 시안 촬영은 이 옵션 없이 임시 사본으로 했다.
 3. **앱별 적용**(소비자 → 판매자·어드민 → 기사, 서로 독립, 각 15~45파일): 하드코딩 색 치환, `color-scheme`, `themeColor`. 증명: 밝은 모드 촬영 diff 0 + 어두운 모드 새 촬영 세트를 사용자에게 확인받는다. 소비자는 `ui-stack-migration-plan.md` §8 동결을 따른다.
 4. **전환 버튼**(승인 시): 설정 화면 한 줄, `<head>` 스크립트, CSP 해시.

@@ -41,6 +41,15 @@ export function isComplete(manifest) {
  * 이어 찍기: 앞선(끊긴) 기록을 이어받을 수 있는지 보고, 이어받은 manifest를 만든다.
  * 앱·기준 시각·화면 폭·화면 묶음(--set)이 같아야 한다. 다르면 problems에 이유를 담고 manifest는 null이다.
  */
+/**
+ * 촬영 묶음의 색 구성(shots.mjs --color-scheme). 옵션이 생기기 전 묶음에는 값이 없고 밝음으로 찍혔다
+ * (Playwright 기본 colorScheme이 light).
+ * @param {{ colorScheme?: string } | null | undefined} manifest
+ */
+export function colorSchemeOf(manifest) {
+  return manifest?.colorScheme ?? 'light';
+}
+
 export function resumeManifest(previous, fresh) {
   const problems = [];
   if (!previous) return { manifest: null, problems: ['이어 찍을 manifest.json이 없습니다'] };
@@ -55,6 +64,11 @@ export function resumeManifest(previous, fresh) {
   if ((previous.set ?? null) !== (fresh.set ?? null)) {
     problems.push(
       `화면 묶음(--set)이 다릅니다: ${previous.set ?? '기본'} / ${fresh.set ?? '기본'}`,
+    );
+  }
+  if (colorSchemeOf(previous) !== colorSchemeOf(fresh)) {
+    problems.push(
+      `색 구성(--color-scheme)이 다릅니다: ${colorSchemeOf(previous)} / ${colorSchemeOf(fresh)}`,
     );
   }
   if (problems.length) return { manifest: null, problems };
