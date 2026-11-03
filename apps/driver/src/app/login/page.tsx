@@ -138,7 +138,7 @@ export default async function LoginPage({
                   type="submit"
                   fullWidth
                   size="md"
-                  style={{ backgroundColor: 'var(--color-primary)' }}
+                  style={{ backgroundColor: 'var(--primary)' }}
                 >
                   로그인
                 </AppButton>

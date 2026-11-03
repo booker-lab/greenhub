@@ -19,7 +19,7 @@
 | `--color-deadline` | `#FFD43B` | 회차 마감 카운트다운 띠 |
 | `--color-deadline-surface` / `--color-deadline-text` | `#FFF4CC` / `#3B2F00` | 마감 안내 상자, "얼마 안 남음" 태그 |
 | `--color-text` | `#111111` | 본문, 가격 |
-| `--color-text-secondary` | `#6B716E` | 설명 글자 |
+| `--color-text-secondary` · `--muted-foreground` | `#696F6C` | 설명 글자. 흰 바탕 5.1:1, 연회색 면(`#F1F3F2`) 4.6:1(2026-11-02 `#6B716E`에서 바꿈, 면 위 4.47:1이 4.5 아래였다) |
 | `--color-surface-muted` | `#F1F3F2` | 칩·수량 조절·요약 상자 바탕 |
 | `--color-border` | `#ECEFED` | 구분선, 카드 테두리 |
 | `--color-danger` / `--color-danger-surface` | `#D92D20` / `#FDE8E6` | 오류, 배송 보류 같은 문제 상태만 |

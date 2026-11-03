@@ -264,8 +264,8 @@ export default function CheckoutForm({
         결제
       </h1>
 
-      {/* 주문 요약: ② 테두리 상자 대신 연회색 면(design-direction.md §3.1·§4.3). 설명 글자 #6B716E는 연회색
-          면 위에서도 대비 4.5:1 이상이고, 상품 이름·금액은 본문 색이다. */}
+      {/* 주문 요약: ② 테두리 상자 대신 연회색 면(design-direction.md §3.1·§4.3). 설명 글자
+          --color-text-secondary(#696F6C)는 연회색 면 위에서 4.6:1이고, 상품 이름·금액은 본문 색이다. */}
       <div
         className="mb-8 p-4"
         style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}

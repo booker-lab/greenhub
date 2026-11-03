@@ -179,7 +179,7 @@ export default function GroupBuyPage() {
               fontSize: 'var(--font-size-sm)',
               fontWeight: 'var(--fw-medium)',
               color: 'var(--color-bg)',
-              background: 'var(--color-primary)',
+              background: 'var(--primary)',
               borderRadius: 'var(--radius-sm)',
               padding: '1px 8px',
             }}
