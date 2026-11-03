@@ -38,6 +38,8 @@ type PhotoCaptureProps = {
 
 // 다크 모드(D5): 촬영 화면은 두 구성 모두 검정 바탕(#000)이므로 그 위 글자·셔터 면은 흰색으로 고정한다(--color-bg는 어둠에서 어두워진다).
 const CAMERA_ON = '#ffffff';
+// 촬영 화면의 흰 버튼(tone white, 두 구성 모두 흰 면) 위 글자. 밝음 --color-text 값으로 고정한다.
+const CAMERA_BUTTON_INK = '#111111';
 
 const INVALID_ORDER_ADDRESS_MESSAGE =
   '주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해주세요.';
@@ -85,7 +87,7 @@ export default function PhotoCapture({ orderId: rawOrderId, mode }: PhotoCapture
           onClick={() => router.replace('/board')}
           tone="white"
           className="rounded-sm"
-          style={{ color: 'var(--color-text)' }}
+          style={{ color: CAMERA_BUTTON_INK }}
         >
           배송 목록으로
         </AppButton>
@@ -582,7 +584,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               disabled={preparing}
               tone="white"
               className="rounded-sm"
-              style={{ color: 'var(--color-text)' }}
+              style={{ color: CAMERA_BUTTON_INK }}
             >
               {isRoundDirect ? '카메라 촬영' : '사진 촬영'}
             </AppButton>
