@@ -17,6 +17,7 @@
 import {
   type AppContentSecurityPolicy,
   buildContentSecurityPolicy as buildPolicy,
+  COLOR_SCHEME_SCRIPT_CSP_HASH,
   type ContentSecurityPolicyInput,
 } from '@greenhub/shared';
 
@@ -43,6 +44,8 @@ const SELLER_POLICY: AppContentSecurityPolicy = {
   connectOrigins: CONNECT_ORIGINS,
   developmentConnectOrigins: DEVELOPMENT_CONNECT_ORIGINS,
   formActionSelf: true,
+  // 루트 layout <head>의 화면 모드 인라인 스크립트(다크 모드 D5-b, @greenhub/shared color-scheme.ts).
+  inlineScriptHashes: [COLOR_SCHEME_SCRIPT_CSP_HASH],
 };
 
 export function buildContentSecurityPolicy(input: ContentSecurityPolicyInput): string {

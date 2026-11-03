@@ -1,5 +1,6 @@
 'use client';
 
+import { ColorSchemeSetting } from '@greenhub/ui/components/color-scheme-setting';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -122,7 +123,12 @@ export default function SettingsPage() {
           )}
 
           <SectionCard label="정보">
-            <div className="flex flex-row flex-wrap items-center justify-between gap-4 p-4">
+            {/* 화면 모드(시스템/밝게/어둡게, design-direction.md §9.3) */}
+            <ColorSchemeSetting className="px-4 py-2" />
+            <div
+              className="flex flex-row flex-wrap items-center justify-between gap-4 p-4"
+              style={{ borderTop: '1px solid var(--color-border)' }}
+            >
               <p
                 className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}
