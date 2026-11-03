@@ -116,7 +116,7 @@ export default async function ProfilePage() {
                 </p>
               </div>
             </div>
-            <div className="border-t border-[#dee2e6]" />
+            <div className="border-t border-ui-gray-3" />
             <div className="flex flex-wrap items-center justify-between gap-4 p-4">
               <p
                 className={text}

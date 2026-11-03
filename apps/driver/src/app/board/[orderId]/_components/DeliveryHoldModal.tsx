@@ -320,10 +320,10 @@ export function DeliveryHoldModal({
         <DialogOverlay className="z-[200]" />
         <DialogPopup
           data-slot="dialog-content"
-          className="fixed inset-0 z-[200] m-auto flex h-fit max-h-[90dvh] w-[min(440px,90vw)] flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none"
+          className="fixed inset-0 z-[200] m-auto flex h-fit max-h-[90dvh] w-[min(440px,90vw)] flex-col overflow-y-auto rounded-lg bg-background text-ui-ink shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none"
         >
           <DialogHeader>
-            <DialogTitle className="m-0 p-0 text-black">배송 보류 기록</DialogTitle>
+            <DialogTitle className="m-0 p-0 text-ui-ink">배송 보류 기록</DialogTitle>
           </DialogHeader>
           {/* preflight 없이 연결한 앱이라 버튼 기본 테두리·여백을 지운다. */}
           <DialogClose
@@ -365,7 +365,7 @@ export function DeliveryHoldModal({
                 onChange={setRedeliveryFee}
               />
               {responsibilityFeeHint && (
-                <p className={`${text} text-sm/[1.45] text-[#fa5252]`}>{responsibilityFeeHint}</p>
+                <p className={`${text} text-sm/[1.45] text-ui-red`}>{responsibilityFeeHint}</p>
               )}
               <TextField
                 label="다음 연락 예정"
@@ -379,7 +379,7 @@ export function DeliveryHoldModal({
                 value={nextDeliveryAt}
                 onChange={(event) => setNextDeliveryAt(event.currentTarget.value)}
               />
-              {error && <p className={`${text} text-[#fa5252]`}>{error}</p>}
+              {error && <p className={`${text} text-ui-red`}>{error}</p>}
               <div className="flex flex-wrap items-center justify-end gap-4">
                 <AppButton tone="default" onClick={onClose} disabled={loading}>
                   취소

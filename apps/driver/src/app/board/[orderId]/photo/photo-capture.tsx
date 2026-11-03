@@ -36,6 +36,9 @@ type PhotoCaptureProps = {
   mode: PhotoMode;
 };
 
+// 다크 모드(D5): 촬영 화면은 두 구성 모두 검정 바탕(#000)이므로 그 위 글자·셔터 면은 흰색으로 고정한다(--color-bg는 어둠에서 어두워진다).
+const CAMERA_ON = '#ffffff';
+
 const INVALID_ORDER_ADDRESS_MESSAGE =
   '주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해주세요.';
 // 명령을 보내기 전에 실패하므로 같은 사진으로 다시 시도해도 안전하다.
@@ -74,7 +77,7 @@ export default function PhotoCapture({ orderId: rawOrderId, mode }: PhotoCapture
       >
         <p
           className={cn(text, 'text-center')}
-          style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }}
+          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}
         >
           {INVALID_ORDER_ADDRESS_MESSAGE}
         </p>
@@ -511,7 +514,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             router.back();
           }}
           style={{
-            color: 'var(--color-bg)',
+            color: CAMERA_ON,
             padding: 4,
             background: 'none',
             border: 'none',
@@ -538,7 +541,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
         <h1
           className="m-0 leading-[1.3]"
           style={{
-            color: 'var(--color-bg)',
+            color: CAMERA_ON,
             fontSize: 'var(--font-size-md)',
             fontWeight: 'var(--fw-bold)',
           }}
@@ -571,10 +574,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               gap: 24,
             }}
           >
-            <p
-              className={text}
-              style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }}
-            >
+            <p className={text} style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}>
               {isRoundDirect ? '문 앞 배송 완료 상태를 촬영해주세요' : '하차 물품을 촬영해주세요'}
             </p>
             <AppButton
@@ -593,7 +593,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
                 disabled={preparing}
                 tone="white-outline"
                 className="rounded-sm"
-                style={{ color: 'var(--color-bg)' }}
+                style={{ color: CAMERA_ON }}
               >
                 카메라 앱으로 찍기·사진 선택
               </AppButton>
@@ -642,7 +642,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
                   width: 64,
                   height: 64,
                   borderRadius: '50%',
-                  backgroundColor: 'var(--color-bg)',
+                  backgroundColor: CAMERA_ON,
                   border: '4px solid var(--color-primary)',
                   cursor: 'pointer',
                 }}
