@@ -20,7 +20,7 @@ const UNSTYLED_BUTTON =
 /** 설정 섹션 카드 — 작은 회색 라벨 헤더 + 행 목록. */
 function SectionCard({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="block overflow-hidden rounded-[16px] bg-white" style={{ overflow: 'hidden' }}>
+    <div className="block overflow-hidden rounded-[16px] bg-card" style={{ overflow: 'hidden' }}>
       <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
         <p
           className={TEXT}

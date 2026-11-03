@@ -26,7 +26,7 @@ export default async function SignInErrorPage({
       }}
     >
       <div className="mx-auto w-full max-w-[540px] px-4">
-        <div className="block rounded-[16px] bg-white p-8">
+        <div className="block rounded-[16px] bg-card p-8">
           <div className="flex flex-col items-stretch justify-start gap-4">
             <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">{notice.title}</h3>
             <p

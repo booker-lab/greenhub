@@ -38,9 +38,9 @@ interface DeliveryHoldModalProps {
 // TextInput(datetime-local)과 같은 값.
 const TEXT = 'm-0 p-0 text-base font-normal';
 const GROUP_LABEL =
-  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-black';
+  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
 const REQUIRED = (
-  <span className="text-[#fa5252]" aria-hidden>
+  <span className="text-ui-red" aria-hidden>
     {' *'}
   </span>
 );
@@ -72,14 +72,14 @@ function HoldCheckbox({
           checked={checked}
           disabled={disabled}
           onChange={(event) => onCheckedChange(event.currentTarget.checked)}
-          className="peer m-0 block size-5 cursor-pointer appearance-none rounded-[4px] border border-[#ced4da] bg-white p-0 transition-[border-color,background-color] duration-100 outline-none [-webkit-tap-highlight-color:transparent] checked:border-(--checkbox-color) checked:bg-(--checkbox-color) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--checkbox-color) focus-visible:outline-solid disabled:cursor-not-allowed disabled:border-[#dee2e6] disabled:bg-[#e9ecef]"
+          className="peer m-0 block size-5 cursor-pointer appearance-none rounded-[4px] border border-input bg-background p-0 transition-[border-color,background-color] duration-100 outline-none [-webkit-tap-highlight-color:transparent] checked:border-(--checkbox-color) checked:bg-(--checkbox-color) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--checkbox-color) focus-visible:outline-solid disabled:cursor-not-allowed disabled:border-ui-gray-3 disabled:bg-ui-gray-2"
         />
-        <CheckIcon className="pointer-events-none absolute inset-0 m-auto w-[60%] translate-y-[5px] scale-50 text-white opacity-0 transition-[translate,scale,opacity] duration-100 peer-checked:translate-none peer-checked:scale-100 peer-checked:opacity-100 peer-disabled:text-[#adb5bd]" />
+        <CheckIcon className="pointer-events-none absolute inset-0 m-auto w-[60%] translate-y-[5px] scale-50 text-white opacity-0 transition-[translate,scale,opacity] duration-100 peer-checked:translate-none peer-checked:scale-100 peer-checked:opacity-100 peer-disabled:text-ui-gray-5" />
       </div>
       <div className="order-2 inline-flex cursor-pointer flex-col text-sm/[20px]">
         <label
           htmlFor={id}
-          className={`ps-3 ${disabled ? 'cursor-not-allowed text-[#adb5bd]' : 'cursor-pointer text-inherit'}`}
+          className={`ps-3 ${disabled ? 'cursor-not-allowed text-ui-gray-5' : 'cursor-pointer text-inherit'}`}
         >
           {label}
         </label>
@@ -112,7 +112,7 @@ const INPUT_LINE = 'leading-[34px]';
 
 const FEE_STEP = 1000;
 const CONTROL =
-  'flex h-[17px] w-full flex-[0_0_50%] cursor-pointer appearance-none items-center justify-center border-0 border-s border-solid border-s-[#ced4da] bg-transparent p-0 text-black hover:bg-[#f8f9fa] disabled:cursor-not-allowed disabled:bg-transparent disabled:text-[#adb5bd] disabled:opacity-60';
+  'flex h-[17px] w-full flex-[0_0_50%] cursor-pointer appearance-none items-center justify-center border-0 border-s border-solid border-s-input bg-transparent p-0 text-ui-ink hover:bg-ui-gray-0 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-ui-gray-5 disabled:opacity-60';
 
 /** Mantine NumberInput(min 0, step 1000, 천 단위 ',', 끝에 '원', 위·아래 버튼). */
 function FeeInput({
@@ -148,7 +148,7 @@ function FeeInput({
         className={`pe-6 ${INPUT_LINE}`}
       />
       <div
-        className="absolute end-px top-px bottom-px z-[1] flex w-6 items-center justify-center rounded-e-lg text-[#868e96]"
+        className="absolute end-px top-px bottom-px z-[1] flex w-6 items-center justify-center rounded-e-lg text-ui-gray-6"
         style={{ pointerEvents: disabled ? 'none' : undefined }}
       >
         <div className="ms-auto flex h-[34px] w-full max-w-[23.8px] flex-col">

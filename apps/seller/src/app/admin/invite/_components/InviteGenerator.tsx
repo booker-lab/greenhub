@@ -38,7 +38,7 @@ function RecipientEmailInput({
         {label}
         {required && (
           // Mantine 필수 표시: 라벨 글자 바로 뒤 공백 + red-6 별표(라벨 칸 간격 8px는 지운다).
-          <span aria-hidden="true" className="-ms-2 text-[#fa5252]">
+          <span aria-hidden="true" className="-ms-2 text-ui-red">
             {'\u00a0*'}
           </span>
         )}
@@ -91,7 +91,7 @@ export function InviteGenerator({
   const recipientMissing = recipientEmail.trim() === '';
 
   return (
-    <div className="mb-8 block rounded-[8px] border border-rule bg-white p-4 min-[641px]:p-5">
+    <div className="mb-8 block rounded-[8px] border border-rule bg-card p-4 min-[641px]:p-5">
       <p className={`${TEXT} mb-4 text-[15px] leading-[22px] text-[var(--color-text-secondary)]`}>
         판매자 초대 링크를 만듭니다. 링크는 발급 후 <strong>72시간</strong> 동안 한 번만 쓸 수 있고,
         받는 분이 링크를 열어 카카오로 로그인하면 판매자로 가입돼요.

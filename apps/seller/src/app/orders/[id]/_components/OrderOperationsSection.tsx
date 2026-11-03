@@ -14,7 +14,7 @@ import { Row } from './OrderRow';
 // ② 디자인 방향(D2·2026-11-01 결정): 카드는 그림자·바깥 테두리 없이 흰 면. 흰 카드 안의 기록 카드는 테두리 대신
 // --frame 면, 그 안 조치 기록은 흰 면이다. 상태는 점 + 글자(StatusDot). 나머지는 ① 값(radius·Group·Stack·Text) 유지.
 const TEXT = 'm-0 p-0 text-base font-normal';
-const PAPER = 'block rounded-[16px] bg-white';
+const PAPER = 'block rounded-[16px] bg-card';
 const GROUP_BETWEEN = 'flex flex-row flex-wrap items-center justify-between gap-4';
 
 // 상태는 배지 면 대신 점 + 글자(2026-11-01 결정): 문제(빨강)=problem, 끝남(회색)=done, 나머지=검정.
@@ -170,7 +170,7 @@ function IssueCard({
           {issue.actions.map((action) => (
             <div
               key={`${action.actorId}-${action.performedAt}-${action.actionType}-${action.status}`}
-              className="block rounded-[4px] bg-white p-2.5"
+              className="block rounded-[4px] bg-card p-2.5"
               style={{ backgroundColor: 'var(--color-surface-muted)' }}
             >
               <div className="flex flex-row flex-wrap items-center justify-between gap-2.5">

@@ -103,6 +103,7 @@
     --ui-dark-light: #3d4642;
     --ui-dark-light-text: #e8ecea;
     --ui-dark-light-hover: #464f4a;
+    --ui-dark-filled-hover: #c4ccc8;
 
     /* 고정 바: 그림자 대신 위쪽 1px 선(§9.1) */
     --bar-shadow: 0 -1px 0 var(--rule);

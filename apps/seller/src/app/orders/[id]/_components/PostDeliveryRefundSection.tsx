@@ -45,7 +45,7 @@ const smallText = { fontSize: 'var(--font-size-sm)' } as const;
 // Radio.Group(라벨 600, Radio sm)·TextInput(radius md)과 같은 값. 라디오는 어드민 배송 후 환불 확인창(#714)과 같은 계산값이다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 const GROUP_LABEL =
-  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-black';
+  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
 
 /**
  * 배송 완료 주문의 "배송 후 환불" 버튼과 확인 창(계획서 R6).

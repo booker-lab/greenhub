@@ -35,8 +35,12 @@ type Props<T extends string> = {
 
 // ① 외형 유지(UI 교체 P4): Mantine Container sm(720px·좌우 16px)·Group(gap 0)·UnstyledButton·Badge xs와 같은 값.
 // Badge xs = 높이 16·좌우 6·9px·줄 높이 14, filled gray-6·red-6 면에 흰 글자.
-const BADGE_XS = 'h-4 px-1.5 text-[9px] leading-[14px] text-white ml-1.5';
-const BADGE_COLOR = { gray: 'bg-[#868e96]', red: 'bg-[#fa5252]' } as const;
+// 다크 모드(D5): 회색 면은 어둠에서 밝아지므로 글자를 종이 색(밝음 흰색)으로, 빨강 면은 --ui-red-filled(어둠 #D92D20)에 흰 글자로 둔다.
+const BADGE_XS = 'h-4 px-1.5 text-[9px] leading-[14px] ml-1.5';
+const BADGE_COLOR = {
+  gray: 'bg-ui-gray-6 text-background',
+  red: 'bg-ui-red-filled text-white',
+} as const;
 
 export function SegmentedTabs<T extends string>({
   tabs,

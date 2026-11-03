@@ -46,7 +46,7 @@ const TEXT = 'm-0 p-0 text-base';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 const CONTAINER = 'mx-auto max-w-[720px] px-4';
-const PAPER = 'block rounded-[16px] bg-white';
+const PAPER = 'block rounded-[16px] bg-card';
 // ② 디자인 방향(D2·§3.2): 카드는 그림자 없이 틀(--frame) 위 흰 면, 선택 칩은 초록 면 대신 검정 테두리·굵기.
 // 칩 띠(검색·날짜·보조 필터)는 틀과 같은 --frame이고 띠 사이 선을 긋지 않는다(D3).
 function chipStyle(selected: boolean, idleBackground: string) {
@@ -285,7 +285,10 @@ export default function OrdersPage() {
                 borderRadius: 99,
                 backgroundColor:
                   loading || refreshing ? 'var(--color-surface-muted)' : 'var(--primary)',
-                color: loading || refreshing ? 'var(--color-text-disabled)' : 'var(--color-bg)',
+                color:
+                  loading || refreshing
+                    ? 'var(--color-text-disabled)'
+                    : 'var(--primary-foreground)',
                 opacity: loading || refreshing ? 0.7 : 1,
                 cursor: loading || refreshing ? 'default' : 'pointer',
                 flexShrink: 0,
@@ -568,7 +571,7 @@ export default function OrdersPage() {
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
                     backgroundColor: 'var(--primary)',
-                    color: 'var(--color-bg)',
+                    color: 'var(--primary-foreground)',
                     flexShrink: 0,
                   }}
                 >
@@ -591,7 +594,7 @@ export default function OrdersPage() {
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
                     backgroundColor: 'var(--primary)',
-                    color: 'var(--color-bg)',
+                    color: 'var(--primary-foreground)',
                   }}
                 >
                   다시 시도
@@ -618,7 +621,7 @@ export default function OrdersPage() {
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
                     backgroundColor: 'var(--primary)',
-                    color: 'var(--color-bg)',
+                    color: 'var(--primary-foreground)',
                     flexShrink: 0,
                   }}
                 >
@@ -652,7 +655,7 @@ export default function OrdersPage() {
                     fontSize: 'var(--font-size-sm)',
                     borderRadius: 99,
                     backgroundColor: 'var(--primary)',
-                    color: 'var(--color-bg)',
+                    color: 'var(--primary-foreground)',
                     flexShrink: 0,
                   }}
                 >

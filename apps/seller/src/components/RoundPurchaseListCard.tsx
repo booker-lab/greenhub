@@ -17,7 +17,7 @@ export function RoundPurchaseListCard({
   const list = buildRoundPurchaseList(round);
 
   return (
-    <div className="block rounded-[16px] bg-white p-4">
+    <div className="block rounded-[16px] bg-card p-4">
       <p className={TEXT} style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>
         {title}
       </p>

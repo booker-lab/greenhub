@@ -47,7 +47,7 @@ interface Props {
 
 // ① 외형 유지(UI 교체 P2b): Mantine Paper(흰 바탕·모서리 16·안쪽 16; 그림자는 ② D2로 걷음)·Text(p, 여백 0)·
 // Group(간격 10)·Stack 값. 안쪽 Text(span)는 Mantine처럼 16px·400으로 돌아간다.
-const PAPER = 'block rounded-[16px] bg-white p-4';
+const PAPER = 'block rounded-[16px] bg-card p-4';
 const TEXT = 'm-0 p-0 text-base font-normal';
 const GROUP = 'flex flex-row flex-wrap items-center justify-start gap-2.5';
 const LABEL_STYLE = {
