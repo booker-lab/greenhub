@@ -10,8 +10,6 @@
  * API origin은 NEXT_PUBLIC_API_URL(각 앱 lib/api-base-url.ts와 같은 값)에서 만든다.
  */
 
-import { COLOR_SCHEME_SCRIPT_CSP_HASH } from './color-scheme.js';
-
 export const CSP_REPORT_PATH = '/api/csp-report';
 
 const DEVELOPMENT_API_ORIGIN = 'http://localhost:3000';
@@ -28,6 +26,11 @@ export type AppContentSecurityPolicy = {
   frameOrigins?: readonly string[];
   /** true면 `form-action 'self'`를 둔다. 폼 제출 뒤 외부로 이동하는 앱은 false로 둔다. */
   formActionSelf: boolean;
+  /**
+   * script-src에 더할 고정 인라인 스크립트 해시(`'sha256-…'`). nonce 없이 루트 layout에 두는 고정 스크립트용이다
+   * (예: 화면 모드 COLOR_SCHEME_SCRIPT_CSP_HASH, color-scheme.ts). 그 스크립트를 두는 앱만 넣는다.
+   */
+  inlineScriptHashes?: readonly string[];
 };
 
 export type ContentSecurityPolicyInput = {
@@ -76,8 +79,7 @@ export function buildContentSecurityPolicy(
       [
         "'self'",
         `'nonce-${nonce}'`,
-        // 루트 layout <head>의 화면 모드 인라인 스크립트(color-scheme.ts). layout이 요청 헤더를 읽지 않아 nonce가 없다.
-        COLOR_SCHEME_SCRIPT_CSP_HASH,
+        ...(app.inlineScriptHashes ?? []),
         "'strict-dynamic'",
         ...(isDevelopment ? ["'unsafe-eval'"] : []),
       ],

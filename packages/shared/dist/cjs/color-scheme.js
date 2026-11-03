@@ -2,15 +2,15 @@
 /**
  * 화면 모드 직접 선택(다크 모드 D5-b, design-direction.md §9.3).
  *
- * 선택값은 세 앱이 같은 `localStorage` 키 하나에 둔다. 값이 `light`·`dark`가 아니거나(없음 포함)
+ * 선택값은 앱마다 같은 `localStorage` 키 하나에 둔다. 값이 `light`·`dark`가 아니거나(없음 포함)
  * localStorage를 쓸 수 없으면(사파리 개인 모드 등) 시스템(기기 설정)으로 본다.
  * 적용은 `<html data-theme="light|dark">` 속성이다. 시스템이면 속성을 두지 않고, 색은 dark.css의
  * `prefers-color-scheme` 미디어 쿼리가 정한다.
  *
- * 첫 페인트 전에 속성을 넣도록 각 앱 루트 layout `<head>`에 COLOR_SCHEME_SCRIPT를 인라인으로 둔다.
- * 루트 layout은 요청 헤더를 읽지 않으므로(정적 렌더링) nonce 대신 이 고정 스크립트의 sha256 해시를
- * CSP `script-src`에 더한다(content-security-policy.ts). 스크립트를 한 글자라도 바꾸면 해시도 바꾼다
- * (color-scheme.test.ts가 확인한다).
+ * 첫 페인트 전에 속성을 넣도록 쓰는 앱(판매자·기사) 루트 layout `<head>`에 COLOR_SCHEME_SCRIPT를 인라인으로 둔다.
+ * 고정 문자열이라 nonce를 넘기지 않고(layout이 nonce를 읽을 필요가 없다) 그 sha256 해시를 각 앱 CSP 구성의
+ * `inlineScriptHashes`로 `script-src`에 더한다. 스크립트를 한 글자라도 바꾸면 해시도 바꾼다
+ * (color-scheme.test.ts가 확인한다). 소비자 앱은 다크 모드를 쓰지 않아 이 스크립트를 두지 않는다(2026-11-03 사용자 결정).
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.COLOR_SCHEME_SCRIPT_CSP_HASH = exports.COLOR_SCHEME_SCRIPT = exports.COLOR_SCHEME_PREFERENCES = exports.COLOR_SCHEME_STORAGE_KEY = void 0;

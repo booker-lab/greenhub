@@ -13,8 +13,8 @@ import { useId, useSyncExternalStore } from 'react';
 
 import { cn } from '../lib/utils';
 
-// 화면 모드 직접 선택(다크 모드 D5-b, design-direction.md §9.3). 각 앱 설정 화면 안 한 줄
-// (소비자 MY·판매자 설정·기사 내 정보)이고, 감싸는 줄(면·여백·선)은 앱이 정한다.
+// 화면 모드 직접 선택(다크 모드 D5-b, design-direction.md §9.3). 판매자 설정·기사 내 정보 화면 안 한 줄이고
+// (소비자 앱은 다크 모드를 쓰지 않는다, 2026-11-03 사용자 결정), 감싸는 줄(면·여백·선)은 앱이 정한다.
 // 선택 표시는 초록 면 없이 검정 2px 테두리·굵은 글자다(결제 수단 선택과 같은 규칙, §3.2).
 // 접근성: role="radiogroup"(aria-labelledby로 "화면 모드"), 항목은 같은 name을 나눠 가진 진짜
 // input type="radio"라 Tab은 그룹에 한 번 들어가고 화살표 키로 고른 항목을 옮긴다(RadioGroup과 같다).
