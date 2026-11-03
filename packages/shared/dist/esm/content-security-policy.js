@@ -50,6 +50,7 @@ export function buildContentSecurityPolicy(app, { nonce, nodeEnv, apiUrl }) {
             [
                 "'self'",
                 `'nonce-${nonce}'`,
+                ...(app.inlineScriptHashes ?? []),
                 "'strict-dynamic'",
                 ...(isDevelopment ? ["'unsafe-eval'"] : []),
             ],
