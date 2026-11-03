@@ -16,9 +16,8 @@
    (tokens.css·아래 body)에 지도록 base layer에 둔다. */
 @import "@greenhub/ui/styles/base.css" layer(base);
 
-/* 다크 모드(D5, design-direction.md §9): 기기 설정이 어둠이면 토큰 값만 다시 정의한다. base.css·tokens.css 값을 이기도록
-   그 뒤에 layer 없이 둔다. */
-@import "@greenhub/ui/styles/dark.css";
+/* 다크 모드(D5)는 소비자 앱에 두지 않는다(2026-11-03 사용자 결정, design-direction.md §8 D5). 그래서 dark.css를
+   import하지 않고, 기기 설정이 어둠이어도 밝은 화면 그대로다. 토큰으로 옮긴 색(#806)은 밝은 값이 같아 그대로 둔다. */
 
 /* @import는 모두 위에 둔다(@import 뒤에 다른 규칙이 오면 무효). */
 
@@ -30,7 +29,7 @@
    바탕색(Mantine body 흰색)은 아래 layer 밖 body 규칙이 정한다. */
 @layer base {
   :root {
-    color-scheme: light dark;
+    color-scheme: light;
   }
 
   *,
