@@ -74,7 +74,7 @@ function RadioItem({
           value={value}
           checked={group.value === value}
           onChange={() => group.onValueChange(value)}
-          className="peer relative m-0 flex size-5 cursor-default appearance-none items-center justify-center rounded-[20px] border border-solid border-[#ced4da] bg-white transition-[background-color,border-color] duration-100 ease-[ease] checked:border-brand checked:bg-brand [-webkit-tap-highlight-color:transparent]"
+          className="peer relative m-0 flex size-5 cursor-default appearance-none items-center justify-center rounded-[20px] border border-solid border-input bg-background transition-[background-color,border-color] duration-100 ease-[ease] checked:border-brand checked:bg-brand [-webkit-tap-highlight-color:transparent]"
         />
         <svg
           xmlns="http://www.w3.org/2000/svg"

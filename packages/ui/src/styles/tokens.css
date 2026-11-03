@@ -56,6 +56,44 @@
   --status-warning-foreground: #7a5b00;
   --frame: #f4f7f5;
   --rule: #e3e8e5;
+
+  /*
+   * ① 외형 Mantine 색(packages/ui 부품 variant·입력칸·메뉴). 값은 부품에 직접 적던 Mantine 계산값과 같다.
+   * 어둠 값은 dark.css가 정한다(design-direction.md §9.4 첫 행). 회색은 Mantine gray 단계이고 어둠에서는 단계의
+   * 밝기 순서를 뒤집는다(면 단계는 어두워지고 글자 단계는 밝아진다). 입력칸 테두리(gray-4)는 `--input`을 쓴다.
+   * outline 노랑(yellow-6 #fab005)·초록(green-6 #40c057)은 어두운 종이 위에서도 대비가 7:1 이상이라 부품에 그대로 둔다.
+   */
+  --ui-ink: #000000;
+  --ui-gray-0: #f8f9fa;
+  --ui-gray-1: #f1f3f5;
+  --ui-gray-2: #e9ecef;
+  --ui-gray-3: #dee2e6;
+  --ui-gray-5: #adb5bd;
+  --ui-gray-6: #868e96;
+  --ui-gray-7: #495057;
+  --ui-gray-9: #212529;
+  --ui-primary-hover: #006638;
+  --ui-brand-light: #d2f2df;
+  --ui-brand-light-hover: #a6e5c0;
+  --ui-brand-light-text: #005c32;
+  /* 빨강: 채운 면(흰 글자)과 글자·테두리는 밝음 값이 같지만 어둠에서 갈린다. */
+  --ui-red: #fa5252;
+  --ui-red-filled: #fa5252;
+  --ui-red-filled-hover: #f03e3e;
+  --ui-red-light: #ffe3e3;
+  --ui-red-light-hover: #ffc9c9;
+  --ui-red-light-text: #c92a2a;
+  --ui-blue-light: #d0ebff;
+  --ui-blue-light-hover: #a5d8ff;
+  --ui-blue-light-text: #1864ab;
+  --ui-green-light: #d3f9d8;
+  --ui-green-light-hover: #b2f2bb;
+  --ui-green-light-text: #2b8a3e;
+  --ui-orange-light: #ffe8cc;
+  --ui-orange-light-text: #d9480f;
+  --ui-dark: #2e2e2e;
+  --ui-dark-light: #b8b8b8;
+  --ui-dark-light-text: #141414;
 }
 
 @theme inline {
@@ -93,6 +131,36 @@
   --color-status-warning-foreground: var(--status-warning-foreground);
   --color-frame: var(--frame);
   --color-rule: var(--rule);
+  --color-ui-ink: var(--ui-ink);
+  --color-ui-gray-0: var(--ui-gray-0);
+  --color-ui-gray-1: var(--ui-gray-1);
+  --color-ui-gray-2: var(--ui-gray-2);
+  --color-ui-gray-3: var(--ui-gray-3);
+  --color-ui-gray-5: var(--ui-gray-5);
+  --color-ui-gray-6: var(--ui-gray-6);
+  --color-ui-gray-7: var(--ui-gray-7);
+  --color-ui-gray-9: var(--ui-gray-9);
+  --color-ui-primary-hover: var(--ui-primary-hover);
+  --color-ui-brand-light: var(--ui-brand-light);
+  --color-ui-brand-light-hover: var(--ui-brand-light-hover);
+  --color-ui-brand-light-text: var(--ui-brand-light-text);
+  --color-ui-red: var(--ui-red);
+  --color-ui-red-filled: var(--ui-red-filled);
+  --color-ui-red-filled-hover: var(--ui-red-filled-hover);
+  --color-ui-red-light: var(--ui-red-light);
+  --color-ui-red-light-hover: var(--ui-red-light-hover);
+  --color-ui-red-light-text: var(--ui-red-light-text);
+  --color-ui-blue-light: var(--ui-blue-light);
+  --color-ui-blue-light-hover: var(--ui-blue-light-hover);
+  --color-ui-blue-light-text: var(--ui-blue-light-text);
+  --color-ui-green-light: var(--ui-green-light);
+  --color-ui-green-light-hover: var(--ui-green-light-hover);
+  --color-ui-green-light-text: var(--ui-green-light-text);
+  --color-ui-orange-light: var(--ui-orange-light);
+  --color-ui-orange-light-text: var(--ui-orange-light-text);
+  --color-ui-dark: var(--ui-dark);
+  --color-ui-dark-light: var(--ui-dark-light);
+  --color-ui-dark-light-text: var(--ui-dark-light-text);
 
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-brand: 'Nunito', 'Pretendard Variable', Pretendard, system-ui, sans-serif;

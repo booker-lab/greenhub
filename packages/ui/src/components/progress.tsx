@@ -16,7 +16,7 @@ function Progress({
   return (
     <div
       data-slot="progress"
-      className={cn('relative flex h-2 overflow-hidden rounded-lg bg-[#e9ecef]', className)}
+      className={cn('relative flex h-2 overflow-hidden rounded-lg bg-ui-gray-2', className)}
       {...props}
     >
       <div
