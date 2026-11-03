@@ -237,8 +237,8 @@ function DetailSkeleton({
       className="relative overflow-hidden [transform:translateZ(0)]"
       style={{ height, width, borderRadius: radius }}
     >
-      <span className="absolute inset-0 z-10 bg-white" />
-      <span className="absolute inset-0 z-[11] animate-[pulse_1500ms_linear_infinite] bg-[#dee2e6]" />
+      <span className="absolute inset-0 z-10 bg-background" />
+      <span className="absolute inset-0 z-[11] animate-[pulse_1500ms_linear_infinite] bg-ui-gray-3" />
     </div>
   );
 }

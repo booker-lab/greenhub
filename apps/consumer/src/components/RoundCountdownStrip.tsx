@@ -51,7 +51,7 @@ export default function RoundCountdownStrip({ status, schedule }: Props) {
       style={{
         alignItems: 'center',
         background: 'var(--color-deadline)',
-        color: 'var(--color-deadline-text)',
+        color: 'var(--color-deadline-on)',
         display: 'flex',
         fontSize: 'var(--font-size-sm)',
         fontVariantNumeric: 'tabular-nums',

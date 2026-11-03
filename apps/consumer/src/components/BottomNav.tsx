@@ -122,7 +122,7 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
         zIndex: 100,
         backgroundColor: 'var(--color-bg)',
         // 고정 바는 위쪽 1px 선 대신 옅은 그림자로 본문과 나눈다(design-direction.md §3.1).
-        boxShadow: '0 -4px 16px rgba(17,17,17,0.06)',
+        boxShadow: 'var(--bar-shadow)',
         height: 'calc(64px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}

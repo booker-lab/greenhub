@@ -54,7 +54,7 @@ function LabelRadio({
           value={value}
           checked={checked}
           onChange={onSelect}
-          className="peer relative m-0 flex size-5 cursor-default appearance-none items-center justify-center rounded-[20px] border border-solid border-[#ced4da] bg-white transition-[background-color,border-color] duration-100 ease-[ease] outline-none [-webkit-tap-highlight-color:transparent] checked:border-(--color-primary) checked:bg-(--color-primary) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-primary) focus-visible:outline-solid"
+          className="peer relative m-0 flex size-5 cursor-default appearance-none items-center justify-center rounded-[20px] border border-solid border-input bg-background transition-[background-color,border-color] duration-100 ease-[ease] outline-none [-webkit-tap-highlight-color:transparent] checked:border-(--color-primary) checked:bg-(--color-primary) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--color-primary) focus-visible:outline-solid"
         />
         <svg
           xmlns="http://www.w3.org/2000/svg"

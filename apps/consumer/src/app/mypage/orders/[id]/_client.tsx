@@ -108,7 +108,7 @@ function SegmentedChoice<T extends string>({
       role="radiogroup"
       aria-label={ariaLabel}
       data-disabled={disabled || undefined}
-      className={`relative flex flex-row overflow-hidden rounded-[16px] bg-[#f1f3f5] p-1 ${className ?? ''}`}
+      className={`relative flex flex-row overflow-hidden rounded-[16px] bg-ui-gray-1 p-1 ${className ?? ''}`}
     >
       {data.map((item, index) => {
         const selected = item.value === value;
@@ -117,7 +117,7 @@ function SegmentedChoice<T extends string>({
         return (
           <div key={item.value} className="relative z-[2] flex-1">
             {separator && (
-              <span aria-hidden className="absolute top-0 bottom-0 left-0 w-px bg-[#dee2e6]" />
+              <span aria-hidden className="absolute top-0 bottom-0 left-0 w-px bg-ui-gray-3" />
             )}
             <input
               type="radio"
@@ -135,16 +135,16 @@ function SegmentedChoice<T extends string>({
               data-disabled={disabled || undefined}
               className={`relative block cursor-pointer overflow-hidden rounded-[12px] px-2.5 py-[3px] text-center text-[15px] leading-[1.55] font-semibold text-ellipsis whitespace-nowrap select-none [-webkit-tap-highlight-color:transparent] peer-focus-visible:outline-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid ${
                 disabled
-                  ? 'cursor-not-allowed text-[#adb5bd]'
+                  ? 'cursor-not-allowed text-ui-gray-5'
                   : selected
-                    ? 'font-bold text-black'
-                    : 'text-[#495057] [@media(hover:hover)]:hover:text-black'
+                    ? 'font-bold text-ui-ink'
+                    : 'text-ui-gray-7 [@media(hover:hover)]:hover:text-ui-ink'
               }`}
             >
               {selected && (
                 <span
                   aria-hidden
-                  className="absolute inset-0 z-[-1] rounded-[12px] border-2 border-solid border-[var(--color-text)] bg-white"
+                  className="absolute inset-0 z-[-1] rounded-[12px] border-2 border-solid border-[var(--color-text)] bg-background"
                 />
               )}
               <span className="relative">{item.label}</span>
@@ -203,8 +203,8 @@ function BackButton({ onClick, className }: { onClick: () => void; className: st
 // 진행 = 주색 테두리, 모서리 Mantine과 같은 1000px), 단계 최소 높이 36 + 32 + 5, 단계 사이 5px, 세로 연결선 2px,
 // 라벨 15px·600·줄 높이 1. rounded-full(무한대) 모서리와 아래 완료 아이콘 스타일 없이 그렸을 때는 원 가장자리
 // 안티앨리어싱이 Mantine과 달랐고, 둘을 Mantine과 같게 둔 뒤 촬영이 같아졌다.
-const STEP_OUTLINE = '#e9ecef';
-const STEP_COLOR = '#00a65a';
+const STEP_OUTLINE = 'var(--ui-gray-2)';
+const STEP_COLOR = 'var(--brand)';
 
 function DeliverySteps({ labels, active }: { labels: string[]; active: number }) {
   return (
@@ -223,7 +223,7 @@ function DeliverySteps({ labels, active }: { labels: string[]; active: number })
                 style={{
                   background: completed ? STEP_COLOR : STEP_OUTLINE,
                   borderColor: completed || progress ? STEP_COLOR : STEP_OUTLINE,
-                  color: completed ? '#fff' : '#495057',
+                  color: completed ? '#fff' : 'var(--ui-gray-7)',
                   fontSize: 'var(--font-size-sm)',
                 }}
               >
@@ -914,7 +914,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </div>
           ))}
           {/* Mantine Divider(gray-3 1px 위 테두리, 구분선 역할) */}
-          <hr className="m-0 h-0 border-0 border-t border-solid border-[#dee2e6]" />
+          <hr className="m-0 h-0 border-0 border-t border-solid border-ui-gray-3" />
           {detail.deliveryFee > 0 && (
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
@@ -1077,7 +1077,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       {showPickupCode && (
         <div className="mb-5 rounded-[var(--radius)] bg-[var(--color-surface-muted)] p-5 text-center">
-          <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)', color: '#007a43' }}>
+          <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)', color: 'var(--brand-ink)' }}>
             픽업 코드
           </p>
           <p

@@ -94,6 +94,10 @@
   --ui-dark: #2e2e2e;
   --ui-dark-light: #b8b8b8;
   --ui-dark-light-text: #141414;
+  --ui-dark-light-hover: #828282;
+
+  /* 화면 아래 고정 바(하단 탭·구매 바)의 위쪽 그림자. 어둠에서는 그림자가 보이지 않아 위쪽 1px 선으로 바꾼다(§9.1). */
+  --bar-shadow: 0 -4px 16px rgba(17, 17, 17, 0.06);
 }
 
 @theme inline {
@@ -161,6 +165,7 @@
   --color-ui-dark: var(--ui-dark);
   --color-ui-dark-light: var(--ui-dark-light);
   --color-ui-dark-light-text: var(--ui-dark-light-text);
+  --color-ui-dark-light-hover: var(--ui-dark-light-hover);
 
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-brand: 'Nunito', 'Pretendard Variable', Pretendard, system-ui, sans-serif;

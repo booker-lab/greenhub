@@ -310,7 +310,7 @@ function useRoundCartValidation(
 // Mantine ActionIcon(size 36·subtle dark·radius xl) 계산값: UnstyledButton 위에 36px 정사각, 투명 1px 테두리,
 // dark-9 글자, 줄 높이 1, 글꼴은 물려받는다. 마우스를 올리면(hover 가능한 기기만) dark-light-hover(dark-2) 면.
 const QUANTITY_BUTTON =
-  'relative m-0 inline-flex size-9 min-h-9 min-w-9 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-[#141414] no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-[#828282]';
+  'relative m-0 inline-flex size-9 min-h-9 min-w-9 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-ui-dark-light-hover';
 
 function RoundValidationNotice({ validation }: { validation: RoundCartValidation | undefined }) {
   if (!validation) {
@@ -644,8 +644,8 @@ export default function CartPage() {
                       )}
                       {itemIssues.length > 0 && (
                         // Mantine Alert light orange(orange-1 면·orange-9 글자, p xs, 본문 검정 15px)
-                        <Alert role="alert" className="mt-3 bg-[#ffe8cc] p-2.5 text-[#d9480f]">
-                          <div className="overflow-hidden text-[15px] text-ellipsis text-black">
+                        <Alert role="alert" className="mt-3 bg-ui-orange-light p-2.5 text-ui-orange-light-text">
+                          <div className="overflow-hidden text-[15px] text-ellipsis text-ui-ink">
                             <div className="flex flex-col gap-1">
                               {itemIssues.map((issue) => (
                                 <p key={issue.code} className="m-0 p-0 text-sm font-normal">
@@ -657,7 +657,7 @@ export default function CartPage() {
                                 render={<Link href={productHref} />}
                                 variant="light"
                                 size="xs"
-                                className="mt-1 bg-[#ffe8cc] text-[#d9480f]"
+                                className="mt-1 bg-ui-orange-light text-ui-orange-light-text"
                               >
                                 <ButtonLabel>다시 선택하기</ButtonLabel>
                               </ButtonLink>

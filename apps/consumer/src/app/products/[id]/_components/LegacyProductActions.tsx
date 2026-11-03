@@ -30,7 +30,7 @@ interface Props {
 // Mantine ActionIcon(size lg 34px·variant default·radius md 8px) 계산값: 흰 면, gray-4 1px 테두리, 검정 글자,
 // 줄 높이 1, 글꼴은 물려받는다. hover(가능한 기기만) gray-0 면.
 const QUANTITY_BUTTON =
-  'relative m-0 inline-flex size-[34px] min-h-[34px] min-w-[34px] cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[8px] border border-solid border-[#ced4da] bg-white p-0 text-left leading-none text-black no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-[#f8f9fa]';
+  'relative m-0 inline-flex size-[34px] min-h-[34px] min-w-[34px] cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[8px] border border-solid border-input bg-background p-0 text-left leading-none text-ui-ink no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-ui-gray-0';
 
 function StoreInitialAvatar({ name }: { name: string }) {
   return (
@@ -445,7 +445,7 @@ export default function LegacyProductActions({ product }: Props) {
       )}
 
       {/* Mantine Divider: 1px gray-3 윗선, 역할 separator(가로) */}
-      <hr className="m-0 mb-8 h-0 border-0 border-t border-solid border-[#dee2e6]" />
+      <hr className="m-0 mb-8 h-0 border-0 border-t border-solid border-ui-gray-3" />
       <div className="mb-8">
         <GreenLoveBrandSection />
       </div>

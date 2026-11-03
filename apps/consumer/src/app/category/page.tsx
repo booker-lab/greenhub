@@ -58,7 +58,7 @@ const ALERT_STACK = 'flex flex-col items-center justify-start gap-3 py-12';
 const EMPTY_STACK = 'flex flex-col items-center justify-start gap-4 py-16';
 const SECTION_TITLE = 'm-0 mb-4 text-[18px] leading-[1.45]';
 const SECTION_TITLE_STYLE = { color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' } as const;
-const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-[#dee2e6]';
+const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-ui-gray-3';
 // Mantine UnstyledButton(+ 초점 링 mantine-focus-auto)과 같은 초기화. 모양은 각 버튼의 style이 준다.
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-[16px] text-inherit no-underline touch-manipulation [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid';
