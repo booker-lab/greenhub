@@ -14,11 +14,11 @@ const alertVariants = cva(
   {
     variants: {
       variant: {
-        default: 'bg-[#d2f2df] text-[#005c32]',
-        destructive: 'bg-[#ffe3e3] text-[#c92a2a]',
-        warning: 'bg-[#fff4cc] text-[#7a5b00]',
+        default: 'bg-ui-brand-light text-ui-brand-light-text',
+        destructive: 'bg-ui-red-light text-ui-red-light-text',
+        warning: 'bg-status-warning text-status-warning-foreground',
         // Mantine light gray(gray-1 면·gray-9 글자).
-        secondary: 'bg-[#f1f3f5] text-[#212529]',
+        secondary: 'bg-ui-gray-1 text-ui-gray-9',
       },
     },
     defaultVariants: {
@@ -115,7 +115,7 @@ function AlertDescription({ className, ...props }: React.ComponentProps<'div'>) 
   return (
     <div
       data-slot="alert-description"
-      className={cn('overflow-hidden text-[15px] text-ellipsis text-black', className)}
+      className={cn('overflow-hidden text-[15px] text-ellipsis text-ui-ink', className)}
       {...props}
     />
   );

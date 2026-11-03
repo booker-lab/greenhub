@@ -68,5 +68,39 @@
     --color-deadline-surface: #2b2410;
     --color-deadline-on: #2a2100;
     --color-deadline-text: #ffd866;
+    /* ── tokens.css ① 외형 Mantine 색(packages/ui 부품 variant, §9.4 첫 행) ──
+       회색은 단계의 밝기 순서를 뒤집는다: 면 단계(0~3)는 면·선 값, 글자 단계(5~9)는 꺼진·보조·본문 글자 값.
+       연한 면(light) variant는 어두운 면 + 밝은 글자(면 위 7:1 이상)이고, 채운 빨강은 §9.2대로 #D92D20(흰 글자 4.8)이다. */
+    --ui-ink: #e8ecea;
+    --ui-gray-0: #232a26;
+    --ui-gray-1: #232a26;
+    --ui-gray-2: #2e3632;
+    --ui-gray-3: #3d4642;
+    --ui-gray-5: #6e7772;
+    --ui-gray-6: #a1aaa5;
+    --ui-gray-7: #c4ccc8;
+    --ui-gray-9: #e8ecea;
+    /* §9.2 --primary 행: 어둠의 버튼 마우스 올림 */
+    --ui-primary-hover: #008248;
+    --ui-brand-light: #10301f;
+    --ui-brand-light-hover: #17432c;
+    --ui-brand-light-text: #4fd08c;
+    --ui-red: #ff7366;
+    --ui-red-filled: #d92d20;
+    --ui-red-filled-hover: #b42318;
+    --ui-red-light: #3a1714;
+    --ui-red-light-hover: #4d1f1b;
+    --ui-red-light-text: #ff8a7e;
+    --ui-blue-light: #13293d;
+    --ui-blue-light-hover: #1b3a55;
+    --ui-blue-light-text: #8cc8ff;
+    --ui-green-light: #10301f;
+    --ui-green-light-hover: #17432c;
+    --ui-green-light-text: #69db7c;
+    --ui-orange-light: #3a2410;
+    --ui-orange-light-text: #ffa94d;
+    --ui-dark: #e8ecea;
+    --ui-dark-light: #3d4642;
+    --ui-dark-light-text: #e8ecea;
   }
 }

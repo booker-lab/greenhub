@@ -121,7 +121,7 @@ function FieldLabel({
     >
       {children}
       {required && (
-        <span data-slot="field-required" aria-hidden="true" className="text-[#fa5252]">
+        <span data-slot="field-required" aria-hidden="true" className="text-ui-red">
           {' *'}
         </span>
       )}
@@ -147,7 +147,7 @@ function FieldDescription({ className, ...props }: React.ComponentProps<'p'>) {
     <p
       data-slot="field-description"
       className={cn(
-        'text-left text-xs leading-[1.2] font-normal text-[#868e96] group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5',
+        'text-left text-xs leading-[1.2] font-normal text-ui-gray-6 group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5',
         '[&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-brand-ink',
         className,
       )}
@@ -230,7 +230,7 @@ function FieldError({
     <div
       role="alert"
       data-slot="field-error"
-      className={cn('text-xs leading-[1.2] font-normal text-[#fa5252]', className)}
+      className={cn('text-xs leading-[1.2] font-normal text-ui-red', className)}
       {...props}
     >
       {content}

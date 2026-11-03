@@ -18,36 +18,35 @@ import { cn } from '../lib/utils';
 // (brand-7 #008A4B·red-7 #f03e3e), light·subtle은 *-light-hover(brand-2·gray-2·red-2·blue-2·green-2),
 // outline은 테두리색 5%, default는 gray-0이다. light 노랑은 theme.ts가 hover를 면색과 같게 둔다.
 const buttonVariants = cva(
-  'group/button relative inline-flex shrink-0 overflow-hidden cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-transparent text-sm leading-none font-semibold whitespace-nowrap normal-case no-underline transition-all outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-[#e9ecef] disabled:text-[#adb5bd] aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=size-])]:size-4',
+  'group/button relative inline-flex shrink-0 overflow-hidden cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-transparent text-sm leading-none font-semibold whitespace-nowrap normal-case no-underline transition-all outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-ui-gray-2 disabled:text-ui-gray-5 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=size-])]:size-4',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-[#006638]',
+        default: 'bg-primary text-primary-foreground hover:bg-ui-primary-hover',
         outline: 'border-primary bg-transparent text-brand-ink hover:bg-primary/5',
         // Mantine variant="outline" color="gray"(gray-6 테두리·글자, 대조 화면 계산값).
-        'outline-gray': 'border-[#868e96] bg-transparent text-[#868e96] hover:bg-[#868e96]/5',
-        light: 'bg-[#d2f2df] text-[#005c32] hover:bg-[#a6e5c0]',
-        subtle: 'bg-transparent text-[#005c32] hover:bg-[#a6e5c0]',
-        secondary: 'bg-[#f1f3f5] text-[#212529] hover:bg-[#e9ecef]',
-        ghost: 'bg-transparent text-[#212529] hover:bg-[#e9ecef] aria-expanded:bg-muted',
-        destructive: 'bg-[#fa5252] text-white hover:bg-[#f03e3e]',
+        'outline-gray': 'border-ui-gray-6 bg-transparent text-ui-gray-6 hover:bg-ui-gray-6/5',
+        light: 'bg-ui-brand-light text-ui-brand-light-text hover:bg-ui-brand-light-hover',
+        subtle: 'bg-transparent text-ui-brand-light-text hover:bg-ui-brand-light-hover',
+        secondary: 'bg-ui-gray-1 text-ui-gray-9 hover:bg-ui-gray-2',
+        ghost: 'bg-transparent text-ui-gray-9 hover:bg-ui-gray-2 aria-expanded:bg-muted',
+        destructive: 'bg-ui-red-filled text-white hover:bg-ui-red-filled-hover',
         // Mantine light·subtle color="red"·"yellow"(노랑 light는 theme.ts가 경고 토큰으로 바꾼 값).
-        'light-destructive': 'bg-[#ffe3e3] text-[#c92a2a] hover:bg-[#ffc9c9]',
-        'subtle-destructive': 'bg-transparent text-[#c92a2a] hover:bg-[#ffc9c9]',
-        'light-warning': 'bg-[#fff4cc] text-[#7a5b00]',
+        'light-destructive': 'bg-ui-red-light text-ui-red-light-text hover:bg-ui-red-light-hover',
+        'subtle-destructive': 'bg-transparent text-ui-red-light-text hover:bg-ui-red-light-hover',
+        'light-warning': 'bg-status-warning text-status-warning-foreground',
         // Mantine light blue(blue-1 면·blue-9 글자).
-        'light-blue': 'bg-[#d0ebff] text-[#1864ab] hover:bg-[#a5d8ff]',
+        'light-blue': 'bg-ui-blue-light text-ui-blue-light-text hover:bg-ui-blue-light-hover',
         // Mantine outline yellow·green(yellow-6·green-6 테두리·글자), light green(green-1 면·green-9 글자).
         'outline-warning': 'border-[#fab005] bg-transparent text-[#fab005] hover:bg-[#fab005]/5',
         'outline-green': 'border-[#40c057] bg-transparent text-[#40c057] hover:bg-[#40c057]/5',
         // Mantine outline red(red-6 테두리·글자).
-        'outline-destructive':
-          'border-[#fa5252] bg-transparent text-[#fa5252] hover:bg-[#fa5252]/5',
-        'light-green': 'bg-[#d3f9d8] text-[#2b8a3e] hover:bg-[#b2f2bb]',
+        'outline-destructive': 'border-ui-red bg-transparent text-ui-red hover:bg-ui-red/5',
+        'light-green': 'bg-ui-green-light text-ui-green-light-text hover:bg-ui-green-light-hover',
         // Mantine outline dark(dark-6 테두리·글자).
-        'outline-dark': 'border-[#2e2e2e] bg-transparent text-[#2e2e2e] hover:bg-[#2e2e2e]/5',
+        'outline-dark': 'border-ui-dark bg-transparent text-ui-dark hover:bg-ui-dark/5',
         // Mantine variant="default"(흰 면·gray-4 테두리·검정 글자, 올리면 gray-0).
-        plain: 'border-[#ced4da] bg-white text-black hover:bg-[#f8f9fa]',
+        plain: 'border-input bg-background text-ui-ink hover:bg-ui-gray-0',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
       size: {

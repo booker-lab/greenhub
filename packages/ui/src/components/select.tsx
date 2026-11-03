@@ -64,7 +64,7 @@ function SelectChevron({ className }: { className?: string }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       data-slot="select-chevron"
-      className={cn('text-[#868e96]', className)}
+      className={cn('text-ui-gray-6', className)}
     >
       <path
         d="M4.93179 5.43179C4.75605 5.60753 4.75605 5.89245 4.93179 6.06819C5.10753 6.24392 5.39245 6.24392 5.56819 6.06819L7.49999 4.13638L9.43179 6.06819C9.60753 6.24392 9.89245 6.24392 10.0682 6.06819C10.2439 5.89245 10.2439 5.60753 10.0682 5.43179L7.81819 3.18179C7.73379 3.0974 7.61933 3.04999 7.49999 3.04999C7.38064 3.04999 7.26618 3.0974 7.18179 3.18179L4.93179 5.43179ZM10.0682 9.56819C10.2439 9.39245 10.2439 9.10753 10.0682 8.93179C9.89245 8.75606 9.60753 8.75606 9.43179 8.93179L7.49999 10.8636L5.56819 8.93179C5.39245 8.75606 5.10753 8.75606 4.93179 8.93179C4.75605 9.10753 4.75605 9.39245 4.93179 9.56819L7.18179 11.8182C7.35753 11.9939 7.64245 11.9939 7.81819 11.8182L10.0682 9.56819Z"
@@ -195,7 +195,7 @@ function Select({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => onValueChange(null)}
               className={cn(
-                'pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-white text-[#495057] outline-none',
+                'pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-background text-ui-gray-7 outline-none',
                 CLEAR_SIZE[size],
               )}
             >
@@ -217,7 +217,7 @@ function Select({
         >
           <SelectPrimitive.Popup
             data-slot="select-popup"
-            className="w-(--anchor-width) rounded-lg border border-[#e9ecef] bg-white p-1 text-black outline-none"
+            className="w-(--anchor-width) rounded-lg border border-ui-gray-2 bg-popover p-1 text-ui-ink outline-none"
           >
             <SelectPrimitive.List
               aria-label={listLabel}
@@ -231,7 +231,7 @@ function Select({
                     value={item.value}
                     data-slot="select-item"
                     className={cn(
-                      'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-[#f8f9fa] focus-visible:bg-primary focus-visible:text-white',
+                      'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-ui-gray-0 focus-visible:bg-primary focus-visible:text-white',
                       OPTION_CLASS[size],
                       itemClassName,
                     )}
@@ -248,7 +248,7 @@ function Select({
                     <SelectPrimitive.GroupLabel
                       data-slot="select-group-label"
                       className={cn(
-                        'flex items-center font-semibold text-[#868e96] after:ms-2.5 after:h-px after:flex-1 after:bg-[#e9ecef] after:content-[""]',
+                        'flex items-center font-semibold text-ui-gray-6 after:ms-2.5 after:h-px after:flex-1 after:bg-ui-gray-2 after:content-[""]',
                         GROUP_LABEL_CLASS[size],
                       )}
                     >

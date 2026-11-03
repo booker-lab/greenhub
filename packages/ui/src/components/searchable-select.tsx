@@ -146,7 +146,7 @@ function SearchableSelect({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(null)}
               className={cn(
-                'pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-white text-[#495057] outline-none',
+                'pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-background text-ui-gray-7 outline-none',
                 CLEAR_SIZE[size],
               )}
             >
@@ -168,7 +168,7 @@ function SearchableSelect({
           <ComboboxPrimitive.Popup
             data-slot="select-popup"
             className={cn(
-              'w-(--anchor-width) rounded-lg border border-[#e9ecef] bg-white p-1 text-black outline-none',
+              'w-(--anchor-width) rounded-lg border border-ui-gray-2 bg-popover p-1 text-ui-ink outline-none',
               !nothingFoundMessage && filtered.length === 0 && 'hidden',
             )}
           >
@@ -185,7 +185,7 @@ function SearchableSelect({
                   value={item}
                   data-slot="select-item"
                   className={cn(
-                    'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-[#f8f9fa]',
+                    'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-ui-gray-0',
                     keyboardHighlight && 'data-highlighted:bg-primary! data-highlighted:text-white',
                     OPTION_CLASS[size],
                   )}
@@ -202,7 +202,7 @@ function SearchableSelect({
             {nothingFoundMessage && (
               <ComboboxPrimitive.Empty
                 data-slot="select-empty"
-                className={cn('-me-1 text-center text-[#868e96] empty:hidden', OPTION_CLASS[size])}
+                className={cn('-me-1 text-center text-ui-gray-6 empty:hidden', OPTION_CLASS[size])}
               >
                 {nothingFoundMessage}
               </ComboboxPrimitive.Empty>
