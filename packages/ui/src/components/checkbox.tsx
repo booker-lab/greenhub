@@ -69,7 +69,7 @@ function Checkbox({
           data-slot="checkbox"
           data-testid={testId}
           className={cn(
-            'peer m-0 block cursor-pointer appearance-none rounded-[4px] border border-[#ced4da] bg-white p-0 transition-[border-color,background-color] duration-100 outline-none [-webkit-tap-highlight-color:transparent] checked:border-(--checkbox-color) checked:bg-(--checkbox-color) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--checkbox-color) focus-visible:outline-solid',
+            'peer m-0 block cursor-pointer appearance-none rounded-[4px] border border-input bg-background p-0 transition-[border-color,background-color] duration-100 outline-none [-webkit-tap-highlight-color:transparent] checked:border-(--checkbox-color) checked:bg-(--checkbox-color) focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-(--checkbox-color) focus-visible:outline-solid',
             BOX[size],
           )}
         />

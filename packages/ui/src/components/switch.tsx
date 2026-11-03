@@ -12,14 +12,14 @@ function Switch({ className, ...props }: SwitchPrimitive.Root.Props) {
     <SwitchPrimitive.Root
       data-slot="switch"
       className={cn(
-        'group/switch relative z-0 inline-flex h-5 w-[38px] min-w-[38px] shrink-0 cursor-pointer items-center overflow-hidden rounded-[1000px] bg-[#dee2e6] transition-[background-color,border-color] duration-150 ease-[ease] outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid data-checked:bg-brand data-disabled:cursor-not-allowed data-disabled:bg-[#e9ecef]',
+        'group/switch relative z-0 inline-flex h-5 w-[38px] min-w-[38px] shrink-0 cursor-pointer items-center overflow-hidden rounded-[1000px] bg-ui-gray-3 transition-[background-color,border-color] duration-150 ease-[ease] outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid data-checked:bg-brand data-disabled:cursor-not-allowed data-disabled:bg-ui-gray-2',
         className,
       )}
       {...props}
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
-        className="absolute start-[2.5px] z-[1] flex size-3.5 rounded-[1000px] bg-white transition-[inset-inline-start] duration-150 ease-[ease] before:absolute before:top-1/2 before:left-1/2 before:size-[40%] before:-translate-1/2 before:rounded-[1000px] before:bg-[#dee2e6] before:content-[''] data-checked:start-[calc(100%-14px-2.5px)] data-checked:before:bg-brand data-disabled:before:bg-[#e9ecef] data-checked:data-disabled:before:bg-[#e9ecef] group-data-disabled/switch:bg-[#f8f9fa]"
+        className="absolute start-[2.5px] z-[1] flex size-3.5 rounded-[1000px] bg-white transition-[inset-inline-start] duration-150 ease-[ease] before:absolute before:top-1/2 before:left-1/2 before:size-[40%] before:-translate-1/2 before:rounded-[1000px] before:bg-ui-gray-3 before:content-[''] data-checked:start-[calc(100%-14px-2.5px)] data-checked:before:bg-brand data-disabled:before:bg-ui-gray-2 data-checked:data-disabled:before:bg-ui-gray-2 group-data-disabled/switch:bg-ui-gray-0"
       />
     </SwitchPrimitive.Root>
   );

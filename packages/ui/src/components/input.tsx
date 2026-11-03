@@ -7,7 +7,7 @@ import { cn } from '../lib/utils';
 // 글자는 Mantine 기본 검정, 자리표시 글자 gray-5, 비활성 gray-2 면·gray-5 글자, 오류 red-6 테두리·글자(대조 화면에서 맞춤).
 // Autocomplete 입력칸도 같은 모양이라 클래스를 함께 쓴다.
 const inputClassName =
-  'block h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm text-black transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-[#adb5bd] focus:border-brand aria-invalid:border-[#fa5252] aria-invalid:text-[#fa5252] disabled:cursor-not-allowed disabled:bg-[#e9ecef] disabled:text-[#adb5bd] disabled:opacity-60';
+  'block h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm text-ui-ink transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-ui-gray-5 focus:border-brand aria-invalid:border-ui-red aria-invalid:text-ui-red disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:opacity-60';
 
 // Mantine Input 크기(높이·좌우 여백 = 높이 ÷ 3·글자). sm이 기본이다. 모서리는 className으로 준다
 // (Mantine radius md = rounded-[8px], xl = rounded-xl).
@@ -38,7 +38,7 @@ function InputSection({
       data-slot="input-section"
       data-position={side}
       className={cn(
-        'pointer-events-none absolute top-px bottom-px z-[1] flex items-center justify-center text-[#868e96]',
+        'pointer-events-none absolute top-px bottom-px z-[1] flex items-center justify-center text-ui-gray-6',
         side === 'left' ? 'start-px rounded-s-lg' : 'end-px rounded-e-lg',
         sectionWidthClassName[size],
         className,

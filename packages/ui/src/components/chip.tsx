@@ -50,7 +50,7 @@ function Chip({
       <label
         htmlFor={id}
         data-checked={checked || undefined}
-        className="inline-flex h-7 cursor-pointer items-center rounded-[1000rem] border border-transparent bg-[#f1f3f5] px-5 text-[15px] leading-[26px] whitespace-nowrap text-black select-none [-webkit-tap-highlight-color:transparent] [text-box-edge:cap_alphabetic] [text-box-trim:trim-both] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid hover:bg-[#e9ecef] data-checked:bg-(--chip-bg) data-checked:px-2.5 data-checked:hover:bg-(--chip-hover) data-checked:text-white"
+        className="inline-flex h-7 cursor-pointer items-center rounded-[1000rem] border border-transparent bg-ui-gray-1 px-5 text-[15px] leading-[26px] whitespace-nowrap text-ui-ink select-none [-webkit-tap-highlight-color:transparent] [text-box-edge:cap_alphabetic] [text-box-trim:trim-both] peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid hover:bg-ui-gray-2 data-checked:bg-(--chip-bg) data-checked:px-2.5 data-checked:hover:bg-(--chip-hover) data-checked:text-white"
       >
         {checked && (
           <span className="flex h-3 w-5 max-w-5 items-center overflow-hidden">
