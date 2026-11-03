@@ -66,12 +66,12 @@ test('Tailwind는 preflight 없이 theme·utilities만 각 layer로 연결한다
   assert.ok(css.includes('@source "../../../../packages/ui/src";'));
 });
 
-test('다크 모드 토큰(dark.css)은 base.css 뒤에 layer 없이 import한다(tokens.css·base.css 값을 이긴다)', () => {
-  const paths = imports.map((i) => i.path);
-  const dark = imports.find((i) => i.path === '@greenhub/ui/styles/dark.css');
-  assert.deepEqual(dark, { path: '@greenhub/ui/styles/dark.css', rest: '' });
-  assert.ok(paths.indexOf('@greenhub/ui/styles/dark.css') > paths.indexOf('@greenhub/ui/styles/base.css'));
-  assert.ok(paths.indexOf('@greenhub/ui/styles/dark.css') > paths.indexOf('@greenhub/ui/styles/tokens.css'));
+test('소비자 앱은 다크 모드 토큰(dark.css)을 import하지 않는다(2026-11-03 사용자 결정)', () => {
+  assert.equal(
+    imports.find((i) => i.path === '@greenhub/ui/styles/dark.css'),
+    undefined,
+  );
+  assert.doesNotMatch(css, /prefers-color-scheme/);
 });
 
 test('@import는 다른 규칙보다 앞에 있다(뒤에 오면 무효)', () => {
@@ -87,14 +87,14 @@ test('Mantine이 깔던 기본 규칙을 base layer에 옮긴다', () => {
     assert.ok(selectors.includes(s), s);
   }
   const base = css.slice(css.indexOf('@layer base {'));
-  // 다크 모드(D5): 입력칸·스크롤바도 기기 설정을 따른다.
-  assert.match(base, /color-scheme:\s*light dark;/);
+  // 소비자 앱은 밝은 모드 하나뿐이다(다크 모드 없음, 2026-11-03 결정).
+  assert.match(base, /color-scheme:\s*light;/);
   assert.match(base, /box-sizing:\s*border-box;/);
   assert.match(base, /font:\s*inherit;/);
   assert.match(base, /font-family:\s*var\(--font-family\);/);
   assert.match(base, /font-size:\s*var\(--font-size-md\);/);
   assert.match(base, /line-height:\s*1\.55;/);
-  // 밝음 #000(Mantine 검정 글자), 어둠은 dark.css 값.
+  // #000(Mantine 검정 글자). 소비자는 다크 모드가 없어 이 값만 쓴다.
   assert.match(base, /color:\s*var\(--ui-ink\);/);
 });
 
