@@ -33,7 +33,7 @@ describe('CSP 정책 공통 틀', () => {
     ).toBe(
       [
         "default-src 'self'",
-        "script-src 'self' 'nonce-abc123==' 'strict-dynamic'",
+        "script-src 'self' 'nonce-abc123==' 'sha256-vetTXFXcSiwJzoxthExAUb93WNz5Evs5Oe67fhsMztk=' 'strict-dynamic'",
         "style-src 'self' 'unsafe-inline'",
         "img-src 'self' data: blob: https://img.example.test",
         "font-src 'self' data:",

@@ -2,6 +2,7 @@ import { auth, signOut } from '@/auth';
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
 import { Card } from '@greenhub/ui/components/card';
+import { ColorSchemeSetting } from '@greenhub/ui/components/color-scheme-setting';
 import { cn } from '@greenhub/ui/lib/utils';
 import { AppButton } from '@/components/app-button';
 import { card, text, titleH4 } from '@/components/look';
@@ -116,6 +117,9 @@ export default async function ProfilePage() {
                 </p>
               </div>
             </div>
+            <div className="border-t border-ui-gray-3" />
+            {/* 화면 모드(시스템/밝게/어둡게, design-direction.md §9.3): 밤에 어둡게 맞춘 휴대폰을 낮 야외에서 밝게 쓴다 */}
+            <ColorSchemeSetting className="px-4 py-2" />
             <div className="border-t border-ui-gray-3" />
             <div className="flex flex-wrap items-center justify-between gap-4 p-4">
               <p

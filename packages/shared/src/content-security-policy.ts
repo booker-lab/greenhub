@@ -10,6 +10,8 @@
  * API origin은 NEXT_PUBLIC_API_URL(각 앱 lib/api-base-url.ts와 같은 값)에서 만든다.
  */
 
+import { COLOR_SCHEME_SCRIPT_CSP_HASH } from './color-scheme.js';
+
 export const CSP_REPORT_PATH = '/api/csp-report';
 
 const DEVELOPMENT_API_ORIGIN = 'http://localhost:3000';
@@ -74,6 +76,8 @@ export function buildContentSecurityPolicy(
       [
         "'self'",
         `'nonce-${nonce}'`,
+        // 루트 layout <head>의 화면 모드 인라인 스크립트(color-scheme.ts). layout이 요청 헤더를 읽지 않아 nonce가 없다.
+        COLOR_SCHEME_SCRIPT_CSP_HASH,
         "'strict-dynamic'",
         ...(isDevelopment ? ["'unsafe-eval'"] : []),
       ],

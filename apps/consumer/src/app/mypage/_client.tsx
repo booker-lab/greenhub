@@ -2,6 +2,7 @@
 
 import type { Order, OrderStatus } from '@greenhub/shared';
 import { Button } from '@greenhub/ui/components/button';
+import { ColorSchemeSetting } from '@greenhub/ui/components/color-scheme-setting';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronRight } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -434,6 +435,11 @@ export default function MyPageClient() {
             </p>
             <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
           </button>
+          {/* 화면 모드(시스템/밝게/어둡게, design-direction.md §9.3): 메뉴 줄과 같은 연회색 면 한 줄 */}
+          <ColorSchemeSetting
+            className="px-4 py-2"
+            style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
+          />
           <MenuLink label="회원 탈퇴" onClick={() => router.push('/mypage/withdraw')} />
         </div>
       </div>

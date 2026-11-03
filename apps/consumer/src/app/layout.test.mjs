@@ -32,3 +32,9 @@ test('네이버 서치어드바이저 소유 확인 meta를 내보낸다', () =>
     /'naver-site-verification': 'a69f8be2ede55c9efa26e8e75d077f9e9ea8ecbe'/,
   );
 });
+
+test('화면 모드 인라인 스크립트(CSP 해시로 허용하는 고정 문자열)를 <head>에 둔다', () => {
+  assert.match(layoutSource, /import \{ COLOR_SCHEME_SCRIPT \} from '@greenhub\/shared';/);
+  const head = layoutSource.slice(layoutSource.indexOf('<head>'), layoutSource.indexOf('</head>'));
+  assert.match(head, /<script dangerouslySetInnerHTML=\{\{ __html: COLOR_SCHEME_SCRIPT \}\} \/>/);
+});

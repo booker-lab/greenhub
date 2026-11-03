@@ -26,6 +26,7 @@ const requireForTest = (specifier) => {
   }
   if (
     specifier === '@greenhub/ui/components/button' ||
+    specifier === '@greenhub/ui/components/color-scheme-setting' ||
     specifier === '@greenhub/ui/components/status-dot' ||
     specifier === 'lucide-react' ||
     specifier === 'next-auth/react' ||
