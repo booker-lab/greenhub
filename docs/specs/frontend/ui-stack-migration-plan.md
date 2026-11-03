@@ -81,7 +81,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 | `--color-primary-dark` `#007A43` | `--brand-ink` (추가) | `text-brand-ink` |
 | `--color-primary-surface` `#E9F9EF` | `--brand-surface` (추가) | `bg-brand-surface` |
 | `--color-surface-muted` `#F1F3F2` | `--muted` / `--secondary` | `bg-muted` |
-| `--color-text-secondary` `#6B716E` | `--muted-foreground` | `text-muted-foreground` |
+| `--color-text-secondary` `#696F6C` | `--muted-foreground` | `text-muted-foreground` |
 | `--color-border` `#ECEFED` | `--color-border`를 같은 값으로 직접 정의(`--border`는 쓰지 않음, 위 충돌 표), `--input` | `border-border` |
 | `--color-danger` / `-surface` | `--destructive` / `--destructive-surface` (추가) | `text-destructive` |
 | `--color-deadline` / `-surface` / `-text` | `--deadline` / `--deadline-surface` / `--deadline-foreground` (추가) | `bg-deadline` |
