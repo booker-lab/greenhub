@@ -37,7 +37,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#00A65A',
+  // 다크 모드(D5, design-direction.md §9.3): 기기 설정을 따르는 정적 메타 두 값. 어둠은 소비자 바탕(#161B18)이다.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#00A65A' },
+    { media: '(prefers-color-scheme: dark)', color: '#161B18' },
+  ],
   width: 'device-width',
   initialScale: 1,
   minimumScale: 1,
@@ -45,7 +49,7 @@ export const viewport: Viewport = {
 };
 
 // 루트 layout은 요청 헤더를 읽지 않는다. 읽으면 모든 화면이 요청마다 서버에서 만들어져 공개 화면을
-// CDN에 둘 수 없다. 색상 모드는 밝은 모드 하나뿐이라(전환 기능 없음) 색상 모드 스크립트·속성을 두지 않는다.
+// CDN에 둘 수 없다. 색상 모드는 기기 설정을 CSS(dark.css 미디어 쿼리)만으로 따르므로 색상 모드 스크립트·속성을 두지 않는다.
 export default function RootLayout({
   children,
 }: Readonly<{

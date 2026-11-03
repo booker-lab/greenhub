@@ -66,6 +66,14 @@ test('Tailwind는 preflight 없이 theme·utilities만 각 layer로 연결한다
   assert.ok(css.includes('@source "../../../../packages/ui/src";'));
 });
 
+test('다크 모드 토큰(dark.css)은 base.css 뒤에 layer 없이 import한다(tokens.css·base.css 값을 이긴다)', () => {
+  const paths = imports.map((i) => i.path);
+  const dark = imports.find((i) => i.path === '@greenhub/ui/styles/dark.css');
+  assert.deepEqual(dark, { path: '@greenhub/ui/styles/dark.css', rest: '' });
+  assert.ok(paths.indexOf('@greenhub/ui/styles/dark.css') > paths.indexOf('@greenhub/ui/styles/base.css'));
+  assert.ok(paths.indexOf('@greenhub/ui/styles/dark.css') > paths.indexOf('@greenhub/ui/styles/tokens.css'));
+});
+
 test('@import는 다른 규칙보다 앞에 있다(뒤에 오면 무효)', () => {
   const lastImport = css.lastIndexOf('\n@import ');
   const firstRule = css.search(/\n(@layer base|@font-face|:root|body)\b/);
@@ -79,13 +87,15 @@ test('Mantine이 깔던 기본 규칙을 base layer에 옮긴다', () => {
     assert.ok(selectors.includes(s), s);
   }
   const base = css.slice(css.indexOf('@layer base {'));
-  assert.match(base, /color-scheme:\s*light;/);
+  // 다크 모드(D5): 입력칸·스크롤바도 기기 설정을 따른다.
+  assert.match(base, /color-scheme:\s*light dark;/);
   assert.match(base, /box-sizing:\s*border-box;/);
   assert.match(base, /font:\s*inherit;/);
   assert.match(base, /font-family:\s*var\(--font-family\);/);
   assert.match(base, /font-size:\s*var\(--font-size-md\);/);
   assert.match(base, /line-height:\s*1\.55;/);
-  assert.match(base, /color:\s*#000;/);
+  // 밝음 #000(Mantine 검정 글자), 어둠은 dark.css 값.
+  assert.match(base, /color:\s*var\(--ui-ink\);/);
 });
 
 test('preflight 대신 채우는 초기화(테두리·여백·모양)는 새 컴포넌트(data-slot)에만 걸린다', () => {

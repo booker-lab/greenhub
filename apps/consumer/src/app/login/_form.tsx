@@ -17,7 +17,7 @@ import { isOrderCallback, safeCallbackPath } from './_callback-url';
 // TextInput·PasswordInput(sm, radius 16, 라벨 15px·600과 필수 " *")·Alert light red(p sm 12)와 같은 값.
 // 입력칸 묶음은 Field(role="group")를 쓰지 않고 div + 라벨(htmlFor)로 둬 접근성 이름("이메일"·"비밀번호")을 그대로 둔다.
 const DIVIDER =
-  "flex items-center text-xs/[1.55] whitespace-nowrap text-[#868e96] before:me-2.5 before:h-px before:flex-1 before:border-t before:border-[#dee2e6] before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-[#dee2e6] after:content-['']";
+  "flex items-center text-xs/[1.55] whitespace-nowrap text-ui-gray-6 before:me-2.5 before:h-px before:flex-1 before:border-t before:border-ui-gray-3 before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-ui-gray-3 after:content-['']";
 const FIELD_LABEL = 'cursor-default text-[15px]';
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {

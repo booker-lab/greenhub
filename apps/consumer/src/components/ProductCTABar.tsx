@@ -47,7 +47,7 @@ export default function ProductCTABar({
         right: 0,
         zIndex: 100,
         backgroundColor: 'var(--color-bg)',
-        boxShadow: '0 -4px 16px rgba(17,17,17,0.06)',
+        boxShadow: 'var(--bar-shadow)',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >

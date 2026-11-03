@@ -111,7 +111,8 @@ test('하단 고정 바는 한 줄이고 살 수 있을 때 총 금액을 주 �
     /const primaryLabel = canBuy && !isUnavailable \? `\$\{totalAmount\.toLocaleString\(\)\}원 \$\{ctaLabel\}` : ctaLabel;/,
   );
   assert.doesNotMatch(ctaSource, /총 금액<|borderTop/);
-  assert.match(ctaSource, /boxShadow: '0 -4px 16px rgba\(17,17,17,0\.06\)'/);
+  // 그림자 값은 토큰(--bar-shadow, 밝음 0 -4px 16px rgba(17,17,17,0.06) · 어둠 위쪽 1px 선)이다.
+  assert.match(ctaSource, /boxShadow: 'var\(--bar-shadow\)'/);
   // 사진 장수는 사진 아래 점(버튼)으로 보여 주고 썸네일 줄은 두지 않는다.
   assert.match(imagesSource, /aria-label=\{`\$\{i \+ 1\}번째 사진 보기`\}/);
   assert.doesNotMatch(imagesSource, /썸네일/);
