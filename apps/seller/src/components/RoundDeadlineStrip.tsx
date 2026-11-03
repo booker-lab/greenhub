@@ -51,7 +51,7 @@ export function RoundDeadlineStrip({ round, showName = false, href, rounded = fa
     alignItems: 'center',
     background: 'var(--color-deadline)',
     borderRadius: rounded ? 'var(--radius)' : 0,
-    color: 'var(--color-deadline-text)',
+    color: 'var(--color-deadline-on)',
     display: 'flex',
     fontSize: 'var(--font-size-sm)',
     fontVariantNumeric: 'tabular-nums',

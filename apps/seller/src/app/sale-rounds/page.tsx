@@ -56,7 +56,7 @@ const STATUS_META: Record<
 // Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16(그림자는 ② D2로 걷음),
 // Group = 가로 flex(줄바꿈, 가운데 정렬), Stack = 세로 flex(늘임), 간격 xs 10·sm 12·md 16px.
 const TEXT = 'm-0 p-0 text-base font-normal';
-const PAPER = 'block rounded-[16px] bg-white';
+const PAPER = 'block rounded-[16px] bg-card';
 const ROW = 'flex flex-row flex-wrap items-center';
 const COLUMN = 'flex flex-col items-stretch justify-start';
 // datetime 입력칸은 Mantine 입력칸 줄 높이(높이 - 2px = 34px)를 준다. text-sm 1.45로 두면 날짜 글자가 소수점만큼 어긋난다.
@@ -169,7 +169,7 @@ function Metric({
       <Progress
         value={usage}
         className="h-[5px] rounded-[32px]"
-        indicatorClassName={usage >= 100 ? 'bg-[#fa5252]' : undefined}
+        indicatorClassName={usage >= 100 ? 'bg-ui-red' : undefined}
       />
       {reserved > 0 && (
         <p

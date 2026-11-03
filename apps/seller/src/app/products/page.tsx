@@ -230,7 +230,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
   }
 
   return (
-    <div className="block rounded-[16px] bg-white p-4">
+    <div className="block rounded-[16px] bg-card p-4">
       <div className="flex flex-row flex-wrap items-start justify-start gap-3">
         {/* 이미지 */}
         <div

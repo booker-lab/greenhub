@@ -41,6 +41,17 @@ describe('globals.css', () => {
     expect(imports).toContainEqual({ path: '@greenhub/ui/styles/tokens.css', rest: '' });
   });
 
+  it('다크 모드 토큰(dark.css)은 base.css 뒤에 layer 없이 import한다(tokens.css·base.css 값을 이긴다)', () => {
+    const paths = imports.map((i) => i.path);
+    expect(imports).toContainEqual({ path: '@greenhub/ui/styles/dark.css', rest: '' });
+    expect(paths.indexOf('@greenhub/ui/styles/dark.css')).toBeGreaterThan(
+      paths.indexOf('@greenhub/ui/styles/base.css'),
+    );
+    expect(paths.indexOf('@greenhub/ui/styles/dark.css')).toBeGreaterThan(
+      paths.indexOf('@greenhub/ui/styles/tokens.css'),
+    );
+  });
+
   it('Tailwind는 preflight 없이 theme·utilities만 각 layer로 연결한다', () => {
     expect(imports.map((i) => i.path)).not.toContain('tailwindcss');
     expect(imports.map((i) => i.path)).not.toContain('tailwindcss/preflight.css');
@@ -62,13 +73,15 @@ describe('globals.css', () => {
       expect(selectors, s).toContain(s);
     }
     const base = css.slice(css.indexOf('@layer base {'));
-    expect(base).toMatch(/color-scheme:\s*light;/);
+    // 다크 모드(D5): 입력칸·스크롤바도 기기 설정을 따른다.
+    expect(base).toMatch(/color-scheme:\s*light dark;/);
     expect(base).toMatch(/box-sizing:\s*border-box;/);
     expect(base).toMatch(/font:\s*inherit;/);
     expect(base).toMatch(/font-family:\s*var\(--font-family\);/);
     expect(base).toMatch(/font-size:\s*var\(--font-size-md\);/);
     expect(base).toMatch(/line-height:\s*1\.55;/);
-    expect(base).toMatch(/color:\s*#000;/);
+    // 밝음 #000(Mantine 검정 글자), 어둠은 dark.css 값.
+    expect(base).toMatch(/color:\s*var\(--ui-ink\);/);
   });
 
   it('preflight 대신 채우는 초기화(테두리·여백·모양)는 새 컴포넌트(data-slot)에만 걸린다', () => {

@@ -157,7 +157,7 @@ export default function HubsPage() {
         ) : (
           <div className="flex flex-col items-stretch justify-start gap-3">
             {hubs.map((hub) => (
-              <div key={hub.id} className="block rounded-[16px] bg-white p-4">
+              <div key={hub.id} className="block rounded-[16px] bg-card p-4">
                 <div className="flex flex-row flex-wrap items-start justify-between gap-2.5">
                   <Link
                     href={`/hubs/${hub.id}`}

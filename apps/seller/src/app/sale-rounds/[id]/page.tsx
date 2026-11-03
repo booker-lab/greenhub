@@ -57,7 +57,7 @@ const STATUS_META: Record<
 // ① 외형 유지(UI 교체 P4): Mantine Paper·Text·Group·Stack·SimpleGrid·Container·Alert·Badge·Button과 같은 값을
 // Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16(그림자는 ② D2로 걷음).
 const TEXT = 'm-0 p-0 text-base font-normal';
-const PAPER = 'block rounded-[16px] bg-white';
+const PAPER = 'block rounded-[16px] bg-card';
 const COLUMN = 'flex flex-col items-stretch justify-start';
 
 // 상태 변경 버튼: 예약은 Mantine filled brand, 마감은 outline dark, 완료는 outline brand와 같은 변형이다.

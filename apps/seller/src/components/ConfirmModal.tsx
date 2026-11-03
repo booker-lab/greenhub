@@ -26,6 +26,7 @@ interface ConfirmModalProps {
 
 // ① 외형 유지(UI 교체 P2b·P4): Mantine 확인 버튼 color 값을 같은 색의 Button으로 옮긴다. filled gray-6·green-6·dark-6과
 // 마우스를 올렸을 때의 gray-7·green-7·dark-7은 Mantine 9 light 계산값이다.
+// 다크 모드(D5): 회색·dark 면은 어둠에서 밝아지므로 글자를 종이 색(밝음 흰색)으로 둔다. 초록 green-6은 두 구성 모두 같은 면이다.
 /** 확인 버튼 색. 표에 없는 값은 타입 검사에서 걸린다(모르는 값이 빨강으로 빠지지 않게). */
 export type ConfirmColor = 'brand' | 'red' | 'gray' | 'green' | 'dark';
 
@@ -35,9 +36,12 @@ const CONFIRM_BUTTON: Record<
 > = {
   brand: { variant: 'default' },
   red: { variant: 'destructive' },
-  gray: { variant: 'default', className: 'bg-[#868e96] hover:bg-[#495057]' },
+  gray: { variant: 'default', className: 'bg-ui-gray-6 text-background hover:bg-ui-gray-7' },
   green: { variant: 'default', className: 'bg-[#40c057] hover:bg-[#37b24d]' },
-  dark: { variant: 'default', className: 'bg-[#2e2e2e] hover:bg-[#242424]' },
+  dark: {
+    variant: 'default',
+    className: 'bg-ui-dark text-background hover:bg-ui-dark-filled-hover',
+  },
 };
 
 export function ConfirmModal({

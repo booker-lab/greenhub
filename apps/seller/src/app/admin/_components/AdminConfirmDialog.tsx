@@ -110,7 +110,7 @@ export function AdminConfirmDialog({
                   checked={check.checked}
                   disabled={loading}
                   onChange={(event) => check.onChange(event.currentTarget.checked)}
-                  className="size-5 shrink-0 cursor-pointer accent-[#007A43]"
+                  className="size-5 shrink-0 cursor-pointer accent-primary"
                   data-autofocus={initialFocus === 'check' ? true : undefined}
                 />
                 <span>{check.label}</span>
@@ -126,7 +126,7 @@ export function AdminConfirmDialog({
                 variant="plain"
                 onClick={onClose}
                 disabled={loading}
-                className="h-10 rounded-[8px] px-4 text-[15px] focus-visible:outline-black max-sm:w-full"
+                className="h-10 rounded-[8px] px-4 text-[15px] focus-visible:outline-ui-ink max-sm:w-full"
                 data-autofocus={initialFocus === 'close' ? true : undefined}
               >
                 닫기
@@ -136,7 +136,7 @@ export function AdminConfirmDialog({
                   if (!disabled) onConfirm();
                 }}
                 disabled={disabled}
-                className="h-10 rounded-[8px] bg-[#007A43] px-4 text-[15px] text-white hover:bg-[#006638] focus-visible:outline-black disabled:text-[#495057] max-sm:w-full"
+                className="h-10 rounded-[8px] bg-primary px-4 text-[15px] text-white hover:bg-ui-primary-hover focus-visible:outline-ui-ink disabled:text-ui-gray-7 max-sm:w-full"
               >
                 {loading ? '처리 중…' : confirmLabel}
               </Button>
@@ -151,7 +151,7 @@ export function AdminConfirmDialog({
 // 이름–값 줄. 줄 구분선은 상자 안쪽 전체 폭에 한 줄로 긋는다.
 function ConfirmRows({ rows, numeric = false }: { rows: AdminConfirmRow[]; numeric?: boolean }) {
   return (
-    <dl className="m-0 divide-y divide-rule rounded-[8px] bg-[#f4f7f5]">
+    <dl className="m-0 divide-y divide-rule rounded-[8px] bg-frame">
       {rows.map((row) => (
         <div
           key={row.label}

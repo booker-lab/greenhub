@@ -21,7 +21,7 @@ import { useTokenRef } from '@/lib/use-token-ref';
 // Stack(gap sm)·Text(sm = 15px·줄 높이 1.45)·TextInput·Textarea(autosize, 라벨)·Checkbox green(green-6)과 같은 값.
 const TEXT = 'm-0 p-0 text-base';
 const TEXT_SM = 'm-0 p-0 text-sm';
-const PAPER = 'block rounded-[16px] bg-white p-4';
+const PAPER = 'block rounded-[16px] bg-card p-4';
 const STACK = 'flex flex-col items-stretch justify-start gap-3';
 const GREEN = '#40c057';
 

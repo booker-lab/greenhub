@@ -20,7 +20,7 @@ interface DeliveryConfig {
 
 // ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(안쪽 20; 그림자는 ② D2로 걷음) 값.
 const TEXT = 'm-0 p-0 text-base';
-const PAPER = 'block rounded-[16px] bg-white p-5';
+const PAPER = 'block rounded-[16px] bg-card p-5';
 
 const DEFAULTS: DeliveryConfig = {
   directFee: 3000,

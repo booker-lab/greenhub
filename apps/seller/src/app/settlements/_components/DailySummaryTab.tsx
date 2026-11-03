@@ -31,7 +31,7 @@ export function DailySummaryTab({
   summaryError,
 }: DailySummaryTabProps) {
   return (
-    <div className="block rounded-[16px] bg-white p-5">
+    <div className="block rounded-[16px] bg-card p-5">
       <div className={`${ROW} mb-4`}>
         <p
           className={TEXT}
