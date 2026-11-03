@@ -351,7 +351,7 @@ export default function MapPage() {
                       flexShrink: 0,
                       borderRadius: '50%',
                       backgroundColor: 'var(--primary)',
-                      color: 'var(--color-bg)',
+                      color: 'var(--primary-foreground)',
                       fontSize: 'var(--font-size-sm)',
                       fontWeight: 'var(--fw-bold)',
                       display: 'flex',

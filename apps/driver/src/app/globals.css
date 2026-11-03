@@ -24,11 +24,15 @@
 
 @import "@greenhub/ui/styles/base.css";
 
+/* 다크 모드(D5, design-direction.md §9): 기기 설정이 어둠이면 토큰 값만 다시 정의한다. base.css·tokens.css 값을 이기도록
+   그 뒤에 layer 없이 둔다. 기사 앱의 무채색 값은 아래 기사 전용 블록이 덮어쓴다. */
+@import "@greenhub/ui/styles/dark.css";
+
 /* Mantine 기본 규칙(baseline.css)과 MantineProvider 테마 값(theme.ts)을 옮긴 것이다(① 외형 유지).
    글꼴 Pretendard 16px·줄 높이 1.55·검정 글자, 상자 크기는 테두리 포함, 입력·버튼은 부모 글꼴을 쓴다. */
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: light dark;
     /* 기사 ② 방향(design-direction.md §6 "한 손 배송 목록"). 햇빛 아래에서 읽도록 보조 글자도 거의 검정(흰 바탕 대비 9.7:1),
        전화·길 찾기는 연회색 면(초록 주요 버튼만 칠한 면이 되게), 화면 아래 고정 바는 위쪽 선 대신 옅은 그림자다. */
     --driver-text-muted: #3F4642;
@@ -59,7 +63,7 @@
     font-family: var(--font-family);
     font-size: var(--font-size-md);
     line-height: 1.55;
-    color: #000;
+    color: var(--ui-ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -68,6 +72,59 @@
     body {
       -webkit-text-size-adjust: 100%;
     }
+  }
+}
+
+/* 다크 모드(D5) 기사 앱 값(design-direction.md §9.1·§9.2 기사 행): D4 무채색 틀이라 초록빛 없는 회색을 쓴다.
+   바탕 #121212 · 카드 #1C1C1C · 면 #262626, 글자 #F2F2F2(16.7:1) · 보조 #B0B0B0(8.6:1). 표에 없는 선·입력칸·꺼진 글자·
+   회색 단계는 dark.css(초록빛 회색)와 같은 밝기의 무채색이다. 초록·빨강·노랑 색 토큰은 dark.css 값을 그대로 쓴다.
+   dark.css와 위 base layer의 --driver-* 값을 이기도록 layer 없이 그 뒤에 둔다. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #121212;
+    --foreground: #f2f2f2;
+    --card: #1c1c1c;
+    --card-foreground: #f2f2f2;
+    --card-border: #333333;
+    --popover: #262626;
+    --popover-foreground: #f2f2f2;
+    --secondary: #262626;
+    --secondary-foreground: #f2f2f2;
+    --muted: #262626;
+    --muted-foreground: #b0b0b0;
+    --status-info: #262626;
+    --status-info-foreground: #c8c8c8;
+    --input: #6b6b6b;
+    --rule: #333333;
+    --frame: #121212;
+
+    --color-bg: #121212;
+    --color-surface: #121212;
+    --color-surface-muted: #262626;
+    --color-border: #2a2a2a;
+    --color-text: #f2f2f2;
+    --color-text-secondary: #b0b0b0;
+    --color-text-disabled: #707070;
+    --color-status-info-bg: #262626;
+    --color-status-info-text: #c8c8c8;
+
+    --ui-ink: #f2f2f2;
+    --ui-gray-0: #262626;
+    --ui-gray-1: #262626;
+    --ui-gray-2: #333333;
+    --ui-gray-3: #3d3d3d;
+    --ui-gray-5: #707070;
+    --ui-gray-6: #b0b0b0;
+    --ui-gray-7: #c8c8c8;
+    --ui-gray-9: #f2f2f2;
+    --ui-dark: #f2f2f2;
+    --ui-dark-light: #3d3d3d;
+    --ui-dark-light-text: #f2f2f2;
+    --ui-dark-light-hover: #474747;
+
+    --driver-text-muted: #b0b0b0;
+    --driver-action-surface: #262626;
+    --driver-bar-shadow: 0 -1px 0 var(--rule);
   }
 }
 

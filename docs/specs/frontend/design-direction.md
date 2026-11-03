@@ -523,6 +523,21 @@ API 제안(이번 적용 범위 밖, 따로 판단): 할 일 요약 조회(환�
 | `--input` | `#CED4DA` | `#646D68` | 종이 3.3 | 입력칸 테두리(밝음은 1.5) |
 | 기사 바탕 · 카드 · 면 | `#FFFFFF` · — · `#F1F3F2` | `#121212` · `#1C1C1C` · `#262626` | 글자 `#F2F2F2` 16.7 · 보조 `#B0B0B0` 8.6 | 기사 앱만. 버튼 면은 같은 `#007A43` |
 
+기사 앱 확장 값(2026-11-03 조정 세션 확정, 안 A): 위 표 기사 행에 없는 자리도 초록빛 없는 무채색으로 둔다. dark.css와 같은 밝기이고, `apps/driver/src/app/globals.css`의 기사 전용 어둠 블록이 dark.css 뒤에서 덮어쓴다. 초록·빨강·노랑 색 토큰은 dark.css 값을 그대로 쓴다.
+
+| 자리(토큰) | 기사 어둠 값 | 대비 |
+|---|---|---|
+| 바탕(`--background`·`--color-bg`·`--color-surface`) · 카드(`--card`) | `#121212` · `#1C1C1C` | 본문 `#F2F2F2` 16.7 · 15.2 |
+| 면·떠 있는 메뉴(`--muted`·`--secondary`·`--color-surface-muted`·`--status-info`·`--driver-action-surface`·`--popover`·`--ui-gray-0/1`) | `#262626` | 본문 13.5 · 보조 `#B0B0B0` 7.0 · 정보 글자 `#C8C8C8` 9.0 |
+| 보조 글자(`--muted-foreground`·`--color-text-secondary`·`--driver-text-muted`·`--ui-gray-6`) | `#B0B0B0` | 바탕 8.6 · 카드 7.9 · 면 7.0 |
+| 선(`--rule`·`--card-border`·`--ui-gray-2` · `--color-border` · `--ui-gray-3`) | `#333333` · `#2A2A2A` · `#3D3D3D` | 비글자(구분선) |
+| 입력칸 테두리(`--input`) | `#6B6B6B` | 바탕 3.5 · 카드 3.2 |
+| 꺼진 글자(`--color-text-disabled`·`--ui-gray-5`) · `--ui-gray-7` | `#707070` · `#C8C8C8` | 바탕 3.8(대비 기준 예외) |
+| 고정 바(`--driver-bar-shadow`) | 위쪽 1px `--rule` 선 | — |
+| 초록 행동 버튼(56px, `--primary` `#007A43`) 흰 글자 | 밝음과 같음 | 5.4 |
+| 빨강 문제 글자(`--color-danger` `#FF7366`) | dark.css 값 | 바탕 7.0 · 카드 6.4 · 면 5.7 |
+| 초록 글자(`--color-primary-dark` `#4FD08C`) | dark.css 값 | 바탕 9.6 · 카드 8.7 · 면 7.7 |
+
 시안에서 드러난 토큰 구조 문제:
 
 - 밝음에서 `--color-deadline-text`(`#3B2F00`) 하나가 노랑 띠 위와 연노랑 상자 위에 같이 쓰인다. 어둠에서는 두 바탕의 밝기가 반대라 **띠 위 글자**(`--deadline-on`, 어둠 `#2A2100`)와 **상자 위 글자**(`--deadline-foreground`, 어둠 `#FFD866`)로 나눈다. 시안의 결제 화면 경고 상자 제목이 이 때문에 보이지 않는다.
