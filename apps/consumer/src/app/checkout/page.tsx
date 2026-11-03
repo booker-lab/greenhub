@@ -569,7 +569,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
       {saleRounds.isRefreshing && (
         // Mantine Container(sm 720px·px md·pt sm)·Text sm dimmed(gray-6) 계산값
         <div className="mx-auto max-w-[720px] px-4 pt-3">
-          <p className="m-0 text-center text-sm text-[#868e96]" aria-live="polite">
+          <p className="m-0 text-center text-sm text-ui-gray-6" aria-live="polite">
             최신 회차 정보를 확인하는 중...
           </p>
         </div>
@@ -652,7 +652,7 @@ function CartCheckoutContent() {
     return (
       // Mantine Text c="red"(red-6) 계산값
       <div className="mx-auto max-w-[720px] px-4 py-5">
-        <p className="m-0 text-base text-[#fa5252]">결제할 장바구니 정보를 확인할 수 없습니다.</p>
+        <p className="m-0 text-base text-ui-red">결제할 장바구니 정보를 확인할 수 없습니다.</p>
       </div>
     );
   }

@@ -21,7 +21,7 @@ const categoryLabels: Record<string, string> = {
 // ② 도감 타일(design-direction.md §4.1): 카드 테두리를 걷고 사진을 연회색 타일(모서리 16)에 둔다. 글자는 타일 밖
 // 아래 왼쪽 정렬이고 가격 아래에 도감 라벨을 둔다. 분류 칩·공구 진행 막대는 그대로다.
 const CARD_LINK =
-  'relative block bg-white text-black no-underline outline-none touch-manipulation [-webkit-tap-highlight-color:transparent]';
+  'relative block bg-background text-ui-ink no-underline outline-none touch-manipulation [-webkit-tap-highlight-color:transparent]';
 
 export default function ProductCard({ product }: ProductCardProps) {
   const imgSrc = product.images?.[0] ?? PRODUCT_IMAGE_FALLBACK;

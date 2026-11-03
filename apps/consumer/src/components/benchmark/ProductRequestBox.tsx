@@ -68,7 +68,7 @@ export default function ProductRequestBox({
               background: 'var(--primary)',
               border: 0,
               borderRadius: 'var(--radius-full)',
-              color: 'var(--color-bg)',
+              color: 'var(--primary-foreground)',
               cursor: 'pointer',
               fontSize: 'var(--font-size-md)',
               fontWeight: 800,

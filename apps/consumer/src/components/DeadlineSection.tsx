@@ -82,7 +82,8 @@ function DeadlineCard({ product }: { product: Product }) {
             style={{
               fontSize: 'var(--font-size-sm)',
               fontWeight: 'var(--fw-bold)',
-              color: 'var(--color-bg)',
+              // 사진 위 검정 55% 덮개 위 글자라 두 색 구성 모두 흰색이다(--color-bg는 어둠에서 어두워진다).
+              color: '#ffffff',
               fontFamily: 'monospace',
             }}
           >

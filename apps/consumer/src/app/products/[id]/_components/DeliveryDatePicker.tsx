@@ -49,7 +49,7 @@ function buildCalendar(year: number, month: number): (string | null)[][] {
 // Mantine ActionIcon(size md 28px·subtle gray·기본 모서리 16px) 계산값: 투명 1px 테두리, gray-9 글자, 줄 높이 1,
 // hover(가능한 기기만) gray-2 면, 비활성은 gray-2 면·gray-5 글자.
 const MONTH_NAV_BUTTON =
-  'relative m-0 inline-flex size-7 min-h-7 min-w-7 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[16px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-[#212529] no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px enabled:[@media(hover:hover)]:hover:bg-[#e9ecef] disabled:cursor-not-allowed disabled:bg-[#e9ecef] disabled:text-[#adb5bd] disabled:active:translate-y-0';
+  'relative m-0 inline-flex size-7 min-h-7 min-w-7 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[16px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-gray-9 no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px enabled:[@media(hover:hover)]:hover:bg-ui-gray-2 disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:active:translate-y-0';
 
 export default function DeliveryDatePicker({ storeId, value, onChange }: Props) {
   const todayStr = todayKST();

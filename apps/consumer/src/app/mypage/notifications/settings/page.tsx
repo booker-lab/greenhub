@@ -334,7 +334,7 @@ function LegacyNotificationSettingsPage() {
 
         {notice && (
           // Mantine Alert light green(green-1 면·green-9 글자).
-          <Alert role="alert" className="bg-[#d3f9d8] text-[#2b8a3e]">
+          <Alert role="alert" className="bg-ui-green-light text-ui-green-light-text">
             <AlertDescription>
               <p className={TEXT_SM}>{notice}</p>
             </AlertDescription>

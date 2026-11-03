@@ -132,7 +132,7 @@ function FieldFrame({
         <p
           id={errorId}
           data-slot="field-error"
-          className="m-0 text-xs leading-[1.2] font-normal text-[#fa5252]"
+          className="m-0 text-xs leading-[1.2] font-normal text-ui-red"
         >
           {error}
         </p>

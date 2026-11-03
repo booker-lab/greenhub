@@ -59,7 +59,7 @@ function AddressCard({
             </p>
             {/* ② 방향(design-standard §5): 초록 면은 행동에만. 기본 표시는 연회색 면 위 흰 태그 + 검정 굵은 글자 */}
             {addr.isDefault && (
-              <span className="rounded-[var(--radius-tag)] bg-white px-2 text-[13px] leading-5 font-bold text-[var(--color-text)]">
+              <span className="rounded-[var(--radius-tag)] bg-background px-2 text-[13px] leading-5 font-bold text-[var(--color-text)]">
                 기본
               </span>
             )}
@@ -156,7 +156,7 @@ function AddressFormModal({
         >
           <DialogPopup
             data-slot="dialog-content"
-            className="pointer-events-auto relative flex max-h-[90dvh] w-[440px] max-w-full flex-col overflow-y-auto rounded-[8px] bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none will-change-[opacity] duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
+            className="pointer-events-auto relative flex max-h-[90dvh] w-[440px] max-w-full flex-col overflow-y-auto rounded-[8px] bg-popover text-ui-ink shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none will-change-[opacity] duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95"
           >
             <DialogClose
               data-slot="dialog-close"
@@ -339,7 +339,7 @@ export default function AddressesClient() {
                     type="button"
                     size="xs"
                     variant="ghost"
-                    className="bg-white text-[#fa5252] hover:bg-white"
+                    className="bg-background text-ui-red hover:bg-background"
                     onClick={() => refetch()}
                   >
                     다시 시도
