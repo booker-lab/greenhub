@@ -1,8 +1,10 @@
 import { COLOR_SCHEME_SCRIPT } from '@greenhub/shared';
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import { connection } from 'next/server';
 import AppShell from '@/components/AppShell';
 import BottomNav from '@/components/BottomNav';
+import { decodeInitialSession, INITIAL_SESSION_HEADER } from '@/lib/initial-session';
 import Providers from './providers';
 import './globals.css';
 
@@ -38,6 +40,8 @@ export default async function RootLayout({
   // 요청마다 그린다. proxy가 요청 CSP 헤더에 넣은 nonce를 Next가 자기 스크립트에 붙이려면 동적 렌더링이어야 한다
   // (Mantine 색상 모드 스크립트에 nonce를 넘기려고 요청 헤더를 읽던 동안과 같은 렌더링 방식).
   await connection();
+  // proxy가 보호 경로에서 이미 확인한 판매자 세션. 없으면(로그인·초대 화면) 화면이 예전처럼 직접 조회한다.
+  const initialSession = decodeInitialSession((await headers()).get(INITIAL_SESSION_HEADER));
   return (
     // data-theme은 hydration 전에 인라인 스크립트가 넣으므로 html 속성 차이 경고를 끈다(html 요소 자신만 해당).
     <html lang="ko" suppressHydrationWarning>
@@ -48,7 +52,7 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: COLOR_SCHEME_SCRIPT }} />
       </head>
       <body>
-        <Providers>
+        <Providers session={initialSession}>
           <AppShell>{children}</AppShell>
           <BottomNav />
         </Providers>
