@@ -230,3 +230,62 @@ describe('useSaleRounds — 토큰 갱신과 회차 목록 재조회', () => {
     expect(signedOut.error).toBe('셀러 스토어 인증 정보를 확인할 수 없습니다.');
   });
 });
+
+describe('useSaleRounds — 진행 중인 작업과 상세 조회', () => {
+  const pending = () => {
+    let settle: { resolve: (value: unknown) => void; reject: (error: Error) => void } = {
+      resolve: () => {},
+      reject: () => {},
+    };
+    const promise = new Promise((resolve, reject) => {
+      settle = { resolve, reject };
+    });
+    return { promise, ...settle };
+  };
+
+  beforeEach(() => {
+    harness.state.reset();
+    apiJson.mockReset();
+  });
+
+  // 세션이 첫 렌더부터 있으면(proxy가 넘긴 첫 세션) 상세 화면 effect가 마운트 즉시 조회를 시작한다.
+  // 개발 모드 Strict Mode는 effect를 정리 후 다시 돌리므로 첫 조회가 끝나기 전에 두 번째 조회가 온다.
+  it('앞선 상세 조회가 끝나기 전의 새 상세 조회를 막지 않고 둘 다 요청한다', async () => {
+    const first = pending();
+    const second = pending();
+    apiJson.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    const hook = render(authenticated('store-a', 'token-1'));
+
+    const firstCall = hook.getRound('round-a');
+    const secondCall = hook.getRound('round-a');
+    expect(apiJson).toHaveBeenCalledTimes(2);
+
+    first.reject(new Error('앞선 조회 실패'));
+    await expect(firstCall).rejects.toThrow('앞선 조회 실패');
+    // 대체된 앞선 조회는 새 조회의 진행 표시와 오류를 건드리지 않는다.
+    const during = render(authenticated('store-a', 'token-1'));
+    expect(during.pendingOperation).toBe('detail');
+    expect(during.operationError).toBeNull();
+
+    second.reject(new Error('응답 형식 확인 생략'));
+    await expect(secondCall).rejects.toThrow('응답 형식 확인 생략');
+    const after = render(authenticated('store-a', 'token-1'));
+    expect(after.pendingOperation).toBeNull();
+    expect(after.operationError).toBe('응답 형식 확인 생략');
+  });
+
+  it('상세 조회 중의 변경 작업은 그대로 막는다', async () => {
+    const first = pending();
+    apiJson.mockReturnValueOnce(first.promise);
+    const hook = render(authenticated('store-a', 'token-1'));
+
+    const detail = hook.getRound('round-a');
+    await expect(hook.changeStatus('round-a', 'OPEN' as never)).rejects.toThrow(
+      '진행 중인 회차 작업이 끝난 뒤 다시 시도해 주세요.',
+    );
+    expect(apiJson).toHaveBeenCalledTimes(1);
+
+    first.reject(new Error('응답 형식 확인 생략'));
+    await expect(detail).rejects.toThrow('응답 형식 확인 생략');
+  });
+});

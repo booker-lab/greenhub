@@ -1,6 +1,7 @@
 'use client';
 
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
+import type { Session } from 'next-auth';
 import { getSession, SessionProvider, signOut, useSession } from 'next-auth/react';
 import { createContext, useContext, useEffect, useRef } from 'react';
 import { AppToaster } from '@/components/AppToaster';
@@ -82,10 +83,18 @@ function SessionAuthorityRecheck() {
   return null;
 }
 
-export default function Providers({ children }: { children: React.ReactNode }) {
+// session은 루트 layout이 넘긴 proxy 확인 세션이다. 있으면 첫 화면에서 /api/auth/session을 다시
+// 조회하지 않는다. 없으면(undefined) 예전처럼 SessionProvider가 직접 조회한다.
+export default function Providers({
+  children,
+  session,
+}: {
+  children: React.ReactNode;
+  session?: Session;
+}) {
   return (
     <AppToaster>
-      <SessionProvider>
+      <SessionProvider session={session}>
         <SessionKeepAlive />
         <SessionAuthorityRecheck />
         <TokenErrorGuard>{children}</TokenErrorGuard>
