@@ -110,9 +110,10 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
       `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
     );
     await expect(directCard).toBeVisible();
-    // 상품마다 한 줄로 챙길 개수를 보인다.
-    await expect(directCard.getByText('E2E 호접란 · 1개', { exact: true })).toBeVisible();
-    await expect(directCard.getByText('E2E 미니 호접란 · 1개', { exact: true })).toBeVisible();
+    // 상품마다 챙길 개수를 보인다. 배송판 행은 두 줄(1줄 주소, 2줄 받는 분·상품)이라 상품 줄을 한 줄에 이어 쓴다
+    // (design-direction.md §6 기사 ② D4-1, #799). 상세 화면은 상품마다 한 줄이다(아래 배송 시작 테스트).
+    await expect(directCard).toContainText('E2E 호접란 · 1개');
+    await expect(directCard).toContainText('E2E 미니 호접란 · 1개');
     await expect(
       page.getByTestId(
         `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_HUB)}`,
@@ -160,9 +161,10 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.getByRole('button', { name: '배송 보류 저장' }).click();
 
     await expect(page.getByRole('dialog', { name: '배송 보류 기록' })).toHaveCount(0);
-    await expect(
-      page.getByRole('main').getByRole('paragraph').filter({ hasText: /^배송 보류$/ }),
-    ).toBeVisible();
+    // 보류 상태는 상세 머리(banner)에 빨간 점 + 글자로 보이고, 본문에는 "배송 보류 내용" 상자가 생긴다
+    // (design-direction.md §6 기사 ② D4-2, #800).
+    await expect(page.getByRole('banner').getByText('배송 보류', { exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByText('배송 보류 내용', { exact: true })).toBeVisible();
     await expect(page.getByText('기상 악화')).toBeVisible();
     await expect(page.getByText('판매자 책임')).toBeVisible();
     await expect(page.getByText('재배송비 없음')).toBeVisible();

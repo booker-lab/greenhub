@@ -10,27 +10,46 @@
 
 ## 2. 색
 
-| 토큰 | 값 | 쓰는 곳 |
-|---|---|---|
-| `--primary` · `bg-primary` | `#007A43` | 버튼 면(주요 버튼·담기·결제), 외곽선 버튼의 테두리와 글자, 채운 배지. 흰 글자 대비 5.4:1(`design-direction.md` §2, 2026-11-02 적용) |
-| `--color-primary` · `--brand` · `bg-brand` | `#00A65A` | 작은 글자를 얹지 않는 면: 진행 막대, 체크박스·라디오·스위치의 켜진 면, 입력칸 초점 선, 선택 표시 테두리. **면 전용** |
-| `--color-primary-dark` · `brand.8` | `#007A43` | 초록 글자(판매자명, 태그 글자, 링크, 강조 숫자) |
-| `--color-primary-surface` · `brand.0` | `#E9F9EF` | 배송 흐름 상자, 판매자 요약 숫자 바탕, 품질 보장 태그. 소비자 회차 상품 타일의 도착 태그는 2026-11-02에 없앴다(`design-direction.md` §4.1) |
-| `--color-deadline` | `#FFD43B` | 회차 마감 카운트다운 띠 |
-| `--color-deadline-surface` / `--color-deadline-text` | `#FFF4CC` / `#3B2F00` | 마감 안내 상자, "얼마 안 남음" 태그 |
-| `--color-text` | `#111111` | 본문, 가격 |
-| `--color-text-secondary` · `--muted-foreground` | `#696F6C` | 설명 글자. 흰 바탕 5.1:1, 연회색 면(`#F1F3F2`) 4.6:1(2026-11-02 `#6B716E`에서 바꿈, 면 위 4.47:1이 4.5 아래였다) |
-| `--color-surface-muted` | `#F1F3F2` | 칩·수량 조절·요약 상자 바탕 |
-| `--color-border` | `#ECEFED` | 구분선, 카드 테두리 |
-| `--color-danger` / `--color-danger-surface` | `#D92D20` / `#FDE8E6` | 오류, 배송 보류 같은 문제 상태만 |
-| `--frame` · `bg-frame` | `#F4F7F5` | 판매자·어드민 틀(머리·하단 탭·탭 띠·페이지 바탕, 어드민 사이드바·상단바). `packages/ui/src/styles/tokens.css`, 소비자 앱은 쓰지 않는다(`design-direction.md` §8 D3) |
-| `--rule` · `border-rule` | `#E3E8E5` | 어드민 종이 1px 테두리·표 행 선·선택 메뉴 테두리(`design-direction.md` §5 "어드민") |
-| `--driver-text-muted` / `--driver-action-surface` / `--driver-bar-shadow` | `#3F4642` / `#E4EAE6` / `0 -4px 16px rgba(17,17,17,0.06)` | 기사 앱만(`apps/driver/src/app/globals.css`): 보조 글자(흰 바탕 9.7:1), 전화·길 찾기 면, 고정 바 그림자(`design-direction.md` §6, 2026-11-03 적용) |
+| 토큰 | 값 | 어둠 값(§2.1) | 쓰는 곳 |
+|---|---|---|---|
+| `--primary` · `bg-primary` | `#007A43` | 같음 | 버튼 면(주요 버튼·담기·결제), 외곽선 버튼의 테두리와 글자, 채운 배지. 흰 글자 대비 5.4:1(`design-direction.md` §2, 2026-11-02 적용) |
+| `--color-primary` · `--brand` · `bg-brand` | `#00A65A` | 같음 | 작은 글자를 얹지 않는 면: 진행 막대, 체크박스·라디오·스위치의 켜진 면, 입력칸 초점 선, 선택 표시 테두리. **면 전용** |
+| `--color-primary-dark` · `brand.8` | `#007A43` | `#4FD08C` | 초록 글자(판매자명, 태그 글자, 링크, 강조 숫자) |
+| `--color-primary-surface` · `brand.0` | `#E9F9EF` | `#10301F` | 배송 흐름 상자, 판매자 요약 숫자 바탕, 품질 보장 태그. 소비자 회차 상품 타일의 도착 태그는 2026-11-02에 없앴다(`design-direction.md` §4.1) |
+| `--color-deadline` | `#FFD43B` | `#F2C21D` | 회차 마감 카운트다운 띠 |
+| `--color-deadline-surface` / `--color-deadline-text` | `#FFF4CC` / `#3B2F00` | `#2B2410` / `#FFD866` | 마감 안내 상자, "얼마 안 남음" 태그 |
+| `--color-text` | `#111111` | `#E8ECEA` | 본문, 가격 |
+| `--color-text-secondary` · `--muted-foreground` | `#696F6C` | `#A1AAA5` | 설명 글자. 흰 바탕 5.1:1, 연회색 면(`#F1F3F2`) 4.6:1(2026-11-02 `#6B716E`에서 바꿈, 면 위 4.47:1이 4.5 아래였다) |
+| `--color-surface-muted` | `#F1F3F2` | `#232A26` | 칩·수량 조절·요약 상자 바탕 |
+| `--color-border` | `#ECEFED` | `#262E2A` | 구분선, 카드 테두리 |
+| `--color-danger` / `--color-danger-surface` | `#D92D20` / `#FDE8E6` | `#FF7366` / `#3A1714` | 오류, 배송 보류 같은 문제 상태만 |
+| `--frame` · `bg-frame` | `#F4F7F5` | `#0F1311` | 판매자·어드민 틀(머리·하단 탭·탭 띠·페이지 바탕, 어드민 사이드바·상단바). `packages/ui/src/styles/tokens.css`, 소비자 앱은 쓰지 않는다(`design-direction.md` §8 D3) |
+| `--rule` · `border-rule` | `#E3E8E5` | `#2E3632` | 어드민 종이 1px 테두리·표 행 선·선택 메뉴 테두리(`design-direction.md` §5 "어드민") |
+| `--driver-text-muted` / `--driver-action-surface` / `--driver-bar-shadow` | `#3F4642` / `#E4EAE6` / `0 -4px 16px rgba(17,17,17,0.06)` | `#B0B0B0` / `#262626` / `0 -1px 0 var(--rule)` | 기사 앱만(`apps/driver/src/app/globals.css`): 보조 글자(흰 바탕 9.7:1), 전화·길 찾기 면, 고정 바 그림자(`design-direction.md` §6, 2026-11-03 적용) |
 
 규칙:
 - `--color-primary`를 흰 바탕의 작은 글자색으로 쓰지 않는다(대비 3.2:1). 초록 글자는 `--color-primary-dark`.
 - 흰 글자를 얹는 초록 면(버튼·채운 배지)은 `--primary`(`#007A43`)다. `#00A65A` 위의 흰 글자는 대비가 3.2:1이라 쓰지 않는다. 판매자 화면이 버튼 면·채운 배지에 직접 칠하던 `var(--color-primary)`도 `var(--primary)`로 맞췄다(2026-11-02).
 - 빨강은 문제 상태에만 쓴다. 할인·강조 용도로 쓰지 않는다.
+
+### 2.1 다크 모드
+
+2026-11-02 사용자 확정(`design-direction.md` §9.6 D5-a·D5-b·D5-c), 판매자·어드민·기사 앱 적용 완료(2026-11-03). **소비자 앱은 다크 모드를 쓰지 않고 밝은 화면만 쓴다**(2026-11-03 사용자 결정).
+
+- **값의 정본**은 `packages/ui/src/styles/dark.css`다. 위 표의 어둠 값 열과 다른 의미 변수(`--background`·`--card`·`--popover`·`--ui-*` 등)를 이 파일만 다시 정의하고, 컴포넌트는 토큰만 읽는다. 하드코딩 색을 새로 넣지 않는다(`check-css-vars`).
+- **바탕 단계**: 틀 `#0F1311`(`--frame`) → 종이 `#161B18`(`--background`·`--color-bg`) → 면 `#232A26`(`--color-surface-muted`) → 떠 있는 창 `#1E2421`(`--popover`). 그림자 대신 위쪽 1px 선(`--bar-shadow: 0 -1px 0 var(--rule)`)으로 고정 바를 나눈다.
+- **초록**: 버튼 면 `--primary` `#007A43`과 흰 글자는 밝음과 같다. 초록 글자는 `#4FD08C`(`--color-primary-dark`·`--brand-ink`), 빨강 글자는 `#FF7366`, 채운 빨강 면은 `#D92D20`(흰 글자 4.8:1)이다.
+- **기사 앱은 무채색**이다: 바탕 `#121212` · 카드 `#1C1C1C` · 면·떠 있는 메뉴 `#262626`, 글자 `#F2F2F2` · 보조 `#B0B0B0`. 표에 없는 자리도 같은 밝기의 무채색이다(확장 값, 2026-11-03 조정 세션 확정 안 A): 선 `#333333`(`--rule`·`--card-border`) · `#2A2A2A`(`--color-border`) · `#3D3D3D`(`--ui-gray-3`), 입력칸 테두리 `#6B6B6B`, 꺼진 글자 `#707070`, `--ui-gray-7` `#C8C8C8`, 고정 바는 위쪽 1px `--rule` 선. 대비 표는 `design-direction.md` §9.2 "기사 앱 확장 값"이다.
+  - 기사 `apps/driver/src/app/globals.css`의 기사 전용 블록이 dark.css 뒤에서 회색 값만 덮어쓰고, 초록·빨강·노랑 값은 dark.css를 그대로 쓴다.
+- **전환**: 기본은 기기 설정(`prefers-color-scheme`)을 따른다. 판매자 설정 "정보" 카드와 기사 내 정보 계정 카드의 한 줄 "화면 모드: 시스템 / 밝게 / 어둡게"(`@greenhub/ui` `ColorSchemeSetting`)로 직접 고를 수 있다. 선택 표시는 검정 2px 테두리·굵은 글자(초록 면 없음)이고, 라디오 그룹 이름이 "화면 모드"다.
+  - 저장은 `localStorage` 키 `greenhub-color-scheme` 하나(값 `light`·`dark`, 시스템이면 키 없음)다. 값이 잘못됐거나 저장소를 쓸 수 없으면 시스템으로 본다. 쿠키는 쓰지 않는다.
+  - 판매자·기사 루트 layout `<head>`의 고정 인라인 스크립트(`@greenhub/shared` `COLOR_SCHEME_SCRIPT`)가 첫 페인트 전에 `<html data-theme="light|dark">`을 넣고, CSP `script-src`는 그 sha256 해시로 허용한다(앱 CSP 구성 `inlineScriptHashes`, 소비자는 넣지 않는다). 스크립트를 바꾸면 해시도 바꾼다(`color-scheme.test.ts`).
+  - CSS 선택자는 두 곳에 같은 값이다: `@media (prefers-color-scheme: dark)` 안 `:root:not([data-theme="light"])`와 `:root[data-theme="dark"]`. 기사 전용 블록도 같다. 두 블록이 같은지는 `scripts/ui/dark-css.spec.mjs`가 본다. `color-scheme`은 시스템이면 `light dark`, 고르면 그 값이다.
+  - viewport `themeColor`는 기기 설정을 따르는 정적 메타 두 값(밝음 `#00A65A`, 어둠 판매자 `#0F1311`·기사 `#121212`)이다. 직접 고른 모드는 따르지 않고 그대로 둔다(2026-11-03 결정, #809). 밝은 기기에서 '어둡게'를 고르면 상태 표시줄·주소창 색만 밝게 남는다. 따르게 하려면 인라인 스크립트가 meta를 고쳐야 하고 해시도 바뀐다.
+- **바꿀 수 없는 외부 화면**(어둠에서도 밝게 열린다): 카카오맵(기사 지도). 카카오 로그인 버튼의 노랑은 브랜드 규정 값으로 고정한다. 소비자 앱의 외부 화면(PortOne 결제창, 다음 우편번호 창, 카카오 채널 버튼)은 소비자가 밝은 화면만 쓰므로 해당하지 않는다(`design-direction.md` §9.4).
+- **후속 후보**(사용자 결정 전에는 하지 않는다):
+  - 어둠에서만 상품 사진 둘레에 흰 6% 안쪽 선(`design-direction.md` §9.1). 흰 배경 사진이 밝은 네모로 뜨는 것을 줄인다. 지금은 넣지 않았다.
+  - 판매자·기사 `global-error.tsx`(루트 layout을 대신하는 최후 오류 화면)의 다크 모드. 전역 CSS 없이 인라인 색으로 그려 지금은 밝게 나온다.
 
 ## 3. 글자
 
