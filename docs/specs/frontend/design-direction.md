@@ -510,7 +510,7 @@ API 제안(이번 적용 범위 밖, 따로 판단): 할 일 요약 조회(환�
 | `--muted` · `--secondary` · `--color-surface-muted` · `--status-info` | `#F1F3F2` | `#232A26` | — | D2 면, 칩, 타일 바탕 |
 | `--foreground` · `--color-text` | `#111111` | `#E8ECEA` | 종이 14.6 · 면 12.3 | 본문·가격 |
 | `--muted-foreground` · `--color-text-secondary` | `#696F6C` | `#A1AAA5` | 종이 7.3 · 면 6.2 | 설명 글자 |
-| `--color-text-disabled` | `#A3A9A6` | `#6E7772` | 3.8 | 꺼진 글자(대비 기준 예외) |
+| `--color-text-disabled` · `--ui-gray-5` | `#A3A9A6` · `#ADB5BD` | `#8A938E` | 틀 5.9 · 종이 5.5 · 떠 있는 창 5.0 · 면 4.6 | 꺼진 글자이자 옅은 안내 글자(날짜 줄·비활성 탭·하단 메뉴 등). 어둠은 보조 글자 기준 4.5를 지키고 보조 `#A1AAA5`보다 어둡게 둔다(2026-11-05, 이전 `#6E7772` 면 3.2). 밝음 값 2.1~2.4는 후속 후보 |
 | `--primary` | `#007A43` | `#007A43`(같음) | 흰 글자 5.4 · 종이 3.2 | 버튼 면. 마우스 올림은 어둠에서 `#008248`(흰 글자 4.9) |
 | `--brand` · `--color-primary` | `#00A65A` | `#00A65A`(같음) | 종이 5.5 · 면 4.6 | 진행 막대, 켜진 스위치, 선택 테두리 |
 | `--brand-ink` · `--ring` · `--accent-foreground` · `--color-primary-dark` | `#007A43` | `#4FD08C` | 종이 8.9 · 면 7.5 | 초록 글자, 링크, 초점 링 |
@@ -533,7 +533,7 @@ API 제안(이번 적용 범위 밖, 따로 판단): 할 일 요약 조회(환�
 | 보조 글자(`--muted-foreground`·`--color-text-secondary`·`--driver-text-muted`·`--ui-gray-6`) | `#B0B0B0` | 바탕 8.6 · 카드 7.9 · 면 7.0 |
 | 선(`--rule`·`--card-border`·`--ui-gray-2` · `--color-border` · `--ui-gray-3`) | `#333333` · `#2A2A2A` · `#3D3D3D` | 비글자(구분선) |
 | 입력칸 테두리(`--input`) | `#6B6B6B` | 바탕 3.5 · 카드 3.2 |
-| 꺼진 글자(`--color-text-disabled`·`--ui-gray-5`) · `--ui-gray-7` | `#707070` · `#C8C8C8` | 바탕 3.8(대비 기준 예외) |
+| 꺼진 글자(`--color-text-disabled`·`--ui-gray-5`) · `--ui-gray-7` | `#8E8E8E` · `#C8C8C8` | 꺼진 글자 바탕 5.7 · 카드 5.2 · 면 4.6(옅은 안내 글자로도 쓰여 보조 글자 기준 4.5를 지키고 보조 `#B0B0B0`보다 어둡게 둔다. 2026-11-05, 이전 `#707070` 바탕 3.8) |
 | 고정 바(`--driver-bar-shadow`) | 위쪽 1px `--rule` 선 | — |
 | 초록 행동 버튼(56px, `--primary` `#007A43`) 흰 글자 | 밝음과 같음 | 5.4 |
 | 빨강 문제 글자(`--color-danger` `#FF7366`) | dark.css 값 | 바탕 7.0 · 카드 6.4 · 면 5.7 |
