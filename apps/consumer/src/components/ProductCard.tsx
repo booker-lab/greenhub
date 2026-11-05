@@ -4,6 +4,7 @@ import { Progress } from '@greenhub/ui/components/progress';
 import Link from 'next/link';
 import { getGroupBuyStatus, type Product } from '@greenhub/shared';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
+import { dogamLabel } from '@/lib/dogam-label';
 
 interface ProductCardProps {
   product: Product;
@@ -15,10 +16,12 @@ const categoryLabels: Record<string, string> = {
   foliage: '관엽',
 };
 
-// ① 외형 유지(UI 교체 P5): Mantine Card(component=Link, radius 16, 흰 면·검정 글자, 위치 relative, outline 0이라
-// 초점 링 없음)·Box p xs(10)·Progress sm(높이 5)·radius xl(32)·위 6과 같은 값.
+// ① 외형 유지(UI 교체 P5): Mantine Card(component=Link, 흰 면·검정 글자, 위치 relative, outline 0이라
+// 초점 링 없음)·Progress sm(높이 5)·radius xl(32)·위 6과 같은 값.
+// ② 도감 타일(design-direction.md §4.1): 카드 테두리를 걷고 사진을 연회색 타일(모서리 16)에 둔다. 글자는 타일 밖
+// 아래 왼쪽 정렬이고 가격 아래에 도감 라벨을 둔다. 분류 칩·공구 진행 막대는 그대로다.
 const CARD_LINK =
-  'relative block overflow-hidden rounded-[16px] bg-white text-black no-underline outline-none touch-manipulation [-webkit-tap-highlight-color:transparent]';
+  'relative block bg-background text-ui-ink no-underline outline-none touch-manipulation [-webkit-tap-highlight-color:transparent]';
 
 export default function ProductCard({ product }: ProductCardProps) {
   const imgSrc = product.images?.[0] ?? PRODUCT_IMAGE_FALLBACK;
@@ -28,17 +31,16 @@ export default function ProductCard({ product }: ProductCardProps) {
       href={`/products/${product.id}`}
       className={CARD_LINK}
       style={{
-        overflow: 'hidden',
         display: 'block',
         textDecoration: 'none',
-        border: 'var(--border)',
       }}
     >
       <div
         style={{
           position: 'relative',
           aspectRatio: '4/5',
-          background: 'var(--color-border)',
+          background: 'var(--color-surface-muted)',
+          borderRadius: 'var(--radius)',
           overflow: 'hidden',
         }}
       >
@@ -52,7 +54,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         />
       </div>
 
-      <div className="p-2.5">
+      <div className="pt-2">
         <div style={{ display: 'flex', gap: 4, marginBottom: 4, flexWrap: 'wrap' }}>
           <span
             style={{
@@ -106,6 +108,24 @@ export default function ProductCard({ product }: ProductCardProps) {
         >
           {product.price.toLocaleString()}원
         </p>
+        {(() => {
+          const label = dogamLabel(product);
+          return label ? (
+            <p
+              className="truncate"
+              style={{
+                fontSize: 'var(--font-size-xs)',
+                fontWeight: 'var(--fw-bold)',
+                lineHeight: 1.4,
+                color: 'var(--color-text-secondary)',
+                marginTop: 4,
+                marginBottom: 0,
+              }}
+            >
+              {label}
+            </p>
+          ) : null;
+        })()}
         {(() => {
           const colors = product.selection?.colors ?? product.colors ?? [];
           return colors.length > 0 ? (

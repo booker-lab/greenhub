@@ -1,6 +1,7 @@
 'use client';
 import { Alert } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
@@ -309,7 +310,7 @@ function useRoundCartValidation(
 // Mantine ActionIcon(size 36·subtle dark·radius xl) 계산값: UnstyledButton 위에 36px 정사각, 투명 1px 테두리,
 // dark-9 글자, 줄 높이 1, 글꼴은 물려받는다. 마우스를 올리면(hover 가능한 기기만) dark-light-hover(dark-2) 면.
 const QUANTITY_BUTTON =
-  'relative m-0 inline-flex size-9 min-h-9 min-w-9 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-[#141414] no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-[#828282]';
+  'relative m-0 inline-flex size-9 min-h-9 min-w-9 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-ui-dark-light-hover';
 
 function RoundValidationNotice({ validation }: { validation: RoundCartValidation | undefined }) {
   if (!validation) {
@@ -448,7 +449,7 @@ export default function CartPage() {
         <div className="mb-4 flex flex-col gap-2.5">
           <div
             className="p-4"
-            style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
+            style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
           >
             <div className="flex flex-nowrap items-start justify-between gap-4">
               <div>
@@ -467,9 +468,10 @@ export default function CartPage() {
               </div>
               {/* 비로그인 장바구니(guest-cart)는 서버 확인을 하지 않으므로 확인 표시를 두지 않는다. */}
               {!isGuest && (
-                <Badge variant={isChecking ? 'secondary' : 'default'} style={{ flexShrink: 0 }}>
+                // ② 방향(design-standard §5): 상태는 배지 면 없이 점 + 글자. 확인 중=회색, 확인 완료=검정.
+                <StatusDot tone={isChecking ? 'done' : 'default'} className="shrink-0 font-bold">
                   {isChecking ? '확인 중' : '확인 완료'}
-                </Badge>
+                </StatusDot>
               )}
             </div>
           </div>
@@ -502,7 +504,8 @@ export default function CartPage() {
           <IcheonPrecheck />
         </div>
       )}
-      <div className="mb-5 flex flex-col gap-3">
+      {/* ② 방향(design-standard §4·§5): 테두리 카드 대신 줄 목록. 카드 안에 연회색 요소(사진 바탕·수량 조절)가 많아 면 대신 줄 사이 선으로 나눈다. */}
+      <div className="mb-5 flex flex-col">
         {items.map((item) => {
           const roundItem = isRoundCartItem(item) ? item : null;
           const itemIssues = roundItem ? [] : getCartItemValidationIssues(item);
@@ -520,8 +523,7 @@ export default function CartPage() {
           return (
             <div
               key={cartItemKey(item)}
-              className="p-3"
-              style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}
+              className="border-0 border-solid border-[var(--color-border)] py-3 not-first:border-t"
             >
               <div className="flex flex-nowrap items-start justify-start gap-4">
                 <Link
@@ -578,9 +580,9 @@ export default function CartPage() {
                     <>
                       <span
                         style={{
-                          background: 'var(--color-primary-surface)',
+                          background: 'var(--color-surface-muted)',
                           borderRadius: 'var(--radius-tag)',
-                          color: 'var(--color-primary-dark)',
+                          color: 'var(--color-text)',
                           display: 'inline-block',
                           fontSize: 'var(--font-size-xs)',
                           fontWeight: 'var(--fw-bold)',
@@ -642,8 +644,8 @@ export default function CartPage() {
                       )}
                       {itemIssues.length > 0 && (
                         // Mantine Alert light orange(orange-1 면·orange-9 글자, p xs, 본문 검정 15px)
-                        <Alert role="alert" className="mt-3 bg-[#ffe8cc] p-2.5 text-[#d9480f]">
-                          <div className="overflow-hidden text-[15px] text-ellipsis text-black">
+                        <Alert role="alert" className="mt-3 bg-ui-orange-light p-2.5 text-ui-orange-light-text">
+                          <div className="overflow-hidden text-[15px] text-ellipsis text-ui-ink">
                             <div className="flex flex-col gap-1">
                               {itemIssues.map((issue) => (
                                 <p key={issue.code} className="m-0 p-0 text-sm font-normal">
@@ -655,7 +657,7 @@ export default function CartPage() {
                                 render={<Link href={productHref} />}
                                 variant="light"
                                 size="xs"
-                                className="mt-1 bg-[#ffe8cc] text-[#d9480f]"
+                                className="mt-1 bg-ui-orange-light text-ui-orange-light-text"
                               >
                                 <ButtonLabel>다시 선택하기</ButtonLabel>
                               </ButtonLink>

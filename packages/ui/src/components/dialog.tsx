@@ -159,7 +159,7 @@ function DialogContent({
           initialFocus={initialFocus ?? autofocus}
           data-slot="dialog-content"
           className={cn(
-            'pointer-events-auto relative flex max-h-[90dvh] will-change-[opacity] w-[440px] max-w-full flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
+            'pointer-events-auto relative flex max-h-[90dvh] will-change-[opacity] w-[440px] max-w-full flex-col overflow-y-auto rounded-lg bg-popover text-ui-ink shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] duration-100 outline-none data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
             className,
           )}
           {...props}

@@ -178,8 +178,8 @@ export default function GroupBuyPage() {
             style={{
               fontSize: 'var(--font-size-sm)',
               fontWeight: 'var(--fw-medium)',
-              color: 'var(--color-bg)',
-              background: 'var(--color-primary)',
+              color: 'var(--primary-foreground)',
+              background: 'var(--primary)',
               borderRadius: 'var(--radius-sm)',
               padding: '1px 8px',
             }}

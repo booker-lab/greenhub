@@ -103,7 +103,7 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
   const showBulkButton = canBulkPrepare(round.status, targets.length);
 
   return (
-    <div className="block rounded-[16px] bg-white p-4">
+    <div className="block rounded-[16px] bg-card p-4">
       <div className="flex flex-col items-stretch justify-start gap-3">
         <div className="flex flex-row flex-wrap items-baseline justify-between gap-4">
           <p

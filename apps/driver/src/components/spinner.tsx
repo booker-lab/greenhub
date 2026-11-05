@@ -17,7 +17,7 @@ export function Spinner({
     <span
       role="presentation"
       className={cn(
-        'inline-block size-(--spinner-size) text-primary',
+        'inline-block size-(--spinner-size) text-brand',
         "after:block after:size-(--spinner-size) after:animate-spin after:[animation-duration:1.2s] after:rounded-full after:border-[calc(var(--spinner-size)/8)] after:border-solid after:border-current after:border-l-transparent after:content-['']",
         className,
       )}

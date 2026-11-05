@@ -13,22 +13,22 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-primary-foreground [a]:hover:bg-primary/90',
-        light: 'bg-[#d2f2df] text-[#005c32]',
+        light: 'bg-ui-brand-light text-ui-brand-light-text',
         outline: 'border-primary bg-transparent text-brand-ink',
         // Mantine variant="outline" color="gray"(gray-6 테두리·글자).
-        'outline-gray': 'border-[#868e96] bg-transparent text-[#868e96]',
+        'outline-gray': 'border-ui-gray-6 bg-transparent text-ui-gray-6',
         // Mantine variant="outline" color="yellow"·"red"(yellow-6·red-6 테두리·글자).
         'outline-warning': 'border-[#fab005] bg-transparent text-[#fab005]',
-        'outline-destructive': 'border-[#fa5252] bg-transparent text-[#fa5252]',
+        'outline-destructive': 'border-ui-red bg-transparent text-ui-red',
         warning: 'bg-status-warning text-status-warning-foreground',
-        secondary: 'bg-[#f1f3f5] text-[#212529]',
-        destructive: 'bg-[#ffe3e3] text-[#c92a2a]',
+        secondary: 'bg-ui-gray-1 text-ui-gray-9',
+        destructive: 'bg-ui-red-light text-ui-red-light-text',
         // Mantine filled red(red-6 면·흰 글자), light orange(orange-1 면·orange-9 글자).
-        'destructive-filled': 'bg-[#fa5252] text-white',
-        'light-orange': 'bg-[#ffe8cc] text-[#d9480f]',
+        'destructive-filled': 'bg-ui-red-filled text-white',
+        'light-orange': 'bg-ui-orange-light text-ui-orange-light-text',
         // Mantine light dark·green(dark-1 면·dark-9 글자, green-1 면·green-9 글자).
-        'light-dark': 'bg-[#b8b8b8] text-[#141414]',
-        'light-green': 'bg-[#d3f9d8] text-[#2b8a3e]',
+        'light-dark': 'bg-ui-dark-light text-ui-dark-light-text',
+        'light-green': 'bg-ui-green-light text-ui-green-light-text',
         ghost: 'bg-transparent text-foreground hover:bg-muted',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },

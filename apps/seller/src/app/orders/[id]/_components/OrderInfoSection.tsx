@@ -11,7 +11,7 @@ import { Row } from './OrderRow';
 // ② 디자인 방향(D2·2026-11-01 결정): 카드는 그림자 없이 틀 위 흰 면, 상태는 점 + 글자(StatusDot).
 // 나머지(radius lg = 16px·Group·Stack·Text)는 ① 값을 유지한다.
 const TEXT = 'm-0 p-0 text-base font-normal';
-const PAPER = 'block rounded-[16px] bg-white';
+const PAPER = 'block rounded-[16px] bg-card';
 
 interface OrderInfoSectionProps {
   order: Order;
@@ -189,7 +189,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           ) : (
             order.pickupCode && (
               <div
-                className="mt-2.5 block rounded-[8px] bg-white p-3"
+                className="mt-2.5 block rounded-[8px] bg-card p-3"
                 style={{ backgroundColor: 'var(--color-primary-surface)', textAlign: 'center' }}
               >
                 <p
@@ -232,7 +232,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
 
       {order.status === 'CANCELLED' && order.cancelReason && (
         <div
-          className="block rounded-[16px] bg-white p-4"
+          className="block rounded-[16px] bg-card p-4"
           style={{ backgroundColor: 'var(--color-danger-surface)' }}
         >
           <p

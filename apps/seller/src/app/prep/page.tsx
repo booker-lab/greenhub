@@ -26,7 +26,7 @@ import { isPurchaseListRound } from '@/lib/round-purchase-list';
 const TEXT = 'm-0 p-0 text-base font-normal';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
-const PAPER = 'block rounded-[16px] bg-white p-4';
+const PAPER = 'block rounded-[16px] bg-card p-4';
 
 function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accent?: boolean }) {
   return (

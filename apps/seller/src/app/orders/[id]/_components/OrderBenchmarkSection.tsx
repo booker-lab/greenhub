@@ -27,7 +27,7 @@ export function OrderBenchmarkSection({ order }: { order: Order }) {
   } as const;
 
   return (
-    <div className="block rounded-[16px] bg-white p-4">
+    <div className="block rounded-[16px] bg-card p-4">
       <div className="flex flex-col gap-1.5">
         {optionLines.length > 0 && (
           <>

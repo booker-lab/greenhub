@@ -79,7 +79,7 @@ export default function NewHubPage() {
           </h2>
         </div>
 
-        <div className="block rounded-[16px] bg-white p-5">
+        <div className="block rounded-[16px] bg-card p-5">
           <form onSubmit={handleSubmit}>
             <div className="flex flex-col items-stretch justify-start gap-4">
               <Field>
@@ -166,7 +166,7 @@ export default function NewHubPage() {
                 disabled={loading}
                 size="md"
                 className="mt-2.5 w-full"
-                style={{ backgroundColor: 'var(--color-primary)' }}
+                style={{ backgroundColor: 'var(--primary)' }}
               >
                 {loading ? '등록 중...' : '거점 등록'}
               </Button>

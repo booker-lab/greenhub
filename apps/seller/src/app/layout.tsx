@@ -1,3 +1,4 @@
+import { COLOR_SCHEME_SCRIPT } from '@greenhub/shared';
 import type { Metadata, Viewport } from 'next';
 import { connection } from 'next/server';
 import AppShell from '@/components/AppShell';
@@ -18,7 +19,11 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#00A65A',
+  // 다크 모드(D5, design-direction.md §9.3): 기기 설정을 따르는 정적 메타 두 값. 어둠은 판매자·어드민 상단 바의 틀 색(#0F1311)이다.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#00A65A' },
+    { media: '(prefers-color-scheme: dark)', color: '#0F1311' },
+  ],
   width: 'device-width',
   initialScale: 1,
   minimumScale: 1,
@@ -34,7 +39,14 @@ export default async function RootLayout({
   // (Mantine 색상 모드 스크립트에 nonce를 넘기려고 요청 헤더를 읽던 동안과 같은 렌더링 방식).
   await connection();
   return (
-    <html lang="ko">
+    // data-theme은 hydration 전에 인라인 스크립트가 넣으므로 html 속성 차이 경고를 끈다(html 요소 자신만 해당).
+    <html lang="ko" suppressHydrationWarning>
+      <head>
+        {/* 화면 모드 직접 선택(D5-b, design-direction.md §9.3): 첫 페인트 전에 저장값으로 <html data-theme>을 정한다.
+            고정 문자열이라 CSP script-src에 sha256 해시로 허용한다(@greenhub/shared color-scheme.ts). */}
+        {/* biome-ignore lint/security/noDangerouslySetInnerHtml: 고정 상수 스크립트(사용자 입력 없음), CSP 해시와 짝이다 */}
+        <script dangerouslySetInnerHTML={{ __html: COLOR_SCHEME_SCRIPT }} />
+      </head>
       <body>
         <Providers>
           <AppShell>{children}</AppShell>

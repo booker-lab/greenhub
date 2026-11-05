@@ -30,7 +30,7 @@ import {
 // Mantine ActionIcon(size 40·subtle dark·radius xl) 계산값(상품 상세 수량 버튼과 같다): 40px 정사각, 모서리 32px,
 // 투명 1px 테두리, dark-9 글자, 줄 높이 1, 글꼴은 물려받는다. hover(가능한 기기만) dark-2 면, 비활성은 gray-2 면·gray-5 글자.
 const QUANTITY_BUTTON =
-  'relative m-0 inline-flex size-10 min-h-10 min-w-10 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-[#141414] no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px enabled:[@media(hover:hover)]:hover:bg-[#828282] disabled:cursor-not-allowed disabled:bg-[#e9ecef] disabled:text-[#adb5bd] disabled:active:translate-y-0';
+  'relative m-0 inline-flex size-10 min-h-10 min-w-10 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px enabled:[@media(hover:hover)]:hover:bg-ui-dark-light-hover disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:active:translate-y-0';
 // Mantine Text 크기별 계산값(글꼴 크기 토큰·줄 높이 sm 1.45·md 1.55·lg 1.6, 여백 0).
 const TEXT_SM = 'm-0 p-0 text-[length:var(--font-size-sm)] leading-[1.45]';
 const TEXT_MD = 'm-0 p-0 text-[length:var(--font-size-md)] leading-[1.55]';
@@ -135,7 +135,7 @@ export default function OptionSheet({
           initialFocus={closeRef}
           data-slot="sheet-content"
           data-side="bottom"
-          className="fixed bottom-0 left-0 z-[200] flex h-auto w-max max-w-full [transform:translateY(0)] backface-hidden max-h-[85dvh] flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] transition duration-200 ease-in-out outline-none data-ending-style:translate-y-10 data-ending-style:opacity-0 data-starting-style:translate-y-10 data-starting-style:opacity-0"
+          className="fixed bottom-0 left-0 z-[200] flex h-auto w-max max-w-full [transform:translateY(0)] backface-hidden max-h-[85dvh] flex-col overflow-y-auto rounded-lg bg-popover text-ui-ink shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] transition duration-200 ease-in-out outline-none data-ending-style:translate-y-10 data-ending-style:opacity-0 data-starting-style:translate-y-10 data-starting-style:opacity-0"
         >
           <SheetHeader>
             <SheetTitle className="text-lg leading-none font-extrabold">옵션 고르기</SheetTitle>

@@ -95,3 +95,15 @@ describe('CSP 정책 공통 틀', () => {
     expect(second).not.toBe(first);
   });
 });
+
+describe('고정 인라인 스크립트 해시', () => {
+  it('앱이 준 해시만 nonce 뒤·strict-dynamic 앞에 더하고, 주지 않은 앱은 그대로다', () => {
+    const hash = "'sha256-abc='";
+    const withHash = directives(
+      buildContentSecurityPolicy({ ...app, inlineScriptHashes: [hash] }, { nonce: 'n', nodeEnv: 'production' }),
+    );
+    expect(withHash.get('script-src')).toEqual(["'self'", "'nonce-n'", hash, "'strict-dynamic'"]);
+    const without = directives(buildContentSecurityPolicy(app, { nonce: 'n', nodeEnv: 'production' }));
+    expect(without.get('script-src')).toEqual(["'self'", "'nonce-n'", "'strict-dynamic'"]);
+  });
+});

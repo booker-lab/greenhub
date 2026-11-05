@@ -164,6 +164,23 @@ describe('compareRuns', () => {
     );
   });
 
+  it('색 구성이 다르면 비교하지 않는다(값이 없는 예전 묶음은 밝음)', () => {
+    const shots = [sound('a', 'mobile')];
+    const dark = compareRuns(run(shots), run(shots, { colorScheme: 'dark' }), () => image(1, 1));
+    assert.equal(dark.ok, false);
+    assert.match(dark.problems[0], /색 구성이 다릅니다: before light · after dark/);
+    assert.equal(
+      compareRuns(run(shots), run(shots, { colorScheme: 'light' }), () => image(1, 1)).ok,
+      true,
+    );
+    assert.equal(
+      compareRuns(run(shots, { colorScheme: 'dark' }), run(shots, { colorScheme: 'dark' }), () =>
+        image(1, 1),
+      ).ok,
+      true,
+    );
+  });
+
   it('한쪽에만 있는 화면은 실패다', () => {
     const r = compareRuns(
       run([sound('a', 'mobile'), sound('b', 'mobile')]),

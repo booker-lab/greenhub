@@ -34,7 +34,7 @@ export function PrepareForm({
   const roundOrder = isRoundOrder(order);
 
   return (
-    <div className="block rounded-[16px] bg-white p-4">
+    <div className="block rounded-[16px] bg-card p-4">
       <p
         className={`${TEXT} mb-3`}
         style={{
@@ -103,7 +103,7 @@ export function PrepareForm({
           size="md"
           className="flex-1"
           style={{
-            backgroundColor: 'var(--color-primary)',
+            backgroundColor: 'var(--primary)',
             fontWeight: 'var(--fw-medium)',
           }}
         >

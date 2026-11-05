@@ -17,8 +17,8 @@ export default function ProductTopBar() {
         left: 0,
         right: 0,
         zIndex: 100,
+        // ② 홈 흰 머리띠와 같게 아래 1px 선을 두지 않는다(design-direction.md §3.1). 아이콘은 검정.
         backgroundColor: 'var(--color-bg)',
-        borderBottom: 'var(--border)',
         height: 'calc(52px + env(safe-area-inset-top))',
         paddingTop: 'env(safe-area-inset-top)',
       }}
@@ -85,7 +85,7 @@ export default function ProductTopBar() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--color-text-secondary)',
+              color: 'var(--color-text)',
             }}
             aria-label="홈으로"
           >
@@ -105,7 +105,7 @@ export default function ProductTopBar() {
               alignItems: 'center',
               justifyContent: 'center',
               position: 'relative',
-              color: 'var(--color-text-secondary)',
+              color: 'var(--color-text)',
             }}
             aria-label="장바구니"
           >

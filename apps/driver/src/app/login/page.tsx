@@ -39,7 +39,7 @@ export default async function LoginPage({
     >
       <div className="w-full" style={{ maxWidth: 400 }}>
         {/* 카드: 모서리 16·안쪽 32. 그림자 대신 연한 선으로 구역을 나눈다(design-standard.md §4, 2026-10-31 사용자 결정). */}
-        <div className="rounded-[16px] bg-white p-8" style={{ border: 'var(--border)' }}>
+        <div className="rounded-[16px] bg-card p-8" style={{ border: 'var(--border)' }}>
           {/* 로고 */}
           <div className="mb-8 flex flex-col items-center gap-2.5">
             <Image
@@ -76,11 +76,11 @@ export default async function LoginPage({
               role="alert"
               className={
                 notice.kind === 'failed'
-                  ? 'relative mb-4 overflow-hidden rounded-[8px] border border-transparent bg-[#ffe3e3] p-4 text-[#c92a2a]'
+                  ? 'relative mb-4 overflow-hidden rounded-[8px] border border-transparent bg-ui-red-light p-4 text-ui-red-light-text'
                   : 'relative mb-4 overflow-hidden rounded-[8px] border border-transparent bg-status-warning p-4 text-status-warning-foreground'
               }
             >
-              <div className="overflow-hidden text-sm/[1.55] text-ellipsis text-black">
+              <div className="overflow-hidden text-sm/[1.55] text-ellipsis text-ui-ink">
                 <p
                   className={`${text} mb-1`}
                   style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
@@ -129,7 +129,7 @@ export default async function LoginPage({
             <form action={localCredentialSignIn}>
               <div className="mt-4 flex flex-col gap-3">
                 {/* ① 외형 유지: Mantine Divider(label 가운데) */}
-                <div className="flex items-center text-xs/[1.55] whitespace-nowrap text-[#868e96] before:me-2.5 before:h-px before:flex-1 before:border-t before:border-[#dee2e6] before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-[#dee2e6] after:content-['']">
+                <div className="flex items-center text-xs/[1.55] whitespace-nowrap text-ui-gray-6 before:me-2.5 before:h-px before:flex-1 before:border-t before:border-ui-gray-3 before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-ui-gray-3 after:content-['']">
                   또는
                 </div>
                 <TextField type="email" name="email" placeholder="이메일" required size="md" />
@@ -138,7 +138,7 @@ export default async function LoginPage({
                   type="submit"
                   fullWidth
                   size="md"
-                  style={{ backgroundColor: 'var(--color-primary)' }}
+                  style={{ backgroundColor: 'var(--primary)' }}
                 >
                   로그인
                 </AppButton>

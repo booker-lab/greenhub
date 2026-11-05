@@ -1,23 +1,8 @@
 import type { Product, Variety } from '@greenhub/shared';
 import { Badge } from '@greenhub/ui/components/badge';
 import { HideOnErrorImage } from '@/components/ResilientImage';
+import { BLOOM_LABEL, CARE_LABEL, FRAGRANCE_LABEL } from '@/lib/dogam-label';
 import { isFeatureOn } from '@/lib/features';
-
-const FRAGRANCE_LABEL: Record<string, string> = {
-  none: '없음',
-  light: '은은함',
-  strong: '진함',
-};
-const BLOOM_LABEL: Record<string, string> = {
-  bud: '봉오리',
-  half: '반개화',
-  full: '활짝 핌',
-};
-const CARE_LABEL: Record<string, string> = {
-  easy: '쉬움',
-  normal: '보통',
-  hard: '어려움',
-};
 
 interface Props {
   product: Product;
@@ -105,7 +90,7 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
             </p>
           </div>
 
-          <hr className="m-0 mb-5 h-0 border-0 border-t border-solid border-[#dee2e6]" />
+          <hr className="m-0 mb-5 h-0 border-0 border-t border-solid border-ui-gray-3" />
         </>
       )}
 

@@ -9,7 +9,8 @@
     "./lib/utils": "./src/lib/utils.ts",
     "./styles/tokens.css": "./src/styles/tokens.css",
     "./styles/shadcn-tailwind.css": "./src/styles/shadcn-tailwind.css",
-    "./styles/base.css": "./src/styles/base.css"
+    "./styles/base.css": "./src/styles/base.css",
+    "./styles/dark.css": "./src/styles/dark.css"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json"
@@ -19,6 +20,7 @@
   },
   "dependencies": {
     "@base-ui/react": "1.9.0",
+    "@greenhub/shared": "workspace:*",
     "class-variance-authority": "0.7.1",
     "cn": "0.4.0",
     "lucide-react": "^1.61.0",

@@ -22,9 +22,7 @@ import {
   fetchPublicStoreProfile,
   storeProfileFailureMessage,
 } from '@/lib/public-store-profile';
-import { deliveryDayTag } from '@/lib/round-countdown';
 import {
-  canQuickAdd,
   cartAddFailureMessage,
   roundItemCartInput,
   roundProductHref,
@@ -37,14 +35,8 @@ import {
 } from '@/lib/round-schedule-label';
 import { homePrefetchStoreId, useHomeStorePrefetch } from './home-store-prefetch';
 import { resolveHomeStoreId } from './home-store-selection';
-import {
-  BenchmarkCardProvider,
-  CardDiscount,
-  CardMeta,
-  CardSellerLine,
-  CardWishButton,
-  type CardContextValue,
-} from './benchmark/CardExtras';
+import { BenchmarkCardProvider, type CardContextValue } from './benchmark/CardExtras';
+import RoundTileGrid from './RoundTile';
 import KakaoChannelCta from './benchmark/KakaoChannelCta';
 import { useReviewStats, useRoundWishlist, useStoreProfile } from '@/hooks/useBenchmark';
 import { isFeatureOn } from '@/lib/features';
@@ -130,213 +122,9 @@ const LINE_CLAMP_2 = 'line-clamp-2 text-ellipsis';
 const GRID = 'grid grid-cols-2 gap-3';
 const ALERT_STACK = 'flex flex-col items-center justify-start gap-3 py-12';
 const CENTER_STACK = 'flex flex-col items-center justify-start gap-4';
-const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-[#dee2e6]';
+const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-ui-gray-3';
 const SECONDARY_COLOR = { color: 'var(--color-text-secondary)' } as const;
 const DISABLED_COLOR = { color: 'var(--color-text-disabled)' } as const;
-
-type TagTone = 'primary' | 'deadline' | 'muted';
-
-const TAG_TONE: Record<TagTone, { background: string; color: string }> = {
-  primary: { background: 'var(--color-primary-surface)', color: 'var(--color-primary-dark)' },
-  deadline: { background: 'var(--color-deadline-surface)', color: 'var(--color-deadline-text)' },
-  muted: { background: 'var(--color-surface-muted)', color: 'var(--color-text-secondary)' },
-};
-
-// 남은 수량은 공개 API가 숨기는 재고 신호라 표시하지 않는다(품절만 표시).
-function roundItemTag(
-  item: SaleRoundItem,
-  round: PublicSaleRound,
-  isPast: boolean,
-): { label: string; tone: TagTone } | null {
-  if (isPast) return null;
-  if (item.status === 'SOLD_OUT') return { label: '품절', tone: 'muted' };
-  if (round.status === 'SCHEDULED') return { label: '판매 예정', tone: 'deadline' };
-  if (round.status !== 'OPEN' || item.status === 'CLOSED') {
-    return { label: '판매 종료', tone: 'muted' };
-  }
-  const arrival = deliveryDayTag(round.schedule.deliveryStartAt);
-  return arrival ? { label: arrival, tone: 'primary' } : null;
-}
-
-function RoundProductCard({
-  item,
-  round,
-  isPast = false,
-  onQuickAdd,
-}: {
-  item: SaleRoundItem;
-  round: PublicSaleRound;
-  isPast?: boolean;
-  onQuickAdd?: (item: SaleRoundItem) => void;
-}) {
-  const href = `/products/${encodeURIComponent(item.productId)}?round=${encodeURIComponent(round.id)}`;
-  const tag = roundItemTag(item, round, isPast);
-  const dimmed = isPast || item.status === 'SOLD_OUT';
-  const quickAdd = onQuickAdd && canQuickAdd(item, round.status, isPast) ? onQuickAdd : null;
-
-  return (
-    <div style={{ position: 'relative', minWidth: 0 }}>
-      <RoundProductCardLink
-        href={href}
-        item={item}
-        round={round}
-        isPast={isPast}
-        tag={tag}
-        dimmed={dimmed}
-      />
-      <div
-        style={{
-          aspectRatio: '1/1',
-          left: 0,
-          pointerEvents: 'none',
-          position: 'absolute',
-          top: 0,
-          width: '100%',
-        }}
-      >
-        <CardWishButton productId={item.productId} roundId={round.id} name={item.productNameSnapshot} />
-      </div>
-      {quickAdd && (
-        // 사진과 같은 정사각형 영역 위에 + 버튼을 겹친다(링크 안에 버튼을 넣지 않기 위해 형제로 둔다).
-        <div
-          style={{
-            aspectRatio: '1/1',
-            left: 0,
-            pointerEvents: 'none',
-            position: 'absolute',
-            top: 0,
-            width: '100%',
-          }}
-        >
-          <button
-            type="button"
-            aria-label={`${item.productNameSnapshot} 장바구니에 담기`}
-            onClick={() => quickAdd(item)}
-            style={{
-              alignItems: 'center',
-              background: 'transparent',
-              border: 0,
-              bottom: 2,
-              cursor: 'pointer',
-              display: 'flex',
-              height: 'var(--touch-target)',
-              justifyContent: 'center',
-              padding: 0,
-              pointerEvents: 'auto',
-              position: 'absolute',
-              right: 2,
-              width: 'var(--touch-target)',
-            }}
-          >
-            <span
-              aria-hidden
-              style={{
-                alignItems: 'center',
-                background: 'var(--color-bg)',
-                borderRadius: 'var(--radius-full)',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-                color: 'var(--color-primary-dark)',
-                display: 'flex',
-                fontSize: 22,
-                fontWeight: 'var(--fw-extrabold)',
-                height: 34,
-                justifyContent: 'center',
-                lineHeight: 1,
-                width: 34,
-              }}
-            >
-              +
-            </span>
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function RoundProductCardLink({
-  href,
-  item,
-  round,
-  isPast,
-  tag,
-  dimmed,
-}: {
-  href: string;
-  item: SaleRoundItem;
-  round: PublicSaleRound;
-  isPast: boolean;
-  tag: ReturnType<typeof roundItemTag>;
-  dimmed: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-label={isPast ? `지난 회차 ${round.name} ${item.productNameSnapshot}` : undefined}
-      style={{ display: 'block', minWidth: 0, color: 'inherit', textDecoration: 'none' }}
-    >
-      <div
-        style={{
-          position: 'relative',
-          aspectRatio: '1/1',
-          overflow: 'hidden',
-          borderRadius: 'var(--radius)',
-          background: 'var(--color-surface-muted)',
-          opacity: dimmed ? 0.6 : 1,
-        }}
-      >
-        <ResilientImage
-          fill
-          src={item.productImageUrlSnapshot ?? PRODUCT_IMAGE_FALLBACK}
-          fallbackSrc={PRODUCT_IMAGE_FALLBACK}
-          alt={item.productNameSnapshot}
-          sizes="(max-width: 600px) 50vw, 33vw"
-          style={{ objectFit: 'cover' }}
-        />
-      </div>
-      <CardSellerLine />
-      <p
-        className={`${TEXT} ${LINE_CLAMP_2} ${isFeatureOn('seller-store') ? 'mt-0.5' : 'mt-2'}`}
-        style={{
-          color: 'var(--color-text)',
-          fontSize: 'var(--font-size-sm)',
-          fontWeight: 'var(--fw-bold)',
-          lineHeight: 1.35,
-        }}
-      >
-        {item.productNameSnapshot}
-      </p>
-      <p
-        className={`${TEXT} mt-0.5`}
-        style={{
-          color: 'var(--color-text)',
-          fontSize: 'var(--font-size-md)',
-          fontVariantNumeric: 'tabular-nums',
-          fontWeight: 'var(--fw-extrabold)',
-        }}
-      >
-        {item.roundPrice.toLocaleString()}원
-        <CardDiscount item={item} />
-      </p>
-      <CardMeta item={item} isPast={isPast} />
-      {tag && (
-        <span
-          style={{
-            ...TAG_TONE[tag.tone],
-            borderRadius: 'var(--radius-tag)',
-            display: 'inline-block',
-            fontSize: 'var(--font-size-xs)',
-            fontWeight: 'var(--fw-bold)',
-            marginTop: 6,
-            padding: '2px 7px',
-          }}
-        >
-          {tag.label}
-        </span>
-      )}
-    </Link>
-  );
-}
 
 function RoundItems({
   round,
@@ -359,17 +147,13 @@ function RoundItems({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-x-3 gap-y-5">
-      {items.map((item) => (
-        <RoundProductCard
-          key={item.id}
-          item={item}
-          round={round}
-          isPast={isPast}
-          onQuickAdd={onQuickAdd}
-        />
-      ))}
-    </div>
+    <RoundTileGrid
+      items={items}
+      round={round}
+      isPast={isPast}
+      tileLabel={isPast ? (item) => `지난 회차 ${round.name} ${item.productNameSnapshot}` : undefined}
+      onQuickAdd={onQuickAdd}
+    />
   );
 }
 

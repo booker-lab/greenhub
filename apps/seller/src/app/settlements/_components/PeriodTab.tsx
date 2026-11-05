@@ -43,7 +43,7 @@ export function PeriodTab({
 }: PeriodTabProps) {
   return (
     <div className="flex flex-col items-stretch justify-start gap-4">
-      <div className="block rounded-[16px] bg-white p-5">
+      <div className="block rounded-[16px] bg-card p-5">
         <p
           className={`${TEXT} mb-4`}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
@@ -89,7 +89,7 @@ export function PeriodTab({
           disabled={listLoading}
           size="md"
           className="w-full"
-          style={{ backgroundColor: 'var(--color-primary)' }}
+          style={{ backgroundColor: 'var(--primary)' }}
         >
           {listLoading ? '조회 중...' : '조회'}
         </Button>

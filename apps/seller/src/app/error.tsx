@@ -76,8 +76,8 @@ export default function ErrorPage({
             style={{
               ...actionStyle,
               border: 'none',
-              backgroundColor: 'var(--color-primary)',
-              color: 'var(--color-bg)',
+              backgroundColor: 'var(--primary)',
+              color: 'var(--primary-foreground)',
             }}
           >
             다시 시도

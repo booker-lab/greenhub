@@ -27,7 +27,7 @@ interface Props {
 // Mantine ActionIcon(size 40·subtle dark·radius xl) 계산값: 40px 정사각, 모서리 32px, 투명 1px 테두리, dark-9 글자,
 // 줄 높이 1, 글꼴은 물려받는다. hover(가능한 기기만) dark-2 면, 비활성은 gray-2 면·gray-5 글자.
 const QUANTITY_BUTTON =
-  'relative m-0 inline-flex size-10 min-h-10 min-w-10 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-[#141414] no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px enabled:[@media(hover:hover)]:hover:bg-[#828282] disabled:cursor-not-allowed disabled:bg-[#e9ecef] disabled:text-[#adb5bd] disabled:active:translate-y-0';
+  'relative m-0 inline-flex size-10 min-h-10 min-w-10 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px enabled:[@media(hover:hover)]:hover:bg-ui-dark-light-hover disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:active:translate-y-0';
 
 export default function RoundDirectProductActions({ product, roundProduct }: Props) {
   const router = useRouter();
@@ -199,7 +199,7 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
       </div>
 
       {/* Mantine Divider: 1px gray-3 윗선, 역할 separator(가로) */}
-      <hr className="m-0 mb-8 h-0 border-0 border-t border-solid border-[#dee2e6]" />
+      <hr className="m-0 mb-8 h-0 border-0 border-t border-solid border-ui-gray-3" />
       <div className="mb-8">
         <GreenLoveBrandSection />
       </div>
@@ -286,7 +286,7 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
       )}
 
       {cartError && (
-        <p role="alert" className="m-0 mt-4 p-0 text-sm font-normal" style={{ color: '#fa5252' }}>
+        <p role="alert" className="m-0 mt-4 p-0 text-sm font-normal" style={{ color: 'var(--ui-red)' }}>
           {cartError}
         </p>
       )}

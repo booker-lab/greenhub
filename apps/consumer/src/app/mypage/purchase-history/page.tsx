@@ -116,7 +116,7 @@ function PurchaseHistoryContent() {
             <div
               key={entry.productId}
               className="flex flex-row flex-nowrap items-center justify-start gap-3 p-3"
-              style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius)' }}
+              style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
             >
               <div
                 style={{

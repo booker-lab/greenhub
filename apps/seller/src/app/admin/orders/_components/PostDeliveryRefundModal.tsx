@@ -117,4 +117,4 @@ export function PostDeliveryRefundModal({
 // ① 외형 유지(UI 교체 P2b): Mantine Radio.Group 라벨(InputWrapper 라벨, div)과 Radio(sm: 원 20px, 테두리 gray-4,
 // 고르면 주색 바탕·흰 점, 글자 14px/20px·왼쪽 12px) 값. 기사 앱 RadioGroupField와 같은 계산값이다.
 const GROUP_LABEL =
-  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-black';
+  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';

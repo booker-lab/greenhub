@@ -143,7 +143,7 @@ export default function EditHubPage() {
         ) : loading ? (
           <LoadingState />
         ) : (
-          <div className="block rounded-[16px] bg-white p-5">
+          <div className="block rounded-[16px] bg-card p-5">
             <form onSubmit={handleSubmit}>
               <div className="flex flex-col items-stretch justify-start gap-4">
                 <Field>
@@ -218,7 +218,7 @@ export default function EditHubPage() {
                   disabled={saving}
                   size="md"
                   className="mt-2.5 w-full"
-                  style={{ backgroundColor: 'var(--color-primary)' }}
+                  style={{ backgroundColor: 'var(--primary)' }}
                 >
                   {saving ? '저장 중...' : '변경 저장'}
                 </Button>

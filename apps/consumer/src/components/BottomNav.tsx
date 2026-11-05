@@ -121,7 +121,8 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
         right: 0,
         zIndex: 100,
         backgroundColor: 'var(--color-bg)',
-        borderTop: 'var(--border)',
+        // 고정 바는 위쪽 1px 선 대신 옅은 그림자로 본문과 나눈다(design-direction.md §3.1).
+        boxShadow: 'var(--bar-shadow)',
         height: 'calc(64px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
@@ -141,7 +142,7 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
                   <Icon
                     size={24}
                     strokeWidth={isActive ? 2.2 : 1.8}
-                    color={isActive ? 'var(--color-primary)' : 'var(--color-text-secondary)'}
+                    color={isActive ? 'var(--color-text)' : 'var(--color-text-secondary)'}
                   />
                   {tab.showBadge && visibleItemCount > 0 && (
                     <div
@@ -171,7 +172,7 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     fontWeight: isActive ? 'var(--fw-extrabold)' : 'var(--fw-medium)',
-                    color: isActive ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
+                    color: isActive ? 'var(--color-text)' : 'var(--color-text-secondary)',
                   }}
                 >
                   {tab.label}

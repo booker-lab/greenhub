@@ -68,7 +68,7 @@ export function FormSection({
   children: ReactNode;
 }) {
   return (
-    <div className="block rounded-[16px] bg-white p-4">
+    <div className="block rounded-[16px] bg-card p-4">
       <div className={`${COLUMN} gap-4`}>
         <div>
           <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">{title}</h4>
@@ -173,7 +173,7 @@ export function DeliveryRegionSection({
           <span
             id={labelId}
             className={`inline-flex flex-col text-[15px] leading-5 ps-3 ${
-              busy ? 'cursor-not-allowed text-[#adb5bd]' : 'cursor-pointer'
+              busy ? 'cursor-not-allowed text-ui-gray-5' : 'cursor-pointer'
             }`}
           >
             배송 지역 활성

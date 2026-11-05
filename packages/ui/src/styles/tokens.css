@@ -3,18 +3,21 @@
  *
  * Mantine과 같이 쓰는 동안 앱은 `@import "tailwindcss"`(preflight 포함) 대신 이 파일을 import한다(P2a의 layer 순서).
  * 값은 packages/ui/src/styles/base.css(예전 style.css·theme.ts 값)와 같다. 값을 바꿀 때는 두 파일을 한 PR에서 같이 바꾼다
- * (소비자 동결 중에는 바꾸지 않는다, §8).
+ * 
  *
  * 이름 충돌(§4):
  * - `--border`는 정의하지 않는다. base.css의 `--border`는 색이 아니라 `1px solid …` 묶음 값이고 앱 40곳이 쓴다.
- *   테두리 색 유틸리티(`border-border`)는 `--color-border`를 현행과 같은 값으로 직접 둔다.
+ *   테두리 색 유틸리티(`border-border`)는 base.css의 `--color-border`를 읽는다(값은 base.css와 dark.css가 정한다).
+ *   예전에는 `#ecefed`를 직접 두어 다크 모드에서 바뀌지 않았다(design-direction.md §9.2).
  * - `--color-*`·`--radius-sm`처럼 base.css와 이름이 같은 테마 변수는 같은 값만 쓴다.
  * - 줄 높이는 Mantine 기본(xs 1.4·sm 1.45·md 1.55·lg 1.6·xl 1.65)과 같게 둔다.
  *
  * ① 외형 유지 값: `--input`(Mantine 입력칸 테두리 gray-4)·`--card-border`(Mantine Paper·Card 테두리 gray-3)는
  * 지금 화면과 같은 모양을 내기 위한 값이다. 화면 방향(design-direction.md) 적용은 ② 단계에서 한다.
  *
- * ② 방향 값(design-direction.md §5·§8 D3·D7): 판매자·어드민 화면만 쓴다. 소비자 앱은 이 파일을 import하지 않는다.
+ * ② 버튼 면(design-direction.md §2, 2026-11-02 적용): `--primary`는 `#007A43`(흰 글자 대비 5.4:1)이다. `#00A65A`는
+ *   `--brand`로 남아 작은 글자를 얹지 않는 면(진행 막대·라디오·스위치 켜진 면·입력칸 초점 선)에만 쓴다.
+ * ② 방향 값(design-direction.md §5·§8 D3·D7): 판매자·어드민 화면만 쓴다.
  * - `--frame`: 판매자·어드민 틀(머리·하단 탭·사이드바·상단바·바탕)의 옅은 초록빛 회색.
  * - `--rule`: 어드민 종이 1px 테두리·표 행 선·선택 메뉴 테두리.
  */
@@ -26,12 +29,12 @@
   --card-border: #dee2e6;
   --popover: #ffffff;
   --popover-foreground: #111111;
-  --primary: #00a65a;
+  --primary: #007a43;
   --primary-foreground: #ffffff;
   --secondary: #f1f3f2;
   --secondary-foreground: #111111;
   --muted: #f1f3f2;
-  --muted-foreground: #6b716e;
+  --muted-foreground: #696f6c;
   --accent: #e9f9ef;
   --accent-foreground: #007a43;
   --destructive: #d92d20;
@@ -43,6 +46,9 @@
   --brand-surface: #e9f9ef;
   --deadline: #ffd43b;
   --deadline-surface: #fff4cc;
+  /* 마감 글자 둘(§9.2): --deadline-on은 노랑 띠 위, --deadline-foreground는 연노랑 상자 위. 밝음은 같은 값이고
+     어둠에서는 두 바탕의 밝기가 반대라 갈린다(dark.css). */
+  --deadline-on: #3b2f00;
   --deadline-foreground: #3b2f00;
   --status-info: #f1f3f2;
   --status-info-foreground: #3f4642;
@@ -50,6 +56,50 @@
   --status-warning-foreground: #7a5b00;
   --frame: #f4f7f5;
   --rule: #e3e8e5;
+
+  /*
+   * ① 외형 Mantine 색(packages/ui 부품 variant·입력칸·메뉴). 값은 부품에 직접 적던 Mantine 계산값과 같다.
+   * 어둠 값은 dark.css가 정한다(design-direction.md §9.4 첫 행). 회색은 Mantine gray 단계이고 어둠에서는 단계의
+   * 밝기 순서를 뒤집는다(면 단계는 어두워지고 글자 단계는 밝아진다). 입력칸 테두리(gray-4)는 `--input`을 쓴다.
+   * outline 노랑(yellow-6 #fab005)·초록(green-6 #40c057)은 어두운 종이 위에서도 대비가 7:1 이상이라 부품에 그대로 둔다.
+   */
+  --ui-ink: #000000;
+  --ui-gray-0: #f8f9fa;
+  --ui-gray-1: #f1f3f5;
+  --ui-gray-2: #e9ecef;
+  --ui-gray-3: #dee2e6;
+  --ui-gray-5: #adb5bd;
+  --ui-gray-6: #868e96;
+  --ui-gray-7: #495057;
+  --ui-gray-9: #212529;
+  --ui-primary-hover: #006638;
+  --ui-brand-light: #d2f2df;
+  --ui-brand-light-hover: #a6e5c0;
+  --ui-brand-light-text: #005c32;
+  /* 빨강: 채운 면(흰 글자)과 글자·테두리는 밝음 값이 같지만 어둠에서 갈린다. */
+  --ui-red: #fa5252;
+  --ui-red-filled: #fa5252;
+  --ui-red-filled-hover: #f03e3e;
+  --ui-red-light: #ffe3e3;
+  --ui-red-light-hover: #ffc9c9;
+  --ui-red-light-text: #c92a2a;
+  --ui-blue-light: #d0ebff;
+  --ui-blue-light-hover: #a5d8ff;
+  --ui-blue-light-text: #1864ab;
+  --ui-green-light: #d3f9d8;
+  --ui-green-light-hover: #b2f2bb;
+  --ui-green-light-text: #2b8a3e;
+  --ui-orange-light: #ffe8cc;
+  --ui-orange-light-text: #d9480f;
+  --ui-dark: #2e2e2e;
+  --ui-dark-light: #b8b8b8;
+  --ui-dark-light-text: #141414;
+  --ui-dark-light-hover: #828282;
+  /* 채운 dark 면(판매자 확인 버튼 dark-6)의 마우스 올림(dark-7). 어둠에서는 면이 밝아지므로 함께 밝다. */
+  --ui-dark-filled-hover: #242424;
+
+  /* 화면 아래 고정 바(하단 탭·구매 바)의 위쪽 그림자. 어둠에서는 그림자가 보이지 않아 위쪽 1px 선으로 바꾼다(§9.1). */
+  --bar-shadow: 0 -4px 16px rgba(17, 17, 17, 0.06);
 }
 
 @theme inline {
@@ -70,7 +120,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-surface: var(--destructive-surface);
-  --color-border: #ecefed;
+  /* 같은 이름의 base.css 값(앱 :root, theme layer보다 뒤)이 이긴다. tokens.css만 쓰는 곳은 없다. */
+  --color-border: var(--color-border);
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-brand: var(--brand);
@@ -78,6 +129,7 @@
   --color-brand-surface: var(--brand-surface);
   --color-deadline: var(--deadline);
   --color-deadline-surface: var(--deadline-surface);
+  --color-deadline-on: var(--deadline-on);
   --color-deadline-foreground: var(--deadline-foreground);
   --color-status-info: var(--status-info);
   --color-status-info-foreground: var(--status-info-foreground);
@@ -85,6 +137,38 @@
   --color-status-warning-foreground: var(--status-warning-foreground);
   --color-frame: var(--frame);
   --color-rule: var(--rule);
+  --color-ui-ink: var(--ui-ink);
+  --color-ui-gray-0: var(--ui-gray-0);
+  --color-ui-gray-1: var(--ui-gray-1);
+  --color-ui-gray-2: var(--ui-gray-2);
+  --color-ui-gray-3: var(--ui-gray-3);
+  --color-ui-gray-5: var(--ui-gray-5);
+  --color-ui-gray-6: var(--ui-gray-6);
+  --color-ui-gray-7: var(--ui-gray-7);
+  --color-ui-gray-9: var(--ui-gray-9);
+  --color-ui-primary-hover: var(--ui-primary-hover);
+  --color-ui-brand-light: var(--ui-brand-light);
+  --color-ui-brand-light-hover: var(--ui-brand-light-hover);
+  --color-ui-brand-light-text: var(--ui-brand-light-text);
+  --color-ui-red: var(--ui-red);
+  --color-ui-red-filled: var(--ui-red-filled);
+  --color-ui-red-filled-hover: var(--ui-red-filled-hover);
+  --color-ui-red-light: var(--ui-red-light);
+  --color-ui-red-light-hover: var(--ui-red-light-hover);
+  --color-ui-red-light-text: var(--ui-red-light-text);
+  --color-ui-blue-light: var(--ui-blue-light);
+  --color-ui-blue-light-hover: var(--ui-blue-light-hover);
+  --color-ui-blue-light-text: var(--ui-blue-light-text);
+  --color-ui-green-light: var(--ui-green-light);
+  --color-ui-green-light-hover: var(--ui-green-light-hover);
+  --color-ui-green-light-text: var(--ui-green-light-text);
+  --color-ui-orange-light: var(--ui-orange-light);
+  --color-ui-orange-light-text: var(--ui-orange-light-text);
+  --color-ui-dark: var(--ui-dark);
+  --color-ui-dark-light: var(--ui-dark-light);
+  --color-ui-dark-light-text: var(--ui-dark-light-text);
+  --color-ui-dark-light-hover: var(--ui-dark-light-hover);
+  --color-ui-dark-filled-hover: var(--ui-dark-filled-hover);
 
   --font-sans: 'Pretendard Variable', Pretendard, -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   --font-brand: 'Nunito', 'Pretendard Variable', Pretendard, system-ui, sans-serif;

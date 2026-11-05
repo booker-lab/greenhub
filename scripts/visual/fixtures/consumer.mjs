@@ -937,13 +937,13 @@ export const screens = [
     ],
   },
   {
-    // 상품 상세 '바로 구매'는 그 상품 하나로 결제 화면을 연다.
+    // 상품 상세 '바로 구매'는 그 상품 하나로 결제 화면을 연다. 버튼 글자는 총 금액을 앞에 붙인 "N원 바로 구매"다(정규식).
     id: 'product-buy-now',
     group: '결제 동선',
     title: '상품 상세 → 바로 구매',
     path: '/products/product-1?round=round-open',
     expectPath: '/checkout',
-    steps: [{ press: '바로 구매' }, { waitPath: '/checkout' }],
+    steps: [{ press: /원 바로 구매$/ }, { waitPath: '/checkout' }],
   },
   { id: 'mypage', group: 'MY', title: 'MY', path: '/mypage' },
   {

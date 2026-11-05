@@ -65,10 +65,10 @@ export default function ProductRequestBox({
             type="submit"
             disabled={state === 'sending' || !text.trim()}
             style={{
-              background: 'var(--color-primary)',
+              background: 'var(--primary)',
               border: 0,
               borderRadius: 'var(--radius-full)',
-              color: 'var(--color-bg)',
+              color: 'var(--primary-foreground)',
               cursor: 'pointer',
               fontSize: 'var(--font-size-md)',
               fontWeight: 800,

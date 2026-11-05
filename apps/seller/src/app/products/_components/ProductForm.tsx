@@ -138,7 +138,7 @@ export default function ProductForm(props: ProductFormProps) {
                 onClick={f.goNext}
                 size="lg"
                 className="flex-1"
-                style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}
+                style={{ backgroundColor: 'var(--primary)', fontWeight: 'var(--fw-medium)' }}
               >
                 다음
               </Button>
@@ -148,7 +148,7 @@ export default function ProductForm(props: ProductFormProps) {
                 disabled={f.submitting}
                 size="lg"
                 className="flex-1"
-                style={{ backgroundColor: 'var(--color-primary)', fontWeight: 'var(--fw-medium)' }}
+                style={{ backgroundColor: 'var(--primary)', fontWeight: 'var(--fw-medium)' }}
               >
                 {f.submitting ? '처리 중...' : mode === 'create' ? '등록하기' : '저장하기'}
               </Button>

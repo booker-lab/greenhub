@@ -113,7 +113,7 @@ function FieldLabel({
       data-slot="field-label"
       className={cn(
         'group/field-label peer/field-label inline-flex w-fit gap-2 text-sm leading-[1.55] font-semibold group-data-[disabled=true]/field:opacity-50',
-        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-input has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 *:data-[slot=field]:p-2.5',
+        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-input has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-data-checked:border-brand/30 has-data-checked:bg-brand/5 *:data-[slot=field]:p-2.5',
         required && 'inline-block',
         className,
       )}
@@ -121,7 +121,7 @@ function FieldLabel({
     >
       {children}
       {required && (
-        <span data-slot="field-required" aria-hidden="true" className="text-[#fa5252]">
+        <span data-slot="field-required" aria-hidden="true" className="text-ui-red">
           {' *'}
         </span>
       )}
@@ -147,7 +147,7 @@ function FieldDescription({ className, ...props }: React.ComponentProps<'p'>) {
     <p
       data-slot="field-description"
       className={cn(
-        'text-left text-xs leading-[1.2] font-normal text-[#868e96] group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5',
+        'text-left text-xs leading-[1.2] font-normal text-ui-gray-6 group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5',
         '[&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-brand-ink',
         className,
       )}
@@ -230,7 +230,7 @@ function FieldError({
     <div
       role="alert"
       data-slot="field-error"
-      className={cn('text-xs leading-[1.2] font-normal text-[#fa5252]', className)}
+      className={cn('text-xs leading-[1.2] font-normal text-ui-red', className)}
       {...props}
     >
       {content}

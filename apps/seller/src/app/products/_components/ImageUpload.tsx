@@ -78,7 +78,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
   }
 
   return (
-    <div className="block rounded-[16px] bg-white p-4">
+    <div className="block rounded-[16px] bg-card p-4">
       <p
         className={`${TEXT} mb-2.5`}
         style={{
@@ -116,7 +116,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
                   position: 'absolute',
                   bottom: 4,
                   left: 4,
-                  backgroundColor: 'var(--color-primary)',
+                  backgroundColor: 'var(--primary)',
                   color: 'white',
                   fontSize: 'var(--font-size-xs)',
                   fontWeight: 700,

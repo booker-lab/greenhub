@@ -41,9 +41,9 @@ const TEXT_MD = `${TEXT} text-base`;
 const TEXT_SM = `${TEXT} text-sm`;
 // text-[15px]를 주면 cn(tailwind-merge)이 Button의 leading-none을 지우므로 줄 높이 1을 다시 준다(Mantine 줄 높이 1).
 const COMPACT_SM = 'h-[26px] px-2 text-[15px] leading-none';
-const DEFAULT_BUTTON = 'border-[#ced4da] bg-white text-black hover:bg-[#f8f9fa]';
+const DEFAULT_BUTTON = 'border-input bg-background text-ui-ink hover:bg-ui-gray-0';
 const GROUP_LABEL =
-  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-black';
+  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
 
 export function ReviewCard({
   review,
@@ -66,7 +66,7 @@ export function ReviewCard({
   const noteId = `review-${review.id}-note`;
   return (
     <div
-      className="block rounded-[16px] bg-white p-4"
+      className="block rounded-[16px] bg-card p-4"
       // ② 숨긴 후기는 그림자 없이 틀 색(--frame) 면으로 구분한다(D2·D3).
       style={review.hidden ? { background: 'var(--frame)' } : undefined}
     >
@@ -140,7 +140,7 @@ export function ReviewCard({
             <div>
               <div id={reasonLabelId} className={GROUP_LABEL}>
                 숨기는 사유
-                <span className="text-[#fa5252]" aria-hidden>
+                <span className="text-ui-red" aria-hidden>
                   {' *'}
                 </span>
               </div>

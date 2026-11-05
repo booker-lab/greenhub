@@ -41,14 +41,14 @@ function PasswordInput({
     <div data-slot="password-input" className="relative">
       <div
         className={cn(
-          'relative cursor-text overflow-hidden border border-solid border-[#ced4da] bg-white text-black transition-[border-color] duration-100 ease-[ease] focus-within:border-primary',
+          'relative cursor-text overflow-hidden border border-solid border-input bg-background text-ui-ink transition-[border-color] duration-100 ease-[ease] focus-within:border-brand',
           sized.box,
         )}
       >
         <input
           type={reveal ? 'text' : 'password'}
           className={cn(
-            'absolute inset-0 h-full w-full cursor-text border-0 [font-family:inherit] bg-transparent text-inherit leading-[1.55] outline-0 placeholder:text-[#adb5bd] placeholder:opacity-100',
+            'absolute inset-0 h-full w-full cursor-text border-0 [font-family:inherit] bg-transparent text-inherit leading-[1.55] outline-0 placeholder:text-ui-gray-5 placeholder:opacity-100',
             sized.input,
             className,
           )}
@@ -57,7 +57,7 @@ function PasswordInput({
       </div>
       <div
         className={cn(
-          'absolute top-px right-px bottom-px z-[1] flex items-center justify-center text-[#868e96]',
+          'absolute top-px right-px bottom-px z-[1] flex items-center justify-center text-ui-gray-6',
           sized.section,
         )}
       >
@@ -71,7 +71,7 @@ function PasswordInput({
             setReveal((value) => !value);
           }}
           className={cn(
-            'relative flex cursor-pointer appearance-none items-center justify-center overflow-hidden border border-solid border-transparent bg-transparent p-0 leading-none text-[#212529] hover:bg-[#f1f3f5]',
+            'relative flex cursor-pointer appearance-none items-center justify-center overflow-hidden border border-solid border-transparent bg-transparent p-0 leading-none text-ui-gray-9 hover:bg-ui-gray-1',
             sized.button,
           )}
         >

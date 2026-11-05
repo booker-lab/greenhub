@@ -14,7 +14,7 @@
   --color-surface: #FFFFFF;
   --color-border: #ECEFED;
   --color-text: #111111;
-  --color-text-secondary: #6B716E;
+  --color-text-secondary: #696F6C;
   --color-text-disabled: #A3A9A6;
 
   /* ── Typography ── */
@@ -57,7 +57,8 @@
   /* ── 회차 마감 강조(노랑) ── */
   --color-deadline: #FFD43B;
   --color-deadline-surface: #FFF4CC;
-  --color-deadline-text: #3B2F00;
+  --color-deadline-text: #3B2F00; /* 연노랑 상자 위 글자 */
+  --color-deadline-on: #3B2F00; /* 노랑 띠 위 글자. 밝음은 --color-deadline-text와 같고 어둠에서 갈린다(dark.css) */
 }
 
 /* 300ms 탭 딜레이 제거 + 텍스트 선택 방지 (모바일 버튼/링크) */

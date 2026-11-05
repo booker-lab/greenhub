@@ -16,7 +16,7 @@
 | `@base-ui/react` | 1.9.0 | 옛 이름 `@base-ui-components/react`는 deprecated |
 | `cn` / `class-variance-authority` / `shadcn` | P1에서 확인 / 0.7.1 / 4.23.0 | 2026-10-27 문서 원본의 수동 설치는 `shadcn class-variance-authority cn lucide-react tw-animate-css`다(`installation/manual.mdx`). `cn()`은 `tailwind-merge`가 아니라 `cn` 패키지를 쓰고, `shadcn` 패키지도 실행 의존성(`shadcn/tailwind.css`)이다. 실제 목록은 P1의 CLI 출력으로 확정한다 |
 | `tw-animate-css` | 1.4.0 | shadcn 기본 애니메이션. `shadcn/tailwind.css`(열림·닫힘 변형)와 함께 import한다 |
-| (알림) | — | `-b base`의 알림은 shadcn `toast`(Base UI Toast, `@base-ui/react`)다. Base UI 문서 목록에 `sonner`는 없다. radix·aria용 `sonner`는 `next-themes`를 같이 설치하므로 쓰지 않는다(§5 다크 모드 없음). 호출은 `toast.add(...)`다(`components/base/toast.mdx`) |
+| (알림) | — | `-b base`의 알림은 shadcn `toast`(Base UI Toast, `@base-ui/react`)다. Base UI 문서 목록에 `sonner`는 없다. radix·aria용 `sonner`는 `next-themes`를 같이 설치하므로 쓰지 않는다. 다크 모드(D5, 판매자·어드민·기사 앱)는 `next-themes` 없이 고정 인라인 스크립트와 CSP 해시로 전환한다(`design-standard.md` §2.1, `design-direction.md` §9.3). 호출은 `toast.add(...)`다(`components/base/toast.mdx`) |
 | `lucide-react` | 1.63.0 | 이미 consumer·seller가 사용 중 |
 | 비교: `@mantine/core` | 9.7.4 | 현행 |
 
@@ -81,7 +81,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 | `--color-primary-dark` `#007A43` | `--brand-ink` (추가) | `text-brand-ink` |
 | `--color-primary-surface` `#E9F9EF` | `--brand-surface` (추가) | `bg-brand-surface` |
 | `--color-surface-muted` `#F1F3F2` | `--muted` / `--secondary` | `bg-muted` |
-| `--color-text-secondary` `#6B716E` | `--muted-foreground` | `text-muted-foreground` |
+| `--color-text-secondary` `#696F6C` | `--muted-foreground` | `text-muted-foreground` |
 | `--color-border` `#ECEFED` | `--color-border`를 같은 값으로 직접 정의(`--border`는 쓰지 않음, 위 충돌 표), `--input` | `border-border` |
 | `--color-danger` / `-surface` | `--destructive` / `--destructive-surface` (추가) | `text-destructive` |
 | `--color-deadline` / `-surface` / `-text` | `--deadline` / `--deadline-surface` / `--deadline-foreground` (추가) | `bg-deadline` |
@@ -130,7 +130,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 | List | `ul`·`ol` | |
 | `@mantine/notifications` | shadcn `toast`(Base UI Toast) | 17개 파일. `notifications.show(...)`를 `toast.add(...)`로 파일마다 바꾼다 |
 | `@mantine/hooks` | 직접 작성하거나 React 기본 API | 2개 파일 |
-| MantineProvider · ColorSchemeScript | 제거 | 다크 모드를 지원하지 않으므로 `next-themes`도 넣지 않는다 |
+| MantineProvider · ColorSchemeScript | 제거 | 다크 모드(D5, 판매자·어드민·기사 앱. 소비자는 밝은 화면만)는 `dark.css` 미디어 쿼리와 `<html data-theme>`(루트 layout `<head>`의 고정 인라인 스크립트 `COLOR_SCHEME_SCRIPT`, CSP sha256 해시)로 한다. `next-themes`는 넣지 않는다(`design-standard.md` §2.1) |
 
 ## 6. 단계
 
@@ -322,6 +322,8 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - ① 병합 전: 사용자가 `scripts/visual/start.mjs driver --phone`(Tailscale, 가짜 데이터)으로 화면·입력·알림을 휴대폰에서 확인한다(PR 본문 체크리스트).
   - ② 실제 기사 계정의 도착 사진 업로드·완료 처리·서비스워커는 운영 배포 직전 출시 E2E용 exact Preview에서 사용자가 휴대폰으로 확인한 뒤 배포를 승인한다. PR마다 Preview를 쓰지 않는다(`AGENTS.md` §0-9).
 
+- **기사 ② 완료**(2026-11-03, `design-direction.md` §8 D4, 2026-11-02 사용자 확정): D4-1 배송판·하단 바(#799), D4-2 주문 상세·완료 동선(#800). 규칙은 `design-standard.md` §5 "기사 앱"으로 옮겼다. 동작(목록·상세 조회, 상태 명령, 사진 업로드, 보류, 서비스워커)은 바꾸지 않았고, 기사 API에 없는 값(끝낸 배송 수·소요 시간·회차 날짜·경로 순번·상품 사진)은 화면에서 뺐다. 로컬 증명은 PR마다 기준 `main`(D4-2는 D4-1 head)과 같은 fixture로 39장 diff·parity·focus-trap, `driver-design-system.spec` 26 통과다. 실제 휴대폰 확인(도착 사진·완료·보류·한 손 조작)은 출시 회차 Preview에서 사용자가 한다.
+
 ### P4. 판매자 앱 틀·회차·주문·준비·재고·정산
 - 공용 틀 부품 구현(2026-10-31, 브랜치 `claude/ui-p4-frame`): `PageHeader`·`PageShell`·`SegmentedTabs`·`StateViews`(LoadingState·EmptyState)·어드민 `LoadMoreFooter`의 `@mantine/core`를 걷었다. Mantine Container(xs 540·sm 720·md 960·lg 1140·xl 1320, 좌우 16px)·Group·Stack·Title order 3(22px·800·1.4)·ActionIcon(28px subtle gray = `ghost` `size-7`, svg는 `size-5`)·Badge xs(16px·좌우 6·9px·줄 높이 14, filled gray-6·red-6)·Loader sm 계산값을 옮겼다. `LoadMoreFooter` 불러오는 중은 정산 `LoadMoreButton`과 같은 Mantine loading 모양(덮개·따로 합성되는 원)이다. `SegmentedTabs`의 이름 있는 group은 spread로 역할을 줘 biome 규칙을 끄지 않았다.
   - 공용 `ConfirmModal` 회귀 바로잡기: #712에서 확인 버튼 색 표에 `dark`가 빠져 회차 상세 "주문 마감" 확인창이 빨강이었다. Mantine 9 light 계산값(filled dark-6 `#2e2e2e`, 마우스 올림 dark-7)을 더하고 gray·green 마우스 올림도 Mantine 값(gray-7·green-7)으로 두었다. `confirmColor`는 `ConfirmColor`(brand·red·gray·green·dark) 유니온이라 모르는 값은 타입 검사에서 걸린다.
@@ -508,3 +510,35 @@ M1의 "② 방향 적용은 첫 회차 배송 뒤에만 한다"를 사용자가 
 - 관리자·판매자: ②를 지금 시작해 증명이 끝나는 대로 `main`에 병합한다. 확정된 D7(관리자)·D2·D3(`design-direction.md` §8)만 적용한다. D4(기사)·D5는 아직 결정 전이라 하지 않는다.
 - 소비자: ①과 ②(D1 도감 타일 등)를 브랜치에서 미리 준비만 한다. §8 소비자 동결은 그대로라, 병합·배포는 사용자가 심사·LIVE 전환·실결제 확인이 끝났다고 알린 뒤에 한다. 버튼 색 `#007A43` 같은 전체 값도 동결이 풀린 뒤다.
 - 같은 화면에서는 ①(외형 유지)과 ②를 계속 별도 PR로 낸다(§7). 각 PR은 자기 기준 `main`과 비교해 증명한다.
+
+### 결정 변경 (2026-11-02)
+
+사용자가 `design-direction.md` §8의 D4·D5를 확정했다.
+
+- D4(기사 앱 무채색 틀 + 초록 행동 버튼): 제안대로 바꾼다. 기사 앱 ②를 시작한다. 실제 휴대폰 확인 조건(P3)은 그대로다.
+- D5(다크 모드): 지원한다. 이 문서의 "다크 모드 없음"을 전제로 한 줄(§3 알림의 `sonner`·`next-themes` 제외 이유, §5 `MantineProvider · ColorSchemeScript` 행)은 다크 모드를 적용하는 PR이 함께 고친다. 순서는 어두운 색 값·전환 방식 시안 → 사용자 확인 → 공용 토큰(`packages/ui`) → 앱별 적용이며, 진행 중인 ② PR과 같은 파일을 동시에 고치지 않도록 공용 토큰 변경은 ② 병합 뒤에 한다.
+
+### 소비자 ② 완료 (2026-11-02)
+
+소비자 동결이 풀린 뒤 ② 방향 적용을 화면 묶음별 PR 여섯 개로 마쳤다. 병합은 배포가 아니고, 운영 배포는 사용자가 SHA를 붙여 따로 승인한다.
+
+- (a) 전역 버튼 색 `--primary` #007A43 #790
+- (b) 흰 머리띠·하단 메뉴 #791
+- (c) D1 도감 타일 #792
+- (d) 구매 동선(상품 상세·결제) #793
+- (e1) 마이페이지 #794
+- (e2) 장바구니·로그인·공개 화면 #795
+
+이 묶음에서 하지 않은 것: preflight 켜기, 사진 배경 제거. D4(기사)·D5(다크 모드)는 위 "결정 변경 (2026-11-02)"을 따른다. 판매자 화면에 남아 있던 `var(--color-primary)` 버튼 면도 같은 날 `--primary`로 맞췄다(`design-standard.md` §2).
+
+### D5 다크 모드 완료 (2026-11-03)
+
+`design-direction.md` §9(D5-a·D5-b·D5-c, 2026-11-02 확정)를 판매자·어드민·기사 앱에 적용했다. 소비자 앱은 2026-11-03 사용자 결정("다크모드는 소비자앱에서는 필요없다")으로 밝은 화면만 쓴다. 규칙은 `design-standard.md` §2.1로 옮겼다. 병합은 배포가 아니고, 운영 배포는 사용자가 SHA를 붙여 따로 승인한다.
+
+- 밝은 모드 색 정리 #803
+- 공용 어둠 토큰 `packages/ui/src/styles/dark.css`, `shots.mjs --color-scheme dark` #804
+- 공용 부품 `--ui-*` 토큰 #805
+- 소비자 #806(2026-11-03 사용자 결정으로 소비자는 다크 모드를 끄고 밝은 화면만 쓴다, #810) · 기사(무채색) #807 · 판매자·어드민 #808
+- 직접 전환 "화면 모드: 시스템 / 밝게 / 어둡게"(판매자 설정·기사 내 정보, `localStorage` + `<head>` 인라인 스크립트 + CSP 해시) #809
+
+남은 일(사용자 결정 전에는 하지 않는다): 어둠 전용 상품 사진 둘레 흰 6% 안쪽 선(`design-direction.md` §9.1), 판매자·기사 `global-error.tsx` 다크 모드. viewport `themeColor`가 직접 고른 모드를 따르게 하는 것은 하지 않기로 했다(#809).

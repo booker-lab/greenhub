@@ -37,6 +37,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // 소비자 앱은 다크 모드를 두지 않는다(2026-11-03 사용자 결정). 기기 설정과 상관없이 한 값이다.
   themeColor: '#00A65A',
   width: 'device-width',
   initialScale: 1,
@@ -45,7 +46,7 @@ export const viewport: Viewport = {
 };
 
 // 루트 layout은 요청 헤더를 읽지 않는다. 읽으면 모든 화면이 요청마다 서버에서 만들어져 공개 화면을
-// CDN에 둘 수 없다. 색상 모드는 밝은 모드 하나뿐이라(전환 기능 없음) 색상 모드 스크립트·속성을 두지 않는다.
+// CDN에 둘 수 없다. 소비자 앱은 밝은 모드 하나뿐이라(다크 모드 없음, 2026-11-03 결정) 색상 모드 스크립트·속성을 두지 않는다.
 export default function RootLayout({
   children,
 }: Readonly<{

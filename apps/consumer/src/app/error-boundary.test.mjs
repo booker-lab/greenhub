@@ -58,7 +58,7 @@ test('error.tsx: not-found 화면과 같은 디자인 토큰을 쓴다', () => {
   const errorSource = source('error.tsx');
   for (const token of [
     'var(--color-surface-muted)',
-    'var(--color-primary)',
+    'var(--primary)',
     'var(--touch-target)',
     'var(--font-size-lg)',
   ]) {

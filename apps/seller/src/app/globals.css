@@ -16,6 +16,10 @@
    (tokens.css·아래 :root·body)에 지도록 base layer에 둔다. */
 @import "@greenhub/ui/styles/base.css" layer(base);
 
+/* 다크 모드(D5, design-direction.md §9): 기기 설정이 어둠이면 토큰 값만 다시 정의한다. base.css·tokens.css 값을 이기도록
+   그 뒤에 layer 없이 둔다. */
+@import "@greenhub/ui/styles/dark.css";
+
 /* @import는 모두 위에 둔다(@import 뒤에 다른 규칙이 오면 무효). */
 
 /* 클래스 탐색: Tailwind는 node_modules(워크스페이스 링크 포함)를 보지 않으므로 공용 컴포넌트 경로를 직접 준다. */
@@ -35,7 +39,7 @@
    바탕색(Mantine body 흰색)은 아래 layer 밖 body 규칙이 정한다. */
 @layer base {
   :root {
-    color-scheme: light;
+    color-scheme: light dark;
   }
 
   *,
@@ -61,7 +65,7 @@
     font-family: var(--font-family);
     font-size: var(--font-size-md);
     line-height: 1.55;
-    color: #000;
+    color: var(--ui-ink);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
