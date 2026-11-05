@@ -251,6 +251,9 @@ export function useSaleRounds(): UseSaleRoundsResult {
   const [operationError, setOperationError] = useState<string | null>(null);
   const listRequestId = useRef(0);
   const operationRef = useRef<SaleRoundOperation | null>(null);
+  // 지금 진행 중인 작업의 번호. 앞선 상세 조회가 새 상세 조회로 대체됐을 때, 늦게 끝난
+  // 앞선 조회가 새 조회의 진행 표시·오류를 지우거나 덮지 않게 한다.
+  const operationOwnerRef = useRef(0);
   // 토큰 문자열은 세션 유지(약 2분 확인)로 갱신될 때마다 바뀐다. 요청 함수가 토큰 값에 묶이면
   // 그 함수를 effect 의존성으로 쓰는 회차 상세가 다시 조회되며 편집 중인 폼이 초기화된다.
   // 그래서 토큰은 호출 시점에 ref로 읽고, 요청 함수는 스토어와 토큰 유무가 바뀔 때만 새로 만든다.
@@ -322,12 +325,18 @@ export function useSaleRounds(): UseSaleRoundsResult {
       request: (context: ApiContext) => Promise<T>,
       changedRound?: (result: T) => SaleRound,
     ): Promise<T> => {
-      if (operationRef.current) {
+      // 상세 조회끼리는 새 조회가 앞선 조회를 대체한다. 회차 상세 화면은 effect를 다시 돌릴 때
+      // (개발 모드 Strict Mode의 두 번 실행 등) 앞선 응답을 요청 번호로 버리므로 막을 이유가 없다.
+      // 변경 작업과 상세 조회 사이, 변경 작업끼리는 그대로 막는다.
+      const inFlight = operationRef.current;
+      if (inFlight && !(inFlight === 'detail' && operation === 'detail')) {
         const concurrentError = new Error('진행 중인 회차 작업이 끝난 뒤 다시 시도해 주세요.');
         setOperationError(concurrentError.message);
         throw concurrentError;
       }
 
+      const owner = ++operationOwnerRef.current;
+      const isCurrent = () => operationOwnerRef.current === owner;
       operationRef.current = operation;
       setPendingOperation(operation);
       setOperationError(null);
@@ -339,11 +348,15 @@ export function useSaleRounds(): UseSaleRoundsResult {
         }
         return result;
       } catch (requestError) {
-        setOperationError(errorMessage(requestError, '회차 작업을 완료하지 못했습니다.'));
+        if (isCurrent()) {
+          setOperationError(errorMessage(requestError, '회차 작업을 완료하지 못했습니다.'));
+        }
         throw requestError;
       } finally {
-        operationRef.current = null;
-        setPendingOperation(null);
+        if (isCurrent()) {
+          operationRef.current = null;
+          setPendingOperation(null);
+        }
       }
     },
     [getApiContext],
