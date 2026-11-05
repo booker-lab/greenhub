@@ -1,4 +1,4 @@
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import { isInviteTokenFormat } from '@/lib/seller-invite';
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 
 const textSm = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' };
 
-// ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Paper(radius lg·shadow sm·p xl)·
+// ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Paper(radius lg·p xl; 그림자는 ② D2로 걷음)·
 // Stack(gap xs·md)·Title order 3(22px·줄 높이 1.4·800)·Text(m-0 p-0)·Button(md·outline, radius xl)과 같은 값.
 const TEXT = 'm-0 p-0 text-base';
 const STACK = 'flex flex-col items-stretch justify-start gap-4';
@@ -31,12 +31,12 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'var(--color-bg)',
+        backgroundColor: 'var(--frame)',
         padding: '0 16px',
       }}
     >
       <div className="mx-auto w-full max-w-[540px] px-4">
-        <div className="block rounded-[16px] bg-white p-8 shadow-mantine-sm">
+        <div className="block rounded-[16px] bg-card p-8">
           <div className="mb-5 flex flex-col items-center justify-start gap-2.5">
             <Image
               src="/icons/icon-192x192.png"
@@ -78,14 +78,9 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
               <p className={TEXT} style={textSm}>
                 링크 주소가 잘렸거나 잘못된 초대예요. 관리자에게 새 초대 링크를 요청해 주세요.
               </p>
-              <Button
-                render={<a href="/login" />}
-                nativeButton={false}
-                variant="outline"
-                className="w-full"
-              >
+              <ButtonLink href="/login" variant="outline" className="w-full">
                 로그인 화면으로
-              </Button>
+              </ButtonLink>
             </div>
           )}
         </div>

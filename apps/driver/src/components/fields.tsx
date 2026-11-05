@@ -18,10 +18,10 @@ const SIZE = {
 } as const;
 
 const inputBase =
-  'block w-full min-w-0 cursor-text appearance-none rounded-[16px] border border-solid border-[#ced4da] bg-white text-start text-black transition-[border-color] duration-100 ease-[ease] outline-none placeholder:text-[#adb5bd] placeholder:opacity-100 focus:border-primary disabled:cursor-not-allowed disabled:bg-[#e9ecef] disabled:text-[#adb5bd] disabled:opacity-60 [-webkit-tap-highlight-color:transparent]';
+  'block w-full min-w-0 cursor-text appearance-none rounded-[16px] border border-solid border-input bg-background text-start text-ui-ink transition-[border-color] duration-100 ease-[ease] outline-none placeholder:text-ui-gray-5 placeholder:opacity-100 focus:border-brand disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:opacity-60 [-webkit-tap-highlight-color:transparent]';
 
 const labelClass =
-  'inline-flex cursor-default text-sm/[1.55] font-semibold break-words text-black select-auto';
+  'inline-flex cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink select-auto';
 
 function FieldLabel({
   htmlFor,
@@ -38,7 +38,7 @@ function FieldLabel({
     <Label htmlFor={htmlFor} id={id} className={cn(labelClass, 'inline-block')}>
       {children}
       {required && (
-        <span aria-hidden="true" className="text-[#fa5252]">
+        <span aria-hidden="true" className="text-ui-red">
           {' *'}
         </span>
       )}
@@ -99,23 +99,24 @@ export function PasswordField({
   const [reveal, setReveal] = useState(false);
   return (
     <div className="relative">
-      <div className="relative h-[42px] min-h-[42px] cursor-text overflow-hidden rounded-[32px] border border-solid border-[#ced4da] bg-white ps-[14px] pe-10 text-base leading-[40px] text-black transition-[border-color] duration-100 ease-[ease] focus-within:border-primary">
+      <div className="relative h-[42px] min-h-[42px] cursor-text overflow-hidden rounded-[32px] border border-solid border-input bg-background ps-[14px] pe-10 text-base leading-[40px] text-ui-ink transition-[border-color] duration-100 ease-[ease] focus-within:border-brand">
         <input
           type={reveal ? 'text' : 'password'}
           className={cn(
-            'absolute inset-0 h-full w-full cursor-text border-0 bg-transparent ps-[14px] pe-10 text-inherit leading-[1.55] outline-0 placeholder:text-[#adb5bd] placeholder:opacity-100',
+            'absolute inset-0 h-full w-full cursor-text border-0 bg-transparent ps-[14px] pe-10 text-inherit leading-[1.55] outline-0 placeholder:text-ui-gray-5 placeholder:opacity-100',
             className,
           )}
           {...props}
         />
       </div>
-      <div className="absolute top-px right-px bottom-px z-[1] flex w-10 items-center justify-center rounded-r-[32px] text-[#868e96]">
+      <div className="absolute top-px right-px bottom-px z-[1] flex w-10 items-center justify-center rounded-r-[32px] text-ui-gray-6">
+        {/* Mantine은 Tab으로 가지 않는 버튼이었지만, 키보드·읽기 도구로도 비밀번호를 볼 수 있게 초점을 받는다. */}
         <button
           type="button"
-          tabIndex={-1}
-          aria-hidden="true"
+          aria-label={reveal ? '비밀번호 숨기기' : '비밀번호 보기'}
+          aria-pressed={reveal}
           onClick={() => setReveal((value) => !value)}
-          className="relative flex size-[28px] min-h-[28px] min-w-[28px] cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 leading-none text-[#212529] hover:bg-[#f1f3f5]"
+          className="relative flex size-[28px] min-h-[28px] min-w-[28px] cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 leading-none text-ui-gray-9 hover:bg-ui-gray-1"
         >
           <span className="flex size-[26px] items-center justify-center">
             <PasswordToggleIcon reveal={reveal} />
@@ -259,7 +260,7 @@ export function NumberField({
     onChange(Math.max(min, current + direction * step));
   };
   const control =
-    'flex h-[17px] w-full flex-[0_0_50%] cursor-pointer appearance-none items-center justify-center border-0 border-s border-solid border-s-[#ced4da] bg-transparent p-0 text-black hover:bg-[#f8f9fa] disabled:cursor-not-allowed disabled:bg-transparent disabled:text-[#adb5bd] disabled:opacity-60';
+    'flex h-[17px] w-full flex-[0_0_50%] cursor-pointer appearance-none items-center justify-center border-0 border-s border-solid border-s-input bg-transparent p-0 text-ui-ink hover:bg-ui-gray-0 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-ui-gray-5 disabled:opacity-60';
   return (
     <div>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
@@ -282,7 +283,7 @@ export function NumberField({
           }}
           className={cn(inputBase, SIZE.sm, 'pe-6')}
         />
-        <div className="absolute top-px right-px bottom-px z-[1] flex w-6 items-center justify-center rounded-r-[16px] text-[#868e96]">
+        <div className="absolute top-px right-px bottom-px z-[1] flex w-6 items-center justify-center rounded-r-[16px] text-ui-gray-6">
           <div className="ms-auto flex h-[34px] w-full max-w-[calc(14px*1.7)] flex-col">
             <button
               type="button"
@@ -399,8 +400,8 @@ function InlineControl({
           disabled={disabled}
           onChange={onChange}
           className={cn(
-            'peer m-0 size-5 cursor-default appearance-none border border-solid border-[#ced4da] bg-white transition-[background-color,border-color] duration-100 ease-[ease] [-webkit-tap-highlight-color:transparent]',
-            'checked:border-primary checked:bg-primary disabled:cursor-not-allowed disabled:border-[#dee2e6] disabled:bg-[#e9ecef]',
+            'peer m-0 size-5 cursor-default appearance-none border border-solid border-input bg-background transition-[background-color,border-color] duration-100 ease-[ease] [-webkit-tap-highlight-color:transparent]',
+            'checked:border-brand checked:bg-brand disabled:cursor-not-allowed disabled:border-ui-gray-3 disabled:bg-ui-gray-2',
             isRadio
               ? 'relative flex items-center justify-center rounded-[20px]'
               : 'block rounded-[4px] p-0',
@@ -412,7 +413,7 @@ function InlineControl({
             fill="none"
             viewBox="0 0 5 5"
             aria-hidden="true"
-            className="pointer-events-none absolute top-1/2 left-1/2 size-2 text-white opacity-0 transition-[opacity,transform] duration-[100ms,200ms] ease-[ease] [transform:scale(0.2)_translateY(10px)] [translate:-50%_-50%] peer-checked:opacity-100 peer-checked:[transform:scale(1)] peer-disabled:text-[#adb5bd]"
+            className="pointer-events-none absolute top-1/2 left-1/2 size-2 text-white opacity-0 transition-[opacity,transform] duration-[100ms,200ms] ease-[ease] [transform:scale(0.2)_translateY(10px)] [translate:-50%_-50%] peer-checked:opacity-100 peer-checked:[transform:scale(1)] peer-disabled:text-ui-gray-5"
           >
             <circle cx="2.5" cy="2.5" r="2.5" fill="currentColor" />
           </svg>
@@ -422,7 +423,7 @@ function InlineControl({
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
             aria-hidden="true"
-            className="pointer-events-none absolute inset-0 m-auto w-[60%] text-white opacity-0 transition-[transform,opacity] duration-100 ease-[ease] [transform:translateY(5px)_scale(0.5)] peer-checked:opacity-100 peer-checked:[transform:none] peer-disabled:text-[#adb5bd]"
+            className="pointer-events-none absolute inset-0 m-auto w-[60%] text-white opacity-0 transition-[transform,opacity] duration-100 ease-[ease] [transform:translateY(5px)_scale(0.5)] peer-checked:opacity-100 peer-checked:[transform:none] peer-disabled:text-ui-gray-5"
           >
             <path
               d="M4 4.586L1.707 2.293A1 1 0 1 0 .293 3.707l3 3a.997.997 0 0 0 1.414 0l5-5A1 1 0 1 0 8.293.293L4 4.586z"
@@ -443,7 +444,7 @@ function InlineControl({
           htmlFor={id}
           className={cn(
             'block ps-3',
-            disabled ? 'cursor-not-allowed text-[#adb5bd]' : 'cursor-default text-inherit',
+            disabled ? 'cursor-not-allowed text-ui-gray-5' : 'cursor-default text-inherit',
           )}
         >
           {label}

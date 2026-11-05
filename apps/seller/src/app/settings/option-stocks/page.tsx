@@ -3,7 +3,8 @@
 import type { OptionStock } from '@greenhub/shared';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { notifications } from '@mantine/notifications';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { notify } from '@/components/AppToaster';
 import { useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
@@ -20,7 +21,6 @@ import {
   toRemainingBody,
   upsertStock,
 } from './_lib';
-import { LoadingButton } from '../_components/LoadingButton';
 
 // 옵션 재고(직접 출력한 화분 등). 상품 옵션 선택지에 연결하면 주문할 때마다 줄고, 결제 전 취소·환불이면
 // 돌아온다. 남은 개수가 모자라면 손님 주문을 받지 않는다.
@@ -31,7 +31,7 @@ const onlyDigits = (value: string) => value.replace(/[^0-9]/g, '');
 // Stack·Group(gap xs·아래 맞춤)·Text(sm = 15px·줄 높이 1.45)·TextInput(라벨)과 같은 값.
 const TEXT = 'm-0 p-0 text-base';
 const TEXT_SM = 'm-0 p-0 text-sm';
-const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-card p-4';
 const ROW = 'flex flex-row flex-nowrap items-end justify-start gap-2.5';
 
 /** Mantine TextInput(label)과 같은 흐름: 라벨 → 입력칸. */
@@ -96,6 +96,7 @@ function StockRow({
             style={{ flex: 1 }}
           />
           <LoadingButton
+            measured
             variant="light-green"
             loading={busy === 'add'}
             onClick={() => submit('add')}
@@ -113,6 +114,7 @@ function StockRow({
             style={{ flex: 1 }}
           />
           <LoadingButton
+            measured
             variant="secondary"
             loading={busy === 'remaining'}
             onClick={() => submit('remaining')}
@@ -170,7 +172,7 @@ export default function OptionStocksSettingsPage() {
       );
       if (stock) setStocks((current) => upsertStock(current, stock));
       setForm({ name: '', quantity: '' });
-      notifications.show({ message: '재고를 추가했어요' });
+      notify({ message: '재고를 추가했어요' });
     } catch (e) {
       setCreateError(e instanceof Error ? e.message : '추가하지 못했어요.');
     } finally {
@@ -188,10 +190,10 @@ export default function OptionStocksSettingsPage() {
         }),
       );
       if (stock) setStocks((current) => upsertStock(current, stock));
-      notifications.show({ message: '재고를 저장했어요' });
+      notify({ message: '재고를 저장했어요' });
       return true;
     } catch (e) {
-      notifications.show({
+      notify({
         color: 'red',
         message: e instanceof Error ? e.message : '저장하지 못했어요.',
       });
@@ -255,7 +257,7 @@ export default function OptionStocksSettingsPage() {
                     {createError}
                   </p>
                 )}
-                <LoadingButton size="md" loading={creating} onClick={create}>
+                <LoadingButton measured size="md" loading={creating} onClick={create}>
                   추가
                 </LoadingButton>
               </div>

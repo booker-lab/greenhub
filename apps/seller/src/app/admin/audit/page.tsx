@@ -1,23 +1,56 @@
 'use client';
 
-import { Badge } from '@greenhub/ui/components/badge';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
-import { EmptyState, LoadingState } from '@/components/StateViews';
 import { apiJson } from '@/lib/api';
+import {
+  ADMIN_SUB,
+  ADMIN_TD,
+  ADMIN_TH,
+  AdminListNotice,
+  AdminPageHeader,
+} from '../_components/adminList';
 import {
   type AdminAuditLog,
   actionLabel,
   describeChanges,
   formatLoggedAt,
-  targetLabel,
+  targetIdLabel,
+  targetTypeLabel,
 } from './_lib';
 
 // 어드민이 수수료·정지·환불·지급·배너를 바꾼 기록. 최근 100건만 읽기 전용으로 보여 준다.
+// ② 방향(design-direction.md §5 어드민 "모든 목록 화면의 규칙", §8 D7): 카드 대신 다른 목록과 같은 표.
+// 열: 시각 → 기록(굵게) → 대상(종류 + 전체 식별 값) → 바뀐 내용(한국어 칸 이름·값, 사유) → 처리한 사람.
+// 태블릿(1100px 이하)은 처리한 사람을 바뀐 내용 아래 보조 줄로, 휴대폰(640px 이하)은 세 줄 행이다.
 
-// Mantine Text size sm(15px·줄 높이 1.45)·xs(13px·1.4), 여백 0.
-const TEXT_SM = 'm-0 p-0 text-sm font-normal';
-const TEXT_XS = 'm-0 p-0 text-xs font-normal';
+function actorLabel(log: AdminAuditLog, myId: string | undefined): string {
+  return log.actorId === myId ? '나' : `다른 관리자 · ${log.actorId}`;
+}
+
+function Changes({ log }: { log: AdminAuditLog }) {
+  const lines = describeChanges(log);
+  return (
+    <>
+      {lines.map((line) => (
+        <p key={line} className="m-0 [word-break:keep-all]">
+          {line}
+        </p>
+      ))}
+      {log.reason && <p className={`${ADMIN_SUB} break-words`}>사유: {log.reason}</p>}
+    </>
+  );
+}
+
+function Target({ log }: { log: AdminAuditLog }) {
+  const id = targetIdLabel(log);
+  return (
+    <>
+      <span className="whitespace-nowrap">{targetTypeLabel(log.targetType)}</span>
+      {id && <span className={`${ADMIN_SUB} block break-all`}>{id}</span>}
+    </>
+  );
+}
 
 export default function AdminAuditPage() {
   const { data: session } = useSession();
@@ -40,58 +73,78 @@ export default function AdminAuditPage() {
     );
   }, [token]);
 
-  // ① 외형 유지(UI 교체 P2b): Mantine Stack(gap sm)·Title order 3(22px·800·줄 높이 1.4)·Text sm·xs·Paper(lg·xs·md)·Badge light gray.
   return (
-    <div className="flex flex-col gap-3">
-      <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">행동 기록</h3>
-      <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
-        관리자가 바꾼 내용을 최근 100건까지 보여 줘요. 기록은 고칠 수 없어요.
-      </p>
+    <div>
+      <AdminPageHeader
+        title="감사 기록"
+        subline="관리자가 바꾼 내용을 최근 100건까지 보여 줘요. 기록은 고칠 수 없어요."
+      />
       {logs === null ? (
-        <LoadingState />
+        <AdminListNotice>불러오는 중...</AdminListNotice>
       ) : failed ? (
-        <EmptyState text="기록을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요." />
+        <AdminListNotice>기록을 불러오지 못했어요. 잠시 뒤 다시 열어 주세요.</AdminListNotice>
       ) : logs.length === 0 ? (
-        <EmptyState text="아직 기록이 없어요" />
+        <AdminListNotice>아직 기록이 없어요</AdminListNotice>
       ) : (
-        logs.map((log) => (
-          <div key={log.id} className="block rounded-[16px] bg-white p-4 shadow-mantine-xs">
-            <div className="flex flex-row flex-nowrap items-center justify-between gap-2.5">
-              <div className="flex flex-row flex-nowrap items-center justify-start gap-2.5">
-                {/* Mantine Badge는 overflow: hidden인 grid라 좁은 폭에서 줄어든다. 글자 칸(label)은
-                    style.css 보정으로 overflow: visible이라 가운데 놓인 글자가 좌우 여백으로 넘쳐 보인다. */}
-                <Badge
-                  variant="secondary"
-                  className="inline-grid shrink overflow-hidden text-ellipsis rounded-[16px]"
-                >
-                  <span className="overflow-visible text-center text-ellipsis whitespace-nowrap">
-                    {actionLabel(log.action)}
-                  </span>
-                </Badge>
-                <p className={`${TEXT_SM} font-semibold`}>{targetLabel(log)}</p>
-              </div>
-              <p
-                className={TEXT_XS}
-                style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }}
-              >
-                {formatLoggedAt(log.createdAt)}
-              </p>
-            </div>
-            {describeChanges(log).map((line) => (
-              <p key={line} className={`${TEXT_SM} mt-1`}>
-                {line}
-              </p>
+        <>
+          {/* 휴대폰(640px 이하): 1줄 기록·시각, 2줄 대상, 3줄 바뀐 내용·사유·처리한 사람. */}
+          <ul className="m-0 list-none p-0 min-[641px]:hidden" aria-label="감사 기록">
+            {logs.map((log) => (
+              <li key={log.id} className="border-b border-rule py-2.5 text-[15px] leading-[22px]">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="m-0 min-w-0 font-bold">{actionLabel(log.action)}</p>
+                  <p className={`${ADMIN_SUB} shrink-0 whitespace-nowrap tabular-nums`}>
+                    {formatLoggedAt(log.createdAt)}
+                  </p>
+                </div>
+                <div className="text-[13px] leading-[18px] text-[var(--color-text-secondary)]">
+                  <Target log={log} />
+                </div>
+                <Changes log={log} />
+                <p className={`${ADMIN_SUB} break-all`}>처리: {actorLabel(log, myId)}</p>
+              </li>
             ))}
-            {log.reason && (
-              <p className={`${TEXT_SM} mt-1`} style={{ color: 'var(--color-text-secondary)' }}>
-                사유: {log.reason}
-              </p>
-            )}
-            <p className={`${TEXT_XS} mt-1`} style={{ color: 'var(--color-text-disabled)' }}>
-              처리: {log.actorId === myId ? '나' : log.actorId.slice(0, 8)}
-            </p>
-          </div>
-        ))
+          </ul>
+
+          {/* 태블릿·데스크톱(641px 이상): 표. 1100px 이하는 처리한 사람을 바뀐 내용 아래 보조 줄로 옮긴다. */}
+          <table className="w-full border-collapse max-[640px]:hidden">
+            <thead>
+              <tr>
+                <th className={ADMIN_TH}>시각</th>
+                <th className={ADMIN_TH}>기록</th>
+                <th className={ADMIN_TH}>대상</th>
+                <th className={ADMIN_TH}>바뀐 내용</th>
+                <th className={`${ADMIN_TH} max-[1100px]:hidden`}>처리</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log) => (
+                <tr key={log.id}>
+                  <td className={`${ADMIN_TD} whitespace-nowrap tabular-nums`}>
+                    {formatLoggedAt(log.createdAt)}
+                  </td>
+                  <td className={`${ADMIN_TD} font-bold whitespace-nowrap`}>
+                    {actionLabel(log.action)}
+                  </td>
+                  <td className={`${ADMIN_TD} max-w-[220px]`}>
+                    <Target log={log} />
+                  </td>
+                  <td className={ADMIN_TD}>
+                    <Changes log={log} />
+                    <p className={`${ADMIN_SUB} break-all min-[1101px]:hidden`}>
+                      처리: {actorLabel(log, myId)}
+                    </p>
+                  </td>
+                  <td
+                    className={`${ADMIN_TD} max-w-[200px] break-all text-[13px] max-[1100px]:hidden`}
+                  >
+                    {actorLabel(log, myId)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </div>
   );

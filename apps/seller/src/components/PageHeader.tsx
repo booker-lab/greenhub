@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { ChevronLeft, Home } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -42,8 +42,7 @@ export function PageHeader({
   return (
     <header
       style={{
-        backgroundColor: 'var(--color-bg)',
-        borderBottom: '1px solid var(--color-border)',
+        backgroundColor: 'var(--frame)',
         padding: '16px',
         ...(sticky ? { position: 'sticky', top: 0, zIndex: 10 } : {}),
       }}
@@ -58,16 +57,15 @@ export function PageHeader({
             )}
             <h3 className="m-0 min-w-0 text-[22px] leading-[1.4] font-extrabold">{title}</h3>
             {showHome && (
-              <Button
+              <ButtonLink
                 variant="ghost"
                 size="icon-sm"
                 className="size-7"
                 aria-label="홈"
-                nativeButton={false}
                 render={<Link href="/" />}
               >
                 <Home size={20} className="size-5" />
-              </Button>
+              </ButtonLink>
             )}
           </div>
           {right}

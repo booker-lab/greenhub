@@ -1,7 +1,7 @@
-// ① 외형 유지(UI 교체 P4): Mantine Badge variant="light" color → @greenhub/ui Badge 변형(어드민 정산과 같은 대응).
-export const LIGHT_BADGE: Record<string, 'warning' | 'light' | 'secondary' | 'destructive'> = {
-  yellow: 'warning',
-  brand: 'light',
-  gray: 'secondary',
-  red: 'destructive',
-};
+import type { SettlementStatus } from '../_constants';
+
+// ② 상태는 배지 면 대신 점 + 글자(StatusDot, 2026-11-01 결정): 끝났거나 멈춘 상태(지급 완료·취소)=회색,
+// 나머지(정산 대기·확정) 검정. 어드민 정산(`settlementStatusTone`)과 같은 규칙이다.
+export function settlementStatusTone(status: SettlementStatus): 'done' | 'default' {
+  return status === 'paid' || status === 'cancelled' ? 'done' : 'default';
+}

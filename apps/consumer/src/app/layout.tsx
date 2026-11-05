@@ -1,6 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import { headers } from 'next/headers';
-import { ColorSchemeScript } from '@mantine/core';
 import Providers from './providers';
 import BottomNav from '@/components/BottomNav';
 import { enabledFeatureKeys } from '@/lib/features';
@@ -39,6 +37,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // 소비자 앱은 다크 모드를 두지 않는다(2026-11-03 사용자 결정). 기기 설정과 상관없이 한 값이다.
   themeColor: '#00A65A',
   width: 'device-width',
   initialScale: 1,
@@ -46,17 +45,16 @@ export const viewport: Viewport = {
   viewportFit: 'cover',
 };
 
-export default async function RootLayout({
+// 루트 layout은 요청 헤더를 읽지 않는다. 읽으면 모든 화면이 요청마다 서버에서 만들어져 공개 화면을
+// CDN에 둘 수 없다. 소비자 앱은 밝은 모드 하나뿐이라(다크 모드 없음, 2026-11-03 결정) 색상 모드 스크립트·속성을 두지 않는다.
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  // proxy가 요청마다 만든 CSP nonce. 인라인 색상 모드 스크립트에 붙인다.
-  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
-    <html lang="ko" suppressHydrationWarning>
+    <html lang="ko">
       <head>
-        <ColorSchemeScript nonce={nonce} />
         {/* 빌드 때 켜진 기능 토글 키(쉼표 목록, 꺼짐이면 빈 값). E2E가 배포 빌드의 토글을 읽는다. */}
         <meta name="greenhub-features" content={enabledFeatureKeys().join(',')} />
       </head>

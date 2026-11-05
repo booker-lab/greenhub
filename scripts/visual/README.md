@@ -85,33 +85,57 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 
 - 주소로 열 수 없는 화면 안 상태(탭 등)는 fixture 화면 목록에 `click: '<누를 글자>'`를 주면 찍기 전에 그 글자를 누른다(예: 셀러 정산 `기간별 조회`).
 - 모달처럼 지금 보이는 화면이 중요한 상태는 `steps: [{ click: '<글자>' }]`와 `viewport: true`로 찍는다(예: 셀러 `modal-order-hold`).
-- 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 대조 화면 `ui-compare-select`).
+- 불러오는 중 버튼처럼 누른 뒤 응답을 기다리는 상태는 `steps`에 `{ scenario: '<이름>' }`을 넣어 화면을 연 뒤에 가짜 API 상황을 바꾸고(예: 셀러 `slow-writes` = 쓰기 요청 60초 지연) 버튼을 누른다. 찍고 나면 페이지를 닫으므로 기다리던 요청은 취소된다(`ERR_ABORTED`, 정상 판정 제외).
+- 글자가 없는 대상(값이 든 입력칸 등)은 `steps: [{ clickSelector: '<CSS 선택자>' }]`로 실제 마우스 클릭을 한다(예: 상품 폼의 Select 입력칸).
+- 버튼은 `{ press: '<접근성 이름>', nth }`(글자가 기호뿐이거나 같은 이름이 여러 곳인 버튼), 체크박스는 `{ check: '<접근성 이름>' }`, 앱이 스스로 주소를 바꾸는 동작(결제 완료 뒤 이동 등)은 `{ waitPath: '/order/success' }`로 기다린다.
+- **결제창 stub**(`portone: 'success' | 'cancel'`): 소비자 결제 화면은 PortOne SDK가 `window.PortOne`이 이미 있으면 CDN 스크립트를 불러오지 않는 점을 이용해 stub을 넣는다(로컬 E2E `installPortOneBrowserStub`과 같은 방식). `success`는 결제 완료, `cancel`은 결제창 취소 응답을 돌려주고, 넘긴 인자를 `manifest.json`의 `portoneCalls`에 남긴다. `start.mjs consumer`는 가짜 PortOne 공개 설정(상점 ID·카카오페이 채널 키)을 넣는다. 외부 요청은 그대로 막혀 있어 실제 결제창·결제는 일어나지 않는다.
+- 화면이 일부러 만든 오류 응답(주문 거절 409 등)에 브라우저가 남기는 리소스 오류 줄은 `expectedErrors: ['<정규식>']`로만 뺀다.
+- 화면마다 `manifest.json`에 쓰기 요청(`writes`, 본문 포함)·브라우저 저장소(`storage`)를, `<id>-<viewport>.aria.yml`에 접근성 트리(Playwright `ariaSnapshot`)를 남긴다. 비교는 아래 "작업 전·후 동작·접근성 비교".
+- **색 구성**(`--color-scheme dark`, 기본 `light`): 브라우저 `colorScheme`만 바꿔 `prefers-color-scheme: dark`로 찍는다(다크 모드 D5, `design-direction.md` §9). 값은 `manifest.json`의 `colorScheme`에 남고, 색 구성이 다른 묶음끼리는 이어 찍기·`diff.mjs`·`parity.mjs`를 하지 않는다(옵션 전 묶음은 밝음으로 본다). label은 따로 둔다(예: `--label after-dark`).
 - **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 가짜 API에 닿지 못한 요청 0(취소된 요청 제외), 하네스가 지원하지 않는 화면 0(`--prod`의 셀러 Firestore 화면), 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
 - **렌더 결정성**: 브라우저는 `--disable-partial-raster`로 띄운다. Chromium이 바뀐 영역만 다시 래스터하면 그리는 이력에 따라 글자·둥근 모서리의 안티앨리어싱이 채널 2~40만큼 달라져, 같은 커밋 두 번 촬영이 브라우저 컨텍스트마다 약 5~15% 어긋났다(2026-10-30 기사 화면 실측). 끄면 20번 중 20번 같았다.
 - `next dev`는 힙 사용량이 상한(시스템 메모리의 50%)의 80%를 넘으면 스스로 재시작한다("Server is approaching the used memory threshold, restarting..."). 한 서버로 여러 번 연달아 찍다가 재시작하면, 그 사이 찍힌 화면은 연결 오류나 덜 그려진 상태(로딩)가 된다. `start.mjs`가 재시작 횟수를 `dev-restarts.txt`에 적고 `shots.mjs`가 재시작이 걸친 화면과 그 바로 다음 화면을 정상 판정에서 뺀다("next dev 메모리 재시작 중·직후 촬영"). 그 화면만 `--only`로 다시 찍는다. 세 앱 서버와 에뮬레이터를 한 컨테이너에서 같이 띄우면 더 자주 일어난다. 그래서 `start.mjs seller`는 다른 앱 하네스가 떠 있으면 시작하지 않는다(`--allow-concurrent`로 무시). 판매자가 떠 있을 때 다른 앱을 띄우면 경고만 한다.
 - 캡처는 `%TEMP%\greenhub-visual\<app>\shots\<label>\`에 PNG와 `manifest.json`으로 남는다.
+  - `manifest.json`은 화면마다 원자적으로(임시 파일 → 이름 바꾸기) 저장한다. 촬영이 끊기면 그때까지의 기록이 `complete: false`로 남고, `diff.mjs`·`parity.mjs`는 끝나지 않은 묶음을 비교하지 않는다(일부만 같다고 통과시키지 않는다).
+  - 끊긴 촬영은 서버를 같은 `--now`로 띄운 뒤 `shots.mjs <app> --label <같은 label> --resume`으로 이어 찍는다. 기록이 있는 화면은 건너뛴다. `--resume --only <id,...>`는 고른 화면만 같은 묶음 안에서 다시 찍는다(next dev 재시작이 걸친 화면 등). 기준 시각·화면 폭·`--set`이 다르면 이어 찍지 않는다.
   - `manifest.json`에는 화면별 최종 주소, 콘솔 오류, fixture가 없는 API 경로가 함께 기록된다.
 - 작업 전 화면은 main worktree에서 같은 명령을 `--label before`로 찍는다.
 - Claude가 `<폴더>`를 claude.ai 아티팩트로 게시한다(`db` 기능 사용).
   - 사람이 화면마다 괜찮음/고칠 것과 메모를 남긴다.
   - 판정은 `verdicts` 컬렉션(문서 id `<label>__<screen id>`)에 저장되고, Claude가 읽어 다음 수정을 정한다.
 
-## UI 교체 대조 화면(판매자)
-
-Mantine을 걷어내는 동안(`docs/specs/frontend/ui-stack-migration-plan.md` P1·P2a) `@greenhub/ui` 컴포넌트가 같은 크기의 Mantine과 같은 모양인지 본다.
+## 작업 전·후 동작·접근성 비교
 
 ```bash
-node scripts/visual/shots.mjs seller --label compare --set compare   # 대조 화면과 Modal·Dialog·Drawer·Sheet 열린 상태(fixture compareScreens)
-node scripts/visual/compare-cells.mjs --viewport 390                 # 짝마다 위치·크기·계산된 스타일·픽셀 비교(390·768·1280)
+node scripts/visual/parity.mjs consumer --before before --after after                     # 쓰기 요청·결제창 인자·저장소·접근성 트리
+node scripts/visual/parity.mjs consumer --before before --after after --allow parity-allow.json
 ```
 
-- 화면은 판매자 앱 `/dev/ui-compare`다. 행마다 왼쪽 Mantine, 오른쪽 `@greenhub/ui`를 그린다. 짝은 판매자 앱이 실제로 쓰는 props(`theme.ts` 기본값 포함)로 고른다.
-- 열린 상태는 `?open=modal|dialog|drawer|sheet|select|uiselect`. Select 목록 둘은 입력칸을 실제로 눌러 연다. Modal은 `ConfirmModal`, Drawer는 소비자 `OptionSheet`와 같은 설정이다. 두 캡처는 같은 화면 위에 열리므로 캡처끼리 그대로 비교한다.
-- 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열린다. 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`).
-- `compare-cells.mjs`는 같은 순서의 부품(칸의 첫 요소·button·input·svg·글자)을 짝지어 칸 안 위치·크기와 면·테두리·모서리·글꼴·색을 비교한다. 줄 높이·여백은 글자 위치로 드러나므로 따로 보지 않는다.
-  - 픽셀은 같은 자리에서 비교한다. 오른쪽 칸을 찍고, 그 칸을 왼쪽(Mantine) 내용의 복제로 바꿔 다시 찍는다. 같은 Mantine 버튼도 가로 위치가 다른 칸에 놓으면 모서리 안티앨리어싱이 15픽셀 달라지기 때문이다(2026-10-31 실측).
-  - textarea·select는 입력칸처럼 상자·글꼴을 비교하고, 안의 글자(option 포함)는 픽셀로만 본다(글자 노드 범위 좌표가 화면 위치가 아니다).
-  - 채널 허용치는 1(`diff.mjs --tolerance 1`과 같다). 차이 있는 행이 있으면 종료 코드 1이다. `--out <폴더>`로 칸 이미지를 남긴다.
+- 픽셀이 같아도 동작이 바뀔 수 있다(주문 요청 본문, 결제창 인자, 링크가 버튼이 되는 역할 변화). UI 교체 PR은 `diff.mjs`와 함께 이 비교도 통과해야 한다.
+- 화면·폭마다 `writes`·`portoneCalls`·`storage`·`aria`를 비교한다. 결제마다 새로 만드는 UUID와 실제 시각(ISO)은 자리표시로 바꿔 비교한다.
+- `aria`에서 Next.js 경로 안내(`next-route-announcer`의 alert)는 찍을 때 뺀다. 이동 시점에 따라 글자가 채워지거나 비는 Next 요소라 가짜 차이만 만든다(`aria-snapshot.mjs`). 앱이 그린 alert는 그대로 비교하고, 경로 안내 글자는 `manifest.json`의 `routeAnnouncer`에 따로 남는다. 빼기 전 `shots.mjs`로 찍은 묶음과는 aria를 비교하지 않고 실패로 본다(같은 `shots.mjs`로 다시 찍는다).
+- 통과 조건: 모두 같거나, 다른 항목이 허용 목록(`{ "screen", "viewport"?, "kind", "reason" }`, kind는 위 넷 중 하나)에 사유와 함께 있다. 한쪽에만 있는 화면·기록·정상 촬영 판정 실패는 실패다. 판정은 `parity.spec.mjs`(`node --test scripts/visual/parity.spec.mjs`).
+
+## 창 초점 순회 검사
+
+```bash
+node scripts/visual/focus-trap.mjs seller                          # steps로 여는 창 전부, 세 폭
+node scripts/visual/focus-trap.mjs driver --only modal-hold --viewports desktop
+node scripts/visual/focus-trap.mjs seller --set overlays          # 앱 화면이 아직 쓰지 않는 @greenhub/ui 창(Sheet) 검사 화면
+```
+
+- 서버를 띄운 채로 실행한다(next dev만, `--prod`는 지원하지 않는다). steps가 있는 화면 중 steps 뒤에 창(`role=dialog`·`alertdialog`)이 열린 화면을 검사한다. id가 `modal-`로 시작하는데 창이 열리지 않으면 실패다.
+- 판정(하나라도 어기면 종료 코드 1):
+  - 창이 열린 뒤 초점을 받은 요소(`focusin`)가 모두 창 안이다. 다음 프레임에 창 안으로 돌아가는 Base UI 초점 가드(`span[data-base-ui-focus-guard]`)가 잠깐 받은 초점도 실패로 센다.
+  - Tab만, Shift+Tab만 눌러 각각 출발 요소로 돌아온다(한 바퀴). 누를 때마다 두 프레임 뒤 초점이 창 안이다.
+  - 창이 열린 직후 첫 초점은 창 안 `data-autofocus` 요소, 없으면 창 안 첫 Tab 대상이다.
+  - 창에 `aria-modal="true"`가 있고, 본문(`data-slot=dialog-body`·`sheet-body`)이 있으면 `aria-describedby`가 창 안 요소를 가리킨다.
+  - Esc로 창이 닫히고 초점이 창을 연 요소로 돌아온다. 화면을 열 때 이미 열려 있던 창은 여는 요소가 없어 이 항목만 빼고 결과에 기록한다.
+    - fixture 화면에 `closeBlocked: '<사유>'`가 있으면(처리 중 창: 해결로 닫기·회차 복사 처리 중) 반대로 Esc로 닫히지 않고 초점이 창 안에 남아야 한다. 앱이 처리 중 닫기를 막는 약속(Mantine `closeOnEscape={!처리 중}`과 같음)을 검사한다.
+    - ⋮ 메뉴 항목처럼 창이 열리면 사라지는 요소로 연 창은 fixture 화면에 `returnFocus: '<선택자>'`를 두어, 닫은 뒤 초점이 그 요소(메뉴 버튼)로 돌아오는지 본다.
+- `--set overlays`는 판매자 `/dev/overlays`(fixture `overlayScreens`)다. 앱 화면이 아직 쓰지 않는 `Sheet`를 버튼으로 열어 같은 판정을 한다. 이 주소는 `GREENHUB_LOCAL_RUNTIME=true`이고 운영 빌드가 아닐 때(하네스·`dev:local`)만 열리고 그 밖에는 404다(`apps/seller/src/lib/local-preview.ts`, 테스트 `local-preview.test.ts`). 실제 화면이 Sheet를 쓰면 그 화면 fixture의 steps로 옮기고 지운다.
+- 결과: `%TEMP%\greenhub-visual\<app>\focus\<label>.json`(화면·폭마다 Tab·Shift+Tab으로 거친 요소 목록 포함).
+- 실측(2026-11-01): Base UI 교체 직후 `main`(b9c2f5a)은 판매자 창 21개 모두 실패했다(창마다 초점 가드 2번, `aria-modal`·`aria-describedby` 없음). 원인과 수정은 `packages/ui/src/components/dialog.tsx` `DialogPopup` 주석.
 
 ## 작업 전·후 픽셀 비교
 
@@ -142,10 +166,13 @@ node scripts/visual/diff.mjs seller --before before --after after --allow allow.
 | `apps.mjs` | 앱별 포트 등 공통 설정 |
 | `clock.mjs` | 기준 시각(캡처 시계·fixture 일정) |
 | `shots.mjs` | 화면 자동 캡처(Playwright, `apps/e2e`의 설치본 사용) |
+| `steps.mjs` | 화면 안 동작(steps) 실행기(`shots.mjs`·`focus-trap.mjs` 공용) |
+| `focus-trap.mjs` | 창 초점 순회·aria-modal·초점 복귀 검사 |
 | `soundness.mjs` | 정상 촬영 판정 |
 | `diff.mjs` · `compare.mjs` · `png.mjs` | 작업 전·후 픽셀 비교(의존성 없음, `compare.spec.mjs`) |
+| `parity.mjs` | 작업 전·후 쓰기 요청·결제창 인자·저장소·접근성 트리 비교(`parity.spec.mjs`) |
+| `aria-snapshot.mjs` | 경로 안내를 뺀 접근성 트리 촬영. 감추기·되돌리기 로직은 `aria-snapshot.spec.mjs`(가짜 document, CI), 실제 Chromium 확인은 `aria-snapshot.browser-check.mjs`(로컬 전용, CI는 브라우저가 없어 `.spec`이 아닌 이름) |
 | `report.mjs` · `report-template.html` | 캡처 결과로 확인판 HTML 생성 |
-| `compare-cells.mjs` | UI 교체 대조 화면의 짝 비교(위치·스타일·픽셀) |
 
 ## 안전장치
 

@@ -12,16 +12,18 @@ const SIZE = {
   sm: { root: 'h-9 px-[18px] text-sm', withLeft: 'ps-[12px]', loader: 36 / 1.8 },
   md: { root: 'h-[42px] px-[22px] text-base', withLeft: 'ps-[calc(22px/1.5)]', loader: 42 / 1.8 },
   lg: { root: 'h-[50px] px-[26px] text-lg', withLeft: 'ps-[calc(26px/1.5)]', loader: 50 / 1.8 },
+  /** 기사 ② 주요 행동 버튼(design-direction.md §6): 높이 56px·굵은 18px. */
+  xl: { root: 'h-14 px-7 text-lg font-bold', withLeft: 'ps-[calc(28px/1.5)]', loader: 56 / 1.8 },
 } as const;
 
 const TONE = {
-  brand: 'bg-primary text-white hover:bg-[#008a4b]',
-  'brand-outline': 'border-primary bg-transparent text-[#007a43] hover:bg-[rgba(0,166,90,0.05)]',
-  'brand-light': 'bg-[#d2f2df] text-[#005c32] hover:bg-[#a6e5c0]',
-  red: 'bg-[#fa5252] text-white hover:bg-[#f03e3e]',
-  'red-outline': 'border-[#fa5252] bg-transparent text-[#fa5252] hover:bg-[rgba(250,82,82,0.05)]',
-  gray: 'bg-[#868e96] text-white hover:bg-[#495057]',
-  default: 'border-[#ced4da] bg-white text-black hover:bg-[#f8f9fa]',
+  brand: 'bg-primary text-white hover:bg-ui-primary-hover',
+  'brand-outline': 'border-primary bg-transparent text-brand-ink hover:bg-primary/5',
+  'brand-light': 'bg-ui-brand-light text-ui-brand-light-text hover:bg-ui-brand-light-hover',
+  red: 'bg-ui-red-filled text-white hover:bg-ui-red-filled-hover',
+  'red-outline': 'border-ui-red bg-transparent text-ui-red hover:bg-ui-red/5',
+  gray: 'bg-ui-gray-6 text-background hover:bg-ui-gray-7',
+  default: 'border-input bg-background text-ui-ink hover:bg-ui-gray-0',
   white: 'bg-white text-[#00a65a] hover:bg-white',
   'white-outline': 'border-white bg-transparent text-white hover:bg-[rgba(255,255,255,0.05)]',
 } as const;
@@ -74,7 +76,7 @@ function rootClassName({
     fullWidth ? 'block w-full' : null,
     // Mantine은 로딩 중인 버튼을 막되 색은 그대로 두고, 위에 흐린 흰 막을 덮는다.
     disabled && !loading
-      ? 'cursor-not-allowed border-transparent bg-[#e9ecef] text-[#adb5bd] hover:bg-[#e9ecef]'
+      ? 'cursor-not-allowed border-transparent bg-ui-gray-2 text-ui-gray-5 hover:bg-ui-gray-2'
       : null,
     // packages/ui Button은 disabled일 때 회색 면을 칠하므로, 로딩 중에는 같은 색을 disabled에도 다시 준다.
     loading

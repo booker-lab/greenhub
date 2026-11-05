@@ -2,7 +2,7 @@
 
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import type * as React from 'react';
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { popupPositionClassName, useDocumentAnchor } from '../lib/use-document-anchor';
 import { cn } from '../lib/utils';
@@ -16,6 +16,16 @@ import { type InputSize, inputClassName, inputSizeClassName } from './input';
 // 마우스를 올리면 gray-0, 방향키로 옮기면(focus-visible) Mantine data-combobox-selected처럼 주색 면·흰 글자다.
 // 목록이 열려 있는 동안 닫힌 칸은 Mantine(초점이 입력칸에 남음)처럼 주색 테두리다.
 // 항목 글자 줄 높이는 Mantine처럼 본문 1.55이고, 목록 자리는 Mantine처럼 문서 좌표로 준다(useDocumentAnchor).
+
+/**
+ * 열린 목록(listbox)의 접근성 이름. Mantine Combobox 드롭다운은 입력칸 라벨에 묶여(aria-labelledby) 라벨 이름을
+ * 가졌다. aria-label을 받았으면 그 값을, 아니면 닫힌 칸(input)에 연결된 label 글자를 쓴다.
+ */
+export function listboxLabel(root: HTMLElement | null, ariaLabel?: string): string | undefined {
+  if (ariaLabel) return ariaLabel;
+  const input = root?.querySelector('input');
+  return input?.labels?.[0]?.textContent?.trim() || undefined;
+}
 
 export interface SelectItem {
   value: string;
@@ -54,7 +64,7 @@ function SelectChevron({ className }: { className?: string }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
       data-slot="select-chevron"
-      className={cn('text-[#868e96]', className)}
+      className={cn('text-ui-gray-6', className)}
     >
       <path
         d="M4.93179 5.43179C4.75605 5.60753 4.75605 5.89245 4.93179 6.06819C5.10753 6.24392 5.39245 6.24392 5.56819 6.06819L7.49999 4.13638L9.43179 6.06819C9.60753 6.24392 9.89245 6.24392 10.0682 6.06819C10.2439 5.89245 10.2439 5.60753 10.0682 5.43179L7.81819 3.18179C7.73379 3.0974 7.61933 3.04999 7.49999 3.04999C7.38064 3.04999 7.26618 3.0974 7.18179 3.18179L4.93179 5.43179ZM10.0682 9.56819C10.2439 9.39245 10.2439 9.10753 10.0682 8.93179C9.89245 8.75606 9.60753 8.75606 9.43179 8.93179L7.49999 10.8636L5.56819 8.93179C5.39245 8.75606 5.10753 8.75606 4.93179 8.93179C4.75605 9.10753 4.75605 9.39245 4.93179 9.56819L7.18179 11.8182C7.35753 11.9939 7.64245 11.9939 7.81819 11.8182L10.0682 9.56819Z"
@@ -125,6 +135,11 @@ function Select({
   const showClear = clearable && value != null;
   const rootRef = useRef<HTMLDivElement>(null);
   const anchor = useDocumentAnchor(rootRef, { measureOnMount: defaultOpen });
+  const [listLabel, setListLabel] = useState(ariaLabel);
+  // 처음부터 열린 목록(defaultOpen)은 onOpenChange가 불리지 않으므로 붙은 뒤 한 번 읽는다.
+  useEffect(() => {
+    if (defaultOpen) setListLabel(listboxLabel(rootRef.current, ariaLabel));
+  }, [defaultOpen, ariaLabel]);
 
   return (
     <SelectPrimitive.Root
@@ -134,7 +149,9 @@ function Select({
       modal={false}
       defaultOpen={defaultOpen}
       onOpenChange={(open) => {
-        if (open) anchor.measure();
+        if (!open) return;
+        anchor.measure();
+        setListLabel(listboxLabel(rootRef.current, ariaLabel));
       }}
     >
       <div ref={rootRef} data-slot="select-root" className="relative">
@@ -155,7 +172,7 @@ function Select({
           className={cn(
             inputClassName,
             inputSizeClassName[size],
-            'cursor-pointer caret-transparent data-popup-open:border-primary',
+            'cursor-pointer caret-transparent data-popup-open:border-brand',
             showClear ? COMBINED_INPUT_PADDING[size] : SECTION_INPUT_PADDING[size],
             className,
           )}
@@ -178,7 +195,7 @@ function Select({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => onValueChange(null)}
               className={cn(
-                'pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-white text-[#495057] outline-none',
+                'pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-background text-ui-gray-7 outline-none',
                 CLEAR_SIZE[size],
               )}
             >
@@ -200,9 +217,10 @@ function Select({
         >
           <SelectPrimitive.Popup
             data-slot="select-popup"
-            className="w-(--anchor-width) rounded-lg border border-[#e9ecef] bg-white p-1 text-black outline-none"
+            className="w-(--anchor-width) rounded-lg border border-ui-gray-2 bg-popover p-1 text-ui-ink outline-none"
           >
             <SelectPrimitive.List
+              aria-label={listLabel}
               className="overflow-y-auto"
               style={{ maxHeight: maxDropdownHeight }}
             >
@@ -213,7 +231,7 @@ function Select({
                     value={item.value}
                     data-slot="select-item"
                     className={cn(
-                      'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-[#f8f9fa] focus-visible:bg-primary focus-visible:text-white',
+                      'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-ui-gray-0 focus-visible:bg-primary focus-visible:text-white',
                       OPTION_CLASS[size],
                       itemClassName,
                     )}
@@ -230,7 +248,7 @@ function Select({
                     <SelectPrimitive.GroupLabel
                       data-slot="select-group-label"
                       className={cn(
-                        'flex items-center font-semibold text-[#868e96] after:ms-2.5 after:h-px after:flex-1 after:bg-[#e9ecef] after:content-[""]',
+                        'flex items-center font-semibold text-ui-gray-6 after:ms-2.5 after:h-px after:flex-1 after:bg-ui-gray-2 after:content-[""]',
                         GROUP_LABEL_CLASS[size],
                       )}
                     >

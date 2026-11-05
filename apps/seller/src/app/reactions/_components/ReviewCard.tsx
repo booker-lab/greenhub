@@ -1,10 +1,10 @@
 import { type ManagedReview, REVIEW_HIDE_REASON_MAX_LENGTH } from '@greenhub/shared';
-import { Badge } from '@greenhub/ui/components/badge';
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { Textarea } from '@greenhub/ui/components/textarea';
-import { useId } from 'react';
-import { BUTTON_LOADING, ButtonLoader } from '../../orders/[id]/_components/ButtonLoading';
+import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import { HIDE_POLICY_NOTE, HIDE_REASON_OPTIONS, hiddenReasonLabel, hiddenSummary } from '../_lib';
 
 // 후기 한 건. 숨기기(사유 고르기·설명 선택)와 숨김 상태를 보여준다. 상태는 부모(page)가 가진다.
@@ -41,51 +41,9 @@ const TEXT_MD = `${TEXT} text-base`;
 const TEXT_SM = `${TEXT} text-sm`;
 // text-[15px]를 주면 cn(tailwind-merge)이 Button의 leading-none을 지우므로 줄 높이 1을 다시 준다(Mantine 줄 높이 1).
 const COMPACT_SM = 'h-[26px] px-2 text-[15px] leading-none';
-const DEFAULT_BUTTON = 'border-[#ced4da] bg-white text-black hover:bg-[#f8f9fa]';
+const DEFAULT_BUTTON = 'border-input bg-background text-ui-ink hover:bg-ui-gray-0';
 const GROUP_LABEL =
-  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-black';
-
-export function RadioItem({
-  name,
-  label,
-  checked,
-  onChange,
-}: {
-  name: string;
-  label: string;
-  checked: boolean;
-  onChange: () => void;
-}) {
-  const id = useId();
-  return (
-    <div className="flex [-webkit-tap-highlight-color:transparent]">
-      <div className="relative order-1 size-5">
-        <input
-          id={id}
-          type="radio"
-          name={name}
-          checked={checked}
-          onChange={onChange}
-          className="peer relative m-0 flex size-5 cursor-default appearance-none items-center justify-center rounded-[20px] border border-solid border-[#ced4da] bg-white transition-[background-color,border-color] duration-100 ease-[ease] checked:border-primary checked:bg-primary [-webkit-tap-highlight-color:transparent]"
-        />
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 5 5"
-          aria-hidden="true"
-          className="pointer-events-none absolute top-1/2 left-1/2 size-2 text-white opacity-0 transition-[opacity,transform] duration-[100ms,200ms] ease-[ease] [transform:scale(0.2)_translateY(10px)] [translate:-50%_-50%] peer-checked:opacity-100 peer-checked:[transform:scale(1)]"
-        >
-          <circle cx="2.5" cy="2.5" r="2.5" fill="currentColor" />
-        </svg>
-      </div>
-      <div className="order-2 inline-flex cursor-default flex-col text-sm/[20px] [-webkit-tap-highlight-color:transparent]">
-        <label htmlFor={id} className="block cursor-default ps-3 text-inherit">
-          {label}
-        </label>
-      </div>
-    </div>
-  );
-}
+  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
 
 export function ReviewCard({
   review,
@@ -108,8 +66,9 @@ export function ReviewCard({
   const noteId = `review-${review.id}-note`;
   return (
     <div
-      className="block rounded-[16px] bg-white p-4 shadow-mantine-xs"
-      style={review.hidden ? { background: 'var(--color-surface-muted)' } : undefined}
+      className="block rounded-[16px] bg-card p-4"
+      // ② 숨긴 후기는 그림자 없이 틀 색(--frame) 면으로 구분한다(D2·D3).
+      style={review.hidden ? { background: 'var(--frame)' } : undefined}
     >
       <div className="flex flex-row flex-nowrap items-center justify-between gap-4">
         <div className="flex flex-row flex-nowrap items-center justify-start gap-1.5">
@@ -122,12 +81,9 @@ export function ReviewCard({
             {'★'.repeat(review.rating)}
           </p>
           {review.hidden && (
-            <Badge
-              variant="secondary"
-              className="h-[18px] rounded-[16px] bg-[#868e96] px-2 text-[10px] leading-4 text-white"
-            >
+            <StatusDot tone="done" size={13}>
               숨김
-            </Badge>
+            </StatusDot>
           )}
         </div>
         <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
@@ -184,23 +140,23 @@ export function ReviewCard({
             <div>
               <div id={reasonLabelId} className={GROUP_LABEL}>
                 숨기는 사유
-                <span className="text-[#fa5252]" aria-hidden>
+                <span className="text-ui-red" aria-hidden>
                   {' *'}
                 </span>
               </div>
-              <div role="radiogroup" aria-labelledby={reasonLabelId} aria-required>
+              <RadioGroup
+                aria-labelledby={reasonLabelId}
+                name={reasonName}
+                value={reasonCode}
+                onValueChange={onReasonChange}
+                required
+              >
                 <div className="mt-1 flex flex-col gap-1.5">
                   {HIDE_REASON_OPTIONS.map((option) => (
-                    <RadioItem
-                      key={option.value}
-                      name={reasonName}
-                      label={option.label}
-                      checked={reasonCode === option.value}
-                      onChange={() => onReasonChange(option.value)}
-                    />
+                    <RadioItem key={option.value} value={option.value} label={option.label} />
                   ))}
                 </div>
-              </div>
+              </RadioGroup>
             </div>
             <Field>
               <FieldLabel htmlFor={noteId}>설명(선택)</FieldLabel>
@@ -223,17 +179,17 @@ export function ReviewCard({
               >
                 취소
               </Button>
-              <Button
+              <LoadingButton
+                measured
                 variant="destructive"
-                className={`${COMPACT_SM} ${busy ? BUTTON_LOADING.destructive : ''}`}
-                disabled={busy || !reasonCode}
-                data-loading={busy || undefined}
-                aria-busy={busy || undefined}
+                className={COMPACT_SM}
+                buttonHeight={26}
+                loading={busy}
+                disabled={!reasonCode}
                 onClick={onConfirmHide}
               >
-                {busy && <ButtonLoader variant="destructive" height={26} />}
                 숨기기 확인
-              </Button>
+              </LoadingButton>
             </div>
           </div>
         ) : (

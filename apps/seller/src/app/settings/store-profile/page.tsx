@@ -4,8 +4,9 @@ import type { StoreProfileExtras } from '@greenhub/shared';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
@@ -15,13 +16,12 @@ import { LoadingState } from '@/components/StateViews';
 import { apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import { useTokenRef } from '@/lib/use-token-ref';
-import { LoadingButton } from '../_components/LoadingButton';
 
-// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·Paper(radius lg·shadow xs·p md)·
+// ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·Paper(radius lg·p md; 그림자는 ② D2로 걷음)·
 // Stack(gap sm)·Text(sm = 15px·줄 높이 1.45)·TextInput·Textarea(autosize, 라벨)·Checkbox green(green-6)과 같은 값.
 const TEXT = 'm-0 p-0 text-base';
 const TEXT_SM = 'm-0 p-0 text-sm';
-const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-card p-4';
 const STACK = 'flex flex-col items-stretch justify-start gap-3';
 const GREEN = '#40c057';
 
@@ -223,6 +223,7 @@ export default function StoreProfileSettingsPage() {
               </p>
             )}
             <LoadingButton
+              measured
               size="md"
               loading={saving}
               onClick={async () => {
@@ -236,7 +237,7 @@ export default function StoreProfileSettingsPage() {
                 setError(null);
                 try {
                   await apiJson(`/stores/${storeId}`, token, { method: 'PATCH', body: JSON.stringify(body) });
-                  notifications.show({ message: '저장했어요' });
+                  notify({ message: '저장했어요' });
                 } catch (e) {
                   setError(e instanceof Error ? e.message : '저장하지 못했어요.');
                 } finally {

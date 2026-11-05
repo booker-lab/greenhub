@@ -39,7 +39,13 @@ export default function SettlementsPage() {
     <PageShell>
       <PageHeader title="정산 관리" />
 
-      <SegmentedTabs<SettlementTab> tabs={TABS} value={activeTab} onChange={setActiveTab} sticky />
+      <SegmentedTabs<SettlementTab>
+        tabs={TABS}
+        value={activeTab}
+        onChange={setActiveTab}
+        sticky
+        variant="underline"
+      />
 
       {/* ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·py md와 같은 값. */}
       <div className="mx-auto max-w-[720px] px-4 py-4">

@@ -27,7 +27,6 @@ export function DateSection({ meta, orders }: { meta: GroupHeaderMeta; orders: O
             color: danger ? 'var(--color-danger)' : 'var(--color-text-disabled)',
           }}
         >
-          {danger && '🔴 '}
           {meta.label} · {orders.length}건
         </p>
       </div>

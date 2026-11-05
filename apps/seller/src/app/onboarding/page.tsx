@@ -3,7 +3,7 @@
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { ChevronLeft, Store } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -19,10 +19,10 @@ import {
 } from '../products/_components/image-reencode';
 import { useTokenRef } from '@/lib/use-token-ref';
 
-// ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Group·Stack·Paper(radius lg·shadow sm·p lg)·
+// ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Group·Stack·Paper(radius lg·p lg; 그림자는 ② D2로 걷음)·
 // Title order 2(줄 높이 1.35·800)·Text·Divider·TextInput(radius xl, 필수 표시 *)·ActionIcon subtle gray와 같은 값.
 const TEXT = 'm-0 p-0 text-base';
-const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-[#dee2e6]';
+const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-ui-gray-3';
 
 /** Mantine TextInput(size sm, radius xl). 필수면 라벨 뒤에 빨간 *를 붙인다(Mantine withAsterisk). */
 function TextField({
@@ -37,7 +37,7 @@ function TextField({
       <FieldLabel htmlFor={id} className="inline-block">
         {label}
         {required && (
-          <span aria-hidden="true" className="text-[#fa5252]">
+          <span aria-hidden="true" className="text-ui-red">
             {' *'}
           </span>
         )}
@@ -186,7 +186,7 @@ export default function OnboardingPage() {
         await update({ storeId: data.storeId });
       } else {
         await apiJson(`/stores/${storeId}`, token, { method: 'PATCH', body });
-        notifications.show({ color: 'brand', message: '사업자 정보를 저장했어요.' });
+        notify({ color: 'brand', message: '사업자 정보를 저장했어요.' });
         router.push('/settings');
         return;
       }
@@ -199,7 +199,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main style={{ minHeight: '100vh', backgroundColor: 'var(--color-bg)', padding: '32px 16px' }}>
+    <main style={{ minHeight: '100vh', backgroundColor: 'var(--frame)', padding: '32px 16px' }}>
       <div className="mx-auto max-w-[540px] px-4">
         {isEdit ? (
           <div className="mb-5 flex flex-row flex-nowrap items-center justify-start gap-3">
@@ -236,7 +236,7 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        <div className="block rounded-[16px] bg-white p-5 shadow-mantine-sm">
+        <div className="block rounded-[16px] bg-card p-5">
           <form onSubmit={handleSubmit}>
             <div className="flex flex-col items-stretch justify-start gap-4">
               {/* 로고 업로드 */}
@@ -366,7 +366,7 @@ export default function OnboardingPage() {
                 disabled={loading}
                 size="md"
                 className="mt-2.5 w-full"
-                style={{ backgroundColor: 'var(--color-primary)' }}
+                style={{ backgroundColor: 'var(--primary)' }}
               >
                 {loading ? '저장 중...' : isEdit ? '저장' : '저장 후 시작하기'}
               </Button>

@@ -76,10 +76,12 @@ function Field({
   orientation = 'vertical',
   ...props
 }: React.ComponentProps<'div'> & VariantProps<typeof fieldVariants>) {
+  // 접근성 유지: Mantine InputWrapper처럼 역할 없는 div다. registry 원본의 role="group"은 이름이 없어 읽기 도구가
+  // 입력칸마다 '그룹'을 반복했다. 판매자 Field는 모두 라벨 하나·입력칸 하나라 묶음 의미가 없다. 여러 컨트롤을 묶을
+  // 때는 FieldSet(fieldset·legend)이나 RadioGroup·CheckboxGroup의 역할을 쓰거나, 호출부가 role="group"과
+  // aria-labelledby를 함께 준다.
   return (
-    // biome-ignore lint/a11y/useSemanticElements: registry 원본 구조. fieldset은 FieldSet이 맡는다.
     <div
-      role="group"
       data-slot="field"
       data-orientation={orientation}
       className={cn(fieldVariants({ orientation }), className)}
@@ -111,7 +113,7 @@ function FieldLabel({
       data-slot="field-label"
       className={cn(
         'group/field-label peer/field-label inline-flex w-fit gap-2 text-sm leading-[1.55] font-semibold group-data-[disabled=true]/field:opacity-50',
-        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-input has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-data-checked:border-primary/30 has-data-checked:bg-primary/5 *:data-[slot=field]:p-2.5',
+        'has-[>[data-slot=field]]:w-full has-[>[data-slot=field]]:flex-col has-[>[data-slot=field]]:rounded-lg has-[>[data-slot=field]]:border has-[>[data-slot=field]]:border-input has-[>[data-slot=field]]:has-[:focus-visible]:border-ring has-[>[data-slot=field]]:not-has-[:disabled,[data-disabled]]:hover:bg-muted/50 has-data-checked:border-brand/30 has-data-checked:bg-brand/5 *:data-[slot=field]:p-2.5',
         required && 'inline-block',
         className,
       )}
@@ -119,7 +121,7 @@ function FieldLabel({
     >
       {children}
       {required && (
-        <span data-slot="field-required" aria-hidden="true" className="text-[#fa5252]">
+        <span data-slot="field-required" aria-hidden="true" className="text-ui-red">
           {' *'}
         </span>
       )}
@@ -145,7 +147,7 @@ function FieldDescription({ className, ...props }: React.ComponentProps<'p'>) {
     <p
       data-slot="field-description"
       className={cn(
-        'text-left text-xs leading-[1.2] font-normal text-[#868e96] group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5',
+        'text-left text-xs leading-[1.2] font-normal text-ui-gray-6 group-has-data-horizontal/field:text-balance [[data-variant=legend]+&]:-mt-1.5',
         '[&>a]:underline [&>a]:underline-offset-4 [&>a:hover]:text-brand-ink',
         className,
       )}
@@ -228,7 +230,7 @@ function FieldError({
     <div
       role="alert"
       data-slot="field-error"
-      className={cn('text-xs leading-[1.2] font-normal text-[#fa5252]', className)}
+      className={cn('text-xs leading-[1.2] font-normal text-ui-red', className)}
       {...props}
     >
       {content}

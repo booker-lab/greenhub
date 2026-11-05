@@ -115,7 +115,7 @@ export default function EditProductPage() {
       <div
         style={{
           minHeight: '100vh',
-          backgroundColor: 'var(--color-surface-muted)',
+          backgroundColor: 'var(--frame)',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',

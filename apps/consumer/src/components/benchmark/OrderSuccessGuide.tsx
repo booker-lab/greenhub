@@ -1,6 +1,5 @@
 'use client';
 
-import { Paper, Stack, Text } from '@mantine/core';
 import KakaoChannelCta from './KakaoChannelCta';
 
 // 주문 완료 안내(order-success-guide): 실제 도착 날짜, 받는 방법, 다음 할 일.
@@ -15,29 +14,42 @@ export function formatDeliveryDay(value: string | null | undefined): string | nu
   return `${Number(m)}월 ${Number(d)}일(${weekday})`;
 }
 
-export default function OrderSuccessGuide({ requestedDeliveryDate }: { requestedDeliveryDate: string | null }) {
+export default function OrderSuccessGuide({
+  requestedDeliveryDate,
+}: {
+  requestedDeliveryDate: string | null;
+}) {
   const day = formatDeliveryDay(requestedDeliveryDate);
   return (
-    <Stack gap="sm" mt="sm" w="100%">
-      <Paper p="md" style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}>
-        <Text fw="var(--fw-extrabold)" c="var(--color-primary-dark)">
+    // Mantine Stack gap="sm" mt="sm" w="100%" · Paper p="md" · Text(16px/1.55)·Text sm(15px/1.45) 계산값
+    <div className="mt-3 flex w-full flex-col gap-3">
+      <div
+        className="block p-4"
+        style={{ background: 'var(--color-primary-surface)', borderRadius: 'var(--radius)' }}
+      >
+        <p
+          className="m-0 p-0 text-base"
+          style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-primary-dark)' }}
+        >
           {day ? `${day} 오전 9시까지 문 앞에 둘게요` : '화요일 오전 9시까지 문 앞에 둘게요'}
-        </Text>
-        <Text size="sm" mt={4}>
+        </p>
+        <p className="m-0 mt-1 p-0 text-sm font-normal">
           경기도 이천시 직접배송이에요. 배송을 마치면 문 앞 사진을 MY 주문 내역에 올려 드려요.
-        </Text>
-      </Paper>
-      <Paper p="md" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
-        <Text fw="var(--fw-extrabold)" size="sm" mb={6}>
+        </p>
+      </div>
+      <div className="block p-4" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
+        <p className="m-0 mb-1.5 p-0 text-sm" style={{ fontWeight: 'var(--fw-extrabold)' }}>
           받은 뒤에는
-        </Text>
-        <ol style={{ fontSize: 'var(--font-size-sm)', lineHeight: 1.7, margin: 0, paddingLeft: 18 }}>
+        </p>
+        <ol
+          style={{ fontSize: 'var(--font-size-sm)', lineHeight: 1.7, margin: 0, paddingLeft: 18 }}
+        >
           <li>포장을 풀고 직사광선이 없는 밝은 곳에 두세요.</li>
           <li>바로 물을 주지 말고, 겉흙이 마르면 주세요.</li>
           <li>꽃이나 잎에 문제가 있으면 사진과 함께 고객센터로 알려 주세요.</li>
         </ol>
-      </Paper>
+      </div>
       <KakaoChannelCta compact title="배송 소식과 관리 팁을 카카오톡으로 받아요" />
-    </Stack>
+    </div>
   );
 }

@@ -12,7 +12,7 @@ export function LoadingState({ fullPage = false }: { fullPage?: boolean }) {
       <div
         style={{
           minHeight: '100vh',
-          backgroundColor: 'var(--color-surface-muted)',
+          backgroundColor: 'var(--frame)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

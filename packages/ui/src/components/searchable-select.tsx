@@ -7,7 +7,7 @@ import { popupPositionClassName, useDocumentAnchor } from '../lib/use-document-a
 import { cn } from '../lib/utils';
 import { CloseIcon } from './close-button';
 import { type InputSize, inputClassName, inputSizeClassName } from './input';
-import { OptionCheck, SelectChevron, type SelectItem } from './select';
+import { listboxLabel, OptionCheck, SelectChevron, type SelectItem } from './select';
 
 // ① 외형 유지: Mantine Select searchable. 닫힌 모양·목록은 Select(검색 없음)와 같고, 입력칸에 글자를 적어 거른다.
 // Mantine 동작을 따른다.
@@ -72,6 +72,7 @@ function SearchableSelect({
   const [keyboardHighlight, setKeyboardHighlight] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const anchor = useDocumentAnchor(rootRef);
+  const [listLabel, setListLabel] = useState(ariaLabel);
 
   useEffect(() => {
     latestLabelRef.current = selectedLabel;
@@ -102,8 +103,10 @@ function SearchableSelect({
         if (details.reason === 'input-change') setSearch(next);
       }}
       onOpenChange={(open) => {
-        if (open) anchor.measure();
-        else setSearch(latestLabelRef.current);
+        if (open) {
+          anchor.measure();
+          setListLabel(listboxLabel(rootRef.current, ariaLabel));
+        } else setSearch(latestLabelRef.current);
       }}
       onItemHighlighted={(item, details) =>
         setKeyboardHighlight(item !== undefined && details.reason === 'keyboard')
@@ -143,7 +146,7 @@ function SearchableSelect({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => choose(null)}
               className={cn(
-                'pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-white text-[#495057] outline-none',
+                'pointer-events-auto inline-flex shrink-0 cursor-pointer items-center justify-center rounded-lg bg-background text-ui-gray-7 outline-none',
                 CLEAR_SIZE[size],
               )}
             >
@@ -165,11 +168,14 @@ function SearchableSelect({
           <ComboboxPrimitive.Popup
             data-slot="select-popup"
             className={cn(
-              'w-(--anchor-width) rounded-lg border border-[#e9ecef] bg-white p-1 text-black outline-none',
+              'w-(--anchor-width) rounded-lg border border-ui-gray-2 bg-popover p-1 text-ui-ink outline-none',
               !nothingFoundMessage && filtered.length === 0 && 'hidden',
             )}
           >
+            {/* 목록 이름은 Select와 같다(listboxLabel). Base UI가 입력칸 옆에 넣는 숨은 닫기 버튼의 이름 "Dismiss"는
+                Base UI 1.9 ComboboxInternalDismissButton에 고정돼 있고 바꾸는 속성·로케일이 없다. */}
             <ComboboxPrimitive.List
+              aria-label={listLabel}
               className="overflow-y-auto empty:hidden"
               style={{ maxHeight: maxDropdownHeight }}
             >
@@ -179,7 +185,7 @@ function SearchableSelect({
                   value={item}
                   data-slot="select-item"
                   className={cn(
-                    'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-[#f8f9fa]',
+                    'group/select-item flex cursor-pointer items-center gap-2 rounded-lg break-words outline-none hover:bg-ui-gray-0',
                     keyboardHighlight && 'data-highlighted:bg-primary! data-highlighted:text-white',
                     OPTION_CLASS[size],
                   )}
@@ -196,7 +202,7 @@ function SearchableSelect({
             {nothingFoundMessage && (
               <ComboboxPrimitive.Empty
                 data-slot="select-empty"
-                className={cn('-me-1 text-center text-[#868e96] empty:hidden', OPTION_CLASS[size])}
+                className={cn('-me-1 text-center text-ui-gray-6 empty:hidden', OPTION_CLASS[size])}
               >
                 {nothingFoundMessage}
               </ComboboxPrimitive.Empty>

@@ -19,7 +19,7 @@ function format(value: number | '', separator: string | undefined) {
 // 누르면 입력칸에 초점을 주고 step만큼 바꾼다. 최댓값·최솟값에 닿으면 그쪽 버튼이 잠긴다(흐림 60%·gray-5).
 // 입력칸이 잠기면 두 버튼도 잠긴다.
 const CONTROL =
-  'flex h-[17px] w-full flex-[0_0_50%] cursor-pointer appearance-none items-center justify-center border-0 border-s border-solid border-s-[#ced4da] bg-transparent p-0 text-black hover:bg-[#f8f9fa] disabled:cursor-not-allowed disabled:bg-transparent disabled:text-[#adb5bd] disabled:opacity-60';
+  'flex h-[17px] w-full flex-[0_0_50%] cursor-pointer appearance-none items-center justify-center border-0 border-s border-solid border-s-input bg-transparent p-0 text-ui-ink hover:bg-ui-gray-0 disabled:cursor-not-allowed disabled:bg-transparent disabled:text-ui-gray-5 disabled:opacity-60';
 
 function Chevron({ up = false }: { up?: boolean }) {
   return (

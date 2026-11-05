@@ -38,11 +38,8 @@ export function Row({
           wordBreak: 'break-all',
           fontSize: 'var(--font-size-sm)',
           fontWeight: bold ? 'var(--fw-bold)' : undefined,
-          color: bold
-            ? 'var(--color-text)'
-            : highlight
-              ? 'var(--color-primary-dark)'
-              : 'var(--color-text-secondary)',
+          // ② 강조 값은 초록 대신 검정(초록은 행동에만, design-direction §2).
+          color: bold || highlight ? 'var(--color-text)' : 'var(--color-text-secondary)',
         }}
       >
         {value}

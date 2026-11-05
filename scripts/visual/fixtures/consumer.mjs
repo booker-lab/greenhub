@@ -363,6 +363,35 @@ const ORDERS = [
     updatedAt: '2026-10-01T06:40:00.000Z',
   }),
 ];
+// MY 주문 목록(/orders)에는 넣지 않고 주문 상세로만 여는 주문. 목록 화면(mypage)의 촬영 결과를 바꾸지 않는다.
+// - order-round-held: 고객 사유 배송 보류 + 재배송비 결제 대기(결제 수단 고르기·재배송비 결제 버튼).
+//   결제 수단이 2개 이상일 때만 결제 수단 고르기가 보이므로 paymentMethodScreens(--set payment-methods)에서 찍는다.
+const HELD_AT = '2026-09-29T01:30:00.000Z';
+const DETAIL_ONLY_ORDERS = [
+  roundOrder('order-round-held', '20260926-000040', ROUND_CLOSED, 'DELIVERY_HELD', [[2, 1]], {
+    createdAt: '2026-09-26T05:40:00.000Z',
+    updatedAt: HELD_AT,
+    deliveryHold: {
+      heldAt: HELD_AT,
+      reasonCode: 'CUSTOMER_UNREACHABLE',
+      reasonMessage: '받는 분과 연락이 닿지 않아 배송을 보류했습니다.',
+      customerResponsible: true,
+      redeliveryFee: 5000,
+      nextContactAt: null,
+      nextDeliveryAt: null,
+      resolvedAt: null,
+    },
+    redeliveryPayment: {
+      required: true,
+      holdAt: HELD_AT,
+      chargeId: null,
+      status: 'MISSING',
+      canPay: true,
+      paid: false,
+      requiresRecovery: false,
+    },
+  }),
+];
 
 // ── MY: 저장 배송지(/auth/me)·알림 ──
 const ME = {
@@ -519,17 +548,139 @@ const benchmarkRoutes = [
  * - scheduled: 판매 중·지난 회차 없이 다음 회차만 예정된 주(오픈 알림·빈 지난 회차 숨김).
  */
 export const scenarioRoutes = {
+  // 로그인 오류 화면: 가짜 API가 자격 정보 실패(401)를 돌려준다.
+  'login-failed': [
+    ['POST', /^\/auth\/login$/, () => ({ status: 401, body: { message: 'Invalid credentials' } })],
+  ],
+  // 기능 플래그 화면(UI 교체 P5 E 묶음): 입점 문의 거절·구매 내역 빈 상태·조회 실패.
+  'partner-reject': [
+    [
+      'POST',
+      /^\/partner-inquiries$/,
+      () => ({ status: 400, body: { message: '연락처 형식을 확인해 주세요.' } }),
+    ],
+  ],
+  'purchase-history-empty': [['GET', /^\/orders$/, () => ({ body: [] })]],
+  'purchase-history-error': [
+    ['GET', /^\/orders$/, () => ({ status: 500, body: { message: '서버 오류' } })],
+  ],
+  // 주문 생성 거절(서버 확정 거절 4xx): 결제 화면의 오류 안내(role=alert)를 찍는다.
+  'order-reject': [
+    [
+      'POST',
+      /^\/stores\/[^/]+\/orders$/,
+      () => ({ status: 409, body: { message: '회차 판매 수량이 모두 찼습니다. 장바구니를 다시 확인해 주세요.' } }),
+    ],
+  ],
+  // 주문 생성 응답을 늦춘다: 결제 버튼의 처리 중 상태(비활성·"처리 중...")를 찍는다.
+  'order-slow': [
+    [
+      'POST',
+      /^\/stores\/[^/]+\/orders$/,
+      ({ body }) => ({ ...createOrderResponse(body), delay: 30_000 }),
+    ],
+  ],
+  // MY 빈 상태·조회 실패(UI 교체 P5 마이페이지 묶음): 주문·배송지·알림 목록이 비었거나 조회가 실패한 화면.
+  'mypage-empty': [['GET', /^\/orders$/, () => ({ body: [] })]],
+  'mypage-error': [['GET', /^\/orders$/, () => ({ status: 500, body: { message: '서버 오류' } })]],
+  'addresses-empty': [['GET', /^\/auth\/me$/, () => ({ body: { ...ME, savedAddresses: [] } })]],
+  'addresses-error': [['GET', /^\/auth\/me$/, () => ({ status: 500, body: { message: '서버 오류' } })]],
+  'notifications-empty': [['GET', /^\/notifications\/me$/, () => ({ body: { items: [] } })]],
+  'notifications-error': [
+    ['GET', /^\/notifications\/me$/, () => ({ status: 500, body: { message: '서버 오류' } })],
+  ],
+  // 공용 틀(UI 교체 P5 A 묶음): 화면 오류 안내(app/error.tsx). 금액이 빠진 주문은 MY 주문 카드가 그리다 예외를 던진다.
+  'render-error': [
+    [
+      'GET',
+      /^\/orders$/,
+      () => ({ body: [{ id: 'order-broken', status: 'ACCEPTED', createdAt: '2026-10-30T01:00:00.000Z' }] }),
+    ],
+  ],
   scheduled: [
     [
       'GET',
       /^\/stores\/[^/]+\/sale-rounds\/public$/,
-      () => ({ body: { items: SALE_ROUNDS.filter((round) => round.status === 'SCHEDULED') } }),
+      ({ url }) => ({
+        body: {
+          items: publicRoundList(
+            url,
+            SALE_ROUNDS.filter((round) => round.status === 'SCHEDULED'),
+          ),
+        },
+      }),
     ],
   ],
 };
 
 const notFound = (message) => ({ status: 404, body: { message } });
 const publicRounds = SALE_ROUNDS;
+
+/** 공개 회차 상세(상품 포함). 상세 경로와 목록 `?include=items` 응답이 같은 모양을 쓴다. */
+function publicRoundDetail(round) {
+  // 비교 기능(demand-signals): showDemandSignals 가게만 API가 붙여 준다.
+  const items = roundItems(round).map((item) => {
+    const previousRoundPrice =
+      round.status === 'OPEN' ? PREVIOUS_ROUND_PRICES[item.productId] : undefined;
+    return {
+      ...item,
+      demand: { remainingQuantity: Math.max(0, item.saleLimitQuantity - item.orderedQuantity) },
+      ...(previousRoundPrice === undefined ? {} : { previousRoundPrice }),
+    };
+  });
+  return { ...round, items, demand: { buyerCount: round.counters.orderedDeliveryAddresses } };
+}
+
+/**
+ * 공개 회차 목록. 앱은 `?include=items&past=N`으로 판매 예정·판매 중 전부와 최신 지난 회차 N개를
+ * 상품까지 한 번에 받는다(API sale-rounds.controller `include=items`). 그 밖에는 회차만 준다.
+ */
+function publicRoundList(url, rounds) {
+  if (url.searchParams.get('include') !== 'items') return rounds;
+  const past = Number(url.searchParams.get('past') ?? 0);
+  const live = rounds.filter((r) => r.status === 'SCHEDULED' || r.status === 'OPEN');
+  const closed = rounds
+    .filter((r) => r.status === 'CLOSED' || r.status === 'COMPLETED')
+    .sort((a, b) => b.schedule.orderOpenAt.localeCompare(a.schedule.orderOpenAt))
+    .slice(0, past);
+  return [...live, ...closed].map(publicRoundDetail);
+}
+
+/**
+ * 주문 생성(POST /stores/:storeId/orders) 응답. 결제 버튼을 누른 화면이 이 응답으로 결제창(PortOne stub)을 연다.
+ * 금액은 앱이 보낸 회차 상품·옵션으로 계산한다(앱은 장바구니 금액과 다르면 결제창을 열지 않는다).
+ * orderId는 주문 완료·주문 상세 화면이 읽는 기존 주문을 돌려준다(결제 완료 뒤 이동 화면을 그대로 찍는다).
+ */
+function createOrderResponse(body) {
+  let request = {};
+  try {
+    request = JSON.parse(body || '{}');
+  } catch {
+    /* 빈 본문 */
+  }
+  const lines = Array.isArray(request.roundItems)
+    ? request.roundItems
+    : [{ roundItemId: null, productId: request.productId, quantity: request.quantity }];
+  let amount = 0;
+  const names = [];
+  for (const line of lines) {
+    const index = line.roundItemId
+      ? Number(String(line.roundItemId).split('-item-')[1]) - 1
+      : PRODUCTS.findIndex((p) => p.id === line.productId);
+    const product = PRODUCTS[index];
+    if (!product) continue;
+    const delta = (product.options ?? [])
+      .flatMap((group) => group.choices)
+      .filter((choice) => (line.optionChoiceIds ?? []).includes(choice.id))
+      .reduce((sum, choice) => sum + choice.priceDelta, 0);
+    amount += (product.price + delta) * Number(line.quantity ?? 0);
+    names.push(product.name);
+  }
+  const name = names.length > 1 ? `${names[0]} 외 ${names.length - 1}건` : (names[0] ?? '주문');
+  return {
+    body: { orderId: 'order-round-accepted', portonePaymentParams: { name, amount } },
+  };
+}
 
 /** [메서드, 경로 정규식, 처리 함수] — 첫 일치가 응답한다. 처리 함수는 { status?, body, delay? }를 돌려준다. */
 export const routes = [
@@ -574,6 +725,7 @@ export const routes = [
       };
     },
   ],
+  ['POST', /^\/stores\/[^/]+\/orders$/, ({ body }) => createOrderResponse(body)],
   // 홈·하단 메뉴·상품 상세: 일반 상품만 둔다(공동구매 목록은 비움).
   [
     'GET',
@@ -593,30 +745,17 @@ export const routes = [
     /^\/stores\/([^/]+)\/public-profile$/,
     ({ params: [id] }) => (id === STORE_ID ? { body: PUBLIC_PROFILE } : notFound('스토어 없음')),
   ],
-  ['GET', /^\/stores\/[^/]+\/sale-rounds\/public$/, () => ({ body: { items: publicRounds } })],
+  [
+    'GET',
+    /^\/stores\/[^/]+\/sale-rounds\/public$/,
+    ({ url }) => ({ body: { items: publicRoundList(url, publicRounds) } }),
+  ],
   [
     'GET',
     /^\/stores\/[^/]+\/sale-rounds\/public\/([^/]+)$/,
     ({ params: [id] }) => {
       const round = publicRounds.find((r) => r.id === id);
-      if (!round) return notFound('회차 없음');
-      // 비교 기능(demand-signals): showDemandSignals 가게만 API가 붙여 준다.
-      const items = roundItems(round).map((item) => {
-        const previousRoundPrice =
-          round.status === 'OPEN' ? PREVIOUS_ROUND_PRICES[item.productId] : undefined;
-        return {
-          ...item,
-          demand: { remainingQuantity: Math.max(0, item.saleLimitQuantity - item.orderedQuantity) },
-          ...(previousRoundPrice === undefined ? {} : { previousRoundPrice }),
-        };
-      });
-      return {
-        body: {
-          ...round,
-          items,
-          demand: { buyerCount: round.counters.orderedDeliveryAddresses },
-        },
-      };
+      return round ? { body: publicRoundDetail(round) } : notFound('회차 없음');
     },
   ],
   ['GET', /^\/banner$/, () => ({ body: BANNER })],
@@ -626,7 +765,7 @@ export const routes = [
     'GET',
     /^\/orders\/([^/]+)$/,
     ({ params: [id] }) => {
-      const order = ORDERS.find((o) => o.id === id);
+      const order = ORDERS.find((o) => o.id === id) ?? DETAIL_ONLY_ORDERS.find((o) => o.id === id);
       return order ? { body: order } : notFound('주문 없음');
     },
   ],
@@ -671,6 +810,19 @@ export const screens = [
     path: '/login',
     auth: false,
   },
+  {
+    id: 'login-error',
+    group: '둘러보기',
+    title: '로그인 · 이메일 로그인 실패 (하네스 전용 칸)',
+    path: '/login',
+    auth: false,
+    scenario: 'login-failed',
+    steps: [
+      { fill: { label: '이메일', value: 'wrong@example.com' } },
+      { fill: { label: '비밀번호', value: 'wrong-password' } },
+      { click: '로그인' },
+    ],
+  },
   { id: 'cart', group: '구매', title: '장바구니', path: '/cart', storage: true },
   { id: 'checkout', group: '구매', title: '결제', path: '/checkout?from=cart', storage: true },
   {
@@ -678,6 +830,120 @@ export const screens = [
     group: '구매',
     title: '주문 완료',
     path: '/order/success?orderId=order-round-accepted',
+  },
+  // ── 결제 동선 단계(UI 교체 P5): 누르고 적은 뒤의 화면·쓰기 요청 본문·결제창 호출 인자·접근성 의미를 남긴다 ──
+  {
+    id: 'product-quantity',
+    group: '결제 동선',
+    title: '상품 상세 · 수량 2개',
+    path: '/products/product-1?round=round-open',
+    steps: [{ press: '수량 늘리기' }],
+  },
+  {
+    // 상단 바 장바구니 아이콘도 이름이 '장바구니'라 두 번째(아래 담기 버튼)를 누른다.
+    id: 'product-add-to-cart',
+    group: '결제 동선',
+    title: '상품 상세 · 장바구니 담기 → 장바구니',
+    path: '/products/product-1?round=round-open',
+    expectPath: '/cart',
+    steps: [{ press: '수량 늘리기' }, { press: '장바구니', nth: 1 }, { waitPath: '/cart' }],
+  },
+  {
+    id: 'cart-quantity',
+    group: '결제 동선',
+    title: '장바구니 · 첫 상품 수량 늘림',
+    path: '/cart',
+    storage: true,
+    steps: [{ press: '동양란 빅립 수량 늘리기' }],
+  },
+  {
+    id: 'cart-to-checkout',
+    group: '결제 동선',
+    title: '장바구니 → 결제',
+    path: '/cart',
+    storage: true,
+    expectPath: '/checkout',
+    steps: [{ press: '2개 상품 한 번에 결제' }, { waitPath: '/checkout' }],
+  },
+  {
+    id: 'checkout-request-note',
+    group: '결제 동선',
+    title: '결제 · 요청사항 입력',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [{ fill: { label: '요청사항 (선택)', value: '받는 분 김그린 010-0000-0000 / 문구: 개업을 축하합니다' } }],
+  },
+  {
+    id: 'checkout-ready',
+    group: '결제 동선',
+    title: '결제 · 결제 버튼 직전(변경 확인)',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [{ check: '상품·가격·회차 변경 내용을 확인했습니다.' }],
+  },
+  {
+    id: 'checkout-processing',
+    group: '결제 동선',
+    title: '결제 · 처리 중(주문 생성 응답 대기)',
+    path: '/checkout?from=cart',
+    storage: true,
+    scenario: 'order-slow',
+    portone: 'success',
+    steps: [
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+    ],
+  },
+  {
+    id: 'checkout-rejected',
+    group: '결제 동선',
+    title: '결제 · 주문 생성 거절 안내',
+    path: '/checkout?from=cart',
+    storage: true,
+    scenario: 'order-reject',
+    portone: 'success',
+    expectedErrors: ['status of 409 \\(Conflict\\).*/stores/store-visual-0001/orders\\)$'],
+    steps: [
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+    ],
+  },
+  {
+    id: 'checkout-pay-cancelled',
+    group: '결제 동선',
+    title: '결제 · 결제창 취소 안내',
+    path: '/checkout?from=cart',
+    storage: true,
+    portone: 'cancel',
+    steps: [
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+    ],
+  },
+  {
+    // 결제 완료 응답을 받으면 주문 완료 화면으로 바꾼다(router.replace).
+    id: 'checkout-paid',
+    group: '결제 동선',
+    title: '결제 · 결제 완료 → 주문 완료',
+    path: '/checkout?from=cart',
+    storage: true,
+    portone: 'success',
+    expectPath: '/order/success',
+    steps: [
+      { fill: { label: '요청사항 (선택)', value: '문 앞에 두세요' } },
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+      { waitPath: '/order/success' },
+    ],
+  },
+  {
+    // 상품 상세 '바로 구매'는 그 상품 하나로 결제 화면을 연다. 버튼 글자는 총 금액을 앞에 붙인 "N원 바로 구매"다(정규식).
+    id: 'product-buy-now',
+    group: '결제 동선',
+    title: '상품 상세 → 바로 구매',
+    path: '/products/product-1?round=round-open',
+    expectPath: '/checkout',
+    steps: [{ press: /원 바로 구매$/ }, { waitPath: '/checkout' }],
   },
   { id: 'mypage', group: 'MY', title: 'MY', path: '/mypage' },
   {
@@ -707,6 +973,90 @@ export const screens = [
     path: '/mypage/notifications/settings',
   },
   { id: 'withdraw', group: 'MY', title: '회원 탈퇴', path: '/mypage/withdraw' },
+  {
+    id: 'withdraw-checked',
+    group: 'MY',
+    title: '회원 탈퇴 · 확인 체크',
+    path: '/mypage/withdraw',
+    steps: [{ check: '위 내용을 확인했고 탈퇴합니다.' }],
+  },
+  { id: 'mypage-empty', group: 'MY', title: 'MY · 주문 없음', path: '/mypage', scenario: 'mypage-empty' },
+  {
+    id: 'mypage-error',
+    group: 'MY',
+    title: 'MY · 주문 조회 실패',
+    path: '/mypage',
+    scenario: 'mypage-error',
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/orders\\?'],
+  },
+  {
+    id: 'addresses-empty',
+    group: 'MY',
+    title: '배송지 · 없음',
+    path: '/mypage/addresses',
+    scenario: 'addresses-empty',
+  },
+  {
+    id: 'addresses-error',
+    group: 'MY',
+    title: '배송지 · 조회 실패',
+    path: '/mypage/addresses',
+    scenario: 'addresses-error',
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/auth/me\\)$'],
+  },
+  // 배송지 추가·수정 창(UI 교체 P5 마이페이지 묶음): 열린 창을 지금 보이는 화면으로 찍는다.
+  {
+    id: 'modal-address-add',
+    group: 'MY',
+    title: '배송지 · 추가 창',
+    path: '/mypage/addresses',
+    steps: [{ click: '+ 배송지 추가' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-address-filled',
+    group: 'MY',
+    title: '배송지 · 추가 창(입력)',
+    path: '/mypage/addresses',
+    steps: [
+      { click: '+ 배송지 추가' },
+      { fill: { label: '이름 *', value: '부모님 댁' } },
+      { fill: { label: '우편번호 *', value: '48058' } },
+      { fill: { label: '주소 *', value: '부산 해운대구 센텀중앙로 79' } },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-address-error',
+    group: 'MY',
+    title: '배송지 · 추가 창(필수 입력 안내)',
+    path: '/mypage/addresses',
+    steps: [{ click: '+ 배송지 추가' }, { click: '저장' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-address-edit',
+    group: 'MY',
+    title: '배송지 · 수정 창',
+    path: '/mypage/addresses',
+    steps: [{ click: '수정' }],
+    viewport: true,
+  },
+  {
+    id: 'notifications-empty',
+    group: 'MY',
+    title: '알림 · 없음',
+    path: '/mypage/notifications',
+    scenario: 'notifications-empty',
+  },
+  {
+    id: 'notifications-error',
+    group: 'MY',
+    title: '알림 · 조회 실패',
+    path: '/mypage/notifications',
+    scenario: 'notifications-error',
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/notifications/me'],
+  },
   { id: 'category', group: '찾기', title: '상품 탭', path: '/category', auth: false },
   { id: 'search', group: '찾기', title: '검색', path: '/search', auth: false },
   {
@@ -726,6 +1076,23 @@ export const screens = [
     path: '/groupbuy',
     expectPath: '/',
     auth: false,
+  },
+  {
+    id: 'not-found',
+    group: '안내',
+    title: '없는 주소(404 안내)',
+    path: '/no-such-page',
+    auth: false,
+    expectedErrors: ['status of 404 \\(Not Found\\).*/no-such-page'],
+  },
+  {
+    id: 'render-error',
+    group: '안내',
+    title: '화면 오류 안내(error.tsx)',
+    path: '/mypage',
+    scenario: 'render-error',
+    // 일부러 금액을 뺀 주문이라 React가 렌더 예외를 콘솔에 남긴다(error.tsx가 받는다).
+    expectedErrors: ["Cannot read properties of undefined \\(reading 'toLocaleString'\\)"],
   },
   { id: 'terms', group: '안내', title: '이용약관', path: '/terms', auth: false },
   { id: 'privacy', group: '안내', title: '개인정보처리방침', path: '/privacy', auth: false },
@@ -868,6 +1235,69 @@ export const benchmarkScreens = [
     features: ['gift'],
   },
   {
+    id: 'bm-checkout-package-label',
+    group: '구매',
+    title: '결제 · 포장 라벨 문구 넣기',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [{ click: '문구 넣기' }, { fill: { label: '라벨 문구', value: '祝 開業 그린상회' } }],
+    features: ['option-sheet'],
+  },
+  {
+    // 선물을 채워 결제까지 진행한다. 주문 생성 본문의 gift와 결제창 인자를 남긴다.
+    // 선물을 켜면 포장 라벨 칸은 보내는 분 이름으로 합쳐져 보이지 않는다(#705).
+    id: 'bm-checkout-gift-paid',
+    group: '구매',
+    title: '결제 · 선물 → 결제 완료',
+    path: '/checkout?from=cart',
+    storage: true,
+    portone: 'success',
+    expectPath: '/order/success',
+    steps: [
+      { click: '선물로 보내요' },
+      { fill: { label: '이름', value: '박엄마', nth: 0 } },
+      { fill: { label: '이름', value: '김그린', nth: 1 } },
+      { fill: { label: '카드 문구', value: '늘 고마워요. 건강하세요!' } },
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+      { waitPath: '/order/success' },
+    ],
+    features: ['gift'],
+  },
+  {
+    // 포장 라벨 문구를 넣고 결제까지 진행한다. 주문 생성 본문의 packageLabel을 남긴다.
+    id: 'bm-checkout-label-paid',
+    group: '구매',
+    title: '결제 · 포장 라벨 → 결제 완료',
+    path: '/checkout?from=cart',
+    storage: true,
+    portone: 'success',
+    expectPath: '/order/success',
+    steps: [
+      { click: '문구 넣기' },
+      { fill: { label: '라벨 문구', value: '祝 開業 그린상회' } },
+      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { press: '카카오페이로 결제하기' },
+      { waitPath: '/order/success' },
+    ],
+    features: ['option-sheet'],
+  },
+  {
+    // 옵션 시트에서 토퍼를 고르고 담는다. 장바구니에 담긴 옵션(optionChoiceIds)을 저장소 기록으로 남긴다.
+    id: 'bm-product-options-added',
+    group: '상품',
+    title: '상품 상세 · 옵션 골라 담기 → 장바구니',
+    path: '/products/product-1?round=round-open',
+    expectPath: '/cart',
+    steps: [
+      { click: '장바구니' },
+      { click: '祝 開業' },
+      { click: '장바구니 담기' },
+      { waitPath: '/cart' },
+    ],
+    features: ['option-sheet'],
+  },
+  {
     id: 'bm-success',
     group: '구매',
     title: '주문 완료',
@@ -934,5 +1364,104 @@ export const benchmarkScreens = [
     path: '/partner',
     auth: false,
     features: ['partner-inquiry'],
+  },
+  // 기능 플래그 화면(UI 교체 P5 E 묶음): 입점 문의 입력·보낸 뒤·거절, 찜·구매한 꽃 빈 상태·조회 실패.
+  {
+    id: 'bm-partner-filled',
+    group: '가게·안내',
+    title: '입점 문의 · 입력과 동의',
+    path: '/partner',
+    auth: false,
+    features: ['partner-inquiry'],
+    steps: [
+      { fill: { label: '농가·화원 이름', value: '푸른난원' } },
+      { fill: { label: '지역', value: '경기 용인' } },
+      { fill: { label: '연락처', value: '010-0000-0000' } },
+      { fill: { label: '소개와 문의 내용', value: '동양란을 30년째 기르고 있습니다.\n입점 상담을 받고 싶어요.' } },
+      { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
+    ],
+  },
+  {
+    id: 'bm-partner-done',
+    group: '가게·안내',
+    title: '입점 문의 · 보낸 뒤',
+    path: '/partner',
+    auth: false,
+    features: ['partner-inquiry'],
+    steps: [
+      { fill: { label: '농가·화원 이름', value: '푸른난원' } },
+      { fill: { label: '지역', value: '경기 용인' } },
+      { fill: { label: '연락처', value: '010-0000-0000' } },
+      { fill: { label: '소개와 문의 내용', value: '동양란을 30년째 기르고 있습니다.\n입점 상담을 받고 싶어요.' } },
+      { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
+      { click: '문의 보내기' },
+    ],
+    // 보낸 뒤 화면으로 바뀔 때 Mantine Container(p·pb 함께 쓰던 style)가 남기는 React 개발 경고(수정 전 화면만).
+    expectedErrors: ['Removing paddingBottom padding'],
+  },
+  {
+    id: 'bm-partner-error',
+    group: '가게·안내',
+    title: '입점 문의 · 보내기 실패',
+    path: '/partner',
+    auth: false,
+    scenario: 'partner-reject',
+    features: ['partner-inquiry'],
+    steps: [
+      { fill: { label: '농가·화원 이름', value: '푸른난원' } },
+      { fill: { label: '지역', value: '경기 용인' } },
+      { fill: { label: '연락처', value: '010-0000-0000' } },
+      { fill: { label: '소개와 문의 내용', value: '동양란을 30년째 기르고 있습니다.\n입점 상담을 받고 싶어요.' } },
+      { check: '입점 상담을 위해 이름·지역·연락처를 받고, 문의일로부터 1년 뒤 지우는 데 동의합니다.' },
+      { click: '문의 보내기' },
+    ],
+    expectedErrors: ['status of 400 \\(Bad Request\\).*/partner-inquiries'],
+  },
+  {
+    id: 'bm-wishlist-empty',
+    group: 'MY',
+    title: 'MY · 이번 회차 찜 없음',
+    path: '/mypage/wishlist',
+    features: ['wishlist'],
+  },
+  {
+    id: 'bm-purchase-history-empty',
+    group: 'MY',
+    title: 'MY · 구매한 꽃 없음',
+    path: '/mypage/purchase-history',
+    scenario: 'purchase-history-empty',
+    features: ['purchase-history'],
+  },
+  {
+    id: 'bm-purchase-history-error',
+    group: 'MY',
+    title: 'MY · 구매한 꽃 조회 실패',
+    path: '/mypage/purchase-history',
+    scenario: 'purchase-history-error',
+    features: ['purchase-history'],
+    expectedErrors: ['status of 500 \\(Internal Server Error\\).*/orders'],
+  },
+];
+
+/**
+ * 결제 수단이 여러 개(카카오페이·네이버페이·카드)일 때만 보이는 화면.
+ * 결제 수단 목록은 빌드 때 채널 키로 정해지므로(apps/consumer/src/lib/payment-method-options.ts)
+ * `start.mjs consumer --payment-methods all`로 띄운 서버에서 `shots.mjs consumer --set payment-methods`로 찍는다.
+ * 기본 묶음(screens)은 카카오페이 하나라 이 화면들과 같은 서버로 찍지 않는다.
+ */
+export const paymentMethodScreens = [
+  {
+    id: 'checkout-payment-methods',
+    group: '결제 동선',
+    title: '결제 · 결제 수단 고르기(카카오페이·네이버페이·카드)',
+    path: '/checkout?from=cart',
+    storage: true,
+    steps: [{ check: '상품·가격·회차 변경 내용을 확인했습니다.' }],
+  },
+  {
+    id: 'order-redelivery-fee',
+    group: 'MY',
+    title: '주문 상세 · 배송 보류 재배송비 결제(결제 수단 고르기)',
+    path: '/mypage/orders/order-round-held',
   },
 ];

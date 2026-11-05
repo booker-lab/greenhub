@@ -1,30 +1,29 @@
 'use client';
 
-import { Box } from '@mantine/core';
 import { ChevronLeft, Home, ShoppingCart } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/hooks/useCart';
 
+// ① 외형 유지(UI 교체 P5): Mantine Box(component=header·div)는 스타일이 없는 요소라 같은 요소로 바꿨다.
 export default function ProductTopBar() {
   const router = useRouter();
   const { itemCount } = useCart();
 
   return (
-    <Box
-      component="header"
+    <header
       style={{
         position: 'fixed',
         top: 0,
         left: 0,
         right: 0,
         zIndex: 100,
+        // ② 홈 흰 머리띠와 같게 아래 1px 선을 두지 않는다(design-direction.md §3.1). 아이콘은 검정.
         backgroundColor: 'var(--color-bg)',
-        borderBottom: 'var(--border)',
         height: 'calc(52px + env(safe-area-inset-top))',
         paddingTop: 'env(safe-area-inset-top)',
       }}
     >
-      <Box
+      <div
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -73,7 +72,7 @@ export default function ProductTopBar() {
         </span>
 
         {/* 홈 + 장바구니 */}
-        <Box style={{ display: 'flex', alignItems: 'center' }}>
+        <div style={{ display: 'flex', alignItems: 'center' }}>
           <button
             type="button"
             onClick={() => router.push('/')}
@@ -86,7 +85,7 @@ export default function ProductTopBar() {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--color-text-secondary)',
+              color: 'var(--color-text)',
             }}
             aria-label="홈으로"
           >
@@ -106,13 +105,13 @@ export default function ProductTopBar() {
               alignItems: 'center',
               justifyContent: 'center',
               position: 'relative',
-              color: 'var(--color-text-secondary)',
+              color: 'var(--color-text)',
             }}
             aria-label="장바구니"
           >
             <ShoppingCart size={22} strokeWidth={1.8} />
             {itemCount > 0 && (
-              <Box
+              <div
                 style={{
                   position: 'absolute',
                   top: 6,
@@ -131,11 +130,11 @@ export default function ProductTopBar() {
                 }}
               >
                 {itemCount > 99 ? '99+' : itemCount}
-              </Box>
+              </div>
             )}
           </button>
-        </Box>
-      </Box>
-    </Box>
+        </div>
+      </div>
+    </header>
   );
 }

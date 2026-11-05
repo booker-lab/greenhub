@@ -1,16 +1,17 @@
 'use client';
 
 import { Button } from '@greenhub/ui/components/button';
-import { notifications } from '@mantine/notifications';
+import { notify } from '@/components/AppToaster';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
 import { todayKST } from '@greenhub/shared';
 import { ApiError, apiJson } from '@/lib/api';
+import { currentMonthKST } from './_lib';
 
-// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(sm 그림자)·UnstyledButton·SimpleGrid(7칸, 간격 16) 값.
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(그림자는 ② D2로 걷음)·UnstyledButton·SimpleGrid(7칸, 간격 16) 값.
 const TEXT = 'm-0 p-0 text-base';
-const PAPER = 'block rounded-[16px] bg-white shadow-mantine-sm';
+const PAPER = 'block rounded-[16px] bg-card';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 const GRID7 = 'grid grid-cols-7 gap-4';
@@ -62,9 +63,10 @@ export default function DailyCapsPage() {
   const { data: session } = useSession();
   const router = useRouter();
 
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth());
+  // 처음 달은 오늘 칸(todayKST)과 같은 KST 기준이다(서버 UTC 지역 시간으로 정하면 매월 1일 00~09시에 hydration 오류).
+  const [initialMonth] = useState(currentMonthKST);
+  const [year, setYear] = useState(initialMonth.year);
+  const [month, setMonth] = useState(initialMonth.month);
 
   const [caps, setCaps] = useState<Record<string, DailyCap>>({});
   const [loading, setLoading] = useState(false);
@@ -132,7 +134,7 @@ export default function DailyCapsPage() {
       setCaps((prev) => ({ ...prev, [date]: { ...prev[date], date, totalCap } }));
       setEditing(null);
     } catch (e) {
-      notifications.show({
+      notify({
         color: 'red',
         title: '설정 저장 실패',
         message: e instanceof ApiError ? e.message : '일일 캡 저장에 실패했습니다',
@@ -153,7 +155,7 @@ export default function DailyCapsPage() {
     <main
       style={{
         minHeight: '100vh',
-        backgroundColor: 'var(--color-surface-muted)',
+        backgroundColor: 'var(--frame)',
         padding: '32px 16px',
       }}
     >
@@ -356,7 +358,7 @@ export default function DailyCapsPage() {
                 onClick={() => saveCap(editing)}
                 disabled={saving}
                 className="flex-1"
-                style={{ backgroundColor: 'var(--color-primary)' }}
+                style={{ backgroundColor: 'var(--primary)' }}
               >
                 {saving ? '저장 중...' : '저장'}
               </Button>

@@ -1,7 +1,7 @@
 // packages/ui 토큰 계약 검사 — UI 교체 P1(docs/specs/frontend/ui-stack-migration-plan.md §4·P1).
 // Mantine과 같이 쓰는 동안 새 토큰이 지금 화면을 바꾸지 않는지 확인한다.
 // - 앱이 import할 tokens.css에 preflight(`@import "tailwindcss"`)와 `--border` 색 정의가 없다.
-// - Tailwind로 실제 컴파일했을 때 style.css와 이름이 같은 변수가 다른 값으로 나오지 않는다.
+// - Tailwind로 실제 컴파일했을 때 style.css와 이름이 같은 변수가 다른 값으로 나오지 않는다(예전 style.css, P6부터 styles/base.css).
 // - 글자 크기·줄 높이·모서리 유틸리티가 지금 화면 값과 같다.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const UI = path.join(ROOT, 'packages/ui');
 const TOKENS = path.join(UI, 'src/styles/tokens.css');
-const LEGACY = path.join(UI, 'src/style.css');
+const LEGACY = path.join(UI, 'src/styles/base.css');
 const requireFromUi = createRequire(path.join(UI, 'package.json'));
 
 const tokensText = readFileSync(TOKENS, 'utf8');
@@ -65,6 +65,26 @@ describe('tokens.css 원문', () => {
   });
 });
 
+// 버튼 면을 #007A43으로 바꾸면서(design-direction.md §2, 2026-11-02) Tailwind theme layer의 `--color-primary`(= `--primary`)와
+// base.css의 `--color-primary`(#00A65A, 면 전용 예전 이름)가 값이 갈렸다. 세 앱은 base.css를 theme layer보다 뒤(base layer 또는
+// layer 밖)에 두므로 `var(--color-primary)`는 계속 #00A65A이고, `bg-primary`는 `var(--primary)`를 바로 읽는다(@theme inline).
+const INTENDED_CLASHES = new Set(['--color-primary']);
+// 테두리 색(design-direction.md §9.2, 다크 모드 D5): @theme inline의 `--color-border`는 고정값 대신 base.css의 같은 이름 변수를
+// 읽는다(`var(--color-border)`). theme layer의 자기 참조 선언은 뒤 layer의 base.css 값(밝음 #ECEFED, 어둠은 dark.css)이 이긴다.
+const DEFERS_TO_BASE = new Set(['--color-border']);
+
+describe('세 앱 globals.css', () => {
+  it('base.css를 theme layer보다 뒤(base layer 또는 layer 밖)에 둔다', () => {
+    for (const app of ['consumer', 'seller', 'driver']) {
+      const text = readFileSync(path.join(ROOT, `apps/${app}/src/app/globals.css`), 'utf8');
+      assert.match(text, /^@layer theme, base,/m, app);
+      const line = text.split('\n').find((l) => l.includes('@greenhub/ui/styles/base.css'));
+      assert.ok(line, `${app}: base.css import 없음`);
+      assert.match(line, /base\.css"(\s+layer\(base\))?;/, app);
+    }
+  });
+});
+
 describe('Tailwind 컴파일 결과', () => {
   const utilities = [
     'bg-primary',
@@ -79,12 +99,18 @@ describe('Tailwind 컴파일 결과', () => {
     'rounded-full',
   ];
 
-  it('style.css와 이름이 같은 변수는 같은 값만 낸다', async () => {
+  it('base.css(예전 style.css)와 이름이 같은 변수는 같은 값만 낸다', async () => {
     const css = await compile(utilities);
     const emitted = declarations(css);
     const clashes = [];
     for (const [name, legacyValue] of legacy) {
       if (!emitted.has(name)) continue;
+      if (INTENDED_CLASHES.has(name)) continue;
+      if (DEFERS_TO_BASE.has(name)) {
+        if (emitted.get(name) !== `var(${name})`)
+          clashes.push(`${name}: ${emitted.get(name)} (base.css 변수를 읽어야 함)`);
+        continue;
+      }
       const value = resolve(emitted.get(name));
       if (value !== resolve(legacyValue)) clashes.push(`${name}: ${value} (현행 ${legacyValue})`);
     }
@@ -114,10 +140,14 @@ describe('Tailwind 컴파일 결과', () => {
     assert.match(css, /\.rounded-lg\s*\{[^}]*border-radius:\s*16px/);
   });
 
-  it('의미 색 유틸리티는 토큰 변수를 쓰고, 테두리 색은 현행 값이다', async () => {
+  it('의미 색 유틸리티는 토큰 변수를 쓰고, 테두리 색은 base.css 변수(밝음 현행 값)를 읽는다', async () => {
     const css = await compile(utilities);
     assert.match(css, /\.bg-primary\s*\{[^}]*background-color:\s*var\(--primary\)/);
-    assert.match(css, /\.border-border\s*\{[^}]*border-color:\s*#ecefed/i);
-    assert.equal(resolve('var(--primary)'), legacy.get('--color-primary').toLowerCase());
+    assert.match(css, /\.border-border\s*\{[^}]*border-color:\s*var\(--color-border\)/);
+    assert.equal(legacy.get('--color-border').toLowerCase(), '#ecefed');
+    // 버튼 면은 #007A43(design-direction.md §2, 2026-11-02 적용)이라 예전 초록 글자 값과 같고,
+    // 예전 면 색 #00A65A는 --brand로 남는다.
+    assert.equal(resolve('var(--primary)'), legacy.get('--color-primary-dark').toLowerCase());
+    assert.equal(resolve('var(--brand)'), legacy.get('--color-primary').toLowerCase());
   });
 });

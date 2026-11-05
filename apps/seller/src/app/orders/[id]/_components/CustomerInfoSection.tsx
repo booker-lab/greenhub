@@ -1,14 +1,14 @@
 'use client';
 
 import type { Order } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
+import { ButtonLink } from '@greenhub/ui/components/button';
 import { displayBuyerName, displayBuyerPhone, displayRequestNote, toTelHref } from '../_lib';
 import { Row } from './OrderRow';
 
-// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, shadow xs, p md)·Stack·Text(p, 여백 0, 줄 높이 1.55)와
+// ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, p md; 그림자는 ② D2로 걷음)·Stack·Text(p, 여백 0, 줄 높이 1.55)와
 // 같은 값. 전화 걸기는 Mantine Button light md(링크)이고, 마우스를 올리면 Mantine처럼 brand-2 면이 된다.
 const TEXT = 'm-0 p-0 text-base font-normal';
-const PAPER = 'block rounded-[16px] bg-white p-4 shadow-mantine-xs';
+const PAPER = 'block rounded-[16px] bg-card p-4';
 
 export function CustomerInfoSection({ order }: { order: Order }) {
   const phone = displayBuyerPhone(order);
@@ -52,16 +52,15 @@ export function CustomerInfoSection({ order }: { order: Order }) {
           </div>
         )}
         {telHref && (
-          <Button
-            render={<a href={telHref} />}
-            nativeButton={false}
+          <ButtonLink
+            href={telHref}
             variant="light"
             size="md"
-            className="mt-2.5 w-full hover:bg-[#a6e5c0]"
+            className="mt-2.5 w-full hover:bg-ui-brand-light-hover"
             style={{ fontWeight: 'var(--fw-medium)' }}
           >
             전화 걸기
-          </Button>
+          </ButtonLink>
         )}
       </div>
     </div>

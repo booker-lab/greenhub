@@ -19,12 +19,8 @@ const NO_SEARCH_BUTTONS =
 /** 주문 목록 통합 검색 한 칸 — 손님 이름·전화·주문번호 */
 export function OrderSearchInput({ value, onChange, phoneSearching, phoneSearchError }: Props) {
   return (
-    <div
-      style={{
-        backgroundColor: 'var(--color-bg)',
-        borderBottom: '1px solid var(--color-border)',
-      }}
-    >
+    // ② 디자인 방향(D3): 칩·검색 띠는 틀과 같은 --frame이고 띠 사이 선을 긋지 않는다.
+    <div style={{ backgroundColor: 'var(--frame)' }}>
       <div className="mx-auto max-w-[720px] px-4 py-2.5">
         <Input
           type="search"

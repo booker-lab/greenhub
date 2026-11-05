@@ -151,20 +151,29 @@ export class PortoneClient {
     }
   }
 
-  /** Portone V2 Webhook 서명 검증 (Svix 기반) */
+  /**
+   * Portone V2 Webhook 서명 검증 (Svix 기반).
+   *
+   * PortOne은 실연동·테스트 모드의 웹훅 시크릿이 다르다. 운영은 실연동 시크릿(`PORTONE_WEBHOOK_SECRET`)을 쓰고,
+   * LIVE 전환 전 테스트 채널 결제의 알림을 받으려면 테스트 모드 시크릿(`PORTONE_WEBHOOK_SECRET_TEST`, 선택)도 둔다.
+   * 둘 중 하나로 서명이 맞으면 통과한다. 결제 확정은 이 뒤에 PortOne 결제 조회로 상태·금액을 다시 확인한다.
+   */
   verifyWebhookSignature(
     webhookId: string,
     webhookTimestamp: string,
     rawBody: Buffer,
     signatureHeader: string,
   ): void {
-    const webhookSecret = this.config.get<string>('PORTONE_WEBHOOK_SECRET', '');
+    const webhookSecrets = [
+      this.config.get<string>('PORTONE_WEBHOOK_SECRET', ''),
+      this.config.get<string>('PORTONE_WEBHOOK_SECRET_TEST', ''),
+    ].filter((secret): secret is string => typeof secret === 'string' && secret.trim() !== '');
     if (
       !webhookId?.trim() ||
       !webhookTimestamp?.trim() ||
       !signatureHeader?.trim() ||
       !Buffer.isBuffer(rawBody) ||
-      !webhookSecret
+      webhookSecrets.length === 0
     ) {
       throw new UnauthorizedException('웹훅 인증 정보가 올바르지 않습니다.');
     }
@@ -175,17 +184,20 @@ export class PortoneClient {
       throw new UnauthorizedException('웹훅 timestamp가 올바르지 않습니다.');
     }
 
-    const secretBytes = Buffer.from(
-      webhookSecret.startsWith('whsec_') ? webhookSecret.slice(6) : webhookSecret,
-      'base64',
-    );
-    if (secretBytes.length === 0) {
+    const secretBytesList = webhookSecrets
+      .map((secret) =>
+        Buffer.from(secret.startsWith('whsec_') ? secret.slice(6) : secret, 'base64'),
+      )
+      .filter((bytes) => bytes.length > 0);
+    if (secretBytesList.length === 0) {
       throw new UnauthorizedException('웹훅 인증 정보가 올바르지 않습니다.');
     }
 
     const signedContent = `${webhookId}.${webhookTimestamp}.${rawBody.toString()}`;
 
-    const expectedSig = crypto.createHmac('sha256', secretBytes).update(signedContent).digest();
+    const expectedSigs = secretBytesList.map((secretBytes) =>
+      crypto.createHmac('sha256', secretBytes).update(signedContent).digest(),
+    );
 
     const signatures = signatureHeader
       .trim()
@@ -193,9 +205,11 @@ export class PortoneClient {
       .filter((signature) => /^v[0-9]+,/.test(signature))
       .map((signature) => Buffer.from(signature.replace(/^v[0-9]+,/, ''), 'base64'));
 
-    const isValid = signatures.some(
-      (signature) =>
-        signature.length === expectedSig.length && crypto.timingSafeEqual(signature, expectedSig),
+    const isValid = signatures.some((signature) =>
+      expectedSigs.some(
+        (expectedSig) =>
+          signature.length === expectedSig.length && crypto.timingSafeEqual(signature, expectedSig),
+      ),
     );
     if (!isValid) {
       throw new UnauthorizedException('웹훅 서명이 올바르지 않습니다.');

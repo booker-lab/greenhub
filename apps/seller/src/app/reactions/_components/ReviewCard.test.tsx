@@ -1,7 +1,8 @@
 import type { ManagedReview } from '@greenhub/shared';
+import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { RadioItem, ReviewCard, type ReviewCardProps } from './ReviewCard';
+import { ReviewCard, type ReviewCardProps } from './ReviewCard';
 
 function review(overrides: Partial<ManagedReview> = {}): ManagedReview {
   return {
@@ -100,7 +101,14 @@ describe('고객 반응 후기 카드 숨기기', () => {
     ]);
     expect(texts).toContain('숨기는 사유');
     const abuse = radios.find((radio) => radio.props.label === '욕설·비방');
-    (abuse?.props.onChange as (() => void) | undefined)?.();
+    expect(abuse?.props.value).toBe('abuse');
+    // 사유 그룹: 이름(숨기는 사유)과 연결된 필수 radiogroup이고, 고른 값이 바뀌면 onReasonChange로 알린다.
+    const group = elements.find((element) => element.type === RadioGroup)?.props as
+      | Record<string, unknown>
+      | undefined;
+    expect(group?.required).toBe(true);
+    expect(group?.['aria-labelledby']).toBeTruthy();
+    (group?.onValueChange as ((value: string) => void) | undefined)?.('abuse');
     expect(handlers.onReasonChange).toHaveBeenCalledWith('abuse');
     expect(texts).toContain('설명(선택)');
     expect(button('숨기기')).toBeUndefined();

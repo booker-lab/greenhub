@@ -110,9 +110,10 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
       `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
     );
     await expect(directCard).toBeVisible();
-    // 상품마다 한 줄로 챙길 개수를 보인다.
-    await expect(directCard.getByText('E2E 호접란 · 1개', { exact: true })).toBeVisible();
-    await expect(directCard.getByText('E2E 미니 호접란 · 1개', { exact: true })).toBeVisible();
+    // 상품마다 챙길 개수를 보인다. 배송판 행은 두 줄(1줄 주소, 2줄 받는 분·상품)이라 상품 줄을 한 줄에 이어 쓴다
+    // (design-direction.md §6 기사 ② D4-1, #799). 상세 화면은 상품마다 한 줄이다(아래 배송 시작 테스트).
+    await expect(directCard).toContainText('E2E 호접란 · 1개');
+    await expect(directCard).toContainText('E2E 미니 호접란 · 1개');
     await expect(
       page.getByTestId(
         `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_HUB)}`,
@@ -150,7 +151,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_WEATHER);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '배송 보류' }).click();
+    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
     await page.getByRole('radio', { name: '기상 악화' }).check();
     await page.getByLabel('보류 사유').fill('강풍으로 안전한 배송이 어렵습니다.');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T08:00');
@@ -160,9 +161,10 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.getByRole('button', { name: '배송 보류 저장' }).click();
 
     await expect(page.getByRole('dialog', { name: '배송 보류 기록' })).toHaveCount(0);
-    await expect(
-      page.getByRole('main').getByRole('paragraph').filter({ hasText: /^배송 보류$/ }),
-    ).toBeVisible();
+    // 보류 상태는 상세 머리(banner)에 빨간 점 + 글자로 보이고, 본문에는 "배송 보류 내용" 상자가 생긴다
+    // (design-direction.md §6 기사 ② D4-2, #800).
+    await expect(page.getByRole('banner').getByText('배송 보류', { exact: true })).toBeVisible();
+    await expect(page.getByRole('main').getByText('배송 보류 내용', { exact: true })).toBeVisible();
     await expect(page.getByText('기상 악화')).toBeVisible();
     await expect(page.getByText('판매자 책임')).toBeVisible();
     await expect(page.getByText('재배송비 없음')).toBeVisible();
@@ -176,7 +178,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_ACCESS);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '배송 보류' }).click();
+    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
     await page.getByRole('radio', { name: '출입 불가' }).check();
     await page.getByLabel('보류 사유').fill('공동현관 출입 정보를 확인할 수 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
@@ -203,7 +205,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_ADDRESS);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '배송 보류' }).click();
+    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
     await page.getByRole('radio', { name: '주소 오류' }).check();
     await page.getByLabel('보류 사유').fill('상세 주소가 없어 배송지를 확인할 수 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
@@ -226,7 +228,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_UNREACHABLE);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '배송 보류' }).click();
+    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
     await page.getByRole('radio', { name: '고객 연락 불가' }).check();
     await page.getByLabel('보류 사유').fill('배송지 확인을 위해 연락했으나 응답이 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
@@ -263,7 +265,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await expect(page.getByRole('banner').getByText('배송 중', { exact: true })).toBeVisible({
       timeout: orderCommandsSettleTimeout(1),
     });
-    await expect(page.getByRole('button', { name: '배송 완료 사진 촬영' })).toBeVisible();
+    await expect(page.getByRole('button', { name: '도착 사진 찍고 완료' })).toBeVisible();
   });
 
   test('직접배송 완료는 사진을 등록한 뒤에만 정상 완료한다', async ({
@@ -275,7 +277,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.goto(`${BASE}/board/${orderId}`);
 
     await expect(page.getByRole('button', { name: '배송 완료' })).toHaveCount(0);
-    await page.getByRole('button', { name: '배송 완료 사진 촬영' }).click();
+    await page.getByRole('button', { name: '도착 사진 찍고 완료' }).click();
 
     await expect(page).toHaveURL(new RegExp(`/board/${orderId}/photo/round-direct(?:\\?|$)`));
     await expect(page.getByRole('heading', { name: '배송 완료 사진' })).toBeVisible();

@@ -23,9 +23,9 @@ describe('getAdminDriversReadState', () => {
   });
 
   it('성공 + 1건 이상은 HAS_RESULTS를 반환한다', () => {
-    expect(
-      getAdminDriversReadState({ loading: false, error: null, drivers: [driver('d1')] }),
-    ).toBe('HAS_RESULTS');
+    expect(getAdminDriversReadState({ loading: false, error: null, drivers: [driver('d1')] })).toBe(
+      'HAS_RESULTS',
+    );
   });
 
   it('loading + error는 LOADING을 우선한다', () => {
@@ -45,7 +45,7 @@ describe('getAdminDriversReadState', () => {
   });
 });
 
-describe('filterByTab semantics (unchanged)', () => {
+describe('filterByTab semantics', () => {
   const pending = {
     id: 'p1',
     name: '대기',
@@ -84,7 +84,7 @@ describe('filterByTab semantics (unchanged)', () => {
     expect(filterByTab(all, 'suspended')).toEqual([suspended]);
   });
 
-  it('all 탭은 전체를 반환한다', () => {
-    expect(filterByTab(all, 'all')).toEqual(all);
+  it('all 탭은 승인 대기를 뺀 기사를 반환한다(승인 대기는 요약 상자)', () => {
+    expect(filterByTab(all, 'all')).toEqual([approved, suspended]);
   });
 });

@@ -12,7 +12,14 @@ const labelModule = { exports: {} };
 new Function('require', 'module', 'exports', compiled)(
   (specifier) => {
     if (specifier === '@greenhub/shared') return { PACKAGE_LABEL_MAX_LENGTH: 20 };
-    if (specifier === '@mantine/core' || specifier === 'react/jsx-runtime') return {};
+    if (
+      specifier === '@greenhub/ui/components/field' ||
+      specifier === '@greenhub/ui/components/input' ||
+      specifier === 'react' ||
+      specifier === 'react/jsx-runtime'
+    ) {
+      return {};
+    }
     throw new Error(`예상하지 못한 모듈 요청: ${specifier}`);
   },
   labelModule,

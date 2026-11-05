@@ -77,11 +77,23 @@ function killTree(child) {
 
 const args = process.argv.slice(2);
 const nowIndex = args.indexOf('--now');
-// --now 값은 앱 이름이 아니다. --now가 없을 때(nowIndex = -1) 첫 인자를 빼지 않도록 nowIndex를 먼저 본다.
-const appName =
-  args.find((a, i) => !a.startsWith('--') && (nowIndex === -1 || i !== nowIndex + 1)) ?? 'seller';
+// --now·--payment-methods 뒤의 값은 앱 이름이 아니다.
+const optionValueIndexes = new Set(
+  ['--now', '--payment-methods']
+    .map((flag) => args.indexOf(flag))
+    .filter((i) => i > -1)
+    .map((i) => i + 1),
+);
+const appName = args.find((a, i) => !a.startsWith('--') && !optionValueIndexes.has(i)) ?? 'seller';
 const phone = args.includes('--phone');
 const prod = args.includes('--prod');
+// --payment-methods all: 소비자 결제 수단을 카카오페이·네이버페이·카드 셋으로 띄운다(가짜 채널 키).
+// 결제 수단 목록은 빌드 때 정해지므로 기본 촬영(카카오페이 하나)과 다른 서버다. fixture paymentMethodScreens용.
+const paymentMethodsIndex = args.indexOf('--payment-methods');
+const paymentMethods = paymentMethodsIndex > -1 ? args[paymentMethodsIndex + 1] : 'default';
+if (!['default', 'all'].includes(paymentMethods)) {
+  fail(`--payment-methods는 all만 받습니다: ${paymentMethods}`);
+}
 if (prod && phone) fail('--prod와 --phone은 함께 쓸 수 없습니다.');
 // 운영 빌드는 API 주소로 HTTPS이면서 'localhost'·'127.0.0.1'이 아닌 주소만 받는다
 // (packages/shared/src/api-base-url.ts). 루프백 대역의 다른 주소를 쓴다.
@@ -211,6 +223,28 @@ Object.assign(env, {
   VISUAL_GUARD_LOG: logs.guard,
 });
 if (prod) env.NODE_EXTRA_CA_CERTS = apiCaFile;
+// 소비자 결제 버튼은 PortOne 공개 설정(상점 ID·채널 키)이 없으면 주문 요청 전에 멈춘다(lib/portone-config.ts).
+// 운영과 무관한 가짜 값을 넣는다. 결제창은 shots.mjs가 화면마다 stub으로 바꾸고(screen.portone),
+// 외부 요청은 브라우저·서버 모두 막혀 있다. 카카오페이 채널만 넣어 결제 수단 목록은 기본(카카오페이)과 같다.
+if (appName === 'consumer') {
+  Object.assign(env, {
+    NEXT_PUBLIC_PORTONE_STORE_ID: 'store-visual-harness',
+    NEXT_PUBLIC_PORTONE_KAKAOPAY_CHANNEL_KEY: 'channel-key-visual-harness-kakaopay',
+  });
+}
+if (paymentMethods === 'all') {
+  if (appName !== 'consumer') fail('--payment-methods는 consumer에서만 씁니다.');
+  Object.assign(env, {
+    NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY: 'channel-key-visual-harness-naverpay',
+    NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: 'channel-key-visual-harness-card',
+  });
+} else if (appName === 'consumer') {
+  // 바깥 셸에 채널 키가 있어도 기본 촬영은 카카오페이 하나로 고정한다.
+  Object.assign(env, {
+    NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY: '',
+    NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY: '',
+  });
+}
 
 // 에뮬레이터를 쓰면 앱을 로컬 Firebase 계약(project·bucket·에뮬레이터 주소 고정)으로 띄운다.
 if (useEmulator) {
@@ -246,23 +280,55 @@ fs.writeFileSync(
     authSecret: prod ? authSecret : null,
     apiCertSpki,
     visualNow: visualNowIso,
+    paymentMethods,
   }),
 );
+
+/**
+ * 명령을 비동기로 돌려 출력(stdout·stderr)을 logFile에 쓴다. { proc, done }을 돌려주고 done은 종료 코드로 끝난다.
+ * 그동안 이 프로세스의 이벤트 루프(가짜 API)는 돈다.
+ */
+function runToLog(command, args, { cwd, env: childEnv, logFile }) {
+  const out = fs.createWriteStream(logFile);
+  const proc = spawn(command, args, { cwd, env: childEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+  proc.stdout.pipe(out, { end: false });
+  proc.stderr.pipe(out, { end: false });
+  const done = new Promise((resolve) => {
+    proc.on('error', (error) => {
+      out.end(`${error.stack ?? error}\n`);
+      resolve(1);
+    });
+    proc.on('close', (code) => out.end(() => resolve(code ?? 1)));
+  });
+  return { proc, done };
+}
 
 const nextBin = createRequire(path.join(appDir, 'package.json')).resolve('next/dist/bin/next');
 if (prod) {
   // 앱 package.json의 build와 같은 명령이다. 산출물(.next)·next가 고치는 next-env.d.ts는 커밋하지 않는다.
+  // 빌드는 비동기로 돌린다. 같은 프로세스의 가짜 API가 빌드 중에도 응답해야, 빌드 때 미리 그리는 정적 화면
+  // (소비자 홈 ○ / 의 배너 /banner 조회 등)이 가짜 데이터로 구워진다. spawnSync로 돌리면 이 프로세스의 이벤트
+  // 루프가 멈춰 가짜 API가 응답하지 못하고, 정적 화면이 데이터 없이 구워졌다가 ISR 갱신(60초) 뒤에야 같아졌다.
   console.log(`⏳ ${appName} 운영 빌드 중… (로그: ${logs.build})`);
-  const build = spawnSync(process.execPath, [nextBin, 'build', '--webpack'], {
+  const build = runToLog(process.execPath, [nextBin, 'build', '--webpack'], {
     cwd: appDir,
     env,
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
+    logFile: logs.build,
   });
-  fs.writeFileSync(logs.build, `${build.stdout ?? ''}${build.stderr ?? ''}`);
-  if (build.status !== 0) {
+  // 빌드 중에 끝내면(Ctrl+C·종료 신호) 빌드 프로세스를 남기지 않는다. 운영 빌드는 에뮬레이터를 쓰지 않는다.
+  const stopBuild = () => {
+    killTree(build.proc);
     mock.close();
-    fail(`운영 빌드 실패(code=${build.status}). 로그: ${logs.build}`);
+    process.exit(0);
+  };
+  process.once('SIGINT', stopBuild);
+  process.once('SIGTERM', stopBuild);
+  const buildCode = await build.done;
+  process.off('SIGINT', stopBuild);
+  process.off('SIGTERM', stopBuild);
+  if (buildCode !== 0) {
+    mock.close();
+    fail(`운영 빌드 실패(code=${buildCode}). 로그: ${logs.build}`);
   }
 }
 const child = spawn(

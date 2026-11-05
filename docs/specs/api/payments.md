@@ -29,7 +29,8 @@
 현재 서버가 사용하는 비밀 설정:
 
 - `PORTONE_V2_SECRET`
-- `PORTONE_WEBHOOK_SECRET`
+- `PORTONE_WEBHOOK_SECRET`(실연동 모드 웹훅 시크릿)
+- `PORTONE_WEBHOOK_SECRET_TEST`(선택, 테스트 모드 웹훅 시크릿. PortOne은 두 모드의 시크릿이 다르다. LIVE 전환 전 운영 앱이 테스트 채널로 결제하는 동안 그 알림을 받으려고 둔다. 2026-11-02 테스트 모드 웹훅이 staging으로 가 운영 주문이 `PENDING`에 멈춘 일로 추가)
 
 client channel/store 설정은 각 frontend 환경의 현재 코드를 따른다. 실제 결제 수단의 계약·심사·활성화 상태는 외부 상태이므로 이 spec에 “현재 승인됨/대기 중”으로 고정하지 않는다. 결제 수단을 변경하는 작업은 PortOne 콘솔과 대상 환경을 직접 재조회한다.
 
@@ -106,7 +107,7 @@ webhook-signature
 
 현재 `PortoneClient.verifyWebhookSignature()` 계약:
 
-- `PORTONE_WEBHOOK_SECRET` 필요
+- `PORTONE_WEBHOOK_SECRET`·`PORTONE_WEBHOOK_SECRET_TEST` 중 하나 이상 필요(둘 다 있으면 어느 쪽 서명이든 통과)
 - raw body 필요
 - header 세 개 모두 필요
 - timestamp 허용 오차: ±5분

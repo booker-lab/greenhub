@@ -19,10 +19,11 @@ const production = directives(
 );
 
 describe('기사 앱 CSP 정책', () => {
-  it('스크립트는 요청 nonce와 strict-dynamic으로만 허용하고 운영에서는 eval을 넣지 않는다', () => {
+  it('스크립트는 요청 nonce·화면 모드 스크립트 해시와 strict-dynamic으로만 허용하고 운영에서는 eval을 넣지 않는다', () => {
     expect(production.get('script-src')).toEqual([
       "'self'",
       "'nonce-abc123=='",
+      "'sha256-vetTXFXcSiwJzoxthExAUb93WNz5Evs5Oe67fhsMztk='",
       "'strict-dynamic'",
     ]);
     expect(production.get('default-src')).toEqual(["'self'"]);

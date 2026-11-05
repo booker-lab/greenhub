@@ -1,14 +1,6 @@
+// optimize: false — 운영 빌드에서 Tailwind의 lightningcss가 색을 짧게 다시 쓰지 않게 한다(판매자·기사 앱과 같다). 압축은 Next가 한다.
 export default {
   plugins: {
-    'postcss-preset-mantine': {},
-    'postcss-simple-vars': {
-      variables: {
-        'mantine-breakpoint-xs': '36em',
-        'mantine-breakpoint-sm': '48em',
-        'mantine-breakpoint-md': '62em',
-        'mantine-breakpoint-lg': '75em',
-        'mantine-breakpoint-xl': '88em',
-      },
-    },
+    '@tailwindcss/postcss': { optimize: false },
   },
 };

@@ -1,18 +1,18 @@
 'use client';
 
 import { apiPathSegment } from '@greenhub/shared';
-import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { CloseIcon, closeButtonClassName } from '@greenhub/ui/components/close-button';
-import { cn } from '@greenhub/ui/lib/utils';
 import {
   Dialog,
   DialogBody,
   DialogClose,
   DialogHeader,
   DialogOverlay,
+  DialogPopup,
   DialogPortal,
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
+import { cn } from '@greenhub/ui/lib/utils';
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { AppButton } from '@/components/app-button';
@@ -315,14 +315,15 @@ export function DeliveryHoldModal({
       <DialogPortal>
         {/* 머리·닫기·본문은 packages/ui Dialog(Mantine Modal 구조)를 쓴다. 하단 탭(z 100) 위를 덮도록 Mantine과 같은
             z 200을 써야 하는데 DialogContent는 오버레이·뷰포트 z가 50으로 고정이라 풀어서 둔다. 가운데 정렬은 flex
-            뷰포트 대신 m-auto로 한다(flex로 두면 Mantine 화면과 라디오 원 가장자리 안티앨리어싱이 1~4 다르게 그려진다). */}
+            뷰포트 대신 m-auto로 한다(flex로 두면 Mantine 화면과 라디오 원 가장자리 안티앨리어싱이 1~4 다르게 그려진다).
+            창 본체는 DialogContent와 같은 DialogPopup이라 Tab 순회가 창 안에서만 돌고 aria-modal이 붙는다. */}
         <DialogOverlay className="z-[200]" />
-        <DialogPrimitive.Popup
+        <DialogPopup
           data-slot="dialog-content"
-          className="fixed inset-0 z-[200] m-auto flex h-fit max-h-[90dvh] w-[min(440px,90vw)] flex-col overflow-y-auto rounded-lg bg-background text-black shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none"
+          className="fixed inset-0 z-[200] m-auto flex h-fit max-h-[90dvh] w-[min(440px,90vw)] flex-col overflow-y-auto rounded-lg bg-background text-ui-ink shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none"
         >
           <DialogHeader>
-            <DialogTitle className="m-0 p-0 text-black">배송 보류 기록</DialogTitle>
+            <DialogTitle className="m-0 p-0 text-ui-ink">배송 보류 기록</DialogTitle>
           </DialogHeader>
           {/* preflight 없이 연결한 앱이라 버튼 기본 테두리·여백을 지운다. */}
           <DialogClose
@@ -364,7 +365,7 @@ export function DeliveryHoldModal({
                 onChange={setRedeliveryFee}
               />
               {responsibilityFeeHint && (
-                <p className={`${text} text-sm/[1.45] text-[#fa5252]`}>{responsibilityFeeHint}</p>
+                <p className={`${text} text-sm/[1.45] text-ui-red`}>{responsibilityFeeHint}</p>
               )}
               <TextField
                 label="다음 연락 예정"
@@ -378,7 +379,7 @@ export function DeliveryHoldModal({
                 value={nextDeliveryAt}
                 onChange={(event) => setNextDeliveryAt(event.currentTarget.value)}
               />
-              {error && <p className={`${text} text-[#fa5252]`}>{error}</p>}
+              {error && <p className={`${text} text-ui-red`}>{error}</p>}
               <div className="flex flex-wrap items-center justify-end gap-4">
                 <AppButton tone="default" onClick={onClose} disabled={loading}>
                   취소
@@ -394,7 +395,7 @@ export function DeliveryHoldModal({
               </div>
             </div>
           </DialogBody>
-        </DialogPrimitive.Popup>
+        </DialogPopup>
       </DialogPortal>
     </Dialog>
   );

@@ -14,7 +14,7 @@ export function PageShell({
     <main
       style={{
         minHeight: '100vh',
-        backgroundColor: 'var(--color-surface-muted)',
+        backgroundColor: 'var(--frame)',
         ...(paddingBottom ? { paddingBottom } : {}),
       }}
     >

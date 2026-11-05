@@ -33,7 +33,7 @@ export default function GlobalError({
           }}
         >
           <h1 style={{ fontSize: 18, margin: '0 0 12px' }}>잠시 문제가 생겼어요</h1>
-          <p style={{ fontSize: 15, color: '#6B716E', margin: '0 0 24px' }}>
+          <p style={{ fontSize: 15, color: '#696F6C', margin: '0 0 24px' }}>
             화면을 불러오는 중에 문제가 생겼어요.
             <br />
             잠시 뒤 다시 시도해 주세요.
@@ -46,7 +46,7 @@ export default function GlobalError({
               padding: '0 24px',
               border: 'none',
               borderRadius: 9999,
-              backgroundColor: '#00A65A',
+              backgroundColor: '#007A43', // 흰 글자 버튼 면은 --primary(design-standard §2)
               color: '#FFFFFF',
               fontSize: 15,
               fontWeight: 700,
@@ -61,7 +61,7 @@ export default function GlobalError({
               홈으로 가기
             </a>
           </p>
-          <p style={{ fontSize: 15, color: '#6B716E', margin: '24px 0 0' }}>
+          <p style={{ fontSize: 15, color: '#696F6C', margin: '24px 0 0' }}>
             계속 같은 화면이 나오면 고객센터로 연락해 주세요.
             <br />
             <a href={PUBLIC_BUSINESS_INFO.phoneHref} style={{ color: '#111111', fontWeight: 700 }}>
@@ -70,7 +70,7 @@ export default function GlobalError({
             ({PUBLIC_BUSINESS_INFO.supportHours})
           </p>
           {error.digest ? (
-            <p style={{ fontSize: 15, color: '#6B716E', margin: '12px 0 0' }}>
+            <p style={{ fontSize: 15, color: '#696F6C', margin: '12px 0 0' }}>
               오류 번호 {error.digest}
             </p>
           ) : null}

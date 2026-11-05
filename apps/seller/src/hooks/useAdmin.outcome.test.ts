@@ -219,7 +219,7 @@ describe('9. user/driver command consumers preserve reason', () => {
 
   it('users _client는 outcome reason을 표시한다 (silent close 금지)', () => {
     expect(usersClient).toContain('describeAdminCommandOutcome(outcome,');
-    expect(usersClient).toContain('notifications.show');
+    expect(usersClient).toContain('notify(');
     // 기존 ConfirmModal + reload 배선 유지
     expect(usersClient).toMatch(/await toggleSuspend\(\s*pending\.userId,\s*!pending\.currentlySuspended,/);
     expect(usersClient).toContain('onConfirm={runPending}');
@@ -227,7 +227,7 @@ describe('9. user/driver command consumers preserve reason', () => {
 
   it('drivers _client는 approve/suspend reason을 표시한다', () => {
     expect(driversClient).toContain('describeAdminCommandOutcome(outcome,');
-    expect(driversClient).toContain('notifications.show');
+    expect(driversClient).toContain('notify(');
     expect(driversClient).toContain('approve(pending.userId)');
     expect(driversClient).toMatch(/toggleSuspend\(\s*pending\.userId,/);
   });

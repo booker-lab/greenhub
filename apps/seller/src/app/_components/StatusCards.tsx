@@ -46,7 +46,6 @@ export function OrderStatusCard({
       <div className="flex flex-row flex-nowrap items-start justify-start gap-0.5">
         {PIPELINE.map((step, i) => {
           const count = groupCounts[step.group];
-          const accent = step.group === 'ACTION_REQUIRED' && (count ?? 0) > 0;
           return (
             <Fragment key={step.group}>
               {i > 0 && (
@@ -64,7 +63,7 @@ export function OrderStatusCard({
                       fontSize: 'var(--font-size-2xl)',
                       fontWeight: 'var(--fw-bold)',
                       lineHeight: 1,
-                      color: accent ? 'var(--color-primary-dark)' : 'var(--color-text)',
+                      color: 'var(--color-text)',
                     }}
                   >
                     {count ?? '—'}
@@ -195,7 +194,7 @@ export function SettlementCard({
           style={{
             fontSize: 'var(--font-size-md)',
             fontWeight: 'var(--fw-bold)',
-            color: 'var(--color-primary-dark)',
+            color: 'var(--color-text)',
           }}
         >
           {amountText}
@@ -210,8 +209,9 @@ export function SettlementCard({
           >
             최신 정보를 확인하지 못했습니다. 이전 정보입니다.
           </p>
+          {/* ② "이전 정보" 재조회는 노란 면 대신 중립 외곽선(2026-11-01 결정: 노랑은 마감에만). */}
           {onRetry && (
-            <Button size="xs" variant="light-warning" onClick={onRetry} className="self-start">
+            <Button size="xs" variant="outline-gray" onClick={onRetry} className="self-start">
               <RefreshCcw className="size-3.5" data-icon="inline-start" />
               다시 조회
             </Button>
@@ -309,7 +309,7 @@ export function ProductStatusCard({
             style={{
               fontSize: 'var(--font-size-md)',
               fontWeight: 'var(--fw-bold)',
-              color: inactiveCount > 0 ? 'var(--color-status-warning-text)' : 'var(--color-text)',
+              color: 'var(--color-text)',
             }}
           >
             {inactiveCount}
@@ -325,8 +325,9 @@ export function ProductStatusCard({
           >
             최신 정보를 확인하지 못했습니다. 이전 수치입니다.
           </p>
+          {/* ② "이전 정보" 재조회는 노란 면 대신 중립 외곽선(2026-11-01 결정: 노랑은 마감에만). */}
           {onRetry && (
-            <Button size="xs" variant="light-warning" onClick={onRetry} className="self-start">
+            <Button size="xs" variant="outline-gray" onClick={onRetry} className="self-start">
               <RefreshCcw className="size-3.5" data-icon="inline-start" />
               다시 조회
             </Button>

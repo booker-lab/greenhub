@@ -16,7 +16,7 @@
 | `@base-ui/react` | 1.9.0 | 옛 이름 `@base-ui-components/react`는 deprecated |
 | `cn` / `class-variance-authority` / `shadcn` | P1에서 확인 / 0.7.1 / 4.23.0 | 2026-10-27 문서 원본의 수동 설치는 `shadcn class-variance-authority cn lucide-react tw-animate-css`다(`installation/manual.mdx`). `cn()`은 `tailwind-merge`가 아니라 `cn` 패키지를 쓰고, `shadcn` 패키지도 실행 의존성(`shadcn/tailwind.css`)이다. 실제 목록은 P1의 CLI 출력으로 확정한다 |
 | `tw-animate-css` | 1.4.0 | shadcn 기본 애니메이션. `shadcn/tailwind.css`(열림·닫힘 변형)와 함께 import한다 |
-| (알림) | — | `-b base`의 알림은 shadcn `toast`(Base UI Toast, `@base-ui/react`)다. Base UI 문서 목록에 `sonner`는 없다. radix·aria용 `sonner`는 `next-themes`를 같이 설치하므로 쓰지 않는다(§5 다크 모드 없음). 호출은 `toast.add(...)`다(`components/base/toast.mdx`) |
+| (알림) | — | `-b base`의 알림은 shadcn `toast`(Base UI Toast, `@base-ui/react`)다. Base UI 문서 목록에 `sonner`는 없다. radix·aria용 `sonner`는 `next-themes`를 같이 설치하므로 쓰지 않는다. 다크 모드(D5, 판매자·어드민·기사 앱)는 `next-themes` 없이 고정 인라인 스크립트와 CSP 해시로 전환한다(`design-standard.md` §2.1, `design-direction.md` §9.3). 호출은 `toast.add(...)`다(`components/base/toast.mdx`) |
 | `lucide-react` | 1.63.0 | 이미 consumer·seller가 사용 중 |
 | 비교: `@mantine/core` | 9.7.4 | 현행 |
 
@@ -81,7 +81,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 | `--color-primary-dark` `#007A43` | `--brand-ink` (추가) | `text-brand-ink` |
 | `--color-primary-surface` `#E9F9EF` | `--brand-surface` (추가) | `bg-brand-surface` |
 | `--color-surface-muted` `#F1F3F2` | `--muted` / `--secondary` | `bg-muted` |
-| `--color-text-secondary` `#6B716E` | `--muted-foreground` | `text-muted-foreground` |
+| `--color-text-secondary` `#696F6C` | `--muted-foreground` | `text-muted-foreground` |
 | `--color-border` `#ECEFED` | `--color-border`를 같은 값으로 직접 정의(`--border`는 쓰지 않음, 위 충돌 표), `--input` | `border-border` |
 | `--color-danger` / `-surface` | `--destructive` / `--destructive-surface` (추가) | `text-destructive` |
 | `--color-deadline` / `-surface` / `-text` | `--deadline` / `--deadline-surface` / `--deadline-foreground` (추가) | `bg-deadline` |
@@ -130,7 +130,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 | List | `ul`·`ol` | |
 | `@mantine/notifications` | shadcn `toast`(Base UI Toast) | 17개 파일. `notifications.show(...)`를 `toast.add(...)`로 파일마다 바꾼다 |
 | `@mantine/hooks` | 직접 작성하거나 React 기본 API | 2개 파일 |
-| MantineProvider · ColorSchemeScript | 제거 | 다크 모드를 지원하지 않으므로 `next-themes`도 넣지 않는다 |
+| MantineProvider · ColorSchemeScript | 제거 | 다크 모드(D5, 판매자·어드민·기사 앱. 소비자는 밝은 화면만)는 `dark.css` 미디어 쿼리와 `<html data-theme>`(루트 layout `<head>`의 고정 인라인 스크립트 `COLOR_SCHEME_SCRIPT`, CSP sha256 해시)로 한다. `next-themes`는 넣지 않는다(`design-standard.md` §2.1) |
 
 ## 6. 단계
 
@@ -144,8 +144,8 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 | P2 | 판매자 앱 연결(P2a) → 판매자 비회차 화면(P2b) | P1 뒤 |
 | P3 | 기사 앱 | P1 뒤(P2와 병렬) |
 | P4 | 판매자 앱 틀·회차·주문·준비·재고·정산 | P2a 뒤 |
-| P5 | 소비자 앱 | 소비자 동결이 풀린 뒤(§8) |
-| P6 | 정리 | 마지막 |
+| P5 | 소비자 앱 | 완료(2026-11-01~02, #756·#753·#767·#771·#751·#786·#787) |
+| P6 | 정리 | Mantine 제거 완료(2026-11-02: 판매자 #747·#754·#761·#775, 소비자 #788, `packages/ui` 정리). preflight 전환은 P6에서 하지 않고 ② 방향 적용으로 넘김(2026-11-02 결정, 아래 P6 기록) |
 
 ### P0. 사전 준비 (Mantine 상태에서)
 - `.mantine-*` 클래스로 요소를 찾던 E2E를 역할·이름 기반 선택자로 바꾼다. Mantine 클래스 이름은 교체와 함께 사라지기 때문이다.
@@ -322,13 +322,23 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
   - ① 병합 전: 사용자가 `scripts/visual/start.mjs driver --phone`(Tailscale, 가짜 데이터)으로 화면·입력·알림을 휴대폰에서 확인한다(PR 본문 체크리스트).
   - ② 실제 기사 계정의 도착 사진 업로드·완료 처리·서비스워커는 운영 배포 직전 출시 E2E용 exact Preview에서 사용자가 휴대폰으로 확인한 뒤 배포를 승인한다. PR마다 Preview를 쓰지 않는다(`AGENTS.md` §0-9).
 
+- **기사 ② 완료**(2026-11-03, `design-direction.md` §8 D4, 2026-11-02 사용자 확정): D4-1 배송판·하단 바(#799), D4-2 주문 상세·완료 동선(#800). 규칙은 `design-standard.md` §5 "기사 앱"으로 옮겼다. 동작(목록·상세 조회, 상태 명령, 사진 업로드, 보류, 서비스워커)은 바꾸지 않았고, 기사 API에 없는 값(끝낸 배송 수·소요 시간·회차 날짜·경로 순번·상품 사진)은 화면에서 뺐다. 로컬 증명은 PR마다 기준 `main`(D4-2는 D4-1 head)과 같은 fixture로 39장 diff·parity·focus-trap, `driver-design-system.spec` 26 통과다. 실제 휴대폰 확인(도착 사진·완료·보류·한 손 조작)은 출시 회차 Preview에서 사용자가 한다.
+
 ### P4. 판매자 앱 틀·회차·주문·준비·재고·정산
 - 공용 틀 부품 구현(2026-10-31, 브랜치 `claude/ui-p4-frame`): `PageHeader`·`PageShell`·`SegmentedTabs`·`StateViews`(LoadingState·EmptyState)·어드민 `LoadMoreFooter`의 `@mantine/core`를 걷었다. Mantine Container(xs 540·sm 720·md 960·lg 1140·xl 1320, 좌우 16px)·Group·Stack·Title order 3(22px·800·1.4)·ActionIcon(28px subtle gray = `ghost` `size-7`, svg는 `size-5`)·Badge xs(16px·좌우 6·9px·줄 높이 14, filled gray-6·red-6)·Loader sm 계산값을 옮겼다. `LoadMoreFooter` 불러오는 중은 정산 `LoadMoreButton`과 같은 Mantine loading 모양(덮개·따로 합성되는 원)이다. `SegmentedTabs`의 이름 있는 group은 spread로 역할을 줘 biome 규칙을 끄지 않았다.
   - 공용 `ConfirmModal` 회귀 바로잡기: #712에서 확인 버튼 색 표에 `dark`가 빠져 회차 상세 "주문 마감" 확인창이 빨강이었다. Mantine 9 light 계산값(filled dark-6 `#2e2e2e`, 마우스 올림 dark-7)을 더하고 gray·green 마우스 올림도 Mantine 값(gray-7·green-7)으로 두었다. `confirmColor`는 `ConfirmColor`(brand·red·gray·green·dark) 유니온이라 모르는 값은 타입 검사에서 걸린다.
   - 촬영 목록 추가: 회차 목록 불러오는 중·없음(`sale-rounds-loading`·`sale-rounds-empty`, scenario `rounds-slow`·`rounds-empty`), 어드민 기사 더 보기 불러오는 중(`admin-drivers-load-more`, 기사 목록이 다음 쪽이 있다고 답함), 주문 마감 확인창(`modal-round-close`). 더 보기 실패·dark 확인 버튼은 대조 화면 행으로 본다(실패 응답은 콘솔 오류라 촬영 판정에 걸린다).
   - 로컬 증명(판매자 단독, 기준 시각 2026-10-31T00:00+09:00): `main` fc16129를 merge한 뒤 기준 `main` fc16129 + 같은 fixture 264장과 `diff.mjs --tolerance 1` 261장 같음, `modal-round-close` 3장만 `main`(빨강)과 다르고 Mantine 시절 e93322d + 같은 fixture와 같음(허용 목록 없음). 그 뒤 #726·#716을 merge하고 로그인·로그인 오류·onboarding·어드민 배너·감사 기록 15장을 `main` 69919ed + 같은 fixture와 다시 찍어 같음. 대조 행 390·768·1280 모두 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0(fc16129 merge 뒤), 단위 테스트 881개. 운영 빌드는 증명하지 않았다.
 - 앱 틀(사이드바·상단바) → 회차·주문·준비 → 재고 → 정산 순서로 나눈다.
+- 판매자 앱 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-2`): 판매자 앱에는 사이드바·모바일 메뉴가 없고 하단 탭(`BottomNav`)이 틀이다. `BottomNav`·`ConnectionStatus`(머리 오른쪽 연결 상태)의 `@mantine/core`를 걷었다(UnstyledButton 링크·Stack·Group·Text 계산값). `layout.tsx`의 `ColorSchemeScript`·`providers.tsx`의 `MantineProvider`는 Mantine 화면이 남아 있는 동안 둔다.
+  - 로컬 증명(판매자 단독, 허용 목록 없음): `main` 1423448 merge 뒤 기준 `main` 1423448 + 같은 fixture와 351장 같음. 이어 `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture(기준 시각 2026-11-01T00:00+09:00)와 그 사이 바뀐 화면 81장(주문 목록·홈·준비·운영 확인·초대·배송 보류·어드민 판매자)과 기능 플래그를 켠 고객 반응 4화면 12장이 같음. 대조 행 세 폭 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
 - 다음 회차가 잡혀 있으면, 회차 운영 동선 묶음(어드민 기사 승인·환불 포함)은 끝까지 교체된 상태로만 그 회차의 마지막 출시에 넣는다. 판매자 대표가 실제 계정으로 한 번 끝까지 써 보고, 직전 seller 배포 ID를 롤백 대상으로 기록한다.
+- 어드민 틀 구현(2026-10-31, 브랜치 `claude/ui-p4-frame-3`): 어드민 `layout.tsx`(머리·관리자 콘솔 글자·셀러 화면 링크·ADMIN 배지·본문 칸)·`AdminNav`·`AdminLogoutButton`·`AdminFetchError`의 `@mantine/core`를 걷었다. Mantine Container lg(1140px)·Group·Text·Badge light red(= `destructive`)·Paper(radius lg·shadow xs)·Button outline radius md 계산값이다. 조회 실패 화면은 실패 응답이 콘솔 오류라 촬영 판정에 걸리므로 대조 화면 행으로 본다.
+  - 로컬 증명(판매자 단독, `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture, 기준 시각 2026-11-01T00:00+09:00): 375장 정상 촬영, `diff.mjs --tolerance 1` 375장 같음(허용 목록 없음), 대조 행 세 폭 같음(조회 실패 행 포함), 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
+- 알림 전환 구현(2026-11-01, 브랜치 `claude/ui-p4-frame-4`): 판매자 앱 전체의 `@mantine/notifications`를 `packages/ui` toast 관리자(Base UI Toast)로 바꿨다. 판매자 `components/AppToaster.tsx`가 예전 Mantine Notifications(top-right, autoClose 4000)와 같은 모양으로 그린다: 오른쪽 위 16px, 폭 440px까지, 알림 사이 16px, 흰 바탕·16px 모서리·그림자 lg, 왼쪽 색 막대(brand 주색·red-6·yellow-6·green-6), 제목 15px·500·gray-9, 제목이 있으면 설명 gray-6, 4초 뒤 닫힘, 오래된 알림이 위, 오른쪽에서 들고 나는 250ms 전환. 기사 앱 `AppToaster`(P3)와 같은 방식이다.
+  - `notify({ color, title, message, autoClose })`는 `notifications.show`와 같은 인자라 호출처 13개 파일(설정 4·거점·온보딩·어드민 주문·정산·기사·판매자·소비자·초대 2)은 이름만 바꿨다. `autoClose: false`는 `timeout: 0`이다. `MantineProvider` 안의 `Notifications`, `globals.css`의 `@mantine/notifications` CSS, `next.config.ts` 최적화 목록, seller 의존성 `@mantine/notifications`를 걷었고 seller에 `@base-ui/react`(1.9.0, `packages/ui`와 같은 설치본)를 더했다.
+  - 촬영 목록 추가: 옵션 재고 저장 알림(`toast-option-stock-saved`, 제목 없는 주색)·기사 승인 결과 알림(`toast-driver-approve`, 제목 있는 노랑). 기준도 같은 fixture로 찍었다.
+  - 로컬 증명(판매자 단독, `main` 4a72d7d merge 뒤 기준 `main` 4a72d7d + 같은 fixture, 기준 시각 2026-11-01T00:00+09:00): 381장 정상 촬영, `diff.mjs --tolerance 1` 381장 같음(알림 화면 6장 포함, 허용 목록 없음), 대조 행 세 폭 같음, 판매자·어드민 로컬 E2E 20/20·건너뜀 0, 단위 테스트 887개. 운영 빌드는 증명하지 않았다.
 
 ### P5. 소비자 앱 (51개 파일)
 - 첫 PR에서 소비자 앱을 연결한다(P2a 방식).
@@ -338,9 +348,26 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 - 예전 판매(legacy·공동구매) 화면은 컴포넌트만 바꾸고 구성은 바꾸지 않는다(`design-standard.md` §5).
 
 ### P6. 정리
-- 세 앱과 `packages/ui`에서 `@mantine/*`, `postcss-preset-mantine`, `postcss-simple-vars`, `theme.ts`, `style.css`의 Mantine 보정, 두 앱 `next.config.ts`의 `@mantine/notifications` 설정을 제거한다. 앱 CSS를 CLI `globals.css`(preflight 포함)로 바꾸고, §4에서 기존 이름에 맞춰 둔 값(`--border` 묶음 값 등)을 shadcn 방식으로 정리한다.
+- 세 앱과 `packages/ui`에서 `@mantine/*`, `postcss-preset-mantine`, `postcss-simple-vars`, `theme.ts`, `style.css`의 Mantine 보정, 두 앱 `next.config.ts`의 `@mantine/notifications` 설정을 제거한다. §4에서 기존 이름에 맞춰 둔 값(`--border` 묶음 값 등)을 shadcn 방식으로 정리한다. 앱 CSS의 preflight 전환은 P6에서 하지 않는다(2026-11-02 결정, 아래 preflight 기록).
 - `design-standard.md`의 값 정본 표기(`theme.ts`)를 새 위치로 바꾸고, 앱별 `AGENTS.md`의 글꼴 크기 예외 표를 새 컴포넌트 이름으로 갱신한다.
 - `docs/specs/perf/mantine-treeshaking.md`는 역사 자료로 표시한다.
+- 판매자 P6(2026-11-01): 대조 화면(`/dev/ui-compare`, `scripts/visual/compare-cells.mjs`, `shots.mjs --set compare`)은 판매자 화면 교체(P4)가 끝나 판정할 짝이 없어 지웠다. 위 P2·P4 기록의 대조 화면 판정은 그때의 증거로 남긴다. 앱 화면이 아직 쓰지 않는 `Sheet`의 창 초점 검사는 판매자 `/dev/overlays`(`focus-trap.mjs --set overlays`, 버튼으로 열어 Esc 뒤 초점 복귀까지 검사)로 옮겼다.
+- 판매자 P6 Mantine 의존 제거(2026-11-01): `apps/seller`에서 `@mantine/core`·`@mantine/hooks`·`postcss-preset-mantine`·`postcss-simple-vars`, `MantineProvider`·`ColorSchemeScript`, `next.config.ts`의 Mantine `optimizePackageImports`, `globals.css`의 `mantine` layer와 Mantine CSS import를 걷었다. postcss는 기사 앱과 같게 `@tailwindcss/postcss`만 쓴다. preflight는 켜지 않았다(세 앱 공용 P6).
+  - 옮긴 규칙: main 93be55b 판매자 135화면(390)에서 mantine layer·MantineProvider style 규칙 중 실제 요소에 걸린 것만 셌다. 컴포넌트 규칙(`.m_*`)과 `global.css`는 0건이었다. 걸린 것은 `baseline.css`(`:root` color-scheme, `*` box-sizing, body 글꼴 `--font-family`·16px·1.55·#000·margin 0·font-smoothing, 입력·버튼 `font: inherit`, `button,select` text-transform)와 아무도 참조하지 않는 `--mantine-*` 변수 정의다. baseline만 기사 앱과 같은 내용으로 `@layer base`에 옮겼다. `@greenhub/ui/style.css`는 mantine layer 자리(base와 components 사이, layer 밖 규칙에 짐) 대신 `layer(base)`로 넣는다.
+  - 루트 layout은 `headers()` 대신 `await connection()`으로 요청마다 그린다. Next가 요청 CSP 헤더의 nonce를 자기 스크립트에 붙이려면 동적 렌더링이어야 한다.
+  - 로컬 증명(기준 `main` d9c051b, 기준 시각 2026-11-01T00:00+09:00, 허용 목록 없음):
+    - 판매자 405장 `diff.mjs --tolerance 1` 모두 같음. `parity.mjs`는 쓰기 요청·접근성 트리가 모두 같다. storage는 에뮬레이터가 실행마다 새로 발급하는 `firebase:authUser` 토큰과, 끊긴 촬영을 `--resume`으로 새 브라우저 문맥에서 이어 찍어 앞 화면이 남기던 `product_draft_*`가 없는 것만 다르다.
+    - `focus-trap.mjs`: main과 같은 결과(창 69개 중 처리 중 창 6개 실패, P6-a에서 수정). `--set overlays` 통과.
+    - 같은 경로·CI build 설정 빌드: 소비자 185개·기사 137개 정적 산출물 해시가 같고, 판매자 경로 표가 같다(모두 ƒ). 운영 빌드 `/login`의 스크립트 28개가 Report-Only CSP nonce와 일치한다(main과 같음).
+    - 소비자 99장·기사 36장 촬영이 main과 같다.
+    - 판매자 운영 CSS 241,582B(gzip 46,130B) → 119,473B(28,233B), JS 합 2,849,415B(844,008B) → 2,822,912B(836,528B).
+- 소비자 P6 Mantine 의존 제거(2026-11-02, #788): `apps/consumer`에서 `@mantine/core`·`@mantine/hooks`·`postcss-preset-mantine`·`postcss-simple-vars`, `MantineProvider`·`mantineHtmlProps`, `next.config.ts`의 Mantine `optimizePackageImports`, `globals.css`의 `mantine` layer와 Mantine CSS import를 걷었다. 남은 Mantine 화면 부품 `KakaoChannelCta`는 같은 계산값의 `section`·`p`로 바꿨다. Mantine baseline 규칙은 판매자·기사와 같은 내용으로 base layer에 옮겼고, 루트 layout은 요청 헤더를 읽지 않는 정적 렌더링 그대로다.
+  - 로컬 증명(기준 `main` 3d112a7, 기준 시각 2026-11-02T00:00+09:00, 허용 목록 없음, `--tolerance 1`): dev 기본 141장·benchmark 96장·결제 수단 6장, 운영 빌드(`--prod`) 기본 141장 중 138장의 diff·parity(writes·portoneCalls·storage·aria)가 모두 같다. 운영 빌드의 `login-error` 3장은 기준·작업본 모두 E2E 이메일 입력칸이 없어 정상 판정에서 빠지고 dev에서 같다. focus-trap 결과가 main과 같다(기본 창 33개·benchmark 창 15개, main과 같은 실패 포함). 옵션 시트 `aria-describedby`의 useId 값만 바뀌었다. 운영 빌드 `prerender-manifest.json` 경로(#703)가 같다.
+  - 소비자 운영 CSS 208,897B(gzip 41,491B) → 118,935B(27,733B).
+- 공용 정리(2026-11-02): `packages/ui`의 `theme.ts`·`index.ts`와 `"."`·`./theme`·`./style.css` export, `@mantine/core`·`@mantine/hooks` peer·dev 의존을 지웠다(쓰는 곳 0). 이로써 저장소에 `@mantine/*` 의존이 없다. `style.css`는 세 앱이 공용 변수(`--color-*`·`--font-*`·`--radius`·`--border` 등)와 터치 규칙 때문에 쓰고 있어, 값 그대로 `src/styles/base.css`(`./styles/base.css`)로 옮기고 Mantine Badge 보정(`.m_5add502a`)만 덜었다. 세 앱은 예전과 같은 자리로 import한다(판매자·소비자 `layer(base)`, 기사 layer 밖).
+  - `scripts/check-css-vars.mjs`의 `--mantine` 예외를 뺐다. 소비자 주문 상세의 `var(--mantine-color-brand-*, 값)`은 같은 색 값으로, 판매자 `shadow-mantine-xs`·`sm` 토큰은 `shadow-paper-xs`·`sm`으로 이름만 바꿨다(값 그대로). `freeze-guard.mjs`의 소비자 공용 파일 목록, `tokens.spec.mjs`, `design-standard.md`의 값 정본 표기를 `styles/base.css`로 맞췄다. `docs/specs/perf/mantine-treeshaking.md`는 역사 자료로 표시했다. 소비자 `AGENTS.md` 글꼴 예외 표에서 지금 코드에 없는 Stepper 12px 줄을 지웠다.
+  - 로컬 증명(기준 #788 head c9f6fd0 = `main` 3782886, 기준 시각 2026-11-02T00:00+09:00, 허용 목록 없음, `--tolerance 1`, next dev만, 운영 빌드 촬영은 미증명): 판매자 423장·기사 36장·소비자 기본 141장의 diff·parity가 모두 같다. 같은 경로·CI build 설정으로 빌드한 정적 산출물(소비자 168·판매자 202·기사 139개 파일)은 빌드 ID 파일을 빼면 예상한 파일만 바뀌었다. 세 앱 CSS(Badge 보정 제거, 판매자 `shadow-paper-*` 이름), 소비자 주문 상세 청크와 webpack 런타임(대체값 변수 → 색 값), 판매자 어드민 배너·제휴 문의·리뷰 페이지 청크(그림자 클래스 이름)다. 운영 CSS에 `mantine` 문자열이 0이다.
+- preflight 전환(2026-11-02 결정: ① 단계에서는 켜지 않는다): Tailwind preflight를 켜면 세 앱 모두 화면이 바뀐다. 목록 글머리(`ol, ul { list-style: none }`, 소비자 약관 등 9곳), 줄 안 아이콘(`svg { display: block }`), 제목 크기·굵기(`h1~h6 inherit`, 소비자 52·판매자 21·기사 5곳), 링크 색·밑줄(`a { color: inherit }`), 전체 여백·테두리 초기화, 입력칸 안내 글자 색(`::placeholder`), 표(`border-collapse`)·`hr`이 달라진다. §7 ①에서는 이런 차이를 사유로 넘길 수 없어, 차이 0을 지키려면 세 앱 수십 개 파일에 보정 클래스를 넣어야 한다. 그래서 PR을 열지 않았다. 결정(2026-11-02, 조정 세션 판단·사용자 위임 범위): ① 외형 유지 단계에서는 preflight를 켜지 않고 지금 방식(data-slot에만 거는 초기화 + Mantine baseline을 옮긴 base layer)을 유지한다. preflight는 화면별 ② 방향 적용 PR에서 의도한 차이와 함께 다룬다. 고르지 않은 안은 앱별 preflight PR에 보정 클래스를 넣고 전체 촬영으로 차이 0을 증명하는 방법이었다.
 
 ## 7. 화면 변경을 같이 할지
 
@@ -374,6 +401,7 @@ C의 규칙:
   - 막지 않는 것: 판매자·기사·어드민 교체, `packages/ui`에 새 파일 추가, 교체와 무관한 소비자 수정(결제 수정 등).
   - P1처럼 lockfile·`packages/ui`가 바뀌어 소비자 앱이 다시 빌드되는 변경은, 소비자 화면 촬영이 `main`과 차이 0일 때만 병합한다(§9).
   - 풀기: 사용자가 심사·LIVE·실결제 확인이 끝났다고 알려 주면 상태 파일을 `open`으로 바꾸는 커밋을 병합한다.
+  - **2026-11-01 사용자 결정으로 풀었다**: 심사·LIVE·실결제 확인 전이지만 소비자 교체(P5) 병합을 진행한다(상태 `open`). 병합은 배포가 아니므로, 소비자 화면이 바뀐 SHA를 운영에 내보낼 때는 배포 승인 전에 소비자 변경이 들어 있음을 따로 알린다.
 - **운영 배포**: 병합은 배포가 아니다. 운영 배포는 지금처럼 사용자 승인으로만 한다(`production-deploy.yml`). 배포 직전 최종 `main` SHA로 원격 회차 E2E를 1회 돌린다(`AGENTS.md` §0-9). 소비자 동결 중의 배포는 소비자 빌드가 바뀌지 않았는지(빌드 생략 또는 촬영 차이 0) 확인한다.
 - **다음 회차**: 교체가 끝나고 회차 일정을 다시 잡으면, 그 회차 기준으로 `pre-candidate`(교체 코드 병합 금지)·`candidate`(후보 SHA 계열만 배포) 구간을 다시 쓴다. 이 구간 규칙은 아래 "회차 기준 동결"을 따른다.
 
@@ -403,7 +431,7 @@ C의 규칙:
 
 | # | 결정 | 확정 내용 |
 |---|---|---|
-| M1 | 화면 변경을 같이 할지(§7) | C. 화면별 2단계. ①은 정상 촬영 판정·시각 고정·픽셀 비교·영역 사유로 판정하고, Mantine 보정이나 shadcn 기본값에서 생긴 차이는 사유로 넘기지 않으며, Taste를 쓰지 않는다. ②는 `design-direction.md`를 방향으로 삼아(`draw.mjs` 미사용은 의도한 이탈) 첫 회차 배송 뒤에만 한다 |
+| M1 | 화면 변경을 같이 할지(§7) | C. 화면별 2단계. ①은 정상 촬영 판정·시각 고정·픽셀 비교·영역 사유로 판정하고, Mantine 보정이나 shadcn 기본값에서 생긴 차이는 사유로 넘기지 않으며, Taste를 쓰지 않는다. ②는 `design-direction.md`를 방향으로 삼아(`draw.mjs` 미사용은 의도한 이탈) 한다. 시작 시점은 아래 "결정 변경 (2026-11-01)"을 따른다(첫 회차 배송을 기다리지 않음) |
 | M2 | 동결(§8) | **2026-10-30 다시 정함**: 첫 회차를 교체 뒤로 미루고, 카카오페이 심사·LIVE 결제 전환·실결제 확인 전까지 소비자 앱 화면만 묶는다(상태 `consumer-freeze`). 다음 회차부터는 회차 기준 동결(`pre-candidate`·`candidate`)을 다시 쓴다. 처음 확정안(첫 회차 전 P0·P0.5만, 12/2부터 P1)은 §11에 남긴다 |
 | M3 | 교체 순서(§6) | **2026-10-30 다시 정함**: P1 `packages/ui` → P2a 판매자 연결 → P2b 설정·상품·어드민 → P4 판매자 틀·회차·주문·준비·재고·정산, P1 뒤 P3 기사는 P2와 병렬, P5 소비자는 소비자 동결이 풀린 뒤, P6 정리. 단계마다 증명이 끝나는 대로 병합한다 |
 | M4 | 스킬을 저장소에 넣을지 | Taste Skill만, ② 단계(방향 적용)를 시작할 때 넣는다(`evals` 제외, `.taste-skill/`은 `.gitignore`, `--no-sandbox` 셸 래퍼 포함). 쓰임은 ② 단계의 권고 검수로 한정한다. UI UX Pro Max는 넣지 않는다: `ui-styling` 하위 스킬이 Radix `asChild`·Tailwind v3 설정·HSL 값을 전제하고, 핵심 `shadcn.csv`도 모든 base에 `sonner`를 권해(:32-34) `-b base`의 Toast와 어긋나며, native select 금지(:21)·다크 모드 필수(:7)가 우리 결정과 다르다. `design` 스킬은 외부 이미지 API 키를 쓰고, `--persist`는 두 번째 디자인 기준 문서를 만든다 |
@@ -475,3 +503,42 @@ C의 규칙:
 
 3라운드 뒤 확정한 M2·M3은 "첫 회차(11/22 주문, 12/1 배송)를 지킨다"를 전제로 했다. 사용자가 같은 날 "회차를 생각하지 않고, 심사에 지장이 없다면 교체를 먼저 끝낸 뒤 회차를 진행한다"로 전제를 바꿨다. 심사자가 보는 화면은 소비자 앱이므로 소비자 앱만 심사·LIVE·실결제 확인 전까지 묶고, 나머지는 단계마다 증명이 끝나는 대로 병합하기로 했다. P2·P3은 브랜치를 나눠 병렬로 진행한다. 회차 일정 변경 자체는 운영 데이터라 사용자가 한다.
 
+### 결정 변경 (2026-11-01)
+
+M1의 "② 방향 적용은 첫 회차 배송 뒤에만 한다"를 사용자가 바꿨다. ①의 진행 속도를 보고 첫 회차 배송을 기다리지 않고 ②를 시작한다.
+
+- 관리자·판매자: ②를 지금 시작해 증명이 끝나는 대로 `main`에 병합한다. 확정된 D7(관리자)·D2·D3(`design-direction.md` §8)만 적용한다. D4(기사)·D5는 아직 결정 전이라 하지 않는다.
+- 소비자: ①과 ②(D1 도감 타일 등)를 브랜치에서 미리 준비만 한다. §8 소비자 동결은 그대로라, 병합·배포는 사용자가 심사·LIVE 전환·실결제 확인이 끝났다고 알린 뒤에 한다. 버튼 색 `#007A43` 같은 전체 값도 동결이 풀린 뒤다.
+- 같은 화면에서는 ①(외형 유지)과 ②를 계속 별도 PR로 낸다(§7). 각 PR은 자기 기준 `main`과 비교해 증명한다.
+
+### 결정 변경 (2026-11-02)
+
+사용자가 `design-direction.md` §8의 D4·D5를 확정했다.
+
+- D4(기사 앱 무채색 틀 + 초록 행동 버튼): 제안대로 바꾼다. 기사 앱 ②를 시작한다. 실제 휴대폰 확인 조건(P3)은 그대로다.
+- D5(다크 모드): 지원한다. 이 문서의 "다크 모드 없음"을 전제로 한 줄(§3 알림의 `sonner`·`next-themes` 제외 이유, §5 `MantineProvider · ColorSchemeScript` 행)은 다크 모드를 적용하는 PR이 함께 고친다. 순서는 어두운 색 값·전환 방식 시안 → 사용자 확인 → 공용 토큰(`packages/ui`) → 앱별 적용이며, 진행 중인 ② PR과 같은 파일을 동시에 고치지 않도록 공용 토큰 변경은 ② 병합 뒤에 한다.
+
+### 소비자 ② 완료 (2026-11-02)
+
+소비자 동결이 풀린 뒤 ② 방향 적용을 화면 묶음별 PR 여섯 개로 마쳤다. 병합은 배포가 아니고, 운영 배포는 사용자가 SHA를 붙여 따로 승인한다.
+
+- (a) 전역 버튼 색 `--primary` #007A43 #790
+- (b) 흰 머리띠·하단 메뉴 #791
+- (c) D1 도감 타일 #792
+- (d) 구매 동선(상품 상세·결제) #793
+- (e1) 마이페이지 #794
+- (e2) 장바구니·로그인·공개 화면 #795
+
+이 묶음에서 하지 않은 것: preflight 켜기, 사진 배경 제거. D4(기사)·D5(다크 모드)는 위 "결정 변경 (2026-11-02)"을 따른다. 판매자 화면에 남아 있던 `var(--color-primary)` 버튼 면도 같은 날 `--primary`로 맞췄다(`design-standard.md` §2).
+
+### D5 다크 모드 완료 (2026-11-03)
+
+`design-direction.md` §9(D5-a·D5-b·D5-c, 2026-11-02 확정)를 판매자·어드민·기사 앱에 적용했다. 소비자 앱은 2026-11-03 사용자 결정("다크모드는 소비자앱에서는 필요없다")으로 밝은 화면만 쓴다. 규칙은 `design-standard.md` §2.1로 옮겼다. 병합은 배포가 아니고, 운영 배포는 사용자가 SHA를 붙여 따로 승인한다.
+
+- 밝은 모드 색 정리 #803
+- 공용 어둠 토큰 `packages/ui/src/styles/dark.css`, `shots.mjs --color-scheme dark` #804
+- 공용 부품 `--ui-*` 토큰 #805
+- 소비자 #806(2026-11-03 사용자 결정으로 소비자는 다크 모드를 끄고 밝은 화면만 쓴다, #810) · 기사(무채색) #807 · 판매자·어드민 #808
+- 직접 전환 "화면 모드: 시스템 / 밝게 / 어둡게"(판매자 설정·기사 내 정보, `localStorage` + `<head>` 인라인 스크립트 + CSP 해시) #809
+
+남은 일(사용자 결정 전에는 하지 않는다): 어둠 전용 상품 사진 둘레 흰 6% 안쪽 선(`design-direction.md` §9.1), 판매자·기사 `global-error.tsx` 다크 모드. viewport `themeColor`가 직접 고른 모드를 따르게 하는 것은 하지 않기로 했다(#809).

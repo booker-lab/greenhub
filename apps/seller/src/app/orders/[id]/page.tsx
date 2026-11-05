@@ -39,7 +39,7 @@ function DetailStatusBox({ children }: { children: ReactNode }) {
     <div
       style={{
         minHeight: '100vh',
-        backgroundColor: 'var(--color-surface-muted)',
+        backgroundColor: 'var(--frame)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -225,7 +225,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
       <div
         style={{
           minHeight: '100vh',
-          backgroundColor: 'var(--color-surface-muted)',
+          backgroundColor: 'var(--frame)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -413,7 +413,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   size="md"
                   className="w-full"
                   style={{
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     fontWeight: 'var(--fw-medium)',
                   }}
                 >
@@ -427,7 +427,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   size="md"
                   className="w-full"
                   style={{
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     fontWeight: 'var(--fw-medium)',
                   }}
                 >
@@ -444,7 +444,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   size="md"
                   className="w-full"
                   style={{
-                    backgroundColor: 'var(--color-primary)',
+                    backgroundColor: 'var(--primary)',
                     fontWeight: 'var(--fw-medium)',
                   }}
                 >

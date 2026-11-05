@@ -16,7 +16,7 @@ function Progress({
   return (
     <div
       data-slot="progress"
-      className={cn('relative flex h-2 overflow-hidden rounded-lg bg-[#e9ecef]', className)}
+      className={cn('relative flex h-2 overflow-hidden rounded-lg bg-ui-gray-2', className)}
       {...props}
     >
       <div
@@ -27,7 +27,7 @@ function Progress({
         aria-valuenow={value}
         aria-valuetext={`${value}%`}
         className={cn(
-          'flex h-full items-center justify-center overflow-hidden rounded-s-[inherit] bg-primary transition-[width] duration-100 ease-[ease]',
+          'flex h-full items-center justify-center overflow-hidden rounded-s-[inherit] bg-brand transition-[width] duration-100 ease-[ease]',
           indicatorClassName,
         )}
         style={{ width: `${value}%` }}

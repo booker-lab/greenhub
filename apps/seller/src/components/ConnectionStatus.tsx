@@ -1,7 +1,5 @@
 'use client';
 
-import { Box, Group, Text } from '@mantine/core';
-
 interface ConnectionStatusProps {
   loading: boolean;
   error?: string | null;
@@ -26,12 +24,16 @@ export function ConnectionStatus({
   const label =
     connecting ? '연결 중' : error ? '연결 오류' : source === 'api' ? '서버 연결' : '실시간 연결';
 
+  // ① 외형 유지(UI 교체 P4): Mantine Group(gap 6·가운데)·Text와 같은 값.
   return (
-    <Group gap={6}>
-      <Box style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: color }} />
-      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+    <div className="flex flex-row flex-wrap items-center justify-start gap-1.5">
+      <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: color }} />
+      <p
+        className="m-0 p-0 text-base font-normal"
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+      >
         {label}
-      </Text>
-    </Group>
+      </p>
+    </div>
   );
 }

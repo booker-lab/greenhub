@@ -165,10 +165,12 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
                 variant="outline-gray"
                 style={
                   config.groupDeliveryMethod === value
-                    ? {
-                        backgroundColor: 'var(--color-primary-surface)',
-                        borderColor: 'var(--color-primary)',
-                        color: 'var(--color-primary-dark)',
+                    ? // ② 선택 표시는 초록 면 대신 흰 바탕 + 검정 테두리 + 굵게(design-direction §3.2).
+                      {
+                        backgroundColor: 'var(--color-bg)',
+                        borderColor: 'var(--color-text)',
+                        color: 'var(--color-text)',
+                        fontWeight: 'var(--fw-bold)',
                       }
                     : {}
                 }

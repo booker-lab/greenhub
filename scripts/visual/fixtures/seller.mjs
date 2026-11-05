@@ -314,6 +314,8 @@ const ADMIN_SETTLEMENTS = [
     settledAt: '2026-09-27T15:00:00.000Z',
     confirmedAt: '2026-09-27T15:00:00.000Z',
     paidAt: null,
+    // 지급 대상 행에만 오는 정산 계좌(지급 완료 기록 버튼·가린 번호·복사).
+    payoutAccount: { bankName: '국민은행', accountHolder: '디어오키드', accountNumber: '123456-01-987654' },
   },
   // 상태별 배지·회수 필요(빨강 채움)·지급 보류(주황)·가게 이름·주문번호.
   {
@@ -1212,10 +1214,16 @@ export const routes = [
   [
     'GET',
     /^\/admin\/drivers$/,
-    ({ url }) =>
-      url.searchParams.get('cursor')
+    ({ url }) => {
+      // 어드민 사이드바 할 일 수(승인 대기)는 status=pending으로 묻는다. API와 같은 기준(미승인·미정지)으로 거른다.
+      if (url.searchParams.get('status') === 'pending') {
+        const drivers = ADMIN_DRIVERS.filter((d) => !d.driverApproved && !d.suspended);
+        return { body: { drivers, total: drivers.length, hasMore: false, nextCursor: null } };
+      }
+      return url.searchParams.get('cursor')
         ? { body: { drivers: [], hasMore: false }, delay: 8000 }
-        : { body: { drivers: ADMIN_DRIVERS, hasMore: true, nextCursor: 'visual-more' } },
+        : { body: { drivers: ADMIN_DRIVERS, hasMore: true, nextCursor: 'visual-more' } };
+    },
   ],
   ['GET', /^\/admin\/banner$/, () => ({ body: ADMIN_BANNER })],
   ['GET', /^\/stores\/[^/]+\/delivery-config$/, () => ({ body: DELIVERY_CONFIG })],
@@ -1605,7 +1613,14 @@ export const screens = [
   { id: 'admin-audit', group: '어드민', title: '감사 기록', path: '/admin/audit' },
   { id: 'hub-detail', group: '판매자', title: '거점 상세', path: '/hubs/hub-0001' },
   { id: 'hub-edit', group: '판매자', title: '거점 수정', path: '/hubs/hub-0001/edit' },
-  { id: 'hub-pickup', group: '판매자', title: '거점 픽업', path: '/hubs/hub-0001/pickup' },
+  // 주문 ID(orderId) 없이 연 거점 픽업 주소 — 화면은 "주문 주소가 올바르지 않습니다" 안내다(#687 처음부터 그랬다).
+  // 코드 입력 정상 화면은 hub-pickup-order가 찍는다. 이전 촬영과 이어 비교하도록 id는 그대로 둔다.
+  {
+    id: 'hub-pickup',
+    group: '판매자',
+    title: '거점 픽업 · 주문 없는 주소(안내)',
+    path: '/hubs/hub-0001/pickup',
+  },
   {
     id: 'hub-detail-inactive',
     group: '판매자',
@@ -1917,28 +1932,37 @@ export const screens = [
     ],
     viewport: true,
   },
+  // ② 방향(D7): 주문 상태는 표 위 탭 한 줄이다(상태 선택 Select를 없앴다).
   {
-    id: 'admin-orders-status-open',
+    id: 'admin-orders-tab-held',
     group: '어드민 · 필터',
-    title: '주문 · 상태 선택 열림',
+    title: '주문 · 배송 보류 탭',
     path: '/admin/orders',
-    steps: [{ clickSelector: 'input[aria-label="주문 상태"]' }],
-    viewport: true,
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("배송 보류")' }],
   },
   {
     id: 'admin-orders-empty',
     group: '어드민 · 필터',
     title: '주문 · 고른 상태의 주문 없음',
     path: '/admin/orders',
-    steps: [{ clickSelector: 'input[aria-label="주문 상태"]' }, { click: '리뷰완료' }],
+    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("준비 중")' }],
   },
-  // 어드민 기사 승인·정지 확인창(ConfirmModal, 정지는 사유 입력칸 포함). 기본 탭은 승인 대기다.
+  {
+    id: 'admin-orders-row-menu',
+    group: '어드민 · 필터',
+    title: '주문 · 행 ⋮ 메뉴 열림',
+    path: '/admin/orders',
+    steps: [{ clickSelector: 'button[aria-label="주문 R-ACCEPTED 동작 더 보기"]:visible' }],
+    viewport: true,
+  },
+  // 어드민 기사 승인·정지 확인창(ConfirmModal, 정지는 사유 입력칸 포함).
+  // 승인은 표 위 승인 대기 상자의 "승인…", 정지는 표 행 끝 ⋮ 메뉴(D7)에서 연다.
   {
     id: 'modal-driver-approve',
     group: '어드민 · 모달',
     title: '기사 · 승인 확인',
     path: '/admin/drivers',
-    steps: [{ click: '승인' }],
+    steps: [{ clickSelector: 'button[aria-label="기사 이대기 승인"]' }],
     viewport: true,
   },
   {
@@ -1946,10 +1970,23 @@ export const screens = [
     group: '어드민 · 모달',
     title: '기사 · 정지 확인(사유)',
     path: '/admin/drivers',
-    steps: [{ click: '정지' }],
+    steps: [
+      { clickSelector: 'button[aria-label="기사 박배송 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("정지")' },
+    ],
+    // 메뉴 항목은 창이 열리면 사라지므로 닫은 뒤 초점은 ⋮ 메뉴 버튼으로 돌아와야 한다(focus-trap returnFocus).
+    returnFocus: 'button[aria-label="기사 박배송 동작 더 보기"]:visible',
     viewport: true,
   },
-  // 어드민 판매자·소비자(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  {
+    id: 'admin-drivers-row-menu',
+    group: '어드민 · 필터',
+    title: '기사 · 행 ⋮ 메뉴 열림',
+    path: '/admin/drivers',
+    steps: [{ clickSelector: 'button[aria-label="기사 최정지 동작 더 보기"]:visible' }],
+    viewport: true,
+  },
+  // 어드민 판매자·소비자. 표와 휴대폰 행이 같은 버튼을 함께 그려 보이는 것만 누른다.
   {
     id: 'admin-stores-all',
     group: '어드민',
@@ -1968,22 +2005,50 @@ export const screens = [
     group: '어드민',
     title: '판매자 · 검색어 입력',
     path: '/admin/stores',
-    steps: [{ fill: { label: '판매자 검색', value: '농원' } }],
+    steps: [{ fill: { label: '이 목록에서 찾기', value: '농원' } }],
   },
   {
     id: 'admin-stores-commission-edit',
     group: '어드민',
     title: '판매자 · 수수료율 입력',
     path: '/admin/stores',
-    steps: [{ clickSelector: 'button:has-text("수수료 설정"):visible' }],
+    steps: [
+      { clickSelector: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("수수료 바꾸기")' },
+    ],
   },
   {
-    // 상태 Select 열린 목록(Mantine Combobox ↔ Base UI Select, #719 열린 목록 기본값).
-    id: 'admin-stores-status-open',
-    group: '어드민',
-    title: '판매자 · 상태 고르기 열림',
+    // 상태 Select를 숫자 탭으로 바꿨으므로(D7) 열린 목록 대신 행 끝 ⋮ 메뉴를 찍는다.
+    id: 'admin-stores-row-menu',
+    group: '어드민 · 필터',
+    title: '판매자 · 행 ⋮ 메뉴 열림',
     path: '/admin/stores',
-    steps: [{ clickSelector: 'input[readonly]:visible' }],
+    steps: [{ clickSelector: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible' }],
+    viewport: true,
+  },
+  // 어드민 판매자 정리하기·복구 확인창(② D7). 행 끝 ⋮ 메뉴에서 열고, 닫으면 초점은 ⋮ 메뉴 버튼으로 돌아온다.
+  {
+    id: 'modal-store-archive',
+    group: '어드민 · 모달',
+    title: '판매자 · 정리하기 확인',
+    path: '/admin/stores',
+    steps: [
+      { clickSelector: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("정리하기")' },
+    ],
+    returnFocus: 'button[aria-label="판매자 디어 오키드 동작 더 보기"]:visible',
+    viewport: true,
+  },
+  {
+    id: 'modal-store-restore',
+    group: '어드민 · 모달',
+    title: '판매자 · 복구 확인',
+    path: '/admin/stores?status=all',
+    steps: [
+      { clickSelector: 'button[aria-label="판매자 정리된 가게 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("복구하기")' },
+    ],
+    returnFocus: 'button[aria-label="판매자 정리된 가게 동작 더 보기"]:visible',
     viewport: true,
   },
   {
@@ -1991,17 +2056,25 @@ export const screens = [
     group: '어드민 · 모달',
     title: '소비자 · 정지 확인(사유)',
     path: '/admin/users',
-    steps: [{ clickSelector: 'button:has-text("정지"):visible' }],
+    steps: [
+      { clickSelector: 'button[aria-label="소비자 김그린 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("정지")' },
+    ],
+    returnFocus: 'button[aria-label="소비자 김그린 동작 더 보기"]:visible',
     viewport: true,
   },
-  // 어드민 초대(UI 교체 P2b). 표와 카드가 같은 버튼을 함께 그려 보이는 것만 누른다.
+  // 어드민 초대. 표와 휴대폰 행이 같은 버튼을 함께 그려 보이는 것만 누른다. 취소는 유효 행의 ⋮ 메뉴에 있다.
   // 링크 복사는 헤드리스에서도 성공해 그 행 버튼이 '복사됨!'이 된다(직접 복사 창은 열리지 않는다).
   {
     id: 'modal-invite-revoke',
     group: '어드민 · 모달',
     title: '초대 · 취소 확인',
     path: '/admin/invite',
-    steps: [{ clickSelector: 'button:has-text("취소"):visible' }],
+    steps: [
+      { clickSelector: 'button[aria-label="초대 VALID001 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("초대 취소")' },
+    ],
+    returnFocus: 'button[aria-label="초대 VALID001 동작 더 보기"]:visible',
     viewport: true,
   },
   {
@@ -2049,14 +2122,36 @@ export const screens = [
     path: '/admin/settlements',
     steps: [{ click: '더 보기' }],
   },
+  // 어드민 정산 지급 완료 기록 확인창(② D7). 이체 확인 체크가 처음 초점이고, 체크하기 전에는 확정이 꺼져 있다.
+  {
+    id: 'modal-admin-pay',
+    group: '어드민 · 모달',
+    title: '정산 · 지급 완료 기록 확인',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible' },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-admin-pay-checked',
+    group: '어드민 · 모달',
+    title: '정산 · 지급 완료 기록(이체 확인 체크)',
+    path: '/admin/settlements',
+    steps: [
+      { clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible' },
+      { clickSelector: '[role="dialog"] input[type="checkbox"]' },
+    ],
+    viewport: true,
+  },
   // 어드민 주문 환불 확인창. 강제환불은 사유 입력칸, 배송 후 환불은 메모 입력칸이 첫 초점(data-autofocus)이다.
   {
     id: 'modal-admin-refund',
     group: '어드민 · 모달',
     title: '주문 · 강제환불 확인',
     path: '/admin/orders',
-    // 모바일 카드와 PC 표가 같은 버튼을 함께 그리고 하나만 보이므로 보이는 버튼을 누른다.
-    steps: [{ clickSelector: 'button:has-text("강제환불"):visible' }],
+    // 휴대폰 행과 PC 표가 같은 버튼을 함께 그리고 하나만 보이므로 보이는 버튼을 누른다(배송 보류 행의 "환불").
+    steps: [{ clickSelector: 'button[aria-label="주문 R-HELD 환불"]:visible' }],
     viewport: true,
   },
   {
@@ -2064,7 +2159,12 @@ export const screens = [
     group: '어드민 · 모달',
     title: '주문 · 배송 후 환불 확인',
     path: '/admin/orders',
-    steps: [{ clickSelector: 'button:has-text("배송 후 환불"):visible' }],
+    steps: [
+      { clickSelector: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("배송 후 환불")' },
+    ],
+    // 메뉴 항목은 창이 열리면 사라지므로 닫은 뒤 초점은 ⋮ 메뉴 버튼으로 돌아와야 한다(focus-trap returnFocus).
+    returnFocus: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible',
     viewport: true,
   },
   {
@@ -2073,10 +2173,12 @@ export const screens = [
     title: '주문 · 배송 후 환불(사유·메모 입력)',
     path: '/admin/orders',
     steps: [
-      { clickSelector: 'button:has-text("배송 후 환불"):visible' },
+      { clickSelector: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible' },
+      { clickSelector: '[role="menuitem"]:has-text("배송 후 환불")' },
       { click: '꽃 상함' },
       { fill: { label: '메모 (손님에게는 보이지 않음, 필수)', value: '꽃잎이 상해 도착' } },
     ],
+    returnFocus: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible',
     viewport: true,
   },
   {
@@ -2132,6 +2234,30 @@ export const screens = [
     path: '/sale-rounds',
     scenario: 'rounds-empty',
   },
+  // UI 교체 P4 알림 전환: 오른쪽 위 알림(제목 없는 주색, 제목 있는 노랑). 재고 저장은 가짜 API가 쓰기에 200 {}을
+  // 돌려줘 성공 알림이 뜬다. 기사 승인은 200 {} + 다시 조회 성공이면 설계상 알림이 없으므로(admin/drivers/_client.tsx
+  // runPending의 confirmed·reconciled), 승인 요청에 503을 돌려줘 "결과를 확인할 수 없습니다" 노랑 알림(unknown)을 띄운다.
+  {
+    id: 'toast-option-stock-saved',
+    group: '알림',
+    title: '옵션 재고 · 저장 알림',
+    path: '/settings/option-stocks',
+    steps: [{ fill: { label: '새로 출력한 개수', value: '5' } }, { click: '더하기' }],
+    viewport: true,
+  },
+  {
+    id: 'toast-driver-approve',
+    group: '알림',
+    title: '기사 · 승인 결과 알림',
+    path: '/admin/drivers',
+    scenario: 'driver-approve-unknown',
+    steps: [
+      { clickSelector: 'button[aria-label="기사 이대기 승인"]' },
+      { clickSelector: '[role=dialog] button:has-text("승인")' },
+    ],
+    viewport: true,
+    expectedErrors: ['status of 503 \\(Service Unavailable\\).*/admin/drivers/[^/]+/approve\\)$'],
+  },
   {
     id: 'admin-drivers-load-more',
     group: '어드민 · 필터',
@@ -2139,12 +2265,126 @@ export const screens = [
     path: '/admin/drivers',
     steps: [{ click: '더 보기' }],
   },
+  // 불러오는 중 버튼(UI 교체 P6): 화면을 연 뒤 상황을 바꿔 다음 요청을 오래 걸리게 하고 버튼을 누른 채 찍는다.
+  {
+    id: 'settings-option-stocks-add-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '설정 · 옵션 재고 · 더하기 누름',
+    path: '/settings/option-stocks',
+    steps: [
+      { fill: { label: '새로 출력한 개수', value: '5' } },
+      { scenario: 'slow-writes' },
+      { click: '더하기' },
+    ],
+  },
+  {
+    id: 'settings-option-stocks-remaining-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '설정 · 옵션 재고 · 맞추기 누름',
+    path: '/settings/option-stocks',
+    steps: [
+      { fill: { label: '실제 남은 개수', value: '3' } },
+      { scenario: 'slow-writes' },
+      { click: '맞추기' },
+    ],
+  },
+  {
+    id: 'order-ops-retry-refund-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '주문 상세 · 환불 재시도 처리 중',
+    path: '/orders/order-round-held',
+    steps: [{ scenario: 'slow-writes' }, { clickSelector: 'button:has-text("환불 재시도")' }],
+  },
+  {
+    id: 'order-ops-reload-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '주문 상세 · 운영 기록 새로고침 중',
+    path: '/orders/order-round-held',
+    // 이 화면에는 "새로고침" 버튼이 둘(주문 머리·운영 기록 칸)이라 글자로 누르면 머리 쪽이 눌린다. 운영 기록 칸 버튼을 고른다.
+    steps: [
+      { scenario: 'slow-operation-issues' },
+      {
+        clickSelector: 'div:has(> p:text-is("연락·환불·분쟁 기록")) + button:has-text("새로고침")',
+      },
+    ],
+  },
+  {
+    id: 'operations-reload-loading',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '운영 확인 · 다시 조회 중',
+    path: '/operations',
+    steps: [
+      { scenario: 'slow-operation-issues' },
+      { clickSelector: 'button[aria-label="운영 기록 다시 조회"]' },
+    ],
+  },
+  {
+    id: 'operations-resolve-loading',
+    // 처리 중에는 Esc·바깥 누름으로 닫지 않는다(앱 onOpenChange가 막는다, Mantine closeOnEscape={!처리 중}과 같다).
+    closeBlocked: '처리 중 닫기 막음',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '운영 확인 · 해결로 닫기 처리 중',
+    path: '/operations',
+    steps: [
+      { clickSelector: 'button:has-text("해결로 닫기")' },
+      { fill: { label: '닫는 이유 메모', value: '고객과 통화해 배송 사진을 다시 확인했어요' } },
+      { scenario: 'slow-writes' },
+      { clickSelector: '[role="dialog"] button:has-text("해결로 닫기")' },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-round-copy-loading',
+    // 처리 중에는 Esc·바깥 누름으로 닫지 않는다(앱 onOpenChange가 막는다, Mantine closeOnEscape={!처리 중}과 같다).
+    closeBlocked: '처리 중 닫기 막음',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '회차 목록 · 이전 회차 복사 처리 중',
+    path: '/sale-rounds',
+    steps: [
+      { clickSelector: '[data-testid="sale-round-round-open"] button:has-text("이전 회차 복사")' },
+      { scenario: 'slow-writes' },
+      { click: '회차 복사' },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'sale-round-draft-saving',
+    group: '판매자 · 불러오는 중 버튼',
+    title: '회차 상세 · 작성 중 · 저장 처리 중',
+    path: '/sale-rounds/round-draft',
+    firestore: true,
+    steps: [{ scenario: 'slow-writes' }, { click: '회차 저장' }],
+    viewport: true,
+  },
 ];
 
 /** 화면별 상황(shots.mjs가 화면을 열 때 /__scenario로 고른다). 그 경로를 기본 경로 앞에 끼운다. */
 export const scenarioRoutes = {
+  // 불러오는 중 버튼: 쓰기 요청은 60초 뒤에야 답한다(찍고 페이지를 닫으면 취소된다). 요청 본문은 mock-api.log에 남는다.
+  'slow-writes': ['POST', 'PATCH', 'PUT', 'DELETE'].map((method) => [
+    method,
+    /^\/.+$/,
+    () => ({ body: {}, delay: 60_000 }),
+  ]),
+  // 운영 기록 다시 조회 중(목록 조회만 60초 지연).
+  'slow-operation-issues': [
+    [
+      'GET',
+      /^\/stores\/[^/]+\/operation-issues$/,
+      () => ({ body: { items: OPERATION_ISSUES }, delay: 60_000 }),
+    ],
+  ],
   // 공용 LoadingState·EmptyState(회차 목록이 늦게 오거나 비었을 때).
   'rounds-slow': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] }, delay: 8000 })]],
+  // 기사 승인 결과 알림: 승인 요청만 503(서버 오류)이라 앱이 결과를 확정하지 못한다(unknown → 노랑 알림).
+  // 목록 조회는 그대로다.
+  'driver-approve-unknown': [
+    [
+      'PATCH',
+      /^\/admin\/drivers\/[^/]+\/approve$/,
+      () => ({ status: 503, body: { message: '일시적인 서버 오류입니다.' } }),
+    ],
+  ],
   'rounds-empty': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] } })]],
   'legacy-store': [
     [
@@ -2156,28 +2396,19 @@ export const scenarioRoutes = {
 };
 
 /**
- * UI 교체 대조 화면(ui-stack-migration-plan.md §6 P1·P2a, `shots.mjs --set compare`).
- * 왼쪽 Mantine, 오른쪽 @greenhub/ui를 같은 칸에 그린다. main에는 없는 화면이라 전·후 비교(screens)에 넣지 않는다.
- * 앱은 하네스·dev:local(GREENHUB_LOCAL_RUNTIME=true + next dev)에서만 이 주소를 연다(apps/seller/src/lib/local-preview.ts).
+ * 창 초점 검사 화면(`focus-trap.mjs --set overlays`). 앱 화면이 아직 쓰지 않는 @greenhub/ui 창(Sheet)을 버튼으로 연다.
+ * main 화면 목록(screens)에 넣지 않는다. 앱은 하네스·dev:local(GREENHUB_LOCAL_RUNTIME=true + next dev)에서만
+ * 이 주소를 연다(apps/seller/src/lib/local-preview.ts).
  */
-export const compareScreens = [
-  { id: 'ui-compare', group: 'UI 대조', title: '컴포넌트 대조', path: '/dev/ui-compare' },
-  ...[
-    ['modal', 'Mantine Modal'],
-    ['dialog', '@greenhub/ui Dialog'],
-    ['drawer', 'Mantine Drawer(bottom)'],
-    ['sheet', '@greenhub/ui Sheet(bottom)'],
-    ['select', 'Mantine Select 목록(묶음·고른 항목)'],
-    ['uiselect', '@greenhub/ui Select 목록(묶음·고른 항목)'],
-  ].map(([open, title]) => ({
-    id: `ui-compare-${open}`,
-    group: 'UI 대조',
-    title,
-    path: `/dev/ui-compare?open=${open}`,
+export const overlayScreens = [
+  {
+    id: 'modal-overlay-sheet',
+    group: '창 검사',
+    title: '@greenhub/ui Sheet(bottom)',
+    path: '/dev/overlays',
     viewport: true,
-    // Select 목록은 사람이 누른 것처럼 연다(Mantine은 이때 입력칸에 초점이 남는다).
-    ...(open.endsWith('select') ? { steps: [{ clickSelector: 'main input:not([type=hidden])' }] } : {}),
-  })),
+    steps: [{ click: '시트 열기' }],
+  },
 ];
 
 /**
@@ -2197,6 +2428,14 @@ export const benchmarkScreens = [
     group: '판매자',
     title: '가게 소개·품질 보장 설정',
     path: '/settings/store-profile',
+    features: ['seller-store', 'quality-guarantee', 'demand-signals'],
+  },
+  {
+    id: 'bm-seller-store-profile-saving',
+    group: '판매자',
+    title: '가게 소개·품질 보장 설정 · 저장 처리 중',
+    path: '/settings/store-profile',
+    steps: [{ scenario: 'slow-writes' }, { click: '저장' }],
     features: ['seller-store', 'quality-guarantee', 'demand-signals'],
   },
   {
@@ -2223,6 +2462,19 @@ export const benchmarkScreens = [
     title: '고객 반응 · 후기 숨기기 사유',
     path: '/reactions',
     steps: [{ click: '숨기기' }, { click: '욕설·비방' }],
+    features: ['reviews'],
+  },
+  {
+    id: 'bm-seller-review-hide-loading',
+    group: '판매자',
+    title: '고객 반응 · 후기 숨기기 확인 처리 중',
+    path: '/reactions',
+    steps: [
+      { click: '숨기기' },
+      { click: '욕설·비방' },
+      { scenario: 'slow-writes' },
+      { click: '숨기기 확인' },
+    ],
     features: ['reviews'],
   },
   {
