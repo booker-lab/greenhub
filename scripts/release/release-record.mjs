@@ -9,7 +9,12 @@
  *
  * - 결과 파일은 한 줄에 `단계<TAB>JSON`이다(배포 job이 production-deploy.mjs 출력을 모은 것).
  * - tag는 `prod-<KST 날짜>-<SHA 앞 8자리>`. 같은 이름이 이미 있으면 뒤에 run ID를 붙인다.
- * - 변경 목록은 직전 `prod-` Release와 비교해 GitHub가 만든다. 직전 Release가 없으면 생략한다.
+ * - 범위에 든 대상(API·프런트·인덱스·규칙)마다 그 대상을 마지막으로 배포한 `prod-` Release를 직전 배포로 본다.
+ *   일부 범위 배포가 끼면 대상마다 직전 배포가 다르다. 직전 배포 링크(되돌릴 기준)는 대상별로 적고,
+ *   변경 목록은 직전 배포들을 경계로 구간을 나눠 각 구간이 어느 대상에 처음 나가는지 적는다.
+ *   직전 배포 기록이 없는 대상은 그 전 변경을 생략한다.
+ * - 본문 첫 줄에 기계용 범위 표식(`<!-- release-scope: api -->`)을 남긴다. 표식이 없는 옛 Release는
+ *   이름의 `범위 <scope>`로 읽고, 그것도 없으면 all로 본다.
  * - 범위가 all일 때만 Latest로 표시한다. 일부 범위 배포는 기록만 남긴다.
  * - 같은 배포 run의 Release가 이미 있으면 새로 만들지 않는다(job 재실행).
  *
@@ -23,6 +28,21 @@ import { assertSha, REPO_NAME, REPO_ORG } from './production-deploy.mjs';
 export const TAG_PREFIX = 'prod-';
 export const SCOPES = Object.freeze(['all', 'indexes', 'api', 'frontends', 'rules']);
 export const API_PLATFORMS = Object.freeze(['railway', 'cloudrun']);
+/** 배포 대상과 본문에 쓰는 이름. 순서는 본문 표기 순서다. */
+export const TARGETS = Object.freeze({
+  api: 'API',
+  frontends: '프런트',
+  indexes: '인덱스',
+  rules: '규칙',
+});
+/** 범위가 배포하는 대상. production-deploy.yml 각 step의 `if:`와 같다. */
+export const SCOPE_TARGETS = Object.freeze({
+  all: Object.freeze(['api', 'frontends', 'indexes', 'rules']),
+  indexes: Object.freeze(['indexes']),
+  api: Object.freeze(['api']),
+  frontends: Object.freeze(['frontends']),
+  rules: Object.freeze(['rules']),
+});
 const REPO_URL = `https://github.com/${REPO_ORG}/${REPO_NAME}`;
 const API = `https://api.github.com/repos/${REPO_ORG}/${REPO_NAME}`;
 // GitHub Release 본문 한도(125,000자)보다 여유를 둔다.
@@ -31,6 +51,63 @@ const MAX_BODY_LENGTH = 120_000;
 export const runUrl = (runId) => `${REPO_URL}/actions/runs/${runId}`;
 /** 본문에서 배포 run을 찾는 줄. 줄 끝까지 맞춰 run 123이 run 1234와 겹치지 않게 한다. */
 const runLine = (runId) => `- 배포 run: ${runUrl(runId)}`;
+/** 본문 첫 줄의 기계용 범위 표식. 화면에는 보이지 않는다. */
+export const scopeMark = (scope) => `<!-- release-scope: ${scope} -->`;
+
+/**
+ * 이미 있는 Release의 범위. 기계용 표식 → 이름의 `범위 <scope>`(옛 Release) → all 순서로 읽는다.
+ * 이름에 범위가 없던 것은 all 배포였다(releaseName은 all일 때 범위를 적지 않는다).
+ */
+export function releaseScope(release) {
+  const mark = /^<!-- release-scope: ([a-z]+) -->$/m.exec(release?.body ?? '');
+  if (mark && SCOPES.includes(mark[1])) return mark[1];
+  const named = /(?:^| · )범위 ([a-z]+)(?: · |$)/.exec(release?.name ?? '');
+  if (named && SCOPES.includes(named[1])) return named[1];
+  return 'all';
+}
+
+const byPublishedDesc = (a, b) =>
+  String(b.published_at ?? '').localeCompare(String(a.published_at ?? ''));
+
+/**
+ * 이번 범위의 대상마다 그 대상을 마지막으로 배포한 Release를 고른다(없으면 null).
+ * 목록 순서는 배포 순서가 아니다(같은 날 tag는 이름 역순으로 온다). created_at도 대상 커밋 날짜라
+ * 쓸 수 없고, record job이 Release를 만든 시각인 published_at이 늦을수록 나중 배포로 본다.
+ */
+export function previousByTarget({ releases, scope }) {
+  const published = releases
+    .filter((release) => release.tag_name?.startsWith(TAG_PREFIX) && !release.draft)
+    .sort(byPublishedDesc);
+  return Object.fromEntries(
+    SCOPE_TARGETS[scope].map((target) => [
+      target,
+      published.find((release) => SCOPE_TARGETS[releaseScope(release)].includes(target)) ?? null,
+    ]),
+  );
+}
+
+/**
+ * 직전 배포들을 경계로 변경 구간을 나눈다. 새 구간부터 돌려준다.
+ * 구간 `from → to`(to가 null이면 이번 배포)의 변경은 직전 배포가 from 이전(포함)인 대상에 이번에 처음 나간다.
+ */
+export function changeSegments(previous) {
+  const bases = [];
+  for (const release of Object.values(previous)) {
+    if (release && !bases.some((known) => known.tag_name === release.tag_name)) bases.push(release);
+  }
+  bases.sort(byPublishedDesc).reverse();
+  const order = (release) => bases.findIndex((known) => known.tag_name === release?.tag_name);
+  return bases
+    .map((from, index) => ({
+      from,
+      to: bases[index + 1] ?? null,
+      targets: Object.keys(previous).filter((target) => {
+        const at = order(previous[target]);
+        return at !== -1 && at <= index;
+      }),
+    }))
+    .reverse();
+}
 
 export function kstDate(now) {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Seoul' }).format(now);
@@ -101,6 +178,49 @@ export function describeResult({ step, result, raw }) {
   }
 }
 
+const releaseLink = (release) => `[${release.tag_name}](${release.html_url})`;
+const targetNames = (targets) => targets.map((target) => TARGETS[target]).join(', ');
+
+/** 직전 배포 줄. 대상마다 직전 배포가 다르면 대상별로 적는다(되돌릴 때 대상마다 기준이 다르다). */
+function previousLine(previous) {
+  const entries = Object.entries(previous ?? {});
+  const tags = new Set(entries.map(([, release]) => release?.tag_name ?? null));
+  if (tags.size <= 1) {
+    const release = entries[0]?.[1];
+    return release
+      ? `- 직전 배포: ${releaseLink(release)} — 되돌릴 때는 직전 배포의 배포 ID를 쓴다.`
+      : '- 직전 배포: Release 기록 없음. 그 전 이력은 `docs/memory.md` 5절.';
+  }
+  const parts = entries.map(
+    ([target, release]) =>
+      `${TARGETS[target]} ${release ? releaseLink(release) : 'Release 기록 없음'}`,
+  );
+  return `- 직전 배포(대상별): ${parts.join(' · ')} — 되돌릴 때는 대상마다 그 직전 배포의 배포 ID를 쓴다.`;
+}
+
+/** 구간별 변경 목록을 본문 텍스트로 만든다. 구간이 하나뿐이면 예전처럼 목록만 둔다. */
+export function renderChanges({ previous, segments, notes }) {
+  const missing = Object.keys(previous).filter((target) => !previous[target]);
+  const lines = [];
+  if (segments.length > 1) {
+    lines.push(
+      '대상마다 직전 배포가 달라 구간을 나눈다. 각 구간의 변경은 적힌 대상에 이번에 처음 나간다.',
+      '',
+    );
+  }
+  segments.forEach((segment, index) => {
+    if (segments.length > 1) {
+      const to = segment.to ? releaseLink(segment.to) : '이번 배포';
+      lines.push(`#### ${releaseLink(segment.from)} → ${to} · ${targetNames(segment.targets)}`, '');
+    }
+    lines.push(notes[index]?.trim() || '(변경 목록을 받지 못했다)', '');
+  });
+  if (missing.length && segments.length) {
+    lines.push(`${targetNames(missing)}: 직전 배포 Release가 없어 그 전 변경은 생략했다.`);
+  }
+  return lines.join('\n').trim() || null;
+}
+
 export function buildReleaseBody({
   sha,
   scope,
@@ -112,15 +232,14 @@ export function buildReleaseBody({
   changes,
 }) {
   const lines = [
+    scopeMark(scope),
     '## 운영 배포 기록',
     '',
     `- SHA: ${code(sha)}`,
     `- 범위: ${code(scope)} · API: ${code(apiPlatform)}`,
     runLine(runId),
     `- 원격 회차 E2E run: ${runUrl(e2eRunId)}`,
-    previous
-      ? `- 직전 배포: [${previous.tag_name}](${previous.html_url}) — 되돌릴 때는 직전 배포의 배포 ID를 쓴다.`
-      : '- 직전 배포: Release 기록 없음. 그 전 이력은 `docs/memory.md` 5절.',
+    previousLine(previous),
     '',
     '### 배포 결과',
     '',
@@ -191,14 +310,7 @@ export async function recordRelease({
   if (existing) {
     return { status: 'exists', tag: existing.tag_name, url: existing.html_url };
   }
-  // 목록 순서는 배포 순서가 아니다(같은 날 tag는 이름 역순으로 온다). created_at도 대상 커밋 날짜라
-  // 쓸 수 없고, record job이 Release를 만든 시각인 published_at이 가장 늦은 것을 직전 배포로 본다.
-  const previous =
-    releases
-      .filter((release) => release.tag_name?.startsWith(TAG_PREFIX) && !release.draft)
-      .sort((a, b) =>
-        String(b.published_at ?? '').localeCompare(String(a.published_at ?? '')),
-      )[0] ?? null;
+  const previous = previousByTarget({ releases, scope });
 
   let tag = baseTag({ sha, now });
   const taken =
@@ -206,15 +318,20 @@ export async function recordRelease({
     (await call({ path: `/git/ref/tags/${tag}`, allow404: true })) !== null;
   if (taken) tag = `${tag}-${runId}`;
 
-  let changes = null;
-  if (previous) {
-    const notes = await call({
+  // 구간마다 GitHub가 변경 목록을 만든다. 마지막 구간의 끝은 새 tag(아직 없음), 나머지는 이미 있는 tag다.
+  const segments = changeSegments(previous);
+  const notes = [];
+  for (const segment of segments) {
+    const result = await call({
       method: 'POST',
       path: '/releases/generate-notes',
-      body: { tag_name: tag, target_commitish: sha, previous_tag_name: previous.tag_name },
+      body: segment.to
+        ? { tag_name: segment.to.tag_name, previous_tag_name: segment.from.tag_name }
+        : { tag_name: tag, target_commitish: sha, previous_tag_name: segment.from.tag_name },
     });
-    changes = notes?.body ?? null;
+    notes.push(result?.body ?? null);
   }
+  const changes = renderChanges({ previous, segments, notes });
 
   const created = await call({
     method: 'POST',
@@ -240,7 +357,9 @@ export async function recordRelease({
     status: 'created',
     tag,
     url: created?.html_url ?? null,
-    previous: previous?.tag_name ?? null,
+    previous: Object.fromEntries(
+      Object.entries(previous).map(([target, release]) => [target, release?.tag_name ?? null]),
+    ),
   };
 }
 
