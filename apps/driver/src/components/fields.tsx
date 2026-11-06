@@ -17,8 +17,11 @@ const SIZE = {
   md: 'h-[42px] min-h-[42px] px-[14px] text-base leading-[40px]',
 } as const;
 
+// 자리표시 글자는 켜진 칸의 안내 글자라 WCAG 대비 예외가 아니다. gray-5(흰 바탕 2.1:1) 대신 packages/ui 입력칸과 같은
+// 보조 글자(--muted-foreground, 5.1:1)로 칠한다. 기사 보조 글자(--driver-text-muted, 9.7:1)는 입력값(검정)과 너무 가까워 쓰지 않는다.
+// 꺼진 칸·버튼의 gray-5 글자는 꺼진 컨트롤(대비 예외)이라 그대로 둔다.
 const inputBase =
-  'block w-full min-w-0 cursor-text appearance-none rounded-[16px] border border-solid border-input bg-background text-start text-ui-ink transition-[border-color] duration-100 ease-[ease] outline-none placeholder:text-ui-gray-5 placeholder:opacity-100 focus:border-brand disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:opacity-60 [-webkit-tap-highlight-color:transparent]';
+  'block w-full min-w-0 cursor-text appearance-none rounded-[16px] border border-solid border-input bg-background text-start text-ui-ink transition-[border-color] duration-100 ease-[ease] outline-none placeholder:text-muted-foreground placeholder:opacity-100 focus:border-brand disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:opacity-60 [-webkit-tap-highlight-color:transparent]';
 
 const labelClass =
   'inline-flex cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink select-auto';
@@ -103,7 +106,7 @@ export function PasswordField({
         <input
           type={reveal ? 'text' : 'password'}
           className={cn(
-            'absolute inset-0 h-full w-full cursor-text border-0 bg-transparent ps-[14px] pe-10 text-inherit leading-[1.55] outline-0 placeholder:text-ui-gray-5 placeholder:opacity-100',
+            'absolute inset-0 h-full w-full cursor-text border-0 bg-transparent ps-[14px] pe-10 text-inherit leading-[1.55] outline-0 placeholder:text-muted-foreground placeholder:opacity-100',
             className,
           )}
           {...props}
