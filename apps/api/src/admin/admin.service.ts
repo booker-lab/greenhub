@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
   Optional,
+  PreconditionFailedException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type * as admin from 'firebase-admin';
@@ -27,6 +28,10 @@ import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.serv
 import type { OrderStatus } from '../orders/dto/update-status.dto';
 import { getAllowedTransitions } from '../orders/orders.helpers';
 import { PaymentsService } from '../payments/payments.service';
+import {
+  readPayoutAccount,
+  STORE_PAYOUT_ACCOUNTS_COLLECTION,
+} from '../payout-accounts/payout-account.fields';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 import { releaseLegacyGroupQuantityInTransaction } from '../orders/_lib/legacy-group-quantity';
 import { readOrderPayoutHoldInTransaction } from '../settlements/_lib/order-payout-hold';
@@ -78,6 +83,11 @@ const ADMIN_USER_LIST_FIELDS = ['id', 'email', 'name', 'phone', 'suspended', 'cr
 // 치운 판매자를 복구할 때 돌아갈 수 있는 상태. 그 밖의 값(없음·알 수 없음)은 active로 본다.
 function restorableStoreStatus(value: unknown): 'invited' | 'active' {
   return value === 'invited' ? 'invited' : 'active';
+}
+
+// 기록 있는 판매자를 치울 때 관리자가 입력하는 확인 값(가게 ID 앞 8자리, 소문자).
+function storeIdConfirmPrefix(storeId: string): string {
+  return storeId.slice(0, 8).toLowerCase();
 }
 
 type LegacyRefundClaimResult =
@@ -153,9 +163,11 @@ export class AdminService {
   // 치운 가게는 손님 화면에서 숨고 새 주문이 막힌다(판매자 로그인은 그대로).
   // 기록 가드: 주문·정산 기록이 하나라도 있으면 차단(법적 책임·이력 보존).
   // 기록 확인과 상태 변경을 한 트랜잭션에 넣어, 확인 직후 들어온 주문과 엇갈리지 않게 한다.
-  async archiveStore(storeId: string, actorId: string) {
+  // 주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리(confirmStoreIdPrefix)를 맞게 넣어야 치운다.
+  // 실제 판매자를 잘못 눌러 숨기는 일을 막는 확인이며, 기록은 지우지 않는다.
+  async archiveStore(storeId: string, actorId: string, confirmStoreIdPrefix?: string) {
     const ref = this.firestore.doc(`stores/${storeId}`);
-    const previousStatus = await this.firestore.runTransaction(async (tx) => {
+    const { previousStatus, hadRecords } = await this.firestore.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
       if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
       const status = snap.data()?.['status'] as string | undefined;
@@ -168,8 +180,16 @@ export class AdminService {
         tx.get(this.firestore.collection('orders').where('storeId', '==', storeId).limit(1)),
         tx.get(this.firestore.collection('settlements').where('storeId', '==', storeId).limit(1)),
       ]);
-      if (!orderSnap.empty || !settlementSnap.empty) {
-        throw new BadRequestException('주문·정산 기록이 있는 판매자는 치울 수 없습니다.');
+      const hasRecords = !orderSnap.empty || !settlementSnap.empty;
+      if (hasRecords) {
+        if (confirmStoreIdPrefix === undefined) {
+          throw new PreconditionFailedException(
+            '주문·정산 기록이 있는 판매자입니다. 가게 ID 앞 8자리를 입력해야 치울 수 있습니다.',
+          );
+        }
+        if (confirmStoreIdPrefix.trim().toLowerCase() !== storeIdConfirmPrefix(storeId)) {
+          throw new PreconditionFailedException('입력한 가게 ID가 맞지 않습니다.');
+        }
       }
 
       const now = this.firestore.Timestamp.now();
@@ -180,7 +200,7 @@ export class AdminService {
         archivedAt: now,
         updatedAt: now,
       });
-      return status ?? null;
+      return { previousStatus: status ?? null, hadRecords: hasRecords };
     });
 
     await this.recordAdmin({
@@ -189,7 +209,7 @@ export class AdminService {
       targetType: 'store',
       targetId: storeId,
       before: { status: previousStatus },
-      after: { status: 'archived' },
+      after: hadRecords ? { status: 'archived', hadRecords: true } : { status: 'archived' },
     });
     return { storeId, status: 'archived' };
   }
@@ -658,6 +678,16 @@ export class AdminService {
       if (orderHold) {
         throw new ConflictException(
           '취소됐거나 환불이 진행 중인 주문의 정산이라 지급할 수 없습니다. 주문 상태를 먼저 확인하세요.',
+        );
+      }
+      // 입금할 계좌가 없으면 지급 완료로 기록하지 않는다(2026-10-30 사용자 결정, 다른 지급 수단은 허용하지 않음).
+      const storeId = typeof data['storeId'] === 'string' ? data['storeId'] : '';
+      const accountSnap = storeId
+        ? await t.get(this.firestore.doc(`${STORE_PAYOUT_ACCOUNTS_COLLECTION}/${storeId}`))
+        : null;
+      if (!accountSnap?.exists || !readPayoutAccount(accountSnap.data())) {
+        throw new ConflictException(
+          '정산 계좌가 등록되지 않은 가게라 지급 완료로 기록할 수 없습니다. 판매자에게 정산 계좌 등록을 요청하세요.',
         );
       }
 

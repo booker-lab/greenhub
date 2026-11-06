@@ -164,6 +164,23 @@ describe('compareRuns', () => {
     );
   });
 
+  it('색 구성이 다르면 비교하지 않는다(값이 없는 예전 묶음은 밝음)', () => {
+    const shots = [sound('a', 'mobile')];
+    const dark = compareRuns(run(shots), run(shots, { colorScheme: 'dark' }), () => image(1, 1));
+    assert.equal(dark.ok, false);
+    assert.match(dark.problems[0], /색 구성이 다릅니다: before light · after dark/);
+    assert.equal(
+      compareRuns(run(shots), run(shots, { colorScheme: 'light' }), () => image(1, 1)).ok,
+      true,
+    );
+    assert.equal(
+      compareRuns(run(shots, { colorScheme: 'dark' }), run(shots, { colorScheme: 'dark' }), () =>
+        image(1, 1),
+      ).ok,
+      true,
+    );
+  });
+
   it('한쪽에만 있는 화면은 실패다', () => {
     const r = compareRuns(
       run([sound('a', 'mobile'), sound('b', 'mobile')]),
@@ -197,12 +214,20 @@ describe('compareRuns', () => {
 });
 
 describe('soundness', () => {
-  it('fixture 누락·콘솔 오류·멈춘 단계·다른 주소를 문제로 잡는다', () => {
+  it('fixture 누락·콘솔 오류·API 요청 실패·멈춘 단계·하네스 미지원·dev 재시작·다른 주소를 문제로 잡는다', () => {
     const problems = shotProblems(
-      { missing: ['/x'], errors: ['boom'], stepNote: '누를 글자 없음: 저장', finalPath: '/login' },
+      {
+        missing: ['/x'],
+        errors: ['boom'],
+        failed: ['/driver/orders/o1 net::ERR_CERT_AUTHORITY_INVALID'],
+        stepNote: '누를 글자 없음: 저장',
+        unsupported: 'Firestore 에뮬레이터 없음',
+        devRestarted: 'next dev 메모리 재시작 중 촬영',
+        finalPath: '/login',
+      },
       '/orders',
     );
-    assert.equal(problems.length, 4);
+    assert.equal(problems.length, 7);
     assert.deepEqual(
       shotProblems({ missing: [], errors: [], finalPath: '/orders' }, '/orders'),
       [],

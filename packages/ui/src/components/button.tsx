@@ -1,33 +1,64 @@
 import { Button as ButtonPrimitive } from '@base-ui/react/button';
+import { mergeProps } from '@base-ui/react/merge-props';
+import { useRender } from '@base-ui/react/use-render';
 import { cva, type VariantProps } from 'class-variance-authority';
+import type * as React from 'react';
+import { Children } from 'react';
 
 import { cn } from '../lib/utils';
 
 // ① 외형 유지: Mantine Button(radius xl = 32px, 600, 줄 높이 1) 크기·색과 같게 둔다.
+// 아이콘을 글자 앞뒤에 둘 때는 svg에 data-icon="inline-start"·"inline-end"를 준다. Mantine left·rightSection처럼
+// 그쪽 여백이 좌우 여백 ÷ 1.5가 되고, 글자와는 10px(gap) 떨어진다. 링크로 그려도 밑줄이 없다.
 // 초점 표시는 Mantine focusRing auto와 같은 주색 2px 외곽선(간격 2px)이다.
 // 모서리는 rounded-full(9999px)이 아니라 Mantine과 같은 32px이고, Mantine처럼 position: relative·overflow: hidden이다.
 // 색은 판매자 앱 대조 화면(/dev/ui-compare, scripts/visual/compare-cells.mjs)에서 Mantine 계산값을 읽어 맞췄다.
 // light·subtle은 Mantine brand-1·brand-9, 회색 글자는 gray-9, 위험은 red-6, 비활성은 gray-2 면·gray-5 글자다.
+// 마우스 올림 색도 Mantine 9 계산값(판매자 앱 MantineProvider의 --mantine-color-*-hover)과 같다. filled는 한 단계 짙은 색
+// (brand-7 #008A4B·red-7 #f03e3e), light·subtle은 *-light-hover(brand-2·gray-2·red-2·blue-2·green-2),
+// outline은 테두리색 5%, default는 gray-0이다. light 노랑은 theme.ts가 hover를 면색과 같게 둔다.
 const buttonVariants = cva(
-  'group/button relative inline-flex shrink-0 overflow-hidden cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-transparent text-sm leading-none font-semibold whitespace-nowrap normal-case transition-all outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-[#e9ecef] disabled:text-[#adb5bd] aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=size-])]:size-4',
+  'group/button relative inline-flex shrink-0 overflow-hidden cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-transparent text-sm leading-none font-semibold whitespace-nowrap normal-case no-underline transition-all outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-ui-gray-2 disabled:text-ui-gray-5 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=size-])]:size-4',
   {
     variants: {
       variant: {
-        default: 'bg-primary text-primary-foreground hover:bg-primary/90',
+        default: 'bg-primary text-primary-foreground hover:bg-ui-primary-hover',
         outline: 'border-primary bg-transparent text-brand-ink hover:bg-primary/5',
-        light: 'bg-[#d2f2df] text-[#005c32]',
-        subtle: 'bg-transparent text-[#005c32] hover:bg-brand-surface',
-        secondary: 'bg-[#f1f3f5] text-[#212529] hover:bg-[#e9ecef]',
-        ghost: 'bg-transparent text-[#212529] hover:bg-muted aria-expanded:bg-muted',
-        destructive: 'bg-[#fa5252] text-white hover:bg-[#fa5252]/90',
+        // Mantine variant="outline" color="gray"(gray-6 테두리·글자, 대조 화면 계산값).
+        'outline-gray': 'border-ui-gray-6 bg-transparent text-ui-gray-6 hover:bg-ui-gray-6/5',
+        light: 'bg-ui-brand-light text-ui-brand-light-text hover:bg-ui-brand-light-hover',
+        subtle: 'bg-transparent text-ui-brand-light-text hover:bg-ui-brand-light-hover',
+        secondary: 'bg-ui-gray-1 text-ui-gray-9 hover:bg-ui-gray-2',
+        ghost: 'bg-transparent text-ui-gray-9 hover:bg-ui-gray-2 aria-expanded:bg-muted',
+        destructive: 'bg-ui-red-filled text-white hover:bg-ui-red-filled-hover',
+        // Mantine light·subtle color="red"·"yellow"(노랑 light는 theme.ts가 경고 토큰으로 바꾼 값).
+        'light-destructive': 'bg-ui-red-light text-ui-red-light-text hover:bg-ui-red-light-hover',
+        'subtle-destructive': 'bg-transparent text-ui-red-light-text hover:bg-ui-red-light-hover',
+        'light-warning': 'bg-status-warning text-status-warning-foreground',
+        // Mantine light blue(blue-1 면·blue-9 글자).
+        'light-blue': 'bg-ui-blue-light text-ui-blue-light-text hover:bg-ui-blue-light-hover',
+        // Mantine outline yellow·green(yellow-6·green-6 테두리·글자), light green(green-1 면·green-9 글자).
+        'outline-warning': 'border-[#fab005] bg-transparent text-[#fab005] hover:bg-[#fab005]/5',
+        'outline-green': 'border-[#40c057] bg-transparent text-[#40c057] hover:bg-[#40c057]/5',
+        // Mantine outline red(red-6 테두리·글자).
+        'outline-destructive': 'border-ui-red bg-transparent text-ui-red hover:bg-ui-red/5',
+        'light-green': 'bg-ui-green-light text-ui-green-light-text hover:bg-ui-green-light-hover',
+        // Mantine outline dark(dark-6 테두리·글자).
+        'outline-dark': 'border-ui-dark bg-transparent text-ui-dark hover:bg-ui-dark/5',
+        // Mantine variant="default"(흰 면·gray-4 테두리·검정 글자, 올리면 gray-0).
+        plain: 'border-input bg-background text-ui-ink hover:bg-ui-gray-0',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
       },
       size: {
-        default: 'h-9 px-4.5',
-        xs: 'h-7.5 px-3.5 text-xs leading-none',
-        sm: 'h-7.5 px-3.5 text-xs leading-none',
-        md: 'h-10.5 px-5.5 text-base leading-none',
-        lg: 'h-12.5 px-6.5 text-lg leading-none',
+        default:
+          'h-9 px-4.5 has-data-[icon=inline-start]:ps-[calc(18px/1.5)] has-data-[icon=inline-end]:pe-[calc(18px/1.5)]',
+        xs: 'h-7.5 px-3.5 text-xs leading-none has-data-[icon=inline-start]:ps-[calc(14px/1.5)] has-data-[icon=inline-end]:pe-[calc(14px/1.5)]',
+        sm: 'h-7.5 px-3.5 text-xs leading-none has-data-[icon=inline-start]:ps-[calc(14px/1.5)] has-data-[icon=inline-end]:pe-[calc(14px/1.5)]',
+        md: 'h-10.5 px-5.5 text-base leading-none has-data-[icon=inline-start]:ps-[calc(22px/1.5)] has-data-[icon=inline-end]:pe-[calc(22px/1.5)]',
+        lg: 'h-12.5 px-6.5 text-lg leading-none has-data-[icon=inline-start]:ps-[calc(26px/1.5)] has-data-[icon=inline-end]:pe-[calc(26px/1.5)]',
+        // Mantine compact-xs(높이 22·좌우 7px·13px)·compact-sm(높이 26·좌우 8px·15px).
+        'compact-xs': 'h-[22px] px-[7px] text-xs leading-none',
+        'compact-sm': 'h-[26px] px-2 text-sm leading-none',
         icon: 'size-9',
         'icon-xs': 'size-6 [&_svg:not([class*=size-])]:size-3',
         'icon-sm': 'size-7.5',
@@ -41,10 +72,40 @@ const buttonVariants = cva(
   },
 );
 
+// Mantine Button의 글자 칸(.mantine-Button-label)과 같은 값. 글자 줄 상자를 대문자 높이로 잘라
+// (text-box-trim) 세로 가운데에 놓으므로, 감싸지 않으면 글자 가장자리 픽셀이 Mantine과 달라진다.
+const labelClassName =
+  'flex h-full items-center overflow-hidden whitespace-nowrap [text-box-edge:cap_alphabetic] [text-box-trim:trim-both]';
+
+/** 이어진 글자(문자열·숫자)를 한 글자 칸으로 감싼다(Mantine은 글자 전체가 칸 하나). 아이콘 등 요소는 그대로 둔다. */
+function wrapLabels(children: React.ReactNode) {
+  const out: React.ReactNode[] = [];
+  let text: (string | number)[] = [];
+  const flush = () => {
+    if (text.length === 0) return;
+    out.push(
+      <span key={`label-${out.length}`} data-slot="button-label" className={labelClassName}>
+        {text.join('')}
+      </span>,
+    );
+    text = [];
+  };
+  for (const child of Children.toArray(children)) {
+    if (typeof child === 'string' || typeof child === 'number') text.push(child);
+    else {
+      flush();
+      out.push(child);
+    }
+  }
+  flush();
+  return out;
+}
+
 function Button({
   className,
   variant = 'default',
   size = 'default',
+  children,
   ...props
 }: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
   return (
@@ -52,8 +113,62 @@ function Button({
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+    >
+      {typeof children === 'function' ? children : wrapLabels(children)}
+    </ButtonPrimitive>
   );
 }
 
-export { Button, buttonVariants };
+// 페이지 이동·전화 걸기처럼 링크인 것은 Button이 아니라 ButtonLink로 그린다.
+// Base UI Button은 nativeButton={false}이면 그린 a에도 role="button"을 붙여(useButton) 보조기술·테스트가 링크를
+// 버튼으로 읽는다. ButtonLink는 Base UI Button을 거치지 않으므로 a 요소의 링크 의미(role=link·href)가 그대로다.
+// 외형은 Button과 같은 클래스·data-slot·글자 칸(wrapLabels)이다. 링크에는 비활성 상태가 없으니 disabled는 받지 않는다.
+// Next.js Link는 render={<Link href="..." />}, 그 밖의 주소(tel: 등)는 href로 준다.
+function ButtonLink({
+  className,
+  variant = 'default',
+  size = 'default',
+  render,
+  children,
+  ...props
+}: Omit<useRender.ComponentProps<'a'>, 'children'> &
+  VariantProps<typeof buttonVariants> & { children?: React.ReactNode }) {
+  return useRender({
+    defaultTagName: 'a',
+    render,
+    props: mergeProps<'a'>(
+      {
+        'data-slot': 'button',
+        className: cn(buttonVariants({ variant, size, className })),
+        children: wrapLabels(children),
+      } as React.ComponentProps<'a'>,
+      props,
+    ),
+  });
+}
+
+// ① 외형 유지: Mantine Button 안쪽(inner·label) 구조. 버튼보다 긴 내용(두 줄 글자 등)을 Mantine처럼
+// 왼쪽부터 그리고 오른쪽을 자르고, 글자 위치도 Mantine과 같은 반올림으로 놓는다.
+// 글자만 있는 보통 버튼은 Button이 글자 칸으로 감싸므로(wrapLabels) 쓰지 않아도 된다. 직접 감싼 ButtonLabel은
+// 요소라서 다시 감싸지 않는다.
+function ButtonLabel({ className, children, ...props }: React.ComponentProps<'span'>) {
+  return (
+    <span
+      data-slot="button-inner"
+      className="flex h-full w-full min-w-0 items-center justify-center overflow-visible"
+    >
+      <span
+        data-slot="button-label"
+        className={cn(
+          'flex h-full items-center overflow-hidden whitespace-nowrap [text-box-edge:cap_alphabetic] [text-box-trim:trim-both]',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </span>
+    </span>
+  );
+}
+
+export { Button, ButtonLabel, ButtonLink, buttonVariants };

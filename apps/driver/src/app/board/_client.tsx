@@ -1,10 +1,11 @@
 'use client';
 
 import type { Order } from '@greenhub/shared';
-import { Anchor, Badge, Box, Button, Stack, Text, Title, UnstyledButton } from '@mantine/core';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { AppButton } from '@/components/app-button';
+import { text } from '@/components/look';
 import OrderCard from '@/components/OrderCard';
 import { apiRead } from '@/lib/api';
 import {
@@ -179,214 +180,319 @@ export default function BoardClient() {
     weekday: 'short',
     timeZone: 'Asia/Seoul',
   });
+  const retry = () => setReloadKey((key) => key + 1);
+  const showProgress = hasSuccessfulRead && !authRequired;
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
-      {/* 헤더 */}
-      <Box
-        component="header"
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+      {/* 머리: 로고 + 오늘 배송 한 줄, 배송지 점 띠와 진행 한 줄, 탭(design-direction.md §6). 틀은 흰 바탕·검정 글자다. */}
+      <header
         style={{
           position: 'sticky',
           top: 0,
           zIndex: 10,
           backgroundColor: 'var(--color-bg)',
-          borderBottom: 'var(--border)',
-          padding: '16px 16px 0',
+          padding: '12px 16px 0',
         }}
       >
-        <Box mb="sm">
-          <Title order={4}>오늘 배송</Title>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-            {today}
-          </Text>
-        </Box>
+        <div className="flex min-h-11 items-center gap-3">
+          <span
+            aria-hidden="true"
+            style={{
+              fontFamily: 'var(--font-brand)',
+              fontWeight: 'var(--fw-extrabold)',
+              fontSize: 'var(--font-size-lg)',
+              color: 'var(--color-primary-dark)',
+              lineHeight: 1,
+            }}
+          >
+            Green Love
+          </span>
+          <h1
+            className="m-0"
+            style={{
+              fontSize: 'var(--font-size-md)',
+              fontWeight: 'var(--fw-bold)',
+              color: 'var(--color-text)',
+              lineHeight: 1.4,
+            }}
+          >
+            오늘 배송 · {today}
+          </h1>
+        </div>
+        {showProgress && <DeliveryProgress preparing={preparing} delivering={delivering} />}
 
-        {/* 탭 */}
-        <Box style={{ display: 'flex' }}>
+        {/* 탭: 선택 표시는 색 없이 검정 3px 밑줄과 굵은 검정 글자다. */}
+        <div className="mt-2 flex">
           {[
             { key: 'preparing', label: '수거 대기', count: preparing.length },
             { key: 'delivering', label: '배송 중', count: delivering.length },
           ].map(({ key, label, count }) => (
-            <UnstyledButton
+            <button
+              type="button"
               key={key}
+              aria-pressed={tab === key}
+              className="flex min-h-12 flex-1 cursor-pointer appearance-none items-center justify-center border-0 bg-transparent p-0 text-inherit no-underline"
               onClick={() => router.replace(`/board?tab=${key}`)}
               style={{
-                flex: 1,
-                padding: '12px 0',
-                textAlign: 'center',
-                fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-bold)',
-                borderBottom: `2px solid ${tab === key ? 'var(--color-primary)' : 'transparent'}`,
-                color: tab === key ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
+                fontSize: 'var(--font-size-md)',
+                fontWeight: tab === key ? 'var(--fw-bold)' : 'var(--fw-regular)',
+                borderBottom: `3px solid ${tab === key ? 'var(--color-text)' : 'transparent'}`,
+                color: tab === key ? 'var(--color-text)' : 'var(--driver-text-muted)',
               }}
             >
               {label}
               {count > 0 && (
-                <Badge size="xs" color={key === 'preparing' ? 'brand' : 'dark'} circle>
+                <span className="ml-1.5" style={{ fontVariantNumeric: 'tabular-nums' }}>
                   {count}
-                </Badge>
+                </span>
               )}
-            </UnstyledButton>
+            </button>
           ))}
-        </Box>
-      </Box>
+        </div>
+      </header>
 
       {/* 주문 목록 */}
-      <Box component="main" style={{ flex: 1, padding: '16px' }}>
+      <main style={{ flex: 1, padding: '16px' }}>
         {loading ? (
-          <Stack align="center" justify="center" h={192} gap="xs">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-              주문을 불러오는 중입니다
-            </Text>
-          </Stack>
+          <BoardMessage>주문을 불러오는 중입니다</BoardMessage>
         ) : authRequired ? (
-          <Stack align="center" justify="center" h={192} gap="xs">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
-              로그인이 필요합니다. 세션을 다시 확인해 주세요.
-            </Text>
+          <BoardMessage tone="danger" message="로그인이 필요합니다. 세션을 다시 확인해 주세요.">
             {/* 인증 오류는 같은 토큰으로 재조회해도 반복되므로 세션을 정리하고 로그인으로 보낸다. */}
-            <Button
-              color="brand"
-              radius="xl"
-              onClick={() => void signOut({ redirectTo: '/login' })}
-            >
+            <AppButton onClick={() => void signOut({ redirectTo: '/login' })}>
               다시 로그인
-            </Button>
-            <Button
-              variant="outline"
-              color="brand"
-              radius="xl"
-              onClick={() => setReloadKey((key) => key + 1)}
-            >
+            </AppButton>
+            <AppButton tone="brand-outline" onClick={retry}>
               다시 시도
-            </Button>
-          </Stack>
+            </AppButton>
+          </BoardMessage>
         ) : error && !hasSuccessfulRead ? (
-          <Stack align="center" justify="center" h={192} gap="xs">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
-              {error}
-            </Text>
-            <Button
-              variant="outline"
-              color="brand"
-              radius="xl"
-              onClick={() => setReloadKey((key) => key + 1)}
-            >
+          <BoardMessage tone="danger" message={error}>
+            <AppButton tone="brand-outline" onClick={retry}>
               다시 시도
-            </Button>
-          </Stack>
+            </AppButton>
+          </BoardMessage>
         ) : error && hasSuccessfulRead ? (
           orders.length === 0 ? (
-            <Stack align="center" justify="center" h={192} gap="xs">
-              <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+            <div className="flex h-48 flex-col items-center justify-center gap-2.5">
+              <p className={text} style={{ ...messageStyle, color: 'var(--color-danger)' }}>
                 {error}
-              </Text>
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              >
+              </p>
+              <p className={text} style={messageStyle}>
                 {tab === 'preparing'
                   ? '마지막 확인 당시 수거할 주문이 없었습니다.'
                   : '마지막 확인 당시 배송 중인 주문이 없었습니다.'}
-              </Text>
-              <Button
-                variant="outline"
-                color="brand"
-                radius="xl"
-                onClick={() => setReloadKey((key) => key + 1)}
-              >
+              </p>
+              <AppButton tone="brand-outline" onClick={() => setReloadKey((key) => key + 1)}>
                 다시 시도
-              </Button>
-            </Stack>
+              </AppButton>
+            </div>
           ) : (
-            <Stack gap="sm">
+            <div className="flex flex-col gap-3">
               {refreshing && (
-                <Text
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                >
+                <p className={text} style={messageStyle}>
                   최신 정보를 확인하는 중입니다…
-                </Text>
+                </p>
               )}
-              {error && (
-                <Stack align="center" justify="center" gap="xs">
-                  <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
-                    {error} (이전 목록 표시 중)
-                  </Text>
-                  <Button
-                    variant="outline"
-                    color="brand"
-                    radius="xl"
-                    onClick={() => setReloadKey((key) => key + 1)}
-                  >
-                    다시 시도
-                  </Button>
-                </Stack>
-              )}
-              {orders.map((order) => (
-                <OrderCard key={order.id} order={order} tab={tab} />
-              ))}
-            </Stack>
+              <div className="flex flex-col items-center justify-center gap-2.5">
+                <p className={text} style={{ ...messageStyle, color: 'var(--color-danger)' }}>
+                  {error} (이전 목록 표시 중)
+                </p>
+                <AppButton tone="brand-outline" onClick={retry}>
+                  다시 시도
+                </AppButton>
+              </div>
+              <OrderList key={tab} orders={orders} tab={tab} />
+            </div>
           )
         ) : refreshing && hasSuccessfulRead && orders.length === 0 ? (
-          <Stack align="center" justify="center" h={192} gap="xs">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          <div className="flex h-48 flex-col items-center justify-center gap-2.5">
+            <p className={text} style={messageStyle}>
               최신 정보를 확인하는 중입니다…
-            </Text>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+            </p>
+            <p className={text} style={messageStyle}>
               {tab === 'preparing'
                 ? '마지막 확인 당시 수거할 주문이 없었습니다.'
                 : '마지막 확인 당시 배송 중인 주문이 없었습니다.'}
-            </Text>
-          </Stack>
+            </p>
+          </div>
         ) : orders.length === 0 ? (
-          <Stack align="center" justify="center" h={192} gap="xs">
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          <div className="flex h-48 flex-col items-center justify-center gap-2.5">
+            <p className={text} style={messageStyle}>
               {tab === 'preparing'
                 ? '오늘 수거할 주문이 없습니다'
                 : '현재 배송 중인 주문이 없습니다'}
-            </Text>
+            </p>
             {tab === 'preparing' && (
-              <Anchor
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-primary-dark)' }}
+              <button
+                type="button"
+                className="m-0 inline min-h-11 cursor-pointer appearance-none border-0 bg-transparent p-0 underline"
+                style={{
+                  fontSize: 'var(--font-size-md)',
+                  fontWeight: 'var(--fw-bold)',
+                  color: 'var(--color-text)',
+                }}
                 onClick={() => router.push('/map')}
               >
                 지도에서 경로 보기
-              </Anchor>
+              </button>
             )}
-          </Stack>
+          </div>
         ) : (
-          <Stack gap="sm">
+          <div className="flex flex-col gap-3">
             {refreshing && (
-              <Text
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-              >
+              <p className={text} style={messageStyle}>
                 최신 정보를 확인하는 중입니다…
-              </Text>
+              </p>
             )}
             {error && (
-              <Stack align="center" justify="center" gap="xs">
-                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+              <div className="flex flex-col items-center justify-center gap-2.5">
+                <p className={text} style={{ ...messageStyle, color: 'var(--color-danger)' }}>
                   {error} (이전 목록 표시 중)
-                </Text>
-                <Button
-                  variant="outline"
-                  color="brand"
-                  radius="xl"
-                  onClick={() => setReloadKey((key) => key + 1)}
-                >
+                </p>
+                <AppButton tone="brand-outline" onClick={retry}>
                   다시 시도
-                </Button>
-              </Stack>
+                </AppButton>
+              </div>
             )}
-            {orders.map((order) => (
-              <OrderCard key={order.id} order={order} tab={tab} />
-            ))}
-          </Stack>
+            <OrderList key={tab} orders={orders} tab={tab} />
+          </div>
         )}
-      </Box>
-    </Box>
+      </main>
+    </div>
+  );
+}
+
+const messageStyle = {
+  fontSize: 'var(--font-size-sm)',
+  color: 'var(--driver-text-muted)',
+} as const;
+
+function BoardMessage({
+  children,
+  message,
+  tone,
+}: {
+  children: ReactNode;
+  message?: string;
+  tone?: 'danger';
+}) {
+  return (
+    <div className="flex h-48 flex-col items-center justify-center gap-2.5">
+      {message ? (
+        <>
+          <p
+            className={text}
+            style={{
+              ...messageStyle,
+              color: tone === 'danger' ? 'var(--color-danger)' : messageStyle.color,
+            }}
+          >
+            {message}
+          </p>
+          {children}
+        </>
+      ) : (
+        <p className={text} style={messageStyle}>
+          {children}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** 첫 화면에 보이는 행 수. 넘치면 "남은 n곳 더 보기"로 남은 수를 밝힌다(design-direction.md §6). */
+const FIRST_SCREEN_ROWS = 5;
+
+function OrderList({ orders, tab }: { orders: Order[]; tab: string }) {
+  const [expanded, setExpanded] = useState(false);
+  // 배송 중 탭에서는 보류가 아닌 첫 배송지를 "다음 배송지"로 크게 보인다. 순서는 목록 응답 순서다.
+  const next =
+    tab === 'delivering' ? orders.find((order) => order.status === 'DELIVERING') : undefined;
+  const rest = next ? orders.filter((order) => order !== next) : orders;
+  const visible = expanded ? rest : rest.slice(0, FIRST_SCREEN_ROWS);
+  const hidden = rest.length - visible.length;
+
+  return (
+    <>
+      {next && <OrderCard order={next} tab={tab} variant="next" />}
+      {visible.length > 0 && (
+        <ul className="m-0 list-none p-0">
+          {visible.map((order, index) => (
+            <li key={order.id} style={index === 0 ? undefined : { borderTop: 'var(--border)' }}>
+              <OrderCard order={order} tab={tab} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {hidden > 0 && (
+        <button
+          type="button"
+          className="flex min-h-12 w-full cursor-pointer appearance-none items-center justify-center rounded-[var(--radius)] border-0 p-0"
+          style={{
+            backgroundColor: 'var(--color-surface-muted)',
+            color: 'var(--color-text)',
+            fontSize: 'var(--font-size-md)',
+            fontWeight: 'var(--fw-bold)',
+          }}
+          onClick={() => setExpanded(true)}
+        >
+          남은 {hidden}곳 더 보기
+        </button>
+      )}
+    </>
+  );
+}
+
+/**
+ * 배송지 점 띠와 진행 한 줄. 목록 API가 주는 값(배송 중·보류·수거 대기 주문)만으로 그린다.
+ * 끝낸 배송 수·도착 예상 시간은 기사 목록 응답에 없어 쓰지 않는다(design-direction.md §3.5).
+ */
+function DeliveryProgress({ preparing, delivering }: { preparing: Order[]; delivering: Order[] }) {
+  const held = delivering.filter((order) => order.status === 'DELIVERY_HELD').length;
+  const toDeliver = delivering.length - held;
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      {preparing.length + delivering.length > 0 && (
+        <div aria-hidden="true" className="flex flex-wrap gap-1.5">
+          {delivering.map((order) => (
+            <span
+              key={order.id}
+              className="block size-2.5 rounded-full"
+              style={{
+                backgroundColor:
+                  order.status === 'DELIVERY_HELD' ? 'var(--color-danger)' : 'var(--color-text)',
+              }}
+            />
+          ))}
+          {preparing.map((order) => (
+            <span
+              key={order.id}
+              className="block size-2.5 rounded-full"
+              style={{ boxShadow: 'inset 0 0 0 2px var(--driver-text-muted)' }}
+            />
+          ))}
+        </div>
+      )}
+      <p
+        className={text}
+        style={{
+          fontSize: 'var(--font-size-sm)',
+          color: 'var(--driver-text-muted)',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        남은 배송 {toDeliver}곳
+        {held > 0 && (
+          <>
+            {' · '}
+            <span style={{ color: 'var(--color-danger)', fontWeight: 'var(--fw-bold)' }}>
+              보류 {held}곳
+            </span>
+          </>
+        )}
+        {' · '}수거 {preparing.length}곳
+      </p>
+    </div>
   );
 }

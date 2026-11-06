@@ -1,7 +1,11 @@
 'use client';
 
 import { FLOWER_MARKET_GUBN_LABELS, FLOWER_MARKET_GUBNS } from '@greenhub/shared';
-import { Autocomplete, Select, Stack, Text, TextInput } from '@mantine/core';
+import { Autocomplete } from '@greenhub/ui/components/autocomplete';
+import { Field, FieldDescription, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
+import { NativeSelect } from '@greenhub/ui/components/native-select';
+import { useId } from 'react';
 import { useMarketCatalog, useMarketLookup } from '@/hooks/useMarketPrices';
 import {
   MARKET_PRICE_SOURCE,
@@ -12,7 +16,10 @@ import {
 } from '@/lib/market-price';
 import { FieldCard } from './FormPrimitives';
 
+// 다른 상품 편집 칸과 같은 글자(Text p, 여백 0)와 입력칸 모양(md, rounded-xl)을 쓴다.
+const TEXT = 'm-0 p-0 text-base font-normal';
 const HINT_STYLE = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' } as const;
+const INPUT_CLASS = 'rounded-xl';
 
 const GUBN_OPTIONS = [
   { value: '', label: '연결 안 함' },
@@ -34,6 +41,7 @@ export function MarketRefSection({
   value: MarketRefForm;
   onChange: (next: MarketRefForm) => void;
 }) {
+  const unitsId = useId();
   const catalog = useMarketCatalog(storeId, token, value.flowerGubn);
   const lookup = useMarketLookup(storeId, token, marketLookupQuery(value));
   const set = (patch: Partial<MarketRefForm>) => onChange({ ...value, ...patch });
@@ -44,76 +52,89 @@ export function MarketRefSection({
 
   return (
     <FieldCard label="경매 시세 연결 (판매자만 보여요)">
-      <Stack gap="xs">
-        <Text style={HINT_STYLE}>
+      <div className="flex flex-col gap-2.5">
+        <p className={TEXT} style={HINT_STYLE}>
           연결하면 회차 가격을 정할 때와 구매 목록에서 최근 경락가로 예상 매입가를 보여 줘요.
-        </Text>
-        <Select
+        </p>
+        <NativeSelect
           aria-label="경매 부류"
           data={GUBN_OPTIONS}
           value={value.flowerGubn}
-          onChange={(next) =>
-            set({ flowerGubn: (next ?? '') as MarketRefForm['flowerGubn'], pumName: '', goodName: '', grade: '' })
+          onChange={(event) =>
+            set({
+              flowerGubn: event.currentTarget.value as MarketRefForm['flowerGubn'],
+              pumName: '',
+              goodName: '',
+              grade: '',
+            })
           }
-          allowDeselect={false}
           size="md"
-          radius="xl"
+          className={INPUT_CLASS}
         />
         {value.flowerGubn !== '' && (
           <>
             <Autocomplete
               aria-label="경매 품목"
               placeholder="품목 (예: 호접란)"
-              data={pumNames}
+              items={pumNames}
               value={value.pumName}
-              onChange={(pumName) => set({ pumName, goodName: '', grade: '' })}
-              limit={30}
-              size="md"
-              radius="xl"
+              onValueChange={(pumName) => set({ pumName, goodName: '', grade: '' })}
+              className={`h-10.5 px-3.5 text-base ${INPUT_CLASS}`}
             />
             <Autocomplete
               aria-label="경매 품종"
               placeholder="품종 (비우면 품목 전체)"
-              data={goodNames}
+              items={goodNames}
               value={value.goodName}
-              onChange={(goodName) => set({ goodName, grade: '' })}
-              limit={30}
-              size="md"
-              radius="xl"
+              onValueChange={(goodName) => set({ goodName, grade: '' })}
+              className={`h-10.5 px-3.5 text-base ${INPUT_CLASS}`}
             />
             <Autocomplete
               aria-label="경매 등급"
               placeholder="등급 (비우면 전체 등급)"
-              data={lookup.summary?.grades ?? []}
+              items={lookup.summary?.grades ?? []}
               value={value.grade}
-              onChange={(grade) => set({ grade })}
-              size="md"
-              radius="xl"
+              onValueChange={(grade) => set({ grade })}
+              className={`h-10.5 px-3.5 text-base ${INPUT_CLASS}`}
             />
-            <TextInput
-              aria-label="상품 1개에 드는 경매 단위 수"
-              label={`상품 1개에 드는 경매 단위 수 (1${unit} 기준)`}
-              description={unit === '속' ? '예: 꽃다발 하나에 2속이 들면 2' : '예: 화분 하나에 1분이면 1'}
-              inputMode="decimal"
-              value={value.unitsPerItem}
-              onChange={(event) => set({ unitsPerItem: event.currentTarget.value })}
-              size="md"
-              radius="xl"
-            />
+            <Field>
+              <FieldLabel htmlFor={unitsId}>{`상품 1개에 드는 경매 단위 수 (1${unit} 기준)`}</FieldLabel>
+              <FieldDescription>
+                {unit === '속' ? '예: 꽃다발 하나에 2속이 들면 2' : '예: 화분 하나에 1분이면 1'}
+              </FieldDescription>
+              <Input
+                id={unitsId}
+                inputMode="decimal"
+                value={value.unitsPerItem}
+                onChange={(event) => set({ unitsPerItem: event.currentTarget.value })}
+                size="md"
+                className={INPUT_CLASS}
+              />
+            </Field>
             {lookup.summary &&
               marketSummaryLines(lookup.summary).map((line) => (
-                <Text key={line} style={{ ...HINT_STYLE, color: 'var(--color-text)' }}>
+                <p key={line} className={TEXT} style={{ ...HINT_STYLE, color: 'var(--color-text)' }}>
                   {line}
-                </Text>
+                </p>
               ))}
-            {lookup.summary && <Text style={HINT_STYLE}>{MARKET_PRICE_SOURCE}</Text>}
-            {lookup.error && <Text style={HINT_STYLE}>{lookup.error}</Text>}
+            {lookup.summary && (
+              <p className={TEXT} style={HINT_STYLE}>
+                {MARKET_PRICE_SOURCE}
+              </p>
+            )}
+            {lookup.error && (
+              <p className={TEXT} style={HINT_STYLE}>
+                {lookup.error}
+              </p>
+            )}
             {catalog && catalog.items.length === 0 && (
-              <Text style={HINT_STYLE}>아직 수집된 경매 이름이 없어요. 경매 이름을 그대로 적어 두면 수집 뒤에 시세가 보여요.</Text>
+              <p className={TEXT} style={HINT_STYLE}>
+                아직 수집된 경매 이름이 없어요. 경매 이름을 그대로 적어 두면 수집 뒤에 시세가 보여요.
+              </p>
             )}
           </>
         )}
-      </Stack>
+      </div>
     </FieldCard>
   );
 }

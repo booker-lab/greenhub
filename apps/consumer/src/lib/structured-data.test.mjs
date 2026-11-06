@@ -93,6 +93,13 @@ test('현재 회차는 판매 중 우선, 없으면 가장 가까운 미래 판�
   assert.equal(selectOrderableRound([closed, past], NOW), null);
 });
 
+test('판매 중 회차가 여럿이면 화면처럼 주문 시작이 가장 늦은 회차를 고른다', () => {
+  const older = round({ id: 'older', schedule: { orderOpenAt: '2026-10-28T00:00:00Z', orderCloseAt: 'x' } });
+  const newer = round({ id: 'newer', schedule: { orderOpenAt: '2026-10-30T18:00:00Z', orderCloseAt: 'x' } });
+  assert.equal(selectOrderableRound([older, newer], NOW).id, 'newer');
+  assert.equal(selectOrderableRound([newer, older], NOW).id, 'newer');
+});
+
 test('사업자 정보는 화면 footer와 같은 값으로 싣고 주소를 나눈다', () => {
   const jsonLd = buildSiteJsonLd(
     {

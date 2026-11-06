@@ -20,6 +20,7 @@ import { normalizeKoreanMobilePhone } from './_lib/korean-mobile-phone';
 import {
   collectOptionStockLines,
   normalizeGift,
+  resolvePackageLabel,
   resolveSelectedOptions,
 } from './_lib/round-order-extras';
 import { assertStoreAcceptsOrders } from '../stores/store-availability';
@@ -48,6 +49,8 @@ export class RoundOrderCreateService {
     // 선물(받는 분 이름·휴대폰 등 개인정보)은 GREENHUB_FEATURES에 gift가 켜졌을 때만 저장한다.
     // 꺼져 있으면 옛 앱 호환을 위해 거부하지 않고 조용히 버린다.
     const gift = this.isGiftEnabled() ? normalizeGift(dto.gift) : null;
+    // 포장 라벨 문구: 선물이면 보내는 분 이름, 아니면 고객이 넣은 문구(없으면 라벨 없음).
+    const packageLabel = resolvePackageLabel(dto.packageLabel, gift);
     const orderRef = this.firestore.doc(`orders/${orderId}`);
     let result: Record<string, unknown> | null = null;
 
@@ -148,6 +151,7 @@ export class RoundOrderCreateService {
         acquisition: dto.acquisition ?? null,
         totalAmount,
         ...(gift ? { gift } : {}),
+        ...(packageLabel ? { packageLabel } : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -221,7 +225,6 @@ export class RoundOrderCreateService {
       const option = resolveSelectedOptions(
         productSnap.exists ? productSnap.data()?.['options'] : undefined,
         input.optionChoiceIds,
-        input.optionText,
       );
       byRoundItemId.set(input.roundItemId, option);
     });
@@ -270,8 +273,9 @@ export class RoundOrderCreateService {
           acquisition: dto.acquisition ?? null,
           // 요청사항이 없으면 필드 자체를 빼서 기존 결제 시도의 해시를 유지한다.
           ...(requestNote !== null ? { requestNote } : {}),
-          // 선물도 쓸 때만 넣어 기존 해시를 바꾸지 않는다.
+          // 선물·포장 라벨도 쓸 때만 넣어 기존 해시를 바꾸지 않는다.
           ...(dto.gift ? { gift: dto.gift } : {}),
+          ...(dto.packageLabel !== undefined ? { packageLabel: dto.packageLabel } : {}),
         }),
       )
       .digest('hex');

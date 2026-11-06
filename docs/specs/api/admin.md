@@ -92,7 +92,8 @@ PATCH /admin/stores/:storeId/restore
 
 현재 archive는 물리 삭제가 아니다.
 
-- 주문 또는 settlement가 하나라도 존재하면 archive 거부, 이미 치운 판매자면 409
+- 주문 또는 settlement가 하나라도 존재하면 본문 `confirmStoreIdPrefix`(가게 ID 앞 8자리, 앞뒤 공백·대소문자 무시)가 맞아야 archive한다. 없거나 틀리면 412. 화면은 412를 받으면 입력창으로 ID를 받아 다시 보낸다(2026-10-30 결정: 주문이 있는 테스트 가게 정리). 이때 행동 기록 `after`에 `hadRecords: true`를 남긴다
+- 이미 치운 판매자면 409
 - 허용되면 `status: archived`, `archivedAt`, 치우기 전 상태 `archivedFromStatus` 기록
 - restore는 치운 판매자만 받고(아니면 409) `archivedFromStatus`(없으면 `active`)로 되돌린 뒤 `archivedAt`·`archivedFromStatus` 제거
 - 치운 판매자는 손님 공개 화면(가게·상품·회차)에서 숨고 새 주문이 막힌다. 판매자 로그인은 허용한다(2026-10-21 결정, `apps/api/src/stores/store-availability.ts`)

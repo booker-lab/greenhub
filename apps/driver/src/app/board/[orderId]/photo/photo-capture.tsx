@@ -1,11 +1,14 @@
 'use client';
 
 import { apiPathSegment, isSafeApiPathSegment, readRouteParam } from '@greenhub/shared';
-import { Button, Loader, Text, Title } from '@mantine/core';
+import { cn } from '@greenhub/ui/lib/utils';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { AppButton } from '@/components/app-button';
+import { text } from '@/components/look';
+import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
 import { readDriverOrderCommandErrorCodeFromResponse } from '../../_lib/driver-order-detail';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
@@ -32,6 +35,11 @@ type PhotoCaptureProps = {
   orderId: string;
   mode: PhotoMode;
 };
+
+// 다크 모드(D5): 촬영 화면은 두 구성 모두 검정 바탕(#000)이므로 그 위 글자·셔터 면은 흰색으로 고정한다(--color-bg는 어둠에서 어두워진다).
+const CAMERA_ON = '#ffffff';
+// 촬영 화면의 흰 버튼(tone white, 두 구성 모두 흰 면) 위 글자. 밝음 --color-text 값으로 고정한다.
+const CAMERA_BUTTON_INK = '#111111';
 
 const INVALID_ORDER_ADDRESS_MESSAGE =
   '주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해주세요.';
@@ -69,17 +77,20 @@ export default function PhotoCapture({ orderId: rawOrderId, mode }: PhotoCapture
           padding: 24,
         }}
       >
-        <Text style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }} ta="center">
+        <p
+          className={cn(text, 'text-center')}
+          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}
+        >
           {INVALID_ORDER_ADDRESS_MESSAGE}
-        </Text>
-        <Button
+        </p>
+        <AppButton
           onClick={() => router.replace('/board')}
-          color="white"
-          style={{ color: 'var(--color-text)' }}
-          radius="md"
+          tone="white"
+          className="rounded-sm"
+          style={{ color: CAMERA_BUTTON_INK }}
         >
           배송 목록으로
-        </Button>
+        </AppButton>
       </div>
     );
   }
@@ -505,7 +516,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             router.back();
           }}
           style={{
-            color: 'var(--color-bg)',
+            color: CAMERA_ON,
             padding: 4,
             background: 'none',
             border: 'none',
@@ -529,16 +540,16 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             />
           </svg>
         </button>
-        <Title
-          order={1}
+        <h1
+          className="m-0 leading-[1.3]"
           style={{
-            color: 'var(--color-bg)',
+            color: CAMERA_ON,
             fontSize: 'var(--font-size-md)',
             fontWeight: 'var(--fw-bold)',
           }}
         >
           {isRoundDirect ? '배송 완료 사진' : '거점 하차 인증 사진'}
-        </Title>
+        </h1>
       </header>
 
       <div style={{ flex: 1, position: 'relative' }}>
@@ -565,39 +576,37 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               gap: 24,
             }}
           >
-            <Text style={{ color: 'var(--color-bg)', fontSize: 'var(--font-size-sm)' }}>
+            <p className={text} style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}>
               {isRoundDirect ? '문 앞 배송 완료 상태를 촬영해주세요' : '하차 물품을 촬영해주세요'}
-            </Text>
-            <Button
+            </p>
+            <AppButton
               onClick={startCamera}
               disabled={preparing}
-              color="white"
-              style={{ color: 'var(--color-text)' }}
-              radius="md"
+              tone="white"
+              className="rounded-sm"
+              style={{ color: CAMERA_BUTTON_INK }}
             >
               {isRoundDirect ? '카메라 촬영' : '사진 촬영'}
-            </Button>
+            </AppButton>
             {isRoundDirect && (
-              <Button
+              <AppButton
                 onClick={() => fileInputRef.current?.click()}
                 loading={preparing}
                 disabled={preparing}
-                variant="outline"
-                color="white"
-                style={{ color: 'var(--color-bg)' }}
-                radius="md"
+                tone="white-outline"
+                className="rounded-sm"
+                style={{ color: CAMERA_ON }}
               >
                 카메라 앱으로 찍기·사진 선택
-              </Button>
+              </AppButton>
             )}
             {error && (
-              <Text
+              <p
+                className={cn(text, 'px-8 text-center')}
                 style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}
-                ta="center"
-                px="xl"
               >
                 {error}
-              </Text>
+              </p>
             )}
           </div>
         )}
@@ -635,7 +644,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
                   width: 64,
                   height: 64,
                   borderRadius: '50%',
-                  backgroundColor: 'var(--color-bg)',
+                  backgroundColor: CAMERA_ON,
                   border: '4px solid var(--color-primary)',
                   cursor: 'pointer',
                 }}
@@ -677,29 +686,25 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           }}
         >
           {captured && (
-            <Button
-              flex={1}
+            <AppButton
               onClick={retake}
               disabled={uploading}
-              variant="outline"
-              color="white"
-              radius="xl"
+              tone="white-outline"
               size="lg"
+              className="flex-1"
             >
               재촬영
-            </Button>
+            </AppButton>
           )}
-          <Button
-            flex={1}
+          <AppButton
             onClick={upload}
             disabled={!captured || uploading || !sessionReady}
-            color="brand"
-            radius="xl"
             size="lg"
-            leftSection={uploading ? <Loader size="xs" color="white" /> : null}
+            className="flex-1"
+            leftSection={uploading ? <Spinner size={18} className="text-white" /> : null}
           >
             {uploading ? '업로드 중...' : isRoundDirect ? '사진을 등록하고 배송 완료' : '업로드'}
-          </Button>
+          </AppButton>
         </div>
       )}
 

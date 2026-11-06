@@ -55,14 +55,47 @@ describe('AdminService 판매자 치우기', () => {
   it.each([
     ['orders/o-1', { id: 'o-1', storeId: 's-1' }],
     ['settlements/o-1', { id: 'o-1', storeId: 's-1' }],
-  ])('%s 기록이 있으면 400으로 막고 바꾸지 않는다', async (path, data) => {
+  ])('%s 기록이 있는데 가게 ID 확인이 없거나 틀리면 412로 막고 바꾸지 않는다', async (path, data) => {
     const { occ, audit, service } = makeFixture();
-    occ.seed('stores/s-1', { id: 's-1', status: 'active' });
+    occ.seed('stores/abcdef12-3456', { id: 'abcdef12-3456', status: 'active' });
+    occ.seed(path, { ...data, storeId: 'abcdef12-3456' });
+
+    for (const prefix of [undefined, '', 'abcdef1', 'abcdef123', 'zzzzzzzz']) {
+      await expect(
+        service.archiveStore('abcdef12-3456', 'admin-1', prefix),
+      ).rejects.toMatchObject({ status: 412 });
+    }
+    expect(occ.getData('stores/abcdef12-3456')).toEqual({
+      id: 'abcdef12-3456',
+      status: 'active',
+    });
+    expect(audit.logAdmin).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['orders/o-1', { id: 'o-1', storeId: 'S-1A2B3C4D-xyz' }],
+    ['settlements/o-1', { id: 'o-1', storeId: 'S-1A2B3C4D-xyz' }],
+  ])('%s 기록이 있어도 가게 ID 앞 8자리가 맞으면 치우고 기록을 남긴다', async (path, data) => {
+    const { occ, audit, service } = makeFixture();
+    occ.seed('stores/S-1A2B3C4D-xyz', { id: 'S-1A2B3C4D-xyz', status: 'active' });
     occ.seed(path, data);
 
-    await expect(service.archiveStore('s-1', 'admin-1')).rejects.toMatchObject({ status: 400 });
-    expect(occ.getData('stores/s-1')).toEqual({ id: 's-1', status: 'active' });
-    expect(audit.logAdmin).not.toHaveBeenCalled();
+    // 앞뒤 공백·대소문자는 무시한다.
+    await expect(
+      service.archiveStore('S-1A2B3C4D-xyz', 'admin-1', ' s-1a2b3c '),
+    ).resolves.toEqual({ storeId: 'S-1A2B3C4D-xyz', status: 'archived' });
+    expect(occ.getData('stores/S-1A2B3C4D-xyz')).toMatchObject({
+      status: 'archived',
+      archivedFromStatus: 'active',
+    });
+    // 기록은 지우지 않는다.
+    expect(occ.getData(path)).toEqual(data);
+    expect(audit.logAdmin).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'admin.store.archived',
+        after: { status: 'archived', hadRecords: true },
+      }),
+    );
   });
 
   it('이미 치운 판매자는 409로 거절해 이전 상태를 덮어쓰지 않는다', async () => {

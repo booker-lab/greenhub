@@ -1,8 +1,17 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { AdminUser } from '@/hooks/useAdmin';
-import { formatJoinedDate, formatPhone, suspendActionLabel } from '../_lib';
+import {
+  ADMIN_SUB,
+  ADMIN_TD,
+  ADMIN_TH,
+  AdminListNotice,
+  AdminMissing,
+  AdminRowMenu,
+  formatAdminDate,
+} from '../../_components/adminList';
+import { suspendActionLabel } from '../_lib';
 
 interface UsersTableProps {
   users: AdminUser[];
@@ -10,178 +19,122 @@ interface UsersTableProps {
   onToggle: (user: AdminUser) => void;
 }
 
-const thBase = {
-  textAlign: 'left' as const,
-  padding: '12px 16px',
-  fontWeight: 500,
-  color: 'var(--color-text-secondary)',
-};
+// ② 방향(design-direction.md §5 어드민 "모든 목록 화면의 규칙", §8 D7): 카드 목록 대신 다른 목록과 같은 표.
+// 열: 이름(굵게, 아래 회색 이메일) → 연락처 → 상태(점 + 글자, 정지는 빨강) → 가입일 → ⋮(정지… / 정지 풀기…).
+// 잘린 계정 id는 보여 주지 않는다. 태블릿(1100px 이하)은 가입일을 이름 아래 보조 줄로, 휴대폰은 세 줄 행이다.
+
+function userName(user: AdminUser): string {
+  // 타입은 string이지만 옛 문서에 필드가 없을 수 있어 ?.로 방어한다.
+  return user.name?.trim() || '이름 없음';
+}
+
+function UserPhone({ phone }: { phone?: string }) {
+  const value = phone?.trim();
+  if (!value) return <span className="text-[var(--color-text-secondary)]">연락처 미등록</span>;
+  return <span className="whitespace-nowrap tabular-nums">{value}</span>;
+}
+
+function UserStatus({ user, size }: { user: AdminUser; size: 13 | 15 }) {
+  return user.suspended ? (
+    <StatusDot tone="problem" size={size}>
+      정지
+    </StatusDot>
+  ) : (
+    <StatusDot size={size}>정상</StatusDot>
+  );
+}
+
+function UserJoined({ user }: { user: AdminUser }) {
+  const date = formatAdminDate(user.createdAt);
+  return date ? <span className="whitespace-nowrap tabular-nums">{date}</span> : <AdminMissing />;
+}
 
 export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
-  if (users.length === 0) {
-    return (
-      <Paper
-        radius="lg"
-        shadow="xs"
-        style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-      >
-        <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>
-          등록된 소비자가 없습니다.
-        </Text>
-      </Paper>
+  if (users.length === 0) return <AdminListNotice>등록된 소비자가 없습니다.</AdminListNotice>;
+
+  const actionsOf = (user: AdminUser) =>
+    processingId === user.id ? (
+      <span className="text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
+        처리 중…
+      </span>
+    ) : (
+      <AdminRowMenu
+        label={`소비자 ${userName(user)}`}
+        items={[
+          {
+            key: 'suspend',
+            label: `${suspendActionLabel(!!user.suspended)}…`,
+            onSelect: () => onToggle(user),
+          },
+        ]}
+      />
     );
-  }
 
   return (
     <>
-      {/* 모바일(<sm): 카드 리스트 — 상태·정지/정지 해제 버튼 잘림 방지 */}
-      <Stack gap="sm" hiddenFrom="sm">
+      {/* 휴대폰(640px 이하): 세 줄 행 — 1줄 이름, 2줄 연락처와 오른쪽 상태, 3줄 이메일·가입일, 옆에 ⋮ 한 자리. */}
+      <ul className="m-0 list-none p-0 min-[641px]:hidden" aria-label="소비자 목록">
         {users.map((user) => (
-          <Paper
+          <li
             key={user.id}
-            radius="md"
-            px="md"
-            py="sm"
-            shadow="xs"
-            style={{ border: '1px solid var(--color-border)' }}
+            className="flex items-center gap-2 border-b border-rule py-2.5 [word-break:keep-all]"
           >
-            <Group justify="space-between" mb="xs" align="flex-start">
-              <Box style={{ minWidth: 0, flex: 1 }}>
-                <Text style={{ fontWeight: 'var(--fw-medium)' }}>{user.name}</Text>
-                <Text
-                  style={{
-                    fontSize: 'var(--font-size-sm)',
-                    color: 'var(--color-text-secondary)',
-                    wordBreak: 'break-all',
-                  }}
-                >
-                  {user.email}
-                </Text>
-                <Text
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-                >
-                  전화 {formatPhone(user.phone)}
-                </Text>
-                <Text
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                >
-                  가입일 {formatJoinedDate(user.createdAt)}
-                </Text>
-              </Box>
-              <Badge color={user.suspended ? 'red' : 'brand'} variant="light" radius="xl">
-                {user.suspended ? '정지됨' : '정상'}
-              </Badge>
-            </Group>
-            <Group justify="flex-end" mt="xs">
-              <Button
-                onClick={() => onToggle(user)}
-                disabled={processingId === user.id}
-                size="xs"
-                variant="outline"
-                color={user.suspended ? 'brand' : 'red'}
-                radius="md"
-              >
-                {processingId === user.id ? '처리중…' : suspendActionLabel(!!user.suspended)}
-              </Button>
-            </Group>
-          </Paper>
+            <div className="min-w-0 flex-1">
+              <p className="m-0 text-[15px] leading-[22px] font-bold">{userName(user)}</p>
+              <div className="flex items-start justify-between gap-2">
+                <p className={`${ADMIN_SUB} min-w-0`}>
+                  <UserPhone phone={user.phone} />
+                </p>
+                <UserStatus user={user} size={13} />
+              </div>
+              <p className={`${ADMIN_SUB} break-all`}>
+                {user.email} · 가입 <UserJoined user={user} />
+              </p>
+            </div>
+            <div className="flex w-11 shrink-0 justify-center">{actionsOf(user)}</div>
+          </li>
         ))}
-      </Stack>
+      </ul>
 
-      {/* 데스크톱(≥sm): 기존 4칸 테이블 유지. 앱 셸이 480px라 칸을 늘리면 상태·정지 버튼이
-          잘리므로 전화·가입일은 이메일 칸 아래 보조 줄로 둔다. */}
-      <Paper
-        radius="lg"
-        shadow="xs"
-        style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        visibleFrom="sm"
-      >
-        <Box
-          component="table"
-          style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
-        >
-          <Box
-            component="thead"
-            style={{
-              backgroundColor: 'var(--color-surface-muted)',
-              borderBottom: '1px solid var(--color-border)',
-            }}
-          >
-            <tr>
-              <Box component="th" style={thBase}>
-                이름
-              </Box>
-              <Box component="th" style={thBase}>
-                이메일
-              </Box>
-              <Box component="th" style={thBase}>
-                상태
-              </Box>
-              <Box component="th" style={{ padding: '12px 16px' }} />
+      {/* 태블릿·데스크톱(641px 이상): 표. 1100px 이하는 가입일을 이름 아래 보조 줄로 옮긴다. */}
+      <table className="w-full border-collapse max-[640px]:hidden">
+        <thead>
+          <tr>
+            <th className={ADMIN_TH}>이름</th>
+            <th className={ADMIN_TH}>연락처</th>
+            <th className={ADMIN_TH}>상태</th>
+            <th className={`${ADMIN_TH} max-[1100px]:hidden`}>가입일</th>
+            <th className={`${ADMIN_TH} w-[60px]`}>
+              <span className="sr-only">동작</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((user) => (
+            <tr key={user.id}>
+              <td className={`${ADMIN_TD} w-[40%] [word-break:keep-all]`}>
+                <p className="m-0 font-bold">{userName(user)}</p>
+                <p className={`${ADMIN_SUB} break-all`}>{user.email}</p>
+                <p className={`${ADMIN_SUB} min-[1101px]:hidden`}>
+                  가입 <UserJoined user={user} />
+                </p>
+              </td>
+              <td className={ADMIN_TD}>
+                <UserPhone phone={user.phone} />
+              </td>
+              <td className={ADMIN_TD}>
+                <UserStatus user={user} size={15} />
+              </td>
+              <td className={`${ADMIN_TD} max-[1100px]:hidden`}>
+                <UserJoined user={user} />
+              </td>
+              <td className={`${ADMIN_TD} py-1 text-right align-middle`}>
+                <span className="flex justify-end">{actionsOf(user)}</span>
+              </td>
             </tr>
-          </Box>
-          <Box component="tbody">
-            {users.map((user) => (
-              <Box
-                component="tr"
-                key={user.id}
-                style={{ borderTop: '1px solid var(--color-border)' }}
-              >
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Text style={{ fontWeight: 'var(--fw-medium)' }}>{user.name}</Text>
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-disabled)',
-                    }}
-                    ff="monospace"
-                  >
-                    {user.id.slice(0, 8)}…
-                  </Text>
-                </Box>
-                <Box
-                  component="td"
-                  style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
-                >
-                  <Text style={{ fontSize: 'var(--font-size-sm)', wordBreak: 'break-all' }}>
-                    {user.email}
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-secondary)',
-                    }}
-                  >
-                    전화 {formatPhone(user.phone)}
-                  </Text>
-                  <Text
-                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                  >
-                    가입일 {formatJoinedDate(user.createdAt)}
-                  </Text>
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Badge color={user.suspended ? 'red' : 'brand'} variant="light" radius="xl">
-                    {user.suspended ? '정지됨' : '정상'}
-                  </Badge>
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
-                  <Button
-                    onClick={() => onToggle(user)}
-                    disabled={processingId === user.id}
-                    size="xs"
-                    variant="outline"
-                    color={user.suspended ? 'brand' : 'red'}
-                    radius="md"
-                  >
-                    {processingId === user.id ? '처리중…' : suspendActionLabel(!!user.suspended)}
-                  </Button>
-                </Box>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      </Paper>
+          ))}
+        </tbody>
+      </table>
     </>
   );
 }

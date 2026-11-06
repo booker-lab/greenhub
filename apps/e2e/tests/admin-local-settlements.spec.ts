@@ -7,7 +7,6 @@ import {
   type DocData,
   deleteDocs,
   deleteLocalAdmin,
-  krw,
   type LocalAdmin,
   loginLocalAdmin,
   newRunId,
@@ -16,6 +15,7 @@ import {
   readDoc,
   seedDocs,
   visible,
+  won,
 } from './_helpers/admin-local';
 
 // 어드민 정산(#592) — 상태 필터·지급 대기/지급 완료 합계 카드·더 보기·지급 확인창(가게·금액·계좌)·지급 뒤 합계 이동.
@@ -136,7 +136,7 @@ test.describe('어드민 로컬 — 정산', () => {
     visible(page.getByRole('button', { name: label, exact: true }));
 
   async function openStoreSettlements(page: Page) {
-    await openAdminPage(page, '/admin/settlements', '정산 목록');
+    await openAdminPage(page, '/admin/settlements', '지급 완료 기록은 돈을 보내지 않습니다');
     await pickSelectOption(
       page,
       page.getByRole('combobox', { name: '가게', exact: true }),
@@ -145,84 +145,97 @@ test.describe('어드민 로컬 — 정산', () => {
         search: true,
       },
     );
-    await expect(page.getByText('정산 목록 (101)')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('정산 101건')).toBeVisible({ timeout: 30_000 });
   }
 
   test('합계 카드는 조건 전체, 목록은 100건 뒤 더 보기로 이어 받는다', async ({ page }) => {
     await openStoreSettlements(page);
 
-    await expect(summaryCard(page, '지급 대기')).toContainText(krw(PAY.net));
-    await expect(summaryCard(page, '지급 대기')).toContainText('1건 · 확정');
-    await expect(summaryCard(page, '지급 완료')).toContainText(krw(PAID.net));
+    await expect(summaryCard(page, '지급 대기')).toContainText(won(PAY.net));
+    await expect(summaryCard(page, '지급 대기')).toContainText('1건 · 아래 두 칸 포함');
+    await expect(summaryCard(page, '지급 완료')).toContainText(won(PAID.net));
     await expect(summaryCard(page, '지급 완료')).toContainText('1건');
-    await expect(summaryCard(page, '플랫폼 수수료')).toContainText(krw(PAY.fee + PAID.fee));
+    await expect(summaryCard(page, '플랫폼 수수료')).toContainText(won(PAY.fee + PAID.fee));
 
     await expect(rows(page)).toHaveCount(100);
     await expect(
-      page.getByText('100건까지 불러왔습니다. 합계 카드는 조건 전체 기준입니다.'),
+      page.getByText(
+        '100건까지 불러왔습니다. 합계는 조건 전체 기준이고, 계좌 없음·지급 보류와 가게별 묶음은 불러온 행 기준입니다.',
+      ),
     ).toBeVisible();
     await visible(page.getByRole('button', { name: '더 보기' })).click();
     await expect(rows(page)).toHaveCount(101);
     await expect(page.getByRole('button', { name: '더 보기' })).toHaveCount(0);
     // 더 받아도 합계는 그대로다(서버가 조건 전체로 계산).
-    await expect(summaryCard(page, '지급 대기')).toContainText(krw(PAY.net));
+    await expect(summaryCard(page, '지급 대기')).toContainText(won(PAY.net));
   });
 
-  test('상태 필터 — 확정·지급 완료·전체로 목록과 건수가 바뀐다', async ({ page }) => {
+  test('상태 필터 — 지급 대기·지급 완료·회차 마감 전·전체로 목록과 건수가 바뀐다', async ({
+    page,
+  }) => {
     await openStoreSettlements(page);
 
-    await statusTab(page, '확정').click();
-    await expect(page.getByText('정산 목록 (1)')).toBeVisible();
+    await statusTab(page, '지급 대기').click();
+    await expect(page.getByText('정산 1건')).toBeVisible();
     await expect(rows(page)).toHaveCount(1);
     await expect(rows(page)).toHaveText(fx.payOrderNumber);
 
     await statusTab(page, '지급 완료').click();
-    await expect(page.getByText('정산 목록 (1)')).toBeVisible();
+    await expect(page.getByText('정산 1건')).toBeVisible();
     await expect(rows(page)).toHaveText(fx.paidOrderNumber);
 
-    await statusTab(page, '정산 대기').click();
-    await expect(page.getByText(`정산 목록 (${FILLER_COUNT})`)).toBeVisible();
+    await statusTab(page, '회차 마감 전').click();
+    await expect(page.getByText(`정산 ${FILLER_COUNT}건`)).toBeVisible();
     await expect(rows(page)).toHaveCount(FILLER_COUNT);
 
     await statusTab(page, '전체').click();
-    await expect(page.getByText('정산 목록 (101)')).toBeVisible();
+    await expect(page.getByText('정산 101건')).toBeVisible();
   });
 
   test('지급 확인창에 가게·주문·금액·계좌를 보이고, 지급하면 합계가 지급 완료로 옮겨 간다', async ({
     page,
   }) => {
     await openStoreSettlements(page);
-    await statusTab(page, '확정').click();
-    await expect(page.getByText('정산 목록 (1)')).toBeVisible();
+    await statusTab(page, '지급 대기').click();
+    await expect(page.getByText('정산 1건')).toBeVisible();
     await expect(rows(page)).toHaveText(fx.payOrderNumber);
 
-    await visible(page.getByRole('button', { name: '지급처리' })).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog.getByText('정산 지급 처리')).toBeVisible();
-    await expect(dialog).toContainText(`가게: ${fx.storeName}`);
-    await expect(dialog).toContainText(`주문번호: ${fx.payOrderNumber}`);
-    await expect(dialog).toContainText(`지급액: ${krw(PAY.net)}`);
+    await visible(
+      page.getByRole('button', { name: `주문 ${fx.payOrderNumber} 지급 완료 기록` }),
+    ).click();
+    // ② 확인창(D7): 제목 = 동작 + 대상, 대상 정보(가게·주문·입금 계좌 전체 번호·예금주), 돈의 흐름(거래액 − 수수료 = 지급액).
+    const dialog = page.getByRole('dialog', { name: `${fx.storeName} 정산 1건 지급 완료 기록` });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(`주문번호${fx.payOrderNumber}`);
     const { bankName, accountNumber, accountHolder } = fx.account;
-    await expect(dialog).toContainText(
-      `입금 계좌: ${bankName} ${accountNumber} (예금주 ${accountHolder})`,
-    );
+    await expect(dialog).toContainText(`입금 계좌${bankName} ${accountNumber}`);
+    await expect(dialog).toContainText(`예금주${accountHolder}`);
+    await expect(dialog).toContainText(`거래액${won(PAY.net + PAY.fee)}`);
+    await expect(dialog).toContainText(`플랫폼 수수료−${won(PAY.fee)}`);
+    await expect(dialog).toContainText(`지급액${won(PAY.net)}`);
+    // 이체를 마쳤다고 체크하기 전에는 기록 버튼이 꺼져 있다(체크는 비운 채 열린다).
+    const confirm = dialog.getByRole('button', { name: `${won(PAY.net)} 지급 완료 기록` });
+    await expect(confirm).toBeDisabled();
+    await dialog
+      .getByRole('checkbox', { name: `은행 앱에서 이 계좌로 ${won(PAY.net)} 이체를 마쳤습니다` })
+      .check();
 
     const payResponse = page.waitForResponse(
       (res) =>
         res.url().endsWith(`/admin/settlements/${fx.payId}/pay`) &&
         res.request().method() === 'PATCH',
     );
-    await dialog.getByRole('button', { name: '지급 완료', exact: true }).click();
+    await confirm.click();
     expect((await payResponse).status()).toBe(200);
     await expect(dialog).toBeHidden();
     expect((await readDoc(`settlements/${fx.payId}`))?.status).toBe('paid');
 
     await statusTab(page, '전체').click();
-    await expect(summaryCard(page, '지급 대기')).toContainText(krw(0));
-    await expect(summaryCard(page, '지급 대기')).toContainText('0건 · 확정');
-    await expect(summaryCard(page, '지급 완료')).toContainText(krw(PAY.net + PAID.net));
+    await expect(summaryCard(page, '지급 대기')).toContainText(won(0));
+    await expect(summaryCard(page, '지급 대기')).toContainText('0건 · 아래 두 칸 포함');
+    await expect(summaryCard(page, '지급 완료')).toContainText(won(PAY.net + PAID.net));
     await expect(summaryCard(page, '지급 완료')).toContainText('2건');
     // 수수료 합계는 지급 대기 + 지급 완료라 지급해도 변하지 않는다.
-    await expect(summaryCard(page, '플랫폼 수수료')).toContainText(krw(PAY.fee + PAID.fee));
+    await expect(summaryCard(page, '플랫폼 수수료')).toContainText(won(PAY.fee + PAID.fee));
   });
 });

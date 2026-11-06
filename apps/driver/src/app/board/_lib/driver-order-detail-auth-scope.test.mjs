@@ -328,7 +328,7 @@ test('R3. 이전 auth scope command continuation은 새 scope UI를 변경하지
   const tail = detailSource.slice(cmdAt);
   assert.match(tail, /setOrder\(fresh\)/);
   assert.match(tail, /setReadbackWarning/);
-  assert.match(tail, /notifications\.show/);
+  assert.match(tail, /toast\.add/);
   assert.match(tail, /router\.replace/);
   assert.match(tail, /await readDetail\(token\)/);
 });

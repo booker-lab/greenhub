@@ -72,3 +72,6 @@ apps/*/public/swe-worker-*.js
 .claude/
 # 세션 인계용 로컬 묶음(git bundle·node_modules 압축 등). 공개 저장소에 올리지 않는다.
 .claude-handoff/
+
+# Taste Skill 검수 결과(scripts/visual/taste-skill/VENDOR.md)
+.taste-skill/

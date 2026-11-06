@@ -117,13 +117,16 @@ function orderMillis(round: RoundTiming): number {
 /**
  * 화면의 "이번 주 회차"와 같은 규칙으로 현재 회차를 고른다(useSaleRounds의 selectCurrentRound).
  * 판매 중 회차가 우선이고, 없으면 아직 주문 시작 전인 가장 가까운 판매 예정 회차다.
+ * 판매 중 회차가 여럿이면 화면처럼 주문 시작이 가장 늦은 회차다(API 목록은 정렬되지 않는다).
  * 마감 회차는 지금 살 수 없으므로 가격 정보 대상이 아니다.
  */
 export function selectOrderableRound<T extends RoundTiming>(
   rounds: ReadonlyArray<T>,
   now: Date,
 ): T | null {
-  const open = rounds.find((round) => round.status === 'OPEN');
+  const open = rounds
+    .filter((round) => round.status === 'OPEN')
+    .sort((a, b) => orderMillis(b) - orderMillis(a))[0];
   if (open) return open;
   const nowMillis = now.getTime();
   return (

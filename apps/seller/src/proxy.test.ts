@@ -19,13 +19,20 @@ vi.mock('@/auth', () => ({
 // vitest에는 '@/' 별칭 설정이 없어 같은 모듈로 잇는다.
 vi.mock('@/lib/content-security-policy', () => import('./lib/content-security-policy'));
 vi.mock('@/lib/admin-landing', () => import('./lib/admin-landing'));
+vi.mock('@/lib/initial-session', () => import('./lib/initial-session'));
 
 const { config, proxy } = await import('./proxy');
+const { decodeInitialSession, encodeInitialSession, INITIAL_SESSION_HEADER } = await import(
+  './lib/initial-session'
+);
 
 const event = {} as NextFetchEvent;
 
-async function run(path: string): Promise<Response> {
-  const response = await proxy(new NextRequest(`https://seller.example.test${path}`), event);
+async function run(path: string, headers?: Record<string, string>): Promise<Response> {
+  const response = await proxy(
+    new NextRequest(`https://seller.example.test${path}`, { headers }),
+    event,
+  );
   if (!response) throw new Error('proxy returned no response');
   return response;
 }
@@ -112,6 +119,64 @@ describe('판매자 proxy 로그인 검사', () => {
     expect(response.headers.get('location')).toBeNull();
     expect(response.headers.get('x-middleware-next')).toBe('1');
     expect(state.authPaths).toEqual([]);
+  });
+});
+
+describe('판매자 proxy 첫 화면 세션 전달', () => {
+  const sellerSession = {
+    user: { name: '김판매', role: 'seller', storeId: 'store-1', accessToken: 'access-1' },
+    expires: '2099-01-01T00:00:00.000Z',
+  };
+  const forged = encodeInitialSession({
+    user: { role: 'admin', storeId: null, accessToken: 'forged' },
+    expires: '2099-01-01T00:00:00.000Z',
+  } as never);
+  const passedSession = (response: Response) =>
+    response.headers.get(`x-middleware-request-${INITIAL_SESSION_HEADER}`);
+
+  it('보호 경로에서 확인한 판매자 세션을 그대로 layout에 넘긴다(브라우저가 보낸 값은 덮어쓴다)', async () => {
+    state.session = sellerSession;
+    for (const path of ['/', '/orders', '/orders/order-1', '/settings', '/onboarding']) {
+      const response = await run(path, { [INITIAL_SESSION_HEADER]: forged });
+      expect(response.headers.get('location')).toBeNull();
+      expect(decodeInitialSession(passedSession(response))).toEqual(sellerSession);
+    }
+  });
+
+  it('관리자 경로를 여는 순수 관리자 세션도 넘긴다', async () => {
+    const adminSession = {
+      user: { role: 'admin', storeId: null, accessToken: 'access-2' },
+      expires: '2099-01-01T00:00:00.000Z',
+    };
+    state.session = adminSession as never;
+    const response = await run('/admin/stores', { [INITIAL_SESSION_HEADER]: forged });
+    expect(decodeInitialSession(passedSession(response))).toEqual(adminSession);
+  });
+
+  it('로그인·초대 화면에서는 세션을 넘기지 않고 브라우저가 보낸 같은 이름의 헤더도 지운다', async () => {
+    state.session = sellerSession;
+    for (const path of ['/login', '/invite/ABCDEF0123456789']) {
+      const response = await run(path, { [INITIAL_SESSION_HEADER]: forged });
+      expect(passedSession(response)).toBeNull();
+      expect(response.headers.get('x-middleware-override-headers')).not.toContain(
+        INITIAL_SESSION_HEADER,
+      );
+    }
+    expect(state.authPaths).toEqual([]);
+  });
+
+  it('로그인·온보딩·관리자 콘솔로 보내는 경우에는 세션을 넘기지 않는다', async () => {
+    const cases: Array<[typeof state.session, string]> = [
+      [null, '/orders'],
+      [{ user: { role: 'seller' } }, '/orders'],
+      [{ user: { role: 'admin' } }, '/orders'],
+    ];
+    for (const [session, path] of cases) {
+      state.session = session;
+      const response = await run(path, { [INITIAL_SESSION_HEADER]: forged });
+      expect(response.status).toBe(307);
+      expect(passedSession(response)).toBeNull();
+    }
   });
 });
 

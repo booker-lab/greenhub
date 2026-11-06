@@ -1,6 +1,5 @@
 'use client';
 
-import { Container } from '@mantine/core';
 import { useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
@@ -40,9 +39,16 @@ export default function SettlementsPage() {
     <PageShell>
       <PageHeader title="정산 관리" />
 
-      <SegmentedTabs<SettlementTab> tabs={TABS} value={activeTab} onChange={setActiveTab} sticky />
+      <SegmentedTabs<SettlementTab>
+        tabs={TABS}
+        value={activeTab}
+        onChange={setActiveTab}
+        sticky
+        variant="underline"
+      />
 
-      <Container size="sm" px="md" py="md">
+      {/* ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·py md와 같은 값. */}
+      <div className="mx-auto max-w-[720px] px-4 py-4">
         {activeTab === 'daily' && (
           <DailySummaryTab
             selectedDate={selectedDate}
@@ -81,7 +87,7 @@ export default function SettlementsPage() {
             onLoadMore={loadMoreSettlements}
           />
         )}
-      </Container>
+      </div>
     </PageShell>
   );
 }

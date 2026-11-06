@@ -1,28 +1,41 @@
 'use client';
 
-import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
-import { useDebouncedCallback } from '@mantine/hooks';
-import { notifications } from '@mantine/notifications';
+import { ButtonLink } from '@greenhub/ui/components/button';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Input } from '@greenhub/ui/components/input';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { notify } from '@/components/AppToaster';
+import { SegmentedTabs } from '@/components/SegmentedTabs';
 import type { AdminStore } from '@/hooks/useAdmin';
-import { classifyAdminCommandError, describeAdminCommandOutcome, useAdminStores } from '@/hooks/useAdmin';
+import {
+  classifyAdminCommandError,
+  describeAdminCommandOutcome,
+  useAdminStores,
+} from '@/hooks/useAdmin';
+import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
+import { AdminListError, AdminPageHeader } from '../_components/adminList';
 import { StoresFilters } from './_components/StoresFilters';
 import { StoresTable } from './_components/StoresTable';
 import {
+  countStoresByFilter,
   DEFAULT_COMMISSION_PERCENT,
   DEFAULT_SORT,
   DEFAULT_STATUS_FILTER,
   describeArchiveConfirm,
+  describeArchiveRecordsConfirm,
+  describeCommissionSaved,
   describeRestoreConfirm,
   filterStores,
   getAdminStoresReadState,
   getEmptyKind,
-  describeCommissionSaved,
   parseRate,
   parseSort,
-  rateToInput,
   parseStatusFilter,
+  rateToInput,
+  STATUS_FILTER_OPTIONS,
   type StoreSort,
   type StoreStatusFilter,
   sortStores,
@@ -110,7 +123,7 @@ export default function AdminStoresClient() {
   const handleSave = async (storeId: string) => {
     const parsed = parseRate(rateInput);
     if (!parsed.ok) {
-      notifications.show({
+      notify({
         color: 'yellow',
         title: '입력 값을 확인하세요',
         message: '0~100 사이의 수수료율(%)을 입력해야 합니다 (예: 5 = 5%).',
@@ -124,7 +137,7 @@ export default function AdminStoresClient() {
       setEditId(null);
       setRateInput('');
       const storeName = stores.find((s) => s.id === storeId)?.name ?? '';
-      notifications.show({
+      notify({
         color: 'brand',
         title: '수수료율 저장',
         message: describeCommissionSaved(storeName, parsed.rate),
@@ -136,12 +149,16 @@ export default function AdminStoresClient() {
       setEditId(null);
       setRateInput('');
       const presentation = describeAdminCommandOutcome(outcome, '수수료율 변경');
-      notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
+      notify({
+        color: 'yellow',
+        title: presentation.title,
+        message: presentation.message,
+      });
       return;
     }
     // rejected: 서버 reason 보존 + 편집 유지(수정 가능). unknown: 재확인 우선 + 편집 유지.
     const presentation = describeAdminCommandOutcome(outcome, '수수료율 변경');
-    notifications.show({
+    notify({
       color: outcome.kind === 'rejected' ? 'red' : 'yellow',
       title: presentation.title,
       message: presentation.message,
@@ -158,71 +175,123 @@ export default function AdminStoresClient() {
     setRateInput('');
   };
 
-  const handleArchive = async (store: AdminStore) => {
-    if (!window.confirm(describeArchiveConfirm(store))) return;
+  // 정리하기·복구 확인창(design-direction.md §5 어드민 "위험 동작 확인창"). 정리하기는 서버가 412(주문·정산 기록 있음)를
+  // 돌려주면 같은 창이 가게 ID 앞 8자리 입력 단계로 바뀌고, 입력값을 실어 한 번 더 보낸다. 닫으면 아무것도 보내지 않는다.
+  const prefixInputId = useId();
+  const [storeAction, setStoreAction] = useState<{
+    store: AdminStore;
+    step: 'archive' | 'records' | 'restore';
+  } | null>(null);
+  const [typedPrefix, setTypedPrefix] = useState('');
+  const [storeActionBusy, setStoreActionBusy] = useState(false);
+
+  const handleArchive = (store: AdminStore) => setStoreAction({ store, step: 'archive' });
+  const handleRestore = (store: AdminStore) => setStoreAction({ store, step: 'restore' });
+  const closeStoreAction = () => {
+    if (storeActionBusy) return;
+    setStoreAction(null);
+    setTypedPrefix('');
+  };
+
+  const runArchive = async (store: AdminStore, typed: string | null) => {
+    setStoreActionBusy(true);
     try {
-      const reconciliation = await archiveStore(store.id);
+      const reconciliation =
+        typed === null ? await archiveStore(store.id) : await archiveStore(store.id, typed);
+      setStoreAction(null);
+      setTypedPrefix('');
       if (!reconciliation.reconciled) {
         // COMMAND CONFIRMED + RECONCILIATION FAILED — 실패로 표현하지 않고 중복 실행을 유도하지 않는다.
-        notifications.show({
+        notify({
           color: 'yellow',
-          title: '치우기는 완료됐으나 목록 확인 실패',
+          title: '정리는 완료됐으나 목록 확인 실패',
           message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
         });
         return;
       }
-      notifications.show({
+      notify({
         color: 'brand',
-        title: '판매자를 치웠습니다',
-        message: `${store.name || '(미설정)'} — 손님 화면에서 숨고 새 주문을 받지 않습니다.`,
+        title: '판매자를 정리했습니다',
+        message: `${store.name || '이름 없는 가게'} — 손님 화면에서 숨고 새 주문을 받지 않습니다.`,
       });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
+      // 주문·정산 기록이 있는 판매자(412) — 가게 ID 앞 8자리를 받는 단계로 넘어간다.
+      if (typed === null && classified.kind === 'rejected' && classified.status === 412) {
+        setTypedPrefix('');
+        setStoreAction({ store, step: 'records' });
+        return;
+      }
+      setStoreAction(null);
+      setTypedPrefix('');
       if (classified.kind === 'unknown') {
-        const presentation = describeAdminCommandOutcome(classified, '치우기');
-        notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
+        const presentation = describeAdminCommandOutcome(classified, '정리하기');
+        notify({
+          color: 'yellow',
+          title: presentation.title,
+          message: presentation.message,
+        });
         return;
       }
       // 기록 가드(400) 등 차단 사유를 서버 메시지 그대로 안내
-      notifications.show({
+      notify({
         color: 'red',
-        title: '치울 수 없습니다',
-        message: e instanceof Error ? e.message : '판매자를 치우는 중 오류가 발생했습니다.',
+        title: '정리할 수 없습니다',
+        message: e instanceof Error ? e.message : '판매자를 정리하는 중 오류가 발생했습니다.',
       });
+    } finally {
+      setStoreActionBusy(false);
     }
   };
 
-  const handleRestore = async (store: AdminStore) => {
-    if (!window.confirm(describeRestoreConfirm(store))) return;
+  const runRestore = async (store: AdminStore) => {
+    setStoreActionBusy(true);
     try {
       const reconciliation = await restoreStore(store.id);
+      setStoreAction(null);
       if (!reconciliation.reconciled) {
-        notifications.show({
+        notify({
           color: 'yellow',
           title: '복구 처리는 완료됐으나 목록 확인 실패',
           message: `${reconciliation.readError ?? '목록 조회 실패'} 다시 조회해 최신 상태를 확인해 주세요. 같은 작업을 중복 실행하지 마세요.`,
         });
         return;
       }
-      notifications.show({
+      notify({
         color: 'brand',
         title: '판매자를 복구했습니다',
-        message: `${store.name || '(미설정)'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
+        message: `${store.name || '이름 없는 가게'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
       });
     } catch (e) {
+      setStoreAction(null);
       const classified = classifyAdminCommandError(e);
       if (classified.kind === 'unknown') {
         const presentation = describeAdminCommandOutcome(classified, '복구');
-        notifications.show({ color: 'yellow', title: presentation.title, message: presentation.message });
+        notify({
+          color: 'yellow',
+          title: presentation.title,
+          message: presentation.message,
+        });
         return;
       }
-      notifications.show({
+      notify({
         color: 'red',
         title: '복구할 수 없습니다',
         message: e instanceof Error ? e.message : '판매자 복구 중 오류가 발생했습니다.',
       });
+    } finally {
+      setStoreActionBusy(false);
     }
   };
+
+  const records =
+    storeAction?.step === 'records' ? describeArchiveRecordsConfirm(storeAction.store) : null;
+  const storeConfirm = !storeAction
+    ? null
+    : storeAction.step === 'restore'
+      ? describeRestoreConfirm(storeAction.store)
+      : (records ?? describeArchiveConfirm(storeAction.store));
+  const prefixMatches = records !== null && typedPrefix === records.prefix;
 
   const filtered = filterStores(stores, { keyword: view.keyword, status: view.status });
   const visible = sortStores(filtered, view.sort);
@@ -233,64 +302,51 @@ export default function AdminStoresClient() {
   const readState = getAdminStoresReadState({ loading, error, stores, visible });
   const isFetchError = readState === 'FETCH_ERROR';
 
-  return (
-    <Box>
-      <Group justify="space-between" mb="md">
-        <Title order={4}>
-          판매자 목록{' '}
-          {error === null && (
-            <Text
-              component="span"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
-              ({visible.length})
-            </Text>
-          )}
-        </Title>
-      </Group>
+  const counts = countStoresByFilter(stores, view.keyword);
+  const statusTabs = STATUS_FILTER_OPTIONS.map((option) => ({
+    key: option.value,
+    label: option.label,
+    count: !loading && error === null ? counts[option.value] : undefined,
+  }));
 
+  return (
+    <div>
+      {/* ② 방향(design-direction.md §5 어드민 "판매자", §8 D7): 명사 하나의 h1, 지금 기준 한 줄, 주요 버튼은 초대 링크 만들기. */}
       {/* 가게별 수수료율은 정산을 만들 때 그 가게 요율로 계산한다(결정 ②, BACKLOG STORE-COMMISSION-RATE-UNUSED).
           이미 만든 정산은 다시 계산하지 않는다. */}
-      <Text
-        mb="sm"
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-      >
-        수수료율은 다음에 만들어지는 정산부터 적용됩니다. 설정하지 않은 가게는 기본{' '}
-        {DEFAULT_COMMISSION_PERCENT}%로 정산하며, 이미 만든 정산은 바뀌지 않습니다.
-      </Text>
+      <AdminPageHeader
+        title="판매자"
+        subline={`수수료율은 다음에 만들어지는 정산부터 적용됩니다. 설정하지 않은 가게는 기본 ${DEFAULT_COMMISSION_PERCENT}%로 정산하며, 이미 만든 정산은 바뀌지 않습니다.`}
+        action={
+          <ButtonLink render={<Link href="/admin/invite" />} className="rounded-[8px]">
+            초대 링크 만들기
+          </ButtonLink>
+        }
+      />
 
       <StoresFilters
         keyword={view.keyword}
-        status={view.status}
         sort={view.sort}
         loading={loading}
         onKeywordChange={(keyword) => updateView({ keyword }, { debounceUrl: true })}
-        onStatusChange={(status) => updateView({ status })}
         onSortChange={(sort) => updateView({ sort })}
         onReload={reload}
       />
 
+      <div className="mb-2">
+        <SegmentedTabs<StoreStatusFilter>
+          tabs={statusTabs}
+          value={view.status}
+          onChange={(status) => updateView({ status })}
+          layout="scroll"
+          variant="underline"
+          surface="paper"
+          ariaLabel="판매자 상태"
+        />
+      </div>
+
       {isFetchError ? (
-        <Paper
-          radius="lg"
-          shadow="xs"
-          style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        >
-          <Stack gap="sm" align="center" py={64} px="md">
-            <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
-              판매자 목록을 불러오지 못했습니다.
-            </Text>
-            <Text
-              ta="center"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
-              {error}
-            </Text>
-            <Button onClick={reload} size="sm" variant="outline" radius="md">
-              다시 조회
-            </Button>
-          </Stack>
-        </Paper>
+        <AdminListError title="판매자 목록을 불러오지 못했습니다." error={error} onRetry={reload} />
       ) : (
         <StoresTable
           stores={visible}
@@ -306,10 +362,58 @@ export default function AdminStoresClient() {
           onSave={handleSave}
           onArchive={handleArchive}
           onRestore={handleRestore}
+          onOpenSettlements={(store) =>
+            router.push(`/admin/settlements?store=${encodeURIComponent(store.id)}`)
+          }
           onResetFilters={resetFilters}
           onSortChange={(sort) => updateView({ sort })}
         />
       )}
-    </Box>
+
+      <AdminConfirmDialog
+        open={storeAction !== null}
+        title={storeConfirm?.title ?? ''}
+        lead={storeConfirm?.lead}
+        facts={storeConfirm?.facts}
+        confirmLabel={storeConfirm?.confirmLabel ?? ''}
+        confirmDisabled={records !== null && !prefixMatches}
+        disabledHint={
+          records
+            ? `가게 ID 앞 8자리 ${records.prefix}를 그대로 입력하면 버튼이 켜집니다.`
+            : undefined
+        }
+        loading={storeActionBusy}
+        initialFocus={records ? 'field' : 'close'}
+        onConfirm={() => {
+          if (!storeAction) return;
+          if (storeAction.step === 'restore') void runRestore(storeAction.store);
+          else if (storeAction.step === 'archive') void runArchive(storeAction.store, null);
+          else if (prefixMatches) void runArchive(storeAction.store, typedPrefix);
+        }}
+        onClose={closeStoreAction}
+      >
+        {storeConfirm?.note && (
+          <p className="m-0 text-[13px] leading-[18px] text-[var(--color-text-secondary)]">
+            {storeConfirm.note}
+          </p>
+        )}
+        {records && (
+          <Field>
+            <FieldLabel htmlFor={prefixInputId}>가게 ID 앞 8자리</FieldLabel>
+            <Input
+              id={prefixInputId}
+              value={typedPrefix}
+              maxLength={8}
+              autoComplete="off"
+              spellCheck={false}
+              onChange={(event) => setTypedPrefix(event.currentTarget.value)}
+              disabled={storeActionBusy}
+              className="rounded-[8px] font-mono"
+              data-autofocus
+            />
+          </Field>
+        )}
+      </AdminConfirmDialog>
+    </div>
   );
 }

@@ -1,7 +1,8 @@
 'use client';
 
 import type { OperationIssueActionType, OperationIssueStatus, Order } from '@greenhub/shared';
-import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
+import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import {
   getAllowedOperationAction,
   ISSUE_DESCRIPTIONS,
@@ -9,6 +10,20 @@ import {
   type OrderOperationIssue,
 } from '../operation-issues';
 import { Row } from './OrderRow';
+
+// ② 디자인 방향(D2·2026-11-01 결정): 카드는 그림자·바깥 테두리 없이 흰 면. 흰 카드 안의 기록 카드는 테두리 대신
+// --frame 면, 그 안 조치 기록은 흰 면이다. 상태는 점 + 글자(StatusDot). 나머지는 ① 값(radius·Group·Stack·Text) 유지.
+const TEXT = 'm-0 p-0 text-base font-normal';
+const PAPER = 'block rounded-[16px] bg-card';
+const GROUP_BETWEEN = 'flex flex-row flex-wrap items-center justify-between gap-4';
+
+// 상태는 배지 면 대신 점 + 글자(2026-11-01 결정): 문제(빨강)=problem, 끝남(회색)=done, 나머지=검정.
+const TONE: Record<string, 'default' | 'problem' | 'done'> = {
+  brand: 'default',
+  red: 'problem',
+  yellow: 'default',
+  gray: 'done',
+};
 
 const STATUS_LABELS: Record<OperationIssueStatus, string> = {
   OPEN: '확인 필요',
@@ -67,17 +82,20 @@ function RedeliveryPaymentPanel({ payment }: { payment: Order['redeliveryPayment
   if (!presentation) return null;
 
   return (
-    <Paper radius="lg" shadow="xs" p="md" data-testid="seller-redelivery-payment">
-      <Group justify="space-between" mb="xs">
-        <Text style={{ fontWeight: 'var(--fw-medium)' }}>재배송비 결제</Text>
-        <Badge color={presentation.color} variant="light">
-          {presentation.label}
-        </Badge>
-      </Group>
-      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+    <div className={`${PAPER} p-4`} data-testid="seller-redelivery-payment">
+      <div className={`${GROUP_BETWEEN} mb-2.5`}>
+        <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+          재배송비 결제
+        </p>
+        <StatusDot tone={TONE[presentation.color]}>{presentation.label}</StatusDot>
+      </div>
+      <p
+        className={TEXT}
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+      >
         {presentation.description}
-      </Text>
-    </Paper>
+      </p>
+    </div>
   );
 }
 
@@ -98,6 +116,8 @@ function IssueCard({
   onAction: (issue: OrderOperationIssue) => Promise<void>;
 }) {
   const allowedAction = getAllowedOperationAction(issue);
+  const actionVariant = allowedAction === 'RETRY_REFUND' ? 'destructive' : 'default';
+  const actionLoading = actionIssueId === issue.id;
   const snapshotRows = [
     ['주문 상태', issue.currentState?.orderStatus ?? issue.latestSnapshot.orderStatus],
     ['결제 상태', issue.currentState?.paymentStatus ?? issue.latestSnapshot.paymentStatus],
@@ -109,31 +129,36 @@ function IssueCard({
   ].filter((row): row is [string, string] => typeof row[1] === 'string');
 
   return (
-    <Paper withBorder radius="md" p="sm">
-      <Group justify="space-between" align="flex-start" gap="xs">
-        <Stack gap={2} style={{ flex: 1 }}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}>
+    <div className="block rounded-[8px] p-3" style={{ backgroundColor: 'var(--frame)' }}>
+      <div className="flex flex-row flex-wrap items-start justify-between gap-2.5">
+        <div className="flex flex-col gap-0.5" style={{ flex: 1 }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+          >
             {ISSUE_LABELS[issue.type]}
-          </Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          </p>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
             {ISSUE_DESCRIPTIONS[issue.type]}
-          </Text>
-        </Stack>
-        <Badge color={issueColor(issue)} variant="light">
-          {STATUS_LABELS[issue.status]}
-        </Badge>
-      </Group>
+          </p>
+        </div>
+        <StatusDot tone={TONE[issueColor(issue)]}>{STATUS_LABELS[issue.status]}</StatusDot>
+      </div>
 
-      <Stack gap={4} mt="sm">
+      <div className="mt-3 flex flex-col gap-1">
         {snapshotRows.map(([label, value]) => (
           <Row key={label} label={label} value={value} />
         ))}
         <Row label="최근 갱신" value={formatDateTime(issue.updatedAt)} />
-      </Stack>
+      </div>
 
       {issue.actions.length > 0 && (
-        <Stack gap={6} mt="sm">
-          <Text
+        <div className="mt-3 flex flex-col gap-1.5">
+          <p
+            className={TEXT}
             style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-disabled)',
@@ -141,57 +166,54 @@ function IssueCard({
             }}
           >
             {issue.type === 'CUSTOMER_NOTICE_FAILED' ? '고객 연락 기록' : '조치 감사 기록'}
-          </Text>
+          </p>
           {issue.actions.map((action) => (
-            <Paper
+            <div
               key={`${action.actorId}-${action.performedAt}-${action.actionType}-${action.status}`}
-              radius="sm"
-              p="xs"
+              className="block rounded-[4px] bg-card p-2.5"
               style={{ backgroundColor: 'var(--color-surface-muted)' }}
             >
-              <Group justify="space-between" gap="xs">
-                <Text style={{ fontSize: 'var(--font-size-sm)' }}>
+              <div className="flex flex-row flex-wrap items-center justify-between gap-2.5">
+                <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
                   {ACTION_LABELS[action.actionType]}
-                </Text>
-                <Badge color={action.status === 'SUCCEEDED' ? 'brand' : 'red'} variant="light">
+                </p>
+                <StatusDot tone={action.status === 'SUCCEEDED' ? 'done' : 'problem'}>
                   {action.status === 'SUCCEEDED' ? '성공' : '실패'}
-                </Badge>
-              </Group>
-              <Text
-                mt={2}
+                </StatusDot>
+              </div>
+              <p
+                className={`${TEXT} mt-0.5`}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
               >
                 {formatDateTime(action.performedAt)}
                 {action.failureReason ? ` · ${action.failureReason}` : ''}
-              </Text>
-            </Paper>
+              </p>
+            </div>
           ))}
-        </Stack>
+        </div>
       )}
 
       {allowedAction && (
         <>
-          <Button
-            mt="sm"
-            fullWidth
-            radius="xl"
-            color={allowedAction === 'RETRY_REFUND' ? 'red' : 'brand'}
-            loading={actionIssueId === issue.id}
-            disabled={actionIssueId !== null && actionIssueId !== issue.id}
+          <LoadingButton
+            measured
+            variant={actionVariant}
+            className="mt-3 w-full"
+            loading={actionLoading}
+            disabled={actionIssueId !== null}
             onClick={() => void onAction(issue)}
           >
             {ACTION_LABELS[allowedAction]}
-          </Button>
-          <Text
-            ta="center"
-            mt={4}
+          </LoadingButton>
+          <p
+            className={`${TEXT} text-center mt-1`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             실행 직전 서버의 최신 주문·결제 상태를 다시 확인합니다.
-          </Text>
+          </p>
         </>
       )}
-    </Paper>
+    </div>
   );
 }
 
@@ -217,14 +239,16 @@ export function OrderOperationsSection({
       <RedeliveryPaymentPanel payment={order.redeliveryPayment} />
 
       {order.deliveryHold && (
-        <Paper radius="lg" shadow="xs" p="md">
-          <Group justify="space-between" mb="xs">
-            <Text style={{ fontWeight: 'var(--fw-medium)' }}>배송 보류 운영</Text>
-            <Badge color={order.status === 'DELIVERY_HELD' ? 'red' : 'gray'} variant="light">
+        <div className={`${PAPER} p-4`}>
+          <div className={`${GROUP_BETWEEN} mb-2.5`}>
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+              배송 보류 운영
+            </p>
+            <StatusDot tone={order.status === 'DELIVERY_HELD' ? 'problem' : 'done'}>
               {order.status === 'DELIVERY_HELD' ? '조치 중' : '해소 기록'}
-            </Badge>
-          </Group>
-          <Stack gap={6}>
+            </StatusDot>
+          </div>
+          <div className="flex flex-col gap-1.5">
             <Row label="보류 사유" value={order.deliveryHold.reasonMessage} />
             <Row label="발생 시각" value={formatDateTime(order.deliveryHold.heldAt)} />
             <Row
@@ -256,48 +280,59 @@ export function OrderOperationsSection({
               }
               highlight
             />
-          </Stack>
-          <Text
-            mt="sm"
+          </div>
+          <p
+            className={`${TEXT} mt-3`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
           >
             재배송비 결제 생성은 주문자 전용이며, 셀러는 서버에 기록된 금액과 일정만 확인합니다.
-          </Text>
-        </Paper>
+          </p>
+        </div>
       )}
 
-      <Paper radius="lg" shadow="xs" p="md">
-        <Group justify="space-between" mb="sm">
-          <Stack gap={2}>
-            <Text style={{ fontWeight: 'var(--fw-medium)' }}>연락·환불·분쟁 기록</Text>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+      <div className={`${PAPER} p-4`}>
+        <div className={`${GROUP_BETWEEN} mb-3`}>
+          <div className="flex flex-col gap-0.5">
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+              연락·환불·분쟁 기록
+            </p>
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               서버가 반환한 운영 기록과 허용 조치만 표시합니다.
-            </Text>
-          </Stack>
-          <Button
+            </p>
+          </div>
+          <LoadingButton
+            measured
             size="xs"
-            variant="subtle"
-            color="gray"
+            variant="ghost"
             loading={loading}
             disabled={actionIssueId !== null}
             onClick={() => void onReload()}
           >
             새로고침
-          </Button>
-        </Group>
+          </LoadingButton>
+        </div>
 
         {error && (
-          <Text mb="sm" style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}>
+          <p
+            className={`${TEXT} mb-3`}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+          >
             {error}
-          </Text>
+          </p>
         )}
         {!loading && issues.length === 0 && (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
             이 주문에 연결된 운영 기록이 없습니다.
-          </Text>
+          </p>
         )}
         {issues.length > 0 && (
-          <Stack gap="sm">
+          <div className="flex flex-col gap-3">
             {issues.map((issue) => (
               <IssueCard
                 key={issue.id}
@@ -306,9 +341,9 @@ export function OrderOperationsSection({
                 onAction={onAction}
               />
             ))}
-          </Stack>
+          </div>
         )}
-      </Paper>
+      </div>
     </>
   );
 }

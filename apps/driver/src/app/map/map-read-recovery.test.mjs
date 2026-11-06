@@ -166,7 +166,7 @@ test('Map navigation is fail-closed on error and stale states', () => {
     mapSource,
     /sorted\.length > 0 && !loading && !authRequired && !error && hasSuccessfulRead/,
   );
-  assert.match(mapSource, /component="a"/);
+  assert.match(mapSource, /href=\{mapLink\.href\}/);
   assert.match(mapSource, /href=\{nextStopLink\.href\}/);
   // Stale navigation renders disabled with an explicit safety notice.
   assert.match(mapSource, /sorted\.length > 0 && error && hasSuccessfulRead/);
@@ -186,13 +186,13 @@ test('Map loading, auth, and initial-error states expose no navigation', () => {
     mapSource.indexOf('{loading ?'),
     mapSource.indexOf(') : authRequired ?'),
   );
-  assert.doesNotMatch(loadingBranch, /buildOrderMapLink|component="a"/);
+  assert.doesNotMatch(loadingBranch, /buildOrderMapLink|href=\{/);
   // Auth branch contains no navigation link.
   const authBranch = mapSource.slice(
     mapSource.indexOf(') : authRequired ?'),
     mapSource.indexOf(') : error && !hasSuccessfulRead ?'),
   );
-  assert.doesNotMatch(authBranch, /buildOrderMapLink|component="a"/);
+  assert.doesNotMatch(authBranch, /buildOrderMapLink|href=\{/);
 });
 
 // 11a. nearestNeighbor implementation is preserved (regression pins).

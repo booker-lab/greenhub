@@ -87,10 +87,10 @@ function seed(extra: Record<string, RecordData> = {}) {
         },
         {
           id: 'msg',
-          name: '문구',
+          name: '축하 토퍼',
           choices: [
-            { id: 'none', label: '문구 없음', priceDelta: 0 },
-            { id: 'topper', label: '3D 토퍼', priceDelta: 5000, needsText: true },
+            { id: 'none', label: '토퍼 없음', priceDelta: 0 },
+            { id: 'topper', label: '祝 開業', priceDelta: 5000 },
           ],
         },
       ],
@@ -141,7 +141,7 @@ function request(overrides: RecordData = {}) {
     requestedDeliveryDate: '2026-07-21',
     roundId: 'round-1',
     roundItems: [
-      { roundItemId: 'round-item-1', quantity: 2, optionChoiceIds: ['ceramic', 'topper'], optionText: '개업 축하' },
+      { roundItemId: 'round-item-1', quantity: 2, optionChoiceIds: ['ceramic', 'topper'] },
     ],
     deliveryPhone: '010-9999-0000',
     deliveryAddress: { address: '경기도 이천시 중리천로 1', addressDetail: '201호', zipCode: '17373' },
@@ -160,10 +160,10 @@ function makeService(firestore: any, features?: string) {
   return new RoundOrderCreateService(firestore, capacity, retention as never, config as never);
 }
 
-describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () => {
+describe('회차 주문 옵션·포장 라벨·선물(벤치마킹 비교 기능)', () => {
   const GIFT = { recipientName: '박꽃님', recipientPhone: '01098765432', senderName: '김그린', cardMessage: '개업 축하해요' };
 
-  it('옵션 금액을 단가에 더하고, 문구와 선물 정보를 주문서에 남긴다', async () => {
+  it('옵션 금액을 단가에 더하고, 선물 정보와 보내는 분 포장 라벨을 주문서에 남긴다', async () => {
     const { firestore, records } = makeFirestore(seed());
     const result = await makeService(firestore, 'gift').create('store-round', 'user-1', request({ gift: GIFT }));
     const order = records.get(`orders/${(result as any).orderId}`)!;
@@ -172,11 +172,12 @@ describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () 
       subtotalAmount: 86000,
       selectedOptions: [
         { groupId: 'pot', groupName: '화분', choiceId: 'ceramic', choiceLabel: '도자기 화분', priceDelta: 8000 },
-        { groupId: 'msg', groupName: '문구', choiceId: 'topper', choiceLabel: '3D 토퍼', priceDelta: 5000, text: '개업 축하' },
+        { groupId: 'msg', groupName: '축하 토퍼', choiceId: 'topper', choiceLabel: '祝 開業', priceDelta: 5000 },
       ],
     });
     expect(order['totalAmount']).toBe(86000);
     expect(order['gift']).toEqual({ ...GIFT, recipientPhone: '010-9876-5432' });
+    expect(order['packageLabel']).toBe('김그린');
     expect((result as any).portonePaymentParams.amount).toBe(86000);
   });
 
@@ -192,20 +193,56 @@ describe('회차 주문 옵션·문구·선물(벤치마킹 비교 기능)', () 
     const order = records.get(`orders/${(result as any).orderId}`)!;
     expect(order['totalAmount']).toBe(30000);
     expect(order).not.toHaveProperty('gift');
+    expect(order).not.toHaveProperty('packageLabel');
     expect(order['orderItems'][0]).not.toHaveProperty('selectedOptions');
   });
 
-  it('토퍼를 고르고 문구를 비우면 거부한다', async () => {
+  it('선물이 아니면 고객이 넣은 포장 라벨 문구를 한 줄로 정리해 남긴다(선물 토글과 무관)', async () => {
+    const { firestore, records } = makeFirestore(seed());
+    const result = await makeService(firestore).create(
+      'store-round',
+      'user-1',
+      request({ packageLabel: ' 그린\n플라워 ' }),
+    );
+    const order = records.get(`orders/${(result as any).orderId}`)!;
+    expect(order['packageLabel']).toBe('그린 플라워');
+    expect(order).not.toHaveProperty('gift');
+  });
+
+  it('포장 라벨 문구가 20자를 넘으면 거부하고 아무것도 쓰지 않는다', async () => {
+    const { firestore, records } = makeFirestore(seed());
+    const before = new Map(records);
+    await expect(
+      makeService(firestore).create('store-round', 'user-1', request({ packageLabel: '가'.repeat(21) }) as never),
+    ).rejects.toThrow('포장 라벨 문구는 20자까지 쓸 수 있어요.');
+    expect(records).toEqual(before);
+  });
+
+  it('선물과 포장 라벨 문구를 함께 보내면 거부한다(보내는 분 이름이 라벨이다)', async () => {
     const { firestore } = makeFirestore(seed());
     await expect(
-      makeService(firestore).create(
+      makeService(firestore, 'gift').create(
         'store-round',
         'user-1',
-        request({
-          roundItems: [{ roundItemId: 'round-item-1', quantity: 1, optionChoiceIds: ['basic', 'topper'] }],
-        }) as never,
+        request({ gift: GIFT, packageLabel: '다른 이름' }) as never,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('옛 앱이 보낸 상품별 문구(optionText)는 받기만 하고 저장하지 않는다', async () => {
+    const { firestore, records } = makeFirestore(seed());
+    const result = await makeService(firestore).create(
+      'store-round',
+      'user-1',
+      request({
+        roundItems: [
+          { roundItemId: 'round-item-1', quantity: 1, optionChoiceIds: ['basic', 'topper'], optionText: '개업 축하' },
+        ],
+      }),
+    );
+    const order = records.get(`orders/${(result as any).orderId}`)!;
+    expect(JSON.stringify(order)).not.toContain('개업 축하');
+    expect(order).not.toHaveProperty('packageLabel');
   });
 
   it('선물이 켜져 있을 때 받는 분 연락처가 없으면 거부한다', async () => {
@@ -278,6 +315,7 @@ describe('선물 정보 저장 토글(GREENHUB_FEATURES의 gift)', () => {
     expect(order['status']).toBe('PENDING');
     expect(order['totalAmount']).toBe(86000);
     expect(order).not.toHaveProperty('gift');
+    expect(order).not.toHaveProperty('packageLabel');
     expect(JSON.stringify(order)).not.toContain('박꽃님');
   });
 

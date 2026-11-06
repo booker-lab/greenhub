@@ -1,7 +1,8 @@
 import type { OrderStatus } from '@greenhub/shared';
 import type { ComponentProps, ReactElement, ReactNode } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { BuyerAndProduct, OrdersTable, RequestNote, StatusBadges } from './OrdersTable';
+import { OrdersTable, RequestNote } from './OrdersTable';
 
 type Props = ComponentProps<typeof OrdersTable>;
 
@@ -20,6 +21,7 @@ function order(
   id: string,
   orderNumber: string,
   status: OrderStatus = 'ACCEPTED',
+  extra: Partial<Props['orders'][number]> = {},
 ): Props['orders'][number] {
   return {
     id,
@@ -29,8 +31,15 @@ function order(
     totalAmount: 12000,
     deliveryMethod: 'DIRECT',
     createdAt: '2026-09-01T00:00:00.000Z',
+    schemaVersion: 2,
+    roundId: 'round-1',
+    ...extra,
   };
 }
+
+const html = (props: Partial<Props>) =>
+  renderToStaticMarkup(<OrdersTable {...baseProps} {...props} />);
+const count = (haystack: string, needle: string) => haystack.split(needle).length - 1;
 
 interface Clickable {
   children?: ReactNode;
@@ -41,34 +50,24 @@ function isElement(node: ReactNode): node is ReactElement<Clickable> {
   return typeof node === 'object' && node !== null && 'props' in node;
 }
 
-/** 렌더 트리(DOM 불필요)에 포함된 모든 텍스트 리프를 수집한다. */
-function textsOf(node: ReactNode): string[] {
-  const out: string[] = [];
-  const visit = (current: ReactNode): void => {
-    if (typeof current === 'string') {
-      out.push(current);
-      return;
-    }
-    if (Array.isArray(current)) {
-      for (const child of current) visit(child);
-      return;
-    }
-    if (isElement(current)) visit(current.props.children);
-  };
-  visit(node);
-  return out;
-}
-
-/** 주어진 라벨을 포함한 버튼의 onClick 핸들러를 수집한다. */
+/** 읽기 상태 화면(호스트 요소만 있는 트리)에서 라벨을 가진 버튼의 onClick을 모은다. */
 function handlersFor(tree: ReactNode, label: string): Array<() => void> {
   const handlers: Array<() => void> = [];
+  const textOf = (node: ReactNode): string =>
+    typeof node === 'string'
+      ? node
+      : Array.isArray(node)
+        ? node.map(textOf).join('')
+        : isElement(node)
+          ? textOf(node.props.children)
+          : '';
   const visit = (current: ReactNode): void => {
     if (Array.isArray(current)) {
       for (const child of current) visit(child);
       return;
     }
     if (!isElement(current)) return;
-    if (typeof current.props.onClick === 'function' && textsOf(current).includes(label)) {
+    if (typeof current.props.onClick === 'function' && textOf(current).includes(label)) {
       handlers.push(current.props.onClick as () => void);
     }
     visit(current.props.children);
@@ -79,31 +78,28 @@ function handlersFor(tree: ReactNode, label: string): Array<() => void> {
 
 describe('Admin OrdersTable read state', () => {
   it('loading → 로딩 UI를 표시한다', () => {
-    const tree = OrdersTable({ ...baseProps, loading: true });
-    expect(textsOf(tree)).toContain('불러오는 중...');
+    expect(html({ loading: true })).toContain('불러오는 중...');
   });
 
   it('조회 실패 + 0건 → empty copy 없이 error UI와 retry를 표시한다', () => {
-    const tree = OrdersTable({ ...baseProps, error: FETCH_ERROR_MESSAGE });
-    const texts = textsOf(tree);
-    expect(texts).not.toContain('주문이 없습니다.');
-    expect(texts).toContain('주문 목록을 불러오지 못했습니다.');
-    expect(texts).toContain(FETCH_ERROR_MESSAGE);
-    expect(handlersFor(tree, '다시 조회').length).toBeGreaterThan(0);
+    const out = html({ error: FETCH_ERROR_MESSAGE });
+    expect(out).not.toContain('주문이 없습니다.');
+    expect(out).toContain('주문 목록을 불러오지 못했습니다.');
+    expect(out).toContain(FETCH_ERROR_MESSAGE);
+    expect(out).toContain('다시 조회');
   });
 
   it('성공 + 0건 → 기존 empty copy를 표시하고 retry를 노출하지 않는다', () => {
-    const tree = OrdersTable({ ...baseProps });
-    expect(textsOf(tree)).toContain('주문이 없습니다.');
-    expect(handlersFor(tree, '다시 조회')).toHaveLength(0);
+    const out = html({});
+    expect(out).toContain('주문이 없습니다.');
+    expect(out).not.toContain('다시 조회');
   });
 
-  it('성공 + 결과 → 기존 order rendering을 유지하고 retry를 노출하지 않는다', () => {
-    const tree = OrdersTable({ ...baseProps, orders: [order('o1', 'ORD-1')] });
-    const texts = textsOf(tree);
-    expect(texts).toContain('ORD-1');
-    expect(texts).not.toContain('주문이 없습니다.');
-    expect(handlersFor(tree, '다시 조회')).toHaveLength(0);
+  it('성공 + 결과 → 주문 행을 그리고 retry를 노출하지 않는다', () => {
+    const out = html({ orders: [order('o1', 'ORD-1')] });
+    expect(out).toContain('ORD-1');
+    expect(out).not.toContain('주문이 없습니다.');
+    expect(out).not.toContain('다시 조회');
   });
 
   it('retry 실행 시 onRetry를 호출한다', () => {
@@ -114,75 +110,58 @@ describe('Admin OrdersTable read state', () => {
     handlers[0]();
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
+});
 
-  it('refund behavior를 보존한다(환불가능 상태만 강제환불, 처리중 표시)', () => {
-    const tree = OrdersTable({
-      ...baseProps,
-      orders: [order('o1', 'ORD-1', 'ACCEPTED'), order('o2', 'ORD-2', 'DELIVERED')],
+describe('Admin OrdersTable 행 동작(D7)', () => {
+  it('배송 보류 행에만 보이는 글자 버튼 "환불"을 두고, 그 밖의 환불은 ⋮ 메뉴로 넣는다', () => {
+    const out = html({
+      orders: [order('held', 'ORD-HELD', 'DELIVERY_HELD'), order('acc', 'ORD-ACC', 'ACCEPTED')],
     });
-    const texts = textsOf(tree);
-    expect(texts).toContain('ORD-1');
-    expect(texts).toContain('ORD-2');
-    expect(texts).toContain('강제환불');
-
-    const processing = OrdersTable({
-      ...baseProps,
-      orders: [order('o1', 'ORD-1', 'ACCEPTED')],
-      processingIds: new Set(['o1']),
-    });
-    expect(textsOf(processing)).toContain('처리중…');
+    // 휴대폰 행 + 표 행 = 2번씩
+    expect(count(out, 'aria-label="주문 ORD-HELD 환불"')).toBe(2);
+    expect(out).not.toContain('aria-label="주문 ORD-ACC 환불"');
+    expect(count(out, 'aria-label="주문 ORD-ACC 동작 더 보기"')).toBe(2);
+    // 빨간·채운 "강제환불" 버튼은 행에 없다.
+    expect(out).not.toContain('강제환불');
   });
 
-  it('강제환불 버튼은 확인창용으로 주문 객체 전체를 넘긴다', () => {
-    const onRefund = vi.fn();
-    const target = order('o1', 'ORD-1', 'ACCEPTED');
-    const tree = OrdersTable({ ...baseProps, orders: [target], onRefund });
-    const handlers = handlersFor(tree, '강제환불');
-    expect(handlers.length).toBeGreaterThan(0);
-    handlers[0]();
-    expect(onRefund).toHaveBeenCalledWith(target);
+  it('환불할 수 없는 행은 동작 없이 자리만 둔다', () => {
+    const out = html({ orders: [order('dlv', 'ORD-DLV', 'DELIVERING')] });
+    expect(out).not.toContain('동작 더 보기');
+    expect(out).not.toContain('ORD-DLV 환불');
   });
 
   it('처리 중 표시는 주문마다 따로 유지된다(한 건이 끝나도 다른 건은 잠김)', () => {
-    const tree = OrdersTable({
-      ...baseProps,
-      orders: [order('o1', 'ORD-1', 'ACCEPTED'), order('o2', 'ORD-2', 'ACCEPTED')],
-      processingIds: new Set(['o2']),
+    const out = html({
+      orders: [order('a', 'ORD-A', 'DELIVERY_HELD'), order('b', 'ORD-B', 'DELIVERY_HELD')],
+      processingIds: new Set(['a']),
     });
-    const texts = textsOf(tree);
-    expect(texts.filter((t) => t === '처리중…')).toHaveLength(2); // 카드 + 표 각 1
-    expect(texts.filter((t) => t === '강제환불')).toHaveLength(2);
+    expect(count(out, '처리 중…')).toBe(2); // 휴대폰 행 + 표 행
+    expect(out).not.toContain('주문 ORD-A 환불');
+    expect(count(out, 'aria-label="주문 ORD-B 환불"')).toBe(2);
+  });
+
+  it('배송 후 환불 처리기가 없으면 배송 완료 회차 주문에 ⋮을 두지 않는다', () => {
+    const delivered = order('d', 'ORD-D', 'DELIVERED');
+    expect(html({ orders: [delivered] })).not.toContain('동작 더 보기');
+    expect(html({ orders: [delivered], onPostDeliveryRefund: () => {} })).toContain(
+      'aria-label="주문 ORD-D 동작 더 보기"',
+    );
   });
 });
 
-/** 렌더 트리에서 주어진 컴포넌트 요소의 props를 수집한다. */
-function propsOf<P>(tree: ReactNode, type: unknown): P[] {
-  const out: P[] = [];
-  const visit = (current: ReactNode): void => {
-    if (Array.isArray(current)) {
-      for (const child of current) visit(child);
-      return;
-    }
-    if (!isElement(current)) return;
-    if ((current as ReactElement).type === type) out.push(current.props as P);
-    visit(current.props.children);
-  };
-  visit(tree);
-  return out;
-}
-
 describe('Admin OrdersTable 요청사항', () => {
-  it('요청사항이 있는 주문은 모바일 카드와 데스크톱 행 모두에 넘긴다', () => {
-    const tree = OrdersTable({
-      ...baseProps,
-      orders: [{ ...order('o1', 'ORD-1'), requestNote: '문구: 개업 축하' }],
+  it('요청사항이 있는 주문은 휴대폰 행과 표 행 모두에 보여 준다', () => {
+    const out = html({
+      orders: [order('o1', 'ORD-1', 'ACCEPTED', { requestNote: '문구: 개업 축하' })],
     });
-    const notes = propsOf<{ note?: string | null }>(tree, RequestNote).map((props) => props.note);
-    expect(notes).toEqual(['문구: 개업 축하', '문구: 개업 축하']);
+    expect(count(out, 'title="문구: 개업 축하"')).toBe(2);
   });
 
   it('요청사항 문구를 보여주고 없거나 공백뿐이면 그리지 않는다', () => {
-    expect(textsOf(RequestNote({ note: ' 문구: 개업 축하 ' }))).toContain('문구: 개업 축하');
+    expect(renderToStaticMarkup(<RequestNote note=" 문구: 개업 축하 " />)).toContain(
+      '문구: 개업 축하',
+    );
     expect(RequestNote({ note: '   ' })).toBeNull();
     expect(RequestNote({ note: null })).toBeNull();
     expect(RequestNote({})).toBeNull();
@@ -190,49 +169,39 @@ describe('Admin OrdersTable 요청사항', () => {
 });
 
 describe('Admin OrdersTable 주문 칸', () => {
-  // 함수 컴포넌트는 렌더하지 않고 props로 받은 주문을 직접 그려 텍스트를 모은다.
-  function renderedTexts(tree: ReactNode): string[] {
-    const nested = [
-      ...propsOf<{ order: Props['orders'][number] }>(tree, StatusBadges).map((p) =>
-        StatusBadges(p),
-      ),
-      ...propsOf<{ order: Props['orders'][number] }>(tree, BuyerAndProduct).map((p) =>
-        BuyerAndProduct(p),
-      ),
-    ];
-    return [...textsOf(tree), ...nested.flatMap((node) => textsOf(node))];
-  }
-
-  it('주문일시·고객 이름·상품 요약·가게 이름을 카드와 표 모두에 보여 준다', () => {
-    const tree = OrdersTable({
-      ...baseProps,
+  it('주문 시각·가린 주문자·상품 요약·가게 이름·금액을 휴대폰 행과 표 모두에 보여 준다', () => {
+    const out = html({
       orders: [
-        {
-          ...order('o1', 'ORD-1'),
+        order('o1', 'ORD-1', 'ACCEPTED', {
           createdAt: '2026-10-20T15:05:00.000Z',
           buyerName: '김손님',
           productSummary: '호접란 외 1개',
           storeName: '난플렉스',
-        },
+        }),
       ],
     });
-    const texts = renderedTexts(tree);
-    expect(texts.filter((t) => t === '2026-10-21 00:05')).toHaveLength(2);
-    expect(texts.filter((t) => t === '김손님')).toHaveLength(2);
-    expect(texts.filter((t) => t === '호접란 외 1개')).toHaveLength(2);
-    expect(texts.filter((t) => t === '난플렉스')).toHaveLength(2);
+    expect(count(out, '2026-10-21 00:05')).toBe(2);
+    expect(count(out, '김*님')).toBe(2);
+    expect(out).not.toContain('김손님');
+    expect(count(out, '호접란 외 1개')).toBe(2);
+    expect(count(out, '난플렉스')).toBeGreaterThanOrEqual(2);
+    expect(count(out, '12,000원')).toBe(2);
   });
 
-  it('환불 진행 중·실패는 상태 옆 배지로 보여 준다', () => {
-    const tree = OrdersTable({
-      ...baseProps,
-      orders: [
-        { ...order('o1', 'ORD-1', 'CANCELLED'), cancellationStatus: 'REFUND_FAILED' },
-        { ...order('o2', 'ORD-2', 'CANCELLED'), cancellationStatus: 'COMPLETED' },
-      ],
+  it('상태는 점 + 글자이고 환불 실패는 빨강(문제)으로 더한다', () => {
+    const out = html({
+      orders: [order('o1', 'ORD-1', 'CANCELLED', { cancellationStatus: 'REFUND_FAILED' })],
     });
-    const texts = renderedTexts(tree);
-    expect(texts.filter((t) => t === '환불 실패')).toHaveLength(2);
-    expect(texts).not.toContain('환불 진행 중');
+    expect(count(out, 'data-tone="problem"')).toBe(2);
+    expect(count(out, '환불 실패')).toBe(2);
+    expect(count(out, 'data-tone="done"')).toBe(2); // 취소는 끝난 상태(회색)
+  });
+
+  it('가게 이름·주문번호가 없어도 잘린 시스템 id를 보여 주지 않는다', () => {
+    const out = html({ orders: [{ ...order('abcdef1234567890', 'X'), orderNumber: null }] });
+    expect(out).not.toContain('store-ab');
+    expect(out).not.toContain('abcdef123456');
+    expect(out).toContain('이름 없는 가게');
+    expect(out).toContain('주문번호 없음');
   });
 });

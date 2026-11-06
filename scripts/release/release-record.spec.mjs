@@ -7,6 +7,7 @@ import {
   parseResults,
   recordRelease,
   releaseName,
+  releaseScope,
   runUrl,
 } from './release-record.mjs';
 
@@ -42,7 +43,7 @@ function githubFetch({
       return existingTags.includes(tag) ? json({ ref: `refs/tags/${tag}` }) : json({}, 404);
     }
     if (method === 'POST' && url.endsWith('/releases/generate-notes')) {
-      return json({ name: 'x', body: notes });
+      return json({ name: 'x', body: typeof notes === 'function' ? notes(body) : notes });
     }
     if (method === 'POST' && url.endsWith('/releases')) {
       return json({ html_url: `https://github.test/releases/${body.tag_name}` }, 201);
@@ -85,9 +86,15 @@ test('결과 파일: 단계별 JSON을 읽고, JSON이 아닌 줄은 원문으�
 test('본문: 배포 ID·직전 배포·변경 목록을 담는다', () => {
   const body = buildReleaseBody({
     ...base,
-    previous: { tag_name: 'prod-20261023-951044f2', html_url: 'https://github.test/r/prev' },
+    previous: Object.fromEntries(
+      ['api', 'frontends', 'indexes', 'rules'].map((target) => [
+        target,
+        { tag_name: 'prod-20261023-951044f2', html_url: 'https://github.test/r/prev' },
+      ]),
+    ),
     changes: '* fix in #639',
   });
+  assert.ok(body.startsWith('<!-- release-scope: all -->\n## 운영 배포 기록\n'));
   assert.match(body, new RegExp(`- SHA: \`${SHA}\``));
   assert.match(body, /- 범위: `all` · API: `railway`/);
   assert.ok(body.includes(`- 배포 run: ${runUrl('40000000001')}\n`));
@@ -113,13 +120,13 @@ test('본문: 직전 Release·결과가 없으면 그렇다고 적고, 표 칸�
   const body = buildReleaseBody({
     ...base,
     results: parseResults('odd\ta|b'),
-    previous: null,
+    previous: { api: null, frontends: null, indexes: null, rules: null },
     changes: null,
   });
   assert.match(body, /직전 배포: Release 기록 없음/);
   assert.match(body, /직전 배포 Release가 없어 변경 목록을 생략했다/);
   assert.match(body, /\| odd \| `a\\\|b` \|/);
-  const empty = buildReleaseBody({ ...base, results: [], previous: null, changes: null });
+  const empty = buildReleaseBody({ ...base, results: [], previous: {}, changes: null });
   assert.match(empty, /배포 결과가 전달되지 않았다/);
 });
 
@@ -132,7 +139,7 @@ test('첫 기록: 직전 prod Release가 없으면 변경 목록 없이 만들�
     status: 'created',
     tag: 'prod-20261024-7563488a',
     url: 'https://github.test/releases/prod-20261024-7563488a',
-    previous: null,
+    previous: { api: null, frontends: null, indexes: null, rules: null },
   });
   assert.ok(!calls.some((call) => call.url.endsWith('/generate-notes')));
   const create = calls.find((call) => call.method === 'POST' && call.url.endsWith('/releases'));
@@ -150,7 +157,7 @@ test('직전 prod Release와 비교한 변경 목록을 넣는다', async () => 
     ],
   });
   const result = await recordRelease({ ...base, fetchImpl: impl });
-  assert.equal(result.previous, 'prod-20261023-951044f2');
+  assert.equal(result.previous.api, 'prod-20261023-951044f2');
   const notes = calls.find((call) => call.url.endsWith('/generate-notes'));
   assert.deepEqual(notes.body, {
     tag_name: 'prod-20261024-7563488a',
@@ -204,7 +211,7 @@ test('직전 배포는 목록 순서가 아니라 Release를 만든 시각(publi
     ],
   });
   const result = await recordRelease({ ...base, fetchImpl: impl });
-  assert.equal(result.previous, 'prod-20261024-7ad5b07b');
+  assert.equal(result.previous.frontends, 'prod-20261024-7ad5b07b');
   const notes = calls.find((call) => call.url.endsWith('/generate-notes'));
   assert.equal(notes.body.previous_tag_name, 'prod-20261024-7ad5b07b');
   const create = calls.find((call) => call.method === 'POST' && call.url.endsWith('/releases'));
@@ -212,6 +219,130 @@ test('직전 배포는 목록 순서가 아니라 Release를 만든 시각(publi
     create.body.body,
     /직전 배포: \[prod-20261024-7ad5b07b\]\(https:\/\/github.test\/r\/7ad5\)/,
   );
+});
+
+// 실제 이력(2026-11): 263a0a74 all → 68b0ef54 api → 7a028753 frontends → 다음 API·프런트 함께.
+// 68b0ef54 Release 이름에 `범위 api`가 있고, 7a028753부터는 본문에 기계용 범위 표식이 있다고 본다.
+const R263 = {
+  tag_name: 'prod-20261031-263a0a74',
+  name: '운영 배포 2026-10-31 · 263a0a74',
+  html_url: 'https://github.test/r/263a',
+  body: '## 운영 배포 기록\n',
+  published_at: '2026-10-31T05:00:00Z',
+};
+const R68B = {
+  tag_name: 'prod-20261103-68b0ef54',
+  name: '운영 배포 2026-11-03 · 68b0ef54 · 범위 api',
+  html_url: 'https://github.test/r/68b0',
+  body: '## 운영 배포 기록\n',
+  published_at: '2026-11-03T05:00:00Z',
+};
+const R7A0 = {
+  tag_name: 'prod-20261105-7a028753',
+  name: '운영 배포 2026-11-05 · 7a028753 · 범위 frontends',
+  html_url: 'https://github.test/r/7a02',
+  body: '<!-- release-scope: frontends -->\n## 운영 배포 기록\n',
+  published_at: '2026-11-05T05:00:00Z',
+};
+const historyNotes = (body) => `* ${body.previous_tag_name}..${body.tag_name}`;
+const notesCalls = (calls) =>
+  calls.filter((call) => call.url.endsWith('/generate-notes')).map((call) => call.body);
+const createdBody = (calls) =>
+  calls.find((call) => call.method === 'POST' && call.url.endsWith('/releases')).body.body;
+
+test('범위: 기계용 표식 → 이름의 범위 → all 순서로 읽는다', () => {
+  assert.equal(releaseScope(R263), 'all');
+  assert.equal(releaseScope(R68B), 'api');
+  assert.equal(releaseScope({ ...R7A0, name: '손으로 바꾼 이름' }), 'frontends');
+  assert.equal(
+    releaseScope({ name: '운영 배포 · 범위 db', body: '<!-- release-scope: x -->' }),
+    'all',
+  );
+  assert.equal(releaseScope({}), 'all');
+});
+
+test('이력: api 배포의 기준·롤백은 마지막으로 API를 낸 all 배포다', async () => {
+  const { impl, calls } = githubFetch({ releases: [R263], notes: historyNotes });
+  const result = await recordRelease({
+    ...base,
+    sha: '68b0ef54'.padEnd(40, '0'),
+    scope: 'api',
+    fetchImpl: impl,
+  });
+  assert.deepEqual(result.previous, { api: R263.tag_name });
+  assert.deepEqual(
+    notesCalls(calls).map((body) => body.previous_tag_name),
+    [R263.tag_name],
+  );
+  const body = createdBody(calls);
+  assert.ok(body.startsWith('<!-- release-scope: api -->\n'));
+  assert.match(body, /직전 배포: \[prod-20261031-263a0a74\]\(https:\/\/github.test\/r\/263a\)/);
+});
+
+test('이력: api 배포 뒤 frontends 배포는 api 배포를 건너뛰고 마지막 프런트 배포를 기준·롤백으로 삼는다', async () => {
+  const { impl, calls } = githubFetch({ releases: [R68B, R263], notes: historyNotes });
+  const sha = '7a028753'.padEnd(40, '0');
+  const result = await recordRelease({ ...base, sha, scope: 'frontends', fetchImpl: impl });
+  // 68b0ef54(api)에는 프런트 배포 ID가 없다. 롤백 기준이 거기로 잡히면 안 된다.
+  assert.deepEqual(result.previous, { frontends: R263.tag_name });
+  assert.deepEqual(notesCalls(calls), [
+    { tag_name: result.tag, target_commitish: sha, previous_tag_name: R263.tag_name },
+  ]);
+  const body = createdBody(calls);
+  assert.match(body, /직전 배포: \[prod-20261031-263a0a74\]/);
+  assert.doesNotMatch(body, /68b0ef54/);
+});
+
+test('이력: 다음 API·프런트 배포는 대상별 기준·롤백을 따로 잡고 변경을 구간별로 나눈다', async () => {
+  const { impl, calls } = githubFetch({ releases: [R7A0, R68B, R263], notes: historyNotes });
+  const sha = 'f00dcafe'.padEnd(40, '0');
+  const result = await recordRelease({ ...base, sha, scope: 'all', fetchImpl: impl });
+  assert.deepEqual(result.previous, {
+    api: R68B.tag_name,
+    frontends: R7A0.tag_name,
+    indexes: R263.tag_name,
+    rules: R263.tag_name,
+  });
+  assert.deepEqual(notesCalls(calls), [
+    { tag_name: result.tag, target_commitish: sha, previous_tag_name: R7A0.tag_name },
+    { tag_name: R7A0.tag_name, previous_tag_name: R68B.tag_name },
+    { tag_name: R68B.tag_name, previous_tag_name: R263.tag_name },
+  ]);
+  const body = createdBody(calls);
+  assert.match(
+    body,
+    /- 직전 배포\(대상별\): API \[prod-20261103-68b0ef54\]\(https:\/\/github.test\/r\/68b0\) · 프런트 \[prod-20261105-7a028753\]\(https:\/\/github.test\/r\/7a02\) · 인덱스 \[prod-20261031-263a0a74\]\(https:\/\/github.test\/r\/263a\) · 규칙 \[prod-20261031-263a0a74\]\(https:\/\/github.test\/r\/263a\) — 되돌릴 때는 대상마다/,
+  );
+  const changes = body.slice(body.indexOf('### 변경'));
+  const newest = changes.indexOf(
+    '#### [prod-20261105-7a028753](https://github.test/r/7a02) → 이번 배포 · API, 프런트, 인덱스, 규칙',
+  );
+  const middle = changes.indexOf(
+    '#### [prod-20261103-68b0ef54](https://github.test/r/68b0) → [prod-20261105-7a028753](https://github.test/r/7a02) · API, 인덱스, 규칙',
+  );
+  const oldest = changes.indexOf(
+    '#### [prod-20261031-263a0a74](https://github.test/r/263a) → [prod-20261103-68b0ef54](https://github.test/r/68b0) · 인덱스, 규칙',
+  );
+  assert.ok(newest > 0 && middle > newest && oldest > middle, changes);
+  assert.ok(changes.includes(`* ${R7A0.tag_name}..${result.tag}`));
+  assert.ok(changes.includes(`* ${R68B.tag_name}..${R7A0.tag_name}`));
+});
+
+test('직전 배포 기록이 없는 대상은 그 전 변경을 생략했다고 적는다', async () => {
+  const { impl, calls } = githubFetch({ releases: [R68B], notes: historyNotes });
+  const result = await recordRelease({ ...base, scope: 'all', fetchImpl: impl });
+  assert.deepEqual(result.previous, {
+    api: R68B.tag_name,
+    frontends: null,
+    indexes: null,
+    rules: null,
+  });
+  const body = createdBody(calls);
+  assert.match(
+    body,
+    /직전 배포\(대상별\): API \[prod-20261103-68b0ef54\].* · 프런트 Release 기록 없음/,
+  );
+  assert.match(body, /프런트, 인덱스, 규칙: 직전 배포 Release가 없어 그 전 변경은 생략했다/);
 });
 
 test('같은 이름 tag가 이미 있으면(같은 날 같은 SHA 재배포) run ID를 붙인다', async () => {

@@ -1,11 +1,13 @@
 'use client';
 
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
-import { Box, Group, Paper, Text } from '@mantine/core';
 import { useSession } from 'next-auth/react';
 import { useMarketSummaries } from '@/hooks/useMarketPrices';
 import { estimatePurchase, formatWon, MARKET_PRICE_SOURCE } from '@/lib/market-price';
 import { buildRoundPurchaseList } from '@/lib/round-purchase-list';
+
+// ② 디자인 방향(D2): 그림자 없이 흰 면만 남긴다. 목록 행 사이 선은 유지한다.
+const TEXT = 'm-0 p-0 text-base font-normal';
 
 // 회차 구매 목록(경매에서 살 상품별 수량). 수량은 서버 회차 상품 집계를 그대로 쓴다.
 // 경매 시세를 연결한 상품은 예상 매입액(상품 1개 예상 매입가 × 수량)을 함께 보여 준다.
@@ -30,25 +32,30 @@ export function RoundPurchaseListCard({
   const hasEstimate = estimate.lines.some((line) => line.unitCost !== null);
 
   return (
-    <Paper radius="lg" shadow="xs" p="md">
-      <Text style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>{title}</Text>
-      <Text
-        mt={2}
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+    <div className="block rounded-[16px] bg-card p-4">
+      <p className={TEXT} style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}>
+        {title}
+      </p>
+      <p
+        className={TEXT}
+        style={{
+          marginTop: 2,
+          fontSize: 'var(--font-size-sm)',
+          color: 'var(--color-text-secondary)',
+        }}
       >
         결제가 끝난 주문 기준이에요. 취소·환불되면 바로 빠져요.
-      </Text>
-      <Box mt="sm">
+      </p>
+      <div className="mt-3">
         {list.lines.map((line, index) => (
-          <Group
+          <div
             key={line.roundItemId}
-            justify="space-between"
-            wrap="nowrap"
-            py={10}
+            className="flex flex-row flex-nowrap items-center justify-between gap-4 py-2.5"
             style={index > 0 ? { borderTop: '1px solid var(--color-border)' } : undefined}
           >
-            <Box style={{ minWidth: 0 }}>
-              <Text
+            <div style={{ minWidth: 0 }}>
+              <p
+                className={TEXT}
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-text)',
@@ -56,15 +63,19 @@ export function RoundPurchaseListCard({
                 }}
               >
                 {line.productName}
-              </Text>
+              </p>
               {hasEstimate && estimate.lines[index].unitCost !== null && (
-                <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+                <p
+                  className={TEXT}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
                   개당 약 {formatWon(estimate.lines[index].unitCost!)} · 예상{' '}
                   {formatWon(estimate.lines[index].cost!)}
-                </Text>
+                </p>
               )}
-            </Box>
-            <Text
+            </div>
+            <p
+              className={TEXT}
               style={{
                 fontSize: 'var(--font-size-md)',
                 fontWeight: 'var(--fw-bold)',
@@ -73,12 +84,16 @@ export function RoundPurchaseListCard({
               }}
             >
               {line.orderedQuantity.toLocaleString()}개
-            </Text>
-          </Group>
+            </p>
+          </div>
         ))}
-      </Box>
-      <Group justify="flex-end" pt={10} style={{ borderTop: '1px solid var(--color-border)' }}>
-        <Text
+      </div>
+      <div
+        className="flex flex-row flex-wrap items-center justify-end gap-4 pt-2.5"
+        style={{ borderTop: '1px solid var(--color-border)' }}
+      >
+        <p
+          className={TEXT}
           style={{
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-secondary)',
@@ -87,27 +102,35 @@ export function RoundPurchaseListCard({
         >
           배송지 {list.orderedDeliveryAddresses.toLocaleString()}곳 · 총{' '}
           {list.orderedTotal.toLocaleString()}개
-        </Text>
-      </Group>
+        </p>
+      </div>
       {hasEstimate && (
-        <Text
-          mt={6}
-          ta="right"
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        <p
+          className={TEXT}
+          style={{
+            marginTop: 6,
+            textAlign: 'right',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+          }}
         >
           경매 시세 기준 예상 매입액 약 {formatWon(estimate.total)}
           {estimate.unknownCount > 0 ? ` (시세 모르는 상품 ${estimate.unknownCount}개 제외)` : ''}
           {` · ${MARKET_PRICE_SOURCE}`}
-        </Text>
+        </p>
       )}
       {list.pendingTotal > 0 && (
-        <Text
-          mt={6}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        <p
+          className={TEXT}
+          style={{
+            marginTop: 6,
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+          }}
         >
           지금 결제 중인 {list.pendingTotal.toLocaleString()}개는 결제가 끝나면 더해져요.
-        </Text>
+        </p>
       )}
-    </Paper>
+    </div>
   );
 }

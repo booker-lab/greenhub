@@ -4,6 +4,7 @@
 // 없으면 200 {}을 돌려준다(예: 장바구니 검증처럼 화면이 응답 내용을 읽는 POST).
 import fs from 'node:fs';
 import http from 'node:http';
+import https from 'node:https';
 
 /**
  * @param {object} opts
@@ -14,6 +15,9 @@ import http from 'node:http';
  * @param {string} opts.logFile 요청 기록(JSON lines)
  * @param {(() => string) | null} [opts.firebaseToken] 있으면 /auth/firebase-token이 이 값(Auth 에뮬레이터용
  *   커스텀 토큰)을 평문으로 돌려준다. 앱은 응답을 res.text()로 읽어 signInWithCustomToken에 넘긴다.
+ * @param {{ host: string, cert: string, key: string } | null} [opts.tls] 있으면 같은 처리기를 이 주소의 HTTPS로도
+ *   연다(운영 빌드 하네스 start.mjs --prod: 운영 빌드는 HTTPS·비루프백 이름의 API 주소만 받는다).
+ *   하네스 내부 조회(/__log·/__scenario)는 그대로 hosts의 HTTP로 한다.
  */
 export function startMockApi({
   port,
@@ -22,6 +26,7 @@ export function startMockApi({
   fixtures,
   logFile,
   firebaseToken = null,
+  tls = null,
 }) {
   const log = [];
   const record = (entry) => {
@@ -100,6 +105,18 @@ export function startMockApi({
 
     const body = m === 'GET' || m === 'HEAD' ? '' : await readBody(req);
 
+    // ── 화면별 상황(scenario)이 고른 경로는 기본 인증 응답보다 먼저 본다(예: 로그인 실패) ──
+    for (const [method, pattern, handle] of scenario) {
+      if (method !== m) continue;
+      const match = p.match(pattern);
+      if (!match) continue;
+      const out = handle({ url, params: match.slice(1).map(decodeURIComponent), body });
+      const status = out.status ?? 200;
+      const kind = p.startsWith('/auth/') ? 'auth' : m !== 'GET' && m !== 'HEAD' ? 'write' : 'read';
+      record({ kind, method: m, path: p, query: url.search, status });
+      return send(req, res, status, out.body, out.delay ?? 0);
+    }
+
     // ── 인증: 어떤 계정·비밀번호든 fixture 사용자로 로그인된다 ──
     if (p === '/auth/login' && m === 'POST') {
       record({ kind: 'auth', method: m, path: p });
@@ -137,13 +154,21 @@ export function startMockApi({
       if (!match) continue;
       const out = handle({ url, params: match.slice(1).map(decodeURIComponent), body });
       const status = out.status ?? 200;
-      record({ kind: isWrite ? 'write' : 'read', method: m, path: p, query: url.search, status });
+      record({
+        kind: isWrite ? 'write' : 'read',
+        method: m,
+        path: p,
+        query: url.search,
+        status,
+        // 쓰기 요청 본문은 작업 전·후 동작 비교(parity.mjs)에 쓴다.
+        ...(isWrite ? { body: body.slice(0, 4000) } : {}),
+      });
       return send(req, res, status, out.body, out.delay ?? 0);
     }
 
     // ── fixture에 없는 쓰기 요청: 기록만 하고 200 ──
     if (isWrite) {
-      record({ kind: 'write', method: m, path: p, query: url.search, body: body.slice(0, 500) });
+      record({ kind: 'write', method: m, path: p, query: url.search, body: body.slice(0, 4000) });
       return send(req, res, 200, {});
     }
 
@@ -157,6 +182,16 @@ export function startMockApi({
       .on('error', (e) => console.error(`[mock-api] ${host}:${port} 바인딩 실패: ${e.message}`))
       .listen(port, host),
   );
+  if (tls) {
+    servers.push(
+      https
+        .createServer({ cert: tls.cert, key: tls.key }, handler)
+        .on('error', (e) =>
+          console.error(`[mock-api] https ${tls.host}:${port} 바인딩 실패: ${e.message}`),
+        )
+        .listen(port, tls.host),
+    );
+  }
   return {
     log,
     close: () => {

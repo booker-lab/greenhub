@@ -9,8 +9,13 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 new Function('module', 'exports', compiled)(module, module.exports);
-const { formatRoundTime, formatOrderCloseLabel, formatOrderOpenLabel, roundSectionTitle } =
-  module.exports;
+const {
+  formatRoundTime,
+  formatRoundDay,
+  formatOrderCloseLabel,
+  formatOrderOpenLabel,
+  roundSectionTitle,
+} = module.exports;
 
 test('한국시간 자정은 전날 밤 12시로 표기한다', () => {
   // 2026-11-09 00:00 KST = 2026-11-08 15:00 UTC
@@ -41,4 +46,12 @@ test('주문 시작 전 회차만 판매 예정 제목을 쓴다', () => {
   assert.equal(roundSectionTitle('SCHEDULED'), '판매 예정');
   assert.equal(roundSectionTitle('OPEN'), '이번 주 판매');
   assert.equal(roundSectionTitle('CLOSED'), '이번 주 판매');
+});
+
+test('배송일은 "12월 1일(화)"로 쓰고 자정은 전날로 읽는다', () => {
+  // 2026-12-01 09:00 KST
+  assert.equal(formatRoundDay('2026-12-01T00:00:00.000Z'), '12월 1일(화)');
+  // 2026-11-09 00:00 KST → 11월 8일(일)
+  assert.equal(formatRoundDay('2026-11-08T15:00:00.000Z'), '11월 8일(일)');
+  assert.equal(formatRoundDay('not-a-date'), null);
 });

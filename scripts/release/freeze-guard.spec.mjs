@@ -156,7 +156,7 @@ describe('consumer-freeze', () => {
     const r = evaluatePullRequest(
       state,
       change({
-        files: ['apps/consumer/postcss.config.mjs', 'packages/ui/src/theme.ts'],
+        files: ['apps/consumer/postcss.config.mjs', 'packages/ui/src/styles/base.css'],
         added: {
           'apps/consumer/src/app/page.tsx': [
             "import { Button } from '@greenhub/ui/components/button';",

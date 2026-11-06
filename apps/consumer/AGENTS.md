@@ -12,8 +12,7 @@
 |---|---:|---|
 | `BottomNav` 탭 라벨 | `fontSize: 10` | 모바일 하단 내비게이션 |
 | `ProductTopBar` 버튼 라벨 | `fontSize: 10` | 모바일 상단 바의 좁은 공간 |
-| `mypage/_client.tsx` 주문 상태 뱃지 | `fontSize: 12` | 작은 뱃지 패턴 |
+| `mypage/_client.tsx` 주문 상태(점 + 글자, `StatusDot`) | 13 | 굵은 상태 표시(디자인 기준 §3·§5) |
 | `ProductActions.tsx` 카운트다운 뱃지 | `fontSize: 13` | 타이머 표시 |
-| `orders/[id]/_client.tsx` Stepper 단계 설명 | `fontSize: 12` | Mantine Stepper 내부 텍스트 |
-| `HomeProductList.tsx` 회차 상품 태그(도착·품절·판매 예정) | `--font-size-xs`(13) | 작은 뱃지 패턴(디자인 기준 §3) |
+| `RoundTile.tsx`·`ProductCard.tsx` 도감 라벨, `RoundTile.tsx` "n개 남음" | `--font-size-xs`(13) | 도감 라벨 13px(디자인 방향 §4.1)·굵은 보조 정보(디자인 기준 §3) |
 | `BusinessInfoFooter.tsx` 고객센터 안내·사업자 정보·저작권 | `fontSize: 13` | 법정 고지 footer 관례(본문이 아닌 보조 정보) |

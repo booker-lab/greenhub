@@ -19,6 +19,7 @@
 import {
   type AppContentSecurityPolicy,
   buildContentSecurityPolicy as buildPolicy,
+  COLOR_SCHEME_SCRIPT_CSP_HASH,
   type ContentSecurityPolicyInput,
 } from '@greenhub/shared';
 import { KAKAO_PROFILE_IMAGE_HOSTS } from './profile-image';
@@ -46,6 +47,8 @@ const DRIVER_POLICY: AppContentSecurityPolicy = {
   developmentConnectOrigins: DEVELOPMENT_CONNECT_ORIGINS,
   // 카카오 로그인은 서버 액션 폼을 제출한 뒤 외부로 리다이렉트하므로 form-action은 두지 않는다.
   formActionSelf: false,
+  // 루트 layout <head>의 화면 모드 인라인 스크립트(다크 모드 D5-b, @greenhub/shared color-scheme.ts).
+  inlineScriptHashes: [COLOR_SCHEME_SCRIPT_CSP_HASH],
 };
 
 export function buildContentSecurityPolicy(input: ContentSecurityPolicyInput): string {

@@ -2,7 +2,7 @@
 // 팔도감 벤치마킹 비교용 기능의 공개 계약. 모든 필드는 선택이라 기존 데이터·응답과 호환된다.
 // 기능 토글은 features.ts를 따른다.
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PRODUCT_REQUEST_MAX_LENGTH = exports.GIFT_MESSAGE_MAX_LENGTH = exports.REVIEW_HIDE_REASON_LABELS = exports.REVIEW_HIDE_REASONS = exports.REVIEW_HIDE_REASON_MAX_LENGTH = exports.REVIEW_PHOTO_CONTENT_TYPES = exports.REVIEW_PHOTO_MAX_BYTES = exports.REVIEW_PHOTO_MAX_COUNT = exports.REVIEW_TEXT_MAX_LENGTH = exports.PRODUCT_NOTICE_DEFAULT_CERTIFICATION = exports.PRODUCT_NOTICE_DEFAULT_ORIGIN = exports.PRODUCT_NOTICE_FIELDS = exports.OPTION_STOCK_QUANTITY_MAX = exports.OPTION_STOCK_NAME_MAX_LENGTH = exports.OPTION_TEXT_MAX_LENGTH = exports.PRODUCT_OPTION_PRICE_DELTA_MAX = exports.PRODUCT_OPTION_CHOICE_MAX = exports.PRODUCT_OPTION_GROUP_MAX = exports.PLACEMENT_LABELS = exports.PLACEMENTS = exports.LIGHT_LABELS = exports.LIGHT_LEVELS = void 0;
+exports.PRODUCT_REQUEST_MAX_LENGTH = exports.GIFT_MESSAGE_MAX_LENGTH = exports.REVIEW_HIDE_REASON_LABELS = exports.REVIEW_HIDE_REASONS = exports.REVIEW_HIDE_REASON_MAX_LENGTH = exports.REVIEW_PHOTO_CONTENT_TYPES = exports.REVIEW_PHOTO_MAX_BYTES = exports.REVIEW_PHOTO_MAX_COUNT = exports.REVIEW_TEXT_MAX_LENGTH = exports.PRODUCT_NOTICE_DEFAULT_CERTIFICATION = exports.PRODUCT_NOTICE_DEFAULT_ORIGIN = exports.PRODUCT_NOTICE_FIELDS = exports.OPTION_STOCK_QUANTITY_MAX = exports.OPTION_STOCK_NAME_MAX_LENGTH = exports.PACKAGE_LABEL_MAX_LENGTH = exports.PRODUCT_OPTION_PRICE_DELTA_MAX = exports.PRODUCT_OPTION_CHOICE_MAX = exports.PRODUCT_OPTION_GROUP_MAX = exports.PLACEMENT_LABELS = exports.PLACEMENTS = exports.LIGHT_LABELS = exports.LIGHT_LEVELS = void 0;
 exports.optionStockRemaining = optionStockRemaining;
 exports.resolveProductNotice = resolveProductNotice;
 exports.LIGHT_LEVELS = ['bright', 'medium', 'low'];
@@ -21,8 +21,11 @@ exports.PLACEMENT_LABELS = {
 exports.PRODUCT_OPTION_GROUP_MAX = 3;
 exports.PRODUCT_OPTION_CHOICE_MAX = 6;
 exports.PRODUCT_OPTION_PRICE_DELTA_MAX = 200_000;
-/** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
-exports.OPTION_TEXT_MAX_LENGTH = 20;
+/**
+ * 포장 겉면 라벨 문구 최대 길이(글자). 주문마다 한 장, 무료.
+ * 선물이면 보내는 분 이름(GiftInfo.senderName)이 라벨 문구다. 축하 문구는 미리 출력한 토퍼 옵션으로 고른다.
+ */
+exports.PACKAGE_LABEL_MAX_LENGTH = 20;
 exports.OPTION_STOCK_NAME_MAX_LENGTH = 30;
 /** 한 번에 넣거나 맞출 수 있는 최대 수량 */
 exports.OPTION_STOCK_QUANTITY_MAX = 10_000;

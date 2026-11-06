@@ -488,6 +488,8 @@ export function hasAuthoritativeOrderStatus(
 export interface OrderBenchmarkExtras {
   items: Array<{ id: string; productId: string; roundItemId: string | null; quantity: number; optionLabel: string | null }>;
   gift: { recipientName: string; recipientPhone: string; senderName: string; cardMessage: string } | null;
+  /** 포장 겉면 라벨 문구(선물이면 보내는 분 이름). 없으면 null */
+  packageLabel: string | null;
 }
 
 export function readOrderBenchmarkExtras(value: unknown): OrderBenchmarkExtras {
@@ -527,5 +529,6 @@ export function readOrderBenchmarkExtras(value: unknown): OrderBenchmarkExtras {
             cardMessage: typeof order.gift.cardMessage === 'string' ? order.gift.cardMessage : '',
           }
         : null,
+    packageLabel: typeof order.packageLabel === 'string' && order.packageLabel ? order.packageLabel : null,
   };
 }

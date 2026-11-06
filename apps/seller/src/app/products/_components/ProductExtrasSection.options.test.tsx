@@ -48,8 +48,8 @@ function extrasWithPot(): ProductExtrasForm {
         id: 'g1',
         name: '화분',
         choices: [
-          { id: 'c1', label: '기본 화분', priceDelta: '', needsText: false, stockId: '' },
-          { id: 'c2', label: '출력 화분', priceDelta: '7000', needsText: false, stockId: '' },
+          { id: 'c1', label: '기본 화분', priceDelta: '', stockId: '' },
+          { id: 'c2', label: '출력 화분', priceDelta: '7000', stockId: '' },
         ],
       },
     ],

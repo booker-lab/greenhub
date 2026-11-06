@@ -1,26 +1,25 @@
 import {
   GIFT_MESSAGE_MAX_LENGTH,
   type GiftInfo,
-  OPTION_TEXT_MAX_LENGTH,
+  PACKAGE_LABEL_MAX_LENGTH,
   type SelectedProductOption,
 } from '@greenhub/shared';
 import { BadRequestException } from '@nestjs/common';
 import { toSingleLineText } from '../../notifications/notification-templates';
 import { normalizeKoreanMobilePhone } from './korean-mobile-phone';
 
-// 팔도감 벤치마킹 비교용 회차 주문 부가 정보(옵션·선물). 옵션·선물이 없는 요청은 기존 계산과 같다.
+// 팔도감 벤치마킹 비교용 회차 주문 부가 정보(옵션·선물·포장 라벨). 없는 요청은 기존 계산과 같다.
 
 /**
  * 상품의 옵션 묶음과 고객이 고른 선택지 id로 옵션 스냅샷과 추가 금액을 만든다.
  * - 상품에 옵션이 없으면 선택지를 받지 않는다.
  * - 옵션이 있으면 묶음마다 정확히 하나를 골라야 한다.
- * - 문구가 필요한 선택지(라벨·토퍼)를 고르면 문구(한 줄, OPTION_TEXT_MAX_LENGTH자 이하)가 있어야 한다.
- *   문구가 필요 없는 선택만 골랐으면 보낸 문구는 버린다.
+ * 축하 문구는 미리 출력한 토퍼 선택지로 고르고, 자유 문구는 주문의 포장 라벨(resolvePackageLabel)로 받는다.
+ * 예전 상품 문서에 남은 needsText는 보지 않는다.
  */
 export function resolveSelectedOptions(
   productOptions: unknown,
   choiceIds: readonly string[] | undefined,
-  optionText?: string,
 ): { selected: SelectedProductOption[]; priceDelta: number } {
   const groups = Array.isArray(productOptions) ? (productOptions as Array<Record<string, any>>) : [];
   const picked = choiceIds ?? [];
@@ -51,15 +50,6 @@ export function resolveSelectedOptions(
     if (typeof choice['stockId'] === 'string' && choice['stockId'] !== '') {
       snapshot.stockId = choice['stockId'];
     }
-    if (choice['needsText'] === true) {
-      // 줄바꿈·보이지 않는 글자를 정리한 뒤 길이를 잰다(잘라 내지 않고 넘치면 막는다).
-      const text = toSingleLineText(optionText, OPTION_TEXT_MAX_LENGTH * 10);
-      if (!text) throw new BadRequestException(`${snapshot.choiceLabel}에 넣을 문구를 적어 주세요.`);
-      if (Array.from(text).length > OPTION_TEXT_MAX_LENGTH) {
-        throw new BadRequestException(`문구는 ${OPTION_TEXT_MAX_LENGTH}자까지 쓸 수 있어요.`);
-      }
-      snapshot.text = text;
-    }
     return snapshot;
   });
   return { selected, priceDelta: selected.reduce((sum, option) => sum + option.priceDelta, 0) };
@@ -87,13 +77,19 @@ export function collectOptionStockLines(
     .map(([stockId, quantity]) => ({ stockId, quantity }));
 }
 
-/** 선물 정보는 한 줄로 정리한다. 받는 분 이름·연락처, 보내는 분 이름은 꼭 있어야 한다. */
+/**
+ * 선물 정보는 한 줄로 정리한다. 받는 분 이름·연락처, 보내는 분 이름은 꼭 있어야 한다.
+ * 보내는 분 이름은 포장 라벨로 출력되므로 잘라 내지 않고 넘치면 막는다.
+ */
 export function normalizeGift(gift: Partial<GiftInfo> | undefined | null): GiftInfo | null {
   if (!gift) return null;
   const recipientName = toSingleLineText(gift.recipientName, 20);
-  const senderName = toSingleLineText(gift.senderName, 20);
+  const senderName = toSingleLineText(gift.senderName, PACKAGE_LABEL_MAX_LENGTH * 10);
   if (!recipientName || !senderName) {
     throw new BadRequestException('선물 받는 분과 보내는 분 이름을 적어 주세요.');
+  }
+  if (Array.from(senderName).length > PACKAGE_LABEL_MAX_LENGTH) {
+    throw new BadRequestException(`보내는 분 이름은 ${PACKAGE_LABEL_MAX_LENGTH}자까지 쓸 수 있어요.`);
   }
   const recipientPhone = normalizeKoreanMobilePhone(gift.recipientPhone);
   if (!recipientPhone) {
@@ -105,4 +101,25 @@ export function normalizeGift(gift: Partial<GiftInfo> | undefined | null): GiftI
     senderName,
     cardMessage: toSingleLineText(gift.cardMessage, GIFT_MESSAGE_MAX_LENGTH),
   };
+}
+
+/**
+ * 포장 겉면에 붙일 라벨 문구(주문마다 한 장, 무료). 없으면 null.
+ * - 선물이면 보내는 분 이름이 라벨이다. 이때 따로 보낸 라벨 문구는 받지 않는다(두 값이 어긋나지 않게).
+ * - 선물이 아니면 고객이 "넣기"를 고른 경우에만 보낸다. 한 줄로 정리한 뒤 PACKAGE_LABEL_MAX_LENGTH자를
+ *   넘으면 잘라 내지 않고 막는다. 정리 뒤 비어 있으면 라벨 없음이다.
+ */
+export function resolvePackageLabel(packageLabel: string | undefined, gift: GiftInfo | null): string | null {
+  if (gift) {
+    if (packageLabel !== undefined) {
+      throw new BadRequestException('선물은 보내는 분 이름이 포장 라벨로 붙어요. 라벨 문구를 따로 보낼 수 없어요.');
+    }
+    return gift.senderName;
+  }
+  const text = toSingleLineText(packageLabel, PACKAGE_LABEL_MAX_LENGTH * 10);
+  if (!text) return null;
+  if (Array.from(text).length > PACKAGE_LABEL_MAX_LENGTH) {
+    throw new BadRequestException(`포장 라벨 문구는 ${PACKAGE_LABEL_MAX_LENGTH}자까지 쓸 수 있어요.`);
+  }
+  return text;
 }

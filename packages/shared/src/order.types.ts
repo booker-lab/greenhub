@@ -128,6 +128,7 @@ export interface Order {
   requestNote?: string | null        // 소비자 요청사항 — 회차 주문만, 없으면 null
   deliveryPhotoIds?: string[]
   gift?: GiftInfo | null
+  packageLabel?: string | null       // 포장 겉면 라벨 문구 — 회차 주문만, 선물이면 보내는 분 이름, 없으면 키가 없다
   postDeliveryRefund?: PostDeliveryRefundRecord | null // 배송 후 환불 기록 — 환불한 주문만 존재
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
@@ -168,10 +169,10 @@ export interface CreateOrderRequest {
     quantity: number
     /** 옵션 묶음마다 고른 선택지 id */
     optionChoiceIds?: string[]
-    /** 문구가 필요한 선택지(라벨·토퍼)에 넣을 문구 */
-    optionText?: string
   }>
   gift?: GiftInfo
+  /** 포장 겉면 라벨 문구(선택, PACKAGE_LABEL_MAX_LENGTH 이하). 선물이면 보내지 않는다(보내는 분 이름이 라벨이 된다). */
+  packageLabel?: string
   deliveryPhone: string
   requestNote?: string           // 선택 — ORDER_REQUEST_NOTE_MAX_LENGTH 이하
   marketingConsent?: MarketingConsentInput

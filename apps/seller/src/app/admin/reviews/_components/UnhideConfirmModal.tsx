@@ -1,7 +1,9 @@
 'use client';
 
 import { type AdminHiddenReview, REVIEW_HIDE_REASON_MAX_LENGTH } from '@greenhub/shared';
-import { Stack, Text, Textarea } from '@mantine/core';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
+import { Textarea } from '@greenhub/ui/components/textarea';
+import { useId } from 'react';
 import { ConfirmModal } from '@/components/ConfirmModal';
 
 interface UnhideConfirmModalProps {
@@ -24,32 +26,44 @@ export function UnhideConfirmModal({
   onConfirm,
   onClose,
 }: UnhideConfirmModalProps) {
+  const reasonId = useId();
+  // ① 외형 유지(UI 교체 P2b): Mantine Stack(gap xs)·Text·Textarea(radius md, autosize 2줄).
+  // 열리면 data-autofocus인 사유 칸이 첫 초점이다(Mantine Modal 약속, Dialog가 지킨다).
   return (
     <ConfirmModal
       opened={target !== null}
       title="숨김 해제"
       message={
-        <Stack gap="xs">
-          <Text style={{ fontSize: 'var(--font-size-sm)', overflowWrap: 'anywhere' }}>
+        <div className="flex flex-col gap-2.5">
+          <p
+            className="m-0 p-0 text-base"
+            style={{ fontSize: 'var(--font-size-sm)', overflowWrap: 'anywhere' }}
+          >
             {target
               ? `${target.storeName ?? target.storeId} · ${target.productName ?? '삭제된 상품'}`
               : ''}
-          </Text>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+          </p>
+          <p
+            className="m-0 p-0 text-base"
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
             이 후기를 다시 고객에게 보이고 별점에 넣을까요?
-          </Text>
-          <Textarea
-            label="해제 사유 (선택)"
-            placeholder="예: 개인정보가 아닌 내용으로 확인"
-            maxLength={REVIEW_HIDE_REASON_MAX_LENGTH}
-            value={reason}
-            onChange={(e) => onReasonChange(e.currentTarget.value)}
-            autosize
-            minRows={2}
-            radius="md"
-            data-autofocus
-          />
-        </Stack>
+          </p>
+          <Field>
+            <FieldLabel htmlFor={reasonId}>해제 사유 (선택)</FieldLabel>
+            <Textarea
+              id={reasonId}
+              placeholder="예: 개인정보가 아닌 내용으로 확인"
+              maxLength={REVIEW_HIDE_REASON_MAX_LENGTH}
+              value={reason}
+              onChange={(e) => onReasonChange(e.currentTarget.value)}
+              autosize
+              minRows={2}
+              className="rounded-[8px]"
+              data-autofocus
+            />
+          </Field>
+        </div>
       }
       confirmLabel="숨김 해제"
       confirmColor="green"

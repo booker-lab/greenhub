@@ -6,15 +6,15 @@ import { buildOrdersHref } from '../orders/orders-deep-link';
 
 export interface TaskRow {
   key: string;
-  /** 줄 앞 점 색 — 할 일=초록, 문제=빨강, 점검=노랑. */
+  /** 줄 앞 점 색 — 문제=빨강, 나머지(할 일·점검)=검정. 초록은 행동, 노랑은 마감에만 쓴다(design-direction §2·§3.2). */
   dot: string;
   label: string;
   href: string;
 }
 
-const DOT_TODO = 'var(--color-primary)';
+const DOT_TODO = 'var(--color-text)';
 const DOT_PROBLEM = 'var(--color-danger)';
-const DOT_CHECK = 'var(--color-status-warning-text)';
+const DOT_CHECK = 'var(--color-text)';
 
 /** 회차 주문이 기사에게 넘어간 뒤 배송을 기다리는 상태(보류는 따로 센다). */
 const ROUND_DELIVERY_STATUSES: ReadonlyArray<Order['status']> = ['PREPARING', 'DELIVERING'];

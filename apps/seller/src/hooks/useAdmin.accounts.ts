@@ -39,9 +39,18 @@ export function useAdminStores() {
   // 치우기 — 기록 가드 차단(400) 사유를 UI에 그대로 안내해야 하므로
   // outcome boolean 축약 대신 ApiError를 직접 전파한다.
   // command 2xx 확인 뒤 reload 실패는 reconciliation으로 반환한다 (실패로 되돌리지 않음).
-  const archiveStore = async (storeId: string): Promise<AdminReconciliation> => {
+  // 주문·정산 기록이 있는 판매자는 서버가 412로 가게 ID 앞 8자리 확인을 요구한다.
+  const archiveStore = async (
+    storeId: string,
+    confirmStoreIdPrefix?: string,
+  ): Promise<AdminReconciliation> => {
     if (!token) throw new Error('인증 토큰이 없습니다. 다시 로그인해 주세요.');
-    await apiJson(`/admin/stores/${storeId}/archive`, token, { method: 'PATCH' });
+    await apiJson(`/admin/stores/${storeId}/archive`, token, {
+      method: 'PATCH',
+      ...(confirmStoreIdPrefix === undefined
+        ? {}
+        : { body: JSON.stringify({ confirmStoreIdPrefix }) }),
+    });
     const readError = await reload();
     if (readError === null) return { reconciled: true, readError: null };
     return { reconciled: false, readError };

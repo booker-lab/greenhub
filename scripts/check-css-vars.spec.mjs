@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { findUndefinedCssVars } from './check-css-vars.mjs';
 
-test('정의되지 않은 변수만 찾고 대체값·Mantine·인라인 정의는 통과시킨다', () => {
+test('정의되지 않은 변수만 찾고 대체값·외부 런타임·인라인 정의는 통과시킨다(Mantine 변수는 이제 미정의로 잡는다)', () => {
   const missing = findUndefinedCssVars([
-    { file: 'ui/style.css', text: ':root { --fw-bold: 700; --radius-sm: 8px; }' },
+    { file: 'ui/styles/base.css', text: ':root { --fw-bold: 700; --radius-sm: 8px; }' },
     {
       file: 'a.tsx',
       text: [
@@ -18,5 +18,8 @@ test('정의되지 않은 변수만 찾고 대체값·Mantine·인라인 정의�
       ].join('\n'),
     },
   ]);
-  assert.deepEqual(missing, [{ name: '--fw-semibold', files: ['a.tsx'] }]);
+  assert.deepEqual(missing, [
+    { name: '--fw-semibold', files: ['a.tsx'] },
+    { name: '--mantine-spacing-xs', files: ['a.tsx'] },
+  ]);
 });

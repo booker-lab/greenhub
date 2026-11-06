@@ -79,26 +79,25 @@ test.describe('어드민 로컬 — 기사·판매자 연락처', () => {
     await loginLocalAdmin(page, admin as LocalAdmin);
   });
 
-  test('기사 탭 — 이름·이메일·전화(전화 걸기 링크)·가입일을 보여 준다', async ({ page }) => {
-    await openAdminPage(page, '/admin/drivers', '드라이버 관리');
+  test('기사 승인 대기 상자 — 이름·전화(전화 걸기 링크)·신청일을 보여 준다', async ({ page }) => {
+    await openAdminPage(page, '/admin/drivers', '활동 중');
 
-    // 기본 탭은 승인 대기 — 시드 기사는 미승인이라 여기 보인다.
-    const row = visible(page.getByText(driver.name)).first();
-    await expect(row).toBeVisible({ timeout: 30_000 });
-    await expect(visible(page.getByText(driver.email))).toHaveCount(1);
-    const phoneLink = visible(page.locator(`a[href="tel:${driver.phone}"]`));
+    // 시드 기사는 미승인이라 표 위 승인 대기 상자(D7)에 보인다. 상자는 이메일 대신 연락처·신청일을 쓴다.
+    const box = page.getByRole('region', { name: /승인 대기/ });
+    const item = box.getByRole('listitem').filter({ hasText: driver.name });
+    await expect(item).toHaveCount(1, { timeout: 30_000 });
+    const phoneLink = item.locator(`a[href="tel:${driver.phone}"]`);
     await expect(phoneLink).toHaveCount(1);
     await expect(phoneLink).toHaveText(driver.phone);
-    // 전화와 가입일은 같은 줄이다 — 다른 실행의 기사와 섞이지 않게 이 기사의 전화로 줄을 집는다.
-    await expect(
-      visible(page.getByText(`${driver.phone} · 가입일 ${driver.joined}`, { exact: true })),
-    ).toHaveCount(1);
+    // 전화와 신청일은 같은 줄이다 — 다른 실행의 기사와 섞이지 않게 이 기사 항목 안에서 찾는다.
+    await expect(item).toContainText(`${driver.phone} · 신청 ${driver.joined}`);
+    await expect(item.getByRole('button', { name: `기사 ${driver.name} 승인` })).toBeVisible();
   });
 
   test('판매자 탭 — 대표자·연락처(전화 걸기 링크)를 보여 준다', async ({ page }) => {
-    await openAdminPage(page, '/admin/stores', '판매자 목록');
+    await openAdminPage(page, '/admin/stores', '이 목록에서 찾기');
 
-    await page.getByLabel('판매자 검색').fill(store.name);
+    await page.getByLabel('이 목록에서 찾기').fill(store.name);
     await expect(visible(page.getByText(store.name))).toHaveCount(1, { timeout: 30_000 });
     await expect(visible(page.getByText(`${store.ceoName} ·`))).toHaveCount(1);
     const phoneLink = visible(page.locator(`a[href="tel:${store.phone}"]`));
@@ -106,7 +105,7 @@ test.describe('어드민 로컬 — 기사·판매자 연락처', () => {
     await expect(phoneLink).toHaveText(store.phone);
 
     // 전화번호로도 같은 판매자를 찾는다(검색은 숫자만 비교).
-    await page.getByLabel('판매자 검색').fill(store.phone.replace(/-/g, ''));
+    await page.getByLabel('이 목록에서 찾기').fill(store.phone.replace(/-/g, ''));
     await expect(visible(page.getByText(store.name))).toHaveCount(1);
   });
 });

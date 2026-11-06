@@ -1,4 +1,3 @@
-import { Box, Container } from '@mantine/core';
 import { Suspense } from 'react';
 import BusinessInfoFooter from '@/components/BusinessInfoFooter';
 import BusinessRelationshipNotice from '@/components/BusinessRelationshipNotice';
@@ -22,11 +21,12 @@ async function HomeStoreHint() {
   return storeId ? <HomeStorePrefetch storeId={storeId} /> : null;
 }
 
+// ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px, 좌우 0·아래 96)·Box(좌우 md 16·위 40)와 같은 값.
 // 홈 구성은 docs/specs/frontend/design-standard.md §5를 따른다.
 // 사업자 관계 안내(카카오 채널 승인 증빙)는 상품 목록 아래에 둔다.
 export default function HomePage() {
   return (
-    <Container size="sm" px={0} pt={0} pb={96}>
+    <div className="mx-auto max-w-[720px] px-0 pt-0 pb-24">
       <script
         type="application/ld+json"
         // biome-ignore lint/security/noDangerouslySetInnerHtml: serializeJsonLd가 `<`를 이스케이프해 태그를 닫을 수 없다
@@ -39,10 +39,10 @@ export default function HomePage() {
       <Suspense fallback={null}>
         <HomeProductList banner={<HeroBanner />} />
       </Suspense>
-      <Box px="md" mt={40}>
+      <div className="mt-10 px-4">
         <BusinessRelationshipNotice />
         <BusinessInfoFooter />
-      </Box>
-    </Container>
+      </div>
+    </div>
   );
 }

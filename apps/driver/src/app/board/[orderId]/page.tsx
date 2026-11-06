@@ -2,25 +2,19 @@
 
 import type { RedeliveryPaymentActionability } from '@greenhub/shared';
 import { apiPathSegment, readRouteParam } from '@greenhub/shared';
-import {
-  Anchor,
-  Badge,
-  Box,
-  Button,
-  Card,
-  Group,
-  Loader,
-  Stack,
-  Text,
-  UnstyledButton,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { toast } from '@greenhub/ui/components/toast';
+import { cn } from '@greenhub/ui/lib/utils';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
-import { use, useCallback, useEffect, useRef, useState } from 'react';
+import { type ReactNode, use, useCallback, useEffect, useRef, useState } from 'react';
+import { AppButton } from '@/components/app-button';
+import { TOAST_WARNING } from '@/components/app-toaster';
+import { text } from '@/components/look';
+import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
 import { isApiTimeoutError } from '@/lib/api-timeout';
+import { splitDeliveryAddress } from '@/lib/address-parts';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
 import { buildOrderMapLink } from '../../map/_lib/map-navigation-link';
 import {
@@ -105,7 +99,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
   const orderId = readRouteParam(rawOrderId);
   if (!orderId) {
     return (
-      <Box
+      <div
         style={{
           minHeight: '100dvh',
           display: 'flex',
@@ -113,20 +107,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
           justifyContent: 'center',
         }}
       >
-        <Stack align="center" gap="sm" px="md">
-          <Text style={{ color: 'var(--color-text-disabled)' }} ta="center">
+        <div className="flex flex-col items-center gap-3 px-4">
+          <p className={cn(text, 'text-center')} style={{ color: 'var(--color-text-disabled)' }}>
             주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해 주세요.
-          </Text>
-          <Anchor
-            component={Link}
+          </p>
+          <Link
             href="/board"
             replace
+            className={cn(text, 'cursor-pointer no-underline hover:underline')}
             style={{ color: 'var(--color-primary-dark)', fontSize: 'var(--font-size-sm)' }}
           >
             배송 목록으로
-          </Anchor>
-        </Stack>
-      </Box>
+          </Link>
+        </div>
+      </div>
     );
   }
   return <OrderDetail orderId={orderId} />;
@@ -336,23 +330,23 @@ function OrderDetail({ orderId }: { orderId: string }) {
       if (!isCommandCurrent()) return;
       const result = resolveDriverStatusCommandReadback({ requestedStatus: status, readback });
       if (result === 'APPLIED') {
-        notifications.show({ message: STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE });
+        toast.add({ description: STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE });
         if (isDriverTerminalCommandStatus(status)) router.replace('/board?tab=delivering');
         return;
       }
       if (result === 'LEFT_DRIVER_SCOPE') {
         // 완료 전이 요청 뒤 상세 404: 완료 ACK 경로와 같이 목록 조회로 수렴한다.
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE,
         });
         router.replace('/board?tab=delivering');
         return;
       }
       if (result === 'NOT_APPLIED') {
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE,
         });
       }
     };
@@ -402,9 +396,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
         // 403/409 + STATE_CONFLICT: 로그인 상실이 아니다. 같은 command를 자동
         // 재전송하지 않고 authoritative GET으로 수렴한다 (기존 409 race convergence 재사용).
         if (recovery === 'STATE_CONFLICT') {
-          notifications.show({
-            color: 'yellow',
-            message: '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.',
+          toast.add({
+            type: TOAST_WARNING,
+            description: '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.',
           });
           await readDetail(token);
           return;
@@ -424,9 +418,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
         // F/G: 403/409 STATE·AUTHORITY·NOT_FOUND 이외 4xx·5xx ACK-uncertain.
         // 같은 PATCH를 자동 재전송하지 않고 UNCERTAIN을 보존한 채 authoritative
         // GET으로 수렴한다. fresh GET 성공이 warning을 해소하기 전에는 fail-closed다.
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
         });
         setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
         settleUncertainReadback(await readDetail(token));
@@ -438,9 +432,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
         result = (await res.json()) as { orderId?: unknown; status?: unknown };
       } catch {
         if (!isCommandCurrent()) return;
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
         });
         setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
         settleUncertainReadback(await readDetail(token));
@@ -449,9 +443,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
       if (!isCommandCurrent()) return;
       // C: 2xx이지만 ACK orderId/status mismatch. 자동 resend 없이 GET 수렴한다.
       if (!isDriverOrderStatusAck(result, orderId, status)) {
-        notifications.show({
-          color: 'yellow',
-          message: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
+        toast.add({
+          type: TOAST_WARNING,
+          description: STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
         });
         setReadbackWarning(STATUS_UNCERTAIN_READBACK_WARNING);
         settleUncertainReadback(await readDetail(token));
@@ -504,9 +498,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
       // 않고 UNCERTAIN을 보존한 채 authoritative GET으로 수렴한다. same-command 재시도 유도 copy 금지.
       // 시간 초과는 서버가 상태를 저장한 뒤 알림 발송을 기다리는 중일 수 있어 이미 처리됐을 수 있다.
       if (!isCommandCurrent()) return;
-      notifications.show({
-        color: 'yellow',
-        message: isApiTimeoutError(cause)
+      toast.add({
+        type: TOAST_WARNING,
+        description: isApiTimeoutError(cause)
           ? STATUS_TIMEOUT_CONVERGENCE_MESSAGE
           : STATUS_UNCERTAIN_CONVERGENCE_MESSAGE,
       });
@@ -526,7 +520,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
 
   if (readLoading) {
     return (
-      <Box
+      <div
         style={{
           minHeight: '100dvh',
           display: 'flex',
@@ -534,8 +528,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
           justifyContent: 'center',
         }}
       >
-        <Loader color="brand" />
-      </Box>
+        <Spinner />
+      </div>
     );
   }
 
@@ -547,7 +541,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
           ? '주문 정보를 불러오지 못했습니다'
           : '주문을 찾을 수 없습니다';
     return (
-      <Box
+      <div
         style={{
           minHeight: '100dvh',
           display: 'flex',
@@ -555,31 +549,23 @@ function OrderDetail({ orderId }: { orderId: string }) {
           justifyContent: 'center',
         }}
       >
-        <Stack align="center" gap="sm">
-          <Text style={{ color: 'var(--color-text-disabled)' }}>{message}</Text>
+        <div className="flex flex-col items-center gap-3">
+          <p className={text} style={{ color: 'var(--color-text-disabled)' }}>
+            {message}
+          </p>
           {readError?.kind === 'FETCH_ERROR' && (
-            <Button
-              variant="outline"
-              color="brand"
-              radius="xl"
-              onClick={() => setReadKey((key) => key + 1)}
-            >
+            <AppButton tone="brand-outline" onClick={() => setReadKey((key) => key + 1)}>
               다시 시도
-            </Button>
+            </AppButton>
           )}
           {readError?.kind === 'AUTH_ERROR' && (
             // 같은 토큰으로 재조회해도 401/403이 반복되므로 세션을 정리하고 로그인으로 보낸다.
-            <Button
-              variant="outline"
-              color="brand"
-              radius="xl"
-              onClick={() => void signOut({ redirectTo: '/login' })}
-            >
+            <AppButton tone="brand-outline" onClick={() => void signOut({ redirectTo: '/login' })}>
               다시 로그인
-            </Button>
+            </AppButton>
           )}
-        </Stack>
-      </Box>
+        </div>
+      </div>
     );
   }
 
@@ -609,6 +595,22 @@ function OrderDetail({ orderId }: { orderId: string }) {
     readErrorKind: readError?.kind ?? null,
     hasReadbackWarning: readbackWarning !== null,
   });
+  // 문 앞에서 가장 중요한 동·호수를 크게 쓴다. 거점은 거점 이름이 제목이고 주소가 보조다.
+  const addressParts = isHub
+    ? { base: order.hubAddress ?? '-', detail: order.hubName ?? null }
+    : (splitDeliveryAddress(order.address, order.deliveryAddress?.address) ?? {
+        base: '-',
+        detail: null,
+      });
+  // 단계마다 보이는 전화는 하나다(판매자: 수거 대기·거점 배송 중, 소비자: 직배송 배송 중·보류). 노출 규칙은 API가 정한다.
+  const contact =
+    isPreparing && order.sellerPhone
+      ? { label: '판매자', phone: order.sellerPhone }
+      : (isDelivering || isHeld) && !isHub && order.buyerPhone
+        ? { label: '소비자', phone: order.buyerPhone }
+        : isDelivering && isHub && order.sellerPhone
+          ? { label: '판매자', phone: order.sellerPhone }
+          : null;
   const preparedAtStr = order.preparedAt
     ? new Date(order.preparedAt).toLocaleTimeString('ko-KR', {
         hour: '2-digit',
@@ -617,25 +619,25 @@ function OrderDetail({ orderId }: { orderId: string }) {
     : '시간 미정';
 
   return (
-    <Box style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
-      {/* 헤더 */}
-      <Box
-        component="header"
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
+      {/* 머리: 뒤로 + 배송 방식·상태 글자. 틀은 흰 바탕·검정 글자, 문제 상태만 빨강(design-direction.md §6). */}
+      <header
         style={{
           position: 'sticky',
           top: 0,
           zIndex: 10,
           backgroundColor: 'var(--color-bg)',
-          borderBottom: 'var(--border)',
-          padding: '16px',
+          padding: '4px 16px',
           display: 'flex',
           alignItems: 'center',
-          gap: 12,
+          gap: 8,
         }}
       >
-        <UnstyledButton
+        <button
+          type="button"
           onClick={() => router.back()}
-          style={{ color: 'var(--color-text-secondary)', padding: 4 }}
+          className="-ml-2.5 flex size-11 cursor-pointer appearance-none items-center justify-center border-0 bg-transparent p-0 no-underline"
+          style={{ color: 'var(--color-text)' }}
           aria-label="뒤로가기"
         >
           <svg
@@ -654,329 +656,328 @@ function OrderDetail({ orderId }: { orderId: string }) {
               d="M15 19l-7-7 7-7"
             />
           </svg>
-        </UnstyledButton>
-        <Group gap="xs">
-          <Badge color="brand" variant="light" size="sm">
+        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className={text} style={mutedText}>
             {METHOD_LABEL[order.deliveryMethod] ?? order.deliveryMethod}
-          </Badge>
+          </p>
+          {isPreparing && (
+            <p className={text} style={mutedText}>
+              · 수거 {preparedAtStr}
+            </p>
+          )}
           {isDelivering && (
-            <Text
+            <p
+              className={text}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
-                color: 'var(--color-primary-dark)',
+                color: 'var(--color-text)',
               }}
             >
               배송 중
-            </Text>
+            </p>
           )}
           {isHeld && (
-            <Text
+            <p
+              className={cn(text, 'flex items-center gap-1.5')}
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-bold)',
                 color: 'var(--color-danger)',
               }}
             >
+              <span
+                aria-hidden="true"
+                className="block size-2 rounded-full"
+                style={{ backgroundColor: 'var(--color-danger)' }}
+              />
               배송 보류
-            </Text>
+            </p>
           )}
-        </Group>
-      </Box>
+        </div>
+      </header>
 
       {/* 본문 */}
-      <Box component="main" style={{ flex: 1, padding: '24px 16px' }}>
-        <Stack gap="md">
+      <main style={{ flex: 1, padding: '8px 16px 24px' }}>
+        <div className="flex flex-col gap-5">
           {readRefreshing && (
-            <Text
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
+            <p className={text} style={mutedText}>
               최신 정보를 확인하는 중입니다…
-            </Text>
+            </p>
           )}
           {readError && (
-            <Card radius="xl" withBorder p="md">
-              <Stack gap="xs">
-                <Text
-                  style={{
-                    fontSize: 'var(--font-size-sm)',
-                    color: 'var(--color-danger)',
-                  }}
-                >
-                  {readError.message} (이전 정보 표시 중)
-                </Text>
-                {readError.kind === 'FETCH_ERROR' && (
-                  <Button
-                    variant="outline"
-                    color="brand"
-                    radius="xl"
-                    onClick={() => setReadKey((key) => key + 1)}
-                  >
-                    다시 확인
-                  </Button>
-                )}
-              </Stack>
-            </Card>
+            <ProblemPanel>
+              <p className={text} style={problemText}>
+                {readError.message} (이전 정보 표시 중)
+              </p>
+              {readError.kind === 'FETCH_ERROR' && (
+                <AppButton tone="brand-outline" onClick={() => setReadKey((key) => key + 1)}>
+                  다시 확인
+                </AppButton>
+              )}
+            </ProblemPanel>
           )}
           {readbackWarning && (
-            <Card radius="xl" withBorder p="md">
-              <Stack gap="xs">
-                <Text
-                  style={{
-                    fontSize: 'var(--font-size-sm)',
-                    color: 'var(--color-danger)',
-                  }}
-                >
-                  {readbackWarning}
-                </Text>
-                <Button
-                  variant="outline"
-                  color="brand"
-                  radius="xl"
-                  onClick={() => {
-                    const token = session?.user.accessToken;
-                    if (token) void readDetail(token);
-                  }}
-                >
-                  상태 다시 확인
-                </Button>
-              </Stack>
-            </Card>
+            <ProblemPanel>
+              <p className={text} style={problemText}>
+                {readbackWarning}
+              </p>
+              <AppButton
+                tone="brand-outline"
+                onClick={() => {
+                  const token = session?.user.accessToken;
+                  if (token) void readDetail(token);
+                }}
+              >
+                상태 다시 확인
+              </AppButton>
+            </ProblemPanel>
           )}
-          {/* 주문 정보 */}
-          <Card radius="xl" withBorder p="md">
-            <Stack gap="sm">
-              <Text
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  fontWeight: 'var(--fw-bold)',
-                  color: 'var(--color-text-disabled)',
-                }}
-              >
-                주문 정보
-              </Text>
-              {itemLines ? (
-                <InfoLinesRow label="상품" lines={itemLines} />
-              ) : (
-                <InfoRow label="상품" value={orderItemsLabel(order.productName, order.quantity)} />
-              )}
-              {isPreparing && <InfoRow label="수거 예정" value={preparedAtStr} />}
-              {isHub ? (
-                <>
-                  <InfoRow label="거점명" value={order.hubName ?? '-'} />
-                  <InfoRow label="거점 주소" value={order.hubAddress ?? '-'} />
-                </>
-              ) : (
-                <InfoRow
-                  label="배송지"
-                  value={order.address ?? order.deliveryAddress?.address ?? '-'}
-                />
-              )}
-              {mapLink && (
-                <Button
-                  component="a"
-                  href={mapLink.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  variant="light"
-                  size="sm"
-                  fullWidth
-                >
-                  카카오맵에서 {mapLink.kind === 'route' ? '길찾기' : '주소 보기'}
-                </Button>
-              )}
-              {isPreparing && <InfoRow label="소비자" value={order.buyerName ?? '-'} />}
-              {order.requestNote?.trim() && (
-                <Stack gap={2}>
-                  <Text
-                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-                  >
-                    요청사항
-                  </Text>
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-sm)',
-                      fontWeight: 'var(--fw-medium)',
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                    }}
-                  >
-                    {order.requestNote.trim()}
-                  </Text>
-                </Stack>
-              )}
-            </Stack>
-          </Card>
 
-          {/* 연락처 */}
-          <Card radius="xl" withBorder p="md">
-            <Stack gap="sm">
-              <Text
+          {/* 동·호수가 주인공: 위 15px 기본 주소, 아래 28px 동·호수(거점은 거점 이름). */}
+          <div className="flex flex-col gap-1">
+            <p className={text} style={mutedText}>
+              {addressParts.detail ? addressParts.base : isHub ? '거점' : '배송지'}
+            </p>
+            <h1
+              className="m-0"
+              style={{
+                fontSize: addressParts.detail ? 28 : 'var(--font-size-xl)',
+                fontWeight: 'var(--fw-extrabold)',
+                lineHeight: 1.3,
+                color: 'var(--color-text)',
+                wordBreak: 'keep-all',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {addressParts.detail ?? addressParts.base}
+            </h1>
+          </div>
+
+          {/* 건넬 상품을 크게 + 받는 분 */}
+          <div className="flex flex-col gap-1">
+            {itemLines ? (
+              <ItemLines lines={itemLines} />
+            ) : (
+              <ItemLines lines={[orderItemsLabel(order.productName, order.quantity)]} />
+            )}
+            <p className={text} style={mutedText}>
+              받는 분 {order.buyerName ?? '-'}
+            </p>
+          </div>
+
+          {order.requestNote?.trim() && (
+            <div
+              className="flex flex-col gap-0.5 rounded-[var(--radius)] p-4"
+              style={{ backgroundColor: 'var(--color-surface-muted)' }}
+            >
+              <p className={text} style={mutedText}>
+                요청사항
+              </p>
+              <p
+                className={text}
                 style={{
-                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text)',
                   fontWeight: 'var(--fw-bold)',
-                  color: 'var(--color-text-disabled)',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
                 }}
               >
-                연락처
-              </Text>
-              {isPreparing && order.sellerPhone && (
-                <ContactRow label="판매자" phone={order.sellerPhone} />
+                {order.requestNote.trim()}
+              </p>
+            </div>
+          )}
+
+          {/* 전화·길 찾기: 연회색 면 + 검정 글자(초록 주요 버튼만 칠한 면이 되게). */}
+          {(contact || mapLink) && (
+            <div className="flex flex-col gap-2">
+              <div className="flex gap-2">
+                {contact && (
+                  <a
+                    href={`tel:${contact.phone}`}
+                    className={actionButton}
+                    style={actionButtonStyle}
+                  >
+                    <PhoneIcon />
+                    {contact.label}에게 전화
+                  </a>
+                )}
+                {mapLink && (
+                  <a
+                    href={mapLink.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={actionButton}
+                    style={actionButtonStyle}
+                  >
+                    카카오맵에서 {mapLink.kind === 'route' ? '길찾기' : '주소 보기'}
+                  </a>
+                )}
+              </div>
+              {contact && (
+                <p className={text} style={{ ...mutedText, fontVariantNumeric: 'tabular-nums' }}>
+                  {contact.label} {contact.phone}
+                </p>
               )}
-              {(isDelivering || isHeld) && !isHub && order.buyerPhone && (
-                <ContactRow label="소비자" phone={order.buyerPhone} />
-              )}
-              {isDelivering && isHub && order.sellerPhone && (
-                <ContactRow label="판매자" phone={order.sellerPhone} />
-              )}
-            </Stack>
-          </Card>
+            </div>
+          )}
+
+          {/* 배송 보류 같은 드문 작업은 주요 버튼에서 떨어진 글자 버튼에서 확인 창과 함께 연다. */}
+          {holdEntryVisible && (
+            <button
+              type="button"
+              className="m-0 min-h-11 cursor-pointer appearance-none self-start border-0 bg-transparent p-0 underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-50"
+              style={{
+                fontSize: 'var(--font-size-md)',
+                fontWeight: 'var(--fw-bold)',
+                color: 'var(--color-text)',
+              }}
+              disabled={loading || !commandsAllowed}
+              onClick={() => setHoldOpened(true)}
+            >
+              부재·문제 알리기
+            </button>
+          )}
 
           {isHeld && order.deliveryHold && <DeliveryHoldCard hold={order.deliveryHold} />}
 
           {paymentPresentation && (
-            <Card radius="xl" withBorder p="md">
-              <Stack gap="xs">
-                <Group justify="space-between" align="center">
-                  <Text style={{ fontWeight: 'var(--fw-bold)' }}>재배송비 결제</Text>
-                  <Badge color={paymentPresentation.color} variant="light">
-                    {paymentPresentation.label}
-                  </Badge>
-                </Group>
-                <Text
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-                >
-                  {paymentPresentation.description}
-                </Text>
-              </Stack>
-            </Card>
+            <div
+              className="flex flex-col gap-1 rounded-[var(--radius)] p-4"
+              style={{
+                backgroundColor:
+                  paymentPresentation.color === 'red'
+                    ? 'var(--color-danger-surface)'
+                    : 'var(--color-surface-muted)',
+              }}
+            >
+              <p
+                className={cn(text, 'flex items-center gap-1.5')}
+                style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="block size-2 rounded-full"
+                  style={{
+                    backgroundColor:
+                      paymentPresentation.color === 'red'
+                        ? 'var(--color-danger)'
+                        : 'var(--color-text)',
+                  }}
+                />
+                {paymentPresentation.label}
+              </p>
+              <p className={text} style={{ ...mutedText, color: 'var(--color-text)' }}>
+                재배송비 결제 · {paymentPresentation.description}
+              </p>
+            </div>
           )}
-        </Stack>
-      </Box>
+        </div>
+      </main>
 
-      {/* 하단 CTA */}
-      <Box
-        style={{
-          position: 'sticky',
-          bottom: 'calc(72px + env(safe-area-inset-bottom))',
-          padding: '0 16px 16px',
-        }}
-      >
-        {isHeld &&
-          isRoundDirect &&
-          (deliveryStartAllowed ? (
-            <Button
-              fullWidth
-              size="lg"
-              radius="xl"
-              color="brand"
-              loading={loading}
-              disabled={loading || !commandsAllowed}
-              onClick={() => updateStatus('DELIVERING')}
-            >
-              배송 재개
-            </Button>
-          ) : (
-            <Button fullWidth size="lg" radius="xl" color="gray" disabled>
-              {paymentPresentation?.label ?? '배송 재개 불가'}
-            </Button>
-          ))}
-        {(isPreparing || isDelivering) && isRoundDirect && (
-          <Stack gap="xs">
-            {isPreparing &&
-              (deliveryStartAllowed ? (
-                <Button
-                  fullWidth
-                  size="lg"
-                  radius="xl"
-                  color="brand"
-                  loading={loading}
-                  disabled={loading || !commandsAllowed}
-                  onClick={() => updateStatus('DELIVERING')}
-                >
-                  수거 완료 / 배송 시작
-                </Button>
-              ) : (
-                <Button fullWidth size="lg" radius="xl" color="gray" disabled>
-                  {paymentPresentation?.label ?? '배송 시작 불가'}
-                </Button>
-              ))}
-            {isDelivering && (
-              <Button
+      {/* 주요 행동 하나만 엄지 영역에 고정: 높이 56px·화면 폭 전체, 위쪽은 고정 바 그림자. */}
+      {(isHeld && isRoundDirect) ||
+      ((isPreparing || isDelivering) && isRoundDirect) ||
+      (isPreparing && !isRoundDirect) ||
+      (isDelivering && !isRoundDirect) ? (
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 'calc(72px + env(safe-area-inset-bottom))',
+            padding: '12px 16px',
+            backgroundColor: 'var(--color-bg)',
+            boxShadow: 'var(--driver-bar-shadow)',
+          }}
+        >
+          {isHeld &&
+            isRoundDirect &&
+            (deliveryStartAllowed ? (
+              <AppButton
                 fullWidth
-                size="lg"
-                radius="xl"
-                color="brand"
+                size="xl"
                 loading={loading}
-                disabled={!commandsAllowed}
-                onClick={() =>
-                  router.push(`/board/${encodeURIComponent(orderId)}/photo/round-direct`)
-                }
-              >
-                배송 완료 사진 촬영
-              </Button>
-            )}
-            {holdEntryVisible && (
-              <Button
-                fullWidth
-                size="lg"
-                radius="xl"
-                color="red"
-                variant="outline"
                 disabled={loading || !commandsAllowed}
-                onClick={() => setHoldOpened(true)}
+                onClick={() => updateStatus('DELIVERING')}
               >
-                배송 보류
-              </Button>
-            )}
-          </Stack>
-        )}
-        {isPreparing &&
-          !isRoundDirect &&
-          (deliveryStartAllowed ? (
-            <Button
+                배송 재개
+              </AppButton>
+            ) : (
+              <AppButton fullWidth size="xl" tone="gray" disabled>
+                {paymentPresentation?.label ?? '배송 재개 불가'}
+              </AppButton>
+            ))}
+          {isPreparing &&
+            isRoundDirect &&
+            (deliveryStartAllowed ? (
+              <AppButton
+                fullWidth
+                size="xl"
+                loading={loading}
+                disabled={loading || !commandsAllowed}
+                onClick={() => updateStatus('DELIVERING')}
+              >
+                수거 완료 / 배송 시작
+              </AppButton>
+            ) : (
+              <AppButton fullWidth size="xl" tone="gray" disabled>
+                {paymentPresentation?.label ?? '배송 시작 불가'}
+              </AppButton>
+            ))}
+          {isDelivering && isRoundDirect && (
+            <AppButton
               fullWidth
-              size="lg"
-              radius="xl"
-              color="brand"
+              size="xl"
+              loading={loading}
+              disabled={!commandsAllowed}
+              onClick={() =>
+                router.push(`/board/${encodeURIComponent(orderId)}/photo/round-direct`)
+              }
+            >
+              도착 사진 찍고 완료
+            </AppButton>
+          )}
+          {isPreparing &&
+            !isRoundDirect &&
+            (deliveryStartAllowed ? (
+              <AppButton
+                fullWidth
+                size="xl"
+                loading={loading}
+                disabled={loading || !commandsAllowed}
+                onClick={() => updateStatus('DELIVERING')}
+              >
+                수거 완료 / 배송 시작
+              </AppButton>
+            ) : (
+              <AppButton fullWidth size="xl" tone="gray" disabled>
+                {paymentPresentation?.label ?? '배송 시작 불가'}
+              </AppButton>
+            ))}
+          {isDelivering && !isHub && !isRoundDirect && (
+            <AppButton
+              fullWidth
+              size="xl"
               loading={loading}
               disabled={loading || !commandsAllowed}
-              onClick={() => updateStatus('DELIVERING')}
+              onClick={() => updateStatus('DELIVERED')}
             >
-              수거 완료 / 배송 시작
-            </Button>
-          ) : (
-            <Button fullWidth size="lg" radius="xl" color="gray" disabled>
-              {paymentPresentation?.label ?? '배송 시작 불가'}
-            </Button>
-          ))}
-        {isDelivering && !isHub && !isRoundDirect && (
-          <Button
-            fullWidth
-            size="lg"
-            radius="xl"
-            color="brand"
-            loading={loading}
-            disabled={loading || !commandsAllowed}
-            onClick={() => updateStatus('DELIVERED')}
-          >
-            배송 완료
-          </Button>
-        )}
-        {isDelivering && isHub && (
-          <Button
-            fullWidth
-            size="lg"
-            radius="xl"
-            color="brand"
-            loading={loading}
-            disabled={!commandsAllowed}
-            onClick={() => router.push(`/board/${encodeURIComponent(orderId)}/photo`)}
-          >
-            거점 도착
-          </Button>
-        )}
-      </Box>
+              배송 완료
+            </AppButton>
+          )}
+          {isDelivering && isHub && (
+            <AppButton
+              fullWidth
+              size="xl"
+              loading={loading}
+              disabled={!commandsAllowed}
+              onClick={() => router.push(`/board/${encodeURIComponent(orderId)}/photo`)}
+            >
+              거점 도착
+            </AppButton>
+          )}
+        </div>
+      ) : null}
 
       {isRoundDirect && (
         <DeliveryHoldModal
@@ -1030,7 +1031,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
           }}
         />
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -1040,29 +1041,21 @@ function DeliveryHoldCard({ hold }: { hold: DeliveryHold }) {
       ? `${hold.redeliveryFee.toLocaleString('ko-KR')}원`
       : '없음';
   return (
-    <Card radius="xl" withBorder p="md">
-      <Stack gap="sm">
-        <Text
-          style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-bold)',
-            color: 'var(--color-danger)',
-          }}
-        >
-          배송 보류
-        </Text>
-        <InfoRow label="보류 유형" value={HOLD_REASON_LABEL[hold.reasonCode]} />
-        <InfoRow label="보류 사유" value={hold.reasonMessage} />
-        <InfoRow label="책임" value={hold.customerResponsible ? '고객 책임' : '판매자 책임'} />
-        <InfoRow label="재배송비" value={fee} />
-        {hold.nextContactAt && (
-          <InfoRow label="다음 연락" value={formatSchedule(hold.nextContactAt)} />
-        )}
-        {hold.nextDeliveryAt && (
-          <InfoRow label="새 배송 예정" value={formatSchedule(hold.nextDeliveryAt)} />
-        )}
-      </Stack>
-    </Card>
+    <ProblemPanel>
+      <p className={text} style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}>
+        배송 보류 내용
+      </p>
+      <InfoRow label="보류 유형" value={HOLD_REASON_LABEL[hold.reasonCode]} />
+      <InfoRow label="보류 사유" value={hold.reasonMessage} />
+      <InfoRow label="책임" value={hold.customerResponsible ? '고객 책임' : '판매자 책임'} />
+      <InfoRow label="재배송비" value={fee} />
+      {hold.nextContactAt && (
+        <InfoRow label="다음 연락" value={formatSchedule(hold.nextContactAt)} />
+      )}
+      {hold.nextDeliveryAt && (
+        <InfoRow label="새 배송 예정" value={formatSchedule(hold.nextDeliveryAt)} />
+      )}
+    </ProblemPanel>
   );
 }
 
@@ -1078,90 +1071,95 @@ function formatSchedule(value: string) {
   });
 }
 
+// 기사 ② 글자 값(design-direction.md §6): 보조 글자도 15px·거의 검정, 문제 글자는 빨강.
+const mutedText = { fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' } as const;
+const problemText = {
+  fontSize: 'var(--font-size-sm)',
+  fontWeight: 'var(--fw-bold)',
+  color: 'var(--color-text)',
+} as const;
+const actionButton =
+  'flex min-h-12 min-w-0 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full px-3 text-center no-underline';
+const actionButtonStyle = {
+  backgroundColor: 'var(--driver-action-surface)',
+  color: 'var(--color-text)',
+  fontSize: 'var(--font-size-md)',
+  fontWeight: 'var(--fw-bold)',
+  lineHeight: 1.3,
+  // 좁은 폭(360px)에서 "주소 보기"가 글자 단위로 끊기지 않게 단어 단위로 줄을 바꾼다.
+  wordBreak: 'keep-all',
+} as const;
+
+/** 문제 상태 면: 테두리 없이 빨강 연한 면, 글자는 검정(빨강 글자는 이 면 위 대비가 4.1:1이라 쓰지 않는다). */
+function ProblemPanel({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="flex flex-col gap-2.5 rounded-[var(--radius)] p-4"
+      style={{ backgroundColor: 'var(--color-danger-surface)' }}
+    >
+      {children}
+    </div>
+  );
+}
+
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
-    <Group justify="space-between" align="flex-start">
-      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <p className={text} style={mutedText}>
         {label}
-      </Text>{' '}
-      <Text
-        style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)', maxWidth: '60%' }}
-        ta="right"
+      </p>{' '}
+      <p
+        className={cn(text, 'text-right')}
+        style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)', maxWidth: '60%' }}
       >
         {value}
-      </Text>
-    </Group>
+      </p>
+    </div>
   );
 }
 
-// 여러 줄 값(상품별 줄 등)을 InfoRow와 같은 모양으로 한 줄씩 보인다.
-function InfoLinesRow({ label, lines }: { label: string; lines: string[] }) {
+// 건넬 상품: 상품마다 한 줄, 20px 굵게.
+function ItemLines({ lines }: { lines: string[] }) {
   return (
-    <Group justify="space-between" align="flex-start">
-      <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-        {label}
-      </Text>{' '}
-      <Stack gap={2} style={{ maxWidth: '60%' }}>
-        {lines.map((line, index) => (
-          <Text
-            // biome-ignore lint/suspicious/noArrayIndexKey: 줄은 받은 순서 그대로 고정 — reorder 없음
-            key={index}
-            style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
-            ta="right"
-          >
-            {line}
-          </Text>
-        ))}
-      </Stack>
-    </Group>
-  );
-}
-
-function ContactRow({ label, phone }: { label: string; phone: string }) {
-  return (
-    <Group justify="space-between" align="center">
-      <Stack gap={2}>
-        <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
-          {label}
-        </Text>
-        <Text style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}>
-          {phone}
-        </Text>
-      </Stack>
-      <Anchor
-        component="a"
-        href={`tel:${phone}`}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          backgroundColor: 'var(--color-primary-surface)',
-          color: 'var(--color-primary-dark)',
-          fontWeight: 'var(--fw-bold)',
-          fontSize: 'var(--font-size-sm)',
-          padding: '8px 16px',
-          borderRadius: 12,
-          textDecoration: 'none',
-        }}
-      >
-        <svg
-          width="16"
-          height="16"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-          focusable="false"
+    <div className="flex flex-col">
+      {lines.map((line, index) => (
+        <p
+          // biome-ignore lint/suspicious/noArrayIndexKey: 줄은 받은 순서 그대로 고정 — reorder 없음
+          key={index}
+          className={text}
+          style={{
+            fontSize: 'var(--font-size-xl)',
+            fontWeight: 'var(--fw-bold)',
+            lineHeight: 1.4,
+            color: 'var(--color-text)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
         >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-          />
-        </svg>
-        {label}에게 전화
-      </Anchor>
-    </Group>
+          {line}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function PhoneIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+      className="shrink-0"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth={2}
+        d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+      />
+    </svg>
   );
 }

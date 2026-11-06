@@ -91,6 +91,7 @@ export interface Order {
     requestNote?: string | null;
     deliveryPhotoIds?: string[];
     gift?: GiftInfo | null;
+    packageLabel?: string | null;
     postDeliveryRefund?: PostDeliveryRefundRecord | null;
     createdAt: string;
     updatedAt: string;
@@ -128,10 +129,10 @@ export interface CreateOrderRequest {
         quantity: number;
         /** 옵션 묶음마다 고른 선택지 id */
         optionChoiceIds?: string[];
-        /** 문구가 필요한 선택지(라벨·토퍼)에 넣을 문구 */
-        optionText?: string;
     }>;
     gift?: GiftInfo;
+    /** 포장 겉면 라벨 문구(선택, PACKAGE_LABEL_MAX_LENGTH 이하). 선물이면 보내지 않는다(보내는 분 이름이 라벨이 된다). */
+    packageLabel?: string;
     deliveryPhone: string;
     requestNote?: string;
     marketingConsent?: MarketingConsentInput;

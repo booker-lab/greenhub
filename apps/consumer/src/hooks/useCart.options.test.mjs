@@ -62,15 +62,18 @@ test('같은 회차 상품을 다른 옵션으로 다시 담으면 새 옵션으
   assert.deepEqual(second.items[0].optionChoiceIds, ['ceramic']);
 });
 
-test('라벨·토퍼 문구를 함께 담고 다시 열어도 그대로 둔다', () => {
-  const result = addCartItem([], {
-    ...withCeramic,
-    optionLabel: '화분: 도자기 화분 · 문구: 3D 토퍼 "개업 축하"',
-    optionText: '개업 축하',
-    quantity: 1,
-  });
-  assert.equal(result.ok, true);
-  const restored = parseCartSnapshot(JSON.stringify(result.items));
-  assert.equal(restored[0].optionText, '개업 축하');
-  assert.equal(addCartItem([], { ...withCeramic, optionText: 42, quantity: 1 }).ok, false);
+test('예전 장바구니에 남은 상품별 문구(optionText)는 옵션은 살리고 문구만 버린다', () => {
+  const restored = parseCartSnapshot(
+    JSON.stringify([
+      {
+        ...withCeramic,
+        optionLabel: '화분: 도자기 화분 · 문구: 3D 토퍼 "개업 축하"',
+        optionText: '개업 축하',
+        quantity: 1,
+      },
+    ]),
+  );
+  assert.equal(restored.length, 1);
+  assert.deepEqual(restored[0].optionChoiceIds, ['ceramic']);
+  assert.equal('optionText' in restored[0], false);
 });

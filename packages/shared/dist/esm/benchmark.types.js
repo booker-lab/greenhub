@@ -16,8 +16,11 @@ export const PLACEMENT_LABELS = {
 export const PRODUCT_OPTION_GROUP_MAX = 3;
 export const PRODUCT_OPTION_CHOICE_MAX = 6;
 export const PRODUCT_OPTION_PRICE_DELTA_MAX = 200_000;
-/** 라벨·토퍼에 넣는 문구 최대 길이(글자) */
-export const OPTION_TEXT_MAX_LENGTH = 20;
+/**
+ * 포장 겉면 라벨 문구 최대 길이(글자). 주문마다 한 장, 무료.
+ * 선물이면 보내는 분 이름(GiftInfo.senderName)이 라벨 문구다. 축하 문구는 미리 출력한 토퍼 옵션으로 고른다.
+ */
+export const PACKAGE_LABEL_MAX_LENGTH = 20;
 export const OPTION_STOCK_NAME_MAX_LENGTH = 30;
 /** 한 번에 넣거나 맞출 수 있는 최대 수량 */
 export const OPTION_STOCK_QUANTITY_MAX = 10_000;

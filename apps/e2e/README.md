@@ -94,3 +94,14 @@ ADMIN_LOCAL_E2E=1 SELLER_BASE=http://localhost:3002 CONSUMER_BASE=http://localho
 | `admin-local-contacts` | 기사 탭 전화(전화 걸기 링크)·가입일, 판매자 탭 대표자·연락처 |
 
 카카오 로그인으로 초대를 받아 가입하는 흐름은 실제 카카오가 필요해 로컬 E2E로 열 수 없다. API HTTP 통합 테스트(`apps/api/src/admin/admin-invite-revoke.spec.ts`의 "카카오 초대 가입")와 셀러앱 단위 테스트(`src/proxy.test.ts`·`src/lib/seller-invite.test.ts`)가 덮는다.
+
+## 기사 디자인 시스템 spec 로컬 실행
+
+`tests/driver-design-system.spec.ts`는 `DRIVER_BASE`가 루프백이면 인증 화면 묶음을 로컬 파일럿 로그인(아무 이메일·비밀번호)으로 연다. 쿠키가 필요 없고 건너뛰지 않는다. 로그인이 안 되면 실패한다.
+
+```bash
+node scripts/visual/start.mjs driver        # 다른 터미널(가짜 API + next dev, http://127.0.0.1:3203)
+cd apps/e2e && DRIVER_BASE=http://127.0.0.1:3203 pnpm exec playwright test tests/driver-design-system.spec.ts --retries=0
+```
+
+원격 대상은 지금처럼 `DRIVER_SESSION_COOKIE`(세션 쿠키 JSON)를 주면 그 쿠키를 `DRIVER_BASE`의 도메인에 넣는다. 둘 다 없으면 인증 묶음을 건너뛴다.

@@ -13,17 +13,35 @@ const badgeVariants = cva(
     variants: {
       variant: {
         default: 'bg-primary text-primary-foreground [a]:hover:bg-primary/90',
-        light: 'bg-[#d2f2df] text-[#005c32]',
+        light: 'bg-ui-brand-light text-ui-brand-light-text',
         outline: 'border-primary bg-transparent text-brand-ink',
+        // Mantine variant="outline" color="gray"(gray-6 테두리·글자).
+        'outline-gray': 'border-ui-gray-6 bg-transparent text-ui-gray-6',
+        // Mantine variant="outline" color="yellow"·"red"(yellow-6·red-6 테두리·글자).
+        'outline-warning': 'border-[#fab005] bg-transparent text-[#fab005]',
+        'outline-destructive': 'border-ui-red bg-transparent text-ui-red',
         warning: 'bg-status-warning text-status-warning-foreground',
-        secondary: 'bg-[#f1f3f5] text-[#212529]',
-        destructive: 'bg-[#ffe3e3] text-[#c92a2a]',
+        secondary: 'bg-ui-gray-1 text-ui-gray-9',
+        destructive: 'bg-ui-red-light text-ui-red-light-text',
+        // Mantine filled red(red-6 면·흰 글자), light orange(orange-1 면·orange-9 글자).
+        'destructive-filled': 'bg-ui-red-filled text-white',
+        'light-orange': 'bg-ui-orange-light text-ui-orange-light-text',
+        // Mantine light dark·green(dark-1 면·dark-9 글자, green-1 면·green-9 글자).
+        'light-dark': 'bg-ui-dark-light text-ui-dark-light-text',
+        'light-green': 'bg-ui-green-light text-ui-green-light-text',
         ghost: 'bg-transparent text-foreground hover:bg-muted',
         link: 'bg-transparent text-brand-ink underline-offset-4 hover:underline',
+      },
+      // Mantine Badge size(기본 md). sm = 높이 18·좌우 8·10px, xs = 높이 16·좌우 6·9px(줄 높이는 높이 - 2px).
+      size: {
+        md: '',
+        sm: 'h-[18px] px-2 text-[10px] leading-4',
+        xs: 'h-4 px-1.5 text-[9px] leading-[14px]',
       },
     },
     defaultVariants: {
       variant: 'default',
+      size: 'md',
     },
   },
 );
@@ -31,6 +49,7 @@ const badgeVariants = cva(
 function Badge({
   className,
   variant = 'default',
+  size = 'md',
   render,
   ...props
 }: useRender.ComponentProps<'span'> & VariantProps<typeof badgeVariants>) {
@@ -38,7 +57,7 @@ function Badge({
     defaultTagName: 'span',
     props: mergeProps<'span'>(
       {
-        className: cn(badgeVariants({ variant }), className),
+        className: cn(badgeVariants({ variant, size }), className),
       },
       props,
     ),

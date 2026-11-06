@@ -1,0 +1,221 @@
+/*
+ * 다크 모드(D5) 토큰 — design-direction.md §9.2 값(2026-11-02 확정, D5-a·D5-c).
+ *
+ * 기기 설정(`prefers-color-scheme: dark`)을 따를 때 tokens.css(shadcn 의미 변수)와 base.css(--color-*)의
+ * 값만 다시 정의한다. 컴포넌트는 토큰만 읽으므로 이 파일이 색을 바꾸는 유일한 곳이다(§9.1).
+ *
+ * 앱별 적용: 앱은 하드코딩 색을 토큰으로 옮긴 뒤(§9.4) 그 앱 globals.css에서 tokens.css·base.css **뒤에**
+ * layer 없이 이 파일을 import하고, `color-scheme: light dark`와 viewport `themeColor` 두 값을 함께 둔다.
+ * 아직 import하지 않은 앱은 어둠에서도 지금 밝은 화면 그대로다(반쯤 어두운 화면을 내보내지 않는다).
+ *
+ * 밝음과 같은 값(버튼 면 `--primary` #007A43과 흰 글자, `--brand`·`--color-primary` #00A65A)은 다시 쓰지 않는다.
+ *
+ * 직접 전환(D5-b, §9.3): 같은 값을 두 곳에 둔다. ① 기기 설정이 어둠이고 '밝게'를 고르지 않았을 때
+ * (`@media` 안 `:root:not([data-theme="light"])`), ② '어둡게'를 골랐을 때(`:root[data-theme="dark"]`).
+ * CSS에 "미디어 쿼리 또는 속성" 한 블록을 쓰는 방법이 없어 값을 그대로 두 번 적는다. 두 블록이 같은지는
+ * scripts/ui/dark-css.spec.mjs가 확인한다. 값을 고칠 때 두 블록을 함께 고친다.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* ── tokens.css(shadcn 의미 변수) ── */
+    --background: #161b18;
+    --foreground: #e8ecea;
+    --card: #161b18;
+    --card-foreground: #e8ecea;
+    --card-border: #2e3632;
+    --popover: #1e2421;
+    --popover-foreground: #e8ecea;
+    --secondary: #232a26;
+    --secondary-foreground: #e8ecea;
+    --muted: #232a26;
+    --muted-foreground: #a1aaa5;
+    --accent: #10301f;
+    --accent-foreground: #4fd08c;
+    /* 글자·점 빨강. 빨강 채운 버튼 면이 생기면 #D92D20을 따로 둔다(흰 글자 4.8). */
+    --destructive: #ff7366;
+    --destructive-surface: #3a1714;
+    --input: #646d68;
+    --ring: #4fd08c;
+    --brand-ink: #4fd08c;
+    --brand-surface: #10301f;
+    --deadline: #f2c21d;
+    --deadline-on: #2a2100;
+    --deadline-surface: #2b2410;
+    --deadline-foreground: #ffd866;
+    --status-info: #232a26;
+    /* §9.2 표에 없는 값: 밝음 #3F4642(면 위 8.7:1)와 같은 자리, 면 #232A26 위 9.0:1 */
+    --status-info-foreground: #c4ccc8;
+    --status-warning: #2b2410;
+    --status-warning-foreground: #f2c94c;
+    --frame: #0f1311;
+    --rule: #2e3632;
+
+    /* ── base.css(--color-*) ── */
+    --color-primary-dark: #4fd08c;
+    --color-primary-surface: #10301f;
+    --color-bg: #161b18;
+    --color-surface: #161b18;
+    --color-border: #262e2a;
+    --color-text: #e8ecea;
+    --color-text-secondary: #a1aaa5;
+    --color-text-disabled: #8a938e;
+    --color-danger: #ff7366;
+    --color-danger-surface: #3a1714;
+    --color-surface-muted: #232a26;
+    --color-status-info-bg: #232a26;
+    --color-status-info-text: #c4ccc8;
+    --color-status-warning-bg: #2b2410;
+    --color-status-warning-text: #f2c94c;
+    --color-caution-bg: #2b2410;
+    --color-caution-border: #f2c21d;
+    --color-deadline: #f2c21d;
+    --color-deadline-surface: #2b2410;
+    --color-deadline-on: #2a2100;
+    --color-deadline-text: #ffd866;
+    /* ── tokens.css ① 외형 Mantine 색(packages/ui 부품 variant, §9.4 첫 행) ──
+       회색은 단계의 밝기 순서를 뒤집는다: 면 단계(0~3)는 면·선 값, 글자 단계(5~9)는 꺼진·보조·본문 글자 값.
+       연한 면(light) variant는 어두운 면 + 밝은 글자(면 위 7:1 이상)이고, 채운 빨강은 §9.2대로 #D92D20(흰 글자 4.8)이다. */
+    --ui-ink: #e8ecea;
+    --ui-gray-0: #232a26;
+    --ui-gray-1: #232a26;
+    --ui-gray-2: #2e3632;
+    --ui-gray-3: #3d4642;
+    --ui-gray-5: #8a938e;
+    --ui-gray-6: #a1aaa5;
+    --ui-gray-7: #c4ccc8;
+    --ui-gray-9: #e8ecea;
+    /* §9.2 --primary 행: 어둠의 버튼 마우스 올림 */
+    --ui-primary-hover: #008248;
+    --ui-brand-light: #10301f;
+    --ui-brand-light-hover: #17432c;
+    --ui-brand-light-text: #4fd08c;
+    --ui-red: #ff7366;
+    --ui-red-filled: #d92d20;
+    --ui-red-filled-hover: #b42318;
+    --ui-red-light: #3a1714;
+    --ui-red-light-hover: #4d1f1b;
+    --ui-red-light-text: #ff8a7e;
+    --ui-blue-light: #13293d;
+    --ui-blue-light-hover: #1b3a55;
+    --ui-blue-light-text: #8cc8ff;
+    --ui-green-light: #10301f;
+    --ui-green-light-hover: #17432c;
+    --ui-green-light-text: #69db7c;
+    --ui-orange-light: #3a2410;
+    --ui-orange-light-text: #ffa94d;
+    --ui-dark: #e8ecea;
+    --ui-dark-light: #3d4642;
+    --ui-dark-light-text: #e8ecea;
+    --ui-dark-light-hover: #464f4a;
+    --ui-dark-filled-hover: #c4ccc8;
+
+    /* 고정 바: 그림자 대신 위쪽 1px 선(§9.1) */
+    --bar-shadow: 0 -1px 0 var(--rule);
+  }
+}
+
+:root[data-theme="dark"] {
+  /* ── tokens.css(shadcn 의미 변수) ── */
+  --background: #161b18;
+  --foreground: #e8ecea;
+  --card: #161b18;
+  --card-foreground: #e8ecea;
+  --card-border: #2e3632;
+  --popover: #1e2421;
+  --popover-foreground: #e8ecea;
+  --secondary: #232a26;
+  --secondary-foreground: #e8ecea;
+  --muted: #232a26;
+  --muted-foreground: #a1aaa5;
+  --accent: #10301f;
+  --accent-foreground: #4fd08c;
+  /* 글자·점 빨강. 빨강 채운 버튼 면이 생기면 #D92D20을 따로 둔다(흰 글자 4.8). */
+  --destructive: #ff7366;
+  --destructive-surface: #3a1714;
+  --input: #646d68;
+  --ring: #4fd08c;
+  --brand-ink: #4fd08c;
+  --brand-surface: #10301f;
+  --deadline: #f2c21d;
+  --deadline-on: #2a2100;
+  --deadline-surface: #2b2410;
+  --deadline-foreground: #ffd866;
+  --status-info: #232a26;
+  /* §9.2 표에 없는 값: 밝음 #3F4642(면 위 8.7:1)와 같은 자리, 면 #232A26 위 9.0:1 */
+  --status-info-foreground: #c4ccc8;
+  --status-warning: #2b2410;
+  --status-warning-foreground: #f2c94c;
+  --frame: #0f1311;
+  --rule: #2e3632;
+
+  /* ── base.css(--color-*) ── */
+  --color-primary-dark: #4fd08c;
+  --color-primary-surface: #10301f;
+  --color-bg: #161b18;
+  --color-surface: #161b18;
+  --color-border: #262e2a;
+  --color-text: #e8ecea;
+  --color-text-secondary: #a1aaa5;
+  --color-text-disabled: #8a938e;
+  --color-danger: #ff7366;
+  --color-danger-surface: #3a1714;
+  --color-surface-muted: #232a26;
+  --color-status-info-bg: #232a26;
+  --color-status-info-text: #c4ccc8;
+  --color-status-warning-bg: #2b2410;
+  --color-status-warning-text: #f2c94c;
+  --color-caution-bg: #2b2410;
+  --color-caution-border: #f2c21d;
+  --color-deadline: #f2c21d;
+  --color-deadline-surface: #2b2410;
+  --color-deadline-on: #2a2100;
+  --color-deadline-text: #ffd866;
+  /* ── tokens.css ① 외형 Mantine 색(packages/ui 부품 variant, §9.4 첫 행) ──
+     회색은 단계의 밝기 순서를 뒤집는다: 면 단계(0~3)는 면·선 값, 글자 단계(5~9)는 꺼진·보조·본문 글자 값.
+     연한 면(light) variant는 어두운 면 + 밝은 글자(면 위 7:1 이상)이고, 채운 빨강은 §9.2대로 #D92D20(흰 글자 4.8)이다. */
+  --ui-ink: #e8ecea;
+  --ui-gray-0: #232a26;
+  --ui-gray-1: #232a26;
+  --ui-gray-2: #2e3632;
+  --ui-gray-3: #3d4642;
+  --ui-gray-5: #8a938e;
+  --ui-gray-6: #a1aaa5;
+  --ui-gray-7: #c4ccc8;
+  --ui-gray-9: #e8ecea;
+  /* §9.2 --primary 행: 어둠의 버튼 마우스 올림 */
+  --ui-primary-hover: #008248;
+  --ui-brand-light: #10301f;
+  --ui-brand-light-hover: #17432c;
+  --ui-brand-light-text: #4fd08c;
+  --ui-red: #ff7366;
+  --ui-red-filled: #d92d20;
+  --ui-red-filled-hover: #b42318;
+  --ui-red-light: #3a1714;
+  --ui-red-light-hover: #4d1f1b;
+  --ui-red-light-text: #ff8a7e;
+  --ui-blue-light: #13293d;
+  --ui-blue-light-hover: #1b3a55;
+  --ui-blue-light-text: #8cc8ff;
+  --ui-green-light: #10301f;
+  --ui-green-light-hover: #17432c;
+  --ui-green-light-text: #69db7c;
+  --ui-orange-light: #3a2410;
+  --ui-orange-light-text: #ffa94d;
+  --ui-dark: #e8ecea;
+  --ui-dark-light: #3d4642;
+  --ui-dark-light-text: #e8ecea;
+  --ui-dark-light-hover: #464f4a;
+  --ui-dark-filled-hover: #c4ccc8;
+
+  /* 고정 바: 그림자 대신 위쪽 1px 선(§9.1) */
+  --bar-shadow: 0 -1px 0 var(--rule);
+}
+
+/* 직접 고른 모드에 입력칸·스크롤바 색도 맞춘다(시스템이면 각 앱 globals.css의 `color-scheme: light dark`). */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
