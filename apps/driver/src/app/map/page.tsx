@@ -209,7 +209,7 @@ export default function MapPage() {
         <h4 className={titleH4}>오늘 배송 경로</h4>
         <p
           className={cn(text, 'mt-0.5')}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
         >
           총 {orders.length}건
         </p>
@@ -261,7 +261,7 @@ export default function MapPage() {
           >
             <p
               className={text}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
             >
               배송 경로를 불러오는 중입니다
             </p>
@@ -296,7 +296,7 @@ export default function MapPage() {
           >
             <p
               className={text}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
             >
               오늘 배송 주문이 없습니다
             </p>
@@ -306,7 +306,7 @@ export default function MapPage() {
             {refreshing && (
               <p
                 className={text}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
               >
                 최신 정보를 확인하는 중입니다…
               </p>
@@ -372,7 +372,7 @@ export default function MapPage() {
                       className={cn(text, 'truncate')}
                       style={{
                         fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-disabled)',
+                        color: 'var(--driver-text-muted)',
                       }}
                     >
                       {addr}
