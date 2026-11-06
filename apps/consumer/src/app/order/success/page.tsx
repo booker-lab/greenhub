@@ -310,9 +310,11 @@ function OrderSuccessContent() {
   const orderId = resolveSuccessOrderId(params.getAll('orderId'), redirectResult);
   const [paymentReturn, setPaymentReturn] = useState<OrderPaymentReturn | null>(null);
   const handledRedirect = useRef<string | null>(null);
+  // 결제 확인 중(PENDING)이 이어지면 서버가 PortOne에 직접 결제를 확인한다(웹훅 지연·누락 대비).
   const { order, loading, error, pollingExpired, refetch } = useOrderStatus(
     orderId,
     session?.user?.accessToken,
+    { checkPendingPayment: true },
   );
   const validOrder = orderId ? readOrderRecord(order, orderId) : null;
   const successOrder = !loading && !error && orderId ? readSuccessOrder(order, orderId) : null;

@@ -1,4 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
@@ -22,6 +28,27 @@ const PROVIDER_REVERSAL_ISSUE_TYPE = 'PROVIDER_REVERSAL_DETECTED';
 
 // 매분 도는 PENDING 정리 cron의 PortOne 동시 호출 수.
 const CLEANUP_CONCURRENCY = 4;
+
+// 손님 결제 확인 요청: 같은 주문의 PortOne 조회 간격 하한. PortOne 조회 시간 상한(10초)과 같게 두어
+// 앞선 조회가 끝나기 전에 같은 주문을 또 조회하지 않게 한다.
+export const ORDER_PAYMENT_CHECK_MIN_INTERVAL_MS = 10_000;
+const ORDER_PAYMENT_CHECK_FIELD = 'paymentCheckRequestedAtMs';
+const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * 손님 결제 확인 요청 결과.
+ * - not_pending: 이미 확정·취소된 주문이라 PortOne을 조회하지 않았다.
+ * - throttled: 같은 주문을 방금 조회해 이번에는 조회하지 않았다.
+ * - not_paid: PortOne이 아직 결제 완료가 아니라고 답해 아무것도 바꾸지 않았다.
+ * - lookup_failed: PortOne 조회가 실패·시간 초과돼 아무것도 바꾸지 않았다.
+ * - finalized: PortOne이 PAID라 기존 결제 확정 경로를 거쳤다.
+ */
+export type OrderPaymentCheckResult =
+  | 'not_pending'
+  | 'throttled'
+  | 'not_paid'
+  | 'lookup_failed'
+  | 'finalized';
 
 @Injectable()
 export class PaymentsService {
@@ -67,6 +94,71 @@ export class PaymentsService {
       return { ok: true, reason: 'payment_not_paid' };
     }
     return this.finalization.finalizePaidOrder(orderId, paymentData);
+  }
+
+  /**
+   * 결제 완료 화면이 기다리는 동안 손님(주문 당사자)이 부르는 결제 확인.
+   * 웹훅이 늦거나 빠져도 PortOne이 이미 PAID라고 답하면 웹훅·scheduler와 같은
+   * finalizePaidOrder로 확정한다. PAID가 아니면 아무것도 바꾸지 않는다(취소는 15분 scheduler만 한다).
+   */
+  async checkOrderPayment(
+    orderId: string,
+    requesterId: string,
+  ): Promise<{ status: string; result: OrderPaymentCheckResult }> {
+    if (!ORDER_ID_PATTERN.test(orderId)) throw new NotFoundException('주문을 찾을 수 없습니다.');
+    const orderRef = this.firestore.doc(`orders/${orderId}`);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
+    const order = orderSnap.data() as Record<string, any>;
+    if (!requesterId || order['userId'] !== requesterId) throw new ForbiddenException();
+    if (order['status'] !== 'PENDING') {
+      return { status: String(order['status']), result: 'not_pending' };
+    }
+
+    // PENDING 확인과 조회 시각 기록을 한 트랜잭션에서 해 간격 하한을 여러 요청·여러 서버에서 지킨다.
+    const claim = await this.firestore.runTransaction(
+      async (tx): Promise<{ status: string; result?: OrderPaymentCheckResult }> => {
+        const freshSnap = await tx.get(orderRef);
+        const fresh = freshSnap.exists ? (freshSnap.data() as Record<string, any>) : null;
+        if (!fresh || fresh['status'] !== 'PENDING') {
+          return { status: String(fresh?.['status'] ?? 'PENDING'), result: 'not_pending' };
+        }
+        const now = Date.now();
+        const lastRequestedAt = fresh[ORDER_PAYMENT_CHECK_FIELD];
+        if (
+          typeof lastRequestedAt === 'number' &&
+          now - lastRequestedAt >= 0 &&
+          now - lastRequestedAt < ORDER_PAYMENT_CHECK_MIN_INTERVAL_MS
+        ) {
+          return { status: 'PENDING', result: 'throttled' };
+        }
+        tx.update(orderRef, { [ORDER_PAYMENT_CHECK_FIELD]: now });
+        return { status: 'PENDING' };
+      },
+    );
+    if (claim.result) return { status: claim.status, result: claim.result };
+
+    let paymentData: Awaited<ReturnType<PortoneClient['getPayment']>>;
+    try {
+      paymentData = await this.portone.getPayment(orderId);
+    } catch (error) {
+      // 결제창이 아직 진행 중이면 PortOne에 결제가 없을 수 있다. 일시 오류·시간 초과도 주문을 바꾸지 않는다.
+      // 운영 확인 기록(PAYMENT_LOOKUP_FAILED)은 15분 scheduler의 최종 조회만 남긴다.
+      if (
+        error instanceof PortoneError &&
+        error.status === 404 &&
+        error.type === 'PAYMENT_NOT_FOUND'
+      ) {
+        return { status: 'PENDING', result: 'not_paid' };
+      }
+      this.logPaymentCheckError(orderId, error);
+      return { status: 'PENDING', result: 'lookup_failed' };
+    }
+    if (paymentData.status !== 'PAID') return { status: 'PENDING', result: 'not_paid' };
+
+    await this.finalization.finalizePaidOrder(orderId, paymentData);
+    const latest = (await orderRef.get()).data() as Record<string, any> | undefined;
+    return { status: String(latest?.['status'] ?? 'PENDING'), result: 'finalized' };
   }
 
   async getPayment(paymentId: string, requesterId: string) {
@@ -263,6 +355,14 @@ export class PaymentsService {
       this.logger.error(`[PaymentsWebhook] 되돌림 확인 결제 조회 실패 orderId=${orderId} ${label}`);
       return 'LOOKUP_FAILED';
     }
+  }
+
+  private logPaymentCheckError(orderId: string, error: unknown) {
+    const label =
+      error instanceof PortoneError
+        ? `status=${error.status} type=${error.type}`
+        : `networkError=${error instanceof Error ? error.message.replace(/[\r\n\t]/g, ' ').slice(0, 200) : 'unknown'}`;
+    this.logger.warn(`[PaymentCheck] 손님 결제 확인 조회 보류 orderId=${orderId} ${label}`);
   }
 
   private logCleanupError(orderId: string, error: unknown) {

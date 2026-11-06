@@ -288,7 +288,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       : sessionStatus === 'unauthenticated'
         ? null
         : undefined;
-  const { order, loading, error, status, refetch } = useOrderStatus(orderId, accessToken);
+  // 결제 확인 중(PENDING) 주문은 결제 완료 화면처럼 서버에 결제 확인을 요청한다.
+  const { order, loading, error, status, refetch } = useOrderStatus(orderId, accessToken, {
+    checkPendingPayment: true,
+  });
   const [cancelOutcome, setCancelOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   const [reviewOutcome, setReviewOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   const [redeliveryOutcome, setRedeliveryOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
