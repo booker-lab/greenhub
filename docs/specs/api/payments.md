@@ -21,6 +21,7 @@
 - `PaymentFinalizationService.finalizePaidOrder()`는 전달받은 `paymentData.status`가 `PAID`가 아니면
   상태 변경·환불·알림 없이 종료한다. 결제 금액도 주문 금액과 일치하는지 서버에서 확인한다.
 - webhook은 중요한 수렴 경로지만 유일한 수렴 경로가 아니다. 15분 이상 `PENDING` 주문도 scheduler가 PortOne을 재조회해 paid/cancel/확인필요 상태로 수렴시킨다.
+- 손님 결제 완료·주문 상세 화면은 `PENDING`이 이어지면 `POST /payments/orders/:orderId/check`로 서버 결제 확인을 요청한다. 서버는 PortOne이 `PAID`라고 답할 때만 같은 `finalizePaidOrder()`로 확정하고, 그 밖에는 주문을 바꾸지 않는다(취소는 15분 scheduler만 한다). 상세는 §11.
 - legacy 본 결제와 회차 직배송 본 결제는 같은 payment finalization 기반을 공유하지만, 회차 주문은 `checkoutReservations`와 용량 반환·재확보 규칙을 추가로 사용한다.
 - 재배송비는 본 결제와 별개의 `orderCharges` 결제로 관리한다.
 
@@ -353,6 +354,39 @@ GET /stores/:storeId/orders/:orderId/payment
 
 `JwtAuthGuard` 적용. 현재 service는 admin 또는 해당 store 소속 사용자 역할/소유권을 확인한다.
 
+### 손님 결제 확인
+
+```text
+POST /payments/orders/:orderId/check
+```
+
+웹훅이 늦거나 빠졌을 때 결제 완료 화면이 `PENDING`("결제 확인 중")에 오래 머물지 않게 하는 경로다. `JwtAuthGuard` 적용, 기본 요청 한도 적용, 요청 본문 없음.
+
+- 권한: 주문의 `userId`가 요청자와 같을 때만 허용한다. 다른 손님·관리자·판매자는 `403`, 없는 주문이나 `[A-Za-z0-9_-]{1,128}`이 아닌 주문 ID는 `404`. 거절 시 PortOne을 조회하지 않는다.
+- 주문이 `PENDING`이 아니면 PortOne을 조회하지 않고 현재 상태만 돌려준다.
+- 조회 간격 하한: 같은 주문은 10초(`ORDER_PAYMENT_CHECK_MIN_INTERVAL_MS`, PortOne 조회 시간 상한과 같음)에 한 번만 PortOne을 조회한다. 주문 `PENDING` 확인과 조회 시각 기록(`orders/{orderId}.paymentCheckRequestedAtMs`, epoch ms)을 한 트랜잭션에서 해 여러 요청·여러 서버에서도 지킨다.
+- PortOne이 `PAID`면 웹훅·scheduler와 같은 `PaymentFinalizationService.finalizePaidOrder()`로 확정한다. 확정 로직을 따로 두지 않으므로 금액 검증·늦은 결제 처리·(병합 뒤) 채널·통화 검증이 그대로 적용되고, 웹훅·scheduler와 겹쳐도 finalize 트랜잭션의 상태 확인으로 한 번만 확정된다.
+- PortOne이 `PAID`가 아니거나 `404 + PAYMENT_NOT_FOUND`면 아무것도 바꾸지 않는다. 결제창이 아직 진행 중일 수 있어 취소하지 않는다.
+- 그 밖의 PortOne 오류·시간 초과는 주문을 바꾸지 않고 경고 로그(`[PaymentCheck]`, 상태·유형만)만 남긴다. `PAYMENT_LOOKUP_FAILED` 운영 기록은 15분 scheduler의 최종 조회만 남긴다. 손님에게는 제공자 오류 내용을 돌려주지 않는다.
+
+응답(`200`):
+
+```json
+{ "status": "PENDING", "result": "not_paid" }
+```
+
+| `result` | 의미 |
+|---|---|
+| `not_pending` | 이미 확정·취소된 주문. 조회하지 않음 |
+| `throttled` | 간격 하한 안의 재요청. 조회하지 않음 |
+| `not_paid` | PortOne이 아직 결제 완료가 아님(결제 없음 포함). 변경 없음 |
+| `lookup_failed` | PortOne 조회 실패·시간 초과. 변경 없음 |
+| `finalized` | PortOne `PAID`라 확정 경로를 거침. `status`는 확정 뒤 주문 상태 |
+
+손님 화면(`useOrderStatus`의 `checkPendingPayment`): 결제 완료 화면과 주문 상세 화면이 켠다. 기존 3초 폴링(2분 창)은 그대로 두고, `PENDING`이 폴링 창 시작 뒤 6초·20초·45초를 넘겨 이어질 때 한 번씩(창마다 최대 3번, 동시에 하나) 요청한다. 응답 `status`가 `PENDING`이 아니면 바로 주문을 다시 읽고, 실패는 화면에 따로 알리지 않는다. 문구·레이아웃은 바뀌지 않는다.
+
+재배송비(`order-charge-*`)는 이 경로 대상이 아니다. 재배송비 결제에는 15분 scheduler 같은 웹훅 밖 수렴 경로가 아직 없다(§10, 별도 과제).
+
 범용 `POST /refund` 같은 public endpoint는 없다.
 
 ## 12. PortOne client 오류 처리
@@ -434,6 +468,7 @@ export interface Payment {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-06 | 손님 결제 확인 `POST /payments/orders/:orderId/check` 추가 — 주문 당사자만, `PENDING`일 때만 PortOne 조회, 주문별 10초 간격 하한, `PAID`일 때만 기존 `finalizePaidOrder()`로 확정하고 그 밖에는 변경·취소 없음. 결제 완료·주문 상세 화면이 `PENDING` 6·20·45초 뒤 요청 |
 | 2026-10-21 | 본 결제 환불에 `verifyProviderFirst` 선택(첫 요청 전 PortOne 재조회) 추가 — 배송 후 환불이 콘솔 수동 환불과 중복되지 않게 함 |
 | 2026-10-21 | 소비자 앱에 토스페이먼츠 카드 결제(`NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY`, `payMethod: 'CARD'`)를 추가하고 결제수단별 채널 키와 #540 병합 뒤 운영 카드 채널 LIVE·같은 상점 조건을 명시 |
 | 2026-10-10 | 웹훅 거절 로그 집계, 결제사 취소·분쟁 운영 기록, PENDING 정리 cron 동시성, PortOne 시간 상한, 환불 `UNKNOWN` claim·`Idempotency-Key`, 확정 환불 소유 표시, `RETRY_REFUND` 확인 조건, 재배송비 취소 주문 환불을 current source에 맞춰 정합화하고, 상점·통화·채널 미확인(#426 미병합)과 재배송비 환불 운영 기록 라우팅 제약을 명시 |

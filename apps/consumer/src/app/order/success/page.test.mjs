@@ -275,3 +275,10 @@ test('결제 확인 자동 갱신이 멈추면 늦어진다는 안내와 다시 
   assert.match(source, /onClick=\{\(\) => void refetch\(\)\}/);
   assert.match(source, /다시 확인/);
 });
+
+test('결제 완료 화면은 결제 확인 중이 이어지면 서버 결제 확인을 켠 주문 상태 조회를 쓴다', () => {
+  assert.match(
+    source,
+    /useOrderStatus\(\s*orderId,\s*session\?\.user\?\.accessToken,\s*\{ checkPendingPayment: true \},\s*\)/,
+  );
+});
