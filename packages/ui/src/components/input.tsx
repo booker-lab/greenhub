@@ -4,10 +4,12 @@ import type * as React from 'react';
 import { cn } from '../lib/utils';
 
 // ① 외형 유지: Mantine TextInput(높이 36, radius 16, gray-4 테두리, 초점 시 주색 테두리).
-// 글자는 Mantine 기본 검정, 자리표시 글자 gray-5, 비활성 gray-2 면·gray-5 글자, 오류 red-6 테두리·글자(대조 화면에서 맞춤).
+// 글자는 Mantine 기본 검정, 자리표시 글자는 보조 글자색(--muted-foreground), 비활성 gray-2 면·gray-5 글자, 오류 red-6 테두리·글자(대조 화면에서 맞춤).
+// 자리표시 글자는 켜진 입력칸의 안내 글자라 WCAG 대비 예외가 아니다. gray-5(흰 바탕 2.1:1) 대신 보조 글자(5.1:1)로 칠한다.
+// 비활성 글자는 꺼진 컨트롤이라 대비 예외이고, 꺼진 것처럼 보여야 하므로 gray-5를 유지한다.
 // Autocomplete 입력칸도 같은 모양이라 클래스를 함께 쓴다.
 const inputClassName =
-  'block h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm text-ui-ink transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-ui-gray-5 focus:border-brand aria-invalid:border-ui-red aria-invalid:text-ui-red disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:opacity-60';
+  'block h-9 w-full min-w-0 rounded-lg border border-input bg-background px-3 text-sm text-ui-ink transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus:border-brand aria-invalid:border-ui-red aria-invalid:text-ui-red disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:opacity-60';
 
 // Mantine Input 크기(높이·좌우 여백 = 높이 ÷ 3·글자). sm이 기본이다. 모서리는 className으로 준다
 // (Mantine radius md = rounded-[8px], xl = rounded-xl).
