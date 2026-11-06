@@ -34,7 +34,7 @@ export function CustomerInfoSection({ order }: { order: Order }) {
           <div className="mt-1 flex flex-col gap-0.5">
             <p
               className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               요청사항
             </p>

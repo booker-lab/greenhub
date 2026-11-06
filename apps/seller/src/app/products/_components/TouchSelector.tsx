@@ -61,7 +61,7 @@ const STEM_BUTTON = 'h-auto min-h-11 min-w-fit flex-1 px-2 py-1';
 const LABEL_STYLE = {
   fontSize: 'var(--font-size-sm)',
   fontWeight: 'var(--fw-medium)',
-  color: 'var(--color-text-disabled)',
+  color: 'var(--color-text-secondary)',
 } as const;
 
 // ② 디자인 방향(§3.2): 선택 표시는 초록 면 대신 흰 바탕 + 검정 1px 테두리 + 굵은 검정 글자(주문 선택 칩과 같은 규칙).
@@ -116,7 +116,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
                     className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-disabled)',
+                      color: 'var(--color-text-secondary)',
                     }}
                   >
                     {desc}
@@ -131,7 +131,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
       <div className={PAPER}>
         <p className={`${TEXT} mb-2.5`} style={LABEL_STYLE}>
           색상{' '}
-          <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+          <span className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
             (복수 선택 가능)
           </span>
         </p>

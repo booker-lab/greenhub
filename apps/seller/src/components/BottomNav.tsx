@@ -60,8 +60,9 @@ export default function BottomNav() {
                   className="m-0 p-0 font-normal"
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    fontWeight: 'var(--fw-medium)',
-                    color: isActive ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
+                    // 안 고른 탭도 보조 글자(틀 위 4.8:1)라 초록(5.0:1)과 밝기가 거의 같다. 고른 탭은 색만이 아니라 굵기로도 구분한다.
+                    fontWeight: isActive ? 'var(--fw-bold)' : 'var(--fw-medium)',
+                    color: isActive ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
                   }}
                 >
                   {tab.label}
@@ -78,7 +79,7 @@ export default function BottomNav() {
 // ─── Icons (inline SVG) ──────────────────────────────────────────
 
 function OrderIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)';
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-secondary)';
   const sw = active ? 2.2 : 2;
   return (
     <svg
@@ -100,7 +101,7 @@ function OrderIcon({ active }: { active: boolean }) {
 }
 
 function ProductIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)';
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-secondary)';
   const sw = active ? 2.2 : 2;
   return (
     <svg
@@ -122,7 +123,7 @@ function ProductIcon({ active }: { active: boolean }) {
 }
 
 function SaleRoundIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)';
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-secondary)';
   const sw = active ? 2.2 : 2;
   return (
     <svg
@@ -145,7 +146,7 @@ function SaleRoundIcon({ active }: { active: boolean }) {
 }
 
 function PrepIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)';
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-secondary)';
   const sw = active ? 2.2 : 2;
   return (
     <svg
@@ -169,7 +170,7 @@ function PrepIcon({ active }: { active: boolean }) {
 }
 
 function SettingsIcon({ active }: { active: boolean }) {
-  const c = active ? 'var(--color-primary)' : 'var(--color-text-disabled)';
+  const c = active ? 'var(--color-primary)' : 'var(--color-text-secondary)';
   const sw = active ? 2.2 : 2;
   return (
     <svg

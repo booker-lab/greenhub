@@ -24,7 +24,7 @@ export function DateSection({ meta, orders }: { meta: GroupHeaderMeta; orders: O
           style={{
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-bold)',
-            color: danger ? 'var(--color-danger)' : 'var(--color-text-disabled)',
+            color: danger ? 'var(--color-danger)' : 'var(--color-text-secondary)',
           }}
         >
           {meta.label} · {orders.length}건

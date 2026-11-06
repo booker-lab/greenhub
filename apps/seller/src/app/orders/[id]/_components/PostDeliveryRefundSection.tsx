@@ -121,7 +121,7 @@ export function PostDeliveryRefundSection({
     return (
       <p
         className={`${TEXT} py-2.5 text-center`}
-        style={{ ...smallText, color: 'var(--color-text-disabled)' }}
+        style={{ ...smallText, color: 'var(--color-text-secondary)' }}
       >
         배송 중입니다. 취소·환불이 필요하면 관리자에게 문의해 주세요.
       </p>

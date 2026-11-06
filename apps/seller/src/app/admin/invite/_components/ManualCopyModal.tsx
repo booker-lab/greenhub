@@ -34,7 +34,7 @@ export function ManualCopyModal({ link, onClose }: ManualCopyModalProps) {
           <div className="flex flex-col gap-3">
             <p
               className="m-0 p-0 text-base"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               자동 복사를 할 수 없어요. 아래 초대 링크를 선택해 복사해 주세요.
             </p>

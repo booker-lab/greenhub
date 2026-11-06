@@ -53,12 +53,15 @@ export function OrdersTab({
       {listLoading ? (
         <p
           className={`${TEXT} py-20 text-center`}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           불러오는 중...
         </p>
       ) : settlements.length === 0 ? (
-        <div className="py-20" style={{ textAlign: 'center', color: 'var(--color-text-disabled)' }}>
+        <div
+          className="py-20"
+          style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}
+        >
           <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
             정산 완료된 주문이 없습니다
           </p>

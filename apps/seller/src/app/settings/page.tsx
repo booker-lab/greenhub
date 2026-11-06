@@ -137,7 +137,7 @@ export default function SettingsPage() {
               </p>
               <p
                 className={TEXT}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 0.1.0
               </p>

@@ -42,7 +42,7 @@ export function EmptyState({
   return (
     <div
       className="flex flex-col items-center justify-center gap-4 py-20"
-      style={{ color: 'var(--color-text-disabled)' }}
+      style={{ color: 'var(--color-text-secondary)' }}
     >
       {icon}
       <p className="m-0 p-0 font-normal" style={{ fontSize: 'var(--font-size-sm)' }}>

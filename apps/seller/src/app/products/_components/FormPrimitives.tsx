@@ -10,7 +10,7 @@ const TEXT = 'm-0 p-0 text-base font-normal';
 const LABEL_STYLE = {
   fontSize: 'var(--font-size-sm)',
   fontWeight: 'var(--fw-medium)',
-  color: 'var(--color-text-disabled)',
+  color: 'var(--color-text-secondary)',
 } as const;
 
 // ② 디자인 방향(§3.2): 선택 표시는 초록 면 대신 흰 바탕 + 검정 1px 테두리 + 굵은 검정 글자(주문 선택 칩과 같은 규칙).

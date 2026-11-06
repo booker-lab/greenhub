@@ -69,7 +69,7 @@ export default function OrderDetailPage() {
         </p>
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           주문 목록에서 다시 선택해 주세요.
         </p>
@@ -165,7 +165,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
         </p>
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           로그인 상태 확인 후 다시 시도해 주세요.
         </p>
@@ -198,7 +198,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
         {detailError && (
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             {detailError}
           </p>
@@ -295,7 +295,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
             {refreshing ? (
               <p
                 className={TEXT}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 최신 상태 확인 중…
               </p>

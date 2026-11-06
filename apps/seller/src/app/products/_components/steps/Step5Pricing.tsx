@@ -38,7 +38,7 @@ export function Step5Pricing({
         leftSection={
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             ₩
           </p>

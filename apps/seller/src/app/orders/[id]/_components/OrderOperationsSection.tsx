@@ -161,7 +161,7 @@ function IssueCard({
             className={TEXT}
             style={{
               fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-text-disabled)',
+              color: 'var(--color-text-secondary)',
               fontWeight: 'var(--fw-medium)',
             }}
           >
@@ -183,7 +183,7 @@ function IssueCard({
               </div>
               <p
                 className={`${TEXT} mt-0.5`}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 {formatDateTime(action.performedAt)}
                 {action.failureReason ? ` · ${action.failureReason}` : ''}
@@ -207,7 +207,7 @@ function IssueCard({
           </LoadingButton>
           <p
             className={`${TEXT} text-center mt-1`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             실행 직전 서버의 최신 주문·결제 상태를 다시 확인합니다.
           </p>
@@ -283,7 +283,7 @@ export function OrderOperationsSection({
           </div>
           <p
             className={`${TEXT} mt-3`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             재배송비 결제 생성은 주문자 전용이며, 셀러는 서버에 기록된 금액과 일정만 확인합니다.
           </p>
@@ -326,7 +326,7 @@ export function OrderOperationsSection({
         {!loading && issues.length === 0 && (
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             이 주문에 연결된 운영 기록이 없습니다.
           </p>

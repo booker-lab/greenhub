@@ -20,7 +20,7 @@ export default function SellerNoteInput({ value, onChange }: Props) {
         style={{
           fontSize: 'var(--font-size-sm)',
           fontWeight: 'var(--fw-medium)',
-          color: 'var(--color-text-disabled)',
+          color: 'var(--color-text-secondary)',
         }}
       >
         판매자 메모
@@ -43,7 +43,7 @@ export default function SellerNoteInput({ value, onChange }: Props) {
         className={`${TEXT} mt-1 text-right`}
         style={{
           fontSize: 'var(--font-size-sm)',
-          color: value.length >= MAX ? 'var(--color-danger)' : 'var(--color-text-disabled)',
+          color: value.length >= MAX ? 'var(--color-danger)' : 'var(--color-text-secondary)',
         }}
       >
         {value.length} / {MAX}

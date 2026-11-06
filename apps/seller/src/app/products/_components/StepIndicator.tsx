@@ -43,7 +43,8 @@ export function StepIndicator({ step }: { step: number }) {
                       ? 'white'
                       : done
                         ? 'var(--color-primary-dark)'
-                        : 'var(--color-text-disabled)',
+                        : // 다음 단계 숫자는 --color-border 원 위라 보조 글자(4.4:1)도 4.5에 모자라 gray-7(7.1:1)로 칠한다.
+                          'var(--ui-gray-7)',
                   }}
                 >
                   {done ? '✓' : s}
@@ -54,7 +55,7 @@ export function StepIndicator({ step }: { step: number }) {
                     fontSize: 'var(--font-size-xs)',
                     lineHeight: 1.35,
                     wordBreak: 'keep-all',
-                    color: active ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
+                    color: active ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
                     fontWeight: active ? 'var(--fw-bold)' : 400,
                   }}
                 >

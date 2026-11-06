@@ -125,7 +125,7 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
         {loading && orders.length === 0 ? (
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             주문을 불러오는 중…
           </p>
