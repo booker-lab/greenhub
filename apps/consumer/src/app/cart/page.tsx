@@ -632,7 +632,7 @@ export default function CartPage() {
                       {item.requestedDeliveryDate && (
                         <p
                           className="m-0 mt-1 p-0 text-sm font-normal"
-                          style={{ color: 'var(--color-text-disabled)' }}
+                          style={{ color: 'var(--color-text-secondary)' }}
                         >
                           배송 희망일{' '}
                           {new Date(item.requestedDeliveryDate).toLocaleDateString('ko-KR', {
@@ -779,7 +779,7 @@ export default function CartPage() {
       {hasLegacyValidationIssues && (
         <p
           className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
-          style={{ color: 'var(--color-text-disabled)' }}
+          style={{ color: 'var(--color-text-secondary)' }}
         >
           문제 있는 상품을 다시 선택하면 결제할 수 있어요.
         </p>

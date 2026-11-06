@@ -289,7 +289,7 @@ function ErrorState({ message, onHome }: { message: string; onHome: () => void }
       </h1>
       <p
         className="m-0 leading-[1.55]"
-        style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+        style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
       >
         {message}
       </p>
@@ -386,7 +386,7 @@ function OrderSuccessContent() {
             </h1>
             <p
               className="m-0 text-center leading-[1.55]"
-              style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
               {isPending && pollingExpired
                 ? '결제 확인이 늦어지고 있어요. 잠시 후 다시 확인해 주세요.'
@@ -415,14 +415,14 @@ function OrderSuccessContent() {
             {validOrder.status === 'RECRUITING' && (
               <p
                 className="m-0 leading-[1.55]"
-                style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+                style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
               >
                 공동구매 목표 달성 시 주문이 확정됩니다.
               </p>
             )}
             <p
               className="m-0 mt-2.5 leading-[1.55]"
-              style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
               {successOrder.isRoundOrder ? '회차 주문번호' : '주문번호'}: {successOrder.orderNumber}
             </p>
@@ -525,7 +525,7 @@ function OrderSuccessContent() {
             </p>
             <p
               className="m-0 text-center leading-[1.55]"
-              style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
               결제가 완료된 주문입니다. 진행 상황은 주문 내역에서 확인해 주세요.
             </p>
@@ -544,14 +544,14 @@ function OrderSuccessContent() {
             </h1>
             <p
               className="m-0 text-center leading-[1.55]"
-              style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
               {formatCancelReason(validOrder.cancelReason) ?? '결제 처리 중 오류가 발생했습니다.'}
             </p>
             {!isFeatureOn('payment-fail-stay') && (
               <p
                 className="m-0 leading-[1.55]"
-                style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+                style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
               >
                 잠시 후 홈 화면으로 이동합니다.
               </p>
@@ -583,7 +583,7 @@ function OrderSuccessContent() {
             </h1>
             <p
               className="m-0 text-center leading-[1.55]"
-              style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+              style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
               {paymentFailure.message ?? DEFAULT_PAYMENT_FAILURE_MESSAGE}
             </p>
@@ -601,7 +601,7 @@ function OrderSuccessContent() {
         {unpaidItemCount > 0 && !errorMessage && (
           <p
             className="m-0 mt-4 text-center leading-[1.55]"
-            style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+            style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
           >
             장바구니의 다른 상품 {unpaidItemCount}개는 아직 결제되지 않았습니다. 장바구니에서 이어서
             결제해 주세요.

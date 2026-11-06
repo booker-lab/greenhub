@@ -123,7 +123,7 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
                 </p>
                 <p
                   className="m-0 leading-[1.55]"
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   {label}
                 </p>

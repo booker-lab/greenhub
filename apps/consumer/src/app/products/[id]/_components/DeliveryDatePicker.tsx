@@ -186,7 +186,7 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
           </p>
           <p
             className="m-0 p-0 leading-[1.55] font-normal"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             이전 정보를 표시하고 있습니다
           </p>
@@ -208,7 +208,7 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
           <p
             data-testid="delivery-slots-refreshing"
             className="m-0 p-0 leading-[1.55] font-normal"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             최신 정보를 다시 불러오는 중...
           </p>
@@ -221,7 +221,7 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
           <p
             key={d}
             className="m-0 px-0 py-1 text-center leading-[1.55] font-normal"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             {d}
           </p>
@@ -233,7 +233,7 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
         <div className="py-8" style={{ textAlign: 'center' }}>
           <p
             className="m-0 p-0 leading-[1.55] font-normal"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             불러오는 중...
           </p>
@@ -298,7 +298,7 @@ export default function DeliveryDatePicker({ storeId, value, onChange }: Props) 
 
       <p
         className="m-0 mt-2.5 p-0 leading-[1.55] font-normal"
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
       >
         {value
           ? `선택: ${new Date(`${value}T00:00:00+09:00`).toLocaleDateString('ko-KR', {
