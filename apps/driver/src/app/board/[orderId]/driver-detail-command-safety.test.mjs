@@ -53,7 +53,7 @@ test('A. updateStatus는 ref 기반 in-flight guard로 double-submit PATCH를 �
 
 // B. loading 중 CTA → disabled: 모든 status mutation CTA가 명시적으로 disabled다.
 test('B. PATCH dispatch CTA는 loading 중 명시적으로 disabled다', () => {
-  const buttons = detailSource.split('<Button');
+  const buttons = detailSource.split('<AppButton');
   const dispatchButtons = buttons.filter((chunk) => chunk.includes('updateStatus(') && chunk.includes('onClick'));
   // 배송 재개·수거 완료/배송 시작·배송 완료 dispatch 버튼이 존재한다.
   assert.ok(dispatchButtons.length >= 4, `dispatch 버튼이 4개 이상이어야 한다 (${dispatchButtons.length})`);

@@ -1,5 +1,5 @@
 import type { ManagedReview } from '@greenhub/shared';
-import { Radio } from '@mantine/core';
+import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { ReviewCard, type ReviewCardProps } from './ReviewCard';
@@ -92,17 +92,25 @@ describe('고객 반응 후기 카드 숨기기', () => {
   it('숨기기를 누르면 안내 문구·네 가지 사유 선택·설명(선택)·확인/취소가 나온다', () => {
     const { texts, elements, button, handlers } = render({ editing: true });
     expect(texts.join('')).toContain('불만이나 낮은 별점이라는 이유로는 숨길 수 없어요');
-    const radios = elements.filter((element) => element.type === Radio);
+    const radios = elements.filter((element) => element.type === RadioItem);
     expect(radios.map((radio) => radio.props.label)).toEqual([
       '광고·스팸',
       '욕설·비방',
       '개인정보 노출',
       '상품과 무관',
     ]);
-    const group = elements.find((element) => element.props.label === '숨기는 사유');
-    group?.props.onChange?.('abuse');
+    expect(texts).toContain('숨기는 사유');
+    const abuse = radios.find((radio) => radio.props.label === '욕설·비방');
+    expect(abuse?.props.value).toBe('abuse');
+    // 사유 그룹: 이름(숨기는 사유)과 연결된 필수 radiogroup이고, 고른 값이 바뀌면 onReasonChange로 알린다.
+    const group = elements.find((element) => element.type === RadioGroup)?.props as
+      | Record<string, unknown>
+      | undefined;
+    expect(group?.required).toBe(true);
+    expect(group?.['aria-labelledby']).toBeTruthy();
+    (group?.onValueChange as ((value: string) => void) | undefined)?.('abuse');
     expect(handlers.onReasonChange).toHaveBeenCalledWith('abuse');
-    expect(elements.some((element) => element.props.label === '설명(선택)')).toBe(true);
+    expect(texts).toContain('설명(선택)');
     expect(button('숨기기')).toBeUndefined();
     // 사유를 고르기 전에는 확인 버튼이 꺼져 있다.
     expect(button('숨기기 확인')?.props.disabled).toBe(true);

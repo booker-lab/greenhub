@@ -1,10 +1,8 @@
-import { Badge, Box, Container, Group, Text } from '@mantine/core';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
 import { isFeatureOn } from '@/lib/features';
-import { AdminLogoutButton } from './_components/AdminLogoutButton';
-import { AdminNav } from './_components/AdminNav';
-import { buildAdminNavItems } from './_components/navItems';
+import { AdminShell } from './_components/AdminShell';
+import { buildAdminNavGroups } from './_components/navItems';
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -14,59 +12,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <Box style={{ minHeight: '100vh', backgroundColor: 'var(--color-surface-muted)' }}>
-      <Box
-        component="header"
-        style={{
-          backgroundColor: 'var(--color-bg)',
-          borderBottom: '1px solid var(--color-border)',
-          position: 'sticky',
-          top: 0,
-          zIndex: 10,
-        }}
-      >
-        <Container size="lg" px="md" py="sm">
-          <Group justify="space-between">
-            <Text style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}>
-              관리자 콘솔
-            </Text>
-            <Group gap="sm">
-              {/* 겸직 계정(어드민 + 자기 store 보유)만 셀러 화면 복귀 링크 노출 (#CL-52) */}
-              {session.user.storeId && (
-                <Text
-                  component="a"
-                  href="/orders"
-                  style={{
-                    fontSize: 'var(--font-size-sm)',
-                    fontWeight: 'var(--fw-medium)',
-                    color: 'var(--color-primary-dark)',
-                    textDecoration: 'none',
-                  }}
-                >
-                  셀러 화면으로
-                </Text>
-              )}
-              <Badge color="red" variant="light" style={{ fontWeight: 'var(--fw-medium)' }}>
-                ADMIN
-              </Badge>
-              <AdminLogoutButton />
-            </Group>
-          </Group>
-        </Container>
-        <Box style={{ overflowX: 'auto' }}>
-          <Container size="lg" px="md" pb="xs">
-            <AdminNav
-              items={buildAdminNavItems({
-                partnerInquiry: isFeatureOn('partner-inquiry'),
-                reviews: isFeatureOn('reviews'),
-              })}
-            />
-          </Container>
-        </Box>
-      </Box>
-      <Container size="lg" px="md" py="lg">
-        {children}
-      </Container>
-    </Box>
+    <AdminShell
+      groups={buildAdminNavGroups({
+        partnerInquiry: isFeatureOn('partner-inquiry'),
+        reviews: isFeatureOn('reviews'),
+      })}
+      showSellerLink={Boolean(session.user.storeId)}
+    >
+      {children}
+    </AdminShell>
   );
 }

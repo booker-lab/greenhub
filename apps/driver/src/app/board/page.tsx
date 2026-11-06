@@ -1,5 +1,5 @@
 import { Suspense } from 'react';
-import { Loader, Box } from '@mantine/core';
+import { Spinner } from '@/components/spinner';
 import BoardClient from './_client';
 
 // 목록 화면은 서버에서도 그린다(브라우저 API는 effect 안에서만 쓴다). 화면 청크가 첫 문서의
@@ -8,7 +8,7 @@ export default function BoardPage() {
   return (
     <Suspense
       fallback={
-        <Box
+        <div
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -16,8 +16,8 @@ export default function BoardPage() {
             minHeight: '100dvh',
           }}
         >
-          <Loader color="brand" />
-        </Box>
+          <Spinner />
+        </div>
       }
     >
       <BoardClient />

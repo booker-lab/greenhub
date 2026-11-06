@@ -1,14 +1,31 @@
 'use client';
 
-import { Badge, Box, Button, Group, Paper, Stack, Text } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuDotsIcon,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@greenhub/ui/components/dropdown-menu';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { AdminOrder } from '@/hooks/useAdmin';
 import {
-  cancellationBadge,
+  ADMIN_NUM,
+  ADMIN_SUB,
+  ADMIN_TD,
+  ADMIN_TEXT_ACTION,
+  ADMIN_TH,
+  formatWon,
+  maskPersonName,
+} from '../../_components/adminList';
+import {
+  cancellationState,
   formatOrderedAt,
   getAdminOrdersReadState,
-  getStatusColor,
-  isPostDeliveryRefundable,
-  isRefundable,
+  getStatusTone,
+  type OrderRowAction,
+  orderRowActions,
   STATUS_LABEL,
   storeLabel,
 } from '../_lib';
@@ -22,69 +39,123 @@ interface OrdersTableProps {
   processingIds: ReadonlySet<string>;
   /** 확인창을 띄울 대상 주문을 넘긴다(주문번호·금액 표시용). */
   onRefund: (order: AdminOrder) => void;
-  /** 배송 완료 회차 주문의 배송 후 환불 확인창을 띄운다. 없으면 버튼을 숨긴다. */
+  /** 배송 완료 회차 주문의 배송 후 환불 확인창을 띄운다. 없으면 메뉴에 넣지 않는다. */
   onPostDeliveryRefund?: (order: AdminOrder) => void;
   /** 조회 실패 시 재시도 — hook의 reload()에 연결된다. */
   onRetry: () => void;
 }
 
-// 요청사항은 표 폭을 넓히지 않도록 주문번호 아래 작은 글씨로 최대 3줄만 보여준다.
+// ② 방향(design-direction.md §5 어드민 "주문", §8 D7): 줄무늬·머리 띠·그림자 없는 표.
+// 열: 상품(굵게) → 주문번호·주문자(가린 이름) → 가게 → 상태·주문 시각 → 금액(굵게, 오른쪽) → 처리·⋮.
+// 태블릿(1100px 이하)은 가게 열을 상품 아래 보조 줄로 옮기고, 휴대폰(640px 이하)은 모든 목록이 같은 세 줄 행이다.
+// 폭 기준 클래스는 Tailwind가 소스 글자로 찾으므로 조합하지 않고 그대로 쓴다.
+
+/** 주문번호 — 없는 옛 주문은 잘린 id 대신 "주문번호 없음"(전체 id는 확인창에서 보인다). */
+function orderNumberLabel(order: AdminOrder): string {
+  return order.orderNumber ?? '주문번호 없음';
+}
+
+// 요청사항은 표 폭을 넓히지 않도록 상품 아래 13px 회색으로 최대 2줄만 보여준다.
 export function RequestNote({ note }: { note?: string | null }) {
   const text = note?.trim();
   if (!text) return null;
   return (
-    <Text
-      lineClamp={3}
+    <p
+      className={`${ADMIN_SUB} line-clamp-2 max-w-[280px] break-words whitespace-pre-wrap`}
       title={text}
-      style={{
-        fontSize: 'var(--font-size-xs)',
-        color: 'var(--color-text-secondary)',
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-word',
-        maxWidth: 240,
-      }}
     >
       요청: {text}
-    </Text>
+    </p>
   );
 }
 
-const metaText = {
-  fontSize: 'var(--font-size-sm)',
-  color: 'var(--color-text-secondary)',
-};
-
-// 상태 배지 + 취소 진행 배지(환불 진행 중·실패) — 표·카드 공용.
-export function StatusBadges({ order }: { order: AdminOrder }) {
-  const cancel = cancellationBadge(order.cancellationStatus);
+// 상태 점 + 글자, 환불 진행·실패가 있으면 그 점 + 글자를 하나 더 — 표·휴대폰 행 공용.
+export function OrderStatus({ order, size = 15 }: { order: AdminOrder; size?: 13 | 15 }) {
+  const cancel = cancellationState(order.cancellationStatus);
   return (
-    <Group gap={4} wrap="wrap">
-      <Badge color={getStatusColor(order.status)} variant="light" radius="xl">
+    <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-0.5">
+      <StatusDot tone={getStatusTone(order.status)} size={size}>
         {STATUS_LABEL[order.status] ?? order.status}
-      </Badge>
+      </StatusDot>
       {cancel && (
-        <Badge color={cancel.color} variant="outline" radius="xl">
+        <StatusDot tone={cancel.tone} size={size}>
           {cancel.label}
-        </Badge>
+        </StatusDot>
       )}
-    </Group>
+    </span>
   );
 }
 
-// 고객 이름 · 상품 요약 — 표·카드 공용. 고객 전화·주소는 목록에 싣지 않는다.
-export function BuyerAndProduct({ order }: { order: AdminOrder }) {
+/** 주문번호 · 가린 주문자 — 낱말 덩어리마다 줄바꿈 금지. */
+function OrderIdentity({ order }: { order: AdminOrder }) {
+  const buyer = maskPersonName(order.buyerName);
   return (
-    <Text style={metaText}>
-      {order.buyerName?.trim() || '—'} · {order.productSummary?.trim() || '—'}
-    </Text>
+    <>
+      <span className="whitespace-nowrap tabular-nums">{orderNumberLabel(order)}</span>
+      {buyer && (
+        <>
+          {' · '}
+          <span className="whitespace-nowrap">{buyer}</span>
+        </>
+      )}
+    </>
   );
 }
 
-const thBase = {
-  padding: '12px 16px',
-  fontWeight: 500,
-  color: 'var(--color-text-secondary)',
-};
+function RowActions({
+  order,
+  processing,
+  allowPostDelivery,
+  onAction,
+}: {
+  order: AdminOrder;
+  processing: boolean;
+  allowPostDelivery: boolean;
+  onAction: (action: OrderRowAction, order: AdminOrder) => void;
+}) {
+  const { primary, menu: allItems } = orderRowActions(order);
+  const menu = allowPostDelivery
+    ? allItems
+    : allItems.filter((item) => item.action !== 'post-delivery-refund');
+  const label = orderNumberLabel(order);
+  if (processing) {
+    return (
+      <span className="text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
+        처리 중…
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center justify-end gap-1">
+      {primary && (
+        <button
+          type="button"
+          className={ADMIN_TEXT_ACTION}
+          aria-label={`주문 ${label} 환불`}
+          onClick={() => onAction(primary, order)}
+        >
+          환불
+        </button>
+      )}
+      {menu.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger aria-label={`주문 ${label} 동작 더 보기`}>
+            <DropdownMenuDotsIcon />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            {menu.map((item) => (
+              <DropdownMenuItem key={item.action} onClick={() => onAction(item.action, order)}>
+                {item.label}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : (
+        !primary && <span className="block size-11" aria-hidden="true" />
+      )}
+    </span>
+  );
+}
 
 export function OrdersTable({
   orders,
@@ -99,228 +170,128 @@ export function OrdersTable({
 
   if (readState === 'LOADING') {
     return (
-      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
+      <p className="m-0 py-20 text-center text-[15px] text-[var(--color-text-secondary)]">
         불러오는 중...
-      </Text>
+      </p>
     );
   }
 
   // 조회 실패는 성공-empty와 구조적으로 구분 — "주문이 없습니다."로 collapse 금지.
   if (readState === 'FETCH_ERROR') {
     return (
-      <Paper
-        radius="lg"
-        shadow="xs"
-        style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-      >
-        <Stack gap="sm" align="center" py={64} px="md">
-          <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
-            주문 목록을 불러오지 못했습니다.
-          </Text>
-          <Text
-            ta="center"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          >
-            {error}
-          </Text>
-          <Button onClick={onRetry} size="sm" variant="outline" radius="md">
-            다시 조회
-          </Button>
-        </Stack>
-      </Paper>
+      <div className="flex flex-col items-center gap-3 rounded-[8px] border border-rule px-4 py-16">
+        <p className="m-0 text-[15px] font-medium text-foreground">
+          주문 목록을 불러오지 못했습니다.
+        </p>
+        <p className="m-0 text-center text-[13px] text-[var(--color-text-secondary)]">{error}</p>
+        <Button onClick={onRetry} variant="outline" className="rounded-[8px]">
+          다시 조회
+        </Button>
+      </div>
     );
   }
 
   if (readState === 'EMPTY') {
     return (
-      <Paper
-        radius="lg"
-        shadow="xs"
-        style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-      >
-        <Text ta="center" py={64} style={{ color: 'var(--color-text-disabled)' }}>
-          주문이 없습니다.
-        </Text>
-      </Paper>
+      <p className="m-0 rounded-[8px] border border-rule py-16 text-center text-[15px] text-[var(--color-text-secondary)]">
+        주문이 없습니다.
+      </p>
     );
   }
 
+  const onAction = (action: OrderRowAction, order: AdminOrder) => {
+    if (action === 'refund') onRefund(order);
+    else onPostDeliveryRefund?.(order);
+  };
+  const actionsOf = (order: AdminOrder) => (
+    <RowActions
+      order={order}
+      processing={processingIds.has(order.id)}
+      allowPostDelivery={onPostDeliveryRefund !== undefined}
+      onAction={onAction}
+    />
+  );
+
   return (
     <>
-      {/* 모바일(<sm): 카드 리스트 — 마지막 컬럼(금액·강제환불) 잘림 방지 */}
-      <Stack gap="sm" hiddenFrom="sm" role="list" aria-label="주문 목록">
+      {/* 휴대폰(640px 이하): 세 줄 행 — 1줄 상품·금액, 2줄 주문번호·주문자와 오른쪽 상태, 3줄 가게·시각, 옆에 동작 한 자리. */}
+      <ul className="m-0 list-none p-0 min-[641px]:hidden" aria-label="주문 목록">
         {orders.map((order) => (
-          <Paper
-            role="listitem"
+          <li
             key={order.id}
-            radius="md"
-            px="md"
-            py="sm"
-            shadow="xs"
-            style={{ border: '1px solid var(--color-border)' }}
+            className="flex items-center gap-2 border-b border-rule py-2.5 [word-break:keep-all]"
           >
-            <Group justify="space-between" mb="xs">
-              <Text
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-disabled)',
-                }}
-                ff="monospace"
-              >
-                {order.orderNumber ?? `${order.id.slice(0, 12)}…`}
-              </Text>
-              <StatusBadges order={order} />
-            </Group>
-            <Text style={metaText} mb={2}>
-              {formatOrderedAt(order.createdAt)} · {storeLabel(order)}
-            </Text>
-            <BuyerAndProduct order={order} />
-            <RequestNote note={order.requestNote} />
-            <Group justify="space-between" align="center" mt="xs">
-              <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
-                ₩{order.totalAmount.toLocaleString()}
-              </Text>
-              {isRefundable(order) && (
-                <Button
-                  onClick={() => onRefund(order)}
-                  disabled={processingIds.has(order.id)}
-                  size="xs"
-                  variant="outline"
-                  color="red"
-                  radius="md"
-                >
-                  {processingIds.has(order.id) ? '처리중…' : '강제환불'}
-                </Button>
-              )}
-              {onPostDeliveryRefund && isPostDeliveryRefundable(order) && (
-                <Button
-                  onClick={() => onPostDeliveryRefund(order)}
-                  disabled={processingIds.has(order.id)}
-                  size="xs"
-                  variant="outline"
-                  color="red"
-                  radius="md"
-                >
-                  {processingIds.has(order.id) ? '처리중…' : '배송 후 환불'}
-                </Button>
-              )}
-            </Group>
-          </Paper>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="m-0 min-w-0 text-[15px] leading-[22px] font-bold">
+                  {order.productSummary?.trim() || '상품 정보 없음'}
+                </p>
+                <p className={`m-0 text-[15px] leading-[22px] font-bold ${ADMIN_NUM}`}>
+                  {formatWon(order.totalAmount)}
+                </p>
+              </div>
+              <div className="flex items-start justify-between gap-2">
+                <p className={`${ADMIN_SUB} min-w-0`}>
+                  <OrderIdentity order={order} />
+                </p>
+                <OrderStatus order={order} size={13} />
+              </div>
+              <p className={ADMIN_SUB}>
+                {storeLabel(order)} ·{' '}
+                <span className="whitespace-nowrap tabular-nums">
+                  {formatOrderedAt(order.createdAt)}
+                </span>
+              </p>
+              <RequestNote note={order.requestNote} />
+            </div>
+            {/* 동작은 세 줄 옆 고정 폭 한 자리 — 금액·상태의 오른쪽 끝선을 모든 행에서 맞추고 행 높이를 바꾸지 않는다. */}
+            <div className="flex w-11 shrink-0 justify-center">{actionsOf(order)}</div>
+          </li>
         ))}
-      </Stack>
+      </ul>
 
-      {/* 데스크톱(≥sm): 기존 테이블 유지(시각 회귀 0) */}
-      <Paper
-        radius="lg"
-        shadow="xs"
-        style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        visibleFrom="sm"
-      >
-        <Box
-          component="table"
-          style={{ width: '100%', fontSize: 'var(--font-size-sm)', borderCollapse: 'collapse' }}
-        >
-          <Box
-            component="thead"
-            style={{
-              backgroundColor: 'var(--color-surface-muted)',
-              borderBottom: '1px solid var(--color-border)',
-            }}
-          >
-            <tr>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                주문일시
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                주문번호
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                고객 · 상품
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                가게
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'left' }}>
-                상태
-              </Box>
-              <Box component="th" style={{ ...thBase, textAlign: 'right' }}>
-                금액
-              </Box>
-              <Box component="th" style={{ padding: '12px 16px' }} />
+      {/* 태블릿·데스크톱(641px 이상): 표. 1100px 이하는 가게 열을 상품 아래 보조 줄로 옮긴다. */}
+      <table className="w-full border-collapse max-[640px]:hidden">
+        <thead>
+          <tr>
+            <th className={ADMIN_TH}>상품</th>
+            <th className={ADMIN_TH}>주문번호 · 주문자</th>
+            <th className={`${ADMIN_TH} max-[1100px]:hidden`}>가게</th>
+            <th className={ADMIN_TH}>상태 · 주문 시각</th>
+            <th className={`${ADMIN_TH} text-right`}>금액</th>
+            <th className={`${ADMIN_TH} w-[112px]`}>
+              <span className="sr-only">처리</span>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {orders.map((order) => (
+            <tr key={order.id}>
+              <td className={`${ADMIN_TD} [word-break:keep-all]`}>
+                <p className="m-0 font-bold">{order.productSummary?.trim() || '상품 정보 없음'}</p>
+                <p className={`${ADMIN_SUB} min-[1101px]:hidden`}>{storeLabel(order)}</p>
+                <RequestNote note={order.requestNote} />
+              </td>
+              <td className={ADMIN_TD}>
+                <OrderIdentity order={order} />
+              </td>
+              <td className={`${ADMIN_TD} max-[1100px]:hidden [word-break:keep-all]`}>
+                {storeLabel(order)}
+              </td>
+              <td className={ADMIN_TD}>
+                <OrderStatus order={order} />
+                <p className={`${ADMIN_SUB} whitespace-nowrap tabular-nums`}>
+                  {formatOrderedAt(order.createdAt)}
+                </p>
+              </td>
+              <td className={`${ADMIN_TD} ${ADMIN_NUM} font-bold`}>
+                {formatWon(order.totalAmount)}
+              </td>
+              <td className={`${ADMIN_TD} py-1 text-right align-middle`}>{actionsOf(order)}</td>
             </tr>
-          </Box>
-          <Box component="tbody">
-            {orders.map((order) => (
-              <Box
-                component="tr"
-                key={order.id}
-                style={{ borderTop: '1px solid var(--color-border)' }}
-              >
-                <Box component="td" style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                  <Text style={metaText}>{formatOrderedAt(order.createdAt)}</Text>
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Text
-                    style={{
-                      fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-disabled)',
-                    }}
-                    ff="monospace"
-                  >
-                    {order.orderNumber ?? `${order.id.slice(0, 12)}…`}
-                  </Text>
-                  <RequestNote note={order.requestNote} />
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <BuyerAndProduct order={order} />
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <Text style={metaText}>{storeLabel(order)}</Text>
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px' }}>
-                  <StatusBadges order={order} />
-                </Box>
-                <Box
-                  component="td"
-                  style={{
-                    padding: '12px 16px',
-                    textAlign: 'right',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  ₩{order.totalAmount.toLocaleString()}
-                </Box>
-                <Box component="td" style={{ padding: '12px 16px', textAlign: 'right' }}>
-                  {isRefundable(order) && (
-                    <Button
-                      onClick={() => onRefund(order)}
-                      disabled={processingIds.has(order.id)}
-                      size="xs"
-                      variant="outline"
-                      color="red"
-                      radius="md"
-                    >
-                      {processingIds.has(order.id) ? '처리중…' : '강제환불'}
-                    </Button>
-                  )}
-                  {onPostDeliveryRefund && isPostDeliveryRefundable(order) && (
-                    <Button
-                      onClick={() => onPostDeliveryRefund(order)}
-                      disabled={processingIds.has(order.id)}
-                      size="xs"
-                      variant="outline"
-                      color="red"
-                      radius="md"
-                    >
-                      {processingIds.has(order.id) ? '처리중…' : '배송 후 환불'}
-                    </Button>
-                  )}
-                </Box>
-              </Box>
-            ))}
-          </Box>
-        </Box>
-      </Paper>
+          ))}
+        </tbody>
+      </table>
     </>
   );
 }

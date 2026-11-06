@@ -44,6 +44,15 @@ export function formatRoundTime(value: string): string | null {
   return `${at.month}월 ${at.day}일(${at.weekday}) ${period} ${hour12}시${minute}`;
 }
 
+/** 예: "12월 1일(화)". 자정은 전날로 읽는다(formatRoundTime과 같은 규칙). 잘못된 값이면 null. */
+export function formatRoundDay(value: string): string | null {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  const at = kstParts(date);
+  const day = at.hour === 0 && at.minute === 0 ? kstParts(new Date(date.getTime() - DAY_MS)) : at;
+  return `${day.month}월 ${day.day}일(${day.weekday})`;
+}
+
 /** 예: "11월 8일(일) 밤 12시까지" */
 export function formatOrderCloseLabel(value: string): string {
   const time = formatRoundTime(value);

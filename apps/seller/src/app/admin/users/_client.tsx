@@ -1,19 +1,22 @@
 'use client';
 
-import { Box, Button, Group, Paper, Stack, Text, Title } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
 import { useState } from 'react';
-import { ConfirmModal } from '@/components/ConfirmModal';
-import { normalizeSuspendReason, SuspendReasonMessage } from '@/components/SuspendReasonMessage';
+import { notify } from '@/components/AppToaster';
+import { normalizeSuspendReason, SuspendReasonField } from '@/components/SuspendReasonMessage';
 import type { AdminUser } from '@/hooks/useAdmin';
 import { describeAdminCommandOutcome, useAdminUsers } from '@/hooks/useAdmin';
+import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
+import { AdminListError, AdminListNotice, AdminPageHeader } from '../_components/adminList';
+import { RefreshButton } from '../_components/RefreshButton';
 import { UsersTable } from './_components/UsersTable';
-import { describeUserSuspendConfirm } from './_lib';
+import { describeUserSuspendConfirm, suspendActionLabel } from './_lib';
 
 interface PendingUserAction {
   userId: string;
   name: string;
   email: string;
+  phone?: string;
+  createdAt?: unknown;
   currentlySuspended: boolean;
 }
 
@@ -25,7 +28,7 @@ export default function AdminUsersClient() {
 
   const runPending = async () => {
     if (!pending) return;
-    const actionLabel = describeUserSuspendConfirm(pending).confirmLabel;
+    const actionLabel = suspendActionLabel(pending.currentlySuspended);
     setProcessingId(pending.userId);
     try {
       const outcome = await toggleSuspend(
@@ -37,7 +40,7 @@ export default function AdminUsersClient() {
       if (outcome.kind === 'confirmed' && outcome.reconciled) return;
       // rejected는 서버 reason 보존, unknown/stale은 재확인 우선 + blind retry 금지.
       const presentation = describeAdminCommandOutcome(outcome, actionLabel);
-      notifications.show({
+      notify({
         color: outcome.kind === 'rejected' ? 'red' : 'yellow',
         title: presentation.title,
         message: presentation.message,
@@ -53,88 +56,63 @@ export default function AdminUsersClient() {
       userId: user.id,
       name: user.name,
       email: user.email,
+      phone: user.phone,
+      createdAt: user.createdAt,
       currentlySuspended: !!user.suspended,
     });
   };
 
   const confirm = pending ? describeUserSuspendConfirm(pending) : null;
 
+  // ② 방향(design-direction.md §5 어드민, §8 D7): 명사 하나의 h1과 지금 기준 한 줄, 다른 목록과 같은 표.
+  const ready = !loading && error === null;
+  const suspendedCount = users.filter((user) => user.suspended).length;
+  const header = (
+    <AdminPageHeader
+      title="소비자"
+      subline={ready ? `가입 ${users.length}명 · 정지 ${suspendedCount}명` : undefined}
+      action={<RefreshButton loading={loading} onClick={reload} />}
+    />
+  );
+
   if (loading) {
     return (
-      <Text ta="center" py={80} style={{ color: 'var(--color-text-disabled)' }}>
-        불러오는 중...
-      </Text>
+      <div>
+        {header}
+        <AdminListNotice>불러오는 중...</AdminListNotice>
+      </div>
     );
   }
 
-  if (error !== null && !loading) {
+  if (error !== null) {
     return (
-      <Box>
-        <Group justify="space-between" mb="md">
-          <Title order={4}>소비자 계정</Title>
-        </Group>
-        <Paper
-          radius="lg"
-          shadow="xs"
-          style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
-        >
-          <Stack gap="sm" align="center" py={64} px="md">
-            <Text style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
-              소비자 목록을 불러오지 못했습니다.
-            </Text>
-            <Text
-              ta="center"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-            >
-              {error}
-            </Text>
-            <Button onClick={reload} size="sm" variant="outline" radius="md">
-              다시 조회
-            </Button>
-          </Stack>
-        </Paper>
-      </Box>
+      <div>
+        {header}
+        <AdminListError title="소비자 목록을 불러오지 못했습니다." error={error} onRetry={reload} />
+      </div>
     );
   }
 
   return (
-    <Box>
-      <Group justify="space-between" mb="md">
-        <Title order={4}>
-          소비자 계정{' '}
-          <Text
-            component="span"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
-          >
-            ({users.length})
-          </Text>
-        </Title>
-        {/* 새로고침 — stores 탭(StoresFilters)과 같은 버튼 형태, hook reload 재사용 */}
-        <Button variant="light" color="gray" radius="md" loading={loading} onClick={reload}>
-          새로고침
-        </Button>
-      </Group>
+    <div>
+      {header}
 
       <UsersTable users={users} processingId={processingId} onToggle={handleToggle} />
 
-      <ConfirmModal
-        opened={pending !== null}
+      <AdminConfirmDialog
+        open={pending !== null}
         title={confirm?.title ?? ''}
-        message={
-          <SuspendReasonMessage
-            message={confirm?.message ?? ''}
-            reason={reason}
-            onReasonChange={setReason}
-          />
-        }
-        confirmLabel={confirm?.confirmLabel}
-        confirmColor={confirm?.confirmColor}
+        lead={confirm?.lead}
+        facts={confirm?.facts}
+        confirmLabel={confirm?.confirmLabel ?? ''}
         loading={processingId !== null}
         onConfirm={runPending}
         onClose={() => {
           if (processingId === null) setPending(null);
         }}
-      />
-    </Box>
+      >
+        <SuspendReasonField reason={reason} onReasonChange={setReason} />
+      </AdminConfirmDialog>
+    </div>
   );
 }

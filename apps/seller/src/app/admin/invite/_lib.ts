@@ -1,4 +1,5 @@
 import type { InviteRevokeOutcome, InviteToken } from '@/hooks/useAdmin';
+import { formatAdminDateTime } from '../_components/adminFormat';
 
 // 초대 토큰 상태(취소됨/사용됨/만료/유효) 판정 — 테이블·카드 공용(중복 제거).
 // 우선순위는 서버 취소 판정(revokedAt > usedAt > 만료)과 같다.
@@ -96,21 +97,27 @@ export function buildInviteLink(token: string, origin: string): string {
   return `${origin.replace(/\/+$/, '')}/invite/${encodeURIComponent(token)}`;
 }
 
-// 발급·만료·사용 시각 표기 — 보는 기기 시간대와 무관하게 한국 시간(KST) 날짜+시각으로 보여 준다.
-const KST_DATE_TIME = new Intl.DateTimeFormat('ko-KR', {
-  timeZone: 'Asia/Seoul',
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric',
-  hour: '2-digit',
-  minute: '2-digit',
-  hour12: false,
-});
-
+// 발급·만료·사용 시각 표기 — 보는 기기 시간대와 무관하게 한국 시간(KST) "2026-11-28 21:14"로 보여 준다
+// (design-direction.md §5 어드민 "날짜": 한 형식, 24시간). 값이 없거나 읽을 수 없으면 '-'.
 export function formatKstDateTime(value: Date | string | null | undefined): string {
   if (value === null || value === undefined || value === '') return '-';
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? '-' : KST_DATE_TIME.format(date);
+  return formatAdminDateTime(value) ?? '-';
+}
+
+/**
+ * 초대 취소 확인창(design-direction.md §5 어드민 "위험 동작 확인창") — 제목 = 동작 + 대상(받는 사람, 없으면 토큰),
+ * 대상 정보(토큰·받는 사람·발급·만료 시각). 목록에서 그 초대를 못 찾으면 토큰만 보인다.
+ */
+export function describeInviteRevokeConfirm(
+  token: string,
+  invite: Pick<InviteToken, 'recipientEmail' | 'createdAt' | 'expiresAt'> | undefined,
+): { title: string; facts: { label: string; value: string }[] } {
+  const recipient = invite?.recipientEmail?.trim();
+  const facts = [{ label: '토큰', value: token }];
+  if (recipient) facts.push({ label: '받는 사람', value: recipient });
+  if (invite?.createdAt) facts.push({ label: '발급', value: formatKstDateTime(invite.createdAt) });
+  if (invite?.expiresAt) facts.push({ label: '만료', value: formatKstDateTime(invite.expiresAt) });
+  return { title: `${recipient ?? `토큰 ${token}`} 초대 취소`, facts };
 }
 
 // 초대 이력 read state — 조회 실패와 성공-empty의 구조적 구분.

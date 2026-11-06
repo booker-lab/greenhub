@@ -35,7 +35,7 @@ function Autocomplete({
         <AutocompletePrimitive.Positioner className="z-50 outline-none" sideOffset={8}>
           <AutocompletePrimitive.Popup
             data-slot="autocomplete-popup"
-            className="max-h-[min(var(--available-height,20rem),20rem)] w-[var(--anchor-width,100%)] overflow-y-auto rounded-lg border border-[#e9ecef] bg-white p-1 text-black empty:hidden"
+            className="max-h-[min(var(--available-height,20rem),20rem)] w-[var(--anchor-width,100%)] overflow-y-auto rounded-lg border border-ui-gray-2 bg-popover p-1 text-ui-ink empty:hidden"
           >
             <AutocompletePrimitive.List>
               {(item: string) => (
@@ -43,7 +43,7 @@ function Autocomplete({
                   key={item}
                   value={item}
                   data-slot="autocomplete-item"
-                  className="cursor-pointer rounded-lg px-2.5 py-1.5 text-sm break-words outline-none data-highlighted:bg-[#f8f9fa]"
+                  className="cursor-pointer rounded-lg px-2.5 py-1.5 text-sm break-words outline-none data-highlighted:bg-ui-gray-0"
                 >
                   {item}
                 </AutocompletePrimitive.Item>

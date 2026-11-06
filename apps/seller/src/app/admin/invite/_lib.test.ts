@@ -151,19 +151,21 @@ describe('describeInviteRevokeOutcome', () => {
     ).toEqual({ color: 'red', title: '초대를 취소하지 못했어요', message, needsReload: true });
   });
 
-  it.each([
-    [null],
-    ['constructor'],
-  ])('알 수 없는 409 사유(%s)는 일반 상태 변경 문구로 안내한다', (reason) => {
-    const notice = describeInviteRevokeOutcome({
-      kind: 'rejected',
-      status: 409,
-      reason,
-      message: '서버 메시지',
-    });
-    expect(notice?.message).toBe('초대 상태가 바뀌어 취소할 수 없어요. 목록을 다시 확인해 주세요.');
-    expect(notice?.needsReload).toBe(true);
-  });
+  it.each([[null], ['constructor']])(
+    '알 수 없는 409 사유(%s)는 일반 상태 변경 문구로 안내한다',
+    (reason) => {
+      const notice = describeInviteRevokeOutcome({
+        kind: 'rejected',
+        status: 409,
+        reason,
+        message: '서버 메시지',
+      });
+      expect(notice?.message).toBe(
+        '초대 상태가 바뀌어 취소할 수 없어요. 목록을 다시 확인해 주세요.',
+      );
+      expect(notice?.needsReload).toBe(true);
+    },
+  );
 
   it('404는 초대를 찾을 수 없다고 안내한다', () => {
     expect(
@@ -201,15 +203,15 @@ describe('describeInviteRevokeOutcome', () => {
 });
 
 describe('parseInviteRecipientEmail', () => {
-  it.each([
-    '',
-    '   ',
-  ])('받는 사람 이메일은 필수라 비운 입력 %p는 입력 요청 문구를 돌려준다', (input) => {
-    expect(parseInviteRecipientEmail(input)).toEqual({
-      ok: false,
-      error: '받는 사람 이메일을 입력해 주세요.',
-    });
-  });
+  it.each(['', '   '])(
+    '받는 사람 이메일은 필수라 비운 입력 %p는 입력 요청 문구를 돌려준다',
+    (input) => {
+      expect(parseInviteRecipientEmail(input)).toEqual({
+        ok: false,
+        error: '받는 사람 이메일을 입력해 주세요.',
+      });
+    },
+  );
 
   it('형식이 맞으면 앞뒤 공백을 뺀 값을 돌려준다', () => {
     expect(parseInviteRecipientEmail('  Seller@Example.com ')).toEqual({
@@ -218,15 +220,13 @@ describe('parseInviteRecipientEmail', () => {
     });
   });
 
-  it.each([
-    'not-an-email',
-    'a@b',
-    'a b@example.com',
-    `${'a'.repeat(250)}@example.com`,
-  ])('형식이 틀린 입력 %p는 오류 문구를 돌려준다', (input) => {
-    expect(parseInviteRecipientEmail(input)).toEqual({
-      ok: false,
-      error: '이메일 형식이 올바르지 않아요.',
-    });
-  });
+  it.each(['not-an-email', 'a@b', 'a b@example.com', `${'a'.repeat(250)}@example.com`])(
+    '형식이 틀린 입력 %p는 오류 문구를 돌려준다',
+    (input) => {
+      expect(parseInviteRecipientEmail(input)).toEqual({
+        ok: false,
+        error: '이메일 형식이 올바르지 않아요.',
+      });
+    },
+  );
 });

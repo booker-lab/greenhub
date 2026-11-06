@@ -1,4 +1,4 @@
-import { Box, Button, Container, Paper, Stack, Text, Title } from '@mantine/core';
+import { ButtonLink } from '@greenhub/ui/components/button';
 import { describeSignInError } from '@/lib/seller-invite';
 
 export const dynamic = 'force-dynamic';
@@ -12,31 +12,35 @@ export default async function SignInErrorPage({
   const { error } = await searchParams;
   const notice = describeSignInError(Array.isArray(error) ? error[0] : error);
 
+  // ① 외형 유지(UI 교체 P4): Mantine Container size xs·Paper(radius lg·p xl; 그림자는 ② D2로 걷음)·Stack(gap md)·
+  // Title order 3(22px·줄 높이 1.4·800)·Text·Button outline(radius xl, 꽉 찬 폭)과 같은 값.
   return (
-    <Box
-      component="main"
+    <main
       style={{
         minHeight: '100vh',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'var(--color-bg)',
+        backgroundColor: 'var(--frame)',
         padding: '0 16px',
       }}
     >
-      <Container size="xs" w="100%">
-        <Paper radius="lg" shadow="sm" p="xl">
-          <Stack gap="md">
-            <Title order={3}>{notice.title}</Title>
-            <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
+      <div className="mx-auto w-full max-w-[540px] px-4">
+        <div className="block rounded-[16px] bg-card p-8">
+          <div className="flex flex-col items-stretch justify-start gap-4">
+            <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">{notice.title}</h3>
+            <p
+              className="m-0 p-0 text-base"
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
               {notice.message}
-            </Text>
-            <Button component="a" href="/login" variant="outline" fullWidth radius="xl">
+            </p>
+            <ButtonLink href="/login" variant="outline" className="w-full">
               로그인 화면으로
-            </Button>
-          </Stack>
-        </Paper>
-      </Container>
-    </Box>
+            </ButtonLink>
+          </div>
+        </div>
+      </div>
+    </main>
   );
 }

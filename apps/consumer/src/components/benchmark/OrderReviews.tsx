@@ -6,8 +6,10 @@ import {
   REVIEW_PHOTO_MAX_COUNT,
   REVIEW_TEXT_MAX_LENGTH,
 } from '@greenhub/shared';
-import { Box, Button, Group, Paper, Stack, Text, Textarea } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
+import { Textarea } from '@greenhub/ui/components/textarea';
 import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { LoadingButton } from '@/components/LoadingButton';
 import { HideOnErrorImage } from '@/components/ResilientImage';
 import {
   BenchmarkApiError,
@@ -71,8 +73,9 @@ function PhotoPicker({
     if (accepted.length > 0) onChange([...files, ...accepted]);
   };
 
+  // ① 외형 유지(UI 교체 P5): Mantine Group(gap 6)·Button(white compact-xs·default compact-sm) 값.
   return (
-    <Box>
+    <div>
       <input
         ref={inputRef}
         type="file"
@@ -83,9 +86,9 @@ function PhotoPicker({
         tabIndex={-1}
         onChange={pick}
       />
-      <Group gap={6} wrap="wrap">
+      <div className="flex flex-wrap items-center justify-start gap-1.5">
         {previews.map((url, index) => (
-          <Box key={url} style={{ position: 'relative' }}>
+          <div key={url} style={{ position: 'relative' }}>
             <HideOnErrorImage
               src={url}
               alt={`고른 사진 ${index + 1}`}
@@ -100,19 +103,19 @@ function PhotoPicker({
             />
             <Button
               size="compact-xs"
-              variant="white"
+              variant="ghost"
+              className="bg-white text-primary hover:bg-white"
               aria-label={`고른 사진 ${index + 1} 빼기`}
               onClick={() => onChange(files.filter((_, i) => i !== index))}
               style={{ position: 'absolute', right: 2, top: 2 }}
             >
               ✕
             </Button>
-          </Box>
+          </div>
         ))}
         {total < REVIEW_PHOTO_MAX_COUNT && (
           <Button
-            variant="default"
-            radius="xl"
+            variant="plain"
             size="compact-sm"
             disabled={disabled}
             onClick={() => inputRef.current?.click()}
@@ -120,8 +123,8 @@ function PhotoPicker({
             사진 고르기 ({total}/{REVIEW_PHOTO_MAX_COUNT})
           </Button>
         )}
-      </Group>
-    </Box>
+      </div>
+    </div>
   );
 }
 
@@ -171,8 +174,14 @@ function ReviewForm({
   };
 
   return (
-    <Stack gap={6} mt="xs">
-      <Group gap={2} role="group" aria-label={`${productName} 별점`}>
+    // ① 외형 유지(UI 교체 P5): Mantine Stack(gap 6·mt xs)·Group(gap 2)·Textarea(radius 16)·Button 값.
+    <div className="mt-2.5 flex flex-col gap-1.5">
+      {/* biome-ignore lint/a11y/useSemanticElements: Mantine Group(role=group div)과 같은 요소를 그린다. fieldset은 테두리·여백이 달라진다. */}
+      <div
+        className="flex flex-wrap items-center justify-start gap-0.5"
+        role="group"
+        aria-label={`${productName} 별점`}
+      >
         {[1, 2, 3, 4, 5].map((value) => (
           <button
             key={value}
@@ -194,7 +203,7 @@ function ReviewForm({
             ★
           </button>
         ))}
-      </Group>
+      </div>
       <Textarea
         aria-label={`${productName} 후기`}
         placeholder="꽃 상태, 크기, 포장은 어땠나요?"
@@ -212,14 +221,14 @@ function ReviewForm({
         onMessage={setError}
       />
       {error && (
-        <Text role="alert" size="sm" c="var(--color-danger)">
+        <p role="alert" className="m-0 text-sm" style={{ color: 'var(--color-danger)' }}>
           {error}
-        </Text>
+        </p>
       )}
-      <Button radius="xl" loading={sending} disabled={text.trim().length < 5} onClick={submit}>
+      <LoadingButton loading={sending} disabled={text.trim().length < 5} onClick={submit}>
         후기 남기기
-      </Button>
-    </Stack>
+      </LoadingButton>
+    </div>
   );
 }
 
@@ -269,13 +278,13 @@ function WrittenReview({
   };
 
   return (
-    <Stack gap={6} mt={4}>
+    <div className="mt-1 flex flex-col gap-1.5">
       {review.hidden && (
-        <Text size="sm" c="var(--color-text-secondary)">
+        <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
           {hiddenReviewNotice(
             review.hiddenReasonCode ? REVIEW_HIDE_REASON_LABELS[review.hiddenReasonCode] : null,
           )}
-        </Text>
+        </p>
       )}
       <ReviewPhotoStrip urls={review.photoUrls} label={productName} />
       {canAddReviewPhotos(review, REVIEW_PHOTO_MAX_COUNT) && (
@@ -287,29 +296,22 @@ function WrittenReview({
           onMessage={setMessage}
         />
       )}
-      <Group gap="xs">
+      <div className="flex flex-wrap items-center justify-start gap-2.5">
         {adding.length > 0 && (
-          <Button size="compact-sm" radius="xl" loading={busy} onClick={upload}>
+          <LoadingButton size="compact-sm" loading={busy} onClick={upload}>
             사진 {adding.length}장 올리기
-          </Button>
+          </LoadingButton>
         )}
-        <Button
-          size="compact-sm"
-          radius="xl"
-          variant="subtle"
-          color="red"
-          disabled={busy}
-          onClick={remove}
-        >
+        <Button size="compact-sm" variant="subtle-destructive" disabled={busy} onClick={remove}>
           후기 지우기
         </Button>
-      </Group>
+      </div>
       {message && (
-        <Text role="alert" size="sm" c="var(--color-danger)">
+        <p role="alert" className="m-0 text-sm" style={{ color: 'var(--color-danger)' }}>
           {message}
-        </Text>
+        </p>
       )}
-    </Stack>
+    </div>
   );
 }
 
@@ -343,34 +345,33 @@ export default function OrderReviews({
     setWritten((current) => ({ ...current, [productId]: review }));
 
   return (
-    <Paper p="md" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
-      <Text fw={800} mb="xs">
-        후기
-      </Text>
-      <Stack gap="sm">
+    // ① 외형 유지(UI 교체 P5): Mantine Paper(p md)·Text(fw 800·mb xs)·Stack(gap sm)·Group 값.
+    <div className="p-4" style={{ border: 'var(--border)', borderRadius: 'var(--radius)' }}>
+      <p className="m-0 mb-2.5 text-base font-extrabold">후기</p>
+      <div className="flex flex-col gap-3">
         {items.map((item) => {
           const review = written[item.productId];
           return (
-            <Box key={item.id}>
-              <Group justify="space-between" wrap="nowrap">
-                <Text size="sm" fw={700}>
-                  {item.productName}
-                </Text>
+            <div key={item.id}>
+              <div className="flex items-center justify-between gap-4">
+                <p className="m-0 text-sm font-bold">{item.productName}</p>
                 {review ? (
-                  <Text size="sm" c="var(--color-primary-dark)" fw={700}>
+                  <p
+                    className="m-0 text-sm font-bold"
+                    style={{ color: 'var(--color-primary-dark)' }}
+                  >
                     ★ {review.rating} 남김
-                  </Text>
+                  </p>
                 ) : (
                   <Button
                     size="compact-sm"
                     variant="light"
-                    radius="xl"
                     onClick={() => setOpenForm(openForm === item.productId ? null : item.productId)}
                   >
                     후기 쓰기
                   </Button>
                 )}
-              </Group>
+              </div>
               {review && (
                 <WrittenReview
                   review={review}
@@ -398,14 +399,18 @@ export default function OrderReviews({
                 />
               )}
               {notice[item.productId] && (
-                <Text role="status" size="sm" mt={4} c="var(--color-text-secondary)">
+                <p
+                  role="status"
+                  className="m-0 mt-1 text-sm"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                >
                   {notice[item.productId]}
-                </Text>
+                </p>
               )}
-            </Box>
+            </div>
           );
         })}
-      </Stack>
-    </Paper>
+      </div>
+    </div>
   );
 }

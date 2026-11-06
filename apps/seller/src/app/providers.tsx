@@ -1,11 +1,10 @@
 'use client';
 
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
-import { theme } from '@greenhub/ui';
-import { MantineProvider } from '@mantine/core';
-import { Notifications } from '@mantine/notifications';
+import type { Session } from 'next-auth';
 import { getSession, SessionProvider, signOut, useSession } from 'next-auth/react';
 import { createContext, useContext, useEffect, useRef } from 'react';
+import { AppToaster } from '@/components/AppToaster';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { startSessionKeepAlive } from '@/lib/session-keepalive';
@@ -84,15 +83,22 @@ function SessionAuthorityRecheck() {
   return null;
 }
 
-export default function Providers({ children }: { children: React.ReactNode }) {
+// session은 루트 layout이 넘긴 proxy 확인 세션이다. 있으면 첫 화면에서 /api/auth/session을 다시
+// 조회하지 않는다. 없으면(undefined) 예전처럼 SessionProvider가 직접 조회한다.
+export default function Providers({
+  children,
+  session,
+}: {
+  children: React.ReactNode;
+  session?: Session;
+}) {
   return (
-    <MantineProvider theme={theme}>
-      <Notifications position="top-right" autoClose={4000} />
-      <SessionProvider>
+    <AppToaster>
+      <SessionProvider session={session}>
         <SessionKeepAlive />
         <SessionAuthorityRecheck />
         <TokenErrorGuard>{children}</TokenErrorGuard>
       </SessionProvider>
-    </MantineProvider>
+    </AppToaster>
   );
 }

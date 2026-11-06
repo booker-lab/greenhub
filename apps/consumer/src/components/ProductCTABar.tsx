@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Button, Group, Text } from '@mantine/core';
+import { Button } from '@greenhub/ui/components/button';
 
 interface Props {
   totalAmount: number;
@@ -35,8 +35,11 @@ export default function ProductCTABar({
         ? '공구 참여하기'
         : '바로 결제');
 
+  // ② 하단 고정 바는 한 줄(design-direction.md §4.3): 외곽선 "장바구니"와 초록 주 버튼만 둔다. 총 금액은
+  // 살 수 있을 때 주 버튼 글자 앞에 넣는다("39,000원 바로 구매"). 본문과는 위쪽 선 대신 고정 바 그림자로 나눈다(§3.1).
+  const primaryLabel = canBuy && !isUnavailable ? `${totalAmount.toLocaleString()}원 ${ctaLabel}` : ctaLabel;
   return (
-    <Box
+    <div
       style={{
         position: 'fixed',
         bottom: 0,
@@ -44,63 +47,41 @@ export default function ProductCTABar({
         right: 0,
         zIndex: 100,
         backgroundColor: 'var(--color-bg)',
-        borderTop: 'var(--border)',
+        boxShadow: 'var(--bar-shadow)',
         paddingBottom: 'env(safe-area-inset-bottom)',
       }}
     >
-      <Box
+      <div
+        className="flex flex-nowrap items-center justify-start gap-2"
         style={{
           maxWidth: 430,
           margin: '0 auto',
-          padding: '10px 16px 12px',
+          padding: '12px 16px',
         }}
       >
-        {/* 총 금액 */}
-        <Group justify="space-between" mb={8}>
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}>
-            총 금액
-          </Text>
-          <Text
-            style={{
-              fontWeight: 'var(--fw-extrabold)',
-              fontSize: 'var(--font-size-lg)',
-              fontVariantNumeric: 'tabular-nums',
-              color: 'var(--color-text)',
-            }}
-          >
-            {totalAmount.toLocaleString()}원
-          </Text>
-        </Group>
-
-        {/* 버튼: 디자인 기준 §4 — 완전히 둥근 버튼, 보조는 외곽선 */}
-        <Group gap={8} style={{ flexWrap: 'nowrap' }}>
-          <Button
-            flex={1}
-            variant="outline"
-            radius="xl"
-            size="lg"
-            disabled={!canAddToCart}
-            onClick={onAddToCart}
-          >
-            {addToCartLabel}
-          </Button>
-          <Button
-            flex={2}
-            size="lg"
-            radius="xl"
-            disabled={!canBuy}
-            onClick={onBuyNow}
-            style={{
-              backgroundColor: isUnavailable
-                ? 'var(--color-text-disabled)'
-                : 'var(--color-primary)',
-              color: 'var(--color-bg)',
-            }}
-          >
-            {ctaLabel}
-          </Button>
-        </Group>
-      </Box>
-    </Box>
+        <Button
+          className="flex-1"
+          variant="outline"
+          size="lg"
+          disabled={!canAddToCart}
+          onClick={onAddToCart}
+        >
+          {addToCartLabel}
+        </Button>
+        <Button
+          className="flex-[2]"
+          size="lg"
+          disabled={!canBuy}
+          onClick={onBuyNow}
+          style={{
+            backgroundColor: isUnavailable ? 'var(--color-text-disabled)' : 'var(--primary)',
+            color: 'var(--primary-foreground)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {primaryLabel}
+        </Button>
+      </div>
+    </div>
   );
 }

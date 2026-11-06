@@ -1,27 +1,55 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-// UI 교체 P2a(ui-stack-migration-plan.md §6 P2): Mantine과 Tailwind를 같이 쓰는 동안의 CSS 연결 계약.
+// UI 교체 P6(ui-stack-migration-plan.md §6 P6): Mantine을 걷어낸 뒤의 CSS 연결 계약(기사 앱과 같다).
 const read = (name: string) => readFileSync(new URL(`./${name}`, import.meta.url), 'utf8');
 const css = read('globals.css');
+const rules = css.replace(/\/\*[\s\S]*?\*\//g, '');
 const imports = [...css.matchAll(/^@import\s+"([^"]+)"([^;]*);/gm)].map((m) => ({
   path: m[1],
   rest: m[2].trim(),
 }));
 
+/** `@layer base {` 블록들의 선택자(@media 안 포함). */
+function baseSelectors() {
+  const selectors: string[] = [];
+  let from = 0;
+  for (;;) {
+    const start = rules.indexOf('@layer base {', from);
+    if (start < 0) return selectors;
+    const block = rules.slice(start, rules.indexOf('\n}\n', start));
+    for (const m of block.matchAll(/^\s+([^{}@\n][^{}]*)\{/gm)) {
+      selectors.push(...m[1].split(',').map((s) => s.trim()));
+    }
+    from = start + block.length;
+  }
+}
+
 describe('globals.css', () => {
-  it('layer 순서를 맨 앞에 선언한다(Mantine은 base와 components 사이)', () => {
+  it('layer 순서를 맨 앞에 선언한다(Mantine layer 없음)', () => {
     const first = css.split('\n').find((line) => line.startsWith('@'));
-    expect(first).toBe('@layer theme, base, mantine, components, utilities;');
+    expect(first).toBe('@layer theme, base, components, utilities;');
   });
 
-  it('Mantine CSS는 모두 layer(mantine) 안에 있다', () => {
-    const mantine = imports.filter(
-      (i) => i.path.startsWith('@mantine/') || i.path === '@greenhub/ui/style.css',
+  it('Mantine CSS를 import하지 않는다', () => {
+    expect(imports.filter((i) => i.path.startsWith('@mantine/'))).toEqual([]);
+    expect(css).not.toMatch(/layer\(mantine\)/);
+  });
+
+  it('공용 styles/base.css는 base layer로 넣는다(layer 밖 토큰·body 규칙에 진다)', () => {
+    expect(imports).toContainEqual({ path: '@greenhub/ui/styles/base.css', rest: 'layer(base)' });
+    expect(imports).toContainEqual({ path: '@greenhub/ui/styles/tokens.css', rest: '' });
+  });
+
+  it('다크 모드 토큰(dark.css)은 base.css 뒤에 layer 없이 import한다(tokens.css·base.css 값을 이긴다)', () => {
+    const paths = imports.map((i) => i.path);
+    expect(imports).toContainEqual({ path: '@greenhub/ui/styles/dark.css', rest: '' });
+    expect(paths.indexOf('@greenhub/ui/styles/dark.css')).toBeGreaterThan(
+      paths.indexOf('@greenhub/ui/styles/base.css'),
     );
-    expect(mantine.length).toBeGreaterThan(30);
-    for (const i of mantine) expect(i, i.path).toMatchObject({ rest: 'layer(mantine)' });
-    expect(mantine.map((i) => i.path)).toContain('@mantine/notifications/styles.css');
+    expect(paths.indexOf('@greenhub/ui/styles/dark.css')).toBeGreaterThan(
+      paths.indexOf('@greenhub/ui/styles/tokens.css'),
+    );
   });
 
   it('Tailwind는 preflight 없이 theme·utilities만 각 layer로 연결한다', () => {
@@ -39,19 +67,45 @@ describe('globals.css', () => {
     expect(lastImport).toBeLessThan(firstRule);
   });
 
-  it('preflight 대신 채우는 초기화는 새 컴포넌트(data-slot)에만 걸린다', () => {
+  it('Mantine이 깔던 기본 규칙을 base layer에 옮긴다', () => {
+    const selectors = baseSelectors();
+    for (const s of [':root', '*', 'input', 'button', 'textarea', 'select', 'body']) {
+      expect(selectors, s).toContain(s);
+    }
     const base = css.slice(css.indexOf('@layer base {'));
-    const block = base.slice(0, base.indexOf('\n}\n'));
-    const selectors = [...block.matchAll(/^\s{2}([^{}\n][^{}]*)\{/gm)].flatMap((m) =>
-      m[1].split(',').map((s) => s.trim()),
+    // 다크 모드(D5): 입력칸·스크롤바도 기기 설정을 따른다.
+    expect(base).toMatch(/color-scheme:\s*light dark;/);
+    expect(base).toMatch(/box-sizing:\s*border-box;/);
+    expect(base).toMatch(/font:\s*inherit;/);
+    expect(base).toMatch(/font-family:\s*var\(--font-family\);/);
+    expect(base).toMatch(/font-size:\s*var\(--font-size-md\);/);
+    expect(base).toMatch(/line-height:\s*1\.55;/);
+    // 밝음 #000(Mantine 검정 글자), 어둠은 dark.css 값.
+    expect(base).toMatch(/color:\s*var\(--ui-ink\);/);
+  });
+
+  it('preflight 대신 채우는 초기화(테두리·여백·모양)는 새 컴포넌트(data-slot)에만 걸린다', () => {
+    const resetBlocks = [...rules.matchAll(/^\s+([^{}@\n][^{}]*)\{([^}]*)\}/gm)].filter((m) =>
+      /border:\s*0 solid|padding:\s*0;|appearance:\s*none/.test(m[2]),
     );
-    expect(selectors.length).toBeGreaterThan(0);
-    for (const s of selectors) expect(s, s).toContain('[data-slot]');
+    expect(resetBlocks.length).toBeGreaterThan(0);
+    for (const m of resetBlocks) {
+      for (const s of m[1].split(',').map((x) => x.trim())) expect(s, s).toContain('[data-slot]');
+    }
   });
 });
 
-describe('layout.tsx', () => {
-  it('Mantine CSS를 JS로 import하지 않는다(layer 밖으로 빠진다)', () => {
-    expect(read('layout.tsx')).not.toMatch(/import\s+'@mantine\/[^']+\.css'/);
+describe('layout·providers', () => {
+  it('Mantine을 쓰지 않는다(CSS·ColorSchemeScript·MantineProvider)', () => {
+    for (const name of ['layout.tsx', 'providers.tsx']) {
+      const source = read(name);
+      expect(source, name).not.toContain('@mantine/');
+      expect(source, name).not.toContain('MantineProvider');
+      expect(source, name).not.toContain('ColorSchemeScript');
+    }
+  });
+
+  it('루트 layout은 요청마다 그린다(Next가 요청 CSP nonce를 자기 스크립트에 붙인다)', () => {
+    expect(read('layout.tsx')).toMatch(/await connection\(\);/);
   });
 });

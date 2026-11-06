@@ -28,6 +28,10 @@ import { RoundOrderLifecycleService } from '../orders/round-order-lifecycle.serv
 import type { OrderStatus } from '../orders/dto/update-status.dto';
 import { getAllowedTransitions } from '../orders/orders.helpers';
 import { PaymentsService } from '../payments/payments.service';
+import {
+  readPayoutAccount,
+  STORE_PAYOUT_ACCOUNTS_COLLECTION,
+} from '../payout-accounts/payout-account.fields';
 import { releaseLegacyDailyCapacityInTransaction } from '../payments/_lib/legacy-daily-capacity';
 import { releaseLegacyGroupQuantityInTransaction } from '../orders/_lib/legacy-group-quantity';
 import { readOrderPayoutHoldInTransaction } from '../settlements/_lib/order-payout-hold';
@@ -674,6 +678,16 @@ export class AdminService {
       if (orderHold) {
         throw new ConflictException(
           '취소됐거나 환불이 진행 중인 주문의 정산이라 지급할 수 없습니다. 주문 상태를 먼저 확인하세요.',
+        );
+      }
+      // 입금할 계좌가 없으면 지급 완료로 기록하지 않는다(2026-10-30 사용자 결정, 다른 지급 수단은 허용하지 않음).
+      const storeId = typeof data['storeId'] === 'string' ? data['storeId'] : '';
+      const accountSnap = storeId
+        ? await t.get(this.firestore.doc(`${STORE_PAYOUT_ACCOUNTS_COLLECTION}/${storeId}`))
+        : null;
+      if (!accountSnap?.exists || !readPayoutAccount(accountSnap.data())) {
+        throw new ConflictException(
+          '정산 계좌가 등록되지 않은 가게라 지급 완료로 기록할 수 없습니다. 판매자에게 정산 계좌 등록을 요청하세요.',
         );
       }
 

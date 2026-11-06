@@ -1,46 +1,26 @@
 'use client';
 
-import { Group, Select } from '@mantine/core';
-import { buildStatusOptions } from '../_lib';
+import { SearchableSelect } from '@greenhub/ui/components/searchable-select';
 
 interface OrdersFiltersProps {
   storeFilter: string;
-  statusFilter: string;
   /** 가게 선택 옵션('전체 가게' 포함). 판매자 목록을 읽는 중이면 '전체 가게'만 있다. */
   storeOptions: { value: string; label: string }[];
   onStoreChange: (v: string) => void;
-  onStatusChange: (v: string) => void;
 }
 
-export function OrdersFilters({
-  storeFilter,
-  statusFilter,
-  storeOptions,
-  onStoreChange,
-  onStatusChange,
-}: OrdersFiltersProps) {
+// ② 방향(design-direction.md §5 어드민): 상태는 표 위 숫자 탭 한 줄로 옮기고, 여기에는 가게 선택만 남긴다.
+export function OrdersFilters({ storeFilter, storeOptions, onStoreChange }: OrdersFiltersProps) {
   return (
-    <Group gap="sm" mb="md">
-      <Select
+    <div className="mb-3 w-full min-[641px]:max-w-[320px]">
+      <SearchableSelect
         aria-label="가게 선택"
         value={storeFilter}
-        onChange={(v) => onStoreChange(v ?? '')}
+        onValueChange={(v) => onStoreChange(v ?? '')}
         data={storeOptions}
-        searchable
         nothingFoundMessage="맞는 가게가 없습니다"
-        radius="md"
-        size="sm"
-        style={{ flex: 1, minWidth: 160 }}
+        className="rounded-[8px]"
       />
-      <Select
-        aria-label="주문 상태"
-        value={statusFilter}
-        onChange={(v) => onStatusChange(v ?? '')}
-        data={buildStatusOptions()}
-        radius="md"
-        size="sm"
-        style={{ minWidth: 140 }}
-      />
-    </Group>
+    </div>
   );
 }

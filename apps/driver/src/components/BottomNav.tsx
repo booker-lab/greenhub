@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Box, UnstyledButton, Stack, Text } from '@mantine/core';
+import { text } from './look';
 
 const TABS = [
   {
@@ -13,8 +13,8 @@ const TABS = [
         width="24"
         height="24"
         fill="none"
-        stroke={active ? 'var(--color-primary)' : 'var(--color-text-disabled)'}
-        strokeWidth={active ? 2.2 : 2}
+        stroke={active ? 'var(--color-text)' : 'var(--driver-text-muted)'}
+        strokeWidth={active ? 2.4 : 1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
         viewBox="0 0 24 24"
@@ -33,8 +33,8 @@ const TABS = [
         width="24"
         height="24"
         fill="none"
-        stroke={active ? 'var(--color-primary)' : 'var(--color-text-disabled)'}
-        strokeWidth={active ? 2.2 : 2}
+        stroke={active ? 'var(--color-text)' : 'var(--driver-text-muted)'}
+        strokeWidth={active ? 2.4 : 1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
         viewBox="0 0 24 24"
@@ -53,8 +53,8 @@ const TABS = [
         width="24"
         height="24"
         fill="none"
-        stroke={active ? 'var(--color-primary)' : 'var(--color-text-disabled)'}
-        strokeWidth={active ? 2.2 : 2}
+        stroke={active ? 'var(--color-text)' : 'var(--driver-text-muted)'}
+        strokeWidth={active ? 2.4 : 1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
         viewBox="0 0 24 24"
@@ -73,8 +73,7 @@ export default function BottomNav() {
   if (pathname === '/login') return null;
 
   return (
-    <Box
-      component="nav"
+    <nav
       style={{
         position: 'fixed',
         bottom: 0,
@@ -82,34 +81,40 @@ export default function BottomNav() {
         right: 0,
         zIndex: 100,
         backgroundColor: 'var(--color-bg)',
-        borderTop: 'var(--border)',
+        boxShadow: 'var(--driver-bar-shadow)',
         height: 'calc(72px + env(safe-area-inset-bottom))',
         paddingBottom: 'env(safe-area-inset-bottom)',
         display: 'flex',
         justifyContent: 'center',
       }}
     >
-      <Box style={{ maxWidth: 430, width: '100%', display: 'flex' }}>
+      <div style={{ maxWidth: 430, width: '100%', display: 'flex' }}>
         {TABS.map((tab) => {
           const active = pathname.startsWith(tab.href);
           return (
-            <UnstyledButton key={tab.href} component={Link} href={tab.href} style={{ flex: 1 }}>
-              <Stack align="center" justify="center" gap={4} h="100%">
+            <Link
+              key={tab.href}
+              href={tab.href}
+              aria-current={active ? 'page' : undefined}
+              className="flex-1 cursor-pointer text-inherit no-underline"
+            >
+              <div className="flex h-full flex-col items-center justify-center gap-1">
                 {tab.icon(active)}
-                <Text
+                <p
+                  className={text}
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    fontWeight: active ? 'var(--fw-bold)' : 'var(--fw-medium)',
-                    color: active ? 'var(--color-primary-dark)' : 'var(--color-text-disabled)',
+                    fontWeight: active ? 'var(--fw-bold)' : 'var(--fw-regular)',
+                    color: active ? 'var(--color-text)' : 'var(--driver-text-muted)',
                   }}
                 >
                   {tab.label}
-                </Text>
-              </Stack>
-            </UnstyledButton>
+                </p>
+              </div>
+            </Link>
           );
         })}
-      </Box>
-    </Box>
+      </div>
+    </nav>
   );
 }

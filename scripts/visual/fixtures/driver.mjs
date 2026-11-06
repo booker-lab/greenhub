@@ -68,8 +68,9 @@ const ORDERS = [
   driverOrder('order-deliv-1', {
     status: 'DELIVERING',
     buyerName: '박화분',
-    address: '경기도 이천시 중리천로 115 3층',
-    deliveryAddress: { address: '경기도 이천시 중리천로 115 3층' },
+    // 동·호수(상세 주소)가 붙은 전체 주소와 기본 주소가 갈리는 주문 — 기사 화면은 동·호수를 크게 쓴다.
+    address: '경기도 이천시 증포동 새봄마을아파트 103동 1204호',
+    deliveryAddress: { address: '경기도 이천시 증포동 새봄마을아파트' },
     productName: '동양란 v3',
     preparedAt: '2026-10-05T20:50:00.000Z',
     buyerPhone: '010-1234-5678',
@@ -103,13 +104,13 @@ const ORDERS = [
   }),
 ];
 
-/** 목록은 상세 전용 필드(전화·요청사항·보류 사유 등)를 빼고 돌려준다(API view=list와 같게). */
+/** 목록은 상세 전용 필드(전화·요청사항·보류 사유 등)를 빼고 돌려준다(API view=list와 같게).
+ *  기본 주소(deliveryAddress.address)는 API처럼 전체 주소가 있는 행에 싣는다(driver-order-read-model.ts). */
 function listView(order) {
   const {
     storeId: _s,
     schemaVersion: _v,
     roundId: _r,
-    deliveryAddress: _a,
     requestNote: _n,
     deliveryHold: _h,
     sellerPhone: _sp,
@@ -130,6 +131,35 @@ export const routes = [
     },
   ],
 ];
+
+/** 화면별 상황(shots.mjs가 그 화면을 열 때만 고른다). */
+// 배송 중인 곳이 많은 배송판(첫 화면에 다 들어가지 않아 "남은 n곳 더 보기"가 보이는 상태).
+const MANY_DELIVERING = [
+  ...ORDERS,
+  ...Array.from({ length: 8 }, (_, index) =>
+    driverOrder(`order-deliv-${index + 2}`, {
+      status: 'DELIVERING',
+      buyerName: ['정수선', '한목련', '오동백', '윤국화', '서난실', '문소철', '장백합', '임매화'][index],
+      address: `경기도 이천시 증포동 새봄마을아파트 ${104 + index}동 ${301 + index * 100}호`,
+      deliveryAddress: { address: '경기도 이천시 증포동 새봄마을아파트' },
+      productName: index % 2 === 0 ? '동양란 만천홍' : '서양란 호접 2대',
+      quantity: (index % 3) + 1,
+      preparedAt: `2026-10-05T20:${String(10 + index).padStart(2, '0')}:00.000Z`,
+    }),
+  ),
+];
+
+export const scenarioRoutes = {
+  'many-delivering': [['GET', /^\/driver\/orders$/, () => ({ body: MANY_DELIVERING.map(listView) })]],
+  // 주문 다시 읽기를 0.8초 늦춘다. 처음 열 때도 늦지만 화면은 같다.
+  'slow-order-read': [
+    [
+      'GET',
+      /^\/driver\/orders\/order-prep-1$/,
+      () => ({ body: ORDERS.find((o) => o.id === 'order-prep-1'), delay: 800 }),
+    ],
+  ],
+};
 
 /** 자동 캡처 대상 화면. 지도 화면의 카카오맵은 외부 스크립트라 하네스에서는 그려지지 않는다. */
 export const screens = [
@@ -154,13 +184,20 @@ export const screens = [
     title: '배송판 · 배송 중 탭',
     path: '/board?tab=delivering',
   },
+  {
+    id: 'board-delivering-many',
+    group: '기사',
+    title: '배송판 · 배송 중 탭 · 배송지 많음',
+    path: '/board?tab=delivering',
+    scenario: 'many-delivering',
+  },
   // 모달·전체 화면 덮개·알림은 지금 보이는 화면이 중요해 화면 크기 그대로 찍는다(viewport: true).
   {
     id: 'modal-hold',
     group: '기사',
     title: '배송 보류 모달',
     path: '/board/order-deliv-1',
-    steps: [{ click: '배송 보류' }],
+    steps: [{ click: '부재·문제 알리기' }],
     viewport: true,
   },
   {
@@ -181,12 +218,14 @@ export const screens = [
   },
   // 알림(toast): 가짜 API는 상태 변경 PATCH에 200 {}을 돌려준다. 앱은 ACK(orderId·status)가 맞지 않으므로
   // 다시 보내지 않고 주문을 다시 읽는다(불확실 수렴). 다시 읽어도 준비 중이라 "확실하지 않음"·"아직 처리되지 않음"
-  // 두 알림이 뜬다(apps/driver/src/app/board/[orderId]/page.tsx).
+  // 두 알림이 뜬다(apps/driver/src/app/board/[orderId]/page.tsx). 두 알림이 거의 같이 뜨면 쌓이는 위치가
+  // 캡처마다 소수점 픽셀만큼 달라져서(운영 빌드에서 확인), 다시 읽기를 늦춰 첫 알림이 자리 잡은 뒤 둘째가 뜨게 한다.
   {
     id: 'toast-status-uncertain',
     group: '기사',
     title: '알림 · 상태 변경 확인 못 함',
     path: '/board/order-prep-1',
+    scenario: 'slow-order-read',
     steps: [{ click: '수거 완료 / 배송 시작' }],
     viewport: true,
   },

@@ -1,27 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { ACTION_META, describeDriverConfirm } from './_lib';
+import { DRIVER_ACTION_LABEL, describeDriverConfirm } from './_lib';
 
-describe('드라이버 확인창 대상 표시', () => {
-  it('이름·이메일과 액션별 질문을 보여 준다', () => {
+describe('기사 확인창 내용', () => {
+  it('제목은 동작 + 대상이고, 대상 정보에 이메일·연락처·신청일을 쓴다', () => {
+    const confirm = describeDriverConfirm({
+      name: '이대기',
+      email: 'driver@example.com',
+      phone: '010-1111-2222',
+      createdAt: '2026-10-28T01:00:00.000Z',
+      action: 'approve',
+    });
+    expect(confirm.title).toBe('이대기 님을 기사로 승인');
+    expect(confirm.confirmLabel).toBe('이대기 님 승인');
+    expect(confirm.lead).toContain('배송 목록');
+    expect(confirm.facts).toEqual([
+      { label: '이메일', value: 'driver@example.com' },
+      { label: '연락처', value: '010-1111-2222' },
+      { label: '신청일', value: '2026-10-28' },
+    ]);
+  });
+
+  it('정지·정지 풀기는 같은 틀에 가입일을 쓰고, 값이 없는 줄은 뺀다', () => {
+    const suspend = describeDriverConfirm({ name: '김기사', email: null, action: 'suspend' });
+    expect(suspend.title).toBe('김기사 님 기사 정지');
+    expect(suspend.confirmLabel).toBe('김기사 님 정지');
+    expect(suspend.facts).toEqual([]);
+    const unsuspend = describeDriverConfirm({ name: '', email: null, action: 'unsuspend' });
+    expect(unsuspend.title).toBe('이름 없음 님 기사 정지 풀기');
+  });
+
+  it("⋮ 메뉴 '정지 풀기…'와 확인창·결과 알림이 같은 말을 쓴다", () => {
+    expect(DRIVER_ACTION_LABEL.unsuspend).toBe('정지 풀기');
     expect(
-      describeDriverConfirm({
-        name: '김기사',
-        email: 'driver@example.com',
-        action: 'suspend',
-      }).split('\n'),
-    ).toEqual(['김기사 (driver@example.com)', '이 드라이버를 정지하시겠습니까?']);
-  });
-
-  it('이메일이 없으면 이름만, 이름도 없으면 자리표시자를 보여 준다', () => {
-    expect(describeDriverConfirm({ name: '김기사', email: null, action: 'approve' })).toBe(
-      '김기사\n이 드라이버를 승인하시겠습니까?',
-    );
-    expect(describeDriverConfirm({ name: '', email: null, action: 'unsuspend' })).toBe(
-      '이름 없음\n정지를 해제하시겠습니까?',
-    );
-  });
-
-  it("정지 해제 버튼 라벨은 목록 버튼과 같은 '정지 해제'다", () => {
-    expect(ACTION_META.unsuspend.confirmLabel).toBe('정지 해제');
+      describeDriverConfirm({ name: '김기사', email: null, action: 'unsuspend' }).confirmLabel,
+    ).toContain(DRIVER_ACTION_LABEL.unsuspend);
   });
 });

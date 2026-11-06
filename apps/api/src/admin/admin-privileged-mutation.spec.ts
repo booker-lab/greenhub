@@ -39,6 +39,12 @@ const REVERSAL_QUERY_READ =
   'operationIssues?orderId==order-1&type==PROVIDER_REVERSAL_DETECTED&status==OPEN&limit=1';
 const ORDER_PATH = 'orders/order-1';
 const DELIVERED_ORDER: Data = { id: 'order-1', status: 'DELIVERED' };
+const ACCOUNT_PATH = 'storePayoutAccounts/store-1';
+const PAYOUT_ACCOUNT: Data = {
+  bankName: '농협은행',
+  accountHolder: '테스트',
+  accountNumber: '000-0000-0000-00',
+};
 
 function makeHttpHarness() {
   const users = new Map<string, Data>([
@@ -348,12 +354,19 @@ function makeMarkAsPaidFixture(
   status?: string,
   issues: Data[] = [],
   order: Data | null = DELIVERED_ORDER,
+  account: Data | null = PAYOUT_ACCOUNT,
 ) {
   const records = new Map<string, Data>();
   if (status !== undefined) {
-    records.set(SETTLEMENT_PATH, { id: 'settlement-1', orderId: 'order-1', status });
+    records.set(SETTLEMENT_PATH, {
+      id: 'settlement-1',
+      orderId: 'order-1',
+      storeId: 'store-1',
+      status,
+    });
   }
   if (order) records.set(ORDER_PATH, order);
+  if (account) records.set(ACCOUNT_PATH, account);
   for (const issue of issues) records.set(`operationIssues/${issue['id']}`, issue);
 
   const refs = new Map<string, Data>();
@@ -458,7 +471,12 @@ describe('AdminService.markAsPaid 상태 계약', () => {
       status: 'paid',
     });
 
-    expect(fixture.transactionReads).toEqual([SETTLEMENT_PATH, REVERSAL_QUERY_READ, ORDER_PATH]);
+    expect(fixture.transactionReads).toEqual([
+      SETTLEMENT_PATH,
+      REVERSAL_QUERY_READ,
+      ORDER_PATH,
+      ACCOUNT_PATH,
+    ]);
     expect(fixture.transactionUpdates).toEqual([
       {
         path: SETTLEMENT_PATH,
@@ -511,6 +529,7 @@ describe('AdminService.markAsPaid 상태 계약', () => {
       SETTLEMENT_PATH,
       REVERSAL_QUERY_READ,
       ORDER_PATH,
+      ACCOUNT_PATH,
       SETTLEMENT_PATH,
     ]);
     expect(fixture.transactionUpdates).toHaveLength(1);
@@ -611,5 +630,28 @@ describe('AdminService.markAsPaid 상태 계약', () => {
       settlementId: 'settlement-1',
       status: 'paid',
     });
+  });
+
+  it.each([
+    ['계좌 문서가 없는 가게', null],
+    ['필드가 빠진 계좌 문서', { bankName: '농협은행', accountHolder: '테스트' }],
+  ] as const)('%s의 정산은 409로 거부하고 write·기록을 만들지 않는다', async (_label, account) => {
+    const fixture = makeMarkAsPaidFixture('confirmed', [], DELIVERED_ORDER, account);
+
+    const error = await fixture.service.markAsPaid('settlement-1', 'admin-1').catch((reason) => reason);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect(error.message).toBe(
+      '정산 계좌가 등록되지 않은 가게라 지급 완료로 기록할 수 없습니다. 판매자에게 정산 계좌 등록을 요청하세요.',
+    );
+    expect(fixture.transactionReads).toEqual([
+      SETTLEMENT_PATH,
+      REVERSAL_QUERY_READ,
+      ORDER_PATH,
+      ACCOUNT_PATH,
+    ]);
+    expect(fixture.transactionUpdates).toHaveLength(0);
+    expect(fixture.audit.logAdmin).not.toHaveBeenCalled();
+    expect(fixture.records.get(SETTLEMENT_PATH)).toMatchObject({ status: 'confirmed' });
   });
 });

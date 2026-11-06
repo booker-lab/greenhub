@@ -1,7 +1,8 @@
 'use client';
 
-import { Badge, Button, Container, Group, Paper, Stack, Text, UnstyledButton } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
+import { notify } from '@/components/AppToaster';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -10,6 +11,12 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
+
+// ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Stack·Group·Paper·Text·UnstyledButton·Badge·Button과 같은 값을
+// Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16(그림자는 ② D2로 걷음).
+const TEXT = 'm-0 p-0 text-base font-normal';
+const UNSTYLED_BUTTON =
+  'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 
 interface Hub {
   id: string;
@@ -57,7 +64,7 @@ export default function HubsPage() {
       });
       setHubs((prev) => prev.map((h) => (h.id === hub.id ? { ...h, isActive: !hub.isActive } : h)));
     } catch (e) {
-      notifications.show({
+      notify({
         color: 'red',
         title: '거점 상태 변경 실패',
         message: e instanceof ApiError ? e.message : '거점 상태 변경에 실패했습니다',
@@ -87,23 +94,29 @@ export default function HubsPage() {
       <PageHeader
         title="거점 관리"
         right={
-          <Button
-            component={Link}
-            href="/hubs/new"
+          <ButtonLink
+            render={<Link href="/hubs/new" />}
             size="xs"
-            radius="md"
-            style={{ backgroundColor: 'var(--color-primary)' }}
+            className="rounded-[8px]"
+            style={{ backgroundColor: 'var(--primary)' }}
           >
             + 거점 등록
-          </Button>
+          </ButtonLink>
         }
       />
 
-      <Container size="sm" px="md" py="md">
+      <div className="mx-auto max-w-[720px] px-4 py-4">
         {error && (
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }} mb="sm">
+          <p
+            className={TEXT}
+            style={{
+              marginBottom: 12,
+              fontSize: 'var(--font-size-sm)',
+              color: 'var(--color-danger)',
+            }}
+          >
             {error}
-          </Text>
+          </p>
         )}
 
         {loading ? (
@@ -127,104 +140,106 @@ export default function HubsPage() {
             }
             text="등록된 거점이 없습니다"
             action={
-              <Text
-                component={Link}
+              <Link
                 href="/hubs/new"
-                mt="xs"
+                className={`${TEXT} no-underline`}
                 style={{
+                  marginTop: 10,
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-primary-dark)',
                   fontWeight: 500,
                 }}
               >
                 거점 등록하기 →
-              </Text>
+              </Link>
             }
           />
         ) : (
-          <Stack gap="sm">
+          <div className="flex flex-col items-stretch justify-start gap-3">
             {hubs.map((hub) => (
-              <Paper key={hub.id} radius="lg" px="md" py="md" shadow="xs">
-                <Group justify="space-between" align="flex-start" gap="xs">
-                  <UnstyledButton
-                    component={Link}
+              <div key={hub.id} className="block rounded-[16px] bg-card p-4">
+                <div className="flex flex-row flex-wrap items-start justify-between gap-2.5">
+                  <Link
                     href={`/hubs/${hub.id}`}
+                    className={UNSTYLED_BUTTON}
                     style={{ flex: 1, minWidth: 0 }}
                   >
-                    <Group gap="xs" mb={4}>
-                      <Text
+                    <div className="mb-1 flex flex-row flex-wrap items-center justify-start gap-2.5">
+                      <p
+                        className={`${TEXT} truncate`}
                         style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)' }}
-                        truncate
                       >
                         {hub.name}
-                      </Text>
-                      <Badge
-                        color={hub.isActive ? 'green' : 'gray'}
-                        variant="light"
-                        radius="xl"
-                        size="xs"
+                      </p>
+                      {/* ② 상태는 배지 면 대신 점 + 글자(2026-11-01 결정): 비활성=회색, 운영 중=검정. */}
+                      <StatusDot
+                        tone={hub.isActive ? 'default' : 'done'}
+                        size={13}
                         style={{ flexShrink: 0 }}
                       >
                         {hub.isActive ? '운영 중' : '비활성'}
-                      </Badge>
-                    </Group>
-                    <Text
+                      </StatusDot>
+                    </div>
+                    <p
+                      className={`${TEXT} truncate`}
                       style={{
                         fontSize: 'var(--font-size-sm)',
                         color: 'var(--color-text-disabled)',
                       }}
-                      truncate
                     >
                       {hub.address}
-                    </Text>
+                    </p>
                     {hub.addressDetail && (
-                      <Text
+                      <p
+                        className={TEXT}
                         style={{
                           fontSize: 'var(--font-size-sm)',
                           color: 'var(--color-text-disabled)',
                         }}
                       >
                         {hub.addressDetail}
-                      </Text>
+                      </p>
                     )}
                     {hub.operatingHours && (
-                      <Text
+                      <p
+                        className={TEXT}
                         style={{
+                          marginTop: 4,
                           fontSize: 'var(--font-size-sm)',
                           color: 'var(--color-text-disabled)',
                         }}
-                        mt={4}
                       >
                         운영: {hub.operatingHours}
-                      </Text>
+                      </p>
                     )}
-                  </UnstyledButton>
-                  <Stack gap={4} style={{ flexShrink: 0 }}>
+                  </Link>
+                  <div
+                    className="flex flex-col items-stretch justify-start gap-1"
+                    style={{ flexShrink: 0 }}
+                  >
                     <Button
                       onClick={() => toggleActive(hub)}
                       size="xs"
-                      variant="light"
-                      color="blue"
-                      radius="md"
+                      variant="light-blue"
+                      className="rounded-[8px]"
                     >
                       {hub.isActive ? '비활성화' : '활성화'}
                     </Button>
                     <Button
                       onClick={() => setDeleteTargetId(hub.id)}
                       size="xs"
-                      variant="light"
-                      color="red"
-                      radius="md"
+                      variant="light-destructive"
+                      className="rounded-[8px]"
                     >
                       삭제
                     </Button>
-                  </Stack>
-                </Group>
-              </Paper>
+                  </div>
+                </div>
+              </div>
             ))}
-          </Stack>
+          </div>
         )}
-      </Container>
+      </div>
 
       <ConfirmModal
         opened={deleteTargetId !== null}

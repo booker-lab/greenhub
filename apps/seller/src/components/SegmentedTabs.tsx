@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Box, Container, Group, UnstyledButton } from '@mantine/core';
+import { Badge } from '@greenhub/ui/components/badge';
 import type { CSSProperties } from 'react';
 
 export type SegmentedTabItem<T extends string = string> = {
@@ -19,7 +19,28 @@ type Props<T extends string> = {
   layout?: 'flex' | 'scroll';
   /** 탭 묶음의 이름. 주면 묶음이 이 이름의 group으로 읽힌다. */
   ariaLabel?: string;
+  /**
+   * underline: ② 방향(design-direction.md §3.2·§5) — 선택은 검정 3px 밑줄 + 굵은 글자, 색을 칠하지 않는다.
+   * 건수는 배지 대신 글자로 붙이고 0은 회색 "0"으로 쓴다(빨갛게 하지 않는다). 선택 상태는 aria-pressed로도 알린다.
+   * 지정하지 않으면 지금 모양(브랜드 2px 밑줄 + 배지)을 그대로 쓴다.
+   */
+  variant?: 'default' | 'underline';
+  /**
+   * paper: 어드민 흰 종이 안에 놓는 탭(design-direction.md §5 어드민 "상태 탭"). 바깥 상자에 틀 색을 칠하지 않고
+   * 가운데 720px 폭 제한·좌우 16px을 두지 않으며, 탭 줄 아래에 1px rule 선을 긋는다.
+   * 지정하지 않으면 지금 모양(틀 색 바탕·720px 가운데)을 그대로 쓴다.
+   */
+  surface?: 'frame' | 'paper';
 };
+
+// ① 외형 유지(UI 교체 P4): Mantine Container sm(720px·좌우 16px)·Group(gap 0)·UnstyledButton·Badge xs와 같은 값.
+// Badge xs = 높이 16·좌우 6·9px·줄 높이 14, filled gray-6·red-6 면에 흰 글자.
+// 다크 모드(D5): 회색 면은 어둠에서 밝아지므로 글자를 종이 색(밝음 흰색)으로, 빨강 면은 --ui-red-filled(어둠 #D92D20)에 흰 글자로 둔다.
+const BADGE_XS = 'h-4 px-1.5 text-[9px] leading-[14px] ml-1.5';
+const BADGE_COLOR = {
+  gray: 'bg-ui-gray-6 text-background',
+  red: 'bg-ui-red-filled text-white',
+} as const;
 
 export function SegmentedTabs<T extends string>({
   tabs,
@@ -29,51 +50,87 @@ export function SegmentedTabs<T extends string>({
   topOffset = 'var(--header-height)',
   layout = 'flex',
   ariaLabel,
+  variant = 'default',
+  surface = 'frame',
 }: Props<T>) {
+  const underline = variant === 'underline';
+  const paper = surface === 'paper';
   const containerStyle: CSSProperties = {
-    backgroundColor: 'var(--color-bg)',
-    borderBottom: '1px solid var(--color-border)',
+    ...(paper ? { borderBottom: '1px solid var(--rule)' } : { backgroundColor: 'var(--frame)' }),
     ...(sticky ? { position: 'sticky', top: topOffset, zIndex: 10 } : {}),
   };
+
+  // 이름을 주면 묶음이 그 이름의 group으로 읽힌다(E2E가 역할 이름으로 찾는다). fieldset은 기본 최소 폭이 가로 스크롤 탭을 바꿔 div에 역할을 준다.
+  const groupA11y = ariaLabel ? { role: 'group' as const, 'aria-label': ariaLabel } : {};
 
   const groupStyle: CSSProperties =
     layout === 'scroll' ? { overflowX: 'auto', flexWrap: 'nowrap', scrollbarWidth: 'none' } : {};
 
   return (
-    <Box style={containerStyle}>
-      <Container size="sm">
-        <Group
-          gap={0}
+    <div style={containerStyle}>
+      <div className={paper ? undefined : 'mx-auto max-w-[720px] px-4'}>
+        <div
+          className="flex flex-row flex-wrap items-center justify-start gap-0"
           style={groupStyle}
-          role={ariaLabel ? 'group' : undefined}
-          aria-label={ariaLabel}
+          {...groupA11y}
         >
           {tabs.map((tab) => {
             const active = tab.key === value;
-            const buttonStyle: CSSProperties = {
-              padding: '12px 16px',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: active ? 700 : 'var(--fw-medium)',
-              textAlign: 'center',
-              borderBottom: `2px solid ${active ? 'var(--color-primary)' : 'transparent'}`,
-              color: active ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
-              transition: 'all 0.15s',
-              ...(layout === 'flex' ? { flex: 1 } : { flexShrink: 0 }),
-            };
+            const buttonStyle: CSSProperties = underline
+              ? {
+                  padding: '12px 16px',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: active ? 700 : 400,
+                  textAlign: 'center',
+                  whiteSpace: 'nowrap',
+                  borderBottom: `3px solid ${active ? 'var(--color-text)' : 'transparent'}`,
+                  color: active ? 'var(--color-text)' : 'var(--color-text-secondary)',
+                  transition: 'color 0.15s, border-color 0.15s',
+                  ...(layout === 'flex' ? { flex: 1 } : { flexShrink: 0 }),
+                }
+              : {
+                  padding: '12px 16px',
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: active ? 700 : 'var(--fw-medium)',
+                  textAlign: 'center',
+                  borderBottom: `2px solid ${active ? 'var(--color-primary)' : 'transparent'}`,
+                  color: active ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
+                  transition: 'all 0.15s',
+                  ...(layout === 'flex' ? { flex: 1 } : { flexShrink: 0 }),
+                };
 
             return (
-              <UnstyledButton key={tab.key} onClick={() => onChange(tab.key)} style={buttonStyle}>
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => onChange(tab.key)}
+                {...(underline ? { 'aria-pressed': active } : {})}
+                className="cursor-pointer appearance-none border-0 bg-transparent p-0 text-inherit no-underline"
+                style={buttonStyle}
+              >
                 {tab.label}
-                {typeof tab.count === 'number' && tab.count > 0 && (
-                  <Badge size="xs" ml={6} color={tab.badgeColor ?? 'gray'}>
+                {underline && typeof tab.count === 'number' && (
+                  <span
+                    className="tabular-nums"
+                    style={{
+                      marginLeft: 6,
+                      // 0은 회색(--color-text-disabled는 틀 바탕 위 대비 2.3:1이라 쓰지 않는다), 나머지는 검정.
+                      color: tab.count === 0 ? 'var(--color-text-secondary)' : 'var(--color-text)',
+                    }}
+                  >
+                    {tab.count}
+                  </span>
+                )}
+                {!underline && typeof tab.count === 'number' && tab.count > 0 && (
+                  <Badge className={`${BADGE_XS} ${BADGE_COLOR[tab.badgeColor ?? 'gray']}`}>
                     {tab.count}
                   </Badge>
                 )}
-              </UnstyledButton>
+              </button>
             );
           })}
-        </Group>
-      </Container>
-    </Box>
+        </div>
+      </div>
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Stack, TextInput } from '@mantine/core';
+import { Input } from '@greenhub/ui/components/input';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
 import ImageUpload from '../ImageUpload';
 import { CATEGORIES, type ProductFormData } from '../productForm.types';
@@ -24,19 +24,19 @@ export function Step1Basic({
   setError,
 }: Step1BasicProps) {
   return (
-    <Stack gap="sm">
+    <div className="flex flex-col gap-3">
       <ImageUpload
         storeId={storeId}
         images={form.images}
         onChange={(images) => set('images', images)}
         onError={(msg) => setError(msg)}
       />
-      <TextInput
+      <Input
         placeholder="상품명"
         value={form.name}
         onChange={(e) => set('name', e.target.value)}
-        radius="xl"
         size="md"
+        className="rounded-xl"
       />
       <FieldCard label="카테고리">
         <ChoiceRow
@@ -54,6 +54,6 @@ export function Step1Basic({
           token={token}
         />
       </FieldCard>
-    </Stack>
+    </div>
   );
 }

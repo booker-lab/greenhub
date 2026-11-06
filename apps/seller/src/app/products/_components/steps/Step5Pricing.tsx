@@ -1,7 +1,7 @@
 'use client';
 
 import type { SalesMode } from '@greenhub/shared';
-import { Group, NumberInput, Stack, Text } from '@mantine/core';
+import { NumberInput } from '@greenhub/ui/components/number-input';
 import { useOptionStocks } from '@/hooks/useOptionStocks';
 import { isFeatureOn } from '@/lib/features';
 import { showsGroupBuyChoice } from '@/lib/sales-mode';
@@ -9,6 +9,9 @@ import { ChoiceRow, FieldCard } from '../FormPrimitives';
 import GroupConfigSection from '../GroupConfigSection';
 import { ProductExtrasSection } from '../ProductExtrasSection';
 import { DELIVERY_SIZES, type GroupConfigForm, type ProductFormData } from '../productForm.types';
+
+// ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Group·Stack 값.
+const TEXT = 'm-0 p-0 text-base font-normal';
 
 interface Step5PricingProps {
   storeId: string;
@@ -29,24 +32,24 @@ export function Step5Pricing({
 }: Step5PricingProps) {
   const optionStocks = useOptionStocks(storeId, token, isFeatureOn('option-sheet'));
   return (
-    <Stack gap="sm">
+    <div className="flex flex-col gap-3">
       <NumberInput
         placeholder="가격"
         leftSection={
-          <Text style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}>
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          >
             ₩
-          </Text>
+          </p>
         }
         thousandSeparator=","
         min={0}
         max={100_000_000}
-        allowDecimal={false}
-        allowNegative={false}
-        hideControls
         value={form.price === '' ? '' : Number(form.price)}
-        onChange={(val) => set('price', val === '' ? '' : String(val))}
-        radius="xl"
+        onValueChange={(val) => set('price', val === '' ? '' : String(val))}
         size="md"
+        className="rounded-xl"
       />
       <FieldCard label="배송 사이즈">
         <ChoiceRow
@@ -58,7 +61,7 @@ export function Step5Pricing({
       {/* 공동구매는 예전 판매 방식 가게 전용 — 회차 판매 가게에는 판매 방식 선택을 숨긴다. */}
       {showsGroupBuyChoice(salesMode, form.saleType) && (
         <FieldCard label="판매 방식" labelGap="sm">
-          <Group gap="xl">
+          <div className="flex flex-row flex-wrap items-center justify-start gap-8">
             {(['normal', 'group'] as const).map((type) => (
               <label
                 key={type}
@@ -71,14 +74,15 @@ export function Step5Pricing({
                   onChange={() => set('saleType', type)}
                   style={{ accentColor: 'var(--color-primary)', width: 16, height: 16 }}
                 />
-                <Text
+                <p
+                  className={TEXT}
                   style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   {type === 'normal' ? '일반 판매' : '공동구매'}
-                </Text>
+                </p>
               </label>
             ))}
-          </Group>
+          </div>
           <GroupConfigSection
             visible={form.saleType === 'group'}
             config={form.groupConfig}
@@ -92,6 +96,6 @@ export function Step5Pricing({
         optionStocks={optionStocks.stocks}
         optionStocksError={optionStocks.error}
       />
-    </Stack>
+    </div>
   );
 }

@@ -1,7 +1,6 @@
 'use client';
 
 import type { AdminHiddenReview } from '@greenhub/shared';
-import { Stack, Text, Title } from '@mantine/core';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
@@ -77,13 +76,14 @@ export default function AdminReviewsPage() {
     }
   };
 
+  // ① 외형 유지(UI 교체 P2b): Mantine Stack(gap sm)·Title order 3(22px·800·줄 높이 1.4)·Text sm·xs.
   return (
-    <Stack gap="sm">
-      <Title order={3}>숨긴 후기</Title>
-      <Text size="sm" c="var(--color-text-secondary)">
+    <div className="flex flex-col gap-3">
+      <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">숨긴 후기</h3>
+      <p className="m-0 p-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
         숨긴 후기는 고객 화면과 별점에서 빠져 있어요. 사유에 맞지 않게 숨긴 후기는 다시 보이게 해
         주세요.
-      </Text>
+      </p>
       {loadFailed ? (
         <AdminFetchError
           title="숨긴 후기를 불러오지 못했습니다."
@@ -97,9 +97,9 @@ export default function AdminReviewsPage() {
       ) : (
         <>
           {cap !== null && (
-            <Text size="xs" style={{ color: 'var(--color-text-secondary)' }}>
+            <p className="m-0 p-0 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
               {describeListCap(cap)}
-            </Text>
+            </p>
           )}
           {items.map((review) => (
             <HiddenReviewCard
@@ -122,6 +122,6 @@ export default function AdminReviewsPage() {
           if (busyId === null) setConfirmTarget(null);
         }}
       />
-    </Stack>
+    </div>
   );
 }

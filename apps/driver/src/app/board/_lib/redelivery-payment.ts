@@ -3,7 +3,7 @@ import type { RedeliveryPaymentActionability, RedeliveryPaymentState } from '@gr
 export interface RedeliveryPaymentPresentation {
   label: string;
   description: string;
-  color: string;
+  color: 'brand' | 'red' | 'yellow';
 }
 
 const RECOVERY_STATES: RedeliveryPaymentState[] = ['FAILED', 'REFUNDED', 'MISMATCHED'];

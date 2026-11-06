@@ -18,7 +18,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         maxWidth: wide ? 'none' : 480,
         margin: '0 auto',
         position: 'relative',
-        backgroundColor: 'var(--color-bg)',
+        backgroundColor: wide ? 'var(--color-bg)' : 'var(--frame)',
         minHeight: '100dvh',
       }}
     >

@@ -131,7 +131,7 @@ describe('InviteGenerator command state', () => {
     expect(texts).toContain('https://seller.example.test/invite/test-issued-aaa');
     expect(texts).not.toContain('test-issued-aaa');
     // 만료는 KST 날짜+시각으로 보여 준다(2026-12-31T00:00Z = KST 09:00).
-    expect(texts.some((t) => t.includes('2026. 12. 31. 09:00'))).toBe(true);
+    expect(texts.some((t) => t.includes('2026-12-31 09:00'))).toBe(true);
   });
 
   it('copy feedback 계약을 보존한다(링크 복사/복사됨!)', () => {
@@ -233,13 +233,13 @@ describe('InviteGenerator 받는 사람 이메일', () => {
     expect(textsOf(tree).some((t) => t.includes('(선택)'))).toBe(false);
   });
 
-  it.each([
-    '',
-    '   ',
-  ])('받는 사람 이메일이 비어 있으면(%p) 생성 버튼을 막는다', (recipientEmail) => {
-    const tree = InviteGenerator({ ...baseProps, recipientEmail });
-    expect(disabledFor(tree, '새 초대 링크 만들기')).toBe(true);
-  });
+  it.each(['', '   '])(
+    '받는 사람 이메일이 비어 있으면(%p) 생성 버튼을 막는다',
+    (recipientEmail) => {
+      const tree = InviteGenerator({ ...baseProps, recipientEmail });
+      expect(disabledFor(tree, '새 초대 링크 만들기')).toBe(true);
+    },
+  );
 
   it('받는 사람 이메일을 입력하면 생성 버튼을 누를 수 있고, 생성 중에는 막는다', () => {
     const filled = { ...baseProps, recipientEmail: 'seller@example.com' };
