@@ -7,7 +7,12 @@ import { cn } from '../lib/utils';
 
 // ① 외형 유지: Mantine PasswordInput(size md, radius xl). Mantine처럼 테두리 상자(div) 안에 입력칸을 꽉 채워
 // 겹치고(inset 0, 줄 높이 1.55), 오른쪽 40px 칸 가운데에 눈 모양 버튼(ActionIcon subtle gray 28px·그림 22px)을 둔다.
-// 버튼은 Tab으로 가지 않는다(Mantine visibilityToggleFocusable false). 기사 앱 PasswordField(P3)와 같은 값이다.
+// 기사 앱 PasswordField(P3)와 같은 값이다. 버튼은 Mantine(visibilityToggleFocusable false)과 달리 Tab으로 가서
+// Enter·Space로도 바꿀 수 있다(기사 앱 #755와 같은 방식). 마우스로 누를 때는 mousedown 기본 동작만 막아 입력칸의
+// 초점과 커서 위치를 지키고, 바꾸기는 click(키보드 Enter·Space도 click이 된다) 하나에서만 한다.
+// Chromium은 click 시점에 password→text로 바꾸면 입력칸 커서를 맨 앞으로 옮긴다(mousedown 시점에는 유지).
+// 커서는 type이 바뀐 뒤 비동기로(selectionchange) 옮겨지므로, 바꾸기 전 선택 범위를 읽어 두고 다음 프레임에
+// 입력칸에 초점이 그대로 있으면 되돌린다. 키보드로 누를 때는 초점이 버튼에 있어 건드리지 않는다.
 // size="sm": 소비자 앱 Mantine PasswordInput 기본(size sm, theme 기본 radius 16). 높이 36·좌우 12px·15px 글자,
 // 오른쪽 34px 칸, 눈 모양 버튼 26px(그림 칸 24px·그림 20px). 소비자 로그인 화면에서 계산값을 맞췄다.
 // sm은 접근성 트리도 소비자 Mantine과 같게 그림(svg)을 숨기지 않는다(md는 지금처럼 aria-hidden).
@@ -63,15 +68,23 @@ function PasswordInput({
       >
         <button
           type="button"
-          tabIndex={-1}
-          aria-label="Toggle password visibility"
+          aria-label="비밀번호 보기"
           aria-pressed={reveal}
-          onMouseDown={(event) => {
-            event.preventDefault();
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={(event) => {
+            const input = event.currentTarget
+              ?.closest('[data-slot="password-input"]')
+              ?.querySelector('input');
+            const start = input?.selectionStart ?? null;
+            const end = input?.selectionEnd ?? null;
             setReveal((value) => !value);
+            if (!input || start === null || end === null) return;
+            requestAnimationFrame(() => {
+              if (input === document.activeElement) input.setSelectionRange(start, end);
+            });
           }}
           className={cn(
-            'relative flex cursor-pointer appearance-none items-center justify-center overflow-hidden border border-solid border-transparent bg-transparent p-0 leading-none text-ui-gray-9 hover:bg-ui-gray-1',
+            'relative flex cursor-pointer appearance-none items-center justify-center overflow-hidden border border-solid border-transparent bg-transparent p-0 leading-none text-ui-gray-9 outline-none hover:bg-ui-gray-1 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid',
             sized.button,
           )}
         >
