@@ -87,7 +87,7 @@ const TEMPLATE_ICONS: Record<NotificationTemplateCode, { Icon: LucideIcon; tone:
 const TEXT = 'm-0 p-0 leading-[1.55]';
 const DEFAULT_BUTTON_XS = { variant: 'plain', size: 'xs' } as const;
 const DISABLED_TEXT_STYLE = {
-  color: 'var(--color-text-disabled)',
+  color: 'var(--color-text-secondary)',
   fontSize: 'var(--font-size-sm)',
 } as const;
 const SMALL_TEXT_STYLE = { fontSize: 'var(--font-size-sm)' } as const;
@@ -180,7 +180,7 @@ function NotificationItem({
             className={TEXT}
             style={{
               fontSize: 'var(--font-size-sm)',
-              color: 'var(--color-text-disabled)',
+              color: 'var(--color-text-secondary)',
               whiteSpace: 'nowrap',
               flexShrink: 0,
             }}
@@ -315,7 +315,7 @@ export default function NotificationsClient() {
           <p className="m-0 p-0 text-[20px] leading-[1.65]">🔔</p>
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             알림 내역이 없습니다.
           </p>

@@ -19,7 +19,7 @@ const XL_TEXT = 'm-0 p-0 text-[20px] leading-[1.65]';
 const EMPTY_STACK = 'flex flex-col items-center justify-start gap-4 py-16';
 const DISABLED_TEXT_STYLE = {
   fontSize: 'var(--font-size-sm)',
-  color: 'var(--color-text-disabled)',
+  color: 'var(--color-text-secondary)',
 } as const;
 const QUERY_STYLE = { fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' } as const;
 // Mantine TextInput(radius lg 16 = 기본과 같음) 바깥 상자(줄 높이 1.55)와 입력 상자(relative). 두 칸은 모두 눌린다

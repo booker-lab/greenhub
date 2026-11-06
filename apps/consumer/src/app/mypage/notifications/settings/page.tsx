@@ -307,7 +307,7 @@ function LegacyNotificationSettingsPage() {
         {loading && (
           <p
             className="m-0 p-0 py-8 text-center text-[16px] leading-[1.55]"
-            style={{ color: 'var(--color-text-disabled)' }}
+            style={{ color: 'var(--color-text-secondary)' }}
           >
             현재 동의 상태를 확인하는 중...
           </p>
@@ -354,7 +354,7 @@ function LegacyNotificationSettingsPage() {
           ))}
 
         {!loading && preferences && (
-          <p className={TEXT_SM} style={{ color: 'var(--color-text-disabled)' }}>
+          <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
             동의·철회 증거와 보관은 서버 정책에 따라 처리되며 이 화면은 해당 기록에 직접 접근하지
             않습니다.
           </p>

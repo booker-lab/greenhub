@@ -701,7 +701,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   if (sessionStatus === 'loading' || (loading && !detail && status === 'loading')) {
     return (
       <div className="py-[60px] text-center">
-        <p className="m-0 text-base" style={{ color: 'var(--color-text-disabled)' }}>
+        <p className="m-0 text-base" style={{ color: 'var(--color-text-secondary)' }}>
           로딩 중...
         </p>
       </div>
@@ -770,7 +770,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     if (loading) {
       return (
         <div className="py-[60px] text-center">
-          <p className="m-0 text-base" style={{ color: 'var(--color-text-disabled)' }}>
+          <p className="m-0 text-base" style={{ color: 'var(--color-text-secondary)' }}>
             로딩 중...
           </p>
         </div>
@@ -877,7 +877,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           >
             주문 상세
           </h1>
-          <p className="m-0 text-sm" style={{ color: 'var(--color-text-disabled)' }}>
+          <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
             주문번호: {detail.orderNumber}
           </p>
         </div>

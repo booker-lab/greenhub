@@ -149,7 +149,7 @@ export default function PackageLabelFields({
             <InputSection side="right" className="w-[52px]">
               <p
                 className="m-0 p-0 text-xs font-normal"
-                style={{ color: 'var(--color-text-disabled)', fontVariantNumeric: 'tabular-nums' }}
+                style={{ color: 'var(--color-text-secondary)', fontVariantNumeric: 'tabular-nums' }}
               >
                 {length}/{PACKAGE_LABEL_MAX_LENGTH}
               </p>

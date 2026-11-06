@@ -216,7 +216,7 @@ export default function LegacyProductActions({ product }: Props) {
                 fontWeight: 'var(--fw-bold)',
                 lineHeight: 1,
                 color: isGroupUnavailable
-                  ? 'var(--color-text-disabled)'
+                  ? 'var(--color-text-secondary)'
                   : 'var(--color-primary-dark)',
               }}
             >
@@ -235,7 +235,7 @@ export default function LegacyProductActions({ product }: Props) {
             </p>
             <p
               className="m-0 mt-1 p-0 leading-[1.55] font-normal"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               최소 {groupConfig.minQuantity}개 이상 모이면 확정
             </p>
@@ -406,7 +406,7 @@ export default function LegacyProductActions({ product }: Props) {
         {isGroup && groupConfig && (
           <p
             className="m-0 mt-1.5 p-0 leading-[1.55] font-normal"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             1인 최대 {groupConfig.maxPerPerson}개까지 구매 가능
           </p>

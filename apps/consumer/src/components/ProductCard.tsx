@@ -132,7 +132,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             <p
               style={{
                 fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-text-disabled)',
+                color: 'var(--color-text-secondary)',
                 marginTop: 4,
                 marginBottom: 0,
                 overflow: 'hidden',
@@ -168,7 +168,7 @@ export default function ProductCard({ product }: ProductCardProps) {
                 <p
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    color: done ? 'var(--color-text-disabled)' : 'var(--color-primary-dark)',
+                    color: done ? 'var(--color-text-secondary)' : 'var(--color-primary-dark)',
                     marginTop: 2,
                     marginBottom: 0,
                     fontWeight: 'var(--fw-medium)',

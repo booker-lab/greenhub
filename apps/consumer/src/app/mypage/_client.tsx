@@ -153,7 +153,7 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         </StatusDot>
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           {formatDate(order.createdAt)}
         </p>
@@ -249,7 +249,7 @@ export default function MyPageClient() {
   if (status === 'loading') {
     return (
       <div className="py-[60px] text-center">
-        <p className={`${TEXT} text-[16px]`} style={{ color: 'var(--color-text-disabled)' }}>
+        <p className={`${TEXT} text-[16px]`} style={{ color: 'var(--color-text-secondary)' }}>
           로딩 중...
         </p>
       </div>
@@ -259,7 +259,7 @@ export default function MyPageClient() {
   if (!session) return null;
 
   const disabledTextStyle = {
-    color: 'var(--color-text-disabled)',
+    color: 'var(--color-text-secondary)',
     fontSize: 'var(--font-size-sm)',
   } as const;
   const dangerTextStyle = {
