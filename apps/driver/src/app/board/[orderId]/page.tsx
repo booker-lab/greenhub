@@ -108,7 +108,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
         }}
       >
         <div className="flex flex-col items-center gap-3 px-4">
-          <p className={cn(text, 'text-center')} style={{ color: 'var(--color-text-disabled)' }}>
+          <p className={cn(text, 'text-center')} style={{ color: 'var(--driver-text-muted)' }}>
             주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해 주세요.
           </p>
           <Link
@@ -550,7 +550,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
         }}
       >
         <div className="flex flex-col items-center gap-3">
-          <p className={text} style={{ color: 'var(--color-text-disabled)' }}>
+          <p className={text} style={{ color: 'var(--driver-text-muted)' }}>
             {message}
           </p>
           {readError?.kind === 'FETCH_ERROR' && (
