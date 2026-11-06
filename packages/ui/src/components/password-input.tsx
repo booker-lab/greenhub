@@ -53,7 +53,7 @@ function PasswordInput({
         <input
           type={reveal ? 'text' : 'password'}
           className={cn(
-            'absolute inset-0 h-full w-full cursor-text border-0 [font-family:inherit] bg-transparent text-inherit leading-[1.55] outline-0 placeholder:text-ui-gray-5 placeholder:opacity-100',
+            'absolute inset-0 h-full w-full cursor-text border-0 [font-family:inherit] bg-transparent text-inherit leading-[1.55] outline-0 placeholder:text-muted-foreground placeholder:opacity-100',
             sized.input,
             className,
           )}
