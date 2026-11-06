@@ -35,7 +35,7 @@ export function DailySummaryTab({
       <div className={`${ROW} mb-4`}>
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           {selectedDateLabel}
         </p>
@@ -56,7 +56,7 @@ export function DailySummaryTab({
       {summaryLoading ? (
         <p
           className={`${TEXT} py-4 text-center`}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           불러오는 중...
         </p>
@@ -100,7 +100,7 @@ export function DailySummaryTab({
             </p>
             <p
               className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               −{toKRW(summary?.totalPlatformFee ?? 0)}
             </p>

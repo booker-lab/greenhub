@@ -303,7 +303,7 @@ export function ProductsSection({
                 </p>
                 <p
                   className={TEXT}
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   {item.productId}
                 </p>
@@ -357,7 +357,7 @@ export function ProductsSection({
         {availableProducts.length === 0 && (
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             추가할 수 있는 상품이 없습니다. 상품 관리에서 판매 중인 상품을 먼저 등록해 주세요.
           </p>
@@ -376,7 +376,7 @@ export function ProductsSection({
               </div>
               <p
                 className={TEXT}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 상품 기준가 ₩{product.price.toLocaleString()}
               </p>
@@ -428,7 +428,7 @@ function LinkRow({
               className={TEXT}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                color: url ? 'var(--color-text-secondary)' : 'var(--color-text-disabled)',
+                color: url ? 'var(--color-text-secondary)' : 'var(--color-text-secondary)',
                 wordBreak: 'break-all',
               }}
             >

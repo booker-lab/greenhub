@@ -121,7 +121,7 @@ export default function NewHubPage() {
               <Field>
                 <FieldLabel htmlFor={`${formId}-addressDetail`} className="inline-block">
                   상세 주소{' '}
-                  <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+                  <span className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
                     (선택)
                   </span>
                 </FieldLabel>
@@ -138,7 +138,7 @@ export default function NewHubPage() {
               <Field>
                 <FieldLabel htmlFor={`${formId}-operatingHours`} className="inline-block">
                   운영 시간{' '}
-                  <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+                  <span className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
                     (선택)
                   </span>
                 </FieldLabel>

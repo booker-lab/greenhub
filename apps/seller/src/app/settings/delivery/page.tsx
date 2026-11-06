@@ -94,7 +94,7 @@ export default function DeliverySettingsPage() {
       >
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           불러오는 중...
         </p>
@@ -149,7 +149,7 @@ export default function DeliverySettingsPage() {
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
-                color: 'var(--color-text-disabled)',
+                color: 'var(--color-text-secondary)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
               }}
@@ -201,7 +201,7 @@ export default function DeliverySettingsPage() {
                       className={TEXT}
                       style={{
                         fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-disabled)',
+                        color: 'var(--color-text-secondary)',
                         flexShrink: 0,
                       }}
                     >
@@ -220,7 +220,7 @@ export default function DeliverySettingsPage() {
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
-                color: 'var(--color-text-disabled)',
+                color: 'var(--color-text-secondary)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
               }}
@@ -272,7 +272,7 @@ export default function DeliverySettingsPage() {
                       className={TEXT}
                       style={{
                         fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-disabled)',
+                        color: 'var(--color-text-secondary)',
                         flexShrink: 0,
                       }}
                     >
@@ -300,7 +300,7 @@ export default function DeliverySettingsPage() {
                 </p>
                 <p
                   className={TEXT}
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   악천후 시 배송 제한 활성화
                 </p>

@@ -182,7 +182,7 @@ export default function DailyCapsPage() {
           className={`${TEXT} mb-4`}
           style={{
             fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-disabled)',
+            color: 'var(--color-text-secondary)',
             lineHeight: 1.6,
           }}
         >
@@ -221,7 +221,7 @@ export default function DailyCapsPage() {
               <p
                 key={d}
                 className={`${TEXT} py-1 text-center`}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 {d}
               </p>
@@ -233,7 +233,7 @@ export default function DailyCapsPage() {
             <div className="py-8" style={{ textAlign: 'center' }}>
               <p
                 className={TEXT}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 불러오는 중...
               </p>
@@ -285,7 +285,7 @@ export default function DailyCapsPage() {
                           fontWeight: cap ? 'var(--fw-medium)' : undefined,
                           color: cap
                             ? 'var(--color-status-info-text)'
-                            : 'var(--color-text-disabled)',
+                            : 'var(--color-text-secondary)',
                         }}
                       >
                         {cap ? cap.totalCap : '—'}
@@ -295,7 +295,7 @@ export default function DailyCapsPage() {
                           className={TEXT}
                           style={{
                             fontSize: 'var(--font-size-xs)',
-                            color: 'var(--color-text-disabled)',
+                            color: 'var(--color-text-secondary)',
                           }}
                         >
                           {cap.usedSlots}↑
@@ -339,14 +339,14 @@ export default function DailyCapsPage() {
               />
               <p
                 className={TEXT}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 개
               </p>
             </div>
             <p
               className={`${TEXT} mt-1.5`}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               0 = 해당일 배송 불가
             </p>

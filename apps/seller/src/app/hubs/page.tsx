@@ -184,7 +184,7 @@ export default function HubsPage() {
                       className={`${TEXT} truncate`}
                       style={{
                         fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-disabled)',
+                        color: 'var(--color-text-secondary)',
                       }}
                     >
                       {hub.address}
@@ -194,7 +194,7 @@ export default function HubsPage() {
                         className={TEXT}
                         style={{
                           fontSize: 'var(--font-size-sm)',
-                          color: 'var(--color-text-disabled)',
+                          color: 'var(--color-text-secondary)',
                         }}
                       >
                         {hub.addressDetail}
@@ -206,7 +206,7 @@ export default function HubsPage() {
                         style={{
                           marginTop: 4,
                           fontSize: 'var(--font-size-sm)',
-                          color: 'var(--color-text-disabled)',
+                          color: 'var(--color-text-secondary)',
                         }}
                       >
                         운영: {hub.operatingHours}

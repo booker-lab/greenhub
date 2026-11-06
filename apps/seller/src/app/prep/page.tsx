@@ -51,7 +51,7 @@ function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accen
         {line.selectionLabel && (
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             ({line.selectionLabel})
           </p>
@@ -240,7 +240,7 @@ export default function PrepPage() {
           (showsRoundPurchaseList ? (
             <p
               className={`${TEXT} py-4 text-center`}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               회차 주문 외에는 오늘 준비할 물량이 없습니다
             </p>

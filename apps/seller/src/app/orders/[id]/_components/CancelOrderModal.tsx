@@ -53,7 +53,7 @@ export function CancelOrderModal({
           <div className="flex flex-col gap-3">
             <p
               className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               취소 사유를 입력하세요. 소비자에게 알림톡으로 전달됩니다.
             </p>

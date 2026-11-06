@@ -20,7 +20,7 @@ const TEXT = 'm-0 p-0 text-base font-normal';
 const LABEL_STYLE = {
   fontSize: 'var(--font-size-sm)',
   fontWeight: 'var(--fw-medium)',
-  color: 'var(--color-text-disabled)',
+  color: 'var(--color-text-secondary)',
 } as const;
 
 export interface ConflictWarning {
@@ -68,7 +68,7 @@ export default function AIPreviewPanel({
         <Loader size="md" />
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           AI가 상세 페이지를 작성하는 중...
         </p>
@@ -130,7 +130,7 @@ export default function AIPreviewPanel({
             color:
               headline.length > 15
                 ? 'var(--color-status-warning-text)'
-                : 'var(--color-text-disabled)',
+                : 'var(--color-text-secondary)',
           }}
         >
           {headline.length} / 15자 권장

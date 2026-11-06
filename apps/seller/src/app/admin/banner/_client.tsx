@@ -106,7 +106,7 @@ export default function AdminBannerClient() {
     return (
       <p
         className="m-0 p-0 py-20 text-center text-base"
-        style={{ color: 'var(--color-text-disabled)' }}
+        style={{ color: 'var(--color-text-secondary)' }}
       >
         불러오는 중...
       </p>
@@ -133,7 +133,7 @@ export default function AdminBannerClient() {
             </p>
             <p
               className="m-0 p-0 text-center text-base"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               {error}
             </p>
@@ -170,7 +170,7 @@ export default function AdminBannerClient() {
       {banner === null && (
         <p
           className="m-0 mb-4 p-0 text-base"
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           현재 설정된 배너가 없습니다. 아래 양식으로 새 배너를 등록하세요.
         </p>
@@ -190,7 +190,7 @@ export default function AdminBannerClient() {
             </p>
             <p
               className="m-0 p-0 text-center text-base"
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               {saveError} 입력 내용은 그대로 보존되어 있으니 다시 시도해 주세요.
             </p>

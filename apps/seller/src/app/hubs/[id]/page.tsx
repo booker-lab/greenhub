@@ -168,7 +168,7 @@ export default function HubDetailPage() {
                       className={TEXT}
                       style={{
                         fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-disabled)',
+                        color: 'var(--color-text-secondary)',
                       }}
                     >
                       {hub.addressDetail}
@@ -179,7 +179,7 @@ export default function HubDetailPage() {
                       className={TEXT}
                       style={{
                         fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-disabled)',
+                        color: 'var(--color-text-secondary)',
                       }}
                     >
                       운영시간: {hub.operatingHours}
@@ -203,7 +203,10 @@ export default function HubDetailPage() {
                   </p>
                   <p
                     className={TEXT}
-                    style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-text-secondary)',
+                    }}
                   >
                     {orders.length}건
                   </p>
@@ -213,7 +216,7 @@ export default function HubDetailPage() {
                   <div className={`${PAPER} px-4 py-10`}>
                     <div
                       className="flex flex-col items-center justify-start gap-4"
-                      style={{ color: 'var(--color-text-disabled)' }}
+                      style={{ color: 'var(--color-text-secondary)' }}
                     >
                       <svg
                         width="40"
@@ -255,7 +258,7 @@ export default function HubDetailPage() {
                                 className={TEXT}
                                 style={{
                                   fontSize: 'var(--font-size-sm)',
-                                  color: 'var(--color-text-disabled)',
+                                  color: 'var(--color-text-secondary)',
                                 }}
                               >
                                 {formatTime(order.createdAt)}
@@ -278,13 +281,13 @@ export default function HubDetailPage() {
                               style={{
                                 marginTop: 2,
                                 fontSize: 'var(--font-size-sm)',
-                                color: 'var(--color-text-disabled)',
+                                color: 'var(--color-text-secondary)',
                               }}
                             >
                               {order.totalAmount?.toLocaleString()}원
                             </p>
                           </div>
-                          <div style={{ color: 'var(--color-text-disabled)' }}>
+                          <div style={{ color: 'var(--color-text-secondary)' }}>
                             <svg
                               width="16"
                               height="16"

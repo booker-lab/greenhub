@@ -30,7 +30,7 @@ export function ConnectionStatus({
       <div style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: color }} />
       <p
         className="m-0 p-0 text-base font-normal"
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
       >
         {label}
       </p>

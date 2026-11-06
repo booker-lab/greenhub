@@ -28,7 +28,7 @@ export function AdminFetchError({ title, detail, onRetry }: AdminFetchErrorProps
         </p>
         <p
           className={`${TEXT} text-center`}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           {detail}
         </p>

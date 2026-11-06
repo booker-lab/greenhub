@@ -46,7 +46,7 @@ export function PeriodTab({
       <div className="block rounded-[16px] bg-card p-5">
         <p
           className={`${TEXT} mb-4`}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           조회 기간을 선택하세요
         </p>
@@ -66,7 +66,7 @@ export function PeriodTab({
               fontVariantNumeric: 'tabular-nums',
             }}
           />
-          <p className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+          <p className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
             ~
           </p>
           <input
@@ -109,7 +109,7 @@ export function PeriodTab({
           <div className="flex flex-row flex-wrap items-center justify-between gap-4 px-1">
             <p
               className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               {settlements.length}건 조회됨{hasMore ? ' (더 있음)' : ''}
             </p>

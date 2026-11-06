@@ -72,7 +72,7 @@ export function OrderStatusCard({
                     className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-disabled)',
+                      color: 'var(--color-text-secondary)',
                       textAlign: 'center',
                     }}
                   >
@@ -88,7 +88,7 @@ export function OrderStatusCard({
         className={TEXT}
         style={{
           fontSize: 'var(--font-size-sm)',
-          color: 'var(--color-text-disabled)',
+          color: 'var(--color-text-secondary)',
           marginTop: 10,
         }}
       >
@@ -131,7 +131,7 @@ export function SettlementCard({
       <DashboardCard title="정산 현황" moreHref="/settlements">
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           불러오는 중…
         </p>
@@ -155,7 +155,7 @@ export function SettlementCard({
               style={{
                 fontSize: 'var(--font-size-md)',
                 fontWeight: 'var(--fw-bold)',
-                color: 'var(--color-text-disabled)',
+                color: 'var(--color-text-secondary)',
               }}
             >
               —
@@ -164,7 +164,7 @@ export function SettlementCard({
           <p
             className={TEXT}
             role="alert"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             {error ?? '정산 정보를 불러오지 못했습니다.'}
           </p>
@@ -205,7 +205,7 @@ export function SettlementCard({
           <p
             className={TEXT}
             role="alert"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             최신 정보를 확인하지 못했습니다. 이전 정보입니다.
           </p>
@@ -244,7 +244,7 @@ export function ProductStatusCard({
       <DashboardCard title="상품 현황" moreHref="/products">
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           불러오는 중…
         </p>
@@ -259,7 +259,7 @@ export function ProductStatusCard({
           <p
             className={TEXT}
             role="alert"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             상품 정보를 불러오지 못했습니다.
           </p>
@@ -294,7 +294,7 @@ export function ProductStatusCard({
             {activeCount}
           </p>
         </div>
-        <p className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+        <p className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
           ·
         </p>
         <div className="flex flex-row flex-wrap items-center justify-start gap-1.5">
@@ -321,7 +321,7 @@ export function ProductStatusCard({
           <p
             className={TEXT}
             role="alert"
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             최신 정보를 확인하지 못했습니다. 이전 수치입니다.
           </p>

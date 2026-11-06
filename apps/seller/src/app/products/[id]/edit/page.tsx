@@ -125,7 +125,7 @@ export default function EditProductPage() {
       >
         <p
           className="m-0 p-0 text-base font-normal"
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           상품을 찾을 수 없습니다
         </p>

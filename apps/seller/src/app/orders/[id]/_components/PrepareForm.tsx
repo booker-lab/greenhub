@@ -48,7 +48,7 @@ export function PrepareForm({
       {deliveryDate && (
         <p
           className={`${TEXT} mb-2.5`}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           {roundOrder
             ? '배송일'
@@ -88,7 +88,7 @@ export function PrepareForm({
           </div>
           <p
             className={`${TEXT} mb-3`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             {preparedAt
               ? `선택됨: ${new Date(preparedAt).toLocaleString('ko-KR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
