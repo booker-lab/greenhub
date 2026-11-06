@@ -29,7 +29,7 @@ import { useAddresses } from '@/hooks/useAddresses';
 const TEXT = 'm-0 p-0 leading-[1.55]';
 const SMALL_TEXT_STYLE = { fontSize: 'var(--font-size-sm)' } as const;
 const DISABLED_TEXT_STYLE = {
-  color: 'var(--color-text-disabled)',
+  color: 'var(--color-text-secondary)',
   fontSize: 'var(--font-size-sm)',
 } as const;
 
@@ -77,7 +77,7 @@ function AddressCard({
           </p>
           <p
             className={`${TEXT} mt-0.5`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             {addr.zipCode}
           </p>

@@ -73,7 +73,7 @@ export default function GreenLoveBrandSection() {
                 </p>
                 <p
                   className={TEXT}
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   {desc}
                 </p>

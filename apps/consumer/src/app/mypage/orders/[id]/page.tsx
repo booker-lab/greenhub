@@ -5,7 +5,9 @@ import dynamic from 'next/dynamic';
 const OrderDetailClient = dynamic(() => import('./_client'), {
   ssr: false,
   loading: () => (
-    <div style={{ padding: '60px 24px', textAlign: 'center', color: 'var(--color-text-disabled)' }}>
+    <div
+      style={{ padding: '60px 24px', textAlign: 'center', color: 'var(--color-text-secondary)' }}
+    >
       로딩 중...
     </div>
   ),

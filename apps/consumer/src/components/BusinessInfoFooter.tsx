@@ -197,7 +197,7 @@ export default function BusinessInfoFooter() {
 
       <p
         style={{
-          color: 'var(--color-text-disabled)',
+          color: 'var(--color-text-secondary)',
           fontFamily: 'var(--font-brand)',
           fontSize: 13,
           fontWeight: 800,

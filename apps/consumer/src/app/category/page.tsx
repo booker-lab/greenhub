@@ -178,7 +178,7 @@ function RoundDirectCategory({
           판매 회차를 불러오지 못했습니다.
         </p>
         {error && (
-          <p className={TEXT_SM} style={{ color: 'var(--color-text-disabled)' }}>
+          <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
             {error}
           </p>
         )}
@@ -199,7 +199,7 @@ function RoundDirectCategory({
     return (
       <div className={EMPTY_STACK}>
         <p className={TEXT_XL}>🌱</p>
-        <p className={TEXT_SM} style={{ color: 'var(--color-text-disabled)' }}>
+        <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
           현재 또는 지난 판매 회차에 판매 중인 호접란이 없습니다.
         </p>
       </div>
@@ -232,7 +232,7 @@ function RoundDirectCategory({
             최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
           </p>
           {error && (
-            <p className={`${TEXT_SM} mt-1`} style={{ color: 'var(--color-text-disabled)' }}>
+            <p className={`${TEXT_SM} mt-1`} style={{ color: 'var(--color-text-secondary)' }}>
               {error}
             </p>
           )}
@@ -267,7 +267,7 @@ function RoundDirectCategory({
             />
           </div>
         ) : (
-          <p className={`${TEXT_SM} py-4`} style={{ color: 'var(--color-text-disabled)' }}>
+          <p className={`${TEXT_SM} py-4`} style={{ color: 'var(--color-text-secondary)' }}>
             현재 회차에 판매 중인 호접란이 없습니다.
           </p>
         )}
@@ -299,7 +299,7 @@ function RoundDirectCategory({
             ))}
           </div>
         ) : (
-          <p className={`${TEXT_SM} py-4`} style={{ color: 'var(--color-text-disabled)' }}>
+          <p className={`${TEXT_SM} py-4`} style={{ color: 'var(--color-text-secondary)' }}>
             지난 회차에 공개된 호접란이 없습니다.
           </p>
         )}
@@ -346,7 +346,7 @@ function LegacyCategory({
                   padding: '8px 16px',
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: isActive ? 'var(--fw-bold)' : 'normal',
-                  color: isActive ? 'var(--color-text)' : 'var(--color-text-disabled)',
+                  color: isActive ? 'var(--color-text)' : 'var(--color-text-secondary)',
                   borderBottom: isActive ? '2px solid var(--color-text)' : '2px solid transparent',
                 }}
               >
@@ -392,7 +392,7 @@ function LegacyCategory({
                 <p
                   className={TEXT_SM}
                   style={{
-                    color: isActive ? 'var(--color-text)' : 'var(--color-text-disabled)',
+                    color: isActive ? 'var(--color-text)' : 'var(--color-text-secondary)',
                     fontWeight: isActive ? 700 : 500,
                   }}
                 >
@@ -415,7 +415,7 @@ function LegacyCategory({
       )}
       {!loading && error && (
         <div className={ALERT_STACK} role="alert">
-          <p className={`${TEXT_SM} text-center`} style={{ color: 'var(--color-text-disabled)' }}>
+          <p className={`${TEXT_SM} text-center`} style={{ color: 'var(--color-text-secondary)' }}>
             {error}
           </p>
           <Button type="button" variant="light" onClick={refetch} data-testid="products-retry">
@@ -426,7 +426,7 @@ function LegacyCategory({
       {!loading && !error && products.length === 0 && (
         <div className={EMPTY_STACK}>
           <p className={TEXT_XL}>🌱</p>
-          <p className={TEXT_SM} style={{ color: 'var(--color-text-disabled)' }}>
+          <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
             해당 카테고리 상품이 없습니다.
           </p>
         </div>
@@ -435,7 +435,7 @@ function LegacyCategory({
         <>
           <p
             className={`${TEXT_SM} mb-3`}
-            style={{ color: 'var(--color-text-disabled)', fontWeight: 500 }}
+            style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}
           >
             {products.length}개 상품
           </p>
