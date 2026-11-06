@@ -82,7 +82,7 @@ function IssueRow({
           </p>
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             {formatDateTime(issue.updatedAt)}
           </p>

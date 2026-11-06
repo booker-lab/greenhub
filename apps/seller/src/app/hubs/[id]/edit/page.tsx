@@ -45,7 +45,7 @@ function OptionalLabel({ children }: { children: string }) {
   return (
     <>
       {children}{' '}
-      <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+      <span className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
         (선택)
       </span>
     </>

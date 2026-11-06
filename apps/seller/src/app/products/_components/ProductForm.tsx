@@ -94,7 +94,7 @@ export default function ProductForm(props: ProductFormProps) {
               type="button"
               onClick={f.handleDraftReset}
               className={UNSTYLED_BUTTON}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               초기화
             </button>

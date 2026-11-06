@@ -41,7 +41,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
           <div style={{ flex: 1 }}>
             <p
               className={`${TEXT} mb-1`}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               최소 수량
             </p>
@@ -63,7 +63,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
           <div style={{ flex: 1 }}>
             <p
               className={`${TEXT} mb-1`}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               목표 수량
             </p>
@@ -86,7 +86,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         <div className="mb-3">
           <p
             className={`${TEXT} mb-1`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             1인 최대 구매 수량
           </p>
@@ -109,7 +109,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         <div className="mb-3">
           <p
             className={`${TEXT} mb-1`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             모집 마감일시
           </p>
@@ -130,7 +130,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         <div className="mb-3">
           <p
             className={`${TEXT} mb-1`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             배송 예정일
           </p>
@@ -151,7 +151,7 @@ export default function GroupConfigSection({ visible, config, setGroupConfig }: 
         <div>
           <p
             className={`${TEXT} mb-1`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             배송 수단
           </p>

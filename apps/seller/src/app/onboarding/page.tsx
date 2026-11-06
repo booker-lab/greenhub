@@ -288,7 +288,7 @@ export default function OnboardingPage() {
                 </label>
                 <p
                   className={TEXT}
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
                 >
                   선택 사항 · JPG, PNG, WebP 권장
                 </p>
@@ -340,7 +340,7 @@ export default function OnboardingPage() {
                     사업자등록번호{' '}
                     <span
                       className="m-0 p-0 text-base font-normal"
-                      style={{ color: 'var(--color-text-disabled)', fontWeight: 400 }}
+                      style={{ color: 'var(--color-text-secondary)', fontWeight: 400 }}
                     >
                       (선택)
                     </span>
