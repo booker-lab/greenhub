@@ -324,7 +324,7 @@ export default function CheckoutForm({
                       className="m-0 leading-[1.55]"
                       style={{
                         fontSize: 'var(--font-size-sm)',
-                        color: 'var(--color-text-disabled)',
+                        color: 'var(--color-text-secondary)',
                       }}
                     >
                       배송 희망일 {formatDeliveryDate(item.requestedDeliveryDate)}

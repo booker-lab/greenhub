@@ -57,6 +57,10 @@ export const SECRET_KEYS = Object.freeze([
   },
   { key: 'GEMINI_API_KEY', hint: 'Railway 운영 변수(Gemini API 키)' },
   { key: 'OPS_TELEGRAM_BOT_TOKEN', hint: 'Railway 운영 변수(운영 알림 텔레그램 봇 토큰)' },
+  {
+    key: 'FLOWER_AUCTION_API_KEY',
+    hint: 'aT 화훼유통정보 서비스키(Railway에는 두지 않음, 접속 IP가 Cloud Run 고정 IP라 전환 때 직접 넣음). 비우면 경매 시세 수집을 건너뜀',
+  },
 ]);
 
 /** Cloud Run 일반 환경 변수. value가 있으면 고정값, 없으면 입력받는다. */
@@ -97,6 +101,11 @@ export const PLAIN_KEYS = Object.freeze([
   { key: 'SETTLEMENT_CONFIRM_DELAY_DAYS', hint: 'Railway 운영 변수', optional: true },
   { key: 'AI_DAILY_GENERATION_LIMIT', hint: 'Railway 운영 변수', optional: true },
   { key: 'GREENHUB_FEATURES', hint: 'Railway 운영 변수(기능 토글)', optional: true },
+  {
+    key: 'FLOWER_AUCTION_API_URL',
+    hint: 'aT 경락가격 요청 주소. 기본 주소를 쓰면 비움',
+    optional: true,
+  },
 ]);
 
 /** API 코드가 읽지만 Cloud Run 운영으로 옮기지 않는 이름과 이유. */

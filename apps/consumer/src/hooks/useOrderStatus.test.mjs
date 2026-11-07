@@ -34,16 +34,21 @@ function loadModule(react) {
   return hookModule.exports;
 }
 
-const { ORDER_STATUS_POLL_INTERVAL_MS, ORDER_STATUS_POLL_MAX_MS, shouldPollOrderStatus } =
-  loadModule({
-    useCallback: (fn) => fn,
-    useEffect: () => {},
-    useRef: (initial) => ({ current: initial }),
-    useState: (initial) => [initial, () => {}],
-  });
+const {
+  ORDER_PAYMENT_CHECK_AFTER_MS,
+  ORDER_STATUS_POLL_INTERVAL_MS,
+  ORDER_STATUS_POLL_MAX_MS,
+  shouldCheckPendingPayment,
+  shouldPollOrderStatus,
+} = loadModule({
+  useCallback: (fn) => fn,
+  useEffect: () => {},
+  useRef: (initial) => ({ current: initial }),
+  useState: (initial) => [initial, () => {}],
+});
 
 // React 없이 훅의 state·ref·effect 계약만 흉내 내는 최소 실행기(useSaleRounds.test.mjs와 같은 방식).
-function mountHook({ orderId = 'order-1', accessToken = 'token-1', fetchImpl }) {
+function mountHook({ orderId = 'order-1', accessToken = 'token-1', fetchImpl, options }) {
   globalThis.fetch = fetchImpl;
   const stateSlots = [];
   const refSlots = [];
@@ -97,7 +102,7 @@ function mountHook({ orderId = 'order-1', accessToken = 'token-1', fetchImpl }) 
   function render() {
     cursor = 0;
     renderScheduled = false;
-    latest = hook.useOrderStatus(orderId, accessToken);
+    latest = hook.useOrderStatus(orderId, accessToken, options);
     flushEffects();
   }
 
@@ -258,4 +263,124 @@ test('화면을 떠나면 예약된 다시 확인을 취소한다', async (t) =>
   harness.unmount();
   await advance(t, harness, 30_000);
   assert.equal(server.calls, 1);
+});
+
+// 결제 확인 요청(POST /payments/orders/:orderId/check)과 주문 조회(GET /orders/:orderId)를 함께 흉내 낸다.
+function serverWithPaymentCheck(initialStatus) {
+  const server = { status: initialStatus, reads: 0, checks: [], checkResult: null };
+  server.fetch = async (input, init = {}) => {
+    const url = String(input);
+    if (url === 'https://api.example.test/payments/orders/order-1/check') {
+      assert.equal(init.method, 'POST');
+      assert.equal(init.headers.Authorization, 'Bearer token-1');
+      server.checks.push(Date.now());
+      if (server.checkResult === 'network') throw new TypeError('fetch failed');
+      if (typeof server.checkResult === 'number') {
+        return new Response(JSON.stringify({ message: 'error' }), { status: server.checkResult });
+      }
+      if (server.checkResult) server.status = server.checkResult;
+      return new Response(JSON.stringify({ status: server.status, result: 'checked' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    assert.equal(url, 'https://api.example.test/orders/order-1');
+    server.reads += 1;
+    return orderResponse(server.status);
+  };
+  return server;
+}
+
+test('결제 확인은 PENDING이 6초·20초·45초를 넘겨 이어질 때만 차례로 요청한다', () => {
+  assert.deepEqual([...ORDER_PAYMENT_CHECK_AFTER_MS], [6000, 20000, 45000]);
+  assert.equal(shouldCheckPendingPayment('PENDING', 5999, 0), false);
+  assert.equal(shouldCheckPendingPayment('PENDING', 6000, 0), true);
+  assert.equal(shouldCheckPendingPayment('PENDING', 19_999, 1), false);
+  assert.equal(shouldCheckPendingPayment('PENDING', 20_000, 1), true);
+  assert.equal(shouldCheckPendingPayment('PENDING', 45_000, 2), true);
+  // 한 폴링 창에서 3번까지만 보낸다.
+  assert.equal(shouldCheckPendingPayment('PENDING', 119_000, 3), false);
+  assert.equal(shouldCheckPendingPayment('PENDING', ORDER_STATUS_POLL_MAX_MS, 2), false);
+  for (const status of [null, 'ACCEPTED', 'RECRUITING', 'CANCELLED']) {
+    assert.equal(shouldCheckPendingPayment(status, 30_000, 0), false);
+  }
+  for (const elapsed of [Number.NaN, -1, Number.POSITIVE_INFINITY]) {
+    assert.equal(shouldCheckPendingPayment('PENDING', elapsed, 0), false);
+  }
+  assert.equal(shouldCheckPendingPayment('PENDING', 30_000, -1), false);
+});
+
+test('결제 확인을 켠 화면은 PENDING이 이어지면 결제 확인을 최대 3번 요청하고 폴링은 그대로 둔다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 0 });
+  const server = serverWithPaymentCheck('PENDING');
+  const harness = mountHook({ fetchImpl: server.fetch, options: { checkPendingPayment: true } });
+  await harness.settle();
+  assert.equal(server.reads, 1);
+  assert.deepEqual(server.checks, []);
+
+  await advance(t, harness, 3000);
+  assert.deepEqual(server.checks, []);
+  await advance(t, harness, 3000);
+  assert.deepEqual(server.checks, [6000]);
+
+  for (let i = 0; i < 50; i += 1) await advance(t, harness, ORDER_STATUS_POLL_INTERVAL_MS);
+  assert.deepEqual(server.checks, [6000, 21_000, 45_000]);
+  assert.equal(server.reads, 41);
+  assert.equal(harness.get().pollingExpired, true);
+  assert.equal(harness.get().error, null);
+  harness.unmount();
+});
+
+test('서버가 결제를 확정했다고 답하면 다음 폴링을 기다리지 않고 바로 다시 읽는다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 0 });
+  const server = serverWithPaymentCheck('PENDING');
+  server.checkResult = 'ACCEPTED';
+  const harness = mountHook({ fetchImpl: server.fetch, options: { checkPendingPayment: true } });
+  await harness.settle();
+  await advance(t, harness, 6000);
+  assert.equal(server.checks.length, 1);
+  assert.equal(harness.get().order?.status, 'ACCEPTED');
+  const readsAfterConfirm = server.reads;
+
+  await advance(t, harness, 60_000);
+  assert.equal(server.checks.length, 1);
+  assert.equal(server.reads, readsAfterConfirm);
+  harness.unmount();
+});
+
+test('결제 확인 실패는 손님 화면에 오류를 띄우지 않고 기존 폴링을 이어 간다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 0 });
+  for (const failure of [429, 503, 'network']) {
+    const server = serverWithPaymentCheck('PENDING');
+    server.checkResult = failure;
+    const harness = mountHook({ fetchImpl: server.fetch, options: { checkPendingPayment: true } });
+    await harness.settle();
+    await advance(t, harness, 6000);
+    assert.equal(server.checks.length, 1, String(failure));
+    assert.equal(harness.get().error, null, String(failure));
+    assert.equal(harness.get().order?.status, 'PENDING');
+    const reads = server.reads;
+    await advance(t, harness, ORDER_STATUS_POLL_INTERVAL_MS);
+    assert.equal(server.reads, reads + 1, String(failure));
+    harness.unmount();
+  }
+});
+
+test('결제 확인을 켜지 않았거나 PENDING이 아닌 주문은 결제 확인을 요청하지 않는다', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'setInterval', 'Date'], now: 0 });
+  const plain = serverWithPaymentCheck('PENDING');
+  const off = mountHook({ fetchImpl: plain.fetch });
+  await off.settle();
+  for (let i = 0; i < 50; i += 1) await advance(t, off, ORDER_STATUS_POLL_INTERVAL_MS);
+  assert.deepEqual(plain.checks, []);
+  off.unmount();
+
+  for (const status of ['ACCEPTED', 'RECRUITING', 'CANCELLED']) {
+    const server = serverWithPaymentCheck(status);
+    const harness = mountHook({ fetchImpl: server.fetch, options: { checkPendingPayment: true } });
+    await harness.settle();
+    await advance(t, harness, 60_000);
+    assert.deepEqual(server.checks, [], status);
+    harness.unmount();
+  }
 });

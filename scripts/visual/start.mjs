@@ -218,7 +218,12 @@ Object.assign(env, {
   AUTH_SECRET: authSecret,
   AUTH_TRUST_HOST: 'true',
   NEXT_TELEMETRY_DISABLED: '1',
-  NODE_OPTIONS: `--require "${path.join(HERE, 'node-guard.cjs').replaceAll('\\', '/')}"`,
+  // node-guard: 외부 요청 차단. server-clock: 서버가 화면을 그리는 동안의 시계를 shots.mjs가 고정한 브라우저
+  // 시계와 같은 기준 시각으로 둔다(실제 날짜로 그리면 오늘 날짜를 쓰는 화면이 hydration 오류를 낸다, server-clock.cjs).
+  // --phone은 휴대폰 브라우저가 실제 시각으로 돌므로 서버도 실제 시각으로 둔다.
+  NODE_OPTIONS: ['node-guard.cjs', ...(phone ? [] : ['server-clock.cjs'])]
+    .map((file) => `--require "${path.join(HERE, file).replaceAll('\\', '/')}"`)
+    .join(' '),
   VISUAL_GUARD_ALLOW: prod ? `${host},${PROD_API_HOST}` : host,
   VISUAL_GUARD_LOG: logs.guard,
 });

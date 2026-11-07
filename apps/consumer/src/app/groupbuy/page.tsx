@@ -26,7 +26,7 @@ const EMPTY_STACK = 'flex flex-col items-center justify-start gap-4 py-16';
 const GRID = 'grid grid-cols-2 gap-3';
 const DISABLED_TEXT_STYLE = {
   fontSize: 'var(--font-size-sm)',
-  color: 'var(--color-text-disabled)',
+  color: 'var(--color-text-secondary)',
 } as const;
 
 type StoreModeStatus = 'loading' | 'ready' | StoreProfileFailure;
@@ -282,7 +282,7 @@ export default function GroupBuyPage() {
               style={{
                 fontSize: 'var(--font-size-md)',
                 fontWeight: 'var(--fw-bold)',
-                color: 'var(--color-text-disabled)',
+                color: 'var(--color-text-secondary)',
               }}
             >
               모집 종료
@@ -291,7 +291,8 @@ export default function GroupBuyPage() {
               style={{
                 fontSize: 'var(--font-size-sm)',
                 fontWeight: 'var(--fw-medium)',
-                color: 'var(--color-text-disabled)',
+                // --color-border 면 위라 보조 글자(4.4:1)도 4.5에 모자라 gray-7(7.1:1)로 칠한다.
+                color: 'var(--ui-gray-7)',
                 background: 'var(--color-border)',
                 borderRadius: 'var(--radius-sm)',
                 padding: '1px 8px',

@@ -7,6 +7,7 @@ import { isFeatureOn } from '@/lib/features';
 import { showsGroupBuyChoice } from '@/lib/sales-mode';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
 import GroupConfigSection from '../GroupConfigSection';
+import { MarketRefSection } from '../MarketRefSection';
 import { ProductExtrasSection } from '../ProductExtrasSection';
 import { DELIVERY_SIZES, type GroupConfigForm, type ProductFormData } from '../productForm.types';
 
@@ -38,7 +39,7 @@ export function Step5Pricing({
         leftSection={
           <p
             className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             ₩
           </p>
@@ -90,6 +91,12 @@ export function Step5Pricing({
           />
         </FieldCard>
       )}
+      <MarketRefSection
+        storeId={storeId}
+        token={token}
+        value={form.marketRef}
+        onChange={(next) => set('marketRef', next)}
+      />
       <ProductExtrasSection
         extras={form.extras}
         onChange={(next) => set('extras', next)}

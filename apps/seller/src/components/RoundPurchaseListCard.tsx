@@ -1,20 +1,35 @@
 'use client';
 
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
+import { useSession } from 'next-auth/react';
+import { useMarketSummaries } from '@/hooks/useMarketPrices';
+import { estimatePurchase, formatWon, MARKET_PRICE_SOURCE } from '@/lib/market-price';
 import { buildRoundPurchaseList } from '@/lib/round-purchase-list';
 
 // ② 디자인 방향(D2): 그림자 없이 흰 면만 남긴다. 목록 행 사이 선은 유지한다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 
 // 회차 구매 목록(경매에서 살 상품별 수량). 수량은 서버 회차 상품 집계를 그대로 쓴다.
+// 경매 시세를 연결한 상품은 예상 매입액(상품 1개 예상 매입가 × 수량)을 함께 보여 준다.
 export function RoundPurchaseListCard({
   round,
   title = '구매 목록',
 }: {
-  round: Pick<SaleRound, 'name' | 'counters'> & { items: SaleRoundItem[] };
+  round: Pick<SaleRound, 'name' | 'counters' | 'storeId'> & { items: SaleRoundItem[] };
   title?: string;
 }) {
   const list = buildRoundPurchaseList(round);
+  const { data: session } = useSession();
+  const { summaries } = useMarketSummaries(
+    round.storeId,
+    session?.user.accessToken,
+    list.lines.map((line) => line.productId),
+  );
+  const estimate = estimatePurchase(
+    list.lines.map((line) => ({ productId: line.productId, quantity: line.orderedQuantity })),
+    summaries,
+  );
+  const hasEstimate = estimate.lines.some((line) => line.unitCost !== null);
 
   return (
     <div className="block rounded-[16px] bg-card p-4">
@@ -38,17 +53,27 @@ export function RoundPurchaseListCard({
             className="flex flex-row flex-nowrap items-center justify-between gap-4 py-2.5"
             style={index > 0 ? { borderTop: '1px solid var(--color-border)' } : undefined}
           >
-            <p
-              className={TEXT}
-              style={{
-                fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-text)',
-                fontWeight: 'var(--fw-medium)',
-                minWidth: 0,
-              }}
-            >
-              {line.productName}
-            </p>
+            <div style={{ minWidth: 0 }}>
+              <p
+                className={TEXT}
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text)',
+                  fontWeight: 'var(--fw-medium)',
+                }}
+              >
+                {line.productName}
+              </p>
+              {hasEstimate && estimate.lines[index].unitCost !== null && (
+                <p
+                  className={TEXT}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  개당 약 {formatWon(estimate.lines[index].unitCost!)} · 예상{' '}
+                  {formatWon(estimate.lines[index].cost!)}
+                </p>
+              )}
+            </div>
             <p
               className={TEXT}
               style={{
@@ -79,6 +104,21 @@ export function RoundPurchaseListCard({
           {list.orderedTotal.toLocaleString()}개
         </p>
       </div>
+      {hasEstimate && (
+        <p
+          className={TEXT}
+          style={{
+            marginTop: 6,
+            textAlign: 'right',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+          }}
+        >
+          경매 시세 기준 예상 매입액 약 {formatWon(estimate.total)}
+          {estimate.unknownCount > 0 ? ` (시세 모르는 상품 ${estimate.unknownCount}개 제외)` : ''}
+          {` · ${MARKET_PRICE_SOURCE}`}
+        </p>
+      )}
       {list.pendingTotal > 0 && (
         <p
           className={TEXT}

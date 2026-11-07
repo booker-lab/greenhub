@@ -256,7 +256,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
               style={{ objectFit: 'cover' }}
             />
           ) : (
-            <div style={{ color: 'var(--color-text-disabled)' }}>
+            <div style={{ color: 'var(--color-text-secondary)' }}>
               <svg
                 width="24"
                 height="24"
@@ -295,7 +295,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
           </div>
           <p
             className={`${TEXT} mt-0.5`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             {CATEGORY_LABEL[product.category]} · ₩{product.price.toLocaleString()}
             {product.saleType === 'group' && ' · 공동구매'}

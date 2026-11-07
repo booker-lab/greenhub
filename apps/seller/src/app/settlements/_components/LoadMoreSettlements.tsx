@@ -24,7 +24,7 @@ export function LoadMoreSettlements({
     <div className="flex flex-col items-center gap-1.5 py-3">
       <p
         className={`${TEXT} text-center`}
-        style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}
+        style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}
       >
         {loadedCount}건까지 불러왔습니다. 정산이 더 있으며, CSV에는 불러온 건만 담깁니다.
       </p>

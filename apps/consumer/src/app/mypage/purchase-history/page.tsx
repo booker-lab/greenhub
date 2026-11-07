@@ -63,7 +63,7 @@ function PurchaseHistoryContent() {
       <div className="py-[60px] text-center">
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-md)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-md)', color: 'var(--color-text-secondary)' }}
         >
           로딩 중...
         </p>
@@ -81,7 +81,7 @@ function PurchaseHistoryContent() {
       {loading && entries.length === 0 && (
         <p
           className={`${TEXT} py-5 text-center`}
-          style={{ color: 'var(--color-text-disabled)', fontSize: 'var(--font-size-sm)' }}
+          style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
         >
           불러오는 중...
         </p>

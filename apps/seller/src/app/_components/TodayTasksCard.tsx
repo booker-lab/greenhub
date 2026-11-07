@@ -45,7 +45,7 @@ export function TodayTasksCard({
           role={productsError ? 'alert' : 'status'}
           style={{
             fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-disabled)',
+            color: 'var(--color-text-secondary)',
             marginBottom: tasks.length === 0 ? 0 : 8,
           }}
         >

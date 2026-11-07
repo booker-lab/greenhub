@@ -26,7 +26,7 @@ export function Row({
         style={{
           flexShrink: 0,
           fontSize: 'var(--font-size-sm)',
-          color: 'var(--color-text-disabled)',
+          color: 'var(--color-text-secondary)',
         }}
       >
         {label}

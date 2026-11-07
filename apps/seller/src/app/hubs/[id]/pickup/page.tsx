@@ -146,7 +146,7 @@ export default function HubPickupPage() {
               <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">픽업 완료!</h3>
               <p
                 className={TEXT}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 주문이 PICKED_UP 상태로 전환되었습니다.
               </p>
@@ -178,7 +178,7 @@ export default function HubPickupPage() {
                 style={{
                   marginBottom: 4,
                   fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-disabled)',
+                  color: 'var(--color-text-secondary)',
                 }}
               >
                 소비자의 픽업 코드 6자리를 입력하세요
@@ -188,7 +188,7 @@ export default function HubPickupPage() {
                 style={{
                   marginBottom: 32,
                   fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-disabled)',
+                  color: 'var(--color-text-secondary)',
                 }}
               >
                 소비자가 소비자 앱에서 확인한 코드를 제시합니다

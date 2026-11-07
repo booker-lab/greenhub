@@ -34,6 +34,15 @@ export class PaymentsController {
     return this.paymentsService.handleWebhook(dto);
   }
 
+  // 결제 완료 화면의 결제 확인. 주문 당사자만 부를 수 있고, PortOne이 PAID라고 답할 때만
+  // 웹훅과 같은 확정 경로로 주문을 확정한다. 그 밖에는 주문을 바꾸지 않는다.
+  @Post('orders/:orderId/check')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  checkOrderPayment(@Param('orderId') orderId: string, @CurrentUser() user: JwtPayload) {
+    return this.paymentsService.checkOrderPayment(orderId, user.sub);
+  }
+
   @Get(':paymentId')
   @UseGuards(JwtAuthGuard)
   getPayment(@Param('paymentId') paymentId: string, @CurrentUser() user: JwtPayload) {

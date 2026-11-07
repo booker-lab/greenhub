@@ -50,10 +50,18 @@ interface Props {
 const PAPER = 'block rounded-[16px] bg-card p-4';
 const TEXT = 'm-0 p-0 text-base font-normal';
 const GROUP = 'flex flex-row flex-wrap items-center justify-start gap-2.5';
+// 선택 버튼: 한 줄에 똑같이 나누되(flex-1) 글자보다 좁아지지 않게 한다(min-w-fit). 자리가 모자라면 GROUP의
+// flex-wrap으로 다음 줄로 내려간다. Button md의 좌우 22px·높이 42px 고정이면 휴대폰 폭(360·390)에서 버튼이
+// 글자보다 좁아져(overflow-hidden이라 최소 폭 0) 글자가 잘렸고, 두 줄인 출하 형태는 위아래도 잘렸다.
+// 좌우 여백은 8px로 줄이고 높이는 터치 영역 44px로 한다. 글자 크기는 그대로다.
+// 한 줄 버튼은 높이를 고정한다(높이 auto면 글자 칸이 대문자 높이로 줄어 이모지 위아래가 잘린다).
+// 두 줄인 출하 형태 버튼만 내용 높이에 맞춘다(STEM_BUTTON).
+const OPTION_BUTTON = 'h-11 min-w-fit flex-1 px-2';
+const STEM_BUTTON = 'h-auto min-h-11 min-w-fit flex-1 px-2 py-1';
 const LABEL_STYLE = {
   fontSize: 'var(--font-size-sm)',
   fontWeight: 'var(--fw-medium)',
-  color: 'var(--color-text-disabled)',
+  color: 'var(--color-text-secondary)',
 } as const;
 
 // ② 디자인 방향(§3.2): 선택 표시는 초록 면 대신 흰 바탕 + 검정 1px 테두리 + 굵은 검정 글자(주문 선택 칩과 같은 규칙).
@@ -91,7 +99,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
             <Button
               key={v}
               onClick={() => set('stemType', v as SelectionForm['stemType'])}
-              className="flex-1"
+              className={STEM_BUTTON}
               size="md"
               variant="outline-gray"
               style={value.stemType === v ? activeStyle : {}}
@@ -108,7 +116,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
                     className={TEXT}
                     style={{
                       fontSize: 'var(--font-size-sm)',
-                      color: 'var(--color-text-disabled)',
+                      color: 'var(--color-text-secondary)',
                     }}
                   >
                     {desc}
@@ -123,7 +131,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
       <div className={PAPER}>
         <p className={`${TEXT} mb-2.5`} style={LABEL_STYLE}>
           색상{' '}
-          <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+          <span className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
             (복수 선택 가능)
           </span>
         </p>
@@ -154,7 +162,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
             <Button
               key={v}
               onClick={() => set('fragrance', v as SelectionForm['fragrance'])}
-              className="flex-1"
+              className={OPTION_BUTTON}
               size="md"
               variant="outline-gray"
               style={value.fragrance === v ? activeStyle : {}}
@@ -176,7 +184,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
             <Button
               key={v}
               onClick={() => set('bloomCondition', v as SelectionForm['bloomCondition'])}
-              className="flex-1"
+              className={OPTION_BUTTON}
               size="md"
               variant="outline-gray"
               style={value.bloomCondition === v ? activeStyle : {}}
@@ -198,7 +206,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
             <Button
               key={v}
               onClick={() => set('careLevel', v as SelectionForm['careLevel'])}
-              className="flex-1"
+              className={OPTION_BUTTON}
               size="md"
               variant="outline-gray"
               style={value.careLevel === v ? activeStyle : {}}

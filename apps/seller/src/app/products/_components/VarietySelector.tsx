@@ -47,7 +47,7 @@ export default function VarietySelector({
     return (
       <p
         className="m-0 p-0 text-base font-normal"
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
       >
         등록된 품종이 없습니다
       </p>

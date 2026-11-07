@@ -9,6 +9,7 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 import type { ProductFormData } from '../../_components/ProductForm';
 import ProductForm from '../../_components/ProductForm';
 import { extrasFromProduct } from '../../_components/productExtras';
+import { marketRefFormFromProduct } from '@/lib/market-price';
 import { useTokenRef } from '@/lib/use-token-ref';
 
 // Firestore Timestamp | ISO string → YYYY-MM-DD
@@ -93,6 +94,7 @@ export default function EditProductPage() {
           },
           sellerOverride: data.sellerOverride ?? false,
           extras: extrasFromProduct(data),
+          marketRef: marketRefFormFromProduct(data.marketRef),
         };
         if (data.groupConfig) {
           mapped.groupConfig = {
@@ -125,7 +127,7 @@ export default function EditProductPage() {
       >
         <p
           className="m-0 p-0 text-base font-normal"
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           상품을 찾을 수 없습니다
         </p>

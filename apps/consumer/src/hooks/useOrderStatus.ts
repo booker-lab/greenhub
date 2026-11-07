@@ -12,6 +12,12 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 export const ORDER_STATUS_POLL_INTERVAL_MS = 3000;
 export const ORDER_STATUS_POLL_MAX_MS = 2 * 60 * 1000;
 
+// 결제 확인(checkPendingPayment)을 켠 화면은 PENDING이 이어지면 이 시점(폴링 창 시작 기준)에
+// 서버에 결제 확인을 요청한다(POST /payments/orders/:orderId/check). 웹훅이 늦거나 빠져도 서버가
+// PortOne에 직접 물어 이미 결제됐으면 바로 확정한다. 한 폴링 창에서 최대 3번이고, 서로 10초 이상
+// 떨어져 서버의 주문별 조회 간격 하한(10초)에 걸리지 않는다.
+export const ORDER_PAYMENT_CHECK_AFTER_MS = [6_000, 20_000, 45_000] as const;
+
 /** 탭이 숨겨져 있으면 주문 상태 폴링을 쉰다(다시 보이면 바로 조회하고 이어 간다). */
 export function isDocumentHidden(
   doc: { visibilityState?: string } | undefined = globalThis.document,
@@ -28,6 +34,18 @@ export function shouldPollOrderStatus(lastStatus: OrderStatus | null, elapsedMs:
     return false;
   }
   return lastStatus === null || lastStatus === 'PENDING';
+}
+
+/** 결제 확인을 요청할 차례인지. checksMade는 이번 폴링 창에서 이미 보낸 결제 확인 수다. */
+export function shouldCheckPendingPayment(
+  lastStatus: OrderStatus | null,
+  elapsedMs: number,
+  checksMade: number,
+): boolean {
+  if (lastStatus !== 'PENDING' || !Number.isFinite(elapsedMs) || elapsedMs < 0) return false;
+  if (!Number.isSafeInteger(checksMade) || checksMade < 0) return false;
+  const nextAt = ORDER_PAYMENT_CHECK_AFTER_MS[checksMade];
+  return nextAt !== undefined && elapsedMs >= nextAt && elapsedMs < ORDER_STATUS_POLL_MAX_MS;
 }
 
 export type OrderDetailReadStatus = 'loading' | 'found' | 'not-found' | 'auth' | 'network' | 'server';
@@ -59,10 +77,17 @@ interface UseOrderStatusResult {
   refetch: () => Promise<Order | null | undefined>;
 }
 
+interface UseOrderStatusOptions {
+  /** PENDING이 이어지면 서버에 결제 확인을 요청한다(결제 완료·주문 상세 화면). */
+  checkPendingPayment?: boolean;
+}
+
 export function useOrderStatus(
   orderId: string | null,
   accessToken?: string | null,
+  options: UseOrderStatusOptions = {},
 ): UseOrderStatusResult {
+  const checkPendingPayment = options.checkPendingPayment === true;
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +123,36 @@ export function useOrderStatus(
     let lastStatus: OrderStatus | null = null;
     // 숨김 탭이라 다음 확인을 미뤘다. 다시 보이면 바로 확인한다.
     let pollDeferredWhileHidden = false;
+    // 이번 폴링 창에서 보낸 결제 확인 수와 진행 중인 결제 확인(한 번에 하나만 보낸다).
+    let paymentChecksMade = 0;
+    let paymentCheckController: AbortController | null = null;
+
+    // 결제 확인은 주문 상태 폴링을 막지 않는다. 결과는 무시하고, 서버가 확정했다고 답하면 바로 다시 읽는다.
+    // 실패·시간 초과는 손님에게 따로 알리지 않는다(기존 폴링과 다시 확인 안내가 그대로 이어진다).
+    function maybeCheckPendingPayment() {
+      if (!checkPendingPayment || paymentCheckController || !accessToken || !orderId) return;
+      if (!shouldCheckPendingPayment(lastStatus, Date.now() - pollStartedAt, paymentChecksMade)) {
+        return;
+      }
+      paymentChecksMade += 1;
+      const controller = new AbortController();
+      paymentCheckController = controller;
+      fetch(`${getApiBaseUrl()}/payments/orders/${encodeURIComponent(orderId)}/check`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        signal: controller.signal,
+      })
+        .then(async (res) => {
+          if (!res.ok) return;
+          const body = (await res.json().catch(() => null)) as { status?: unknown } | null;
+          if (cancelled || controller.signal.aborted) return;
+          if (typeof body?.status === 'string' && body.status !== 'PENDING') void fetchOrder();
+        })
+        .catch(() => undefined)
+        .finally(() => {
+          if (paymentCheckController === controller) paymentCheckController = null;
+        });
+    }
 
     function stopPolling() {
       if (pollTimer) clearTimeout(pollTimer);
@@ -123,6 +178,8 @@ export function useOrderStatus(
     async function fetchOrder(): Promise<Order | null | undefined> {
       const sequence = ++requestSequence;
       stopPolling();
+      // PENDING이 이어진 폴링 차례면 주문 조회와 함께 결제 확인도 보낸다(조회를 기다리게 하지 않는다).
+      maybeCheckPendingPayment();
       activeController?.abort();
       const controller = new AbortController();
       activeController = controller;
@@ -193,6 +250,7 @@ export function useOrderStatus(
     // 화면의 다시 확인: 바로 새로 읽고, 아직 PENDING이면 2분 동안 다시 자동 확인한다.
     function refetchOrder(): Promise<Order | null | undefined> {
       pollStartedAt = Date.now();
+      paymentChecksMade = 0;
       setPollingExpired(false);
       return fetchOrder();
     }
@@ -217,11 +275,12 @@ export function useOrderStatus(
       cancelled = true;
       requestSequence += 1;
       activeController?.abort();
+      paymentCheckController?.abort();
       if (fetchOrderRef.current === refetchOrder) fetchOrderRef.current = null;
       globalThis.document?.removeEventListener('visibilitychange', handleVisibilityChange);
       stopPolling();
     };
-  }, [orderId, accessToken]);
+  }, [orderId, accessToken, checkPendingPayment]);
 
   return { order, loading, error, status, pollingExpired, refetch };
 }

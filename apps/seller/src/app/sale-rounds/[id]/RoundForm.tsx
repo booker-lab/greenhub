@@ -6,7 +6,9 @@ import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Save } from 'lucide-react';
+import { useSession } from 'next-auth/react';
 import { useEffect, useId, useMemo, useState } from 'react';
+import { useMarketSummaries } from '@/hooks/useMarketPrices';
 import type {
   CreateSaleRoundInput,
   SaleRoundItemInput,
@@ -112,6 +114,13 @@ export function RoundForm({
   const selectedProductIds = useMemo(
     () => new Set(draft.items.map((item) => item.productId)),
     [draft.items],
+  );
+  // 경매 시세는 참고값이라 불러오지 못해도 양식은 그대로 쓴다.
+  const { data: session } = useSession();
+  const { summaries: marketSummaries } = useMarketSummaries(
+    round.storeId,
+    session?.user.accessToken,
+    [...selectedProductIds],
   );
   const availableProducts = products.filter((product) => !selectedProductIds.has(product.id));
   const representativeUrl = readSafeHttpUrl(carrotLinks.representativeUrl);
@@ -310,6 +319,7 @@ export function RoundForm({
             )
           }
           onUpdate={updateItem}
+          marketSummaries={marketSummaries}
         />
         <CarrotLinksSection
           items={draft.items}

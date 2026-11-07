@@ -84,11 +84,11 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
         style={{
           fontSize: 'var(--font-size-sm)',
           fontWeight: 'var(--fw-medium)',
-          color: 'var(--color-text-disabled)',
+          color: 'var(--color-text-secondary)',
         }}
       >
         사진{' '}
-        <span className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+        <span className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
           ({images.length}/5 · 첫 번째가 대표 사진)
         </span>
       </p>
@@ -208,7 +208,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
               justifyContent: 'center',
               gap: 4,
               fontSize: 'var(--font-size-xs)',
-              color: 'var(--color-text-disabled)',
+              color: 'var(--color-text-secondary)',
               backgroundColor: 'transparent',
               cursor: uploading ? 'not-allowed' : 'pointer',
             }}

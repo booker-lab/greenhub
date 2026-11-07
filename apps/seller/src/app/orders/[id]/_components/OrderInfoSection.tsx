@@ -34,7 +34,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
               color:
                 order.status === 'RECRUITING'
                   ? 'var(--color-status-warning-text)'
-                  : 'var(--color-text-disabled)',
+                  : 'var(--color-text-secondary)',
               fontWeight: order.status === 'RECRUITING' ? 'var(--fw-medium)' : undefined,
             }}
           >
@@ -53,7 +53,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
         </p>
         <p
           className={`${TEXT} mt-0.5`}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           {order.saleType === 'group' ? '공동구매' : '일반 판매'}
         </p>
@@ -196,7 +196,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
                   className={`${TEXT} mb-1`}
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    color: 'var(--color-text-disabled)',
+                    color: 'var(--color-text-secondary)',
                   }}
                 >
                   픽업 코드

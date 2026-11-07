@@ -361,7 +361,7 @@ export default function OrdersPage() {
                 className={TEXT}
                 style={{
                   fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-disabled)',
+                  color: 'var(--color-text-secondary)',
                 }}
               >
                 항목을 누르면 확인 필요 목록으로 이동
@@ -433,7 +433,7 @@ export default function OrdersPage() {
                     color: 'var(--color-text)',
                   }}
                 />
-                <p className={TEXT} style={{ color: 'var(--color-text-disabled)' }}>
+                <p className={TEXT} style={{ color: 'var(--color-text-secondary)' }}>
                   ~
                 </p>
                 <input
@@ -673,7 +673,7 @@ export default function OrdersPage() {
               <p
                 className={TEXT}
                 aria-live="polite"
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
                 공구 배송일 정보를 불러오는 중입니다…
               </p>

@@ -24,7 +24,7 @@ export function LoadMoreButton({
     <div className="flex flex-col items-center gap-1.5 py-3">
       <p
         className={`${TEXT} text-center`}
-        style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-disabled)' }}
+        style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}
       >
         {loadedCount}건까지 불러왔습니다. 합계는 조건 전체 기준이고, 계좌 없음·지급 보류와 가게별
         묶음은 불러온 행 기준입니다.
