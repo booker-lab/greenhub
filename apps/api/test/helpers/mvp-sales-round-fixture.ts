@@ -251,6 +251,7 @@ export async function createMvpSalesRoundFixture() {
     admin: module.get(AdminService),
     capacity,
     payments,
+    chargePayments,
     settlements,
     roundLifecycle,
     finalization,

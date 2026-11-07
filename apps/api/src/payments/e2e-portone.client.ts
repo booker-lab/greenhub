@@ -4,6 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { resolveE2EProviderMode } from '../common/e2e-provider-mode';
 import { PortoneError } from './portone.client';
 
+const ORDER_CHARGE_PAYMENT_ID_PREFIX = 'order-charge-';
+
 type E2EPaymentFixture = {
   amount: number;
   status?: 'PAID' | 'READY' | 'PENDING' | 'FAILED' | 'CANCELLED';
@@ -120,7 +122,12 @@ export class E2EPortoneClient {
   }
 
   private getFixture(paymentId: string): E2EPaymentFixture {
-    if (!paymentId.startsWith(`round-direct-e2e-${this.runId}-`)) {
+    // 재배송비 결제 ID는 `order-charge-{chargeId}`다. 접두어를 뗀 chargeId가 이번 실행 범위일 때만
+    // 같은 fixture 규칙으로 다룬다(웹훅 밖 재배송비 확인 경로도 실행 범위 밖 결제에는 닿지 않는다).
+    const scopedId = paymentId.startsWith(ORDER_CHARGE_PAYMENT_ID_PREFIX)
+      ? paymentId.slice(ORDER_CHARGE_PAYMENT_ID_PREFIX.length)
+      : paymentId;
+    if (!scopedId.startsWith(`round-direct-e2e-${this.runId}-`)) {
       throw new PortoneError(404, 'E2E_PAYMENT_OUT_OF_SCOPE', 'E2E 실행 범위 밖 결제입니다.');
     }
     const fixture = this.fixtures[paymentId];
