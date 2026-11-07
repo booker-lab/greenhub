@@ -14,6 +14,7 @@ const UNSTYLED_BUTTON =
 /**
  * 홈 최상단 "오늘 할 일" 체크리스트.
  * 각 줄은 건수 > 0일 때만 렌더, 전부 0이면 완료 메시지(줄 계산은 today-tasks.ts).
+ * 시작 체크리스트를 모두 마쳤다고 확인하기 전에는 새 가게에 완료 메시지를 보이지 않는다.
  * 모든 항목은 홈이 이미 로드하는 데이터로 계산 — 신규 API 없음.
  * 상품 집계는 신뢰 가능할 때만 사용한다. 상품 조회 실패·로딩 중에는
  * 비활성 상품 0건으로 오인하지 않고 경고로 분리한다.
@@ -24,6 +25,7 @@ export function TodayTasksCard({
   productsError,
   productsTrustworthy,
   openIssueCount = 0,
+  startSetupIncomplete = false,
 }: {
   orders: Order[];
   products: Product[];
@@ -31,6 +33,8 @@ export function TodayTasksCard({
   productsTrustworthy: boolean;
   /** 가게 전체 열린 운영 기록 수(환불·결제·연락·사진 확인 필요). */
   openIssueCount?: number;
+  /** 시작 체크리스트(상품·회차·정산 계좌)를 모두 마쳤다고 확인하지 못했는지. 그동안 완료 문구를 보이지 않는다. */
+  startSetupIncomplete?: boolean;
 }) {
   const inactiveCount = productsTrustworthy ? products.filter((p) => !p.isActive).length : 0;
   const tasks = buildTodayTasks({ orders, openIssueCount, inactiveCount });
@@ -54,14 +58,14 @@ export function TodayTasksCard({
             : '상품 상태 확인 중… 비활성 상품 점검을 잠시 건너뜁니다.'}
         </p>
       )}
-      {tasks.length === 0 && productsTrustworthy ? (
+      {tasks.length === 0 && productsTrustworthy && !startSetupIncomplete ? (
         <p
           className={TEXT}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           오늘 할 일을 모두 마쳤어요
         </p>
-      ) : tasks.length === 0 && !productsTrustworthy ? (
+      ) : tasks.length === 0 ? (
         <p
           className={TEXT}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}

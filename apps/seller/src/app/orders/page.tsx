@@ -3,6 +3,7 @@
 import type { SaleType } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { StartChecklistCard } from '@/app/_components/StartChecklistCard';
 import { useFirebaseReady } from '@/app/providers';
 import { notify } from '@/components/AppToaster';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
@@ -20,6 +21,7 @@ import {
   useOrders,
 } from '@/hooks/useOrders';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
+import { useStartChecklist } from '@/hooks/useStartChecklist';
 import { useStoreSalesMode } from '@/hooks/useStoreSalesMode';
 import { pickDeadlineRound } from '@/lib/round-deadline';
 import { showsGroupBuyChoice } from '@/lib/sales-mode';
@@ -132,7 +134,10 @@ export default function OrdersPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
   const firebaseReady = useFirebaseReady();
-  const { rounds } = useSaleRounds();
+  const saleRounds = useSaleRounds();
+  const { rounds } = saleRounds;
+  // 새 가게 시작 체크리스트(상품·회차·정산 계좌). 회차 목록은 위 조회 결과를 나눠 쓴다.
+  const startChecklist = useStartChecklist(storeId, session?.user.accessToken, saleRounds);
   const deadlineRound = useMemo(() => pickDeadlineRound(rounds), [rounds]);
   const [saleType, setSaleType] = useState<SaleType>('normal');
   const salesMode = useStoreSalesMode(storeId, session?.user.accessToken);
@@ -327,6 +332,13 @@ export default function OrdersPage() {
         showName
         href={deadlineRound ? `/sale-rounds/${deadlineRound.id}` : undefined}
       />
+
+      {/* 새 가게 시작 체크리스트 — 마감 띠 아래, 업무 우선순위 위. 모두 마치면 보이지 않는다. */}
+      {startChecklist.visible && (
+        <div className={`${CONTAINER} pt-4`}>
+          <StartChecklistCard checklist={startChecklist} />
+        </div>
+      )}
 
       {/* 회차 상세 "이 회차 주문"에서 들어오면 그 회차 주문만 보여 준다. */}
       {roundFilter && (
