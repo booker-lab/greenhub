@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { EngagementModule } from '../engagement/engagement.module';
+import { MarketPricesModule } from '../market-prices/market-prices.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { RetentionModule } from '../retention/retention.module';
@@ -19,6 +20,7 @@ import {
     SettlementsModule,
     RetentionModule,
     EngagementModule,
+    MarketPricesModule,
   ],
   controllers: [ScheduledJobsController],
   providers: [

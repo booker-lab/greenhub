@@ -1,6 +1,6 @@
 'use client';
 
-import type { Product, SaleRoundDeliveryRegion } from '@greenhub/shared';
+import type { MarketPriceSummary, Product, SaleRoundDeliveryRegion } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
@@ -10,6 +10,7 @@ import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { Switch } from '@greenhub/ui/components/switch';
 import { Copy, Link2, PackagePlus, Trash2 } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
+import { checkRoundPrice, MARKET_PRICE_SOURCE, roundPriceCheckText } from '@/lib/market-price';
 
 export type NumericValue = number | string;
 
@@ -268,10 +269,13 @@ export function ProductsSection({
   onAdd,
   onRemove,
   onUpdate,
+  marketSummaries = {},
 }: {
   items: ItemDraft[];
   availableProducts: readonly Product[];
   busy: boolean;
+  /** 상품별 경매 시세(연결한 상품만). 회차 가격 옆에 예상 매입가를 보여 준다. */
+  marketSummaries?: Readonly<Record<string, MarketPriceSummary | null>>;
   onAdd: (product: Product) => void;
   onRemove: (key: string) => void;
   onUpdate: (
@@ -343,9 +347,21 @@ export function ProductsSection({
                 disabled={busy}
               />
             </div>
+            <RoundPriceMarketHint
+              roundPrice={item.roundPrice}
+              summary={marketSummaries[item.productId]}
+            />
           </div>
         </div>
       ))}
+      {items.some((item) => marketSummaries[item.productId]) && (
+        <p
+          className={TEXT}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        >
+          경매 시세 {MARKET_PRICE_SOURCE}
+        </p>
+      )}
 
       <div className={`${COLUMN} gap-2.5`}>
         <p
@@ -496,5 +512,34 @@ export function CarrotLinksSection({
         </Alert>
       )}
     </FormSection>
+  );
+}
+
+/** 회차 가격과 경매 시세로 낸 예상 매입가 비교. 시세를 연결하지 않은 상품은 아무것도 보이지 않는다. */
+function RoundPriceMarketHint({
+  roundPrice,
+  summary,
+}: {
+  roundPrice: NumericValue;
+  summary: MarketPriceSummary | null | undefined;
+}) {
+  if (!summary) return null;
+  const price = roundPrice === '' ? null : Number(roundPrice);
+  const check = checkRoundPrice(price, summary);
+  const text =
+    roundPriceCheckText(check) ??
+    (summary.recent || summary.latest
+      ? '회차 가격을 넣으면 예상 매입가와 비교해 드려요.'
+      : '아직 이 상품에 맞는 경매 시세가 없어요.');
+  return (
+    <p
+      className={TEXT}
+      style={{
+        fontSize: 'var(--font-size-sm)',
+        color: check.kind === 'below' ? 'var(--color-danger)' : 'var(--color-text-secondary)',
+      }}
+    >
+      경매 시세 · {text}
+    </p>
   );
 }

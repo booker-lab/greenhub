@@ -7,6 +7,7 @@ import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 
 export interface RoundPurchaseLine {
   roundItemId: string;
+  productId: string;
   productName: string;
   orderedQuantity: number;
   pendingQuantity: number;
@@ -33,6 +34,7 @@ export function buildRoundPurchaseList(
     .sort((a, b) => a.displayOrder - b.displayOrder)
     .map((item) => ({
       roundItemId: item.id,
+      productId: item.productId,
       productName: item.productNameSnapshot,
       orderedQuantity: item.orderedQuantity,
       pendingQuantity: item.reservedQuantity,
