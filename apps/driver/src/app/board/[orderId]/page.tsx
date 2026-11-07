@@ -15,19 +15,28 @@ import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
 import { isApiTimeoutError } from '@/lib/api-timeout';
 import { splitDeliveryAddress } from '@/lib/address-parts';
+import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
 import { buildOrderMapLink } from '../../map/_lib/map-navigation-link';
 import {
   buildDriverOrderDetailScope,
+  buildDriverStatusConfirmContent,
   classifyDriverOrderCommandError,
+  DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE,
   type DriverOrderReadback,
   type DriverOrderReadErrorKind,
+  type DriverStatusConfirmKind,
+  driverDetailListHref,
+  driverOrderItemCount,
   isDriverHoldEntryVisible,
   isDriverOrderCommandAllowed,
   isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
+  isDriverStatusConfirmCurrent,
   isDriverTerminalCommandStatus,
+  readDriverDetailBackContext,
   readDriverOrderCommandErrorCodeFromResponse,
+  resolveDriverDetailBackAction,
   resolveDriverStatusCommandReadback,
   shouldPreserveDriverOrderOnReadError,
   toDriverOrderNetworkError,
@@ -43,6 +52,7 @@ import {
   HOLD_REASON_LABEL,
   HOLD_UNCERTAIN_READBACK_WARNING,
 } from './_components/DeliveryHoldModal';
+import { StatusConfirmDialog } from './_components/StatusConfirmDialog';
 
 type Order = {
   id?: string;
@@ -66,6 +76,8 @@ type Order = {
   requestNote?: string | null;
   deliveryHold?: DeliveryHold | null;
   redeliveryPayment?: RedeliveryPaymentActionability;
+  // 배정 여부. 응답에 없으면 확인 창이 배정 사실을 단정하지 않는다(buildDriverStatusConfirmContent).
+  assignedToMe?: boolean;
 };
 
 const METHOD_LABEL: Record<string, string> = {
@@ -78,20 +90,22 @@ const METHOD_LABEL: Record<string, string> = {
 // B(2xx malformed) / C(ACK mismatch) / F(other 4xx) / G(5xx) / H(network) 모두
 // 같은 PATCH를 자동 재전송하지 않고 authoritative GET으로 수렴한다.
 // "다시 시도해주세요" 같은 same-command resend 유도 copy를 쓰지 않는다.
-const STATUS_UNCERTAIN_CONVERGENCE_MESSAGE =
-  '명령이 처리되었는지 확실하지 않습니다. 최신 상태를 다시 확인합니다.';
+// 같은 동작은 버튼 비활성(commandsAllowed)으로 막으므로 안내는 "상태 확인" 하나만 권한다(D-14).
+const STATUS_UNCERTAIN_CONVERGENCE_MESSAGE = '처리됐는지 확인하는 중이에요.';
 const STATUS_UNCERTAIN_READBACK_WARNING =
-  '명령 결과를 확인하지 못했습니다. 상태를 다시 확인해 주세요. 같은 명령을 바로 다시 보내지 마세요.';
+  "처리됐는지 아직 확인하지 못했어요. 연결이 돌아오면 '상태 확인'을 눌러 주세요.";
+// ACK는 받았지만 뒤이은 조회가 실패한 경우. 처리는 됐으므로 재전송 없이 상태 확인만 권한다.
+const STATUS_APPLIED_READBACK_WARNING =
+  "처리는 됐지만 최신 상태를 아직 확인하지 못했어요. 연결이 돌아오면 '상태 확인'을 눌러 주세요.";
 // 시간 초과(apiFetch 기본 제한, lib/api-timeout.ts)도 같은 ACK-uncertain 수렴을 따른다.
-const STATUS_TIMEOUT_CONVERGENCE_MESSAGE =
-  '서버 응답이 늦어 처리되었는지 확실하지 않습니다. 최신 상태를 다시 확인합니다.';
+const STATUS_TIMEOUT_CONVERGENCE_MESSAGE = '응답이 늦어요. 처리됐는지 확인하는 중이에요.';
 // 불확실 수렴 뒤 fresh GET 판정(resolveDriverStatusCommandReadback) 결과 안내.
-const STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE = '처리된 것을 확인했습니다.';
+const STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE = '처리된 것을 확인했어요.';
 // 서버는 이미 적용된 같은 전이를 403/409 STATE_CONFLICT로 거절하므로 다시 눌러도 두 번 처리되지 않는다.
 const STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE =
-  '아직 처리되지 않았습니다. 다시 눌러도 두 번 처리되지 않습니다.';
+  '아직 처리되지 않았어요. 다시 눌러도 두 번 처리되지 않아요.';
 const STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE =
-  '주문이 진행 목록에서 빠졌습니다. 목록에서 결과를 확인해 주세요.';
+  '주문이 진행 목록에서 빠졌어요. 목록에서 결과를 확인해 주세요.';
 
 export default function OrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId: rawOrderId } = use(params);
@@ -132,6 +146,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(false);
   const [holdOpened, setHoldOpened] = useState(false);
+  // 배송 시작·재개 확인 창(D-02). 확인 전에는 PATCH를 보내지 않는다.
+  const [confirmKind, setConfirmKind] = useState<DriverStatusConfirmKind | null>(null);
   const [readLoading, setReadLoading] = useState(true);
   const [readRefreshing, setReadRefreshing] = useState(false);
   const [readError, setReadError] = useState<{
@@ -288,6 +304,11 @@ function OrderDetail({ orderId }: { orderId: string }) {
     readKey,
     readDetail,
   ]);
+
+  // 주문이 사라지면(권한 상실·주문 없음·scope 전환) 열어 둔 확인 창도 버린다. 다시 불러온 주문 위에 저절로 뜨지 않게 한다.
+  useEffect(() => {
+    if (order === null) setConfirmKind(null);
+  }, [order]);
 
   async function updateStatus(status: string) {
     // C1: dispatch 직전에 ref를 선점한다. 이미 진행 중인 command가 있으면
@@ -481,10 +502,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
         } else if (isTerminal) {
           // terminal은 board가 fresh fetch하므로 navigation 계약을 유지한다.
         } else {
-          const message =
-            readbackCause instanceof Error
-              ? '처리는 완료되었지만 최신 상태를 확인하지 못했습니다. 다시 확인해 주세요.'
-              : '처리는 완료되었지만 최신 상태를 확인하지 못했습니다. 다시 확인해 주세요.';
+          const message = STATUS_APPLIED_READBACK_WARNING;
           setReadbackWarning(message);
           return;
         }
@@ -534,12 +552,13 @@ function OrderDetail({ orderId }: { orderId: string }) {
   }
 
   if (!order) {
+    const isNotFound = readError?.kind !== 'AUTH_ERROR' && readError?.kind !== 'FETCH_ERROR';
     const message =
       readError?.kind === 'AUTH_ERROR'
         ? '로그인 정보를 다시 확인해 주세요.'
         : readError?.kind === 'FETCH_ERROR'
           ? '주문 정보를 불러오지 못했습니다'
-          : '주문을 찾을 수 없습니다';
+          : DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE;
     return (
       <div
         style={{
@@ -549,10 +568,16 @@ function OrderDetail({ orderId }: { orderId: string }) {
           justifyContent: 'center',
         }}
       >
-        <div className="flex flex-col items-center gap-3">
-          <p className={text} style={{ color: 'var(--driver-text-muted)' }}>
+        <div className="flex flex-col items-center gap-3 px-4">
+          <p className={cn(text, 'text-center')} style={{ color: 'var(--driver-text-muted)' }}>
             {message}
           </p>
+          {isNotFound && (
+            // 다른 기사가 맡았거나 끝난 주문은 다시 열어도 같으므로 목록으로 바꿔 보낸다(D-17).
+            <AppButton tone="brand-outline" onClick={() => router.replace('/board')}>
+              배송 목록으로
+            </AppButton>
+          )}
           {readError?.kind === 'FETCH_ERROR' && (
             <AppButton tone="brand-outline" onClick={() => setReadKey((key) => key + 1)}>
               다시 시도
@@ -617,6 +642,33 @@ function OrderDetail({ orderId }: { orderId: string }) {
         minute: '2-digit',
       })
     : '시간 미정';
+  // 확인 창은 연 상태 그대로(수거 대기 → 시작, 보류 → 재개)이고 지금 보낼 수 있을 때만 연다.
+  // 조회로 상태·결제·조회 신뢰도가 바뀌면 닫고 버린다(다시 조건이 맞아도 저절로 뜨지 않게).
+  const confirmOpen =
+    isDriverStatusConfirmCurrent(confirmKind, order.status) &&
+    deliveryStartAllowed &&
+    commandsAllowed;
+  if (confirmKind !== null && !confirmOpen) setConfirmKind(null);
+  const confirmContent = confirmKind
+    ? buildDriverStatusConfirmContent({
+        kind: confirmKind,
+        address: addressParts,
+        itemCount: driverOrderItemCount(order.items, order.quantity),
+        assignedToMe: order.assignedToMe,
+      })
+    : null;
+  const openStatusConfirm = (kind: DriverStatusConfirmKind) => {
+    if (loading || !commandsAllowed) return;
+    setConfirmKind(kind);
+  };
+  // 앱 안 이전 기록이 있을 때만 브라우저 뒤로, 없으면(알림·메신저 링크로 바로 연 경우) 목록으로 바꿔 보낸다(D-16).
+  const goBack = () => {
+    if (resolveDriverDetailBackAction(readDriverDetailBackContext(window)) === 'back') {
+      router.back();
+      return;
+    }
+    router.replace(driverDetailListHref(order.status));
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -635,7 +687,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
       >
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={goBack}
           className="-ml-2.5 flex size-11 cursor-pointer appearance-none items-center justify-center border-0 bg-transparent p-0 no-underline"
           style={{ color: 'var(--color-text)' }}
           aria-label="뒤로가기"
@@ -706,19 +758,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
               최신 정보를 확인하는 중입니다…
             </p>
           )}
-          {readError && (
-            <ProblemPanel>
-              <p className={text} style={problemText}>
-                {readError.message} (이전 정보 표시 중)
-              </p>
-              {readError.kind === 'FETCH_ERROR' && (
-                <AppButton tone="brand-outline" onClick={() => setReadKey((key) => key + 1)}>
-                  다시 확인
-                </AppButton>
-              )}
-            </ProblemPanel>
-          )}
-          {readbackWarning && (
+          {/* 응답 불확실(readbackWarning)이면 조회 실패 면을 따로 띄우지 않고 한 면·한 버튼으로 합친다(D-14).
+              버튼은 조회(GET)만 하며 같은 요청을 다시 보내지 않는다. 위험 버튼은 commandsAllowed로 계속 꺼져 있다. */}
+          {readbackWarning ? (
             <ProblemPanel>
               <p className={text} style={problemText}>
                 {readbackWarning}
@@ -730,9 +772,22 @@ function OrderDetail({ orderId }: { orderId: string }) {
                   if (token) void readDetail(token);
                 }}
               >
-                상태 다시 확인
+                상태 확인
               </AppButton>
             </ProblemPanel>
+          ) : (
+            readError && (
+              <ProblemPanel>
+                <p className={text} style={problemText}>
+                  {readError.message} (이전 정보 표시 중)
+                </p>
+                {readError.kind === 'FETCH_ERROR' && (
+                  <AppButton tone="brand-outline" onClick={() => setReadKey((key) => key + 1)}>
+                    다시 확인
+                  </AppButton>
+                )}
+              </ProblemPanel>
+            )
           )}
 
           {/* 동·호수가 주인공: 위 15px 기본 주소, 아래 28px 동·호수(거점은 거점 이름). */}
@@ -836,7 +891,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
               disabled={loading || !commandsAllowed}
               onClick={() => setHoldOpened(true)}
             >
-              부재·문제 알리기
+              배송 못 함 · 보류하기
             </button>
           )}
 
@@ -871,6 +926,17 @@ function OrderDetail({ orderId }: { orderId: string }) {
               <p className={text} style={{ ...mutedText, color: 'var(--color-text)' }}>
                 재배송비 결제 · {paymentPresentation.description}
               </p>
+              {paymentPresentation.needsOps && (
+                // 운영 확인이 필요한 결제 상태는 기사가 풀 수 없으므로 운영팀 전화로 바로 잇는다(D-18).
+                <a
+                  href={DRIVER_OPS_CONTACT.phoneHref}
+                  className={cn(actionButton, 'mt-1.5')}
+                  style={actionButtonStyle}
+                >
+                  <PhoneIcon />
+                  {DRIVER_OPS_CONTACT.label}에 전화
+                </a>
+              )}
             </div>
           )}
         </div>
@@ -898,7 +964,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 size="xl"
                 loading={loading}
                 disabled={loading || !commandsAllowed}
-                onClick={() => updateStatus('DELIVERING')}
+                onClick={() => openStatusConfirm('RESUME')}
               >
                 배송 재개
               </AppButton>
@@ -915,7 +981,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 size="xl"
                 loading={loading}
                 disabled={loading || !commandsAllowed}
-                onClick={() => updateStatus('DELIVERING')}
+                onClick={() => openStatusConfirm('START')}
               >
                 수거 완료 / 배송 시작
               </AppButton>
@@ -945,7 +1011,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 size="xl"
                 loading={loading}
                 disabled={loading || !commandsAllowed}
-                onClick={() => updateStatus('DELIVERING')}
+                onClick={() => openStatusConfirm('START')}
               >
                 수거 완료 / 배송 시작
               </AppButton>
@@ -978,6 +1044,18 @@ function OrderDetail({ orderId }: { orderId: string }) {
           )}
         </div>
       ) : null}
+
+      <StatusConfirmDialog
+        opened={confirmOpen}
+        content={confirmContent}
+        confirmDisabled={loading || !commandsAllowed}
+        onClose={() => setConfirmKind(null)}
+        onConfirm={() => {
+          // 창을 먼저 닫고 기존 updateStatus에 맡긴다. in-flight·불확실 수렴·scope 가드는 그대로다.
+          setConfirmKind(null);
+          void updateStatus('DELIVERING');
+        }}
+      />
 
       {isRoundDirect && (
         <DeliveryHoldModal

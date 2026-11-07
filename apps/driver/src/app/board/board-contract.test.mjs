@@ -113,10 +113,15 @@ test('Driver Card는 결제 대기·완료·운영 확인 상태를 표시한다
 });
 
 test('Driver 배송 시작 판정은 required·paid·requiresRecovery만 사용하고 canPay를 사용하지 않는다', () => {
-  assert.match(paymentSource, /payment\.required\s*===\s*false/);
-  assert.match(paymentSource, /payment\.paid\s*===\s*true/);
-  assert.match(paymentSource, /payment\.requiresRecovery\s*===\s*false/);
-  assert.doesNotMatch(paymentSource, /canPay/);
+  // canPay는 표시 문구(재배송비 결제 전, D-03)에만 쓰고 버튼 잠금 판정에는 쓰지 않는다.
+  const gateAt = paymentSource.indexOf('export function isDeliveryStartAllowed');
+  const gateEnd = paymentSource.indexOf('\n}\n', gateAt);
+  assert.ok(gateAt !== -1 && gateEnd > gateAt, 'isDeliveryStartAllowed가 있어야 한다');
+  const gateSource = paymentSource.slice(gateAt, gateEnd);
+  assert.match(gateSource, /payment\.required\s*===\s*false/);
+  assert.match(gateSource, /payment\.paid\s*===\s*true/);
+  assert.match(gateSource, /payment\.requiresRecovery\s*===\s*false/);
+  assert.doesNotMatch(gateSource, /canPay/);
   assert.doesNotMatch(boardSource, /canPay/);
   assert.doesNotMatch(detailSource, /canPay/);
 });
@@ -213,13 +218,13 @@ test('Detail은 성공 ACK 후 authoritative GET으로 수렴한다', () => {
 
 test('Detail은 readback 실패를 command 실패와 분리하고 자동 resend하지 않는다', () => {
   assert.match(detailSource, /readbackWarning/);
-  assert.match(detailSource, /처리는 완료되었지만 최신 상태를 확인하지 못했습니다/);
+  assert.match(detailSource, /처리는 됐지만 최신 상태를 아직 확인하지 못했어요/);
   assert.doesNotMatch(detailSource, /setTimeout\(updateStatus/);
   assert.doesNotMatch(detailSource, /setInterval/);
 });
 
 test('Detail은 시작·재개 후 서버 상태로 CTA를 다시 계산한다', () => {
-  assert.match(detailSource, /상태 다시 확인/);
+  assert.match(detailSource, />\s*상태 확인\s*</);
   assert.match(detailSource, /readDetail\(token\)/);
 });
 

@@ -14,7 +14,7 @@ import {
 } from '@greenhub/ui/components/dialog';
 import { cn } from '@greenhub/ui/lib/utils';
 import { useSession } from 'next-auth/react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { AppButton } from '@/components/app-button';
 import {
   CheckboxField,
@@ -27,7 +27,9 @@ import { text } from '@/components/look';
 import { apiFetch } from '@/lib/api';
 import {
   deliveryHoldResponsibilityFeeHint,
+  deliveryHoldSubmitError,
   parseRedeliveryFee,
+  redeliveryFeeAfterResponsibilityChange,
 } from '../../_lib/delivery-hold-form';
 import {
   classifyDriverOrderCommandError,
@@ -97,11 +99,11 @@ export const HOLD_STALE_CONVERGENCE_MESSAGE =
 
 // HOLD ACK-uncertain(B/C/F/G/H) convergence contract (NO_RESEND + AUTHORITATIVE_GET).
 // 같은 HOLD를 자동 재전송하지 않고 parent authoritative GET으로 수렴한다.
-// same-command resend 유도 copy를 쓰지 않는다.
-export const HOLD_UNCERTAIN_CONVERGENCE_MESSAGE =
-  '보류 명령이 처리되었는지 확실하지 않습니다. 최신 상태를 다시 확인합니다. 같은 보류를 바로 다시 보내지 마세요.';
+// same-command resend 유도 copy를 쓰지 않는다. 같은 보류는 상세의 버튼 비활성(commandsAllowed)이 막으므로
+// 안내는 상세 화면의 "상태 확인" 하나만 권한다(D-14, 상세 STATUS_UNCERTAIN_* 문구와 같은 말투).
+export const HOLD_UNCERTAIN_CONVERGENCE_MESSAGE = '보류됐는지 확인하는 중이에요.';
 export const HOLD_UNCERTAIN_READBACK_WARNING =
-  '보류 명령 결과를 확인하지 못했습니다. 상태를 다시 확인해 주세요. 같은 보류를 바로 다시 보내지 마세요.';
+  "보류됐는지 아직 확인하지 못했어요. 연결이 돌아오면 '상태 확인'을 눌러 주세요.";
 
 export function DeliveryHoldModal({
   opened,
@@ -118,7 +120,8 @@ export function DeliveryHoldModal({
   onNotFound,
 }: DeliveryHoldModalProps) {
   const { data: session } = useSession();
-  const [reasonCode, setReasonCode] = useState<HoldReason>('WEATHER');
+  // 기본 선택 없음(D-07): 흔한 문 앞 사유를 기상 악화로 잘못 저장하지 않게 기사가 직접 고른다.
+  const [reasonCode, setReasonCode] = useState<HoldReason | null>(null);
   const [reasonMessage, setReasonMessage] = useState('');
   const [customerResponsible, setCustomerResponsible] = useState(false);
   const [redeliveryFee, setRedeliveryFee] = useState<string | number>('');
@@ -135,9 +138,10 @@ export function DeliveryHoldModal({
   // C3: 부모 loading state와 무관한 로컬 submitting guard. 동일 frame
   // double-submit에서도 두 번째 PATCH를 dispatch하지 않는다.
   const submittingRef = useRef(false);
+  const reasonHelpId = useId();
 
   function resetHoldFormFields() {
-    setReasonCode('WEATHER');
+    setReasonCode(null);
     setReasonMessage('');
     setCustomerResponsible(false);
     setRedeliveryFee('');
@@ -157,13 +161,24 @@ export function DeliveryHoldModal({
     }
   }, [opened, orderStatus]);
 
+  // 유형·입력값이 바뀌면 이전 제출 오류는 지금 입력과 맞지 않으므로 지운다(D-15).
   function changeReason(value: string) {
     const next = value as HoldReason;
+    setError('');
     setReasonCode(next);
     if (next === 'WEATHER') {
       setCustomerResponsible(false);
       setRedeliveryFee('');
     }
+  }
+
+  // "고객 책임"을 고르면 비어 있는 재배송비 칸에 기준 금액을 채우고, 풀면 비운다(D-09).
+  function changeCustomerResponsible(checked: boolean) {
+    setError('');
+    setCustomerResponsible(checked);
+    setRedeliveryFee(
+      redeliveryFeeAfterResponsibilityChange({ customerResponsible: checked, redeliveryFee }),
+    );
   }
 
   async function submit() {
@@ -180,12 +195,10 @@ export function DeliveryHoldModal({
     }
     const message = reasonMessage.trim();
     const token = session?.user.accessToken;
-    if (!message) {
-      setError('보류 사유를 입력해주세요.');
-      return;
-    }
-    if (isWeather && !nextDeliveryAt) {
-      setError('기상 보류의 새 배송 예정 시각을 입력해주세요.');
+    const inputError = deliveryHoldSubmitError({ reasonCode, reasonMessage, nextDeliveryAt });
+    // 유형 미선택(null)은 여기서 돌려보내므로 아래 payload에는 고른 유형만 실린다.
+    if (inputError || !reasonCode) {
+      setError(inputError ?? '');
       return;
     }
     // 저장 버튼이 막혀 있지만, 어긋난 책임·재배송비는 보내지 않는다(안내는 입력칸 아래에 있다).
@@ -323,7 +336,7 @@ export function DeliveryHoldModal({
           className="fixed inset-0 z-[200] m-auto flex h-fit max-h-[90dvh] w-[min(440px,90vw)] flex-col overflow-y-auto rounded-lg bg-background text-ui-ink shadow-[0_1px_3px_rgba(0,0,0,0.05),rgba(0,0,0,0.05)_0_36px_28px_-7px,rgba(0,0,0,0.04)_0_17px_17px_-7px] outline-none"
         >
           <DialogHeader>
-            <DialogTitle className="m-0 p-0 text-ui-ink">배송 보류 기록</DialogTitle>
+            <DialogTitle className="m-0 p-0 text-ui-ink">배송 보류</DialogTitle>
           </DialogHeader>
           {/* preflight 없이 연결한 앱이라 버튼 기본 테두리·여백을 지운다. */}
           <DialogClose
@@ -336,24 +349,34 @@ export function DeliveryHoldModal({
             <div className="flex flex-col gap-4">
               <RadioGroupField
                 label="보류 유형"
-                value={reasonCode}
+                value={reasonCode ?? ''}
                 onChange={changeReason}
                 options={Object.entries(HOLD_REASON_LABEL).map(([value, label]) => ({
                   value,
                   label,
                 }))}
               />
-              <TextareaField
-                label="보류 사유"
-                value={reasonMessage}
-                onChange={(event) => setReasonMessage(event.currentTarget.value)}
-                required
-              />
+              <div className="flex flex-col gap-1">
+                {/* 이 글은 손님 주문 화면에 그대로 보이고 저장하면 보류 알림이 간다(D-08). 내부 메모처럼 쓰지 않게 알린다. */}
+                <TextareaField
+                  label="손님에게 보일 사유"
+                  value={reasonMessage}
+                  onChange={(event) => {
+                    setError('');
+                    setReasonMessage(event.currentTarget.value);
+                  }}
+                  aria-describedby={reasonHelpId}
+                  required
+                />
+                <p id={reasonHelpId} className={`${text} text-sm/[1.45] text-ui-ink`}>
+                  손님 주문 화면에 그대로 보여요. 저장하면 손님에게 배송 보류 알림이 가요.
+                </p>
+              </div>
               <CheckboxField
                 label="고객 책임"
                 checked={customerResponsible}
                 disabled={isWeather}
-                onChange={setCustomerResponsible}
+                onChange={changeCustomerResponsible}
               />
               <NumberField
                 label="재배송비"
@@ -362,7 +385,10 @@ export function DeliveryHoldModal({
                 min={0}
                 step={1000}
                 suffix="원"
-                onChange={setRedeliveryFee}
+                onChange={(value) => {
+                  setError('');
+                  setRedeliveryFee(value);
+                }}
               />
               {responsibilityFeeHint && (
                 <p className={`${text} text-sm/[1.45] text-ui-red`}>{responsibilityFeeHint}</p>
@@ -371,13 +397,19 @@ export function DeliveryHoldModal({
                 label="다음 연락 예정"
                 type="datetime-local"
                 value={nextContactAt}
-                onChange={(event) => setNextContactAt(event.currentTarget.value)}
+                onChange={(event) => {
+                  setError('');
+                  setNextContactAt(event.currentTarget.value);
+                }}
               />
               <TextField
                 label="새 배송 예정"
                 type="datetime-local"
                 value={nextDeliveryAt}
-                onChange={(event) => setNextDeliveryAt(event.currentTarget.value)}
+                onChange={(event) => {
+                  setError('');
+                  setNextDeliveryAt(event.currentTarget.value);
+                }}
               />
               {error && <p className={`${text} text-ui-red`}>{error}</p>}
               <div className="flex flex-wrap items-center justify-end gap-4">
@@ -390,7 +422,7 @@ export function DeliveryHoldModal({
                   loading={loading}
                   disabled={loading || responsibilityFeeHint !== null}
                 >
-                  배송 보류 저장
+                  보류하기
                 </AppButton>
               </div>
             </div>

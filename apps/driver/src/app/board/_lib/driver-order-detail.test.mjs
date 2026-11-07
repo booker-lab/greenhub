@@ -3,6 +3,13 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   buildDriverOrderDetailScope,
+  buildDriverStatusConfirmContent,
+  DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE,
+  driverDetailListHref,
+  driverOrderItemCount,
+  isDriverStatusConfirmCurrent,
+  readDriverDetailBackContext,
+  resolveDriverDetailBackAction,
   classifyDriverOrderCommandError,
   classifyDriverOrderReadError,
   DriverOrderReadError,
@@ -300,4 +307,166 @@ test('shared stable code와 동일한 wire 문자열을 소비한다', async () 
   }
   assert.doesNotMatch(sharedSource, /AUTHORITY_LOSS/);
   assert.doesNotMatch(sharedSource, /STATE_CONFLICT.*recovery|recovery.*STATE_CONFLICT/);
+});
+
+// D-16. 상세 뒤로가기: 앱 안 이전 기록이 있을 때만 back, 아니면 상태에 맞는 목록 탭으로 replace.
+test('D-16. 목록 탭: 배송 중·보류는 배송 중 탭, 그 밖은 기본 탭이다', () => {
+  assert.equal(driverDetailListHref('DELIVERING'), '/board?tab=delivering');
+  assert.equal(driverDetailListHref('DELIVERY_HELD'), '/board?tab=delivering');
+  assert.equal(driverDetailListHref('PREPARING'), '/board');
+  assert.equal(driverDetailListHref(undefined), '/board');
+});
+
+test('D-16. Navigation API가 있으면 canGoBack을 그대로 따른다', () => {
+  const base = { historyLength: 5, referrer: '', origin: 'https://d.example', onLandingPage: true };
+  assert.equal(resolveDriverDetailBackAction({ ...base, canGoBack: true }), 'back');
+  assert.equal(resolveDriverDetailBackAction({ ...base, canGoBack: false }), 'list');
+});
+
+test('D-16. Navigation API가 없으면 기록 길이·처음 연 화면·referrer로 추정한다', () => {
+  const origin = 'https://d.example';
+  // 새 탭에서 바로 연 상세: 기록 없음.
+  assert.equal(
+    resolveDriverDetailBackAction({ historyLength: 1, referrer: '', origin, onLandingPage: true }),
+    'list',
+  );
+  // 메신저 등 다른 사이트에서 연 첫 화면.
+  assert.equal(
+    resolveDriverDetailBackAction({
+      historyLength: 3,
+      referrer: 'https://chat.example/room',
+      origin,
+      onLandingPage: true,
+    }),
+    'list',
+  );
+  // referrer가 비어 있는 첫 화면(바로가기·정책으로 지워짐)은 앱 밖으로 나가지 않는 쪽.
+  assert.equal(
+    resolveDriverDetailBackAction({ historyLength: 2, referrer: '', origin, onLandingPage: true }),
+    'list',
+  );
+  // 앱 안에서 연 첫 화면, 또는 앱 안 이동 뒤.
+  assert.equal(
+    resolveDriverDetailBackAction({
+      historyLength: 2,
+      referrer: 'https://d.example/board',
+      origin,
+      onLandingPage: true,
+    }),
+    'back',
+  );
+  assert.equal(
+    resolveDriverDetailBackAction({ historyLength: 2, referrer: '', origin, onLandingPage: false }),
+    'back',
+  );
+});
+
+test('D-16. 브라우저 값 읽기: 처음 연 경로를 읽지 못하면 처음 연 화면으로 본다', () => {
+  const win = (overrides = {}) => ({
+    history: { length: 2 },
+    location: { origin: 'https://d.example', pathname: '/board/o1' },
+    document: { referrer: '' },
+    ...overrides,
+  });
+  assert.deepEqual(readDriverDetailBackContext(win()), {
+    canGoBack: undefined,
+    historyLength: 2,
+    referrer: '',
+    origin: 'https://d.example',
+    onLandingPage: true,
+  });
+  const landedOnBoard = readDriverDetailBackContext(
+    win({
+      navigation: { canGoBack: true },
+      performance: { getEntriesByType: () => [{ name: 'https://d.example/board' }] },
+    }),
+  );
+  assert.equal(landedOnBoard.canGoBack, true);
+  assert.equal(landedOnBoard.onLandingPage, false);
+  const landedHere = readDriverDetailBackContext(
+    win({ performance: { getEntriesByType: () => [{ name: 'https://d.example/board/o1' }] } }),
+  );
+  assert.equal(landedHere.onLandingPage, true);
+  const broken = readDriverDetailBackContext(
+    win({
+      navigation: { canGoBack: 'yes' },
+      performance: { getEntriesByType: () => [{ name: '::' }] },
+    }),
+  );
+  assert.equal(broken.canGoBack, undefined);
+  assert.equal(broken.onLandingPage, true);
+});
+
+test('D-17. 주문 없음 화면은 이유를 해요체로 알린다', () => {
+  assert.equal(DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE, '다른 기사가 맡았거나 이미 끝난 주문이에요.');
+});
+
+test('D-02. 상품 수는 상품 목록 수량 합계, 어긋나면 주문 수량, 모르면 null', () => {
+  assert.equal(
+    driverOrderItemCount(
+      [
+        { productName: 'a', quantity: 1 },
+        { productName: 'b', quantity: 2 },
+      ],
+      9,
+    ),
+    3,
+  );
+  assert.equal(driverOrderItemCount([{ productName: 'a', quantity: 0 }], 2), 2);
+  assert.equal(driverOrderItemCount(undefined, 4), 4);
+  assert.equal(driverOrderItemCount([], 0), null);
+  assert.equal(driverOrderItemCount(null, undefined), null);
+});
+
+test('D-02. 확인 창은 연 상태(수거 대기·보류)와 지금 상태가 같을 때만 유효하다', () => {
+  assert.equal(isDriverStatusConfirmCurrent('START', 'PREPARING'), true);
+  assert.equal(isDriverStatusConfirmCurrent('RESUME', 'DELIVERY_HELD'), true);
+  assert.equal(isDriverStatusConfirmCurrent('START', 'DELIVERING'), false);
+  assert.equal(isDriverStatusConfirmCurrent('RESUME', 'PREPARING'), false);
+  assert.equal(isDriverStatusConfirmCurrent(null, 'PREPARING'), false);
+});
+
+test('D-02. 배송 시작 확인 창: 동·호수·상품 수·손님 알림·배정 안내', () => {
+  const address = { base: '경기도 이천시 테스트로 1', detail: '101동 202호' };
+  const neutral = buildDriverStatusConfirmContent({ kind: 'START', address, itemCount: 2 });
+  assert.equal(neutral.title, '배송을 시작할까요?');
+  assert.equal(neutral.place, '101동 202호');
+  assert.equal(neutral.placeBase, '경기도 이천시 테스트로 1');
+  assert.equal(neutral.itemsLine, '상품 총 2개');
+  assert.equal(neutral.notice, '손님에게 배송 시작 알림이 가요.');
+  // 배정 여부를 모르면 단정하지 않는다.
+  assert.equal(neutral.assignment, '이 주문을 맡아 배송을 시작해요.');
+  assert.equal(neutral.confirmLabel, '배송 시작');
+  assert.match(
+    buildDriverStatusConfirmContent({ kind: 'START', address, itemCount: 2, assignedToMe: false })
+      .assignment,
+    /아직 아무도 맡지 않은 주문이에요/,
+  );
+  assert.equal(
+    buildDriverStatusConfirmContent({ kind: 'START', address, itemCount: 2, assignedToMe: true })
+      .assignment,
+    null,
+  );
+  // 동·호수를 나눌 수 없으면 전체 주소, 수량을 모르면 상품 줄 없음.
+  const whole = buildDriverStatusConfirmContent({
+    kind: 'START',
+    address: { base: '경기도 이천시 테스트로 1 101동', detail: null },
+    itemCount: null,
+  });
+  assert.equal(whole.place, '경기도 이천시 테스트로 1 101동');
+  assert.equal(whole.placeBase, null);
+  assert.equal(whole.itemsLine, null);
+});
+
+test('D-02. 배송 재개 확인 창: 재배송 일정 알림, 배정 안내 없음', () => {
+  const content = buildDriverStatusConfirmContent({
+    kind: 'RESUME',
+    address: { base: '경기도 이천시 테스트로 1', detail: '101동 202호' },
+    itemCount: 1,
+    assignedToMe: false,
+  });
+  assert.equal(content.title, '배송을 다시 시작할까요?');
+  assert.equal(content.notice, '손님에게 재배송 일정 알림이 가요.');
+  assert.equal(content.assignment, null);
+  assert.equal(content.confirmLabel, '배송 재개');
 });
