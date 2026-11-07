@@ -143,7 +143,9 @@ test('파일럿 MY 설정 경로는 마케팅 편집 없이 비활성 안내만 
   const pilotSource = source.slice(start, end);
 
   assert.match(source, /const MARKETING_NOT_USED_IN_PILOT = true/);
-  assert.match(pilotSource, /파일럿에서는 마케팅 수신 동의와 설정을 운영하지 않습니다/);
+  assert.match(pilotSource, /지금은 마케팅 알림을 보내지 않아요\./);
+  // 고객 화면에 내부 운영 용어(파일럿)를 내지 않는다.
+  assert.doesNotMatch(pilotSource, />[^<]*파일럿[^<]*</);
   assert.doesNotMatch(pilotSource, /fetchMarketingPreferences|withdrawMarketingPreference|PATCH/);
   assert.doesNotMatch(pilotSource, /즉시 철회|동의함|동의하지 않음/);
   assert.match(pilotSource, /주문·결제·배송에 필요한 정보성 연락/);
