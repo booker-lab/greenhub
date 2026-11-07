@@ -18,6 +18,7 @@ import {
 } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
+import { deliveryHoldNotice, REDELIVERY_UNPAID_NOTICE } from '@/lib/order-delivery-hold-notice';
 import { formatOrderDeliveryDate } from '@/lib/order-delivery-date';
 import {
   ORDER_DETAIL_STALE_MESSAGE,
@@ -894,6 +895,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const currentStep =
     detail.status === 'REVIEWED' ? steps.length : Math.max(0, steps.indexOf(detail.status));
   const paymentIsDone = detail.redeliveryPayment.paid;
+  // 배송 보류 안내는 사유 코드별 고정 문구(C-28)로 보이고, 직접 적은 사유는 '담당자 메모'로 따로 보인다.
+  const deliveryHoldCopy = detail.deliveryHold
+    ? deliveryHoldNotice({
+        reasonCode: detail.deliveryHold.reasonCode,
+        customerResponsible: detail.deliveryHold.customerResponsible,
+        redeliveryFee: detail.deliveryHold.redeliveryFee,
+        redeliveryPaid: paymentIsDone,
+      })
+    : null;
   // 배송 보류·취소는 문제 상태라 빨강 계열 배지로 보인다
   // ② 방향(design-standard §5): 상태는 점 + 글자. 배송 보류=빨강, 취소·결제 대기·완료=회색, 나머지 검정.
   const statusTone: StatusDotTone =
@@ -1072,17 +1082,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       </div>
 
       {detail.deliveryHold && isDeliveryHoldActive(detail) && (
-        <DetailAlert variant="destructive" className="mb-5" title="배송 보류">
+        <DetailAlert variant="destructive" className="mb-5" title={deliveryHoldCopy?.title}>
           <div className="flex flex-col gap-1.5">
-            <p className="m-0 text-sm">{detail.deliveryHold.reasonMessage}</p>
-            <p className="m-0 text-sm">
-              고객 책임: {detail.deliveryHold.customerResponsible ? '해당' : '없음'}
-            </p>
-            {detail.deliveryHold.redeliveryFee !== null && (
-              <p className="m-0 text-sm">
-                재배송비: {detail.deliveryHold.redeliveryFee.toLocaleString('ko-KR')}원
+            {deliveryHoldCopy?.lines.map((line) => (
+              <p key={line} className="m-0 text-sm">
+                {line}
               </p>
-            )}
+            ))}
+            <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              담당자 메모: {detail.deliveryHold.reasonMessage}
+            </p>
             {detail.deliveryHold.nextContactAt && (
               <p className="m-0 text-sm">
                 다음 연락: {formatDateTime(detail.deliveryHold.nextContactAt)}
@@ -1135,6 +1144,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                             ? '재배송비 결제 계속하기'
                             : '재배송비 결제'}
                       </LoadingButton>
+                      <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                        {REDELIVERY_UNPAID_NOTICE}
+                      </p>
                     </>
                   )}
               </div>
