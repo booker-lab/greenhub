@@ -320,7 +320,7 @@ function RoundValidationNotice({ validation }: { validation: RoundCartValidation
         style={{ color: 'var(--color-text-secondary)' }}
         role="status"
       >
-        서버에서 구매 가능 여부 확인 중
+        구매 가능 여부 확인 중
       </p>
     );
   }
@@ -330,7 +330,7 @@ function RoundValidationNotice({ validation }: { validation: RoundCartValidation
         className="m-0 mt-1.5 p-0 text-xs"
         style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
       >
-        서버 확인 완료 · 같은 회차 상품
+        구매 가능
       </p>
     );
   }
@@ -475,7 +475,7 @@ export default function CartPage() {
                   className="m-0 p-0 text-sm font-normal"
                   style={{ color: 'var(--color-text-secondary)' }}
                 >
-                  같은 회차 상품을 서버에서 확인해 한 번에 결제합니다.
+                  이번 회차 상품을 한 번에 결제해요.
                 </p>
               </div>
               {/* 비로그인 장바구니(guest-cart)는 서버 확인을 하지 않으므로 확인 표시를 두지 않는다. */}
