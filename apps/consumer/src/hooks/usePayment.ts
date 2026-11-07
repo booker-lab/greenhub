@@ -4,6 +4,10 @@ import type { CreateOrderRequest } from '@greenhub/shared';
 import { useEffect, useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem } from '@/hooks/useCart';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import {
+  isRoundOrderClosedRejection,
+  ROUND_ORDER_CLOSED_MESSAGE,
+} from '@/lib/checkout-round-closed';
 import { paymentFailureMessage } from '@/lib/payment-failure-message';
 import { attachPaymentPageGuard } from '@/lib/payment-page-guard';
 import {
@@ -59,6 +63,8 @@ interface UsePaymentResult {
   state: PaymentState;
   orderId: string | null;
   error: string | null;
+  /** 회차 결제에서 주문 생성 API가 회차 주문 마감으로 거절했는지(C-13). 한 번 알아보면 이 화면에서는 유지한다. */
+  roundOrderClosed: boolean;
   requestPayment: () => Promise<void>;
 }
 
@@ -242,6 +248,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
   const [state, setState] = useState<PaymentState>('idle');
   const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roundOrderClosed, setRoundOrderClosed] = useState(false);
   const paymentAttemptId = useRef<string | null>(null);
   const currentState = useRef<PaymentState>('idle');
   // 같은 탭 복귀로 결제 상태를 되돌리면 올라간다. 끝나지 않은 이전 결제창 결과가 늦게 와도 화면을 바꾸지 않는다.
@@ -297,6 +304,11 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
       if (!res.ok) {
         attemptSettled = isSettledRejection(res.status);
         const body = await res.json().catch(() => ({}));
+        // 회차 주문 창이 닫혀 거절되면(예약·주문을 만들지 않는다) 화면이 마감 안내로 바꿀 수 있게 알린다.
+        if (options.roundItems !== undefined && isRoundOrderClosedRejection(res.status, body)) {
+          setRoundOrderClosed(true);
+          throw new Error(ROUND_ORDER_CLOSED_MESSAGE);
+        }
         throw new Error(body.message ?? '주문 생성 실패');
       }
       const payment = readOrderPaymentResponse(await res.json(), prepared.expectedAmount);
@@ -354,5 +366,5 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
     }
   }
 
-  return { state, orderId, error, requestPayment };
+  return { state, orderId, error, roundOrderClosed, requestPayment };
 }

@@ -26,9 +26,38 @@ new Function('require', 'module', 'exports', compiledCart)(
   cartModule.exports,
 );
 
+// 회차 마감 판정은 실제 checkout-round-closed 모듈(일정 판정은 round-schedule-label)로 만든다.
+const libCompilerOptions = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 };
+const scheduleLabelModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../../lib/round-schedule-label.ts', import.meta.url), 'utf8'),
+    { compilerOptions: libCompilerOptions },
+  ).outputText,
+)(scheduleLabelModule, scheduleLabelModule.exports);
+const roundClosedModule = { exports: {} };
+new Function(
+  'require',
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../../lib/checkout-round-closed.ts', import.meta.url), 'utf8'),
+    { compilerOptions: libCompilerOptions },
+  ).outputText,
+)(
+  (specifier) => {
+    if (specifier === '@/lib/round-schedule-label') return scheduleLabelModule.exports;
+    throw new Error(`예상하지 못한 회차 마감 모듈 요청: ${specifier}`);
+  },
+  roundClosedModule,
+  roundClosedModule.exports,
+);
+
 const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 const testableSource = `${source}
-export { CartCheckoutContent, parseCheckoutCart, resolveRoundCheckoutSchedule, resolveRoundScheduleError, resolveSingleCheckoutAmount, SingleCheckoutContent, staleRoundsDetail };`;
+export { CartCheckoutContent, parseCheckoutCart, RoundClosedNotice, resolveRoundCheckoutSchedule, resolveRoundScheduleError, resolveSingleCheckoutAmount, SingleCheckoutContent, staleRoundsDetail };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     esModuleInterop: true,
@@ -57,6 +86,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/hooks/useSaleRounds') return { useSaleRounds: () => ({}) };
   if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
   if (specifier === '@/lib/cartValidation') return { getCartValidationError: () => null };
+  if (specifier === '@/lib/checkout-round-closed') return roundClosedModule.exports;
   if (specifier === '@/lib/checkout-prefill') {
     return { pickCheckoutPrefill: () => ({}), prefillAddress: (c) => c, prefillPhone: (c) => c };
   }
@@ -741,4 +771,83 @@ test('회차 확인 안내는 같은 뜻을 괄호로 반복하지 않고 해요
   assert.doesNotMatch(source, /최신 회차 정보를 불러오지 못했습니다/);
   assert.doesNotMatch(source, /이전 결과로는 결제할 수 없습니다/);
   assert.doesNotMatch(source, /회차 정보가 변경되어 결제할 수 없습니다/);
+});
+
+/** 회차 마감 안내를 그려 화면 요소와 이동을 기록한다. */
+function renderRoundClosedNotice() {
+  const elements = [];
+  const pushes = [];
+  const ButtonStub = () => null;
+  const textOf = (children) =>
+    (Array.isArray(children) ? children : [children])
+      .filter((child) => typeof child === 'string')
+      .join('');
+  const requireForRender = (specifier) => {
+    if (specifier === 'react/jsx-runtime') {
+      const jsx = (type, props) => {
+        elements.push({ type, props, text: textOf(props?.children) });
+        return null;
+      };
+      return { Fragment: Symbol('Fragment'), jsx, jsxs: jsx };
+    }
+    if (specifier === '@greenhub/ui/components/button') return { Button: ButtonStub };
+    return requireForTest(specifier);
+  };
+  const renderModule = { exports: {} };
+  new Function('require', 'module', 'exports', compiled)(
+    requireForRender,
+    renderModule,
+    renderModule.exports,
+  );
+  renderModule.exports.RoundClosedNotice({
+    onCart: () => pushes.push('/cart'),
+    onHome: () => pushes.push('/'),
+  });
+  return { elements, pushes, buttons: elements.filter((element) => element.type === ButtonStub) };
+}
+
+test('회차 마감 안내는 마감 문구와 장바구니·홈으로 버튼을 보인다(C-13)', () => {
+  const { elements, pushes, buttons } = renderRoundClosedNotice();
+
+  const notice = elements.find((element) => element.props?.role === 'alert');
+  assert.ok(notice, '마감 안내는 바로 읽히는 알림이다');
+  assert.ok(elements.some((element) => element.text === '이번 회차 주문이 마감됐어요.'));
+  assert.deepEqual(
+    buttons.map((button) => button.text),
+    ['장바구니로 가기', '홈으로'],
+  );
+  assert.equal(buttons[0].props.variant, undefined);
+  assert.equal(buttons[1].props.variant, 'ghost');
+  for (const button of buttons) button.props.onClick();
+  assert.deepEqual(pushes, ['/cart', '/']);
+  // 발송 기능이 없는 다음 회차 알림은 안내·버튼으로 약속하지 않는다.
+  assert.ok(!elements.some((element) => /알림|소식/.test(element.text)));
+});
+
+test('회차 checkout은 마감 거절 응답·지나간 마감 시각에 결제 버튼을 끄고 마감 안내를 보인다(C-13)', () => {
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+
+  assert.match(
+    roundCheckoutSource,
+    /const \{ state, orderId, error, roundOrderClosed, requestPayment \} = usePayment\(\{/,
+  );
+  assert.match(
+    roundCheckoutSource,
+    /isCheckoutRoundClosed\(\{\s*round: schedule\?\.round \?\? null,\s*nowMillis: Date\.now\(\),\s*closedByOrderResponse: roundOrderClosed,\s*paymentInFlight: isLoading \|\| state === 'done',\s*\}\)/,
+  );
+  // 화면을 연 채 마감 시각이 지나면 그 시각에 다시 그린다.
+  assert.match(roundCheckoutSource, /msUntilRoundOrderClose\(orderCloseAt, Date\.now\(\)\)/);
+  assert.match(roundCheckoutSource, /window\.clearTimeout\(timer\)/);
+  // 결제 버튼을 끄고, 같은 뜻의 오류를 겹쳐 보이지 않고, 버튼 위에 안내를 둔다.
+  assert.match(roundCheckoutSource, /const canPay =\s*!roundClosed &&/);
+  assert.match(
+    roundCheckoutSource,
+    /const formError = roundClosed \? null : \(scheduleError \?\? error\);/,
+  );
+  assert.match(roundCheckoutSource, /error=\{formError\}/);
+  assert.match(roundCheckoutSource, /closedNotice=\{\s*roundClosed \? \(\s*<RoundClosedNotice/);
+  assert.match(roundCheckoutSource, /onCart=\{\(\) => router\.push\('\/cart'\)\}/);
+  assert.match(roundCheckoutSource, /onHome=\{\(\) => router\.push\('\/'\)\}/);
 });

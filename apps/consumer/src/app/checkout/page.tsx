@@ -36,6 +36,11 @@ import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartValidationError } from '@/lib/cartValidation';
 import { pickCheckoutPrefill, prefillAddress, prefillPhone } from '@/lib/checkout-prefill';
+import {
+  isCheckoutRoundClosed,
+  msUntilRoundOrderClose,
+  ROUND_ORDER_CLOSED_MESSAGE,
+} from '@/lib/checkout-round-closed';
 import { isFeatureOn } from '@/lib/features';
 import { isKoreanMobilePhone, ROUND_DELIVERY_PHONE_ERROR } from '@/lib/korean-mobile-phone';
 import { CONNECTION_UNSTABLE_MESSAGE } from '@/lib/load-error-message';
@@ -530,6 +535,34 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
     />
   );
 }
+/**
+ * 회차 주문이 마감됐을 때 결제 버튼 바로 위에 보이는 안내(C-13). 결제 버튼은 꺼지고 돌아갈 길만 준다.
+ * 다음 회차 알림은 발송 기능이 없어 넣지 않는다.
+ */
+function RoundClosedNotice({ onCart, onHome }: { onCart: () => void; onHome: () => void }) {
+  return (
+    <div
+      className="mb-3 p-3"
+      role="alert"
+      style={{
+        // 오래된 회차 정보 안내와 같은 연회색 면(design-direction.md §3.1).
+        background: 'var(--color-surface-muted)',
+        borderRadius: 'var(--radius)',
+      }}
+    >
+      <p className="m-0 text-base leading-[1.55]" style={{ fontWeight: 'var(--fw-bold)' }}>
+        {ROUND_ORDER_CLOSED_MESSAGE}
+      </p>
+      <Button size="md" className="mt-3 w-full" onClick={onCart}>
+        장바구니로 가기
+      </Button>
+      <Button variant="ghost" size="md" className="w-full" onClick={onHome}>
+        홈으로
+      </Button>
+    </div>
+  );
+}
+
 function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] }) {
   const { data: session } = useSession();
   const router = useRouter();
@@ -616,7 +649,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     };
   }, [accessToken]);
 
-  const { state, orderId, error, requestPayment } = usePayment({
+  const { state, orderId, error, roundOrderClosed, requestPayment } = usePayment({
     storeId,
     orderRequest: {
       deliveryAddress: address,
@@ -646,13 +679,35 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     router.replace(`/order/success?orderId=${orderId}`);
   }, [cartItems, orderId, removeRoundItems, router, state]);
 
+  // 화면을 연 채 주문 마감 시각이 지나면 그 시각에 다시 그려 마감을 알아본다(C-13).
+  // 타이머가 이르게 끝나 아직 마감 전이면 tick이 바뀌어 남은 시간만큼 다시 건다.
+  const orderCloseAt = schedule?.round.schedule.orderCloseAt ?? null;
+  const [closeTick, setCloseTick] = useState(0);
+  useEffect(() => {
+    void closeTick;
+    if (!orderCloseAt) return;
+    const delay = msUntilRoundOrderClose(orderCloseAt, Date.now());
+    if (delay === null) return;
+    const timer = window.setTimeout(() => setCloseTick((tick) => tick + 1), delay);
+    return () => window.clearTimeout(timer);
+  }, [closeTick, orderCloseAt]);
+
   // 옵션을 고른 상품은 옵션 금액을 더한 price를 쓴다(옵션이 없으면 price === roundPrice).
   const totalAmount = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const isLoading = state === 'creating' || state === 'paying';
+  const roundClosed = isCheckoutRoundClosed({
+    round: schedule?.round ?? null,
+    nowMillis: Date.now(),
+    closedByOrderResponse: roundOrderClosed,
+    paymentInFlight: isLoading || state === 'done',
+  });
   const scheduleError = resolveRoundScheduleError(saleRounds.status, saleRounds.error, !!schedule);
   const staleDetail = staleRoundsDetail(saleRounds.error);
+  // 마감 안내가 보이면 같은 뜻의 오류(API 거절 문구·회차 확인 안내)를 겹쳐 보이지 않는다.
+  const formError = roundClosed ? null : (scheduleError ?? error);
   const deliveryPhoneValid = isKoreanMobilePhone(deliveryPhone.trim());
   const canPay =
+    !roundClosed &&
     !isLoading &&
     !!schedule &&
     !saleRounds.isStale &&
@@ -713,9 +768,17 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
         onPaymentMethodChange={setPaymentMethod}
         isLoading={isLoading}
         canPay={canPay && giftReady && packageLabelReady}
-        error={scheduleError ?? error}
+        error={formError}
         onPay={requestPayment}
         roundPayReadiness={{ phoneValid: deliveryPhoneValid, giftReady, packageLabelReady }}
+        closedNotice={
+          roundClosed ? (
+            <RoundClosedNotice
+              onCart={() => router.push('/cart')}
+              onHome={() => router.push('/')}
+            />
+          ) : undefined
+        }
         benchmark={{
           arrivalLabel:
             isFeatureOn('arrival-everywhere') && schedule

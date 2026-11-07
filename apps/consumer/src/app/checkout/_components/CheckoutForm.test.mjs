@@ -231,3 +231,15 @@ test('회차 결제 버튼이 꺼져 있으면 버튼 바로 위에 빠진 조�
     /roundPayReadiness=\{\{ phoneValid: deliveryPhoneValid, giftReady, packageLabelReady \}\}/,
   );
 });
+
+test('회차 마감 안내는 결제 버튼 바로 위에 두고 빠진 조건 목록을 대신한다(C-13)', () => {
+  assert.match(formSource, /closedNotice\?: ReactNode;/);
+  assert.match(
+    formSource,
+    /!closedNotice && isRoundCheckout && roundPayReadiness && !effectiveCanPay && !isLoading/,
+  );
+  const blockers = formSource.indexOf('{payBlockers.length > 0 && (');
+  const notice = formSource.indexOf('{closedNotice}');
+  const button = formSource.indexOf('<LoadingButton');
+  assert.ok(blockers >= 0 && blockers < notice && notice < button);
+});

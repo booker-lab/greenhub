@@ -67,6 +67,8 @@ export interface CheckoutFormProps {
   };
   /** 회차 결제에서 결제 버튼이 꺼진 이유를 보이기 위한 조건. 확인 체크·주소는 폼이 직접 판단한다. */
   roundPayReadiness?: { phoneValid: boolean; giftReady: boolean; packageLabelReady: boolean };
+  /** 회차 주문이 마감됐을 때 결제 버튼 바로 위에 보일 안내(C-13). 있으면 빠진 조건 목록은 보이지 않는다. */
+  closedNotice?: ReactNode;
 }
 
 export function isIcheonDeliveryAddress(value: string): boolean {
@@ -211,6 +213,7 @@ export default function CheckoutForm({
   singleSummary,
   benchmark,
   roundPayReadiness,
+  closedNotice,
 }: CheckoutFormProps) {
   const [roundDetailsConfirmed, setRoundDetailsConfirmed] = useState(false);
   const [deliveryPhoneTouched, setDeliveryPhoneTouched] = useState(false);
@@ -229,8 +232,9 @@ export default function CheckoutForm({
   const effectiveCanPay =
     canPay && (!isRoundCheckout || (isIcheonAddress && roundDetailsConfirmed));
   // 결제 버튼이 꺼져 있으면 버튼 바로 위에 고객이 채워야 할 조건을 보인다(C-03).
+  // 마감 안내가 있으면 입력으로 풀 수 있는 조건이 아니므로 빠진 조건 목록을 보이지 않는다.
   const payBlockers =
-    isRoundCheckout && roundPayReadiness && !effectiveCanPay && !isLoading
+    !closedNotice && isRoundCheckout && roundPayReadiness && !effectiveCanPay && !isLoading
       ? roundPayBlockers({
           hasAddress: Boolean(address.address && address.zipCode),
           isIcheonAddress,
@@ -669,6 +673,8 @@ export default function CheckoutForm({
           </ul>
         </div>
       )}
+
+      {closedNotice}
 
       <LoadingButton
         size="lg"

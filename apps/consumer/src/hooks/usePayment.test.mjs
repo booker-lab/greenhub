@@ -64,6 +64,34 @@ new Function(
   ).outputText,
 )(pageGuardModule, pageGuardModule.exports);
 
+// 회차 마감 거절 판정은 실제 checkout-round-closed 모듈(일정 판정은 round-schedule-label)로 만든다.
+const scheduleLabelModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/round-schedule-label.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(scheduleLabelModule, scheduleLabelModule.exports);
+const roundClosedModule = { exports: {} };
+new Function(
+  'require',
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/checkout-round-closed.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(
+  (specifier) => {
+    if (specifier === '@/lib/round-schedule-label') return scheduleLabelModule.exports;
+    throw new Error(`예상하지 못한 회차 마감 모듈 요청: ${specifier}`);
+  },
+  roundClosedModule,
+  roundClosedModule.exports,
+);
+
 const originalFetch = globalThis.fetch;
 const originalEnvironment = {
   apiUrl: process.env.NEXT_PUBLIC_API_URL,
@@ -124,6 +152,7 @@ function loadHook({ paymentResponses = [], onPayment } = {}) {
     if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
     if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
     if (specifier === '@/lib/payment-page-guard') return pageGuardModule.exports;
+    if (specifier === '@/lib/checkout-round-closed') return roundClosedModule.exports;
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => process.env.NEXT_PUBLIC_API_URL };
     }
@@ -404,6 +433,50 @@ test('서버가 4xx로 확정 거절하면 다음 시도는 새 clientOrderReque
     );
     assert.equal(paymentCalls.length, 1);
   }
+});
+
+test('회차 주문 마감 409 거절이면 마감을 알리고 결제창을 열지 않는다', async () => {
+  for (const message of ['현재 주문 가능한 회차가 아닙니다.', '주문 마감된 회차입니다.']) {
+    let fetchCount = 0;
+    globalThis.fetch = async () => {
+      fetchCount += 1;
+      return jsonResponse({ statusCode: 409, error: 'Conflict', message }, false, 409);
+    };
+    const { result, paymentCalls, stateChanges } = createRoundHook();
+
+    await result.requestPayment();
+
+    assert.equal(fetchCount, 1);
+    assert.equal(paymentCalls.length, 0);
+    // 마감 신호(true)를 올리고, 오류 문구는 API 원문 대신 고객 문구로 둔다.
+    assert.ok(stateChanges.includes(true), message);
+    assert.ok(stateChanges.includes('이번 회차 주문이 마감됐어요.'));
+    assert.ok(!stateChanges.includes(message));
+    assert.equal(stateChanges.at(-1), 'error');
+  }
+});
+
+test('회차 마감이 아닌 거절·단일 상품 주문의 409는 마감 신호를 올리지 않는다', async () => {
+  globalThis.fetch = async () =>
+    jsonResponse({ message: '이번 회차 배송지 한도가 마감되었습니다.' }, false, 409);
+  const round = createRoundHook();
+  await round.result.requestPayment();
+  assert.ok(!round.stateChanges.includes(true));
+  assert.ok(round.stateChanges.includes('이번 회차 배송지 한도가 마감되었습니다.'));
+
+  // 회차 상품 없이 주문하는 단일 상품 결제는 회차 마감 안내 대상이 아니다.
+  globalThis.fetch = async () =>
+    jsonResponse({ message: '현재 주문 가능한 회차가 아닙니다.' }, false, 409);
+  const loaded = loadHook();
+  const single = loaded.usePayment({
+    storeId: 'store-1',
+    orderRequest: legacyOrderRequest,
+    accessToken: 'access-token',
+    paymentMethod: 'kakaopay',
+  });
+  await single.requestPayment();
+  assert.ok(!loaded.stateChanges.includes(true));
+  assert.equal(loaded.stateChanges.at(-1), 'error');
 });
 
 test('5xx·408·429·응답 손상처럼 처리 여부가 불확실하면 같은 clientOrderRequestId를 유지한다', async () => {
