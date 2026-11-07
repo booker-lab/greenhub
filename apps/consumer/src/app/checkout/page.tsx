@@ -69,6 +69,7 @@ declare global {
 
 const API_URL = getApiBaseUrl();
 const PHONE_PATTERN = /^[0-9+\-\s()]{8,20}$/;
+const EMPTY_DELIVERY_ADDRESS: DeliveryAddress = { address: '', addressDetail: '', zipCode: '' };
 
 type CheckoutCart =
   | { kind: 'invalid'; items: [] }
@@ -497,16 +498,12 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   const router = useRouter();
   const { removeRoundItems } = useCart();
   // 결제사 화면에서 뒤로 오거나 "다시 결제하기"로 돌아오면 같은 장바구니에서 쓰던 입력값을 복원한다(C-05).
-  // 이 화면은 탭 저장소의 결제 상품을 읽은 뒤에만 그려지므로 첫 렌더에서 바로 읽는다.
+  // 기록은 계정에 묶여 있어, 로그인한 계정이 확인된 뒤에 그 계정의 기록만 복원한다.
+  const userId = session?.user?.id ?? '';
   const draftCartKey = checkoutDraftCartKey(cartItems);
-  const [restoredDraft] = useState(() =>
-    loadCheckoutDraft(readCheckoutDraftStorage(), draftCartKey, Date.now()),
-  );
-  const [address, setAddress] = useState<DeliveryAddress>(
-    () => restoredDraft?.address ?? { address: '', addressDetail: '', zipCode: '' },
-  );
-  const [deliveryPhone, setDeliveryPhone] = useState(restoredDraft?.deliveryPhone ?? '');
-  const [requestNote, setRequestNote] = useState(restoredDraft?.requestNote ?? '');
+  const [address, setAddress] = useState<DeliveryAddress>(EMPTY_DELIVERY_ADDRESS);
+  const [deliveryPhone, setDeliveryPhone] = useState('');
+  const [requestNote, setRequestNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
   const [acquisition, setAcquisition] = useState<OrderAcquisitionSnapshot | null>(null);
   const storeId = cartItems[0]?.storeId ?? '';
@@ -516,9 +513,9 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   const [gift, setGift] = useState<GiftState>(EMPTY_GIFT);
   const giftInfo = isFeatureOn('gift') ? giftPayload(gift, deliveryPhone) : null;
   // 포장 라벨(무료, 옵션 시트와 함께 켠다). 선물이면 보내는 분 이름이 라벨이라 따로 보내지 않는다.
-  const [packageLabel, setPackageLabel] = useState<PackageLabelState>(
-    restoredDraft?.packageLabel ?? EMPTY_PACKAGE_LABEL,
-  );
+  const [packageLabel, setPackageLabel] = useState<PackageLabelState>(EMPTY_PACKAGE_LABEL);
+  // 입력값 복원을 마친 계정. 이 값이 현재 계정과 같아진 뒤에만 저장한다.
+  const [draftOwnerId, setDraftOwnerId] = useState<string | null>(null);
   const giftOn = isFeatureOn('gift') && gift.enabled;
   const packageLabelValue =
     isFeatureOn('option-sheet') && !giftOn ? packageLabelPayload(packageLabel) : null;
@@ -527,15 +524,37 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     setAcquisition(getAcquisitionSnapshot());
   }, []);
 
+  // 계정이 확인되면 그 계정의 입력값을 한 번 복원한다. 다른 계정의 기록은 복원하지 않고 지운다.
+  // 아래 자동 채움 effect보다 먼저 두어, 자동 채움이 복원값 위에서 빈 칸만 채우게 한다.
+  useEffect(() => {
+    if (!userId || draftOwnerId === userId) return;
+    const restored = loadCheckoutDraft(
+      readCheckoutDraftStorage(),
+      draftCartKey,
+      userId,
+      Date.now(),
+    );
+    if (restored || draftOwnerId !== null) {
+      // 같은 화면에서 계정이 바뀌었으면 이전 계정의 입력을 남기지 않는다.
+      setAddress(restored?.address ?? EMPTY_DELIVERY_ADDRESS);
+      setDeliveryPhone(restored?.deliveryPhone ?? '');
+      setRequestNote(restored?.requestNote ?? '');
+      setPackageLabel(restored?.packageLabel ?? EMPTY_PACKAGE_LABEL);
+    }
+    setDraftOwnerId(userId);
+  }, [draftCartKey, draftOwnerId, userId]);
+
   // 입력이 바뀔 때마다 탭 저장소에만 남긴다(개인정보라 탭을 닫으면 사라진다).
   useEffect(() => {
+    if (!userId || draftOwnerId !== userId) return;
     saveCheckoutDraft(
       readCheckoutDraftStorage(),
       { address, deliveryPhone, requestNote, packageLabel },
       draftCartKey,
+      userId,
       Date.now(),
     );
-  }, [address, deliveryPhone, draftCartKey, packageLabel, requestNote]);
+  }, [address, deliveryPhone, draftCartKey, draftOwnerId, packageLabel, requestNote, userId]);
 
   // 계정에 저장된 기본 배송지·전화번호로 빈 칸만 채운다(결제 실패 뒤 다시 들어와도 그대로).
   const accessToken = session?.user?.accessToken;

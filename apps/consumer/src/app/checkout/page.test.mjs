@@ -647,24 +647,33 @@ test('장바구니 checkout은 결제사 화면에서 복원되면 결제 상품
   assert.match(cartSource, /removeEventListener\('pageshow', handlePageShow\)/);
 });
 
-test('회차 checkout은 같은 장바구니의 입력값을 복원하고 바뀔 때마다 탭 저장소에 남긴다', () => {
+test('회차 checkout은 같은 계정·장바구니의 입력값을 복원하고 바뀔 때마다 탭 저장소에 남긴다', () => {
   const start = source.indexOf('function RoundCartCheckoutContent');
   const end = source.indexOf('function CartCheckoutContent', start);
   const roundCheckoutSource = source.slice(start, end);
 
   assert.match(roundCheckoutSource, /checkoutDraftCartKey\(cartItems\)/);
+  // 기록은 로그인한 계정에 묶는다. 계정이 확인되기 전에는 읽지도 저장하지도 않는다.
+  assert.match(roundCheckoutSource, /const userId = session\?\.user\?\.id \?\? ''/);
   assert.match(
     roundCheckoutSource,
-    /loadCheckoutDraft\(readCheckoutDraftStorage\(\), draftCartKey/,
+    /loadCheckoutDraft\(\s+readCheckoutDraftStorage\(\),\s+draftCartKey,\s+userId,/,
   );
-  assert.match(roundCheckoutSource, /restoredDraft\?\.address \?\?/);
-  assert.match(roundCheckoutSource, /useState\(restoredDraft\?\.deliveryPhone \?\? ''\)/);
-  assert.match(roundCheckoutSource, /useState\(restoredDraft\?\.requestNote \?\? ''\)/);
-  assert.match(roundCheckoutSource, /restoredDraft\?\.packageLabel \?\? EMPTY_PACKAGE_LABEL/);
   assert.match(
     roundCheckoutSource,
-    /\{ address, deliveryPhone, requestNote, packageLabel \},\s+draftCartKey/,
+    /\{ address, deliveryPhone, requestNote, packageLabel \},\s+draftCartKey,\s+userId,/,
   );
+  assert.equal(
+    roundCheckoutSource.match(/if \(!userId \|\| draftOwnerId (?:===|!==) userId\) return;/g)
+      ?.length,
+    2,
+  );
+  // 첫 렌더에서 바로 복원하지 않는다(다른 계정의 기록이 계정 확인 전에 보이지 않게).
+  assert.doesNotMatch(roundCheckoutSource, /useState\(\(\) =>\s+loadCheckoutDraft/);
+  // 복원은 자동 채움보다 먼저 일어나 자동 채움이 복원값 위에서 빈 칸만 채운다.
+  const restore = roundCheckoutSource.indexOf('loadCheckoutDraft(');
+  const prefill = roundCheckoutSource.indexOf('pickCheckoutPrefill(profile)');
+  assert.ok(restore >= 0 && restore < prefill);
   // 저장된 배송지 자동 채움은 그대로 빈 칸만 채운다.
   assert.match(
     roundCheckoutSource,

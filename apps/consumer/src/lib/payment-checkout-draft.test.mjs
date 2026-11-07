@@ -21,6 +21,7 @@ const {
 
 const NOW = 1_800_000_000_000;
 const HOUR = 60 * 60 * 1000;
+const OWNER = 'user-a';
 
 function createStorage() {
   const values = new Map();
@@ -53,39 +54,85 @@ test('장바구니 키는 회차와 회차 상품 목록으로 정하고 순서�
 test('저장한 입력값을 같은 장바구니로 다시 열면 그대로 복원한다', () => {
   const storage = createStorage();
   const cartKey = checkoutDraftCartKey(items);
-  saveCheckoutDraft(storage, draft, cartKey, NOW);
+  saveCheckoutDraft(storage, draft, cartKey, OWNER, NOW);
 
   assert.ok(storage.values.has(CHECKOUT_DRAFT_STORAGE_KEY));
-  assert.deepEqual(loadCheckoutDraft(storage, cartKey, NOW + HOUR), draft);
+  assert.deepEqual(loadCheckoutDraft(storage, cartKey, OWNER, NOW + HOUR), draft);
 });
 
 test('다른 장바구니·만료·미래 시각·손상 기록은 복원하지 않는다', () => {
   const storage = createStorage();
   const cartKey = checkoutDraftCartKey(items);
-  saveCheckoutDraft(storage, draft, cartKey, NOW);
+  saveCheckoutDraft(storage, draft, cartKey, OWNER, NOW);
   const raw = storage.getItem(CHECKOUT_DRAFT_STORAGE_KEY);
 
-  assert.equal(readCheckoutDraft(raw, 'round-2:round-item-9', NOW), null);
-  assert.equal(readCheckoutDraft(raw, cartKey, NOW + 2 * HOUR + 1), null);
-  assert.equal(readCheckoutDraft(raw, cartKey, NOW - 1), null);
-  assert.equal(readCheckoutDraft('{', cartKey, NOW), null);
-  assert.equal(readCheckoutDraft(null, cartKey, NOW), null);
+  assert.equal(readCheckoutDraft(raw, 'round-2:round-item-9', OWNER, NOW), null);
+  assert.equal(readCheckoutDraft(raw, cartKey, OWNER, NOW + 2 * HOUR + 1), null);
+  assert.equal(readCheckoutDraft(raw, cartKey, OWNER, NOW - 1), null);
+  assert.equal(readCheckoutDraft('{', cartKey, OWNER, NOW), null);
+  assert.equal(readCheckoutDraft(null, cartKey, OWNER, NOW), null);
   const stored = JSON.parse(raw);
   for (const broken of [
-    { ...stored, version: 2 },
+    { ...stored, version: 3 },
+    { ...stored, ownerId: undefined },
     { ...stored, deliveryPhone: 1234 },
     { ...stored, address: { ...stored.address, zipCode: null } },
     { ...stored, packageLabel: { enabled: 'yes', text: '' } },
     { ...stored, requestNote: 'x'.repeat(1001) },
   ]) {
-    assert.equal(readCheckoutDraft(JSON.stringify(broken), cartKey, NOW), null);
+    assert.equal(readCheckoutDraft(JSON.stringify(broken), cartKey, OWNER, NOW), null);
   }
+});
+
+test('다른 계정의 기록은 복원하지 않고 그 자리에서 지운다', () => {
+  const storage = createStorage();
+  const cartKey = checkoutDraftCartKey(items);
+  saveCheckoutDraft(storage, draft, cartKey, OWNER, NOW);
+  const raw = storage.getItem(CHECKOUT_DRAFT_STORAGE_KEY);
+
+  assert.equal(JSON.parse(raw).ownerId, OWNER);
+  assert.equal(readCheckoutDraft(raw, cartKey, 'user-b', NOW), null);
+  assert.equal(loadCheckoutDraft(storage, cartKey, 'user-b', NOW), null);
+  assert.equal(storage.values.has(CHECKOUT_DRAFT_STORAGE_KEY), false);
+  // 지운 뒤에는 원래 계정으로 돌아와도 남은 것이 없다.
+  assert.equal(loadCheckoutDraft(storage, cartKey, OWNER, NOW), null);
+});
+
+test('계정을 모르면 저장·복원하지 않고 남은 기록도 건드리지 않는다', () => {
+  const storage = createStorage();
+  const cartKey = checkoutDraftCartKey(items);
+  saveCheckoutDraft(storage, draft, cartKey, '', NOW);
+  assert.equal(storage.values.has(CHECKOUT_DRAFT_STORAGE_KEY), false);
+
+  saveCheckoutDraft(storage, draft, cartKey, OWNER, NOW);
+  const raw = storage.getItem(CHECKOUT_DRAFT_STORAGE_KEY);
+  assert.equal(readCheckoutDraft(raw, cartKey, '', NOW), null);
+  assert.equal(loadCheckoutDraft(storage, cartKey, '', NOW), null);
+  assert.equal(storage.getItem(CHECKOUT_DRAFT_STORAGE_KEY), raw);
+});
+
+test('계정을 남기기 전 형식(버전 1) 기록은 누구 것인지 몰라 복원하지 않는다', () => {
+  const storage = createStorage();
+  const cartKey = checkoutDraftCartKey(items);
+  storage.setItem(
+    CHECKOUT_DRAFT_STORAGE_KEY,
+    JSON.stringify({ version: 1, cartKey, savedAt: NOW, ...draft }),
+  );
+  assert.equal(loadCheckoutDraft(storage, cartKey, OWNER, NOW), null);
+  assert.equal(storage.values.has(CHECKOUT_DRAFT_STORAGE_KEY), false);
+});
+
+test('다른 장바구니의 기록은 이 체크아웃이 덮어쓸 자리라 읽을 때 지운다', () => {
+  const storage = createStorage();
+  saveCheckoutDraft(storage, draft, checkoutDraftCartKey(items), OWNER, NOW);
+  assert.equal(loadCheckoutDraft(storage, 'round-2:round-item-9', OWNER, NOW), null);
+  assert.equal(storage.values.has(CHECKOUT_DRAFT_STORAGE_KEY), false);
 });
 
 test('모두 빈 입력은 남기지 않고 이전 기록도 지운다', () => {
   const storage = createStorage();
   const cartKey = checkoutDraftCartKey(items);
-  saveCheckoutDraft(storage, draft, cartKey, NOW);
+  saveCheckoutDraft(storage, draft, cartKey, OWNER, NOW);
   saveCheckoutDraft(
     storage,
     {
@@ -95,6 +142,7 @@ test('모두 빈 입력은 남기지 않고 이전 기록도 지운다', () => {
       packageLabel: { enabled: false, text: '' },
     },
     cartKey,
+    OWNER,
     NOW,
   );
   assert.equal(storage.values.has(CHECKOUT_DRAFT_STORAGE_KEY), false);
@@ -103,9 +151,9 @@ test('모두 빈 입력은 남기지 않고 이전 기록도 지운다', () => {
 test('결제가 성공하면 저장값을 지운다', () => {
   const storage = createStorage();
   const cartKey = checkoutDraftCartKey(items);
-  saveCheckoutDraft(storage, draft, cartKey, NOW);
+  saveCheckoutDraft(storage, draft, cartKey, OWNER, NOW);
   clearCheckoutDraft(storage);
-  assert.equal(loadCheckoutDraft(storage, cartKey, NOW), null);
+  assert.equal(loadCheckoutDraft(storage, cartKey, OWNER, NOW), null);
 });
 
 test('저장소가 없거나 막혀도 예외 없이 넘어간다', () => {
@@ -121,11 +169,11 @@ test('저장소가 없거나 막혀도 예외 없이 넘어간다', () => {
       throw new Error('blocked');
     },
   };
-  assert.doesNotThrow(() => saveCheckoutDraft(blocked, draft, cartKey, NOW));
-  assert.equal(loadCheckoutDraft(blocked, cartKey, NOW), null);
+  assert.doesNotThrow(() => saveCheckoutDraft(blocked, draft, cartKey, OWNER, NOW));
+  assert.equal(loadCheckoutDraft(blocked, cartKey, OWNER, NOW), null);
   assert.doesNotThrow(() => clearCheckoutDraft(blocked));
-  assert.doesNotThrow(() => saveCheckoutDraft(null, draft, cartKey, NOW));
-  assert.equal(loadCheckoutDraft(null, cartKey, NOW), null);
+  assert.doesNotThrow(() => saveCheckoutDraft(null, draft, cartKey, OWNER, NOW));
+  assert.equal(loadCheckoutDraft(null, cartKey, OWNER, NOW), null);
 });
 
 test('입력값은 탭 범위 저장소(sessionStorage)만 쓴다', () => {
