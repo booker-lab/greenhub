@@ -1,9 +1,10 @@
-import type { NextConfig } from "next";
-import withPWA from "@ducanh2912/next-pwa";
-import bundleAnalyzer from "@next/bundle-analyzer";
+import withPWA from '@ducanh2912/next-pwa';
+import bundleAnalyzer from '@next/bundle-analyzer';
+import type { NextConfig } from 'next';
+import { localStorageEmulatorImageConfig } from './src/lib/local-storage-image';
 
 const withBundleAnalyzer = bundleAnalyzer({
-  enabled: process.env.ANALYZE === "true",
+  enabled: process.env.ANALYZE === 'true',
   openAnalyzer: false,
 });
 
@@ -38,13 +39,17 @@ function firebaseStorageImagePatterns() {
   }));
 }
 
+const localImageConfig = localStorageEmulatorImageConfig();
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },
   images: {
-    remotePatterns: firebaseStorageImagePatterns(),
+    // 로컬 런타임에서만 Storage 에뮬레이터 사진을 더한다(운영·Preview 빌드는 빈 값).
+    ...localImageConfig,
+    remotePatterns: [...firebaseStorageImagePatterns(), ...(localImageConfig.remotePatterns ?? [])],
   },
 };
 
@@ -58,26 +63,28 @@ const precacheExclude = [
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default withBundleAnalyzer(withPWA({
-  dest: "public",
-  cacheOnFrontEndNav: false,
-  aggressiveFrontEndNavCaching: false,
-  reloadOnOnline: true,
-  cleanupOutdatedCaches: true,
-  disable: process.env.NODE_ENV === "development",
-  workboxOptions: {
-    exclude: precacheExclude,
-    runtimeCaching: [
-      // Firestore WebChannel — 캐시 불가
-      {
-        urlPattern: /firestore\.googleapis\.com/,
-        handler: 'NetworkOnly',
-      },
-      // Next.js JS 청크 — 구 캐시로 인한 404 방지
-      {
-        urlPattern: /\/_next\/static\/chunks\//,
-        handler: 'NetworkFirst',
-      },
-    ],
-  },
-} as any)(nextConfig));
+export default withBundleAnalyzer(
+  withPWA({
+    dest: 'public',
+    cacheOnFrontEndNav: false,
+    aggressiveFrontEndNavCaching: false,
+    reloadOnOnline: true,
+    cleanupOutdatedCaches: true,
+    disable: process.env.NODE_ENV === 'development',
+    workboxOptions: {
+      exclude: precacheExclude,
+      runtimeCaching: [
+        // Firestore WebChannel — 캐시 불가
+        {
+          urlPattern: /firestore\.googleapis\.com/,
+          handler: 'NetworkOnly',
+        },
+        // Next.js JS 청크 — 구 캐시로 인한 404 방지
+        {
+          urlPattern: /\/_next\/static\/chunks\//,
+          handler: 'NetworkFirst',
+        },
+      ],
+    },
+  } as any)(nextConfig),
+);
