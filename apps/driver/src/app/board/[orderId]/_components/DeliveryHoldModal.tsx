@@ -161,6 +161,11 @@ export function DeliveryHoldModal({
     }
   }, [opened, orderStatus]);
 
+  // 창을 새로 열면 지난번(닫기 직전 불확실 안내·유형 미선택 등) 오류 문구를 남기지 않는다.
+  useEffect(() => {
+    if (opened) setError('');
+  }, [opened]);
+
   // 유형·입력값이 바뀌면 이전 제출 오류는 지금 입력과 맞지 않으므로 지운다(D-15).
   function changeReason(value: string) {
     const next = value as HoldReason;
