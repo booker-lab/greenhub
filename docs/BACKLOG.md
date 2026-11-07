@@ -457,6 +457,15 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - 결제 전(`PENDING`)·이미 취소된 주문은 제외하고, 사유는 고정 문구 `고객 요청`, 멱등 키 `round-consumer-cancel:<orderId>`를 사용한다.
 - 계약 정본: `docs/specs/api/notifications.md`. 직접 근거: `legacy-consumer-cancel-convergence.spec.ts` S9~S12.
 
+### CONSUMER-UX-AUDIT-FOLLOWUPS
+
+상태: `DECISION_REQUIRED` — 2026-11-07 소비자 UX 감사(#826 병합) 뒤 남은 사람 결정·확인. 자료: `docs/ux-audit/consumer/plan.md` 3·10·11절. C-28·재주문·우선순위는 결정됐고, C-01 실기기 확인과 그 결과에 따른 C-02 판단이 남았다.
+
+- [ ] C-01 실기기 확인(사용자, 운영 반영 뒤): Android Chrome·카카오톡 인앱에서 결제창 이동·취소·복귀(10절 체크리스트 A~H)
+- [x] C-28 배송 보류 안내: 2026-11-07 사용자 승인으로 10절 초안 확정·구현(사유 코드별 고정 문구, 직접 입력은 "담당자 메모", 미결제 안내). 11절
+- [x] 재주문(`reorder` 기능 토글) 켜기: 2026-11-07 사용자 승인으로 Vercel consumer Production 값에 추가. 다음 운영 배포 뒤 운영 meta에 `reorder`가 있는지 확인한다
+- [x] 빠진 기능 우선순위: 2026-11-07 사용자 승인으로 확정(11절 표). 1순위 주소 직접 입력 대체 수단부터 별도 PR로 한다
+
 ## DOC_DELTA
 
 ### Pilot marketing contract
@@ -701,6 +710,7 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### ROUND-PAYMENT-RETRY-DOUBLE-HOLD
 - [ ] 소비자가 결제창을 닫고 새 결제 시도 ID로 다시 결제하면(#328), 이전 시도의 `PENDING` 주문·`HELD` 예약이 결제 실패 웹훅 또는 15분 만료 정리(1분 주기)까지 최대 약 16분 동안 회차 배송지·수량·상품 한도를 함께 차지한다. **2026-10-04 결정: 파일럿 동안 유지한다.** 즉시 해제하려면 늦게 도착한 이전 결제(늦은 결제 재확보·자동 환불) 흐름까지 다시 맞춰야 해서 위험이 이득보다 크다. 주문 오픈 날 '한도 마감'이 비정상적으로 빨리 나오면 우선 대응한다.
 - 2026-10-10 결정: 이전 예약 유지는 그대로 두고, 같은 회차에서 고객 한 명이 동시에 가질 수 있는 만료 전 결제 예약을 3건으로 제한한다(4번째 시도는 409 안내). 구현: `OrderCapacityService` `MAX_ACTIVE_CHECKOUT_HOLDS_PER_USER_ROUND`. 2026-10-24 코드 대조: #546의 품목별 1인 상한도 만료 전 `HELD` 예약을 합산하므로, 재시도 수량이 상한에 걸리면 이전 예약이 만료(15분)될 때까지 409를 받을 수 있다.
+- 2026-11-07 소비자 UX 감사(C-02): 로컬(결제 실패 웹훅 없음)에서 결제창 취소·뒤로가기 3회 뒤 네 번째 결제가 막히는 것을 재현했다. #826에서 막힐 때 '최대 15분' 안내와 주문 내역 버튼만 넣었다. 같은 결제 시도 ID 재사용은 API가 취소된 주문에도 같은 응답을 돌려줘 '결제 승인 → 자동 환불'이 될 수 있어 하지 않았다. 남은 판단: 운영에서 결제창을 닫을 때 `Transaction.Failed`가 와서 예약이 바로 반환되는지 실기기로 확인한다(`docs/ux-audit/consumer/plan.md` 10절 시나리오 H). 오지 않으면 같은 절의 API 변경안을 검토한다.
 
 ### CI-REQUIRED-CHECK
 - [x] **2026-10-24 사용자 지정 완료**: `main` branch protection 필수 검사가 `verify`, `lint · typecheck`, `unit tests`, `Firebase rules (emulator)`, `build`(모두 GitHub Actions)다. 최신 main 반영 필수와 우회 금지는 그대로다. 이전 기록: **2026-10-09 결정: 지정한다.** `.github/workflows/ci.yml`이 GitHub에서 실제로 통과하는 것을 확인한 뒤 lint·unit·rules·build를 branch protection 필수 검사로 건다. 지정하면 에이전트 PR 자동 병합도 이 검사를 기다린다. 2026-10-09 CI 추가(#417) 뒤 PR마다 통과한다. 남은 일은 branch protection 필수 검사 지정(사용자)이다.
