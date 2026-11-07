@@ -12,6 +12,7 @@ import { EngagementService } from '../engagement/engagement.service';
 import { MarketPricesService } from '../market-prices/market-prices.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OpsDigestService } from '../ops-alerts/ops-digest.service';
+import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
 import { PaymentsService } from '../payments/payments.service';
 import { RetentionService } from '../retention/retention.service';
 import { SettlementsService } from '../settlements/settlements.service';
@@ -36,6 +37,7 @@ const enabledConfig = {
 function makeServices() {
   return {
     payments: { cleanupPendingOrders: jest.fn().mockResolvedValue(undefined) },
+    orderChargePayments: { reconcilePendingCharges: jest.fn().mockResolvedValue(undefined) },
     notifications: {
       processGroupBuyDeadlines: jest.fn().mockResolvedValue(undefined),
       notifyDeadlineSoon: jest.fn().mockResolvedValue(undefined),
@@ -58,6 +60,7 @@ async function makeApp(config: Record<string, string>, verify: SchedulerIdTokenV
       { provide: SCHEDULER_ID_TOKEN_VERIFIER, useValue: verify },
       { provide: ConfigService, useValue: { get: (key: string) => config[key] } },
       { provide: PaymentsService, useValue: services.payments },
+      { provide: OrderChargePaymentService, useValue: services.orderChargePayments },
       { provide: NotificationsService, useValue: services.notifications },
       { provide: SettlementsService, useValue: services.settlements },
       { provide: RetentionService, useValue: services.retention },
@@ -110,6 +113,7 @@ describe('Cloud Scheduler 정기 작업 경로', () => {
     const { services } = harness;
     const expected = {
       'payments-cleanup-pending-orders': services.payments.cleanupPendingOrders,
+      'payments-reconcile-pending-charges': services.orderChargePayments.reconcilePendingCharges,
       'group-buy-deadlines': services.notifications.processGroupBuyDeadlines,
       'group-buy-deadline-soon': services.notifications.notifyDeadlineSoon,
       'settlements-confirm-due': services.settlements.confirmDueSettlements,

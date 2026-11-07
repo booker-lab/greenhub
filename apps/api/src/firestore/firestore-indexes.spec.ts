@@ -105,6 +105,22 @@ const QUERY_CONTRACTS: QueryContract[] = [
     ],
   },
   {
+    id: 'pending-order-charges-by-created-at',
+    sourceFile: 'apps/api/src/payments/order-charge-payment.service.ts',
+    sourcePatterns: [
+      'private async runReconcilePendingCharges()',
+      ".collection('orderCharges')",
+      ".where('status', '==', 'PENDING')",
+      ".where('createdAt', '<'",
+    ],
+    collectionGroup: 'orderCharges',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'createdAt', order: 'ASCENDING' },
+    ],
+  },
+  {
     id: 'daily-caps-by-store-date',
     sourceFile: 'apps/api/src/products/products.service.ts',
     sourcePatterns: [

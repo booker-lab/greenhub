@@ -276,6 +276,26 @@ REDELIVERY_FEE
 
 본 주문 취소 시 paid 재배송비도 별도 refund 경로로 환불할 수 있다. 본 결제와 재배송비 결제를 같은 payment record라고 가정하지 않는다.
 
+### 웹훅 밖 수렴(`reconcilePendingCharges`)
+
+웹훅이 빠지면 손님이 돈을 냈는데 charge가 `PENDING`에 남아 재배송이 재개되지 않는다. `OrderChargePaymentService.reconcilePendingCharges()`가 매분(`@Cron`, Cloud Run에서는 Cloud Scheduler 작업 `payments-reconcile-pending-charges`) PortOne을 직접 조회해 수렴시킨다.
+
+- 대상: `orderCharges`의 `status == PENDING`이고 `createdAt`이 15분보다 오래된 청구(복합 인덱스 `status`·`createdAt`). `type == REDELIVERY_FEE`이고 `portonePaymentId == order-charge-{chargeId}`인 청구만 본다. 이미 `PAID`·`FAILED`·`REFUNDED`인 청구와 15분이 안 된 청구는 조회하지 않는다.
+- 상한: PortOne 동시 호출 4건, 한 실행당 50건(조회한 적 없는 청구 → 오래전에 조회한 청구 순), 같은 프로세스에서 이전 실행이 끝나기 전의 다음 실행은 건너뛴다.
+- 조회 간격: 같은 청구는 5분(만든 지 하루가 지나면 1시간)에 한 번만 조회한다. `PENDING` 확인과 조회 시각 기록(`orderCharges/{chargeId}.providerCheckedAtMs`, epoch ms)을 한 트랜잭션에서 해 겹친 실행·여러 서버에서도 지킨다. 이 기록은 `status`·`updatedAt`을 바꾸지 않는다.
+
+| 원격 결과 | 처리 |
+|---|---|
+| `PAID` | 웹훅과 같은 `finalizePaid()`로 확정한다. 필요 없는 결제(취소 주문·보류 해소·교체·주문 없음)는 기존대로 `PAID`(+`unneededPaidAt`) 기록 뒤 환불한다. 웹훅과 겹쳐도 finalize 트랜잭션의 상태 확인과 환불 claim으로 반영·환불은 한 번이다. 검증 불일치(금액 등)는 확정하지 않고 오류 로그만 남긴다 |
+| `READY`·`FAILED`·`404 + PAYMENT_NOT_FOUND`, 현재 보류에 필요한 청구 | 바꾸지 않는다. `FAILED`는 손님 화면에서 결제 버튼을 닫고 복구 필요로 바꾸므로(`resolveRedeliveryPaymentActionability`) 같은 결제 ID로 다시 시도할 수 있게 `PENDING`으로 둔다 |
+| `READY`·`FAILED`·`404 + PAYMENT_NOT_FOUND`, 다시 필요해질 수 없는 청구(주문 없음·주문 `CANCELLED`·현재 보류와 불일치)이고 만든 지 24시간이 지남 | 기존 `markFailed()`로 `FAILED`. 필요 여부는 같은 트랜잭션에서 주문을 다시 읽어 판정한다. 그 뒤 PortOne `Transaction.Paid`가 와도 `finalizePaid()`가 `FAILED`를 받아 기록·환불한다 |
+| `CANCELLED`·`PARTIAL_CANCELLED`·가상계좌 발급·결제 대기 등 그 밖의 상태 | 바꾸지 않고 다음 조회로 남긴다 |
+| 인증·네트워크·시간 초과 등 그 밖의 오류 | 상태를 바꾸지 않는다. 오류 로그(`[OrderChargeScheduler]`, 상태·유형만)와 `PAYMENT_LOOKUP_FAILED`(critical, `chargeId`, `paymentId: null`, 키 `charge-payment-lookup-failed:{chargeId}`) 운영 기록을 남긴다. 같은 청구는 하나로 합쳐지고 새로 열릴 때만 알리며, 조회 간격 때문에 매분 기록되지 않는다 |
+
+새 상태는 만들지 않는다. 확정·실패 기록은 각각 기존 `finalizePaid()`·`markFailed()`만 거치므로 그 경로의 검증(#540 병합 뒤 채널·통화 검증 포함)이 그대로 적용된다. E2E 가짜 PortOne(`e2e-portone.client.ts`)은 `order-charge-` 접두어를 뗀 chargeId가 이번 실행 범위일 때만 fixture대로 답하고, 범위 밖 재배송비 결제에는 닿지 않는다(`404 E2E_PAYMENT_OUT_OF_SCOPE`, 상태 변경 없음).
+
+남은 범위: 환불 claim을 쥔 다른 시도가 만료 전에 멈춘 `PAID` 재배송비(취소 주문·`unneededPaidAt`)의 환불 재개는 여전히 PortOne 웹훅 재전송이나 운영 조치(`AUTO_REFUND_FAILED`의 `RETRY_REFUND`)에 기댄다. 이 경로는 `PENDING`만 훑는다. 손님 화면의 즉시 확인(본 결제 `POST /payments/orders/:orderId/check` 같은)은 재배송비에 없다.
+
 ## 10A. 결제 하위 계약 검증 상태
 
 판정 기준은 `docs/DOCUMENT_CONSISTENCY.md`를 따른다.
@@ -317,6 +337,7 @@ REDELIVERY_FEE
 - `Transaction.Paid`에서 원격 결제를 재조회하고 `PAID` 상태·금액·charge/order 연결 관계 검증
 - 식별자·금액 불일치 시 charge를 확정하지 않음, 현재 보류에 필요 없는 승인 결제는 기록 후 환불
 - 실패 webhook 중복 시 `FAILED`로 한 번 수렴
+- 웹훅 밖 수렴: 15분 넘은 `PENDING`만 조회, 원격 `PAID`면 `finalizePaid()`로 확정(필요 없는 결제는 기록 뒤 환불 1회), 웹훅과 동시 실행에서 반영·환불 1회, 원격 비`PAID`·404는 현재 보류에 필요한 청구를 바꾸지 않음, 다시 필요해질 수 없는 24시간 넘은 청구만 `FAILED`, 조회 오류·시간 초과는 상태 불변·청구별 합쳐지는 기록, 조회 간격·실행 겹침·한 실행 50건·동시 4건 상한(`order-charge-pending-reconcile.spec.ts`), 웹훅 없이 재배송비가 확정돼 재배송이 재개되는 통합 흐름(`test/mvp-sales-round.e2e-spec.ts`)
 - paid 재배송비 환불의 동시 호출·완료 후 재시도에서 PortOne 환불 1회
 - 주문 생성 측에서는 고객 책임 배송 보류, WEATHER 제외, 양수 재배송비, 주문자 소유권을 확인
 
@@ -385,7 +406,7 @@ POST /payments/orders/:orderId/check
 
 손님 화면(`useOrderStatus`의 `checkPendingPayment`): 결제 완료 화면과 주문 상세 화면이 켠다. 기존 3초 폴링(2분 창)은 그대로 두고, `PENDING`이 폴링 창 시작 뒤 6초·20초·45초를 넘겨 이어질 때 한 번씩(창마다 최대 3번, 동시에 하나) 요청한다. 응답 `status`가 `PENDING`이 아니면 바로 주문을 다시 읽고, 실패는 화면에 따로 알리지 않는다. 문구·레이아웃은 바뀌지 않는다.
 
-재배송비(`order-charge-*`)는 이 경로 대상이 아니다. 재배송비 결제에는 15분 scheduler 같은 웹훅 밖 수렴 경로가 아직 없다(§10, 별도 과제).
+재배송비(`order-charge-*`)는 이 경로 대상이 아니다. 재배송비의 웹훅 밖 수렴은 매분 scheduler(§10 "웹훅 밖 수렴")가 맡고, 손님 화면의 즉시 확인은 없다.
 
 범용 `POST /refund` 같은 public endpoint는 없다.
 
@@ -434,7 +455,7 @@ export interface Payment {
 
 결제 계열 주요 운영 이슈:
 
-- `PAYMENT_LOOKUP_FAILED`: timeout reconciliation 중 원격 결제 상태를 신뢰성 있게 조회하지 못함
+- `PAYMENT_LOOKUP_FAILED`: timeout reconciliation 중 원격 결제 상태를 신뢰성 있게 조회하지 못함(재배송비는 `chargeId`·`paymentId: null`로 기록, 조치 버튼 없음)
 - `AUTO_REFUND_FAILED`: 자동 환불 provider 호출 결과 불명확(본 결제·재배송비)
 - `FINALIZATION_REFUND_FAILED`: 금액 불일치·늦은 결제 확정 환불의 결과 불명확
 - `PROVIDER_REVERSAL_DETECTED`: 확정된 주문에 결제사 쪽 취소·부분 취소·취소 대기·분쟁 웹훅 수신
@@ -468,6 +489,7 @@ export interface Payment {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-07 | 재배송비 웹훅 밖 수렴 추가 — 매분 15분 넘은 `PENDING` 청구를 PortOne에 조회해 `PAID`면 기존 `finalizePaid()`로 확정(필요 없는 결제는 기록 뒤 환불), 비`PAID`는 현재 보류에 필요하면 그대로 두고 다시 필요해질 수 없는 24시간 넘은 청구만 기존 `markFailed()`로 `FAILED`. 청구별 조회 간격 5분·1시간, 동시 4·실행당 50건, `orderCharges` `status`·`createdAt` 인덱스, Cloud Scheduler 작업 `payments-reconcile-pending-charges` |
 | 2026-11-06 | 손님 결제 확인 `POST /payments/orders/:orderId/check` 추가 — 주문 당사자만, `PENDING`일 때만 PortOne 조회, 주문별 10초 간격 하한, `PAID`일 때만 기존 `finalizePaidOrder()`로 확정하고 그 밖에는 변경·취소 없음. 결제 완료·주문 상세 화면이 `PENDING` 6·20·45초 뒤 요청 |
 | 2026-10-21 | 본 결제 환불에 `verifyProviderFirst` 선택(첫 요청 전 PortOne 재조회) 추가 — 배송 후 환불이 콘솔 수동 환불과 중복되지 않게 함 |
 | 2026-10-21 | 소비자 앱에 토스페이먼츠 카드 결제(`NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY`, `payMethod: 'CARD'`)를 추가하고 결제수단별 채널 키와 #540 병합 뒤 운영 카드 채널 LIVE·같은 상점 조건을 명시 |
