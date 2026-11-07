@@ -59,8 +59,9 @@ function unavailableReason(message?: string) {
   const trimmed = message.trim();
   // 해결 방법이 든 안내를 먼저 본다. 내부 용어가 든 문장은 빼고 남은 문장으로 판정해, 해결 방법은 살리고
   // 내부 용어는 화면에 내지 않는다.
+  // 옵션 안내는 원문 대신 고정 문구를 보이므로, 내부 용어와 같은 문장에 있어도 원문 전체로 판정한다.
+  if (/옵션을 묶음마다/.test(trimmed)) return OPTION_REQUIRED_REASON;
   const actionable = withoutInternalSentences(trimmed);
-  if (/옵션을 묶음마다/.test(actionable)) return OPTION_REQUIRED_REASON;
   if (ACTIONABLE_SERVER_REASON.test(actionable) && actionable.length <= MAX_SERVER_REASON_LENGTH) {
     return actionable;
   }
