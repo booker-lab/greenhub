@@ -426,8 +426,9 @@ export default function MyPageClient() {
         </div>
       </div>
 
-      {/* 앱 설치 */}
-      <div>
+      {/* 앱 설치: A2HSButton은 설치 프롬프트가 없는 브라우저(iOS Safari·인앱 브라우저 등)에서 아무것도
+          그리지 않는다. 제목만 남지 않도록 묶음 안에 버튼(button)이 그려졌을 때만 묶음 전체를 보인다. */}
+      <div className="hidden has-[button]:block" data-testid="mypage-install">
         <h2 className="m-0 mb-4 leading-[1.35]" style={sectionTitleStyle}>
           앱 설치
         </h2>

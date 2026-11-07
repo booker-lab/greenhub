@@ -206,3 +206,13 @@ test('MY 내 정보에 공개 사업자 정보의 고객센터 전화 연결을 
   // 번호를 화면 코드에 직접 적지 않는다.
   assert.doesNotMatch(source, /tel:\d|010-\d{4}-\d{4}/);
 });
+
+test('앱 설치 제목은 설치 버튼이 그려질 때만 보인다', () => {
+  const start = source.indexOf('data-testid="mypage-install"');
+  assert.ok(start > 0);
+  const section = source.slice(source.lastIndexOf('<div', start), source.indexOf('</div>', start));
+  // 버튼이 없으면 묶음(제목 포함)을 숨기고, 버튼이 있을 때만 보인다.
+  assert.match(section, /className="hidden has-\[button\]:block"/);
+  assert.match(section, />\s*앱 설치\s*<\/h2>/);
+  assert.match(section, /<A2HSButton \/>/);
+});
