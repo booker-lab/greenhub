@@ -61,6 +61,15 @@ const requireForTest = (specifier) => {
     return { pickCheckoutPrefill: () => ({}), prefillAddress: (c) => c, prefillPhone: (c) => c };
   }
   if (specifier === '@/lib/payment-redirect') return {};
+  if (specifier === '@/lib/payment-checkout-draft') {
+    return {
+      checkoutDraftCartKey: () => '',
+      clearCheckoutDraft: () => {},
+      loadCheckoutDraft: () => null,
+      readCheckoutDraftStorage: () => null,
+      saveCheckoutDraft: () => {},
+    };
+  }
   if (specifier === '@/lib/payment-page-guard') return { attachPaymentPageGuard: () => () => {} };
   if (specifier === '@/lib/payment-failure-message') {
     return { paymentFailureMessage: () => '결제를 취소했어요. 장바구니는 그대로 남아 있어요.' };
@@ -636,4 +645,37 @@ test('장바구니 checkout은 결제사 화면에서 복원되면 결제 상품
   assert.match(cartSource, /addEventListener\('pageshow', handlePageShow\)/);
   assert.match(cartSource, /if \(event\.persisted\) readCart\(\)/);
   assert.match(cartSource, /removeEventListener\('pageshow', handlePageShow\)/);
+});
+
+test('회차 checkout은 같은 장바구니의 입력값을 복원하고 바뀔 때마다 탭 저장소에 남긴다', () => {
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+
+  assert.match(roundCheckoutSource, /checkoutDraftCartKey\(cartItems\)/);
+  assert.match(
+    roundCheckoutSource,
+    /loadCheckoutDraft\(readCheckoutDraftStorage\(\), draftCartKey/,
+  );
+  assert.match(roundCheckoutSource, /restoredDraft\?\.address \?\?/);
+  assert.match(roundCheckoutSource, /useState\(restoredDraft\?\.deliveryPhone \?\? ''\)/);
+  assert.match(roundCheckoutSource, /useState\(restoredDraft\?\.requestNote \?\? ''\)/);
+  assert.match(roundCheckoutSource, /restoredDraft\?\.packageLabel \?\? EMPTY_PACKAGE_LABEL/);
+  assert.match(
+    roundCheckoutSource,
+    /\{ address, deliveryPhone, requestNote, packageLabel \},\s+draftCartKey/,
+  );
+  // 저장된 배송지 자동 채움은 그대로 빈 칸만 채운다.
+  assert.match(
+    roundCheckoutSource,
+    /setAddress\(\(current\) => prefillAddress\(current, prefill\)\)/,
+  );
+  assert.match(
+    roundCheckoutSource,
+    /setDeliveryPhone\(\(current\) => prefillPhone\(current, prefill\)\)/,
+  );
+  // 결제가 끝나면 checkout_cart와 함께 지운다.
+  const done = roundCheckoutSource.indexOf("state !== 'done' || !orderId");
+  const clear = roundCheckoutSource.indexOf('clearCheckoutDraft(readCheckoutDraftStorage())');
+  assert.ok(done >= 0 && done < clear);
 });

@@ -55,6 +55,19 @@ new Function(
   }).outputText,
 )(failureMessageModule, failureMessageModule.exports);
 
+const draftSource = await readFile(
+  new URL('../../../lib/payment-checkout-draft.ts', import.meta.url),
+  'utf8',
+);
+const draftModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(draftSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(draftModule, draftModule.exports);
+
 const pageModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -68,6 +81,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
   if (specifier === '@/lib/order-cancel-reason') return cancelReasonModule.exports;
   if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
+  if (specifier === '@/lib/payment-checkout-draft') return draftModule.exports;
   if (specifier === '@/hooks/useCart') return { useCart: () => ({ removeRoundItems: () => {} }) };
   // 벤치마킹 비교 기능 모듈: 이 테스트에서는 꺼진 상태로 둔다.
   if (specifier === '@/components/benchmark/OrderSuccessGuide') return { default: () => null };
@@ -310,4 +324,13 @@ test('리다이렉트 결제 실패 문구는 PG 원문 코드 대신 고객 문
   );
   assert.equal(failure.kind, 'failure');
   assert.equal(paymentFailureMessage(failure), '결제를 취소했어요. 장바구니는 그대로 남아 있어요.');
+});
+
+test('모바일 결제 성공 복귀는 checkout_cart와 함께 체크아웃 입력값을 지운다', () => {
+  const confirmGuard = source.indexOf("resolved.kind === 'confirm'");
+  const clear = source.indexOf('clearCheckoutDraft(browser?.storage ?? null)');
+  assert.ok(confirmGuard >= 0 && confirmGuard < clear);
+  const cartRemoval = source.indexOf("removeItem('checkout_cart')");
+  assert.ok(cartRemoval < clear);
+  assert.equal(source.match(/clearCheckoutDraft\(/g)?.length, 1);
 });

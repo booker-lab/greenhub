@@ -11,6 +11,7 @@ import { useCart } from '@/hooks/useCart';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
 import { isFeatureOn } from '@/lib/features';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
+import { clearCheckoutDraft } from '@/lib/payment-checkout-draft';
 import { paymentFailureMessage } from '@/lib/payment-failure-message';
 import {
   type OrderPaymentReturn,
@@ -335,7 +336,11 @@ function OrderSuccessContent() {
     );
     if (resolved.kind === 'confirm') {
       try {
-        if (resolved.clearCheckoutCart) browser?.storage?.removeItem('checkout_cart');
+        if (resolved.clearCheckoutCart) {
+          browser?.storage?.removeItem('checkout_cart');
+          // 결제한 체크아웃의 입력값(연락처·요청사항 등)도 함께 지운다(C-05).
+          clearCheckoutDraft(browser?.storage ?? null);
+        }
         if (resolved.roundItemIds.length > 0) removeRoundItems(resolved.roundItemIds);
       } catch {
         // 저장소 접근이 막혀도 결제 결과 확인은 막지 않는다.

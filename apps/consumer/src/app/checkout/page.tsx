@@ -34,6 +34,13 @@ import { getCartValidationError } from '@/lib/cartValidation';
 import { pickCheckoutPrefill, prefillAddress, prefillPhone } from '@/lib/checkout-prefill';
 import { isFeatureOn } from '@/lib/features';
 import { isKoreanMobilePhone, ROUND_DELIVERY_PHONE_ERROR } from '@/lib/korean-mobile-phone';
+import {
+  checkoutDraftCartKey,
+  clearCheckoutDraft,
+  loadCheckoutDraft,
+  readCheckoutDraftStorage,
+  saveCheckoutDraft,
+} from '@/lib/payment-checkout-draft';
 import { paymentFailureMessage } from '@/lib/payment-failure-message';
 import { attachPaymentPageGuard, type PaymentPagePhase } from '@/lib/payment-page-guard';
 import {
@@ -489,13 +496,17 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   const { data: session } = useSession();
   const router = useRouter();
   const { removeRoundItems } = useCart();
-  const [address, setAddress] = useState<DeliveryAddress>({
-    address: '',
-    addressDetail: '',
-    zipCode: '',
-  });
-  const [deliveryPhone, setDeliveryPhone] = useState('');
-  const [requestNote, setRequestNote] = useState('');
+  // 결제사 화면에서 뒤로 오거나 "다시 결제하기"로 돌아오면 같은 장바구니에서 쓰던 입력값을 복원한다(C-05).
+  // 이 화면은 탭 저장소의 결제 상품을 읽은 뒤에만 그려지므로 첫 렌더에서 바로 읽는다.
+  const draftCartKey = checkoutDraftCartKey(cartItems);
+  const [restoredDraft] = useState(() =>
+    loadCheckoutDraft(readCheckoutDraftStorage(), draftCartKey, Date.now()),
+  );
+  const [address, setAddress] = useState<DeliveryAddress>(
+    () => restoredDraft?.address ?? { address: '', addressDetail: '', zipCode: '' },
+  );
+  const [deliveryPhone, setDeliveryPhone] = useState(restoredDraft?.deliveryPhone ?? '');
+  const [requestNote, setRequestNote] = useState(restoredDraft?.requestNote ?? '');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
   const [acquisition, setAcquisition] = useState<OrderAcquisitionSnapshot | null>(null);
   const storeId = cartItems[0]?.storeId ?? '';
@@ -505,7 +516,9 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   const [gift, setGift] = useState<GiftState>(EMPTY_GIFT);
   const giftInfo = isFeatureOn('gift') ? giftPayload(gift, deliveryPhone) : null;
   // 포장 라벨(무료, 옵션 시트와 함께 켠다). 선물이면 보내는 분 이름이 라벨이라 따로 보내지 않는다.
-  const [packageLabel, setPackageLabel] = useState<PackageLabelState>(EMPTY_PACKAGE_LABEL);
+  const [packageLabel, setPackageLabel] = useState<PackageLabelState>(
+    restoredDraft?.packageLabel ?? EMPTY_PACKAGE_LABEL,
+  );
   const giftOn = isFeatureOn('gift') && gift.enabled;
   const packageLabelValue =
     isFeatureOn('option-sheet') && !giftOn ? packageLabelPayload(packageLabel) : null;
@@ -513,6 +526,16 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   useEffect(() => {
     setAcquisition(getAcquisitionSnapshot());
   }, []);
+
+  // 입력이 바뀔 때마다 탭 저장소에만 남긴다(개인정보라 탭을 닫으면 사라진다).
+  useEffect(() => {
+    saveCheckoutDraft(
+      readCheckoutDraftStorage(),
+      { address, deliveryPhone, requestNote, packageLabel },
+      draftCartKey,
+      Date.now(),
+    );
+  }, [address, deliveryPhone, draftCartKey, packageLabel, requestNote]);
 
   // 계정에 저장된 기본 배송지·전화번호로 빈 칸만 채운다(결제 실패 뒤 다시 들어와도 그대로).
   const accessToken = session?.user?.accessToken;
@@ -557,6 +580,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   useEffect(() => {
     if (state !== 'done' || !orderId) return;
     sessionStorage.removeItem('checkout_cart');
+    clearCheckoutDraft(readCheckoutDraftStorage());
     try {
       // 바로 구매로 들어온 경우 장바구니의 다른 상품은 남겨야 하므로 결제한 회차 상품만 뺀다.
       removeRoundItems(cartItems.map((item) => item.roundItemId));
