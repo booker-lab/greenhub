@@ -16,7 +16,7 @@ new Function('require', 'module', 'exports', compiled)(
   statusModule,
   statusModule.exports,
 );
-const { ORDER_STATUS_LABELS } = statusModule.exports;
+const { ORDER_STATUS_LABELS, orderTimelineStepLabel } = statusModule.exports;
 
 const mypageSource = await readFile(new URL('../app/mypage/_client.tsx', import.meta.url), 'utf8');
 const detailSource = await readFile(
@@ -56,4 +56,11 @@ test('MY 주문 목록과 주문 상세는 같은 이름표 하나를 쓰고 따
     assert.doesNotMatch(screen, /Partial<Record<OrderStatus, string>>\s*=\s*\{/);
     assert.doesNotMatch(screen, /ACCEPTED:\s*'/);
   }
+});
+
+test('배송 현황 첫 단계는 상태 이름이 아니라 단계 이름(주문 접수)으로 부른다', () => {
+  assert.equal(orderTimelineStepLabel('ACCEPTED'), '주문 접수');
+  assert.equal(orderTimelineStepLabel('PREPARING'), '상품 준비 중');
+  assert.equal(orderTimelineStepLabel('DELIVERED'), '배송 완료');
+  assert.match(detailSource, /labels=\{steps\.map\(orderTimelineStepLabel\)\}/);
 });

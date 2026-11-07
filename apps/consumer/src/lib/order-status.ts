@@ -17,3 +17,14 @@ export const ORDER_STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   CANCELLED: '주문 취소',
   REVIEWED: '구매 확정',
 };
+
+// 주문 상세 "배송 현황" 단계 이름. 단계는 진행 순서를 보여 주므로 첫 단계는 상태 이름('결제 완료')이 아니라
+// 단계 이름('주문 접수')으로 부른다. 결제 확인 중(PENDING) 주문도 첫 단계를 진행 중으로 그리는데,
+// 상태 이름을 그대로 쓰면 머리는 '결제 확인 중', 단계는 '결제 완료'로 서로 어긋나 보인다.
+const ORDER_TIMELINE_STEP_LABELS: Partial<Record<OrderStatus, string>> = {
+  ACCEPTED: '주문 접수',
+};
+
+export function orderTimelineStepLabel(status: OrderStatus): string {
+  return ORDER_TIMELINE_STEP_LABELS[status] ?? ORDER_STATUS_LABELS[status] ?? status;
+}

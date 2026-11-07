@@ -18,7 +18,7 @@ import {
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
 import { formatOrderDeliveryDate } from '@/lib/order-delivery-date';
-import { ORDER_STATUS_LABELS as STATUS_LABELS } from '@/lib/order-status';
+import { ORDER_STATUS_LABELS as STATUS_LABELS, orderTimelineStepLabel } from '@/lib/order-status';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import {
@@ -1222,7 +1222,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </p>
           <DeliverySteps
             active={currentStep}
-            labels={steps.map((stepStatus) => STATUS_LABELS[stepStatus] ?? stepStatus)}
+            labels={steps.map(orderTimelineStepLabel)}
           />
         </div>
       )}
