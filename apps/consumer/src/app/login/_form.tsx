@@ -11,6 +11,7 @@ import { useSearchParams } from 'next/navigation';
 import { signIn } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
 import { isFeatureOn } from '@/lib/features';
+import { isSessionExpiredReason } from '@/lib/session-login';
 import { isOrderCallback, safeCallbackPath } from './_callback-url';
 
 // ① 외형 유지(UI 교체 P5): Mantine Stack(gap sm 12)·Button lg(radius xl)·Divider(가운데 글자 xs)·
@@ -19,6 +20,14 @@ import { isOrderCallback, safeCallbackPath } from './_callback-url';
 const DIVIDER =
   "flex items-center text-xs/[1.55] whitespace-nowrap text-ui-gray-6 before:me-2.5 before:h-px before:flex-1 before:border-t before:border-ui-gray-3 before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-ui-gray-3 after:content-['']";
 const FIELD_LABEL = 'cursor-default text-[15px]';
+const NOTICE_STYLE = {
+  background: 'var(--color-surface-muted)',
+  borderRadius: 'var(--radius)',
+  color: 'var(--color-text)',
+  fontSize: 'var(--font-size-sm)',
+  fontWeight: 'var(--fw-bold)',
+  padding: '12px 16px',
+} as const;
 
 export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const searchParams = useSearchParams();
@@ -59,24 +68,21 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const [origin, setOrigin] = useState<string>();
   useEffect(() => setOrigin(window.location.origin), []);
   const forOrder = isFeatureOn('guest-cart') && isOrderCallback(rawCallbackUrl, origin);
+  // 세션이 끝나 로그아웃된 경우(providers.tsx): 이유와 복귀를 알려 준다. 주문 안내보다 앞선다.
+  const expired = isSessionExpiredReason(searchParams.get('reason'));
 
   return (
     <div className="flex flex-col items-stretch justify-start gap-3">
-      {forOrder && (
-        <p
-          role="status"
-          className="m-0 text-center leading-[1.55]"
-          style={{
-            background: 'var(--color-surface-muted)',
-            borderRadius: 'var(--radius)',
-            color: 'var(--color-text)',
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-bold)',
-            padding: '12px 16px',
-          }}
-        >
-          주문하려면 로그인이 필요해요. 장바구니는 그대로 남아 있어요.
+      {expired ? (
+        <p role="status" className="m-0 text-center leading-[1.55]" style={NOTICE_STYLE}>
+          로그인이 만료됐어요. 다시 로그인하면 보던 화면으로 돌아가요.
         </p>
+      ) : (
+        forOrder && (
+          <p role="status" className="m-0 text-center leading-[1.55]" style={NOTICE_STYLE}>
+            주문하려면 로그인이 필요해요. 장바구니는 그대로 남아 있어요.
+          </p>
+        )
       )}
       <Button
         type="button"
