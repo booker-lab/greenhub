@@ -4,6 +4,11 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import 'reflect-metadata';
+import { DEFAULT_SALES_MODE } from '@greenhub/shared';
+import { plainToInstance } from 'class-transformer';
+import { validateSync } from 'class-validator';
+import { UpdateStoreDto } from './dto/update-store.dto';
 import { StoresService } from './stores.service';
 
 const BUCKET = 'greenhub-api-unit-test.appspot.com';
@@ -212,6 +217,8 @@ describe('store creation', () => {
       ownerId: 'seller-1',
       name: '디어오키드',
       status: 'active',
+      // 새 가게는 회차 판매로 시작한다(공용 기본값 legacy는 기존 가게용으로 그대로 둔다).
+      salesMode: 'round_direct',
       logoUrl: logoUrl('seller-1'),
     });
     expect(docs.get('users/seller-1')).toMatchObject({ storeId });
@@ -353,5 +360,42 @@ describe('public store profile extras (benchmark compare)', () => {
     expect(profile['showDemandSignals']).toBe(true);
     expect(profile).not.toHaveProperty('ownerId');
     expect(profile).not.toHaveProperty('phone');
+  });
+});
+
+describe('store salesMode boundary', () => {
+  it('공용 기본 판매 방식은 기존 가게용 legacy로 그대로다', () => {
+    expect(DEFAULT_SALES_MODE).toBe('legacy');
+  });
+
+  it('판매자 생성·수정 본문(UpdateStoreDto)은 salesMode를 받지 않는다(전역 whitelist 400)', () => {
+    const errors = validateSync(
+      plainToInstance(UpdateStoreDto, { name: '상점', salesMode: 'legacy' }),
+      { whitelist: true, forbidNonWhitelisted: true },
+    );
+    expect(errors.map((error) => error.property)).toEqual(['salesMode']);
+  });
+
+  it('updateStore는 본문에 salesMode가 섞여 와도 저장하지 않는다', async () => {
+    const update = jest.fn().mockResolvedValue(undefined);
+    const firestore = {
+      doc: jest.fn().mockReturnValue({
+        get: jest.fn().mockResolvedValue({
+          exists: true,
+          data: () => ({ ownerId: 'seller-1', salesMode: 'round_direct' }),
+        }),
+        update,
+      }),
+      FieldValue: { serverTimestamp: () => 'server-now' },
+    };
+    const service = new StoresService(firestore as never, makeConfig());
+
+    await service.updateStore('s-1', 'seller-1', {
+      name: '새 이름',
+      salesMode: 'legacy',
+    } as never);
+
+    expect(update).toHaveBeenCalledTimes(1);
+    expect(update.mock.calls[0][0]).not.toHaveProperty('salesMode');
   });
 });

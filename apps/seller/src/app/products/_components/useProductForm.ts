@@ -4,21 +4,30 @@ import { apiPathSegment, FEATURE_KEYS } from '@greenhub/shared';
 import { useEffect, useRef, useState } from 'react';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { apiJson } from '@/lib/api';
-import { marketRefBody } from '@/lib/market-price';
 import { isFeatureOn } from '@/lib/features';
+import { marketRefBody } from '@/lib/market-price';
+import { useTokenRef } from '@/lib/use-token-ref';
 import type { ConflictWarning } from './AIPreviewPanel';
-import { extrasBody, fillNoticeDefaults, type NoticeStoreDefaults, noticeBody } from './productExtras';
+import { DRAFT_AUTOSAVE_DELAY_MS, draftSnapshot, shouldAutoSaveDraft } from './productDraft';
+import {
+  extrasBody,
+  fillNoticeDefaults,
+  type NoticeStoreDefaults,
+  noticeBody,
+} from './productExtras';
 import {
   defaultForm,
   type GroupConfigForm,
   type ProductFormData,
   type ProductFormProps,
 } from './productForm.types';
-import { useTokenRef } from '@/lib/use-token-ref';
 
 /** 상품정보제공고시의 빈 칸만 기본값(생산자=매장명, 상담 전화=사업자 프로필 연락처)으로 채운다. */
 function withNoticeDefaults(form: ProductFormData, defaults: NoticeStoreDefaults): ProductFormData {
-  return { ...form, extras: { ...form.extras, notice: fillNoticeDefaults(form.extras.notice, defaults) } };
+  return {
+    ...form,
+    extras: { ...form.extras, notice: fillNoticeDefaults(form.extras.notice, defaults) },
+  };
 }
 
 /** ProductForm의 상태·검증·임시저장·제출 로직을 모두 담는 훅. */
@@ -48,6 +57,8 @@ export function useProductForm({
   const [error, setError] = useState<string | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
   const draftSavedResetTimer = useResettableTimeout();
+  // 신규 등록 자동 임시저장 타이머. 언마운트하면 useResettableTimeout이 해제한다.
+  const draftAutoSaveTimer = useResettableTimeout();
 
   // 신규 등록 시에만 localStorage 임시저장 복원
   useEffect(() => {
@@ -88,11 +99,28 @@ export function useProductForm({
     }
   }, [initialData?.name, initialData]);
 
+  // 신규 등록: 입력이 바뀌면 잠시 뒤 현재 단계까지 함께 자동 임시저장한다(다른 탭에 다녀와도 남게).
+  useEffect(() => {
+    const pristine = withNoticeDefaults(defaultForm(), noticeDefaults.current);
+    if (!shouldAutoSaveDraft({ mode, form, step, pristine })) {
+      draftAutoSaveTimer.clear();
+      return;
+    }
+    draftAutoSaveTimer.schedule(() => {
+      try {
+        localStorage.setItem(draftKey, draftSnapshot(form, step));
+      } catch {}
+    }, DRAFT_AUTOSAVE_DELAY_MS);
+  }, [mode, form, step, draftKey, draftAutoSaveTimer]);
+
   // 매장 이름·연락처를 읽어 고시의 빈 생산자·상담 전화 칸을 채운다. 실패하면 빈 칸으로 두고 판매자가 직접 쓴다.
   useEffect(() => {
     if (!storeId || !hasToken) return;
     let active = true;
-    apiJson<{ name?: string; phone?: string }>(`/stores/${apiPathSegment(storeId)}`, tokenRef.current)
+    apiJson<{ name?: string; phone?: string }>(
+      `/stores/${apiPathSegment(storeId)}`,
+      tokenRef.current,
+    )
       .then((store) => {
         if (!active) return;
         const defaults = { producer: store.name?.trim() ?? '', csPhone: store.phone?.trim() ?? '' };
@@ -126,6 +154,7 @@ export function useProductForm({
   }
 
   function handleDraftReset() {
+    draftAutoSaveTimer.clear();
     try {
       localStorage.removeItem(draftKey);
     } catch {}
@@ -278,6 +307,7 @@ export function useProductForm({
         method: mode === 'create' ? 'POST' : 'PATCH',
         body: JSON.stringify(body),
       });
+      draftAutoSaveTimer.clear();
       localStorage.removeItem(draftKey);
       onSuccess();
     } catch (e) {

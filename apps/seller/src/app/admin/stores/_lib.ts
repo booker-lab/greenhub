@@ -1,4 +1,4 @@
-import type { StoreStatus } from '@greenhub/shared';
+import type { SalesMode, StoreStatus } from '@greenhub/shared';
 import type { AdminStore } from '@/hooks/useAdmin';
 
 // 판매자 상태 라벨·점 색 — stores 화면 표현 SSOT(표·휴대폰 행 공용).
@@ -194,6 +194,67 @@ export function describeRestoreConfirm(
     facts: storeFacts(store),
     confirmLabel: `${label} 복구`,
   };
+}
+
+// ── 판매 방식 ─────────────────────────────────────────────────────
+// 손님 화면의 회차(공개 회차 API)와 회차 주문은 회차 판매(round_direct) 가게에서만 동작한다.
+// 판매 방식이 비어 있는 기존 가게는 예전 방식(legacy)으로 읽는다(서버 normalizeSalesMode와 같은 규칙).
+
+export const SALES_MODE_LABEL: Record<SalesMode, string> = {
+  legacy: '예전 방식',
+  round_direct: '회차 판매',
+};
+
+/** 목록 응답의 판매 방식(API ADMIN_STORE_LIST_FIELDS salesMode). 없거나 모르는 값은 예전 방식. */
+export function readStoreSalesMode(store: AdminStore): SalesMode {
+  return store.salesMode === 'round_direct' ? 'round_direct' : 'legacy';
+}
+
+/** 전환할 판매 방식 — 지금과 반대 방식. */
+export function nextSalesMode(current: SalesMode): SalesMode {
+  return current === 'round_direct' ? 'legacy' : 'round_direct';
+}
+
+/** 판매 방식을 바꾸는 동작 이름("회차 판매로 바꾸기" / "예전 방식으로 바꾸기"). */
+export function salesModeActionLabel(target: SalesMode): string {
+  return target === 'round_direct' ? '회차 판매로 바꾸기' : '예전 방식으로 바꾸기';
+}
+
+/** 판매 방식 전환 확인창 — 바꾸면 손님 화면에서 회차가 어떻게 되는지 알린다. */
+export function describeSalesModeConfirm(
+  store: AdminStore,
+): StoreConfirmView & { target: SalesMode } {
+  const label = storeLabel(store);
+  const current = readStoreSalesMode(store);
+  const target = nextSalesMode(current);
+  const action = salesModeActionLabel(target);
+  return {
+    title: `${label} ${action}`,
+    lead:
+      target === 'round_direct'
+        ? '회차 판매로 바꾸면 손님에게 회차가 보여요. 예정·판매 중인 회차가 손님 화면에 나타나고 회차 주문을 받아요.'
+        : '예전 방식으로 바꾸면 회차가 손님에게서 숨겨져요. 회차 주문도 더 받지 않아요.',
+    facts: [
+      { label: '상호', value: label },
+      { label: '지금 판매 방식', value: SALES_MODE_LABEL[current] },
+      { label: '바꿀 판매 방식', value: SALES_MODE_LABEL[target] },
+    ],
+    ...(target === 'legacy'
+      ? {
+          note: '끝나지 않은 회차(예정·판매 중·마감)가 있으면 바꿀 수 없어요. 회차를 완료하거나 취소한 뒤 다시 바꿔 주세요.',
+        }
+      : {}),
+    confirmLabel: action,
+    target,
+  };
+}
+
+/** 판매 방식 전환 성공 안내. */
+export function describeSalesModeSaved(storeName: string, salesMode: SalesMode): string {
+  const label = storeName.trim() || '(미설정)';
+  return salesMode === 'round_direct'
+    ? `${label} 가게를 회차 판매로 바꿨어요. 손님에게 회차가 보여요.`
+    : `${label} 가게를 예전 방식으로 바꿨어요. 회차는 손님에게서 숨겨져요.`;
 }
 
 export function sortStores(stores: AdminStore[], sort: StoreSort): AdminStore[] {

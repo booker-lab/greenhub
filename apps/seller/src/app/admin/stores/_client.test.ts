@@ -17,7 +17,7 @@ describe('AdminStoresClient read-error recovery wiring', () => {
   it('useAdminStores의 error/reload를 소비한다', () => {
     expect(source).toContain('useAdminStores()');
     expect(source).toMatch(
-      /const\s*\{\s*stores,\s*loading,\s*error,\s*reload,\s*setCommission,\s*archiveStore,\s*restoreStore\s*\}/,
+      /const\s*\{\s*stores,\s*loading,\s*error,\s*reload,\s*setCommission,\s*setSalesMode,\s*archiveStore,\s*restoreStore,?\s*\}/,
     );
     expect(source).toContain('getAdminStoresReadState');
   });

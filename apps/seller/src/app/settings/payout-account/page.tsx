@@ -4,9 +4,9 @@ import { Autocomplete } from '@greenhub/ui/components/autocomplete';
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { notify } from '@/components/AppToaster';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
@@ -95,7 +95,7 @@ export default function PayoutAccountSettingsPage() {
 
   return (
     <PageShell>
-      <PageHeader title="정산 계좌" />
+      <PageHeader title="정산 계좌" backHref="/settings" />
       <div className="mx-auto max-w-[720px] p-4">
         {!loaded ? (
           <LoadingState />

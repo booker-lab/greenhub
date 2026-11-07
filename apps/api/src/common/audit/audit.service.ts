@@ -32,6 +32,8 @@ export type AdminAuditAction =
   | 'admin.store.commission_changed'
   | 'admin.store.archived'
   | 'admin.store.restored'
+  // 관리자가 가게 판매 방식(legacy·round_direct)을 바꿈.
+  | 'admin.store.sales_mode_changed'
   | 'admin.user.suspended'
   | 'admin.user.unsuspended'
   | 'admin.driver.approved'

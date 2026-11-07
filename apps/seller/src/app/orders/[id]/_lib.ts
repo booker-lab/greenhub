@@ -43,6 +43,20 @@ export const CANCELLABLE_STATUSES: OrderStatus[] = [
   'DELIVERY_HELD',
 ];
 
+// 판매자 취소 확인 창의 환불 안내. 서버 판매자 취소(orders-lifecycle·round-order-lifecycle)는 결제 금액 전체
+// (결제 확정 때 totalAmount와 같은지 확인한 금액)를 환불하고, 환불이 실패하면 취소를 끝내지 않는다.
+// 회차 주문은 결제된 재배송비도 함께 환불한다. 취소된 주문을 되돌리는 전이는 없다.
+export function describeSellerCancelRefund(
+  order: Pick<Order, 'status' | 'totalAmount' | 'redeliveryPayment'>,
+): string {
+  const amount = `₩${order.totalAmount.toLocaleString()}`;
+  const withRedeliveryFee =
+    order.status === 'DELIVERY_HELD' || order.redeliveryPayment?.paid === true;
+  return withRedeliveryFee
+    ? `결제 금액 ${amount} 전액과 결제된 재배송비를 모두 환불하고 되돌릴 수 없어요.`
+    : `결제 금액 ${amount} 전액을 환불하고 되돌릴 수 없어요.`;
+}
+
 // buyerName은 주문한 계정 이름이다(선물 받는 분은 요청사항에 적는다).
 // 셀러 상세 API는 연락처를 주문서의 deliveryPhone 하나로 내려준다(없으면 buyerPhone 대체).
 export function displayBuyerName(order: Pick<Order, 'buyerName'>): string {
