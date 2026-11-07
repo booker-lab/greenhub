@@ -1,9 +1,10 @@
 'use client';
 
 import type { Order, OrderStatus } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect } from 'react';
@@ -315,10 +316,14 @@ export default function MyPageClient() {
             </Button>
           </div>
         )}
+        {/* 빈 상태는 "구매한 꽃" 화면과 같은 관례(안내 + 이번 회차 보러 가기)로 다음 행동을 준다. */}
         {!loading && !error && orders.length === 0 && (
-          <p className={`${TEXT} py-8 text-center`} style={disabledTextStyle}>
-            주문 내역이 없습니다.
-          </p>
+          <div className="flex flex-col items-center gap-4 py-8">
+            <p className={TEXT} style={disabledTextStyle}>
+              아직 주문한 꽃이 없어요.
+            </p>
+            <ButtonLink render={<Link href="/" />}>이번 회차 보러 가기</ButtonLink>
+          </div>
         )}
         {orders.length > 0 && (
           <div className="flex flex-col items-stretch justify-start gap-3">

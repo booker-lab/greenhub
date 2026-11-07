@@ -50,6 +50,7 @@ const requireForTest = (specifier) => {
     specifier === 'lucide-react' ||
     specifier === 'next-auth/react' ||
     specifier === 'next/navigation' ||
+    specifier === 'next/link' ||
     specifier === '@/hooks/useOrders' ||
     specifier === '@/components/A2HSButton' ||
     specifier === '@/components/ResilientImage' ||
@@ -215,4 +216,16 @@ test('앱 설치 제목은 설치 버튼이 그려질 때만 보인다', () => {
   assert.match(section, /className="hidden has-\[button\]:block"/);
   assert.match(section, />\s*앱 설치\s*<\/h2>/);
   assert.match(section, /<A2HSButton \/>/);
+});
+
+test('주문이 없으면 안내와 함께 이번 회차(홈)로 가는 버튼을 준다', () => {
+  const start = source.indexOf('{!loading && !error && orders.length === 0 && (');
+  assert.ok(start > 0);
+  const empty = source.slice(start, source.indexOf(')}', start));
+  assert.match(empty, /아직 주문한 꽃이 없어요\./);
+  assert.match(
+    empty,
+    /<ButtonLink render=\{<Link href="\/" \/>\}>이번 회차 보러 가기<\/ButtonLink>/,
+  );
+  assert.doesNotMatch(source, /주문 내역이 없습니다/);
 });
