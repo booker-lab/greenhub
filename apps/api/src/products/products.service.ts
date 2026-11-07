@@ -13,6 +13,7 @@ import { findProductOptionIdConflict } from './dto/product-extras.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { toFirestoreData } from './firestore-data';
 import {
   isPubliclyVisibleProduct,
   toOwnerProductDetail,
@@ -96,10 +97,7 @@ export class ProductsService {
     // Public summary is an explicit allowlist — never spread the stored doc.
     const items = products.map((p) => {
       const gc = groupConfigMap.get(p['id'] as string);
-      const summary = toPublicProductSummary(
-        p,
-        gc ?? null,
-      );
+      const summary = toPublicProductSummary(p, gc ?? null);
       // Backfill groupSummary for group products when the helper omitted it
       // (kept for contract compat with the previous manual shape).
       if (p['saleType'] === 'group' && gc && !summary['groupSummary']) {
@@ -165,8 +163,9 @@ export class ProductsService {
     const now = this.firestore.Timestamp.now();
     const { groupConfig, ...productFields } = dto;
 
+    // 보내지 않은 선택 필드(undefined)는 Firestore가 받지 않으므로 빼고 쓴다.
     await this.firestore.doc(`products/${productId}`).set({
-      ...productFields,
+      ...toFirestoreData(productFields),
       id: productId,
       storeId,
       isActive: dto.isActive ?? true,
@@ -177,7 +176,7 @@ export class ProductsService {
     if (dto.saleType === 'group' && groupConfig) {
       await this.firestore.doc(`groupProductConfig/${productId}`).set({
         productId,
-        ...groupConfig,
+        ...toFirestoreData(groupConfig),
         currentQuantity: 0,
         recruitDeadline: new Date(groupConfig.recruitDeadline),
         groupDeliveryDate: new Date(groupConfig.groupDeliveryDate),
@@ -204,9 +203,10 @@ export class ProductsService {
     }
 
     const { groupConfig, content, ...fields } = dto;
-    const contentUpdate = content ? { content } : {};
+    const contentUpdate = content ? { content: toFirestoreData(content) } : {};
+    // undefined 필드는 '안 바꿈'이라 빼고, null은 '지우기'라 그대로 쓴다.
     await this.firestore.doc(`products/${productId}`).update({
-      ...fields,
+      ...toFirestoreData(fields),
       ...contentUpdate,
       updatedAt: this.firestore.Timestamp.now(),
     });
@@ -214,7 +214,7 @@ export class ProductsService {
     if (groupConfig) {
       await this.firestore
         .doc(`groupProductConfig/${productId}`)
-        .set({ productId, ...groupConfig }, { merge: true });
+        .set({ productId, ...toFirestoreData(groupConfig) }, { merge: true });
     }
 
     return this.getOwnerProductInternal(storeId, productId);
@@ -349,7 +349,10 @@ export class ProductsService {
     await this.assertSellerOwnsStore(storeId, sellerId, role);
     await this.firestore
       .doc(`deliveryFeeConfig/${storeId}`)
-      .set({ storeId, ...dto, updatedAt: this.firestore.Timestamp.now() }, { merge: true });
+      .set(
+        { storeId, ...toFirestoreData(dto), updatedAt: this.firestore.Timestamp.now() },
+        { merge: true },
+      );
     return this.readDeliveryConfig(storeId);
   }
 
@@ -405,9 +408,13 @@ export class ProductsService {
     }
 
     const items = products.map((p: any) =>
-      toPublicProductSummary(p as Record<string, unknown>, groupConfigMap.get(p['id'] as string) ?? null, {
-        includeStoreId: true,
-      }),
+      toPublicProductSummary(
+        p as Record<string, unknown>,
+        groupConfigMap.get(p['id'] as string) ?? null,
+        {
+          includeStoreId: true,
+        },
+      ),
     );
 
     return { items, total: items.length };
@@ -437,7 +444,9 @@ export class ProductsService {
       .flatMap((group) => (Array.isArray(group.choices) ? group.choices : []))
       .filter(
         (choice): choice is { id: string; stockId: string } =>
-          typeof choice.id === 'string' && typeof choice.stockId === 'string' && choice.stockId !== '',
+          typeof choice.id === 'string' &&
+          typeof choice.stockId === 'string' &&
+          choice.stockId !== '',
       );
     const stockIds = [...new Set(linked.map((choice) => choice.stockId))];
     const snaps = await Promise.all(
@@ -491,7 +500,9 @@ export class ProductsService {
 
   // 목록에 나온 상품의 가게 문서를 가게마다 한 번씩만 읽어 치운 가게 id를 모은다.
   private async readArchivedStoreIds(storeIds: unknown[]): Promise<Set<string>> {
-    const unique = [...new Set(storeIds.filter((id): id is string => typeof id === 'string' && id !== ''))];
+    const unique = [
+      ...new Set(storeIds.filter((id): id is string => typeof id === 'string' && id !== '')),
+    ];
     const archived = await Promise.all(unique.map((id) => this.isArchivedStoreId(id)));
     return new Set(unique.filter((_, index) => archived[index]));
   }
