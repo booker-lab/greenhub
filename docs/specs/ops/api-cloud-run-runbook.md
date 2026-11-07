@@ -286,6 +286,7 @@ Cloud Run은 서버 안 정기 작업(`@Cron`)을 쓰지 않는다. Cloud Schedu
 | 작업 이름 | 예약(Asia/Seoul) | 원래 `@Cron` |
 |---|---|---|
 | `payments-cleanup-pending-orders` | `* * * * *` | `PaymentsService.cleanupPendingOrders` |
+| `payments-reconcile-pending-charges` | `* * * * *` | `OrderChargePaymentService.reconcilePendingCharges` |
 | `group-buy-deadlines` | `* * * * *` | `NotificationsService.processGroupBuyDeadlines` |
 | `group-buy-deadline-soon` | `*/10 * * * *` | `NotificationsService.notifyDeadlineSoon` |
 | `retention-purge` | `0 3 * * *` | `RetentionService.runScheduledPurge` |
@@ -310,6 +311,7 @@ job() {
   gcloud scheduler jobs pause "greenhub-$1" --location=asia-northeast3 $P
 }
 job payments-cleanup-pending-orders '* * * * *'
+job payments-reconcile-pending-charges '* * * * *'
 job group-buy-deadlines '* * * * *'
 job group-buy-deadline-soon '*/10 * * * *'
 job retention-purge '0 3 * * *'
@@ -328,7 +330,7 @@ job market-prices-ingest '10 21 * * *'
 ```bash
 gcloud run services update greenhub-api $P --region=asia-northeast3 \
   --update-env-vars=GREENHUB_SCHEDULER_INVOKER_EMAIL=$SA,GREENHUB_SCHEDULER_AUDIENCE=$BASE
-for j in payments-cleanup-pending-orders group-buy-deadlines group-buy-deadline-soon retention-purge partner-inquiry-purge settlements-confirm-due ops-daily-digest market-prices-ingest; do
+for j in payments-cleanup-pending-orders payments-reconcile-pending-charges group-buy-deadlines group-buy-deadline-soon retention-purge partner-inquiry-purge settlements-confirm-due ops-daily-digest market-prices-ingest; do
   gcloud scheduler jobs resume "greenhub-$j" --location=asia-northeast3 $P
 done
 ```
