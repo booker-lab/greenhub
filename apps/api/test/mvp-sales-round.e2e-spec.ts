@@ -291,6 +291,103 @@ describe('회차 직배송 서버 전체 흐름 통합 계약', () => {
     expect(fixture.read(`saleRounds/${roundId}`)?.counters.heldOrderCount).toBe(1);
   });
 
+  it('재배송비 결제 웹훅이 빠져도 웹훅 밖 확인이 PortOne PAID로 확정해 재배송을 재개한다', async () => {
+    const { roundId, roundItemId } = await createOpenRound();
+    const created = await asUser(
+      request(app.getHttpServer()).post('/stores/store-1/orders'),
+      'consumer-1',
+      'consumer',
+    )
+      .send(orderInput(roundId, roundItemId, 'checkout-charge-no-webhook'))
+      .expect(201);
+    const orderId = created.body.orderId as string;
+    await paidWebhook(orderId, 'webhook-charge-no-webhook-order');
+    await asUser(
+      request(app.getHttpServer()).patch(`/stores/store-1/sale-rounds/${roundId}/status`),
+      'seller-1',
+      'seller',
+    )
+      .send({ status: 'CLOSED' })
+      .expect(200);
+    await asUser(
+      request(app.getHttpServer()).patch(`/stores/store-1/orders/${orderId}/status`),
+      'seller-1',
+      'seller',
+    )
+      .send({ status: 'PREPARING', preparedAt: new Date().toISOString() })
+      .expect(200);
+    await asUser(
+      request(app.getHttpServer()).patch(`/stores/store-1/orders/${orderId}/status`),
+      'driver-1',
+      'driver',
+    )
+      .send({ status: 'DELIVERING' })
+      .expect(200);
+    await asUser(
+      request(app.getHttpServer()).patch(`/stores/store-1/orders/${orderId}/delivery-hold`),
+      'driver-1',
+      'driver',
+    )
+      .send({
+        deliveryHold: {
+          reasonCode: 'ACCESS_UNAVAILABLE',
+          reasonMessage: '공동현관 출입 불가',
+          customerResponsible: true,
+          redeliveryFee: 5_000,
+          nextContactAt: new Date(Date.now() + 3_600_000).toISOString(),
+        },
+      })
+      .expect(200);
+    const charge = await asUser(
+      request(app.getHttpServer()).post(`/stores/store-1/orders/${orderId}/redelivery-fee`),
+      'consumer-1',
+      'consumer',
+    )
+      .send({ idempotencyKey: 'redelivery-no-webhook-001' })
+      .expect(200);
+    const chargeId = charge.body.id as string;
+
+    // 손님은 PortOne에서 결제를 마쳤지만 Transaction.Paid 웹훅이 오지 않았다.
+    // 결제 전에는 재배송을 재개할 수 없다.
+    await asUser(
+      request(app.getHttpServer()).patch(`/stores/store-1/orders/${orderId}/status`),
+      'driver-1',
+      'driver',
+    )
+      .send({ status: 'DELIVERING' })
+      .expect(409);
+
+    // 15분이 안 됐으면 조회하지 않는다.
+    await fixture.chargePayments.reconcilePendingCharges();
+    expect(fixture.portone.getPayment).not.toHaveBeenCalledWith(charge.body.portonePaymentId);
+    expect(fixture.read(`orderCharges/${chargeId}`)?.status).toBe('PENDING');
+
+    const realNow = Date.now();
+    const clock = jest.spyOn(Date, 'now').mockReturnValue(realNow + 16 * 60 * 1000);
+    try {
+      await fixture.chargePayments.reconcilePendingCharges();
+    } finally {
+      clock.mockRestore();
+    }
+    expect(fixture.portone.getPayment).toHaveBeenCalledWith(charge.body.portonePaymentId);
+    expect(fixture.read(`orderCharges/${chargeId}`)).toMatchObject({
+      status: 'PAID',
+      portoneTransactionId: `transaction-${charge.body.portonePaymentId}`,
+    });
+    expect(fixture.portone.refund).not.toHaveBeenCalled();
+
+    // 늦게 온 웹훅은 다시 반영하지 않는다.
+    await paidWebhook(charge.body.portonePaymentId, 'webhook-charge-no-webhook-late');
+    expect(fixture.read(`orderCharges/${chargeId}`)?.status).toBe('PAID');
+    await asUser(
+      request(app.getHttpServer()).patch(`/stores/store-1/orders/${orderId}/status`),
+      'driver-1',
+      'driver',
+    )
+      .send({ status: 'DELIVERING' })
+      .expect(200);
+  });
+
   it('회차 한도 초과와 늦은 결제를 실제 예약 재확보 실패 후 한 번만 환불한다', async () => {
     const { roundId, roundItemId } = await createOpenRound(1, 1);
     await asUser(
