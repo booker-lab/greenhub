@@ -108,6 +108,8 @@ test('띠가 보이는 동안만 문서 루트에 띠 높이(올림한 px)를 �
 
   // 띠 높이는 실제 띠를 재서 정하고, 연결되면 변수를 지운다.
   assert.match(source, /new ResizeObserver\(\(\) => setBandHeight\(band\.offsetHeight\)\)/);
+  // offsetHeight(테두리 상자)와 같은 기준으로 관찰해 안쪽 여백만 바뀌어도 다시 잰다.
+  assert.match(source, /observer\.observe\(band, \{ box: 'border-box' \}\)/);
   assert.match(source, /rootStyle\.setProperty\(OFFLINE_NOTICE_HEIGHT_VAR, heightValue\)/);
   assert.match(source, /return \(\) => \{\s*rootStyle\.removeProperty\(OFFLINE_NOTICE_HEIGHT_VAR\);/);
 });

@@ -72,7 +72,8 @@ export default function OfflineNotice() {
     const band = bandRef.current;
     if (online || !band) return;
     const observer = new ResizeObserver(() => setBandHeight(band.offsetHeight));
-    observer.observe(band);
+    // 높이는 offsetHeight(테두리 상자)로 재므로, 안쪽 여백(paddingBottom)만 바뀌어도 다시 재도록 같은 기준으로 관찰한다.
+    observer.observe(band, { box: 'border-box' });
     return () => observer.disconnect();
   }, [online]);
   const heightValue = offlineNoticeHeightValue(online, bandHeight);
