@@ -202,7 +202,10 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     await expect(page.getByRole('heading', { name: /주문 상세/ })).toBeVisible();
     await expect(page.getByText(/총 2개 상품/)).toBeVisible();
     await expect(page.getByRole('paragraph').filter({ hasText: /^배송 보류$/ })).toBeVisible();
-    await expect(page.getByText(/재배송비: 3,000원/)).toBeVisible();
+    // 보류 안내는 사유 코드별 고정 문구다(C-28, lib/order-delivery-hold-notice.ts). 시드는 출입 실패·고객 책임·3,000원.
+    await expect(page.getByText('출입이 어려워 배송하지 못했어요', { exact: true })).toBeVisible();
+    await expect(page.getByText('재배송비 3,000원을 결제하면 다시 배송해요.', { exact: true })).toBeVisible();
+    await expect(page.getByText('담당자 메모: 출입 정보 확인 필요', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '재배송비 결제 계속하기' })).toBeEnabled();
     await expect(page.getByRole('img', { name: /배송 완료 사진/ })).toHaveCount(0);
   });
