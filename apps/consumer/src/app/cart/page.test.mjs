@@ -180,11 +180,11 @@ test('여러 항목은 회차 전체 수량과 금액까지 함께 검증한 결
     {
       [cartItemKey(roundItem)]: {
         status: 'unavailable',
-        reason: '서버 검증 응답을 확인할 수 없습니다.',
+        reason: '구매 가능 여부를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
       },
       [cartItemKey(anotherRoundItem)]: {
         status: 'unavailable',
-        reason: '서버 검증 응답을 확인할 수 없습니다.',
+        reason: '구매 가능 여부를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
       },
     },
   );
@@ -215,7 +215,7 @@ test('회차 관계가 다르거나 응답이 손상되면 기존 항목을 구�
   for (const response of [wrongRound, wrongProduct, brokenAmount, null]) {
     assert.deepEqual(resolveRoundCartValidation(roundItem, response), {
       status: 'unavailable',
-      reason: '서버 검증 응답을 확인할 수 없습니다.',
+      reason: '구매 가능 여부를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
     });
   }
 });
@@ -251,8 +251,23 @@ test('해결 방법이 든 서버 안내는 그대로, 옵션 미선택은 상�
     assert.equal(reasonOf(message), message);
   }
   for (const message of ['roundItems.0.quantity must not be greater than 99', '가'.repeat(200)]) {
-    assert.equal(reasonOf(message), '서버에서 구매 가능 여부를 확인하지 못했습니다.');
+    assert.equal(reasonOf(message), '구매 가능 여부를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
   }
+});
+
+test('확인 실패 사유는 내부 용어("서버") 없이 다시 시도할 수 있는 고객 문구로 보인다', () => {
+  const reasonOf = (message) => resolveRoundCartValidation(roundItem, null, message).reason;
+  // 메시지가 없거나 내부 용어가 든 안내는 일반 문구로 바꾼다.
+  for (const message of [undefined, '서버 검증 실패', '서버 오류로 남았어요 확인이 어려워요.']) {
+    const reason = message === undefined
+      ? resolveRoundCartValidation(roundItem, null).reason
+      : reasonOf(message);
+    assert.equal(reason, '구매 가능 여부를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+  }
+  // 화면 문구와 검증 실패 처리에 "서버"가 든 문자열이 남지 않는다(주석은 제외).
+  const strings = source.match(/'[^'\n]*'/g) ?? [];
+  assert.deepEqual(strings.filter((value) => value.includes('서버')), []);
+  assert.doesNotMatch(source, /unavailableValidations\(roundItems, '[^']*'\)/);
 });
 
 test('결제 대상은 같은 회차의 서버 검증 통과 항목만 포함하고 legacy 항목은 보존한다', () => {

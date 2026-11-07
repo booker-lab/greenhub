@@ -40,10 +40,15 @@ const OPTION_REQUIRED_REASON =
 const ACTIONABLE_SERVER_REASON = /골라 주세요|한 분당|남았어요|다 팔렸어요|이전 결제 시도/;
 const HANGUL = /[가-힣]/;
 const MAX_SERVER_REASON_LENGTH = 160;
+// 확인 요청이 실패했거나 응답을 믿을 수 없을 때 보이는 고객 문구. 내부 용어("서버")를 쓰지 않는다.
+const UNVERIFIED_REASON = '구매 가능 여부를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.';
+// 내부 용어가 든 안내는 손님에게 그대로 보이지 않고 일반 문구로 바꾼다.
+const INTERNAL_TERM = /서버/;
 
 function unavailableReason(message?: string) {
-  if (!message) return '서버에서 구매 가능 여부를 확인하지 못했습니다.';
+  if (!message) return UNVERIFIED_REASON;
   const trimmed = message.trim();
+  if (INTERNAL_TERM.test(trimmed)) return UNVERIFIED_REASON;
   if (/옵션을 묶음마다/.test(trimmed)) return OPTION_REQUIRED_REASON;
   if (ACTIONABLE_SERVER_REASON.test(trimmed) && trimmed.length <= MAX_SERVER_REASON_LENGTH) {
     return trimmed;
@@ -54,7 +59,7 @@ function unavailableReason(message?: string) {
   // 그 밖의 한국어 안내는 손님에게 보여 주려고 쓴 문장이라 그대로 보인다. 검증 기술 메시지(영문)나
   // 지나치게 긴 응답은 일반 문구로 바꾼다.
   if (HANGUL.test(trimmed) && trimmed.length <= MAX_SERVER_REASON_LENGTH) return trimmed;
-  return '서버에서 구매 가능 여부를 확인하지 못했습니다.';
+  return UNVERIFIED_REASON;
 }
 function readErrorMessage(value: unknown) {
   if (!isRecord(value)) return undefined;
@@ -104,7 +109,7 @@ function resolveRoundCartValidation(
     return { status: 'unavailable', reason: unavailableReason(failureMessage) };
   }
   if (!isRecord(value) || !Array.isArray(value.items) || value.items.length !== 1) {
-    return { status: 'unavailable', reason: '서버 검증 응답을 확인할 수 없습니다.' };
+    return { status: 'unavailable', reason: UNVERIFIED_REASON };
   }
   const serverItem = value.items[0];
   if (
@@ -120,7 +125,7 @@ function resolveRoundCartValidation(
     serverItem.subtotalAmount !== serverItem.unitPrice * item.quantity ||
     value.totalAmount !== serverItem.subtotalAmount
   ) {
-    return { status: 'unavailable', reason: '서버 검증 응답을 확인할 수 없습니다.' };
+    return { status: 'unavailable', reason: UNVERIFIED_REASON };
   }
   // 옵션을 고른 상품은 옵션 금액을 더한 가격(price)과 비교한다. 옵션이 없으면 price === roundPrice.
   if (serverItem.unitPrice !== item.price) {
@@ -138,7 +143,7 @@ function unavailableValidations(items: RoundCartItem[], message?: string): Valid
       cartItemKey(item),
       {
         status: 'unavailable',
-        reason: message ? unavailableReason(message) : '서버 검증 응답을 확인할 수 없습니다.',
+        reason: message ? unavailableReason(message) : UNVERIFIED_REASON,
       },
     ]),
   );
@@ -293,7 +298,7 @@ function useRoundCartValidation(
           if (active && !(error instanceof Error && error.name === 'AbortError')) {
             setValidation({
               status: 'ready',
-              items: unavailableValidations(roundItems, '서버 검증 실패'),
+              items: unavailableValidations(roundItems),
             });
           }
         });
