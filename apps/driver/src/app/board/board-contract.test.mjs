@@ -180,7 +180,7 @@ test('Board는 복귀 한 번에 겹쳐 오는 focus·visibilitychange 재조회
 
 test('Board는 usable token 없음을 auth-required로 표시하고 empty와 분리한다', () => {
   assert.match(boardSource, /authRequired/);
-  assert.match(boardSource, /로그인이 필요합니다/);
+  assert.match(boardSource, /로그인이 끝났어요\. 다시 로그인해 주세요\./);
 });
 
 test('Board의 error-only와 empty 렌더는 성공 기록으로 분리된다', () => {
@@ -344,11 +344,15 @@ test('Driver 서비스워커는 세션이 실린 로그인 검사 화면 문서�
   assert.match(list, /driver-protected-pages-network-only/);
 });
 
-test('목록 화면은 서버에서도 그리고 날짜는 서버·휴대폰이 같은 한국 시간으로 그린다', () => {
+test('목록 화면은 서버에서도 그리고 제목은 날짜 없는 "배송 목록"이다', () => {
   assert.doesNotMatch(boardPageSource, /ssr:\s*false|next\/dynamic|'use client'/);
   assert.match(boardPageSource, /import BoardClient from '\.\/_client';/);
   assert.match(boardPageSource, /<Suspense[\s\S]*<BoardClient \/>/);
-  assert.match(boardSource, /toLocaleDateString\('ko-KR', \{[^}]*timeZone: 'Asia\/Seoul'/);
+  // 목록은 날짜와 관계없이 보이는 주문을 모두 보여 주므로 제목에 오늘 날짜를 쓰지 않는다(D-12).
+  // 배송일은 서울 날짜로 판정하는 delivery-day.ts가 행마다 쓴다.
+  assert.match(boardSource, />\s*배송 목록\s*</);
+  assert.doesNotMatch(boardSource, /오늘 배송 ·/);
+  assert.match(cardSource, /formatDeliveryDayLabel\(order\.deliveryDate, new Date\(\)\)/);
   // 브라우저 API는 렌더 중이 아니라 effect 안에서만 쓴다.
   const render = boardSource.slice(boardSource.indexOf('const orders = tab ==='));
   assert.doesNotMatch(render, /window\.|document\.|localStorage|navigator\./);
@@ -673,7 +677,7 @@ test('7. auth loss는 empty가 아닌 auth state이며 성공 기록을 초기�
   // auth 상실 시 stale 보호 데이터를 유지하지 않고 성공 기록도 초기화한다.
   assert.match(boardSource, /hasSuccessfulReadRef\.current = false/);
   assert.match(boardSource, /setHasSuccessfulRead\(false\)/);
-  assert.match(boardSource, /로그인이 필요합니다/);
+  assert.match(boardSource, /로그인이 끝났어요\. 다시 로그인해 주세요\./);
 });
 
 test('8. stale old request는 retry를 덮어쓰지 못한다', () => {

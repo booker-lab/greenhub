@@ -69,13 +69,14 @@ test('상세 인증 오류 화면은 로그인으로 돌아가는 버튼을 제�
   assert.match(block, /다시 로그인/);
 });
 
-test('보드 인증 필요 화면은 같은 토큰 재시도 외에 로그인 이동을 제공한다', () => {
+test('보드 인증 필요 화면은 같은 토큰 재시도 없이 로그인 이동만 제공한다', () => {
   const authAt = boardSource.indexOf('authRequired ?');
   const nextAt = boardSource.indexOf('error && !hasSuccessfulRead', authAt);
   const block = boardSource.slice(authAt, nextAt);
   assert.match(block, /signOut\(\{ redirectTo: '\/login' \}\)/);
   assert.match(block, /다시 로그인/);
-  assert.match(block, /다시 시도/);
+  // 같은 토큰으로 다시 조회하면 늘 같은 화면으로 돌아오므로 다시 시도를 두지 않는다(D-23).
+  assert.doesNotMatch(block, /다시 시도/);
 });
 
 test('로그인 안내 문구는 error·reason 값을 구분한다', () => {
