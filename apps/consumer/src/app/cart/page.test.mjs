@@ -412,6 +412,19 @@ test('상품이 1개면 실패해도 같은 요청을 다시 보내지 않는다
   }
 });
 
+test('회차 주문이 끝나면 지난 마감 시각 대신 마감 안내를 보이고 비로그인 주문 버튼을 막는다', () => {
+  // 지금 회차가 바뀌어도(다음 회차 열림) 장바구니 회차를 받은 회차 목록에서 찾아 판정한다.
+  assert.match(
+    source,
+    /saleRounds\.rounds\.find\(\(round\) => round\.id === firstRoundItem\.roundId\)/,
+  );
+  assert.match(source, /isRoundOrderClosed\(itemsRound, Date\.now\(\)\)/);
+  assert.match(source, /roundOrderClosed\s+\? '이번 회차 주문이 마감됐어요\.'/);
+  assert.match(source, /결제해야 이번 회차로 배송돼요\./);
+  assert.match(source, /disabled=\{roundOrderClosed\}/);
+  assert.match(source, /이번 회차 주문이 마감돼서 지금은 주문할 수 없어요\./);
+});
+
 test('수량 변경은 마지막 수량만 검증하도록 요청을 잠시 미룬다', () => {
   assert.match(source, /VALIDATION_DEBOUNCE_MS = 300/);
   assert.match(source, /clearTimeout\(timer\)/);

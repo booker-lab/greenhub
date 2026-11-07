@@ -15,7 +15,7 @@ import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartItemValidationIssues, getCartValidationError } from '@/lib/cartValidation';
 import { isFeatureOn } from '@/lib/features';
-import { formatOrderCloseLabel } from '@/lib/round-schedule-label';
+import { formatOrderCloseLabel, isRoundOrderClosed } from '@/lib/round-schedule-label';
 
 const API_URL = getApiBaseUrl();
 type RoundCartValidation =
@@ -391,6 +391,18 @@ export default function CartPage() {
     firstRoundItem && saleRounds.currentRound?.id === firstRoundItem.roundId
       ? saleRounds.currentRound
       : null;
+  // 장바구니 회차의 주문이 끝났는지 공개 회차 정보로 판정한다(로그인 전에도). 다음 회차가 열리면 지금 회차가
+  // 바뀌므로 받은 회차 목록 전체에서 찾는다. 목록에 없으면 알 수 없으므로 막지 않는다(로그인 뒤 서버 검증이 정한다).
+  const itemsRound = firstRoundItem
+    ? (saleRounds.rounds.find((round) => round.id === firstRoundItem.roundId) ?? null)
+    : null;
+  const roundOrderClosed =
+    isRoundCart && itemsRound !== null && isRoundOrderClosed(itemsRound, Date.now());
+  const deadlineNotice = roundOrderClosed
+    ? '이번 회차 주문이 마감됐어요.'
+    : cartRound
+      ? `${formatOrderCloseLabel(cartRound.schedule.orderCloseAt)} 결제해야 이번 회차로 배송돼요.`
+      : null;
 
   if (items.length === 0) {
     return (
@@ -475,7 +487,7 @@ export default function CartPage() {
               )}
             </div>
           </div>
-          {cartRound && (
+          {deadlineNotice && (
             <div
               className="px-4 py-3"
               style={{
@@ -486,12 +498,11 @@ export default function CartPage() {
                 fontWeight: 'var(--fw-bold)',
               }}
             >
-              {formatOrderCloseLabel(cartRound.schedule.orderCloseAt)} 결제해야 이번 회차로
-              배송돼요.
+              {deadlineNotice}
             </div>
           )}
           {cartRound && <CartArrivalLine round={cartRound} />}
-          {isGuest && (
+          {isGuest && !roundOrderClosed && (
             <div
               className="px-4 py-3"
               style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
@@ -786,9 +797,25 @@ export default function CartPage() {
       )}
       {isGuest ? (
         // 비로그인 장바구니(guest-cart): 로그인한 뒤 같은 장바구니로 돌아온다.
-        <Button size="lg" className="w-full" onClick={handleCheckout}>
-          로그인하고 주문하기
-        </Button>
+        // 회차 주문이 끝났으면 로그인해도 주문할 수 없으므로 버튼을 막고 이유를 보인다.
+        <>
+          {roundOrderClosed && (
+            <p
+              className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              이번 회차 주문이 마감돼서 지금은 주문할 수 없어요.
+            </p>
+          )}
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={roundOrderClosed}
+            onClick={handleCheckout}
+          >
+            로그인하고 주문하기
+          </Button>
+        </>
       ) : (
         <Button
           size="lg"
