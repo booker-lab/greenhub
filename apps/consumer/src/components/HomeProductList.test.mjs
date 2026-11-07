@@ -72,3 +72,14 @@ test('주문 마감이 지난 회차는 "~까지" 대신 마감됨 문구로 보
   );
   assert.doesNotMatch(source, /formatOrderCloseLabel\(/);
 });
+
+test('회차 조회 오류·이전 결과 안내는 useSaleRounds의 고객 문구 한 줄로 보이고 같은 뜻을 두 번 쓰지 않는다', () => {
+  const roundDirectSource = source.slice(
+    source.indexOf('function RoundDirectHome'),
+    source.indexOf('function LegacyHomeProductList'),
+  );
+  // error는 useSaleRounds가 고객 문구로 바꿔 준다(원문은 그 훅의 테스트가 막는다).
+  assert.equal(roundDirectSource.match(/\{error \?\? saleRoundsErrorMessage\(null\)\}/g)?.length, 2);
+  assert.match(roundDirectSource, /지금은 이전에 불러온 회차 정보를 보여 드려요\./);
+  assert.doesNotMatch(roundDirectSource, /판매 회차를 불러오지 못했습니다|이전 결과를 표시합니다/);
+});

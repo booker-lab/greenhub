@@ -13,6 +13,7 @@ const requireFromApp = createRequire(new URL('../../package.json', import.meta.u
 const sources = {
   '@/lib/shared-request': '../lib/shared-request.ts',
   '@/hooks/useSaleRounds': '../hooks/useSaleRounds.ts',
+  '@/lib/load-error-message': '../lib/load-error-message.ts',
   '@/lib/public-store-profile': '../lib/public-store-profile.ts',
   '@/lib/benchmark-api': '../lib/benchmark-api.ts',
   './home-store-prefetch': './home-store-prefetch.ts',

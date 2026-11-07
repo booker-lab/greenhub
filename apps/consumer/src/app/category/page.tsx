@@ -8,7 +8,11 @@ import BlockSkeleton from '@/components/BlockSkeleton';
 import ProductCard from '@/components/ProductCard';
 import RoundTileGrid from '@/components/RoundTile';
 import { useProducts } from '@/hooks/useProducts';
-import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
+import {
+  type PublicSaleRound,
+  saleRoundsErrorMessage,
+  useSaleRounds,
+} from '@/hooks/useSaleRounds';
 import {
   type StoreProfileFailure,
   classifyStoreProfileFailure,
@@ -174,14 +178,10 @@ function RoundDirectCategory({
   if (status === 'error') {
     return (
       <div className={ALERT_STACK} role="alert">
+        {/* error는 useSaleRounds가 만든 고객 문구다(연결 안내 또는 "판매 회차를 불러오지 못했어요"). */}
         <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
-          판매 회차를 불러오지 못했습니다.
+          {error ?? saleRoundsErrorMessage(null)}
         </p>
-        {error && (
-          <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
-            {error}
-          </p>
-        )}
         <Button type="button" variant="light" onClick={refetch}>
           다시 시도
         </Button>
@@ -229,13 +229,11 @@ function RoundDirectCategory({
           }}
         >
           <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
-            최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+            {error ?? saleRoundsErrorMessage(null)}
           </p>
-          {error && (
-            <p className={`${TEXT_SM} mt-1`} style={{ color: 'var(--color-text-secondary)' }}>
-              {error}
-            </p>
-          )}
+          <p className={`${TEXT_SM} mt-1`} style={{ color: 'var(--color-text-secondary)' }}>
+            지금은 이전에 불러온 회차 정보를 보여 드려요.
+          </p>
           <Button
             type="button"
             variant="light"

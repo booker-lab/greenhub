@@ -14,7 +14,11 @@ import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientIm
 import RoundCountdownStrip from '@/components/RoundCountdownStrip';
 import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
-import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
+import {
+  type PublicSaleRound,
+  saleRoundsErrorMessage,
+  useSaleRounds,
+} from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import {
   type StoreProfileFailure,
@@ -221,14 +225,10 @@ function RoundDirectHome({
   if (status === 'error') {
     return (
       <div className={ALERT_STACK} role="alert">
+        {/* error는 useSaleRounds가 만든 고객 문구다(연결 안내 또는 "판매 회차를 불러오지 못했어요"). */}
         <p className={TEXT_SM} style={SECONDARY_COLOR}>
-          판매 회차를 불러오지 못했습니다.
+          {error ?? saleRoundsErrorMessage(null)}
         </p>
-        {error && (
-          <p className={TEXT_SM} style={DISABLED_COLOR}>
-            {error}
-          </p>
-        )}
         <Button type="button" variant="light" onClick={refetch}>
           다시 시도
         </Button>
@@ -256,13 +256,11 @@ function RoundDirectHome({
             className={TEXT_SM}
             style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-deadline-text)' }}
           >
-            최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+            {error ?? saleRoundsErrorMessage(null)}
           </p>
-          {error && (
-            <p className={`${TEXT_SM} mt-1`} style={SECONDARY_COLOR}>
-              {error}
-            </p>
-          )}
+          <p className={`${TEXT_SM} mt-1`} style={SECONDARY_COLOR}>
+            지금은 이전에 불러온 회차 정보를 보여 드려요.
+          </p>
           <Button
             type="button"
             variant="light"
