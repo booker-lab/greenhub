@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isAdminPath, isPureAdmin, kakaoCallbackUrl, postLoginPath } from './admin-landing';
+import {
+  isAdminPath,
+  isPureAdmin,
+  kakaoCallbackUrl,
+  postLoginPath,
+  shouldContinueAfterLogin,
+} from './admin-landing';
 
 describe('순수 관리자 판정과 로그인 뒤 경로', () => {
   it('가게 없는 관리자만 순수 관리자다', () => {
@@ -56,11 +62,26 @@ describe('순수 관리자 판정과 로그인 뒤 경로', () => {
 
   it('카카오 로그인은 돌아갈 경로가 있으면 로그인 화면을 거쳐 역할을 확인한다', () => {
     expect(kakaoCallbackUrl('/orders/abc?tab=memo')).toBe(
-      '/login?callbackUrl=%2Forders%2Fabc%3Ftab%3Dmemo',
+      '/login?callbackUrl=%2Forders%2Fabc%3Ftab%3Dmemo&postLogin=1',
     );
-    expect(kakaoCallbackUrl('/admin/stores')).toBe('/login?callbackUrl=%2Fadmin%2Fstores');
+    expect(kakaoCallbackUrl('/admin/stores')).toBe(
+      '/login?callbackUrl=%2Fadmin%2Fstores&postLogin=1',
+    );
     expect(kakaoCallbackUrl(null)).toBe('/orders');
     expect(kakaoCallbackUrl('//evil.example')).toBe('/orders');
     expect(kakaoCallbackUrl('/login')).toBe('/orders');
+  });
+});
+
+describe('로그인 화면이 열자마자 세션을 확인할지', () => {
+  it('카카오에서 돌아온 표시(postLogin=1)가 있을 때만 확인한다', () => {
+    expect(shouldContinueAfterLogin('1')).toBe(true);
+  });
+
+  it('로그아웃·계정 정지로 열린 로그인 화면(표시 없음·다른 값)에서는 세션을 조회하지 않는다', () => {
+    expect(shouldContinueAfterLogin(undefined)).toBe(false);
+    expect(shouldContinueAfterLogin('')).toBe(false);
+    expect(shouldContinueAfterLogin('true')).toBe(false);
+    expect(shouldContinueAfterLogin(['1'])).toBe(false);
   });
 });
