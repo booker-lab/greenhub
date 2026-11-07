@@ -23,6 +23,7 @@ import { useId, useState } from 'react';
 import type { AddressFormData } from '@/hooks/useAddresses';
 import { useAddresses } from '@/hooks/useAddresses';
 import { MyPageBackButton } from '../_back-button';
+import { currentMyPageLoginUrl } from '../_login';
 
 // ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 16)·Group(gap xs 10)·Stack·Paper(md 16, radius lg 16,
 // withBorder gray-3)·Text(p, 줄 높이 1.55)·Badge xs light·Button xs outline gray·red·white red·Button sm·md와 같은 값.
@@ -272,7 +273,7 @@ export default function AddressesClient() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   if (status === 'unauthenticated') {
-    router.replace('/login');
+    router.replace(currentMyPageLoginUrl());
     return null;
   }
 

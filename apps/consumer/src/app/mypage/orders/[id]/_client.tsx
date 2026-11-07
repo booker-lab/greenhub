@@ -58,6 +58,7 @@ import {
   readOrderDetail,
   readRedeliveryPaymentResponse,
 } from './_detail';
+import { currentMyPageLoginUrl } from '../../_login';
 
 const API_URL = getApiBaseUrl();
 // 취소 요청 뒤 결과를 모를 때(연결 끊김·응답 확인 실패) 보이는 문구. 아래 '상태 다시 확인' 안내와 함께 보인다.
@@ -692,7 +693,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             로그인이 필요하거나 이 주문을 볼 권한이 없습니다.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <LoadingButton onClick={() => router.push('/login')} loading={retrying}>
+            <LoadingButton onClick={() => router.push(currentMyPageLoginUrl())} loading={retrying}>
               로그인
             </LoadingButton>
             <Button variant="outline" onClick={() => router.push('/mypage')}>

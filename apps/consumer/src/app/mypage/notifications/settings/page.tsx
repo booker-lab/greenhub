@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { currentMyPageLoginUrl } from '../../_login';
 
 const API_URL = getApiBaseUrl();
 const MARKETING_NOT_USED_IN_PILOT = true;
@@ -234,7 +235,7 @@ function LegacyNotificationSettingsPage() {
   useEffect(() => {
     void reloadKey;
     if (status === 'unauthenticated') {
-      router.replace('/login');
+      router.replace(currentMyPageLoginUrl());
       return;
     }
     if (status !== 'authenticated') return;

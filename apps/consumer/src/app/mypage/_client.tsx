@@ -14,6 +14,7 @@ import { useOrders } from '@/hooks/useOrders';
 import { isFeatureOn } from '@/lib/features';
 import { ORDER_STATUS_LABELS as STATUS_LABELS } from '@/lib/order-status';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
+import { currentMyPageLoginUrl } from './_login';
 
 // ② 방향(design-standard §5, 판매자 주문 상태와 같은 규칙): 상태는 배지 면 없이 점 + 글자. 문제=빨강, 끝났거나 멈춘 상태=회색, 나머지 검정.
 const STATUS_TONES: Partial<Record<OrderStatus, StatusDotTone>> = {
@@ -230,7 +231,7 @@ export default function MyPageClient() {
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.replace('/login');
+      router.replace(currentMyPageLoginUrl());
     }
   }, [status, router]);
 

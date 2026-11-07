@@ -10,6 +10,7 @@ import { readCreatedAtMillis, useOrders } from '@/hooks/useOrders';
 import { isFeatureOn } from '@/lib/features';
 import { collectPurchaseHistory } from '@/lib/purchase-history';
 import { MyPageBackButton } from '../_back-button';
+import { currentMyPageLoginUrl } from '../_login';
 
 // 구매한 꽃(purchase-history, 벤치마킹 비교 기능). 내 주문 내역을 상품별로 모아 보여 준다.
 // 기능이 꺼져 있으면 없는 화면이다.
@@ -56,7 +57,7 @@ function PurchaseHistoryContent() {
   const entries = useMemo(() => collectPurchaseHistory(orders, readCreatedAtMillis), [orders]);
 
   useEffect(() => {
-    if (status === 'unauthenticated') router.replace('/login');
+    if (status === 'unauthenticated') router.replace(currentMyPageLoginUrl());
   }, [status, router]);
 
   if (status === 'loading' || !session) {

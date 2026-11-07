@@ -25,6 +25,7 @@ import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
 import { useNotifications } from '@/hooks/useNotifications';
 import { MyPageBackButton } from '../_back-button';
+import { currentMyPageLoginUrl } from '../_login';
 
 const TEMPLATE_LABELS: Record<NotificationTemplateCode, string> = {
   ORDER_ACCEPTED: '결제 완료',
@@ -237,7 +238,7 @@ export default function NotificationsClient() {
   }, [loading, error, notifications.length, markAllRead]);
 
   if (status === 'unauthenticated') {
-    router.replace('/login');
+    router.replace(currentMyPageLoginUrl());
     return null;
   }
 

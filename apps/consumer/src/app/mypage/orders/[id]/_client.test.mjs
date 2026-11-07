@@ -837,7 +837,8 @@ test('주문 상세 화면은 not-found와 일시 실패를 같은 의미로 수
   assert.match(source, /status: sessionStatus/);
   assert.match(source, /handleRetry/);
   assert.match(source, /await refetch\(\)/);
-  assert.match(source, /router\.push\('\/login'\)/);
+  // 로그인으로 보낼 때 보던 주문 상세를 복귀 주소로 싣는다(C-09 후속, mypage/_login.test.mjs).
+  assert.match(source, /router\.push\(currentMyPageLoginUrl\(\)\)/);
   assert.match(source, /주문 정보를 확인할 수 없습니다\. 잠시 후 다시 시도/);
   assert.match(source, /\{error \?\?/);
   assert.match(hookSource, /네트워크 연결을 확인하고 다시 시도/);
