@@ -125,6 +125,11 @@ export default function BusinessInfoFooter() {
         >
           개인정보처리방침
         </Link>
+        <span aria-hidden style={{ background: 'var(--color-border)', height: 12, width: 1 }} />
+        {/* 환불 규정은 이용약관 본문에 있어 따로 페이지를 두지 않고 해당 조(제8조 소비자 취소와 환급)로 바로 보낸다. */}
+        <Link href="/terms#refund" style={legalLinkStyle}>
+          교환·환불 안내
+        </Link>
         {/* 입점 문의(partner-inquiry, 벤치마킹 비교 기능) */}
         {isFeatureOn('partner-inquiry') && (
           <>

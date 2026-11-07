@@ -143,3 +143,35 @@ test('구매안전서비스 마크는 서버 컴포넌트에서 로컬 이미지
   assert.match(loadBusinessInfoSource(), /markImage: '\/images\/kb-escrow-mark\.gif'/);
   assert.ok(existsSync(escrowMarkPath), 'public/images/kb-escrow-mark.gif가 있어야 한다');
 });
+
+const termsPagePath = join(testDirectory, '..', 'app', 'terms', 'page.tsx');
+
+test('교환·환불 안내 링크는 이용약관의 취소·환급 조로 바로 이동한다(UX 감사 C-25)', () => {
+  const footerSource = loadComponentSource();
+  const termsSource = readFileSync(termsPagePath, 'utf8');
+
+  // 법적 고지 줄 안에 링크를 둔다.
+  const navStart = footerSource.indexOf('aria-label="법적 고지"');
+  const navEnd = footerSource.indexOf('</nav>', navStart);
+  assert.ok(navStart >= 0 && navEnd > navStart, '법적 고지 nav가 있어야 한다');
+  const navSource = footerSource.slice(navStart, navEnd);
+  const linkMatch = navSource.match(/<Link href="\/terms#([a-z-]+)"[^>]*>\s*교환·환불 안내\s*</);
+  assert.ok(linkMatch, '법적 고지 줄에 /terms#<앵커>로 가는 "교환·환불 안내" 링크가 있어야 한다');
+  const anchor = linkMatch[1];
+  assert.equal(anchor, 'refund');
+
+  // 앵커는 약관에서 한 조에만 달리고, 그 조는 청약철회·환급을 다루는 조다.
+  const anchorUses = termsSource.match(new RegExp(`id="${anchor}"`, 'g')) ?? [];
+  assert.equal(anchorUses.length, 1, `약관에 id="${anchor}"가 정확히 한 번 있어야 한다`);
+  const sectionMatch = termsSource.match(
+    new RegExp(`<Section id="${anchor}" title="(제\\d+조 [^"]+)">([\\s\\S]*?)</Section>`),
+  );
+  assert.ok(sectionMatch, `id="${anchor}"는 약관 조(Section)에 달려야 한다`);
+  assert.equal(sectionMatch[1], '제8조 소비자 취소와 환급');
+  assert.match(sectionMatch[2], /청약철회/);
+  assert.match(sectionMatch[2], /환불/);
+
+  // Section은 받은 id를 조 제목(h2)에 달고, 도착한 제목이 화면 위에 붙지 않게 여백을 둔다.
+  assert.match(termsSource, /<h2 id=\{id\} style=\{id \? anchoredHeadingStyle : headingStyle\}>/);
+  assert.match(termsSource, /scrollMarginTop: 'calc\(24px \+ env\(safe-area-inset-top\)\)'/);
+});
