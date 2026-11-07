@@ -3,6 +3,7 @@ import type {
   RedeliveryPaymentActionability,
   RedeliveryPaymentState,
 } from '@greenhub/shared';
+import type { DeliveryHoldReasonCode } from '@/lib/order-delivery-hold-notice';
 
 const MAX_IDENTIFIER_LENGTH = 128;
 const UNSAFE_IDENTIFIER_CHARACTERS = '/?#\\';
@@ -26,7 +27,7 @@ const ORDER_STATUSES = new Set<OrderStatus>([
 // RECRUITING·CONFIRMED가 없고, PREPARING·DELIVERY_HELD는 마감 뒤 준비·배송 단계에서만
 // 생기므로 버튼을 노출하면 항상 거절된다. 마감 전에 존재하는 상태만 남긴다.
 const ROUND_CANCELLABLE_STATUSES = new Set<OrderStatus>(['PENDING', 'ACCEPTED']);
-const DELIVERY_HOLD_REASONS = new Set([
+const DELIVERY_HOLD_REASONS = new Set<string>([
   'WEATHER',
   'ACCESS_UNAVAILABLE',
   'ADDRESS_ISSUE',
@@ -58,6 +59,7 @@ export interface DetailItem {
 
 export interface DeliveryHoldView {
   heldAt: string;
+  reasonCode: DeliveryHoldReasonCode;
   reasonMessage: string;
   customerResponsible: boolean;
   redeliveryFee: number | null;
@@ -197,6 +199,7 @@ function readDeliveryHold(value: unknown): DeliveryHoldView | null {
   if (nextContactAt === undefined || nextDeliveryAt === undefined) return null;
   return {
     heldAt: value.heldAt,
+    reasonCode: value.reasonCode as DeliveryHoldReasonCode,
     reasonMessage: value.reasonMessage.trim(),
     customerResponsible: value.customerResponsible,
     redeliveryFee: value.redeliveryFee as number | null,
