@@ -24,8 +24,8 @@
 - consumer·seller·driver Preview가 지정 SHA를 가리키는지 확인
 - 비운영 readiness 통과
 - chromium/mobile fixture seed·verify
-- 회차 직배송 Playwright 64건 실행
-- 64건 통과 뒤 세션 수명주기 Playwright 12건 실행
+- 회차 직배송 Playwright 66건 실행(셀러 상품 등록·수정·삭제 2건 포함)
+- 66건 통과 뒤 세션 수명주기 Playwright 12건 실행
 - 성공/실패와 무관한 fixture cleanup
 
 과거 성공 run은 새 출시 후보 SHA의 통과 증거를 대신하지 않는다.
@@ -117,9 +117,9 @@ E2E provider mode는 `stub`이다.
 9. chromium/mobile cleanup
 10. cleanup 결과와 비민감 증거 artifact 확인
 
-최종 통과는 **Playwright 64건 성공만으로는 부족**하다. 양쪽 fixture cleanup까지 성공해야 한다.
+최종 통과는 **Playwright 66건 성공만으로는 부족**하다. 양쪽 fixture cleanup까지 성공해야 한다.
 
-세션 수명주기 12건은 역할별(consumer·seller·driver)로 Credentials 로그인 쿠키 발급과 같은 컨텍스트 유지, Auth.js 로그아웃 후 세션 소멸, 계정 정지(consumer·seller)·기사 승인 철회(driver) 뒤 다음 세션 조회에서의 세션 종료를 검증한다. 로그아웃·정지가 같은 계정의 다른 세션에 영향을 줄 수 있으므로 64건이 끝난 뒤에만 실행한다. 사용자 상태 변경은 `scripts/round-direct-e2e-user-state.mjs`가 비운영 fixture 가드 아래 이번 실행 fixture 사용자의 `suspended`·`driverApproved`에만 적용하고, 성공·실패·예외 모든 경로에서 복원한 뒤 read-back으로 확인한다.
+세션 수명주기 12건은 역할별(consumer·seller·driver)로 Credentials 로그인 쿠키 발급과 같은 컨텍스트 유지, Auth.js 로그아웃 후 세션 소멸, 계정 정지(consumer·seller)·기사 승인 철회(driver) 뒤 다음 세션 조회에서의 세션 종료를 검증한다. 로그아웃·정지가 같은 계정의 다른 세션에 영향을 줄 수 있으므로 66건이 끝난 뒤에만 실행한다. 사용자 상태 변경은 `scripts/round-direct-e2e-user-state.mjs`가 비운영 fixture 가드 아래 이번 실행 fixture 사용자의 `suspended`·`driverApproved`에만 적용하고, 성공·실패·예외 모든 경로에서 복원한 뒤 read-back으로 확인한다.
 
 ## 9. 비밀정보·증거 규칙
 

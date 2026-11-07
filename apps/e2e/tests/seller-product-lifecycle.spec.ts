@@ -1,20 +1,42 @@
 import { randomUUID } from 'node:crypto';
-import { expect, type Response, test } from '@playwright/test';
-import { AUTH_STATE_PATH } from './_helpers/auth';
+import { test as base, expect, type Response, type TestInfo } from '@playwright/test';
+import { AUTH_STATE_PATH, ROUND_DIRECT_STATE_PATHS } from './_helpers/auth';
 import { genericPreviewFixture } from './_helpers/generic-preview';
+import { roundDirectProject } from './_helpers/round-direct';
 import {
   E2E_PRODUCTION_APP_TARGET_REASON,
   isProductionApiUrl,
   isProductionAppTarget,
+  resolveE2ETargetUrl,
 } from './_helpers/target-url';
 
 // 셀러 상품 실제 저장 동선. 폼 렌더·단계 이동 검증은 seller-product-create.spec.ts가 맡는다.
 
-const BASE = process.env['SELLER_BASE'] ?? 'https://seller.greenlove.co.kr';
+const BASE = resolveE2ETargetUrl('seller');
 
-const sellerEmail = process.env['TEST_SELLER_EMAIL'];
-const sellerPassword = process.env['TEST_SELLER_PASSWORD'];
-const skipAuth = !sellerEmail || !sellerPassword;
+// 원격 회차 E2E(e2e-round-direct.yml)는 globalSetup이 project별 회차 계정 state만 만들고
+// 공용 AUTH_STATE는 만들지 않는다. 회차 실행에서는 그 project의 회차 셀러 계정(가게)으로 돈다.
+const roundDirectEnabled = process.env['ROUND_DIRECT_E2E_ENABLED'] === 'true';
+
+function sellerCredentialEnvNames(testInfo: TestInfo): [string, string] {
+  if (!roundDirectEnabled) return ['TEST_SELLER_EMAIL', 'TEST_SELLER_PASSWORD'];
+  const suffix = roundDirectProject(testInfo).toUpperCase();
+  return [`TEST_SELLER_EMAIL_${suffix}`, `TEST_SELLER_PASSWORD_${suffix}`];
+}
+
+const test = base.extend({
+  // 계정 환경변수가 없으면 globalSetup이 이 state를 만들지 않았으므로, 컨텍스트를 열기 전에 건너뛴다.
+  storageState: async ({}, use, testInfo) => {
+    const [emailName, passwordName] = sellerCredentialEnvNames(testInfo);
+    testInfo.skip(
+      !process.env[emailName] || !process.env[passwordName],
+      `환경변수 ${emailName} / ${passwordName} 필요`,
+    );
+    await use(
+      roundDirectEnabled ? ROUND_DIRECT_STATE_PATHS[roundDirectProject(testInfo)] : AUTH_STATE_PATH,
+    );
+  },
+});
 
 // ── 실제 저장: 등록 → 목록 → 수정 → 삭제 ────────────────────────────
 //
@@ -51,9 +73,6 @@ function formatWon(value: number): string {
 }
 
 test.describe('셀러 상품 등록·수정·삭제 — 실제 저장', () => {
-  test.use({ storageState: AUTH_STATE_PATH });
-
-  test.skip(skipAuth, '환경변수 TEST_SELLER_EMAIL / TEST_SELLER_PASSWORD 필요');
   test.skip(isProductionAppTarget(BASE), E2E_PRODUCTION_APP_TARGET_REASON);
 
   let owned: OwnedProducts | null = null;
