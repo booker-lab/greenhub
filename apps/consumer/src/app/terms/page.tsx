@@ -23,10 +23,19 @@ const listStyle = {
   paddingLeft: 22,
 } as const;
 
-function Section({ children, title }: { children: ReactNode; title: string }) {
+// 다른 화면에서 /terms#<id>로 바로 여는 조에만 id를 단다. 도착한 제목이 화면 맨 위에 붙거나
+// 홈 화면 앱의 상태 표시줄에 가리지 않게 본문 위쪽 여백(24px)만큼 띄운다.
+const anchoredHeadingStyle = {
+  ...headingStyle,
+  scrollMarginTop: 'calc(24px + env(safe-area-inset-top))',
+} as const;
+
+function Section({ children, id, title }: { children: ReactNode; id?: string; title: string }) {
   return (
     <section style={{ marginTop: 34 }}>
-      <h2 style={headingStyle}>{title}</h2>
+      <h2 id={id} style={id ? anchoredHeadingStyle : headingStyle}>
+        {title}
+      </h2>
       {children}
     </section>
   );
@@ -130,7 +139,7 @@ export default function TermsPage() {
         </p>
       </Section>
 
-      <Section title="제8조 소비자 취소와 환급">
+      <Section id="refund" title="제8조 소비자 취소와 환급">
         <p>
           소비자는 자신의 회차 주문을 해당 회차의 주문 마감 전이고 시스템이 허용하는 주문 상태일
           때 취소할 수 있습니다. 회차 마감 후, 배송이 진행된 후 또는 그 밖에 화면과 관계 법령이

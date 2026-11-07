@@ -14,7 +14,11 @@ import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientIm
 import RoundCountdownStrip from '@/components/RoundCountdownStrip';
 import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
-import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
+import {
+  type PublicSaleRound,
+  saleRoundsErrorMessage,
+  useSaleRounds,
+} from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import {
   type StoreProfileFailure,
@@ -29,10 +33,12 @@ import {
 } from '@/lib/round-quick-add';
 import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
 import {
-  formatOrderCloseLabel,
+  formatOrderCloseStatus,
   formatOrderOpenLabel,
+  isRoundOrderClosed,
   roundSectionTitle,
 } from '@/lib/round-schedule-label';
+import { findNextRoundAfterClose, formatNextRoundNotice } from '@/lib/round-next-notice';
 import { homePrefetchStoreId, useHomeStorePrefetch } from './home-store-prefetch';
 import { resolveHomeStoreId } from './home-store-selection';
 import { BenchmarkCardProvider, type CardContextValue } from './benchmark/CardExtras';
@@ -165,6 +171,7 @@ const sectionTitleStyle = {
 } as const;
 
 function RoundDirectHome({
+  rounds,
   currentRound,
   pastRounds,
   loading,
@@ -220,20 +227,20 @@ function RoundDirectHome({
   if (status === 'error') {
     return (
       <div className={ALERT_STACK} role="alert">
+        {/* error는 useSaleRounds가 만든 고객 문구다(연결 안내 또는 "판매 회차를 불러오지 못했어요"). */}
         <p className={TEXT_SM} style={SECONDARY_COLOR}>
-          판매 회차를 불러오지 못했습니다.
+          {error ?? saleRoundsErrorMessage(null)}
         </p>
-        {error && (
-          <p className={TEXT_SM} style={DISABLED_COLOR}>
-            {error}
-          </p>
-        )}
         <Button type="button" variant="light" onClick={refetch}>
           다시 시도
         </Button>
       </div>
     );
   }
+
+  // 보이는 회차의 주문이 끝났으면 이미 받아 둔 회차 목록에서 주문 시작 전 다음 회차를 찾는다(없으면 안내하지 않는다).
+  const nextRound = findNextRoundAfterClose(rounds, currentRound, Date.now());
+  const nextRoundNotice = nextRound ? formatNextRoundNotice(nextRound) : null;
 
   return (
     <div className="flex flex-col items-stretch justify-start gap-7">
@@ -255,13 +262,11 @@ function RoundDirectHome({
             className={TEXT_SM}
             style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-deadline-text)' }}
           >
-            최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+            {error ?? saleRoundsErrorMessage(null)}
           </p>
-          {error && (
-            <p className={`${TEXT_SM} mt-1`} style={SECONDARY_COLOR}>
-              {error}
-            </p>
-          )}
+          <p className={`${TEXT_SM} mt-1`} style={SECONDARY_COLOR}>
+            지금은 이전에 불러온 회차 정보를 보여 드려요.
+          </p>
           <Button
             type="button"
             variant="light"
@@ -301,11 +306,22 @@ function RoundDirectHome({
             </p>
           )}
           <p className={TEXT_SM} style={SECONDARY_COLOR}>
-            주문 마감{' '}
+            {/* 주문 마감 시각이 지났으면 "~까지" 대신 "주문 마감됨 · 시각"으로 쓴다. */}
             {currentRound
-              ? formatOrderCloseLabel(currentRound.schedule.orderCloseAt)
-              : '일정 준비 중'}
+              ? formatOrderCloseStatus(
+                  currentRound.schedule.orderCloseAt,
+                  isRoundOrderClosed(currentRound, Date.now()),
+                )
+              : '주문 마감 일정 준비 중'}
           </p>
+          {nextRoundNotice && (
+            <p
+              className={TEXT_SM}
+              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-primary-dark)' }}
+            >
+              {nextRoundNotice}
+            </p>
+          )}
           <p className={TEXT_SM} style={SECONDARY_COLOR}>
             경기도 이천시 직접배송
           </p>
@@ -324,7 +340,7 @@ function RoundDirectHome({
             </p>
           )}
         </div>
-        {isFeatureOn('open-alert') && currentRound?.status === 'SCHEDULED' && (
+        {isFeatureOn('open-alert') && (currentRound?.status === 'SCHEDULED' || nextRoundNotice) && (
           <div className="mb-4">
             <KakaoChannelCta />
           </div>

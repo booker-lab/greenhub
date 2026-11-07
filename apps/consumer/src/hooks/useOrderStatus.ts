@@ -62,9 +62,9 @@ export function classifyOrderDetailFetchFailure(input: {
 export function getOrderDetailReadErrorMessage(
   status: Exclude<OrderDetailReadStatus, 'loading' | 'found' | 'not-found'>,
 ): string {
-  if (status === 'auth') return '로그인이 필요하거나 이 주문을 볼 권한이 없습니다.';
+  if (status === 'auth') return '로그인이 필요하거나 이 주문을 볼 수 없어요.';
   if (status === 'network') return '네트워크 연결을 확인하고 다시 시도해 주세요.';
-  return '주문 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.';
+  return '주문 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
 }
 
 interface UseOrderStatusResult {

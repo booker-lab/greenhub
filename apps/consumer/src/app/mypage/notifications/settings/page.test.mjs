@@ -41,6 +41,8 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }
+  // 비로그인 복귀 주소 함수(mypage/_login.ts, 자체 테스트가 따로 있다).
+  if (specifier === '../../_login') return { currentMyPageLoginUrl: () => '/login' };
   throw new Error(`예상하지 못한 마케팅 알림 설정 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(
@@ -143,7 +145,9 @@ test('파일럿 MY 설정 경로는 마케팅 편집 없이 비활성 안내만 
   const pilotSource = source.slice(start, end);
 
   assert.match(source, /const MARKETING_NOT_USED_IN_PILOT = true/);
-  assert.match(pilotSource, /파일럿에서는 마케팅 수신 동의와 설정을 운영하지 않습니다/);
+  assert.match(pilotSource, /지금은 마케팅 알림을 보내지 않아요\./);
+  // 고객 화면에 내부 운영 용어(파일럿)를 내지 않는다.
+  assert.doesNotMatch(pilotSource, />[^<]*파일럿[^<]*</);
   assert.doesNotMatch(pilotSource, /fetchMarketingPreferences|withdrawMarketingPreference|PATCH/);
   assert.doesNotMatch(pilotSource, /즉시 철회|동의함|동의하지 않음/);
   assert.match(pilotSource, /주문·결제·배송에 필요한 정보성 연락/);

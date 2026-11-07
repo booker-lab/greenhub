@@ -27,6 +27,7 @@ import { LoadingButton } from '@/components/LoadingButton';
 import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
 import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';
+import { roundPayBlockers } from '@/lib/payment-readiness';
 
 const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
@@ -52,6 +53,8 @@ export interface CheckoutFormProps {
   isLoading: boolean;
   canPay: boolean;
   error: string | null;
+  /** 오류 안내 아래에 둘 다음 행동(예: 결제 예약 한도로 막혔을 때 주문 내역으로 가기, C-02). 오류가 있을 때만 보인다. */
+  errorAction?: ReactNode;
   onPay: () => void;
   singleSummary?: {
     quantity: number;
@@ -64,6 +67,10 @@ export interface CheckoutFormProps {
     gift?: { value: GiftState; onChange: (next: GiftState) => void };
     packageLabel?: { value: PackageLabelState; onChange: (next: PackageLabelState) => void };
   };
+  /** 회차 결제에서 결제 버튼이 꺼진 이유를 보이기 위한 조건. 확인 체크·주소는 폼이 직접 판단한다. */
+  roundPayReadiness?: { phoneValid: boolean; giftReady: boolean; packageLabelReady: boolean };
+  /** 회차 주문이 마감됐을 때 결제 버튼 바로 위에 보일 안내(C-13). 있으면 빠진 조건 목록은 보이지 않는다. */
+  closedNotice?: ReactNode;
 }
 
 export function isIcheonDeliveryAddress(value: string): boolean {
@@ -204,9 +211,12 @@ export default function CheckoutForm({
   isLoading,
   canPay,
   error,
+  errorAction,
   onPay,
   singleSummary,
   benchmark,
+  roundPayReadiness,
+  closedNotice,
 }: CheckoutFormProps) {
   const [roundDetailsConfirmed, setRoundDetailsConfirmed] = useState(false);
   const [deliveryPhoneTouched, setDeliveryPhoneTouched] = useState(false);
@@ -224,20 +234,24 @@ export default function CheckoutForm({
     : '';
   const effectiveCanPay =
     canPay && (!isRoundCheckout || (isIcheonAddress && roundDetailsConfirmed));
+  // 결제 버튼이 꺼져 있으면 버튼 바로 위에 고객이 채워야 할 조건을 보인다(C-03).
+  // 마감 안내가 있으면 입력으로 풀 수 있는 조건이 아니므로 빠진 조건 목록을 보이지 않는다.
+  const payBlockers =
+    !closedNotice && isRoundCheckout && roundPayReadiness && !effectiveCanPay && !isLoading
+      ? roundPayBlockers({
+          hasAddress: Boolean(address.address && address.zipCode),
+          isIcheonAddress,
+          phoneValid: roundPayReadiness.phoneValid,
+          giftReady: roundPayReadiness.giftReady,
+          packageLabelReady: roundPayReadiness.packageLabelReady,
+          detailsConfirmed: roundDetailsConfirmed,
+        })
+      : [];
+  const payBlockersId = useId();
 
   useEffect(() => {
     if (confirmationKey) setRoundDetailsConfirmed(false);
   }, [confirmationKey]);
-
-  useEffect(() => {
-    if (!isLoading) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [isLoading]);
 
   function openAddressSearch() {
     new window.daum.Postcode({
@@ -443,7 +457,7 @@ export default function CheckoutForm({
             readOnly
             error={
               isRoundCheckout && address.address && !isIcheonAddress
-                ? '경기도 이천시 주소만 주문할 수 있습니다.'
+                ? '경기도 이천시 주소만 주문할 수 있어요.'
                 : undefined
             }
           />
@@ -573,10 +587,11 @@ export default function CheckoutForm({
               결제 직전 확인
             </p>
             <p className="m-0 mb-3 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              상품 정보가 변경되면 상품·수량·회차 가격과 총 결제 금액을 다시 확인해야 합니다.
+              위 주문 상품·수량·회차 가격과 결제 금액을 확인하고 체크해야 결제할 수 있어요. 상품
+              정보가 바뀌면 체크가 풀려요.
             </p>
             <Checkbox
-              label="상품·가격·회차 변경 내용을 확인했습니다."
+              label="주문 상품·수량·회차 가격을 확인했어요(필수)"
               checked={roundDetailsConfirmed}
               onCheckedChange={(checked) => setRoundDetailsConfirmed(checked)}
             />
@@ -642,15 +657,38 @@ export default function CheckoutForm({
             <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
               {error}
             </p>
+            {errorAction}
           </AlertDescription>
         </Alert>
       )}
+
+      {payBlockers.length > 0 && (
+        <div id={payBlockersId} className="mb-3">
+          <p className="m-0 text-sm leading-[1.55]" style={{ fontWeight: 'var(--fw-bold)' }}>
+            결제하려면 아래 내용을 확인해 주세요.
+          </p>
+          <ul className="m-0 mt-1 flex list-none flex-col gap-0.5 p-0">
+            {payBlockers.map((blocker) => (
+              <li
+                key={blocker}
+                className="m-0 text-sm leading-[1.55]"
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                · {blocker}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {closedNotice}
 
       <LoadingButton
         size="lg"
         className="w-full"
         disabled={!effectiveCanPay}
         loading={isLoading}
+        aria-describedby={payBlockers.length > 0 ? payBlockersId : undefined}
         onClick={() => {
           if (effectiveCanPay) onPay();
         }}

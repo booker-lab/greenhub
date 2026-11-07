@@ -59,3 +59,13 @@ export function safeCallbackPath(raw: string | null | undefined, origin?: string
 export function isOrderCallback(raw: string | null | undefined, origin?: string): boolean {
   return /^\/(cart|checkout)(\/|\?|#|$)/.test(safeCallbackPath(raw, origin));
 }
+
+/**
+ * 이미 로그인한 손님을 로그인 화면에서 보낼 곳. 복귀 주소가 로그인 화면 자신이면(`/login?callbackUrl=%2Flogin`)
+ * 같은 화면으로 다시 보내 빈 화면에 갇히므로 홈으로 보낸다.
+ */
+export function signedInRedirectPath(raw: string | null | undefined, origin?: string): string {
+  const path = safeCallbackPath(raw, origin);
+  const pathname = new URL(path, 'http://callback-check.invalid').pathname;
+  return pathname === '/login' || pathname.startsWith('/login/') ? DEFAULT_CALLBACK_PATH : path;
+}

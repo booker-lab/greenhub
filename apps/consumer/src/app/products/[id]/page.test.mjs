@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import ts from 'typescript';
 
 const source = await readFile(new URL('./ProductDetailClient.tsx', import.meta.url), 'utf8');
 const serverPageSource = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
@@ -41,7 +42,12 @@ test('공개 회차 정본으로 상품과 스토어 관계를 모두 검증한�
 
 test('유효한 회차 상품을 현재와 마감 상태로 구분해 상세 경계에 전달한다', () => {
   assert.match(source, /state: 'current' \| 'closed'/);
-  assert.match(source, /round\.status === 'OPEN' \|\| round\.status === 'SCHEDULED'/);
+  // 현재(판매 중·판매 예정)·마감 구분은 공용 판정(lib/round-product-state)이 현재 시각으로 한다.
+  assert.match(
+    source,
+    /import \{ resolveRoundProductAvailability \} from '@\/lib\/round-product-state';/,
+  );
+  assert.match(source, /resolveRoundProductAvailability\(round, item, Date\.now\(\)\)/);
   assert.match(source, /roundProduct=\{roundProduct\}/);
   assert.match(source, /data-round-state=\{roundProduct\?\.state\}/);
 });
@@ -168,4 +174,61 @@ test('서버 단서의 매장으로 회차 조회를 상품·판매 방식 조�
   assert.match(pageSource, /if \(hintStoreId\) void loadPublicSaleRoundsState\(hintStoreId\);/);
   // 회차 화면은 같은 공유 요청(loadPublicSaleRoundsState)을 쓰는 useSaleRounds로 읽는다.
   assert.match(source, /const saleRounds = useSaleRounds\(product\.storeId\);/);
+});
+
+test('회차 조회 오류·이전 결과 안내는 useSaleRounds의 고객 문구 한 줄로 보이고 같은 뜻을 두 번 쓰지 않는다', () => {
+  const start = source.indexOf('function RoundDirectProductDetail(');
+  const end = source.indexOf('export default function ProductDetailClient');
+  assert.ok(start !== -1 && end > start);
+  const block = source.slice(start, end);
+  // error는 useSaleRounds가 고객 문구로 바꿔 준다(원문은 그 훅의 테스트가 막는다).
+  // 오류 화면·이전 결과로 회차를 못 찾은 안내·이전 결과 띠, 세 곳 모두 이 한 줄만 쓴다.
+  assert.equal(
+    block.match(/\{saleRounds\.error \?\? saleRoundsErrorMessage\(null\)\}/g)?.length,
+    3,
+  );
+  assert.doesNotMatch(block, /\{saleRounds\.error && \(/);
+  assert.match(block, /지금은 이전에 불러온 회차 정보를 보여 드려요\./);
+  assert.doesNotMatch(block, /판매 회차를 불러오지 못했습니다|이전 결과를 표시합니다/);
+});
+
+// 화면에 보이는 글자(문자열·템플릿 리터럴, JSX 글자)를 모은다. 주석은 AST에 없으므로 빠지고,
+// API 응답 원문은 리터럴이 아니므로 검사 대상이 아니다(주문 상세 _client.test.mjs와 같은 방식).
+function collectScreenStrings(text, fileName) {
+  const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const strings = [];
+  const visit = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      strings.push(node.text);
+    } else if (ts.isJsxText(node)) {
+      const value = node.getText().trim();
+      if (value) strings.push(value);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return strings;
+}
+
+test('상품 상세 화면 문구는 해요체로 통일하고 합니다체·내부 용어가 다시 들어오지 않는다', () => {
+  const strings = collectScreenStrings(source, 'ProductDetailClient.tsx');
+  // 수집이 실제로 동작하는지 확인한다(해요체 안내가 잡혀야 한다).
+  assert.ok(strings.includes('이 상품을 파는 회차를 찾지 못했어요.'));
+  assert.ok(strings.includes('상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'));
+  assert.ok(strings.includes('판매 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'));
+  assert.deepEqual(
+    strings.filter((value) => /니다|니까|십시오|서버/.test(value)),
+    [],
+  );
+  // '공개 판매 회차'처럼 판매 설정 용어를 손님에게 보이지 않는다.
+  assert.deepEqual(
+    strings.filter((value) => /[가-힣]/.test(value) && /공개/.test(value)),
+    [],
+  );
 });

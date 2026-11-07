@@ -24,11 +24,34 @@ function freshSharedRequestModule() {
   );
   return module.exports;
 }
+// 표시용 오류 문구는 실제 lib/load-error-message를 쓴다(문구 규칙은 그 파일의 테스트가 검증한다).
+const loadErrorMessageModule = { exports: {} };
+new Function(
+  'require',
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/load-error-message.ts', import.meta.url), 'utf8'),
+    {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+      fileName: 'load-error-message.ts',
+    },
+  ).outputText,
+)(
+  () => {
+    throw new Error('load-error-message는 다른 모듈을 쓰지 않는다');
+  },
+  loadErrorMessageModule,
+  loadErrorMessageModule.exports,
+);
+const { CONNECTION_UNSTABLE_MESSAGE } = loadErrorMessageModule.exports;
+const SALE_ROUNDS_LOAD_FAILED_MESSAGE = '판매 회차를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+
 const testableSource = `${source.replace(
   "import { getApiBaseUrl } from '@/lib/api-base-url';",
   "const getApiBaseUrl = () => 'https://api.example.test';",
 )}
-export { createLoadingSaleRoundsState, createEmptySaleRoundsState, createErrorSaleRoundsState, hasRecoverableSaleRoundsData, createRefreshingSaleRoundsState, createStaleSaleRoundsState, resolveSaleRoundsRefreshStart, resolveSaleRoundsRefreshResult, fetchPublicSaleRoundsState, loadPublicSaleRoundsState, fetchPublicSaleRound };`;
+export { saleRoundsErrorMessage, createLoadingSaleRoundsState, createEmptySaleRoundsState, createErrorSaleRoundsState, hasRecoverableSaleRoundsData, createRefreshingSaleRoundsState, createStaleSaleRoundsState, resolveSaleRoundsRefreshStart, resolveSaleRoundsRefreshResult, fetchPublicSaleRoundsState, loadPublicSaleRoundsState, fetchPublicSaleRound };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     module: ts.ModuleKind.CommonJS,
@@ -48,6 +71,7 @@ const saleRoundsRequire = (specifier) => {
     };
   }
   if (specifier === '@/lib/shared-request') return topLevelSharedRequest;
+  if (specifier === '@/lib/load-error-message') return loadErrorMessageModule.exports;
   throw new Error(`예상하지 못한 회차 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(
@@ -65,6 +89,7 @@ const {
   fetchPublicSaleRoundsState,
   loadPublicSaleRoundsState,
   fetchPublicSaleRound,
+  saleRoundsErrorMessage,
 } = saleRoundsModule.exports;
 
 const originalFetch = globalThis.fetch;
@@ -204,6 +229,7 @@ function mountHook({ storeId = 'store-1', fetchImpl }) {
       return { getApiBaseUrl: () => 'https://api.example.test' };
     }
     if (specifier === '@/lib/shared-request') return sharedRequestModule;
+    if (specifier === '@/lib/load-error-message') return loadErrorMessageModule.exports;
     throw new Error(`예상하지 못한 회차 모듈 요청: ${specifier}`);
   };
   new Function('require', 'module', 'exports', compiled)(
@@ -421,9 +447,39 @@ test('3. initial failure != empty: 공개 API 실패는 error를 제공하고 em
   assert.equal(state.isEmpty, false);
   assert.equal(state.isRefreshing, false);
   assert.equal(state.isStale, false);
-  assert.equal(state.error, '회차 조회 오류: 503');
+  // 화면에는 상태 코드("회차 조회 오류: 503") 대신 고객 문구를 넘긴다.
+  assert.equal(state.error, SALE_ROUNDS_LOAD_FAILED_MESSAGE);
   assert.deepEqual(state.rounds, []);
   assert.equal(hasRecoverableSaleRoundsData(state), false);
+});
+
+test('연결 실패 원문(Failed to fetch 등)은 화면에 내지 않고 연결 안내로 바꾼다', async () => {
+  for (const message of ['Failed to fetch', 'Load failed', 'fetch failed']) {
+    const state = await fetchPublicSaleRoundsState('store-1', async () => {
+      throw new TypeError(message);
+    });
+    assert.equal(state.status, 'error');
+    assert.equal(state.error, CONNECTION_UNSTABLE_MESSAGE);
+  }
+});
+
+test('공유 조회(loadPublicSaleRoundsState)도 연결 실패 안내를 일반 안내로 덮지 않는다', async () => {
+  globalThis.fetch = async () => {
+    throw new TypeError('Failed to fetch');
+  };
+  const offline = await loadPublicSaleRoundsState('store-offline', { fresh: true });
+  assert.equal(offline.status, 'error');
+  assert.equal(offline.error, CONNECTION_UNSTABLE_MESSAGE);
+
+  globalThis.fetch = async () => jsonResponse({}, 500);
+  const failed = await loadPublicSaleRoundsState('store-offline', { fresh: true });
+  assert.equal(failed.error, SALE_ROUNDS_LOAD_FAILED_MESSAGE);
+});
+
+test('saleRoundsErrorMessage는 원래 오류를 고객 문구로만 바꾼다', () => {
+  assert.equal(saleRoundsErrorMessage(new TypeError('Failed to fetch')), CONNECTION_UNSTABLE_MESSAGE);
+  assert.equal(saleRoundsErrorMessage(new Error('회차 조회 오류: 503')), SALE_ROUNDS_LOAD_FAILED_MESSAGE);
+  assert.equal(saleRoundsErrorMessage(null), SALE_ROUNDS_LOAD_FAILED_MESSAGE);
 });
 
 test('malformed 응답은 정상 empty로 바꾸지 않고 error를 유지한다', async () => {
@@ -432,7 +488,8 @@ test('malformed 응답은 정상 empty로 바꾸지 않고 error를 유지한다
   );
   assert.equal(malformedList.status, 'error');
   assert.equal(malformedList.isEmpty, false);
-  assert.match(malformedList.error ?? '', /형식/);
+  // 응답 형식 오류 원문은 화면에 내지 않는다.
+  assert.equal(malformedList.error, SALE_ROUNDS_LOAD_FAILED_MESSAGE);
 
   // 상품이 빠진 회차가 섞이면 정상 결과로 보지 않는다.
   const open = round('round-open', 'OPEN', '2026-07-13T00:00:00.000Z');
@@ -520,6 +577,12 @@ test('6. success → refresh success는 최신 결과로 교체하고 stale을 �
   const previous = await fetchPublicSaleRoundsState('store-1', successFetcherFor([open]));
   const stale = createStaleSaleRoundsState(previous, new Error('회차 조회 오류: 503'));
   assert.equal(stale.isStale, true);
+  // 원래 오류로 만들어도 화면 문구는 고객 문구이고, 이미 고객 문구인 오류 상태의 error는 그대로 이어 쓴다.
+  assert.equal(stale.error, SALE_ROUNDS_LOAD_FAILED_MESSAGE);
+  assert.equal(
+    createStaleSaleRoundsState(previous, CONNECTION_UNSTABLE_MESSAGE).error,
+    CONNECTION_UNSTABLE_MESSAGE,
+  );
 
   const nextOpen = round('round-next', 'OPEN', '2026-07-20T00:00:00.000Z');
   const next = await fetchPublicSaleRoundsState('store-1', successFetcherFor([nextOpen]));

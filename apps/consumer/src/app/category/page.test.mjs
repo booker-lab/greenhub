@@ -52,3 +52,14 @@ test('round_direct 분기에는 공동구매·택배·거점픽업·전체 상�
 
   assert.doesNotMatch(roundDirectSource, /공동구매|택배|거점픽업|전체 상품/);
 });
+
+test('round_direct 회차 조회 오류·이전 결과 안내는 useSaleRounds의 고객 문구 한 줄로 보인다', () => {
+  const roundDirectSource = source.slice(
+    source.indexOf('function RoundDirectCategory'),
+    source.indexOf('function LegacyCategory'),
+  );
+  // error는 useSaleRounds가 고객 문구로 바꿔 준다(원문은 그 훅의 테스트가 막는다).
+  assert.equal(roundDirectSource.match(/\{error \?\? saleRoundsErrorMessage\(null\)\}/g)?.length, 2);
+  assert.match(roundDirectSource, /지금은 이전에 불러온 회차 정보를 보여 드려요\./);
+  assert.doesNotMatch(roundDirectSource, /판매 회차를 불러오지 못했습니다|이전 결과를 표시합니다/);
+});

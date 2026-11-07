@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Product, Category, ColorOption, SaleType, Variety } from '@greenhub/shared';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { customerLoadErrorMessage } from '@/lib/load-error-message';
 import {
   PublicStoreProfileNotFoundError,
   fetchPublicStoreProfile,
@@ -85,7 +86,8 @@ export function useProducts(
         setLoading(false);
       } catch (e: unknown) {
         if (cancelled || requestSequenceRef.current !== requestId) return;
-        setError(e instanceof Error ? e.message : '상품 조회 실패');
+        // 화면에는 브라우저 원문("Failed to fetch")·상태 코드 대신 손님 문구를 넘긴다.
+        setError(customerLoadErrorMessage(e, '상품을'));
         setLoading(false);
       }
     }

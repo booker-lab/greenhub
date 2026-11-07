@@ -4,12 +4,20 @@ import { useEffect, useRef } from 'react';
 import { SessionProvider, useSession, signOut } from 'next-auth/react';
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { buildSessionExpiredLoginUrl } from '@/lib/session-login';
+
+// 세션이 끝나면 로그인 화면으로 보내되, 보던 화면을 복귀 주소로 싣고 만료 이유를 알린다.
+function signOutExpired() {
+  return signOut({
+    callbackUrl: buildSessionExpiredLoginUrl(window.location.pathname, window.location.search),
+  });
+}
 
 function TokenErrorGuard({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   useEffect(() => {
     if (session?.user?.tokenError) {
-      signOut({ callbackUrl: '/login' });
+      signOutExpired();
     }
   }, [session?.user?.tokenError]);
   return <>{children}</>;
@@ -32,7 +40,7 @@ function SessionAuthorityRecheck() {
           void recheckSessionAfterRejection({
             update: () => updateRef.current({}),
             fetchImpl: (input, init) => window.fetch(input, init),
-            signOut: () => signOut({ callbackUrl: '/login' }),
+            signOut: signOutExpired,
           });
         },
       }),

@@ -6,6 +6,8 @@ import {
   PRODUCTION_API_HOSTS,
 } from '../../../../scripts/check-round-direct-e2e-readiness.mjs';
 import {
+  isProductionApiUrl,
+  isProductionAppTarget,
   ROUND_DIRECT_LOCAL_TARGET_ORIGINS,
   readRoundDirectTargetUrls,
   resolveE2EApiBase,
@@ -235,6 +237,70 @@ describe('API 직접 호출 spec의 API_BASE 계약', () => {
         rejectedAsProduction,
         readiness.failureCodes.includes('PRODUCTION_API_ORIGIN'),
         origin,
+      );
+    }
+  });
+});
+
+describe('데이터를 만들고 지우는 spec의 운영 대상 가드', () => {
+  it('앱 기본값(운영)과 운영 도메인은 운영으로, Preview·로컬 주소는 비운영으로 본다', () => {
+    assert.equal(isProductionAppTarget(resolveE2ETargetUrl('seller', {})), true);
+    assert.equal(isProductionAppTarget('https://seller.greenlove.co.kr'), true);
+    assert.equal(isProductionAppTarget('https://SELLER.GREENLOVE.CO.KR/'), true);
+    assert.equal(isProductionAppTarget('https://greenlove.co.kr'), true);
+    assert.equal(isProductionAppTarget('https://seller-git-preview-team.vercel.app'), false);
+    assert.equal(isProductionAppTarget('http://localhost:3002'), false);
+    assert.equal(isProductionAppTarget('http://127.0.0.2:3102'), false);
+    assert.equal(isProductionAppTarget('https://greenlove.co.kr.example.test'), false);
+  });
+
+  it('주소로 읽을 수 없으면 앱·API 모두 운영으로 보고 막는다', () => {
+    assert.equal(isProductionAppTarget('seller.greenlove.co.kr'), true);
+    assert.equal(isProductionAppTarget(''), true);
+    assert.equal(isProductionApiUrl('api-staging-94af.up.railway.app'), true);
+    assert.equal(isProductionApiUrl(''), true);
+  });
+
+  it('운영 앱 판정은 readiness 가드의 운영 Preview 앱 origin 판정과 같다', () => {
+    const candidates = [
+      'https://greenlove.co.kr',
+      'https://seller.greenlove.co.kr',
+      'https://driver.greenlove.co.kr',
+      'https://seller-git-preview-team.vercel.app',
+      'https://greenlove.co.kr.example.test',
+      'http://localhost:3002',
+    ];
+    for (const origin of candidates) {
+      const readiness = evaluateTargetReadiness({
+        previewAppOrigins: { consumer: origin, seller: origin, driver: origin },
+        allowedPreviewAppOrigins: [origin],
+      });
+      assert.equal(
+        isProductionAppTarget(origin),
+        readiness.failureCodes.includes('PRODUCTION_PREVIEW_APP_ORIGIN'),
+        origin,
+      );
+    }
+  });
+
+  it('화면이 부른 API 주소의 운영 판정은 readiness 가드의 운영 API origin 판정과 같다', () => {
+    const candidates = [
+      ...PRODUCTION_API_HOSTS.map((host) => `https://${host}/stores/s1/public-profile`),
+      'https://api-production-0000.up.railway.app/stores/s1/products',
+      'https://greenhub-api-abc123xyz0-du.a.run.app/stores/s1/products',
+      'https://api.greenlove.co.kr/stores/s1/products',
+      'https://api-staging-94af.up.railway.app/stores/s1/public-profile',
+      'http://localhost:3000/stores/local-store-01/products',
+    ];
+    for (const url of candidates) {
+      const readiness = evaluateTargetReadiness({
+        apiOrigin: new URL(url).origin,
+        allowedApiOrigins: [new URL(url).origin],
+      });
+      assert.equal(
+        isProductionApiUrl(url),
+        readiness.failureCodes.includes('PRODUCTION_API_ORIGIN'),
+        url,
       );
     }
   });

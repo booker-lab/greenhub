@@ -3,11 +3,17 @@
 import { ChevronLeft, Home, ShoppingCart } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCart } from '@/hooks/useCart';
+import { readBackNavigationContext, resolveBackAction } from '@/lib/nav-back';
 
 // ① 외형 유지(UI 교체 P5): Mantine Box(component=header·div)는 스타일이 없는 요소라 같은 요소로 바꿨다.
 export default function ProductTopBar() {
   const router = useRouter();
   const { itemCount } = useCart();
+  // 공유 링크를 새 탭으로 열었거나 다른 사이트에서 막 들어왔으면 돌아갈 가게 화면이 없으니 홈으로 보낸다.
+  const goBack = () => {
+    if (resolveBackAction(readBackNavigationContext(window)) === 'home') router.push('/');
+    else router.back();
+  };
 
   return (
     <header
@@ -38,7 +44,7 @@ export default function ProductTopBar() {
         {/* 뒤로가기 */}
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={goBack}
           style={{
             background: 'none',
             border: 'none',

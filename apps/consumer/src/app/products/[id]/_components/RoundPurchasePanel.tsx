@@ -1,5 +1,6 @@
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
-import { formatOrderCloseLabel, formatRoundDay, formatRoundTime } from '@/lib/round-schedule-label';
+import { roundOrderCloseStep } from '@/lib/round-close-step';
+import { formatRoundDay, formatRoundTime } from '@/lib/round-schedule-label';
 
 interface RoundPurchasePanelProps {
   round: SaleRound;
@@ -35,7 +36,8 @@ export default function RoundPurchasePanel({
     notOpenYet
       ? { label: '주문 시작', value: formatRoundTime(round.schedule.orderOpenAt) ?? '일정 확인 중' }
       : null,
-    { label: '주문 마감', value: formatOrderCloseLabel(round.schedule.orderCloseAt) },
+    // 마감 시각이 지난 회차는 홈과 같이 "~까지" 없이 "주문 마감됨"과 시각만 보인다.
+    roundOrderCloseStep(round, Date.now()),
     { label: '새벽 경매', value: formatRoundTime(round.schedule.auctionAt) ?? '일정 확인 중' },
     {
       label: '문 앞 도착',
