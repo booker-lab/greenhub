@@ -53,6 +53,17 @@ new Function(
   ).outputText,
 )(failureMessageModule, failureMessageModule.exports);
 
+// 이탈 경고·같은 탭 복귀 처리는 실제 payment-page-guard 모듈로 붙인다.
+const pageGuardModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/payment-page-guard.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(pageGuardModule, pageGuardModule.exports);
+
 const originalFetch = globalThis.fetch;
 const originalEnvironment = {
   apiUrl: process.env.NEXT_PUBLIC_API_URL,
@@ -85,10 +96,14 @@ test.after(() => {
 function loadHook({ paymentResponses = [], onPayment } = {}) {
   const paymentCalls = [];
   const stateChanges = [];
+  const effects = [];
   const paymentModule = { exports: {} };
   const requireForTest = (specifier) => {
     if (specifier === 'react') {
       return {
+        useEffect: (effect) => {
+          effects.push(effect);
+        },
         useRef: (initial) => ({ current: initial }),
         useState: (initial) => [
           initial,
@@ -108,6 +123,7 @@ function loadHook({ paymentResponses = [], onPayment } = {}) {
     }
     if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
     if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
+    if (specifier === '@/lib/payment-page-guard') return pageGuardModule.exports;
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => process.env.NEXT_PUBLIC_API_URL };
     }
@@ -133,6 +149,7 @@ function loadHook({ paymentResponses = [], onPayment } = {}) {
     usePayment: paymentModule.exports.usePayment,
     paymentCalls,
     stateChanges,
+    effects,
   };
 }
 
@@ -661,4 +678,114 @@ test('브라우저 밖(origin 없음)에서는 redirectUrl 없이 기존 Promise
   const { result, paymentCalls } = createRoundHook();
   await result.requestPayment();
   assert.equal(Object.hasOwn(paymentCalls[0], 'redirectUrl'), false);
+});
+
+/** addEventListener만 흉내 낸 window. 등록된 이탈·복귀 처리기를 직접 부른다. */
+function installEventWindow() {
+  const browser = installBrowser();
+  const listeners = new Map();
+  globalThis.window.addEventListener = (type, listener) => {
+    listeners.set(type, [...(listeners.get(type) ?? []), listener]);
+  };
+  globalThis.window.removeEventListener = (type, listener) => {
+    listeners.set(
+      type,
+      (listeners.get(type) ?? []).filter((candidate) => candidate !== listener),
+    );
+  };
+  const dispatch = (type, init = {}) => {
+    const event = {
+      type,
+      defaultPrevented: false,
+      preventDefault() {
+        this.defaultPrevented = true;
+      },
+      ...init,
+    };
+    for (const listener of listeners.get(type) ?? []) listener(event);
+    return event;
+  };
+  return { ...browser, dispatch };
+}
+
+test('결제사 이동(paying)에서는 이탈 확인창을 띄우지 않고, 주문 생성 중에는 띄운다', async () => {
+  const browser = installEventWindow();
+  try {
+    let creatingWarned = null;
+    globalThis.fetch = async () => {
+      creatingWarned = browser.dispatch('beforeunload').defaultPrevented;
+      return jsonResponse(successfulRoundResponse);
+    };
+    let payingWarned = null;
+    const loaded = loadHook({
+      // 모바일 결제창은 requestPayment 안에서 곧바로 같은 탭 이동을 시작한다(렌더 전).
+      onPayment: () => {
+        payingWarned = browser.dispatch('beforeunload').defaultPrevented;
+        return new Promise(() => {});
+      },
+    });
+    const result = mountRoundPayment(loaded);
+    for (const effect of loaded.effects) effect();
+
+    void result.requestPayment();
+    await settle();
+
+    assert.equal(creatingWarned, true);
+    assert.equal(payingWarned, false);
+  } finally {
+    browser.restore();
+  }
+});
+
+test('결제사 화면에서 뒤로 와 페이지가 복원되면 결제 전 상태로 돌아가 새 결제 시도로 다시 결제한다', async () => {
+  const browser = installEventWindow();
+  try {
+    const bodies = [];
+    globalThis.fetch = async (_url, init) => {
+      bodies.push(JSON.parse(init.body));
+      return jsonResponse(successfulRoundResponse);
+    };
+    let resolveFirstPayment;
+    let paymentCount = 0;
+    const loaded = loadHook({
+      onPayment: () => {
+        paymentCount += 1;
+        if (paymentCount === 1) {
+          // 결제사로 이동해 끝나지 않는 결제창(뒤로 와도 Promise가 남는다).
+          return new Promise((resolve) => {
+            resolveFirstPayment = resolve;
+          });
+        }
+        return { transactionType: 'PAYMENT', txId: 'tx-2', paymentId: 'order-1' };
+      },
+    });
+    const result = mountRoundPayment(loaded);
+    for (const effect of loaded.effects) effect();
+
+    void result.requestPayment();
+    await settle();
+    assert.equal(loaded.stateChanges.at(-1), 'paying');
+
+    // 새로 로드가 아닌 일반 표시(persisted=false)는 그대로 둔다.
+    browser.dispatch('pageshow', { persisted: false });
+    assert.equal(loaded.stateChanges.at(-1), 'paying');
+
+    browser.dispatch('pageshow', { persisted: true });
+    assert.equal(loaded.stateChanges.at(-1), null);
+    assert.ok(loaded.stateChanges.slice(-2).includes('idle'));
+
+    await result.requestPayment();
+    assert.equal(loaded.paymentCalls.length, 2);
+    assert.equal(bodies.length, 2);
+    assert.notEqual(bodies[0].clientOrderRequestId, bodies[1].clientOrderRequestId);
+    assert.equal(loaded.stateChanges.at(-1), 'done');
+
+    // 늦게 끝난 이전 결제창 결과는 화면 상태를 바꾸지 않는다.
+    const changesBefore = loaded.stateChanges.length;
+    resolveFirstPayment({ code: 'FAILURE_TYPE_PG', message: '취소' });
+    await settle();
+    assert.equal(loaded.stateChanges.length, changesBefore);
+  } finally {
+    browser.restore();
+  }
 });

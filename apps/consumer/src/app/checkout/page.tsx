@@ -35,6 +35,7 @@ import { pickCheckoutPrefill, prefillAddress, prefillPhone } from '@/lib/checkou
 import { isFeatureOn } from '@/lib/features';
 import { isKoreanMobilePhone, ROUND_DELIVERY_PHONE_ERROR } from '@/lib/korean-mobile-phone';
 import { paymentFailureMessage } from '@/lib/payment-failure-message';
+import { attachPaymentPageGuard, type PaymentPagePhase } from '@/lib/payment-page-guard';
 import {
   buildPaymentRedirectUrl,
   createPendingOrderPayment,
@@ -313,9 +314,33 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
   });
   const [deliveryPhone, setDeliveryPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
-  const [state, setState] = useState<'idle' | 'creating' | 'paying' | 'done' | 'error'>('idle');
+  const [state, setState] = useState<PaymentPagePhase>('idle');
   const [error, setError] = useState<string | null>(null);
   const paymentAttemptIds = useRef(new Map<string, string>());
+  // 이탈 경고·같은 탭 복귀 판단은 렌더를 기다리지 않고 이 값으로 한다(C-01).
+  const phase = useRef<PaymentPagePhase>('idle');
+  const attemptGeneration = useRef(0);
+
+  function transition(next: PaymentPagePhase) {
+    phase.current = next;
+    setState(next);
+  }
+
+  useEffect(
+    () =>
+      attachPaymentPageGuard(window, {
+        getPhase: () => phase.current,
+        onRestore: () => {
+          attemptGeneration.current += 1;
+          // 새로 로드된 복귀와 같게 다음 결제는 새 결제 시도 ID로 주문한다.
+          paymentAttemptIds.current.clear();
+          phase.current = 'idle';
+          setState('idle');
+          setError(null);
+        },
+      }),
+    [],
+  );
 
   const totalAmount = cartItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const cartValidationError = getCartValidationError(cartItems);
@@ -331,9 +356,10 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
 
   async function handlePay() {
     if (state !== 'idle' && state !== 'error') return;
+    const generation = attemptGeneration.current;
     if (cartValidationError) {
       setError(cartValidationError);
-      setState('error');
+      transition('error');
       return;
     }
     setError(null);
@@ -344,7 +370,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       configuration = readPortonePaymentConfiguration(paymentMethod);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '결제 설정을 확인할 수 없습니다.');
-      setState('error');
+      transition('error');
       return;
     }
     const PortOne = await import('@portone/browser-sdk/v2');
@@ -367,7 +393,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       ].join(':');
       const clientOrderRequestId = paymentAttemptIds.current.get(itemKey) ?? crypto.randomUUID();
       paymentAttemptIds.current.set(itemKey, clientOrderRequestId);
-      setState('creating');
+      transition('creating');
       const res = await fetch(`${API_URL}/stores/${item.storeId}/orders`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
@@ -390,13 +416,13 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         setError(body.message ?? '주문 생성 실패');
-        setState('error');
+        transition('error');
         return;
       }
       const { orderId, portonePaymentParams } = await res.json();
       lastOrderId = orderId;
 
-      setState('paying');
+      transition('paying');
       savePendingOrderPayment(
         browser?.storage ?? null,
         createPendingOrderPayment({
@@ -426,17 +452,19 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       } finally {
         savePendingOrderPayment(browser?.storage ?? null, null);
       }
+      // 같은 탭 복귀로 상태를 되돌린 뒤 늦게 끝난 이전 결제창 결과는 무시한다.
+      if (generation !== attemptGeneration.current) return;
       if (response && 'code' in response) {
         // PG 원문 코드는 화면에 쓰지 않고 고객 문구로 바꾼다.
         setError(paymentFailureMessage(response));
-        setState('error');
+        transition('error');
         return;
       }
-      setState('idle');
+      transition('idle');
     }
 
     sessionStorage.removeItem('checkout_cart');
-    setState('done');
+    transition('done');
     if (lastOrderId) router.replace(`/order/success?orderId=${lastOrderId}`);
   }
 
@@ -636,11 +664,21 @@ function CartCheckoutContent() {
   const [cart, setCart] = useState<LoadedCheckoutCart>({ kind: 'loading', items: [] });
 
   useEffect(() => {
-    try {
-      setCart(parseCheckoutCart(sessionStorage.getItem('checkout_cart')));
-    } catch {
-      setCart({ kind: 'invalid', items: [] });
-    }
+    const readCart = () => {
+      try {
+        setCart(parseCheckoutCart(sessionStorage.getItem('checkout_cart')));
+      } catch {
+        setCart({ kind: 'invalid', items: [] });
+      }
+    };
+    readCart();
+    // 결제사 화면에서 뒤로 와 페이지가 메모리에서 그대로 복원되면(C-01) 결제 상태는 결제 전으로 되돌아간다.
+    // 그사이 결제가 끝나 결제 상품이 비워졌을 수 있으니 같은 상품을 다시 결제하지 않게 새로 읽는다.
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) readCart();
+    };
+    window.addEventListener('pageshow', handlePageShow);
+    return () => window.removeEventListener('pageshow', handlePageShow);
   }, []);
 
   if (cart.kind === 'loading') {

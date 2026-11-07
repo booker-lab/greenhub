@@ -61,6 +61,7 @@ const requireForTest = (specifier) => {
     return { pickCheckoutPrefill: () => ({}), prefillAddress: (c) => c, prefillPhone: (c) => c };
   }
   if (specifier === '@/lib/payment-redirect') return {};
+  if (specifier === '@/lib/payment-page-guard') return { attachPaymentPageGuard: () => () => {} };
   if (specifier === '@/lib/payment-failure-message') {
     return { paymentFailureMessage: () => '결제를 취소했어요. 장바구니는 그대로 남아 있어요.' };
   }
@@ -612,4 +613,27 @@ test('결제할 장바구니 정보가 없으면 장바구니·홈으로 돌아�
   for (const button of buttons) button.props.onClick();
   assert.deepEqual(pushes, ['/cart', '/']);
   assert.doesNotMatch(source, /결제할 장바구니 정보를 확인할 수 없습니다/);
+});
+
+test('legacy checkout은 결제 단계를 동기 값으로 갱신해 결제사 이동 때 이탈 확인창을 띄우지 않는다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+  assert.match(legacyCheckoutSource, /attachPaymentPageGuard\(window, \{/);
+  assert.match(legacyCheckoutSource, /getPhase: \(\) => phase\.current/);
+  // 결제창 호출 전 단계는 렌더를 기다리지 않고 바뀐다.
+  const paying = legacyCheckoutSource.indexOf("transition('paying')");
+  const request = legacyCheckoutSource.indexOf('PortOne.requestPayment(');
+  assert.ok(paying >= 0 && paying < request);
+  assert.doesNotMatch(legacyCheckoutSource, /setState\('paying'\)/);
+  // 같은 탭 복귀 뒤 늦게 끝난 이전 결제창 결과는 무시한다.
+  assert.match(legacyCheckoutSource, /generation !== attemptGeneration\.current/);
+});
+
+test('장바구니 checkout은 결제사 화면에서 복원되면 결제 상품을 다시 읽는다', () => {
+  const start = source.indexOf('function CartCheckoutContent');
+  const cartSource = source.slice(start, source.indexOf('function CheckoutContent', start));
+  assert.match(cartSource, /addEventListener\('pageshow', handlePageShow\)/);
+  assert.match(cartSource, /if \(event\.persisted\) readCart\(\)/);
+  assert.match(cartSource, /removeEventListener\('pageshow', handlePageShow\)/);
 });

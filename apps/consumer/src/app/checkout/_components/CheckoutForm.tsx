@@ -229,16 +229,6 @@ export default function CheckoutForm({
     if (confirmationKey) setRoundDetailsConfirmed(false);
   }, [confirmationKey]);
 
-  useEffect(() => {
-    if (!isLoading) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [isLoading]);
-
   function openAddressSearch() {
     new window.daum.Postcode({
       oncomplete(data) {

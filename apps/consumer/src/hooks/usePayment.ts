@@ -1,10 +1,11 @@
 'use client';
 
 import type { CreateOrderRequest } from '@greenhub/shared';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem } from '@/hooks/useCart';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { paymentFailureMessage } from '@/lib/payment-failure-message';
+import { attachPaymentPageGuard } from '@/lib/payment-page-guard';
 import {
   buildPaymentRedirectUrl,
   createPendingOrderPayment,
@@ -242,14 +243,35 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
   const [error, setError] = useState<string | null>(null);
   const paymentAttemptId = useRef<string | null>(null);
   const currentState = useRef<PaymentState>('idle');
+  // 같은 탭 복귀로 결제 상태를 되돌리면 올라간다. 끝나지 않은 이전 결제창 결과가 늦게 와도 화면을 바꾸지 않는다.
+  const attemptGeneration = useRef(0);
 
   function transition(nextState: PaymentState) {
     currentState.current = nextState;
     setState(nextState);
   }
 
+  // 주문 생성 중에만 이탈 확인창을 띄우고, 결제사 화면에서 뒤로 와 페이지가 그대로 복원되면
+  // "처리 중..."에 고정되지 않게 결제 전 상태로 되돌린다(C-01). 단계는 동기적으로 갱신되는 ref로 판단한다.
+  useEffect(
+    () =>
+      attachPaymentPageGuard(window, {
+        getPhase: () => currentState.current,
+        onRestore: () => {
+          attemptGeneration.current += 1;
+          // 새로 로드된 복귀와 같게 다음 결제는 새 결제 시도 ID로 주문한다(#328).
+          paymentAttemptId.current = null;
+          currentState.current = 'idle';
+          setState('idle');
+          setError(null);
+        },
+      }),
+    [],
+  );
+
   async function requestPayment() {
     if (currentState.current !== 'idle' && currentState.current !== 'error') return;
+    const generation = attemptGeneration.current;
     transition('creating');
     setError(null);
     paymentAttemptId.current ??= crypto.randomUUID();
@@ -314,6 +336,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
         // Promise로 결과를 받은 경우(PC·결제창 오류)에는 이 화면이 직접 처리하므로 복귀용 기록을 지운다.
         savePendingOrderPayment(browser?.storage ?? null, null);
       }
+      if (generation !== attemptGeneration.current) return;
 
       if (response && 'code' in response) {
         attemptSettled = true;
@@ -323,6 +346,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
 
       transition('done');
     } catch (e: unknown) {
+      if (generation !== attemptGeneration.current) return;
       if (attemptSettled) paymentAttemptId.current = null;
       const message = e instanceof Error ? e.message : '오류가 발생했습니다.';
       setError(message);

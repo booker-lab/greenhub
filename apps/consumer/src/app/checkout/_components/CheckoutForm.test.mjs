@@ -188,3 +188,7 @@ test('결제 버튼 문구는 고른 결제수단을 따른다', () => {
   assert.match(formSource, /PAYMENT_METHOD_OPTIONS\.map/);
   assert.match(formSource, /paymentButtonLabel\(paymentMethod\)/);
 });
+
+test('결제 폼은 이탈 확인창을 직접 걸지 않는다(결제 단계별 경고는 결제 훅이 맡는다)', () => {
+  assert.doesNotMatch(formSource, /beforeunload/);
+});
