@@ -23,6 +23,7 @@ export const ACTION_LABEL: Record<string, string> = {
   'admin.store.commission_changed': '수수료 변경',
   'admin.store.archived': '판매자 정리',
   'admin.store.restored': '판매자 복구',
+  'admin.store.sales_mode_changed': '판매 방식 변경',
   'admin.user.suspended': '소비자 정지',
   'admin.user.unsuspended': '소비자 정지 해제',
   'admin.driver.approved': '기사 승인',
@@ -76,6 +77,7 @@ export function targetLabel(log: Pick<AdminAuditLog, 'targetType' | 'targetId'>)
 // 칸 이름 — API가 before/after에 남기는 키(admin.service·payout-accounts·option-stocks·engagement).
 const FIELD_LABEL: Record<string, string> = {
   commissionRate: '수수료율',
+  salesMode: '판매 방식',
   status: '상태',
   hadRecords: '주문·정산 기록',
   suspended: '정지',
@@ -132,6 +134,9 @@ function formatValue(key: string, value: unknown, targetType?: string): string {
     return `${value.toLocaleString('ko-KR')}원`;
   }
   if (key === 'status' && typeof value === 'string') return statusLabel(targetType, value);
+  if (key === 'salesMode' && typeof value === 'string') {
+    return value === 'round_direct' ? '회차 판매' : '예전 방식';
+  }
   if (key === 'reasonCode' && typeof value === 'string') {
     return (POST_DELIVERY_REFUND_REASON_LABEL as Record<string, string>)[value] ?? '기타';
   }

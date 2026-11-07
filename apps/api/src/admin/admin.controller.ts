@@ -13,6 +13,7 @@ import {
   QueryAdminDriversDto,
   SuspendUserDto,
   SetCommissionDto,
+  SetSalesModeDto,
   ForceRefundDto,
   UpsertBannerDto,
 } from './dto/admin.dto';
@@ -38,6 +39,16 @@ export class AdminController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.admin.setCommission(storeId, dto, user.sub);
+  }
+
+  // 판매 방식(예전 방식 legacy ↔ 회차 판매 round_direct) 전환. 같은 값이면 바꾸지 않고 200.
+  @Patch('stores/:storeId/sales-mode')
+  setSalesMode(
+    @Param('storeId') storeId: string,
+    @Body() dto: SetSalesModeDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.admin.setSalesMode(storeId, dto, user.sub);
   }
 
   @Patch('stores/:storeId/archive')

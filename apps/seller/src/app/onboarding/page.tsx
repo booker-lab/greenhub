@@ -3,21 +3,23 @@
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { notify } from '@/components/AppToaster';
 import { ChevronLeft, Store } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { ApiError, apiJson } from '@/lib/api';
 import { getFirebaseStorage } from '@/lib/firebase';
+import { logout } from '@/lib/logout';
+import { confirmSessionStore } from '@/lib/onboarding-session';
+import { useTokenRef } from '@/lib/use-token-ref';
 import {
   ImageReencodeError,
   imageReencodeFailureMessage,
   LOGO_IMAGE_ENCODE,
   reencodeImageToJpeg,
 } from '../products/_components/image-reencode';
-import { useTokenRef } from '@/lib/use-token-ref';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container size xs(최대 540px)·Group·Stack·Paper(radius lg·p lg; 그림자는 ② D2로 걷음)·
 // Title order 2(줄 높이 1.35·800)·Text·Divider·TextInput(radius xl, 필수 표시 *)·ActionIcon subtle gray와 같은 값.
@@ -54,8 +56,12 @@ export default function OnboardingPage() {
   const [logoUploading, setLogoUploading] = useState(false);
   const [logoPreview, setLogoPreview] = useState('');
   const [error, setError] = useState('');
+  // 이 화면에서 방금 만든 가게. 세션에 반영되기 전 다시 저장해 가게가 두 번 생기지 않게 막는다.
+  const [createdStoreId, setCreatedStoreId] = useState<string | null>(null);
+  const [entering, setEntering] = useState(false);
   // 가게가 이미 있으면 설정 > 사업자 프로필 수정으로 들어온 것 — 처음 등록과 제목·버튼·돌아갈 곳이 다르다.
-  const isEdit = !!session?.user.storeId;
+  // 방금 만든 가게가 세션에 실려도 판매자 화면으로 넘어가기 전까지는 등록 화면을 유지한다.
+  const isEdit = !!session?.user.storeId && !createdStoreId;
 
   const [form, setForm] = useState({
     name: '',
@@ -151,8 +157,27 @@ export default function OnboardingPage() {
     setForm((prev) => ({ ...prev, [name]: value }));
   }
 
+  // 서버 세션에 새 storeId가 실린 것을 확인한 뒤 전체 페이지 이동으로 판매자 화면에 간다.
+  // 확인 전에 이동하면 proxy가 storeId 없는 세션으로 보고 /onboarding으로 되돌린다.
+  // update({})는 jwt 콜백이 API로 다시 검증하게 하고 갱신된 세션 쿠키를 받는다(클라이언트 값은 쓰지 않는다).
+  async function enterSellerHome(storeId: string): Promise<boolean> {
+    const confirmed = await confirmSessionStore({ refresh: () => update({}), storeId });
+    if (confirmed) window.location.assign('/orders');
+    return confirmed;
+  }
+
+  async function handleStart() {
+    if (!createdStoreId) return;
+    setError('');
+    setEntering(true);
+    if (await enterSellerHome(createdStoreId)) return;
+    setEntering(false);
+    setError('아직 가게 정보가 반영되지 않았어요. 잠시 후 다시 눌러주세요.');
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (createdStoreId) return;
     if (!session?.user.storeId && !form.name) {
       setError('상호명을 입력해주세요.');
       return;
@@ -183,19 +208,19 @@ export default function OnboardingPage() {
           method: 'POST',
           body,
         });
-        await update({ storeId: data.storeId });
+        setCreatedStoreId(data.storeId);
+        // 이동하는 동안에는 저장 중 상태를 유지한다. 반영을 확인하지 못하면 '시작하기' 안내를 보인다.
+        if (await enterSellerHome(data.storeId)) return;
       } else {
         await apiJson(`/stores/${storeId}`, token, { method: 'PATCH', body });
         notify({ color: 'brand', message: '사업자 정보를 저장했어요.' });
         router.push('/settings');
         return;
       }
-      router.push('/orders');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : '저장에 실패했습니다. 다시 시도해주세요.');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }
 
   return (
@@ -361,18 +386,55 @@ export default function OnboardingPage() {
                 </p>
               )}
 
-              <Button
-                type="submit"
-                disabled={loading}
-                size="md"
-                className="mt-2.5 w-full"
-                style={{ backgroundColor: 'var(--primary)' }}
-              >
-                {loading ? '저장 중...' : isEdit ? '저장' : '저장 후 시작하기'}
-              </Button>
+              {createdStoreId && !loading ? (
+                <>
+                  <p
+                    className={`${TEXT} text-center`}
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-text-secondary)',
+                    }}
+                  >
+                    가게를 등록했어요. 시작하기를 눌러 판매를 시작해주세요.
+                  </p>
+                  <Button
+                    type="button"
+                    onClick={() => void handleStart()}
+                    disabled={entering}
+                    size="md"
+                    className="w-full"
+                    style={{ backgroundColor: 'var(--primary)' }}
+                  >
+                    {entering ? '확인 중...' : '시작하기'}
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  type="submit"
+                  disabled={loading}
+                  size="md"
+                  className="mt-2.5 w-full"
+                  style={{ backgroundColor: 'var(--primary)' }}
+                >
+                  {loading ? '저장 중...' : isEdit ? '저장' : '저장 후 시작하기'}
+                </Button>
+              )}
             </div>
           </form>
         </div>
+
+        {/* 가게 없는 계정은 모든 화면이 이곳으로 오므로 다른 계정으로 바꿀 수단을 둔다. */}
+        {!isEdit && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="md"
+            className="mt-4 w-full"
+            onClick={() => void logout()}
+          >
+            다른 계정으로 로그인
+          </Button>
+        )}
       </div>
     </main>
   );

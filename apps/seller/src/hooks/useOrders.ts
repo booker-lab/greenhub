@@ -6,31 +6,44 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { type OrderGroup, STATUS_GROUP_MAP } from '@/app/orders/_constants';
 import { apiJson } from '@/lib/api';
 import {
+  collectActionRequiredOrderIds,
+  countNewActionRequiredOrders,
+  shouldPollSellerOrders,
+} from './useOrders.freshness';
+import {
   buildSellerOrdersPath,
   buildSellerOrdersQueryString,
   buildSellerOrdersScopeKey,
   isSellerOrdersBackgroundRefresh,
   resolveSellerOrdersAuthState,
   SELLER_ORDERS_AUTH_ERROR,
+  type SellerOrdersQuery,
   shouldIgnoreSellerOrdersResponse,
   shouldIgnoreSellerOrdersScopeResponse,
   shouldInvalidateSellerOrdersScope,
-  type SellerOrdersQuery,
 } from './useOrders.recovery';
 
+export { SELLER_ORDERS_POLL_INTERVAL_MS } from './useOrders.freshness';
+export type { SellerOrdersAuthState, SellerOrdersQuery } from './useOrders.recovery';
 export {
   ACTIVE_SELLER_ORDERS_QUERY,
   buildSellerOrdersPath,
   buildSellerOrdersScopeKey,
   isSellerOrdersBackgroundRefresh,
   resolveSellerOrdersAuthState,
+  resolveSellerOrdersInitialView,
   SELLER_ORDERS_AUTH_ERROR,
   shouldIgnoreSellerOrdersResponse,
   shouldIgnoreSellerOrdersScopeResponse,
   shouldInvalidateSellerOrdersScope,
 } from './useOrders.recovery';
-export type { SellerOrdersAuthState, SellerOrdersQuery } from './useOrders.recovery';
-export { resolveSellerOrdersInitialView } from './useOrders.recovery';
+
+interface UseOrdersOptions {
+  /** 화면이 보이는 동안 이 간격(ms)으로 다시 읽는다. 빼면 화면 복귀 때만 다시 읽는다. */
+  pollIntervalMs?: number;
+  /** 같은 범위를 다시 읽은 결과에 이전에 없던 처리 필요 주문이 생기면 그 수로 부른다. */
+  onNewActionRequiredOrders?: (count: number) => void;
+}
 
 interface UseOrdersResult {
   orders: Order[];
@@ -45,7 +58,11 @@ interface UseOrdersResult {
  * 판매자 주문 목록. query로 범위를 좁힌다(진행 중 주문 전부 또는 한 회차의 주문 전부).
  * query를 빼면 기존처럼 모든 기간의 주문을 받는다 — 주문이 쌓일수록 커지므로 새 화면은 쓰지 않는다.
  */
-export function useOrders(storeId: string | null, query?: SellerOrdersQuery): UseOrdersResult {
+export function useOrders(
+  storeId: string | null,
+  query?: SellerOrdersQuery,
+  options?: UseOrdersOptions,
+): UseOrdersResult {
   const { data: session, status: sessionStatus } = useSession();
   const token = session?.user.accessToken;
   const queryString = buildSellerOrdersQueryString(query);
@@ -59,6 +76,13 @@ export function useOrders(storeId: string | null, query?: SellerOrdersQuery): Us
   const scopeRef = useRef(scopeKey);
   const requestIdRef = useRef(0);
   const hasDataRef = useRef(false);
+  // 응답을 반영할 요청이 진행 중인지. 간격 재조회가 겹쳐 부르지 않게 한다.
+  const inFlightRef = useRef(false);
+  // 마지막으로 받은 같은 범위 목록의 처리 필요 주문 id. 새 주문 감지 기준이며 범위가 바뀌면 비운다.
+  const actionRequiredIdsRef = useRef<Set<string> | null>(null);
+  const pollIntervalMs = options?.pollIntervalMs;
+  const onNewActionRequiredRef = useRef(options?.onNewActionRequiredOrders);
+  onNewActionRequiredRef.current = options?.onNewActionRequiredOrders;
 
   // Cross-scope reuse 금지: store/token이 바뀌면 이전 scope의
   // orders/count/badge(hasData)/error authority를 렌더 단계에서 동기적으로 무효화한다.
@@ -66,6 +90,8 @@ export function useOrders(storeId: string | null, query?: SellerOrdersQuery): Us
   if (shouldInvalidateSellerOrdersScope(scope, scopeKey)) {
     scopeRef.current = scopeKey;
     hasDataRef.current = false;
+    actionRequiredIdsRef.current = null;
+    inFlightRef.current = false;
     requestIdRef.current += 1;
     setScope(scopeKey);
     setOrders([]);
@@ -93,6 +119,7 @@ export function useOrders(storeId: string | null, query?: SellerOrdersQuery): Us
     if (authState === 'missing') {
       requestIdRef.current += 1;
       hasDataRef.current = false;
+      actionRequiredIdsRef.current = null;
       scopeRef.current = scopeKey;
       setOrders([]);
       setError(SELLER_ORDERS_AUTH_ERROR);
@@ -112,6 +139,7 @@ export function useOrders(storeId: string | null, query?: SellerOrdersQuery): Us
     setError(null);
     const myId = requestIdRef.current + 1;
     requestIdRef.current = myId;
+    inFlightRef.current = true;
     let active = true;
     apiJson<Order[]>(`${buildSellerOrdersPath(storeId as string)}${queryString}`, token as string)
       .then((payload) => {
@@ -119,7 +147,14 @@ export function useOrders(storeId: string | null, query?: SellerOrdersQuery): Us
         if (shouldIgnoreSellerOrdersScopeResponse(scopeRef.current, requestScopeKey)) return;
         if (!Array.isArray(payload)) throw new Error('주문 목록 응답 형식이 올바르지 않습니다.');
         hasDataRef.current = true;
+        const nextActionRequiredIds = collectActionRequiredOrderIds(payload);
+        const added = countNewActionRequiredOrders(
+          actionRequiredIdsRef.current,
+          nextActionRequiredIds,
+        );
+        actionRequiredIdsRef.current = nextActionRequiredIds;
         setOrders(payload);
+        if (added > 0) onNewActionRequiredRef.current?.(added);
       })
       .catch((err: unknown) => {
         if (shouldIgnoreSellerOrdersResponse(active, requestIdRef.current, myId)) return;
@@ -130,6 +165,7 @@ export function useOrders(storeId: string | null, query?: SellerOrdersQuery): Us
       })
       .finally(() => {
         if (shouldIgnoreSellerOrdersResponse(active, requestIdRef.current, myId)) return;
+        inFlightRef.current = false;
         if (shouldIgnoreSellerOrdersScopeResponse(scopeRef.current, requestScopeKey)) return;
         setLoading(false);
         setRefreshing(false);
@@ -137,8 +173,26 @@ export function useOrders(storeId: string | null, query?: SellerOrdersQuery): Us
 
     return () => {
       active = false;
+      inFlightRef.current = false;
     };
   }, [token, sessionStatus, storeId, scopeKey, queryString, tick]);
+
+  // 화면이 보이는 동안만 일정 간격으로 다시 읽는다. 숨은 탭이거나 이미 읽는 중이면 건너뛴다.
+  useEffect(() => {
+    if (!pollIntervalMs || pollIntervalMs <= 0) return;
+    const timer = setInterval(() => {
+      if (
+        !shouldPollSellerOrders({
+          hidden: document.visibilityState === 'hidden',
+          inFlight: inFlightRef.current,
+        })
+      ) {
+        return;
+      }
+      refresh();
+    }, pollIntervalMs);
+    return () => clearInterval(timer);
+  }, [pollIntervalMs, refresh]);
 
   useEffect(() => {
     const revalidate = () => {

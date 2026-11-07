@@ -19,7 +19,7 @@ interface CancelOrderModalProps {
   onClose: () => void;
   onConfirm: () => void;
   title?: string;
-  /** 사유 안내 아래에 덧붙일 설명(예: 배송 보류 주문의 환불 범위) */
+  /** 사유 안내 아래에 덧붙일 설명(환불 금액·범위와 되돌릴 수 없음) */
   note?: string;
 }
 
@@ -35,7 +35,7 @@ export function CancelOrderModal({
   actionError,
   onClose,
   onConfirm,
-  title = '강제 취소',
+  title = '주문 취소',
   note,
 }: CancelOrderModalProps) {
   return (
@@ -55,12 +55,17 @@ export function CancelOrderModal({
               className={TEXT}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
-              취소 사유를 입력하세요. 소비자에게 알림톡으로 전달됩니다.
+              취소 사유를 적어 주세요. 손님에게 알림톡으로 전해져요.
             </p>
+            {/* 환불 금액·되돌릴 수 없음은 확정 전에 꼭 읽어야 해서 사유 안내보다 진하게 쓴다. */}
             {note && (
               <p
                 className={TEXT}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text)',
+                  fontWeight: 'var(--fw-medium)',
+                }}
               >
                 {note}
               </p>

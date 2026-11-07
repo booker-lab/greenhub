@@ -31,6 +31,7 @@ import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { copyFormFieldChange } from './copy-form';
+import { RoundSalesModeNotice } from './RoundSalesModeNotice';
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -401,6 +402,7 @@ export default function SaleRoundsPage() {
 
       <div className="mx-auto max-w-[720px] px-4 py-4">
         <div className={`${COLUMN} gap-3`}>
+          <RoundSalesModeNotice />
           {copySuccess && (
             <Alert role="alert" onClose={() => setCopySuccess(null)} closeButtonLabel="닫기">
               <AlertTitle>회차 복사 완료</AlertTitle>

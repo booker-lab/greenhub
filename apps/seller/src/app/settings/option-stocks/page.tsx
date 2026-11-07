@@ -4,9 +4,9 @@ import type { OptionStock } from '@greenhub/shared';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
-import { notify } from '@/components/AppToaster';
 import { useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
@@ -203,7 +203,7 @@ export default function OptionStocksSettingsPage() {
 
   return (
     <PageShell>
-      <PageHeader title="옵션 재고 (화분)" />
+      <PageHeader title="옵션 재고 (화분)" backHref="/settings" />
       <div className="mx-auto max-w-[720px] px-4 py-4">
         {!loaded ? (
           <LoadingState />

@@ -8,6 +8,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import { notify } from '@/components/AppToaster';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
+import { normalizeSuspendReason, SuspendReasonField } from '@/components/SuspendReasonMessage';
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
   classifyAdminCommandError,
@@ -28,6 +29,8 @@ import {
   describeArchiveRecordsConfirm,
   describeCommissionSaved,
   describeRestoreConfirm,
+  describeSalesModeConfirm,
+  describeSalesModeSaved,
   filterStores,
   getAdminStoresReadState,
   getEmptyKind,
@@ -51,8 +54,16 @@ interface StoreViewState {
 const KEYWORD_URL_DEBOUNCE_MS = 300;
 
 export default function AdminStoresClient() {
-  const { stores, loading, error, reload, setCommission, archiveStore, restoreStore } =
-    useAdminStores();
+  const {
+    stores,
+    loading,
+    error,
+    reload,
+    setCommission,
+    setSalesMode,
+    archiveStore,
+    restoreStore,
+  } = useAdminStores();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -284,6 +295,46 @@ export default function AdminStoresClient() {
     }
   };
 
+  // 판매 방식 전환 확인창. 바뀌는 결과(손님에게 회차가 보이거나 숨겨짐)를 알리고 사유는 선택으로 받는다.
+  const [salesModeStore, setSalesModeStore] = useState<AdminStore | null>(null);
+  const [salesModeReason, setSalesModeReason] = useState('');
+  const [salesModeBusy, setSalesModeBusy] = useState(false);
+  const salesModeConfirm = salesModeStore ? describeSalesModeConfirm(salesModeStore) : null;
+
+  const handleChangeSalesMode = (store: AdminStore) => {
+    setSalesModeReason('');
+    setSalesModeStore(store);
+  };
+  const closeSalesMode = () => {
+    if (salesModeBusy) return;
+    setSalesModeStore(null);
+    setSalesModeReason('');
+  };
+
+  const runSalesMode = async (store: AdminStore) => {
+    const { target } = describeSalesModeConfirm(store);
+    setSalesModeBusy(true);
+    const outcome = await setSalesMode(store.id, target, normalizeSuspendReason(salesModeReason));
+    setSalesModeBusy(false);
+    setSalesModeStore(null);
+    setSalesModeReason('');
+    if (outcome.kind === 'confirmed' && outcome.reconciled) {
+      notify({
+        color: 'brand',
+        title: '판매 방식을 바꿨어요',
+        message: describeSalesModeSaved(store.name ?? '', target),
+      });
+      return;
+    }
+    // 바뀐 뒤 목록 확인 실패는 실패로 되돌리지 않는다. 거절(진행 중 회차 409 등)은 서버 사유를 그대로 보인다.
+    const presentation = describeAdminCommandOutcome(outcome, '판매 방식 변경');
+    notify({
+      color: outcome.kind === 'rejected' ? 'red' : 'yellow',
+      title: presentation.title,
+      message: presentation.message,
+    });
+  };
+
   const records =
     storeAction?.step === 'records' ? describeArchiveRecordsConfirm(storeAction.store) : null;
   const storeConfirm = !storeAction
@@ -362,6 +413,7 @@ export default function AdminStoresClient() {
           onSave={handleSave}
           onArchive={handleArchive}
           onRestore={handleRestore}
+          onChangeSalesMode={handleChangeSalesMode}
           onOpenSettlements={(store) =>
             router.push(`/admin/settlements?store=${encodeURIComponent(store.id)}`)
           }
@@ -413,6 +465,27 @@ export default function AdminStoresClient() {
             />
           </Field>
         )}
+      </AdminConfirmDialog>
+
+      <AdminConfirmDialog
+        open={salesModeStore !== null}
+        title={salesModeConfirm?.title ?? ''}
+        lead={salesModeConfirm?.lead}
+        facts={salesModeConfirm?.facts}
+        confirmLabel={salesModeConfirm?.confirmLabel ?? ''}
+        loading={salesModeBusy}
+        initialFocus="close"
+        onConfirm={() => {
+          if (salesModeStore) void runSalesMode(salesModeStore);
+        }}
+        onClose={closeSalesMode}
+      >
+        {salesModeConfirm?.note && (
+          <p className="m-0 text-[13px] leading-[18px] text-[var(--color-text-secondary)]">
+            {salesModeConfirm.note}
+          </p>
+        )}
+        <SuspendReasonField reason={salesModeReason} onReasonChange={setSalesModeReason} />
       </AdminConfirmDialog>
     </div>
   );

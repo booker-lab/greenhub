@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { STATUS_LABEL as SELLER_STATUS_LABEL } from '../../orders/_constants';
 import {
   buildStoreOptions,
   cancellationState,
@@ -115,6 +116,12 @@ describe('주문 상태 라벨·점 색·탭', () => {
     expect(getStatusTone('CANCELLED')).toBe('done');
     expect(getStatusTone('PENDING')).toBe('done');
     expect(getStatusTone('ACCEPTED')).toBe('default');
+  });
+
+  it('결제 완료·주문 확정은 판매자 주문 화면과 같은 라벨을 쓴다', () => {
+    expect(STATUS_LABEL.ACCEPTED).toBe('결제 완료');
+    expect(STATUS_LABEL.ACCEPTED).toBe(SELLER_STATUS_LABEL.ACCEPTED);
+    expect(STATUS_LABEL.CONFIRMED).toBe(SELLER_STATUS_LABEL.CONFIRMED);
   });
 
   it('상태 탭은 전체 + 서버가 거를 수 있는 단일 상태다(배송 보류를 둘째에 둔다)', () => {

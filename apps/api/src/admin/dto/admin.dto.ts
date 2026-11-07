@@ -16,7 +16,7 @@ import {
   type ValidationOptions,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { SETTLEMENT_STATUSES, type SettlementStatus } from '@greenhub/shared';
+import { type SalesMode, SETTLEMENT_STATUSES, type SettlementStatus } from '@greenhub/shared';
 import { ORDER_STATUSES, type OrderStatus } from '../../orders/dto/update-status.dto';
 import { SETTLEMENT_CURSOR_PATTERN } from '../../settlements/dto/query-settlements.dto';
 import { ADMIN_LIST_CURSOR_PATTERN } from '../admin-lists';
@@ -152,6 +152,24 @@ export class SetCommissionDto {
   @Max(1)
   @Type(() => Number)
   rate: number;
+}
+
+// 관리자가 바꿀 수 있는 가게 판매 방식. 저장값이 없으면 legacy로 읽는다(@greenhub/shared normalizeSalesMode).
+export const ADMIN_STORE_SALES_MODES = [
+  'legacy',
+  'round_direct',
+] as const satisfies readonly SalesMode[];
+export const ADMIN_STORE_SALES_MODE_REASON_MAX_LENGTH = 200;
+
+export class SetSalesModeDto {
+  @IsIn(ADMIN_STORE_SALES_MODES)
+  salesMode: SalesMode;
+
+  // 어드민 행동 기록에 남길 사유(선택).
+  @IsOptional()
+  @IsString()
+  @MaxLength(ADMIN_STORE_SALES_MODE_REASON_MAX_LENGTH)
+  reason?: string;
 }
 
 export class ArchiveStoreDto {

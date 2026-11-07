@@ -24,7 +24,7 @@ import {
 } from './_hooks/useOrderDetail.recovery';
 import { useOrderDetailActions } from './_hooks/useOrderDetailActions';
 import { useOrderOperations } from './_hooks/useOrderOperations';
-import { READONLY_STATUSES } from './_lib';
+import { describeSellerCancelRefund, READONLY_STATUSES } from './_lib';
 import { holdReleaseMessage, resolveOrderDetailActions } from './order-actions';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Stack·Text(p, 여백 0, 줄 높이 1.55)·
@@ -465,15 +465,16 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   배송 보류
                 </Button>
               )}
+              {/* 취소는 환불을 동반해 되돌릴 수 없으므로 주 행동과 같은 무게로 두지 않고 작은 보조 버튼으로 낮춘다. */}
               {canCancel && (
                 <Button
                   onClick={() => setShowCancelModal(true)}
                   disabled={actionLoading}
-                  size="md"
-                  variant="outline-destructive"
-                  className="w-full"
+                  size="sm"
+                  variant="subtle-destructive"
+                  className="self-center"
                 >
-                  {isHeld ? '주문 취소·환불' : '강제 취소'}
+                  {isHeld ? '주문 취소·환불' : '주문 취소'}
                 </Button>
               )}
             </div>
@@ -488,7 +489,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
         actionLoading={actionLoading}
         actionError={actionError}
         title={isHeld ? '주문 취소·환불' : undefined}
-        note={isHeld ? '결제 금액과 결제된 재배송비를 모두 환불해요.' : undefined}
+        note={describeSellerCancelRefund(order)}
         onClose={() => {
           setShowCancelModal(false);
           setCancelReason('');
