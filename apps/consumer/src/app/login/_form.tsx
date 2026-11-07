@@ -12,7 +12,7 @@ import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
 import { isFeatureOn } from '@/lib/features';
 import { hasActiveSession, isSessionExpiredReason } from '@/lib/session-login';
-import { isOrderCallback, safeCallbackPath } from './_callback-url';
+import { isOrderCallback, safeCallbackPath, signedInRedirectPath } from './_callback-url';
 
 // ① 외형 유지(UI 교체 P5): Mantine Stack(gap sm 12)·Button lg(radius xl)·Divider(가운데 글자 xs)·
 // TextInput·PasswordInput(sm, radius 16, 라벨 15px·600과 필수 " *")·Alert light red(p sm 12)와 같은 값.
@@ -79,7 +79,7 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const signedIn = status === 'authenticated' && hasActiveSession(session);
   useEffect(() => {
     if (!signedIn) return;
-    router.replace(safeCallbackPath(rawCallbackUrl, window.location.origin));
+    router.replace(signedInRedirectPath(rawCallbackUrl, window.location.origin));
   }, [signedIn, rawCallbackUrl, router]);
 
   if (signedIn) return <div style={{ height: 240 }} />;

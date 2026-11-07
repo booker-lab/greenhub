@@ -29,7 +29,7 @@ test('이미 로그인한 손님은 로그인 화면 대신 안전한 복귀 주
   assert.match(form, /status === 'authenticated' && hasActiveSession\(session\)/);
   assert.match(
     form,
-    /router\.replace\(safeCallbackPath\(rawCallbackUrl, window\.location\.origin\)\)/,
+    /router\.replace\(signedInRedirectPath\(rawCallbackUrl, window\.location\.origin\)\)/,
   );
   // 서버에서 auth()로 확인하면 갱신된 세션 쿠키를 저장할 수 없으므로 로그인 화면 서버 컴포넌트는 세션을 읽지 않는다.
   const page = await read('./page.tsx');

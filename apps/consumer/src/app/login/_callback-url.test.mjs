@@ -17,7 +17,7 @@ new Function('require', 'module', 'exports', compiled)(
   mod,
   mod.exports,
 );
-const { safeCallbackPath, isOrderCallback } = mod.exports;
+const { safeCallbackPath, isOrderCallback, signedInRedirectPath } = mod.exports;
 
 const ORIGIN = 'https://shop.example.test';
 
@@ -106,4 +106,14 @@ test('주문 흐름 판정: 다른 경로·다른 출처·출처 모름은 주�
   assert.equal(isOrderCallback('https://evil.example/cart', ORIGIN), false);
   assert.equal(isOrderCallback(`${ORIGIN}/cart`), false);
   assert.equal(isOrderCallback('//evil.example/cart', ORIGIN), false);
+});
+
+test('로그인한 손님은 복귀 주소가 로그인 화면 자신이면 홈으로 보낸다', () => {
+  assert.equal(signedInRedirectPath('/login', ORIGIN), '/');
+  assert.equal(signedInRedirectPath('/login?callbackUrl=%2Fcart', ORIGIN), '/');
+  assert.equal(signedInRedirectPath(`${ORIGIN}/login`, ORIGIN), '/');
+  assert.equal(signedInRedirectPath('/cart', ORIGIN), '/cart');
+  assert.equal(signedInRedirectPath('/loginx', ORIGIN), '/loginx');
+  assert.equal(signedInRedirectPath('https://evil.example/login', ORIGIN), '/');
+  assert.equal(signedInRedirectPath(null, ORIGIN), '/');
 });
