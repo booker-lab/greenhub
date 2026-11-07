@@ -685,17 +685,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   if (sessionStatus === 'unauthenticated' || status === 'auth') {
+    // 로그인하지 않은 손님만 로그인으로 보낸다. 로그인한 채 거절(401/403, 남의 주문 등)되면 로그인 화면이
+    // 활성 세션을 복귀 주소(이 주문)로 곧바로 돌려보내 버튼이 아무 일도 하지 않는 것처럼 보이므로 목록만 둔다.
+    const needsLogin = sessionStatus === 'unauthenticated';
     return (
       <div className="mx-auto max-w-[720px] px-4 py-5">
         <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
         <div className="flex flex-col items-center justify-start gap-3 py-10">
           <p className="m-0 text-center text-sm" style={{ color: 'var(--color-danger)' }}>
-            로그인이 필요하거나 이 주문을 볼 권한이 없습니다.
+            {needsLogin
+              ? '로그인이 필요해요. 로그인하면 이 주문으로 돌아와요.'
+              : '이 주문을 볼 수 없어요. 내 주문 목록에서 다시 골라 주세요.'}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <LoadingButton onClick={() => router.push(currentMyPageLoginUrl())} loading={retrying}>
-              로그인
-            </LoadingButton>
+            {needsLogin && (
+              <LoadingButton onClick={() => router.push(currentMyPageLoginUrl())} loading={retrying}>
+                로그인
+              </LoadingButton>
+            )}
             <Button variant="outline" onClick={() => router.push('/mypage')}>
               주문 목록으로 돌아가기
             </Button>

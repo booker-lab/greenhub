@@ -831,7 +831,11 @@ test('주문 상세 hook은 404/auth와 일시 실패의 보관 정책을 구분
 
 test('주문 상세 화면은 not-found와 일시 실패를 같은 의미로 수렴시키지 않는다', () => {
   assert.match(source, /존재하지 않는 주문입니다/);
-  assert.match(source, /로그인이 필요하거나 이 주문을 볼 권한이 없습니다/);
+  assert.match(source, /로그인이 필요해요\. 로그인하면 이 주문으로 돌아와요\./);
+  assert.match(source, /이 주문을 볼 수 없어요\. 내 주문 목록에서 다시 골라 주세요\./);
+  // 로그인한 채 거절된 경우(status 'auth')에는 로그인 버튼을 두지 않는다(같은 주문으로 되돌아와 무반응처럼 보임).
+  assert.match(source, /const needsLogin = sessionStatus === 'unauthenticated';/);
+  assert.match(source, /\{needsLogin && \(\s*<LoadingButton onClick=\{\(\) => router\.push\(currentMyPageLoginUrl\(\)\)\}/);
   assert.match(source, /주문 목록으로 돌아가기/);
   assert.match(source, /다시 시도/);
   assert.match(source, /status: sessionStatus/);
@@ -1011,7 +1015,7 @@ test('전송 불확실성은 blind 중복 재시도 대신 상태 확인을 우�
 
 test('auth 전환 시 fail-closed가 보존된다', () => {
   assert.match(source, /sessionStatus === 'unauthenticated' \|\| status === 'auth'/);
-  assert.match(source, /로그인이 필요하거나 이 주문을 볼 권한이 없습니다/);
+  assert.match(source, /이 주문을 볼 수 없어요/);
   // 명령 핸들러는 토큰 없이 시작하지 않는다.
   assert.ok(source.indexOf('if (!session?.user?.accessToken || !detail?.canRequestCancellation)') > 0);
   assert.ok(source.indexOf('if (!session?.user?.accessToken || !detail)') > 0);
