@@ -18,6 +18,12 @@ import {
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
 import { formatOrderDeliveryDate } from '@/lib/order-delivery-date';
+import {
+  customerRedeliveryPaymentReturn,
+  REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE,
+  REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
+  redeliveryPaymentFailureMessage,
+} from '@/lib/order-redelivery-message';
 import { ORDER_STATUS_LABELS as STATUS_LABELS, orderTimelineStepLabel } from '@/lib/order-status';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
@@ -56,6 +62,8 @@ import {
 const API_URL = getApiBaseUrl();
 // 취소 요청 뒤 결과를 모를 때(연결 끊김·응답 확인 실패) 보이는 문구. 아래 '상태 다시 확인' 안내와 함께 보인다.
 const CANCEL_UNCERTAIN_MESSAGE = '취소가 처리됐는지 아직 확인하지 못했어요.';
+// 구매 확정 요청 뒤 결과를 모를 때 보이는 문구. 취소와 같이 '상태 다시 확인' 안내와 함께 보인다.
+const REVIEW_UNCERTAIN_MESSAGE = '구매 확정이 처리됐는지 아직 확인하지 못했어요.';
 
 function getTimelineSteps(order: OrderDetailView): OrderStatus[] {
   if (order.saleType === 'group') {
@@ -319,7 +327,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
     const message = detail.isRoundOrder
       ? '주문을 취소할까요?'
-      : '공동구매 참여를 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.';
+      : '공동구매 참여를 취소할까요?\n취소하면 되돌릴 수 없어요.';
     if (!confirm(message)) return;
     setCancelOutcome({ kind: 'executing' });
     setActionError(null);
@@ -351,7 +359,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         if (failure === 'rejected') {
           throw {
             kind: 'rejected',
-            message: serverMessage ?? '주문을 취소할 수 없습니다.',
+            message: serverMessage ?? '주문을 취소할 수 없어요.',
           } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
         throw {
@@ -429,8 +437,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       } catch {
         throw {
           kind: 'uncertain',
-          message:
-            '재배송비 결제 요청 결과를 확정할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.',
+          message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       const body: unknown = await response.json().catch(() => null);
@@ -441,13 +448,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         if (failure === 'rejected') {
           throw {
             kind: 'rejected',
-            message: serverMessage ?? '재배송비 결제를 시작할 수 없습니다.',
+            message: serverMessage ?? '재배송비 결제를 시작할 수 없어요.',
           } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
         throw {
           kind: 'uncertain',
-          message:
-            '재배송비 결제 요청 결과를 확정할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.',
+          message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       const payment = readRedeliveryPaymentResponse(body, {
@@ -458,7 +464,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (payment.status === 'FAILED' || payment.status === 'REFUNDED') {
         throw {
           kind: 'rejected',
-          message: '재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.',
+          message: REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
       }
       if (payment.status === 'PENDING') {
@@ -481,11 +487,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           ...(redirectUrl ? { redirectUrl } : {}),
         });
         if (result && 'code' in result) {
+          // PG 원문 코드·메시지는 화면에 쓰지 않고 고객 문구로 바꾼다.
           throw {
             kind: 'rejected',
-            message:
-              (isRecord(result) && isNonEmptyString(result.message) ? result.message : null) ??
-              '재배송비 결제가 취소되었습니다.',
+            message: redeliveryPaymentFailureMessage(result),
           } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
       }
@@ -496,8 +501,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (!latestDetail?.redeliveryPayment.paid) {
         throw {
           kind: 'uncertain',
-          message:
-            '결제 요청은 접수되었지만 서버 확인 전입니다. 중복 결제 전에 잠시 후 다시 확인해 주세요.',
+          message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       setRedeliveryOutcome({ kind: 'done' });
@@ -514,17 +518,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           return;
         }
       }
-      if (caught instanceof TypeError) {
-        const uncertainMessage =
-          '재배송비 결제 요청 결과를 확정할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.';
-        setRedeliveryOutcome({ kind: 'uncertain', message: uncertainMessage });
-        setActionError(uncertainMessage);
-        return;
-      }
-      const fallbackMessage =
-        caught instanceof Error ? caught.message : '재배송비 결제 중 오류가 발생했습니다.';
-      setRedeliveryOutcome({ kind: 'uncertain', message: fallbackMessage });
-      setActionError(fallbackMessage);
+      // 그 밖의 예외(연결 끊김·응답 확인 실패·결제창 오류)도 내부 오류 글자 대신 같은 고객 문구로
+      // 상태 확인을 안내한다.
+      setRedeliveryOutcome({ kind: 'uncertain', message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE });
+      setActionError(REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE);
     }
   }
 
@@ -539,7 +536,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   // 성공 쿼리여도 서버 redeliveryPayment.paid(웹훅 반영)를 확인할 때만 완료로 본다.
   useEffect(() => {
     if (!redeliveryRedirect) return;
-    const outcome = resolveRedeliveryPaymentReturn(redeliveryRedirect, redeliveryPaid);
+    // 복귀 쿼리의 PG 원문은 화면에 쓰지 않는다. 판정은 그대로 두고 문구만 고객 문구로 바꾼다.
+    const outcome = customerRedeliveryPaymentReturn(
+      redeliveryRedirect,
+      resolveRedeliveryPaymentReturn(redeliveryRedirect, redeliveryPaid),
+    );
     if (outcome.kind === 'none') {
       setRedeliveryRedirect(null);
       return;
@@ -617,7 +618,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       } catch {
         throw {
           kind: 'uncertain',
-          message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+          message: REVIEW_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       const body: unknown = await response.json().catch(() => null);
@@ -628,18 +629,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         if (failure === 'rejected') {
           throw {
             kind: 'rejected',
-            message: serverMessage ?? '구매 확정에 실패했습니다.',
+            message: serverMessage ?? '구매 확정을 하지 못했어요.',
           } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
         throw {
           kind: 'uncertain',
-          message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+          message: REVIEW_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       if (!readCommandConfirmation(body, { orderId: detail.id, status: 'REVIEWED' })) {
         throw {
           kind: 'uncertain',
-          message: '구매 확정 확인 응답을 검증하지 못했습니다. 상태를 다시 확인해 주세요.',
+          message: REVIEW_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       setReviewOutcome({ kind: 'reconciling' });
@@ -666,17 +667,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           return;
         }
       }
-      if (caught instanceof TypeError) {
-        const uncertainMessage = '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.';
-        setReviewOutcome({ kind: 'uncertain', message: uncertainMessage });
-        setActionError(uncertainMessage);
-        return;
-      }
-      setReviewOutcome({
-        kind: 'uncertain',
-        message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
-      });
-      setActionError(caught instanceof Error ? caught.message : '구매 확정에 실패했습니다.');
+      // 그 밖의 예외도 내부 오류 글자 대신 같은 고객 문구로 상태 확인을 안내한다.
+      setReviewOutcome({ kind: 'uncertain', message: REVIEW_UNCERTAIN_MESSAGE });
+      setActionError(REVIEW_UNCERTAIN_MESSAGE);
     }
   }
 
@@ -1000,12 +993,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <div className="mt-2.5 flex flex-col gap-1.5">
                 {paymentIsDone && (
                   <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
-                    재배송비 결제가 완료되었습니다. 배송 재개를 기다리고 있습니다.
+                    재배송비 결제가 완료됐어요. 배송이 다시 시작되기를 기다리고 있어요.
                   </p>
                 )}
                 {!paymentIsDone && detail.redeliveryPayment.requiresRecovery && (
                   <p className="m-0 text-sm" style={{ color: 'var(--color-danger)' }}>
-                    재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.
+                    {REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE}
                   </p>
                 )}
                 {!paymentIsDone &&
@@ -1033,7 +1026,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         onClick={handleRedeliveryPayment}
                       >
                         {redeliveryOutcome.kind === 'reconciling'
-                          ? '서버 확인 중...'
+                          ? '결제 확인 중...'
                           : detail.redeliveryPayment.status === 'PENDING'
                             ? '재배송비 결제 계속하기'
                             : '재배송비 결제'}
@@ -1093,7 +1086,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <p className="m-0 mb-3 text-sm">
             {detail.isRoundOrder
               ? '주문 마감 전까지 취소할 수 있어요. 결제한 수단으로 환불돼요.'
-              : '모집 중인 공동구매 참여를 취소할 수 있습니다.'}
+              : '모집 중인 공동구매 참여를 취소할 수 있어요.'}
           </p>
           {isStaleRead && (
             <p className="m-0 mb-3 text-sm">
@@ -1188,7 +1181,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           )}
           {reviewOutcome.kind === 'reconciling' && (
             <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              서버에서 구매 확정을 확인했습니다. 최신 주문 상태를 확인 중입니다.
+              구매 확정이 접수됐어요. 최신 주문 상태를 확인하고 있어요.
             </p>
           )}
         </div>
@@ -1198,8 +1191,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <DetailAlert variant="warning" className="mb-5" title="구매 확정 확인됨 · 상태 재확인 필요">
           <div className="flex flex-col gap-1.5">
             <p className="m-0 text-sm">
-              구매 확정은 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 확정 실패가
-              아니므로 바로 다시 확정하지 말고 상태를 확인해 주세요.
+              구매 확정은 접수됐지만 최신 주문 화면을 다시 불러오지 못했어요. 확정 실패가 아니니 바로
+              다시 확정하지 말고 아래 ‘다시 시도’를 눌러 상태를 확인해 주세요.
             </p>
             <LoadingButton
               className="mt-2.5"
