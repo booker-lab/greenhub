@@ -29,8 +29,9 @@ import {
 } from '@/lib/round-quick-add';
 import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
 import {
-  formatOrderCloseLabel,
+  formatOrderCloseStatus,
   formatOrderOpenLabel,
+  isRoundOrderClosed,
   roundSectionTitle,
 } from '@/lib/round-schedule-label';
 import { homePrefetchStoreId, useHomeStorePrefetch } from './home-store-prefetch';
@@ -301,10 +302,13 @@ function RoundDirectHome({
             </p>
           )}
           <p className={TEXT_SM} style={SECONDARY_COLOR}>
-            주문 마감{' '}
+            {/* 주문 마감 시각이 지났으면 "~까지" 대신 "주문 마감됨 · 시각"으로 쓴다. */}
             {currentRound
-              ? formatOrderCloseLabel(currentRound.schedule.orderCloseAt)
-              : '일정 준비 중'}
+              ? formatOrderCloseStatus(
+                  currentRound.schedule.orderCloseAt,
+                  isRoundOrderClosed(currentRound, Date.now()),
+                )
+              : '주문 마감 일정 준비 중'}
           </p>
           <p className={TEXT_SM} style={SECONDARY_COLOR}>
             경기도 이천시 직접배송

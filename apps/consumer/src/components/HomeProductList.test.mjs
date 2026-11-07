@@ -64,3 +64,11 @@ test('매장을 알게 되는 즉시 판매 방식·회차 조회를 함께 시�
     /useSaleRounds\(\s*storeMode\.salesMode === 'round_direct' \? storeMode\.storeId : null,\s*\)/,
   );
 });
+
+test('주문 마감이 지난 회차는 "~까지" 대신 마감됨 문구로 보인다', () => {
+  assert.match(
+    source,
+    /formatOrderCloseStatus\(\s*currentRound\.schedule\.orderCloseAt,\s*isRoundOrderClosed\(currentRound, Date\.now\(\)\),\s*\)/,
+  );
+  assert.doesNotMatch(source, /formatOrderCloseLabel\(/);
+});
