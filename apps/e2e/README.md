@@ -105,3 +105,22 @@ cd apps/e2e && DRIVER_BASE=http://127.0.0.1:3203 pnpm exec playwright test tests
 ```
 
 원격 대상은 지금처럼 `DRIVER_SESSION_COOKIE`(세션 쿠키 JSON)를 주면 그 쿠키를 `DRIVER_BASE`의 도메인에 넣는다. 둘 다 없으면 인증 묶음을 건너뛴다.
+
+## 셀러 상품 실제 저장 spec
+
+`tests/seller-product-lifecycle.spec.ts`는 셀러 화면에서 상품을 사진 없이 실제로 등록하고, 목록에 보이는지 확인한 뒤, 가격을 바꿔 저장하고, 삭제한다(감사 S-01·S-02 회귀). 폼 렌더·단계 이동은 `tests/seller-product-create.spec.ts`가 그대로 맡는다.
+
+- 원격 Preview가 있어야 돈다. PR마다 돌리지 않고 release train의 일반 Preview E2E(`.github/workflows/e2e.yml`, chromium)에서 함께 돈다.
+- `TEST_SELLER_EMAIL`/`TEST_SELLER_PASSWORD`가 없으면 건너뛴다. `SELLER_BASE`가 운영 도메인(`greenlove.co.kr`·그 하위 도메인)이면 건너뛴다. 비워 두면 기본값이 운영이라 건너뛴다.
+- 등록 화면이 실제로 부르는 API 주소가 운영 API면 아무것도 만들지 않고 실패한다(판정은 `tests/_helpers/target-url.ts`, readiness 가드와 같은지 `target-url.test.mjs`가 고정).
+- 이름은 `E2E <실행 ID> <시도별 접미어> 장미`다. 실행 ID는 `ROUND_DIRECT_E2E_RUN_ID`(일반 Preview E2E는 `generic-<run_id>-<attempt>`), 없으면 `legacy-shared`.
+- 이 테스트가 등록 응답으로 받은 상품 ID만 기록하고, 화면 삭제가 확인되지 않은 상품은 afterEach가 같은 API로 지운다. 성공·단언 실패·예외·시간 초과 모두 같다. 정리에 실패하면 테스트가 실패한다. 기록하지 않은 상품은 지우지 않는다.
+
+로컬 `pnpm dev:local` 스택(셀러 `localhost:3002`, seed된 로컬 셀러)에 붙이는 절차는 아래와 같다. 아직 실행해 확인하지 않은 절차다. 로컬 런타임은 Credentials 헤더 게이트를 생략하지만 `loginViaCredentials`가 `E2E_TEST_SECRET` 값이 있어야 시작하므로 아무 값이나 넣는다.
+
+```bash
+pnpm dev:local                          # 다른 터미널에서 먼저 띄운다(scripts/dev/local/README.md)
+SELLER_BASE=http://localhost:3002 CONSUMER_BASE=http://localhost:3001 DRIVER_BASE=http://localhost:3003 \
+  TEST_SELLER_EMAIL=local-seller@greenhub.local TEST_SELLER_PASSWORD='LocalSeller01!' E2E_TEST_SECRET=local \
+  pnpm --filter e2e exec playwright test tests/seller-product-lifecycle.spec.ts --project=chromium --retries=0
+```

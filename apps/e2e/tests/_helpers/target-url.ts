@@ -141,3 +141,27 @@ export function resolveE2EApiBase(env: NodeJS.ProcessEnv = process.env): string 
   }
   return apiBase;
 }
+
+// 데이터를 만들고 지우는 spec의 대상 가드. 앱 기본값이 운영 도메인이라 SELLER_BASE 등을 비우면 운영을 가리킨다.
+// 운영 앱 판정은 scripts/check-round-direct-e2e-readiness.mjs의 운영 Preview app origin 판정과 같다(테스트로 고정).
+export const E2E_PRODUCTION_APP_TARGET_REASON =
+  '대상 앱이 운영 도메인이라 건너뜀 — 데이터를 만들고 지우는 spec은 운영에서 실행하지 않는다';
+
+/** 앱 대상 주소가 운영 도메인(greenlove.co.kr·그 하위 도메인)이면 true. 주소로 읽을 수 없으면 운영으로 보고 막는다. */
+export function isProductionAppTarget(base: string): boolean {
+  try {
+    const host = new URL(base).hostname.toLowerCase();
+    return host === 'greenlove.co.kr' || host.endsWith('.greenlove.co.kr');
+  } catch {
+    return true;
+  }
+}
+
+/** 화면이 실제로 부른 API 주소가 운영 API면 true. 주소로 읽을 수 없으면 운영으로 보고 막는다. */
+export function isProductionApiUrl(url: string): boolean {
+  try {
+    return isProductionApiHost(new URL(url).hostname);
+  } catch {
+    return true;
+  }
+}
