@@ -39,6 +39,6 @@ export function createPortoneProvider(config: ConfigService): PortoneClient {
       useFactory: createPortoneProvider,
     },
   ],
-  exports: [PaymentsService],
+  exports: [PaymentsService, OrderChargePaymentService],
 })
 export class PaymentsModule {}

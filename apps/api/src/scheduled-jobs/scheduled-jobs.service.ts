@@ -3,6 +3,7 @@ import { EngagementService } from '../engagement/engagement.service';
 import { MarketPricesService } from '../market-prices/market-prices.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { OpsDigestService } from '../ops-alerts/ops-digest.service';
+import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
 import { PaymentsService } from '../payments/payments.service';
 import { RetentionService } from '../retention/retention.service';
 import { SettlementsService } from '../settlements/settlements.service';
@@ -24,9 +25,11 @@ export class ScheduledJobsService {
     engagement: EngagementService,
     opsDigest: OpsDigestService,
     marketPrices: MarketPricesService,
+    orderChargePayments: OrderChargePaymentService,
   ) {
     this.jobs = {
       'payments-cleanup-pending-orders': () => payments.cleanupPendingOrders(),
+      'payments-reconcile-pending-charges': () => orderChargePayments.reconcilePendingCharges(),
       'group-buy-deadlines': () => notifications.processGroupBuyDeadlines(),
       'group-buy-deadline-soon': () => notifications.notifyDeadlineSoon(),
       'settlements-confirm-due': () => settlements.confirmDueSettlements(),
