@@ -1,9 +1,10 @@
 'use client';
 
 import type { Order, OrderStatus } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronRight } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect } from 'react';
@@ -11,21 +12,10 @@ import A2HSButton from '@/components/A2HSButton';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { useOrders } from '@/hooks/useOrders';
 import { isFeatureOn } from '@/lib/features';
-
-const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
-  PENDING: '결제 확인 중',
-  RECRUITING: '모집 중',
-  CONFIRMED: '주문 확정',
-  ACCEPTED: '결제 완료',
-  PREPARING: '상품 준비 중',
-  DELIVERING: '배송 중',
-  DELIVERY_HELD: '배송 보류',
-  HUB_ARRIVED: '거점 도착',
-  PICKED_UP: '픽업 완료',
-  DELIVERED: '배송 완료',
-  CANCELLED: '주문 취소',
-  REVIEWED: '구매 확정',
-};
+import { orderListPendingPaymentNotice } from '@/lib/order-pending-payment';
+import { ORDER_STATUS_LABELS as STATUS_LABELS } from '@/lib/order-status';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
+import { currentMyPageLoginUrl } from './_login';
 
 // ② 방향(design-standard §5, 판매자 주문 상태와 같은 규칙): 상태는 배지 면 없이 점 + 글자. 문제=빨강, 끝났거나 멈춘 상태=회색, 나머지 검정.
 const STATUS_TONES: Partial<Record<OrderStatus, StatusDotTone>> = {
@@ -132,6 +122,8 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
   const tone = STATUS_TONES[order.status] ?? 'default';
   const label = STATUS_LABELS[order.status] ?? order.status;
   const summary = readOrderListSummary(order);
+  // 결제 확인 중 주문은 결제를 끝내지 않은 시도일 수 있어 실제 접수된 주문과 구분되게 설명 한 줄을 붙인다.
+  const pendingNotice = orderListPendingPaymentNotice(order.status);
 
   return (
     <button
@@ -231,6 +223,15 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
           </div>
         </div>
       </div>
+      {pendingNotice && (
+        <p
+          className={`${TEXT} mt-3`}
+          data-testid="order-card-pending-notice"
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        >
+          {pendingNotice}
+        </p>
+      )}
     </button>
   );
 }
@@ -242,7 +243,7 @@ export default function MyPageClient() {
 
   useEffect(() => {
     if (status === 'unauthenticated') {
-      router.replace('/login');
+      router.replace(currentMyPageLoginUrl());
     }
   }, [status, router]);
 
@@ -328,10 +329,14 @@ export default function MyPageClient() {
             </Button>
           </div>
         )}
+        {/* 빈 상태는 "구매한 꽃" 화면과 같은 관례(안내 + 이번 회차 보러 가기)로 다음 행동을 준다. */}
         {!loading && !error && orders.length === 0 && (
-          <p className={`${TEXT} py-8 text-center`} style={disabledTextStyle}>
-            주문 내역이 없습니다.
-          </p>
+          <div className="flex flex-col items-center gap-4 py-8">
+            <p className={TEXT} style={disabledTextStyle}>
+              아직 주문한 꽃이 없어요.
+            </p>
+            <ButtonLink render={<Link href="/" />}>이번 회차 보러 가기</ButtonLink>
+          </div>
         )}
         {orders.length > 0 && (
           <div className="flex flex-col items-stretch justify-start gap-3">
@@ -434,12 +439,14 @@ export default function MyPageClient() {
             </p>
             <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
           </button>
+          <SupportCallLink />
           <MenuLink label="회원 탈퇴" onClick={() => router.push('/mypage/withdraw')} />
         </div>
       </div>
 
-      {/* 앱 설치 */}
-      <div>
+      {/* 앱 설치: A2HSButton은 설치 프롬프트가 없는 브라우저(iOS Safari·인앱 브라우저 등)에서 아무것도
+          그리지 않는다. 제목만 남지 않도록 묶음 안에 버튼(button)이 그려졌을 때만 묶음 전체를 보인다. */}
+      <div className="hidden has-[button]:block" data-testid="mypage-install">
         <h2 className="m-0 mb-4 leading-[1.35]" style={sectionTitleStyle}>
           앱 설치
         </h2>
@@ -478,5 +485,47 @@ function MenuLink({ label, onClick }: { label: string; onClick: () => void }) {
       </p>
       <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
     </button>
+  );
+}
+
+// 고객센터 전화 연결. 번호·상담 시간은 footer와 같은 공개 사업자 정보(PUBLIC_BUSINESS_INFO)를 쓴다.
+function SupportCallLink() {
+  return (
+    <a
+      href={PUBLIC_BUSINESS_INFO.phoneHref}
+      data-testid="mypage-support-call"
+      className={UNSTYLED_BUTTON}
+      style={{
+        alignItems: 'center',
+        background: 'var(--color-surface-muted)',
+        borderRadius: 'var(--radius)',
+        display: 'flex',
+        gap: 12,
+        justifyContent: 'space-between',
+        minHeight: 'var(--touch-target)',
+        padding: '14px 16px',
+        width: '100%',
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <p
+          className={TEXT}
+          style={{
+            color: 'var(--color-text)',
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-medium)',
+          }}
+        >
+          고객센터 전화 {PUBLIC_BUSINESS_INFO.phone}
+        </p>
+        <p
+          className={TEXT}
+          style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
+        >
+          상담 시간 {PUBLIC_BUSINESS_INFO.supportHours}
+        </p>
+      </div>
+      <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
+    </a>
   );
 }

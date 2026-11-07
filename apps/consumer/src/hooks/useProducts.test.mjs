@@ -40,6 +40,17 @@ const compiled = ts.transpileModule(hookSource, {
   fileName: 'useProducts.ts',
 }).outputText;
 
+// 표시용 오류 문구는 실제 lib/load-error-message를 쓴다(문구 규칙은 그 파일의 테스트가 검증한다).
+const loadErrorMessageModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/load-error-message.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(loadErrorMessageModule, loadErrorMessageModule.exports);
+
 const API_BASE_URL = 'https://api.example.test';
 
 const originalFetch = globalThis.fetch;
@@ -131,6 +142,7 @@ function mountHook({ fetchImpl, initialArgs = [] }) {
       // 훅의 요청 순서·stale 응답 규칙만 본다.
       return { sharedRequest: (_key, load) => Promise.resolve().then(load) };
     }
+    if (specifier === '@/lib/load-error-message') return loadErrorMessageModule.exports;
     if (specifier === '@greenhub/shared') return {};
     throw new Error(`예상하지 못한 상품 조회 모듈 요청: ${specifier}`);
   };
@@ -215,7 +227,8 @@ test('초기 실패는 error를 세우고 빈 성공으로 위장하지 않는�
   const harness = mountHook({ fetchImpl: async () => errorResponse(500) });
   await harness.settle();
 
-  assert.match(harness.get().error ?? '', /500/);
+  // 화면에는 상태 코드 대신 손님 문구를 넘긴다.
+  assert.equal(harness.get().error, '상품을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
   assert.deepEqual(harness.get().products, []);
   assert.equal(harness.get().loading, false);
 });

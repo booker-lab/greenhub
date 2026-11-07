@@ -1,11 +1,27 @@
 'use client';
 
 import type { CreateOrderRequest } from '@greenhub/shared';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem } from '@/hooks/useCart';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import {
+  CHECKOUT_HOLD_LIMIT_MESSAGE,
+  isCheckoutHoldLimitRejection,
+} from '@/lib/checkout-hold-limit';
+import {
+  CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE,
+  checkoutPaymentErrorMessage,
+  ORDER_CREATE_FAILED_MESSAGE,
+} from '@/lib/checkout-messages';
+import {
+  isRoundOrderClosedRejection,
+  ROUND_ORDER_CLOSED_MESSAGE,
+} from '@/lib/checkout-round-closed';
+import { paymentFailureMessage } from '@/lib/payment-failure-message';
+import { attachPaymentPageGuard } from '@/lib/payment-page-guard';
+import {
   buildPaymentRedirectUrl,
+  clearOwnPendingOrderPayment,
   createPendingOrderPayment,
   ORDER_PAYMENT_REDIRECT_PATH,
   readBrowserPaymentContext,
@@ -56,6 +72,13 @@ interface UsePaymentResult {
   state: PaymentState;
   orderId: string | null;
   error: string | null;
+  /** 회차 결제에서 주문 생성 API가 회차 주문 마감으로 거절했는지(C-13). 한 번 알아보면 이 화면에서는 유지한다. */
+  roundOrderClosed: boolean;
+  /**
+   * 회차 결제에서 결제를 마치지 않은 이전 시도가 같은 회차 결제 예약 한도를 채워 주문 생성이 거절됐는지(C-02).
+   * 다음 결제를 누르거나 같은 탭 복귀로 결제 전 상태가 되면 다시 false가 된다.
+   */
+  checkoutHoldLimited: boolean;
   requestPayment: () => Promise<void>;
 }
 
@@ -73,6 +96,11 @@ interface OrderPaymentResponse {
 
 const MAX_IDENTIFIER_LENGTH = 128;
 const UNSAFE_IDENTIFIER_CHARACTERS = '/?#\\';
+// 결제 전 확인에 실패하면 화면에 보일 고객 문구(해요체).
+const ROUND_AMOUNT_UNCHECKED_MESSAGE =
+  '결제 금액을 확인하지 못했어요. 장바구니에서 다시 결제해 주세요.';
+const ORDER_RESPONSE_UNCHECKED_MESSAGE =
+  '결제 정보를 확인하지 못해 결제를 시작하지 않았어요. 잠시 후 다시 시도해 주세요.';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -123,31 +151,31 @@ function prepareRoundOrderRequest(
 ): PreparedOrderRequest {
   const { orderRequest, roundItems, storeId } = options;
   if (roundItems.length === 0) {
-    throw new Error('결제할 회차 상품이 없습니다.');
+    throw new Error('결제할 상품이 없어요. 장바구니에서 다시 결제해 주세요.');
   }
   if (!roundItems.every((item) => isValidRoundPaymentItem(item, storeId))) {
-    throw new Error('검증된 회차 상품 정보를 확인할 수 없습니다.');
+    throw new Error('상품 정보를 확인하지 못했어요. 장바구니에서 다시 결제해 주세요.');
   }
 
   const firstItem = roundItems[0];
   if (!firstItem || roundItems.some((item) => item.roundId !== firstItem.roundId)) {
-    throw new Error('같은 회차 상품만 함께 결제할 수 있습니다.');
+    throw new Error('같은 회차 상품만 함께 결제할 수 있어요.');
   }
   const roundItemIds = roundItems.map((item) => item.roundItemId);
   if (new Set(roundItemIds).size !== roundItemIds.length) {
-    throw new Error('같은 회차 상품을 중복으로 결제할 수 없습니다.');
+    throw new Error('같은 상품이 두 번 담겨 있어요. 장바구니에서 확인해 주세요.');
   }
 
   const expectedAmount = roundItems.reduce((sum, item) => {
     // 옵션을 고른 상품은 옵션 금액을 더한 price, 아니면 price === roundPrice.
     const subtotal = item.price * item.quantity;
     if (!Number.isSafeInteger(subtotal) || subtotal < 0) {
-      throw new Error('회차 상품 금액을 확인할 수 없습니다.');
+      throw new Error(ROUND_AMOUNT_UNCHECKED_MESSAGE);
     }
     return sum + subtotal;
   }, 0);
   if (!Number.isSafeInteger(expectedAmount) || expectedAmount <= 0) {
-    throw new Error('회차 주문 금액을 확인할 수 없습니다.');
+    throw new Error(ROUND_AMOUNT_UNCHECKED_MESSAGE);
   }
 
   return {
@@ -197,10 +225,10 @@ function prepareOrderRequest(
 
 function readOrderPaymentResponse(value: unknown, expectedAmount?: number): OrderPaymentResponse {
   if (!isRecord(value) || !isSafeIdentifier(value.orderId)) {
-    throw new Error('주문 응답의 결제 식별자를 확인할 수 없습니다.');
+    throw new Error(ORDER_RESPONSE_UNCHECKED_MESSAGE);
   }
   if ('paymentId' in value && value.paymentId !== value.orderId) {
-    throw new Error('주문 응답에 서로 다른 결제 식별자가 포함되었습니다.');
+    throw new Error(ORDER_RESPONSE_UNCHECKED_MESSAGE);
   }
 
   const parameters = value.portonePaymentParams;
@@ -210,13 +238,15 @@ function readOrderPaymentResponse(value: unknown, expectedAmount?: number): Orde
     !isMoney(parameters.amount) ||
     parameters.amount <= 0
   ) {
-    throw new Error('주문 응답의 결제 정보를 확인할 수 없습니다.');
+    throw new Error(ORDER_RESPONSE_UNCHECKED_MESSAGE);
   }
   if ('paymentId' in parameters && parameters.paymentId !== value.orderId) {
-    throw new Error('주문 응답에 서로 다른 결제 식별자가 포함되었습니다.');
+    throw new Error(ORDER_RESPONSE_UNCHECKED_MESSAGE);
   }
   if (expectedAmount !== undefined && parameters.amount !== expectedAmount) {
-    throw new Error('서버가 반환한 결제 금액이 회차 주문 금액과 일치하지 않습니다.');
+    throw new Error(
+      '결제 금액이 장바구니와 달라 결제를 시작하지 않았어요. 장바구니에서 다시 확인해 주세요.',
+    );
   }
 
   return {
@@ -239,25 +269,58 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
   const [state, setState] = useState<PaymentState>('idle');
   const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [roundOrderClosed, setRoundOrderClosed] = useState(false);
+  const [checkoutHoldLimited, setCheckoutHoldLimited] = useState(false);
   const paymentAttemptId = useRef<string | null>(null);
   const currentState = useRef<PaymentState>('idle');
+  // 같은 탭 복귀로 결제 상태를 되돌리면 올라간다. 끝나지 않은 이전 결제창 결과가 늦게 와도 화면을 바꾸지 않는다.
+  const attemptGeneration = useRef(0);
 
   function transition(nextState: PaymentState) {
     currentState.current = nextState;
     setState(nextState);
   }
 
+  // 주문 생성 중에만 이탈 확인창을 띄우고, 결제사 화면에서 뒤로 와 페이지가 그대로 복원되면
+  // "처리 중..."에 고정되지 않게 결제 전 상태로 되돌린다(C-01). 단계는 동기적으로 갱신되는 ref로 판단한다.
+  useEffect(
+    () =>
+      attachPaymentPageGuard(window, {
+        getPhase: () => currentState.current,
+        onRestore: () => {
+          attemptGeneration.current += 1;
+          // 새로 로드된 복귀와 같게 다음 결제는 새 결제 시도 ID로 주문한다(#328).
+          paymentAttemptId.current = null;
+          currentState.current = 'idle';
+          setCheckoutHoldLimited(false);
+          setState('idle');
+          setError(null);
+        },
+      }),
+    [],
+  );
+
   async function requestPayment() {
     if (currentState.current !== 'idle' && currentState.current !== 'error') return;
+    const generation = attemptGeneration.current;
     transition('creating');
+    setCheckoutHoldLimited(false);
     setError(null);
     paymentAttemptId.current ??= crypto.randomUUID();
     // 서버 거절·결제창 취소처럼 결과가 확정된 실패에서만 결제 시도 ID를 새로 만든다.
     // 응답 없음·5xx처럼 서버 처리 여부가 불확실하면 같은 ID로 멱등 재시도해야 한다.
+    // 결제창 취소 뒤 같은 ID를 다시 쓰지 않는 이유(C-02 확인): API는 같은 ID·같은 내용이면 주문 상태를
+    // 보지 않고 기존 주문을 돌려준다. 결제 실패 알림으로 이미 취소된 주문이면 결제가 승인돼도 자동 환불된다.
     let attemptSettled = false;
 
     try {
-      const configuration = readPortonePaymentConfiguration(options.paymentMethod);
+      let configuration: ReturnType<typeof readPortonePaymentConfiguration>;
+      try {
+        configuration = readPortonePaymentConfiguration(options.paymentMethod);
+      } catch {
+        // 결제 설정 오류 원문 대신 고객 문구를 보인다.
+        throw new Error(CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE);
+      }
       const prepared = prepareOrderRequest(options, paymentAttemptId.current);
       const res = await fetch(
         `${getApiBaseUrl()}/stores/${encodeURIComponent(options.storeId)}/orders`,
@@ -273,7 +336,18 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
       if (!res.ok) {
         attemptSettled = isSettledRejection(res.status);
         const body = await res.json().catch(() => ({}));
-        throw new Error(body.message ?? '주문 생성 실패');
+        // 회차 주문 창이 닫혀 거절되면(예약·주문을 만들지 않는다) 화면이 마감 안내로 바꿀 수 있게 알린다.
+        if (options.roundItems !== undefined && isRoundOrderClosedRejection(res.status, body)) {
+          setRoundOrderClosed(true);
+          throw new Error(ROUND_ORDER_CLOSED_MESSAGE);
+        }
+        // 결제를 마치지 않은 이전 시도가 예약 한도를 채워 거절되면(예약·주문을 만들지 않는다)
+        // 언제 다시 결제할 수 있는지와 주문 내역으로 가는 길을 보이도록 알린다(C-02).
+        if (options.roundItems !== undefined && isCheckoutHoldLimitRejection(res.status, body)) {
+          setCheckoutHoldLimited(true);
+          throw new Error(CHECKOUT_HOLD_LIMIT_MESSAGE);
+        }
+        throw new Error(body.message ?? ORDER_CREATE_FAILED_MESSAGE);
       }
       const payment = readOrderPaymentResponse(await res.json(), prepared.expectedAmount);
       setOrderId(payment.orderId);
@@ -287,16 +361,14 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
       const redirectUrl = browser
         ? buildPaymentRedirectUrl(browser.origin, ORDER_PAYMENT_REDIRECT_PATH)
         : null;
-      savePendingOrderPayment(
-        browser?.storage ?? null,
-        createPendingOrderPayment({
-          paymentId: payment.paymentId,
-          roundItemIds: options.roundItems?.map((item) => item.roundItemId),
-          clearCheckoutCart: options.roundItems !== undefined,
-          retryPath: browser?.currentPath ?? null,
-          now: Date.now(),
-        }),
-      );
+      const pending = createPendingOrderPayment({
+        paymentId: payment.paymentId,
+        roundItemIds: options.roundItems?.map((item) => item.roundItemId),
+        clearCheckoutCart: options.roundItems !== undefined,
+        retryPath: browser?.currentPath ?? null,
+        now: Date.now(),
+      });
+      savePendingOrderPayment(browser?.storage ?? null, pending);
       let response: Awaited<ReturnType<typeof PortOne.requestPayment>>;
       try {
         response = await PortOne.requestPayment({
@@ -311,22 +383,25 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
         });
       } finally {
         // Promise로 결과를 받은 경우(PC·결제창 오류)에는 이 화면이 직접 처리하므로 복귀용 기록을 지운다.
-        savePendingOrderPayment(browser?.storage ?? null, null);
+        // 같은 탭 복귀 뒤 새 결제가 저장한 기록은 이 시도의 것이 아니므로 남긴다.
+        clearOwnPendingOrderPayment(browser?.storage ?? null, pending);
       }
+      if (generation !== attemptGeneration.current) return;
 
       if (response && 'code' in response) {
         attemptSettled = true;
-        throw new Error(response.message ?? '결제가 취소되었습니다.');
+        // PG 원문 코드("[PAY_PROCESS_CANCELED] …")는 화면에 쓰지 않고 고객 문구로 바꾼다.
+        throw new Error(paymentFailureMessage(response));
       }
 
       transition('done');
     } catch (e: unknown) {
+      if (generation !== attemptGeneration.current) return;
       if (attemptSettled) paymentAttemptId.current = null;
-      const message = e instanceof Error ? e.message : '오류가 발생했습니다.';
-      setError(message);
+      setError(checkoutPaymentErrorMessage(e));
       transition('error');
     }
   }
 
-  return { state, orderId, error, requestPayment };
+  return { state, orderId, error, roundOrderClosed, checkoutHoldLimited, requestPayment };
 }

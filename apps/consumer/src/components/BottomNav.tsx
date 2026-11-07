@@ -88,6 +88,16 @@ function useStoreMode(storeId: string | null, productsLoading: boolean): StoreMo
   return state;
 }
 
+/**
+ * 하단 내비게이션 탭 구성을 정할 판매 방식. 상품·판매 방식을 확인하는 동안이나 조회에 실패했을 때도
+ * 내비게이션을 숨기지 않고 운영 판매 방식인 회차 판매(round_direct) 탭을 보인다. legacy 탭은 판매 방식이
+ * legacy로 확인됐을 때만 보인다.
+ */
+export function resolveNavSalesMode(productsError: unknown, storeMode: StoreModeState): SalesMode {
+  if (productsError || storeMode.status !== 'ready') return 'round_direct';
+  return storeMode.salesMode;
+}
+
 // 숨기는 경로(결제·주문 완료·상품 상세)에서는 상품 목록·매장 프로필 조회가 필요 없으므로
 // 경로부터 판정하고, 보일 때만 조회하는 하위 컴포넌트를 마운트한다.
 export default function BottomNav() {
@@ -108,9 +118,8 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
   const storeId = useMemo(() => findSingleStoreId(products), [products]);
   const storeMode = useStoreMode(storeId, productsLoading);
 
-  if (productsError || storeMode.status !== 'ready') return null;
-
-  const tabs = storeMode.salesMode === 'round_direct' ? ROUND_DIRECT_TABS : LEGACY_TABS;
+  const salesMode = resolveNavSalesMode(productsError, storeMode);
+  const tabs = salesMode === 'round_direct' ? ROUND_DIRECT_TABS : LEGACY_TABS;
 
   return (
     <nav
