@@ -10,14 +10,23 @@ test('회차 가격은 상품 원본 가격이 아니라 SaleRoundItem.roundPric
   assert.doesNotMatch(panelSource, /product\.price/);
 });
 
-test('주문 마감은 회차 schedule.orderCloseAt을 Asia\\/Seoul 기준 공통 표기로 보여준다', async () => {
+test('주문 마감은 회차 schedule.orderCloseAt을 Asia\\/Seoul 기준 공통 표기로 보여주고 마감 뒤에는 "까지"를 붙이지 않는다', async () => {
   const labelSource = await readFile(
     new URL('../../../../lib/round-schedule-label.ts', import.meta.url),
     'utf8',
   );
-  assert.match(panelSource, /formatOrderCloseLabel\(round\.schedule\.orderCloseAt\)/);
+  const stepSource = await readFile(
+    new URL('../../../../lib/round-close-step.ts', import.meta.url),
+    'utf8',
+  );
+  // 마감 줄은 공용 판정(isRoundOrderClosed)·표기를 쓰는 roundOrderCloseStep으로 그린다.
+  assert.match(panelSource, /import \{ roundOrderCloseStep \} from '@\/lib\/round-close-step'/);
+  assert.match(panelSource, /roundOrderCloseStep\(round, Date\.now\(\)\)/);
+  assert.match(stepSource, /formatOrderCloseLabel\(closeAt\)/);
+  assert.match(stepSource, /isRoundOrderClosed\(round, nowMillis\)/);
   assert.match(labelSource, /timeZone: 'Asia\/Seoul'/);
-  assert.match(panelSource, /주문 마감/);
+  // 마감이 지난 회차에도 "~까지"를 붙이던 직접 호출은 다시 쓰지 않는다.
+  assert.doesNotMatch(panelSource, /formatOrderCloseLabel/);
 });
 
 test('주문 시작 전 회차는 판매 예정 제목과 주문 시작 시각을 보여준다', () => {
