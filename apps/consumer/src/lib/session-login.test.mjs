@@ -9,7 +9,7 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 new Function('module', 'exports', compiled)(module, module.exports);
-const { buildSessionExpiredLoginUrl, isSessionExpiredReason } = module.exports;
+const { buildSessionExpiredLoginUrl, isSessionExpiredReason, hasActiveSession } = module.exports;
 
 const parse = (url) => {
   const parsed = new URL(url, 'https://shop.example.test');
@@ -68,5 +68,23 @@ test('세션 만료 이유 판정은 expired만 참이다', () => {
   assert.equal(isSessionExpiredReason('expired'), true);
   for (const value of [null, undefined, '', 'Expired', 'expired ', 'other']) {
     assert.equal(isSessionExpiredReason(value), false, String(value));
+  }
+});
+
+test('로그인 화면을 건너뛸 세션: 소비자·관리자 역할이 있고 토큰 오류가 없을 때만', () => {
+  assert.equal(hasActiveSession({ user: { role: 'consumer' } }), true);
+  assert.equal(hasActiveSession({ user: { role: 'admin', tokenError: false } }), true);
+  for (const session of [
+    null,
+    undefined,
+    {},
+    { user: null },
+    { user: {} },
+    { user: { role: '' } },
+    { user: { role: 'driver' } },
+    { user: { role: 'seller' } },
+    { user: { role: 'consumer', tokenError: true } },
+  ]) {
+    assert.equal(hasActiveSession(session), false, JSON.stringify(session));
   }
 });

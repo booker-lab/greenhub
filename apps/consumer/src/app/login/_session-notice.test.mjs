@@ -23,3 +23,15 @@ test('로그인 화면은 세션 만료 이유가 오면 안내를 보인다', a
   // 복귀 주소는 기존과 같이 같은 출처 상대 경로로만 받는다.
   assert.match(form, /safeCallbackPath\(rawCallbackUrl, window\.location\.origin\)/);
 });
+
+test('이미 로그인한 손님은 로그인 화면 대신 안전한 복귀 주소(없으면 홈)로 바로 보낸다', async () => {
+  const form = await read('./_form.tsx');
+  assert.match(form, /status === 'authenticated' && hasActiveSession\(session\)/);
+  assert.match(
+    form,
+    /router\.replace\(safeCallbackPath\(rawCallbackUrl, window\.location\.origin\)\)/,
+  );
+  // 서버에서 auth()로 확인하면 갱신된 세션 쿠키를 저장할 수 없으므로 로그인 화면 서버 컴포넌트는 세션을 읽지 않는다.
+  const page = await read('./page.tsx');
+  assert.doesNotMatch(page, /auth\(\)/);
+});

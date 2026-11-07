@@ -1,4 +1,4 @@
-// 세션이 끝났을 때 로그인 화면으로 보내는 주소와 그 이유 판정.
+// 세션이 끝났을 때 로그인 화면으로 보내는 주소와 그 이유 판정, 로그인 화면을 건너뛸 세션 판정.
 // 로그인 화면은 callbackUrl을 같은 출처 상대 경로로만 받아들인다(app/login/_callback-url.ts).
 
 export const LOGIN_PATH = '/login';
@@ -33,4 +33,24 @@ export function buildSessionExpiredLoginUrl(pathname: string, search: string): s
 /** 로그인 화면 주소의 reason 값이 세션 만료인지. */
 export function isSessionExpiredReason(reason: string | null | undefined): boolean {
   return reason === SESSION_EXPIRED_REASON;
+}
+
+type SessionLike =
+  | {
+      user?: { role?: string | null; tokenError?: boolean | null } | null;
+    }
+  | null
+  | undefined;
+
+// auth.ts가 소비자 앱 세션으로 만들어 주는 역할과 같다.
+const SIGNED_IN_ROLES = ['consumer', 'admin'];
+
+/**
+ * 로그인 화면을 건너뛰어도 되는 세션인지.
+ * 역할이 있고 토큰 오류가 없어야 한다. 토큰 오류 세션은 곧 로그아웃되므로 로그인 화면에 남긴다.
+ */
+export function hasActiveSession(session: SessionLike): boolean {
+  const user = session?.user;
+  if (!user || user.tokenError) return false;
+  return typeof user.role === 'string' && SIGNED_IN_ROLES.includes(user.role);
 }
