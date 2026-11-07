@@ -632,6 +632,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
 }
 
 function CartCheckoutContent() {
+  const router = useRouter();
   const [cart, setCart] = useState<LoadedCheckoutCart>({ kind: 'loading', items: [] });
 
   useEffect(() => {
@@ -651,10 +652,18 @@ function CartCheckoutContent() {
     );
   }
   if (cart.kind === 'invalid') {
+    // 새 탭·주소 직접 열기처럼 탭 저장소에 결제할 상품이 없으면 막다른 화면 대신 돌아갈 길을 준다.
     return (
-      // Mantine Text c="red"(red-6) 계산값
       <div className="mx-auto max-w-[720px] px-4 py-5">
-        <p className="m-0 text-base text-ui-red">결제할 장바구니 정보를 확인할 수 없습니다.</p>
+        <p className="m-0 text-base leading-[1.55]">
+          결제할 상품 정보가 없어요. 장바구니에서 다시 결제해 주세요.
+        </p>
+        <Button size="lg" className="mt-5 w-full" onClick={() => router.push('/cart')}>
+          장바구니로 가기
+        </Button>
+        <Button variant="ghost" size="md" className="w-full" onClick={() => router.push('/')}>
+          홈으로
+        </Button>
       </div>
     );
   }

@@ -28,7 +28,7 @@ new Function('require', 'module', 'exports', compiledCart)(
 
 const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 const testableSource = `${source}
-export { parseCheckoutCart, resolveRoundCheckoutSchedule, resolveSingleCheckoutAmount, SingleCheckoutContent };`;
+export { CartCheckoutContent, parseCheckoutCart, resolveRoundCheckoutSchedule, resolveSingleCheckoutAmount, SingleCheckoutContent };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     esModuleInterop: true,
@@ -548,4 +548,68 @@ test('legacy checkout 결제창 실패는 PG 원문 대신 고객 문구로 보�
   const legacyCheckoutSource = source.slice(start, end);
   assert.match(legacyCheckoutSource, /setError\(paymentFailureMessage\(response\)\)/);
   assert.doesNotMatch(legacyCheckoutSource, /setError\(response\.message/);
+});
+
+/** 장바구니 checkout을 저장소에 결제 상품이 없는(invalid) 상태로 그려 화면 요소와 이동을 기록한다. */
+function renderInvalidCartCheckout() {
+  const elements = [];
+  const pushes = [];
+  const ButtonStub = () => null;
+  const textOf = (children) =>
+    (Array.isArray(children) ? children : [children])
+      .filter((child) => typeof child === 'string')
+      .join('');
+  const requireForRender = (specifier) => {
+    if (specifier === 'react') {
+      return {
+        Suspense: () => null,
+        useEffect: () => {},
+        useRef: (initial) => ({ current: initial }),
+        useState: () => [{ kind: 'invalid', items: [] }, () => {}],
+      };
+    }
+    if (specifier === 'react/jsx-runtime') {
+      const jsx = (type, props) => {
+        elements.push({ type, props, text: textOf(props?.children) });
+        return null;
+      };
+      return { Fragment: Symbol('Fragment'), jsx, jsxs: jsx };
+    }
+    if (specifier === 'next/navigation') {
+      return {
+        useRouter: () => ({ push: (path) => pushes.push(path), replace: () => {} }),
+        useSearchParams: () => new URLSearchParams('from=cart'),
+      };
+    }
+    if (specifier === '@greenhub/ui/components/button') return { Button: ButtonStub };
+    return requireForTest(specifier);
+  };
+  const renderModule = { exports: {} };
+  new Function('require', 'module', 'exports', compiled)(
+    requireForRender,
+    renderModule,
+    renderModule.exports,
+  );
+  renderModule.exports.CartCheckoutContent();
+  return { elements, pushes, buttons: elements.filter((element) => element.type === ButtonStub) };
+}
+
+test('결제할 장바구니 정보가 없으면 장바구니·홈으로 돌아갈 버튼을 보인다', () => {
+  const { elements, pushes, buttons } = renderInvalidCartCheckout();
+
+  assert.ok(
+    elements.some((element) =>
+      element.text.includes('결제할 상품 정보가 없어요. 장바구니에서 다시 결제해 주세요.'),
+    ),
+  );
+  assert.deepEqual(
+    buttons.map((button) => button.text),
+    ['장바구니로 가기', '홈으로'],
+  );
+  // 장바구니로 가기가 주 버튼이고 홈으로는 보조(ghost) 버튼이다.
+  assert.equal(buttons[0].props.variant, undefined);
+  assert.equal(buttons[1].props.variant, 'ghost');
+  for (const button of buttons) button.props.onClick();
+  assert.deepEqual(pushes, ['/cart', '/']);
+  assert.doesNotMatch(source, /결제할 장바구니 정보를 확인할 수 없습니다/);
 });
