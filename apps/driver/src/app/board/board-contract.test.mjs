@@ -185,7 +185,7 @@ test('Board는 usable token 없음을 auth-required로 표시하고 empty와 분
 
 test('Board의 error-only와 empty 렌더는 성공 기록으로 분리된다', () => {
   assert.match(boardSource, /error && !hasSuccessfulRead/);
-  assert.match(boardSource, /오늘 수거할 주문이 없습니다/);
+  assert.match(boardSource, /수거할 주문이 없어요/);
 });
 
 test('Detail read 실패는 NOT_FOUND·AUTH_ERROR·FETCH_ERROR로 분리된다', () => {
@@ -479,7 +479,7 @@ test('Board read-state precedence는 INITIAL > AUTH > INITIAL_FAILURE > STALE > 
   const idxInitialFailure = boardSource.indexOf('error && !hasSuccessfulRead');
   const idxStale = boardSource.indexOf('error && hasSuccessfulRead');
   const idxRevalidating = boardSource.indexOf('refreshing && hasSuccessfulRead');
-  const idxFreshEmpty = boardSource.indexOf('오늘 수거할 주문이 없습니다');
+  const idxFreshEmpty = boardSource.indexOf('수거할 주문이 없어요');
   assert.ok(idxLoading !== -1, 'loading branch가 있어야 한다');
   assert.ok(idxAuth !== -1, 'auth branch가 있어야 한다');
   assert.ok(idxInitialFailure !== -1, 'initial failure branch가 있어야 한다');
@@ -522,8 +522,8 @@ test('1. first success []는 genuine empty다', () => {
   assert.ok(genuineStart !== -1, 'genuine empty branch가 있어야 한다');
   const genuineEnd = boardSource.indexOf(') : (', genuineStart);
   const genuineSlice = boardSource.slice(genuineStart, genuineEnd);
-  assert.match(genuineSlice, /오늘 수거할 주문이 없습니다/);
-  assert.match(genuineSlice, /현재 배송 중인 주문이 없습니다/);
+  assert.match(genuineSlice, /수거할 주문이 없어요/);
+  assert.match(genuineSlice, /배송 중인 주문이 없어요/);
   assert.doesNotMatch(genuineSlice, /\{error\}/);
   assert.doesNotMatch(genuineSlice, /마지막 확인 당시/);
 });
@@ -562,8 +562,8 @@ test('3. success [] → refresh failure는 stale-error state다 (fresh empty 금
   assert.match(staleSlice, /마지막 확인 당시/);
   assert.match(staleSlice, /다시 시도/);
   assert.match(staleSlice, /setReloadKey\(\(key\)\s*=>\s*key\s*\+\s*1\)/);
-  assert.doesNotMatch(staleSlice, /오늘 수거할 주문이 없습니다/);
-  assert.doesNotMatch(staleSlice, /현재 배송 중인 주문이 없습니다/);
+  assert.doesNotMatch(staleSlice, /수거할 주문이 없어요/);
+  assert.doesNotMatch(staleSlice, /배송 중인 주문이 없어요/);
 });
 
 test('4. stale-empty → retry → [] success는 다시 genuine empty다', () => {
@@ -699,8 +699,8 @@ test('9. preparing/delivering 탭 count/filter 회귀 없음', () => {
   // stale-empty와 revalidating-empty도 탭 의미를 보존한다.
   assert.match(boardSource, /마지막 확인 당시 수거할 주문이 없었습니다/);
   assert.match(boardSource, /마지막 확인 당시 배송 중인 주문이 없었습니다/);
-  assert.match(boardSource, /오늘 수거할 주문이 없습니다/);
-  assert.match(boardSource, /현재 배송 중인 주문이 없습니다/);
+  assert.match(boardSource, /수거할 주문이 없어요/);
+  assert.match(boardSource, /배송 중인 주문이 없어요/);
   assert.match(boardSource, /count: preparing\.length/);
   assert.match(boardSource, /count: delivering\.length/);
 });

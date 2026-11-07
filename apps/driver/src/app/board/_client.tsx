@@ -312,8 +312,8 @@ export default function BoardClient() {
           <div className="flex h-48 flex-col items-center justify-center gap-2.5">
             <p className={text} style={messageStyle}>
               {tab === 'preparing'
-                ? '오늘 수거할 주문이 없습니다'
-                : '현재 배송 중인 주문이 없습니다'}
+                ? '수거할 주문이 없어요'
+                : '배송 중인 주문이 없어요'}
             </p>
             {tab === 'preparing' && (
               <button

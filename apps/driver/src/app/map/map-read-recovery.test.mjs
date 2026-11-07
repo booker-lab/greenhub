@@ -49,7 +49,7 @@ test('Map initial loading precedes any empty render', () => {
   assert.match(mapSource, /배송 경로를 불러오는 중입니다/);
   assert.match(mapSource, /\{loading \?/);
   const loadingPos = mapSource.indexOf('{loading ?');
-  const emptyPos = mapSource.indexOf('오늘 배송 주문이 없습니다');
+  const emptyPos = mapSource.indexOf('배송할 주문이 없어요');
   assert.ok(loadingPos !== -1 && emptyPos !== -1 && loadingPos < emptyPos);
   assert.match(mapSource, /if \(background\) \{\s*setRefreshing\(true\);\s*\} else \{\s*setLoading\(true\);\s*\}/s);
 });
@@ -74,10 +74,10 @@ test('Map successful results render filtered route list', () => {
 
 // 3. successful empty: only after authoritative success with zero filtered rows.
 test('Map successful empty requires prior success and is separated from error', () => {
-  assert.match(mapSource, /오늘 배송 주문이 없습니다/);
+  assert.match(mapSource, /배송할 주문이 없어요/);
   assert.match(mapSource, /error && !hasSuccessfulRead/);
   const errorOnlyPos = mapSource.indexOf('error && !hasSuccessfulRead');
-  const emptyPos = mapSource.indexOf('오늘 배송 주문이 없습니다');
+  const emptyPos = mapSource.indexOf('배송할 주문이 없어요');
   assert.ok(errorOnlyPos !== -1 && emptyPos !== -1 && errorOnlyPos < emptyPos);
   assert.match(mapSource, /setError\(null\)/);
 });
@@ -115,7 +115,7 @@ test('Map auth loss clears protected route data and shows auth state', () => {
   assert.match(mapSource, /로그인이 끝났어요\. 다시 로그인해 주세요\./);
   assert.match(mapSource, /\) : authRequired \? \(/);
   const authPos = mapSource.indexOf(') : authRequired ?');
-  const emptyPos = mapSource.indexOf('오늘 배송 주문이 없습니다');
+  const emptyPos = mapSource.indexOf('배송할 주문이 없어요');
   assert.ok(authPos !== -1 && emptyPos !== -1 && authPos < emptyPos);
   // Success memory resets so the next authed read starts as initial loading.
   assert.match(mapSource, /hasSuccessfulReadRef\.current = false/);

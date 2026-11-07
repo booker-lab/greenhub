@@ -327,7 +327,7 @@ export default function MapPage() {
               className={text}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
             >
-              오늘 배송 주문이 없습니다
+              배송할 주문이 없어요
             </p>
           </div>
         ) : (
