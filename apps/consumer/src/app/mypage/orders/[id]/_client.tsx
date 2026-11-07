@@ -23,7 +23,7 @@ import {
   ORDER_DETAIL_STALE_MESSAGE,
   orderDetailReadFailureMessage,
 } from '@/lib/order-detail-message';
-import { orderDetailPendingPaymentGuide } from '@/lib/order-pending-payment';
+import { isPaymentPendingOrder, orderDetailPendingPaymentGuide } from '@/lib/order-pending-payment';
 import {
   customerRedeliveryPaymentReturn,
   REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE,
@@ -1134,9 +1134,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           title={detail.isRoundOrder ? '주문 마감 전 취소' : '공동구매 모집 중'}
         >
           <p className="m-0 mb-3 text-sm">
-            {detail.isRoundOrder
-              ? '주문 마감 전까지 취소할 수 있어요. 결제한 수단으로 환불돼요.'
-              : '모집 중인 공동구매 참여를 취소할 수 있어요.'}
+            {!detail.isRoundOrder
+              ? '모집 중인 공동구매 참여를 취소할 수 있어요.'
+              : isPaymentPendingOrder(detail.status)
+                ? // 결제를 마치지 않은 시도는 환불할 결제가 없으므로 환불 약속을 하지 않는다(UX 감사 C-06).
+                  '결제를 마치지 않은 주문이에요. 필요 없으면 지금 취소할 수 있어요.'
+                : '주문 마감 전까지 취소할 수 있어요. 결제한 수단으로 환불돼요.'}
           </p>
           {isStaleRead && <p className="m-0 mb-3 text-sm">{ORDER_DETAIL_STALE_MESSAGE}</p>}
           {cancelOutcome.kind === 'reconciling' && (

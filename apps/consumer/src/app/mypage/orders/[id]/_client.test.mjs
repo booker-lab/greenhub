@@ -1238,7 +1238,7 @@ test('재배송비 결제의 예상하지 못한 예외는 결제창을 열기 �
 test('결제 확인 중 주문은 배송 현황 단계 대신 결제 안내와 장바구니로 가기를 보이고 취소는 그대로 둔다', () => {
   assert.match(
     source,
-    /import \{ orderDetailPendingPaymentGuide \} from '@\/lib\/order-pending-payment'/,
+    /import \{ isPaymentPendingOrder, orderDetailPendingPaymentGuide \} from '@\/lib\/order-pending-payment'/,
   );
   assert.match(source, /import Link from 'next\/link'/);
   // 고객이 취소한 뒤에는 결제 안내를 내지 않도록 화면의 취소 판단(isCancelled)을 함께 넘긴다.
@@ -1269,4 +1269,9 @@ test('결제 확인 중 주문은 배송 현황 단계 대신 결제 안내와 �
   // 기존 주문 취소(PENDING·ACCEPTED)는 그대로 유지한다.
   assert.match(helperSource, /new Set<OrderStatus>\(\['PENDING', 'ACCEPTED'\]\)/);
   assert.match(source, /\{detail\.isRoundOrder \? '주문 취소' : '공동구매 참여 취소'\}/);
+});
+
+test('결제를 마치지 않은 주문의 취소 안내는 환불을 약속하지 않는다(UX 감사 C-06)', () => {
+  assert.match(source, /isPaymentPendingOrder\(detail\.status\)/);
+  assert.match(source, /결제를 마치지 않은 주문이에요\. 필요 없으면 지금 취소할 수 있어요\./);
 });
