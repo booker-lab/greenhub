@@ -830,7 +830,7 @@ test('주문 상세 hook은 404/auth와 일시 실패의 보관 정책을 구분
 });
 
 test('주문 상세 화면은 not-found와 일시 실패를 같은 의미로 수렴시키지 않는다', () => {
-  assert.match(source, /존재하지 않는 주문입니다/);
+  assert.match(source, /찾을 수 없는 주문이에요\. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요\./);
   assert.match(source, /로그인이 필요해요\. 로그인하면 이 주문으로 돌아와요\./);
   assert.match(source, /이 주문을 볼 수 없어요\. 내 주문 목록에서 다시 골라 주세요\./);
   // 로그인한 채 거절된 경우(status 'auth')에는 로그인 버튼을 두지 않는다(같은 주문으로 되돌아와 무반응처럼 보임).
@@ -843,16 +843,18 @@ test('주문 상세 화면은 not-found와 일시 실패를 같은 의미로 수
   assert.match(source, /await refetch\(\)/);
   // 로그인으로 보낼 때 보던 주문 상세를 복귀 주소로 싣는다(C-09 후속, mypage/_login.test.mjs).
   assert.match(source, /router\.push\(currentMyPageLoginUrl\(\)\)/);
-  assert.match(source, /주문 정보를 확인할 수 없습니다\. 잠시 후 다시 시도/);
-  assert.match(source, /\{error \?\?/);
+  assert.match(source, /주문 정보를 확인하지 못했어요\. 잠시 후 다시 시도/);
+  // 일시 실패 안내는 훅의 오류 글자 대신 읽기 상태(status)에서 해요체 고객 문구를 고른다.
+  assert.match(source, /\{orderDetailReadFailureMessage\(status\)\}/);
+  assert.doesNotMatch(source, /\{error \?\?/);
   assert.match(hookSource, /네트워크 연결을 확인하고 다시 시도/);
   assert.match(hookSource, /주문 정보를 불러오지 못했습니다\. 잠시 후 다시 시도/);
 });
 
 test('이전 데이터가 있는 refresh 실패는 stale을 유지하고 재시도를 노출한다', () => {
   assert.match(source, /const detail = orderId \? readOrderDetail\(order, orderId\) : null/);
-  assert.match(source, /최신 정보를 불러오지 못했습니다/);
-  assert.match(source, /표시된 정보가 최신이 아닐 수 있습니다/);
+  assert.match(source, /최신 정보를 불러오지 못했어요/);
+  assert.match(source, /보이는 정보가 최신이 아닐 수 있어요/);
   assert.match(source, /\(status === 'network' \|\| status === 'server'\)/);
   assert.match(source, /loading=\{retrying\}/);
   // 자동 확인은 결제 확인 중(PENDING) 주문만 2분 안에서 하고, 그 밖에는 다시 시도(refetch)로 읽는다.
@@ -903,14 +905,16 @@ test('stale network/server read는 표시를 유지하지만 최신 상태 명�
   assert.equal(isStaleOrderRead('not-found'), false);
 
   assert.match(source, /isStaleOrderRead\(status\)/);
-  assert.match(source, /최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없습니다/);
+  assert.match(source, /최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없어요/);
   // 세 명령 핸들러가 모두 stale 가드를 먼저 수행한다.
   assert.equal((source.match(/if \(isStaleRead\)/g) ?? []).length >= 3, true);
   assert.match(source, /disabled=\{cancelBusy \|\| isStaleRead \|\| cancelOutcome\.kind === 'reconcile-failed'\}/);
   assert.match(source, /disabled=\{redeliveryBusy \|\| isStaleRead\}/);
   assert.match(source, /showReviewReconcileWarning \|\| isStaleRead/);
   // stale이어도 기존 상세 표시 자체는 유지된다.
-  assert.match(source, /표시된 정보가 최신이 아닐 수 있습니다/);
+  assert.match(source, /보이는 정보가 최신이 아닐 수 있어요/);
+  // 명령을 막을 때는 해요체 고객 문구 하나로 상태 확인을 안내한다.
+  assert.equal((source.match(/setActionError\(ORDER_DETAIL_STALE_MESSAGE\)/g) ?? []).length, 3);
 });
 
 test('재시도 경로는 refetch를 호출하고 stale 해소를 전제로 actionability를 복원한다', () => {
@@ -1157,4 +1161,41 @@ test('재배송비 결제창 실패·모바일 복귀는 PG 원문 대신 고객
     source,
     /customerRedeliveryPaymentReturn\(\s*redeliveryRedirect,\s*resolveRedeliveryPaymentReturn\(redeliveryRedirect, redeliveryPaid\),\s*\)/,
   );
+});
+
+// 화면에 보이는 글자(문자열·템플릿 리터럴, JSX 글자)를 모은다. 주석은 AST에 없으므로 빠지고,
+// API 응답 원문(body.message)은 리터럴이 아니므로 검사 대상이 아니다.
+function collectScreenStrings(text, fileName) {
+  const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const strings = [];
+  const visit = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      strings.push(node.text);
+    } else if (ts.isJsxText(node)) {
+      const value = node.getText().trim();
+      if (value) strings.push(value);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return strings;
+}
+
+test('주문 상세 화면 문구는 해요체로 통일하고 합니다체가 다시 들어오지 않는다', () => {
+  const strings = collectScreenStrings(source, '_client.tsx');
+  // 수집이 실제로 동작하는지 확인한다(해요체 문구가 잡혀야 한다).
+  assert.ok(strings.includes('주문이 취소됐어요'));
+  assert.ok(strings.includes('찾을 수 없는 주문이에요. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요.'));
+  const formal = strings.filter((value) => /니다|니까|십시오/.test(value));
+  assert.deepEqual(formal, []);
+  // 바뀐 조회 안내 문구는 같은 화면의 해요체 문구로 보인다.
+  assert.doesNotMatch(source, /존재하지 않는 주문입니다/);
+  assert.doesNotMatch(source, /주문이 취소되었습니다/);
+  assert.doesNotMatch(source, /최신 상태 확인 후 다시 시도해 주세요/);
 });

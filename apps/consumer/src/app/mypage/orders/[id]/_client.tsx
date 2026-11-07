@@ -19,6 +19,10 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
 import { formatOrderDeliveryDate } from '@/lib/order-delivery-date';
 import {
+  ORDER_DETAIL_STALE_MESSAGE,
+  orderDetailReadFailureMessage,
+} from '@/lib/order-detail-message';
+import {
   customerRedeliveryPaymentReturn,
   REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE,
   REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
@@ -289,7 +293,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         ? null
         : undefined;
   // 결제 확인 중(PENDING) 주문은 결제 완료 화면처럼 서버에 결제 확인을 요청한다.
-  const { order, loading, error, status, refetch } = useOrderStatus(orderId, accessToken, {
+  const { order, loading, status, refetch } = useOrderStatus(orderId, accessToken, {
     checkPendingPayment: true,
   });
   const [cancelOutcome, setCancelOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
@@ -323,7 +327,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     if (!session?.user?.accessToken || !detail?.canRequestCancellation) return;
     if (isAuthoritativelyCancelled) return;
     if (isStaleRead) {
-      setActionError('최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.');
+      setActionError(ORDER_DETAIL_STALE_MESSAGE);
       return;
     }
     const message = detail.isRoundOrder
@@ -416,7 +420,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       return;
     }
     if (isStaleRead) {
-      setActionError('최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.');
+      setActionError(ORDER_DETAIL_STALE_MESSAGE);
       return;
     }
     setRedeliveryOutcome({ kind: 'executing' });
@@ -598,7 +602,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     if (!session?.user?.accessToken || !detail) return;
     if (isAuthoritativelyReviewed) return;
     if (isStaleRead) {
-      setActionError('최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.');
+      setActionError(ORDER_DETAIL_STALE_MESSAGE);
       return;
     }
     setReviewOutcome({ kind: 'executing' });
@@ -718,7 +722,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
         <div className="flex flex-col items-center justify-start gap-3 py-10">
           <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            존재하지 않는 주문입니다. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요.
+            찾을 수 없는 주문이에요. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요.
           </p>
           <Button variant="outline" onClick={() => router.push('/mypage')}>
             주문 목록으로 돌아가기
@@ -734,7 +738,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
         <div className="flex flex-col items-center justify-start gap-3 py-10">
           <p className="m-0 text-center text-sm" style={{ color: 'var(--color-danger)' }}>
-            {error ?? '주문 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'}
+            {orderDetailReadFailureMessage(status)}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <LoadingButton onClick={handleRetry} loading={retrying} disabled={retrying}>
@@ -764,7 +768,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
         <div className="flex flex-col items-center justify-start gap-3 py-10">
           <p className="m-0 text-center text-sm" style={{ color: 'var(--color-danger)' }}>
-            주문 정보를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.
+            주문 정보를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <LoadingButton onClick={handleRetry} loading={retrying} disabled={retrying}>
@@ -837,12 +841,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     <div className="mx-auto max-w-[720px] px-4 pt-5 pb-20">
       <BackButton className="mb-3" onClick={() => router.push('/mypage')} />
       {(status === 'network' || status === 'server') && (
-        <DetailAlert variant="warning" className="mb-5" title="최신 정보를 불러오지 못했습니다">
+        <DetailAlert variant="warning" className="mb-5" title="최신 정보를 불러오지 못했어요">
           <div className="flex flex-col gap-1.5">
-            <p className="m-0 text-sm">{error ?? '최신 주문 정보를 확인하지 못했습니다.'}</p>
-            <p className="m-0 text-sm">표시된 정보가 최신이 아닐 수 있습니다.</p>
+            <p className="m-0 text-sm">{orderDetailReadFailureMessage(status)}</p>
+            <p className="m-0 text-sm">보이는 정보가 최신이 아닐 수 있어요.</p>
             <p className="m-0 text-sm">
-              최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없습니다.
+              최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없어요.
             </p>
             <LoadingButton
               className="mt-2.5"
@@ -1096,11 +1100,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               ? '주문 마감 전까지 취소할 수 있어요. 결제한 수단으로 환불돼요.'
               : '모집 중인 공동구매 참여를 취소할 수 있어요.'}
           </p>
-          {isStaleRead && (
-            <p className="m-0 mb-3 text-sm">
-              최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.
-            </p>
-          )}
+          {isStaleRead && <p className="m-0 mb-3 text-sm">{ORDER_DETAIL_STALE_MESSAGE}</p>}
           {cancelOutcome.kind === 'reconciling' && (
             <p className="m-0 mb-3 text-sm">취소가 접수됐어요. 최신 주문 상태를 확인하고 있어요.</p>
           )}
@@ -1140,7 +1140,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       {isCancelled && (
         <DetailAlert variant="destructive" className="mb-5 text-center">
           <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-bold)' }}>
-            주문이 취소되었습니다
+            주문이 취소됐어요
           </p>
           {cancelReasonText && <p className="m-0 text-sm">사유: {cancelReasonText}</p>}
         </DetailAlert>
@@ -1184,7 +1184,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </LoadingButton>
           {isStaleRead && isReviewable && (
             <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.
+              {ORDER_DETAIL_STALE_MESSAGE}
             </p>
           )}
           {reviewOutcome.kind === 'reconciling' && (
