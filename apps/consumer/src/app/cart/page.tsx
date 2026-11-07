@@ -7,7 +7,7 @@ import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CartArrivalLine, CartUpsell, IcheonPrecheck } from '@/components/benchmark/CartExtras';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
@@ -278,7 +278,13 @@ function useRoundCartValidation(
 ) {
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle', items: {} });
   const validatedOnceRef = useRef(false);
+  // "다시 확인"을 누를 때마다 1씩 늘려 같은 확인을 다시 실행한다.
+  const [retryCount, setRetryCount] = useState(0);
+  const handledRetryRef = useRef(0);
+  const retry = useCallback(() => setRetryCount((count) => count + 1), []);
   useEffect(() => {
+    const isRetry = retryCount !== handledRetryRef.current;
+    handledRetryRef.current = retryCount;
     const roundItems = items.filter(isRoundCartItem);
     if (roundItems.length === 0) {
       setValidation({ status: 'idle', items: {} });
@@ -303,9 +309,10 @@ function useRoundCartValidation(
 
     const controller = new AbortController();
     let active = true;
-    setValidation({ status: 'loading', items: {} });
-    // 수량 +/−를 연달아 누르는 동안은 요청을 보내지 않고 마지막 수량만 검증한다(첫 검증은 바로).
-    const delay = validatedOnceRef.current ? VALIDATION_DEBOUNCE_MS : 0;
+    // 다시 확인하는 동안은 앞선 실패 안내를 그대로 두고(버튼이 "확인 중"으로 남는다) 결과가 오면 바꾼다.
+    setValidation((previous) => ({ status: 'loading', items: isRetry ? previous.items : {} }));
+    // 수량 +/−를 연달아 누르는 동안은 요청을 보내지 않고 마지막 수량만 검증한다(첫 검증과 다시 확인은 바로).
+    const delay = !isRetry && validatedOnceRef.current ? VALIDATION_DEBOUNCE_MS : 0;
     validatedOnceRef.current = true;
     const timer = setTimeout(() => {
       void validateRoundCartItems(roundItems, accessToken, controller.signal)
@@ -327,8 +334,19 @@ function useRoundCartValidation(
       clearTimeout(timer);
       controller.abort();
     };
-  }, [accessToken, items, sessionStatus]);
-  return validation;
+  }, [accessToken, items, sessionStatus, retryCount]);
+  return { validation, retry };
+}
+/**
+ * "다시 확인" 버튼 상태. 확인 요청이 실패한 상품(일반 실패 문구)이 있을 때만 보이고, 확인하는 동안은
+ * 누를 수 없게 "checking"으로 둔다(중복 요청을 막는다).
+ */
+function validationRetryState(validation: ValidationState): 'hidden' | 'checking' | 'ready' {
+  const unverified = Object.values(validation.items).some(
+    (item) => item?.status === 'unavailable' && item.reason === UNVERIFIED_REASON,
+  );
+  if (!unverified) return 'hidden';
+  return validation.status === 'ready' ? 'ready' : 'checking';
 }
 // Mantine ActionIcon(size 36·subtle dark·radius xl) 계산값: UnstyledButton 위에 36px 정사각, 투명 1px 테두리,
 // dark-9 글자, 줄 높이 1, 글꼴은 물려받는다. 마우스를 올리면(hover 가능한 기기만) dark-light-hover(dark-2) 면.
@@ -390,7 +408,12 @@ export default function CartPage() {
   const { items, updateQuantity, removeItem, clearCart } = useCart();
   // 비회원 장바구니(guest-cart): 로그인 전에는 담은 상품만 보여주고, 주문할 때 로그인한다.
   const isGuest = isFeatureOn('guest-cart') && sessionStatus === 'unauthenticated';
-  const validation = useRoundCartValidation(items, session?.user?.accessToken, sessionStatus);
+  const { validation, retry: retryValidation } = useRoundCartValidation(
+    items,
+    session?.user?.accessToken,
+    sessionStatus,
+  );
+  const retryState = validationRetryState(validation);
   const isRoundCart = items.length > 0 && items.every(isRoundCartItem);
   const checkoutItems = selectCheckoutItems(items, validation.items);
   const checkoutAmount = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -773,6 +796,20 @@ export default function CartPage() {
             변경·마감·구매 불가 상품 {excludedCount}개는 장바구니에 남아 있으며 결제 대상에서
             제외됩니다.
           </p>
+          {/* 확인 요청이 실패한 상품이 있으면 새로고침 없이 같은 확인을 다시 실행한다. */}
+          {retryState !== 'hidden' && (
+            <Button
+              type="button"
+              variant="light-destructive"
+              className="mt-2.5"
+              disabled={retryState === 'checking'}
+              onClick={() => {
+                if (retryState === 'ready') retryValidation();
+              }}
+            >
+              {retryState === 'checking' ? '다시 확인하는 중' : '다시 확인'}
+            </Button>
+          )}
         </div>
       )}
       <div

@@ -13,6 +13,7 @@ export {
   roundExtrasRound,
   selectCheckoutItems,
   validateRoundCartItems,
+  validationRetryState,
 };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
@@ -96,6 +97,7 @@ const {
   roundExtrasRound,
   selectCheckoutItems,
   validateRoundCartItems,
+  validationRetryState,
 } = pageModule.exports;
 
 const roundItem = {
@@ -507,4 +509,50 @@ test('수량 1에서는 줄이기 버튼을 막아 확인 없이 상품이 빠�
 test('수량 변경은 마지막 수량만 검증하도록 요청을 잠시 미룬다', () => {
   assert.match(source, /VALIDATION_DEBOUNCE_MS = 300/);
   assert.match(source, /clearTimeout\(timer\)/);
+});
+
+test('확인 요청이 실패한 상품이 있을 때만 "다시 확인"을 보이고, 확인하는 동안은 누를 수 없다', () => {
+  const unverified = {
+    status: 'unavailable',
+    reason: '구매 가능 여부를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.',
+  };
+  const key = cartItemKey(roundItem);
+  assert.equal(validationRetryState({ status: 'ready', items: { [key]: unverified } }), 'ready');
+  // 다시 확인하는 동안은 앞선 실패 안내를 둔 채 버튼만 "확인 중"으로 막는다.
+  assert.equal(
+    validationRetryState({ status: 'loading', items: { [key]: unverified } }),
+    'checking',
+  );
+  // 실패가 아니거나 다시 확인해도 바뀌지 않는 사유(마감·로그인 필요)면 버튼을 두지 않는다.
+  for (const item of [
+    { status: 'eligible', currentUnitPrice: 23000 },
+    { status: 'price_changed', currentUnitPrice: 25000, reason: '가격이 변경되어 확인이 필요합니다.' },
+    { status: 'unavailable', reason: '판매가 마감되었습니다.' },
+    { status: 'unavailable', reason: '로그인 후 구매 가능 여부를 확인해 주세요.' },
+  ]) {
+    assert.equal(validationRetryState({ status: 'ready', items: { [key]: item } }), 'hidden');
+  }
+  assert.equal(validationRetryState({ status: 'loading', items: {} }), 'hidden');
+  assert.equal(validationRetryState({ status: 'idle', items: {} }), 'hidden');
+});
+
+test('"다시 확인"은 같은 확인을 바로 다시 실행하고, 확인 중에는 다시 보내지 않는다', () => {
+  // 다시 확인 횟수가 바뀌면 같은 검증 effect가 다시 실행된다.
+  assert.match(source, /\}, \[accessToken, items, sessionStatus, retryCount\]\);/);
+  assert.match(
+    source,
+    /const retry = useCallback\(\(\) => setRetryCount\(\(count\) => count \+ 1\), \[\]\);/,
+  );
+  // 다시 확인은 미루지 않고 바로 보내며, 결과가 오기 전까지 앞선 안내를 유지한다.
+  assert.match(
+    source,
+    /const delay = !isRetry && validatedOnceRef\.current \? VALIDATION_DEBOUNCE_MS : 0;/,
+  );
+  assert.match(source, /items: isRetry \? previous\.items : \{\}/);
+  const buttonStart = source.indexOf("{retryState !== 'hidden' && (");
+  assert.notEqual(buttonStart, -1);
+  const button = source.slice(buttonStart, source.indexOf('</Button>', buttonStart));
+  assert.match(button, /disabled=\{retryState === 'checking'\}/);
+  assert.match(button, /if \(retryState === 'ready'\) retryValidation\(\);/);
+  assert.match(button, /'다시 확인하는 중' : '다시 확인'/);
 });
