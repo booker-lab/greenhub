@@ -17,6 +17,7 @@ import {
 } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
+import { formatOrderDeliveryDate } from '@/lib/order-delivery-date';
 import { ORDER_STATUS_LABELS as STATUS_LABELS } from '@/lib/order-status';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
@@ -779,6 +780,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
   const isCancelled = isAuthoritativelyCancelled || cancelOutcome.kind === 'done';
   const cancelReasonText = formatCancelReason(detail.cancelReason);
+  // 배송 예정일은 '11월 10일(화)'(한국 시간)로 보인다. 형식을 읽지 못한 드문 값만 날짜 부분을 그대로 둔다.
+  const deliveryDateText = detail.requestedDeliveryDate
+    ? (formatOrderDeliveryDate(detail.requestedDeliveryDate) ??
+      detail.requestedDeliveryDate.slice(0, 10))
+    : null;
   const showCancelReconcileWarning =
     !isAuthoritativelyCancelled && cancelOutcome.kind === 'reconcile-failed';
   const showCancelCommand =
@@ -957,12 +963,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </p>
             </div>
           )}
-          {detail.requestedDeliveryDate && (
+          {deliveryDateText && (
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 배송 예정일
               </p>
-              <p className="m-0 text-sm">{detail.requestedDeliveryDate.slice(0, 10)}</p>
+              <p className="m-0 text-sm">{deliveryDateText}</p>
             </div>
           )}
         </div>
