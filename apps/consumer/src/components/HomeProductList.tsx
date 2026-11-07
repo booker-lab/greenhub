@@ -38,6 +38,7 @@ import {
   isRoundOrderClosed,
   roundSectionTitle,
 } from '@/lib/round-schedule-label';
+import { findNextRoundAfterClose, formatNextRoundNotice } from '@/lib/round-next-notice';
 import { homePrefetchStoreId, useHomeStorePrefetch } from './home-store-prefetch';
 import { resolveHomeStoreId } from './home-store-selection';
 import { BenchmarkCardProvider, type CardContextValue } from './benchmark/CardExtras';
@@ -170,6 +171,7 @@ const sectionTitleStyle = {
 } as const;
 
 function RoundDirectHome({
+  rounds,
   currentRound,
   pastRounds,
   loading,
@@ -235,6 +237,10 @@ function RoundDirectHome({
       </div>
     );
   }
+
+  // 보이는 회차의 주문이 끝났으면 이미 받아 둔 회차 목록에서 주문 시작 전 다음 회차를 찾는다(없으면 안내하지 않는다).
+  const nextRound = findNextRoundAfterClose(rounds, currentRound, Date.now());
+  const nextRoundNotice = nextRound ? formatNextRoundNotice(nextRound) : null;
 
   return (
     <div className="flex flex-col items-stretch justify-start gap-7">
@@ -308,6 +314,14 @@ function RoundDirectHome({
                 )
               : '주문 마감 일정 준비 중'}
           </p>
+          {nextRoundNotice && (
+            <p
+              className={TEXT_SM}
+              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-primary-dark)' }}
+            >
+              {nextRoundNotice}
+            </p>
+          )}
           <p className={TEXT_SM} style={SECONDARY_COLOR}>
             경기도 이천시 직접배송
           </p>
@@ -326,7 +340,7 @@ function RoundDirectHome({
             </p>
           )}
         </div>
-        {isFeatureOn('open-alert') && currentRound?.status === 'SCHEDULED' && (
+        {isFeatureOn('open-alert') && (currentRound?.status === 'SCHEDULED' || nextRoundNotice) && (
           <div className="mb-4">
             <KakaoChannelCta />
           </div>
