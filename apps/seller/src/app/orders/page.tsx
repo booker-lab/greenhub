@@ -2,8 +2,10 @@
 
 import type { SaleType } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import { StartChecklistCard } from '@/app/_components/StartChecklistCard';
 import { useFirebaseReady } from '@/app/providers';
+import { notify } from '@/components/AppToaster';
 import { ConnectionStatus } from '@/components/ConnectionStatus';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
@@ -11,28 +13,34 @@ import { RoundDeadlineStrip } from '@/components/RoundDeadlineStrip';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useGroupConfigs } from '@/hooks/useGroupConfigs';
-import { useOrderPhoneSearch } from '@/hooks/useOrderPhoneSearch';
 import { useOrderArchive } from '@/hooks/useOrderArchive';
-import { ACTIVE_SELLER_ORDERS_QUERY, useOrders } from '@/hooks/useOrders';
+import { useOrderPhoneSearch } from '@/hooks/useOrderPhoneSearch';
+import {
+  ACTIVE_SELLER_ORDERS_QUERY,
+  SELLER_ORDERS_POLL_INTERVAL_MS,
+  useOrders,
+} from '@/hooks/useOrders';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
+import { useStartChecklist } from '@/hooks/useStartChecklist';
 import { useStoreSalesMode } from '@/hooks/useStoreSalesMode';
 import { pickDeadlineRound } from '@/lib/round-deadline';
 import { showsGroupBuyChoice } from '@/lib/sales-mode';
 import { DateSection } from './_components/DateSection';
 import { OrderSearchInput } from './_components/OrderSearchInput';
+import { RoundFilterSelect } from './_components/RoundFilterSelect';
 import { SaleTypeToggle } from './_components/SaleTypeToggle';
 import {
   DATE_PRESETS,
-  DEFAULT_DATE_PRESET,
   type DateRangePreset,
+  DEFAULT_DATE_PRESET,
   GROUP_TABS,
   getGroupHeaderMeta,
   IN_DELIVERY_SUBFILTERS,
   isArchiveTab,
   type OrderGroup,
 } from './_constants';
-import { readOrdersDeepLink } from './orders-deep-link';
 import { phoneSearchDigits } from './order-search';
+import { buildOrdersRoundFilterUrl, readOrdersDeepLink } from './orders-deep-link';
 import {
   buildOrdersScopedViewModel,
   deriveOrdersFetchInput,
@@ -126,7 +134,10 @@ export default function OrdersPage() {
   const { data: session } = useSession();
   const storeId = session?.user.storeId ?? null;
   const firebaseReady = useFirebaseReady();
-  const { rounds } = useSaleRounds();
+  const saleRounds = useSaleRounds();
+  const { rounds } = saleRounds;
+  // 새 가게 시작 체크리스트(상품·회차·정산 계좌). 회차 목록은 위 조회 결과를 나눠 쓴다.
+  const startChecklist = useStartChecklist(storeId, session?.user.accessToken, saleRounds);
   const deadlineRound = useMemo(() => pickDeadlineRound(rounds), [rounds]);
   const [saleType, setSaleType] = useState<SaleType>('normal');
   const salesMode = useStoreSalesMode(storeId, session?.user.accessToken);
@@ -142,9 +153,20 @@ export default function OrdersPage() {
   const [roundFilter, setRoundFilter] = useState<string | null>(null);
   // 모든 기간의 주문을 통째로 받지 않는다. 회차 필터가 있으면 그 회차 주문 전부(완료·취소 포함)를,
   // 없으면 진행 중 주문 전부를 받고, 끝난 주문(완료·취소)은 그 탭을 처음 열 때부터 50건씩 받는다.
+  // 화면을 열어 둔 동안 일정 간격으로 다시 읽고, 새로 생긴 처리 필요 주문을 잠깐 알린다(소리·브라우저 알림 없음).
+  const notifyNewActionRequired = useCallback((count: number) => {
+    notify({
+      title: '새 주문',
+      message: `새로 처리할 주문 ${count.toLocaleString()}건이 들어왔어요.`,
+    });
+  }, []);
   const base = useOrders(
     storeId,
     roundFilter ? { roundId: roundFilter } : ACTIVE_SELLER_ORDERS_QUERY,
+    {
+      pollIntervalMs: SELLER_ORDERS_POLL_INTERVAL_MS,
+      onNewActionRequiredOrders: notifyNewActionRequired,
+    },
   );
   const archiveView = !roundFilter && isArchiveTab(activeTab);
   const archive = useOrderArchive(storeId, archiveView);
@@ -174,10 +196,16 @@ export default function OrdersPage() {
     if (deepLink.roundId) setRoundFilter(deepLink.roundId);
   }, []);
 
-  const clearRoundFilter = () => {
-    setRoundFilter(null);
-    window.history.replaceState(null, '', window.location.pathname);
+  // 회차 선택·"모든 주문 보기"가 회차 필터와 주소(`?round=`)를 함께 바꾼다.
+  const changeRoundFilter = (roundId: string | null) => {
+    setRoundFilter(roundId);
+    window.history.replaceState(
+      null,
+      '',
+      buildOrdersRoundFilterUrl(window.location.pathname, roundId),
+    );
   };
+  const clearRoundFilter = () => changeRoundFilter(null);
 
   // 회차 필터(`?round=`)가 있으면 그 회차 주문만 이후 단계로 보낸다(뱃지·목록·우선순위 모두 같은 범위).
   const roundScopedOrders = useMemo(
@@ -305,6 +333,13 @@ export default function OrdersPage() {
         href={deadlineRound ? `/sale-rounds/${deadlineRound.id}` : undefined}
       />
 
+      {/* 새 가게 시작 체크리스트 — 마감 띠 아래, 업무 우선순위 위. 모두 마치면 보이지 않는다. */}
+      {startChecklist.visible && (
+        <div className={`${CONTAINER} pt-4`}>
+          <StartChecklistCard checklist={startChecklist} />
+        </div>
+      )}
+
       {/* 회차 상세 "이 회차 주문"에서 들어오면 그 회차 주문만 보여 준다. */}
       {roundFilter && (
         <div className={`${CONTAINER} pt-4`}>
@@ -397,6 +432,11 @@ export default function OrdersPage() {
         phoneSearching={phoneSearch.searching}
         phoneSearchError={phoneSearch.error}
       />
+
+      {/* 회차 선택 — 받은 회차가 있거나 딥링크 회차가 있을 때 노출 */}
+      {(rounds.length > 0 || roundFilter) && (
+        <RoundFilterSelect rounds={rounds} value={roundFilter} onChange={changeRoundFilter} />
+      )}
 
       {/* 날짜 범위 필터 — 일반 토글에서만 노출 (공구는 1차 미노출) */}
       {saleType === 'normal' && (

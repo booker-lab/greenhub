@@ -2,10 +2,10 @@
 
 import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
-import { notify } from '@/components/AppToaster';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
@@ -93,6 +93,7 @@ export default function HubsPage() {
     <PageShell>
       <PageHeader
         title="거점 관리"
+        backHref="/settings"
         right={
           <ButtonLink
             render={<Link href="/hubs/new" />}

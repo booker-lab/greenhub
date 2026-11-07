@@ -1,8 +1,9 @@
 'use client';
 
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
-import { AlertTriangle } from 'lucide-react';
+import { Button, ButtonLink } from '@greenhub/ui/components/button';
+import { AlertTriangle, PackagePlus } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useMemo, useState } from 'react';
@@ -12,6 +13,7 @@ import { LoadingState } from '@/components/StateViews';
 import { type CreateSaleRoundInput, useSaleRounds } from '@/hooks/useSaleRounds';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { RoundForm } from '../[id]/RoundForm';
+import { RoundSalesModeNotice } from '../RoundSalesModeNotice';
 import { buildNewRoundTemplate } from './new-round.logic';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm, 좌우·위아래 16px)·Stack(md 16px)·Alert·Text와 같은 값.
@@ -64,6 +66,7 @@ export default function NewSaleRoundPage() {
           </Alert>
         ) : template ? (
           <div className="flex flex-col items-stretch justify-start gap-4">
+            <RoundSalesModeNotice />
             <Alert variant="secondary" role="alert">
               <AlertTitle>기본값을 채워 두었습니다</AlertTitle>
               <AlertDescription>
@@ -75,7 +78,15 @@ export default function NewSaleRoundPage() {
             {storeProducts.length === 0 && (
               <Alert variant="warning" role="alert">
                 <AlertTitle>현재 스토어 상품이 없습니다</AlertTitle>
-                <AlertDescription>회차에 넣을 상품을 먼저 등록해 주세요.</AlertDescription>
+                <AlertDescription>
+                  <div className="flex flex-col items-start justify-start gap-2.5">
+                    <span>회차에 넣을 상품을 먼저 등록해 주세요.</span>
+                    <ButtonLink render={<Link href="/products/new" />} size="xs" variant="light">
+                      <PackagePlus className="size-3.5" data-icon="inline-start" />
+                      상품 등록하기
+                    </ButtonLink>
+                  </div>
+                </AlertDescription>
               </Alert>
             )}
             <RoundForm
@@ -84,6 +95,7 @@ export default function NewSaleRoundPage() {
               carrotLinks={EMPTY_CARROT_LINKS}
               onSave={onSave}
               disabled={pendingOperation === 'create'}
+              isNew
             />
           </div>
         ) : null}

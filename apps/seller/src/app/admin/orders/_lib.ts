@@ -2,18 +2,19 @@ import { type OrderStatus, POST_DELIVERY_REFUNDABLE_STATUSES } from '@greenhub/s
 
 // 주문 상태 라벨/색 — orders 탭 표현 SSOT(테이블·카드·필터 공용).
 // Record<OrderStatus>라 공유 상태가 늘면 라벨 누락을 컴파일 단계에서 잡는다.
+// 결제 완료·주문 확정은 판매자 주문 화면(orders/_constants.ts STATUS_LABEL)과 같은 말을 쓴다.
 export const STATUS_LABEL: Record<OrderStatus, string> = {
   PENDING: '결제 대기',
   RECRUITING: '모집 중',
-  ACCEPTED: '접수됨',
-  CONFIRMED: '확정',
+  ACCEPTED: '결제 완료',
+  CONFIRMED: '주문 확정',
   PREPARING: '준비 중',
   DELIVERING: '배송 중',
   DELIVERY_HELD: '배송 보류',
   HUB_ARRIVED: '거점 도착',
   PICKED_UP: '픽업 완료',
   DELIVERED: '배송 완료',
-  REVIEWED: '후기 작성',
+  REVIEWED: '구매 확정',
   CANCELLED: '취소',
 };
 

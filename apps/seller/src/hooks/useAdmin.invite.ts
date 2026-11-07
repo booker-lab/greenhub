@@ -1,14 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { apiFetch, apiJson } from '@/lib/api';
+import { apiErrorMessage, apiFetch, apiJson } from '@/lib/api';
+import { useAdminList } from './useAdmin.list';
+import { readCappedList } from './useAdmin.listCap';
 import {
   classifyAdminCommandError,
   missingTokenOutcome,
   resolveConfirmedOutcome,
 } from './useAdmin.outcome';
-import { readCappedList } from './useAdmin.listCap';
-import { useAdminList } from './useAdmin.list';
 import type { InviteRevokeOutcome, InviteToken, IssuedInvite } from './useAdmin.types';
 
 // ── Invite ───────────────────────────────────────────────────────
@@ -72,8 +72,8 @@ export function useAdminInvite() {
     }
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { message?: unknown; reason?: unknown };
-      const message =
-        typeof body?.message === 'string' ? body.message : `서버 오류 (${res.status})`;
+      // apiJson과 같은 한국어 변환을 쓴다(4xx 서버 안내는 그대로, 영문 5xx·빈 본문은 한국어 안내).
+      const message = apiErrorMessage(res.status, body?.message, 'POST');
       const outcome = classifyAdminCommandError({ status: res.status, message });
       if (outcome.kind === 'unknown') return outcome;
       return { ...outcome, reason: typeof body?.reason === 'string' ? body.reason : null };

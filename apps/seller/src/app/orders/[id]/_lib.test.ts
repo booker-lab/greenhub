@@ -1,6 +1,7 @@
-import type { OrderItemSnapshot } from '@greenhub/shared';
+import type { Order, OrderItemSnapshot } from '@greenhub/shared';
 import { describe, expect, it } from 'vitest';
 import {
+  describeSellerCancelRefund,
   displayBuyerName,
   displayBuyerPhone,
   displayRequestNote,
@@ -123,5 +124,26 @@ describe('toTelHref', () => {
 
   it('숫자가 없으면 링크를 만들지 않는다', () => {
     expect(toTelHref('없음')).toBeNull();
+  });
+});
+
+describe('describeSellerCancelRefund', () => {
+  it('결제 금액 전액 환불과 되돌릴 수 없음을 금액과 함께 알린다', () => {
+    expect(describeSellerCancelRefund({ status: 'ACCEPTED', totalAmount: 85000 })).toBe(
+      '결제 금액 ₩85,000 전액을 환불하고 되돌릴 수 없어요.',
+    );
+  });
+
+  it('배송 보류 주문은 결제된 재배송비도 함께 환불한다고 알린다', () => {
+    expect(describeSellerCancelRefund({ status: 'DELIVERY_HELD', totalAmount: 30000 })).toBe(
+      '결제 금액 ₩30,000 전액과 결제된 재배송비를 모두 환불하고 되돌릴 수 없어요.',
+    );
+  });
+
+  it('재배송비를 이미 결제하고 재배송 준비로 돌린 주문도 재배송비 환불을 알린다', () => {
+    const redeliveryPayment = { paid: true } as Order['redeliveryPayment'];
+    expect(
+      describeSellerCancelRefund({ status: 'PREPARING', totalAmount: 30000, redeliveryPayment }),
+    ).toBe('결제 금액 ₩30,000 전액과 결제된 재배송비를 모두 환불하고 되돌릴 수 없어요.');
   });
 });

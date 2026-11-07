@@ -79,7 +79,7 @@ test.describe('셀러 주문 관리 — 인증 화면', () => {
           const hasEmpty = await page.locator('text=현재 해당 주문이 없습니다').count()
           const hasOrderBadge = await page.evaluate(() =>
             Array.from(document.querySelectorAll('span')).some((el) =>
-              ['대기', '결제 완료', '주문 확정', '모집 중', '준비 중', '배송 중', '거점 도착', '픽업 완료', '배송 완료', '취소'].includes((el.textContent ?? '').trim()),
+              ['결제 대기', '결제 완료', '주문 확정', '모집 중', '준비 중', '배송 중', '거점 도착', '픽업 완료', '배송 완료', '취소'].includes((el.textContent ?? '').trim()),
             ),
           )
           return hasEmpty > 0 || hasOrderBadge

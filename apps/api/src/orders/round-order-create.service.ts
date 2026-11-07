@@ -8,6 +8,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { parseFeatureFlags } from '@greenhub/shared';
 import { createHash } from 'crypto';
+import { toFirestoreData } from '../common/firestore/firestore-data';
 import { FirestoreService } from '../firestore/firestore.service';
 import {
   INVISIBLE_FORMAT_CHARACTERS,
@@ -148,7 +149,8 @@ export class RoundOrderCreateService {
         roundId: dto.roundId,
         reservationId: reservation.id,
         orderItems: roundItems,
-        acquisition: dto.acquisition ?? null,
+        // 보내지 않은 선택 칸(undefined)은 빼고 저장해요.
+        acquisition: dto.acquisition ? toFirestoreData(dto.acquisition) : null,
         totalAmount,
         ...(gift ? { gift } : {}),
         ...(packageLabel ? { packageLabel } : {}),

@@ -52,3 +52,23 @@ describe('formatLoggedAt', () => {
     expect(formatLoggedAt('not-a-date')).toBe('');
   });
 });
+
+describe('판매 방식 변경 기록', () => {
+  it('기록 이름과 바뀐 판매 방식을 사람이 읽는 말로 보인다', () => {
+    expect(actionLabel('admin.store.sales_mode_changed')).toBe('판매 방식 변경');
+    expect(
+      describeChanges({
+        targetType: 'store',
+        before: { salesMode: 'legacy' },
+        after: { salesMode: 'round_direct' },
+      }),
+    ).toEqual(['판매 방식: 예전 방식 → 회차 판매']);
+    expect(
+      describeChanges({
+        targetType: 'store',
+        before: { salesMode: null },
+        after: { salesMode: 'legacy' },
+      }),
+    ).toEqual(['판매 방식: 없음 → 예전 방식']);
+  });
+});

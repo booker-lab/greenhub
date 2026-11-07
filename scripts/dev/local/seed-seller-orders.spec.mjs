@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  LOCAL_SELLER,
-  SCENARIOS,
   applyScenario,
   assertLocalSeedEnvironment,
   buildScenarioDocs,
   freshnessMutationDoc,
+  LOCAL_SELLER,
+  SCENARIOS,
   toFirestoreFields,
 } from './seed-seller-orders.mjs';
 
@@ -48,7 +48,8 @@ test('seed env: production identity/marker를 거부한다', () => {
 
 test('seed env: emulator authority/service-account/remote API를 거부한다', () => {
   assert.throws(
-    () => assertLocalSeedEnvironment({ ...LOCAL_ENV, FIRESTORE_EMULATOR_HOST: '192.168.0.10:8080' }),
+    () =>
+      assertLocalSeedEnvironment({ ...LOCAL_ENV, FIRESTORE_EMULATOR_HOST: '192.168.0.10:8080' }),
     /emulator/,
   );
   assert.throws(
@@ -103,7 +104,13 @@ test('시나리오 세트는 deterministic하고 slice 범위를 벗어나지 �
 });
 
 test('Firestore REST 인코딩은 emulator 문서 형식을 따른다', () => {
-  const fields = toFirestoreFields({ id: 'skip-me', storeId: 's', quantity: 2, flag: true, nothing: null });
+  const fields = toFirestoreFields({
+    id: 'skip-me',
+    storeId: 's',
+    quantity: 2,
+    flag: true,
+    nothing: null,
+  });
   assert.ok(!('id' in fields.fields));
   assert.equal(fields.fields.storeId.stringValue, 's');
   assert.equal(fields.fields.quantity.integerValue, '2');
@@ -150,7 +157,45 @@ test('applyScenario: reset 시 기존 local 주문을 지우고 시나리오를 
   const writes = calls.filter((c) => c.method === 'POST' && c.url.includes('/documents/'));
   assert.ok(writes.length >= 3);
   assert.ok(
-    writes.every((c) => c.url.includes('/invites') || c.url.includes('/stores') || c.url.includes('/orders')),
+    writes.every(
+      (c) => c.url.includes('/invites') || c.url.includes('/stores') || c.url.includes('/orders'),
+    ),
+  );
+});
+
+test('local seller 초대 ID는 API 초대 토큰 형식을 따르고 invite 문서·register 요청에 같은 값을 쓴다', async () => {
+  // apps/api/src/auth/invite-conflict.ts INVITE_TOKEN_PATTERN과 같은 규칙(형식이 틀리면 register가 404)
+  assert.match(LOCAL_SELLER.inviteId, /^[A-Za-z0-9]{1,64}$/);
+  const firestoreCalls = [];
+  const fetchImpl = async (url, init) => {
+    firestoreCalls.push({ url, method: init?.method ?? 'GET' });
+    if (url.endsWith(':runQuery')) {
+      return {
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => [],
+      };
+    }
+    return { ok: true, status: 200, headers: new Headers(), text: async () => '' };
+  };
+  let registerBody;
+  const apiFetchImpl = async (url, init) => {
+    if (url.endsWith('/auth/register')) {
+      registerBody = JSON.parse(init.body);
+      return { ok: true, status: 200, json: async () => ({ userId: 'local-seller-01' }) };
+    }
+    throw new Error(`unexpected api call: ${url}`);
+  };
+  await applyScenario('S-EMPTY', { reset: true, fetchImpl, apiFetchImpl, env: { ...LOCAL_ENV } });
+  assert.equal(registerBody.inviteToken, LOCAL_SELLER.inviteId);
+  assert.ok(
+    firestoreCalls.some(
+      (c) =>
+        c.method === 'POST' &&
+        c.url.includes('/invites?') &&
+        c.url.includes(`documentId=${LOCAL_SELLER.inviteId}`),
+    ),
   );
 });
 
