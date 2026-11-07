@@ -12,6 +12,7 @@ import A2HSButton from '@/components/A2HSButton';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { useOrders } from '@/hooks/useOrders';
 import { isFeatureOn } from '@/lib/features';
+import { orderListPendingPaymentNotice } from '@/lib/order-pending-payment';
 import { ORDER_STATUS_LABELS as STATUS_LABELS } from '@/lib/order-status';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import { currentMyPageLoginUrl } from './_login';
@@ -121,6 +122,8 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
   const tone = STATUS_TONES[order.status] ?? 'default';
   const label = STATUS_LABELS[order.status] ?? order.status;
   const summary = readOrderListSummary(order);
+  // 결제 확인 중 주문은 결제를 끝내지 않은 시도일 수 있어 실제 접수된 주문과 구분되게 설명 한 줄을 붙인다.
+  const pendingNotice = orderListPendingPaymentNotice(order.status);
 
   return (
     <button
@@ -220,6 +223,15 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
           </div>
         </div>
       </div>
+      {pendingNotice && (
+        <p
+          className={`${TEXT} mt-3`}
+          data-testid="order-card-pending-notice"
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        >
+          {pendingNotice}
+        </p>
+      )}
     </button>
   );
 }

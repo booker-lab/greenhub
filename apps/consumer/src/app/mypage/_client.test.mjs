@@ -61,6 +61,10 @@ const requireForTest = (specifier) => {
   // 벤치마킹 비교 기능 토글: 이 테스트에서는 꺼진 상태로 둔다.
   if (specifier === '@/lib/features') return { isFeatureOn: () => false };
   if (specifier === '@/lib/order-status') return statusLabelModule.exports;
+  // 결제 확인 중 카드 설명(lib/order-pending-payment.ts, 자체 테스트가 따로 있다).
+  if (specifier === '@/lib/order-pending-payment') {
+    return { orderListPendingPaymentNotice: () => null };
+  }
   // 비로그인 복귀 주소 함수(mypage/_login.ts, 자체 테스트가 따로 있다).
   if (specifier === './_login') return { currentMyPageLoginUrl: () => '/login' };
   throw new Error(`예상하지 못한 MY 주문 목록 모듈 요청: ${specifier}`);
@@ -230,4 +234,19 @@ test('주문이 없으면 안내와 함께 이번 회차(홈)로 가는 버튼�
     /<ButtonLink render=\{<Link href="\/" \/>\}>이번 회차 보러 가기<\/ButtonLink>/,
   );
   assert.doesNotMatch(source, /주문 내역이 없습니다/);
+});
+
+test('결제 확인 중 주문 카드는 공용 판단 함수로 자동 취소 설명 한 줄을 붙인다', () => {
+  assert.match(
+    source,
+    /import \{ orderListPendingPaymentNotice \} from '@\/lib\/order-pending-payment'/,
+  );
+  assert.match(source, /const pendingNotice = orderListPendingPaymentNotice\(order\.status\)/);
+  const start = source.indexOf('data-testid="order-card-pending-notice"');
+  assert.ok(start > 0);
+  const notice = source.slice(source.lastIndexOf('{pendingNotice && (', start), source.indexOf(')}', start));
+  assert.match(notice, /\{pendingNotice\}/);
+  // 목록에서 숨기지 않는다: 카드 목록은 주문 상태로 거르지 않는다.
+  assert.match(source, /\{orders\.map\(\(order\) => \(/);
+  assert.doesNotMatch(source, /orders\.filter\(/);
 });

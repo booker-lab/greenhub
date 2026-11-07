@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/ale
 import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronLeft } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ReactNode, use, useEffect, useId, useState } from 'react';
@@ -22,6 +23,7 @@ import {
   ORDER_DETAIL_STALE_MESSAGE,
   orderDetailReadFailureMessage,
 } from '@/lib/order-detail-message';
+import { orderDetailPendingPaymentGuide } from '@/lib/order-pending-payment';
 import {
   customerRedeliveryPaymentReturn,
   REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE,
@@ -795,6 +797,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   const isCancelled = isAuthoritativelyCancelled || cancelOutcome.kind === 'done';
+  // 결제 확인 중(PENDING)은 결제를 끝내지 않은 시도일 수도 있어 배송 현황 단계 대신 안내와 다음 행동을 보인다.
+  const pendingPaymentGuide = orderDetailPendingPaymentGuide(detail.status, {
+    cancelled: isCancelled,
+  });
   const cancelReasonText = formatCancelReason(detail.cancelReason);
   // 배송 예정일은 '11월 10일(화)'(한국 시간)로 보인다. 형식을 읽지 못한 드문 값만 날짜 부분을 그대로 둔다.
   const deliveryDateText = detail.requestedDeliveryDate
@@ -891,6 +897,27 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </StatusDot>
         </p>
       </div>
+
+      {pendingPaymentGuide && (
+        <div
+          className="mb-5 rounded-[var(--radius)] bg-[var(--color-surface-muted)] p-4"
+          data-testid="order-pending-payment"
+        >
+          <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
+            {pendingPaymentGuide.autoCancelNotice}
+          </p>
+          <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            {pendingPaymentGuide.retryHint}
+          </p>
+          <ButtonLink
+            className="mt-3 w-full"
+            variant="outline"
+            render={<Link href={pendingPaymentGuide.cartHref} />}
+          >
+            {pendingPaymentGuide.cartLabel}
+          </ButtonLink>
+        </div>
+      )}
 
       <div
         className="mb-5 p-4"
@@ -1232,10 +1259,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <p className="m-0 mb-4 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
             배송 현황
           </p>
-          <DeliverySteps
-            active={currentStep}
-            labels={steps.map(orderTimelineStepLabel)}
-          />
+          {pendingPaymentGuide ? (
+            <p
+              className="m-0 text-sm"
+              style={{ color: 'var(--color-text-secondary)' }}
+              data-testid="order-pending-timeline"
+            >
+              {pendingPaymentGuide.timelineNotice}
+            </p>
+          ) : (
+            <DeliverySteps active={currentStep} labels={steps.map(orderTimelineStepLabel)} />
+          )}
         </div>
       )}
 

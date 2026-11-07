@@ -1234,3 +1234,39 @@ test('재배송비 결제의 예상하지 못한 예외는 결제창을 열기 �
   assert.match(recheck, /redeliveryOutcome\.kind === 'uncertain'/);
   assert.doesNotMatch(recheck, /redeliveryOutcome\.kind === 'rejected'/);
 });
+
+test('결제 확인 중 주문은 배송 현황 단계 대신 결제 안내와 장바구니로 가기를 보이고 취소는 그대로 둔다', () => {
+  assert.match(
+    source,
+    /import \{ orderDetailPendingPaymentGuide \} from '@\/lib\/order-pending-payment'/,
+  );
+  assert.match(source, /import Link from 'next\/link'/);
+  // 고객이 취소한 뒤에는 결제 안내를 내지 않도록 화면의 취소 판단(isCancelled)을 함께 넘긴다.
+  assert.match(
+    source,
+    /const pendingPaymentGuide = orderDetailPendingPaymentGuide\(detail\.status, \{\s+cancelled: isCancelled,\s+\}\);/,
+  );
+  const guideStart = source.indexOf('data-testid="order-pending-payment"');
+  assert.ok(guideStart > 0);
+  const guide = source.slice(guideStart, source.indexOf('</ButtonLink>', guideStart));
+  assert.match(guide, /\{pendingPaymentGuide\.autoCancelNotice\}/);
+  assert.match(guide, /\{pendingPaymentGuide\.retryHint\}/);
+  assert.match(guide, /render=\{<Link href=\{pendingPaymentGuide\.cartHref\} \/>\}/);
+  assert.match(guide, /\{pendingPaymentGuide\.cartLabel\}/);
+  // 안내는 주문 상품보다 먼저 보인다.
+  assert.ok(guideStart < source.indexOf('            주문 상품'));
+
+  // 배송 현황 단계는 결제 확인 중일 때 그리지 않고 안내 문장으로 바꾼다.
+  const timeline = source.slice(
+    source.indexOf("{!isCancelled && detail.status !== 'DELIVERY_HELD' && ("),
+    source.indexOf('data-testid="order-support"'),
+  );
+  assert.match(
+    timeline,
+    /\{pendingPaymentGuide \? \([\s\S]*\{pendingPaymentGuide\.timelineNotice\}[\s\S]*\) : \(\s+<DeliverySteps active=\{currentStep\} labels=\{steps\.map\(orderTimelineStepLabel\)\} \/>\s+\)\}/,
+  );
+
+  // 기존 주문 취소(PENDING·ACCEPTED)는 그대로 유지한다.
+  assert.match(helperSource, /new Set<OrderStatus>\(\['PENDING', 'ACCEPTED'\]\)/);
+  assert.match(source, /\{detail\.isRoundOrder \? '주문 취소' : '공동구매 참여 취소'\}/);
+});
