@@ -179,6 +179,17 @@ function buildRoundOffer(
   };
 }
 
+/**
+ * 반품 정책. 상품 상세·결제 화면의 청약철회 제한 안내와 같은 내용이다: 경매 직후 신선도가 상품 가치인
+ * 살아 있는 꽃이라 수령 후 단순 변심 교환·반품을 받지 않는다(불량·오배송 등 법정 청약철회는 별개).
+ */
+const MERCHANT_RETURN_POLICY = {
+  '@type': 'MerchantReturnPolicy',
+  applicableCountry: 'KR',
+  returnPolicyCountry: 'KR',
+  returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted',
+} as const;
+
 /** 상품 JSON-LD. 이름이나 현재 회차 가격이 없으면 null(잘못된 가격을 알리지 않는다). */
 export function buildProductJsonLd({
   product,
@@ -208,6 +219,10 @@ export function buildProductJsonLd({
     url,
     ...(description ? { description } : {}),
     ...(images.length > 0 ? { image: images } : {}),
-    offers: { ...offer, seller: { '@type': 'Organization', name: sellerName } },
+    offers: {
+      ...offer,
+      seller: { '@type': 'Organization', name: sellerName },
+      hasMerchantReturnPolicy: MERCHANT_RETURN_POLICY,
+    },
   };
 }

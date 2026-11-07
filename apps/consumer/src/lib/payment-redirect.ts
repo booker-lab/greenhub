@@ -306,6 +306,35 @@ export function shouldRecheckRedeliveryPayment(
   return Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs < maxMs;
 }
 
+// 재배송비 결제 뒤 서버 확인(웹훅 반영) 전이면 이 시점(기다리기 시작한 때 기준)에 서버에 재배송비 결제 확인을
+// 요청한다(POST /payments/orders/:orderId/redelivery-charge/check). 웹훅이 늦거나 빠져도 서버가 PortOne에
+// 직접 물어 이미 결제됐으면 바로 확정한다. 한 창에서 최대 3번이고, 서로 10초 이상 떨어져 서버의 청구별 조회
+// 간격 하한(10초)에 걸리지 않는다(주문 결제 확인과 같은 시점).
+export const REDELIVERY_PAYMENT_CHECK_AFTER_MS = [6_000, 20_000, 45_000] as const;
+
+/** 재배송비 결제 확인을 요청할 차례인지. checksMade는 이번 창에서 이미 보낸 확인 수다. */
+export function shouldCheckRedeliveryPayment(
+  elapsedMs: number,
+  checksMade: number,
+  maxMs: number,
+): boolean {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs >= maxMs) return false;
+  if (!Number.isSafeInteger(checksMade) || checksMade < 0) return false;
+  const nextAt = REDELIVERY_PAYMENT_CHECK_AFTER_MS[checksMade];
+  return nextAt !== undefined && elapsedMs >= nextAt;
+}
+
+export function redeliveryPaymentCheckPath(orderId: string): string {
+  return `/payments/orders/${encodeURIComponent(orderId)}/redelivery-charge/check`;
+}
+
+/** 재배송비 결제 확인 응답이 청구 상태가 바뀌었다(PENDING이 아님)고 답했는지. 바뀌었으면 주문을 다시 읽는다. */
+export function isRedeliveryPaymentCheckSettled(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false;
+  const status = (body as { status?: unknown }).status;
+  return typeof status === 'string' && status !== 'PENDING' && status !== 'NONE';
+}
+
 export function savePendingOrderPayment(
   storage: PaymentStorage | null,
   pending: PendingOrderPayment | null,

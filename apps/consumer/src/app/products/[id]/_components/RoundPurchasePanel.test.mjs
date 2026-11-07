@@ -48,6 +48,11 @@ test('청약철회 제한 조건과 계약 불이행 예외를 함께 고지한�
   assert.match(panelSource, /주문 마감 후/);
   assert.match(panelSource, /상품 가치가 현저히 감소/);
   assert.match(panelSource, /표시·광고 또는 계약 내용과 다르게 이행된 경우/);
+  // 경매 직후 신선도가 상품 가치라 수령 후 단순 변심 반품은 받지 않는다(2026-11-08 사용자 결정).
+  assert.match(panelSource, /단순\s+변심에\s+의한\s+교환·반품\(청약철회\)은\s+할\s+수\s+없습니다/);
+  // 불량·오배송 등 법정 청약철회 기간(전자상거래법 제17조 제3항)은 줄이지 않는다.
+  assert.match(panelSource, /받은\s+날부터\s+3개월\(그\s+사실을\s+안\s+날부터\s+30일\)/);
+  assert.match(panelSource, /판매자\s+부담으로\s+교환·반품/);
 });
 
 test('현재와 마감 상태를 구분하고 구매 불가 상태를 구매 가능으로 표시하지 않는다', () => {

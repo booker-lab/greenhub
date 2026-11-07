@@ -37,11 +37,14 @@ import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import {
   buildPaymentRedirectUrl,
+  isRedeliveryPaymentCheckSettled,
   type PaymentRedirectResult,
   parsePaymentRedirectResult,
   readBrowserPaymentContext,
+  redeliveryPaymentCheckPath,
   redeliveryPaymentRedirectPath,
   resolveRedeliveryPaymentReturn,
+  shouldCheckRedeliveryPayment,
   shouldRecheckRedeliveryPayment,
 } from '@/lib/payment-redirect';
 import {
@@ -73,6 +76,26 @@ const API_URL = getApiBaseUrl();
 const CANCEL_UNCERTAIN_MESSAGE = '취소가 처리됐는지 아직 확인하지 못했어요.';
 // 구매 확정 요청 뒤 결과를 모를 때 보이는 문구. 취소와 같이 '상태 다시 확인' 안내와 함께 보인다.
 const REVIEW_UNCERTAIN_MESSAGE = '구매 확정이 처리됐는지 아직 확인하지 못했어요.';
+
+// 서버에 재배송비 결제 확인을 요청한다. 웹훅이 늦거나 빠져도 서버가 PortOne에 직접 물어 확정한다.
+// 청구 상태가 바뀌었다고 답하면 true다. 실패·시간 초과는 손님에게 따로 알리지 않는다(false).
+async function requestRedeliveryPaymentCheck(
+  orderId: string,
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}${redeliveryPaymentCheckPath(orderId)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+    });
+    if (!res.ok) return false;
+    return isRedeliveryPaymentCheckSettled(await res.json().catch(() => null));
+  } catch {
+    return false;
+  }
+}
 
 function getTimelineSteps(order: OrderDetailView): OrderStatus[] {
   if (order.saleType === 'group') {
@@ -512,6 +535,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
 
       stage = 'confirming';
       setRedeliveryOutcome({ kind: 'reconciling' });
+      // 결제창이 성공으로 끝났으니 웹훅을 기다리지 않고 서버에 결제 확인을 한 번 요청한 뒤 다시 읽는다.
+      await requestRedeliveryPaymentCheck(detail.id, session.user.accessToken);
       const latestOrder = await refetch().catch(() => undefined);
       const latestDetail = latestOrder ? readOrderDetail(latestOrder, detail.id) : null;
       if (!latestDetail?.redeliveryPayment.paid) {
@@ -587,11 +612,38 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     0,
     ORDER_STATUS_POLL_MAX_MS,
   );
+  // 기다리는 동안 6·20·45초에는 서버에 재배송비 결제 확인도 요청한다(한 번에 하나, 다시 읽기를 막지 않음).
+  const redeliveryCheckToken = session?.user?.accessToken ?? null;
+  const redeliveryCheckOrderId = detail?.id ?? null;
   useEffect(() => {
     if (!awaitingRedeliveryPaid) return;
     const startedAt = Date.now();
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let checksMade = 0;
+    let checkController: AbortController | null = null;
+    const maybeCheckPayment = () => {
+      if (checkController || !redeliveryCheckToken || !redeliveryCheckOrderId) return;
+      if (
+        !shouldCheckRedeliveryPayment(Date.now() - startedAt, checksMade, ORDER_STATUS_POLL_MAX_MS)
+      ) {
+        return;
+      }
+      checksMade += 1;
+      const controller = new AbortController();
+      checkController = controller;
+      void requestRedeliveryPaymentCheck(
+        redeliveryCheckOrderId,
+        redeliveryCheckToken,
+        controller.signal,
+      )
+        .then((settled) => {
+          if (settled && !stopped) void refetch();
+        })
+        .finally(() => {
+          if (checkController === controller) checkController = null;
+        });
+    };
     // 다시 읽기가 끝난 뒤에만 다음 확인을 예약한다(요청이 겹치지 않는다).
     const scheduleRecheck = () => {
       if (
@@ -601,15 +653,17 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         return;
       }
       timer = setTimeout(() => {
+        maybeCheckPayment();
         void refetch().finally(scheduleRecheck);
       }, ORDER_STATUS_POLL_INTERVAL_MS);
     };
     scheduleRecheck();
     return () => {
       stopped = true;
+      checkController?.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [awaitingRedeliveryPaid, refetch]);
+  }, [awaitingRedeliveryPaid, refetch, redeliveryCheckToken, redeliveryCheckOrderId]);
 
   async function handleConfirm() {
     if (!session?.user?.accessToken || !detail) return;

@@ -56,6 +56,14 @@ test('판매 중 회차 상품은 회차 가격·재고 있음으로 알린다',
   assert.equal(jsonLd.offers.seller.name, '디어 오키드');
 });
 
+test('반품 정책은 화면 안내와 같이 국내 단순 변심 반품 불가로 알린다', () => {
+  const policy = build(round()).offers.hasMerchantReturnPolicy;
+  assert.equal(policy['@type'], 'MerchantReturnPolicy');
+  assert.equal(policy.applicableCountry, 'KR');
+  assert.equal(policy.returnPolicyCountry, 'KR');
+  assert.equal(policy.returnPolicyCategory, 'https://schema.org/MerchantReturnNotPermitted');
+});
+
 test('판매 예정 회차는 주문 불가와 주문 시작 시각으로 알린다', () => {
   const jsonLd = build(round({ status: 'SCHEDULED' }));
   assert.equal(jsonLd.offers.availability, 'https://schema.org/OutOfStock');

@@ -219,7 +219,13 @@ describe('AdminService 소비자 정지 대상 검사', () => {
       ),
       Timestamp: { now: jest.fn(() => 'now'), fromMillis: jest.fn() },
     };
-    const service = new AdminService(firestore as never, {} as never, {} as never, {} as never);
+    const service = new AdminService(
+      firestore as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
+    );
     return { firestore, refreshTokenRef, service, userRef };
   }
 
@@ -280,7 +286,13 @@ describe('AdminService 소비자 목록 응답 최소화', () => {
       get: jest.fn().mockResolvedValue({ docs, size: docs.length }),
     };
     const firestore = { collection: jest.fn().mockReturnValue(query) };
-    const service = new AdminService(firestore as never, {} as never, {} as never, {} as never);
+    const service = new AdminService(
+      firestore as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
+    );
 
     const result = await service.getUsers();
 
@@ -310,7 +322,13 @@ describe('AdminService 소비자 목록 응답 최소화', () => {
       get: jest.fn().mockResolvedValue({ docs, size: docs.length }),
     };
     const firestore = { collection: jest.fn().mockReturnValue(query) };
-    const service = new AdminService(firestore as never, {} as never, {} as never, {} as never);
+    const service = new AdminService(
+      firestore as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      { logAdmin: jest.fn().mockResolvedValue(undefined), listAdmin: jest.fn() } as never,
+    );
 
     await expect(service.getUsers()).resolves.toEqual({
       users: [{ id: 'consumer-1', name: '소비자' }],
