@@ -41,7 +41,12 @@ test('공개 회차 정본으로 상품과 스토어 관계를 모두 검증한�
 
 test('유효한 회차 상품을 현재와 마감 상태로 구분해 상세 경계에 전달한다', () => {
   assert.match(source, /state: 'current' \| 'closed'/);
-  assert.match(source, /round\.status === 'OPEN' \|\| round\.status === 'SCHEDULED'/);
+  // 현재(판매 중·판매 예정)·마감 구분은 공용 판정(lib/round-product-state)이 현재 시각으로 한다.
+  assert.match(
+    source,
+    /import \{ resolveRoundProductAvailability \} from '@\/lib\/round-product-state';/,
+  );
+  assert.match(source, /resolveRoundProductAvailability\(round, item, Date\.now\(\)\)/);
   assert.match(source, /roundProduct=\{roundProduct\}/);
   assert.match(source, /data-round-state=\{roundProduct\?\.state\}/);
 });

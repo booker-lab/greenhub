@@ -18,6 +18,7 @@ import {
 import { captureAcquisition } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { classifyStoreProfileFailure, fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import { resolveRoundProductAvailability } from '@/lib/round-product-state';
 import ProductActions from './_components/ProductActions';
 import ProductImages from './_components/ProductImages';
 import ProductInfo from './_components/ProductInfo';
@@ -198,17 +199,8 @@ function resolveRoundProduct(
   if (matchingItems.length !== 1) return null;
 
   const item = matchingItems[0];
-  const isCurrentRound = round.status === 'OPEN' || round.status === 'SCHEDULED';
-  const isCurrentItem = item.status === 'ACTIVE';
-  // 판매 중 회차에서 수량이 찬 상품(결제 대기 예약 포함)은 회차 마감이 아니라 품절로 보인다.
-  const isSoldOut = isCurrentRound && item.status === 'SOLD_OUT';
-
-  return {
-    round,
-    item,
-    state: isCurrentRound && isCurrentItem ? 'current' : isSoldOut ? 'sold_out' : 'closed',
-    isPurchasable: round.status === 'OPEN' && isCurrentItem,
-  };
+  // 판매 중이어도 주문 마감 시각이 지난 회차는 장바구니와 같게 판매 마감으로 보고 구매를 막는다.
+  return { round, item, ...resolveRoundProductAvailability(round, item, Date.now()) };
 }
 
 /**
