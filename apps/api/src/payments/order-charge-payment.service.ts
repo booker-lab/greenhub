@@ -1,8 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
+  NotFoundException,
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -48,6 +50,27 @@ const PROVIDER_CHECK_FIELD = 'providerCheckedAtMs';
 // 돈이 PortOne에 잡혀 있지 않은 원격 상태. 이때만 필요 없어진 청구를 FAILED로 닫는다.
 // CANCELLED(결제 뒤 결제사 쪽 취소)·가상계좌 발급·결제 대기 등은 바꾸지 않고 다음 조회로 남긴다.
 const PROVIDER_NO_MONEY_STATUSES = new Set(['READY', 'FAILED']);
+
+// 손님 재배송비 결제 확인: 같은 청구의 PortOne 조회 간격 하한. 본 결제 손님 확인과 같게
+// PortOne 조회 시간 상한(10초)으로 두어 앞선 조회가 끝나기 전에 같은 청구를 또 조회하지 않게 한다.
+export const ORDER_CHARGE_PAYMENT_CHECK_MIN_INTERVAL_MS = 10_000;
+const ORDER_CHARGE_PAYMENT_CHECK_FIELD = 'paymentCheckRequestedAtMs';
+const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
+
+/**
+ * 손님 재배송비 결제 확인 결과.
+ * - not_pending: 연결된 재배송비가 없거나 이미 확정·실패·환불돼 PortOne을 조회하지 않았다.
+ * - throttled: 같은 청구를 방금 조회해 이번에는 조회하지 않았다.
+ * - not_paid: PortOne이 아직 결제 완료가 아니라고 답해(결제 없음 포함) 아무것도 바꾸지 않았다.
+ * - lookup_failed: PortOne 조회가 실패·시간 초과돼 아무것도 바꾸지 않았다.
+ * - finalized: PortOne이 PAID라 웹훅과 같은 finalizePaid를 거쳤다.
+ */
+export type OrderChargePaymentCheckResult =
+  | 'not_pending'
+  | 'throttled'
+  | 'not_paid'
+  | 'lookup_failed'
+  | 'finalized';
 
 type MarkFailedOptions = {
   // 웹훅 밖 수렴 전용: 만든 지 충분히 지났고 주문에 더는 필요 없는 청구만 FAILED로 닫는다.
@@ -119,6 +142,86 @@ export class OrderChargePaymentService {
 
     const paymentData = await this.portone.getPayment(paymentId);
     return this.finalizePaid(chargeId, paymentId, paymentData);
+  }
+
+  /**
+   * 재배송비 결제 뒤 주문 상세 화면이 기다리는 동안 손님(주문 당사자)이 부르는 결제 확인.
+   * 주문에 연결된 PENDING 재배송비만 PortOne에 조회하고, PAID면 웹훅·scheduler와 같은
+   * finalizePaid로 확정한다. PAID가 아니면 아무것도 바꾸지 않는다(FAILED로 닫지 않는다).
+   */
+  async checkOrderChargePayment(
+    orderId: string,
+    requesterId: string,
+  ): Promise<{ status: string; result: OrderChargePaymentCheckResult }> {
+    if (!ORDER_ID_PATTERN.test(orderId)) throw new NotFoundException('주문을 찾을 수 없습니다.');
+    const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
+    if (!orderSnap.exists) throw new NotFoundException('주문을 찾을 수 없습니다.');
+    const order = orderSnap.data() as Record<string, any>;
+    if (!requesterId || order['userId'] !== requesterId) throw new ForbiddenException();
+    const chargeId = order['redeliveryChargeId'];
+    if (typeof chargeId !== 'string' || !ORDER_ID_PATTERN.test(chargeId)) {
+      return { status: 'NONE', result: 'not_pending' };
+    }
+    const paymentId = `${PAYMENT_ID_PREFIX}${chargeId}`;
+    const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
+
+    // PENDING 확인과 조회 시각 기록을 한 트랜잭션에서 해 간격 하한을 여러 요청·여러 서버에서 지킨다.
+    const claim = await this.firestore.runTransaction(
+      async (tx): Promise<{ status: string; result?: OrderChargePaymentCheckResult }> => {
+        const snap = await tx.get(chargeRef);
+        if (!snap.exists) return { status: 'NONE', result: 'not_pending' };
+        const charge = snap.data() as Record<string, any>;
+        const status = String(charge['status'] ?? 'NONE');
+        if (
+          charge['status'] !== 'PENDING' ||
+          charge['orderId'] !== orderId ||
+          charge['userId'] !== requesterId ||
+          charge['type'] !== 'REDELIVERY_FEE' ||
+          charge['portonePaymentId'] !== paymentId
+        ) {
+          return { status, result: 'not_pending' };
+        }
+        const now = Date.now();
+        const lastRequestedAt = charge[ORDER_CHARGE_PAYMENT_CHECK_FIELD];
+        if (
+          typeof lastRequestedAt === 'number' &&
+          now - lastRequestedAt >= 0 &&
+          now - lastRequestedAt < ORDER_CHARGE_PAYMENT_CHECK_MIN_INTERVAL_MS
+        ) {
+          return { status: 'PENDING', result: 'throttled' };
+        }
+        // status·updatedAt은 바꾸지 않는다.
+        tx.update(chargeRef, { [ORDER_CHARGE_PAYMENT_CHECK_FIELD]: now });
+        return { status: 'PENDING' };
+      },
+    );
+    if (claim.result) return { status: claim.status, result: claim.result };
+
+    let paymentData: PaymentData;
+    try {
+      paymentData = await this.portone.getPayment(paymentId);
+    } catch (error) {
+      // 결제창이 아직 진행 중이면 PortOne에 결제가 없을 수 있다. 일시 오류·시간 초과도 청구를 바꾸지 않는다.
+      // 운영 확인 기록(PAYMENT_LOOKUP_FAILED)은 매분 scheduler의 조회만 남긴다.
+      if (
+        error instanceof PortoneError &&
+        error.status === 404 &&
+        error.type === 'PAYMENT_NOT_FOUND'
+      ) {
+        return { status: 'PENDING', result: 'not_paid' };
+      }
+      const label =
+        error instanceof PortoneError
+          ? `status=${error.status} type=${error.type}`
+          : `networkError=${error instanceof Error ? error.message.replace(/[\r\n\t]/g, ' ').slice(0, 200) : 'unknown'}`;
+      this.logger.warn(`[OrderChargePaymentCheck] 손님 재배송비 결제 확인 조회 보류 chargeId=${chargeId} ${label}`);
+      return { status: 'PENDING', result: 'lookup_failed' };
+    }
+    if (paymentData.status !== 'PAID') return { status: 'PENDING', result: 'not_paid' };
+
+    await this.finalizePaid(chargeId, paymentId, paymentData);
+    const latest = (await chargeRef.get()).data() as Record<string, any> | undefined;
+    return { status: String(latest?.['status'] ?? 'PENDING'), result: 'finalized' };
   }
 
   /**

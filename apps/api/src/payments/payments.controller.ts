@@ -43,6 +43,15 @@ export class PaymentsController {
     return this.paymentsService.checkOrderPayment(orderId, user.sub);
   }
 
+  // 주문 상세 화면의 재배송비 결제 확인. 주문 당사자만 부를 수 있고, 주문에 연결된 PENDING
+  // 재배송비가 PortOne에서 PAID일 때만 웹훅과 같은 확정 경로로 확정한다. 그 밖에는 바꾸지 않는다.
+  @Post('orders/:orderId/redelivery-charge/check')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  checkOrderChargePayment(@Param('orderId') orderId: string, @CurrentUser() user: JwtPayload) {
+    return this.paymentsService.checkOrderChargePayment(orderId, user.sub);
+  }
+
   @Get(':paymentId')
   @UseGuards(JwtAuthGuard)
   getPayment(@Param('paymentId') paymentId: string, @CurrentUser() user: JwtPayload) {

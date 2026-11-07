@@ -217,6 +217,11 @@ export class PaymentsService {
     await this.refunds.refundByOrderId(orderId, reason, options);
   }
 
+  /** 주문 상세 화면의 재배송비 결제 확인(주문 당사자만). */
+  async checkOrderChargePayment(orderId: string, requesterId: string) {
+    return this.orderChargePayments.checkOrderChargePayment(orderId, requesterId);
+  }
+
   /** 주문의 재배송비를 환불하고 아직 PAID로 남은 재배송비 수를 돌려준다(0이어야 취소 완료 가능). */
   async refundOrderChargesByOrderId(
     orderId: string,
