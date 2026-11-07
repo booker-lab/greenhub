@@ -8,6 +8,7 @@ import {
   PreconditionFailedException,
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { normalizeSalesMode, type SaleRoundStatus } from '@greenhub/shared';
 import type * as admin from 'firebase-admin';
 import { isWithdrawnUser } from '../auth/account-withdrawal';
 import { normalizeEmail } from '../auth/email-identity';
@@ -16,7 +17,10 @@ import {
   assertInviteTokenFormat,
   inviteConflict,
 } from '../auth/invite-conflict';
-import { AuditService, type AdminAuditEntry } from '../common/audit/audit.service';
+import {
+  AuditService,
+  type AdminAuditEntry,
+} from '../common/audit/audit.service';
 import { toFirestoreData } from '../common/firestore/firestore-data';
 import { FirestoreService } from '../firestore/firestore.service';
 import { customerOrderLabel } from '../notifications/customer-order-label';
@@ -54,6 +58,7 @@ import {
   QueryAdminDriversDto,
   SuspendUserDto,
   SetCommissionDto,
+  SetSalesModeDto,
   ForceRefundDto,
   UpsertBannerDto,
 } from './dto/admin.dto';
@@ -90,6 +95,15 @@ function restorableStoreStatus(value: unknown): 'invited' | 'active' {
 function storeIdConfirmPrefix(storeId: string): string {
   return storeId.slice(0, 8).toLowerCase();
 }
+
+// 예전 방식으로 바꾸는 것을 막는 회차 상태: 손님에게 보이면서 아직 완료·취소되지 않은 회차.
+// DRAFT는 손님에게 보이지 않고, COMPLETED·CANCELLED는 끝난 회차라 막지 않는다.
+export const SALES_MODE_BLOCKING_ROUND_STATUSES = [
+  'SCHEDULED',
+  'OPEN',
+  'CLOSED',
+] as const satisfies readonly SaleRoundStatus[];
+
 
 type LegacyRefundClaimResult =
   | { kind: 'done' }
@@ -158,6 +172,54 @@ export class AdminService {
       after: { commissionRate: dto.rate },
     });
     return { storeId, commissionRate: dto.rate };
+  }
+
+  // 판매 방식 전환(예전 방식 legacy ↔ 회차 판매 round_direct). 공개 회차 API와 회차 주문은 round_direct 가게에서만 동작한다.
+  // 저장값이 없으면 legacy로 읽고(normalizeSalesMode), 같은 값이면 쓰지 않고 그대로 200을 돌려준다(기록도 남기지 않음).
+  // round_direct → legacy는 아직 끝나지 않은 회차(예정·판매 중·마감)가 있으면 409로 막는다. 손님에게서 진행 중 회차가 사라지지 않게 한다.
+  // 회차 확인과 변경을 한 트랜잭션에 넣어, 확인 직후 열린 회차나 다른 관리자의 전환과 엇갈리지 않게 한다.
+  // 치운(archived) 가게도 수수료율처럼 바꿀 수 있다(손님에게는 어차피 숨어 있고, 복구하면 바꾼 방식으로 돌아온다).
+  async setSalesMode(storeId: string, dto: SetSalesModeDto, actorId: string) {
+    const ref = this.firestore.doc(`stores/${storeId}`);
+    const target = dto.salesMode;
+    const { changed, previous } = await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException('스토어를 찾을 수 없습니다.');
+      const stored = snap.data()?.['salesMode'];
+      const current = normalizeSalesMode(stored === 'round_direct' ? 'round_direct' : undefined);
+      if (current === target) return { changed: false, previous: stored ?? null };
+
+      if (current === 'round_direct') {
+        const activeRounds = await tx.get(
+          this.firestore
+            .collection('saleRounds')
+            .where('storeId', '==', storeId)
+            .where('status', 'in', [...SALES_MODE_BLOCKING_ROUND_STATUSES])
+            .limit(1),
+        );
+        if (!activeRounds.empty) {
+          throw new ConflictException(
+            '아직 끝나지 않은 회차(예정·판매 중·마감)가 있어 예전 방식으로 바꿀 수 없습니다. 회차를 완료하거나 취소한 뒤 다시 시도해 주세요.',
+          );
+        }
+      }
+
+      tx.update(ref, { salesMode: target, updatedAt: this.firestore.Timestamp.now() });
+      return { changed: true, previous: stored ?? null };
+    });
+
+    if (changed) {
+      await this.recordAdmin({
+        action: 'admin.store.sales_mode_changed',
+        actorId,
+        targetType: 'store',
+        targetId: storeId,
+        before: { salesMode: previous },
+        after: { salesMode: target },
+        reason: dto.reason ?? null,
+      });
+    }
+    return { storeId, salesMode: target, changed };
   }
 
   // 판매자 "치우기"(아카이브) — 영구 삭제 아님, status='archived' 표시.
