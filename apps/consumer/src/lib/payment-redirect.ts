@@ -22,7 +22,7 @@ const MAX_ROUND_ITEMS = 100;
 // 결제창에서 오래 머문 경우까지 고려하되, 남은 기록이 다른 결제의 정리에 쓰이지 않게 제한한다.
 const PENDING_ORDER_PAYMENT_TTL_MS = 2 * 60 * 60 * 1000;
 
-export const DEFAULT_PAYMENT_FAILURE_MESSAGE = '결제가 취소되었거나 완료되지 않았습니다.';
+export const DEFAULT_PAYMENT_FAILURE_MESSAGE = '결제가 취소됐거나 완료되지 않았어요.';
 
 export interface PaymentRedirectQuery {
   getAll(name: string): string[];
@@ -274,19 +274,20 @@ export function resolveRedeliveryPaymentReturn(
   if (result.kind === 'invalid') {
     return {
       kind: 'uncertain',
-      message: '재배송비 결제 결과를 확인할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.',
+      message:
+        '재배송비 결제 결과를 확인하지 못했어요. 다시 결제하기 전에 상태를 먼저 확인해 주세요.',
     };
   }
   // 서버가 이미 결제 완료로 확인했다면 쿼리보다 서버 상태를 따른다.
   if (paid === true) return { kind: 'done' };
   if (result.kind === 'failure') {
-    return { kind: 'rejected', message: result.message ?? '재배송비 결제가 취소되었습니다.' };
+    return { kind: 'rejected', message: result.message ?? '재배송비 결제가 취소됐어요.' };
   }
   if (paid === undefined) return { kind: 'reconciling' };
   return {
     kind: 'uncertain',
     message:
-      '결제 요청은 접수되었지만 서버 확인 전입니다. 중복 결제 전에 잠시 후 다시 확인해 주세요.',
+      '결제 요청은 접수됐지만 아직 결제를 확인하지 못했어요. 다시 결제하기 전에 잠시 후 상태를 확인해 주세요.',
   };
 }
 
@@ -305,6 +306,35 @@ export function shouldRecheckRedeliveryPayment(
   return Number.isFinite(elapsedMs) && elapsedMs >= 0 && elapsedMs < maxMs;
 }
 
+// 재배송비 결제 뒤 서버 확인(웹훅 반영) 전이면 이 시점(기다리기 시작한 때 기준)에 서버에 재배송비 결제 확인을
+// 요청한다(POST /payments/orders/:orderId/redelivery-charge/check). 웹훅이 늦거나 빠져도 서버가 PortOne에
+// 직접 물어 이미 결제됐으면 바로 확정한다. 한 창에서 최대 3번이고, 서로 10초 이상 떨어져 서버의 청구별 조회
+// 간격 하한(10초)에 걸리지 않는다(주문 결제 확인과 같은 시점).
+export const REDELIVERY_PAYMENT_CHECK_AFTER_MS = [6_000, 20_000, 45_000] as const;
+
+/** 재배송비 결제 확인을 요청할 차례인지. checksMade는 이번 창에서 이미 보낸 확인 수다. */
+export function shouldCheckRedeliveryPayment(
+  elapsedMs: number,
+  checksMade: number,
+  maxMs: number,
+): boolean {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0 || elapsedMs >= maxMs) return false;
+  if (!Number.isSafeInteger(checksMade) || checksMade < 0) return false;
+  const nextAt = REDELIVERY_PAYMENT_CHECK_AFTER_MS[checksMade];
+  return nextAt !== undefined && elapsedMs >= nextAt;
+}
+
+export function redeliveryPaymentCheckPath(orderId: string): string {
+  return `/payments/orders/${encodeURIComponent(orderId)}/redelivery-charge/check`;
+}
+
+/** 재배송비 결제 확인 응답이 청구 상태가 바뀌었다(PENDING이 아님)고 답했는지. 바뀌었으면 주문을 다시 읽는다. */
+export function isRedeliveryPaymentCheckSettled(body: unknown): boolean {
+  if (!body || typeof body !== 'object') return false;
+  const status = (body as { status?: unknown }).status;
+  return typeof status === 'string' && status !== 'PENDING' && status !== 'NONE';
+}
+
 export function savePendingOrderPayment(
   storage: PaymentStorage | null,
   pending: PendingOrderPayment | null,
@@ -315,6 +345,43 @@ export function savePendingOrderPayment(
     else storage.removeItem(PENDING_ORDER_PAYMENT_STORAGE_KEY);
   } catch {
     // 저장소가 막혀도 결제는 진행한다. 복귀 뒤 장바구니 정리만 생략된다.
+  }
+}
+
+/**
+ * 저장소에 남은 복귀용 기록(raw)이 이번 결제 시도가 저장한 기록(owned)인지 판정한다.
+ * 결제 ID와 저장 시각이 모두 같을 때만 같은 시도로 본다. 같은 탭 복귀 뒤 새 결제가 새 기록을
+ * 저장했다면 늦게 끝난 이전 결제창의 정리가 새 기록을 지우지 않게 하려는 판단이다.
+ * 기록이 손상됐거나 이번 시도가 저장한 기록이 없으면 지우지 않는다.
+ */
+export function isOwnPendingOrderPayment(
+  raw: string | null,
+  owned: PendingOrderPayment | null,
+): boolean {
+  if (!raw || !owned) return false;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  return (
+    isRecord(value) && value.paymentId === owned.paymentId && value.createdAt === owned.createdAt
+  );
+}
+
+/** 이번 결제 시도가 저장한 복귀용 기록일 때만 지운다(다른 시도의 기록은 남긴다). */
+export function clearOwnPendingOrderPayment(
+  storage: PaymentStorage | null,
+  owned: PendingOrderPayment | null,
+): void {
+  if (!storage || !owned) return;
+  try {
+    if (isOwnPendingOrderPayment(storage.getItem(PENDING_ORDER_PAYMENT_STORAGE_KEY), owned)) {
+      storage.removeItem(PENDING_ORDER_PAYMENT_STORAGE_KEY);
+    }
+  } catch {
+    // 저장소가 막혀도 결제 결과 처리는 이어 간다. 남은 기록은 유효 시간이 지나면 쓰이지 않는다.
   }
 }
 

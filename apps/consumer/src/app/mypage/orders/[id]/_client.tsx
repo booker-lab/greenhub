@@ -2,9 +2,10 @@
 
 import type { OrderStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button, ButtonLabel } from '@greenhub/ui/components/button';
+import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronLeft } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ReactNode, use, useEffect, useId, useState } from 'react';
@@ -17,14 +18,34 @@ import {
 } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
+import { deliveryHoldNotice, REDELIVERY_UNPAID_NOTICE } from '@/lib/order-delivery-hold-notice';
+import { formatOrderDeliveryDate } from '@/lib/order-delivery-date';
+import {
+  ORDER_DETAIL_STALE_MESSAGE,
+  orderDetailReadFailureMessage,
+} from '@/lib/order-detail-message';
+import { isPaymentPendingOrder, orderDetailPendingPaymentGuide } from '@/lib/order-pending-payment';
+import {
+  customerRedeliveryPaymentReturn,
+  REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE,
+  REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
+  type RedeliveryPaymentStage,
+  redeliveryPaymentFailureMessage,
+  redeliveryPaymentUnexpectedFailure,
+} from '@/lib/order-redelivery-message';
+import { ORDER_STATUS_LABELS as STATUS_LABELS, orderTimelineStepLabel } from '@/lib/order-status';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import {
   buildPaymentRedirectUrl,
+  isRedeliveryPaymentCheckSettled,
   type PaymentRedirectResult,
   parsePaymentRedirectResult,
   readBrowserPaymentContext,
+  redeliveryPaymentCheckPath,
   redeliveryPaymentRedirectPath,
   resolveRedeliveryPaymentReturn,
+  shouldCheckRedeliveryPayment,
   shouldRecheckRedeliveryPayment,
 } from '@/lib/payment-redirect';
 import {
@@ -49,22 +70,33 @@ import {
   readOrderDetail,
   readRedeliveryPaymentResponse,
 } from './_detail';
+import { currentMyPageLoginUrl } from '../../_login';
 
 const API_URL = getApiBaseUrl();
-const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
-  PENDING: '결제 확인 중',
-  RECRUITING: '모집 중',
-  CONFIRMED: '주문 확정',
-  ACCEPTED: '주문 접수',
-  PREPARING: '상품 준비 중',
-  DELIVERING: '배송 중',
-  DELIVERY_HELD: '배송 보류',
-  HUB_ARRIVED: '거점 도착',
-  PICKED_UP: '픽업 완료',
-  DELIVERED: '배송 완료',
-  CANCELLED: '주문 취소',
-  REVIEWED: '구매 확정',
-};
+// 취소 요청 뒤 결과를 모를 때(연결 끊김·응답 확인 실패) 보이는 문구. 아래 '상태 다시 확인' 안내와 함께 보인다.
+const CANCEL_UNCERTAIN_MESSAGE = '취소가 처리됐는지 아직 확인하지 못했어요.';
+// 구매 확정 요청 뒤 결과를 모를 때 보이는 문구. 취소와 같이 '상태 다시 확인' 안내와 함께 보인다.
+const REVIEW_UNCERTAIN_MESSAGE = '구매 확정이 처리됐는지 아직 확인하지 못했어요.';
+
+// 서버에 재배송비 결제 확인을 요청한다. 웹훅이 늦거나 빠져도 서버가 PortOne에 직접 물어 확정한다.
+// 청구 상태가 바뀌었다고 답하면 true다. 실패·시간 초과는 손님에게 따로 알리지 않는다(false).
+async function requestRedeliveryPaymentCheck(
+  orderId: string,
+  accessToken: string,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_URL}${redeliveryPaymentCheckPath(orderId)}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      signal,
+    });
+    if (!res.ok) return false;
+    return isRedeliveryPaymentCheckSettled(await res.json().catch(() => null));
+  } catch {
+    return false;
+  }
+}
 
 function getTimelineSteps(order: OrderDetailView): OrderStatus[] {
   if (order.saleType === 'group') {
@@ -289,7 +321,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         ? null
         : undefined;
   // 결제 확인 중(PENDING) 주문은 결제 완료 화면처럼 서버에 결제 확인을 요청한다.
-  const { order, loading, error, status, refetch } = useOrderStatus(orderId, accessToken, {
+  const { order, loading, status, refetch } = useOrderStatus(orderId, accessToken, {
     checkPendingPayment: true,
   });
   const [cancelOutcome, setCancelOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
@@ -323,12 +355,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     if (!session?.user?.accessToken || !detail?.canRequestCancellation) return;
     if (isAuthoritativelyCancelled) return;
     if (isStaleRead) {
-      setActionError('최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.');
+      setActionError(ORDER_DETAIL_STALE_MESSAGE);
       return;
     }
     const message = detail.isRoundOrder
-      ? '주문 취소를 요청하시겠습니까?\n서버에서 회차 마감 전인지 다시 확인합니다.'
-      : '공동구매 참여를 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.';
+      ? '주문을 취소할까요?'
+      : '공동구매 참여를 취소할까요?\n취소하면 되돌릴 수 없어요.';
     if (!confirm(message)) return;
     setCancelOutcome({ kind: 'executing' });
     setActionError(null);
@@ -349,7 +381,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       } catch {
         throw {
           kind: 'uncertain',
-          message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+          message: CANCEL_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       const body: unknown = await response.json().catch(() => null);
@@ -360,18 +392,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         if (failure === 'rejected') {
           throw {
             kind: 'rejected',
-            message: serverMessage ?? '주문을 취소할 수 없습니다.',
+            message: serverMessage ?? '주문을 취소할 수 없어요.',
           } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
         throw {
           kind: 'uncertain',
-          message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+          message: CANCEL_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       if (!readCommandConfirmation(body, { orderId: detail.id, status: 'CANCELLED' })) {
         throw {
           kind: 'uncertain',
-          message: '취소 확인 응답을 검증하지 못했습니다. 상태를 다시 확인해 주세요.',
+          message: CANCEL_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       setCancelOutcome({ kind: 'reconciling' });
@@ -398,21 +430,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           return;
         }
       }
-      if (caught instanceof TypeError) {
-        const uncertainMessage = '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.';
-        setCancelOutcome({ kind: 'uncertain', message: uncertainMessage });
-        setActionError(uncertainMessage);
-        return;
-      }
-      setCancelOutcome({
-        kind: 'uncertain',
-        message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
-      });
-      setActionError(
-        caught instanceof Error
-          ? caught.message
-          : '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
-      );
+      // 그 밖의 예외도 내부 오류 글자 대신 같은 고객 문구로 상태 확인을 안내한다.
+      setCancelOutcome({ kind: 'uncertain', message: CANCEL_UNCERTAIN_MESSAGE });
+      setActionError(CANCEL_UNCERTAIN_MESSAGE);
     }
   }
 
@@ -428,11 +448,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       return;
     }
     if (isStaleRead) {
-      setActionError('최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.');
+      setActionError(ORDER_DETAIL_STALE_MESSAGE);
       return;
     }
     setRedeliveryOutcome({ kind: 'executing' });
     setActionError(null);
+    // 예상하지 못한 예외가 결제창을 열기 전인지 뒤인지 가르기 위해 진행 단계를 적어 둔다.
+    let stage: RedeliveryPaymentStage = 'requesting';
     try {
       let response: Response;
       try {
@@ -450,8 +472,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       } catch {
         throw {
           kind: 'uncertain',
-          message:
-            '재배송비 결제 요청 결과를 확정할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.',
+          message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       const body: unknown = await response.json().catch(() => null);
@@ -462,13 +483,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         if (failure === 'rejected') {
           throw {
             kind: 'rejected',
-            message: serverMessage ?? '재배송비 결제를 시작할 수 없습니다.',
+            message: serverMessage ?? '재배송비 결제를 시작할 수 없어요.',
           } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
         throw {
           kind: 'uncertain',
-          message:
-            '재배송비 결제 요청 결과를 확정할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.',
+          message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       const payment = readRedeliveryPaymentResponse(body, {
@@ -479,16 +499,20 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       if (payment.status === 'FAILED' || payment.status === 'REFUNDED') {
         throw {
           kind: 'rejected',
-          message: '재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.',
+          message: REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
       }
       if (payment.status === 'PENDING') {
+        // 결제 설정 읽기·결제 모듈 불러오기는 결제창을 열기 전이라 실패해도 결제가 시작되지 않는다.
+        stage = 'opening-window';
         const configuration = readPortonePaymentConfiguration(redeliveryMethod);
         const PortOne = await import('@portone/browser-sdk/v2');
         const browser = readBrowserPaymentContext();
         const redirectUrl = browser
           ? buildPaymentRedirectUrl(browser.origin, redeliveryPaymentRedirectPath(detail.id))
           : null;
+        // 여기부터는 결제창이 열려 손님이 결제했을 수 있다.
+        stage = 'paying';
         const result = await PortOne.requestPayment({
           storeId: configuration.portoneStoreId,
           paymentId: payment.paymentId,
@@ -502,23 +526,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           ...(redirectUrl ? { redirectUrl } : {}),
         });
         if (result && 'code' in result) {
+          // PG 원문 코드·메시지는 화면에 쓰지 않고 고객 문구로 바꾼다.
           throw {
             kind: 'rejected',
-            message:
-              (isRecord(result) && isNonEmptyString(result.message) ? result.message : null) ??
-              '재배송비 결제가 취소되었습니다.',
+            message: redeliveryPaymentFailureMessage(result),
           } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
       }
 
+      stage = 'confirming';
       setRedeliveryOutcome({ kind: 'reconciling' });
+      // 결제창이 성공으로 끝났으니 웹훅을 기다리지 않고 서버에 결제 확인을 한 번 요청한 뒤 다시 읽는다.
+      await requestRedeliveryPaymentCheck(detail.id, session.user.accessToken);
       const latestOrder = await refetch().catch(() => undefined);
       const latestDetail = latestOrder ? readOrderDetail(latestOrder, detail.id) : null;
       if (!latestDetail?.redeliveryPayment.paid) {
         throw {
           kind: 'uncertain',
-          message:
-            '결제 요청은 접수되었지만 서버 확인 전입니다. 중복 결제 전에 잠시 후 다시 확인해 주세요.',
+          message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       setRedeliveryOutcome({ kind: 'done' });
@@ -535,17 +560,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           return;
         }
       }
-      if (caught instanceof TypeError) {
-        const uncertainMessage =
-          '재배송비 결제 요청 결과를 확정할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.';
-        setRedeliveryOutcome({ kind: 'uncertain', message: uncertainMessage });
-        setActionError(uncertainMessage);
-        return;
-      }
-      const fallbackMessage =
-        caught instanceof Error ? caught.message : '재배송비 결제 중 오류가 발생했습니다.';
-      setRedeliveryOutcome({ kind: 'uncertain', message: fallbackMessage });
-      setActionError(fallbackMessage);
+      // 그 밖의 예외는 내부 오류 글자 대신 고객 문구로 보인다. 결제창을 열기 전(결제 설정 누락·결제 모듈
+      // 불러오기 실패)이면 '시작하지 못했어요'로 다시 시도를, 그 뒤(응답 확인 실패·결제창 오류·완료 확인)면
+      // 결제됐을 수 있으므로 '확인하지 못했어요'와 상태 다시 확인을 안내한다.
+      const outcome = redeliveryPaymentUnexpectedFailure(stage);
+      setRedeliveryOutcome(outcome);
+      setActionError(outcome.message);
     }
   }
 
@@ -560,7 +580,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   // 성공 쿼리여도 서버 redeliveryPayment.paid(웹훅 반영)를 확인할 때만 완료로 본다.
   useEffect(() => {
     if (!redeliveryRedirect) return;
-    const outcome = resolveRedeliveryPaymentReturn(redeliveryRedirect, redeliveryPaid);
+    // 복귀 쿼리의 PG 원문은 화면에 쓰지 않는다. 판정은 그대로 두고 문구만 고객 문구로 바꾼다.
+    const outcome = customerRedeliveryPaymentReturn(
+      redeliveryRedirect,
+      resolveRedeliveryPaymentReturn(redeliveryRedirect, redeliveryPaid),
+    );
     if (outcome.kind === 'none') {
       setRedeliveryRedirect(null);
       return;
@@ -589,11 +613,38 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     0,
     ORDER_STATUS_POLL_MAX_MS,
   );
+  // 기다리는 동안 6·20·45초에는 서버에 재배송비 결제 확인도 요청한다(한 번에 하나, 다시 읽기를 막지 않음).
+  const redeliveryCheckToken = session?.user?.accessToken ?? null;
+  const redeliveryCheckOrderId = detail?.id ?? null;
   useEffect(() => {
     if (!awaitingRedeliveryPaid) return;
     const startedAt = Date.now();
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let checksMade = 0;
+    let checkController: AbortController | null = null;
+    const maybeCheckPayment = () => {
+      if (checkController || !redeliveryCheckToken || !redeliveryCheckOrderId) return;
+      if (
+        !shouldCheckRedeliveryPayment(Date.now() - startedAt, checksMade, ORDER_STATUS_POLL_MAX_MS)
+      ) {
+        return;
+      }
+      checksMade += 1;
+      const controller = new AbortController();
+      checkController = controller;
+      void requestRedeliveryPaymentCheck(
+        redeliveryCheckOrderId,
+        redeliveryCheckToken,
+        controller.signal,
+      )
+        .then((settled) => {
+          if (settled && !stopped) void refetch();
+        })
+        .finally(() => {
+          if (checkController === controller) checkController = null;
+        });
+    };
     // 다시 읽기가 끝난 뒤에만 다음 확인을 예약한다(요청이 겹치지 않는다).
     const scheduleRecheck = () => {
       if (
@@ -603,21 +654,23 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         return;
       }
       timer = setTimeout(() => {
+        maybeCheckPayment();
         void refetch().finally(scheduleRecheck);
       }, ORDER_STATUS_POLL_INTERVAL_MS);
     };
     scheduleRecheck();
     return () => {
       stopped = true;
+      checkController?.abort();
       if (timer) clearTimeout(timer);
     };
-  }, [awaitingRedeliveryPaid, refetch]);
+  }, [awaitingRedeliveryPaid, refetch, redeliveryCheckToken, redeliveryCheckOrderId]);
 
   async function handleConfirm() {
     if (!session?.user?.accessToken || !detail) return;
     if (isAuthoritativelyReviewed) return;
     if (isStaleRead) {
-      setActionError('최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.');
+      setActionError(ORDER_DETAIL_STALE_MESSAGE);
       return;
     }
     setReviewOutcome({ kind: 'executing' });
@@ -638,7 +691,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       } catch {
         throw {
           kind: 'uncertain',
-          message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+          message: REVIEW_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       const body: unknown = await response.json().catch(() => null);
@@ -649,18 +702,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         if (failure === 'rejected') {
           throw {
             kind: 'rejected',
-            message: serverMessage ?? '구매 확정에 실패했습니다.',
+            message: serverMessage ?? '구매 확정을 하지 못했어요.',
           } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
         }
         throw {
           kind: 'uncertain',
-          message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+          message: REVIEW_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       if (!readCommandConfirmation(body, { orderId: detail.id, status: 'REVIEWED' })) {
         throw {
           kind: 'uncertain',
-          message: '구매 확정 확인 응답을 검증하지 못했습니다. 상태를 다시 확인해 주세요.',
+          message: REVIEW_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       setReviewOutcome({ kind: 'reconciling' });
@@ -687,17 +740,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           return;
         }
       }
-      if (caught instanceof TypeError) {
-        const uncertainMessage = '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.';
-        setReviewOutcome({ kind: 'uncertain', message: uncertainMessage });
-        setActionError(uncertainMessage);
-        return;
-      }
-      setReviewOutcome({
-        kind: 'uncertain',
-        message: '구매 확정 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
-      });
-      setActionError(caught instanceof Error ? caught.message : '구매 확정에 실패했습니다.');
+      // 그 밖의 예외도 내부 오류 글자 대신 같은 고객 문구로 상태 확인을 안내한다.
+      setReviewOutcome({ kind: 'uncertain', message: REVIEW_UNCERTAIN_MESSAGE });
+      setActionError(REVIEW_UNCERTAIN_MESSAGE);
     }
   }
 
@@ -712,17 +757,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   if (sessionStatus === 'unauthenticated' || status === 'auth') {
+    // 로그인하지 않은 손님만 로그인으로 보낸다. 로그인한 채 거절(401/403, 남의 주문 등)되면 로그인 화면이
+    // 활성 세션을 복귀 주소(이 주문)로 곧바로 돌려보내 버튼이 아무 일도 하지 않는 것처럼 보이므로 목록만 둔다.
+    const needsLogin = sessionStatus === 'unauthenticated';
     return (
       <div className="mx-auto max-w-[720px] px-4 py-5">
         <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
         <div className="flex flex-col items-center justify-start gap-3 py-10">
           <p className="m-0 text-center text-sm" style={{ color: 'var(--color-danger)' }}>
-            로그인이 필요하거나 이 주문을 볼 권한이 없습니다.
+            {needsLogin
+              ? '로그인이 필요해요. 로그인하면 이 주문으로 돌아와요.'
+              : '이 주문을 볼 수 없어요. 내 주문 목록에서 다시 골라 주세요.'}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
-            <LoadingButton onClick={() => router.push('/login')} loading={retrying}>
-              로그인
-            </LoadingButton>
+            {needsLogin && (
+              <LoadingButton onClick={() => router.push(currentMyPageLoginUrl())} loading={retrying}>
+                로그인
+              </LoadingButton>
+            )}
             <Button variant="outline" onClick={() => router.push('/mypage')}>
               주문 목록으로 돌아가기
             </Button>
@@ -738,7 +790,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
         <div className="flex flex-col items-center justify-start gap-3 py-10">
           <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            존재하지 않는 주문입니다. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요.
+            찾을 수 없는 주문이에요. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요.
           </p>
           <Button variant="outline" onClick={() => router.push('/mypage')}>
             주문 목록으로 돌아가기
@@ -754,7 +806,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
         <div className="flex flex-col items-center justify-start gap-3 py-10">
           <p className="m-0 text-center text-sm" style={{ color: 'var(--color-danger)' }}>
-            {error ?? '주문 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.'}
+            {orderDetailReadFailureMessage(status)}
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <LoadingButton onClick={handleRetry} loading={retrying} disabled={retrying}>
@@ -784,7 +836,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <BackButton className="mb-4" onClick={() => router.push('/mypage')} />
         <div className="flex flex-col items-center justify-start gap-3 py-10">
           <p className="m-0 text-center text-sm" style={{ color: 'var(--color-danger)' }}>
-            주문 정보를 확인할 수 없습니다. 잠시 후 다시 시도해 주세요.
+            주문 정보를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-3">
             <LoadingButton onClick={handleRetry} loading={retrying} disabled={retrying}>
@@ -800,7 +852,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   const isCancelled = isAuthoritativelyCancelled || cancelOutcome.kind === 'done';
+  // 결제 확인 중(PENDING)은 결제를 끝내지 않은 시도일 수도 있어 배송 현황 단계 대신 안내와 다음 행동을 보인다.
+  const pendingPaymentGuide = orderDetailPendingPaymentGuide(detail.status, {
+    cancelled: isCancelled,
+  });
   const cancelReasonText = formatCancelReason(detail.cancelReason);
+  // 배송 예정일은 '11월 10일(화)'(한국 시간)로 보인다. 형식을 읽지 못한 드문 값만 날짜 부분을 그대로 둔다.
+  const deliveryDateText = detail.requestedDeliveryDate
+    ? (formatOrderDeliveryDate(detail.requestedDeliveryDate) ??
+      detail.requestedDeliveryDate.slice(0, 10))
+    : null;
   const showCancelReconcileWarning =
     !isAuthoritativelyCancelled && cancelOutcome.kind === 'reconcile-failed';
   const showCancelCommand =
@@ -834,6 +895,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   const currentStep =
     detail.status === 'REVIEWED' ? steps.length : Math.max(0, steps.indexOf(detail.status));
   const paymentIsDone = detail.redeliveryPayment.paid;
+  // 배송 보류 안내는 사유 코드별 고정 문구(C-28)로 보이고, 직접 적은 사유는 '담당자 메모'로 따로 보인다.
+  const deliveryHoldCopy = detail.deliveryHold
+    ? deliveryHoldNotice({
+        reasonCode: detail.deliveryHold.reasonCode,
+        customerResponsible: detail.deliveryHold.customerResponsible,
+        redeliveryFee: detail.deliveryHold.redeliveryFee,
+        redeliveryPaid: paymentIsDone,
+      })
+    : null;
   // 배송 보류·취소는 문제 상태라 빨강 계열 배지로 보인다
   // ② 방향(design-standard §5): 상태는 점 + 글자. 배송 보류=빨강, 취소·결제 대기·완료=회색, 나머지 검정.
   const statusTone: StatusDotTone =
@@ -852,12 +922,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     <div className="mx-auto max-w-[720px] px-4 pt-5 pb-20">
       <BackButton className="mb-3" onClick={() => router.push('/mypage')} />
       {(status === 'network' || status === 'server') && (
-        <DetailAlert variant="warning" className="mb-5" title="최신 정보를 불러오지 못했습니다">
+        <DetailAlert variant="warning" className="mb-5" title="최신 정보를 불러오지 못했어요">
           <div className="flex flex-col gap-1.5">
-            <p className="m-0 text-sm">{error ?? '최신 주문 정보를 확인하지 못했습니다.'}</p>
-            <p className="m-0 text-sm">표시된 정보가 최신이 아닐 수 있습니다.</p>
+            <p className="m-0 text-sm">{orderDetailReadFailureMessage(status)}</p>
+            <p className="m-0 text-sm">보이는 정보가 최신이 아닐 수 있어요.</p>
             <p className="m-0 text-sm">
-              최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없습니다.
+              최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없어요.
             </p>
             <LoadingButton
               className="mt-2.5"
@@ -891,6 +961,27 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </StatusDot>
         </p>
       </div>
+
+      {pendingPaymentGuide && (
+        <div
+          className="mb-5 rounded-[var(--radius)] bg-[var(--color-surface-muted)] p-4"
+          data-testid="order-pending-payment"
+        >
+          <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
+            {pendingPaymentGuide.autoCancelNotice}
+          </p>
+          <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+            {pendingPaymentGuide.retryHint}
+          </p>
+          <ButtonLink
+            className="mt-3 w-full"
+            variant="outline"
+            render={<Link href={pendingPaymentGuide.cartHref} />}
+          >
+            {pendingPaymentGuide.cartLabel}
+          </ButtonLink>
+        </div>
+      )}
 
       <div
         className="mb-5 p-4"
@@ -979,29 +1070,28 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </p>
             </div>
           )}
-          {detail.requestedDeliveryDate && (
+          {deliveryDateText && (
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 배송 예정일
               </p>
-              <p className="m-0 text-sm">{detail.requestedDeliveryDate.slice(0, 10)}</p>
+              <p className="m-0 text-sm">{deliveryDateText}</p>
             </div>
           )}
         </div>
       </div>
 
       {detail.deliveryHold && isDeliveryHoldActive(detail) && (
-        <DetailAlert variant="destructive" className="mb-5" title="배송 보류">
+        <DetailAlert variant="destructive" className="mb-5" title={deliveryHoldCopy?.title}>
           <div className="flex flex-col gap-1.5">
-            <p className="m-0 text-sm">{detail.deliveryHold.reasonMessage}</p>
-            <p className="m-0 text-sm">
-              고객 책임: {detail.deliveryHold.customerResponsible ? '해당' : '없음'}
-            </p>
-            {detail.deliveryHold.redeliveryFee !== null && (
-              <p className="m-0 text-sm">
-                재배송비: {detail.deliveryHold.redeliveryFee.toLocaleString('ko-KR')}원
+            {deliveryHoldCopy?.lines.map((line) => (
+              <p key={line} className="m-0 text-sm">
+                {line}
               </p>
-            )}
+            ))}
+            <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              담당자 메모: {detail.deliveryHold.reasonMessage}
+            </p>
             {detail.deliveryHold.nextContactAt && (
               <p className="m-0 text-sm">
                 다음 연락: {formatDateTime(detail.deliveryHold.nextContactAt)}
@@ -1016,12 +1106,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <div className="mt-2.5 flex flex-col gap-1.5">
                 {paymentIsDone && (
                   <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
-                    재배송비 결제가 완료되었습니다. 배송 재개를 기다리고 있습니다.
+                    재배송비 결제가 완료됐어요. 배송이 다시 시작되기를 기다리고 있어요.
                   </p>
                 )}
                 {!paymentIsDone && detail.redeliveryPayment.requiresRecovery && (
                   <p className="m-0 text-sm" style={{ color: 'var(--color-danger)' }}>
-                    재배송비 결제 상태를 확인할 수 없습니다. 운영 확인이 필요합니다.
+                    {REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE}
                   </p>
                 )}
                 {!paymentIsDone &&
@@ -1049,11 +1139,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                         onClick={handleRedeliveryPayment}
                       >
                         {redeliveryOutcome.kind === 'reconciling'
-                          ? '서버 확인 중...'
+                          ? '결제 확인 중...'
                           : detail.redeliveryPayment.status === 'PENDING'
                             ? '재배송비 결제 계속하기'
                             : '재배송비 결제'}
                       </LoadingButton>
+                      <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                        {REDELIVERY_UNPAID_NOTICE}
+                      </p>
                     </>
                   )}
               </div>
@@ -1107,19 +1200,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           title={detail.isRoundOrder ? '주문 마감 전 취소' : '공동구매 모집 중'}
         >
           <p className="m-0 mb-3 text-sm">
-            {detail.isRoundOrder
-              ? '취소 요청 시 서버가 회차 마감 여부를 다시 확인하고 환불과 주문 한도 반환을 처리합니다.'
-              : '모집 중인 공동구매 참여를 취소할 수 있습니다.'}
+            {!detail.isRoundOrder
+              ? '모집 중인 공동구매 참여를 취소할 수 있어요.'
+              : isPaymentPendingOrder(detail.status)
+                ? // 결제를 마치지 않은 시도는 환불할 결제가 없으므로 환불 약속을 하지 않는다(UX 감사 C-06).
+                  '결제를 마치지 않은 주문이에요. 필요 없으면 지금 취소할 수 있어요.'
+                : '주문 마감 전까지 취소할 수 있어요. 결제한 수단으로 환불돼요.'}
           </p>
-          {isStaleRead && (
-            <p className="m-0 mb-3 text-sm">
-              최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.
-            </p>
-          )}
+          {isStaleRead && <p className="m-0 mb-3 text-sm">{ORDER_DETAIL_STALE_MESSAGE}</p>}
           {cancelOutcome.kind === 'reconciling' && (
-            <p className="m-0 mb-3 text-sm">
-              서버에서 취소를 확인했습니다. 최신 주문 상태를 확인 중입니다.
-            </p>
+            <p className="m-0 mb-3 text-sm">취소가 접수됐어요. 최신 주문 상태를 확인하고 있어요.</p>
           )}
           <LoadingButton
             className="w-full"
@@ -1137,8 +1227,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <DetailAlert variant="warning" className="mb-5" title="취소 확인됨 · 상태 재확인 필요">
           <div className="flex flex-col gap-1.5">
             <p className="m-0 text-sm">
-              취소는 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 취소 실패가
-              아니므로 바로 다시 취소하지 말고 상태를 확인해 주세요.
+              취소는 접수됐지만 최신 주문 화면을 다시 불러오지 못했어요. 취소 실패가 아니니 바로
+              다시 취소하지 말고 아래 ‘다시 시도’를 눌러 상태를 확인해 주세요.
             </p>
             <LoadingButton
               className="mt-2.5"
@@ -1157,7 +1247,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       {isCancelled && (
         <DetailAlert variant="destructive" className="mb-5 text-center">
           <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-bold)' }}>
-            주문이 취소되었습니다
+            주문이 취소됐어요
           </p>
           {cancelReasonText && <p className="m-0 text-sm">사유: {cancelReasonText}</p>}
         </DetailAlert>
@@ -1168,7 +1258,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <div className="flex flex-col gap-1.5">
             <p className="m-0 text-sm">{actionError}</p>
             {needsStatusRecheck && (
-              <p className="m-0 text-sm">중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요.</p>
+              <p className="m-0 text-sm">다시 요청하기 전에 아래 ‘상태 다시 확인’을 눌러 주세요.</p>
             )}
             {needsStatusRecheck && (
               <LoadingButton
@@ -1201,12 +1291,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           </LoadingButton>
           {isStaleRead && isReviewable && (
             <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              최신 주문 상태를 확인하지 못했습니다. 최신 상태 확인 후 다시 시도해 주세요.
+              {ORDER_DETAIL_STALE_MESSAGE}
             </p>
           )}
           {reviewOutcome.kind === 'reconciling' && (
             <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              서버에서 구매 확정을 확인했습니다. 최신 주문 상태를 확인 중입니다.
+              구매 확정이 접수됐어요. 최신 주문 상태를 확인하고 있어요.
             </p>
           )}
         </div>
@@ -1216,8 +1306,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <DetailAlert variant="warning" className="mb-5" title="구매 확정 확인됨 · 상태 재확인 필요">
           <div className="flex flex-col gap-1.5">
             <p className="m-0 text-sm">
-              구매 확정은 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 확정 실패가
-              아니므로 바로 다시 확정하지 말고 상태를 확인해 주세요.
+              구매 확정은 접수됐지만 최신 주문 화면을 다시 불러오지 못했어요. 확정 실패가 아니니 바로
+              다시 확정하지 말고 아래 ‘다시 시도’를 눌러 상태를 확인해 주세요.
             </p>
             <LoadingButton
               className="mt-2.5"
@@ -1238,12 +1328,41 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <p className="m-0 mb-4 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
             배송 현황
           </p>
-          <DeliverySteps
-            active={currentStep}
-            labels={steps.map((stepStatus) => STATUS_LABELS[stepStatus] ?? stepStatus)}
-          />
+          {pendingPaymentGuide ? (
+            <p
+              className="m-0 text-sm"
+              style={{ color: 'var(--color-text-secondary)' }}
+              data-testid="order-pending-timeline"
+            >
+              {pendingPaymentGuide.timelineNotice}
+            </p>
+          ) : (
+            <DeliverySteps active={currentStep} labels={steps.map(orderTimelineStepLabel)} />
+          )}
         </div>
       )}
+
+      {/* 문의하기: 공개 사업자 정보의 고객센터 전화. 주문번호를 함께 보여 통화 때 말하기 쉽게 한다. */}
+      <div
+        className="mt-5 rounded-[var(--radius)] bg-[var(--color-surface-muted)] p-4"
+        data-testid="order-support"
+      >
+        <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-extrabold)' }}>
+          문의하기
+        </p>
+        <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+          전화하실 때 아래 주문번호를 알려 주세요.
+        </p>
+        <p className="m-0 mt-1 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
+          주문번호 {detail.orderNumber}
+        </p>
+        <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+          상담 시간 {PUBLIC_BUSINESS_INFO.supportHours}
+        </p>
+        <ButtonLink className="mt-3 w-full" variant="outline" href={PUBLIC_BUSINESS_INFO.phoneHref}>
+          전화로 문의하기 {PUBLIC_BUSINESS_INFO.phone}
+        </ButtonLink>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import Providers from './providers';
 import BottomNav from '@/components/BottomNav';
+import OfflineNotice from '@/components/OfflineNotice';
 import { enabledFeatureKeys } from '@/lib/features';
 import {
   DEFAULT_SHARE_IMAGE,
@@ -60,6 +61,8 @@ export default function RootLayout({
       </head>
       <body>
         <Providers>
+          {/* 연결 상태는 브라우저에서만 읽는다(요청 헤더를 읽지 않아 정적 렌더링을 유지한다). */}
+          <OfflineNotice />
           <div
             style={{
               maxWidth: 430,

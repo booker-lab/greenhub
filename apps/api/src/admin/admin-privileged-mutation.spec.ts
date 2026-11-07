@@ -26,6 +26,7 @@ type MutationName =
   | 'approveDriver'
   | 'suspendDriver'
   | 'setCommission'
+  | 'setSalesMode'
   | 'archiveStore'
   | 'restoreStore'
   | 'suspendUser'
@@ -116,6 +117,11 @@ function makeHttpHarness() {
       storeId: 'store-1',
       commissionRate: 0.1,
     }),
+    setSalesMode: jest.spyOn(adminService, 'setSalesMode').mockResolvedValue({
+      storeId: 'store-1',
+      salesMode: 'round_direct',
+      changed: true,
+    }),
     archiveStore: jest.spyOn(adminService, 'archiveStore').mockResolvedValue({
       storeId: 'store-1',
       status: 'archived',
@@ -199,6 +205,10 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         return http.patch('/admin/drivers/driver-1/suspend').send({ suspended: true });
       case 'setCommission':
         return http.patch('/admin/stores/store-1/commission').send({ rate: 0.1 });
+      case 'setSalesMode':
+        return http
+          .patch('/admin/stores/store-1/sales-mode')
+          .send({ salesMode: 'round_direct', reason: '회차 판매 시작' });
       case 'archiveStore':
         return http.patch('/admin/stores/store-1/archive');
       case 'restoreStore':
@@ -230,6 +240,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     'approveDriver',
     'suspendDriver',
     'setCommission',
+    'setSalesMode',
     'archiveStore',
     'restoreStore',
     'suspendUser',
@@ -246,6 +257,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.approveDriver).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendDriver).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.setCommission).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.setSalesMode).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.archiveStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
@@ -272,6 +284,7 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
     expect(harness.serviceBoundary.approveDriver).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendDriver).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.setCommission).not.toHaveBeenCalled();
+    expect(harness.serviceBoundary.setSalesMode).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.archiveStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.restoreStore).not.toHaveBeenCalled();
     expect(harness.serviceBoundary.suspendUser).not.toHaveBeenCalled();
@@ -312,6 +325,13 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         break;
       case 'setCommission':
         expect(harness.serviceBoundary.setCommission).toHaveBeenCalledWith('store-1', { rate: 0.1 }, 'admin-1');
+        break;
+      case 'setSalesMode':
+        expect(harness.serviceBoundary.setSalesMode).toHaveBeenCalledWith(
+          'store-1',
+          { salesMode: 'round_direct', reason: '회차 판매 시작' },
+          'admin-1',
+        );
         break;
       case 'archiveStore':
         expect(harness.serviceBoundary.archiveStore).toHaveBeenCalledWith('store-1', 'admin-1', undefined);

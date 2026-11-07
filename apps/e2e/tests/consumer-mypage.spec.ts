@@ -74,7 +74,7 @@ test.describe('Consumer — 마이페이지 (인증)', () => {
   test('주문 목록 렌더링 또는 빈 상태 안내', async ({ page }) => {
     await page.goto(`${BASE}/mypage`)
     await page.waitForLoadState('networkidle')
-    const empty = page.getByText('주문 내역이 없습니다')
+    const empty = page.getByText('아직 주문한 꽃이 없어요.')
     const hasOrders = (await page.locator('[data-testid="order-card"]').count()) > 0
     if (!hasOrders) await expect(empty).toBeVisible({ timeout: 10_000 })
   })

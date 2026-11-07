@@ -12,17 +12,31 @@ export const SELLER_BOTTOM_NAV_ITEMS = [
   { href: '/settings', label: '설정', icon: SettingsIcon },
 ] as const;
 
+// 탭 경로 밖에 있지만 해당 탭에서 들어가는 화면. 정산 관리·거점 관리는 설정에서 들어간다.
+const BOTTOM_NAV_EXTRA_PATHS: Partial<Record<string, readonly string[]>> = {
+  '/settings': ['/settlements', '/hubs'],
+};
+
+function matchesPath(pathname: string, base: string) {
+  return pathname === base || pathname.startsWith(`${base}/`);
+}
+
 export function isBottomNavItemActive(pathname: string, href: string) {
-  return pathname === href || pathname.startsWith(`${href}/`);
+  return [href, ...(BOTTOM_NAV_EXTRA_PATHS[href] ?? [])].some((base) =>
+    matchesPath(pathname, base),
+  );
+}
+
+/** 로그인·온보딩·운영 초대 화면과 어드민 콘솔(자체 상단 탭)에서는 판매자 하단 탭을 숨긴다. */
+export function isBottomNavHidden(pathname: string) {
+  const hiddenPaths = ['/login', '/onboarding', '/invite'];
+  return hiddenPaths.some((p) => pathname.startsWith(p)) || isAdminPath(pathname);
 }
 
 export default function BottomNav() {
   const pathname = usePathname();
 
-  const hiddenPaths = ['/login', '/onboarding'];
-  if (hiddenPaths.some((p) => pathname.startsWith(p))) return null;
-  // 어드민 콘솔은 자체 상단 탭이 있어 판매자 하단 탭을 숨긴다
-  if (isAdminPath(pathname)) return null;
+  if (isBottomNavHidden(pathname)) return null;
 
   // ① 외형 유지(UI 교체 P4): Mantine UnstyledButton(링크)·Stack(가운데·gap 2·높이 100%)·Text와 같은 값.
   return (

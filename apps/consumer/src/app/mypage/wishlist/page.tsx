@@ -14,6 +14,7 @@ import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { isFeatureOn } from '@/lib/features';
 import { cartAddFailureMessage, roundItemCartInput, roundProductHref } from '@/lib/round-quick-add';
 import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
+import { MyPageBackButton } from '../_back-button';
 
 // ① 외형 유지(UI 교체 P5): Mantine Container sm(720px, 좌우 md 16·위 lg 20·아래 100)·Title h1(줄 높이 1.3)·
 // Text(p, 크기 지정 없으면 md·줄 높이 1.55, sm은 줄 높이 1.45)·Stack·SimpleGrid(2열, 12)·Box(sm 12)·
@@ -47,7 +48,10 @@ function WishlistContent() {
 
   return (
     <div className="mx-auto max-w-[720px] px-4 pt-5 pb-[100px]">
-      <h1 className={TITLE}>이번 회차 찜</h1>
+      <div className="flex flex-row flex-nowrap items-center justify-start gap-2.5">
+        <MyPageBackButton />
+        <h1 className={TITLE}>이번 회차 찜</h1>
+      </div>
       <p
         className={`${SMALL_TEXT} mt-1 mb-4`}
         style={{ ...SMALL, color: 'var(--color-text-secondary)' }}

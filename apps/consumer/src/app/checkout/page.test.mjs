@@ -26,9 +26,38 @@ new Function('require', 'module', 'exports', compiledCart)(
   cartModule.exports,
 );
 
+// 회차 마감 판정은 실제 checkout-round-closed 모듈(일정 판정은 round-schedule-label)로 만든다.
+const libCompilerOptions = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 };
+const scheduleLabelModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../../lib/round-schedule-label.ts', import.meta.url), 'utf8'),
+    { compilerOptions: libCompilerOptions },
+  ).outputText,
+)(scheduleLabelModule, scheduleLabelModule.exports);
+const roundClosedModule = { exports: {} };
+new Function(
+  'require',
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../../lib/checkout-round-closed.ts', import.meta.url), 'utf8'),
+    { compilerOptions: libCompilerOptions },
+  ).outputText,
+)(
+  (specifier) => {
+    if (specifier === '@/lib/round-schedule-label') return scheduleLabelModule.exports;
+    throw new Error(`예상하지 못한 회차 마감 모듈 요청: ${specifier}`);
+  },
+  roundClosedModule,
+  roundClosedModule.exports,
+);
+
 const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 const testableSource = `${source}
-export { parseCheckoutCart, resolveRoundCheckoutSchedule, resolveSingleCheckoutAmount, SingleCheckoutContent };`;
+export { CartCheckoutContent, parseCheckoutCart, RoundClosedNotice, resolveRoundCheckoutSchedule, resolveRoundScheduleError, resolveSingleCheckoutAmount, SingleCheckoutContent, staleRoundsDetail };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     esModuleInterop: true,
@@ -57,15 +86,45 @@ const requireForTest = (specifier) => {
   if (specifier === '@/hooks/useSaleRounds') return { useSaleRounds: () => ({}) };
   if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
   if (specifier === '@/lib/cartValidation') return { getCartValidationError: () => null };
+  if (specifier === '@/lib/checkout-round-closed') return roundClosedModule.exports;
+  if (specifier === '@/lib/checkout-hold-limit') {
+    return {
+      CHECKOUT_HOLD_LIMIT_ORDERS_LABEL: '주문 내역 보기',
+      CHECKOUT_HOLD_LIMIT_ORDERS_PATH: '/mypage',
+    };
+  }
+  if (specifier === '@/lib/checkout-messages') {
+    return {
+      CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE:
+        '지금은 결제를 시작할 수 없어요. 잠시 후 다시 시도해 주세요.',
+      ORDER_CREATE_FAILED_MESSAGE: '주문을 만들지 못했어요. 잠시 후 다시 시도해 주세요.',
+    };
+  }
   if (specifier === '@/lib/checkout-prefill') {
     return { pickCheckoutPrefill: () => ({}), prefillAddress: (c) => c, prefillPhone: (c) => c };
   }
   if (specifier === '@/lib/payment-redirect') return {};
+  if (specifier === '@/lib/payment-checkout-draft') {
+    return {
+      checkoutDraftCartKey: () => '',
+      clearCheckoutDraft: () => {},
+      loadCheckoutDraft: () => null,
+      readCheckoutDraftStorage: () => null,
+      saveCheckoutDraft: () => {},
+    };
+  }
+  if (specifier === '@/lib/payment-page-guard') return { attachPaymentPageGuard: () => () => {} };
+  if (specifier === '@/lib/payment-failure-message') {
+    return { paymentFailureMessage: () => '결제를 취소했어요. 장바구니는 그대로 남아 있어요.' };
+  }
   if (specifier === '@/lib/korean-mobile-phone') {
     return { isKoreanMobilePhone: () => true, ROUND_DELIVERY_PHONE_ERROR: '' };
   }
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
+  }
+  if (specifier === '@/lib/load-error-message') {
+    return { CONNECTION_UNSTABLE_MESSAGE: '연결이 불안정해요. 잠시 후 다시 시도해 주세요.' };
   }
   if (specifier === '@/lib/portone-config') {
     return {
@@ -106,8 +165,13 @@ new Function('require', 'module', 'exports', compiled)(
   pageModule.exports,
 );
 
-const { parseCheckoutCart, resolveRoundCheckoutSchedule, resolveSingleCheckoutAmount } =
-  pageModule.exports;
+const {
+  parseCheckoutCart,
+  resolveRoundCheckoutSchedule,
+  resolveRoundScheduleError,
+  resolveSingleCheckoutAmount,
+  staleRoundsDetail,
+} = pageModule.exports;
 
 const firstRoundItem = {
   productId: 'product-1',
@@ -339,6 +403,12 @@ test('legacy checkout도 모바일 리다이렉트 복귀 URL과 남은 미결�
   const save = legacyCheckoutSource.indexOf('savePendingOrderPayment(');
   const sdkCall = legacyCheckoutSource.indexOf('PortOne.requestPayment(');
   assert.ok(save >= 0 && save < sdkCall);
+  // 결제창이 끝나면 이 시도가 저장한 기록만 지운다. 같은 탭 복귀 뒤 새 결제의 기록은 남긴다.
+  assert.match(
+    legacyCheckoutSource,
+    /clearOwnPendingOrderPayment\(browser\?\.storage \?\? null, pending\)/,
+  );
+  assert.doesNotMatch(legacyCheckoutSource, /savePendingOrderPayment\([^)]*, null\)/);
 });
 
 test('결제창 호출은 고른 결제수단으로 파라미터를 만들고 간편결제를 고정하지 않는다', () => {
@@ -493,7 +563,7 @@ test('단건 checkout은 상품 조회에 실패하면 URL 금액 대신 금액�
       await harness.runEffectsAndSettle();
       const rendered = harness.render();
       assert.equal(rendered.totalAmount, 0);
-      assert.match(rendered.error, /상품 정보를 불러오지 못했습니다/);
+      assert.equal(rendered.error, '상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
     },
   );
 });
@@ -537,4 +607,295 @@ test('회차 결제는 받는 분 연락처가 휴대폰 번호일 때만 결제
     roundSection,
     /deliveryPhoneError=\{deliveryPhoneValid \? null : ROUND_DELIVERY_PHONE_ERROR\}/,
   );
+});
+
+test('legacy checkout 결제창 실패는 PG 원문 대신 고객 문구로 보인다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+  assert.match(legacyCheckoutSource, /setError\(paymentFailureMessage\(response\)\)/);
+  assert.doesNotMatch(legacyCheckoutSource, /setError\(response\.message/);
+});
+
+/** 장바구니 checkout을 저장소에 결제 상품이 없는(invalid) 상태로 그려 화면 요소와 이동을 기록한다. */
+function renderInvalidCartCheckout() {
+  const elements = [];
+  const pushes = [];
+  const ButtonStub = () => null;
+  const textOf = (children) =>
+    (Array.isArray(children) ? children : [children])
+      .filter((child) => typeof child === 'string')
+      .join('');
+  const requireForRender = (specifier) => {
+    if (specifier === 'react') {
+      return {
+        Suspense: () => null,
+        useEffect: () => {},
+        useRef: (initial) => ({ current: initial }),
+        useState: () => [{ kind: 'invalid', items: [] }, () => {}],
+      };
+    }
+    if (specifier === 'react/jsx-runtime') {
+      const jsx = (type, props) => {
+        elements.push({ type, props, text: textOf(props?.children) });
+        return null;
+      };
+      return { Fragment: Symbol('Fragment'), jsx, jsxs: jsx };
+    }
+    if (specifier === 'next/navigation') {
+      return {
+        useRouter: () => ({ push: (path) => pushes.push(path), replace: () => {} }),
+        useSearchParams: () => new URLSearchParams('from=cart'),
+      };
+    }
+    if (specifier === '@greenhub/ui/components/button') return { Button: ButtonStub };
+    return requireForTest(specifier);
+  };
+  const renderModule = { exports: {} };
+  new Function('require', 'module', 'exports', compiled)(
+    requireForRender,
+    renderModule,
+    renderModule.exports,
+  );
+  renderModule.exports.CartCheckoutContent();
+  return { elements, pushes, buttons: elements.filter((element) => element.type === ButtonStub) };
+}
+
+test('결제할 장바구니 정보가 없으면 장바구니·홈으로 돌아갈 버튼을 보인다', () => {
+  const { elements, pushes, buttons } = renderInvalidCartCheckout();
+
+  assert.ok(
+    elements.some((element) =>
+      element.text.includes('결제할 상품 정보가 없어요. 장바구니에서 다시 결제해 주세요.'),
+    ),
+  );
+  assert.deepEqual(
+    buttons.map((button) => button.text),
+    ['장바구니로 가기', '홈으로'],
+  );
+  // 장바구니로 가기가 주 버튼이고 홈으로는 보조(ghost) 버튼이다.
+  assert.equal(buttons[0].props.variant, undefined);
+  assert.equal(buttons[1].props.variant, 'ghost');
+  for (const button of buttons) button.props.onClick();
+  assert.deepEqual(pushes, ['/cart', '/']);
+  assert.doesNotMatch(source, /결제할 장바구니 정보를 확인할 수 없습니다/);
+});
+
+test('legacy checkout은 결제 단계를 동기 값으로 갱신해 결제사 이동 때 이탈 확인창을 띄우지 않는다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+  assert.match(legacyCheckoutSource, /attachPaymentPageGuard\(window, \{/);
+  assert.match(legacyCheckoutSource, /getPhase: \(\) => phase\.current/);
+  // 결제창 호출 전 단계는 렌더를 기다리지 않고 바뀐다.
+  const paying = legacyCheckoutSource.indexOf("transition('paying')");
+  const request = legacyCheckoutSource.indexOf('PortOne.requestPayment(');
+  assert.ok(paying >= 0 && paying < request);
+  assert.doesNotMatch(legacyCheckoutSource, /setState\('paying'\)/);
+  // 같은 탭 복귀 뒤 늦게 끝난 이전 결제창 결과는 무시한다.
+  assert.match(legacyCheckoutSource, /generation !== attemptGeneration\.current/);
+});
+
+test('장바구니 checkout은 결제사 화면에서 복원되면 결제 상품을 다시 읽는다', () => {
+  const start = source.indexOf('function CartCheckoutContent');
+  const cartSource = source.slice(start, source.indexOf('function CheckoutContent', start));
+  assert.match(cartSource, /addEventListener\('pageshow', handlePageShow\)/);
+  assert.match(cartSource, /if \(event\.persisted\) readCart\(\)/);
+  assert.match(cartSource, /removeEventListener\('pageshow', handlePageShow\)/);
+});
+
+test('회차 checkout은 같은 계정·장바구니의 입력값을 복원하고 바뀔 때마다 탭 저장소에 남긴다', () => {
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+
+  assert.match(roundCheckoutSource, /checkoutDraftCartKey\(cartItems\)/);
+  // 기록은 로그인한 계정에 묶는다. 계정이 확인되기 전에는 읽지도 저장하지도 않는다.
+  assert.match(roundCheckoutSource, /const userId = session\?\.user\?\.id \?\? ''/);
+  assert.match(
+    roundCheckoutSource,
+    /loadCheckoutDraft\(\s+readCheckoutDraftStorage\(\),\s+draftCartKey,\s+userId,/,
+  );
+  assert.match(
+    roundCheckoutSource,
+    /\{ address, deliveryPhone, requestNote, packageLabel \},\s+draftCartKey,\s+userId,/,
+  );
+  assert.equal(
+    roundCheckoutSource.match(/if \(!userId \|\| draftOwnerId (?:===|!==) userId\) return;/g)
+      ?.length,
+    2,
+  );
+  // 첫 렌더에서 바로 복원하지 않는다(다른 계정의 기록이 계정 확인 전에 보이지 않게).
+  assert.doesNotMatch(roundCheckoutSource, /useState\(\(\) =>\s+loadCheckoutDraft/);
+  // 복원은 자동 채움보다 먼저 일어나 자동 채움이 복원값 위에서 빈 칸만 채운다.
+  const restore = roundCheckoutSource.indexOf('loadCheckoutDraft(');
+  const prefill = roundCheckoutSource.indexOf('pickCheckoutPrefill(profile)');
+  assert.ok(restore >= 0 && restore < prefill);
+  // 저장된 배송지 자동 채움은 그대로 빈 칸만 채운다.
+  assert.match(
+    roundCheckoutSource,
+    /setAddress\(\(current\) => prefillAddress\(current, prefill\)\)/,
+  );
+  assert.match(
+    roundCheckoutSource,
+    /setDeliveryPhone\(\(current\) => prefillPhone\(current, prefill\)\)/,
+  );
+  // 결제가 끝나면 checkout_cart와 함께 지운다.
+  const done = roundCheckoutSource.indexOf("state !== 'done' || !orderId");
+  const clear = roundCheckoutSource.indexOf('clearCheckoutDraft(readCheckoutDraftStorage())');
+  assert.ok(done >= 0 && done < clear);
+});
+
+test('회차 확인 안내는 같은 뜻을 괄호로 반복하지 않고 해요체 한 문장으로 보인다', () => {
+  const loadError = '판매 회차를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+  const connectionError = '연결이 불안정해요. 잠시 후 다시 시도해 주세요.';
+
+  // 오래된 회차 정보: 원인 문구를 괄호로 덧붙이지 않는다.
+  const stale = resolveRoundScheduleError('stale', loadError, true);
+  assert.equal(
+    stale,
+    '최신 회차 정보를 불러오지 못해 지금은 결제할 수 없어요. 다시 시도한 뒤 결제해 주세요.',
+  );
+  assert.equal(resolveRoundScheduleError('stale', null, true), stale);
+  assert.doesNotMatch(stale, /[()]/);
+
+  // 조회 실패는 이미 고객 문구가 된 안내를 그대로 쓴다.
+  assert.equal(resolveRoundScheduleError('error', loadError, false), loadError);
+
+  // 조회는 됐지만 장바구니와 맞는 회차가 없을 때만 변경 안내를 보인다.
+  const changed =
+    '상품·가격·회차 정보가 바뀌어 결제할 수 없어요. 장바구니에서 바뀐 내용을 다시 확인해 주세요.';
+  for (const status of ['success', 'empty', 'refreshing']) {
+    assert.equal(resolveRoundScheduleError(status, null, false), changed);
+    assert.equal(resolveRoundScheduleError(status, null, true), null);
+  }
+  assert.equal(resolveRoundScheduleError('loading', null, false), null);
+
+  // 오래된 정보 상자 아래에는 뜻이 다른 원인(연결 불안정)만 덧붙인다.
+  assert.equal(staleRoundsDetail(loadError), null);
+  assert.equal(staleRoundsDetail(null), null);
+  assert.equal(staleRoundsDetail(connectionError), connectionError);
+
+  // 화면의 회차 안내에 합니다체가 남지 않는다.
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+  assert.match(roundCheckoutSource, /최신 회차 정보를 불러오지 못했어요\./);
+  assert.doesNotMatch(source, /최신 회차 정보를 불러오지 못했습니다/);
+  assert.doesNotMatch(source, /이전 결과로는 결제할 수 없습니다/);
+  assert.doesNotMatch(source, /회차 정보가 변경되어 결제할 수 없습니다/);
+});
+
+/** 회차 마감 안내를 그려 화면 요소와 이동을 기록한다. */
+function renderRoundClosedNotice() {
+  const elements = [];
+  const pushes = [];
+  const ButtonStub = () => null;
+  const textOf = (children) =>
+    (Array.isArray(children) ? children : [children])
+      .filter((child) => typeof child === 'string')
+      .join('');
+  const requireForRender = (specifier) => {
+    if (specifier === 'react/jsx-runtime') {
+      const jsx = (type, props) => {
+        elements.push({ type, props, text: textOf(props?.children) });
+        return null;
+      };
+      return { Fragment: Symbol('Fragment'), jsx, jsxs: jsx };
+    }
+    if (specifier === '@greenhub/ui/components/button') return { Button: ButtonStub };
+    return requireForTest(specifier);
+  };
+  const renderModule = { exports: {} };
+  new Function('require', 'module', 'exports', compiled)(
+    requireForRender,
+    renderModule,
+    renderModule.exports,
+  );
+  renderModule.exports.RoundClosedNotice({
+    onCart: () => pushes.push('/cart'),
+    onHome: () => pushes.push('/'),
+  });
+  return { elements, pushes, buttons: elements.filter((element) => element.type === ButtonStub) };
+}
+
+test('회차 마감 안내는 마감 문구와 장바구니·홈으로 버튼을 보인다(C-13)', () => {
+  const { elements, pushes, buttons } = renderRoundClosedNotice();
+
+  const notice = elements.find((element) => element.props?.role === 'alert');
+  assert.ok(notice, '마감 안내는 바로 읽히는 알림이다');
+  assert.ok(elements.some((element) => element.text === '이번 회차 주문이 마감됐어요.'));
+  assert.deepEqual(
+    buttons.map((button) => button.text),
+    ['장바구니로 가기', '홈으로'],
+  );
+  assert.equal(buttons[0].props.variant, undefined);
+  assert.equal(buttons[1].props.variant, 'ghost');
+  for (const button of buttons) button.props.onClick();
+  assert.deepEqual(pushes, ['/cart', '/']);
+  // 발송 기능이 없는 다음 회차 알림은 안내·버튼으로 약속하지 않는다.
+  assert.ok(!elements.some((element) => /알림|소식/.test(element.text)));
+});
+
+test('회차 checkout은 마감 거절 응답·지나간 마감 시각에 결제 버튼을 끄고 마감 안내를 보인다(C-13)', () => {
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+
+  assert.match(
+    roundCheckoutSource,
+    /const \{ state, orderId, error, roundOrderClosed, checkoutHoldLimited, requestPayment \} =\s*usePayment\(\{/,
+  );
+  assert.match(
+    roundCheckoutSource,
+    /isCheckoutRoundClosed\(\{\s*round: schedule\?\.round \?\? null,\s*nowMillis: Date\.now\(\),\s*closedByOrderResponse: roundOrderClosed,\s*paymentInFlight: isLoading \|\| state === 'done',\s*\}\)/,
+  );
+  // 화면을 연 채 마감 시각이 지나면 그 시각에 다시 그린다.
+  assert.match(roundCheckoutSource, /msUntilRoundOrderClose\(orderCloseAt, Date\.now\(\)\)/);
+  assert.match(roundCheckoutSource, /window\.clearTimeout\(timer\)/);
+  // 결제 버튼을 끄고, 같은 뜻의 오류를 겹쳐 보이지 않고, 버튼 위에 안내를 둔다.
+  assert.match(roundCheckoutSource, /const canPay =\s*!roundClosed &&/);
+  assert.match(
+    roundCheckoutSource,
+    /const formError = roundClosed \? null : \(scheduleError \?\? error\);/,
+  );
+  assert.match(roundCheckoutSource, /error=\{formError\}/);
+  assert.match(roundCheckoutSource, /closedNotice=\{\s*roundClosed \? \(\s*<RoundClosedNotice/);
+  assert.match(roundCheckoutSource, /onCart=\{\(\) => router\.push\('\/cart'\)\}/);
+  assert.match(roundCheckoutSource, /onHome=\{\(\) => router\.push\('\/'\)\}/);
+});
+
+test('결제 화면 문구는 해요체이고 결제 설정 원문 대신 고객 문구를 보인다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+
+  assert.match(legacyCheckoutSource, /setError\(CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE\)/);
+  assert.doesNotMatch(legacyCheckoutSource, /caught\.message/);
+  assert.match(legacyCheckoutSource, /setError\(body\.message \?\? ORDER_CREATE_FAILED_MESSAGE\)/);
+  // 화면에 그리는 문자열 상수·안내에 합니다체가 남지 않는다.
+  const quoted = [...source.matchAll(/'([^'\n]*[가-힣][^'\n]*)'/g)].map((match) => match[1]);
+  for (const text of quoted) assert.doesNotMatch(text, /니다\.?$/, text);
+  assert.doesNotMatch(
+    source,
+    /상품 정보를 불러오지 못했습니다|결제 설정을 확인할 수 없습니다|주문 생성 실패/,
+  );
+});
+
+test('회차 checkout은 결제 예약 한도 거절이면 오류 안내 아래에 주문 내역 버튼을 둔다(C-02)', () => {
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+
+  assert.match(
+    source,
+    /import \{\s*CHECKOUT_HOLD_LIMIT_ORDERS_LABEL,\s*CHECKOUT_HOLD_LIMIT_ORDERS_PATH,\s*\} from '@\/lib\/checkout-hold-limit';/,
+  );
+  // 오류 문구가 보일 때(마감 안내로 가려지지 않았을 때)만, 한도 거절일 때만 버튼을 둔다.
+  assert.match(
+    roundCheckoutSource,
+    /errorAction=\{[\s\S]*?formError && formError === error && checkoutHoldLimited \? \([\s\S]*?onClick=\{\(\) => router\.push\(CHECKOUT_HOLD_LIMIT_ORDERS_PATH\)\}[\s\S]*?\{CHECKOUT_HOLD_LIMIT_ORDERS_LABEL\}[\s\S]*?\) : undefined\s*\}/,
+  );
+  // 단일 상품 결제(예약 한도 없음)에는 버튼을 두지 않는다.
+  assert.equal(source.match(/errorAction=/g)?.length, 1);
 });

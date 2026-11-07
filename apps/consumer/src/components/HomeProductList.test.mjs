@@ -64,3 +64,42 @@ test('매장을 알게 되는 즉시 판매 방식·회차 조회를 함께 시�
     /useSaleRounds\(\s*storeMode\.salesMode === 'round_direct' \? storeMode\.storeId : null,\s*\)/,
   );
 });
+
+test('주문 마감이 지난 회차는 "~까지" 대신 마감됨 문구로 보인다', () => {
+  assert.match(
+    source,
+    /formatOrderCloseStatus\(\s*currentRound\.schedule\.orderCloseAt,\s*isRoundOrderClosed\(currentRound, Date\.now\(\)\),\s*\)/,
+  );
+  assert.doesNotMatch(source, /formatOrderCloseLabel\(/);
+});
+
+test('회차 조회 오류·이전 결과 안내는 useSaleRounds의 고객 문구 한 줄로 보이고 같은 뜻을 두 번 쓰지 않는다', () => {
+  const roundDirectSource = source.slice(
+    source.indexOf('function RoundDirectHome'),
+    source.indexOf('function LegacyHomeProductList'),
+  );
+  // error는 useSaleRounds가 고객 문구로 바꿔 준다(원문은 그 훅의 테스트가 막는다).
+  assert.equal(roundDirectSource.match(/\{error \?\? saleRoundsErrorMessage\(null\)\}/g)?.length, 2);
+  assert.match(roundDirectSource, /지금은 이전에 불러온 회차 정보를 보여 드려요\./);
+  assert.doesNotMatch(roundDirectSource, /판매 회차를 불러오지 못했습니다|이전 결과를 표시합니다/);
+});
+
+test('주문이 끝난 회차 아래에 받아 둔 회차 목록의 다음 회차 주문 시작을 한 줄로 안내한다', () => {
+  const roundDirectSource = source.slice(
+    source.indexOf('function RoundDirectHome'),
+    source.indexOf('function LegacyHomeProductList'),
+  );
+  // 판정은 순수 함수(lib/round-next-notice)가 하고, 홈은 useSaleRounds가 이미 받은 rounds만 넘긴다.
+  assert.match(roundDirectSource, /findNextRoundAfterClose\(rounds, currentRound, Date\.now\(\)\)/);
+  assert.match(roundDirectSource, /formatNextRoundNotice\(nextRound\)/);
+  // 안내는 주문 마감 줄 바로 다음, 배송 지역 줄보다 앞에 둔다.
+  const closePosition = roundDirectSource.indexOf("'주문 마감 일정 준비 중'");
+  const noticePosition = roundDirectSource.indexOf('{nextRoundNotice}');
+  const regionPosition = roundDirectSource.indexOf('경기도 이천시 직접배송');
+  assert.ok(closePosition >= 0 && closePosition < noticePosition && noticePosition < regionPosition);
+  // 카카오 채널 추가는 기존 컴포넌트를 open-alert 토글 아래에서만 다시 쓴다.
+  assert.match(
+    roundDirectSource,
+    /isFeatureOn\('open-alert'\) && \(currentRound\?\.status === 'SCHEDULED' \|\| nextRoundNotice\) && \(\s*<div className="mb-4">\s*<KakaoChannelCta \/>/,
+  );
+});

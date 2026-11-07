@@ -3,8 +3,9 @@
 import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { ChevronLeft, Home } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { canGoBackInApp } from './inAppNavigation';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container 폭(xs 540·sm 720·md 960·lg 1140, 좌우 16px),
 // Group(가운데 정렬·gap sm 12px), Title order 3(22px·800·1.4), ActionIcon(28px, subtle gray = ghost)과 같은 값.
@@ -20,6 +21,11 @@ interface PageHeaderProps {
   title: string;
   /** 지정 시 좌측에 뒤로가기 버튼을 렌더. */
   onBack?: () => void;
+  /**
+   * 지정 시 좌측에 뒤로가기 버튼을 렌더. 바로 앞 기록이 앱 화면이면
+   * 이전 화면으로, 주소로 바로 들어왔거나 바로 앞이 다른 사이트면 이 상위 화면으로 보낸다. onBack이 함께 오면 onBack이 우선.
+   */
+  backHref?: string;
   /** 우측 영역 (액션 버튼·상태 표시 등). */
   right?: ReactNode;
   containerSize?: keyof typeof CONTAINER_WIDTH;
@@ -31,6 +37,7 @@ interface PageHeaderProps {
 export function PageHeader({
   title,
   onBack,
+  backHref,
   right,
   containerSize = 'sm',
   sticky = true,
@@ -38,6 +45,17 @@ export function PageHeader({
   const pathname = usePathname();
   // 홈 진입점 — 현재 경로가 홈이 아닐 때만 노출. 제목 바로 옆에 둬서 긴 제목과 겹치지 않는다.
   const showHome = pathname !== '/';
+  const router = useRouter();
+  const handleBack =
+    onBack ??
+    (backHref
+      ? () => {
+          // window.history.length는 같은 탭에서 앞서 본 다른 사이트까지 세므로 쓰지 않는다.
+          // 바로 앞 기록이 앱 화면이 아니면(새 탭·주소 직접 입력·외부에서 들어옴) router.back()이 앱 밖으로 나가므로 상위 화면으로 바꾼다.
+          if (canGoBackInApp()) router.back();
+          else router.replace(backHref);
+        }
+      : undefined);
 
   return (
     <header
@@ -50,8 +68,14 @@ export function PageHeader({
       <div className={`mx-auto px-4 ${CONTAINER_WIDTH[containerSize]}`}>
         <div className="flex flex-row flex-nowrap items-center justify-between gap-4">
           <div className="flex min-w-0 flex-row flex-nowrap items-center justify-start gap-3">
-            {onBack && (
-              <Button variant="ghost" size="icon-sm" className="size-7" onClick={onBack}>
+            {handleBack && (
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                className="size-7"
+                aria-label="뒤로"
+                onClick={handleBack}
+              >
                 <ChevronLeft size={20} className="size-5" />
               </Button>
             )}

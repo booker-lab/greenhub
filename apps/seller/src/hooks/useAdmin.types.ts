@@ -1,6 +1,7 @@
 import type {
   OrderStatus,
   PostDeliveryRefundRecord,
+  SalesMode,
   SettlementStatus,
   StoreStatus,
 } from '@greenhub/shared';
@@ -22,6 +23,8 @@ export interface AdminStore {
   name: string;
   status: StoreStatus;
   commissionRate?: number;
+  /** 판매 방식. 저장값이 없는 옛 가게는 비어 있고 예전 방식(legacy)으로 읽는다. */
+  salesMode?: SalesMode;
   /** 대표자 이름·연락처. 가입 전(초대 중) 판매자는 비어 있을 수 있다. */
   ceoName?: string;
   phone?: string;
