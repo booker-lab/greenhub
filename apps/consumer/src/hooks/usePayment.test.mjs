@@ -955,7 +955,8 @@ test('결제 설정·연결 실패·주문 응답 손상은 원문 대신 해요
     assert.ok(stateChanges.includes('지금은 결제를 시작할 수 없어요. 잠시 후 다시 시도해 주세요.'));
     assert.ok(!stateChanges.includes('결제 설정을 확인할 수 없습니다.'));
   } finally {
-    process.env.NEXT_PUBLIC_PORTONE_STORE_ID = savedStoreId;
+    if (savedStoreId === undefined) delete process.env.NEXT_PUBLIC_PORTONE_STORE_ID;
+    else process.env.NEXT_PUBLIC_PORTONE_STORE_ID = savedStoreId;
   }
 
   // 연결 실패는 브라우저 원문("Failed to fetch") 대신 연결 안내를 보인다.
