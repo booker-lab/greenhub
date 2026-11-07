@@ -67,7 +67,7 @@ test.describe('어드민 로컬 — 주문', () => {
           createdAt: new Date(),
         },
       },
-      // 일반 주문(접수됨) — 강제환불 버튼이 보이는 상태. KST 2026-10-20 12:04 주문.
+      // 일반 주문(결제 완료) — 강제환불 버튼이 보이는 상태. KST 2026-10-20 12:04 주문.
       order(fx.refund.id, {
         orderNumber: fx.refund.orderNumber,
         status: 'ACCEPTED',
@@ -164,7 +164,7 @@ test.describe('어드민 로컬 — 주문', () => {
     await expect(row).not.toContainText(fx.refund.buyerName);
     await expect(row).toContainText(fx.refund.productName);
     await expect(row).toContainText(fx.storeName);
-    await expect(row).toContainText('접수됨');
+    await expect(row).toContainText('결제 완료');
     await expect(row).toContainText(won(fx.refund.amount));
 
     const roundRow = orderRow(page, fx.round.orderNumber);

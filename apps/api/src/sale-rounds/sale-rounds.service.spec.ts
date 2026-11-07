@@ -236,7 +236,8 @@ describe('SaleRoundsService', () => {
   });
 
   it.each(['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED'])(
-    'public detail은 %s 상태를 허용하고 matching item query를 수행한다', async (status) => {
+    'public detail은 %s 상태를 허용하고 matching item query를 수행한다',
+    async (status) => {
       const { service, collectionCalls } = makeService(
         { 'saleRoundItems/item-1': makeItem() },
         makeRound({ status: status as SaleRound['status'] }),
@@ -251,7 +252,8 @@ describe('SaleRoundsService', () => {
   );
 
   it.each(['DRAFT', 'CANCELLED', 'UNKNOWN'])(
-    'public detail은 %s 상태를 item query 전에 fail closed한다', async (status) => {
+    'public detail은 %s 상태를 item query 전에 fail closed한다',
+    async (status) => {
       const { service, firestore, collectionCalls } = makeService(
         { 'saleRoundItems/item-1': makeItem() },
         makeRound({ status: status as SaleRound['status'] }),
@@ -517,6 +519,97 @@ describe('SaleRoundsService', () => {
     expect(records.get(`saleRoundItems/${created.items[0].id}`)).toMatchObject({
       roundId: created.id,
       productId: 'product-1',
+    });
+  });
+
+  describe('사진 없는 상품의 회차 항목 이미지 스냅샷', () => {
+    const roundInput = (productIds: string[]) => ({
+      name: '사진 없는 상품 회차',
+      schedule: makeRound().schedule,
+      deliveryRegion: makeRound().deliveryRegion,
+      limits: makeRound().limits,
+      items: productIds.map((productId, index) => ({
+        productId,
+        roundPrice: 12000,
+        saleLimitQuantity: 2,
+        displayOrder: index,
+      })),
+    });
+    const noImageProducts = {
+      'products/product-empty': { storeId: 'store-1', name: '빈 배열 상품', images: [] },
+      'products/product-missing': { storeId: 'store-1', name: '이미지 필드 없는 상품' },
+      'products/product-blank': { storeId: 'store-1', name: '빈 문자열 상품', images: [''] },
+      'products/product-non-string': { storeId: 'store-1', name: '비문자열 상품', images: [42] },
+    };
+    const noImageIds = Object.keys(noImageProducts).map((path) => path.split('/')[1]);
+
+    // Firestore는 undefined 필드를 거부하므로 저장되는 항목 문서에 undefined가 없어야 한다.
+    function expectNoUndefinedFields(doc: Data) {
+      for (const [key, value] of Object.entries(doc)) {
+        expect([key, value]).not.toEqual([key, undefined]);
+      }
+    }
+
+    it('회차 생성은 images가 비었거나 없는 상품의 스냅샷을 null로 저장한다', async () => {
+      const { service, records } = makeService(noImageProducts);
+
+      const created = await (service as any).createRound(
+        'store-1',
+        'seller-1',
+        'seller',
+        roundInput(noImageIds),
+      );
+
+      expect(created.items).toHaveLength(noImageIds.length);
+      for (const item of created.items) {
+        expect(item.productImageUrlSnapshot).toBeNull();
+        const stored = records.get(`saleRoundItems/${item.id}`)!;
+        expect(stored.productImageUrlSnapshot).toBeNull();
+        expectNoUndefinedFields(stored);
+      }
+    });
+
+    it('회차 수정은 images가 빈 배열인 상품으로 항목을 바꿔도 스냅샷을 null로 저장한다', async () => {
+      const { service, records } = makeService({
+        ...noImageProducts,
+        'saleRoundItems/item-1': makeItem(),
+      });
+
+      const updated = await (service as any).updateRound(
+        'store-1',
+        'round-1',
+        'seller-1',
+        'seller',
+        { items: roundInput(['product-empty', 'product-missing']).items },
+      );
+
+      expect(updated.items).toHaveLength(2);
+      for (const item of updated.items) {
+        expect(item.productImageUrlSnapshot).toBeNull();
+        const stored = records.get(`saleRoundItems/${item.id}`)!;
+        expect(stored.productImageUrlSnapshot).toBeNull();
+        expectNoUndefinedFields(stored);
+      }
+    });
+
+    it('회차 복사는 사진 없는 상품의 스냅샷을 null로 저장한다', async () => {
+      const { service, records } = makeService(
+        {
+          'products/product-1': { storeId: 'store-1', name: '공개 상품', images: [] },
+          'saleRoundItems/item-1': makeItem(),
+        },
+        makeRound({ status: 'OPEN' }),
+      );
+
+      const copied = await (service as any).copyRound('store-1', 'seller-1', 'seller', {
+        name: '복사 회차',
+        sourceRoundId: 'round-1',
+        schedule: makeRound().schedule,
+      });
+
+      expect(copied.items).toHaveLength(1);
+      expect(copied.items[0].productImageUrlSnapshot).toBeNull();
+      expectNoUndefinedFields(records.get(`saleRoundItems/${copied.items[0].id}`)!);
     });
   });
 
@@ -931,7 +1024,11 @@ describe('SaleRoundsService', () => {
 
       const round = await service.getPublicRound('store-1', 'round-1');
 
-      expect(round).toMatchObject({ id: 'round-1', status: 'CLOSED', closeReason: 'SCHEDULE_ENDED' });
+      expect(round).toMatchObject({
+        id: 'round-1',
+        status: 'CLOSED',
+        closeReason: 'SCHEDULE_ENDED',
+      });
       expect(writes).toHaveLength(0);
       expect(firestore.runTransaction).not.toHaveBeenCalled();
       expect(JSON.stringify(records.get('saleRounds/round-1'))).toBe(before);
@@ -1000,7 +1097,9 @@ describe('SaleRoundsService', () => {
       const detailed = await detailHarness.service.getPublicRound('store-1', 'round-1');
       expect(detailed).toMatchObject({ id: 'round-1', status: 'OPEN' });
       expect(detailHarness.writes).toHaveLength(0);
-      expect(detailHarness.records.get('saleRounds/round-1')).toMatchObject({ status: 'SCHEDULED' });
+      expect(detailHarness.records.get('saleRounds/round-1')).toMatchObject({
+        status: 'SCHEDULED',
+      });
     });
 
     it('6. open/closed boundary: pure effective status correct', async () => {
@@ -1008,19 +1107,13 @@ describe('SaleRoundsService', () => {
         status: 'OPEN',
         schedule: { ...makeRound().schedule, orderCloseAt: '2026-07-14T00:00:00.000+09:00' },
       });
-      const listHarness = makeService(
-        { 'saleRoundItems/item-1': makeItem() },
-        { ...closing },
-      );
+      const listHarness = makeService({ 'saleRoundItems/item-1': makeItem() }, { ...closing });
       const listed = await listHarness.service.listPublicRounds('store-1');
       expect(listed.items[0]).toMatchObject({ status: 'CLOSED', closeReason: 'SCHEDULE_ENDED' });
       expect(listHarness.writes).toHaveLength(0);
       expect(listHarness.records.get('saleRounds/round-1')).toMatchObject({ status: 'OPEN' });
 
-      const detailHarness = makeService(
-        { 'saleRoundItems/item-1': makeItem() },
-        { ...closing },
-      );
+      const detailHarness = makeService({ 'saleRoundItems/item-1': makeItem() }, { ...closing });
       const detailed = await detailHarness.service.getPublicRound('store-1', 'round-1');
       expect(detailed).toMatchObject({ status: 'CLOSED', closeReason: 'SCHEDULE_ENDED' });
       expect(detailHarness.writes).toHaveLength(0);
@@ -1285,11 +1378,14 @@ describe('SaleRoundsService', () => {
       ['15분 결제 대기 예약만으로 한도 도달', { reservedQuantity: 10, orderedQuantity: 0 }],
       ['예약과 주문 합으로 한도 도달', { reservedQuantity: 4, orderedQuantity: 6 }],
       ['한도 초과(경합 잔재)', { reservedQuantity: 6, orderedQuantity: 6 }],
-    ])('ACTIVE 상품은 %s이면 공개 조회에서 SOLD_OUT이고 저장값은 그대로다', async (_label, counts) => {
-      await expect(publicItemStatus({ saleLimitQuantity: 10, ...counts })).resolves.toBe(
-        'SOLD_OUT',
-      );
-    });
+    ])(
+      'ACTIVE 상품은 %s이면 공개 조회에서 SOLD_OUT이고 저장값은 그대로다',
+      async (_label, counts) => {
+        await expect(publicItemStatus({ saleLimitQuantity: 10, ...counts })).resolves.toBe(
+          'SOLD_OUT',
+        );
+      },
+    );
 
     it('한도까지 1개라도 남으면 ACTIVE를 유지한다', async () => {
       await expect(
@@ -1322,19 +1418,19 @@ describe('SaleRoundsService', () => {
       });
     });
 
-    it.each([
-      'SOLD_OUT',
-      'CLOSED',
-    ])('저장값 %s 상품은 수량과 관계없이 그대로 보인다', async (status) => {
-      await expect(
-        publicItemStatus({
-          status,
-          saleLimitQuantity: 10,
-          reservedQuantity: 0,
-          orderedQuantity: 0,
-        }),
-      ).resolves.toBe(status);
-    });
+    it.each(['SOLD_OUT', 'CLOSED'])(
+      '저장값 %s 상품은 수량과 관계없이 그대로 보인다',
+      async (status) => {
+        await expect(
+          publicItemStatus({
+            status,
+            saleLimitQuantity: 10,
+            reservedQuantity: 0,
+            orderedQuantity: 0,
+          }),
+        ).resolves.toBe(status);
+      },
+    );
 
     it('한도에 닿은 HIDDEN 상품은 계속 공개 응답에서 빠진다', async () => {
       const { service } = makeService(
@@ -1443,23 +1539,22 @@ describe('SaleRoundsService', () => {
       expect(writes).toHaveLength(0);
     });
 
-    it.each([
-      'DRAFT',
-      'COMPLETED',
-      'CANCELLED',
-    ])('%s 회차는 일정이 지나도 저장 상태 그대로 보인다', async (status) => {
-      const { service } = makeService(
-        {},
-        makeRound({
-          status: status as SaleRound['status'],
-          schedule: { ...makeRound().schedule, orderCloseAt: '2026-07-14T00:00:00.000+09:00' },
-        }),
-      );
+    it.each(['DRAFT', 'COMPLETED', 'CANCELLED'])(
+      '%s 회차는 일정이 지나도 저장 상태 그대로 보인다',
+      async (status) => {
+        const { service } = makeService(
+          {},
+          makeRound({
+            status: status as SaleRound['status'],
+            schedule: { ...makeRound().schedule, orderCloseAt: '2026-07-14T00:00:00.000+09:00' },
+          }),
+        );
 
-      await expect(
-        (service as any).listSellerRounds('store-1', 'seller-1', 'seller'),
-      ).resolves.toMatchObject({ items: [{ status }] });
-    });
+        await expect(
+          (service as any).listSellerRounds('store-1', 'seller-1', 'seller'),
+        ).resolves.toMatchObject({ items: [{ status }] });
+      },
+    );
 
     it('취소 처리 중인 회차는 일정이 지나도 저장 상태를 유지한다', async () => {
       const { service } = makeService(
@@ -1695,7 +1790,11 @@ describe('SaleRoundsService', () => {
         'saleRounds/past-3': closedRound('past-3', '2026-06-22T00:00:00.000+09:00'),
         'saleRounds/past-4': closedRound('past-4', '2026-06-15T00:00:00.000+09:00'),
         'saleRounds/round-draft': makeRound({ id: 'round-draft', status: 'DRAFT' }),
-        'saleRoundItems/item-1': makeItem({ id: 'item-1', productId: 'product-1', roundPrice: 10000 }),
+        'saleRoundItems/item-1': makeItem({
+          id: 'item-1',
+          productId: 'product-1',
+          roundPrice: 10000,
+        }),
         'saleRoundItems/item-hidden': makeItem({ id: 'item-hidden', status: 'HIDDEN' }),
         'saleRoundItems/past-1-a': makeItem({
           id: 'past-1-a',
@@ -1746,7 +1845,10 @@ describe('SaleRoundsService', () => {
         await expect(service.getPublicRound('store-1', round.id)).resolves.toEqual(round);
       }
       const current = feed.items.find((round) => round.id === 'round-1');
-      expect(current?.items[0]).toMatchObject({ productId: 'product-1', previousRoundPrice: 12000 });
+      expect(current?.items[0]).toMatchObject({
+        productId: 'product-1',
+        previousRoundPrice: 12000,
+      });
     });
 
     it('직전 마감 회차가 past 범위 밖이어도 가격 근거로 쓰고, 회차마다 상품은 한 번만 읽는다', async () => {

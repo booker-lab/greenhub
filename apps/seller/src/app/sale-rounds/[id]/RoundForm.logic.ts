@@ -18,6 +18,26 @@ export function parseKstDateTimeInput(value: string): string | null {
   return parsed.toISOString();
 }
 
+const ORDER_OPEN_FORMAT = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  month: 'long',
+  day: 'numeric',
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+/**
+ * 주문 시작 뒤 수정 잠금 안내. 서버는 작성 중·판매 예정 회차만 수정을 받고, 판매 예정 회차는 주문 시작 시각에
+ * 판매 중으로 바뀐다. 시각은 폼의 주문 시작 입력값(한국 시간)으로 보이고, 읽을 수 없으면 시각 없이 안내한다.
+ */
+export function roundEditLockNotice(orderOpenAtInput: string): string {
+  const orderOpenAt = parseKstDateTimeInput(orderOpenAtInput);
+  const when = orderOpenAt ? ` 시각인 ${ORDER_OPEN_FORMAT.format(new Date(orderOpenAt))}` : '';
+  return `주문 시작${when} 이후에는 회차 내용·가격을 고칠 수 없어요.`;
+}
+
 export function readSafeHttpUrl(value: string | null | undefined): string | null {
   if (!value || value.length > 2_048) return null;
   try {

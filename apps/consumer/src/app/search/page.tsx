@@ -3,13 +3,20 @@
 import { Button } from '@greenhub/ui/components/button';
 import { InputSection, inputClassName } from '@greenhub/ui/components/input';
 import { cn } from '@greenhub/ui/lib/utils';
-import { useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search } from 'lucide-react';
 import ProductRequestBox from '@/components/benchmark/ProductRequestBox';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 import { matchesPlantQuery } from '@/lib/benchmark-format';
 import { isFeatureOn } from '@/lib/features';
+import {
+  buildSearchHref,
+  normalizeSearchQuery,
+  readSearchQuery,
+  SEARCH_URL_SYNC_DELAY_MS,
+} from '@/lib/nav-search-query';
 
 // ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 md 16·아래 96)·Box(좌우 md 16, 위 lg 20·md 16,
 // 아래 sm 12)·Stack(gap md 16·sm 12)·SimpleGrid cols 2(gap sm 12)·Text(p, 16px·줄 높이 1.55, size xl은 20px·1.65,
@@ -29,9 +36,48 @@ const QUERY_STYLE = { fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }
 const CLEAR_BUTTON =
   'relative inline-flex size-[22px] min-h-[22px] min-w-[22px] cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[16px] border border-solid border-transparent bg-transparent p-0 text-start text-[16px] leading-none no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px';
 
+// 검색어는 주소의 ?q=와 맞춘다. 결과에서 상세로 갔다가 뒤로 오거나 /search?q=호접란 링크로 들어와도
+// 검색어와 결과가 남는다. useSearchParams는 정적 화면에서 Suspense 경계가 있어야 하므로(Next 16)
+// 경계 밖 첫 HTML에는 빈 검색어 화면을 두고, 브라우저에서 주소의 검색어로 그린다.
 export default function SearchPage() {
-  const [query, setQuery] = useState('');
+  return (
+    <Suspense fallback={<SearchView urlQuery="" />}>
+      <SearchFromUrl />
+    </Suspense>
+  );
+}
+
+function SearchFromUrl() {
+  const searchParams = useSearchParams();
+  return <SearchView urlQuery={readSearchQuery(searchParams)} />;
+}
+
+function SearchView({ urlQuery }: { urlQuery: string }) {
+  const [query, setQuery] = useState(urlQuery);
   const { products, loading, error, refetch } = useProducts();
+
+  // 마지막으로 주소에 맞춘 검색어. 주소가 밖에서 바뀌면(링크·앞뒤 이동) 입력을 그 값으로 바꾼다.
+  const syncedQueryRef = useRef(urlQuery);
+  useEffect(() => {
+    if (urlQuery === syncedQueryRef.current) return;
+    syncedQueryRef.current = urlQuery;
+    setQuery(urlQuery);
+  }, [urlQuery]);
+
+  // 주소를 지금 검색어로 맞춘다. 기록을 쌓지 않고 서버도 다시 부르지 않도록 History API의
+  // replaceState를 쓴다(Next 라우터가 useSearchParams와 맞춰 준다).
+  const syncUrl = useCallback(() => {
+    const next = normalizeSearchQuery(query);
+    if (next === syncedQueryRef.current) return;
+    syncedQueryRef.current = next;
+    window.history.replaceState(null, '', buildSearchHref(next, window.location.search));
+  }, [query]);
+
+  // 입력할 때마다가 아니라 입력이 잠깐 멈추면 맞춘다.
+  useEffect(() => {
+    const timer = window.setTimeout(syncUrl, SEARCH_URL_SYNC_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [syncUrl]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -73,8 +119,9 @@ export default function SearchPage() {
               placeholder={
                 isFeatureOn('plant-search') ? '꽃 이름·별칭으로 찾기' : '상품명을 검색하세요'
               }
+              // 검색어를 들고 들어오면(뒤로 오기·?q= 링크) 자판이 결과를 가리지 않게 자동 초점을 주지 않는다.
               // biome-ignore lint/a11y/noAutofocus: 교체 전(Mantine TextInput autoFocus)과 같은 동작이다.
-              autoFocus
+              autoFocus={!urlQuery}
               data-slot="input"
               className={cn(inputClassName, 'ps-[34px]', query && 'pe-[34px]')}
             />
@@ -94,8 +141,8 @@ export default function SearchPage() {
         </div>
       </div>
 
-      {/* 결과 영역 */}
-      <div className="px-4 pt-4">
+      {/* 결과 영역: 입력 직후 결과를 누르면 상세로 가기 전에 주소부터 맞춘다. */}
+      <div className="px-4 pt-4" onClickCapture={syncUrl}>
         {loading && (
           <p className={`${TEXT} py-12 text-center`} style={DISABLED_TEXT_STYLE}>
             불러오는 중...

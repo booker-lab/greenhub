@@ -108,7 +108,7 @@ describe('후기 쓰기 권한(로그인한 본인의 배송 완료 주문만)',
     expect(Reflect.getMetadata(ROLES_KEY, SellerEngagementController)).toEqual(['seller', 'admin']);
     expect(typeof SellerEngagementController.prototype.hideReview).toBe('function');
     expect(
-      (SellerEngagementController.prototype as Record<string, unknown>)['unhideReview'],
+      (SellerEngagementController.prototype as unknown as Record<string, unknown>)['unhideReview'],
     ).toBeUndefined();
     expect(Reflect.getMetadata(GUARDS_METADATA, AdminEngagementController)).toEqual([
       JwtAuthGuard,
@@ -118,7 +118,7 @@ describe('후기 쓰기 권한(로그인한 본인의 배송 완료 주문만)',
     expect(typeof AdminEngagementController.prototype.unhideReview).toBe('function');
     expect(typeof AdminEngagementController.prototype.hiddenReviews).toBe('function');
     expect(
-      (MyEngagementController.prototype as Record<string, unknown>)['hideReview'],
+      (MyEngagementController.prototype as unknown as Record<string, unknown>)['hideReview'],
     ).toBeUndefined();
   });
 

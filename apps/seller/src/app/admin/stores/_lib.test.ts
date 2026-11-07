@@ -5,12 +5,18 @@ import {
   describeArchiveRecordsConfirm,
   describeCommissionSaved,
   describeRestoreConfirm,
+  describeSalesModeConfirm,
+  describeSalesModeSaved,
   filterStores,
   formatRate,
   formatStoreContact,
   getAdminStoresReadState,
+  nextSalesMode,
   parseRate,
   rateToInput,
+  readStoreSalesMode,
+  SALES_MODE_LABEL,
+  salesModeActionLabel,
   storeIdConfirmPrefix,
 } from './_lib';
 
@@ -236,5 +242,73 @@ describe('판매자 검색·연락처·정리하기 안내', () => {
     expect(view.title).toBe('난플렉스 판매자 복구');
     expect(view.lead).toContain('손님 화면에 다시 보이고 새 주문을 받습니다');
     expect(view.confirmLabel).toBe('난플렉스 복구');
+  });
+});
+
+describe('판매 방식 전환', () => {
+  const base: AdminStore = {
+    id: 's-1',
+    name: '디어 오키드',
+    status: 'active',
+    ceoName: '홍길동',
+    phone: '010-1234-5678',
+    createdAt: null,
+  };
+  const withMode = (salesMode: unknown) => ({ ...base, salesMode }) as AdminStore;
+
+  it('목록 응답의 salesMode를 읽고, 없거나 모르는 값은 예전 방식으로 본다', () => {
+    expect(readStoreSalesMode(withMode('round_direct'))).toBe('round_direct');
+    expect(readStoreSalesMode(withMode('legacy'))).toBe('legacy');
+    expect(readStoreSalesMode(base)).toBe('legacy');
+    expect(readStoreSalesMode(withMode(null))).toBe('legacy');
+    expect(readStoreSalesMode(withMode('ROUND_DIRECT'))).toBe('legacy');
+  });
+
+  it('전환 대상은 지금과 반대 방식이고 동작 이름이 그에 맞다', () => {
+    expect(nextSalesMode('legacy')).toBe('round_direct');
+    expect(nextSalesMode('round_direct')).toBe('legacy');
+    expect(salesModeActionLabel('round_direct')).toBe('회차 판매로 바꾸기');
+    expect(salesModeActionLabel('legacy')).toBe('예전 방식으로 바꾸기');
+    expect(SALES_MODE_LABEL).toEqual({ legacy: '예전 방식', round_direct: '회차 판매' });
+  });
+
+  it('예전 방식 가게 확인창은 회차가 손님에게 보인다고 알리고 막힘 안내는 없다', () => {
+    const view = describeSalesModeConfirm(base);
+    expect(view.target).toBe('round_direct');
+    expect(view.title).toBe('디어 오키드 회차 판매로 바꾸기');
+    expect(view.lead).toContain('회차 판매로 바꾸면 손님에게 회차가 보여요');
+    expect(view.facts).toEqual([
+      { label: '상호', value: '디어 오키드' },
+      { label: '지금 판매 방식', value: '예전 방식' },
+      { label: '바꿀 판매 방식', value: '회차 판매' },
+    ]);
+    expect(view.note).toBeUndefined();
+    expect(view.confirmLabel).toBe('회차 판매로 바꾸기');
+  });
+
+  it('회차 판매 가게 확인창은 회차가 숨겨진다고 알리고 끝나지 않은 회차가 있으면 막힌다고 안내한다', () => {
+    const view = describeSalesModeConfirm(withMode('round_direct'));
+    expect(view.target).toBe('legacy');
+    expect(view.title).toBe('디어 오키드 예전 방식으로 바꾸기');
+    expect(view.lead).toContain('예전 방식으로 바꾸면 회차가 손님에게서 숨겨져요');
+    expect(view.facts[1]).toEqual({ label: '지금 판매 방식', value: '회차 판매' });
+    expect(view.facts[2]).toEqual({ label: '바꿀 판매 방식', value: '예전 방식' });
+    expect(view.note).toContain('끝나지 않은 회차');
+    expect(view.confirmLabel).toBe('예전 방식으로 바꾸기');
+  });
+
+  it('이름 없는 가게도 대상을 표시한다', () => {
+    expect(describeSalesModeConfirm({ ...base, name: '  ' }).title).toBe(
+      '(미설정) 회차 판매로 바꾸기',
+    );
+  });
+
+  it('성공 안내는 바뀐 결과를 알린다', () => {
+    expect(describeSalesModeSaved('디어 오키드', 'round_direct')).toBe(
+      '디어 오키드 가게를 회차 판매로 바꿨어요. 손님에게 회차가 보여요.',
+    );
+    expect(describeSalesModeSaved('', 'legacy')).toBe(
+      '(미설정) 가게를 예전 방식으로 바꿨어요. 회차는 손님에게서 숨겨져요.',
+    );
   });
 });

@@ -144,6 +144,7 @@ export default function OperationsPage() {
     <PageShell>
       <PageHeader
         title="운영 확인"
+        backHref="/"
         right={
           <LoadingButton
             measured

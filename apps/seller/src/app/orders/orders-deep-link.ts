@@ -43,3 +43,12 @@ export function buildOrdersHref(link: {
   if (link.roundId) params.set('round', link.roundId);
   return `/orders?${params.toString()}`;
 }
+
+/**
+ * 회차 필터를 고르거나 풀 때 바꿀 주소. 회차(`round`)만 남기고, 처음 들어올 때 읽은 탭·배송 보류
+ * 파라미터는 지운다 — 그 뒤 화면에서 바꾼 탭과 주소가 어긋나지 않게 한다(기존 "모든 주문 보기"와 같은 규칙).
+ */
+export function buildOrdersRoundFilterUrl(pathname: string, roundId: string | null): string {
+  if (!roundId) return pathname;
+  return `${pathname}?${new URLSearchParams({ round: roundId }).toString()}`;
+}

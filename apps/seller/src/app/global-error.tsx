@@ -60,7 +60,9 @@ export default function GlobalError({
             </a>
           </p>
           <p style={{ fontSize: 15, color: '#696F6C', margin: '24px 0 0' }}>
-            계속 같은 화면이 나오면 아래 오류 번호와 함께 운영팀에 알려 주세요.
+            {error.digest
+              ? '계속 같은 화면이 나오면 아래 오류 번호와 함께 운영팀에 알려 주세요.'
+              : '같은 화면이 계속 나오면 운영팀에 알려 주세요.'}
           </p>
           {error.digest ? (
             <p style={{ fontSize: 15, color: '#696F6C', margin: '12px 0 0' }}>

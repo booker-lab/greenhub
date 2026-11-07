@@ -830,24 +830,31 @@ test('주문 상세 hook은 404/auth와 일시 실패의 보관 정책을 구분
 });
 
 test('주문 상세 화면은 not-found와 일시 실패를 같은 의미로 수렴시키지 않는다', () => {
-  assert.match(source, /존재하지 않는 주문입니다/);
-  assert.match(source, /로그인이 필요하거나 이 주문을 볼 권한이 없습니다/);
+  assert.match(source, /찾을 수 없는 주문이에요\. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요\./);
+  assert.match(source, /로그인이 필요해요\. 로그인하면 이 주문으로 돌아와요\./);
+  assert.match(source, /이 주문을 볼 수 없어요\. 내 주문 목록에서 다시 골라 주세요\./);
+  // 로그인한 채 거절된 경우(status 'auth')에는 로그인 버튼을 두지 않는다(같은 주문으로 되돌아와 무반응처럼 보임).
+  assert.match(source, /const needsLogin = sessionStatus === 'unauthenticated';/);
+  assert.match(source, /\{needsLogin && \(\s*<LoadingButton onClick=\{\(\) => router\.push\(currentMyPageLoginUrl\(\)\)\}/);
   assert.match(source, /주문 목록으로 돌아가기/);
   assert.match(source, /다시 시도/);
   assert.match(source, /status: sessionStatus/);
   assert.match(source, /handleRetry/);
   assert.match(source, /await refetch\(\)/);
-  assert.match(source, /router\.push\('\/login'\)/);
-  assert.match(source, /주문 정보를 확인할 수 없습니다\. 잠시 후 다시 시도/);
-  assert.match(source, /\{error \?\?/);
+  // 로그인으로 보낼 때 보던 주문 상세를 복귀 주소로 싣는다(C-09 후속, mypage/_login.test.mjs).
+  assert.match(source, /router\.push\(currentMyPageLoginUrl\(\)\)/);
+  assert.match(source, /주문 정보를 확인하지 못했어요\. 잠시 후 다시 시도/);
+  // 일시 실패 안내는 훅의 오류 글자 대신 읽기 상태(status)에서 해요체 고객 문구를 고른다.
+  assert.match(source, /\{orderDetailReadFailureMessage\(status\)\}/);
+  assert.doesNotMatch(source, /\{error \?\?/);
   assert.match(hookSource, /네트워크 연결을 확인하고 다시 시도/);
-  assert.match(hookSource, /주문 정보를 불러오지 못했습니다\. 잠시 후 다시 시도/);
+  assert.match(hookSource, /주문 정보를 불러오지 못했어요\. 잠시 후 다시 시도/);
 });
 
 test('이전 데이터가 있는 refresh 실패는 stale을 유지하고 재시도를 노출한다', () => {
   assert.match(source, /const detail = orderId \? readOrderDetail\(order, orderId\) : null/);
-  assert.match(source, /최신 정보를 불러오지 못했습니다/);
-  assert.match(source, /표시된 정보가 최신이 아닐 수 있습니다/);
+  assert.match(source, /최신 정보를 불러오지 못했어요/);
+  assert.match(source, /보이는 정보가 최신이 아닐 수 있어요/);
   assert.match(source, /\(status === 'network' \|\| status === 'server'\)/);
   assert.match(source, /loading=\{retrying\}/);
   // 자동 확인은 결제 확인 중(PENDING) 주문만 2분 안에서 하고, 그 밖에는 다시 시도(refetch)로 읽는다.
@@ -898,14 +905,16 @@ test('stale network/server read는 표시를 유지하지만 최신 상태 명�
   assert.equal(isStaleOrderRead('not-found'), false);
 
   assert.match(source, /isStaleOrderRead\(status\)/);
-  assert.match(source, /최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없습니다/);
+  assert.match(source, /최신 상태를 확인하기 전까지 취소·구매 확정·재배송비 결제를 시작할 수 없어요/);
   // 세 명령 핸들러가 모두 stale 가드를 먼저 수행한다.
   assert.equal((source.match(/if \(isStaleRead\)/g) ?? []).length >= 3, true);
   assert.match(source, /disabled=\{cancelBusy \|\| isStaleRead \|\| cancelOutcome\.kind === 'reconcile-failed'\}/);
   assert.match(source, /disabled=\{redeliveryBusy \|\| isStaleRead\}/);
   assert.match(source, /showReviewReconcileWarning \|\| isStaleRead/);
   // stale이어도 기존 상세 표시 자체는 유지된다.
-  assert.match(source, /표시된 정보가 최신이 아닐 수 있습니다/);
+  assert.match(source, /보이는 정보가 최신이 아닐 수 있어요/);
+  // 명령을 막을 때는 해요체 고객 문구 하나로 상태 확인을 안내한다.
+  assert.equal((source.match(/setActionError\(ORDER_DETAIL_STALE_MESSAGE\)/g) ?? []).length, 3);
 });
 
 test('재시도 경로는 refetch를 호출하고 stale 해소를 전제로 actionability를 복원한다', () => {
@@ -941,7 +950,7 @@ test('cancel 확인 + 재조회 실패는 취소 실패가 되지 않는다', ()
 
   assert.match(source, /setCancelOutcome\(\{ kind: 'reconcile-failed' \}\)/);
   assert.match(source, /취소 확인됨 · 상태 재확인 필요/);
-  assert.match(source, /취소 실패가\s+아니므로 바로 다시 취소하지 말고/);
+  assert.match(source, /취소 실패가 아니니 바로\s+다시 취소하지 말고/);
   // 취소 배너는 authoritative CANCELLED 또는 reconcile된 done에서만 표시된다.
   assert.match(
     source,
@@ -970,7 +979,7 @@ test('review 확인 + 재조회 성공은 done으로 수렴한다', () => {
 test('review 확인 + 재조회 실패는 확정 실패가 되지 않는다', () => {
   assert.match(source, /setReviewOutcome\(\{ kind: 'reconcile-failed' \}\)/);
   assert.match(source, /구매 확정 확인됨 · 상태 재확인 필요/);
-  assert.match(source, /확정 실패가\s+아니므로 바로 다시 확정하지 말고/);
+  assert.match(source, /확정 실패가 아니니 바로\s+다시 확정하지 말고/);
   // reconcile-failed 동안 명령 버튼은 중복 확정을 막기 위해 비활성화된다.
   assert.match(source, /showReviewReconcileWarning/);
 });
@@ -983,9 +992,9 @@ test('서버 확정 거부는 실패로 표면화된다', () => {
   assert.equal(classifyCommandFailure({ httpStatus: 422, hasResponse: true }), 'rejected');
 
   assert.match(source, /classifyCommandFailure\(\{ httpStatus: response\.status, hasResponse: true \}\)/);
-  assert.match(source, /주문을 취소할 수 없습니다/);
-  assert.match(source, /구매 확정에 실패했습니다/);
-  assert.match(source, /재배송비 결제를 시작할 수 없습니다/);
+  assert.match(source, /'주문을 취소할 수 없어요\.'/);
+  assert.match(source, /'구매 확정을 하지 못했어요\.'/);
+  assert.match(source, /'재배송비 결제를 시작할 수 없어요\.'/);
   assert.match(source, /kind: 'rejected'/);
 });
 
@@ -995,9 +1004,12 @@ test('전송 불확실성은 blind 중복 재시도 대신 상태 확인을 우�
   assert.equal(classifyCommandFailure({ httpStatus: 500, hasResponse: true }), 'uncertain');
   assert.equal(classifyCommandFailure({ httpStatus: 503, hasResponse: true }), 'uncertain');
 
-  assert.match(source, /결과를 확정할 수 없습니다\. 상태를 다시 확인해 주세요/);
-  assert.match(source, /중복 결제 전에/);
-  assert.match(source, /중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요/);
+  // 결과를 모르면 명령마다 고객 문구 하나를 보이고 아래 '상태 다시 확인'으로 안내한다.
+  assert.match(source, /const REVIEW_UNCERTAIN_MESSAGE = '구매 확정이 처리됐는지 아직 확인하지 못했어요\.'/);
+  assert.match(source, /message: REVIEW_UNCERTAIN_MESSAGE/);
+  assert.match(source, /message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE/);
+  assert.match(source, /redeliveryOutcome\.kind === 'uncertain'/);
+  assert.match(source, /다시 요청하기 전에 아래 ‘상태 다시 확인’을 눌러 주세요/);
   assert.match(source, /상태 다시 확인/);
   // 동일 명령 자동 재전송을 하지 않는다.
   assert.doesNotMatch(source, /setTimeout\(.*handleCancel/);
@@ -1007,7 +1019,7 @@ test('전송 불확실성은 blind 중복 재시도 대신 상태 확인을 우�
 
 test('auth 전환 시 fail-closed가 보존된다', () => {
   assert.match(source, /sessionStatus === 'unauthenticated' \|\| status === 'auth'/);
-  assert.match(source, /로그인이 필요하거나 이 주문을 볼 권한이 없습니다/);
+  assert.match(source, /이 주문을 볼 수 없어요/);
   // 명령 핸들러는 토큰 없이 시작하지 않는다.
   assert.ok(source.indexOf('if (!session?.user?.accessToken || !detail?.canRequestCancellation)') > 0);
   assert.ok(source.indexOf('if (!session?.user?.accessToken || !detail)') > 0);
@@ -1015,9 +1027,14 @@ test('auth 전환 시 fail-closed가 보존된다', () => {
 
 test('redelivery paid 확인 게이트가 보존된다', () => {
   assert.match(source, /latestDetail\?\.redeliveryPayment\.paid/);
-  assert.match(source, /서버 확인 전입니다/);
+  const paidGateAt = source.indexOf('if (!latestDetail?.redeliveryPayment.paid)');
+  assert.ok(paidGateAt > 0);
+  assert.match(
+    source.slice(paidGateAt, paidGateAt + 200),
+    /kind: 'uncertain',\s+message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE/,
+  );
   assert.match(source, /!detail\.redeliveryPayment\.requiresRecovery/);
-  assert.match(source, /재배송비 결제 상태를 확인할 수 없습니다\. 운영 확인이 필요합니다/);
+  assert.match(source, /\{REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE\}/);
   // done은 paid 수렴 뒤에만 기록된다.
   const paidGate = source.indexOf('latestDetail?.redeliveryPayment.paid');
   const redeliveryDone = source.indexOf("setRedeliveryOutcome({ kind: 'done' })");
@@ -1080,4 +1097,204 @@ test('재배송비 결제 뒤 서버 결제 확인을 요청한다(결제창 성
   // 확인 경로는 주문 상세의 재배송비 확인 API다.
   assert.match(source, /redeliveryPaymentCheckPath\(orderId\)/);
   assert.match(source, /method: 'POST'/);
+});
+
+test('주문 취소 안내·확인창·실패 문구는 내부 동작 대신 고객 기준으로 말한다', () => {
+  // 회차 주문 취소 안내와 확인창
+  assert.match(source, /'주문 마감 전까지 취소할 수 있어요\. 결제한 수단으로 환불돼요\.'/);
+  assert.match(source, /\? '주문을 취소할까요\?'/);
+  // 결과를 모를 때는 고객 문구 하나로 '상태 다시 확인'을 안내한다.
+  assert.match(source, /const CANCEL_UNCERTAIN_MESSAGE = '취소가 처리됐는지 아직 확인하지 못했어요\.'/);
+  assert.match(source, /setActionError\(CANCEL_UNCERTAIN_MESSAGE\)/);
+  assert.match(source, /취소가 접수됐어요\. 최신 주문 상태를 확인하고 있어요\./);
+  // 취소 흐름에는 서버·검증 같은 내부 동작 설명이 남지 않는다.
+  const handler = source.slice(
+    source.indexOf('async function handleCancel'),
+    source.indexOf('async function handleRedeliveryPayment'),
+  );
+  assert.doesNotMatch(handler, /서버|확정할 수 없습니다|검증하지 못했습니다/);
+  assert.doesNotMatch(handler, /caught\.message : /);
+  assert.doesNotMatch(source, /서버가 회차 마감 여부를 다시 확인/);
+  assert.doesNotMatch(source, /서버에서 회차 마감 전인지 다시 확인/);
+  assert.doesNotMatch(source, /서버에서 취소를 확인했습니다/);
+  assert.doesNotMatch(source, /취소는 서버에서 확인됐지만/);
+  assert.doesNotMatch(source, /중복 요청 전에 다시 시도로/);
+  // 확인되지 않은 환불 기간 약속은 쓰지 않는다.
+  assert.doesNotMatch(source, /영업일/);
+});
+
+test('주문 상세 하단에 주문번호와 함께 고객센터 전화 문의를 둔다', () => {
+  assert.match(source, /import \{ PUBLIC_BUSINESS_INFO \} from '@\/lib\/publicBusinessInfo'/);
+  const support = source.slice(source.indexOf('data-testid="order-support"'));
+  assert.ok(support.length > 0 && source.includes('data-testid="order-support"'));
+  assert.match(support, />\s*문의하기\s*</);
+  assert.match(support, /주문번호 \{detail\.orderNumber\}/);
+  assert.match(support, /<ButtonLink[^>]*href=\{PUBLIC_BUSINESS_INFO\.phoneHref\}/);
+  assert.match(support, /전화로 문의하기 \{PUBLIC_BUSINESS_INFO\.phone\}/);
+  // 번호를 화면 코드에 직접 적지 않는다.
+  assert.doesNotMatch(source, /tel:\d|010-\d{4}-\d{4}/);
+});
+
+test('구매 확정·재배송비 흐름 문구는 내부 표현 대신 고객 문구로 말한다', () => {
+  // '서버'·'운영 확인'·'확정할 수 없습니다'·'검증하지 못했습니다' 같은 내부 표현이 화면 문자열에 남지 않는다.
+  const reviewHandler = source.slice(
+    source.indexOf('async function handleConfirm'),
+    source.indexOf("if (sessionStatus === 'loading'"),
+  );
+  const redeliveryHandler = source.slice(
+    source.indexOf('async function handleRedeliveryPayment'),
+    source.indexOf('async function handleConfirm'),
+  );
+  for (const handler of [reviewHandler, redeliveryHandler]) {
+    assert.ok(handler.length > 0);
+    assert.doesNotMatch(handler, /'[^'\n]*(서버|운영|확정할 수 없습니다|검증하지 못했습니다)[^'\n]*'/);
+    // 내부 오류 글자(caught.message 원문)를 그대로 보이지 않는다.
+    assert.doesNotMatch(handler, /caught\.message : /);
+  }
+  assert.doesNotMatch(source, /서버 확인 중\.\.\./);
+  assert.match(source, /'결제 확인 중\.\.\.'/);
+  assert.doesNotMatch(source, /서버에서 구매 확정을 확인했습니다/);
+  assert.doesNotMatch(source, /구매 확정은 서버에서 확인됐지만/);
+  assert.doesNotMatch(source, /운영 확인이 필요합니다/);
+  assert.doesNotMatch(source, /서버 확인 전입니다/);
+  assert.match(source, /구매 확정이 접수됐어요\. 최신 주문 상태를 확인하고 있어요\./);
+  assert.match(source, /재배송비 결제가 완료됐어요\. 배송이 다시 시작되기를 기다리고 있어요\./);
+  // 재배송비 결제가 실패·환불 상태면 결제 FAILED/REFUNDED 응답과 복구 필요 표시 모두 고객센터 안내로 보인다.
+  assert.match(redeliveryHandler, /message: REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE/);
+  // 공동구매 취소 확인창·안내도 해요체로 말한다.
+  assert.match(source, /'공동구매 참여를 취소할까요\?\\n취소하면 되돌릴 수 없어요\.'/);
+  assert.match(source, /'모집 중인 공동구매 참여를 취소할 수 있어요\.'/);
+  assert.doesNotMatch(source, /하시겠습니까/);
+});
+
+test('재배송비 결제창 실패·모바일 복귀는 PG 원문 대신 고객 문구로 보인다', () => {
+  assert.match(
+    source,
+    /import \{[^}]*customerRedeliveryPaymentReturn[^}]*\} from '@\/lib\/order-redelivery-message'/,
+  );
+  const handler = source.slice(
+    source.indexOf('async function handleRedeliveryPayment'),
+    source.indexOf('async function handleConfirm'),
+  );
+  // PC 결제창 실패 응답은 원문 message를 쓰지 않고 같은 규칙의 고객 문구로 바꾼다.
+  assert.match(handler, /message: redeliveryPaymentFailureMessage\(result\)/);
+  assert.doesNotMatch(handler, /result\.message/);
+  // 모바일 복귀 판정은 그대로 두고 문구만 고객 문구로 바꾼다.
+  assert.match(
+    source,
+    /customerRedeliveryPaymentReturn\(\s*redeliveryRedirect,\s*resolveRedeliveryPaymentReturn\(redeliveryRedirect, redeliveryPaid\),\s*\)/,
+  );
+});
+
+// 화면에 보이는 글자(문자열·템플릿 리터럴, JSX 글자)를 모은다. 주석은 AST에 없으므로 빠지고,
+// API 응답 원문(body.message)은 리터럴이 아니므로 검사 대상이 아니다.
+function collectScreenStrings(text, fileName) {
+  const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const strings = [];
+  const visit = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      strings.push(node.text);
+    } else if (ts.isJsxText(node)) {
+      const value = node.getText().trim();
+      if (value) strings.push(value);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return strings;
+}
+
+test('주문 상세 화면 문구는 해요체로 통일하고 합니다체가 다시 들어오지 않는다', () => {
+  const strings = collectScreenStrings(source, '_client.tsx');
+  // 수집이 실제로 동작하는지 확인한다(해요체 문구가 잡혀야 한다).
+  assert.ok(strings.includes('주문이 취소됐어요'));
+  assert.ok(strings.includes('찾을 수 없는 주문이에요. 주문 번호를 확인하거나 주문 목록으로 돌아가 주세요.'));
+  const formal = strings.filter((value) => /니다|니까|십시오/.test(value));
+  assert.deepEqual(formal, []);
+  // 바뀐 조회 안내 문구는 같은 화면의 해요체 문구로 보인다.
+  assert.doesNotMatch(source, /존재하지 않는 주문입니다/);
+  assert.doesNotMatch(source, /주문이 취소되었습니다/);
+  assert.doesNotMatch(source, /최신 상태 확인 후 다시 시도해 주세요/);
+});
+
+test('재배송비 결제의 예상하지 못한 예외는 결제창을 열기 전과 뒤를 나눠 안내한다', () => {
+  const handler = source.slice(
+    source.indexOf('async function handleRedeliveryPayment'),
+    source.indexOf('async function handleConfirm'),
+  );
+  assert.match(handler, /let stage: RedeliveryPaymentStage = 'requesting';/);
+  const openingAt = handler.indexOf("stage = 'opening-window';");
+  const configAt = handler.indexOf('readPortonePaymentConfiguration(redeliveryMethod)');
+  const sdkAt = handler.indexOf("await import('@portone/browser-sdk/v2')");
+  const payingAt = handler.indexOf("stage = 'paying';");
+  const requestAt = handler.indexOf('PortOne.requestPayment(');
+  const confirmingAt = handler.indexOf("stage = 'confirming';");
+  const reconcilingAt = handler.indexOf("setRedeliveryOutcome({ kind: 'reconciling' })");
+  // 결제 설정 읽기·결제 모듈 불러오기는 결제창을 열기 전 단계에 있다.
+  assert.ok(openingAt > 0 && openingAt < configAt && configAt < sdkAt && sdkAt < payingAt);
+  // 결제창 호출부터는 결과를 모르는 단계이고, 완료 확인도 같은 단계로 본다.
+  assert.ok(payingAt < requestAt && requestAt < confirmingAt && confirmingAt < reconcilingAt);
+  // 마지막 catch는 단계로 문구를 고른다(모든 예외를 '확인하지 못했어요'로 묶지 않는다).
+  assert.match(
+    handler,
+    /const outcome = redeliveryPaymentUnexpectedFailure\(stage\);\s+setRedeliveryOutcome\(outcome\);\s+setActionError\(outcome\.message\);/,
+  );
+  assert.doesNotMatch(
+    handler,
+    /setRedeliveryOutcome\(\{ kind: 'uncertain', message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE \}\)/,
+  );
+  // 결과를 모를 때만 '상태 다시 확인'을 보인다(시작하지 못한 경우는 rejected라 다시 결제할 수 있다).
+  const recheck = source.slice(
+    source.indexOf('const needsStatusRecheck ='),
+    source.indexOf('const showPickupCode ='),
+  );
+  assert.match(recheck, /redeliveryOutcome\.kind === 'uncertain'/);
+  assert.doesNotMatch(recheck, /redeliveryOutcome\.kind === 'rejected'/);
+});
+
+test('결제 확인 중 주문은 배송 현황 단계 대신 결제 안내와 장바구니로 가기를 보이고 취소는 그대로 둔다', () => {
+  assert.match(
+    source,
+    /import \{ isPaymentPendingOrder, orderDetailPendingPaymentGuide \} from '@\/lib\/order-pending-payment'/,
+  );
+  assert.match(source, /import Link from 'next\/link'/);
+  // 고객이 취소한 뒤에는 결제 안내를 내지 않도록 화면의 취소 판단(isCancelled)을 함께 넘긴다.
+  assert.match(
+    source,
+    /const pendingPaymentGuide = orderDetailPendingPaymentGuide\(detail\.status, \{\s+cancelled: isCancelled,\s+\}\);/,
+  );
+  const guideStart = source.indexOf('data-testid="order-pending-payment"');
+  assert.ok(guideStart > 0);
+  const guide = source.slice(guideStart, source.indexOf('</ButtonLink>', guideStart));
+  assert.match(guide, /\{pendingPaymentGuide\.autoCancelNotice\}/);
+  assert.match(guide, /\{pendingPaymentGuide\.retryHint\}/);
+  assert.match(guide, /render=\{<Link href=\{pendingPaymentGuide\.cartHref\} \/>\}/);
+  assert.match(guide, /\{pendingPaymentGuide\.cartLabel\}/);
+  // 안내는 주문 상품보다 먼저 보인다.
+  assert.ok(guideStart < source.indexOf('            주문 상품'));
+
+  // 배송 현황 단계는 결제 확인 중일 때 그리지 않고 안내 문장으로 바꾼다.
+  const timeline = source.slice(
+    source.indexOf("{!isCancelled && detail.status !== 'DELIVERY_HELD' && ("),
+    source.indexOf('data-testid="order-support"'),
+  );
+  assert.match(
+    timeline,
+    /\{pendingPaymentGuide \? \([\s\S]*\{pendingPaymentGuide\.timelineNotice\}[\s\S]*\) : \(\s+<DeliverySteps active=\{currentStep\} labels=\{steps\.map\(orderTimelineStepLabel\)\} \/>\s+\)\}/,
+  );
+
+  // 기존 주문 취소(PENDING·ACCEPTED)는 그대로 유지한다.
+  assert.match(helperSource, /new Set<OrderStatus>\(\['PENDING', 'ACCEPTED'\]\)/);
+  assert.match(source, /\{detail\.isRoundOrder \? '주문 취소' : '공동구매 참여 취소'\}/);
+});
+
+test('결제를 마치지 않은 주문의 취소 안내는 환불을 약속하지 않는다(UX 감사 C-06)', () => {
+  assert.match(source, /isPaymentPendingOrder\(detail\.status\)/);
+  assert.match(source, /결제를 마치지 않은 주문이에요\. 필요 없으면 지금 취소할 수 있어요\./);
 });

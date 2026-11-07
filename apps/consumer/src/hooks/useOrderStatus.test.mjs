@@ -384,3 +384,58 @@ test('결제 확인을 켜지 않았거나 PENDING이 아닌 주문은 결제 �
     harness.unmount();
   }
 });
+
+// 화면에 나갈 수 있는 글자(문자열·템플릿 리터럴, JSX 글자)를 모은다. 주석은 AST에 없으므로 빠지고,
+// API 응답 원문은 리터럴이 아니므로 검사 대상이 아니다(주문 상세 _client.test.mjs와 같은 방식).
+function collectScreenStrings(text, fileName) {
+  const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const strings = [];
+  const visit = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      strings.push(node.text);
+    } else if (ts.isJsxText(node)) {
+      const value = node.getText().trim();
+      if (value) strings.push(value);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return strings;
+}
+
+test('주문 조회 오류 문구는 주문 완료 화면에 그대로 보이므로 해요체 고객 문구다', () => {
+  const { getOrderDetailReadErrorMessage } = loadModule({
+    useCallback: (fn) => fn,
+    useEffect: () => {},
+    useRef: (initial) => ({ current: initial }),
+    useState: (initial) => [initial, () => {}],
+  });
+  assert.equal(
+    getOrderDetailReadErrorMessage('auth'),
+    '로그인이 필요하거나 이 주문을 볼 수 없어요.',
+  );
+  assert.equal(
+    getOrderDetailReadErrorMessage('network'),
+    '네트워크 연결을 확인하고 다시 시도해 주세요.',
+  );
+  assert.equal(
+    getOrderDetailReadErrorMessage('server'),
+    '주문 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+  );
+});
+
+test('주문 상태 훅의 문자열에는 합니다체·내부 용어가 다시 들어오지 않는다', () => {
+  const strings = collectScreenStrings(source, 'useOrderStatus.ts');
+  // 수집이 실제로 동작하는지 확인한다(오류 문구가 잡혀야 한다).
+  assert.ok(strings.includes('주문 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'));
+  assert.deepEqual(
+    strings.filter((value) => /니다|니까|십시오|서버/.test(value)),
+    [],
+  );
+});

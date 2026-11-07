@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import ts from 'typescript';
 
 const source = await readFile(new URL('./BottomNav.tsx', import.meta.url), 'utf8');
 
@@ -42,12 +43,46 @@ test('legacy 내비게이션은 기존 다섯 항목과 경로를 보존한다',
   assert.equal((legacyTabs.match(/href:/g) ?? []).length, 5);
 });
 
-test('판매 모드 확인 전에는 기존 내비게이션을 노출하지 않는다', () => {
-  assert.match(source, /if \(productsError \|\| storeMode\.status !== 'ready'\) return null;/);
-  assert.match(
-    source,
-    /storeMode\.salesMode === 'round_direct' \? ROUND_DIRECT_TABS : LEGACY_TABS/,
+function loadResolveNavSalesMode() {
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      jsx: ts.JsxEmit.ReactJSX,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'BottomNav.tsx',
+  }).outputText;
+  const navModule = { exports: {} };
+  // 판정 함수만 검사하므로 화면 모듈은 빈 값으로 대신한다.
+  const requireForTest = (specifier) =>
+    specifier === '@greenhub/shared' ? { normalizeSalesMode: (value) => value } : {};
+  new Function('require', 'module', 'exports', compiled)(
+    requireForTest,
+    navModule,
+    navModule.exports,
   );
+  return navModule.exports.resolveNavSalesMode;
+}
+
+test('판매 방식을 확인하는 동안이나 조회가 실패해도 내비게이션을 숨기지 않고 회차 판매 탭을 보인다', () => {
+  const resolveNavSalesMode = loadResolveNavSalesMode();
+  const legacyReady = { salesMode: 'legacy', status: 'ready' };
+
+  // 조회 중·실패: 운영 판매 방식(회차 판매) 탭.
+  assert.equal(resolveNavSalesMode(null, { salesMode: 'legacy', status: 'loading' }), 'round_direct');
+  assert.equal(resolveNavSalesMode(null, { salesMode: 'legacy', status: 'error' }), 'round_direct');
+  assert.equal(resolveNavSalesMode('연결이 불안정해요.', legacyReady), 'round_direct');
+  // 확인된 판매 방식은 그대로 따른다(legacy는 확인됐을 때만).
+  assert.equal(resolveNavSalesMode(null, legacyReady), 'legacy');
+  assert.equal(
+    resolveNavSalesMode(null, { salesMode: 'round_direct', status: 'ready' }),
+    'round_direct',
+  );
+
+  assert.doesNotMatch(source, /return null;\s*\n\s*const tabs/);
+  assert.match(source, /const salesMode = resolveNavSalesMode\(productsError, storeMode\);/);
+  assert.match(source, /salesMode === 'round_direct' \? ROUND_DIRECT_TABS : LEGACY_TABS/);
 });
 
 test('인증되지 않았거나 세션을 확인하는 동안에는 장바구니 배지를 숨긴다', () => {

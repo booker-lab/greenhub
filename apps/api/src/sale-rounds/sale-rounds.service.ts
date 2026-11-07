@@ -26,7 +26,9 @@ type RoundWithItems = SaleRound & { items: SaleRoundItem[] };
 
 const PUBLIC_SALE_ROUND_STATUSES = ['SCHEDULED', 'OPEN', 'CLOSED', 'COMPLETED'] as const;
 
-function isPublicSaleRoundStatus(status: unknown): status is (typeof PUBLIC_SALE_ROUND_STATUSES)[number] {
+function isPublicSaleRoundStatus(
+  status: unknown,
+): status is (typeof PUBLIC_SALE_ROUND_STATUSES)[number] {
   return (PUBLIC_SALE_ROUND_STATUSES as readonly unknown[]).includes(status);
 }
 
@@ -177,7 +179,9 @@ export function withDemandSignals(
     demand: { buyerCount: itemCount(stored.counters?.orderedDeliveryAddresses) ?? 0 },
     items: round.items.map((item) => {
       const source = byId.get(item.id);
-      return source ? { ...item, demand: { remainingQuantity: remainingRoundItemQuantity(source) } } : item;
+      return source
+        ? { ...item, demand: { remainingQuantity: remainingRoundItemQuantity(source) } }
+        : item;
     }),
   };
 }
@@ -525,7 +529,9 @@ export class SaleRoundsService {
         ? await this.buildItemDocsInTransaction(tx, storeId, roundId, dto.items, now)
         : null;
       if ((nextItems || dto.limits !== undefined) && this.hasRoundUsage(round, currentItems)) {
-        throw new ConflictException('예약 또는 주문이 사용 중인 회차 상품과 한도는 수정할 수 없습니다.');
+        throw new ConflictException(
+          '예약 또는 주문이 사용 중인 회차 상품과 한도는 수정할 수 없습니다.',
+        );
       }
 
       const update: Record<string, unknown> = { updatedAt: now };
@@ -619,9 +625,7 @@ export class SaleRoundsService {
     role: string,
   ): Promise<SaleRound> {
     await this.assertSellerOwnsStore(storeId, requesterId, role);
-    return this.normalizeRound(
-      await this.roundState.complete({ storeId, roundId }),
-    );
+    return this.normalizeRound(await this.roundState.complete({ storeId, roundId }));
   }
   private async assertSellerOwnsStore(storeId: string, requesterId: string, role: string) {
     if (role === 'admin') return;
@@ -686,10 +690,7 @@ export class SaleRoundsService {
     // write-side domain function without persisting (no transaction/write).
     // Preserves the full SaleRound response contract; only status/closeReason
     // are overlaid with the effective values.
-    const next = resolveAutomaticState(
-      stored,
-      nowMillis,
-    );
+    const next = resolveAutomaticState(stored, nowMillis);
     return { ...stored, status: next.status, closeReason: next.closeReason };
   }
   private normalizeRound(round: SaleRound): SaleRound {
@@ -766,8 +767,9 @@ export class SaleRoundsService {
         roundId,
         storeId,
         productId: item.productId,
-        productNameSnapshot: product['name'],
-        productImageUrlSnapshot: Array.isArray(product['images']) ? product['images'][0] : null,
+        // Firestore는 undefined 필드를 거부하므로 스냅샷은 항상 정해진 타입으로 맞춘다.
+        productNameSnapshot: typeof product['name'] === 'string' ? product['name'] : '',
+        productImageUrlSnapshot: this.firstImageUrlOrNull(product['images']),
         roundPrice: item.roundPrice,
         saleLimitQuantity: item.saleLimitQuantity,
         reservedQuantity: 0,
@@ -778,6 +780,12 @@ export class SaleRoundsService {
         updatedAt: now,
       } as unknown as SaleRoundItem;
     });
+  }
+
+  /** 상품 대표 이미지 스냅샷: 첫 이미지가 비어 있지 않은 문자열일 때만 쓰고, 그 외(빈 배열·빈 문자열·비문자열)는 null. */
+  private firstImageUrlOrNull(images: unknown): string | null {
+    const first = Array.isArray(images) ? images[0] : null;
+    return typeof first === 'string' && first.trim() !== '' ? first : null;
   }
 
   private assertRoundEditable(round: SaleRound) {

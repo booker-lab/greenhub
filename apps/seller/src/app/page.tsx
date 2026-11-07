@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
+import { StartChecklistCard } from '@/app/_components/StartChecklistCard';
 import { OrderStatusCard, ProductStatusCard, SettlementCard } from '@/app/_components/StatusCards';
 import { TodayTasksCard } from '@/app/_components/TodayTasksCard';
 import { useFirebaseReady } from '@/app/providers';
@@ -13,6 +14,8 @@ import { LoadingState } from '@/components/StateViews';
 import { useDashboardSummary } from '@/hooks/useDashboardSummary';
 import { useOrderSummary } from '@/hooks/useOrderSummary';
 import { ACTIVE_SELLER_ORDERS_QUERY, useOrders } from '@/hooks/useOrders';
+import { useSaleRounds } from '@/hooks/useSaleRounds';
+import { useStartChecklist } from '@/hooks/useStartChecklist';
 import { useStoreOperationIssues } from '@/hooks/useStoreOperationIssues';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { areStoreProductCountsTrustworthy } from '@/hooks/useStoreProducts.recovery';
@@ -45,6 +48,9 @@ export default function Home() {
     retry: retrySummary,
   } = useDashboardSummary();
   const { openIssues } = useStoreOperationIssues();
+  // 새 가게 시작 체크리스트(상품·회차·정산 계좌). 주문 관리 화면과 같은 카드를 맨 위에 둔다.
+  const saleRounds = useSaleRounds();
+  const startChecklist = useStartChecklist(storeId, session?.user.accessToken, saleRounds);
   const productsTrustworthy = areStoreProductCountsTrustworthy({
     hasLoaded: productsHasLoaded,
     loading: productsLoading,
@@ -80,12 +86,14 @@ export default function Home() {
       {/* ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·py md, Stack gap md. */}
       <div className="mx-auto max-w-[720px] px-4 py-4">
         <div className="flex flex-col items-stretch justify-start gap-4">
+          <StartChecklistCard checklist={startChecklist} />
           <TodayTasksCard
             orders={orders}
             products={products}
             productsError={productsError}
             productsTrustworthy={productsTrustworthy}
             openIssueCount={openIssues.length}
+            startSetupIncomplete={!startChecklist.allDone}
           />
           <OrderStatusCard groupCounts={statusCounts} />
           <SettlementCard

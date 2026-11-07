@@ -3,6 +3,7 @@
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { customerLoadErrorMessage } from '@/lib/load-error-message';
 import { sharedRequest } from '@/lib/shared-request';
 
 const API_URL = getApiBaseUrl();
@@ -76,12 +77,20 @@ export function createEmptySaleRoundsState(): SaleRoundsState {
   };
 }
 
+/**
+ * 화면에 보일 회차 조회 오류 문구. 브라우저 원문("Failed to fetch")·HTTP 상태 코드·응답 형식 오류 원문은
+ * 내지 않고 연결 안내나 "판매 회차를 불러오지 못했어요" 안내로 바꾼다(lib/load-error-message).
+ */
+export function saleRoundsErrorMessage(error: unknown): string {
+  return customerLoadErrorMessage(error, '판매 회차를');
+}
+
 export function createErrorSaleRoundsState(error: unknown): SaleRoundsState {
   return {
     ...emptyData(),
     status: 'error',
     loading: false,
-    error: error instanceof Error ? error.message : '회차 조회에 실패했습니다.',
+    error: saleRoundsErrorMessage(error),
     isEmpty: false,
     isRefreshing: false,
     isStale: false,
@@ -134,10 +143,10 @@ function createSuccessSaleRoundsState(rounds: PublicSaleRound[], now: Date): Sal
   };
 }
 
+/** 이미 고객 문구로 바뀐 오류 상태의 error(문자열)는 그대로 쓰고, 그 밖의 원래 오류는 고객 문구로 바꾼다. */
 function readErrorMessage(error: unknown): string {
   if (typeof error === 'string' && error.length > 0) return error;
-  if (error instanceof Error) return error.message;
-  return '회차 조회에 실패했습니다.';
+  return saleRoundsErrorMessage(error);
 }
 
 export function hasRecoverableSaleRoundsData(state: SaleRoundsState): boolean {
@@ -217,23 +226,31 @@ function readRoundDetail(payload: unknown): PublicSaleRound {
   return payload as PublicSaleRound;
 }
 
+/** 회차 목록을 읽어 성공·빈 상태를 돌려준다. 실패하면 원래 오류를 그대로 던진다(고객 문구는 부르는 쪽에서 만든다). */
+async function fetchSaleRoundsOrThrow(
+  storeId: string,
+  fetcher: FetchPublicSaleRounds,
+  now: Date,
+): Promise<SaleRoundsState> {
+  // 판매 중·예정 회차 전부와 최근 지난 회차만 상품까지 한 번에 받는다(회차마다 상세를 따로 부르지 않는다).
+  const roundsUrl = `${publicRoundsUrl(storeId)}?include=items&past=${PAST_ROUND_FETCH_LIMIT}`;
+  const response = await fetcher(roundsUrl);
+  if (!response.ok) {
+    throw new Error(`회차 조회 오류: ${response.status}`);
+  }
+
+  const rounds = readRoundsWithItems(await response.json());
+  if (rounds.length === 0) return createEmptySaleRoundsState();
+  return createSuccessSaleRoundsState(rounds, now);
+}
+
 export async function fetchPublicSaleRoundsState(
   storeId: string,
   fetcher: FetchPublicSaleRounds = fetch,
   now: Date = new Date(),
 ): Promise<SaleRoundsState> {
-  // 판매 중·예정 회차 전부와 최근 지난 회차만 상품까지 한 번에 받는다(회차마다 상세를 따로 부르지 않는다).
-  const roundsUrl = `${publicRoundsUrl(storeId)}?include=items&past=${PAST_ROUND_FETCH_LIMIT}`;
-
   try {
-    const response = await fetcher(roundsUrl);
-    if (!response.ok) {
-      throw new Error(`회차 조회 오류: ${response.status}`);
-    }
-
-    const rounds = readRoundsWithItems(await response.json());
-    if (rounds.length === 0) return createEmptySaleRoundsState();
-    return createSuccessSaleRoundsState(rounds, now);
+    return await fetchSaleRoundsOrThrow(storeId, fetcher, now);
   } catch (error: unknown) {
     return createErrorSaleRoundsState(error);
   }
@@ -251,13 +268,11 @@ export function loadPublicSaleRoundsState(
   storeId: string,
   options: { fresh?: boolean } = {},
 ): Promise<SaleRoundsState> {
+  // 실패는 원래 오류 그대로 던져 공유하지 않고, 고객 문구는 마지막에 한 번만 만든다
+  // (이미 바꾼 문구를 다시 바꾸면 연결 실패 안내가 일반 안내로 덮인다).
   return sharedRequest(
     `sale-rounds:${storeId}`,
-    async () => {
-      const state = await fetchPublicSaleRoundsState(storeId);
-      if (state.status === 'error') throw new Error(readErrorMessage(state.error));
-      return state;
-    },
+    () => fetchSaleRoundsOrThrow(storeId, fetch, new Date()),
     { ttlMs: SALE_ROUNDS_SHARE_TTL_MS, fresh: options.fresh },
   ).catch((error: unknown) => createErrorSaleRoundsState(error));
 }
