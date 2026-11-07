@@ -644,6 +644,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
         canPay={canPay && giftReady && packageLabelReady}
         error={scheduleError ?? error}
         onPay={requestPayment}
+        roundPayReadiness={{ phoneValid: deliveryPhoneValid, giftReady, packageLabelReady }}
         benchmark={{
           arrivalLabel:
             isFeatureOn('arrival-everywhere') && schedule

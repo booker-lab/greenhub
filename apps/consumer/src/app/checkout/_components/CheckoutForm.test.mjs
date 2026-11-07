@@ -44,6 +44,19 @@ function loadPaymentMethodOptions(environment) {
   }
 }
 
+const readinessSource = await readFile(
+  new URL('../../../lib/payment-readiness.ts', import.meta.url),
+  'utf8',
+);
+const readinessModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(readinessSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(readinessModule, readinessModule.exports);
+
 const formModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -80,6 +93,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/components/benchmark/GiftFields') return { default: () => null };
   if (specifier === '@/components/benchmark/PackageLabelFields') return { default: () => null };
   if (specifier === '@/lib/payment-method-options') return loadPaymentMethodOptions({});
+  if (specifier === '@/lib/payment-readiness') return readinessModule.exports;
   throw new Error(`예상하지 못한 결제 폼 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(
@@ -122,8 +136,11 @@ test('파일럿 회차 결제는 선택 마케팅 동의 UI와 주문 값을 사
 });
 
 test('회차 결제는 상품·가격·회차 변경 확인 전 차단하고 요약 변경 시 확인을 초기화한다', () => {
-  assert.match(formSource, /상품 정보가 변경/);
-  assert.match(formSource, /변경 내용을 확인/);
+  // 확인 체크는 늘 필수라 조건문 대신 필수임이 드러나는 문구를 쓴다(C-03).
+  assert.match(formSource, /주문 상품·수량·회차 가격을 확인했어요\(필수\)/);
+  assert.match(formSource, /체크해야 결제할 수 있어요/);
+  assert.match(formSource, /상품\s+정보가 바뀌면 체크가 풀려요/);
+  assert.doesNotMatch(formSource, /상품 정보가 변경되면/);
   assert.match(formSource, /setRoundDetailsConfirmed\(false\)/);
   assert.match(formSource, /confirmationKey/);
   assert.match(pageSource, /상품·가격·회차 정보가 변경되어 결제할 수 없습니다/);
@@ -191,4 +208,26 @@ test('결제 버튼 문구는 고른 결제수단을 따른다', () => {
 
 test('결제 폼은 이탈 확인창을 직접 걸지 않는다(결제 단계별 경고는 결제 훅이 맡는다)', () => {
   assert.doesNotMatch(formSource, /beforeunload/);
+});
+
+test('회차 결제 버튼이 꺼져 있으면 버튼 바로 위에 빠진 조건을 보인다', () => {
+  assert.match(formSource, /roundPayBlockers\(\{/);
+  assert.match(formSource, /detailsConfirmed: roundDetailsConfirmed/);
+  assert.match(
+    formSource,
+    /isRoundCheckout && roundPayReadiness && !effectiveCanPay && !isLoading/,
+  );
+  assert.match(formSource, /결제하려면 아래 내용을 확인해 주세요\./);
+  // 안내는 결제 버튼 바로 앞에 그리고 버튼이 안내를 가리킨다.
+  const blockers = formSource.indexOf('{payBlockers.length > 0 && (');
+  const button = formSource.indexOf('<LoadingButton');
+  assert.ok(blockers >= 0 && blockers < button);
+  assert.match(
+    formSource,
+    /aria-describedby=\{payBlockers\.length > 0 \? payBlockersId : undefined\}/,
+  );
+  assert.match(
+    pageSource,
+    /roundPayReadiness=\{\{ phoneValid: deliveryPhoneValid, giftReady, packageLabelReady \}\}/,
+  );
 });
