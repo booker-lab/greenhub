@@ -311,6 +311,9 @@ function useRoundCartValidation(
 // dark-9 글자, 줄 높이 1, 글꼴은 물려받는다. 마우스를 올리면(hover 가능한 기기만) dark-light-hover(dark-2) 면.
 const QUANTITY_BUTTON =
   'relative m-0 inline-flex size-9 min-h-9 min-w-9 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-ui-dark-light-hover';
+// 꺼진 수량 버튼: 꺼진 글자색, 누름·마우스 올림 반응 없음.
+const QUANTITY_BUTTON_DISABLED =
+  'disabled:cursor-default disabled:text-[var(--color-text-disabled)] disabled:active:translate-y-0 [@media(hover:hover)]:disabled:hover:bg-transparent';
 
 function RoundValidationNotice({ validation }: { validation: RoundCartValidation | undefined }) {
   if (!validation) {
@@ -686,10 +689,12 @@ export default function CartPage() {
                         borderRadius: 'var(--radius-full)',
                       }}
                     >
+                      {/* 수량 1에서 줄이면 확인 없이 상품이 빠지므로 막는다. 빼기는 "삭제" 버튼으로만 한다. */}
                       <button
                         type="button"
-                        className={QUANTITY_BUTTON}
+                        className={`${QUANTITY_BUTTON} ${QUANTITY_BUTTON_DISABLED}`}
                         aria-label={`${item.name} 수량 줄이기`}
+                        disabled={item.quantity <= 1}
                         onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                       >
                         −

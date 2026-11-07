@@ -432,6 +432,16 @@ test('회차 안내와 상품별 확인 표시는 내부 용어("서버") 없이
   assert.doesNotMatch(source, /서버 확인 완료|서버에서 확인해 한 번에 결제|서버에서 구매 가능 여부 확인 중/);
 });
 
+test('수량 1에서는 줄이기 버튼을 막아 확인 없이 상품이 빠지지 않게 한다', () => {
+  const minusStart = source.indexOf('수량 줄이기`}');
+  assert.notEqual(minusStart, -1);
+  const minusButton = source.slice(minusStart, source.indexOf('</button>', minusStart));
+  assert.match(minusButton, /disabled=\{item\.quantity <= 1\}/);
+  assert.match(minusButton, /updateQuantity\(item\.productId, item\.quantity - 1\)/);
+  // 삭제는 "삭제" 버튼(removeItem)으로만 한다.
+  assert.match(source, /onClick=\{\(\) => removeItem\(item\.productId\)\}/);
+});
+
 test('수량 변경은 마지막 수량만 검증하도록 요청을 잠시 미룬다', () => {
   assert.match(source, /VALIDATION_DEBOUNCE_MS = 300/);
   assert.match(source, /clearTimeout\(timer\)/);
