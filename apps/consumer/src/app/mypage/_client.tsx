@@ -11,21 +11,7 @@ import A2HSButton from '@/components/A2HSButton';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { useOrders } from '@/hooks/useOrders';
 import { isFeatureOn } from '@/lib/features';
-
-const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
-  PENDING: '결제 확인 중',
-  RECRUITING: '모집 중',
-  CONFIRMED: '주문 확정',
-  ACCEPTED: '결제 완료',
-  PREPARING: '상품 준비 중',
-  DELIVERING: '배송 중',
-  DELIVERY_HELD: '배송 보류',
-  HUB_ARRIVED: '거점 도착',
-  PICKED_UP: '픽업 완료',
-  DELIVERED: '배송 완료',
-  CANCELLED: '주문 취소',
-  REVIEWED: '구매 확정',
-};
+import { ORDER_STATUS_LABELS as STATUS_LABELS } from '@/lib/order-status';
 
 // ② 방향(design-standard §5, 판매자 주문 상태와 같은 규칙): 상태는 배지 면 없이 점 + 글자. 문제=빨강, 끝났거나 멈춘 상태=회색, 나머지 검정.
 const STATUS_TONES: Partial<Record<OrderStatus, StatusDotTone>> = {

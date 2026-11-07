@@ -4,17 +4,37 @@ import test from 'node:test';
 import ts from 'typescript';
 
 const source = await readFile(new URL('./_client.tsx', import.meta.url), 'utf8');
+const statusLabelSource = await readFile(
+  new URL('../../lib/order-status.ts', import.meta.url),
+  'utf8',
+);
+const transpileForTest = (code, fileName) =>
+  ts.transpileModule(code, {
+    compilerOptions: {
+      esModuleInterop: true,
+      jsx: ts.JsxEmit.ReactJSX,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName,
+  }).outputText;
+// 주문 상태 이름표는 실제 공용 표(@/lib/order-status)를 읽어 목록 판정에 쓴다.
+const statusLabelModule = { exports: {} };
+new Function(
+  'require',
+  'module',
+  'exports',
+  transpileForTest(statusLabelSource, 'order-status.ts'),
+)(
+  () => {
+    throw new Error('예상하지 못한 주문 상태 이름표 모듈 요청');
+  },
+  statusLabelModule,
+  statusLabelModule.exports,
+);
 const testableSource = `${source}
 export { readOrderListSummary };`;
-const compiled = ts.transpileModule(testableSource, {
-  compilerOptions: {
-    esModuleInterop: true,
-    jsx: ts.JsxEmit.ReactJSX,
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2022,
-  },
-  fileName: '_client.tsx',
-}).outputText;
+const compiled = transpileForTest(testableSource, '_client.tsx');
 
 const clientModule = { exports: {} };
 const requireForTest = (specifier) => {
@@ -38,6 +58,7 @@ const requireForTest = (specifier) => {
   }
   // 벤치마킹 비교 기능 토글: 이 테스트에서는 꺼진 상태로 둔다.
   if (specifier === '@/lib/features') return { isFeatureOn: () => false };
+  if (specifier === '@/lib/order-status') return statusLabelModule.exports;
   throw new Error(`예상하지 못한 MY 주문 목록 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(
@@ -136,7 +157,8 @@ test('손상된 orderItems나 주문 최상위 상품명을 대표명으로 승�
 });
 
 test('배송 보류 상태와 서버 상품 요약을 주문 카드에 명확히 표시한다', () => {
-  assert.match(source, /DELIVERY_HELD:\s*'배송 보류'/);
+  assert.equal(statusLabelModule.exports.ORDER_STATUS_LABELS.DELIVERY_HELD, '배송 보류');
+  assert.match(source, /from '@\/lib\/order-status'/);
   assert.match(source, /summary\.representativeName/);
   assert.match(source, /summary\.additionalProductCount/);
   assert.match(source, /summary\.productCount/);
