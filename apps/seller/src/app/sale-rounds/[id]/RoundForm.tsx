@@ -26,6 +26,7 @@ import {
 import {
   parseKstDateTimeInput,
   readSafeHttpUrl,
+  roundEditLockNotice,
   toKstDateTimeInput,
   validateRoundFormInput,
 } from './RoundForm.logic';
@@ -280,6 +281,10 @@ export function RoundForm({
     [...selectedProductIds],
   );
   const availableProducts = products.filter((product) => !selectedProductIds.has(product.id));
+  const productPrices = useMemo(
+    () => new Map(products.map((product) => [product.id, product.price])),
+    [products],
+  );
   const representativeUrl = readSafeHttpUrl(carrotLinks.representativeUrl);
 
   const changeDraft = <K extends keyof FormDraft>(key: K, value: FormDraft[K]) => {
@@ -503,9 +508,16 @@ export function RoundForm({
           busy={locked}
           onChange={(key, value) => changeDraft(key, value)}
         />
+        {!readOnly && (
+          <Alert variant="secondary" role="status">
+            <AlertTitle>주문이 시작되면 고칠 수 없어요</AlertTitle>
+            <AlertDescription>{roundEditLockNotice(draft.orderOpenAt)}</AlertDescription>
+          </Alert>
+        )}
         <ProductsSection
           items={draft.items}
           availableProducts={availableProducts}
+          productPrices={productPrices}
           busy={locked}
           onAdd={addProduct}
           onRemove={(key) =>

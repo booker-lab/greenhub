@@ -23,6 +23,7 @@ import {
 import { useStoreProducts } from '@/hooks/useStoreProducts';
 import { showsRoundOrders } from '@/lib/round-orders';
 import { isPurchaseListRound } from '@/lib/round-purchase-list';
+import { RoundSalesModeNotice } from '../RoundSalesModeNotice';
 import {
   buildRoundPageData,
   getRoundAction,
@@ -421,6 +422,7 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
   return (
     <>
       <div className={`${COLUMN} gap-4`}>
+        <RoundSalesModeNotice />
         <RoundDeadlineStrip round={round} rounded />
         <RoundSummary round={round} />
         {showsRoundOrders(round.status) && <RoundOrdersSection round={round} />}
