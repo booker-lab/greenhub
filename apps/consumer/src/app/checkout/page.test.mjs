@@ -61,6 +61,9 @@ const requireForTest = (specifier) => {
     return { pickCheckoutPrefill: () => ({}), prefillAddress: (c) => c, prefillPhone: (c) => c };
   }
   if (specifier === '@/lib/payment-redirect') return {};
+  if (specifier === '@/lib/payment-failure-message') {
+    return { paymentFailureMessage: () => '결제를 취소했어요. 장바구니는 그대로 남아 있어요.' };
+  }
   if (specifier === '@/lib/korean-mobile-phone') {
     return { isKoreanMobilePhone: () => true, ROUND_DELIVERY_PHONE_ERROR: '' };
   }
@@ -537,4 +540,12 @@ test('회차 결제는 받는 분 연락처가 휴대폰 번호일 때만 결제
     roundSection,
     /deliveryPhoneError=\{deliveryPhoneValid \? null : ROUND_DELIVERY_PHONE_ERROR\}/,
   );
+});
+
+test('legacy checkout 결제창 실패는 PG 원문 대신 고객 문구로 보인다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+  assert.match(legacyCheckoutSource, /setError\(paymentFailureMessage\(response\)\)/);
+  assert.doesNotMatch(legacyCheckoutSource, /setError\(response\.message/);
 });

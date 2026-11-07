@@ -42,6 +42,17 @@ new Function(
   }).outputText,
 )(portoneConfigModule, portoneConfigModule.exports);
 
+// 결제창 실패 문구는 실제 payment-failure-message 모듈로 만든다.
+const failureMessageModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/payment-failure-message.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(failureMessageModule, failureMessageModule.exports);
+
 const originalFetch = globalThis.fetch;
 const originalEnvironment = {
   apiUrl: process.env.NEXT_PUBLIC_API_URL,
@@ -96,6 +107,7 @@ function loadHook({ paymentResponses = [], onPayment } = {}) {
       };
     }
     if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
+    if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => process.env.NEXT_PUBLIC_API_URL };
     }
@@ -335,6 +347,9 @@ test('결제창 취소·실패(code 응답) 뒤 재시도는 새 clientOrderRequ
 
   await result.requestPayment();
   assert.equal(stateChanges.at(-1), 'error');
+  // PG 원문 메시지 대신 고객 문구를 오류로 남긴다.
+  assert.ok(stateChanges.includes('결제를 취소했어요. 장바구니는 그대로 남아 있어요.'));
+  assert.ok(!stateChanges.includes('사용자가 결제를 취소했습니다.'));
   await result.requestPayment();
 
   assert.equal(requestBodies.length, 2);

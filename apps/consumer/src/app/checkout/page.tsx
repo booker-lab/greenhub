@@ -34,6 +34,7 @@ import { getCartValidationError } from '@/lib/cartValidation';
 import { pickCheckoutPrefill, prefillAddress, prefillPhone } from '@/lib/checkout-prefill';
 import { isFeatureOn } from '@/lib/features';
 import { isKoreanMobilePhone, ROUND_DELIVERY_PHONE_ERROR } from '@/lib/korean-mobile-phone';
+import { paymentFailureMessage } from '@/lib/payment-failure-message';
 import {
   buildPaymentRedirectUrl,
   createPendingOrderPayment,
@@ -426,7 +427,8 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
         savePendingOrderPayment(browser?.storage ?? null, null);
       }
       if (response && 'code' in response) {
-        setError(response.message ?? '결제가 취소되었습니다.');
+        // PG 원문 코드는 화면에 쓰지 않고 고객 문구로 바꾼다.
+        setError(paymentFailureMessage(response));
         setState('error');
         return;
       }

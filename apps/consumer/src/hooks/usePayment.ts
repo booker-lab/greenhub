@@ -4,6 +4,7 @@ import type { CreateOrderRequest } from '@greenhub/shared';
 import { useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem } from '@/hooks/useCart';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { paymentFailureMessage } from '@/lib/payment-failure-message';
 import {
   buildPaymentRedirectUrl,
   createPendingOrderPayment,
@@ -316,7 +317,8 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
 
       if (response && 'code' in response) {
         attemptSettled = true;
-        throw new Error(response.message ?? '결제가 취소되었습니다.');
+        // PG 원문 코드("[PAY_PROCESS_CANCELED] …")는 화면에 쓰지 않고 고객 문구로 바꾼다.
+        throw new Error(paymentFailureMessage(response));
       }
 
       transition('done');

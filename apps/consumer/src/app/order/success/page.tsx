@@ -11,8 +11,8 @@ import { useCart } from '@/hooks/useCart';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
 import { isFeatureOn } from '@/lib/features';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
+import { paymentFailureMessage } from '@/lib/payment-failure-message';
 import {
-  DEFAULT_PAYMENT_FAILURE_MESSAGE,
   type OrderPaymentReturn,
   type PaymentRedirectResult,
   parsePaymentRedirectResult,
@@ -587,7 +587,8 @@ function OrderSuccessContent() {
               className="m-0 text-center leading-[1.55]"
               style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
-              {paymentFailure.message ?? DEFAULT_PAYMENT_FAILURE_MESSAGE}
+              {/* 복귀 쿼리의 code·message는 PG 원문이라 고객 문구로 바꿔 보인다. */}
+              {paymentFailureMessage(paymentFailure)}
             </p>
             {retryPath && (
               <Button size="lg" className="mt-5 w-full" onClick={() => router.replace(retryPath)}>

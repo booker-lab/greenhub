@@ -42,6 +42,19 @@ new Function(
   }).outputText,
 )(cancelReasonModule, cancelReasonModule.exports);
 
+const failureMessageSource = await readFile(
+  new URL('../../../lib/payment-failure-message.ts', import.meta.url),
+  'utf8',
+);
+const failureMessageModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(failureMessageSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(failureMessageModule, failureMessageModule.exports);
+
 const pageModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -54,6 +67,7 @@ const requireForTest = (specifier) => {
   }
   if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
   if (specifier === '@/lib/order-cancel-reason') return cancelReasonModule.exports;
+  if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
   if (specifier === '@/hooks/useCart') return { useCart: () => ({ removeRoundItems: () => {} }) };
   // 벤치마킹 비교 기능 모듈: 이 테스트에서는 꺼진 상태로 둔다.
   if (specifier === '@/components/benchmark/OrderSuccessGuide') return { default: () => null };
@@ -281,4 +295,19 @@ test('결제 완료 화면은 결제 확인 중이 이어지면 서버 결제 �
     source,
     /useOrderStatus\(\s*orderId,\s*session\?\.user\?\.accessToken,\s*\{ checkPendingPayment: true \},\s*\)/,
   );
+});
+
+test('리다이렉트 결제 실패 문구는 PG 원문 코드 대신 고객 문구로 보인다', () => {
+  assert.match(source, /paymentFailureMessage\(paymentFailure\)/);
+  assert.doesNotMatch(source, /paymentFailure\.message/);
+  const { paymentFailureMessage } = failureMessageModule.exports;
+  const failure = parsePaymentRedirectResult(
+    new URLSearchParams(
+      `paymentId=order-1&code=FAILURE_TYPE_PG&message=${encodeURIComponent(
+        '[PAY_PROCESS_CANCELED] 사용자가 결제를 취소하였습니다',
+      )}`,
+    ),
+  );
+  assert.equal(failure.kind, 'failure');
+  assert.equal(paymentFailureMessage(failure), '결제를 취소했어요. 장바구니는 그대로 남아 있어요.');
 });
