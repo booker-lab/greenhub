@@ -5,6 +5,10 @@ import { useEffect, useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem } from '@/hooks/useCart';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import {
+  CHECKOUT_HOLD_LIMIT_MESSAGE,
+  isCheckoutHoldLimitRejection,
+} from '@/lib/checkout-hold-limit';
+import {
   CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE,
   checkoutPaymentErrorMessage,
   ORDER_CREATE_FAILED_MESSAGE,
@@ -70,6 +74,11 @@ interface UsePaymentResult {
   error: string | null;
   /** 회차 결제에서 주문 생성 API가 회차 주문 마감으로 거절했는지(C-13). 한 번 알아보면 이 화면에서는 유지한다. */
   roundOrderClosed: boolean;
+  /**
+   * 회차 결제에서 결제를 마치지 않은 이전 시도가 같은 회차 결제 예약 한도를 채워 주문 생성이 거절됐는지(C-02).
+   * 다음 결제를 누르거나 같은 탭 복귀로 결제 전 상태가 되면 다시 false가 된다.
+   */
+  checkoutHoldLimited: boolean;
   requestPayment: () => Promise<void>;
 }
 
@@ -261,6 +270,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
   const [orderId, setOrderId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [roundOrderClosed, setRoundOrderClosed] = useState(false);
+  const [checkoutHoldLimited, setCheckoutHoldLimited] = useState(false);
   const paymentAttemptId = useRef<string | null>(null);
   const currentState = useRef<PaymentState>('idle');
   // 같은 탭 복귀로 결제 상태를 되돌리면 올라간다. 끝나지 않은 이전 결제창 결과가 늦게 와도 화면을 바꾸지 않는다.
@@ -282,6 +292,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
           // 새로 로드된 복귀와 같게 다음 결제는 새 결제 시도 ID로 주문한다(#328).
           paymentAttemptId.current = null;
           currentState.current = 'idle';
+          setCheckoutHoldLimited(false);
           setState('idle');
           setError(null);
         },
@@ -293,10 +304,13 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
     if (currentState.current !== 'idle' && currentState.current !== 'error') return;
     const generation = attemptGeneration.current;
     transition('creating');
+    setCheckoutHoldLimited(false);
     setError(null);
     paymentAttemptId.current ??= crypto.randomUUID();
     // 서버 거절·결제창 취소처럼 결과가 확정된 실패에서만 결제 시도 ID를 새로 만든다.
     // 응답 없음·5xx처럼 서버 처리 여부가 불확실하면 같은 ID로 멱등 재시도해야 한다.
+    // 결제창 취소 뒤 같은 ID를 다시 쓰지 않는 이유(C-02 확인): API는 같은 ID·같은 내용이면 주문 상태를
+    // 보지 않고 기존 주문을 돌려준다. 결제 실패 알림으로 이미 취소된 주문이면 결제가 승인돼도 자동 환불된다.
     let attemptSettled = false;
 
     try {
@@ -326,6 +340,12 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
         if (options.roundItems !== undefined && isRoundOrderClosedRejection(res.status, body)) {
           setRoundOrderClosed(true);
           throw new Error(ROUND_ORDER_CLOSED_MESSAGE);
+        }
+        // 결제를 마치지 않은 이전 시도가 예약 한도를 채워 거절되면(예약·주문을 만들지 않는다)
+        // 언제 다시 결제할 수 있는지와 주문 내역으로 가는 길을 보이도록 알린다(C-02).
+        if (options.roundItems !== undefined && isCheckoutHoldLimitRejection(res.status, body)) {
+          setCheckoutHoldLimited(true);
+          throw new Error(CHECKOUT_HOLD_LIMIT_MESSAGE);
         }
         throw new Error(body.message ?? ORDER_CREATE_FAILED_MESSAGE);
       }
@@ -383,5 +403,5 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
     }
   }
 
-  return { state, orderId, error, roundOrderClosed, requestPayment };
+  return { state, orderId, error, roundOrderClosed, checkoutHoldLimited, requestPayment };
 }

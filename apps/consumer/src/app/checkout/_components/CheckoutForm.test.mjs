@@ -248,3 +248,11 @@ test('이천시 밖 주소 오류는 해요체로 보인다', () => {
   assert.match(formSource, /'경기도 이천시 주소만 주문할 수 있어요\.'/);
   assert.doesNotMatch(formSource, /주소만 주문할 수 있습니다/);
 });
+
+test('오류 안내 아래 다음 행동은 오류 상자 안에서 문구 뒤에만 보인다(C-02)', () => {
+  assert.match(formSource, /errorAction\?: ReactNode;/);
+  assert.match(
+    formSource,
+    /\{error && \([\s\S]*?<Alert variant="destructive" role="alert"[\s\S]*?\{error\}\s*<\/p>\s*\{errorAction\}\s*<\/AlertDescription>/,
+  );
+});

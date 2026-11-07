@@ -87,6 +87,12 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
   if (specifier === '@/lib/cartValidation') return { getCartValidationError: () => null };
   if (specifier === '@/lib/checkout-round-closed') return roundClosedModule.exports;
+  if (specifier === '@/lib/checkout-hold-limit') {
+    return {
+      CHECKOUT_HOLD_LIMIT_ORDERS_LABEL: '주문 내역 보기',
+      CHECKOUT_HOLD_LIMIT_ORDERS_PATH: '/mypage',
+    };
+  }
   if (specifier === '@/lib/checkout-messages') {
     return {
       CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE:
@@ -838,7 +844,7 @@ test('회차 checkout은 마감 거절 응답·지나간 마감 시각에 결제
 
   assert.match(
     roundCheckoutSource,
-    /const \{ state, orderId, error, roundOrderClosed, requestPayment \} = usePayment\(\{/,
+    /const \{ state, orderId, error, roundOrderClosed, checkoutHoldLimited, requestPayment \} =\s*usePayment\(\{/,
   );
   assert.match(
     roundCheckoutSource,
@@ -874,4 +880,22 @@ test('결제 화면 문구는 해요체이고 결제 설정 원문 대신 고객
     source,
     /상품 정보를 불러오지 못했습니다|결제 설정을 확인할 수 없습니다|주문 생성 실패/,
   );
+});
+
+test('회차 checkout은 결제 예약 한도 거절이면 오류 안내 아래에 주문 내역 버튼을 둔다(C-02)', () => {
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+
+  assert.match(
+    source,
+    /import \{\s*CHECKOUT_HOLD_LIMIT_ORDERS_LABEL,\s*CHECKOUT_HOLD_LIMIT_ORDERS_PATH,\s*\} from '@\/lib\/checkout-hold-limit';/,
+  );
+  // 오류 문구가 보일 때(마감 안내로 가려지지 않았을 때)만, 한도 거절일 때만 버튼을 둔다.
+  assert.match(
+    roundCheckoutSource,
+    /errorAction=\{[\s\S]*?formError && checkoutHoldLimited \? \([\s\S]*?onClick=\{\(\) => router\.push\(CHECKOUT_HOLD_LIMIT_ORDERS_PATH\)\}[\s\S]*?\{CHECKOUT_HOLD_LIMIT_ORDERS_LABEL\}[\s\S]*?\) : undefined\s*\}/,
+  );
+  // 단일 상품 결제(예약 한도 없음)에는 버튼을 두지 않는다.
+  assert.equal(source.match(/errorAction=/g)?.length, 1);
 });

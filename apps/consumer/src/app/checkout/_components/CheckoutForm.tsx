@@ -53,6 +53,8 @@ export interface CheckoutFormProps {
   isLoading: boolean;
   canPay: boolean;
   error: string | null;
+  /** 오류 안내 아래에 둘 다음 행동(예: 결제 예약 한도로 막혔을 때 주문 내역으로 가기, C-02). 오류가 있을 때만 보인다. */
+  errorAction?: ReactNode;
   onPay: () => void;
   singleSummary?: {
     quantity: number;
@@ -209,6 +211,7 @@ export default function CheckoutForm({
   isLoading,
   canPay,
   error,
+  errorAction,
   onPay,
   singleSummary,
   benchmark,
@@ -651,6 +654,7 @@ export default function CheckoutForm({
             <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
               {error}
             </p>
+            {errorAction}
           </AlertDescription>
         </Alert>
       )}

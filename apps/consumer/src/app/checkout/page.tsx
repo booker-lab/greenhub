@@ -36,6 +36,10 @@ import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartValidationError } from '@/lib/cartValidation';
 import {
+  CHECKOUT_HOLD_LIMIT_ORDERS_LABEL,
+  CHECKOUT_HOLD_LIMIT_ORDERS_PATH,
+} from '@/lib/checkout-hold-limit';
+import {
   CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE,
   ORDER_CREATE_FAILED_MESSAGE,
 } from '@/lib/checkout-messages';
@@ -654,22 +658,23 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     };
   }, [accessToken]);
 
-  const { state, orderId, error, roundOrderClosed, requestPayment } = usePayment({
-    storeId,
-    orderRequest: {
-      deliveryAddress: address,
-      deliveryPhone: deliveryPhone.trim(),
-      ...(requestNote.trim() ? { requestNote: requestNote.trim() } : {}),
-      ...(schedule ? { requestedDeliveryDate: schedule.requestedDeliveryDate } : {}),
-      ...(acquisition ? { acquisition } : {}),
-      ...(giftInfo ? { gift: giftInfo } : {}),
-      ...(typeof packageLabelValue === 'string' ? { packageLabel: packageLabelValue } : {}),
-    },
-    roundItems: cartItems,
-    accessToken: session?.user?.accessToken ?? '',
-    paymentMethod,
-    buyer: { name: session?.user?.name, phone: deliveryPhone.trim() },
-  });
+  const { state, orderId, error, roundOrderClosed, checkoutHoldLimited, requestPayment } =
+    usePayment({
+      storeId,
+      orderRequest: {
+        deliveryAddress: address,
+        deliveryPhone: deliveryPhone.trim(),
+        ...(requestNote.trim() ? { requestNote: requestNote.trim() } : {}),
+        ...(schedule ? { requestedDeliveryDate: schedule.requestedDeliveryDate } : {}),
+        ...(acquisition ? { acquisition } : {}),
+        ...(giftInfo ? { gift: giftInfo } : {}),
+        ...(typeof packageLabelValue === 'string' ? { packageLabel: packageLabelValue } : {}),
+      },
+      roundItems: cartItems,
+      accessToken: session?.user?.accessToken ?? '',
+      paymentMethod,
+      buyer: { name: session?.user?.name, phone: deliveryPhone.trim() },
+    });
 
   useEffect(() => {
     if (state !== 'done' || !orderId) return;
@@ -774,6 +779,19 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
         isLoading={isLoading}
         canPay={canPay && giftReady && packageLabelReady}
         error={formError}
+        errorAction={
+          // 결제를 마치지 않은 이전 시도로 막혔으면 그 시도를 볼 수 있는 주문 내역으로 가는 길을 둔다(C-02).
+          formError && checkoutHoldLimited ? (
+            <Button
+              variant="outline"
+              size="md"
+              className="mt-3 w-full"
+              onClick={() => router.push(CHECKOUT_HOLD_LIMIT_ORDERS_PATH)}
+            >
+              {CHECKOUT_HOLD_LIMIT_ORDERS_LABEL}
+            </Button>
+          ) : undefined
+        }
         onPay={requestPayment}
         roundPayReadiness={{ phoneValid: deliveryPhoneValid, giftReady, packageLabelReady }}
         closedNotice={

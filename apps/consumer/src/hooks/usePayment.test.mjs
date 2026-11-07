@@ -92,6 +92,17 @@ new Function(
   roundClosedModule.exports,
 );
 
+// 결제 예약 한도 거절 판정은 실제 checkout-hold-limit 모듈로 만든다.
+const holdLimitModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/checkout-hold-limit.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(holdLimitModule, holdLimitModule.exports);
+
 // 결제 오류 문구는 실제 checkout-messages 모듈(연결 실패 판정은 load-error-message)로 만든다.
 const loadErrorModule = { exports: {} };
 new Function(
@@ -181,6 +192,7 @@ function loadHook({ paymentResponses = [], onPayment } = {}) {
     if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
     if (specifier === '@/lib/payment-page-guard') return pageGuardModule.exports;
     if (specifier === '@/lib/checkout-round-closed') return roundClosedModule.exports;
+    if (specifier === '@/lib/checkout-hold-limit') return holdLimitModule.exports;
     if (specifier === '@/lib/checkout-messages') return checkoutMessagesModule.exports;
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => process.env.NEXT_PUBLIC_API_URL };
@@ -506,6 +518,76 @@ test('회차 마감이 아닌 거절·단일 상품 주문의 409는 마감 신�
   await single.requestPayment();
   assert.ok(!loaded.stateChanges.includes(true));
   assert.equal(loaded.stateChanges.at(-1), 'error');
+});
+
+const HOLD_LIMIT_API_MESSAGE =
+  '이전 결제 시도를 아직 처리하고 있어요. 잠시 후 다시 시도하거나 주문 내역을 확인해 주세요.';
+const HOLD_LIMIT_CUSTOMER_MESSAGE =
+  '결제를 마치지 않은 이전 결제 시도가 있어 지금은 결제할 수 없어요. 이전 결제 시도가 정리되면(최대 15분) 다시 결제할 수 있어요.';
+
+test('회차 결제 예약 한도 409 거절이면 한도 신호와 기다릴 시간 안내를 보이고 결제창을 열지 않는다(C-02)', async () => {
+  let fetchCount = 0;
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return jsonResponse(
+      { statusCode: 409, error: 'Conflict', message: HOLD_LIMIT_API_MESSAGE },
+      false,
+      409,
+    );
+  };
+  const { result, paymentCalls, stateChanges } = createRoundHook();
+
+  await result.requestPayment();
+
+  assert.equal(fetchCount, 1);
+  assert.equal(paymentCalls.length, 0);
+  // 시도 시작에 한도 신호를 내리고(false), 거절을 알아보면 올린다(true).
+  assert.equal(stateChanges.indexOf(false) < stateChanges.indexOf(true), true);
+  assert.ok(stateChanges.includes(HOLD_LIMIT_CUSTOMER_MESSAGE));
+  assert.ok(!stateChanges.includes(HOLD_LIMIT_API_MESSAGE));
+  // 회차 마감 안내와 섞지 않는다.
+  assert.ok(!stateChanges.includes('이번 회차 주문이 마감됐어요.'));
+  assert.equal(stateChanges.at(-1), 'error');
+});
+
+test('예약 한도 거절은 아무것도 만들지 않았으므로 다음 시도는 새 clientOrderRequestId를 쓴다', async () => {
+  const requestBodies = [];
+  globalThis.fetch = async (_url, init) => {
+    requestBodies.push(JSON.parse(init.body));
+    if (requestBodies.length === 1) {
+      return jsonResponse({ message: HOLD_LIMIT_API_MESSAGE }, false, 409);
+    }
+    return jsonResponse(successfulRoundResponse);
+  };
+  const { result, paymentCalls } = createRoundHook();
+
+  await result.requestPayment();
+  await result.requestPayment();
+
+  assert.equal(requestBodies.length, 2);
+  assert.notEqual(requestBodies[0].clientOrderRequestId, requestBodies[1].clientOrderRequestId);
+  assert.equal(paymentCalls.length, 1);
+});
+
+test('다른 409 거절·단일 상품 주문의 같은 문구는 예약 한도 신호를 올리지 않는다', async () => {
+  globalThis.fetch = async () =>
+    jsonResponse({ message: '이번 회차 배송지 한도가 마감되었습니다.' }, false, 409);
+  const round = createRoundHook();
+  await round.result.requestPayment();
+  assert.ok(!round.stateChanges.includes(true));
+  assert.ok(!round.stateChanges.includes(HOLD_LIMIT_CUSTOMER_MESSAGE));
+
+  globalThis.fetch = async () => jsonResponse({ message: HOLD_LIMIT_API_MESSAGE }, false, 409);
+  const loaded = loadHook();
+  const single = loaded.usePayment({
+    storeId: 'store-1',
+    orderRequest: legacyOrderRequest,
+    accessToken: 'access-token',
+    paymentMethod: 'kakaopay',
+  });
+  await single.requestPayment();
+  assert.ok(!loaded.stateChanges.includes(true));
+  assert.ok(!loaded.stateChanges.includes(HOLD_LIMIT_CUSTOMER_MESSAGE));
 });
 
 test('5xx·408·429·응답 손상처럼 처리 여부가 불확실하면 같은 clientOrderRequestId를 유지한다', async () => {
