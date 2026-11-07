@@ -454,7 +454,7 @@ export default function CheckoutForm({
             readOnly
             error={
               isRoundCheckout && address.address && !isIcheonAddress
-                ? '경기도 이천시 주소만 주문할 수 있습니다.'
+                ? '경기도 이천시 주소만 주문할 수 있어요.'
                 : undefined
             }
           />

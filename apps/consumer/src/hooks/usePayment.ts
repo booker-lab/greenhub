@@ -5,6 +5,11 @@ import { useEffect, useRef, useState } from 'react';
 import { type CartItem, isRoundCartItem, type RoundCartItem } from '@/hooks/useCart';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import {
+  CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE,
+  checkoutPaymentErrorMessage,
+  ORDER_CREATE_FAILED_MESSAGE,
+} from '@/lib/checkout-messages';
+import {
   isRoundOrderClosedRejection,
   ROUND_ORDER_CLOSED_MESSAGE,
 } from '@/lib/checkout-round-closed';
@@ -82,6 +87,11 @@ interface OrderPaymentResponse {
 
 const MAX_IDENTIFIER_LENGTH = 128;
 const UNSAFE_IDENTIFIER_CHARACTERS = '/?#\\';
+// 결제 전 확인에 실패하면 화면에 보일 고객 문구(해요체).
+const ROUND_AMOUNT_UNCHECKED_MESSAGE =
+  '결제 금액을 확인하지 못했어요. 장바구니에서 다시 결제해 주세요.';
+const ORDER_RESPONSE_UNCHECKED_MESSAGE =
+  '결제 정보를 확인하지 못해 결제를 시작하지 않았어요. 잠시 후 다시 시도해 주세요.';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -132,31 +142,31 @@ function prepareRoundOrderRequest(
 ): PreparedOrderRequest {
   const { orderRequest, roundItems, storeId } = options;
   if (roundItems.length === 0) {
-    throw new Error('결제할 회차 상품이 없습니다.');
+    throw new Error('결제할 상품이 없어요. 장바구니에서 다시 결제해 주세요.');
   }
   if (!roundItems.every((item) => isValidRoundPaymentItem(item, storeId))) {
-    throw new Error('검증된 회차 상품 정보를 확인할 수 없습니다.');
+    throw new Error('상품 정보를 확인하지 못했어요. 장바구니에서 다시 결제해 주세요.');
   }
 
   const firstItem = roundItems[0];
   if (!firstItem || roundItems.some((item) => item.roundId !== firstItem.roundId)) {
-    throw new Error('같은 회차 상품만 함께 결제할 수 있습니다.');
+    throw new Error('같은 회차 상품만 함께 결제할 수 있어요.');
   }
   const roundItemIds = roundItems.map((item) => item.roundItemId);
   if (new Set(roundItemIds).size !== roundItemIds.length) {
-    throw new Error('같은 회차 상품을 중복으로 결제할 수 없습니다.');
+    throw new Error('같은 상품이 두 번 담겨 있어요. 장바구니에서 확인해 주세요.');
   }
 
   const expectedAmount = roundItems.reduce((sum, item) => {
     // 옵션을 고른 상품은 옵션 금액을 더한 price, 아니면 price === roundPrice.
     const subtotal = item.price * item.quantity;
     if (!Number.isSafeInteger(subtotal) || subtotal < 0) {
-      throw new Error('회차 상품 금액을 확인할 수 없습니다.');
+      throw new Error(ROUND_AMOUNT_UNCHECKED_MESSAGE);
     }
     return sum + subtotal;
   }, 0);
   if (!Number.isSafeInteger(expectedAmount) || expectedAmount <= 0) {
-    throw new Error('회차 주문 금액을 확인할 수 없습니다.');
+    throw new Error(ROUND_AMOUNT_UNCHECKED_MESSAGE);
   }
 
   return {
@@ -206,10 +216,10 @@ function prepareOrderRequest(
 
 function readOrderPaymentResponse(value: unknown, expectedAmount?: number): OrderPaymentResponse {
   if (!isRecord(value) || !isSafeIdentifier(value.orderId)) {
-    throw new Error('주문 응답의 결제 식별자를 확인할 수 없습니다.');
+    throw new Error(ORDER_RESPONSE_UNCHECKED_MESSAGE);
   }
   if ('paymentId' in value && value.paymentId !== value.orderId) {
-    throw new Error('주문 응답에 서로 다른 결제 식별자가 포함되었습니다.');
+    throw new Error(ORDER_RESPONSE_UNCHECKED_MESSAGE);
   }
 
   const parameters = value.portonePaymentParams;
@@ -219,13 +229,15 @@ function readOrderPaymentResponse(value: unknown, expectedAmount?: number): Orde
     !isMoney(parameters.amount) ||
     parameters.amount <= 0
   ) {
-    throw new Error('주문 응답의 결제 정보를 확인할 수 없습니다.');
+    throw new Error(ORDER_RESPONSE_UNCHECKED_MESSAGE);
   }
   if ('paymentId' in parameters && parameters.paymentId !== value.orderId) {
-    throw new Error('주문 응답에 서로 다른 결제 식별자가 포함되었습니다.');
+    throw new Error(ORDER_RESPONSE_UNCHECKED_MESSAGE);
   }
   if (expectedAmount !== undefined && parameters.amount !== expectedAmount) {
-    throw new Error('서버가 반환한 결제 금액이 회차 주문 금액과 일치하지 않습니다.');
+    throw new Error(
+      '결제 금액이 장바구니와 달라 결제를 시작하지 않았어요. 장바구니에서 다시 확인해 주세요.',
+    );
   }
 
   return {
@@ -288,7 +300,13 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
     let attemptSettled = false;
 
     try {
-      const configuration = readPortonePaymentConfiguration(options.paymentMethod);
+      let configuration: ReturnType<typeof readPortonePaymentConfiguration>;
+      try {
+        configuration = readPortonePaymentConfiguration(options.paymentMethod);
+      } catch {
+        // 결제 설정 오류 원문 대신 고객 문구를 보인다.
+        throw new Error(CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE);
+      }
       const prepared = prepareOrderRequest(options, paymentAttemptId.current);
       const res = await fetch(
         `${getApiBaseUrl()}/stores/${encodeURIComponent(options.storeId)}/orders`,
@@ -309,7 +327,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
           setRoundOrderClosed(true);
           throw new Error(ROUND_ORDER_CLOSED_MESSAGE);
         }
-        throw new Error(body.message ?? '주문 생성 실패');
+        throw new Error(body.message ?? ORDER_CREATE_FAILED_MESSAGE);
       }
       const payment = readOrderPaymentResponse(await res.json(), prepared.expectedAmount);
       setOrderId(payment.orderId);
@@ -360,8 +378,7 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
     } catch (e: unknown) {
       if (generation !== attemptGeneration.current) return;
       if (attemptSettled) paymentAttemptId.current = null;
-      const message = e instanceof Error ? e.message : '오류가 발생했습니다.';
-      setError(message);
+      setError(checkoutPaymentErrorMessage(e));
       transition('error');
     }
   }

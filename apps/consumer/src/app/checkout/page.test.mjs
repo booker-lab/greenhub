@@ -87,6 +87,13 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
   if (specifier === '@/lib/cartValidation') return { getCartValidationError: () => null };
   if (specifier === '@/lib/checkout-round-closed') return roundClosedModule.exports;
+  if (specifier === '@/lib/checkout-messages') {
+    return {
+      CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE:
+        '지금은 결제를 시작할 수 없어요. 잠시 후 다시 시도해 주세요.',
+      ORDER_CREATE_FAILED_MESSAGE: '주문을 만들지 못했어요. 잠시 후 다시 시도해 주세요.',
+    };
+  }
   if (specifier === '@/lib/checkout-prefill') {
     return { pickCheckoutPrefill: () => ({}), prefillAddress: (c) => c, prefillPhone: (c) => c };
   }
@@ -550,7 +557,7 @@ test('단건 checkout은 상품 조회에 실패하면 URL 금액 대신 금액�
       await harness.runEffectsAndSettle();
       const rendered = harness.render();
       assert.equal(rendered.totalAmount, 0);
-      assert.match(rendered.error, /상품 정보를 불러오지 못했습니다/);
+      assert.equal(rendered.error, '상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
     },
   );
 });
@@ -850,4 +857,21 @@ test('회차 checkout은 마감 거절 응답·지나간 마감 시각에 결제
   assert.match(roundCheckoutSource, /closedNotice=\{\s*roundClosed \? \(\s*<RoundClosedNotice/);
   assert.match(roundCheckoutSource, /onCart=\{\(\) => router\.push\('\/cart'\)\}/);
   assert.match(roundCheckoutSource, /onHome=\{\(\) => router\.push\('\/'\)\}/);
+});
+
+test('결제 화면 문구는 해요체이고 결제 설정 원문 대신 고객 문구를 보인다', () => {
+  const start = source.indexOf('function LegacyCartCheckoutContent');
+  const end = source.indexOf('function RoundCartCheckoutContent', start);
+  const legacyCheckoutSource = source.slice(start, end);
+
+  assert.match(legacyCheckoutSource, /setError\(CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE\)/);
+  assert.doesNotMatch(legacyCheckoutSource, /caught\.message/);
+  assert.match(legacyCheckoutSource, /setError\(body\.message \?\? ORDER_CREATE_FAILED_MESSAGE\)/);
+  // 화면에 그리는 문자열 상수·안내에 합니다체가 남지 않는다.
+  const quoted = [...source.matchAll(/'([^'\n]*[가-힣][^'\n]*)'/g)].map((match) => match[1]);
+  for (const text of quoted) assert.doesNotMatch(text, /니다\.?$/, text);
+  assert.doesNotMatch(
+    source,
+    /상품 정보를 불러오지 못했습니다|결제 설정을 확인할 수 없습니다|주문 생성 실패/,
+  );
 });

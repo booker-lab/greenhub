@@ -243,3 +243,8 @@ test('회차 마감 안내는 결제 버튼 바로 위에 두고 빠진 조건 �
   const button = formSource.indexOf('<LoadingButton');
   assert.ok(blockers >= 0 && blockers < notice && notice < button);
 });
+
+test('이천시 밖 주소 오류는 해요체로 보인다', () => {
+  assert.match(formSource, /'경기도 이천시 주소만 주문할 수 있어요\.'/);
+  assert.doesNotMatch(formSource, /주소만 주문할 수 있습니다/);
+});

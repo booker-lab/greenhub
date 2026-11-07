@@ -35,6 +35,10 @@ import {
 import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartValidationError } from '@/lib/cartValidation';
+import {
+  CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE,
+  ORDER_CREATE_FAILED_MESSAGE,
+} from '@/lib/checkout-messages';
 import { pickCheckoutPrefill, prefillAddress, prefillPhone } from '@/lib/checkout-prefill';
 import {
   isCheckoutRoundClosed,
@@ -347,7 +351,7 @@ function SingleCheckoutContent() {
       canPay={canPay}
       error={
         error ??
-        (productUnavailable ? '상품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.' : null)
+        (productUnavailable ? '상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.' : null)
       }
       onPay={requestPayment}
       singleSummary={{ quantity, deliveryMethod, requestedDeliveryDate }}
@@ -419,8 +423,9 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
     let configuration: ReturnType<typeof readPortonePaymentConfiguration>;
     try {
       configuration = readPortonePaymentConfiguration(paymentMethod);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : '결제 설정을 확인할 수 없습니다.');
+    } catch {
+      // 결제 설정 원문 대신 고객 문구를 보인다.
+      setError(CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE);
       transition('error');
       return;
     }
@@ -466,7 +471,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body.message ?? '주문 생성 실패');
+        setError(body.message ?? ORDER_CREATE_FAILED_MESSAGE);
         transition('error');
         return;
       }

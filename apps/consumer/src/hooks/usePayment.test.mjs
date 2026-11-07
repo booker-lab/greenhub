@@ -92,6 +92,34 @@ new Function(
   roundClosedModule.exports,
 );
 
+// 결제 오류 문구는 실제 checkout-messages 모듈(연결 실패 판정은 load-error-message)로 만든다.
+const loadErrorModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/load-error-message.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(loadErrorModule, loadErrorModule.exports);
+const checkoutMessagesModule = { exports: {} };
+new Function(
+  'require',
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/checkout-messages.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(
+  (specifier) => {
+    if (specifier === '@/lib/load-error-message') return loadErrorModule.exports;
+    throw new Error(`예상하지 못한 결제 문구 모듈 요청: ${specifier}`);
+  },
+  checkoutMessagesModule,
+  checkoutMessagesModule.exports,
+);
+
 const originalFetch = globalThis.fetch;
 const originalEnvironment = {
   apiUrl: process.env.NEXT_PUBLIC_API_URL,
@@ -153,6 +181,7 @@ function loadHook({ paymentResponses = [], onPayment } = {}) {
     if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
     if (specifier === '@/lib/payment-page-guard') return pageGuardModule.exports;
     if (specifier === '@/lib/checkout-round-closed') return roundClosedModule.exports;
+    if (specifier === '@/lib/checkout-messages') return checkoutMessagesModule.exports;
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => process.env.NEXT_PUBLIC_API_URL };
     }
@@ -908,4 +937,65 @@ test('같은 탭 복귀 뒤 새 결제의 복귀 기록은 늦게 끝난 이전 
   } finally {
     browser.restore();
   }
+});
+
+test('결제 설정·연결 실패·주문 응답 손상은 원문 대신 해요체 고객 문구로 보인다', async () => {
+  // 결제 설정이 없으면 주문을 만들지 않고 결제를 시작할 수 없다고 안내한다.
+  const savedStoreId = process.env.NEXT_PUBLIC_PORTONE_STORE_ID;
+  let fetchCount = 0;
+  globalThis.fetch = async () => {
+    fetchCount += 1;
+    return jsonResponse(successfulRoundResponse);
+  };
+  delete process.env.NEXT_PUBLIC_PORTONE_STORE_ID;
+  try {
+    const { result, stateChanges } = createRoundHook();
+    await result.requestPayment();
+    assert.equal(fetchCount, 0);
+    assert.ok(stateChanges.includes('지금은 결제를 시작할 수 없어요. 잠시 후 다시 시도해 주세요.'));
+    assert.ok(!stateChanges.includes('결제 설정을 확인할 수 없습니다.'));
+  } finally {
+    process.env.NEXT_PUBLIC_PORTONE_STORE_ID = savedStoreId;
+  }
+
+  // 연결 실패는 브라우저 원문("Failed to fetch") 대신 연결 안내를 보인다.
+  globalThis.fetch = async () => {
+    throw new TypeError('Failed to fetch');
+  };
+  const offline = createRoundHook();
+  await offline.result.requestPayment();
+  assert.ok(offline.stateChanges.includes('연결이 불안정해요. 잠시 후 다시 시도해 주세요.'));
+  assert.ok(!offline.stateChanges.includes('Failed to fetch'));
+
+  // API가 안내 문구 없이 거절하면 일반 주문 실패 안내를 보인다.
+  globalThis.fetch = async () => jsonResponse({}, false, 400);
+  const rejected = createRoundHook();
+  await rejected.result.requestPayment();
+  assert.ok(rejected.stateChanges.includes('주문을 만들지 못했어요. 잠시 후 다시 시도해 주세요.'));
+
+  // 결제 금액이 장바구니와 다르면 서버 같은 내부 말 없이 장바구니 확인을 안내한다.
+  globalThis.fetch = async () =>
+    jsonResponse({
+      ...successfulRoundResponse,
+      portonePaymentParams: { ...successfulRoundResponse.portonePaymentParams, amount: 1 },
+    });
+  const mismatch = createRoundHook();
+  await mismatch.result.requestPayment();
+  assert.equal(mismatch.paymentCalls.length, 0);
+  assert.ok(
+    mismatch.stateChanges.includes(
+      '결제 금액이 장바구니와 달라 결제를 시작하지 않았어요. 장바구니에서 다시 확인해 주세요.',
+    ),
+  );
+});
+
+test('결제 훅이 화면에 내는 문구에 합니다체·서버·영문 원문이 남지 않는다', () => {
+  const messages = [...source.matchAll(/new Error\(\s*'([^']*)'/g)].map((match) => match[1]);
+  const constants = [...source.matchAll(/_MESSAGE =\s*'([^']*)'/g)].map((match) => match[1]);
+  assert.ok(messages.length >= 4);
+  assert.ok(constants.length >= 2);
+  for (const message of [...messages, ...constants]) {
+    assert.doesNotMatch(message, /니다|서버|[A-Za-z]/, message);
+  }
+  assert.doesNotMatch(source, /'주문 생성 실패'|'오류가 발생했습니다\.'/);
 });
