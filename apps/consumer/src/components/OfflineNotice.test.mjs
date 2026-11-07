@@ -22,7 +22,12 @@ new Function('require', 'module', 'exports', compiled)(
   noticeModule,
   noticeModule.exports,
 );
-const { offlineNoticeBottomOffset, subscribeOnlineStatus } = noticeModule.exports;
+const {
+  OFFLINE_NOTICE_HEIGHT_VAR,
+  offlineNoticeBottomOffset,
+  offlineNoticeHeightValue,
+  subscribeOnlineStatus,
+} = noticeModule.exports;
 
 test('online·offline 이벤트마다 알리고, 구독을 끝내면 더 알리지 않는다', () => {
   const target = new EventTarget();
@@ -91,4 +96,27 @@ test('하단 내비가 숨는 화면 목록과 하단 바 높이는 BottomNav·P
   // 구매 바: 위아래 12px 여백 + 큰 버튼(h-12.5 = 50px) = 74px.
   assert.match(ctaBarSource, /padding: '12px 16px'/);
   assert.match(ctaBarSource, /size="lg"/);
+});
+
+test('띠가 보이는 동안만 문서 루트에 띠 높이(올림한 px)를 알리고, 연결되거나 재지 못했으면 알리지 않는다', () => {
+  assert.equal(OFFLINE_NOTICE_HEIGHT_VAR, '--offline-notice-height');
+  assert.equal(offlineNoticeHeightValue(false, 42), '42px');
+  assert.equal(offlineNoticeHeightValue(false, 41.6), '42px');
+  assert.equal(offlineNoticeHeightValue(true, 42), null);
+  assert.equal(offlineNoticeHeightValue(false, 0), null);
+  assert.equal(offlineNoticeHeightValue(false, Number.NaN), null);
+
+  // 띠 높이는 실제 띠를 재서 정하고, 연결되면 변수를 지운다.
+  assert.match(source, /new ResizeObserver\(\(\) => setBandHeight\(band\.offsetHeight\)\)/);
+  assert.match(source, /rootStyle\.setProperty\(OFFLINE_NOTICE_HEIGHT_VAR, heightValue\)/);
+  assert.match(source, /return \(\) => \{\s*rootStyle\.removeProperty\(OFFLINE_NOTICE_HEIGHT_VAR\);/);
+});
+
+test('띠가 보이는 동안 문서 끝에 띠 높이만큼 빈 공간을 더해 본문 마지막 부분을 가리지 않는다', () => {
+  assert.match(
+    source,
+    /heightValue !== null &&\s*createPortal\(<div aria-hidden style=\{\{ height: heightValue \}\} \/>, document\.body\)/,
+  );
+  // 빈 공간은 띠가 보일 때만 그린다(연결되면 컴포넌트가 아무것도 그리지 않는다).
+  assert.ok(source.indexOf('if (online) return null;') < source.indexOf('createPortal('));
 });
