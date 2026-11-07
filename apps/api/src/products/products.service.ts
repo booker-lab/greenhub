@@ -13,7 +13,7 @@ import { findProductOptionIdConflict } from './dto/product-extras.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { UpdateDeliveryConfigDto } from './dto/update-delivery-config.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
-import { toFirestoreData } from './firestore-data';
+import { toFirestoreData } from '../common/firestore/firestore-data';
 import {
   isPubliclyVisibleProduct,
   toOwnerProductDetail,

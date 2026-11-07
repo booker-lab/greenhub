@@ -17,6 +17,7 @@ import {
   inviteConflict,
 } from '../auth/invite-conflict';
 import { AuditService, type AdminAuditEntry } from '../common/audit/audit.service';
+import { toFirestoreData } from '../common/firestore/firestore-data';
 import { FirestoreService } from '../firestore/firestore.service';
 import { customerOrderLabel } from '../notifications/customer-order-label';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -934,8 +935,10 @@ export class AdminService {
     const {
       updatedAt: _u,
       createdAt: _c,
-      ...fields
+      ...sent
     } = dto as UpsertBannerDto & Record<string, unknown>;
+    // 보내지 않은 칸(undefined)은 빼서 기존 값을 그대로 두고, 기록에도 바꾼 칸만 남겨요.
+    const fields = toFirestoreData(sent);
     const ref = this.firestore.doc('banners/main_hero');
     const previous = ((await ref.get()).data() ?? {}) as Record<string, unknown>;
     await ref.set({ ...fields, updatedAt: this.firestore.Timestamp.now() }, { merge: true });
