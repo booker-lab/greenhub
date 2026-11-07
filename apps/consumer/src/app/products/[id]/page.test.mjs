@@ -174,3 +174,19 @@ test('서버 단서의 매장으로 회차 조회를 상품·판매 방식 조�
   // 회차 화면은 같은 공유 요청(loadPublicSaleRoundsState)을 쓰는 useSaleRounds로 읽는다.
   assert.match(source, /const saleRounds = useSaleRounds\(product\.storeId\);/);
 });
+
+test('회차 조회 오류·이전 결과 안내는 useSaleRounds의 고객 문구 한 줄로 보이고 같은 뜻을 두 번 쓰지 않는다', () => {
+  const start = source.indexOf('function RoundDirectProductDetail(');
+  const end = source.indexOf('export default function ProductDetailClient');
+  assert.ok(start !== -1 && end > start);
+  const block = source.slice(start, end);
+  // error는 useSaleRounds가 고객 문구로 바꿔 준다(원문은 그 훅의 테스트가 막는다).
+  // 오류 화면·이전 결과로 회차를 못 찾은 안내·이전 결과 띠, 세 곳 모두 이 한 줄만 쓴다.
+  assert.equal(
+    block.match(/\{saleRounds\.error \?\? saleRoundsErrorMessage\(null\)\}/g)?.length,
+    3,
+  );
+  assert.doesNotMatch(block, /\{saleRounds\.error && \(/);
+  assert.match(block, /지금은 이전에 불러온 회차 정보를 보여 드려요\./);
+  assert.doesNotMatch(block, /판매 회차를 불러오지 못했습니다|이전 결과를 표시합니다/);
+});

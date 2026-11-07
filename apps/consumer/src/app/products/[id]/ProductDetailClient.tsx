@@ -12,6 +12,7 @@ import ProductTopBar from '@/components/ProductTopBar';
 import {
   loadPublicSaleRoundsState,
   type PublicSaleRound,
+  saleRoundsErrorMessage,
   usePublicSaleRound,
   useSaleRounds,
 } from '@/hooks/useSaleRounds';
@@ -421,17 +422,13 @@ function RoundDirectProductDetail({
           role="alert"
           aria-label="판매 회차 조회 실패"
         >
+          {/* error는 useSaleRounds가 만든 고객 문구다(연결 안내 또는 "판매 회차를 불러오지 못했어요"). */}
           <p
             className="m-0 text-center py-3 text-sm"
             style={{ color: 'var(--color-text-secondary)' }}
           >
-            판매 회차를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+            {saleRounds.error ?? saleRoundsErrorMessage(null)}
           </p>
-          {saleRounds.error && (
-            <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              {saleRounds.error}
-            </p>
-          )}
           <Button variant="light" size="xs" onClick={saleRounds.refetch}>
             다시 시도
           </Button>
@@ -470,16 +467,8 @@ function RoundDirectProductDetail({
             aria-label="판매 회차 확인 실패"
           >
             <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+              {saleRounds.error ?? saleRoundsErrorMessage(null)}
             </p>
-            {saleRounds.error && (
-              <p
-                className="m-0 text-center text-sm"
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
-                {saleRounds.error}
-              </p>
-            )}
             <Button variant="light" size="xs" onClick={saleRounds.refetch}>
               다시 시도
             </Button>
@@ -520,13 +509,11 @@ function RoundDirectProductDetail({
             }}
           >
             <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+              {saleRounds.error ?? saleRoundsErrorMessage(null)}
             </p>
-            {saleRounds.error && (
-              <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                {saleRounds.error}
-              </p>
-            )}
+            <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              지금은 이전에 불러온 회차 정보를 보여 드려요.
+            </p>
             <Button variant="light" size="xs" className="mt-2.5" onClick={saleRounds.refetch}>
               다시 시도
             </Button>
