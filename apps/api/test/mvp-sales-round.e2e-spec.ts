@@ -291,17 +291,18 @@ describe('회차 직배송 서버 전체 흐름 통합 계약', () => {
     expect(fixture.read(`saleRounds/${roundId}`)?.counters.heldOrderCount).toBe(1);
   });
 
-  it('재배송비 결제 웹훅이 빠져도 웹훅 밖 확인이 PortOne PAID로 확정해 재배송을 재개한다', async () => {
+  // 결제된 회차 주문을 고객 책임 유료 보류로 만들고 재배송비 청구를 만든다(재배송비 웹훅은 보내지 않는다).
+  async function createHeldOrderWithCharge(key: string) {
     const { roundId, roundItemId } = await createOpenRound();
     const created = await asUser(
       request(app.getHttpServer()).post('/stores/store-1/orders'),
       'consumer-1',
       'consumer',
     )
-      .send(orderInput(roundId, roundItemId, 'checkout-charge-no-webhook'))
+      .send(orderInput(roundId, roundItemId, `checkout-${key}`))
       .expect(201);
     const orderId = created.body.orderId as string;
-    await paidWebhook(orderId, 'webhook-charge-no-webhook-order');
+    await paidWebhook(orderId, `webhook-${key}-order`);
     await asUser(
       request(app.getHttpServer()).patch(`/stores/store-1/sale-rounds/${roundId}/status`),
       'seller-1',
@@ -343,9 +344,15 @@ describe('회차 직배송 서버 전체 흐름 통합 계약', () => {
       'consumer-1',
       'consumer',
     )
-      .send({ idempotencyKey: 'redelivery-no-webhook-001' })
+      .send({ idempotencyKey: `redelivery-${key}-001` })
       .expect(200);
     const chargeId = charge.body.id as string;
+    return { orderId, chargeId, paymentId: charge.body.portonePaymentId as string };
+  }
+
+  it('재배송비 결제 웹훅이 빠져도 웹훅 밖 확인이 PortOne PAID로 확정해 재배송을 재개한다', async () => {
+    const { orderId, chargeId, paymentId } = await createHeldOrderWithCharge('charge-no-webhook');
+    const charge = { body: { portonePaymentId: paymentId } };
 
     // 손님은 PortOne에서 결제를 마쳤지만 Transaction.Paid 웹훅이 오지 않았다.
     // 결제 전에는 재배송을 재개할 수 없다.
@@ -379,6 +386,38 @@ describe('회차 직배송 서버 전체 흐름 통합 계약', () => {
     // 늦게 온 웹훅은 다시 반영하지 않는다.
     await paidWebhook(charge.body.portonePaymentId, 'webhook-charge-no-webhook-late');
     expect(fixture.read(`orderCharges/${chargeId}`)?.status).toBe('PAID');
+    await asUser(
+      request(app.getHttpServer()).patch(`/stores/store-1/orders/${orderId}/status`),
+      'driver-1',
+      'driver',
+    )
+      .send({ status: 'DELIVERING' })
+      .expect(200);
+  });
+
+  it('주문 상세의 재배송비 결제 확인이 웹훅 없이 확정하고 다른 손님은 거부한다', async () => {
+    const { orderId, chargeId, paymentId } = await createHeldOrderWithCharge('charge-customer-check');
+    const path = `/payments/orders/${orderId}/redelivery-charge/check`;
+
+    await request(app.getHttpServer()).post(path).expect(401);
+    await asUser(request(app.getHttpServer()).post(path), 'consumer-2', 'consumer').expect(403);
+    expect(fixture.portone.getPayment).not.toHaveBeenCalledWith(paymentId);
+
+    const checked = await asUser(request(app.getHttpServer()).post(path), 'consumer-1', 'consumer')
+      .send()
+      .expect(200);
+    expect(checked.body).toEqual({ status: 'PAID', result: 'finalized' });
+    expect(fixture.read(`orderCharges/${chargeId}`)).toMatchObject({ status: 'PAID' });
+    expect(fixture.portone.refund).not.toHaveBeenCalled();
+
+    // 이미 확정된 뒤에는 PortOne을 다시 조회하지 않는다.
+    fixture.portone.getPayment.mockClear();
+    const again = await asUser(request(app.getHttpServer()).post(path), 'consumer-1', 'consumer')
+      .send()
+      .expect(200);
+    expect(again.body).toEqual({ status: 'PAID', result: 'not_pending' });
+    expect(fixture.portone.getPayment).not.toHaveBeenCalled();
+
     await asUser(
       request(app.getHttpServer()).patch(`/stores/store-1/orders/${orderId}/status`),
       'driver-1',
