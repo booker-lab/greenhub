@@ -1,4 +1,5 @@
 import Image from 'next/image';
+import { POST_LOGIN_PARAM, shouldContinueAfterLogin } from '@/lib/admin-landing';
 import { safeCallbackPath } from '@/lib/login-callback';
 import { LoginForm } from './_form';
 
@@ -7,11 +8,20 @@ export const dynamic = 'force-dynamic';
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ callbackUrl?: string | string[] }>;
+  searchParams: Promise<{
+    callbackUrl?: string | string[];
+    [POST_LOGIN_PARAM]?: string | string[];
+  }>;
 }) {
   // proxy가 넘긴 돌아갈 경로. 같은 출처 상대 경로만 받고 나머지는 버린다.
-  const { callbackUrl } = await searchParams;
+  const params = await searchParams;
+  const callbackUrl = params.callbackUrl;
   const callbackPath = safeCallbackPath(Array.isArray(callbackUrl) ? callbackUrl[0] : callbackUrl);
+  // 카카오 로그인에서 돌아온 경우에만 열자마자 세션을 확인해 이동한다(admin-landing 설명 참고).
+  const postLogin = params[POST_LOGIN_PARAM];
+  const continueAfterLogin = shouldContinueAfterLogin(
+    Array.isArray(postLogin) ? postLogin[0] : postLogin,
+  );
 
   // E2E 헤더 게이트 환경 또는 local pilot runtime에서만 Credentials form을 노출한다.
   // launcher는 local child에서 E2E_TEST를 제거하므로 local marker도 함께 확인한다.
@@ -62,7 +72,11 @@ export default async function LoginPage({
             </p>
           </div>
 
-          <LoginForm showCredentials={showCredentials} callbackPath={callbackPath} />
+          <LoginForm
+            showCredentials={showCredentials}
+            callbackPath={callbackPath}
+            continueAfterLogin={continueAfterLogin}
+          />
         </div>
       </div>
     </main>
