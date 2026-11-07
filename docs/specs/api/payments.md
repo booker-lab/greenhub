@@ -33,6 +33,8 @@
 - `PORTONE_WEBHOOK_SECRET`(실연동 모드 웹훅 시크릿)
 - `PORTONE_WEBHOOK_SECRET_TEST`(선택, 테스트 모드 웹훅 시크릿. PortOne은 두 모드의 시크릿이 다르다. LIVE 전환 전 운영 앱이 테스트 채널로 결제하는 동안 그 알림을 받으려고 둔다. 2026-11-02 테스트 모드 웹훅이 staging으로 가 운영 주문이 `PENDING`에 멈춘 일로 추가)
 
+결제 확정 때 재조회 결과와 비교하는 비밀 아닌 설정: `PORTONE_STORE_ID`(consumer `NEXT_PUBLIC_PORTONE_STORE_ID`와 같은 값, §6 상점·통화·채널 검증).
+
 client channel/store 설정은 각 frontend 환경의 현재 코드를 따른다. 실제 결제 수단의 계약·심사·활성화 상태는 외부 상태이므로 이 spec에 “현재 승인됨/대기 중”으로 고정하지 않는다. 결제 수단을 변경하는 작업은 PortOne 콘솔과 대상 환경을 직접 재조회한다.
 
 소비자 앱 결제수단과 채널 키(공개값):
@@ -43,9 +45,9 @@ client channel/store 설정은 각 frontend 환경의 현재 코드를 따른다
 | 네이버페이 | `NEXT_PUBLIC_PORTONE_NAVERPAY_CHANNEL_KEY` | `payMethod: 'EASY_PAY'`, `easyPayProvider: 'NAVERPAY'` |
 | 카드(토스페이먼츠) | `NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY` | `payMethod: 'CARD'`, 구매자 이름·전화(`customer`) |
 
-키가 비어 있는 결제수단은 결제 화면과 재배송비 결제에서 선택지로 보이지 않는다(카카오페이는 기본 결제수단). 모든 채널은 `NEXT_PUBLIC_PORTONE_STORE_ID`와 같은 PortOne 상점에 있어야 한다. 서버는 결제수단을 검증하지 않고 PortOne 재조회 결과의 상태·금액으로 확정한다.
+키가 비어 있는 결제수단은 결제 화면과 재배송비 결제에서 선택지로 보이지 않는다(카카오페이는 기본 결제수단). 모든 채널은 `NEXT_PUBLIC_PORTONE_STORE_ID`와 같은 PortOne 상점에 있어야 한다. 서버는 결제수단을 검증하지 않고 PortOne 재조회 결과의 상태·금액과 상점·통화·채널(§6)로 확정한다.
 
-열린 PR #540(결제 확정 시 채널 유형·통화 검증)이 병합되면 운영 카드 채널도 LIVE 채널이고 같은 상점이어야 한다. TEST 채널 키가 운영에 남아 있으면 그 카드 결제는 확정되지 않는다.
+운영에서는 모든 결제수단 채널(카카오페이·네이버페이·카드)이 LIVE 채널이고 같은 상점이어야 한다. TEST 채널 키가 운영에 남아 있으면 그 결제수단의 결제는 확정되지 않고 환불·취소된다(재배송비는 `400`). 운영 채널 키를 LIVE로 바꾸면 `PORTONE_WEBHOOK_SECRET_TEST`는 더 필요 없다(TEST 채널 결제는 웹훅이 와도 확정되지 않는다).
 
 비밀값 원문은 문서·로그·Git에 기록하지 않는다.
 
@@ -148,14 +150,22 @@ webhook-signature
 - 주문 존재 여부
 - 전달된 provider 결제 상태가 `PAID`인지 여부
 - 주문이 `canFinalize()` 가능한 상태인지
+- PortOne 상점(storeId)·통화(currency)·채널(channel.type) 일치 여부
 - PortOne 금액과 주문 금액 일치 여부
 - 회차 reservation/capacity 조건
-
-현재 finalization은 provider 결제의 `status`와 `amount.total`만 확인하며, PortOne 상점(storeId)·통화(currency)·채널(channel)은 확인하지 않는다(해당 확인을 추가하는 PR #426은 아직 병합되지 않은 open 상태).
 
 비`PAID` 입력은 상태 변경·환불·알림 없이 `payment_not_paid`로 종료한다. 정상 `PAID` 경로는
 주문 수락, 결제 기록, reservation/capacity 수렴과 거래성 알림으로 이어진다. 이 설명은 현재
 source behavior이며, 전체 release 회귀 통과를 뜻하지 않는다.
+
+### 상점·통화·채널 검증
+
+금액 검증보다 먼저 PortOne 재조회 결과의 상점·통화·채널을 확인한다(`apps/api/src/payments/portone-payment-context.ts`).
+
+- 운영 runtime(`isProductionRuntime`)은 `channel.type === 'LIVE'`와 `currency === 'KRW'`를 요구하고, `PORTONE_STORE_ID`가 있으면 `storeId` 일치도 요구한다. 필드가 없어도 불일치다. 운영에서 TEST 채널을 허용하는 설정은 없다.
+- 비운영 runtime(스테이징·E2E stub·로컬)은 TEST 채널을 허용하고 없는 필드는 건너뛴다. 값이 있으면 통화와(설정된 경우) 상점은 비교한다.
+
+불일치 시 아래 금액 불일치와 같은 환불·취소 경로를 쓰되, audit은 `payment.context_mismatch`, 소유 표시·취소 사유는 `payment_context_mismatch`다. 웹훅·15분 정리·늦은 결제·손님 결제 확인 요청(§11 `POST /payments/orders/:orderId/check`)이 모두 `finalizePaidOrder()`를 거치므로 같은 검증을 받는다. 운영 PortOne 상점에 LIVE 채널이 없으면 운영의 모든 결제가 이 경로로 환불·취소된다.
 
 ### 금액 검증
 
@@ -271,6 +281,9 @@ REDELIVERY_FEE
 - 저장된 `portonePaymentId`와 webhook payment ID 일치
 - PortOne 원격 상태 `PAID`
 - 원격 금액과 charge 금액 일치
+- PortOne 상점·통화·채널 일치(§6과 같은 정책, 운영은 LIVE·KRW 필수)
+
+금액이나 상점·통화·채널이 다르면 `400`으로 거절하고 charge를 바꾸지 않는다.
 
 위 검증을 통과한 결제는 PortOne이 승인한 돈이다. 연결 주문이 `DELIVERY_HELD`·`PREPARING`이고 현재 보류의 `redeliveryChargeId`, `storeId`, `userId`가 일치하면 `PAID`로 반영한다. 주문이 취소(진행)됐으면 `PAID`로 기록한 뒤 환불하고, 그 밖에 현재 보류에 필요 없는 결제(주문 없음·보류 해소·다른 보류로 교체·배송 재개 뒤)는 `PAID` + `unneededPaidAt`로 기록한 뒤 환불한다. 환불이 끝나지 않으면 같은 결제의 `Transaction.Paid` 재전송이 환불을 이어 가고, 다른 시도가 만료 전 claim을 쥐고 있으면 `503`으로 응답해 재전송을 유도한다. 결제만 되고 기록·환불이 없는 상태를 남기지 않는다.
 
@@ -292,7 +305,7 @@ REDELIVERY_FEE
 | `CANCELLED`·`PARTIAL_CANCELLED`·가상계좌 발급·결제 대기 등 그 밖의 상태 | 바꾸지 않고 다음 조회로 남긴다 |
 | 인증·네트워크·시간 초과 등 그 밖의 오류 | 상태를 바꾸지 않는다. 오류 로그(`[OrderChargeScheduler]`, 상태·유형만)와 `PAYMENT_LOOKUP_FAILED`(critical, `chargeId`, `paymentId: null`, 키 `charge-payment-lookup-failed:{chargeId}`) 운영 기록을 남긴다. 같은 청구는 하나로 합쳐지고 새로 열릴 때만 알리며, 조회 간격 때문에 매분 기록되지 않는다 |
 
-새 상태는 만들지 않는다. 확정·실패 기록은 각각 기존 `finalizePaid()`·`markFailed()`만 거치므로 그 경로의 검증(#540 병합 뒤 채널·통화 검증 포함)이 그대로 적용된다. E2E 가짜 PortOne(`e2e-portone.client.ts`)은 `order-charge-` 접두어를 뗀 chargeId가 이번 실행 범위일 때만 fixture대로 답하고, 범위 밖 재배송비 결제에는 닿지 않는다(`404 E2E_PAYMENT_OUT_OF_SCOPE`, 상태 변경 없음).
+새 상태는 만들지 않는다. 확정·실패 기록은 각각 기존 `finalizePaid()`·`markFailed()`만 거치므로 그 경로의 검증(상점·통화·채널 검증 포함, 불일치면 웹훅처럼 확정하지 않고 청구를 `PENDING`으로 둔다)이 그대로 적용된다. E2E 가짜 PortOne(`e2e-portone.client.ts`)은 `order-charge-` 접두어를 뗀 chargeId가 이번 실행 범위일 때만 fixture대로 답하고, 범위 밖 재배송비 결제에는 닿지 않는다(`404 E2E_PAYMENT_OUT_OF_SCOPE`, 상태 변경 없음).
 
 남은 범위: 환불 claim을 쥔 다른 시도가 만료 전에 멈춘 `PAID` 재배송비(취소 주문·`unneededPaidAt`)의 환불 재개는 여전히 PortOne 웹훅 재전송이나 운영 조치(`AUTO_REFUND_FAILED`의 `RETRY_REFUND`)에 기댄다. 이 경로는 `PENDING`만 훑는다. 손님 화면의 즉시 확인(본 결제 `POST /payments/orders/:orderId/check` 같은)은 재배송비에 없다.
 
@@ -303,11 +316,11 @@ REDELIVERY_FEE
 ### 본 결제 finalization provider 상태 `PAYMENT-FINALIZATION-PAID-GUARD` — `IMPLEMENTED / PROVEN`
 
 `finalizePaidOrder()`가 비`PAID` provider 입력을 상태 변경·환불·알림 없이 자체 차단하고,
-`PAID` 결제에 대해서만 정상 finalization과 금액 불일치·timeout·late-payment 수렴을
+`PAID` 결제에 대해서만 정상 finalization과 금액·상점·통화·채널 불일치·timeout·late-payment 수렴을
 수행한다. 비`PAID` 직접 거부와 정상/불일치/race 회귀가 직접 고정되어 있다.
 
 직접 근거: `apps/api/src/payments/payment-finalization.service.ts`,
-`apps/api/src/payments/payments.service.spec.ts`.
+`apps/api/src/payments/payments.service.spec.ts`, `apps/api/src/payments/portone-payment-context.spec.ts`.
 
 ### PortOne webhook signature 검증 coverage `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE` — `IMPLEMENTED / PROVEN`
 
@@ -386,7 +399,7 @@ POST /payments/orders/:orderId/check
 - 권한: 주문의 `userId`가 요청자와 같을 때만 허용한다. 다른 손님·관리자·판매자는 `403`, 없는 주문이나 `[A-Za-z0-9_-]{1,128}`이 아닌 주문 ID는 `404`. 거절 시 PortOne을 조회하지 않는다.
 - 주문이 `PENDING`이 아니면 PortOne을 조회하지 않고 현재 상태만 돌려준다.
 - 조회 간격 하한: 같은 주문은 10초(`ORDER_PAYMENT_CHECK_MIN_INTERVAL_MS`, PortOne 조회 시간 상한과 같음)에 한 번만 PortOne을 조회한다. 주문 `PENDING` 확인과 조회 시각 기록(`orders/{orderId}.paymentCheckRequestedAtMs`, epoch ms)을 한 트랜잭션에서 해 여러 요청·여러 서버에서도 지킨다.
-- PortOne이 `PAID`면 웹훅·scheduler와 같은 `PaymentFinalizationService.finalizePaidOrder()`로 확정한다. 확정 로직을 따로 두지 않으므로 금액 검증·늦은 결제 처리·(병합 뒤) 채널·통화 검증이 그대로 적용되고, 웹훅·scheduler와 겹쳐도 finalize 트랜잭션의 상태 확인으로 한 번만 확정된다.
+- PortOne이 `PAID`면 웹훅·scheduler와 같은 `PaymentFinalizationService.finalizePaidOrder()`로 확정한다. 확정 로직을 따로 두지 않으므로 금액 검증·늦은 결제 처리·상점·통화·채널 검증이 그대로 적용되고, 웹훅·scheduler와 겹쳐도 finalize 트랜잭션의 상태 확인으로 한 번만 확정된다.
 - PortOne이 `PAID`가 아니거나 `404 + PAYMENT_NOT_FOUND`면 아무것도 바꾸지 않는다. 결제창이 아직 진행 중일 수 있어 취소하지 않는다.
 - 그 밖의 PortOne 오류·시간 초과는 주문을 바꾸지 않고 경고 로그(`[PaymentCheck]`, 상태·유형만)만 남긴다. `PAYMENT_LOOKUP_FAILED` 운영 기록은 15분 scheduler의 최종 조회만 남긴다. 손님에게는 제공자 오류 내용을 돌려주지 않는다.
 
@@ -493,6 +506,7 @@ export interface Payment {
 | 2026-11-06 | 손님 결제 확인 `POST /payments/orders/:orderId/check` 추가 — 주문 당사자만, `PENDING`일 때만 PortOne 조회, 주문별 10초 간격 하한, `PAID`일 때만 기존 `finalizePaidOrder()`로 확정하고 그 밖에는 변경·취소 없음. 결제 완료·주문 상세 화면이 `PENDING` 6·20·45초 뒤 요청 |
 | 2026-10-21 | 본 결제 환불에 `verifyProviderFirst` 선택(첫 요청 전 PortOne 재조회) 추가 — 배송 후 환불이 콘솔 수동 환불과 중복되지 않게 함 |
 | 2026-10-21 | 소비자 앱에 토스페이먼츠 카드 결제(`NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY`, `payMethod: 'CARD'`)를 추가하고 결제수단별 채널 키와 #540 병합 뒤 운영 카드 채널 LIVE·같은 상점 조건을 명시 |
+| 2026-10-18 | 본 결제 확정과 재배송비 결제 확정에 PortOne 상점·통화·채널 검증을 반영(운영은 LIVE·KRW 필수, 본 결제 불일치는 금액 불일치와 같은 환불·취소, 재배송비는 `400`) |
 | 2026-10-10 | 웹훅 거절 로그 집계, 결제사 취소·분쟁 운영 기록, PENDING 정리 cron 동시성, PortOne 시간 상한, 환불 `UNKNOWN` claim·`Idempotency-Key`, 확정 환불 소유 표시, `RETRY_REFUND` 확인 조건, 재배송비 취소 주문 환불을 current source에 맞춰 정합화하고, 상점·통화·채널 미확인(#426 미병합)과 재배송비 환불 운영 기록 라우팅 제약을 명시 |
 | 2026-09-25 | `PAYMENT-FINALIZATION-PAID-GUARD`와 `PAYMENT-WEBHOOK-SIGNATURE-COVERAGE`를 직접 회귀 증거와 함께 `IMPLEMENTED / PROVEN`으로 정합화하고 stale 최종 회귀 요구 표현 제거 |
 | 2026-08-30 | `finalizePaidOrder()`의 자체 `PAID` guard와 실제 PortOne·PG 결제/환불 역할을 current source에 맞춰 정렬 |

@@ -1,11 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import {
   BadRequestException,
+  Inject,
   Injectable,
   Logger,
   Optional,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
@@ -20,6 +22,11 @@ import {
   PortoneError,
   createPortoneRefundIdempotencyKey,
 } from './portone.client';
+import {
+  findPortonePaymentContextMismatch,
+  type PortonePaymentContextPolicy,
+  resolvePortonePaymentContextPolicyFromConfig,
+} from './portone-payment-context';
 
 type PaymentData = Awaited<ReturnType<PortoneClient['getPayment']>>;
 
@@ -95,6 +102,7 @@ type ChargeRefundRunResult = 'handled' | 'claim_in_flight';
 @Injectable()
 export class OrderChargePaymentService {
   private readonly logger = new Logger(OrderChargePaymentService.name);
+  private readonly paymentContextPolicy: PortonePaymentContextPolicy;
   // 같은 프로세스 안에서 이전 확인 실행이 끝나기 전에 다음 실행이 겹치지 않게 막는다.
   private pendingChargeCheckInFlight = false;
 
@@ -102,7 +110,11 @@ export class OrderChargePaymentService {
     private readonly firestore: FirestoreService,
     private readonly portone: PortoneClient,
     @Optional() private readonly issueWriter?: OperationIssueWriterService,
-  ) {}
+    // Nest DI는 전역 ConfigService를 항상 주입한다. 직접 생성하는 테스트만 process.env를 쓴다.
+    @Inject(ConfigService) config?: ConfigService,
+  ) {
+    this.paymentContextPolicy = resolvePortonePaymentContextPolicyFromConfig(config);
+  }
 
   isOrderChargePaymentId(paymentId: string) {
     return paymentId.startsWith(PAYMENT_ID_PREFIX);
@@ -218,7 +230,7 @@ export class OrderChargePaymentService {
     }
     try {
       // 웹훅과 같은 확정 경로다. 상태·식별자·금액 검증, 필요 없는 결제의 기록 뒤 환불,
-      // 그리고 병합 뒤 채널·통화 검증이 그대로 적용되고 웹훅과 겹쳐도 트랜잭션 상태 확인으로 한 번만 반영된다.
+      // 그리고 상점·통화·채널 검증이 그대로 적용되고 웹훅과 겹쳐도 트랜잭션 상태 확인으로 한 번만 반영된다.
       await this.finalizePaid(chargeId, paymentId, paymentData);
       return 'finalized';
     } catch (error) {
@@ -331,6 +343,16 @@ export class OrderChargePaymentService {
 
   private async finalizePaid(chargeId: string, paymentId: string, paymentData: PaymentData) {
     const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
+    // 운영에서 LIVE 채널·KRW가 아닌 결제는 금액 불일치와 같이 확정하지 않고 청구를 그대로 둔다.
+    const contextMismatch = findPortonePaymentContextMismatch(
+      paymentData,
+      this.paymentContextPolicy,
+    );
+    if (contextMismatch) {
+      this.logger.warn(
+        `재배송비 결제 상점·통화·채널 불일치 paymentId=${paymentId} field=${contextMismatch.field} actual=${contextMismatch.actual ?? 'none'}`,
+      );
+    }
     // Retry purity: the post-transaction decision must come only from the
     // committed attempt's return value. An outer `let result` would leak an
     // aborted attempt's decision across OCC retry.
@@ -369,7 +391,8 @@ export class OrderChargePaymentService {
           charge['type'] !== 'REDELIVERY_FEE' ||
           charge['portonePaymentId'] !== paymentId ||
           paymentData.status !== 'PAID' ||
-          paymentData.amount.total !== charge['amount']
+          paymentData.amount.total !== charge['amount'] ||
+          contextMismatch !== null
         ) {
           throw new BadRequestException('재배송비 결제 정보가 일치하지 않습니다.');
         }
