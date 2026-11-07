@@ -186,6 +186,11 @@ function resolveRoundCartBatchValidation(items: RoundCartItem[], value: unknown)
   }
   return resolved;
 }
+// 도착 안내와 이번 회차 추가 제안은 회차 주문을 받는 동안만 보인다. 마감 뒤에는 지킬 수 없는 도착 약속과
+// 담아도 결제할 수 없는 제안이 되므로 숨긴다.
+function roundExtrasRound<T>(cartRound: T | null, roundOrderClosed: boolean): T | null {
+  return roundOrderClosed ? null : cartRound;
+}
 function selectCheckoutItems(items: CartItem[], validationByKey: ValidationByKey) {
   if (!items.every(isRoundCartItem)) return items;
   return items.filter((item) => validationByKey[cartItemKey(item)]?.status === 'eligible');
@@ -411,6 +416,7 @@ export default function CartPage() {
     : cartRound
       ? `${formatOrderCloseLabel(cartRound.schedule.orderCloseAt)} 결제해야 이번 회차로 배송돼요.`
       : null;
+  const extrasRound = roundExtrasRound(cartRound, roundOrderClosed);
 
   if (items.length === 0) {
     return (
@@ -509,7 +515,7 @@ export default function CartPage() {
               {deadlineNotice}
             </div>
           )}
-          {cartRound && <CartArrivalLine round={cartRound} />}
+          {extrasRound && <CartArrivalLine round={extrasRound} />}
           {isGuest && !roundOrderClosed && (
             <div
               className="px-4 py-3"
@@ -740,7 +746,7 @@ export default function CartPage() {
           );
         })}
       </div>
-      {cartRound && <CartUpsell round={cartRound} items={items} />}
+      {extrasRound && <CartUpsell round={extrasRound} items={items} />}
       {excludedCount > 0 && !isGuest && (
         <div
           className="mb-4 p-3"

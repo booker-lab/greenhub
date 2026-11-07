@@ -10,6 +10,7 @@ export {
   cartItemKey,
   resolveRoundCartBatchValidation,
   resolveRoundCartValidation,
+  roundExtrasRound,
   selectCheckoutItems,
   validateRoundCartItems,
 };`;
@@ -92,6 +93,7 @@ const {
   cartItemKey,
   resolveRoundCartBatchValidation,
   resolveRoundCartValidation,
+  roundExtrasRound,
   selectCheckoutItems,
   validateRoundCartItems,
 } = pageModule.exports;
@@ -438,6 +440,19 @@ test('회차 주문이 끝나면 지난 마감 시각 대신 마감 안내를 �
   assert.match(source, /결제해야 이번 회차로 배송돼요\./);
   assert.match(source, /disabled=\{roundOrderClosed\}/);
   assert.match(source, /이번 회차 주문이 마감돼서 지금은 주문할 수 없어요\./);
+});
+
+test('회차 주문이 마감되면 도착 안내와 이번 회차 추가 제안을 숨기고, 마감 전에는 그대로 보인다', () => {
+  const round = { id: 'round-1', status: 'OPEN' };
+  assert.equal(roundExtrasRound(round, false), round);
+  assert.equal(roundExtrasRound(round, true), null);
+  assert.equal(roundExtrasRound(null, false), null);
+  assert.equal(roundExtrasRound(null, true), null);
+  // 1차 배치의 마감 판정(roundOrderClosed)을 그대로 쓰고, 두 안내 모두 판정 결과로만 그린다.
+  assert.match(source, /const extrasRound = roundExtrasRound\(cartRound, roundOrderClosed\);/);
+  assert.match(source, /\{extrasRound && <CartArrivalLine round=\{extrasRound\} \/>\}/);
+  assert.match(source, /\{extrasRound && <CartUpsell round=\{extrasRound\} items=\{items\} \/>\}/);
+  assert.doesNotMatch(source, /<CartArrivalLine round=\{cartRound\}|<CartUpsell round=\{cartRound\}/);
 });
 
 test('회차 안내와 상품별 확인 표시는 내부 용어("서버") 없이 고객 문구로 보인다', () => {
