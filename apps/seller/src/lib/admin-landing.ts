@@ -37,6 +37,9 @@ export function postLoginPath(user: SessionUser, callbackPath?: string | null): 
   return callback;
 }
 
+/** 카카오 로그인에서 돌아왔다는 표시. 이 표시가 있을 때만 로그인 화면이 세션을 확인해 바로 이동한다. */
+export const POST_LOGIN_PARAM = 'postLogin';
+
 /**
  * 카카오 로그인 뒤 돌아올 주소. 돌아갈 경로가 있으면 로그인 화면으로 다시 와서 세션의 역할을 확인한 뒤
  * postLoginPath로 보낸다(로그인 전에는 역할을 몰라 관리자 경로를 그대로 넘기지 않는다).
@@ -44,5 +47,16 @@ export function postLoginPath(user: SessionUser, callbackPath?: string | null): 
  */
 export function kakaoCallbackUrl(callbackPath?: string | null): string {
   const callback = safeCallbackPath(callbackPath);
-  return callback ? `/login?callbackUrl=${encodeURIComponent(callback)}` : SELLER_HOME_PATH;
+  return callback
+    ? `/login?callbackUrl=${encodeURIComponent(callback)}&${POST_LOGIN_PARAM}=1`
+    : SELLER_HOME_PATH;
+}
+
+/**
+ * 로그인 화면이 열리자마자 세션을 확인해 이동할지. 카카오에서 돌아온 경우(표시 있음)에만 한다.
+ * 로그아웃·계정 정지로 열린 로그인 화면이 세션을 조회하면, 지워지기 직전 쿠키를 실은 그 요청이
+ * 세션 확인 재사용 구간(60초) 안에서 세션 쿠키를 다시 써 로그아웃을 되돌릴 수 있다.
+ */
+export function shouldContinueAfterLogin(postLogin: unknown): boolean {
+  return postLogin === '1';
 }

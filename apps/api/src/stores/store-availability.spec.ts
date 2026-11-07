@@ -81,7 +81,9 @@ describe('치운 가게는 손님 화면에서 숨는다', () => {
 
   it('상품 요청은 없는 가게처럼 받지 않는다', async () => {
     const firestore = makeFirestore({ 'stores/s-1': ARCHIVED });
-    const service = new EngagementService(firestore as never);
+    const service = new EngagementService(firestore as never, {
+      logAdmin: jest.fn().mockResolvedValue(undefined),
+    } as never);
     await expect(service.createProductRequest('s-1', '호접란')).rejects.toBeInstanceOf(
       NotFoundException,
     );
