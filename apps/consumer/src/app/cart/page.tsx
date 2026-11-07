@@ -7,7 +7,7 @@ import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { CartArrivalLine, CartUpsell, IcheonPrecheck } from '@/components/benchmark/CartExtras';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
@@ -15,7 +15,7 @@ import { useSaleRounds } from '@/hooks/useSaleRounds';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartItemValidationIssues, getCartValidationError } from '@/lib/cartValidation';
 import { isFeatureOn } from '@/lib/features';
-import { formatOrderCloseLabel } from '@/lib/round-schedule-label';
+import { formatOrderCloseLabel, isRoundOrderClosed } from '@/lib/round-schedule-label';
 
 const API_URL = getApiBaseUrl();
 type RoundCartValidation =
@@ -40,21 +40,40 @@ const OPTION_REQUIRED_REASON =
 const ACTIONABLE_SERVER_REASON = /골라 주세요|한 분당|남았어요|다 팔렸어요|이전 결제 시도/;
 const HANGUL = /[가-힣]/;
 const MAX_SERVER_REASON_LENGTH = 160;
+// 확인 요청이 실패했거나 응답을 믿을 수 없을 때 보이는 고객 문구. 내부 용어("서버")를 쓰지 않는다.
+const UNVERIFIED_REASON = '구매 가능 여부를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.';
+// 내부 용어가 든 안내는 손님에게 그대로 보이지 않고 일반 문구로 바꾼다.
+const INTERNAL_TERM = /서버/;
+
+// 안내를 문장 단위로 나눠 내부 용어가 든 문장만 뺀다. 남은 문장(해결 방법)은 그대로 이어 붙인다.
+function withoutInternalSentences(text: string) {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !INTERNAL_TERM.test(sentence))
+    .join(' ')
+    .trim();
+}
 
 function unavailableReason(message?: string) {
-  if (!message) return '서버에서 구매 가능 여부를 확인하지 못했습니다.';
+  if (!message) return UNVERIFIED_REASON;
   const trimmed = message.trim();
+  // 해결 방법이 든 안내를 먼저 본다. 내부 용어가 든 문장은 빼고 남은 문장으로 판정해, 해결 방법은 살리고
+  // 내부 용어는 화면에 내지 않는다.
+  // 옵션 안내는 원문 대신 고정 문구를 보이므로, 내부 용어와 같은 문장에 있어도 원문 전체로 판정한다.
   if (/옵션을 묶음마다/.test(trimmed)) return OPTION_REQUIRED_REASON;
-  if (ACTIONABLE_SERVER_REASON.test(trimmed) && trimmed.length <= MAX_SERVER_REASON_LENGTH) {
-    return trimmed;
+  const actionable = withoutInternalSentences(trimmed);
+  if (ACTIONABLE_SERVER_REASON.test(actionable) && actionable.length <= MAX_SERVER_REASON_LENGTH) {
+    return actionable;
   }
+  // 해결 방법이 없는데 내부 용어가 든 안내는 일반 문구로 바꾼다.
+  if (INTERNAL_TERM.test(trimmed)) return UNVERIFIED_REASON;
   if (/수량|한도|품절/.test(trimmed)) return '요청한 수량을 구매할 수 없습니다.';
   if (/마감|현재 주문 가능한 회차|구매할 수 없는/.test(trimmed)) return '판매가 마감되었습니다.';
   if (/찾을 수 없/.test(trimmed)) return '현재 구매할 수 없는 상품입니다.';
   // 그 밖의 한국어 안내는 손님에게 보여 주려고 쓴 문장이라 그대로 보인다. 검증 기술 메시지(영문)나
   // 지나치게 긴 응답은 일반 문구로 바꾼다.
   if (HANGUL.test(trimmed) && trimmed.length <= MAX_SERVER_REASON_LENGTH) return trimmed;
-  return '서버에서 구매 가능 여부를 확인하지 못했습니다.';
+  return UNVERIFIED_REASON;
 }
 function readErrorMessage(value: unknown) {
   if (!isRecord(value)) return undefined;
@@ -104,7 +123,7 @@ function resolveRoundCartValidation(
     return { status: 'unavailable', reason: unavailableReason(failureMessage) };
   }
   if (!isRecord(value) || !Array.isArray(value.items) || value.items.length !== 1) {
-    return { status: 'unavailable', reason: '서버 검증 응답을 확인할 수 없습니다.' };
+    return { status: 'unavailable', reason: UNVERIFIED_REASON };
   }
   const serverItem = value.items[0];
   if (
@@ -120,7 +139,7 @@ function resolveRoundCartValidation(
     serverItem.subtotalAmount !== serverItem.unitPrice * item.quantity ||
     value.totalAmount !== serverItem.subtotalAmount
   ) {
-    return { status: 'unavailable', reason: '서버 검증 응답을 확인할 수 없습니다.' };
+    return { status: 'unavailable', reason: UNVERIFIED_REASON };
   }
   // 옵션을 고른 상품은 옵션 금액을 더한 가격(price)과 비교한다. 옵션이 없으면 price === roundPrice.
   if (serverItem.unitPrice !== item.price) {
@@ -138,7 +157,7 @@ function unavailableValidations(items: RoundCartItem[], message?: string): Valid
       cartItemKey(item),
       {
         status: 'unavailable',
-        reason: message ? unavailableReason(message) : '서버 검증 응답을 확인할 수 없습니다.',
+        reason: message ? unavailableReason(message) : UNVERIFIED_REASON,
       },
     ]),
   );
@@ -180,6 +199,11 @@ function resolveRoundCartBatchValidation(items: RoundCartItem[], value: unknown)
     return unavailableValidations(items);
   }
   return resolved;
+}
+// 도착 안내와 이번 회차 추가 제안은 회차 주문을 받는 동안만 보인다. 마감 뒤에는 지킬 수 없는 도착 약속과
+// 담아도 결제할 수 없는 제안이 되므로 숨긴다.
+function roundExtrasRound<T>(cartRound: T | null, roundOrderClosed: boolean): T | null {
+  return roundOrderClosed ? null : cartRound;
 }
 function selectCheckoutItems(items: CartItem[], validationByKey: ValidationByKey) {
   if (!items.every(isRoundCartItem)) return items;
@@ -255,7 +279,13 @@ function useRoundCartValidation(
 ) {
   const [validation, setValidation] = useState<ValidationState>({ status: 'idle', items: {} });
   const validatedOnceRef = useRef(false);
+  // "다시 확인"을 누를 때마다 1씩 늘려 같은 확인을 다시 실행한다.
+  const [retryCount, setRetryCount] = useState(0);
+  const handledRetryRef = useRef(0);
+  const retry = useCallback(() => setRetryCount((count) => count + 1), []);
   useEffect(() => {
+    const isRetry = retryCount !== handledRetryRef.current;
+    handledRetryRef.current = retryCount;
     const roundItems = items.filter(isRoundCartItem);
     if (roundItems.length === 0) {
       setValidation({ status: 'idle', items: {} });
@@ -280,9 +310,10 @@ function useRoundCartValidation(
 
     const controller = new AbortController();
     let active = true;
-    setValidation({ status: 'loading', items: {} });
-    // 수량 +/−를 연달아 누르는 동안은 요청을 보내지 않고 마지막 수량만 검증한다(첫 검증은 바로).
-    const delay = validatedOnceRef.current ? VALIDATION_DEBOUNCE_MS : 0;
+    // 다시 확인하는 동안은 앞선 실패 안내를 그대로 두고(버튼이 "확인 중"으로 남는다) 결과가 오면 바꾼다.
+    setValidation((previous) => ({ status: 'loading', items: isRetry ? previous.items : {} }));
+    // 수량 +/−를 연달아 누르는 동안은 요청을 보내지 않고 마지막 수량만 검증한다(첫 검증과 다시 확인은 바로).
+    const delay = !isRetry && validatedOnceRef.current ? VALIDATION_DEBOUNCE_MS : 0;
     validatedOnceRef.current = true;
     const timer = setTimeout(() => {
       void validateRoundCartItems(roundItems, accessToken, controller.signal)
@@ -293,7 +324,7 @@ function useRoundCartValidation(
           if (active && !(error instanceof Error && error.name === 'AbortError')) {
             setValidation({
               status: 'ready',
-              items: unavailableValidations(roundItems, '서버 검증 실패'),
+              items: unavailableValidations(roundItems),
             });
           }
         });
@@ -304,13 +335,27 @@ function useRoundCartValidation(
       clearTimeout(timer);
       controller.abort();
     };
-  }, [accessToken, items, sessionStatus]);
-  return validation;
+  }, [accessToken, items, sessionStatus, retryCount]);
+  return { validation, retry };
+}
+/**
+ * "다시 확인" 버튼 상태. 확인 요청이 실패한 상품(일반 실패 문구)이 있을 때만 보이고, 확인하는 동안은
+ * 누를 수 없게 "checking"으로 둔다(중복 요청을 막는다).
+ */
+function validationRetryState(validation: ValidationState): 'hidden' | 'checking' | 'ready' {
+  const unverified = Object.values(validation.items).some(
+    (item) => item?.status === 'unavailable' && item.reason === UNVERIFIED_REASON,
+  );
+  if (!unverified) return 'hidden';
+  return validation.status === 'ready' ? 'ready' : 'checking';
 }
 // Mantine ActionIcon(size 36·subtle dark·radius xl) 계산값: UnstyledButton 위에 36px 정사각, 투명 1px 테두리,
 // dark-9 글자, 줄 높이 1, 글꼴은 물려받는다. 마우스를 올리면(hover 가능한 기기만) dark-light-hover(dark-2) 면.
 const QUANTITY_BUTTON =
   'relative m-0 inline-flex size-9 min-h-9 min-w-9 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-ui-dark-light-hover';
+// 꺼진 수량 버튼: 꺼진 글자색, 누름·마우스 올림 반응 없음.
+const QUANTITY_BUTTON_DISABLED =
+  'disabled:cursor-default disabled:text-[var(--color-text-disabled)] disabled:active:translate-y-0 [@media(hover:hover)]:disabled:hover:bg-transparent';
 
 function RoundValidationNotice({ validation }: { validation: RoundCartValidation | undefined }) {
   if (!validation) {
@@ -320,7 +365,7 @@ function RoundValidationNotice({ validation }: { validation: RoundCartValidation
         style={{ color: 'var(--color-text-secondary)' }}
         role="status"
       >
-        서버에서 구매 가능 여부 확인 중
+        구매 가능 여부 확인 중
       </p>
     );
   }
@@ -330,7 +375,7 @@ function RoundValidationNotice({ validation }: { validation: RoundCartValidation
         className="m-0 mt-1.5 p-0 text-xs"
         style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
       >
-        서버 확인 완료 · 같은 회차 상품
+        구매 가능
       </p>
     );
   }
@@ -364,7 +409,12 @@ export default function CartPage() {
   const { items, updateQuantity, removeItem, clearCart } = useCart();
   // 비회원 장바구니(guest-cart): 로그인 전에는 담은 상품만 보여주고, 주문할 때 로그인한다.
   const isGuest = isFeatureOn('guest-cart') && sessionStatus === 'unauthenticated';
-  const validation = useRoundCartValidation(items, session?.user?.accessToken, sessionStatus);
+  const { validation, retry: retryValidation } = useRoundCartValidation(
+    items,
+    session?.user?.accessToken,
+    sessionStatus,
+  );
+  const retryState = validationRetryState(validation);
   const isRoundCart = items.length > 0 && items.every(isRoundCartItem);
   const checkoutItems = selectCheckoutItems(items, validation.items);
   const checkoutAmount = checkoutItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
@@ -391,6 +441,19 @@ export default function CartPage() {
     firstRoundItem && saleRounds.currentRound?.id === firstRoundItem.roundId
       ? saleRounds.currentRound
       : null;
+  // 장바구니 회차의 주문이 끝났는지 공개 회차 정보로 판정한다(로그인 전에도). 다음 회차가 열리면 지금 회차가
+  // 바뀌므로 받은 회차 목록 전체에서 찾는다. 목록에 없으면 알 수 없으므로 막지 않는다(로그인 뒤 서버 검증이 정한다).
+  const itemsRound = firstRoundItem
+    ? (saleRounds.rounds.find((round) => round.id === firstRoundItem.roundId) ?? null)
+    : null;
+  const roundOrderClosed =
+    isRoundCart && itemsRound !== null && isRoundOrderClosed(itemsRound, Date.now());
+  const deadlineNotice = roundOrderClosed
+    ? '이번 회차 주문이 마감됐어요.'
+    : cartRound
+      ? `${formatOrderCloseLabel(cartRound.schedule.orderCloseAt)} 결제해야 이번 회차로 배송돼요.`
+      : null;
+  const extrasRound = roundExtrasRound(cartRound, roundOrderClosed);
 
   if (items.length === 0) {
     return (
@@ -463,7 +526,7 @@ export default function CartPage() {
                   className="m-0 p-0 text-sm font-normal"
                   style={{ color: 'var(--color-text-secondary)' }}
                 >
-                  같은 회차 상품을 서버에서 확인해 한 번에 결제합니다.
+                  이번 회차 상품을 한 번에 결제해요.
                 </p>
               </div>
               {/* 비로그인 장바구니(guest-cart)는 서버 확인을 하지 않으므로 확인 표시를 두지 않는다. */}
@@ -475,7 +538,7 @@ export default function CartPage() {
               )}
             </div>
           </div>
-          {cartRound && (
+          {deadlineNotice && (
             <div
               className="px-4 py-3"
               style={{
@@ -486,12 +549,11 @@ export default function CartPage() {
                 fontWeight: 'var(--fw-bold)',
               }}
             >
-              {formatOrderCloseLabel(cartRound.schedule.orderCloseAt)} 결제해야 이번 회차로
-              배송돼요.
+              {deadlineNotice}
             </div>
           )}
-          {cartRound && <CartArrivalLine round={cartRound} />}
-          {isGuest && (
+          {extrasRound && <CartArrivalLine round={extrasRound} />}
+          {isGuest && !roundOrderClosed && (
             <div
               className="px-4 py-3"
               style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
@@ -675,10 +737,12 @@ export default function CartPage() {
                         borderRadius: 'var(--radius-full)',
                       }}
                     >
+                      {/* 수량 1에서 줄이면 확인 없이 상품이 빠지므로 막는다. 빼기는 "삭제" 버튼으로만 한다. */}
                       <button
                         type="button"
-                        className={QUANTITY_BUTTON}
+                        className={`${QUANTITY_BUTTON} ${QUANTITY_BUTTON_DISABLED}`}
                         aria-label={`${item.name} 수량 줄이기`}
+                        disabled={item.quantity <= 1}
                         onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                       >
                         −
@@ -719,7 +783,7 @@ export default function CartPage() {
           );
         })}
       </div>
-      {cartRound && <CartUpsell round={cartRound} items={items} />}
+      {extrasRound && <CartUpsell round={extrasRound} items={items} />}
       {excludedCount > 0 && !isGuest && (
         <div
           className="mb-4 p-3"
@@ -733,6 +797,20 @@ export default function CartPage() {
             변경·마감·구매 불가 상품 {excludedCount}개는 장바구니에 남아 있으며 결제 대상에서
             제외됩니다.
           </p>
+          {/* 확인 요청이 실패한 상품이 있으면 새로고침 없이 같은 확인을 다시 실행한다. */}
+          {retryState !== 'hidden' && (
+            <Button
+              type="button"
+              variant="light-destructive"
+              className="mt-2.5"
+              disabled={retryState === 'checking'}
+              onClick={() => {
+                if (retryState === 'ready') retryValidation();
+              }}
+            >
+              {retryState === 'checking' ? '다시 확인하는 중' : '다시 확인'}
+            </Button>
+          )}
         </div>
       )}
       <div
@@ -786,9 +864,25 @@ export default function CartPage() {
       )}
       {isGuest ? (
         // 비로그인 장바구니(guest-cart): 로그인한 뒤 같은 장바구니로 돌아온다.
-        <Button size="lg" className="w-full" onClick={handleCheckout}>
-          로그인하고 주문하기
-        </Button>
+        // 회차 주문이 끝났으면 로그인해도 주문할 수 없으므로 버튼을 막고 이유를 보인다.
+        <>
+          {roundOrderClosed && (
+            <p
+              className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
+              style={{ color: 'var(--color-text-secondary)' }}
+            >
+              이번 회차 주문이 마감돼서 지금은 주문할 수 없어요.
+            </p>
+          )}
+          <Button
+            size="lg"
+            className="w-full"
+            disabled={roundOrderClosed}
+            onClick={handleCheckout}
+          >
+            로그인하고 주문하기
+          </Button>
+        </>
       ) : (
         <Button
           size="lg"

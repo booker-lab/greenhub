@@ -9,6 +9,8 @@ import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientIm
 import { readCreatedAtMillis, useOrders } from '@/hooks/useOrders';
 import { isFeatureOn } from '@/lib/features';
 import { collectPurchaseHistory } from '@/lib/purchase-history';
+import { MyPageBackButton } from '../_back-button';
+import { currentMyPageLoginUrl } from '../_login';
 
 // 구매한 꽃(purchase-history, 벤치마킹 비교 기능). 내 주문 내역을 상품별로 모아 보여 준다.
 // 기능이 꺼져 있으면 없는 화면이다.
@@ -55,7 +57,7 @@ function PurchaseHistoryContent() {
   const entries = useMemo(() => collectPurchaseHistory(orders, readCreatedAtMillis), [orders]);
 
   useEffect(() => {
-    if (status === 'unauthenticated') router.replace('/login');
+    if (status === 'unauthenticated') router.replace(currentMyPageLoginUrl());
   }, [status, router]);
 
   if (status === 'loading' || !session) {
@@ -73,7 +75,10 @@ function PurchaseHistoryContent() {
 
   return (
     <div className="mx-auto max-w-[720px] px-4 pt-5 pb-[100px]">
-      <h1 className={TITLE}>구매한 꽃</h1>
+      <div className="flex flex-row flex-nowrap items-center justify-start gap-2.5">
+        <MyPageBackButton />
+        <h1 className={TITLE}>구매한 꽃</h1>
+      </div>
       <p className={`${TEXT} mt-1 mb-4`} style={mutedTextStyle}>
         지금까지 산 꽃을 최근에 산 순서로 모았어요. 취소·환불됐거나 결제가 끝나지 않은 주문은 빼요.
       </p>

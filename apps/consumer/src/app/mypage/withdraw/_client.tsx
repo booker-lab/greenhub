@@ -15,6 +15,7 @@ import {
   WITHDRAW_FAILED_MESSAGE,
   WITHDRAW_KEPT_ITEMS,
 } from './_lib';
+import { currentMyPageLoginUrl } from '../_login';
 
 // ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 16)·Group(gap xs 10)·Stack(gap lg 20)·
 // Text(p, 줄 높이 1.55)·List(아래 WithdrawList)·Checkbox(sm)·
@@ -40,7 +41,7 @@ export default function WithdrawClient() {
   const [error, setError] = useState<string | null>(null);
 
   if (status === 'unauthenticated') {
-    router.replace('/login');
+    router.replace(currentMyPageLoginUrl());
     return null;
   }
 

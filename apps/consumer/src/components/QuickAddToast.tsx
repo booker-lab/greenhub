@@ -11,6 +11,12 @@ export interface QuickAddToastState {
 }
 
 const VISIBLE_MS = 3500;
+/**
+ * 알림을 화면 아래에서 띄울 거리: 하단 내비 높이 + 12px. 오프라인 띠(OfflineNotice)가 하단 내비 바로 위에
+ * 떠 있으면 띠가 문서 루트에 알린 띠 높이(--offline-notice-height)만큼 더 올라가 띠에 가리지 않는다.
+ */
+export const QUICK_ADD_TOAST_BOTTOM =
+  'calc(64px + env(safe-area-inset-bottom) + var(--offline-notice-height, 0px) + 12px)';
 
 // 홈 "+ 바로 담기" 결과를 하단 탭 위에 잠깐 보여주고 장바구니로 가는 링크를 붙인다.
 export default function QuickAddToast({
@@ -31,7 +37,7 @@ export default function QuickAddToast({
     <div
       aria-live="polite"
       style={{
-        bottom: 'calc(64px + env(safe-area-inset-bottom) + 12px)',
+        bottom: QUICK_ADD_TOAST_BOTTOM,
         left: 16,
         pointerEvents: 'none',
         position: 'fixed',

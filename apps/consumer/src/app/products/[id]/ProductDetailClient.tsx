@@ -12,12 +12,14 @@ import ProductTopBar from '@/components/ProductTopBar';
 import {
   loadPublicSaleRoundsState,
   type PublicSaleRound,
+  saleRoundsErrorMessage,
   usePublicSaleRound,
   useSaleRounds,
 } from '@/hooks/useSaleRounds';
 import { captureAcquisition } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { classifyStoreProfileFailure, fetchPublicStoreProfile } from '@/lib/public-store-profile';
+import { resolveRoundProductAvailability } from '@/lib/round-product-state';
 import ProductActions from './_components/ProductActions';
 import ProductImages from './_components/ProductImages';
 import ProductInfo from './_components/ProductInfo';
@@ -155,7 +157,7 @@ function useStoreMode(storeId: string | null): StoreModeState {
         if (!active) return;
         const value = profile.salesMode;
         if (value !== 'legacy' && value !== 'round_direct') {
-          throw new Error('판매 방식 정보가 올바르지 않습니다.');
+          throw new Error('판매 방식 정보가 올바르지 않아요.');
         }
         setStoreMode({
           status: 'ready',
@@ -198,17 +200,8 @@ function resolveRoundProduct(
   if (matchingItems.length !== 1) return null;
 
   const item = matchingItems[0];
-  const isCurrentRound = round.status === 'OPEN' || round.status === 'SCHEDULED';
-  const isCurrentItem = item.status === 'ACTIVE';
-  // 판매 중 회차에서 수량이 찬 상품(결제 대기 예약 포함)은 회차 마감이 아니라 품절로 보인다.
-  const isSoldOut = isCurrentRound && item.status === 'SOLD_OUT';
-
-  return {
-    round,
-    item,
-    state: isCurrentRound && isCurrentItem ? 'current' : isSoldOut ? 'sold_out' : 'closed',
-    isPurchasable: round.status === 'OPEN' && isCurrentItem,
-  };
+  // 판매 중이어도 주문 마감 시각이 지난 회차는 장바구니와 같게 판매 마감으로 보고 구매를 막는다.
+  return { round, item, ...resolveRoundProductAvailability(round, item, Date.now()) };
 }
 
 /**
@@ -429,17 +422,13 @@ function RoundDirectProductDetail({
           role="alert"
           aria-label="판매 회차 조회 실패"
         >
+          {/* error는 useSaleRounds가 만든 고객 문구다(연결 안내 또는 "판매 회차를 불러오지 못했어요"). */}
           <p
             className="m-0 text-center py-3 text-sm"
             style={{ color: 'var(--color-text-secondary)' }}
           >
-            판매 회차를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+            {saleRounds.error ?? saleRoundsErrorMessage(null)}
           </p>
-          {saleRounds.error && (
-            <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              {saleRounds.error}
-            </p>
-          )}
           <Button variant="light" size="xs" onClick={saleRounds.refetch}>
             다시 시도
           </Button>
@@ -478,16 +467,8 @@ function RoundDirectProductDetail({
             aria-label="판매 회차 확인 실패"
           >
             <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+              {saleRounds.error ?? saleRoundsErrorMessage(null)}
             </p>
-            {saleRounds.error && (
-              <p
-                className="m-0 text-center text-sm"
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
-                {saleRounds.error}
-              </p>
-            )}
             <Button variant="light" size="xs" onClick={saleRounds.refetch}>
               다시 시도
             </Button>
@@ -495,7 +476,7 @@ function RoundDirectProductDetail({
               className="m-0 text-center py-3 text-sm"
               style={{ color: 'var(--color-text-secondary)' }}
             >
-              이 상품에 연결된 공개 판매 회차를 찾을 수 없습니다.
+              이 상품을 파는 회차를 찾지 못했어요.
             </p>
           </div>
         </div>
@@ -528,13 +509,11 @@ function RoundDirectProductDetail({
             }}
           >
             <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
+              {saleRounds.error ?? saleRoundsErrorMessage(null)}
             </p>
-            {saleRounds.error && (
-              <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-                {saleRounds.error}
-              </p>
-            )}
+            <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+              지금은 이전에 불러온 회차 정보를 보여 드려요.
+            </p>
             <Button variant="light" size="xs" className="mt-2.5" onClick={saleRounds.refetch}>
               다시 시도
             </Button>
@@ -591,7 +570,7 @@ export default function ProductDetailClient({ id, hint }: ProductDetailClientPro
     return (
       <DetailStateFrame
         label="상품 조회 실패"
-        message="상품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+        message="상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
         alert
       />
     );
@@ -605,7 +584,7 @@ export default function ProductDetailClient({ id, hint }: ProductDetailClientPro
     return (
       <DetailStateFrame
         label="판매 정보 조회 실패"
-        message="판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+        message="판매 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
         alert
       />
     );
@@ -617,7 +596,7 @@ export default function ProductDetailClient({ id, hint }: ProductDetailClientPro
       return (
         <DetailStateFrame
           label="판매 정보 조회 실패"
-          message="판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+          message="판매 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
           alert
         />
       );

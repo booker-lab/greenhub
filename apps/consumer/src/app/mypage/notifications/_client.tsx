@@ -8,7 +8,6 @@ import {
   Bell,
   BellOff,
   CalendarClock,
-  ChevronLeft,
   CircleCheck,
   CirclePause,
   CircleX,
@@ -25,6 +24,8 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
 import { useNotifications } from '@/hooks/useNotifications';
+import { MyPageBackButton } from '../_back-button';
+import { currentMyPageLoginUrl } from '../_login';
 
 const TEMPLATE_LABELS: Record<NotificationTemplateCode, string> = {
   ORDER_ACCEPTED: '결제 완료',
@@ -237,7 +238,7 @@ export default function NotificationsClient() {
   }, [loading, error, notifications.length, markAllRead]);
 
   if (status === 'unauthenticated') {
-    router.replace('/login');
+    router.replace(currentMyPageLoginUrl());
     return null;
   }
 
@@ -255,15 +256,7 @@ export default function NotificationsClient() {
           borderBottom: '1px solid var(--color-border)',
         }}
       >
-        <Button
-          type="button"
-          variant="ghost"
-          className="ps-0 hover:bg-transparent"
-          style={{ color: 'var(--color-text)' }}
-          onClick={() => router.back()}
-        >
-          <ChevronLeft size={20} className="size-5" />
-        </Button>
+        <MyPageBackButton />
         <p
           className={TEXT}
           style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)', flex: 1 }}

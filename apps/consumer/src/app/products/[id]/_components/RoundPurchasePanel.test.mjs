@@ -10,14 +10,23 @@ test('회차 가격은 상품 원본 가격이 아니라 SaleRoundItem.roundPric
   assert.doesNotMatch(panelSource, /product\.price/);
 });
 
-test('주문 마감은 회차 schedule.orderCloseAt을 Asia\\/Seoul 기준 공통 표기로 보여준다', async () => {
+test('주문 마감은 회차 schedule.orderCloseAt을 Asia\\/Seoul 기준 공통 표기로 보여주고 마감 뒤에는 "까지"를 붙이지 않는다', async () => {
   const labelSource = await readFile(
     new URL('../../../../lib/round-schedule-label.ts', import.meta.url),
     'utf8',
   );
-  assert.match(panelSource, /formatOrderCloseLabel\(round\.schedule\.orderCloseAt\)/);
+  const stepSource = await readFile(
+    new URL('../../../../lib/round-close-step.ts', import.meta.url),
+    'utf8',
+  );
+  // 마감 줄은 공용 판정(isRoundOrderClosed)·표기를 쓰는 roundOrderCloseStep으로 그린다.
+  assert.match(panelSource, /import \{ roundOrderCloseStep \} from '@\/lib\/round-close-step'/);
+  assert.match(panelSource, /roundOrderCloseStep\(round, Date\.now\(\)\)/);
+  assert.match(stepSource, /formatOrderCloseLabel\(closeAt\)/);
+  assert.match(stepSource, /isRoundOrderClosed\(round, nowMillis\)/);
   assert.match(labelSource, /timeZone: 'Asia\/Seoul'/);
-  assert.match(panelSource, /주문 마감/);
+  // 마감이 지난 회차에도 "~까지"를 붙이던 직접 호출은 다시 쓰지 않는다.
+  assert.doesNotMatch(panelSource, /formatOrderCloseLabel/);
 });
 
 test('주문 시작 전 회차는 판매 예정 제목과 주문 시작 시각을 보여준다', () => {
@@ -49,18 +58,32 @@ test('현재와 마감 상태를 구분하고 구매 불가 상태를 구매 가
   assert.match(panelSource, /data-round-purchasable=\{isPurchasable\}/);
 });
 
-test('수량이 찬 현재 회차 상품은 판매 마감이 아니라 품절로 표시한다', () => {
+test('수량이 찬 현재 회차 상품은 판매 마감이 아니라 품절로 표시한다', async () => {
   assert.match(panelSource, /state: 'current' \| 'closed' \| 'sold_out'/);
   assert.match(panelSource, /const soldOut = state === 'sold_out'/);
   assert.match(panelSource, /soldOut\s*\?\s*'품절'/);
   // 품절은 회차가 끝난 것이 아니므로 제목은 현재·예정 회차 문구를 유지한다.
   assert.match(panelSource, /const notOpenYet = !closed && round\.status === 'SCHEDULED'/);
-  assert.match(pageSource, /const isSoldOut = isCurrentRound && item\.status === 'SOLD_OUT'/);
+  // 상태·구매 가능 판정은 공용 순수 함수(lib/round-product-state)로 옮겼다. 동작은 그 단위 테스트가 고정한다.
+  const stateSource = await readFile(
+    new URL('../../../../lib/round-product-state.ts', import.meta.url),
+    'utf8',
+  );
   assert.match(
     pageSource,
+    /return \{ round, item, \.\.\.resolveRoundProductAvailability\(round, item, Date\.now\(\)\) \};/,
+  );
+  assert.match(stateSource, /const isSoldOut = isCurrentRound && item\.status === 'SOLD_OUT'/);
+  assert.match(
+    stateSource,
     /state: isCurrentRound && isCurrentItem \? 'current' : isSoldOut \? 'sold_out' : 'closed'/,
   );
-  assert.match(pageSource, /isPurchasable: round\.status === 'OPEN' && isCurrentItem/);
+  // 판매 중(OPEN)이어도 주문 마감 시각이 지나면 구매할 수 없다(장바구니와 같은 isRoundOrderClosed).
+  assert.match(
+    stateSource,
+    /const isOpenForOrder = round\.status === 'OPEN' && !isRoundOrderClosed\(round, nowMillis\)/,
+  );
+  assert.match(stateSource, /isPurchasable: isOpenForOrder && isCurrentItem/);
 });
 
 test('상품 상세은 Task 4.8이 검증한 회차 상품 구조를 패널에 그대로 전달한다', () => {
