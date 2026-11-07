@@ -272,7 +272,7 @@ function ErrorState({ message, onHome }: { message: string; onHome: () => void }
     <>
       <StatusMark tone="danger" icon="alert" />
       <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
-        주문 정보를 불러올 수 없습니다
+        주문 정보를 확인할 수 없어요
       </h1>
       <p
         className="m-0 leading-[1.55]"
@@ -359,12 +359,12 @@ function OrderSuccessContent() {
   const errorMessage = paymentFailure
     ? null
     : redirectResult.kind === 'invalid'
-      ? '결제 결과를 확인할 수 없습니다. 주문 내역에서 결제 상태를 확인해 주세요.'
+      ? '결제 결과를 확인하지 못했어요. 주문 내역에서 결제 상태를 확인해 주세요.'
       : !orderId
-        ? '올바른 주문번호가 필요합니다.'
+        ? '올바른 주문번호가 필요해요.'
         : error ||
           (responseError
-            ? '주문 응답을 확인할 수 없습니다. 주문 내역에서 다시 확인해 주세요.'
+            ? '주문 정보를 확인하지 못했어요. 주문 내역에서 다시 확인해 주세요.'
             : null);
 
   return (
@@ -383,7 +383,7 @@ function OrderSuccessContent() {
             >
               {isPending && pollingExpired
                 ? '결제 확인이 늦어지고 있어요. 잠시 후 다시 확인해 주세요.'
-                : '잠시만 기다려주세요. 결제 완료 후 자동으로 업데이트됩니다.'}
+                : '잠시만 기다려 주세요. 결제가 확인되면 화면이 자동으로 바뀌어요.'}
             </p>
             {isPending && pollingExpired && (
               <Button size="lg" className="mt-4 w-full" onClick={() => void refetch()}>
@@ -397,7 +397,7 @@ function OrderSuccessContent() {
           <>
             <StatusMark tone="success" icon="success" />
             <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
-              주문이 완료되었습니다
+              주문이 완료됐어요
             </h1>
             <p
               className="m-0 text-base"
@@ -411,7 +411,7 @@ function OrderSuccessContent() {
                 className="m-0 leading-[1.55]"
                 style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
               >
-                공동구매 목표 달성 시 주문이 확정됩니다.
+                공동구매 목표를 달성하면 주문이 확정돼요.
               </p>
             )}
             <p
@@ -491,7 +491,7 @@ function OrderSuccessContent() {
                       화요일 배송 안내
                     </p>
                     <p className="m-0 text-sm">
-                      화요일 오전 9시까지 문 앞 배송합니다. 경기도 이천시 직접배송 주문입니다.
+                      화요일 오전 9시까지 문 앞에 배송해요. 경기도 이천시 직접배송 주문이에요.
                     </p>
                   </div>
                 )}
@@ -509,7 +509,7 @@ function OrderSuccessContent() {
           <>
             <StatusMark tone="success" icon="success" />
             <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
-              주문이 접수되었습니다
+              주문이 접수됐어요
             </h1>
             <p
               className="m-0 text-base"
@@ -521,7 +521,7 @@ function OrderSuccessContent() {
               className="m-0 text-center leading-[1.55]"
               style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
-              결제가 완료된 주문입니다. 진행 상황은 주문 내역에서 확인해 주세요.
+              결제가 완료된 주문이에요. 진행 상황은 주문 내역에서 확인해 주세요.
             </p>
             <OrderResultActions
               onOrders={() => router.push('/mypage')}
@@ -534,20 +534,20 @@ function OrderSuccessContent() {
           <>
             <StatusMark tone="danger" icon="danger" />
             <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
-              결제가 취소되었습니다
+              결제가 취소됐어요
             </h1>
             <p
               className="m-0 text-center leading-[1.55]"
               style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
-              {formatCancelReason(validOrder.cancelReason) ?? '결제 처리 중 오류가 발생했습니다.'}
+              {formatCancelReason(validOrder.cancelReason) ?? '결제를 처리하지 못했어요.'}
             </p>
             {!isFeatureOn('payment-fail-stay') && (
               <p
                 className="m-0 leading-[1.55]"
                 style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
               >
-                잠시 후 홈 화면으로 이동합니다.
+                잠시 후 홈 화면으로 이동해요.
               </p>
             )}
             {/* 결제 실패 화면 유지(payment-fail-stay): 홈으로 보내는 대신 장바구니에서 다시 결제할 길을 준다. */}
@@ -573,7 +573,7 @@ function OrderSuccessContent() {
           <>
             <StatusMark tone="danger" icon="danger" />
             <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
-              결제가 완료되지 않았습니다
+              결제가 완료되지 않았어요
             </h1>
             <p
               className="m-0 text-center leading-[1.55]"
@@ -598,7 +598,7 @@ function OrderSuccessContent() {
             className="m-0 mt-4 text-center leading-[1.55]"
             style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
           >
-            장바구니의 다른 상품 {unpaidItemCount}개는 아직 결제되지 않았습니다. 장바구니에서 이어서
+            장바구니의 다른 상품 {unpaidItemCount}개는 아직 결제되지 않았어요. 장바구니에서 이어서
             결제해 주세요.
           </p>
         )}

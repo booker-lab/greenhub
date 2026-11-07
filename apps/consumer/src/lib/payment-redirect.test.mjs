@@ -355,7 +355,7 @@ test('재배송비 복귀는 서버 paid 확인 전까지 완료로 보지 않�
   );
   assert.deepEqual(
     resolveRedeliveryPaymentReturn(parsePaymentRedirectResult(query('code=X')), undefined),
-    { kind: 'rejected', message: '재배송비 결제가 취소되었습니다.' },
+    { kind: 'rejected', message: '재배송비 결제가 취소됐어요.' },
   );
   // 서버가 이미 paid로 확인했다면 쿼리보다 서버 상태가 우선이다.
   assert.deepEqual(
@@ -392,4 +392,61 @@ test('재배송비 결제가 성공으로 돌아왔는데 서버 확인 전이�
   ]) {
     assert.equal(shouldRecheckRedeliveryPayment(result, false, 0, MAX), false);
   }
+});
+
+// 화면에 나갈 수 있는 글자(문자열·템플릿 리터럴)를 모은다. 주석은 AST에 없으므로 빠지고,
+// 복귀 쿼리의 PG 원문은 리터럴이 아니므로 검사 대상이 아니다(주문 상세 _client.test.mjs와 같은 방식).
+function collectScreenStrings(text, fileName) {
+  const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const strings = [];
+  const visit = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      strings.push(node.text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return strings;
+}
+
+test('결제 복귀 기본 문구는 판정(kind)을 그대로 두고 해요체 고객 문구로 말한다', () => {
+  assert.equal(DEFAULT_PAYMENT_FAILURE_MESSAGE, '결제가 취소됐거나 완료되지 않았어요.');
+  assert.deepEqual(
+    resolveRedeliveryPaymentReturn(
+      parsePaymentRedirectResult(query('paymentId=a&paymentId=b')),
+      false,
+    ),
+    {
+      kind: 'uncertain',
+      message:
+        '재배송비 결제 결과를 확인하지 못했어요. 다시 결제하기 전에 상태를 먼저 확인해 주세요.',
+    },
+  );
+  assert.deepEqual(
+    resolveRedeliveryPaymentReturn(
+      parsePaymentRedirectResult(query('paymentId=redelivery-1')),
+      false,
+    ),
+    {
+      kind: 'uncertain',
+      message:
+        '결제 요청은 접수됐지만 아직 결제를 확인하지 못했어요. 다시 결제하기 전에 잠시 후 상태를 확인해 주세요.',
+    },
+  );
+});
+
+test('결제 복귀 문자열에는 합니다체·내부 용어가 다시 들어오지 않는다', () => {
+  const strings = collectScreenStrings(source, 'payment-redirect.ts');
+  // 수집이 실제로 동작하는지 확인한다(기본 실패 문구가 잡혀야 한다).
+  assert.ok(strings.includes('결제가 취소됐거나 완료되지 않았어요.'));
+  assert.deepEqual(
+    strings.filter((value) => /니다|니까|십시오|서버/.test(value)),
+    [],
+  );
 });

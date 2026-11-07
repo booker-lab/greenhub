@@ -157,7 +157,7 @@ function useStoreMode(storeId: string | null): StoreModeState {
         if (!active) return;
         const value = profile.salesMode;
         if (value !== 'legacy' && value !== 'round_direct') {
-          throw new Error('판매 방식 정보가 올바르지 않습니다.');
+          throw new Error('판매 방식 정보가 올바르지 않아요.');
         }
         setStoreMode({
           status: 'ready',
@@ -476,7 +476,7 @@ function RoundDirectProductDetail({
               className="m-0 text-center py-3 text-sm"
               style={{ color: 'var(--color-text-secondary)' }}
             >
-              이 상품에 연결된 공개 판매 회차를 찾을 수 없습니다.
+              이 상품을 파는 회차를 찾지 못했어요.
             </p>
           </div>
         </div>
@@ -570,7 +570,7 @@ export default function ProductDetailClient({ id, hint }: ProductDetailClientPro
     return (
       <DetailStateFrame
         label="상품 조회 실패"
-        message="상품 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+        message="상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
         alert
       />
     );
@@ -584,7 +584,7 @@ export default function ProductDetailClient({ id, hint }: ProductDetailClientPro
     return (
       <DetailStateFrame
         label="판매 정보 조회 실패"
-        message="판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+        message="판매 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
         alert
       />
     );
@@ -596,7 +596,7 @@ export default function ProductDetailClient({ id, hint }: ProductDetailClientPro
       return (
         <DetailStateFrame
           label="판매 정보 조회 실패"
-          message="판매 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요."
+          message="판매 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요."
           alert
         />
       );

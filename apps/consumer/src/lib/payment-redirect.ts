@@ -22,7 +22,7 @@ const MAX_ROUND_ITEMS = 100;
 // 결제창에서 오래 머문 경우까지 고려하되, 남은 기록이 다른 결제의 정리에 쓰이지 않게 제한한다.
 const PENDING_ORDER_PAYMENT_TTL_MS = 2 * 60 * 60 * 1000;
 
-export const DEFAULT_PAYMENT_FAILURE_MESSAGE = '결제가 취소되었거나 완료되지 않았습니다.';
+export const DEFAULT_PAYMENT_FAILURE_MESSAGE = '결제가 취소됐거나 완료되지 않았어요.';
 
 export interface PaymentRedirectQuery {
   getAll(name: string): string[];
@@ -274,19 +274,20 @@ export function resolveRedeliveryPaymentReturn(
   if (result.kind === 'invalid') {
     return {
       kind: 'uncertain',
-      message: '재배송비 결제 결과를 확인할 수 없습니다. 중복 결제 전에 상태를 다시 확인해 주세요.',
+      message:
+        '재배송비 결제 결과를 확인하지 못했어요. 다시 결제하기 전에 상태를 먼저 확인해 주세요.',
     };
   }
   // 서버가 이미 결제 완료로 확인했다면 쿼리보다 서버 상태를 따른다.
   if (paid === true) return { kind: 'done' };
   if (result.kind === 'failure') {
-    return { kind: 'rejected', message: result.message ?? '재배송비 결제가 취소되었습니다.' };
+    return { kind: 'rejected', message: result.message ?? '재배송비 결제가 취소됐어요.' };
   }
   if (paid === undefined) return { kind: 'reconciling' };
   return {
     kind: 'uncertain',
     message:
-      '결제 요청은 접수되었지만 서버 확인 전입니다. 중복 결제 전에 잠시 후 다시 확인해 주세요.',
+      '결제 요청은 접수됐지만 아직 결제를 확인하지 못했어요. 다시 결제하기 전에 잠시 후 상태를 확인해 주세요.',
   };
 }
 

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
+import ts from 'typescript';
 
 const source = await readFile(new URL('./ProductDetailClient.tsx', import.meta.url), 'utf8');
 const serverPageSource = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
@@ -189,4 +190,45 @@ test('회차 조회 오류·이전 결과 안내는 useSaleRounds의 고객 문�
   assert.doesNotMatch(block, /\{saleRounds\.error && \(/);
   assert.match(block, /지금은 이전에 불러온 회차 정보를 보여 드려요\./);
   assert.doesNotMatch(block, /판매 회차를 불러오지 못했습니다|이전 결과를 표시합니다/);
+});
+
+// 화면에 보이는 글자(문자열·템플릿 리터럴, JSX 글자)를 모은다. 주석은 AST에 없으므로 빠지고,
+// API 응답 원문은 리터럴이 아니므로 검사 대상이 아니다(주문 상세 _client.test.mjs와 같은 방식).
+function collectScreenStrings(text, fileName) {
+  const file = ts.createSourceFile(fileName, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const strings = [];
+  const visit = (node) => {
+    if (
+      ts.isStringLiteral(node) ||
+      ts.isNoSubstitutionTemplateLiteral(node) ||
+      ts.isTemplateHead(node) ||
+      ts.isTemplateMiddle(node) ||
+      ts.isTemplateTail(node)
+    ) {
+      strings.push(node.text);
+    } else if (ts.isJsxText(node)) {
+      const value = node.getText().trim();
+      if (value) strings.push(value);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(file);
+  return strings;
+}
+
+test('상품 상세 화면 문구는 해요체로 통일하고 합니다체·내부 용어가 다시 들어오지 않는다', () => {
+  const strings = collectScreenStrings(source, 'ProductDetailClient.tsx');
+  // 수집이 실제로 동작하는지 확인한다(해요체 안내가 잡혀야 한다).
+  assert.ok(strings.includes('이 상품을 파는 회차를 찾지 못했어요.'));
+  assert.ok(strings.includes('상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'));
+  assert.ok(strings.includes('판매 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.'));
+  assert.deepEqual(
+    strings.filter((value) => /니다|니까|십시오|서버/.test(value)),
+    [],
+  );
+  // '공개 판매 회차'처럼 판매 설정 용어를 손님에게 보이지 않는다.
+  assert.deepEqual(
+    strings.filter((value) => /[가-힣]/.test(value) && /공개/.test(value)),
+    [],
+  );
 });

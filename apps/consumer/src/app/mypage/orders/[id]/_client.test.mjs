@@ -848,7 +848,7 @@ test('주문 상세 화면은 not-found와 일시 실패를 같은 의미로 수
   assert.match(source, /\{orderDetailReadFailureMessage\(status\)\}/);
   assert.doesNotMatch(source, /\{error \?\?/);
   assert.match(hookSource, /네트워크 연결을 확인하고 다시 시도/);
-  assert.match(hookSource, /주문 정보를 불러오지 못했습니다\. 잠시 후 다시 시도/);
+  assert.match(hookSource, /주문 정보를 불러오지 못했어요\. 잠시 후 다시 시도/);
 });
 
 test('이전 데이터가 있는 refresh 실패는 stale을 유지하고 재시도를 노출한다', () => {
