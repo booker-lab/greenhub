@@ -45,14 +45,27 @@ const UNVERIFIED_REASON = '구매 가능 여부를 아직 확인하지 못했어
 // 내부 용어가 든 안내는 손님에게 그대로 보이지 않고 일반 문구로 바꾼다.
 const INTERNAL_TERM = /서버/;
 
+// 안내를 문장 단위로 나눠 내부 용어가 든 문장만 뺀다. 남은 문장(해결 방법)은 그대로 이어 붙인다.
+function withoutInternalSentences(text: string) {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .filter((sentence) => !INTERNAL_TERM.test(sentence))
+    .join(' ')
+    .trim();
+}
+
 function unavailableReason(message?: string) {
   if (!message) return UNVERIFIED_REASON;
   const trimmed = message.trim();
-  if (INTERNAL_TERM.test(trimmed)) return UNVERIFIED_REASON;
-  if (/옵션을 묶음마다/.test(trimmed)) return OPTION_REQUIRED_REASON;
-  if (ACTIONABLE_SERVER_REASON.test(trimmed) && trimmed.length <= MAX_SERVER_REASON_LENGTH) {
-    return trimmed;
+  // 해결 방법이 든 안내를 먼저 본다. 내부 용어가 든 문장은 빼고 남은 문장으로 판정해, 해결 방법은 살리고
+  // 내부 용어는 화면에 내지 않는다.
+  const actionable = withoutInternalSentences(trimmed);
+  if (/옵션을 묶음마다/.test(actionable)) return OPTION_REQUIRED_REASON;
+  if (ACTIONABLE_SERVER_REASON.test(actionable) && actionable.length <= MAX_SERVER_REASON_LENGTH) {
+    return actionable;
   }
+  // 해결 방법이 없는데 내부 용어가 든 안내는 일반 문구로 바꾼다.
+  if (INTERNAL_TERM.test(trimmed)) return UNVERIFIED_REASON;
   if (/수량|한도|품절/.test(trimmed)) return '요청한 수량을 구매할 수 없습니다.';
   if (/마감|현재 주문 가능한 회차|구매할 수 없는/.test(trimmed)) return '판매가 마감되었습니다.';
   if (/찾을 수 없/.test(trimmed)) return '현재 구매할 수 없는 상품입니다.';

@@ -272,6 +272,38 @@ test('확인 실패 사유는 내부 용어("서버") 없이 다시 시도할 �
   assert.doesNotMatch(source, /unavailableValidations\(roundItems, '[^']*'\)/);
 });
 
+test('내부 용어("서버")와 해결 방법이 함께 든 안내는 그 문장만 빼고 해결 방법을 보인다', () => {
+  const reasonOf = (message) => resolveRoundCartValidation(roundItem, null, message).reason;
+  assert.equal(
+    reasonOf('서버에서 재고를 다시 확인했어요. 화분 흰색 2개만 남았어요. 수량을 줄여 주세요.'),
+    '화분 흰색 2개만 남았어요. 수량을 줄여 주세요.',
+  );
+  assert.equal(
+    reasonOf('호접란 이번 회차에 한 분당 1개까지 주문할 수 있어요. 서버 기준이에요.'),
+    '호접란 이번 회차에 한 분당 1개까지 주문할 수 있어요.',
+  );
+  // 옵션 미선택은 내부 용어가 같이 있어도 상품 화면 안내로 보인다.
+  assert.equal(
+    reasonOf('서버 확인 결과예요. 옵션을 묶음마다 하나씩 골라 주세요.'),
+    '옵션을 골라야 하는 상품이에요. 상품 화면에서 옵션을 고른 뒤 다시 담아 주세요.',
+  );
+  // 해결 방법이 내부 용어와 같은 문장에만 있으면 일반 문구로 바꾼다("서버"가 화면에 나가지 않는다).
+  for (const message of [
+    '서버 기준으로 화분 흰색 2개만 남았어요.',
+    '서버 점검 중이에요. 잠시 후 이용해 주세요.',
+  ]) {
+    const reason = reasonOf(message);
+    assert.doesNotMatch(reason, /서버/);
+    assert.equal(reason, '구매 가능 여부를 아직 확인하지 못했어요. 잠시 후 다시 시도해 주세요.');
+  }
+  // 해결 안내 규칙을 내부 용어 검사보다 먼저 본다.
+  const body = source.slice(source.indexOf('function unavailableReason'));
+  assert.ok(
+    body.indexOf('ACTIONABLE_SERVER_REASON.test(actionable)') <
+      body.indexOf('INTERNAL_TERM.test(trimmed)'),
+  );
+});
+
 test('결제 대상은 같은 회차의 서버 검증 통과 항목만 포함하고 legacy 항목은 보존한다', () => {
   const anotherRoundItem = {
     ...roundItem,
