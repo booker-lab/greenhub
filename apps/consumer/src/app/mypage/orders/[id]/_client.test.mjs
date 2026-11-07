@@ -1199,3 +1199,38 @@ test('주문 상세 화면 문구는 해요체로 통일하고 합니다체가 �
   assert.doesNotMatch(source, /주문이 취소되었습니다/);
   assert.doesNotMatch(source, /최신 상태 확인 후 다시 시도해 주세요/);
 });
+
+test('재배송비 결제의 예상하지 못한 예외는 결제창을 열기 전과 뒤를 나눠 안내한다', () => {
+  const handler = source.slice(
+    source.indexOf('async function handleRedeliveryPayment'),
+    source.indexOf('async function handleConfirm'),
+  );
+  assert.match(handler, /let stage: RedeliveryPaymentStage = 'requesting';/);
+  const openingAt = handler.indexOf("stage = 'opening-window';");
+  const configAt = handler.indexOf('readPortonePaymentConfiguration(redeliveryMethod)');
+  const sdkAt = handler.indexOf("await import('@portone/browser-sdk/v2')");
+  const payingAt = handler.indexOf("stage = 'paying';");
+  const requestAt = handler.indexOf('PortOne.requestPayment(');
+  const confirmingAt = handler.indexOf("stage = 'confirming';");
+  const reconcilingAt = handler.indexOf("setRedeliveryOutcome({ kind: 'reconciling' })");
+  // 결제 설정 읽기·결제 모듈 불러오기는 결제창을 열기 전 단계에 있다.
+  assert.ok(openingAt > 0 && openingAt < configAt && configAt < sdkAt && sdkAt < payingAt);
+  // 결제창 호출부터는 결과를 모르는 단계이고, 완료 확인도 같은 단계로 본다.
+  assert.ok(payingAt < requestAt && requestAt < confirmingAt && confirmingAt < reconcilingAt);
+  // 마지막 catch는 단계로 문구를 고른다(모든 예외를 '확인하지 못했어요'로 묶지 않는다).
+  assert.match(
+    handler,
+    /const outcome = redeliveryPaymentUnexpectedFailure\(stage\);\s+setRedeliveryOutcome\(outcome\);\s+setActionError\(outcome\.message\);/,
+  );
+  assert.doesNotMatch(
+    handler,
+    /setRedeliveryOutcome\(\{ kind: 'uncertain', message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE \}\)/,
+  );
+  // 결과를 모를 때만 '상태 다시 확인'을 보인다(시작하지 못한 경우는 rejected라 다시 결제할 수 있다).
+  const recheck = source.slice(
+    source.indexOf('const needsStatusRecheck ='),
+    source.indexOf('const showPickupCode ='),
+  );
+  assert.match(recheck, /redeliveryOutcome\.kind === 'uncertain'/);
+  assert.doesNotMatch(recheck, /redeliveryOutcome\.kind === 'rejected'/);
+});

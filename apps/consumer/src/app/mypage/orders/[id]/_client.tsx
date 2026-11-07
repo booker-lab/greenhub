@@ -26,7 +26,9 @@ import {
   customerRedeliveryPaymentReturn,
   REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE,
   REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE,
+  type RedeliveryPaymentStage,
   redeliveryPaymentFailureMessage,
+  redeliveryPaymentUnexpectedFailure,
 } from '@/lib/order-redelivery-message';
 import { ORDER_STATUS_LABELS as STATUS_LABELS, orderTimelineStepLabel } from '@/lib/order-status';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
@@ -425,6 +427,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
     setRedeliveryOutcome({ kind: 'executing' });
     setActionError(null);
+    // 예상하지 못한 예외가 결제창을 열기 전인지 뒤인지 가르기 위해 진행 단계를 적어 둔다.
+    let stage: RedeliveryPaymentStage = 'requesting';
     try {
       let response: Response;
       try {
@@ -473,12 +477,16 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         } satisfies Extract<CommandOutcome, { kind: 'rejected' }>;
       }
       if (payment.status === 'PENDING') {
+        // 결제 설정 읽기·결제 모듈 불러오기는 결제창을 열기 전이라 실패해도 결제가 시작되지 않는다.
+        stage = 'opening-window';
         const configuration = readPortonePaymentConfiguration(redeliveryMethod);
         const PortOne = await import('@portone/browser-sdk/v2');
         const browser = readBrowserPaymentContext();
         const redirectUrl = browser
           ? buildPaymentRedirectUrl(browser.origin, redeliveryPaymentRedirectPath(detail.id))
           : null;
+        // 여기부터는 결제창이 열려 손님이 결제했을 수 있다.
+        stage = 'paying';
         const result = await PortOne.requestPayment({
           storeId: configuration.portoneStoreId,
           paymentId: payment.paymentId,
@@ -500,6 +508,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         }
       }
 
+      stage = 'confirming';
       setRedeliveryOutcome({ kind: 'reconciling' });
       const latestOrder = await refetch().catch(() => undefined);
       const latestDetail = latestOrder ? readOrderDetail(latestOrder, detail.id) : null;
@@ -523,10 +532,12 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           return;
         }
       }
-      // 그 밖의 예외(연결 끊김·응답 확인 실패·결제창 오류)도 내부 오류 글자 대신 같은 고객 문구로
-      // 상태 확인을 안내한다.
-      setRedeliveryOutcome({ kind: 'uncertain', message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE });
-      setActionError(REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE);
+      // 그 밖의 예외는 내부 오류 글자 대신 고객 문구로 보인다. 결제창을 열기 전(결제 설정 누락·결제 모듈
+      // 불러오기 실패)이면 '시작하지 못했어요'로 다시 시도를, 그 뒤(응답 확인 실패·결제창 오류·완료 확인)면
+      // 결제됐을 수 있으므로 '확인하지 못했어요'와 상태 다시 확인을 안내한다.
+      const outcome = redeliveryPaymentUnexpectedFailure(stage);
+      setRedeliveryOutcome(outcome);
+      setActionError(outcome.message);
     }
   }
 

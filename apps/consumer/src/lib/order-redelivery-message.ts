@@ -17,6 +17,9 @@ export const REDELIVERY_PAYMENT_NOT_COMPLETED_MESSAGE =
   '재배송비 결제가 완료되지 않았어요. 다시 결제해 주세요.';
 // 결제 결과를 아직 모를 때. 화면에서 '상태 다시 확인' 안내와 함께 보인다.
 export const REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE = '재배송비 결제가 됐는지 아직 확인하지 못했어요.';
+// 결제창을 열기 전(결제 설정 읽기·결제 모듈 불러오기)에 멈췄을 때. 결제창이 열리지 않았으므로 다시 시도를 안내한다.
+export const REDELIVERY_PAYMENT_NOT_STARTED_MESSAGE =
+  '재배송비 결제를 시작하지 못했어요. 잠시 후 다시 시도해 주세요.';
 // 결제 기록이 실패·환불 상태이거나 복구가 필요해 손님이 다시 결제할 수 없을 때. 주문 상세 하단에 고객센터가 있다.
 export const REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE =
   '재배송비 결제 상태를 확인하지 못했어요. 아래 고객센터로 문의해 주세요.';
@@ -49,4 +52,31 @@ export function customerRedeliveryPaymentReturn(
     return { kind: 'uncertain', message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE };
   }
   return outcome;
+}
+
+/**
+ * 재배송비 결제 흐름의 진행 단계.
+ * - requesting: 결제 기록 요청을 보냈거나 그 응답을 읽는 중(요청이 닿았는지 모른다)
+ * - opening-window: 결제 기록을 받고 결제창을 열 준비를 하는 중(결제 설정·결제 모듈, 결제창은 아직 안 열림)
+ * - paying: 결제창을 불렀다(손님이 결제했을 수 있다)
+ * - confirming: 결제창이 끝나 주문의 결제 완료를 다시 읽는 중
+ */
+export type RedeliveryPaymentStage = 'requesting' | 'opening-window' | 'paying' | 'confirming';
+
+export type RedeliveryPaymentUnexpectedFailure =
+  | { kind: 'rejected'; message: string }
+  | { kind: 'uncertain'; message: string };
+
+/**
+ * 예상하지 못한 예외를 진행 단계로 가른다. 결제창을 열기 전에 멈췄으면 결제가 시작되지 않았으므로
+ * '시작하지 못했어요'로 다시 시도를 안내하고, 그 밖의 단계는 결제됐을 수 있으므로 중복 결제를 막기 위해
+ * '확인하지 못했어요'와 '상태 다시 확인'을 안내한다.
+ */
+export function redeliveryPaymentUnexpectedFailure(
+  stage: RedeliveryPaymentStage,
+): RedeliveryPaymentUnexpectedFailure {
+  if (stage === 'opening-window') {
+    return { kind: 'rejected', message: REDELIVERY_PAYMENT_NOT_STARTED_MESSAGE };
+  }
+  return { kind: 'uncertain', message: REDELIVERY_PAYMENT_UNCERTAIN_MESSAGE };
 }
