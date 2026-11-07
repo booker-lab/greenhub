@@ -17,12 +17,12 @@ import {
 import { FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
-import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useId, useState } from 'react';
 import type { AddressFormData } from '@/hooks/useAddresses';
 import { useAddresses } from '@/hooks/useAddresses';
+import { MyPageBackButton } from '../_back-button';
 
 // ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 16)·Group(gap xs 10)·Stack·Paper(md 16, radius lg 16,
 // withBorder gray-3)·Text(p, 줄 높이 1.55)·Badge xs light·Button xs outline gray·red·white red·Button sm·md와 같은 값.
@@ -308,15 +308,7 @@ export default function AddressesClient() {
   return (
     <div className="mx-auto max-w-[720px] px-4 pt-5 pb-20">
       <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-2.5">
-        <UiButton
-          type="button"
-          variant="ghost"
-          className="ps-0 hover:bg-transparent"
-          style={{ color: 'var(--color-text)' }}
-          onClick={() => router.back()}
-        >
-          <ChevronLeft size={20} className="size-5" />
-        </UiButton>
+        <MyPageBackButton />
         <p
           className={TEXT}
           style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}
