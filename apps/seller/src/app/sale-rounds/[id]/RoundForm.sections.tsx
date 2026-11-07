@@ -265,6 +265,7 @@ export function LimitsSection({
 export function ProductsSection({
   items,
   availableProducts,
+  productPrices,
   busy,
   onAdd,
   onRemove,
@@ -273,6 +274,8 @@ export function ProductsSection({
 }: {
   items: ItemDraft[];
   availableProducts: readonly Product[];
+  /** 상품 ID별 상품 기준가(스토어 상품 목록의 price). 목록에 없는 상품은 기준가를 숨긴다. */
+  productPrices?: ReadonlyMap<string, number>;
   busy: boolean;
   /** 상품별 경매 시세(연결한 상품만). 회차 가격 옆에 예상 매입가를 보여 준다. */
   marketSummaries?: Readonly<Record<string, MarketPriceSummary | null>>;
@@ -297,63 +300,71 @@ export function ProductsSection({
           </AlertDescription>
         </Alert>
       )}
-      {items.map((item) => (
-        <div key={item.key} className={BORDER_PAPER}>
-          <div className={`${COLUMN} gap-3`}>
-            <div className="flex flex-row flex-nowrap items-start justify-between gap-4">
-              <div>
-                <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
-                  {item.name}
-                </p>
-                <p
-                  className={TEXT}
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+      {items.map((item) => {
+        const basePrice = productPrices?.get(item.productId);
+        return (
+          <div key={item.key} className={BORDER_PAPER}>
+            <div className={`${COLUMN} gap-3`}>
+              <div className="flex flex-row flex-nowrap items-start justify-between gap-4">
+                <div>
+                  <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+                    {item.name}
+                  </p>
+                  {basePrice !== undefined && (
+                    <p
+                      className={TEXT}
+                      style={{
+                        fontSize: 'var(--font-size-sm)',
+                        color: 'var(--color-text-secondary)',
+                      }}
+                    >
+                      상품 기준가 ₩{basePrice.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="subtle-destructive"
+                  onClick={() => onRemove(item.key)}
+                  disabled={busy}
                 >
-                  {item.productId}
-                </p>
+                  <Trash2 className="size-3.5" data-icon="inline-start" />
+                  제거
+                </Button>
               </div>
-              <Button
-                type="button"
-                size="xs"
-                variant="subtle-destructive"
-                onClick={() => onRemove(item.key)}
-                disabled={busy}
-              >
-                <Trash2 className="size-3.5" data-icon="inline-start" />
-                제거
-              </Button>
-            </div>
-            <div className="grid grid-cols-1 gap-4 min-[48em]:grid-cols-3">
-              <NumberField
-                label="회차 가격"
-                min={1}
-                thousandSeparator=","
-                value={item.roundPrice}
-                onChange={(value) => onUpdate(item.key, 'roundPrice', value)}
-                disabled={busy}
-              />
-              <NumberField
-                label="상품별 한도"
-                min={1}
-                value={item.saleLimitQuantity}
-                onChange={(value) => onUpdate(item.key, 'saleLimitQuantity', value)}
-                disabled={busy}
-              />
-              <NumberField
-                label="노출 순서"
-                min={0}
-                value={item.displayOrder}
-                onChange={(value) => onUpdate(item.key, 'displayOrder', value)}
-                disabled={busy}
+              <div className="grid grid-cols-1 gap-4 min-[48em]:grid-cols-3">
+                <NumberField
+                  label="회차 가격"
+                  min={1}
+                  thousandSeparator=","
+                  value={item.roundPrice}
+                  onChange={(value) => onUpdate(item.key, 'roundPrice', value)}
+                  disabled={busy}
+                />
+                <NumberField
+                  label="상품별 한도"
+                  min={1}
+                  value={item.saleLimitQuantity}
+                  onChange={(value) => onUpdate(item.key, 'saleLimitQuantity', value)}
+                  disabled={busy}
+                />
+                <NumberField
+                  label="노출 순서"
+                  min={0}
+                  value={item.displayOrder}
+                  onChange={(value) => onUpdate(item.key, 'displayOrder', value)}
+                  disabled={busy}
+                />
+              </div>
+              <RoundPriceMarketHint
+                roundPrice={item.roundPrice}
+                summary={marketSummaries[item.productId]}
               />
             </div>
-            <RoundPriceMarketHint
-              roundPrice={item.roundPrice}
-              summary={marketSummaries[item.productId]}
-            />
           </div>
-        </div>
-      ))}
+        );
+      })}
       {items.some((item) => marketSummaries[item.productId]) && (
         <p
           className={TEXT}

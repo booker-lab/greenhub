@@ -17,15 +17,19 @@ import {
 import {
   formatRate,
   formatStoreContact,
+  nextSalesMode,
+  readStoreSalesMode,
+  SALES_MODE_LABEL,
   STATUS_LABEL,
   STATUS_TONE,
   type StoreEmptyKind,
   type StoreSort,
   type StoreSortKey,
+  salesModeActionLabel,
 } from '../_lib';
 
 // ② 방향(design-direction.md §5 어드민 "판매자", §8 D7): 줄무늬·머리 띠·그림자 없는 표.
-// 열: 상호(굵게, 아래 회색 대표 · 연락처) → 상태(점 + 글자) → 수수료율("5% 기본") → 등록일 → ⋮.
+// 열: 상호(굵게, 아래 회색 대표 · 연락처) → 상태(점 + 글자) → 판매 방식 → 수수료율("5% 기본") → 등록일 → ⋮.
 // 회차 주문·지급 대기 열은 판매자별 데이터가 없어 두지 않는다(2026-11-01 "데이터가 없는 칸은 뺀다").
 // 태블릿(1100px 이하)은 등록일을 상호 아래 보조 줄로 옮기고, 휴대폰(640px 이하)은 다른 목록과 같은 세 줄 행이다.
 // 폭 기준 클래스는 Tailwind가 소스 글자로 찾으므로 조합하지 않고 그대로 쓴다.
@@ -44,6 +48,8 @@ interface StoresTableProps {
   onSave: (storeId: string) => void;
   onArchive: (store: AdminStore) => void;
   onRestore: (store: AdminStore) => void;
+  /** 판매 방식 전환 확인창을 연다(⋮ "회차 판매로 바꾸기…" / "예전 방식으로 바꾸기…"). */
+  onChangeSalesMode: (store: AdminStore) => void;
   /** 그 가게의 정산 화면으로 간다(⋮ "정산 보기"). */
   onOpenSettlements: (store: AdminStore) => void;
   onResetFilters: () => void;
@@ -143,6 +149,7 @@ export function StoresTable({
   onSave,
   onArchive,
   onRestore,
+  onChangeSalesMode,
   onOpenSettlements,
   onResetFilters,
   onSortChange,
@@ -220,6 +227,11 @@ export function StoresTable({
       ? []
       : [
           { key: 'commission', label: '수수료 바꾸기…', onSelect: () => onStartEdit(store) },
+          {
+            key: 'sales-mode',
+            label: `${salesModeActionLabel(nextSalesMode(readStoreSalesMode(store)))}…`,
+            onSelect: () => onChangeSalesMode(store),
+          },
           store.status === 'archived'
             ? { key: 'restore', label: '복구하기…', onSelect: () => onRestore(store) }
             : { key: 'archive', label: '정리하기…', onSelect: () => onArchive(store) },
@@ -227,6 +239,9 @@ export function StoresTable({
         ];
   const menuOf = (store: AdminStore) => (
     <AdminRowMenu label={`판매자 ${storeName(store)}`} items={menuItems(store)} />
+  );
+  const salesModeOf = (store: AdminStore) => (
+    <span className="whitespace-nowrap">{SALES_MODE_LABEL[readStoreSalesMode(store)]}</span>
   );
   const statusOf = (store: AdminStore, size: 13 | 15) => (
     <StatusDot tone={STATUS_TONE[store.status] ?? 'default'} size={size}>
@@ -236,7 +251,7 @@ export function StoresTable({
 
   return (
     <>
-      {/* 휴대폰(640px 이하): 세 줄 행 — 1줄 상호·수수료율, 2줄 대표·연락처와 오른쪽 상태, 3줄 등록일, 옆에 ⋮ 한 자리. */}
+      {/* 휴대폰(640px 이하): 세 줄 행 — 1줄 상호·수수료율, 2줄 대표·연락처와 오른쪽 상태, 3줄 등록일·판매 방식, 옆에 ⋮ 한 자리. */}
       <ul className="m-0 list-none p-0 min-[641px]:hidden" aria-label="판매자 목록">
         {stores.map((store) => (
           <li
@@ -257,7 +272,7 @@ export function StoresTable({
                 {statusOf(store, 13)}
               </div>
               <p className={ADMIN_SUB}>
-                등록 <StoreJoined store={store} />
+                등록 <StoreJoined store={store} /> · {salesModeOf(store)}
               </p>
             </div>
             <div className="flex w-11 shrink-0 justify-center">{menuOf(store)}</div>
@@ -275,6 +290,7 @@ export function StoresTable({
             <th className={ADMIN_TH}>
               <SortHeader label="상태" sortKey="status" sort={sort} onSortChange={onSortChange} />
             </th>
+            <th className={ADMIN_TH}>판매 방식</th>
             <th className={ADMIN_TH}>
               <SortHeader label="수수료율" sortKey="rate" sort={sort} onSortChange={onSortChange} />
             </th>
@@ -297,6 +313,7 @@ export function StoresTable({
                 </p>
               </td>
               <td className={ADMIN_TD}>{statusOf(store, 15)}</td>
+              <td className={ADMIN_TD}>{salesModeOf(store)}</td>
               <td className={ADMIN_TD}>{renderRate(store)}</td>
               <td className={`${ADMIN_TD} max-[1100px]:hidden`}>
                 <StoreJoined store={store} />

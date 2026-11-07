@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { forwardRef, Inject, Injectable, Optional } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { toFirestoreData } from '../common/firestore/firestore-data';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { OpsAlertService } from '../ops-alerts/ops-alert.service';
@@ -124,9 +125,10 @@ export class NotificationsService {
     const current = await ref.get();
     const currentPreferences =
       (current.data()?.['notificationPreferences'] as Record<string, boolean> | undefined) ?? {};
+    // 보내지 않은 채널(undefined)은 빼서 기존 설정을 그대로 둬요.
     const nextPreferences = {
       ...currentPreferences,
-      ...preferences,
+      ...toFirestoreData(preferences),
     };
     await ref.update({
       notificationPreferences: nextPreferences,

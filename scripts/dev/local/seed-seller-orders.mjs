@@ -44,16 +44,12 @@ export const LOCAL_SELLER = Object.freeze({
   userId: 'local-seller-01',
   storeId: 'local-store-01',
   storeName: '로컬 테스트 상점',
-  inviteId: 'local-seller-invite-01',
+  // API 초대 토큰 형식(apps/api/src/auth/invite-conflict.ts INVITE_TOKEN_PATTERN, 영숫자 1~64자)을 따른다.
+  // 하이픈 등이 섞이면 POST /auth/register가 404로 거부한다.
+  inviteId: 'localSellerInvite01',
 });
 
-export const SCENARIOS = Object.freeze([
-  'S-EMPTY',
-  'S-ACTION',
-  'S-HELD',
-  'S-MIXED',
-  'S-FRESHNESS',
-]);
+export const SCENARIOS = Object.freeze(['S-EMPTY', 'S-ACTION', 'S-HELD', 'S-MIXED', 'S-FRESHNESS']);
 
 export class LocalSeedError extends Error {
   constructor(message) {
@@ -74,7 +70,11 @@ export function assertLocalSeedEnvironment(env = process.env) {
   if (readEnv(env, 'NODE_ENV') !== 'development') {
     throw new LocalSeedError('seed는 NODE_ENV=development에서만 실행할 수 있습니다.');
   }
-  if (['NODE_ENV', 'VERCEL_ENV', 'RAILWAY_ENVIRONMENT_NAME'].some((k) => readEnv(env, k) === 'production')) {
+  if (
+    ['NODE_ENV', 'VERCEL_ENV', 'RAILWAY_ENVIRONMENT_NAME'].some(
+      (k) => readEnv(env, k) === 'production',
+    )
+  ) {
     throw new LocalSeedError('production marker가 있는 환경에서는 seed를 거부합니다.');
   }
   if (readEnv(env, 'GREENHUB_SCHEDULES_ENABLED') !== 'false') {
@@ -93,7 +93,10 @@ export function assertLocalSeedEnvironment(env = process.env) {
   if (PRODUCTION_PROJECT_IDS.has(projectId)) {
     throw new LocalSeedError('production Firebase project에는 seed를 쓰지 않습니다.');
   }
-  if (readEnv(env, 'GOOGLE_APPLICATION_CREDENTIALS') || readEnv(env, 'FIREBASE_SERVICE_ACCOUNT_JSON')) {
+  if (
+    readEnv(env, 'GOOGLE_APPLICATION_CREDENTIALS') ||
+    readEnv(env, 'FIREBASE_SERVICE_ACCOUNT_JSON')
+  ) {
     throw new LocalSeedError('seed는 service-account credential binding을 거부합니다.');
   }
   const apiUrl = readEnv(env, 'NEXT_PUBLIC_API_URL') || LOCAL_API_BASE_URL;
@@ -107,7 +110,8 @@ export function assertLocalSeedEnvironment(env = process.env) {
     projectId: LOCAL_PROJECT_ID,
     firestoreHost: LOCAL_FIRESTORE_HOST,
     authHost: LOCAL_AUTH_HOST,
-    apiBaseUrl: apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1') ? apiUrl : LOCAL_API_BASE_URL,
+    apiBaseUrl:
+      apiUrl.includes('localhost') || apiUrl.includes('127.0.0.1') ? apiUrl : LOCAL_API_BASE_URL,
   };
 }
 
@@ -209,9 +213,7 @@ export function buildScenarioDocs(scenario) {
         baseOrder({ orderId: 'local-order-mixed-05', status: 'DELIVERED', offsetDays: -3 }),
       ];
     case 'S-FRESHNESS':
-      return [
-        baseOrder({ orderId: 'local-order-fresh-01', status: 'PENDING', offsetDays: 1 }),
-      ];
+      return [baseOrder({ orderId: 'local-order-fresh-01', status: 'PENDING', offsetDays: 1 })];
     default:
       throw new LocalSeedError(`알 수 없는 시나리오: ${scenario}. (${SCENARIOS.join(', ')})`);
   }
@@ -265,7 +267,9 @@ async function restJson(url, { method = 'GET', body, fetchImpl = fetch } = {}) {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new LocalSeedError(`emulator REST 실패: ${method} ${url} → ${res.status} ${text.slice(0, 200)}`);
+    throw new LocalSeedError(
+      `emulator REST 실패: ${method} ${url} → ${res.status} ${text.slice(0, 200)}`,
+    );
   }
   if (res.status === 200 && (res.headers.get('content-type') ?? '').includes('application/json')) {
     return res.json();
@@ -278,13 +282,17 @@ export async function listLocalStoreOrders({ fetchImpl = fetch } = {}) {
   const body = {
     structuredQuery: {
       from: [{ collectionId: 'orders' }],
-      where: { fieldFilter: { field: { fieldPath: 'storeId' }, op: 'EQUAL', value: { stringValue: LOCAL_SELLER.storeId } } },
+      where: {
+        fieldFilter: {
+          field: { fieldPath: 'storeId' },
+          op: 'EQUAL',
+          value: { stringValue: LOCAL_SELLER.storeId },
+        },
+      },
     },
   };
   const rows = (await restJson(url, { method: 'POST', body, fetchImpl })) ?? [];
-  return rows
-    .map((r) => r?.document?.name?.split('/').pop())
-    .filter(Boolean);
+  return rows.map((r) => r?.document?.name?.split('/').pop()).filter(Boolean);
 }
 
 export async function deleteDocs(collection, ids, { fetchImpl = fetch } = {}) {
@@ -323,7 +331,10 @@ export async function patchDoc(collection, id, fields, { fetchImpl = fetch } = {
   return id;
 }
 
-export async function applyScenario(scenario, { reset = true, fetchImpl = fetch, apiFetchImpl = fetch, env = process.env } = {}) {
+export async function applyScenario(
+  scenario,
+  { reset = true, fetchImpl = fetch, apiFetchImpl = fetch, env = process.env } = {},
+) {
   const runtime = assertLocalSeedEnvironment(env);
   if (!SCENARIOS.includes(scenario)) {
     throw new LocalSeedError(`알 수 없는 시나리오: ${scenario}`);
@@ -368,13 +379,18 @@ export async function applyScenario(scenario, { reset = true, fetchImpl = fetch,
   }
 
   // 3. store upsert (owner = local seller)
-  await writeDoc('stores', LOCAL_SELLER.storeId, {
-    id: LOCAL_SELLER.storeId,
-    ownerId: sellerId,
-    name: LOCAL_SELLER.storeName,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-  }, { fetchImpl });
+  await writeDoc(
+    'stores',
+    LOCAL_SELLER.storeId,
+    {
+      id: LOCAL_SELLER.storeId,
+      ownerId: sellerId,
+      name: LOCAL_SELLER.storeName,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+    { fetchImpl },
+  );
 
   // 3b. seller ↔ store 연결 (proxy /orders 진입 + API owner 검사에 필요).
   // register는 storeId=null로 생성하므로 seed에서 명시적으로 연결한다.
@@ -396,12 +412,13 @@ export async function applyScenario(scenario, { reset = true, fetchImpl = fetch,
 }
 
 function printUsage() {
-  console.log('사용: node scripts/dev/local/seed-seller-orders.mjs --scenario=<S-EMPTY|S-ACTION|S-HELD|S-MIXED|S-FRESHNESS> [--reset|--no-reset] [--list]');
+  console.log(
+    '사용: node scripts/dev/local/seed-seller-orders.mjs --scenario=<S-EMPTY|S-ACTION|S-HELD|S-MIXED|S-FRESHNESS> [--reset|--no-reset] [--list]',
+  );
 }
 
 const invokedAsMain =
-  typeof process.argv[1] === 'string' &&
-  process.argv[1] === fileURLToPath(import.meta.url);
+  typeof process.argv[1] === 'string' && process.argv[1] === fileURLToPath(import.meta.url);
 if (invokedAsMain) {
   const args = process.argv.slice(2);
   if (args.includes('--list')) {

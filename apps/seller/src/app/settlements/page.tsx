@@ -37,7 +37,7 @@ export default function SettlementsPage() {
 
   return (
     <PageShell>
-      <PageHeader title="정산 관리" />
+      <PageHeader title="정산 관리" backHref="/settings" />
 
       <SegmentedTabs<SettlementTab>
         tabs={TABS}

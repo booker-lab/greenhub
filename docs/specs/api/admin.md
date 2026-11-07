@@ -31,7 +31,7 @@ admin role을 어떤 운영 절차로 부여하는지는 계정 보안 정책이
 
 위 class-level guard 구현이 존재한다. `apps/api/src/admin/admin-privileged-mutation.spec.ts`가 실제 `AdminController` + `JwtAuthGuard` + `RolesGuard` + `JwtStrategy`를 Nest HTTP 경계로 구동해 다음을 직접 고정한다.
 
-- 10개 privileged mutation(`refund`, `pay`, `approveDriver`, `suspendDriver`, `setCommission`, `archiveStore`, `restoreStore`, `suspendUser`, `generateInvite`, `upsertBanner`)에 대한 unauthenticated 401
+- 11개 privileged mutation(`refund`, `pay`, `approveDriver`, `suspendDriver`, `setCommission`, `setSalesMode`, `archiveStore`, `restoreStore`, `suspendUser`, `generateInvite`, `upsertBanner`)에 대한 unauthenticated 401
 - consumer/seller/driver 요청의 403
 - invalid role에서 service 호출·payment/settlement/round lifecycle·Firestore write side-effect 0
 - admin 정상 요청이 controller service boundary까지 도달
@@ -82,6 +82,25 @@ PATCH /admin/stores/:storeId/commission
 ```
 
 body `{ rate }`(0~1, `SetCommissionDto`). 저장한 요율은 그 가게의 다음 정산부터 쓰이고(미설정이면 `PLATFORM_FEE_RATE`, 기본 5%), 이미 만든 정산은 바뀌지 않는다(`docs/specs/api/settlements.md` §4). 화면은 % 단위로 받아(5 → 0.05) 저장한다.
+
+### Store 판매 방식
+
+```text
+PATCH /admin/stores/:storeId/sales-mode
+```
+
+body `{ salesMode: 'legacy' | 'round_direct', reason?: string }`(`SetSalesModeDto`, 사유 최대 200자). 응답 `{ storeId, salesMode, changed }`. 공개 회차 API와 회차 주문 생성은 `stores/{id}.salesMode === 'round_direct'`인 가게에서만 동작하므로, 이 값이 손님에게 회차가 보이는지를 정한다.
+
+- 저장값이 없거나 `round_direct`가 아니면 `legacy`로 읽는다(`@greenhub/shared` `normalizeSalesMode`, `DEFAULT_SALES_MODE = 'legacy'`)
+- 같은 값이면 쓰지 않고 200(`changed: false`), 행동 기록도 남기지 않는다
+- `round_direct` → `legacy`는 그 가게에 끝나지 않은 회차(`SCHEDULED`·`OPEN`·`CLOSED`)가 있으면 409와 한국어 사유로 거절한다(진행 중 회차가 손님에게서 사라지지 않게). `DRAFT`·`COMPLETED`·`CANCELLED`는 막지 않는다
+- 가게 읽기·회차 확인·변경은 한 트랜잭션이다. 없는 가게는 404
+- 치운(archived) 가게도 수수료율처럼 바꿀 수 있다(손님에게는 숨어 있고, 복구하면 바꾼 방식으로 보인다)
+- 바뀌면 행동 기록 `admin.store.sales_mode_changed`(`before`/`after`의 `salesMode`, `reason`)를 남긴다
+- 판매자 프로필 수정(`PATCH /stores/:storeId`, `UpdateStoreDto`)은 `salesMode`를 받지 않는다(전역 whitelist 400). 판매 방식은 이 관리자 API로만 바꾼다
+- 판매자 온보딩(`POST /stores`)으로 새로 만든 가게는 `salesMode: 'round_direct'`로 생성된다(2026-11-07 결정, `apps/api/src/stores/stores.service.ts` `NEW_STORE_SALES_MODE`). 공용 기본값 `DEFAULT_SALES_MODE`는 판매 방식이 비어 있는 기존 가게를 위해 `legacy`로 둔다
+
+관리자 판매자 목록(`GET /admin/stores`)은 `salesMode`를 함께 내려 주고, 화면은 가게별 판매 방식(회차 판매 / 예전 방식)과 ⋮ 메뉴의 전환 확인창을 보여 준다.
 
 ### Store archive / restore
 

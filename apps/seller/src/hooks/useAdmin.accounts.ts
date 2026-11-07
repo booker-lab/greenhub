@@ -1,7 +1,7 @@
 'use client';
 
+import type { SalesMode } from '@greenhub/shared';
 import { apiJson } from '@/lib/api';
-import type { AdminCommandOutcome } from './useAdmin.outcome';
 import { readActiveDeliveryCount } from './useAdmin.driverSuspend';
 import {
   pick,
@@ -10,10 +10,27 @@ import {
   useAdminList,
   withQuery,
 } from './useAdmin.list';
+import type { AdminCommandOutcome } from './useAdmin.outcome';
 import { useAdminPagedList } from './useAdmin.paged';
 import type { AdminDriver, AdminReconciliation, AdminStore, AdminUser } from './useAdmin.types';
 
 // ── Stores ───────────────────────────────────────────────────────
+
+/** 판매 방식 전환 요청(PATCH /admin/stores/:storeId/sales-mode). 빈 사유는 보내지 않는다. */
+export function buildSalesModeRequest(
+  storeId: string,
+  salesMode: SalesMode,
+  reason?: string,
+): { path: string; init: { method: 'PATCH'; body: string } } {
+  const trimmed = reason?.trim();
+  return {
+    path: `/admin/stores/${encodeURIComponent(storeId)}/sales-mode`,
+    init: {
+      method: 'PATCH',
+      body: JSON.stringify({ salesMode, ...(trimmed ? { reason: trimmed } : {}) }),
+    },
+  };
+}
 
 export function useAdminStores() {
   const {
@@ -34,6 +51,17 @@ export function useAdminStores() {
       },
       reload,
     );
+  };
+
+  // 판매 방식 전환. 같은 값이면 서버가 바꾸지 않고 200을 준다.
+  // 회차 판매 → 예전 방식은 끝나지 않은 회차가 있으면 서버가 409와 사유를 돌려준다(rejected의 message로 보존).
+  const setSalesMode = async (
+    storeId: string,
+    salesMode: SalesMode,
+    reason?: string,
+  ): Promise<AdminCommandOutcome> => {
+    const request = buildSalesModeRequest(storeId, salesMode, reason);
+    return runAdminCommand(token, request.path, request.init, reload);
   };
 
   // 치우기 — 기록 가드 차단(400) 사유를 UI에 그대로 안내해야 하므로
@@ -64,7 +92,16 @@ export function useAdminStores() {
     return { reconciled: false, readError };
   };
 
-  return { stores, loading, error, reload, setCommission, archiveStore, restoreStore };
+  return {
+    stores,
+    loading,
+    error,
+    reload,
+    setCommission,
+    setSalesMode,
+    archiveStore,
+    restoreStore,
+  };
 }
 
 // ── Users ────────────────────────────────────────────────────────

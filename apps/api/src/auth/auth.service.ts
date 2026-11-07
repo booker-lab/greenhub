@@ -17,6 +17,7 @@ import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
 import { FirestoreService } from '../firestore/firestore.service';
 import { AuditService } from '../common/audit/audit.service';
+import { toFirestoreData } from '../common/firestore/firestore-data';
 import { OpsAlertService } from '../ops-alerts/ops-alert.service';
 import {
   WITHDRAWAL_ACTIVE_ORDER_MESSAGE,
@@ -397,8 +398,9 @@ export class AuthService {
   }
 
   async updateMe(userId: string, dto: UpdateMeDto) {
+    // 보내지 않은 칸(undefined)은 빼서 기존 값을 그대로 둬요.
     await this.firestore.doc(`users/${userId}`).update({
-      ...dto,
+      ...toFirestoreData(dto),
       updatedAt: this.firestore.Timestamp.now(),
     });
     return this.getMe(userId);
@@ -457,7 +459,8 @@ export class AuthService {
           a.isDefault = false;
         });
       }
-      addresses[idx] = { ...addresses[idx], ...dto, id: addressId };
+      // 보내지 않은 칸(undefined)은 빼서 기존 값을 그대로 둬요.
+      addresses[idx] = { ...addresses[idx], ...toFirestoreData(dto), id: addressId };
 
       tx.update(ref, {
         savedAddresses: addresses,
@@ -551,7 +554,7 @@ export class AuthService {
     if (!allowedRoles.includes(role)) {
       await this.audit.log('auth.kakao.forbidden', {
         userId: userData['id'] as string,
-        detail: { actualRole: role, targetRole: dto.targetRole },
+        detail: { actualRole: role, targetRole: dto.targetRole ?? null },
       });
       // 초대 링크로 들어온 카카오 계정이 이미 손님 등 다른 역할이면 판매자로 바꾸지 않는다.
       // 초대는 소모하지 않고, 다른 카카오 계정으로 가입하도록 사유를 알린다.

@@ -18,7 +18,7 @@ const actionStyle = {
 
 // 화면을 그리다 런타임 오류가 났을 때 Next 기본(영어) 오류 화면 대신 보여주는 안내 화면.
 // 소비자 앱(#568)과 같은 모양이다. 오류 메시지·스택은 보이지 않게 하고,
-// 서버 기록과 맞춰볼 digest만 작게 보여준다.
+// 서버 기록과 맞춰볼 digest만 작게 보여준다(digest가 없으면 번호 안내도 하지 않는다).
 // ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·py 64, Stack(가운데·gap md,
 // 버튼 묶음 gap xs·최대 280px), Title order 1(줄 높이 1.3), Text(m-0 p-0)와 같은 값.
 const TEXT = 'm-0 p-0 text-center text-base';
@@ -94,8 +94,11 @@ export default function ErrorPage({
             홈으로 가기
           </Link>
         </div>
+        {/* 브라우저에서 난 오류는 digest(서버 기록 번호)가 없으니 번호 이야기를 빼고 안내한다 */}
         <p className={TEXT} style={{ ...mutedSm, wordBreak: 'keep-all' }}>
-          계속 같은 화면이 나오면 아래 오류 번호와 함께 운영팀에 알려 주세요.
+          {error.digest
+            ? '계속 같은 화면이 나오면 아래 오류 번호와 함께 운영팀에 알려 주세요.'
+            : '같은 화면이 계속 나오면 운영팀에 알려 주세요.'}
         </p>
         {error.digest ? (
           <p className={TEXT} style={mutedSm}>
