@@ -52,7 +52,8 @@ const requireForTest = (specifier) => {
     specifier === 'next/navigation' ||
     specifier === '@/hooks/useOrders' ||
     specifier === '@/components/A2HSButton' ||
-    specifier === '@/components/ResilientImage'
+    specifier === '@/components/ResilientImage' ||
+    specifier === '@/lib/publicBusinessInfo'
   ) {
     return {};
   }
@@ -194,4 +195,14 @@ test('대표(첫) 상품의 주문 시점 사진 주소를 썸네일로 쓴다',
     })),
   };
   assert.equal(readOrderListSummary(blankFirst)?.representativeImageUrl, null);
+});
+
+test('MY 내 정보에 공개 사업자 정보의 고객센터 전화 연결을 둔다', () => {
+  assert.match(source, /import \{ PUBLIC_BUSINESS_INFO \} from '@\/lib\/publicBusinessInfo'/);
+  assert.match(source, /<SupportCallLink \/>/);
+  assert.match(source, /href=\{PUBLIC_BUSINESS_INFO\.phoneHref\}/);
+  assert.match(source, /고객센터 전화 \{PUBLIC_BUSINESS_INFO\.phone\}/);
+  assert.match(source, /상담 시간 \{PUBLIC_BUSINESS_INFO\.supportHours\}/);
+  // 번호를 화면 코드에 직접 적지 않는다.
+  assert.doesNotMatch(source, /tel:\d|010-\d{4}-\d{4}/);
 });

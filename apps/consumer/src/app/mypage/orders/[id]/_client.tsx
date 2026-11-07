@@ -2,7 +2,7 @@
 
 import type { OrderStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button, ButtonLabel } from '@greenhub/ui/components/button';
+import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -19,6 +19,7 @@ import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
 import { ORDER_STATUS_LABELS as STATUS_LABELS } from '@/lib/order-status';
 import { PAYMENT_METHOD_OPTIONS } from '@/lib/payment-method-options';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 import {
   buildPaymentRedirectUrl,
   type PaymentRedirectResult,
@@ -1219,6 +1220,28 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           />
         </div>
       )}
+
+      {/* 문의하기: 공개 사업자 정보의 고객센터 전화. 주문번호를 함께 보여 통화 때 말하기 쉽게 한다. */}
+      <div
+        className="mt-5 rounded-[var(--radius)] bg-[var(--color-surface-muted)] p-4"
+        data-testid="order-support"
+      >
+        <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-extrabold)' }}>
+          문의하기
+        </p>
+        <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+          전화하실 때 아래 주문번호를 알려 주세요.
+        </p>
+        <p className="m-0 mt-1 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
+          주문번호 {detail.orderNumber}
+        </p>
+        <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+          상담 시간 {PUBLIC_BUSINESS_INFO.supportHours}
+        </p>
+        <ButtonLink className="mt-3 w-full" variant="outline" href={PUBLIC_BUSINESS_INFO.phoneHref}>
+          전화로 문의하기 {PUBLIC_BUSINESS_INFO.phone}
+        </ButtonLink>
+      </div>
     </div>
   );
 }

@@ -1082,3 +1082,15 @@ test('주문 취소 안내·확인창·실패 문구는 내부 동작 대신 고
   // 확인되지 않은 환불 기간 약속은 쓰지 않는다.
   assert.doesNotMatch(source, /영업일/);
 });
+
+test('주문 상세 하단에 주문번호와 함께 고객센터 전화 문의를 둔다', () => {
+  assert.match(source, /import \{ PUBLIC_BUSINESS_INFO \} from '@\/lib\/publicBusinessInfo'/);
+  const support = source.slice(source.indexOf('data-testid="order-support"'));
+  assert.ok(support.length > 0 && source.includes('data-testid="order-support"'));
+  assert.match(support, />\s*문의하기\s*</);
+  assert.match(support, /주문번호 \{detail\.orderNumber\}/);
+  assert.match(support, /<ButtonLink[^>]*href=\{PUBLIC_BUSINESS_INFO\.phoneHref\}/);
+  assert.match(support, /전화로 문의하기 \{PUBLIC_BUSINESS_INFO\.phone\}/);
+  // 번호를 화면 코드에 직접 적지 않는다.
+  assert.doesNotMatch(source, /tel:\d|010-\d{4}-\d{4}/);
+});

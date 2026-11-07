@@ -12,6 +12,7 @@ import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientIm
 import { useOrders } from '@/hooks/useOrders';
 import { isFeatureOn } from '@/lib/features';
 import { ORDER_STATUS_LABELS as STATUS_LABELS } from '@/lib/order-status';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 
 // ② 방향(design-standard §5, 판매자 주문 상태와 같은 규칙): 상태는 배지 면 없이 점 + 글자. 문제=빨강, 끝났거나 멈춘 상태=회색, 나머지 검정.
 const STATUS_TONES: Partial<Record<OrderStatus, StatusDotTone>> = {
@@ -420,6 +421,7 @@ export default function MyPageClient() {
             </p>
             <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
           </button>
+          <SupportCallLink />
           <MenuLink label="회원 탈퇴" onClick={() => router.push('/mypage/withdraw')} />
         </div>
       </div>
@@ -464,5 +466,47 @@ function MenuLink({ label, onClick }: { label: string; onClick: () => void }) {
       </p>
       <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
     </button>
+  );
+}
+
+// 고객센터 전화 연결. 번호·상담 시간은 footer와 같은 공개 사업자 정보(PUBLIC_BUSINESS_INFO)를 쓴다.
+function SupportCallLink() {
+  return (
+    <a
+      href={PUBLIC_BUSINESS_INFO.phoneHref}
+      data-testid="mypage-support-call"
+      className={UNSTYLED_BUTTON}
+      style={{
+        alignItems: 'center',
+        background: 'var(--color-surface-muted)',
+        borderRadius: 'var(--radius)',
+        display: 'flex',
+        gap: 12,
+        justifyContent: 'space-between',
+        minHeight: 'var(--touch-target)',
+        padding: '14px 16px',
+        width: '100%',
+      }}
+    >
+      <div style={{ minWidth: 0 }}>
+        <p
+          className={TEXT}
+          style={{
+            color: 'var(--color-text)',
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-medium)',
+          }}
+        >
+          고객센터 전화 {PUBLIC_BUSINESS_INFO.phone}
+        </p>
+        <p
+          className={TEXT}
+          style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
+        >
+          상담 시간 {PUBLIC_BUSINESS_INFO.supportHours}
+        </p>
+      </div>
+      <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
+    </a>
   );
 }
