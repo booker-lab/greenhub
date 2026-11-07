@@ -52,6 +52,8 @@ import {
 } from './_detail';
 
 const API_URL = getApiBaseUrl();
+// 취소 요청 뒤 결과를 모를 때(연결 끊김·응답 확인 실패) 보이는 문구. 아래 '상태 다시 확인' 안내와 함께 보인다.
+const CANCEL_UNCERTAIN_MESSAGE = '취소가 처리됐는지 아직 확인하지 못했어요.';
 
 function getTimelineSteps(order: OrderDetailView): OrderStatus[] {
   if (order.saleType === 'group') {
@@ -314,7 +316,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       return;
     }
     const message = detail.isRoundOrder
-      ? '주문 취소를 요청하시겠습니까?\n서버에서 회차 마감 전인지 다시 확인합니다.'
+      ? '주문을 취소할까요?'
       : '공동구매 참여를 취소하시겠습니까?\n취소 후에는 되돌릴 수 없습니다.';
     if (!confirm(message)) return;
     setCancelOutcome({ kind: 'executing' });
@@ -336,7 +338,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       } catch {
         throw {
           kind: 'uncertain',
-          message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+          message: CANCEL_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       const body: unknown = await response.json().catch(() => null);
@@ -352,13 +354,13 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         }
         throw {
           kind: 'uncertain',
-          message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
+          message: CANCEL_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       if (!readCommandConfirmation(body, { orderId: detail.id, status: 'CANCELLED' })) {
         throw {
           kind: 'uncertain',
-          message: '취소 확인 응답을 검증하지 못했습니다. 상태를 다시 확인해 주세요.',
+          message: CANCEL_UNCERTAIN_MESSAGE,
         } satisfies Extract<CommandOutcome, { kind: 'uncertain' }>;
       }
       setCancelOutcome({ kind: 'reconciling' });
@@ -385,21 +387,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           return;
         }
       }
-      if (caught instanceof TypeError) {
-        const uncertainMessage = '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.';
-        setCancelOutcome({ kind: 'uncertain', message: uncertainMessage });
-        setActionError(uncertainMessage);
-        return;
-      }
-      setCancelOutcome({
-        kind: 'uncertain',
-        message: '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
-      });
-      setActionError(
-        caught instanceof Error
-          ? caught.message
-          : '취소 요청 결과를 확정할 수 없습니다. 상태를 다시 확인해 주세요.',
-      );
+      // 그 밖의 예외도 내부 오류 글자 대신 같은 고객 문구로 상태 확인을 안내한다.
+      setCancelOutcome({ kind: 'uncertain', message: CANCEL_UNCERTAIN_MESSAGE });
+      setActionError(CANCEL_UNCERTAIN_MESSAGE);
     }
   }
 
@@ -1095,7 +1085,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         >
           <p className="m-0 mb-3 text-sm">
             {detail.isRoundOrder
-              ? '취소 요청 시 서버가 회차 마감 여부를 다시 확인하고 환불과 주문 한도 반환을 처리합니다.'
+              ? '주문 마감 전까지 취소할 수 있어요. 결제한 수단으로 환불돼요.'
               : '모집 중인 공동구매 참여를 취소할 수 있습니다.'}
           </p>
           {isStaleRead && (
@@ -1104,9 +1094,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
             </p>
           )}
           {cancelOutcome.kind === 'reconciling' && (
-            <p className="m-0 mb-3 text-sm">
-              서버에서 취소를 확인했습니다. 최신 주문 상태를 확인 중입니다.
-            </p>
+            <p className="m-0 mb-3 text-sm">취소가 접수됐어요. 최신 주문 상태를 확인하고 있어요.</p>
           )}
           <LoadingButton
             className="w-full"
@@ -1124,8 +1112,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         <DetailAlert variant="warning" className="mb-5" title="취소 확인됨 · 상태 재확인 필요">
           <div className="flex flex-col gap-1.5">
             <p className="m-0 text-sm">
-              취소는 서버에서 확인됐지만 최신 주문 화면을 다시 불러오지 못했습니다. 취소 실패가
-              아니므로 바로 다시 취소하지 말고 상태를 확인해 주세요.
+              취소는 접수됐지만 최신 주문 화면을 다시 불러오지 못했어요. 취소 실패가 아니니 바로
+              다시 취소하지 말고 아래 ‘다시 시도’를 눌러 상태를 확인해 주세요.
             </p>
             <LoadingButton
               className="mt-2.5"
@@ -1155,7 +1143,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           <div className="flex flex-col gap-1.5">
             <p className="m-0 text-sm">{actionError}</p>
             {needsStatusRecheck && (
-              <p className="m-0 text-sm">중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요.</p>
+              <p className="m-0 text-sm">다시 요청하기 전에 아래 ‘상태 다시 확인’을 눌러 주세요.</p>
             )}
             {needsStatusRecheck && (
               <LoadingButton

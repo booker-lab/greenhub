@@ -941,7 +941,7 @@ test('cancel 확인 + 재조회 실패는 취소 실패가 되지 않는다', ()
 
   assert.match(source, /setCancelOutcome\(\{ kind: 'reconcile-failed' \}\)/);
   assert.match(source, /취소 확인됨 · 상태 재확인 필요/);
-  assert.match(source, /취소 실패가\s+아니므로 바로 다시 취소하지 말고/);
+  assert.match(source, /취소 실패가 아니니 바로\s+다시 취소하지 말고/);
   // 취소 배너는 authoritative CANCELLED 또는 reconcile된 done에서만 표시된다.
   assert.match(
     source,
@@ -997,7 +997,7 @@ test('전송 불확실성은 blind 중복 재시도 대신 상태 확인을 우�
 
   assert.match(source, /결과를 확정할 수 없습니다\. 상태를 다시 확인해 주세요/);
   assert.match(source, /중복 결제 전에/);
-  assert.match(source, /중복 요청 전에 다시 시도로 현재 상태를 확인해 주세요/);
+  assert.match(source, /다시 요청하기 전에 아래 ‘상태 다시 확인’을 눌러 주세요/);
   assert.match(source, /상태 다시 확인/);
   // 동일 명령 자동 재전송을 하지 않는다.
   assert.doesNotMatch(source, /setTimeout\(.*handleCancel/);
@@ -1057,4 +1057,28 @@ test('재배송비 결제는 고른 결제수단(카드 포함)으로 결제창�
   assert.doesNotMatch(source, /payMethod: 'EASY_PAY'/);
   // 선택지가 둘 이상일 때만 결제수단 선택을 보여 준다(채널 키 없는 수단은 숨김).
   assert.match(source, /PAYMENT_METHOD_OPTIONS\.length > 1 &&/);
+});
+
+test('주문 취소 안내·확인창·실패 문구는 내부 동작 대신 고객 기준으로 말한다', () => {
+  // 회차 주문 취소 안내와 확인창
+  assert.match(source, /'주문 마감 전까지 취소할 수 있어요\. 결제한 수단으로 환불돼요\.'/);
+  assert.match(source, /\? '주문을 취소할까요\?'/);
+  // 결과를 모를 때는 고객 문구 하나로 '상태 다시 확인'을 안내한다.
+  assert.match(source, /const CANCEL_UNCERTAIN_MESSAGE = '취소가 처리됐는지 아직 확인하지 못했어요\.'/);
+  assert.match(source, /setActionError\(CANCEL_UNCERTAIN_MESSAGE\)/);
+  assert.match(source, /취소가 접수됐어요\. 최신 주문 상태를 확인하고 있어요\./);
+  // 취소 흐름에는 서버·검증 같은 내부 동작 설명이 남지 않는다.
+  const handler = source.slice(
+    source.indexOf('async function handleCancel'),
+    source.indexOf('async function handleRedeliveryPayment'),
+  );
+  assert.doesNotMatch(handler, /서버|확정할 수 없습니다|검증하지 못했습니다/);
+  assert.doesNotMatch(handler, /caught\.message : /);
+  assert.doesNotMatch(source, /서버가 회차 마감 여부를 다시 확인/);
+  assert.doesNotMatch(source, /서버에서 회차 마감 전인지 다시 확인/);
+  assert.doesNotMatch(source, /서버에서 취소를 확인했습니다/);
+  assert.doesNotMatch(source, /취소는 서버에서 확인됐지만/);
+  assert.doesNotMatch(source, /중복 요청 전에 다시 시도로/);
+  // 확인되지 않은 환불 기간 약속은 쓰지 않는다.
+  assert.doesNotMatch(source, /영업일/);
 });
