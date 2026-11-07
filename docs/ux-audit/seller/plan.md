@@ -64,7 +64,8 @@
 - 운영에서 확인(비로그인·읽기 전용, `2d747da4` 배포 직후): 초대 화면 하단 탭 없음(S-19), 보호 경로 → `/login?callbackUrl=…`(S-13).
 - `0c0e402` 배포 뒤 consumer·seller 운영 배포는 이 SHA로 READY이고, driver는 코드 변경이 없어 빌드를 생략해 직전 배포가 계속 서비스한다.
 - 운영 상품 저장(S-01·S-02)은 운영 데이터를 바꾸지 않는 원칙 때문에 직접 확인하지 않았다. 판매자가 비공개 상품으로 등록·수정·삭제를 확인해야 한다.
-- #832의 `seller-product-lifecycle` E2E는 원격 회차 E2E(`consumer-round-direct`·`seller-sale-rounds`·`driver-direct-delivery`·`auth-session-lifecycle`)에 포함되지 않아 release train에서 돌지 않는다. 일반 E2E(`e2e.yml`)는 BACKLOG `LEGACY-E2E-WORKFLOW-VARS`로 막혀 있다.
+- #832의 `seller-product-lifecycle` E2E는 원격 회차 E2E에 포함되지 않아 release train에서 돌지 않았다(일반 E2E `e2e.yml`은 BACKLOG `LEGACY-E2E-WORKFLOW-VARS`로 막혀 있다). → 이 브랜치에서 회차 E2E 묶음에 넣었다(판정 64→66건, project별 회차 셀러 계정 사용). 다음 release train부터 돈다.
+- 운영 판매자 확인(2026-11-08): 상품 등록·수정·재등록은 된다. 소비자 앱에 안 보이는 것은 `round_direct` 가게가 판매 회차 상품만 보여 주기 때문이다(결함 아님). 상품을 작성 중·판매 예정 회차에 넣어 공개하면 보인다.
 
 ### 이번 작업에서 새로 드러난 후속 후보
 
