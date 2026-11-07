@@ -63,6 +63,9 @@ export function safeDriverReturnPath(raw: unknown): string | null {
   if (decoded === null || isExcludedPathname(url.pathname) || isExcludedPathname(decoded)) {
     return null;
   }
+  // `/.//evil.com`·`/..//evil.com`·`/board/..//evil.com`은 점 세그먼트를 정리하면 `//evil.com`이 된다.
+  // 돌려줄 값이 `//`로 시작하면 받는 쪽에서 다른 출처(프로토콜 상대 주소)로 읽히므로 정리한 뒤에도 거절한다.
+  if (url.pathname.startsWith('//') || decoded.startsWith('//')) return null;
   return `${url.pathname}${url.search}${url.hash}`;
 }
 

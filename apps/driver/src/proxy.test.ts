@@ -71,7 +71,13 @@ describe('기사 proxy 로그인 검사', () => {
       expect(response.status).toBe(307);
       expect(response.headers.get('location')).toBe(location);
     }
-    expect(state.authPaths).toEqual(['/board', '/board/order-1/photo', '/board', '/map', '/profile']);
+    expect(state.authPaths).toEqual([
+      '/board',
+      '/board/order-1/photo',
+      '/board',
+      '/map',
+      '/profile',
+    ]);
   });
 
   it('세션 쿠키가 있었는데 세션이 없으면(폐기·만료) 로그인 만료 안내(reason=expired)를 붙인다', async () => {
@@ -137,9 +143,17 @@ describe('기사 proxy 로그인 화면', () => {
       ['/login?callbackUrl=%2Fmap%3Fday%3Dtoday', 'https://driver.example.test/map?day=today'],
       // 자기 순환·다른 출처·API 경로는 /board로 바꾼다.
       ['/login?callbackUrl=%2Flogin', 'https://driver.example.test/board'],
-      ['/login?callbackUrl=%2Flogin%3FcallbackUrl%3D%252Flogin', 'https://driver.example.test/board'],
+      [
+        '/login?callbackUrl=%2Flogin%3FcallbackUrl%3D%252Flogin',
+        'https://driver.example.test/board',
+      ],
       ['/login?callbackUrl=https%3A%2F%2Fevil.example', 'https://driver.example.test/board'],
       ['/login?callbackUrl=%2F%2Fevil.example', 'https://driver.example.test/board'],
+      // 점 세그먼트를 정리하면 `//evil.example`이 되는 값도 다른 출처로 보내지 않는다.
+      ['/login?callbackUrl=%2F.%2F%2Fevil.example', 'https://driver.example.test/board'],
+      ['/login?callbackUrl=%2F..%2F%2Fevil.example', 'https://driver.example.test/board'],
+      ['/login?callbackUrl=%2F%252e%252e%2F%2Fevil.example', 'https://driver.example.test/board'],
+      ['/login?callbackUrl=%2Fboard%2F..%2F%2Fevil.example', 'https://driver.example.test/board'],
       ['/login?callbackUrl=%2Fapi%2Fauth%2Fsignout', 'https://driver.example.test/board'],
     ];
     for (const [path, location] of cases) {

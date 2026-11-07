@@ -6,6 +6,7 @@ import { buildContentSecurityPolicy, createCspNonce } from '@/lib/content-securi
 import { encodeInitialSession, INITIAL_SESSION_HEADER } from '@/lib/initial-session';
 import {
   buildDriverLoginPath,
+  DRIVER_DEFAULT_RETURN_PATH,
   DRIVER_LOGIN_PATH,
   hasAuthSessionCookie,
   resolveDriverReturnPath,
@@ -82,8 +83,15 @@ const loginGate = auth((request) => {
   const session = request.auth;
   // 토큰 오류 세션은 화면의 TokenErrorGuard가 로그아웃시키는 중이므로 보내지 않는다.
   if (session?.user?.role === 'driver' && !session.user.tokenError) {
-    const target = resolveDriverReturnPath(request.nextUrl.searchParams.get('callbackUrl'));
-    return NextResponse.redirect(new URL(target, request.url));
+    const target = new URL(
+      resolveDriverReturnPath(request.nextUrl.searchParams.get('callbackUrl')),
+      request.url,
+    );
+    // 이 리다이렉트는 Auth.js redirect callback을 거치지 않으므로 출처를 한 번 더 고정한다(이중 방어).
+    const sameOrigin = target.origin === request.nextUrl.origin;
+    return NextResponse.redirect(
+      sameOrigin ? target : new URL(DRIVER_DEFAULT_RETURN_PATH, request.url),
+    );
   }
   return continueWithCsp(request);
 });

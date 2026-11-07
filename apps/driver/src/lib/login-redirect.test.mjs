@@ -41,6 +41,13 @@ test('다른 출처·스킴·역슬래시·제어 문자는 거절한다', () =>
     '/\\evil.example',
     '\\/evil.example',
     '/\t/evil.example',
+    // 점 세그먼트를 정리하면 `//evil.example`(프로토콜 상대 주소)이 되는 값.
+    '/.//evil.example',
+    '/..//evil.example',
+    '/%2e%2e//evil.example',
+    '/%2E//evil.example',
+    '/board/..//evil.example',
+    '/board/../..//evil.example',
     '/board\n',
     `/${'a'.repeat(2048)}`,
   ]) {
@@ -86,10 +93,7 @@ test('로그인 화면 주소는 허용된 복귀 경로만 싣고 세션 만료
     buildDriverLoginPath({ returnPath: '/login?callbackUrl=%2Fmap', sessionEnded: true }),
     '/login?reason=expired',
   );
-  assert.equal(
-    buildDriverLoginPath({ returnPath: 'https://evil.example/board' }),
-    '/login',
-  );
+  assert.equal(buildDriverLoginPath({ returnPath: 'https://evil.example/board' }), '/login');
   // 만든 주소의 callbackUrl을 다시 읽으면 같은 경로로 돌아간다.
   const built = new URL(buildDriverLoginPath({ returnPath: '/map?day=today' }), 'https://d.test');
   assert.equal(resolveDriverReturnPath(built.searchParams.get('callbackUrl')), '/map?day=today');
@@ -130,7 +134,10 @@ test('카카오 로그인 API 거절을 안내 종류로 나눈다', () => {
 
 test('세션이 끝나 로그아웃시키는 두 곳은 보던 경로와 만료 안내를 싣는다', async () => {
   const providers = await readFile(new URL('../app/providers.tsx', import.meta.url), 'utf8');
-  assert.equal(providers.match(/signOut\(\{ callbackUrl: sessionEndedLoginUrl\(\) \}\)/g)?.length, 2);
+  assert.equal(
+    providers.match(/signOut\(\{ callbackUrl: sessionEndedLoginUrl\(\) \}\)/g)?.length,
+    2,
+  );
   assert.doesNotMatch(providers, /callbackUrl: '\/login'/);
   assert.match(
     providers,
