@@ -865,7 +865,7 @@ test('모바일 재배송비 결제 복귀는 서버 결제 확인 전까지 주
   assert.match(source, /ORDER_STATUS_POLL_MAX_MS/);
   const recheckAt = source.indexOf('if (!awaitingRedeliveryPaid) return;');
   assert.ok(recheckAt !== -1, '재확인 효과가 있어야 한다');
-  const recheckBlock = source.slice(recheckAt, recheckAt + 900);
+  const recheckBlock = source.slice(recheckAt, recheckAt + 2400);
   // 다시 읽기가 끝난 뒤에만 다음 확인을 예약하고, 화면을 떠나면 멈춘다.
   assert.match(recheckBlock, /void refetch\(\)\.finally\(scheduleRecheck\)/);
   assert.match(recheckBlock, /ORDER_STATUS_POLL_INTERVAL_MS/);
@@ -1057,4 +1057,27 @@ test('재배송비 결제는 고른 결제수단(카드 포함)으로 결제창�
   assert.doesNotMatch(source, /payMethod: 'EASY_PAY'/);
   // 선택지가 둘 이상일 때만 결제수단 선택을 보여 준다(채널 키 없는 수단은 숨김).
   assert.match(source, /PAYMENT_METHOD_OPTIONS\.length > 1 &&/);
+});
+
+test('재배송비 결제 뒤 서버 결제 확인을 요청한다(결제창 성공 직후 1번, 리다이렉트 복귀 대기 중 6·20·45초)', () => {
+  // 결제창이 성공으로 끝나면 다시 읽기 전에 서버 확인을 한 번 요청한다.
+  const reconcileIndex = source.indexOf(
+    "setRedeliveryOutcome({ kind: 'reconciling' });\n      // 결제창이",
+  );
+  assert.ok(reconcileIndex > 0);
+  const afterReconcile = source.slice(reconcileIndex, reconcileIndex + 400);
+  assert.match(
+    afterReconcile,
+    /await requestRedeliveryPaymentCheck\(detail\.id, session\.user\.accessToken\);\s+const latestOrder = await refetch\(\)/,
+  );
+  // 리다이렉트 복귀 재확인 루프는 정해진 시점에만 확인을 보내고, 바뀌었다고 답하면 다시 읽는다.
+  assert.match(
+    source,
+    /shouldCheckRedeliveryPayment\(Date\.now\(\) - startedAt, checksMade, ORDER_STATUS_POLL_MAX_MS\)/,
+  );
+  assert.match(source, /if \(settled && !stopped\) void refetch\(\);/);
+  assert.match(source, /maybeCheckPayment\(\);\s+void refetch\(\)\.finally\(scheduleRecheck\);/);
+  // 확인 경로는 주문 상세의 재배송비 확인 API다.
+  assert.match(source, /redeliveryPaymentCheckPath\(orderId\)/);
+  assert.match(source, /method: 'POST'/);
 });

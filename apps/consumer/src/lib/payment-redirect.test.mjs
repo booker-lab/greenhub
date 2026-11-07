@@ -23,6 +23,10 @@ const {
   savePendingOrderPayment,
   shouldRecheckRedeliveryPayment,
   takePendingOrderPayment,
+  REDELIVERY_PAYMENT_CHECK_AFTER_MS,
+  shouldCheckRedeliveryPayment,
+  redeliveryPaymentCheckPath,
+  isRedeliveryPaymentCheckSettled,
 } = module.exports;
 
 const query = (search) => new URLSearchParams(search);
@@ -328,5 +332,41 @@ test('재배송비 결제가 성공으로 돌아왔는데 서버 확인 전이�
     null,
   ]) {
     assert.equal(shouldRecheckRedeliveryPayment(result, false, 0, MAX), false);
+  }
+});
+
+test('재배송비 결제 확인: 기다리기 시작한 뒤 6·20·45초에 한 번씩, 창 안에서만 요청한다', () => {
+  const MAX = 120_000;
+  assert.deepEqual([...REDELIVERY_PAYMENT_CHECK_AFTER_MS], [6_000, 20_000, 45_000]);
+  // 서버 청구별 조회 간격 하한(10초)보다 서로 멀다.
+  for (let index = 1; index < REDELIVERY_PAYMENT_CHECK_AFTER_MS.length; index += 1) {
+    assert.ok(
+      REDELIVERY_PAYMENT_CHECK_AFTER_MS[index] - REDELIVERY_PAYMENT_CHECK_AFTER_MS[index - 1] >=
+        10_000,
+    );
+  }
+  assert.equal(shouldCheckRedeliveryPayment(5_999, 0, MAX), false);
+  assert.equal(shouldCheckRedeliveryPayment(6_000, 0, MAX), true);
+  assert.equal(shouldCheckRedeliveryPayment(19_999, 1, MAX), false);
+  assert.equal(shouldCheckRedeliveryPayment(20_000, 1, MAX), true);
+  assert.equal(shouldCheckRedeliveryPayment(45_000, 2, MAX), true);
+  assert.equal(shouldCheckRedeliveryPayment(90_000, 3, MAX), false);
+  assert.equal(shouldCheckRedeliveryPayment(MAX, 0, MAX), false);
+  assert.equal(shouldCheckRedeliveryPayment(Number.NaN, 0, MAX), false);
+  assert.equal(shouldCheckRedeliveryPayment(10_000, -1, MAX), false);
+  assert.equal(shouldCheckRedeliveryPayment(10_000, 0.5, MAX), false);
+});
+
+test('재배송비 결제 확인 경로와 응답 해석', () => {
+  assert.equal(
+    redeliveryPaymentCheckPath('order 1/x'),
+    '/payments/orders/order%201%2Fx/redelivery-charge/check',
+  );
+  assert.equal(isRedeliveryPaymentCheckSettled({ status: 'PAID', result: 'finalized' }), true);
+  assert.equal(isRedeliveryPaymentCheckSettled({ status: 'REFUNDED', result: 'finalized' }), true);
+  assert.equal(isRedeliveryPaymentCheckSettled({ status: 'PENDING', result: 'not_paid' }), false);
+  assert.equal(isRedeliveryPaymentCheckSettled({ status: 'NONE', result: 'not_pending' }), false);
+  for (const body of [null, undefined, 'PAID', {}, { status: 1 }]) {
+    assert.equal(isRedeliveryPaymentCheckSettled(body), false);
   }
 });
