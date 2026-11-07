@@ -16,13 +16,20 @@ export interface PaymentFailureInput {
   pgCode?: string | null;
 }
 
-// PortOne·PG 취소 코드(PAY_PROCESS_CANCELED, USER_CANCEL 등)와 "취소" 원문 메시지를 취소로 본다.
+// 고객이 결제창을 닫은 경우만 취소로 본다. code·pgCode의 취소 코드(PAY_PROCESS_CANCELED, USER_CANCEL 등),
+// 메시지 앞 대괄호 코드("[PAY_PROCESS_CANCELED] ..."), "사용자가 취소"·"결제를 취소" 문장이 그 신호다.
+// "취소된 카드입니다"·"거래 취소 불가"처럼 고객이 닫지 않은 PG 실패는 '취소'라는 글자가 있어도 취소로 보지 않는다.
 const CANCEL_CODE_PATTERN = /CANCEL/i;
+const BRACKETED_CANCEL_CODE_PATTERN = /\[[^\]]*CANCEL[^\]]*\]/i;
+const USER_CANCEL_SENTENCE_PATTERN = /결제를\s*취소|사용자가?\s*취소/;
 
 function isCanceled({ code, message, pgCode }: PaymentFailureInput): boolean {
-  return [code, pgCode, message].some(
-    (value) =>
-      typeof value === 'string' && (CANCEL_CODE_PATTERN.test(value) || value.includes('취소')),
+  if ([code, pgCode].some((value) => typeof value === 'string' && CANCEL_CODE_PATTERN.test(value))) {
+    return true;
+  }
+  return (
+    typeof message === 'string' &&
+    (BRACKETED_CANCEL_CODE_PATTERN.test(message) || USER_CANCEL_SENTENCE_PATTERN.test(message))
   );
 }
 

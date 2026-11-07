@@ -19,7 +19,7 @@ test('결제창 취소는 PG 원문 코드 대신 장바구니가 남아 있다�
     { code: 'FAILURE_TYPE_PG', message: '[PAY_PROCESS_CANCELED] 사용자가 결제를 취소하였습니다' },
     { code: 'FAILURE_TYPE_PG', message: 'canceled', pgCode: 'PAY_PROCESS_CANCELED' },
     { code: 'USER_CANCEL' },
-    { code: 'FAILURE_TYPE_PG', message: '취소' },
+    { code: 'FAILURE_TYPE_PG', message: '결제를 취소했습니다' },
   ]) {
     assert.equal(paymentFailureMessage(failure), PAYMENT_CANCELED_MESSAGE);
   }
@@ -44,4 +44,17 @@ test('고객 문구에는 PG 원문 코드·대괄호·영문 코드가 섞이�
   for (const message of messages) {
     assert.doesNotMatch(message, /\[|\]|[A-Z_]{3,}/);
   }
+});
+
+test('취소라는 글자가 있어도 고객이 결제창을 닫지 않은 PG 실패는 취소로 보지 않는다', () => {
+  for (const message of ['취소된 카드입니다', '[CARD_ERROR] 거래 취소 불가 카드입니다']) {
+    assert.equal(
+      paymentFailureMessage({ code: 'FAILURE_TYPE_PG', message }),
+      PAYMENT_NOT_COMPLETED_MESSAGE,
+    );
+  }
+  assert.equal(
+    paymentFailureMessage({ code: 'FAILURE_TYPE_PG', message: '사용자가 결제를 취소하였습니다' }),
+    PAYMENT_CANCELED_MESSAGE,
+  );
 });
