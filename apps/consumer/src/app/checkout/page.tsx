@@ -27,13 +27,18 @@ import {
   useCart,
 } from '@/hooks/useCart';
 import { type PaymentMethod, usePayment } from '@/hooks/usePayment';
-import { type PublicSaleRound, useSaleRounds } from '@/hooks/useSaleRounds';
+import {
+  type PublicSaleRound,
+  type SaleRoundsRequestStatus,
+  useSaleRounds,
+} from '@/hooks/useSaleRounds';
 import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartValidationError } from '@/lib/cartValidation';
 import { pickCheckoutPrefill, prefillAddress, prefillPhone } from '@/lib/checkout-prefill';
 import { isFeatureOn } from '@/lib/features';
 import { isKoreanMobilePhone, ROUND_DELIVERY_PHONE_ERROR } from '@/lib/korean-mobile-phone';
+import { CONNECTION_UNSTABLE_MESSAGE } from '@/lib/load-error-message';
 import {
   checkoutDraftCartKey,
   clearCheckoutDraft,
@@ -193,6 +198,38 @@ function resolveRoundCheckoutSchedule(
     ),
   );
   return matchesRoundItems ? { round, requestedDeliveryDate } : null;
+}
+
+const ROUND_STALE_PAY_MESSAGE =
+  '최신 회차 정보를 불러오지 못해 지금은 결제할 수 없어요. 다시 시도한 뒤 결제해 주세요.';
+const ROUND_CHANGED_PAY_MESSAGE =
+  '상품·가격·회차 정보가 바뀌어 결제할 수 없어요. 장바구니에서 바뀐 내용을 다시 확인해 주세요.';
+
+/**
+ * 회차 결제 버튼 옆에 보일 회차 확인 안내. 같은 뜻을 괄호로 덧붙이지 않고 한 문장으로만 안내한다.
+ * - error: 회차 조회 실패 안내(이미 고객 문구)를 그대로 쓴다.
+ * - stale: 이전 결과로는 결제하지 않으므로 다시 시도를 안내한다.
+ * - 조회는 됐지만 장바구니와 맞는 회차가 없으면 바뀐 내용을 확인하게 한다.
+ */
+function resolveRoundScheduleError(
+  status: SaleRoundsRequestStatus,
+  error: string | null,
+  hasSchedule: boolean,
+): string | null {
+  if (status === 'error') return error;
+  if (status === 'stale') return ROUND_STALE_PAY_MESSAGE;
+  if ((status === 'success' || status === 'empty' || status === 'refreshing') && !hasSchedule) {
+    return ROUND_CHANGED_PAY_MESSAGE;
+  }
+  return null;
+}
+
+/**
+ * 오래된 회차 정보 안내 아래에 덧붙일 원인. "판매 회차를 불러오지 못했어요"처럼 위 안내와 뜻이 같으면
+ * 보이지 않고, 연결이 불안정한 경우처럼 고객이 할 일이 달라지는 원인만 보인다.
+ */
+function staleRoundsDetail(error: string | null): string | null {
+  return error === CONNECTION_UNSTABLE_MESSAGE ? error : null;
 }
 
 /**
@@ -612,17 +649,8 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   // 옵션을 고른 상품은 옵션 금액을 더한 price를 쓴다(옵션이 없으면 price === roundPrice).
   const totalAmount = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
   const isLoading = state === 'creating' || state === 'paying';
-  const scheduleError =
-    saleRounds.status === 'error'
-      ? saleRounds.error
-      : saleRounds.status === 'stale'
-        ? `최신 회차 정보를 불러오지 못했습니다. 이전 결과로는 결제할 수 없습니다. 다시 시도 후 결제해 주세요.${saleRounds.error ? ` (${saleRounds.error})` : ''}`
-        : (saleRounds.status === 'success' ||
-              saleRounds.status === 'empty' ||
-              saleRounds.status === 'refreshing') &&
-            !schedule
-          ? '상품·가격·회차 정보가 변경되어 결제할 수 없습니다. 장바구니에서 변경 내용을 다시 확인해 주세요.'
-          : null;
+  const scheduleError = resolveRoundScheduleError(saleRounds.status, saleRounds.error, !!schedule);
+  const staleDetail = staleRoundsDetail(saleRounds.error);
   const deliveryPhoneValid = isKoreanMobilePhone(deliveryPhone.trim());
   const canPay =
     !isLoading &&
@@ -659,11 +687,11 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
               borderRadius: 'var(--radius)',
             }}
           >
-            <p className="m-0 text-sm">
-              최신 회차 정보를 불러오지 못했습니다. 이전 결과로는 결제할 수 없습니다.
-            </p>
-            {saleRounds.error && (
-              <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>{saleRounds.error}</p>
+            <p className="m-0 text-sm">최신 회차 정보를 불러오지 못했어요.</p>
+            {staleDetail && (
+              <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                {staleDetail}
+              </p>
             )}
             <Button variant="light" size="xs" className="mt-2.5" onClick={saleRounds.refetch}>
               다시 시도

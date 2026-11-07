@@ -143,7 +143,7 @@ test('회차 결제는 상품·가격·회차 변경 확인 전 차단하고 요
   assert.doesNotMatch(formSource, /상품 정보가 변경되면/);
   assert.match(formSource, /setRoundDetailsConfirmed\(false\)/);
   assert.match(formSource, /confirmationKey/);
-  assert.match(pageSource, /상품·가격·회차 정보가 변경되어 결제할 수 없습니다/);
+  assert.match(pageSource, /상품·가격·회차 정보가 바뀌어 결제할 수 없어요/);
   assert.match(formSource, /effectiveCanPay\s*=\s*canPay\s*&&\s*\(!isRoundCheckout\s*\|\|/);
   assert.match(formSource, /disabled=\{!effectiveCanPay\}/);
 });

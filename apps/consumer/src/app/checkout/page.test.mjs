@@ -28,7 +28,7 @@ new Function('require', 'module', 'exports', compiledCart)(
 
 const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 const testableSource = `${source}
-export { CartCheckoutContent, parseCheckoutCart, resolveRoundCheckoutSchedule, resolveSingleCheckoutAmount, SingleCheckoutContent };`;
+export { CartCheckoutContent, parseCheckoutCart, resolveRoundCheckoutSchedule, resolveRoundScheduleError, resolveSingleCheckoutAmount, SingleCheckoutContent, staleRoundsDetail };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     esModuleInterop: true,
@@ -80,6 +80,9 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }
+  if (specifier === '@/lib/load-error-message') {
+    return { CONNECTION_UNSTABLE_MESSAGE: '연결이 불안정해요. 잠시 후 다시 시도해 주세요.' };
+  }
   if (specifier === '@/lib/portone-config') {
     return {
       readPortonePaymentConfiguration: () => ({
@@ -119,8 +122,13 @@ new Function('require', 'module', 'exports', compiled)(
   pageModule.exports,
 );
 
-const { parseCheckoutCart, resolveRoundCheckoutSchedule, resolveSingleCheckoutAmount } =
-  pageModule.exports;
+const {
+  parseCheckoutCart,
+  resolveRoundCheckoutSchedule,
+  resolveRoundScheduleError,
+  resolveSingleCheckoutAmount,
+  staleRoundsDetail,
+} = pageModule.exports;
 
 const firstRoundItem = {
   productId: 'product-1',
@@ -687,4 +695,44 @@ test('회차 checkout은 같은 계정·장바구니의 입력값을 복원하�
   const done = roundCheckoutSource.indexOf("state !== 'done' || !orderId");
   const clear = roundCheckoutSource.indexOf('clearCheckoutDraft(readCheckoutDraftStorage())');
   assert.ok(done >= 0 && done < clear);
+});
+
+test('회차 확인 안내는 같은 뜻을 괄호로 반복하지 않고 해요체 한 문장으로 보인다', () => {
+  const loadError = '판매 회차를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.';
+  const connectionError = '연결이 불안정해요. 잠시 후 다시 시도해 주세요.';
+
+  // 오래된 회차 정보: 원인 문구를 괄호로 덧붙이지 않는다.
+  const stale = resolveRoundScheduleError('stale', loadError, true);
+  assert.equal(
+    stale,
+    '최신 회차 정보를 불러오지 못해 지금은 결제할 수 없어요. 다시 시도한 뒤 결제해 주세요.',
+  );
+  assert.equal(resolveRoundScheduleError('stale', null, true), stale);
+  assert.doesNotMatch(stale, /[()]/);
+
+  // 조회 실패는 이미 고객 문구가 된 안내를 그대로 쓴다.
+  assert.equal(resolveRoundScheduleError('error', loadError, false), loadError);
+
+  // 조회는 됐지만 장바구니와 맞는 회차가 없을 때만 변경 안내를 보인다.
+  const changed =
+    '상품·가격·회차 정보가 바뀌어 결제할 수 없어요. 장바구니에서 바뀐 내용을 다시 확인해 주세요.';
+  for (const status of ['success', 'empty', 'refreshing']) {
+    assert.equal(resolveRoundScheduleError(status, null, false), changed);
+    assert.equal(resolveRoundScheduleError(status, null, true), null);
+  }
+  assert.equal(resolveRoundScheduleError('loading', null, false), null);
+
+  // 오래된 정보 상자 아래에는 뜻이 다른 원인(연결 불안정)만 덧붙인다.
+  assert.equal(staleRoundsDetail(loadError), null);
+  assert.equal(staleRoundsDetail(null), null);
+  assert.equal(staleRoundsDetail(connectionError), connectionError);
+
+  // 화면의 회차 안내에 합니다체가 남지 않는다.
+  const start = source.indexOf('function RoundCartCheckoutContent');
+  const end = source.indexOf('function CartCheckoutContent', start);
+  const roundCheckoutSource = source.slice(start, end);
+  assert.match(roundCheckoutSource, /최신 회차 정보를 불러오지 못했어요\./);
+  assert.doesNotMatch(source, /최신 회차 정보를 불러오지 못했습니다/);
+  assert.doesNotMatch(source, /이전 결과로는 결제할 수 없습니다/);
+  assert.doesNotMatch(source, /회차 정보가 변경되어 결제할 수 없습니다/);
 });
