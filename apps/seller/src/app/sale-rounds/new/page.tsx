@@ -84,6 +84,7 @@ export default function NewSaleRoundPage() {
               carrotLinks={EMPTY_CARROT_LINKS}
               onSave={onSave}
               disabled={pendingOperation === 'create'}
+              isNew
             />
           </div>
         ) : null}
