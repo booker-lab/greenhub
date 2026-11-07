@@ -894,7 +894,7 @@ test('회차 checkout은 결제 예약 한도 거절이면 오류 안내 아래�
   // 오류 문구가 보일 때(마감 안내로 가려지지 않았을 때)만, 한도 거절일 때만 버튼을 둔다.
   assert.match(
     roundCheckoutSource,
-    /errorAction=\{[\s\S]*?formError && checkoutHoldLimited \? \([\s\S]*?onClick=\{\(\) => router\.push\(CHECKOUT_HOLD_LIMIT_ORDERS_PATH\)\}[\s\S]*?\{CHECKOUT_HOLD_LIMIT_ORDERS_LABEL\}[\s\S]*?\) : undefined\s*\}/,
+    /errorAction=\{[\s\S]*?formError && formError === error && checkoutHoldLimited \? \([\s\S]*?onClick=\{\(\) => router\.push\(CHECKOUT_HOLD_LIMIT_ORDERS_PATH\)\}[\s\S]*?\{CHECKOUT_HOLD_LIMIT_ORDERS_LABEL\}[\s\S]*?\) : undefined\s*\}/,
   );
   // 단일 상품 결제(예약 한도 없음)에는 버튼을 두지 않는다.
   assert.equal(source.match(/errorAction=/g)?.length, 1);

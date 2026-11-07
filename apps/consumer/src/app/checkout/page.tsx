@@ -781,7 +781,8 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
         error={formError}
         errorAction={
           // 결제를 마치지 않은 이전 시도로 막혔으면 그 시도를 볼 수 있는 주문 내역으로 가는 길을 둔다(C-02).
-          formError && checkoutHoldLimited ? (
+          // 회차 확인 오류(scheduleError)가 대신 보일 때는 한도 안내 버튼을 붙이지 않는다.
+          formError && formError === error && checkoutHoldLimited ? (
             <Button
               variant="outline"
               size="md"
