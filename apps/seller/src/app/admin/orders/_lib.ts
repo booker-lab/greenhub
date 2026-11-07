@@ -14,7 +14,7 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   HUB_ARRIVED: '거점 도착',
   PICKED_UP: '픽업 완료',
   DELIVERED: '배송 완료',
-  REVIEWED: '후기 작성',
+  REVIEWED: '구매 확정',
   CANCELLED: '취소',
 };
 
