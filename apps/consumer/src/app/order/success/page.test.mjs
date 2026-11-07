@@ -68,6 +68,19 @@ new Function(
   }).outputText,
 )(draftModule, draftModule.exports);
 
+const orderStatusSource = await readFile(
+  new URL('../../../lib/order-status.ts', import.meta.url),
+  'utf8',
+);
+const orderStatusModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(orderStatusSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(orderStatusModule, orderStatusModule.exports);
+
 const pageModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -80,6 +93,7 @@ const requireForTest = (specifier) => {
   }
   if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
   if (specifier === '@/lib/order-cancel-reason') return cancelReasonModule.exports;
+  if (specifier === '@/lib/order-status') return orderStatusModule.exports;
   if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
   if (specifier === '@/lib/payment-checkout-draft') return draftModule.exports;
   if (specifier === '@/hooks/useCart') return { useCart: () => ({ removeRoundItems: () => {} }) };
@@ -333,4 +347,19 @@ test('모바일 결제 성공 복귀는 checkout_cart와 함께 체크아웃 입
   const cartRemoval = source.indexOf("removeItem('checkout_cart')");
   assert.ok(cartRemoval < clear);
   assert.equal(source.match(/clearCheckoutDraft\(/g)?.length, 1);
+});
+
+test('주문 완료 화면은 공용 주문 상태 이름표를 써서 ACCEPTED를 MY·알림과 같은 결제 완료로 부른다', () => {
+  const { ORDER_STATUS_LABELS } = orderStatusModule.exports;
+  assert.equal(ORDER_STATUS_LABELS.ACCEPTED, '결제 완료');
+  assert.match(source, /import \{ ORDER_STATUS_LABELS \} from '@\/lib\/order-status'/);
+  assert.match(source, /\{ORDER_STATUS_LABELS\[validOrder\.status\]\}/);
+  assert.match(
+    source,
+    /현재 상태: \{ORDER_STATUS_LABELS\[validOrder\.status\] \?\? '주문 진행 중'\}/,
+  );
+  // 화면 안에 따로 상태 이름표를 두지 않아 '주문 접수 완료' 같은 다른 이름이 다시 생기지 않는다.
+  assert.doesNotMatch(source, /Partial<Record<OrderStatus, string>>\s*=\s*\{/);
+  assert.doesNotMatch(source, /ACCEPTED:\s*'/);
+  assert.doesNotMatch(source, /주문 접수 완료/);
 });

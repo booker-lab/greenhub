@@ -11,6 +11,7 @@ import { useCart } from '@/hooks/useCart';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
 import { isFeatureOn } from '@/lib/features';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
+import { ORDER_STATUS_LABELS } from '@/lib/order-status';
 import { clearCheckoutDraft } from '@/lib/payment-checkout-draft';
 import { paymentFailureMessage } from '@/lib/payment-failure-message';
 import {
@@ -21,21 +22,6 @@ import {
   resolveOrderPaymentReturn,
   takePendingOrderPayment,
 } from '@/lib/payment-redirect';
-
-const STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
-  PENDING: '결제 확인 중...',
-  RECRUITING: '공동구매 모집 중',
-  CONFIRMED: '주문 확정',
-  ACCEPTED: '주문 접수 완료',
-  PREPARING: '상품 준비 중',
-  DELIVERING: '배송 중',
-  DELIVERY_HELD: '배송 보류',
-  HUB_ARRIVED: '거점 도착',
-  PICKED_UP: '픽업 완료',
-  DELIVERED: '배송 완료',
-  CANCELLED: '주문 취소',
-  REVIEWED: '리뷰 완료',
-};
 
 const ORDER_STATUSES = new Set<OrderStatus>([
   'PENDING',
@@ -417,7 +403,8 @@ function OrderSuccessContent() {
               className="m-0 text-base"
               style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
             >
-              {STATUS_LABELS[validOrder.status]}
+              {/* 상태 이름은 MY·주문 상세·알림과 같은 공용 표를 써서 같은 주문을 같은 이름(결제 완료 등)으로 부른다. */}
+              {ORDER_STATUS_LABELS[validOrder.status]}
             </p>
             {validOrder.status === 'RECRUITING' && (
               <p
@@ -528,7 +515,7 @@ function OrderSuccessContent() {
               className="m-0 text-base"
               style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
             >
-              현재 상태: {STATUS_LABELS[validOrder.status] ?? '주문 진행 중'}
+              현재 상태: {ORDER_STATUS_LABELS[validOrder.status] ?? '주문 진행 중'}
             </p>
             <p
               className="m-0 text-center leading-[1.55]"
