@@ -35,6 +35,7 @@ import {
 import { getAcquisitionSnapshot } from '@/lib/acquisition';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { getCartValidationError } from '@/lib/cartValidation';
+import { hasDeliveryAddress } from '@/lib/checkout-address';
 import {
   CHECKOUT_HOLD_LIMIT_ORDERS_LABEL,
   CHECKOUT_HOLD_LIMIT_ORDERS_PATH,
@@ -336,8 +337,7 @@ function SingleCheckoutContent() {
   const isLoading = state === 'creating' || state === 'paying';
   const canPay =
     !isLoading &&
-    !!address.address &&
-    !!address.zipCode &&
+    hasDeliveryAddress(address) &&
     PHONE_PATTERN.test(deliveryPhone.trim()) &&
     !!session;
 
@@ -407,8 +407,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
   const canPay =
     !cartValidationError &&
     !isLoading &&
-    !!address.address &&
-    !!address.zipCode &&
+    hasDeliveryAddress(address) &&
     PHONE_PATTERN.test(deliveryPhone.trim()) &&
     !!session &&
     cartItems.length > 0;
@@ -721,8 +720,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
     !isLoading &&
     !!schedule &&
     !saleRounds.isStale &&
-    !!address.address &&
-    !!address.zipCode &&
+    hasDeliveryAddress(address) &&
     deliveryPhoneValid &&
     !!session;
   // 선물을 켰으면 받는 분·보내는 분 이름을 모두 적어야 결제한다(gift).
