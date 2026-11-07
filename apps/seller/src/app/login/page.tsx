@@ -1,9 +1,18 @@
 import Image from 'next/image';
+import { safeCallbackPath } from '@/lib/login-callback';
 import { LoginForm } from './_form';
 
 export const dynamic = 'force-dynamic';
 
-export default function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ callbackUrl?: string | string[] }>;
+}) {
+  // proxy가 넘긴 돌아갈 경로. 같은 출처 상대 경로만 받고 나머지는 버린다.
+  const { callbackUrl } = await searchParams;
+  const callbackPath = safeCallbackPath(Array.isArray(callbackUrl) ? callbackUrl[0] : callbackUrl);
+
   // E2E 헤더 게이트 환경 또는 local pilot runtime에서만 Credentials form을 노출한다.
   // launcher는 local child에서 E2E_TEST를 제거하므로 local marker도 함께 확인한다.
   const showCredentials =
@@ -53,7 +62,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <LoginForm showCredentials={showCredentials} />
+          <LoginForm showCredentials={showCredentials} callbackPath={callbackPath} />
         </div>
       </div>
     </main>

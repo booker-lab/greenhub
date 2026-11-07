@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { CreateSaleRoundInput } from '@/hooks/useSaleRounds';
 import {
   parseKstDateTimeInput,
+  roundEditLockNotice,
   toKstDateTimeInput,
   validateRoundFormInput,
 } from './RoundForm.logic';
@@ -120,5 +121,20 @@ describe('RoundForm 검증', () => {
         items: [VALID_INPUT.items[0], { ...VALID_INPUT.items[1], productId: 'product-a' }],
       }),
     ).toContain('같은 상품을 회차에 두 번 포함할 수 없습니다.');
+  });
+});
+
+describe('roundEditLockNotice', () => {
+  it('폼의 주문 시작 시각을 한국 시간으로 넣어 안내한다', () => {
+    expect(roundEditLockNotice('2026-11-09T09:00')).toBe(
+      '주문 시작 시각인 11월 9일 (월) 09:00 이후에는 회차 내용·가격을 고칠 수 없어요.',
+    );
+  });
+
+  it('주문 시작 시각을 읽을 수 없으면 시각 없이 안내한다', () => {
+    expect(roundEditLockNotice('')).toBe('주문 시작 이후에는 회차 내용·가격을 고칠 수 없어요.');
+    expect(roundEditLockNotice('2026-02-30T09:00')).toBe(
+      '주문 시작 이후에는 회차 내용·가격을 고칠 수 없어요.',
+    );
   });
 });

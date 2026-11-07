@@ -40,7 +40,7 @@ export const IN_DELIVERY_SUBFILTERS: {
 ];
 
 export const STATUS_LABEL: Record<OrderStatus, string> = {
-  PENDING: '대기',
+  PENDING: '결제 대기',
   RECRUITING: '모집 중',
   CONFIRMED: '주문 확정',
   ACCEPTED: '결제 완료',

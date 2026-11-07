@@ -4,6 +4,7 @@ import { auth } from '@/auth';
 import { ADMIN_HOME_PATH, isAdminPath, isPureAdmin } from '@/lib/admin-landing';
 import { buildContentSecurityPolicy, createCspNonce } from '@/lib/content-security-policy';
 import { encodeInitialSession, INITIAL_SESSION_HEADER } from '@/lib/initial-session';
+import { safeCallbackPath } from '@/lib/login-callback';
 
 // 요청마다 nonce를 만들어 요청 헤더로 넘긴다. Next는 요청의 CSP 헤더에서 nonce를 읽어
 // 자기 스크립트에 붙이고, 루트 layout은 x-nonce를 읽어 인라인 스크립트에 붙인다.
@@ -41,8 +42,12 @@ const authGate = auth((request) => {
   const { pathname } = request.nextUrl;
 
   // 미로그인 → /login 리다이렉트. 세션 객체가 있어도 필수 필드(role)가 없으면 미로그인으로 본다.
+  // 열려던 경로는 callbackUrl로 넘겨 로그인 뒤 돌아오게 한다(첫 화면 '/'와 안전하지 않은 값은 넘기지 않는다).
   if (!session?.user?.role) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    const loginUrl = new URL('/login', request.url);
+    const callback = safeCallbackPath(`${pathname}${request.nextUrl.search}`);
+    if (callback && callback !== '/') loginUrl.searchParams.set('callbackUrl', callback);
+    return NextResponse.redirect(loginUrl);
   }
 
   const isAdmin = session.user.role === 'admin';

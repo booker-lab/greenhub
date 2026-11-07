@@ -32,6 +32,17 @@ describe.each(boundaries)('$fileName', ({ fileName, exportName }) => {
   });
 });
 
+describe('error.tsx', () => {
+  it('digest가 없는 브라우저 오류에서는 오류 번호를 언급하지 않는다', () => {
+    const errorSource = source('error.tsx');
+    expect(errorSource).toMatch(
+      /error\.digest\s*\?\s*'[^']*오류 번호[^']*'\s*:\s*'같은 화면이 계속 나오면 운영팀에 알려 주세요\.'/,
+    );
+    // 번호 안내 문구가 조건 없이 그려지지 않는다
+    expect(errorSource).not.toMatch(/>\s*계속 같은 화면이 나오면 아래 오류 번호/);
+  });
+});
+
 describe('global-error.tsx', () => {
   it('root layout을 대신하므로 html·body를 직접 그리고 Mantine·next/link에 기대지 않는다', () => {
     const globalErrorSource = source('global-error.tsx');

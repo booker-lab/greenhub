@@ -1,4 +1,4 @@
-import { normalizeSalesMode } from '@greenhub/shared';
+import { normalizeSalesMode, type SalesMode } from '@greenhub/shared';
 import {
   BadRequestException,
   ConflictException,
@@ -26,6 +26,9 @@ const STORE_LOGO_URL_MESSAGE = 'logoUrl은 판매자 앱에서 올린 로고 이
 
 /** 매장을 새로 만들 수 있는 역할. 판매자 앱 온보딩(`POST /stores`)만 이 경로를 쓴다. */
 export const STORE_CREATOR_ROLES = ['seller'] as const;
+
+/** 판매자 온보딩으로 새로 만드는 가게의 판매 방식. 기존 가게·프로필 수정은 이 값을 쓰지 않는다. */
+export const NEW_STORE_SALES_MODE: SalesMode = 'round_direct';
 
 @Injectable()
 export class StoresService {
@@ -133,6 +136,9 @@ export class StoresService {
         businessNumber: dto.businessNumber ?? null,
         logoUrl: dto.logoUrl ?? null,
         status: 'active',
+        // 새 가게는 회차 판매로 시작한다(2026-11-07 결정). 공용 기본값(DEFAULT_SALES_MODE=legacy)은
+        // 판매 방식이 비어 있는 기존 가게를 위해 그대로 두고, 생성 때 값을 명시한다.
+        salesMode: NEW_STORE_SALES_MODE,
         createdAt: now,
         updatedAt: now,
       });
