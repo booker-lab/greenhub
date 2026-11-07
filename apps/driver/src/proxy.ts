@@ -4,6 +4,12 @@ import { DRIVER_ADMIN_ACCOUNT_ERROR } from '@/app/login/login-notice';
 import { auth } from '@/auth';
 import { buildContentSecurityPolicy, createCspNonce } from '@/lib/content-security-policy';
 import { encodeInitialSession, INITIAL_SESSION_HEADER } from '@/lib/initial-session';
+import {
+  buildDriverLoginPath,
+  DRIVER_LOGIN_PATH,
+  hasAuthSessionCookie,
+  resolveDriverReturnPath,
+} from '@/lib/login-redirect';
 
 // 요청마다 nonce를 만들어 요청 헤더로 넘긴다. Next는 요청의 CSP 헤더에서 nonce를 읽어
 // 자기 스크립트에 붙이고, 인라인 스크립트를 둘 때는 x-nonce를 읽어 붙인다.
@@ -44,8 +50,14 @@ const authGate = auth((request) => {
   const session = request.auth;
 
   // 세션 객체가 있어도 필수 필드(role)가 없으면 로그인하지 않은 것으로 본다.
+  // 보던 화면 경로를 callbackUrl로 실어 다시 로그인하면 그 화면으로 돌아가게 한다. 세션 쿠키가
+  // 있었는데 세션이 없으면(폐기·만료) 로그인 화면이 "로그인이 끝났어요" 안내를 보이게 한다.
   if (!session?.user?.role) {
-    return NextResponse.redirect(new URL('/login', request.url));
+    const loginPath = buildDriverLoginPath({
+      returnPath: `${request.nextUrl.pathname}${request.nextUrl.search}`,
+      sessionEnded: hasAuthSessionCookie(request.cookies.getAll().map((cookie) => cookie.name)),
+    });
+    return NextResponse.redirect(new URL(loginPath, request.url));
   }
 
   // 기사 앱은 기사(driver) 역할만 받는다(2026-10-04 결정). 로그인과 jwt callback이 먼저
@@ -61,12 +73,31 @@ const authGate = auth((request) => {
   return continueWithCsp(request, session);
 });
 
+// 이미 로그인한 기사가 로그인 화면을 열면 callbackUrl(같은 출처 앱 경로만) 또는 /board로 보낸다.
+// 로그인 화면(서버 컴포넌트)에서 인자 없이 `await auth()`로 세션을 읽으면 위 경고처럼 갱신된
+// 쿠키가 버려지므로, 같은 auth() 래퍼로 감싸 갱신된 쿠키를 리다이렉트·통과 응답 모두에 싣는다.
+// callbackUrl이 로그인 화면 자신이면 `/board`로 바꿔 자기 순환(`/login?callbackUrl=%2Flogin`)을 막는다.
+// 세션이 없거나 기사가 아니면(관리자 쿠키는 jwt callback이 지운다) 로그인 화면을 그대로 보인다.
+const loginGate = auth((request) => {
+  const session = request.auth;
+  // 토큰 오류 세션은 화면의 TokenErrorGuard가 로그아웃시키는 중이므로 보내지 않는다.
+  if (session?.user?.role === 'driver' && !session.user.tokenError) {
+    const target = resolveDriverReturnPath(request.nextUrl.searchParams.get('callbackUrl'));
+    return NextResponse.redirect(new URL(target, request.url));
+  }
+  return continueWithCsp(request);
+});
+
 type AuthGateContext = Parameters<typeof authGate>[1];
 
 export function proxy(request: NextRequest, event: NextFetchEvent) {
-  // 로그인 검사가 없는 경로에서는 세션을 읽거나 갱신하지 않는다.
-  if (!isAuthGatedPath(request.nextUrl.pathname)) return continueWithCsp(request);
+  const { pathname } = request.nextUrl;
   // auth()는 두 번째 인자를 위 콜백에 그대로 넘길 뿐 쓰지 않는다.
+  if (pathname === DRIVER_LOGIN_PATH) {
+    return loginGate(request, event as unknown as AuthGateContext);
+  }
+  // 로그인 검사가 없는 경로에서는 세션을 읽거나 갱신하지 않는다.
+  if (!isAuthGatedPath(pathname)) return continueWithCsp(request);
   return authGate(request, event as unknown as AuthGateContext);
 }
 
@@ -76,8 +107,9 @@ export const config = {
     '/board/:path*',
     '/map/:path*',
     '/profile/:path*',
-    // 그 밖의 페이지 문서에는 CSP nonce만 붙인다. API, Next 내부 경로, 확장자가 있는
-    // 정적 파일(sw.js·workbox-*.js·manifest.json·아이콘·글꼴 등)과 프리페치 요청은 제외한다.
+    // 그 밖의 페이지 문서에는 CSP nonce만 붙인다(/login은 위 loginGate가 기사 세션만 확인한다).
+    // API, Next 내부 경로, 확장자가 있는 정적 파일(sw.js·workbox-*.js·manifest.json·아이콘·글꼴 등)과
+    // 프리페치 요청은 제외한다.
     {
       source: '/((?!api/|_next/|.*\\.\\w+$).*)',
       missing: [

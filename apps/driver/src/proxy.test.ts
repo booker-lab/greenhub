@@ -3,7 +3,7 @@ import { type NextFetchEvent, NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const state = vi.hoisted(() => ({
-  session: null as null | { user: { role?: string } },
+  session: null as null | { user: { role?: string; tokenError?: boolean } },
   authPaths: [] as string[],
 }));
 
@@ -20,6 +20,7 @@ vi.mock('@/auth', () => ({
 vi.mock('@/lib/content-security-policy', () => import('./lib/content-security-policy'));
 vi.mock('@/app/login/login-notice', () => import('./app/login/login-notice'));
 vi.mock('@/lib/initial-session', () => import('./lib/initial-session'));
+vi.mock('@/lib/login-redirect', () => import('./lib/login-redirect'));
 
 const { config, proxy } = await import('./proxy');
 const { decodeInitialSession, encodeInitialSession, INITIAL_SESSION_HEADER } = await import(
@@ -50,13 +51,45 @@ beforeEach(() => {
 });
 
 describe('기사 proxy 로그인 검사', () => {
-  it('로그인하지 않은 사용자를 보호 경로에서 /login으로 보낸다', async () => {
-    for (const path of ['/board', '/board/order-1/photo', '/map', '/profile']) {
+  it('로그인하지 않은 사용자를 보호 경로에서 보던 경로(callbackUrl)를 실어 /login으로 보낸다', async () => {
+    const cases: Array<[string, string]> = [
+      // 기본 복귀 경로(/board)는 싣지 않는다.
+      ['/board', 'https://driver.example.test/login'],
+      [
+        '/board/order-1/photo',
+        'https://driver.example.test/login?callbackUrl=%2Fboard%2Forder-1%2Fphoto',
+      ],
+      [
+        '/board?tab=delivering',
+        'https://driver.example.test/login?callbackUrl=%2Fboard%3Ftab%3Ddelivering',
+      ],
+      ['/map', 'https://driver.example.test/login?callbackUrl=%2Fmap'],
+      ['/profile', 'https://driver.example.test/login?callbackUrl=%2Fprofile'],
+    ];
+    for (const [path, location] of cases) {
       const response = await run(path);
       expect(response.status).toBe(307);
-      expect(response.headers.get('location')).toBe('https://driver.example.test/login');
+      expect(response.headers.get('location')).toBe(location);
     }
-    expect(state.authPaths).toEqual(['/board', '/board/order-1/photo', '/map', '/profile']);
+    expect(state.authPaths).toEqual(['/board', '/board/order-1/photo', '/board', '/map', '/profile']);
+  });
+
+  it('세션 쿠키가 있었는데 세션이 없으면(폐기·만료) 로그인 만료 안내(reason=expired)를 붙인다', async () => {
+    for (const cookie of [
+      'authjs.session-token=stale',
+      '__Secure-authjs.session-token=stale',
+      '__Secure-authjs.session-token.0=a; __Secure-authjs.session-token.1=b',
+    ]) {
+      const response = await run('/board/order-1', { cookie });
+      expect(response.headers.get('location')).toBe(
+        'https://driver.example.test/login?reason=expired&callbackUrl=%2Fboard%2Forder-1',
+      );
+    }
+    // 세션과 무관한 쿠키만 있으면 처음 여는 것으로 본다.
+    const response = await run('/board/order-1', { cookie: 'authjs.csrf-token=x' });
+    expect(response.headers.get('location')).toBe(
+      'https://driver.example.test/login?callbackUrl=%2Fboard%2Forder-1',
+    );
   });
 
   it('남아 있는 관리자 세션은 로그인 안내로 보낸다', async () => {
@@ -78,12 +111,55 @@ describe('기사 proxy 로그인 검사', () => {
   });
 
   it('공개 경로는 세션을 읽지 않고 리다이렉트하지 않는다', async () => {
-    for (const path of ['/', '/login', '/boards']) {
+    for (const path of ['/', '/boards', '/login-help']) {
       const response = await run(path);
       expect(response.headers.get('location')).toBeNull();
       expect(response.headers.get('x-middleware-next')).toBe('1');
     }
     expect(state.authPaths).toEqual([]);
+  });
+});
+
+describe('기사 proxy 로그인 화면', () => {
+  it('세션이 없으면 auth() 래퍼로 세션만 확인하고 로그인 화면을 그대로 보인다', async () => {
+    const response = await run('/login?reason=expired&callbackUrl=%2Fmap');
+    expect(response.headers.get('location')).toBeNull();
+    expect(response.headers.get('x-middleware-next')).toBe('1');
+    // 세션 확인(토큰 갱신 포함)은 auth() 래퍼 안에서만 한다(갱신된 쿠키가 응답에 실린다).
+    expect(state.authPaths).toEqual(['/login']);
+  });
+
+  it('로그인한 기사는 허용된 callbackUrl, 아니면 /board로 보낸다', async () => {
+    state.session = { user: { role: 'driver' } };
+    const cases: Array<[string, string]> = [
+      ['/login', 'https://driver.example.test/board'],
+      ['/login?callbackUrl=%2Fboard%2Forder-1', 'https://driver.example.test/board/order-1'],
+      ['/login?callbackUrl=%2Fmap%3Fday%3Dtoday', 'https://driver.example.test/map?day=today'],
+      // 자기 순환·다른 출처·API 경로는 /board로 바꾼다.
+      ['/login?callbackUrl=%2Flogin', 'https://driver.example.test/board'],
+      ['/login?callbackUrl=%2Flogin%3FcallbackUrl%3D%252Flogin', 'https://driver.example.test/board'],
+      ['/login?callbackUrl=https%3A%2F%2Fevil.example', 'https://driver.example.test/board'],
+      ['/login?callbackUrl=%2F%2Fevil.example', 'https://driver.example.test/board'],
+      ['/login?callbackUrl=%2Fapi%2Fauth%2Fsignout', 'https://driver.example.test/board'],
+    ];
+    for (const [path, location] of cases) {
+      const response = await run(path);
+      expect(response.status).toBe(307);
+      expect(response.headers.get('location')).toBe(location);
+    }
+  });
+
+  it('기사가 아닌 세션이나 토큰 오류 세션은 로그인 화면에 머문다', async () => {
+    for (const session of [
+      { user: { role: 'admin' } },
+      { user: {} },
+      { user: { role: 'driver', tokenError: true } },
+    ]) {
+      state.session = session;
+      const response = await run('/login?error=AdminAccount');
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.headers.get('x-middleware-next')).toBe('1');
+    }
   });
 });
 
@@ -109,14 +185,21 @@ describe('기사 proxy 첫 화면 세션 전달', () => {
 
   it('공개 경로에서는 세션을 넘기지 않고 브라우저가 보낸 같은 이름의 헤더도 지운다', async () => {
     state.session = driverSession;
-    for (const path of ['/', '/login']) {
-      const response = await run(path, { [INITIAL_SESSION_HEADER]: forged });
-      expect(passedSession(response)).toBeNull();
-      expect(response.headers.get('x-middleware-override-headers')).not.toContain(
-        INITIAL_SESSION_HEADER,
-      );
-    }
+    const response = await run('/', { [INITIAL_SESSION_HEADER]: forged });
+    expect(passedSession(response)).toBeNull();
+    expect(response.headers.get('x-middleware-override-headers')).not.toContain(
+      INITIAL_SESSION_HEADER,
+    );
     expect(state.authPaths).toEqual([]);
+  });
+
+  it('로그인 화면을 보일 때도 세션을 넘기지 않고 브라우저가 보낸 같은 이름의 헤더를 지운다', async () => {
+    state.session = null;
+    const response = await run('/login', { [INITIAL_SESSION_HEADER]: forged });
+    expect(passedSession(response)).toBeNull();
+    expect(response.headers.get('x-middleware-override-headers')).not.toContain(
+      INITIAL_SESSION_HEADER,
+    );
   });
 
   it('로그인 안내로 보내는 경우에는 세션을 넘기지 않는다', async () => {
