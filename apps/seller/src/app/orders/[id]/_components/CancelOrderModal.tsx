@@ -55,7 +55,7 @@ export function CancelOrderModal({
               className={TEXT}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
-              취소 사유를 입력하세요. 소비자에게 알림톡으로 전달됩니다.
+              취소 사유를 적어 주세요. 손님에게 알림톡으로 전해져요.
             </p>
             {/* 환불 금액·되돌릴 수 없음은 확정 전에 꼭 읽어야 해서 사유 안내보다 진하게 쓴다. */}
             {note && (
