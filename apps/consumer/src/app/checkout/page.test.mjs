@@ -360,6 +360,12 @@ test('legacy checkout도 모바일 리다이렉트 복귀 URL과 남은 미결�
   const save = legacyCheckoutSource.indexOf('savePendingOrderPayment(');
   const sdkCall = legacyCheckoutSource.indexOf('PortOne.requestPayment(');
   assert.ok(save >= 0 && save < sdkCall);
+  // 결제창이 끝나면 이 시도가 저장한 기록만 지운다. 같은 탭 복귀 뒤 새 결제의 기록은 남긴다.
+  assert.match(
+    legacyCheckoutSource,
+    /clearOwnPendingOrderPayment\(browser\?\.storage \?\? null, pending\)/,
+  );
+  assert.doesNotMatch(legacyCheckoutSource, /savePendingOrderPayment\([^)]*, null\)/);
 });
 
 test('결제창 호출은 고른 결제수단으로 파라미터를 만들고 간편결제를 고정하지 않는다', () => {

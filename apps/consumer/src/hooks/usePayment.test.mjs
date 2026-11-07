@@ -789,3 +789,50 @@ test('결제사 화면에서 뒤로 와 페이지가 복원되면 결제 전 상
     browser.restore();
   }
 });
+
+test('같은 탭 복귀 뒤 새 결제의 복귀 기록은 늦게 끝난 이전 결제창이 지우지 않는다', async () => {
+  const browser = installEventWindow();
+  try {
+    let orderCount = 0;
+    globalThis.fetch = async () => {
+      orderCount += 1;
+      return jsonResponse({ ...successfulRoundResponse, orderId: `order-${orderCount}` });
+    };
+    let resolveFirstPayment;
+    let paymentCount = 0;
+    const loaded = loadHook({
+      onPayment: () => {
+        paymentCount += 1;
+        if (paymentCount === 1) {
+          // 결제사로 이동했다가 뒤로 와도 끝나지 않고 남는 이전 결제창.
+          return new Promise((resolve) => {
+            resolveFirstPayment = resolve;
+          });
+        }
+        // 새 결제는 모바일처럼 결제사로 이동해 이 화면에서는 끝나지 않는다.
+        return leaveForRedirect();
+      },
+    });
+    const result = mountRoundPayment(loaded);
+    for (const effect of loaded.effects) effect();
+
+    void result.requestPayment();
+    await settle();
+    browser.dispatch('pageshow', { persisted: true });
+
+    void result.requestPayment();
+    await settle();
+    assert.equal(loaded.paymentCalls.length, 2);
+    assert.equal(loaded.paymentCalls[1].paymentId, 'order-2');
+
+    // 이전 결제창이 늦게 끝나도 새 결제의 복귀 기록(재시도 경로·장바구니 정리)은 남는다.
+    resolveFirstPayment({ code: 'FAILURE_TYPE_PG', message: '취소' });
+    await settle();
+    const pending = takePendingOrderPayment(browser.sessionStorage, Date.now());
+    assert.equal(pending?.paymentId, 'order-2');
+    assert.deepEqual(pending.roundItemIds, ['round-item-1', 'round-item-2']);
+    assert.equal(pending.retryPath, '/checkout?from=cart');
+  } finally {
+    browser.restore();
+  }
+});

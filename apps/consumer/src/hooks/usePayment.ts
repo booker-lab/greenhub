@@ -8,6 +8,7 @@ import { paymentFailureMessage } from '@/lib/payment-failure-message';
 import { attachPaymentPageGuard } from '@/lib/payment-page-guard';
 import {
   buildPaymentRedirectUrl,
+  clearOwnPendingOrderPayment,
   createPendingOrderPayment,
   ORDER_PAYMENT_REDIRECT_PATH,
   readBrowserPaymentContext,
@@ -310,16 +311,14 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
       const redirectUrl = browser
         ? buildPaymentRedirectUrl(browser.origin, ORDER_PAYMENT_REDIRECT_PATH)
         : null;
-      savePendingOrderPayment(
-        browser?.storage ?? null,
-        createPendingOrderPayment({
-          paymentId: payment.paymentId,
-          roundItemIds: options.roundItems?.map((item) => item.roundItemId),
-          clearCheckoutCart: options.roundItems !== undefined,
-          retryPath: browser?.currentPath ?? null,
-          now: Date.now(),
-        }),
-      );
+      const pending = createPendingOrderPayment({
+        paymentId: payment.paymentId,
+        roundItemIds: options.roundItems?.map((item) => item.roundItemId),
+        clearCheckoutCart: options.roundItems !== undefined,
+        retryPath: browser?.currentPath ?? null,
+        now: Date.now(),
+      });
+      savePendingOrderPayment(browser?.storage ?? null, pending);
       let response: Awaited<ReturnType<typeof PortOne.requestPayment>>;
       try {
         response = await PortOne.requestPayment({
@@ -334,7 +333,8 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
         });
       } finally {
         // Promise로 결과를 받은 경우(PC·결제창 오류)에는 이 화면이 직접 처리하므로 복귀용 기록을 지운다.
-        savePendingOrderPayment(browser?.storage ?? null, null);
+        // 같은 탭 복귀 뒤 새 결제가 저장한 기록은 이 시도의 것이 아니므로 남긴다.
+        clearOwnPendingOrderPayment(browser?.storage ?? null, pending);
       }
       if (generation !== attemptGeneration.current) return;
 

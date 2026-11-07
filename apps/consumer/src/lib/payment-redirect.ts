@@ -318,6 +318,43 @@ export function savePendingOrderPayment(
   }
 }
 
+/**
+ * 저장소에 남은 복귀용 기록(raw)이 이번 결제 시도가 저장한 기록(owned)인지 판정한다.
+ * 결제 ID와 저장 시각이 모두 같을 때만 같은 시도로 본다. 같은 탭 복귀 뒤 새 결제가 새 기록을
+ * 저장했다면 늦게 끝난 이전 결제창의 정리가 새 기록을 지우지 않게 하려는 판단이다.
+ * 기록이 손상됐거나 이번 시도가 저장한 기록이 없으면 지우지 않는다.
+ */
+export function isOwnPendingOrderPayment(
+  raw: string | null,
+  owned: PendingOrderPayment | null,
+): boolean {
+  if (!raw || !owned) return false;
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+  return (
+    isRecord(value) && value.paymentId === owned.paymentId && value.createdAt === owned.createdAt
+  );
+}
+
+/** 이번 결제 시도가 저장한 복귀용 기록일 때만 지운다(다른 시도의 기록은 남긴다). */
+export function clearOwnPendingOrderPayment(
+  storage: PaymentStorage | null,
+  owned: PendingOrderPayment | null,
+): void {
+  if (!storage || !owned) return;
+  try {
+    if (isOwnPendingOrderPayment(storage.getItem(PENDING_ORDER_PAYMENT_STORAGE_KEY), owned)) {
+      storage.removeItem(PENDING_ORDER_PAYMENT_STORAGE_KEY);
+    }
+  } catch {
+    // 저장소가 막혀도 결제 결과 처리는 이어 간다. 남은 기록은 유효 시간이 지나면 쓰이지 않는다.
+  }
+}
+
 /** 저장된 기록을 한 번만 읽고 지운다. */
 export function takePendingOrderPayment(
   storage: PaymentStorage | null,

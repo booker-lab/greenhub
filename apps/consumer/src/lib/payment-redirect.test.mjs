@@ -14,7 +14,9 @@ const {
   PENDING_ORDER_PAYMENT_STORAGE_KEY,
   DEFAULT_PAYMENT_FAILURE_MESSAGE,
   buildPaymentRedirectUrl,
+  clearOwnPendingOrderPayment,
   createPendingOrderPayment,
+  isOwnPendingOrderPayment,
   parsePaymentRedirectResult,
   readPendingOrderPayment,
   redeliveryPaymentRedirectPath,
@@ -276,6 +278,67 @@ test('결제 전 기록은 sessionStorage에 저장하고 복귀 뒤 한 번만 
   assert.doesNotThrow(() => savePendingOrderPayment(blocked, pending));
   assert.equal(takePendingOrderPayment(blocked, NOW), null);
   assert.equal(takePendingOrderPayment(null, NOW), null);
+});
+
+test('결제 시도가 끝나면 그 시도가 저장한 복귀 기록만 지우고 새 시도의 기록은 남긴다', () => {
+  const storage = memoryStorage();
+  const previous = createPendingOrderPayment({
+    paymentId: 'order-1',
+    clearCheckoutCart: true,
+    retryPath: '/checkout?from=cart',
+    now: NOW,
+  });
+  const next = createPendingOrderPayment({
+    paymentId: 'order-2',
+    clearCheckoutCart: true,
+    retryPath: '/checkout?from=cart',
+    now: NOW + 1_000,
+  });
+
+  // 이번 시도가 저장한 기록이면 지운다.
+  savePendingOrderPayment(storage, previous);
+  assert.equal(
+    isOwnPendingOrderPayment(storage.getItem(PENDING_ORDER_PAYMENT_STORAGE_KEY), previous),
+    true,
+  );
+  clearOwnPendingOrderPayment(storage, previous);
+  assert.equal(storage.values.has(PENDING_ORDER_PAYMENT_STORAGE_KEY), false);
+
+  // 같은 탭 복귀 뒤 새 결제가 새 기록을 저장했으면 늦게 끝난 이전 시도는 지우지 않는다.
+  savePendingOrderPayment(storage, previous);
+  savePendingOrderPayment(storage, next);
+  clearOwnPendingOrderPayment(storage, previous);
+  assert.deepEqual(takePendingOrderPayment(storage, NOW + 2_000), next);
+
+  // 결제 ID가 같아도 저장 시각이 다르면 다른 시도의 기록이다.
+  const samePaymentLater = { ...previous, createdAt: NOW + 5_000 };
+  savePendingOrderPayment(storage, samePaymentLater);
+  clearOwnPendingOrderPayment(storage, previous);
+  assert.deepEqual(takePendingOrderPayment(storage, NOW + 6_000), samePaymentLater);
+
+  // 기록이 없거나 손상됐거나, 이번 시도가 저장한 기록이 없으면 지우지 않는다.
+  assert.equal(isOwnPendingOrderPayment(null, previous), false);
+  assert.equal(isOwnPendingOrderPayment('{', previous), false);
+  assert.equal(isOwnPendingOrderPayment('[]', previous), false);
+  assert.equal(isOwnPendingOrderPayment(JSON.stringify(previous), null), false);
+  savePendingOrderPayment(storage, next);
+  clearOwnPendingOrderPayment(storage, null);
+  assert.ok(storage.values.has(PENDING_ORDER_PAYMENT_STORAGE_KEY));
+
+  // 저장소가 막혀도 결제 결과 처리를 멈추지 않는다.
+  const blocked = {
+    getItem() {
+      throw new Error('blocked');
+    },
+    setItem() {
+      throw new Error('blocked');
+    },
+    removeItem() {
+      throw new Error('blocked');
+    },
+  };
+  assert.doesNotThrow(() => clearOwnPendingOrderPayment(blocked, previous));
+  assert.doesNotThrow(() => clearOwnPendingOrderPayment(null, previous));
 });
 
 test('재배송비 복귀는 서버 paid 확인 전까지 완료로 보지 않는다', () => {

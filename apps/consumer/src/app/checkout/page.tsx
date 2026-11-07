@@ -50,6 +50,7 @@ import { paymentFailureMessage } from '@/lib/payment-failure-message';
 import { attachPaymentPageGuard, type PaymentPagePhase } from '@/lib/payment-page-guard';
 import {
   buildPaymentRedirectUrl,
+  clearOwnPendingOrderPayment,
   createPendingOrderPayment,
   ORDER_PAYMENT_REDIRECT_PATH,
   readBrowserPaymentContext,
@@ -468,17 +469,15 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       lastOrderId = orderId;
 
       transition('paying');
-      savePendingOrderPayment(
-        browser?.storage ?? null,
-        createPendingOrderPayment({
-          paymentId: orderId,
-          clearCheckoutCart: true,
-          unpaidItemCount: cartItems.length - index - 1,
-          // 앞 상품이 이미 결제됐다면 같은 장바구니로 다시 결제하면 중복 주문이 되므로 첫 상품만 재시도 경로를 둔다.
-          retryPath: index === 0 ? (browser?.currentPath ?? null) : null,
-          now: Date.now(),
-        }),
-      );
+      const pending = createPendingOrderPayment({
+        paymentId: orderId,
+        clearCheckoutCart: true,
+        unpaidItemCount: cartItems.length - index - 1,
+        // 앞 상품이 이미 결제됐다면 같은 장바구니로 다시 결제하면 중복 주문이 되므로 첫 상품만 재시도 경로를 둔다.
+        retryPath: index === 0 ? (browser?.currentPath ?? null) : null,
+        now: Date.now(),
+      });
+      savePendingOrderPayment(browser?.storage ?? null, pending);
       let response: Awaited<ReturnType<typeof PortOne.requestPayment>>;
       try {
         response = await PortOne.requestPayment({
@@ -495,7 +494,8 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
           ...(redirectUrl ? { redirectUrl } : {}),
         });
       } finally {
-        savePendingOrderPayment(browser?.storage ?? null, null);
+        // 같은 탭 복귀 뒤 새 결제가 저장한 기록은 지우지 않고 이 시도가 저장한 기록만 지운다.
+        clearOwnPendingOrderPayment(browser?.storage ?? null, pending);
       }
       // 같은 탭 복귀로 상태를 되돌린 뒤 늦게 끝난 이전 결제창 결과는 무시한다.
       if (generation !== attemptGeneration.current) return;
