@@ -357,7 +357,7 @@ export function ProductsSection({
       {items.some((item) => marketSummaries[item.productId]) && (
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           경매 시세 {MARKET_PRICE_SOURCE}
         </p>
