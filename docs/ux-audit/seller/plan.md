@@ -57,12 +57,13 @@
 
 | 항목 | 분류 | 근거 |
 |---|---|---|
-| 같은 원인의 undefined 쓰기: 주소 수정, 내 정보 수정, 관리자 배너 저장 | `IMPLEMENTATION_GAP` 후보(셀러 범위 밖) | `apps/api/src/auth/auth.service.ts:400-401`, `:460`, `apps/api/src/admin/admin.service.ts:933-941` |
-| 셀러 `PENDING` 라벨 '대기' vs 관리자 '결제 대기' | 작은 정합 | `apps/seller/src/app/orders/_constants.ts` |
+| 같은 원인의 undefined 쓰기: 주소 수정, 내 정보 수정, 관리자 배너 저장 | **완료(G1)** — 공용 `common/firestore/firestore-data.ts`로 옮기고, 추가로 찾은 카카오 로그인 거절 기록·알림 설정·회차 주문 유입 정보까지 고쳤다 | 지점별 실제 SDK spec(수정 전 실패 확인) |
+| 셀러 `PENDING` 라벨 '대기' vs 관리자 '결제 대기' | **완료(G3)** — '결제 대기'로 통일, 셀러 주문 E2E 기대값 포함 | `apps/seller/src/app/orders/_constants.ts` |
 | `REVIEWED`를 셀러는 '구매 확정', 관리자는 '후기 작성'으로 표시 | `SEMANTIC_CONFLICT` — 사람 결정 | 두 화면의 상태 해석이 다르다 |
-| `useStoreSalesMode`가 조회 실패도 'legacy'로 돌려줘 S-05 경고를 단정할 수 없음 | 작은 개선 | `apps/seller/src/hooks/useStoreSalesMode.ts` |
+| `useStoreSalesMode`가 조회 실패도 'legacy'로 돌려줘 S-05 경고를 단정할 수 없음 | **완료(G2)** — 조회 상태 훅 추가, 실제 legacy는 단정 경고·조회 실패는 약한 안내 | `apps/seller/src/hooks/useStoreSalesMode.ts` |
 | 하위 화면 뒤로가기의 `history.length` 판정은 앱 밖 기록까지 센다 | 알려진 한계 | `apps/seller/src/components/PageHeader.tsx` |
-| 관리자 초대 화면은 `apiJson`을 거치지 않아 한국어 오류 변환이 적용되지 않음 | 작은 개선 | `apps/seller/src/hooks/useAdmin.invite.ts:76` |
+| 관리자 초대 화면은 `apiJson`을 거치지 않아 한국어 오류 변환이 적용되지 않음 | **완료(G3)** | `apps/seller/src/hooks/useAdmin.invite.ts` |
+| API 기존 서비스 파일에 `biome check --write`를 돌리면 safe fix `useImportType`이 Nest DI 생성자 import를 `import type`으로 바꾼다 | 도구 주의(사람 결정: api override로 끌지) | `biome.json` — 이번 작업에서는 API 서비스에 쓰기 모드를 쓰지 않았고 `main` 대비 `import type` 변경 0건 |
 
 ## 3. 사람 결정이 필요한 항목 (이번 작업에서 구현하지 않음)
 
