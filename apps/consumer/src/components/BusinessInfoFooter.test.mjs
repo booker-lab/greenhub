@@ -146,7 +146,7 @@ test('구매안전서비스 마크는 서버 컴포넌트에서 로컬 이미지
 
 const termsPagePath = join(testDirectory, '..', 'app', 'terms', 'page.tsx');
 
-test('교환·환불 안내 링크는 이용약관의 취소·환급 조로 바로 이동한다(UX 감사 C-25)', () => {
+test('취소·환불 안내 링크는 이용약관의 취소·환급 조로 바로 이동한다(UX 감사 C-25)', () => {
   const footerSource = loadComponentSource();
   const termsSource = readFileSync(termsPagePath, 'utf8');
 
@@ -155,8 +155,8 @@ test('교환·환불 안내 링크는 이용약관의 취소·환급 조로 바�
   const navEnd = footerSource.indexOf('</nav>', navStart);
   assert.ok(navStart >= 0 && navEnd > navStart, '법적 고지 nav가 있어야 한다');
   const navSource = footerSource.slice(navStart, navEnd);
-  const linkMatch = navSource.match(/<Link href="\/terms#([a-z-]+)"[^>]*>\s*교환·환불 안내\s*</);
-  assert.ok(linkMatch, '법적 고지 줄에 /terms#<앵커>로 가는 "교환·환불 안내" 링크가 있어야 한다');
+  const linkMatch = navSource.match(/<Link href="\/terms#([a-z-]+)"[^>]*>\s*취소·환불 안내\s*</);
+  assert.ok(linkMatch, '법적 고지 줄에 /terms#<앵커>로 가는 "취소·환불 안내" 링크가 있어야 한다');
   const anchor = linkMatch[1];
   assert.equal(anchor, 'refund');
 
