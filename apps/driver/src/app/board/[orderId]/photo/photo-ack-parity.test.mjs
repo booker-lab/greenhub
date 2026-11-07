@@ -169,3 +169,56 @@ test('완료 버튼은 세션(access token)이 준비되기 전까지 비활성�
   );
   assert.match(photoCaptureSource, /disabled=\{!captured \|\| uploading \|\| !sessionReady\}/);
 });
+
+// D-04: 완료 알림은 회차 직배송이 완료로 수렴했을 때(uploadRoundDirect가 true)만, 목록 이동 직전에 띄운다.
+test('완료 알림은 회차 직배송 완료 수렴 뒤에만 띄우고 불확실·실패 경로에서는 띄우지 않는다', () => {
+  const uploadSlice = photoCaptureSource.slice(
+    photoCaptureSource.indexOf('async function upload()'),
+  );
+  const gateAt = uploadSlice.indexOf(
+    'if (!(await uploadRoundDirect(token, blob, storeId))) return;',
+  );
+  const toastAt = uploadSlice.indexOf('toast.add({ description: deliveryCompletedMessage(');
+  const legacyAt = uploadSlice.indexOf('uploadLegacyHubPhoto(orderId');
+  const moveAt = uploadSlice.indexOf("router.replace('/board?tab=delivering')");
+  assert.ok(gateAt !== -1 && toastAt > gateAt, '알림은 완료 판정 뒤에 있어야 한다');
+  assert.ok(toastAt < legacyAt && toastAt < moveAt, '알림은 회차 분기 안, 목록 이동 전이어야 한다');
+  assert.equal((photoCaptureSource.match(/toast\.add\(/g) ?? []).length, 1);
+  // 실패 수렴·업로드 판단 구간에서는 알림을 띄우지 않는다.
+  assert.doesNotMatch(roundDirectSlice, /toast\.add\(/);
+});
+
+// D-21: 받는 형식(JPEG)은 그대로 두고 안내 문구만 할 일 중심으로 바꾼다.
+test('JPEG가 아닌 사진은 형식 이름 대신 카메라 촬영으로 다시 찍도록 안내한다', () => {
+  assert.match(
+    photoCaptureSource,
+    /이 사진 형식은 올릴 수 없어요\. '카메라 촬영'으로 새로 찍어 주세요\./,
+  );
+  assert.match(
+    photoCaptureSource,
+    /file\.type\s*!==\s*['"]image\/jpeg['"]\)\s*\{\s*setError\(NON_JPEG_PHOTO_MESSAGE\)/,
+  );
+  assert.doesNotMatch(photoCaptureSource, /JPEG 사진만 선택할 수 있습니다/);
+});
+
+// D-05: 주소 안내는 화면을 열 때 기사 주문 조회 응답에서 같은 주문일 때만 읽는다.
+test('촬영 화면 주소 안내는 기사 주문 조회 응답에서 같은 주문일 때만 읽는다', () => {
+  assert.match(photoCaptureSource, /readPhotoOrderSummary\(await response\.json\(\), orderId\)/);
+  assert.match(photoCaptureSource, /isRoundDirect && orderSummary && \(/);
+  // 업로드는 여전히 매번 판매자 ID를 조회 응답에서 확인한다.
+  assert.match(photoCaptureSource, /const storeId = await readOrderStoreId\(token\);/);
+});
+
+// D-06: 미리보기 상태 버튼은 세로로 쌓아 확정 버튼을 한 줄 전체 폭으로 둔다.
+test('미리보기 하단 버튼은 세로로 쌓고 확정 버튼은 전체 폭이다', () => {
+  const barAt = photoCaptureSource.indexOf('{(captured || isRoundDirect) && (');
+  assert.ok(barAt !== -1);
+  const bar = photoCaptureSource.slice(
+    barAt,
+    photoCaptureSource.indexOf('{error && captured', barAt),
+  );
+  assert.match(bar, /flexDirection: 'column'/);
+  assert.equal((bar.match(/\bfullWidth\b/g) ?? []).length, 2);
+  assert.doesNotMatch(bar, /flex-1/);
+  assert.match(bar, /'올리는 중…'/);
+});
