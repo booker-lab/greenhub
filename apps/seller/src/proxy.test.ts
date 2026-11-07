@@ -20,6 +20,7 @@ vi.mock('@/auth', () => ({
 vi.mock('@/lib/content-security-policy', () => import('./lib/content-security-policy'));
 vi.mock('@/lib/admin-landing', () => import('./lib/admin-landing'));
 vi.mock('@/lib/initial-session', () => import('./lib/initial-session'));
+vi.mock('@/lib/login-callback', () => import('./lib/login-callback'));
 
 const { config, proxy } = await import('./proxy');
 const { decodeInitialSession, encodeInitialSession, INITIAL_SESSION_HEADER } = await import(
@@ -50,11 +51,33 @@ beforeEach(() => {
 });
 
 describe('판매자 proxy 로그인 검사', () => {
-  it('로그인하지 않은 사용자를 보호 경로에서 /login으로 보낸다', async () => {
+  it('로그인하지 않은 사용자를 보호 경로에서 돌아갈 경로와 함께 /login으로 보낸다', async () => {
     const response = await run('/orders?status=paid');
     expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe('https://seller.example.test/login');
+    const location = new URL(response.headers.get('location') ?? '');
+    expect(location.origin).toBe('https://seller.example.test');
+    expect(location.pathname).toBe('/login');
+    expect(location.searchParams.get('callbackUrl')).toBe('/orders?status=paid');
     expect(state.authPaths).toEqual(['/orders']);
+  });
+
+  it('상세 경로·관리자 경로도 callbackUrl로 넘기고, 첫 화면은 넘기지 않는다', async () => {
+    expect((await run('/orders/abc')).headers.get('location')).toBe(
+      'https://seller.example.test/login?callbackUrl=%2Forders%2Fabc',
+    );
+    expect((await run('/admin/stores?page=2')).headers.get('location')).toBe(
+      'https://seller.example.test/login?callbackUrl=%2Fadmin%2Fstores%3Fpage%3D2',
+    );
+    expect((await run('/')).headers.get('location')).toBe('https://seller.example.test/login');
+  });
+
+  it('다른 사이트로 읽힐 수 있는 경로는 callbackUrl로 넘기지 않는다', async () => {
+    const response = await run('//evil.example/orders');
+    expect(response.status).toBe(307);
+    const location = new URL(response.headers.get('location') ?? '');
+    expect(location.origin).toBe('https://seller.example.test');
+    expect(location.pathname).toBe('/login');
+    expect(location.searchParams.get('callbackUrl')).toBeNull();
   });
 
   it('storeId 없는 판매자는 /onboarding으로, 순수 관리자의 /onboarding은 /admin/stores로 보낸다', async () => {
@@ -110,7 +133,9 @@ describe('판매자 proxy 로그인 검사', () => {
 
   it('초대 링크와 이름만 비슷한 경로는 그대로 로그인 검사를 한다', async () => {
     const response = await run('/invites');
-    expect(response.headers.get('location')).toBe('https://seller.example.test/login');
+    expect(response.headers.get('location')).toBe(
+      'https://seller.example.test/login?callbackUrl=%2Finvites',
+    );
     expect(state.authPaths).toEqual(['/invites']);
   });
 
