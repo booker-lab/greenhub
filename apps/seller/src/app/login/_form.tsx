@@ -16,9 +16,12 @@ const DIVIDER =
 export function LoginForm({
   showCredentials,
   callbackPath,
+  continueAfterLogin,
 }: {
   showCredentials: boolean;
   callbackPath: string | null;
+  /** 카카오 로그인에서 돌아왔을 때만 true — 열자마자 세션을 확인해 돌아갈 곳으로 보낸다. */
+  continueAfterLogin: boolean;
 }) {
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -26,9 +29,12 @@ export function LoginForm({
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // 이미 로그인한 상태(카카오 로그인에서 돌아온 경우 포함)면 역할을 확인해 돌아갈 곳으로 바로 보낸다.
-  // 세션 조회는 /api/auth/session(쿠키를 갱신할 수 있는 경로)으로 한다. 토큰 오류 세션은 TokenErrorGuard가 로그아웃시킨다.
+  // 카카오 로그인에서 돌아온 경우에만 역할을 확인해 돌아갈 곳으로 바로 보낸다.
+  // 로그아웃·계정 정지로 열린 로그인 화면에서는 세션을 조회하지 않는다. 그 요청이 지워지기 직전 쿠키를 싣고 가면
+  // 세션 확인 재사용 구간 안에서 세션 쿠키를 다시 써 로그아웃을 되돌린다(원격 회차 E2E run 42391155363).
+  // 토큰 오류 세션은 TokenErrorGuard가 로그아웃시킨다.
   useEffect(() => {
+    if (!continueAfterLogin) return;
     let cancelled = false;
     getSession()
       .then((session) => {
@@ -41,7 +47,7 @@ export function LoginForm({
     return () => {
       cancelled = true;
     };
-  }, [callbackPath, router]);
+  }, [callbackPath, continueAfterLogin, router]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
