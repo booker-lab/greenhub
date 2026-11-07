@@ -1,6 +1,7 @@
 import type { SaleRoundStatus } from '@greenhub/shared';
 
-// 회차 일정 문구. 모두 한국시간 기준이며, 자정(00:00)은 전날 "밤 12시"로 읽히게 표기한다.
+// 회차 일정 문구. 모두 한국시간 기준이며, 자정(00:00)과 0시대(00:01~00:59)는 전날 "밤 12시", "밤 12시 44분"으로
+// 읽히게 표기한다("오전 12시 44분"은 낮 12시와 헷갈리고, 같은 날짜에 "밤 12시"를 붙이면 하루 뒤 자정과 겹친다).
 const KST_PARTS = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Asia/Seoul',
   year: 'numeric',
@@ -29,27 +30,30 @@ function kstParts(date: Date) {
   };
 }
 
-/** 예: "11월 1일(일) 오전 10시", "11월 8일(일) 밤 12시". 잘못된 값이면 null. */
+/**
+ * 예: "11월 1일(일) 오전 10시", "11월 8일(일) 밤 12시"(11월 9일 00:00), "11월 8일(일) 밤 12시 44분"(11월 9일 00:44).
+ * 잘못된 값이면 null.
+ */
 export function formatRoundTime(value: string): string | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   const at = kstParts(date);
-  if (at.hour === 0 && at.minute === 0) {
+  const minute = at.minute > 0 ? ` ${at.minute}분` : '';
+  if (at.hour === 0) {
     const previous = kstParts(new Date(date.getTime() - DAY_MS));
-    return `${previous.month}월 ${previous.day}일(${previous.weekday}) 밤 12시`;
+    return `${previous.month}월 ${previous.day}일(${previous.weekday}) 밤 12시${minute}`;
   }
   const period = at.hour < 12 ? '오전' : '오후';
   const hour12 = at.hour % 12 === 0 ? 12 : at.hour % 12;
-  const minute = at.minute > 0 ? ` ${at.minute}분` : '';
   return `${at.month}월 ${at.day}일(${at.weekday}) ${period} ${hour12}시${minute}`;
 }
 
-/** 예: "12월 1일(화)". 자정은 전날로 읽는다(formatRoundTime과 같은 규칙). 잘못된 값이면 null. */
+/** 예: "12월 1일(화)". 자정·0시대는 전날로 읽는다(formatRoundTime과 같은 규칙). 잘못된 값이면 null. */
 export function formatRoundDay(value: string): string | null {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   const at = kstParts(date);
-  const day = at.hour === 0 && at.minute === 0 ? kstParts(new Date(date.getTime() - DAY_MS)) : at;
+  const day = at.hour === 0 ? kstParts(new Date(date.getTime() - DAY_MS)) : at;
   return `${day.month}월 ${day.day}일(${day.weekday})`;
 }
 
