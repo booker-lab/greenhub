@@ -29,6 +29,7 @@ __exportStar(require("./date.js"), exports);
 __exportStar(require("./group-buy.js"), exports);
 __exportStar(require("./features.js"), exports);
 __exportStar(require("./benchmark.types.js"), exports);
+__exportStar(require("./market-price.types.js"), exports);
 __exportStar(require("./api-base-url.js"), exports);
 __exportStar(require("./api-path.js"), exports);
 __exportStar(require("./auth-runtime.js"), exports);

@@ -75,6 +75,7 @@ export interface ProductPublic extends ProductExtras {
     groupConfig?: GroupConfigPublic;
 }
 import type { ProductExtras } from './benchmark.types.js';
+import type { ProductMarketRef } from './market-price.types.js';
 export interface Product extends ProductExtras {
     id: string;
     storeId: string;
@@ -99,6 +100,8 @@ export interface Product extends ProductExtras {
     sellerNote?: string;
     content?: GeneratedContent;
     sellerOverride?: boolean;
+    /** 따라 볼 경매 시세(판매자 전용, 공개 응답 allowlist에 없다). null이면 연결을 지운 것이다. */
+    marketRef?: ProductMarketRef | null;
     description?: string;
     colors?: ColorOption[];
 }

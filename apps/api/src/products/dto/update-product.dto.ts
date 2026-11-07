@@ -19,6 +19,7 @@ import {
   PRODUCT_MONEY_MAX,
   SelectionDto,
 } from './create-product.dto';
+import { ProductMarketRefDto } from '../../market-prices/dto/market-ref.dto';
 import { ProductExtrasDto } from './product-extras.dto';
 
 export class UpdateProductDto extends ProductExtrasDto {
@@ -80,4 +81,10 @@ export class UpdateProductDto extends ProductExtrasDto {
   @ValidateNested()
   @Type(() => GroupConfigDto)
   groupConfig?: GroupConfigDto;
+
+  /** 따라 볼 경매 시세(판매자 전용). null을 보내면 연결을 지운다. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => ProductMarketRefDto)
+  marketRef?: ProductMarketRefDto | null;
 }

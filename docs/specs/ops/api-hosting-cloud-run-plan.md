@@ -54,6 +54,7 @@
 | 세 앱 Vercel 운영 env `NEXT_PUBLIC_API_URL` | 운영 API 주소 | C7 |
 | PortOne 콘솔 웹훅 주소 | 운영 API 주소 | C7(사용자) |
 | ALIGO 허용 IP, `ALIGO_OUTBOUND_PROXY_URL`(Fixie) | 고정 송신 IP | C5·C8 |
+| aT 화훼유통정보 접속 IP(`34.64.250.181` 하나만 등록), Cloud Run의 `FLOWER_AUCTION_API_KEY` | 고정 송신 IP(경매 시세 수집, 전환 뒤 시작) | C5·C7 |
 | `apps/consumer/src/app/privacy/page.tsx` §4·§5, `docs/specs/legal/consumer-legal-documents.md` | 처리위탁·국외 처리(Railway, 미국 캘리포니아) | C7 |
 
 ## 목표 구성
