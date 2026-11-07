@@ -34,7 +34,7 @@ export function OrderSearchInput({ value, onChange, phoneSearching, phoneSearchE
           <p
             aria-live="polite"
             className={`${TEXT} mt-1`}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             전화번호로 찾는 중입니다…
           </p>

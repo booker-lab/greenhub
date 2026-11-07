@@ -436,7 +436,7 @@ function RoundDirectProductDetail({
             판매 회차를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
           </p>
           {saleRounds.error && (
-            <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-disabled)' }}>
+            <p className="m-0 text-center text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               {saleRounds.error}
             </p>
           )}
@@ -483,7 +483,7 @@ function RoundDirectProductDetail({
             {saleRounds.error && (
               <p
                 className="m-0 text-center text-sm"
-                style={{ color: 'var(--color-text-disabled)' }}
+                style={{ color: 'var(--color-text-secondary)' }}
               >
                 {saleRounds.error}
               </p>
@@ -531,7 +531,7 @@ function RoundDirectProductDetail({
               최신 회차 정보를 불러오지 못했습니다. 이전 결과를 표시합니다.
             </p>
             {saleRounds.error && (
-              <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-disabled)' }}>
+              <p className="m-0 mt-1 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 {saleRounds.error}
               </p>
             )}

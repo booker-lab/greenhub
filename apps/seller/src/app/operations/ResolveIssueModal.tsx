@@ -98,7 +98,7 @@ export function ResolveIssueModal({ issue, onClose, onConfirm }: ResolveIssueMod
               className={TEXT}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                color: 'var(--color-text-disabled)',
+                color: 'var(--color-text-secondary)',
                 textAlign: 'right',
               }}
             >

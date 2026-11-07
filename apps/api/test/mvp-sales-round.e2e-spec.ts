@@ -330,4 +330,73 @@ describe('회차 직배송 서버 전체 흐름 통합 계약', () => {
     });
     expect(fixture.portone.refund).toHaveBeenCalledTimes(1);
   });
+
+  it('웹훅 없이도 결제 완료 화면의 결제 확인이 PortOne PAID 주문을 한 번만 확정한다', async () => {
+    const { roundId, roundItemId } = await createOpenRound();
+    const created = await asUser(
+      request(app.getHttpServer()).post('/stores/store-1/orders'),
+      'consumer-1',
+      'consumer',
+    )
+      .send(orderInput(roundId, roundItemId, 'checkout-check-001'))
+      .expect(201);
+    const orderId = created.body.orderId as string;
+    const reservationId = created.body.reservationId as string;
+    const check = (userId: string, role: string) =>
+      asUser(request(app.getHttpServer()).post(`/payments/orders/${orderId}/check`), userId, role);
+
+    // 로그인 없음·다른 손님·관리자는 주문을 확인할 수 없다.
+    await request(app.getHttpServer()).post(`/payments/orders/${orderId}/check`).expect(401);
+    await check('consumer-2', 'consumer').expect(403);
+    await check('admin-1', 'admin').expect(403);
+    expect(fixture.portone.getPayment).not.toHaveBeenCalled();
+
+    // 결제창이 아직 진행 중이면 주문을 바꾸지 않는다(취소하지 않는다).
+    fixture.portone.getPayment.mockResolvedValueOnce({
+      status: 'READY',
+      amount: { total: 0 },
+      method: { type: 'CARD' },
+      transactionId: 'transaction-ready',
+    });
+    await check('consumer-1', 'consumer')
+      .expect(200)
+      .expect({ status: 'PENDING', result: 'not_paid' });
+    // 같은 주문을 곧바로 다시 확인하면 PortOne을 다시 조회하지 않는다.
+    await check('consumer-1', 'consumer')
+      .expect(200)
+      .expect({ status: 'PENDING', result: 'throttled' });
+    expect(fixture.portone.getPayment).toHaveBeenCalledTimes(1);
+    expect(fixture.read(`orders/${orderId}`)).toMatchObject({ status: 'PENDING' });
+    expect(fixture.read(`checkoutReservations/${reservationId}`)).toMatchObject({ status: 'HELD' });
+
+    // 간격이 지난 뒤 PortOne이 PAID라고 답하면 웹훅 없이 확정한다.
+    const order = fixture.records.get(`orders/${orderId}`) as Record<string, unknown>;
+    fixture.records.set(`orders/${orderId}`, {
+      ...order,
+      paymentCheckRequestedAtMs: Date.now() - 10_000,
+    });
+    await check('consumer-1', 'consumer')
+      .expect(200)
+      .expect({ status: 'ACCEPTED', result: 'finalized' });
+    const read = await asUser(
+      request(app.getHttpServer()).get(`/orders/${orderId}`),
+      'consumer-1',
+      'consumer',
+    ).expect(200);
+    expect(read.body.status).toBe('ACCEPTED');
+    expect(fixture.read(`checkoutReservations/${reservationId}`)).toMatchObject({
+      status: 'CONSUMED',
+      orderId,
+    });
+    expect(fixture.read(`payments/${orderId}`)).toMatchObject({ status: 'PAID' });
+
+    // 늦게 온 웹훅과 다시 누른 확인은 아무것도 다시 확정하지 않는다.
+    await paidWebhook(orderId, 'webhook-order-paid-after-check');
+    await check('consumer-1', 'consumer')
+      .expect(200)
+      .expect({ status: 'ACCEPTED', result: 'not_pending' });
+    expect(fixture.read(`orders/${orderId}`)).toMatchObject({ status: 'ACCEPTED' });
+    expect(fixture.notifications.sendToUser).toHaveBeenCalledTimes(1);
+    expect(fixture.portone.refund).not.toHaveBeenCalled();
+  });
 });

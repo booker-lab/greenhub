@@ -35,7 +35,7 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
         <StatusDot tone={STATUS_TONE[order.status]}>{STATUS_LABEL[order.status]}</StatusDot>
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
           {formatRelativeTime(order.createdAt)}
         </p>
@@ -69,7 +69,7 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
       </p>
       <p
         className={`${TEXT} mb-1.5`}
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
       >
         {DELIVERY_LABEL[order.deliveryMethod]}
         {order.requestedDeliveryDate && ` · ${order.requestedDeliveryDate}`}

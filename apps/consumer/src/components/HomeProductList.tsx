@@ -124,7 +124,7 @@ const ALERT_STACK = 'flex flex-col items-center justify-start gap-3 py-12';
 const CENTER_STACK = 'flex flex-col items-center justify-start gap-4';
 const DIVIDER = 'm-0 h-0 border-0 border-t border-solid border-ui-gray-3';
 const SECONDARY_COLOR = { color: 'var(--color-text-secondary)' } as const;
-const DISABLED_COLOR = { color: 'var(--color-text-disabled)' } as const;
+const DISABLED_COLOR = { color: 'var(--color-text-secondary)' } as const;
 
 function RoundItems({
   round,

@@ -88,7 +88,7 @@ export default async function ProfilePage() {
                 </p>
                 <p
                   className={text}
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
                 >
                   {user.email ?? ''}
                 </p>
@@ -101,7 +101,7 @@ export default async function ProfilePage() {
             <div className="flex flex-wrap items-center justify-between gap-4 p-4">
               <p
                 className={text}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
               >
                 연결된 계정
               </p>
@@ -124,13 +124,13 @@ export default async function ProfilePage() {
             <div className="flex flex-wrap items-center justify-between gap-4 p-4">
               <p
                 className={text}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
               >
                 앱 버전
               </p>
               <p
                 className={text}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
               >
                 1.0.0
               </p>

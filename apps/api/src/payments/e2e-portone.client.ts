@@ -6,8 +6,8 @@ import { PortoneError } from './portone.client';
 
 type E2EPaymentFixture = {
   amount: number;
-  status?: 'PAID' | 'PENDING' | 'FAILED' | 'CANCELLED';
-  lookupStatuses?: Array<'PAID' | 'PENDING' | 'FAILED' | 'CANCELLED'>;
+  status?: 'PAID' | 'READY' | 'PENDING' | 'FAILED' | 'CANCELLED';
+  lookupStatuses?: Array<'PAID' | 'READY' | 'PENDING' | 'FAILED' | 'CANCELLED'>;
   refundResult?: 'success' | 'failure';
 };
 

@@ -52,7 +52,7 @@ export function SettlementListItem({ settlement: s, showFee }: SettlementListIte
             </p>
             <p
               className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-disabled)' }}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               수수료 {toKRW(s.platformFee)}
             </p>

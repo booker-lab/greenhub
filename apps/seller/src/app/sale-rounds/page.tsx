@@ -177,7 +177,7 @@ function Metric({
           style={{
             marginTop: 5,
             fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-disabled)',
+            color: 'var(--color-text-secondary)',
           }}
         >
           결제 진행 중 {reserved.toLocaleString()} 추가 확보

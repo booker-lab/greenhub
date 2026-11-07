@@ -288,7 +288,10 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       : sessionStatus === 'unauthenticated'
         ? null
         : undefined;
-  const { order, loading, error, status, refetch } = useOrderStatus(orderId, accessToken);
+  // 결제 확인 중(PENDING) 주문은 결제 완료 화면처럼 서버에 결제 확인을 요청한다.
+  const { order, loading, error, status, refetch } = useOrderStatus(orderId, accessToken, {
+    checkPendingPayment: true,
+  });
   const [cancelOutcome, setCancelOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   const [reviewOutcome, setReviewOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   const [redeliveryOutcome, setRedeliveryOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
@@ -701,7 +704,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
   if (sessionStatus === 'loading' || (loading && !detail && status === 'loading')) {
     return (
       <div className="py-[60px] text-center">
-        <p className="m-0 text-base" style={{ color: 'var(--color-text-disabled)' }}>
+        <p className="m-0 text-base" style={{ color: 'var(--color-text-secondary)' }}>
           로딩 중...
         </p>
       </div>
@@ -770,7 +773,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     if (loading) {
       return (
         <div className="py-[60px] text-center">
-          <p className="m-0 text-base" style={{ color: 'var(--color-text-disabled)' }}>
+          <p className="m-0 text-base" style={{ color: 'var(--color-text-secondary)' }}>
             로딩 중...
           </p>
         </div>
@@ -877,7 +880,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           >
             주문 상세
           </h1>
-          <p className="m-0 text-sm" style={{ color: 'var(--color-text-disabled)' }}>
+          <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
             주문번호: {detail.orderNumber}
           </p>
         </div>
