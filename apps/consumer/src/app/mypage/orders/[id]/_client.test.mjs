@@ -313,6 +313,33 @@ test('해제된 배송 보류는 경고로 남기지 않고 결제 후 배송 �
   assert.ok(source.includes('{detail.deliveryHold && isDeliveryHoldActive(detail) && ('));
 });
 
+test('배송 보류 안내는 사유 코드별 고정 문구로 보이고 직접 적은 사유는 담당자 메모로 구분한다(C-28)', () => {
+  const detail = readOrderDetail(
+    {
+      ...activeOrder,
+      status: 'DELIVERY_HELD',
+      deliveryHold: {
+        heldAt: '2026-07-21T01:00:00.000Z',
+        reasonCode: 'ADDRESS_ISSUE',
+        reasonMessage: '동 호수 확인 필요',
+        customerResponsible: true,
+        redeliveryFee: 3000,
+        nextContactAt: null,
+        nextDeliveryAt: null,
+      },
+    },
+    activeOrder.id,
+  );
+  assert.equal(detail?.deliveryHold?.reasonCode, 'ADDRESS_ISSUE');
+  assert.ok(source.includes('title={deliveryHoldCopy?.title}'));
+  assert.ok(source.includes('reasonCode: detail.deliveryHold.reasonCode'));
+  assert.ok(source.includes('담당자 메모: {detail.deliveryHold.reasonMessage}'));
+  assert.ok(source.includes('{REDELIVERY_UNPAID_NOTICE}'));
+  // 내부 용어 '고객 책임: 해당/없음'과 '재배송비: n원' 줄은 고정 문구로 대신한다.
+  assert.ok(!source.includes('고객 책임:'));
+  assert.ok(!source.includes('재배송비: {'));
+});
+
 test('서버 redeliveryPayment 상태가 주문 상태와 독립적으로 결제 상태를 결정한다', () => {
   const hold = {
     heldAt: '2026-07-21T01:00:00.000Z',

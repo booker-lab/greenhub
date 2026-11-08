@@ -109,8 +109,8 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     await page.goto(`${BASE}/cart`);
 
     await expect(page.getByText(/이번 주 판매/)).toBeVisible();
-    // 서버 확인이 끝나면 상품마다 '서버 확인 완료 · 같은 회차 상품'도 떠서, 안내 문장 하나만 집어 확인한다.
-    await expect(page.getByText(/같은 회차 상품을 서버에서 확인해/)).toBeVisible();
+    // 결제 버튼에도 '한 번에 결제'가 있어 안내 문장 하나만 집어 확인한다(#826 C-19 고객 문구).
+    await expect(page.getByText('이번 회차 상품을 한 번에 결제해요.')).toBeVisible();
     await expect(page.getByText(/회차 가격/).first()).toBeVisible();
     // 안내 문장에도 '한 번에 결제'가 있어 서버 확인이 끝나면 버튼과 두 곳이 잡힌다. 결제 버튼으로 확인한다.
     await expect(page.getByRole('button', { name: /한 번에 결제/ })).toBeVisible();
@@ -183,8 +183,11 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
   }) => {
     await page.goto(`${BASE}/checkout?from=cart`);
 
-    await expect(page.getByText(/상품 정보가 변경/)).toBeVisible();
-    await expect(page.getByRole('checkbox', { name: /변경 내용을 확인/ })).not.toBeChecked();
+    // 결제 직전 확인 체크는 필수이고, 상품 정보가 바뀌면 체크가 풀린다고 안내한다(#826 C-03).
+    await expect(page.getByText(/정보가 바뀌면 체크가 풀려요/)).toBeVisible();
+    await expect(
+      page.getByRole('checkbox', { name: /주문 상품·수량·회차 가격을 확인했어요/ }),
+    ).not.toBeChecked();
     await expect(page.getByRole('button', { name: /결제하기/ })).toBeDisabled();
   });
 
@@ -199,7 +202,10 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
     await expect(page.getByRole('heading', { name: /주문 상세/ })).toBeVisible();
     await expect(page.getByText(/총 2개 상품/)).toBeVisible();
     await expect(page.getByRole('paragraph').filter({ hasText: /^배송 보류$/ })).toBeVisible();
-    await expect(page.getByText(/재배송비: 3,000원/)).toBeVisible();
+    // 보류 안내는 사유 코드별 고정 문구다(C-28, lib/order-delivery-hold-notice.ts). 시드는 출입 실패·고객 책임·3,000원.
+    await expect(page.getByText('출입이 어려워 배송하지 못했어요', { exact: true })).toBeVisible();
+    await expect(page.getByText('재배송비 3,000원을 결제하면 다시 배송해요.', { exact: true })).toBeVisible();
+    await expect(page.getByText('담당자 메모: 출입 정보 확인 필요', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '재배송비 결제 계속하기' })).toBeEnabled();
     await expect(page.getByRole('img', { name: /배송 완료 사진/ })).toHaveCount(0);
   });
@@ -226,7 +232,8 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
       `${BASE}/mypage/orders/${roundDirect.orderId('round-direct-order-accepted')}`,
     );
 
-    await expect(page.getByRole('paragraph').filter({ hasText: /^주문 접수$/ })).toBeVisible();
+    // 결제가 끝나 접수된 주문(ACCEPTED)의 상태 이름은 '결제 완료'다(#826 C-08, lib/order-status.ts).
+    await expect(page.getByRole('paragraph').filter({ hasText: /^결제 완료$/ })).toBeVisible();
     await expect(page.getByRole('button', { name: /주문 취소/ })).toBeVisible();
     await expect(page.getByText(/배송 보류/)).toHaveCount(0);
     await expect(page.getByRole('img', { name: /배송 완료 사진/ })).toHaveCount(0);
@@ -240,7 +247,7 @@ test.describe('Consumer 회차 직배송 인증 화면 계약', () => {
       `${BASE}/mypage/orders/${roundDirect.orderId('round-direct-order-cancelled-timeout')}`,
     );
 
-    await expect(page.getByText('주문이 취소되었습니다')).toBeVisible();
+    await expect(page.getByText('주문이 취소됐어요', { exact: true })).toBeVisible();
     await expect(page.getByText('사유: 결제 시간이 지나 주문이 자동으로 취소됐어요')).toBeVisible();
     await expect(page.getByText(/timeout/)).toHaveCount(0);
     await expect(page.getByRole('button', { name: /주문 취소/ })).toHaveCount(0);
