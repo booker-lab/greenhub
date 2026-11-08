@@ -25,6 +25,49 @@ export function isRedeliveryFeeWithinLimit(fee: number | null): boolean {
   return fee === null || (Number.isInteger(fee) && fee <= MAX_REDELIVERY_FEE_KRW);
 }
 
+/**
+ * "고객 책임"을 고르면 미리 채우는 재배송비 기준 금액(원). 2026-11-08 사용자 결정, 판매자 보류 창
+ * (apps/seller/src/app/orders/[id]/_components/DeliveryHoldModal.tsx)과 같은 값이다. 앱 간 import 없이
+ * 옮긴 값이므로 바꿀 때 함께 바꾼다. 기사가 칸에서 바꿀 수 있고 상한(MAX_REDELIVERY_FEE_KRW) 검사는 그대로다.
+ */
+export const DEFAULT_REDELIVERY_FEE_KRW = 10_000;
+
+/**
+ * "고객 책임" 체크를 바꿀 때 재배송비 칸의 다음 값(D-09).
+ * 체크하면 칸이 비어 있을 때(재배송비 없음으로 읽히는 값)만 기준 금액을 채우고, 이미 적은 금액은 두며,
+ * 체크를 풀면 비운다(고객 책임이 아니면 재배송비를 둘 수 없다).
+ */
+export function redeliveryFeeAfterResponsibilityChange(args: {
+  customerResponsible: boolean;
+  redeliveryFee: string | number;
+}): string | number {
+  if (!args.customerResponsible) return '';
+  return parseRedeliveryFee(args.redeliveryFee) === null
+    ? DEFAULT_REDELIVERY_FEE_KRW
+    : args.redeliveryFee;
+}
+
+export const HOLD_REASON_REQUIRED_MESSAGE = '보류 유형을 골라 주세요.';
+export const HOLD_MESSAGE_REQUIRED_MESSAGE = '손님에게 보일 사유를 입력해 주세요.';
+export const HOLD_WEATHER_DATE_REQUIRED_MESSAGE = '기상 악화는 새 배송 예정 시각을 입력해 주세요.';
+
+/**
+ * 저장 전 입력 검사(D-07). 유형은 기본 선택이 없으므로 먼저 고르게 한다.
+ * 맞으면 null, 아니면 고칠 방법을 담은 안내. 책임·재배송비 어긋남은 deliveryHoldResponsibilityFeeHint가 맡는다.
+ */
+export function deliveryHoldSubmitError(args: {
+  reasonCode: string | null;
+  reasonMessage: string;
+  nextDeliveryAt: string;
+}): string | null {
+  if (!args.reasonCode) return HOLD_REASON_REQUIRED_MESSAGE;
+  if (!args.reasonMessage.trim()) return HOLD_MESSAGE_REQUIRED_MESSAGE;
+  if (args.reasonCode === 'WEATHER' && !args.nextDeliveryAt) {
+    return HOLD_WEATHER_DATE_REQUIRED_MESSAGE;
+  }
+  return null;
+}
+
 export const HOLD_FEE_REQUIRED_HINT = '고객 책임이면 재배송비를 입력해 주세요.';
 export const HOLD_FEE_NOT_ALLOWED_HINT =
   '재배송비는 고객 책임일 때만 받을 수 있습니다. 고객 책임을 선택하거나 재배송비를 지워 주세요.';
@@ -32,7 +75,7 @@ export const HOLD_FEE_RANGE_HINT = `재배송비는 ${MAX_REDELIVERY_FEE_KRW.toL
 
 /** 책임·재배송비가 어긋나거나 재배송비가 상한 이하 정수가 아니면 고칠 방법을 담은 안내, 맞으면 null. */
 export function deliveryHoldResponsibilityFeeHint(args: {
-  reasonCode: string;
+  reasonCode: string | null;
   customerResponsible: boolean;
   redeliveryFee: string | number;
 }): string | null {

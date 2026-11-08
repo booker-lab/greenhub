@@ -11,6 +11,9 @@ export const metadata: Metadata = {
   description: 'Green Love 드라이버 배송 앱',
   manifest: '/manifest.json',
   icons: { icon: '/icons/icon-192x192.png' },
+  // iOS가 글 속 전화번호를 자동 링크로 바꾸면 주문 카드(링크) 안에 누르는 곳이 겹친다.
+  // 전화는 화면의 전화 버튼(tel 링크)으로만 건다.
+  formatDetection: { telephone: false },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',

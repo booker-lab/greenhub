@@ -41,6 +41,28 @@ export function isRedeliveryFeeWithinLimit(fee: number | null): boolean {
   return fee === null || (Number.isInteger(fee) && fee <= MAX_REDELIVERY_FEE_KRW);
 }
 
+/**
+ * 고객 책임을 고를 때 재배송비 칸에 미리 채우는 기준 금액(원).
+ * 2026-11-08 사용자 결정. 기사 앱 `apps/driver/src/app/board/_lib/delivery-hold-form.ts`와 같은 값,
+ * 앱 간 import 없이 옮긴 값이다. 판매자가 바꿀 수 있고, 고정 금액으로 받는 계약이 아니다.
+ */
+export const DEFAULT_REDELIVERY_FEE_KRW = 10_000;
+
+/**
+ * 고객 책임 체크가 바뀐 뒤의 재배송비 칸 값.
+ * 체크하면 재배송비가 없을 때(빈 칸·0원) 기준 금액으로 채우고, 이미 적은 금액은 그대로 둔다.
+ * 체크를 풀면 비운다(고객 책임이 아니면 재배송비를 둘 수 없다).
+ */
+export function redeliveryFeeAfterResponsibilityChange(args: {
+  customerResponsible: boolean;
+  redeliveryFee: string | number;
+}): string | number {
+  if (!args.customerResponsible) return '';
+  return parseRedeliveryFee(args.redeliveryFee) === null
+    ? DEFAULT_REDELIVERY_FEE_KRW
+    : args.redeliveryFee;
+}
+
 export const HOLD_FEE_REQUIRED_HINT = '고객 책임이면 재배송비를 입력해 주세요.';
 export const HOLD_FEE_NOT_ALLOWED_HINT =
   '재배송비는 고객 책임일 때만 받을 수 있습니다. 고객 책임을 선택하거나 재배송비를 지워 주세요.';

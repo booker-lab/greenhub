@@ -3,15 +3,20 @@ import { cn } from '@greenhub/ui/lib/utils';
 import Link from 'next/link';
 import { getRedeliveryPaymentPresentation } from '@/app/board/_lib/redelivery-payment';
 import { splitDeliveryAddress } from '@/lib/address-parts';
+import { formatDeliveryDayLabel } from '@/lib/delivery-day';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
 import { text } from './look';
 
 // 기사 ② 방향(design-direction.md §6 "한 손 배송 목록"): 틀은 흰 바탕·검정 글자이고 색은 문제 상태(빨강)에만 쓴다.
 // 배송 중 탭의 첫 배송지는 동·호수를 크게 쓴 "다음 배송지"(variant="next"), 나머지는 두 줄 행(variant="row")이다.
 
-type DriverListOrder = Order & {
+export type DriverListOrder = Order & {
   items?: DriverOrderItem[];
   deliveryAddress?: { address?: string } | null;
+  /** 요청한 기사 본인에게 배정된 주문인지. 이전 API 응답에는 없다. */
+  assignedToMe?: boolean;
+  /** 회차 주문의 회차 배송 시작 시각(ISO). 회차가 없는 주문에는 없다. */
+  deliveryDate?: string | null;
 };
 
 function formatTime(value?: string | null) {
@@ -59,6 +64,8 @@ export default function OrderCard({
       ? orderItemsLabel(order.productName, order.quantity)
       : null;
   const methodText = isHub ? '거점 픽업' : order.deliveryMethod === 'parcel' ? '택배' : null;
+  // 오늘(서울 날짜)이 아닌 회차 주문에만 배송일을 쓴다. 목록은 날짜와 관계없이 보이는 주문을 모두 보여 준다.
+  const deliveryDayText = formatDeliveryDayLabel(order.deliveryDate, new Date());
   const paymentLine = payment && (
     <p
       className={text}
@@ -84,7 +91,8 @@ export default function OrderCard({
       >
         <div className="flex flex-col gap-1">
           <p className={text} style={muted}>
-            다음 배송지{methodText ? ` · ${methodText}` : ''}
+            다음 배송지{deliveryDayText ? ` · ${deliveryDayText}` : ''}
+            {methodText ? ` · ${methodText}` : ''}
             {parts.detail ? ` · ${parts.base}` : ''}
           </p>
           <h2
@@ -160,6 +168,12 @@ export default function OrderCard({
           </span>
         )}
         {isHeld && ' · '}
+        {deliveryDayText && (
+          <span style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}>
+            {deliveryDayText} 배송
+          </span>
+        )}
+        {deliveryDayText && ' · '}
         {methodText && `${methodText} · `}
         {second}
       </p>

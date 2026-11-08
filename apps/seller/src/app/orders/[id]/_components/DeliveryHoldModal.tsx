@@ -20,6 +20,7 @@ import {
   deliveryHoldResponsibilityFeeHint,
   HOLD_REASON_LABEL,
   type HoldReason,
+  redeliveryFeeAfterResponsibilityChange,
 } from '../delivery-hold-form';
 
 interface DeliveryHoldModalProps {
@@ -233,6 +234,17 @@ export function DeliveryHoldModal({
     }
   }
 
+  // 고객 책임을 고르면 빈 재배송비 칸을 기준 금액으로 채우고, 풀면 비운다(판매자가 금액을 바꿀 수 있다).
+  function changeCustomerResponsible(checked: boolean) {
+    setCustomerResponsible(checked);
+    setRedeliveryFee((current) =>
+      redeliveryFeeAfterResponsibilityChange({
+        customerResponsible: checked,
+        redeliveryFee: current,
+      }),
+    );
+  }
+
   async function submit() {
     if (actionLoading) return;
     const result = buildDeliveryHoldPayload({
@@ -313,7 +325,7 @@ export function DeliveryHoldModal({
               label="고객 책임"
               checked={customerResponsible}
               disabled={isWeather}
-              onCheckedChange={setCustomerResponsible}
+              onCheckedChange={changeCustomerResponsible}
             />
             <Field>
               <FieldLabel htmlFor={feeId}>재배송비</FieldLabel>

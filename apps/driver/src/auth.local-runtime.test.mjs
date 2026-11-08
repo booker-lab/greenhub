@@ -207,14 +207,19 @@ describe('드라이버 local-runtime 인증 source-read 회귀 계약', () => {
     assert.match(loginSource, /showLocalCredentials\s*&&/);
   });
 
-  it('login 로컬 액션은 credentials → /board 계약을 유지한다', () => {
+  // 로그인 뒤 돌아갈 곳은 폼의 callbackUrl을 다시 검증한 값이고, 허용하지 않으면 /board다
+  // (resolveDriverReturnPath 동작은 lib/login-redirect.test.mjs가 확인한다).
+  it('login 로컬 액션은 credentials → 검증된 복귀 경로(기본 /board) 계약을 유지한다', () => {
     const action = extractBlock(
       loginSource,
       /function\s+localCredentialSignIn\s*\(/,
       'localCredentialSignIn',
     );
     assert.match(action, /signIn\s*\(\s*['"]credentials['"]/);
-    assert.match(action, /redirectTo\s*:\s*['"]\/board['"]/);
+    assert.match(
+      action,
+      /redirectTo\s*:\s*resolveDriverReturnPath\(formData\.get\(['"]callbackUrl['"]\)\)/,
+    );
   });
 
   it('Kakao Driver auth가 local 지원과 공존한다 (provider 등록 유지)', () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDeliveryHoldPayload,
+  DEFAULT_REDELIVERY_FEE_KRW,
   type DeliveryHoldFormValues,
   deliveryHoldResponsibilityFeeHint,
   HOLD_FEE_NOT_ALLOWED_HINT,
@@ -10,6 +11,7 @@ import {
   isRedeliveryFeeWithinLimit,
   MAX_REDELIVERY_FEE_KRW,
   parseRedeliveryFee,
+  redeliveryFeeAfterResponsibilityChange,
 } from './delivery-hold-form';
 
 const base: DeliveryHoldFormValues = {
@@ -87,6 +89,73 @@ describe('재배송비·책임 규칙(기사 앱·서버와 같음)', () => {
       'CUSTOMER_UNREACHABLE',
       'OTHER',
     ]);
+  });
+});
+
+describe('고객 책임 체크와 재배송비 기준 금액(2026-11-08 결정, 기사 앱과 같음)', () => {
+  it('기준 금액은 10,000원이고 상한 이하의 정수다', () => {
+    expect(DEFAULT_REDELIVERY_FEE_KRW).toBe(10_000);
+    expect(isRedeliveryFeeWithinLimit(DEFAULT_REDELIVERY_FEE_KRW)).toBe(true);
+  });
+
+  it('체크하면 빈 재배송비(빈 칸·0원)를 기준 금액으로 채운다', () => {
+    for (const redeliveryFee of ['', 0, '0']) {
+      expect(
+        redeliveryFeeAfterResponsibilityChange({ customerResponsible: true, redeliveryFee }),
+      ).toBe(DEFAULT_REDELIVERY_FEE_KRW);
+    }
+  });
+
+  it('체크할 때 이미 적은 금액은 그대로 둔다', () => {
+    expect(
+      redeliveryFeeAfterResponsibilityChange({ customerResponsible: true, redeliveryFee: 5000 }),
+    ).toBe(5000);
+    expect(
+      redeliveryFeeAfterResponsibilityChange({ customerResponsible: true, redeliveryFee: '7000' }),
+    ).toBe('7000');
+  });
+
+  it('체크를 풀면 재배송비를 비운다', () => {
+    for (const redeliveryFee of ['', DEFAULT_REDELIVERY_FEE_KRW, 3000, '60000']) {
+      expect(
+        redeliveryFeeAfterResponsibilityChange({ customerResponsible: false, redeliveryFee }),
+      ).toBe('');
+    }
+  });
+
+  it('채운 기준 금액은 책임·재배송비 규칙을 통과하고, 풀어 비운 칸도 어긋나지 않는다', () => {
+    const checkedFee = redeliveryFeeAfterResponsibilityChange({
+      customerResponsible: true,
+      redeliveryFee: '',
+    });
+    expect(
+      deliveryHoldResponsibilityFeeHint({
+        ...base,
+        customerResponsible: true,
+        redeliveryFee: checkedFee,
+      }),
+    ).toBeNull();
+    const uncheckedFee = redeliveryFeeAfterResponsibilityChange({
+      customerResponsible: false,
+      redeliveryFee: checkedFee,
+    });
+    expect(
+      deliveryHoldResponsibilityFeeHint({
+        ...base,
+        customerResponsible: false,
+        redeliveryFee: uncheckedFee,
+      }),
+    ).toBeNull();
+  });
+
+  it('기준 금액을 상한 넘게 바꾸면 상한 안내는 그대로 나온다', () => {
+    expect(
+      deliveryHoldResponsibilityFeeHint({
+        ...base,
+        customerResponsible: true,
+        redeliveryFee: MAX_REDELIVERY_FEE_KRW + 1,
+      }),
+    ).toBe(HOLD_FEE_RANGE_HINT);
   });
 });
 

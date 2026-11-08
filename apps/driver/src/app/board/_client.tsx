@@ -1,12 +1,11 @@
 'use client';
 
-import type { Order } from '@greenhub/shared';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
-import OrderCard from '@/components/OrderCard';
+import OrderCard, { type DriverListOrder } from '@/components/OrderCard';
 import { apiRead } from '@/lib/api';
 import {
   buildDriverListScope,
@@ -14,6 +13,7 @@ import {
   toDriverListReadError,
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
+import { groupPreparingOrders } from '@/lib/preparing-groups';
 
 /** 복귀 재조회 묶음 간격. focus·visibilitychange가 이 간격 안에 겹치면 목록을 한 번만 다시 조회한다. */
 const REVALIDATE_COALESCE_MS = 1_500;
@@ -24,8 +24,8 @@ export default function BoardClient() {
   const { data: session, status: sessionStatus } = useSession();
   const tab = searchParams.get('tab') ?? 'preparing';
 
-  const [preparing, setPreparing] = useState<Order[]>([]);
-  const [delivering, setDelivering] = useState<Order[]>([]);
+  const [preparing, setPreparing] = useState<DriverListOrder[]>([]);
+  const [delivering, setDelivering] = useState<DriverListOrder[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [authRequired, setAuthRequired] = useState(false);
@@ -122,7 +122,7 @@ export default function BoardClient() {
         if (!response.ok) throw toDriverListReadError(response.status);
         const payload: unknown = await response.json();
         if (!Array.isArray(payload)) throw new Error('driver orders response is not a list');
-        return payload as Order[];
+        return payload as DriverListOrder[];
       })
       .then((orders) => {
         if (!isCurrent()) return;
@@ -173,19 +173,14 @@ export default function BoardClient() {
   }, [session?.user.id, session?.user.role, session?.user.accessToken, sessionStatus, reloadKey]);
 
   const orders = tab === 'preparing' ? preparing : delivering;
-  // 서버(UTC)와 휴대폰이 같은 날짜를 그리도록 한국 시간으로 고정한다(오전 9시 전 하루 밀림 방지).
-  const today = new Date().toLocaleDateString('ko-KR', {
-    month: 'long',
-    day: 'numeric',
-    weekday: 'short',
-    timeZone: 'Asia/Seoul',
-  });
   const retry = () => setReloadKey((key) => key + 1);
   const showProgress = hasSuccessfulRead && !authRequired;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
-      {/* 머리: 로고 + 오늘 배송 한 줄, 배송지 점 띠와 진행 한 줄, 탭(design-direction.md §6). 틀은 흰 바탕·검정 글자다. */}
+      {/* 머리: 로고 + 제목 한 줄, 배송지 점 띠와 진행 한 줄, 탭(design-direction.md §6). 틀은 흰 바탕·검정 글자다.
+          목록은 날짜·회차와 관계없이 기사에게 보이는 주문을 모두 보여 주므로 제목에 오늘 날짜를 쓰지 않고,
+          오늘이 아닌 회차 주문은 행에 배송일을 쓴다(OrderCard). */}
       <header
         style={{
           position: 'sticky',
@@ -217,7 +212,7 @@ export default function BoardClient() {
               lineHeight: 1.4,
             }}
           >
-            오늘 배송 · {today}
+            배송 목록
           </h1>
         </div>
         {showProgress && <DeliveryProgress preparing={preparing} delivering={delivering} />}
@@ -257,13 +252,10 @@ export default function BoardClient() {
         {loading ? (
           <BoardMessage>주문을 불러오는 중입니다</BoardMessage>
         ) : authRequired ? (
-          <BoardMessage tone="danger" message="로그인이 필요합니다. 세션을 다시 확인해 주세요.">
-            {/* 인증 오류는 같은 토큰으로 재조회해도 반복되므로 세션을 정리하고 로그인으로 보낸다. */}
+          <BoardMessage tone="danger" message="로그인이 끝났어요. 다시 로그인해 주세요.">
+            {/* 인증 오류는 같은 토큰으로 재조회해도 반복되므로 재조회 버튼 없이 세션을 정리하고 로그인으로 보낸다. */}
             <AppButton onClick={() => void signOut({ redirectTo: '/login' })}>
               다시 로그인
-            </AppButton>
-            <AppButton tone="brand-outline" onClick={retry}>
-              다시 시도
             </AppButton>
           </BoardMessage>
         ) : error && !hasSuccessfulRead ? (
@@ -320,8 +312,8 @@ export default function BoardClient() {
           <div className="flex h-48 flex-col items-center justify-center gap-2.5">
             <p className={text} style={messageStyle}>
               {tab === 'preparing'
-                ? '오늘 수거할 주문이 없습니다'
-                : '현재 배송 중인 주문이 없습니다'}
+                ? '수거할 주문이 없어요'
+                : '배송 중인 주문이 없어요'}
             </p>
             {tab === 'preparing' && (
               <button
@@ -404,18 +396,83 @@ function BoardMessage({
 /** 첫 화면에 보이는 행 수. 넘치면 "남은 n곳 더 보기"로 남은 수를 밝힌다(design-direction.md §6). */
 const FIRST_SCREEN_ROWS = 5;
 
-function OrderList({ orders, tab }: { orders: Order[]; tab: string }) {
-  const [expanded, setExpanded] = useState(false);
+function OrderList({ orders, tab }: { orders: DriverListOrder[]; tab: string }) {
+  // 수거 대기 탭은 내게 배정된 주문과 아직 아무도 맡지 않은 주문을 나눠 보인다.
+  // 배정 여부가 없는 이전 API 응답이면 groupPreparingOrders가 null을 돌려 예전처럼 한 묶음이다.
+  const groups = tab === 'preparing' ? groupPreparingOrders(orders) : null;
+  if (groups) {
+    return (
+      <>
+        {groups.mine.length > 0 && <OrderGroup title="내 수거" orders={groups.mine} tab={tab} />}
+        {groups.available.length > 0 && (
+          <OrderGroup
+            title="맡을 수 있는 주문"
+            hint="주문을 열어 배송을 시작하면 내 주문이 돼요."
+            orders={groups.available}
+            tab={tab}
+          />
+        )}
+      </>
+    );
+  }
+
   // 배송 중 탭에서는 보류가 아닌 첫 배송지를 "다음 배송지"로 크게 보인다. 순서는 목록 응답 순서다.
   const next =
     tab === 'delivering' ? orders.find((order) => order.status === 'DELIVERING') : undefined;
   const rest = next ? orders.filter((order) => order !== next) : orders;
-  const visible = expanded ? rest : rest.slice(0, FIRST_SCREEN_ROWS);
-  const hidden = rest.length - visible.length;
 
   return (
     <>
       {next && <OrderCard order={next} tab={tab} variant="next" />}
+      <OrderRows orders={rest} tab={tab} />
+    </>
+  );
+}
+
+function OrderGroup({
+  title,
+  hint,
+  orders,
+  tab,
+}: {
+  title: string;
+  hint?: string;
+  orders: DriverListOrder[];
+  tab: string;
+}) {
+  return (
+    <section className="flex flex-col gap-1" aria-label={title}>
+      <h2
+        className="m-0"
+        style={{
+          fontSize: 'var(--font-size-md)',
+          fontWeight: 'var(--fw-bold)',
+          color: 'var(--color-text)',
+          lineHeight: 1.4,
+        }}
+      >
+        {title}
+        <span className="ml-1.5" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {orders.length}
+        </span>
+      </h2>
+      {hint && (
+        <p className={text} style={messageStyle}>
+          {hint}
+        </p>
+      )}
+      <OrderRows orders={orders} tab={tab} />
+    </section>
+  );
+}
+
+function OrderRows({ orders, tab }: { orders: DriverListOrder[]; tab: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? orders : orders.slice(0, FIRST_SCREEN_ROWS);
+  const hidden = orders.length - visible.length;
+
+  return (
+    <>
       {visible.length > 0 && (
         <ul className="m-0 list-none p-0">
           {visible.map((order, index) => (
@@ -448,9 +505,17 @@ function OrderList({ orders, tab }: { orders: Order[]; tab: string }) {
  * 배송지 점 띠와 진행 한 줄. 목록 API가 주는 값(배송 중·보류·수거 대기 주문)만으로 그린다.
  * 끝낸 배송 수·도착 예상 시간은 기사 목록 응답에 없어 쓰지 않는다(design-direction.md §3.5).
  */
-function DeliveryProgress({ preparing, delivering }: { preparing: Order[]; delivering: Order[] }) {
+function DeliveryProgress({
+  preparing,
+  delivering,
+}: {
+  preparing: DriverListOrder[];
+  delivering: DriverListOrder[];
+}) {
   const held = delivering.filter((order) => order.status === 'DELIVERY_HELD').length;
   const toDeliver = delivering.length - held;
+  // 배정 여부를 알면 수거는 내 주문만 세고, 아무도 맡지 않은 주문은 따로 센다.
+  const preparingGroups = groupPreparingOrders(preparing);
   return (
     <div className="mt-2 flex flex-col gap-1.5">
       {preparing.length + delivering.length > 0 && (
@@ -491,7 +556,12 @@ function DeliveryProgress({ preparing, delivering }: { preparing: Order[]; deliv
             </span>
           </>
         )}
-        {' · '}수거 {preparing.length}곳
+        {' · '}수거 {preparingGroups ? preparingGroups.mine.length : preparing.length}곳
+        {preparingGroups && preparingGroups.available.length > 0 && (
+          <>
+            {' · '}맡을 수 있는 {preparingGroups.available.length}곳
+          </>
+        )}
       </p>
     </div>
   );

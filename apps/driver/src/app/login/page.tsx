@@ -3,24 +3,40 @@ import { signIn } from '@/auth';
 import { AppButton } from '@/components/app-button';
 import { PasswordField, TextField } from '@/components/fields';
 import { text } from '@/components/look';
+import { safeDriverReturnPath, resolveDriverReturnPath } from '@/lib/login-redirect';
+import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
 import { resolveDriverLoginNotice } from './login-notice';
 
+// 로그인 뒤 돌아갈 곳(redirectTo)은 폼이 넘긴 callbackUrl을 다시 검증해 정한다. 허용하지 않으면 /board.
 async function localCredentialSignIn(formData: FormData) {
   'use server';
   await signIn('credentials', {
     email: formData.get('email'),
     password: formData.get('password'),
-    redirectTo: '/board',
+    redirectTo: resolveDriverReturnPath(formData.get('callbackUrl')),
   });
 }
+
+async function kakaoSignIn(formData: FormData) {
+  'use server';
+  await signIn('kakao', { redirectTo: resolveDriverReturnPath(formData.get('callbackUrl')) });
+}
+
+type SearchParamValue = string | string[] | undefined;
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pending?: string | string[]; error?: string | string[] }>;
+  searchParams: Promise<{
+    error?: SearchParamValue;
+    reason?: SearchParamValue;
+    callbackUrl?: SearchParamValue;
+  }>;
 }) {
-  const { pending, error } = await searchParams;
-  const notice = resolveDriverLoginNotice({ pending, error });
+  const { error, reason, callbackUrl } = await searchParams;
+  // 세션이 끝나 돌아온 경우 보던 화면 경로(같은 출처 앱 경로만). 없으면 로그인 뒤 /board로 간다.
+  const returnPath = safeDriverReturnPath(callbackUrl);
+  const notice = resolveDriverLoginNotice({ error, reason, hasReturnPath: returnPath !== null });
   // Local pilot runtime에서만 승인된 드라이버의 Credentials 진입을 노출한다.
   // 운영/Preview에서는 카카오 로그인만 사용한다.
   const showLocalCredentials =
@@ -69,7 +85,7 @@ export default async function LoginPage({
             </p>
           </div>
 
-          {/* 승인 대기·로그인 거절·관리자 계정·로그인 실패 안내 */}
+          {/* 승인 대기·다른 역할·관리자 계정·로그인 실패·로그인 만료 안내 */}
           {notice && (
             // ① 외형 유지: Mantine Alert(light, radius md). 빨강은 Mantine red light, 노랑은 theme.ts의 경고 토큰이다.
             <div
@@ -90,17 +106,26 @@ export default async function LoginPage({
                 <p className={text} style={{ fontSize: 'var(--font-size-sm)' }}>
                   {notice.body}
                 </p>
+                {notice.showOpsContact && (
+                  <p className={`${text} mt-2`} style={{ fontSize: 'var(--font-size-sm)' }}>
+                    {DRIVER_OPS_CONTACT.label}{' '}
+                    <a
+                      href={DRIVER_OPS_CONTACT.phoneHref}
+                      className="font-bold underline underline-offset-2"
+                    >
+                      {DRIVER_OPS_CONTACT.phone}
+                    </a>
+                    <br />
+                    운영 시간 {DRIVER_OPS_CONTACT.hours}
+                  </p>
+                )}
               </div>
             </div>
           )}
 
           {/* 카카오 로그인 */}
-          <form
-            action={async () => {
-              'use server';
-              await signIn('kakao', { redirectTo: '/board' });
-            }}
-          >
+          <form action={kakaoSignIn}>
+            {returnPath && <input type="hidden" name="callbackUrl" value={returnPath} />}
             <AppButton
               type="submit"
               fullWidth
@@ -127,6 +152,7 @@ export default async function LoginPage({
           {/* 로컬 파일럿 전용: 승인된 드라이버 Credentials 진입 */}
           {showLocalCredentials && (
             <form action={localCredentialSignIn}>
+              {returnPath && <input type="hidden" name="callbackUrl" value={returnPath} />}
               <div className="mt-4 flex flex-col gap-3">
                 {/* ① 외형 유지: Mantine Divider(label 가운데) */}
                 <div className="flex items-center text-xs/[1.55] whitespace-nowrap text-ui-gray-6 before:me-2.5 before:h-px before:flex-1 before:border-t before:border-ui-gray-3 before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-ui-gray-3 after:content-['']">

@@ -333,3 +333,183 @@ export function isDriverHoldEntryVisible(args: {
 }): boolean {
   return args.isRoundDirect && args.status === 'DELIVERING';
 }
+
+/**
+ * 주문 없음(NOT_FOUND) 화면 안내(D-17). 기사 상세 GET은 본인 배정이거나 아직 아무도 맡지 않은
+ * 진행 중 주문만 보이므로, 404는 대개 다른 기사가 맡았거나 완료·취소된 주문이다.
+ */
+export const DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE = '다른 기사가 맡았거나 이미 끝난 주문이에요.';
+
+/** 상세에서 목록으로 돌아갈 때 주문 상태에 맞는 탭. 배송 중·보류는 배송 중 탭, 그 밖은 기본(수거 대기) 탭이다. */
+export function driverDetailListHref(status: string | null | undefined): string {
+  return status === 'DELIVERING' || status === 'DELIVERY_HELD' ? '/board?tab=delivering' : '/board';
+}
+
+/**
+ * 상세 뒤로가기 판정 입력. 소비자 앱 `lib/nav-back.ts`·판매자 앱 `components/inAppNavigation.ts`와 같은 근거를 쓴다.
+ * - canGoBack: Navigation API `navigation.canGoBack`(바로 앞 기록이 같은 출처인지). 지원하지 않으면 undefined.
+ * - historyLength: `history.length`(같은 탭에서 앞서 본 다른 사이트도 센다).
+ * - referrer·origin: 처음 연 문서가 같은 출처에서 왔는지.
+ * - onLandingPage: 이 문서를 처음 연 경로에 아직 머물러 있는지(앱 안 이동을 아직 하지 않았는지).
+ */
+export interface DriverDetailBackContext {
+  canGoBack?: boolean;
+  historyLength: number;
+  referrer: string;
+  origin: string;
+  onLandingPage: boolean;
+}
+
+function isSameOriginReferrer(referrer: string, origin: string): boolean {
+  if (!referrer) return false;
+  try {
+    return new URL(referrer).origin === origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 뒤로가기를 브라우저 기록(back)으로 할지, 목록으로 바꿔 보낼지(list) 정한다(D-16).
+ * 알림·메신저 링크로 상세를 처음 열면 앱 안 이전 기록이 없어 router.back()이 앱 밖(빈 화면)으로 나가거나
+ * 아무 반응이 없다. 확실하지 않으면 앱 밖으로 나가지 않는 쪽(list)으로 닫는다.
+ *
+ * 알려진 한계:
+ * - Navigation API가 없는 브라우저(iOS Safari 일부 등)는 history.length·referrer로 추정한다.
+ *   history.length는 같은 탭에서 앞서 본 다른 사이트와 앞으로 가기 기록도 센다.
+ * - referrer는 Referrer-Policy·홈 화면 바로가기 실행에서 비어 있을 수 있다. 처음 연 화면에서 비어 있으면 list로 보낸다.
+ * - 앱 안에서 다른 화면을 들렀다가 처음 연 상세 경로로 돌아오면(예: 상세 → 사진 → 뒤로) 처음 연 화면으로 보고
+ *   referrer로 판정한다. 이때 list로 가도 앱 안에 머문다.
+ */
+export function resolveDriverDetailBackAction(context: DriverDetailBackContext): 'back' | 'list' {
+  if (typeof context.canGoBack === 'boolean') return context.canGoBack ? 'back' : 'list';
+  if (context.historyLength <= 1) return 'list';
+  // document.referrer는 앱 안 이동으로 바뀌지 않으므로 처음 연 화면일 때만 본다.
+  if (context.onLandingPage && !isSameOriginReferrer(context.referrer, context.origin)) {
+    return 'list';
+  }
+  return 'back';
+}
+
+type DriverDetailBackBrowser = {
+  history: { length: number };
+  location: { origin: string; pathname: string };
+  document: { referrer: string };
+  navigation?: { canGoBack?: unknown };
+  performance?: { getEntriesByType?: (type: string) => ArrayLike<{ name: string }> };
+};
+
+/** 브라우저 값을 읽어 판정 입력을 만든다. 처음 연 경로를 읽지 못하면 처음 연 화면으로 본다(앱 밖으로 나가지 않는 쪽). */
+export function readDriverDetailBackContext(win: DriverDetailBackBrowser): DriverDetailBackContext {
+  const canGoBack = win.navigation?.canGoBack;
+  let onLandingPage = true;
+  try {
+    const entry = win.performance?.getEntriesByType?.('navigation')?.[0];
+    if (entry) onLandingPage = new URL(entry.name).pathname === win.location.pathname;
+  } catch {
+    onLandingPage = true;
+  }
+  return {
+    canGoBack: typeof canGoBack === 'boolean' ? canGoBack : undefined,
+    historyLength: win.history.length,
+    referrer: win.document.referrer,
+    origin: win.location.origin,
+    onLandingPage,
+  };
+}
+
+/** 상품 수: 상품 목록 수량 합계, 목록이 없거나 어긋나면 주문 전체 수량. 둘 다 없으면 null(지어내지 않는다). */
+export function driverOrderItemCount(
+  items: unknown,
+  quantity: number | null | undefined,
+): number | null {
+  if (Array.isArray(items) && items.length > 0) {
+    const quantities = items.map((item) => (item as { quantity?: unknown } | null)?.quantity);
+    if (quantities.every((value) => typeof value === 'number' && Number.isInteger(value) && value > 0)) {
+      return (quantities as number[]).reduce((sum, value) => sum + value, 0);
+    }
+  }
+  return typeof quantity === 'number' && Number.isInteger(quantity) && quantity > 0
+    ? quantity
+    : null;
+}
+
+/** 확인 창을 거치는 상태 변경. START: 수거 대기 → 배송 중, RESUME: 배송 보류 → 배송 중. */
+export type DriverStatusConfirmKind = 'START' | 'RESUME';
+
+const CONFIRM_FROM_STATUS: Record<DriverStatusConfirmKind, string> = {
+  START: 'PREPARING',
+  RESUME: 'DELIVERY_HELD',
+};
+
+/**
+ * 확인 창이 아직 유효한가. 창을 연 사이 조회로 주문 상태가 바뀌면(다른 기기·판매자 처리 등)
+ * 그 창의 확인으로 요청을 보내지 않도록 창을 닫는다. 실제 허용 판정은 여전히 서버가 한다.
+ */
+export function isDriverStatusConfirmCurrent(
+  kind: DriverStatusConfirmKind | null,
+  status: string | null | undefined,
+): boolean {
+  return kind !== null && status === CONFIRM_FROM_STATUS[kind];
+}
+
+export interface DriverStatusConfirmContent {
+  title: string;
+  /** 동·호수(나눌 수 없으면 전체 주소, 거점은 거점 이름). */
+  place: string;
+  /** 동·호수 위에 작게 쓰는 기본 주소. 나눌 수 없으면 null. */
+  placeBase: string | null;
+  /** "상품 총 N개". 수량을 모르면 null. */
+  itemsLine: string | null;
+  /** 손님에게 가는 알림. */
+  notice: string;
+  /** 처음 맡는 주문의 배정 안내. 이미 내 주문이면 null. */
+  assignment: string | null;
+  confirmLabel: string;
+}
+
+/**
+ * 배송 시작·재개 확인 창 문구(D-02). 이 전환은 손님 알림을 보내고(PREPARING → DELIVERING: 배송 시작,
+ * DELIVERY_HELD → DELIVERING: 재배송 일정, apps/api/src/orders/orders.helpers.ts NOTIFICATION_MAP)
+ * 기사 화면에서 되돌릴 수 없으므로 확인을 받는다.
+ *
+ * 배정 안내: 미배정 주문은 배송 시작 때 요청한 기사에게 배정된다. 상세 응답에 배정 여부(`assignedToMe`)가
+ * 없으면 단정하지 않고 중립 표현을 쓴다. 보류 주문은 본인 배정 주문만 보이므로 재개에는 배정 안내가 없다.
+ */
+export function buildDriverStatusConfirmContent(args: {
+  kind: DriverStatusConfirmKind;
+  address: { base: string; detail: string | null };
+  itemCount: number | null;
+  assignedToMe?: boolean | null;
+}): DriverStatusConfirmContent {
+  const { kind, address, itemCount } = args;
+  const place = address.detail ?? address.base;
+  const placeBase = address.detail ? address.base : null;
+  const itemsLine = itemCount !== null ? `상품 총 ${itemCount}개` : null;
+  if (kind === 'RESUME') {
+    return {
+      title: '배송을 다시 시작할까요?',
+      place,
+      placeBase,
+      itemsLine,
+      notice: '손님에게 재배송 일정 알림이 가요.',
+      assignment: null,
+      confirmLabel: '배송 재개',
+    };
+  }
+  const assignment =
+    args.assignedToMe === true
+      ? null
+      : args.assignedToMe === false
+        ? '아직 아무도 맡지 않은 주문이에요. 시작하면 내 배송으로 배정돼요.'
+        : '이 주문을 맡아 배송을 시작해요.';
+  return {
+    title: '배송을 시작할까요?',
+    place,
+    placeBase,
+    itemsLine,
+    notice: '손님에게 배송 시작 알림이 가요.',
+    assignment,
+    confirmLabel: '배송 시작',
+  };
+}

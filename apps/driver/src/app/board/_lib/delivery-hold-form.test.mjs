@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
+  DEFAULT_REDELIVERY_FEE_KRW,
   deliveryHoldResponsibilityFeeHint,
+  deliveryHoldSubmitError,
+  HOLD_MESSAGE_REQUIRED_MESSAGE,
+  HOLD_REASON_REQUIRED_MESSAGE,
+  HOLD_WEATHER_DATE_REQUIRED_MESSAGE,
+  redeliveryFeeAfterResponsibilityChange,
   HOLD_FEE_NOT_ALLOWED_HINT,
   HOLD_FEE_RANGE_HINT,
   HOLD_FEE_REQUIRED_HINT,
@@ -122,4 +128,105 @@ test('보류 모달은 어긋난 책임·재배송비를 저장 버튼에서 막
   const guardAt = holdModalSource.indexOf('if (responsibilityFeeHint) return;', fnAt);
   const patchAt = holdModalSource.indexOf("method: 'PATCH'", fnAt);
   assert.ok(guardAt !== -1 && guardAt < patchAt);
+});
+
+test('D-09. 고객 책임을 고르면 비어 있는 재배송비에 기준 금액 10,000원을 채우고, 풀면 비운다', () => {
+  assert.equal(DEFAULT_REDELIVERY_FEE_KRW, 10_000);
+  assert.ok(DEFAULT_REDELIVERY_FEE_KRW <= MAX_REDELIVERY_FEE_KRW);
+  for (const redeliveryFee of ['', 0, '0']) {
+    assert.equal(
+      redeliveryFeeAfterResponsibilityChange({ customerResponsible: true, redeliveryFee }),
+      DEFAULT_REDELIVERY_FEE_KRW,
+    );
+  }
+  // 이미 적은 금액은 그대로 둔다(기사가 바꿀 수 있다).
+  assert.equal(
+    redeliveryFeeAfterResponsibilityChange({ customerResponsible: true, redeliveryFee: 3000 }),
+    3000,
+  );
+  for (const redeliveryFee of ['', 3000, DEFAULT_REDELIVERY_FEE_KRW]) {
+    assert.equal(
+      redeliveryFeeAfterResponsibilityChange({ customerResponsible: false, redeliveryFee }),
+      '',
+    );
+  }
+  // 채운 기준 금액은 책임·상한 검사를 그대로 통과한다.
+  for (const reasonCode of NON_WEATHER) {
+    assert.equal(
+      deliveryHoldResponsibilityFeeHint({
+        reasonCode,
+        customerResponsible: true,
+        redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+      }),
+      null,
+    );
+  }
+});
+
+test('D-07. 유형 기본 선택이 없고, 고르지 않으면 저장 전에 고르게 한다', () => {
+  assert.equal(
+    deliveryHoldSubmitError({ reasonCode: null, reasonMessage: '사유', nextDeliveryAt: '' }),
+    HOLD_REASON_REQUIRED_MESSAGE,
+  );
+  assert.equal(HOLD_REASON_REQUIRED_MESSAGE, '보류 유형을 골라 주세요.');
+  assert.equal(
+    deliveryHoldSubmitError({
+      reasonCode: 'ACCESS_UNAVAILABLE',
+      reasonMessage: '  ',
+      nextDeliveryAt: '',
+    }),
+    HOLD_MESSAGE_REQUIRED_MESSAGE,
+  );
+  assert.equal(
+    deliveryHoldSubmitError({ reasonCode: 'WEATHER', reasonMessage: '강풍', nextDeliveryAt: '' }),
+    HOLD_WEATHER_DATE_REQUIRED_MESSAGE,
+  );
+  assert.equal(
+    deliveryHoldSubmitError({
+      reasonCode: 'WEATHER',
+      reasonMessage: '강풍',
+      nextDeliveryAt: '2026-07-22T08:00',
+    }),
+    null,
+  );
+  assert.equal(
+    deliveryHoldSubmitError({
+      reasonCode: 'CUSTOMER_UNREACHABLE',
+      reasonMessage: '부재',
+      nextDeliveryAt: '',
+    }),
+    null,
+  );
+  // 모달 상태는 미선택(null)으로 시작·초기화하고, 저장은 미선택을 보내기 전에 돌려보낸다.
+  assert.match(holdModalSource, /useState<HoldReason \| null>\(null\)/);
+  assert.doesNotMatch(holdModalSource, /setReasonCode\('WEATHER'\)/);
+  const fnAt = holdModalSource.indexOf('async function submit');
+  const guardAt = holdModalSource.indexOf('if (inputError || !reasonCode)', fnAt);
+  const payloadAt = holdModalSource.indexOf('const deliveryHold = {', fnAt);
+  assert.ok(guardAt !== -1 && guardAt < payloadAt, '유형 검사가 payload보다 먼저다');
+});
+
+test('D-08·D-15·D-24. 보류 창 이름·사유 안내·오류 지움', () => {
+  assert.match(holdModalSource, /<DialogTitle[^>]*>배송 보류<\/DialogTitle>/);
+  assert.match(holdModalSource, />\s*보류하기\s*</);
+  assert.match(holdModalSource, /label="손님에게 보일 사유"/);
+  assert.match(
+    holdModalSource,
+    /손님 주문 화면에 그대로 보여요\. 저장하면 손님에게 배송 보류 알림이 가요\./,
+  );
+  assert.match(holdModalSource, /aria-describedby=\{reasonHelpId\}/);
+  // 고객 책임 체크는 기준 금액 판단을 거친다.
+  assert.match(holdModalSource, /onChange=\{changeCustomerResponsible\}/);
+  assert.match(holdModalSource, /redeliveryFeeAfterResponsibilityChange\(/);
+  // 유형·사유·책임·재배송비·일정이 바뀌면 이전 제출 오류를 지운다.
+  const changeReasonAt = holdModalSource.indexOf('function changeReason');
+  const changeResponsibleAt = holdModalSource.indexOf('function changeCustomerResponsible');
+  assert.match(holdModalSource.slice(changeReasonAt, changeReasonAt + 120), /setError\(''\)/);
+  assert.match(
+    holdModalSource.slice(changeResponsibleAt, changeResponsibleAt + 160),
+    /setError\(''\)/,
+  );
+  const formAt = holdModalSource.indexOf('<RadioGroupField');
+  const formEnd = holdModalSource.indexOf('{error &&', formAt);
+  assert.equal((holdModalSource.slice(formAt, formEnd).match(/setError\(''\)/g) ?? []).length, 4);
 });

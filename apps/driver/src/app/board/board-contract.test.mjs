@@ -113,10 +113,15 @@ test('Driver Card는 결제 대기·완료·운영 확인 상태를 표시한다
 });
 
 test('Driver 배송 시작 판정은 required·paid·requiresRecovery만 사용하고 canPay를 사용하지 않는다', () => {
-  assert.match(paymentSource, /payment\.required\s*===\s*false/);
-  assert.match(paymentSource, /payment\.paid\s*===\s*true/);
-  assert.match(paymentSource, /payment\.requiresRecovery\s*===\s*false/);
-  assert.doesNotMatch(paymentSource, /canPay/);
+  // canPay는 표시 문구(재배송비 결제 전, D-03)에만 쓰고 버튼 잠금 판정에는 쓰지 않는다.
+  const gateAt = paymentSource.indexOf('export function isDeliveryStartAllowed');
+  const gateEnd = paymentSource.indexOf('\n}\n', gateAt);
+  assert.ok(gateAt !== -1 && gateEnd > gateAt, 'isDeliveryStartAllowed가 있어야 한다');
+  const gateSource = paymentSource.slice(gateAt, gateEnd);
+  assert.match(gateSource, /payment\.required\s*===\s*false/);
+  assert.match(gateSource, /payment\.paid\s*===\s*true/);
+  assert.match(gateSource, /payment\.requiresRecovery\s*===\s*false/);
+  assert.doesNotMatch(gateSource, /canPay/);
   assert.doesNotMatch(boardSource, /canPay/);
   assert.doesNotMatch(detailSource, /canPay/);
 });
@@ -180,12 +185,12 @@ test('Board는 복귀 한 번에 겹쳐 오는 focus·visibilitychange 재조회
 
 test('Board는 usable token 없음을 auth-required로 표시하고 empty와 분리한다', () => {
   assert.match(boardSource, /authRequired/);
-  assert.match(boardSource, /로그인이 필요합니다/);
+  assert.match(boardSource, /로그인이 끝났어요\. 다시 로그인해 주세요\./);
 });
 
 test('Board의 error-only와 empty 렌더는 성공 기록으로 분리된다', () => {
   assert.match(boardSource, /error && !hasSuccessfulRead/);
-  assert.match(boardSource, /오늘 수거할 주문이 없습니다/);
+  assert.match(boardSource, /수거할 주문이 없어요/);
 });
 
 test('Detail read 실패는 NOT_FOUND·AUTH_ERROR·FETCH_ERROR로 분리된다', () => {
@@ -213,13 +218,13 @@ test('Detail은 성공 ACK 후 authoritative GET으로 수렴한다', () => {
 
 test('Detail은 readback 실패를 command 실패와 분리하고 자동 resend하지 않는다', () => {
   assert.match(detailSource, /readbackWarning/);
-  assert.match(detailSource, /처리는 완료되었지만 최신 상태를 확인하지 못했습니다/);
+  assert.match(detailSource, /처리는 됐지만 최신 상태를 아직 확인하지 못했어요/);
   assert.doesNotMatch(detailSource, /setTimeout\(updateStatus/);
   assert.doesNotMatch(detailSource, /setInterval/);
 });
 
 test('Detail은 시작·재개 후 서버 상태로 CTA를 다시 계산한다', () => {
-  assert.match(detailSource, /상태 다시 확인/);
+  assert.match(detailSource, />\s*상태 확인\s*</);
   assert.match(detailSource, /readDetail\(token\)/);
 });
 
@@ -344,11 +349,15 @@ test('Driver 서비스워커는 세션이 실린 로그인 검사 화면 문서�
   assert.match(list, /driver-protected-pages-network-only/);
 });
 
-test('목록 화면은 서버에서도 그리고 날짜는 서버·휴대폰이 같은 한국 시간으로 그린다', () => {
+test('목록 화면은 서버에서도 그리고 제목은 날짜 없는 "배송 목록"이다', () => {
   assert.doesNotMatch(boardPageSource, /ssr:\s*false|next\/dynamic|'use client'/);
   assert.match(boardPageSource, /import BoardClient from '\.\/_client';/);
   assert.match(boardPageSource, /<Suspense[\s\S]*<BoardClient \/>/);
-  assert.match(boardSource, /toLocaleDateString\('ko-KR', \{[^}]*timeZone: 'Asia\/Seoul'/);
+  // 목록은 날짜와 관계없이 보이는 주문을 모두 보여 주므로 제목에 오늘 날짜를 쓰지 않는다(D-12).
+  // 배송일은 서울 날짜로 판정하는 delivery-day.ts가 행마다 쓴다.
+  assert.match(boardSource, />\s*배송 목록\s*</);
+  assert.doesNotMatch(boardSource, /오늘 배송 ·/);
+  assert.match(cardSource, /formatDeliveryDayLabel\(order\.deliveryDate, new Date\(\)\)/);
   // 브라우저 API는 렌더 중이 아니라 effect 안에서만 쓴다.
   const render = boardSource.slice(boardSource.indexOf('const orders = tab ==='));
   assert.doesNotMatch(render, /window\.|document\.|localStorage|navigator\./);
@@ -475,7 +484,7 @@ test('Board read-state precedence는 INITIAL > AUTH > INITIAL_FAILURE > STALE > 
   const idxInitialFailure = boardSource.indexOf('error && !hasSuccessfulRead');
   const idxStale = boardSource.indexOf('error && hasSuccessfulRead');
   const idxRevalidating = boardSource.indexOf('refreshing && hasSuccessfulRead');
-  const idxFreshEmpty = boardSource.indexOf('오늘 수거할 주문이 없습니다');
+  const idxFreshEmpty = boardSource.indexOf('수거할 주문이 없어요');
   assert.ok(idxLoading !== -1, 'loading branch가 있어야 한다');
   assert.ok(idxAuth !== -1, 'auth branch가 있어야 한다');
   assert.ok(idxInitialFailure !== -1, 'initial failure branch가 있어야 한다');
@@ -518,8 +527,8 @@ test('1. first success []는 genuine empty다', () => {
   assert.ok(genuineStart !== -1, 'genuine empty branch가 있어야 한다');
   const genuineEnd = boardSource.indexOf(') : (', genuineStart);
   const genuineSlice = boardSource.slice(genuineStart, genuineEnd);
-  assert.match(genuineSlice, /오늘 수거할 주문이 없습니다/);
-  assert.match(genuineSlice, /현재 배송 중인 주문이 없습니다/);
+  assert.match(genuineSlice, /수거할 주문이 없어요/);
+  assert.match(genuineSlice, /배송 중인 주문이 없어요/);
   assert.doesNotMatch(genuineSlice, /\{error\}/);
   assert.doesNotMatch(genuineSlice, /마지막 확인 당시/);
 });
@@ -558,8 +567,8 @@ test('3. success [] → refresh failure는 stale-error state다 (fresh empty 금
   assert.match(staleSlice, /마지막 확인 당시/);
   assert.match(staleSlice, /다시 시도/);
   assert.match(staleSlice, /setReloadKey\(\(key\)\s*=>\s*key\s*\+\s*1\)/);
-  assert.doesNotMatch(staleSlice, /오늘 수거할 주문이 없습니다/);
-  assert.doesNotMatch(staleSlice, /현재 배송 중인 주문이 없습니다/);
+  assert.doesNotMatch(staleSlice, /수거할 주문이 없어요/);
+  assert.doesNotMatch(staleSlice, /배송 중인 주문이 없어요/);
 });
 
 test('4. stale-empty → retry → [] success는 다시 genuine empty다', () => {
@@ -673,7 +682,7 @@ test('7. auth loss는 empty가 아닌 auth state이며 성공 기록을 초기�
   // auth 상실 시 stale 보호 데이터를 유지하지 않고 성공 기록도 초기화한다.
   assert.match(boardSource, /hasSuccessfulReadRef\.current = false/);
   assert.match(boardSource, /setHasSuccessfulRead\(false\)/);
-  assert.match(boardSource, /로그인이 필요합니다/);
+  assert.match(boardSource, /로그인이 끝났어요\. 다시 로그인해 주세요\./);
 });
 
 test('8. stale old request는 retry를 덮어쓰지 못한다', () => {
@@ -695,8 +704,8 @@ test('9. preparing/delivering 탭 count/filter 회귀 없음', () => {
   // stale-empty와 revalidating-empty도 탭 의미를 보존한다.
   assert.match(boardSource, /마지막 확인 당시 수거할 주문이 없었습니다/);
   assert.match(boardSource, /마지막 확인 당시 배송 중인 주문이 없었습니다/);
-  assert.match(boardSource, /오늘 수거할 주문이 없습니다/);
-  assert.match(boardSource, /현재 배송 중인 주문이 없습니다/);
+  assert.match(boardSource, /수거할 주문이 없어요/);
+  assert.match(boardSource, /배송 중인 주문이 없어요/);
   assert.match(boardSource, /count: preparing\.length/);
   assert.match(boardSource, /count: delivering\.length/);
 });

@@ -138,6 +138,10 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
       `https://map.kakao.com/link/search/${encodeURIComponent('경기도 이천시 테스트로 1')}`,
     );
     await page.getByRole('button', { name: '수거 완료 / 배송 시작' }).click();
+    // 손님 알림이 가는 전환이라 확인 창에서 한 번 더 확인한다(D-02). 확인 전에는 요청을 보내지 않는다.
+    const startDialog = page.getByRole('dialog', { name: '배송을 시작할까요?' });
+    await expect(startDialog.getByText('손님에게 배송 시작 알림이 가요.')).toBeVisible();
+    await startDialog.getByRole('button', { name: '배송 시작', exact: true }).click();
 
     await expect(page.getByText('배송 중')).toBeVisible();
     await expect(page.getByRole('button', { name: '수거 완료 / 배송 시작' })).toHaveCount(0);
@@ -151,16 +155,16 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_WEATHER);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
+    await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '기상 악화' }).check();
-    await page.getByLabel('보류 사유').fill('강풍으로 안전한 배송이 어렵습니다.');
+    await page.getByLabel('손님에게 보일 사유').fill('강풍으로 안전한 배송이 어렵습니다.');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T08:00');
 
     await expect(page.getByRole('checkbox', { name: '고객 책임' })).not.toBeChecked();
     await expect(page.getByLabel('재배송비')).toBeDisabled();
-    await page.getByRole('button', { name: '배송 보류 저장' }).click();
+    await page.getByRole('button', { name: '보류하기', exact: true }).click();
 
-    await expect(page.getByRole('dialog', { name: '배송 보류 기록' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: '배송 보류' })).toHaveCount(0);
     // 보류 상태는 상세 머리(banner)에 빨간 점 + 글자로 보이고, 본문에는 "배송 보류 내용" 상자가 생긴다
     // (design-direction.md §6 기사 ② D4-2, #800).
     await expect(page.getByRole('banner').getByText('배송 보류', { exact: true })).toBeVisible();
@@ -178,18 +182,22 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_ACCESS);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
+    await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '출입 불가' }).check();
-    await page.getByLabel('보류 사유').fill('공동현관 출입 정보를 확인할 수 없습니다.');
+    await page.getByLabel('손님에게 보일 사유').fill('공동현관 출입 정보를 확인할 수 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
-    // 고객 책임이면 재배송비를 넣어야 저장할 수 있다.
+    // 고객 책임을 고르면 재배송비 칸이 기준 금액 10,000원으로 채워지고(D-09), 기사가 바꿀 수 있다.
+    await expect(page.getByLabel('재배송비')).toHaveValue('10000원');
+    await expect(page.getByRole('button', { name: '보류하기', exact: true })).toBeEnabled();
+    // 재배송비를 지우면 저장할 수 없다.
+    await page.getByLabel('재배송비').fill('');
     await expect(page.getByText('고객 책임이면 재배송비를 입력해 주세요.')).toBeVisible();
-    await expect(page.getByRole('button', { name: '배송 보류 저장' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '보류하기', exact: true })).toBeDisabled();
     await page.getByLabel('재배송비').fill('3000');
     await expect(page.getByText('고객 책임이면 재배송비를 입력해 주세요.')).toHaveCount(0);
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T09:00');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T11:00');
-    await page.getByRole('button', { name: '배송 보류 저장' }).click();
+    await page.getByRole('button', { name: '보류하기', exact: true }).click();
 
     await expect(page.getByText('출입 불가')).toBeVisible();
     await expect(page.getByText('고객 책임')).toBeVisible();
@@ -205,14 +213,14 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_ADDRESS);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
+    await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '주소 오류' }).check();
-    await page.getByLabel('보류 사유').fill('상세 주소가 없어 배송지를 확인할 수 없습니다.');
+    await page.getByLabel('손님에게 보일 사유').fill('상세 주소가 없어 배송지를 확인할 수 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
     await page.getByLabel('재배송비').fill('3000');
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T09:30');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T11:30');
-    await page.getByRole('button', { name: '배송 보류 저장' }).click();
+    await page.getByRole('button', { name: '보류하기', exact: true }).click();
 
     await expect(page.getByText('주소 오류')).toBeVisible();
     await expect(page.getByText('고객 책임')).toBeVisible();
@@ -228,14 +236,14 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_UNREACHABLE);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
+    await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '고객 연락 불가' }).check();
-    await page.getByLabel('보류 사유').fill('배송지 확인을 위해 연락했으나 응답이 없습니다.');
+    await page.getByLabel('손님에게 보일 사유').fill('배송지 확인을 위해 연락했으나 응답이 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
     await page.getByLabel('재배송비').fill('3000');
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T10:00');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T12:00');
-    await page.getByRole('button', { name: '배송 보류 저장' }).click();
+    await page.getByRole('button', { name: '보류하기', exact: true }).click();
 
     await expect(page.getByText('고객 연락 불가')).toBeVisible();
     await expect(page.getByText('고객 책임')).toBeVisible();
@@ -260,6 +268,9 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await expect(page.getByRole('button', { name: '배송 재개' })).toBeVisible();
     await expect(page.getByText('재배송비 결제 완료')).toBeVisible();
     await page.getByRole('button', { name: '배송 재개' }).click();
+    const resumeDialog = page.getByRole('dialog', { name: '배송을 다시 시작할까요?' });
+    await expect(resumeDialog.getByText('손님에게 재배송 일정 알림이 가요.')).toBeVisible();
+    await resumeDialog.getByRole('button', { name: '배송 재개', exact: true }).click();
 
     // 재개 PATCH(재배송 알림톡 멱등 기록·발송 포함)와 상세 재조회가 끝나야 배송 중으로 바뀐다.
     await expect(page.getByRole('banner').getByText('배송 중', { exact: true })).toBeVisible({

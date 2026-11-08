@@ -222,8 +222,8 @@ test('command ACK 후 authoritative GET 수렴·readback 분리 계약이 유지
   assert.match(detailSource, /isDriverOrderStatusAck\(result,\s*orderId,\s*status\)/);
   assert.match(detailSource, /setOrder\(fresh\)/);
   assert.match(detailSource, /readbackWarning/);
-  assert.match(detailSource, /처리는 완료되었지만 최신 상태를 확인하지 못했습니다/);
-  assert.match(detailSource, /상태 다시 확인/);
+  assert.match(detailSource, /처리는 됐지만 최신 상태를 아직 확인하지 못했어요/);
+  assert.match(detailSource, />\s*상태 확인\s*</);
   assert.match(detailSource, /readDetail\(token\)/);
   assert.doesNotMatch(detailSource, /setTimeout\(updateStatus/);
   assert.doesNotMatch(detailSource, /setInterval/);
@@ -376,7 +376,7 @@ test('R6. 정상 command는 semantic ACK 후 authoritative GET으로 수렴한�
 
 // R7. ACK 성공 → readback network/5xx 실패 → 자동 resend 없음·warning 유지·fail-closed.
 test('R7. readback 실패는 자동 재전송 없이 warning과 fail-closed를 유지한다', () => {
-  assert.match(detailSource, /처리는 완료되었지만 최신 상태를 확인하지 못했습니다/);
+  assert.match(detailSource, /처리는 됐지만 최신 상태를 아직 확인하지 못했어요/);
   assert.match(detailSource, /setReadbackWarning\(message\)/);
   assert.match(detailSource, /hasReadbackWarning: readbackWarning !== null/);
   assert.equal(
