@@ -83,31 +83,10 @@ deployment·activation·live round·actual payment/notification을 주장하지 
 
 ## ACTIVE
 
-### BR-R3 — 증거 분류와 역사 승격 경계
-
-이번 정본화는 선택지 B를 적용한다. 역사 보고서 전체를 current branch에 복구하지 않고, 역사
-commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 판정과 acceptance의 정본은
-아래 `CURRENT_IMPLEMENTATION_EVIDENCE`와 이 Backlog의 두 finding이다.
-
-- `HISTORICAL_EVIDENCE`: `54af6edf44008848e586b1707d0f1fd13470a5f6`의
-  `docs/reports/REPORT_retention_operations_sale_round_audit_20260824.md`는 2026-08-24 당시의
-  감사 보고서다. 현재 branch에는 보고서 파일을 복구하지 않으며, 과거 결론을 현재 `VERIFIED`로
-  승격하지 않는다.
-- `CURRENT_IMPLEMENTATION_EVIDENCE`: 현재 source·직접 테스트·current spec·runbook을 다시
-  대조한 결과다. Sale Round atomicity/recovery는 #66의 직접 proof와 #70/#71 publication으로
-  `IMPLEMENTATION_PROVEN` / `PUBLISHED`가 되었으며, 남은 현재 공백은 retention과 operation
-  claim fencing의 두 finding으로 분리했다.
-- 위에서 유지된 직접 검증 항목은 `RESOLVED_NOT_PROMOTED`다. 이는 해당 base contract가 현재
-  증거로 유지된다는 뜻일 뿐, 이번 두 finding이 해결되었거나 release gate·production 승인이
-  되었다는 뜻이 아니다.
-- `CURRENT_UNRESOLVED_FINDING`: `RETENTION-DELETE-ISSUE-ROUTING`,
-  `OPERATION-ACTION-CLAIM-FENCING`만 이번 BR-R3의 current unresolved finding으로
-  canonicalize한다. Sale Round finding은 #66/#70/#71로 implementation proof와 publication이
-  완료되었지만, 이 사실이 exact-release runtime proof나 production 승인을 의미하지는 않는다.
-- `FUTURE_REENABLE_REQUIREMENT`: 역사 보고서의 marketing consent lifecycle 논점은 현재
-  `MARKETING_NOT_USED_IN_PILOT` controlled-pilot 정책을 변경하거나 새 finding으로 승격하지 않는다. 향후 marketing을 다시
-  활성화할 때에만 당시의 동의·철회·보관·법무·provider·release 증거를 현재 권위로 재검증하고,
-  별도 승인된 Task에서 범위를 확정한다.
+현재 ACTIVE 항목 없음. 직전 `BR-R3 — 증거 분류와 역사 승격 경계`는 두 current finding
+(`RETENTION-DELETE-ISSUE-ROUTING`, `OPERATION-ACTION-CLAIM-FENCING`)이 LATER에서 `RESOLVED`되어
+2026-11-07 종료했다. 추적 요약은 `docs/archive/BACKLOG_archive_20261107.md`, marketing 재활성화 조건은
+아래 DOC_DELTA `Pilot marketing contract`가 소유한다.
 
 ---
 
@@ -180,7 +159,7 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 
 - Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`: 회차 주문 API가 `marketingConsent`를 거부한다(`apps/api/src/orders/round-order-create.service.ts`, 회귀 `apps/api/src/orders/mvp-order-flow.spec.ts`). 결제 화면은 동의를 받지 않고 MY 마케팅 설정은 미운영 안내만 보인다.
 - 공개 `/privacy`·`/terms`(시행일 2026-08-30)와 `docs/specs/legal/README.md`, `docs/specs/mvp-sales-round-direct-delivery.md`, `docs/specs/api/notifications.md`가 같은 정책을 적는다.
-- 향후 marketing 활성화는 별도의 product·legal·provider·release authority와 현재 증거가 필요한 후속 판단이다.
+- 향후 marketing 활성화는 별도의 product·legal·provider·release authority와 현재 증거가 필요한 후속 판단이다. 그때 동의·철회·보관·법무·provider·release 증거를 현재 권위로 다시 검증하고 별도 승인된 Task에서 범위를 정한다. 2026-08-24 감사 보고서의 marketing consent 논점은 역사 근거일 뿐 현재 finding이 아니다(`docs/archive/BACKLOG_archive_20261107.md`).
 
 ## NEXT — 현재 residual 해소 후
 
