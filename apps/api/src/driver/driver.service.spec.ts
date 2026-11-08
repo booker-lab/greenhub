@@ -833,7 +833,7 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     ]);
   });
 
-  it('목록 한 번의 요청에서 같은 stores·saleRounds 문서는 주문 수와 관계없이 한 번만 읽는다', async () => {
+  it('목록 한 번의 요청에서 같은 stores·saleRounds 문서는 주문 수와 관계없이 정해진 횟수만 읽는다', async () => {
     const records: Record<string, Data> = {
       'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
       'stores/legacy': { id: 'legacy', salesMode: 'legacy' },
@@ -875,7 +875,151 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
       firestore.doc.mock.calls.filter(([called]) => called === path).length;
     expect(readCount('stores/pilot')).toBe(1);
     expect(readCount('stores/legacy')).toBe(1);
-    expect(readCount('saleRounds/round-valid')).toBe(1);
+    // 노출 판정 1회 + 회차 배송일 1회. 같은 회차 주문이 늘어도 그대로다.
+    expect(readCount('saleRounds/round-valid')).toBe(2);
+  });
+
+  it('목록·상세에 요청 기사 본인 배정 여부만 assignedToMe로 싣는다', async () => {
+    const { service } = makeService({
+      'orders/mine': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+      },
+      'orders/open': {
+        status: 'PREPARING',
+        deliveryMethod: 'direct',
+        driverId: null,
+      },
+      'orders/legacy-open': {
+        status: 'PREPARING',
+        deliveryMethod: 'hub',
+      },
+      'orders/mine-delivering': {
+        status: 'DELIVERING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+      },
+    });
+
+    const list = await service.getOrders('driver-1');
+    expect(
+      Object.fromEntries(list.map((order) => [order.id, order['assignedToMe']])),
+    ).toEqual({
+      mine: true,
+      open: false,
+      'legacy-open': false,
+      'mine-delivering': true,
+    });
+    for (const order of list) expect(order).not.toHaveProperty('driverId');
+    await expect(service.getOrder('driver-1', 'mine')).resolves.toMatchObject({
+      assignedToMe: true,
+    });
+    await expect(service.getOrder('driver-1', 'open')).resolves.toMatchObject({
+      assignedToMe: false,
+    });
+  });
+
+  it('회차 주문 목록 행에 회차 배송 시작 시각을 싣고 회차 문서는 회차마다 정해진 횟수만 읽는다', async () => {
+    const records: Record<string, Data> = {
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'stores/legacy': { id: 'legacy', salesMode: 'legacy' },
+      'saleRounds/round-a': {
+        id: 'round-a',
+        storeId: 'pilot',
+        schedule: { deliveryStartAt: '2026-11-10T01:00:00.000Z', timezone: 'Asia/Seoul' },
+      },
+      // Firestore Timestamp로 저장된 일정도 ISO로 바꿔 싣는다.
+      'saleRounds/round-b': {
+        id: 'round-b',
+        storeId: 'pilot',
+        schedule: {
+          deliveryStartAt: { toMillis: () => Date.parse('2026-11-12T00:30:00.000Z') },
+          timezone: 'Asia/Seoul',
+        },
+      },
+    };
+    for (let i = 0; i < 6; i += 1) {
+      records[`orders/a-${i}`] = {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-a',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: `2026-01-01T00:0${i}:00.000Z`,
+      };
+      records[`orders/b-${i}`] = {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-b',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+        driverId: 'driver-1',
+        updatedAt: `2026-01-01T01:0${i}:00.000Z`,
+      };
+    }
+    records['orders/legacy'] = {
+      storeId: 'legacy',
+      deliveryMethod: 'hub',
+      status: 'PREPARING',
+      driverId: null,
+      updatedAt: '2026-01-01T02:00:00.000Z',
+    };
+    const { service, firestore } = makeService(records);
+
+    const result = await service.getOrders('driver-1');
+
+    expect(result).toHaveLength(13);
+    for (const order of result) {
+      if (String(order.id).startsWith('a-')) {
+        expect(order['deliveryDate']).toBe('2026-11-10T01:00:00.000Z');
+      } else if (String(order.id).startsWith('b-')) {
+        expect(order['deliveryDate']).toBe('2026-11-12T00:30:00.000Z');
+      } else {
+        expect(order).not.toHaveProperty('deliveryDate');
+      }
+    }
+    const readCount = (path: string) =>
+      firestore.doc.mock.calls.filter(([called]) => called === path).length;
+    // 주문 12건이어도 회차마다 노출 판정 1회 + 배송일 1회다.
+    expect(readCount('saleRounds/round-a')).toBe(2);
+    expect(readCount('saleRounds/round-b')).toBe(2);
+    expect(
+      firestore.doc.mock.calls.filter(([called]) => String(called).startsWith('saleRounds/')),
+    ).toHaveLength(4);
+  });
+
+  it('회차 문서를 다시 읽지 못하면 목록은 그대로 두고 배송일만 뺀다', async () => {
+    const { service, firestore } = makeService({
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'saleRounds/round-a': {
+        id: 'round-a',
+        storeId: 'pilot',
+        schedule: { deliveryStartAt: '2026-11-10T01:00:00.000Z' },
+      },
+      'orders/a': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-a',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+    });
+    const baseDoc = firestore.doc.getMockImplementation()!;
+    let roundReads = 0;
+    firestore.doc.mockImplementation((path: string) => {
+      if (path === 'saleRounds/round-a' && ++roundReads > 1) {
+        return { get: jest.fn(async () => Promise.reject(new Error('unavailable'))) };
+      }
+      return baseDoc(path);
+    });
+
+    const result = await service.getOrders('driver-1');
+
+    expect(result.map((order) => order.id)).toEqual(['a']);
+    expect(result[0]).not.toHaveProperty('deliveryDate');
   });
 
   it.each([

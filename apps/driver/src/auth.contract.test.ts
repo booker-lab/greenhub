@@ -28,12 +28,15 @@ describe('driver auth.ts 계약', () => {
     expect(AUTH_UPSTREAM_TIMEOUT_MS).toBe(10_000);
   });
 
-  it('카카오 로그인 API 호출 실패는 예외 대신 false로 끝난다', () => {
+  // 응답 없음·시간 초과는 세션 없이 일반 실패 안내(LOGIN_FAILED_URL)로 보낸다.
+  // false(AccessDenied)는 "기사용 계정이 아니에요" 안내라서 다른 역할 거절에만 쓴다.
+  it('카카오 로그인 API 호출 실패는 예외 대신 일반 실패 안내로 끝난다', () => {
     const kakaoAt = authSource.search(/fetch\(`\$\{API\}\/auth\/kakao-login`/);
     expect(kakaoAt).toBeGreaterThan(0);
     const tryAt = authSource.lastIndexOf('try {', kakaoAt);
     const signInAt = authSource.indexOf('async signIn({ user, account })');
     expect(tryAt).toBeGreaterThan(signInAt);
-    expect(authSource.slice(kakaoAt)).toMatch(/\} catch \{\s*return false;\s*\}/);
+    expect(authSource.slice(kakaoAt)).toMatch(/\} catch \{\s*return LOGIN_FAILED_URL;\s*\}/);
+    expect(authSource).toMatch(/const LOGIN_FAILED_URL = `\/login\?error=\$\{DRIVER_LOGIN_FAILED_ERROR\}`;/);
   });
 });

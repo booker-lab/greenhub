@@ -20,6 +20,10 @@ const holdModalSource = await readFile(
   new URL('./_components/DeliveryHoldModal.tsx', import.meta.url),
   'utf8',
 );
+const confirmDialogSource = await readFile(
+  new URL('./_components/StatusConfirmDialog.tsx', import.meta.url),
+  'utf8',
+);
 
 const CONVERGENCE_MESSAGE = '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.';
 
@@ -53,9 +57,16 @@ test('A. updateStatus는 ref 기반 in-flight guard로 double-submit PATCH를 �
 
 // B. loading 중 CTA → disabled: 모든 status mutation CTA가 명시적으로 disabled다.
 test('B. PATCH dispatch CTA는 loading 중 명시적으로 disabled다', () => {
-  const buttons = detailSource.split('<AppButton');
-  const dispatchButtons = buttons.filter((chunk) => chunk.includes('updateStatus(') && chunk.includes('onClick'));
-  // 배송 재개·수거 완료/배송 시작·배송 완료 dispatch 버튼이 존재한다.
+  const buttons = detailSource
+    .split('<AppButton')
+    .slice(1)
+    .map((chunk) => chunk.slice(0, chunk.indexOf('</AppButton>')));
+  // 배송 완료는 바로 dispatch하고, 배송 재개·수거 완료/배송 시작은 확인 창을 연다(D-02).
+  const dispatchButtons = buttons.filter(
+    (chunk) =>
+      (chunk.includes('updateStatus(') || chunk.includes('openStatusConfirm(')) &&
+      chunk.includes('onClick'),
+  );
   assert.ok(dispatchButtons.length >= 4, `dispatch 버튼이 4개 이상이어야 한다 (${dispatchButtons.length})`);
   for (const chunk of dispatchButtons) {
     assert.match(
@@ -89,7 +100,7 @@ test('C. HoldModal은 submittingRef guard로 double-submit PATCH를 차단한다
   const finallyAt = holdModalSource.indexOf('} finally {', fnAt);
   assert.ok(finallyAt !== -1 && finallyAt < releaseAt, 'submitting 해제는 finally에서 한다');
   // 저장 버튼도 명시적으로 disabled다.
-  assert.match(holdModalSource, /배송 보류 저장/);
+  assert.match(holdModalSource, />\s*보류하기\s*</);
   assert.match(
     holdModalSource,
     /onClick=\{submit\}\s*loading=\{loading\}\s*disabled=\{loading \|\| responsibilityFeeHint !== null\}/,
@@ -200,8 +211,8 @@ test('F. readback 불확실성은 PATCH 재호출 없이 warning과 fail-closed�
   const patchCount = (detailSource.match(/method: 'PATCH'/g) ?? []).length;
   assert.equal(patchCount, 1, 'detail PATCH는 상태 전환 1회뿐이다');
   assert.match(detailSource, /readbackWarning/);
-  assert.match(detailSource, /처리는 완료되었지만 최신 상태를 확인하지 못했습니다/);
-  assert.match(detailSource, /상태 다시 확인/);
+  assert.match(detailSource, /처리는 됐지만 최신 상태를 아직 확인하지 못했어요/);
+  assert.match(detailSource, />\s*상태 확인\s*</);
   // readbackWarning 존재 시 command가 fail-closed된다.
   assert.match(detailSource, /hasReadbackWarning: readbackWarning !== null/);
   // 이전 order를 최신이라고 주장하지 않는다: local 합성 없이 fresh GET으로만 수렴.
@@ -240,11 +251,19 @@ test('기존 command 안전계약이 유지된다', () => {
 test('H1. STATUS uncertain constants exist without resend copy', () => {
   assert.match(detailSource, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
   assert.match(detailSource, /STATUS_UNCERTAIN_READBACK_WARNING/);
+  // 안내는 "명령" 같은 내부 말 없이 확인 중임과 "상태 확인" 하나만 권한다(D-14).
+  assert.match(detailSource, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE = '처리됐는지 확인하는 중이에요\.'/);
   assert.match(
     detailSource,
-    /\uBA85\uB839\uC774 \uCC98\uB9AC\uB418\uC5C8\uB294\uC9C0 \uD655\uC2E4\uD558\uC9C0 \uC54A\uC2B5\uB2C8\uB2E4/,
+    /처리됐는지 아직 확인하지 못했어요\. 연결이 돌아오면 '상태 확인'을 눌러 주세요\./,
   );
-  assert.match(detailSource, /\uBC14\uB85C \uB2E4\uC2DC \uBCF4\uB0B4\uC9C0 \uB9C8\uC138\uC694/);
+  const constantsBlock = detailSource.slice(
+    detailSource.indexOf('const STATUS_UNCERTAIN_CONVERGENCE_MESSAGE'),
+    detailSource.indexOf('export default function OrderDetailPage'),
+  );
+  for (const literal of constantsBlock.match(/['"][^'"\n]*[가-힣][^'"\n]*['"]/g) ?? []) {
+    assert.doesNotMatch(literal, /명령|서버|다시 시도/, literal);
+  }
   assert.doesNotMatch(detailSource, /setTimeout\(updateStatus/);
   assert.doesNotMatch(detailSource, /setInterval/);
   const updateAt = detailSource.indexOf('async function updateStatus');
@@ -380,8 +399,8 @@ test('T3. settleUncertainReadback은 재전송 없이 성공·목록 수렴·미
   assert.doesNotMatch(block, /updateStatus\(/);
   assert.doesNotMatch(block, /setTimeout/);
   // 미반영 안내는 서버 중복 차단(STATE_CONFLICT)에 근거해 다시 눌러도 된다고 안내한다.
-  assert.match(detailSource, /아직 처리되지 않았습니다\. 다시 눌러도 두 번 처리되지 않습니다\./);
-  assert.match(detailSource, /서버 응답이 늦어 처리되었는지 확실하지 않습니다/);
+  assert.match(detailSource, /아직 처리되지 않았어요\. 다시 눌러도 두 번 처리되지 않아요\./);
+  assert.match(detailSource, /응답이 늦어요\. 처리됐는지 확인하는 중이에요\./);
 });
 
 test('T4. readDetail은 수렴 판정용 결과를 돌려주고 시간 초과는 FETCH_ERROR로 끝낸다', () => {
@@ -590,4 +609,49 @@ test('10. 기존 409 race convergence가 유지된다', () => {
   assert.equal(holdPatchCount, 1, 'hold PATCH는 1회뿐이다');
   assert.doesNotMatch(detailSource, /setTimeout\(updateStatus/);
   assert.doesNotMatch(holdModalSource, /setTimeout\(submit/);
+});
+
+// D-02. 배송 시작·재개는 확인 창을 거친 뒤에만 기존 updateStatus로 PATCH를 보낸다.
+test('D-02. 배송 시작·재개 버튼은 확인 창만 열고, PATCH는 확인 뒤 updateStatus 한 곳에서만 보낸다', () => {
+  // 버튼은 확인 창을 연다.
+  assert.equal((detailSource.match(/onClick=\{\(\) => openStatusConfirm\('START'\)\}/g) ?? []).length, 2);
+  assert.equal((detailSource.match(/onClick=\{\(\) => openStatusConfirm\('RESUME'\)\}/g) ?? []).length, 1);
+  // DELIVERING 요청은 확인 창의 onConfirm 한 곳뿐이고, 창을 먼저 닫는다.
+  assert.equal((detailSource.match(/updateStatus\('DELIVERING'\)/g) ?? []).length, 1);
+  const confirmAt = detailSource.indexOf('<StatusConfirmDialog');
+  assert.ok(confirmAt !== -1, '확인 창이 렌더되어야 한다');
+  const confirmBlock = detailSource.slice(confirmAt, detailSource.indexOf('/>', confirmAt));
+  assert.match(confirmBlock, /confirmDisabled=\{loading \|\| !commandsAllowed\}/);
+  const closeAt = confirmBlock.indexOf('setConfirmKind(null);', confirmBlock.indexOf('onConfirm'));
+  const dispatchAt = confirmBlock.indexOf("void updateStatus('DELIVERING')");
+  assert.ok(closeAt !== -1 && dispatchAt > closeAt, '창을 닫은 뒤 updateStatus에 맡긴다');
+  // 창은 연 상태 그대로이고 지금 보낼 수 있을 때만 열린다(조회로 상태·결제·신뢰도가 바뀌면 닫힌다).
+  assert.match(
+    detailSource,
+    /const confirmOpen =\s*isDriverStatusConfirmCurrent\(confirmKind, order\.status\) &&\s*deliveryStartAllowed &&\s*commandsAllowed;/,
+  );
+  // 창 열기도 in-flight·fail-closed 상태에서는 하지 않는다.
+  const openAt = detailSource.indexOf('const openStatusConfirm');
+  assert.match(detailSource.slice(openAt, openAt + 200), /if \(loading \|\| !commandsAllowed\) return;/);
+  // 확인 창은 요청을 직접 보내지 않는다.
+  assert.doesNotMatch(confirmDialogSource, /apiFetch|method: 'PATCH'|updateStatus\(/);
+  // 보류 창과 같은 Dialog 구조·z 200(하단 탭 위).
+  assert.match(confirmDialogSource, /<DialogOverlay className="z-\[200\]" \/>/);
+  assert.match(confirmDialogSource, /fixed inset-0 z-\[200\]/);
+});
+
+test('D-14. 응답 불확실 안내는 조회 실패 면과 겹치지 않는 한 면·한 버튼이다', () => {
+  const warningAt = detailSource.indexOf('{readbackWarning ? (');
+  assert.ok(warningAt !== -1, 'readbackWarning이 있으면 조회 실패 면 대신 한 면만 그린다');
+  const readErrorAt = detailSource.indexOf('(이전 정보 표시 중)', warningAt);
+  const block = detailSource.slice(warningAt, readErrorAt);
+  assert.equal((block.match(/<AppButton/g) ?? []).length, 1);
+  assert.match(block, />\s*상태 확인\s*</);
+  assert.match(block, /void readDetail\(token\)/);
+  assert.doesNotMatch(block, /updateStatus|apiFetch/);
+  assert.match(
+    holdModalSource,
+    /HOLD_UNCERTAIN_READBACK_WARNING =\s*"보류됐는지 아직 확인하지 못했어요\. 연결이 돌아오면 '상태 확인'을 눌러 주세요\."/,
+  );
+  assert.doesNotMatch(holdModalSource, /보류 명령|바로 다시 보내지 마세요/);
 });

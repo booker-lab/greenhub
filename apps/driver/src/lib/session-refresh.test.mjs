@@ -453,7 +453,7 @@ test('첫 화면 세션은 proxy가 확인한 값을 쓰고 세션 유지·토�
   assert.doesNotMatch(providersSource, /refetchInterval=|refetchOnWindowFocus=/);
   assert.match(
     providersSource,
-    /if \(session\?\.user\?\.tokenError\) \{\s*signOut\(\{ callbackUrl: '\/login' \}\);/,
+    /if \(session\?\.user\?\.tokenError\) \{\s*signOut\(\{ callbackUrl: sessionEndedLoginUrl\(\) \}\);/,
   );
   assert.match(
     providersSource,

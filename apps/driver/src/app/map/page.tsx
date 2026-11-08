@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSession } from 'next-auth/react';
+import { signOut, useSession } from 'next-auth/react';
 import { apiRead } from '@/lib/api';
 import {
   buildDriverListScope,
@@ -10,10 +10,15 @@ import {
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
 import { buildOrderMapLink, pickNextDeliveryStop } from './_lib/map-navigation-link';
-import { Badge } from '@greenhub/ui/components/badge';
+import {
+  countHeldOrders,
+  groupMapStops,
+  isMapStop,
+  mapStopAddressLine,
+} from './_lib/map-stop-groups';
 import { cn } from '@greenhub/ui/lib/utils';
 import { AppButton } from '@/components/app-button';
-import { badgeDark, badgeSize, text, titleH4 } from '@/components/look';
+import { text, titleH4 } from '@/components/look';
 
 type Order = {
   id: string;
@@ -142,9 +147,13 @@ export default function MapPage() {
       })
       .then((driverOrders) => {
         if (!isCurrent()) return;
+        // 지도 목록(배송 중·수거 대기)과 함께, 목록에서 빠지는 보류 주문 수를 세기 위해 보류도 둔다.
         setOrders(
           driverOrders.filter(
-            (order) => order.status === 'PREPARING' || order.status === 'DELIVERING',
+            (order) =>
+              order.status === 'PREPARING' ||
+              order.status === 'DELIVERING' ||
+              order.status === 'DELIVERY_HELD',
           ),
         );
         hasSuccessfulReadRef.current = true;
@@ -185,8 +194,13 @@ export default function MapPage() {
     };
   }, [session?.user.id, session?.user.role, session?.user.accessToken, sessionStatus, reloadKey]);
 
+  // 보류 주문은 지도 목록에 올리지 않는다(작업 보드에서 다룬다). 머리에 수만 밝힌다.
+  const stops = useMemo(() => orders.filter(isMapStop), [orders]);
+  const heldCount = countHeldOrders(orders);
   // O(n²) 정렬이라 목록이 바뀔 때만 다시 계산한다.
-  const sorted = useMemo(() => nearestNeighbor(orders), [orders]);
+  const sorted = useMemo(() => nearestNeighbor(stops), [stops]);
+  // 좌표가 없어 정렬 결과는 경로 순서가 아니므로 번호 대신 상태로 묶어 보인다(배송 중 → 수거 대기).
+  const groups = groupMapStops(sorted);
   // 주문에는 배송지 좌표가 없으므로 여러 곳 경유 길안내 대신
   // 다음 배송지 1곳만 연다. 유효 좌표가 없으면 주소 검색 링크로 연다.
   // 다음 배송지는 이미 수거해 배송 중인 내 주문에서만 고른다.
@@ -206,13 +220,27 @@ export default function MapPage() {
           padding: '16px',
         }}
       >
-        <h4 className={titleH4}>오늘 배송 경로</h4>
+        <h4 className={titleH4}>배송지 지도</h4>
         <p
           className={cn(text, 'mt-0.5')}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--driver-text-muted)',
+            fontVariantNumeric: 'tabular-nums',
+          }}
         >
-          총 {orders.length}건
+          {groups.length > 0
+            ? groups.map((group) => `${group.label} ${group.orders.length}`).join(' · ')
+            : `총 ${stops.length}건`}
         </p>
+        {heldCount > 0 && (
+          <p
+            className={cn(text, 'mt-0.5')}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
+          >
+            보류 {heldCount}곳은 작업 보드에서 확인해요.
+          </p>
+        )}
       </header>
 
       {/* 지도 플레이스홀더 */}
@@ -253,7 +281,7 @@ export default function MapPage() {
         </div>
       </div>
 
-      {/* 경유지 목록 */}
+      {/* 배송지 목록(상태 묶음) */}
       <div style={{ flex: 1, padding: '16px' }}>
         {loading ? (
           <div
@@ -272,10 +300,11 @@ export default function MapPage() {
               className={text}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
             >
-              로그인이 필요합니다. 세션을 다시 확인해 주세요.
+              로그인이 끝났어요. 다시 로그인해 주세요.
             </p>
-            <AppButton tone="brand-outline" onClick={() => setReloadKey((key) => key + 1)}>
-              다시 시도
+            {/* 같은 토큰으로 다시 조회하면 늘 같은 화면이므로 재조회 버튼 없이 로그인으로 보낸다(작업 보드와 같다). */}
+            <AppButton onClick={() => void signOut({ redirectTo: '/login' })}>
+              다시 로그인
             </AppButton>
           </div>
         ) : error && !hasSuccessfulRead ? (
@@ -298,7 +327,7 @@ export default function MapPage() {
               className={text}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
             >
-              오늘 배송 주문이 없습니다
+              배송할 주문이 없어요
             </p>
           </div>
         ) : (
@@ -324,81 +353,78 @@ export default function MapPage() {
                 </AppButton>
               </div>
             )}
-            {sorted.map((order, idx) => {
-              const addr =
-                order.deliveryMethod === 'hub'
-                  ? `${order.hubName ?? '거점'} · ${order.hubAddress ?? '-'}`
-                  : (order.address ?? '-');
-              // stale(error) 상태에서는 목록 행 지도 링크도 fail-closed로 숨긴다.
-              const mapLink = error ? null : buildOrderMapLink(order);
-              return (
-                <div
-                  key={order.id}
+            {groups.map((group) => (
+              <section
+                key={group.status}
+                className="flex flex-col gap-2.5"
+                aria-label={group.label}
+              >
+                <h2
+                  className="m-0"
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                    backgroundColor: 'var(--color-bg)',
-                    borderRadius: 12,
-                    border: 'var(--border)',
-                    padding: '12px 16px',
+                    fontSize: 'var(--font-size-md)',
+                    fontWeight: 'var(--fw-bold)',
+                    color: 'var(--color-text)',
+                    lineHeight: 1.4,
                   }}
                 >
-                  <div
-                    style={{
-                      width: 24,
-                      height: 24,
-                      flexShrink: 0,
-                      borderRadius: '50%',
-                      backgroundColor: 'var(--primary)',
-                      color: 'var(--primary-foreground)',
-                      fontSize: 'var(--font-size-sm)',
-                      fontWeight: 'var(--fw-bold)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}
-                  >
-                    {idx + 1}
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p
-                      className={cn(text, 'truncate')}
-                      style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
-                    >
-                      {order.buyerName ?? '소비자'}
-                    </p>
-                    <p
-                      className={cn(text, 'truncate')}
+                  {group.label}
+                  <span className="ml-1.5" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {group.orders.length}
+                  </span>
+                </h2>
+                {group.orders.map((order) => {
+                  // 동·호수(상세 주소)를 앞에 쓴다. 거점은 거점 이름이 앞이다.
+                  const addr = mapStopAddressLine(order);
+                  // stale(error) 상태에서는 목록 행 지도 링크도 fail-closed로 숨긴다.
+                  const mapLink = error ? null : buildOrderMapLink(order);
+                  return (
+                    <div
+                      key={order.id}
                       style={{
-                        fontSize: 'var(--font-size-sm)',
-                        color: 'var(--driver-text-muted)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 12,
+                        backgroundColor: 'var(--color-bg)',
+                        borderRadius: 12,
+                        border: 'var(--border)',
+                        padding: '12px 16px',
                       }}
                     >
-                      {addr}
-                    </p>
-                  </div>
-                  <Badge
-                    variant={order.status === 'DELIVERING' ? 'default' : 'warning'}
-                    className={cn(badgeSize.xs, order.status === 'DELIVERING' && badgeDark.light)}
-                  >
-                    {order.status === 'DELIVERING' ? '배송 중' : '수거 대기'}
-                  </Badge>
-                  {mapLink && (
-                    <AppButton
-                      href={mapLink.href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      size="xs"
-                      tone="brand-light"
-                      aria-label={`${idx + 1}번 배송지 카카오맵에서 열기`}
-                    >
-                      지도
-                    </AppButton>
-                  )}
-                </div>
-              );
-            })}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p
+                          className={cn(text, 'truncate')}
+                          style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+                        >
+                          {addr}
+                        </p>
+                        <p
+                          className={cn(text, 'truncate')}
+                          style={{
+                            fontSize: 'var(--font-size-sm)',
+                            color: 'var(--driver-text-muted)',
+                          }}
+                        >
+                          {order.buyerName ?? '소비자'}
+                        </p>
+                      </div>
+                      {mapLink && (
+                        <AppButton
+                          href={mapLink.href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          size="xs"
+                          tone="brand-light"
+                          aria-label={`${addr} 카카오맵에서 열기`}
+                        >
+                          지도
+                        </AppButton>
+                      )}
+                    </div>
+                  );
+                })}
+              </section>
+            ))}
           </div>
         )}
       </div>

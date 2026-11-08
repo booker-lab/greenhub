@@ -3,6 +3,8 @@
 // stage-based masking of customer contact data cannot diverge.
 
 export type DriverOrderView = 'list' | 'detail';
+// 주문 문서 밖에서 읽어 함께 싣는 값. 회차 배송 시작 시각은 노출 판정이 확인한 회차 문서에서 온다.
+export type DriverOrderProjectionContext = { roundDeliveryStartAt?: string | null };
 type DriverOrderItem = { productName: string; quantity: number };
 export type DriverOrderReadModel = Record<string, unknown> & {
   redeliveryPayment: {
@@ -24,11 +26,14 @@ export function projectDriverOrder(
   order: Record<string, any>,
   driverId: string,
   view: DriverOrderView,
+  context: DriverOrderProjectionContext = {},
 ): DriverOrderReadModel {
   const isAssignedToRequester = order['driverId'] === driverId;
   const projected: DriverOrderReadModel = {
     id: order['id'],
     status: order['status'],
+    // 요청한 기사 본인에게 배정됐는지만 싣는다(배정된 기사 ID는 싣지 않는다).
+    assignedToMe: isAssignedToRequester,
     deliveryMethod: order['deliveryMethod'],
     buyerName: order['buyerName'],
     address: order['address'] ?? deliveryAddressValue(order['deliveryAddress']),
@@ -46,6 +51,11 @@ export function projectDriverOrder(
   // 기사가 상품마다 챙길 개수를 보도록 상품 이름·수량만 싣는다(가격·상품 ID 등은 싣지 않는다).
   const items = projectItems(order['orderItems']);
   if (items) projected['items'] = items;
+
+  // 회차 주문의 배송일 표시용. 회차 일정은 손님·기사 정보가 아니고 같은 회차 주문에 모두 같다.
+  if (typeof context.roundDeliveryStartAt === 'string') {
+    projected['deliveryDate'] = context.roundDeliveryStartAt;
+  }
 
   if (view === 'list') {
     // 지도 검색용 기본 주소(동·호수 없는 deliveryAddress.address)는 전체 주소를 이미 싣는 행에만 싣는다.
