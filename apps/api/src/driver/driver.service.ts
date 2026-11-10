@@ -1,3 +1,4 @@
+import { dateRangeKST, todayKST } from '@greenhub/shared';
 import { Injectable } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
 import {
@@ -55,6 +56,21 @@ function roundDeliveryStartAt(round: Record<string, any> | null): string | null 
   }
 }
 
+// 배송 완료 뒤 주문이 갈 수 있는 상태. 고객 리뷰(구매 확정)나 배송 후 환불로 상태가 넘어가도
+// 배송 완료 시각(deliveredAt)이 오늘이면 오늘 완료로 센다.
+export const DRIVER_COMPLETED_ORDER_STATUSES = ['DELIVERED', 'REVIEWED', 'CANCELLED'] as const;
+
+/**
+ * 주문의 배송 완료 시각(ms). 배송 완료 전이가 쓰는 deliveredAt을 쓰고, 그 필드를 쓰기 전에 완료된
+ * 주문은 아직 DELIVERED에 머문 경우에만 마지막 변경 시각(updatedAt)으로 대신한다. 리뷰·취소로 넘어간
+ * 이전 주문은 완료 시각을 알 수 없어 세지 않는다.
+ */
+function deliveredAtMillis(order: Record<string, unknown>): number | null {
+  const deliveredAt = timestampMillis(order['deliveredAt']);
+  if (deliveredAt !== null) return deliveredAt;
+  return order['status'] === 'DELIVERED' ? timestampMillis(order['updatedAt']) : null;
+}
+
 @Injectable()
 export class DriverService {
   private readonly driverScope: DriverOrderScopeService;
@@ -101,7 +117,8 @@ export class DriverService {
       }
     }
     const candidates = [...byId.values()].sort(compareByPreparedThenUpdated);
-    // 노출 판정이 이미 읽은 회차 문서를 그대로 받아 배송일을 싣는다. 회차 문서는 요청당 회차마다 한 번만 읽는다.
+    // 노출 판정이 이미 읽은 회차·판매점 문서를 그대로 받아 배송일과 수거 장소를 싣는다.
+    // 회차·판매점 문서는 요청당 문서마다 한 번만 읽는다.
     const visibleEntries = await this.driverScope.filterVisibleOrdersWithRounds(
       candidates,
       driverId,
@@ -109,9 +126,10 @@ export class DriverService {
     );
 
     return Promise.all(
-      visibleEntries.map(({ order, pilotRound }) =>
+      visibleEntries.map(({ order, pilotRound, store }) =>
         this.toDriverOrder(order, driverId, 'list', {
           roundDeliveryStartAt: roundDeliveryStartAt(pilotRound),
+          pickupStore: store,
         }),
       ),
     );
@@ -123,11 +141,41 @@ export class DriverService {
     if (!snap.exists) throwDriverOrderNotFound('주문을 찾을 수 없습니다.');
 
     const order = { id: orderId, ...snap.data() } as Record<string, unknown>;
-    if (!(await this.driverScope.isOrderVisible(order, driverId, authority))) {
-      throwDriverOrderNotFound('주문을 찾을 수 없습니다.');
-    }
+    // 노출 판정이 읽은 판매점 문서로 수거 장소를 싣는다(판매점 문서를 다시 읽지 않는다).
+    const visible = await this.driverScope.resolveVisibleOrder(order, driverId, authority);
+    if (!visible) throwDriverOrderNotFound('주문을 찾을 수 없습니다.');
 
-    return this.toDriverOrder(order, driverId, 'detail');
+    return this.toDriverOrder(order, driverId, 'detail', { pickupStore: visible.store });
+  }
+
+  /**
+   * 요청 기사에게 배정된 주문 중 오늘(서울 날짜) 배송 완료된 수. 손님 정보는 싣지 않는다.
+   * 오늘 배송 완료된 주문은 그 뒤 리뷰·취소가 있어도 마지막 변경 시각이 오늘 이후이므로, 기존
+   * (status, driverId, updatedAt) 복합 인덱스로 오늘 바뀐 본인 완료 계열 주문만 읽고 완료 시각으로 센다.
+   */
+  async getSummary(driverId: string): Promise<{ completedToday: number }> {
+    await this.driverScope.assertDriverAuthority(driverId);
+    const { start, endExclusive } = dateRangeKST(todayKST());
+    const snap = await this.firestore
+      .collection('orders')
+      .where('status', 'in', [...DRIVER_COMPLETED_ORDER_STATUSES])
+      .where('driverId', '==', driverId)
+      .where('updatedAt', '>=', this.firestore.Timestamp.fromDate(start))
+      .get();
+
+    const startMillis = start.getTime();
+    const endMillis = endExclusive.getTime();
+    let completedToday = 0;
+    for (const doc of snap.docs) {
+      const order = doc.data() as Record<string, unknown>;
+      // 쿼리 조건을 메모리에서도 다시 확인해, 조건 밖 문서가 섞여도 세지 않는다.
+      if (order['driverId'] !== driverId) continue;
+      const deliveredAt = deliveredAtMillis(order);
+      if (deliveredAt !== null && deliveredAt >= startMillis && deliveredAt < endMillis) {
+        completedToday += 1;
+      }
+    }
+    return { completedToday };
   }
 
   private async toDriverOrder(

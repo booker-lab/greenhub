@@ -5,9 +5,37 @@ import { DriverService } from './driver.service';
 
 type Data = Record<string, any>;
 
+// Firestore Timestamp처럼 toMillis로 시각을 읽는 값.
+const timestamp = (iso: string) => {
+  const millis = Date.parse(iso);
+  return { toMillis: () => millis, toDate: () => new Date(millis) };
+};
+
+function comparableMillis(value: unknown): number | null {
+  if (typeof value === 'object' && value !== null && 'toMillis' in value) {
+    return (value as { toMillis: () => number }).toMillis();
+  }
+  return null;
+}
+
+function matchesFilter(data: Data, [field, operator, value]: [string, string, unknown]) {
+  if (!(field in data)) return false;
+  if (operator === 'in') return Array.isArray(value) && value.includes(data[field]);
+  if (operator === '==') return data[field] === value;
+  // 범위 비교는 실제 Firestore처럼 같은 타입(Timestamp)끼리만 일치한다.
+  const left = comparableMillis(data[field]);
+  const right = comparableMillis(value);
+  if (left === null || right === null) return false;
+  if (operator === '>=') return left >= right;
+  if (operator === '<') return left < right;
+  throw new Error(`지원하지 않는 연산자: ${operator}`);
+}
+
 function makeFirestore(records: Record<string, Data>) {
   // 쿼리마다 필터를 따로 두고, 실제 Firestore처럼 결과를 문서 ID 오름차순으로 돌려준다.
   const reads = { orderDocs: 0 };
+  // 실행한 쿼리마다 컬렉션과 필터(필드·연산자·값)를 남겨 쿼리 모양을 확인한다.
+  const executedQueries: Array<Array<[string, string, unknown]>> = [];
   const where = jest.fn();
   const orderBy = jest.fn();
   const makeQuery = (
@@ -24,16 +52,11 @@ function makeFirestore(records: Record<string, Data>) {
       return makeQuery(filters, [...orderFields, field]);
     },
     get: jest.fn(async () => {
+      executedQueries.push(filters);
       // 실제 Firestore처럼 == null·in은 필드가 없는 문서와 일치하지 않는다.
       const docs = Object.entries(records)
         .filter(([path]) => path.startsWith('orders/'))
-        .filter(([, data]) =>
-          filters.every(([field, operator, value]) =>
-            operator === 'in'
-              ? Array.isArray(value) && field in data && value.includes(data[field])
-              : field in data && data[field] === value,
-          ),
-        )
+        .filter(([, data]) => filters.every((filter) => matchesFilter(data, filter)))
         .filter(([, data]) => orderFields.every((field) => field in data))
         .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
         .map(([path, data]) => ({
@@ -46,6 +69,7 @@ function makeFirestore(records: Record<string, Data>) {
   });
   const query = { where, orderBy };
   const firestore = {
+    Timestamp: { fromDate: (date: Date) => timestamp(date.toISOString()) },
     collection: jest.fn((_path: string) => makeQuery([], [])),
     doc: jest.fn((path: string) => ({
       get: jest.fn(async () => ({
@@ -54,14 +78,14 @@ function makeFirestore(records: Record<string, Data>) {
       })),
     })),
   };
-  return { firestore, query, reads };
+  return { firestore, query, reads, executedQueries };
 }
 
 function makeService(
   records: Record<string, Data>,
   driver: Data = { role: 'driver', driverApproved: true },
 ) {
-  const { firestore, query, reads } = makeFirestore(records);
+  const { firestore, query, reads, executedQueries } = makeFirestore(records);
   records['users/driver-1'] = { id: 'driver-1', ...driver };
   const ordersQuery = new OrdersQueryService(firestore as never);
   const driverScope = new DriverOrderScopeService(firestore as never);
@@ -71,6 +95,7 @@ function makeService(
     query,
     firestore,
     reads,
+    executedQueries,
   };
 }
 
@@ -1214,5 +1239,332 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
 
     await expect(service.getOrders('driver-1')).rejects.toThrow();
     await expect(service.getOrder('driver-1', 'order-1')).rejects.toThrow();
+  });
+});
+
+describe('DriverService 수거 장소와 목록 판매점 ID', () => {
+  // 판매점 이름·주소는 노출 판정이 읽은 stores/{storeId} 문서에서 온다.
+  function pickupRecords(): Record<string, Data> {
+    const records: Record<string, Data> = {
+      'stores/pilot': {
+        id: 'pilot',
+        salesMode: 'round_direct',
+        name: '  그린 화원  ',
+        address: ' 서울시 중구 세종대로 1 ',
+        ownerPhone: '010-9999-9999',
+      },
+      'stores/legacy': { id: 'legacy', salesMode: 'legacy', name: '레거시 꽃집', address: '   ' },
+      'saleRounds/round-a': { id: 'round-a', storeId: 'pilot' },
+      'orders/legacy-open': {
+        storeId: 'legacy',
+        deliveryMethod: 'hub',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: '2026-01-01T02:00:00.000Z',
+      },
+      'orders/pilot-delivering': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-a',
+        deliveryMethod: 'direct',
+        status: 'DELIVERING',
+        driverId: 'driver-1',
+        updatedAt: '2026-01-01T03:00:00.000Z',
+      },
+      'orders/pilot-held': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-a',
+        deliveryMethod: 'direct',
+        status: 'DELIVERY_HELD',
+        driverId: 'driver-1',
+        updatedAt: '2026-01-01T04:00:00.000Z',
+      },
+      // storeId가 없는 이전 주문은 판매점을 읽지 않으므로 수거 장소가 없다.
+      'orders/storeless': {
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: '2026-01-01T05:00:00.000Z',
+      },
+    };
+    for (let i = 0; i < 5; i += 1) {
+      records[`orders/pilot-${i}`] = {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-a',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: i === 0 ? 'driver-1' : null,
+        updatedAt: `2026-01-01T00:0${i}:00.000Z`,
+      };
+    }
+    return records;
+  }
+
+  it('목록의 PREPARING 주문에만 공백을 걷어 낸 판매점 이름·주소를 싣고 판매점 문서는 요청당 한 번만 읽는다', async () => {
+    const { service, firestore } = makeService(pickupRecords());
+
+    const result = await service.getOrders('driver-1');
+    const byId = Object.fromEntries(result.map((order) => [order.id, order]));
+
+    expect(Object.keys(byId).sort()).toEqual(
+      [
+        'legacy-open',
+        'pilot-0',
+        'pilot-1',
+        'pilot-2',
+        'pilot-3',
+        'pilot-4',
+        'pilot-delivering',
+        'pilot-held',
+        'storeless',
+      ].sort(),
+    );
+    for (let i = 0; i < 5; i += 1) {
+      expect(byId[`pilot-${i}`]).toMatchObject({
+        pickupStoreName: '그린 화원',
+        pickupAddress: '서울시 중구 세종대로 1',
+      });
+    }
+    // 공백뿐인 주소는 싣지 않고 이름만 싣는다.
+    expect(byId['legacy-open']['pickupStoreName']).toBe('레거시 꽃집');
+    expect(byId['legacy-open']).not.toHaveProperty('pickupAddress');
+    for (const id of ['pilot-delivering', 'pilot-held', 'storeless']) {
+      expect(byId[id]).not.toHaveProperty('pickupStoreName');
+      expect(byId[id]).not.toHaveProperty('pickupAddress');
+    }
+    // 판매점의 다른 필드는 싣지 않는다.
+    for (const order of result) expect(JSON.stringify(order)).not.toContain('010-9999-9999');
+
+    const readCount = (path: string) =>
+      firestore.doc.mock.calls.filter(([called]) => called === path).length;
+    // 주문 7건이 같은 판매점이어도 노출 판정에서 1회만 읽고 수거 장소는 그 문서를 그대로 쓴다.
+    expect(readCount('stores/pilot')).toBe(1);
+    expect(readCount('stores/legacy')).toBe(1);
+    expect(
+      firestore.doc.mock.calls.filter(([called]) => String(called).startsWith('stores/')),
+    ).toHaveLength(2);
+  });
+
+  it('목록 행에도 storeId를 싣는다(storeId가 없는 이전 주문은 비워 둔다)', async () => {
+    const { service } = makeService(pickupRecords());
+
+    const result = await service.getOrders('driver-1');
+    const byId = Object.fromEntries(result.map((order) => [order.id, order]));
+
+    expect(byId['pilot-0']['storeId']).toBe('pilot');
+    expect(byId['pilot-delivering']['storeId']).toBe('pilot');
+    expect(byId['legacy-open']['storeId']).toBe('legacy');
+    expect(JSON.parse(JSON.stringify(byId['storeless']))).not.toHaveProperty('storeId');
+    for (const order of result) expect(order).not.toHaveProperty('driverId');
+  });
+
+  it('상세도 PREPARING 주문에만 수거 장소를 싣고 노출 판정이 읽은 판매점 문서를 다시 읽지 않는다', async () => {
+    const { service, firestore } = makeService(pickupRecords());
+    const storeReads = () =>
+      firestore.doc.mock.calls.filter(([called]) => String(called).startsWith('stores/')).length;
+
+    await expect(service.getOrder('driver-1', 'pilot-0')).resolves.toMatchObject({
+      storeId: 'pilot',
+      pickupStoreName: '그린 화원',
+      pickupAddress: '서울시 중구 세종대로 1',
+    });
+    expect(storeReads()).toBe(1);
+
+    const legacy = await service.getOrder('driver-1', 'legacy-open');
+    expect(legacy['pickupStoreName']).toBe('레거시 꽃집');
+    expect(legacy).not.toHaveProperty('pickupAddress');
+
+    for (const id of ['pilot-delivering', 'pilot-held', 'storeless']) {
+      const order = await service.getOrder('driver-1', id);
+      expect(order).not.toHaveProperty('pickupStoreName');
+      expect(order).not.toHaveProperty('pickupAddress');
+    }
+  });
+
+  it.each([
+    ['이름·주소가 없는 판매점', {}],
+    ['빈 문자열', { name: '', address: '' }],
+    ['공백뿐인 값', { name: '  ', address: '\n\t' }],
+    ['문자열이 아닌 값', { name: 123, address: { road: '세종대로' } }],
+  ])('%s이면 수거 장소 필드를 싣지 않는다', async (_label, storeFields) => {
+    const { service } = makeService({
+      'stores/legacy': { id: 'legacy', salesMode: 'legacy', ...storeFields },
+      'orders/open': {
+        storeId: 'legacy',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
+    });
+
+    const [listed] = await service.getOrders('driver-1');
+    const detail = await service.getOrder('driver-1', 'open');
+
+    for (const order of [listed, detail]) {
+      expect(order).not.toHaveProperty('pickupStoreName');
+      expect(order).not.toHaveProperty('pickupAddress');
+    }
+  });
+});
+
+describe('DriverService 오늘 완료 요약', () => {
+  // 서울 2026-11-11 00:30. 서울 오늘의 시작은 2026-11-10T15:00:00Z다.
+  const AFTER_MIDNIGHT = '2026-11-10T15:30:00.000Z';
+  // 서울 2026-11-10 23:30. 서울 오늘의 시작은 2026-11-09T15:00:00Z, 끝(제외)은 2026-11-10T15:00:00Z다.
+  const BEFORE_MIDNIGHT = '2026-11-10T14:30:00.000Z';
+
+  function summaryRecords(): Record<string, Data> {
+    const mine = { driverId: 'driver-1', deliveryMethod: 'direct', storeId: 'pilot' };
+    return {
+      // 서울 자정 정각에 완료.
+      'orders/at-midnight': {
+        ...mine,
+        status: 'DELIVERED',
+        deliveredAt: timestamp('2026-11-10T15:00:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:00:00.000Z'),
+      },
+      // 서울 자정 1초 전 완료.
+      'orders/before-midnight': {
+        ...mine,
+        status: 'DELIVERED',
+        deliveredAt: timestamp('2026-11-10T14:59:59.000Z'),
+        updatedAt: timestamp('2026-11-10T14:59:59.000Z'),
+      },
+      // 자정 전에 완료하고 자정 뒤 고객이 리뷰(구매 확정)해 updatedAt만 다음 날인 주문.
+      'orders/reviewed-after-midnight-delivered-before': {
+        ...mine,
+        status: 'REVIEWED',
+        deliveredAt: timestamp('2026-11-10T14:59:59.000Z'),
+        updatedAt: timestamp('2026-11-10T15:10:00.000Z'),
+      },
+      // 자정 뒤 완료하고 리뷰돼 상태가 DELIVERED 뒤로 넘어간 주문.
+      'orders/reviewed-today': {
+        ...mine,
+        status: 'REVIEWED',
+        deliveredAt: timestamp('2026-11-10T15:05:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:20:00.000Z'),
+      },
+      // 자정 뒤 완료한 뒤 배송 후 환불로 취소된 주문.
+      'orders/refunded-after-delivery-today': {
+        ...mine,
+        status: 'CANCELLED',
+        deliveredAt: timestamp('2026-11-10T15:06:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:25:00.000Z'),
+      },
+      // deliveredAt을 쓰기 전에 완료된 주문: DELIVERED에 머물면 updatedAt을 완료 시각으로 본다.
+      'orders/previous-delivered-today': {
+        ...mine,
+        status: 'DELIVERED',
+        updatedAt: timestamp('2026-11-10T15:07:00.000Z'),
+      },
+      // deliveredAt 없이 리뷰·취소로 넘어간 주문은 완료 시각을 알 수 없어 세지 않는다.
+      'orders/previous-reviewed-today': {
+        ...mine,
+        status: 'REVIEWED',
+        updatedAt: timestamp('2026-11-10T15:08:00.000Z'),
+      },
+      'orders/cancelled-before-delivery': {
+        ...mine,
+        status: 'CANCELLED',
+        updatedAt: timestamp('2026-11-10T15:09:00.000Z'),
+      },
+      'orders/mine-delivering': {
+        ...mine,
+        status: 'DELIVERING',
+        updatedAt: timestamp('2026-11-10T15:11:00.000Z'),
+      },
+      'orders/mine-hub-arrived': {
+        ...mine,
+        deliveryMethod: 'hub',
+        status: 'HUB_ARRIVED',
+        updatedAt: timestamp('2026-11-10T15:12:00.000Z'),
+      },
+      // 다른 기사·미배정 주문은 같은 날 완료여도 세지 않는다.
+      'orders/other-driver-today': {
+        ...mine,
+        driverId: 'driver-2',
+        status: 'DELIVERED',
+        deliveredAt: timestamp('2026-11-10T15:13:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:13:00.000Z'),
+      },
+      'orders/parcel-today': {
+        storeId: 'pilot',
+        deliveryMethod: 'parcel',
+        status: 'DELIVERED',
+        deliveredAt: timestamp('2026-11-10T15:14:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:14:00.000Z'),
+      },
+    };
+  }
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('서울 자정 직후에는 자정 이후 완료만 세고, 리뷰·환불로 상태가 넘어간 오늘 완료도 센다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const { service } = makeService(summaryRecords());
+
+    // at-midnight, reviewed-today, refunded-after-delivery-today, previous-delivered-today.
+    await expect(service.getSummary('driver-1')).resolves.toEqual({ completedToday: 4 });
+  });
+
+  it('서울 자정 직전에는 그날 완료만 세고 자정 정각 이후 완료는 세지 않는다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(BEFORE_MIDNIGHT));
+    const { service } = makeService(summaryRecords());
+
+    // before-midnight, reviewed-after-midnight-delivered-before 두 건(완료 시각이 서울 11-10).
+    await expect(service.getSummary('driver-1')).resolves.toEqual({ completedToday: 2 });
+  });
+
+  it('응답은 완료 수만 싣는다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const { service } = makeService(summaryRecords());
+
+    const summary = await service.getSummary('driver-1');
+
+    expect(Object.keys(summary)).toEqual(['completedToday']);
+  });
+
+  it('기존 (status, driverId, updatedAt) 인덱스 모양의 쿼리 하나로 본인·오늘 바뀐 완료 계열 주문만 읽는다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const records = summaryRecords();
+    // 지난 기록이 많아도 오늘 바뀌지 않은 주문은 읽지 않는다.
+    for (let i = 0; i < 20; i += 1) {
+      records[`orders/history-${String(i).padStart(2, '0')}`] = {
+        driverId: 'driver-1',
+        deliveryMethod: 'direct',
+        status: i % 2 === 0 ? 'DELIVERED' : 'REVIEWED',
+        deliveredAt: timestamp('2026-10-01T03:00:00.000Z'),
+        updatedAt: timestamp('2026-10-02T03:00:00.000Z'),
+      };
+    }
+    const { service, executedQueries, reads } = makeService(records);
+
+    await expect(service.getSummary('driver-1')).resolves.toEqual({ completedToday: 4 });
+
+    expect(executedQueries).toHaveLength(1);
+    const [filters] = executedQueries;
+    expect(filters.map(([field, operator]) => [field, operator])).toEqual([
+      ['status', 'in'],
+      ['driverId', '=='],
+      ['updatedAt', '>='],
+    ]);
+    expect(filters[0][2]).toEqual(['DELIVERED', 'REVIEWED', 'CANCELLED']);
+    expect(filters[1][2]).toBe('driver-1');
+    expect(comparableMillis(filters[2][2])).toBe(Date.parse('2026-11-10T15:00:00.000Z'));
+    // 오늘 바뀐 본인 DELIVERED·REVIEWED·CANCELLED 주문 7건만 읽는다.
+    expect(reads.orderDocs).toBe(7);
+  });
+
+  it.each([
+    ['승인 필드가 정확한 true가 아님', { role: 'driver', driverApproved: false }],
+    ['정지됨', { role: 'driver', driverApproved: true, suspended: true }],
+    ['driver 역할이 아님', { role: 'consumer', driverApproved: true }],
+  ])('%s이면 요약을 거부하고 주문을 읽지 않는다', async (_label, driver) => {
+    const { service, executedQueries } = makeService(summaryRecords(), driver);
+
+    await expect(service.getSummary('driver-1')).rejects.toThrow();
+    expect(executedQueries).toHaveLength(0);
   });
 });

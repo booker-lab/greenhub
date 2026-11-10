@@ -5,6 +5,7 @@ import { getRedeliveryPaymentPresentation } from '@/app/board/_lib/redelivery-pa
 import { splitDeliveryAddress } from '@/lib/address-parts';
 import { formatDeliveryDayLabel } from '@/lib/delivery-day';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
+import { type PickupPlace, readPickupPlace } from '@/lib/pickup-place';
 import { text } from './look';
 
 // 기사 ② 방향(design-direction.md §6 "한 손 배송 목록"): 틀은 흰 바탕·검정 글자이고 색은 문제 상태(빨강)에만 쓴다.
@@ -17,6 +18,18 @@ export type DriverListOrder = Order & {
   assignedToMe?: boolean;
   /** 회차 주문의 회차 배송 시작 시각(ISO). 회차가 없는 주문에는 없다. */
   deliveryDate?: string | null;
+  /** 수거 대기 주문의 수거 가게 이름·주소. 다른 상태와 이전 API 응답에는 없다. */
+  pickupStoreName?: string;
+  pickupAddress?: string;
+};
+
+/** 한 번에 수거 고르기 칸. 있으면 행은 주문 상세로 가는 링크 대신 고르기 칸이 된다. */
+export type OrderRowSelection = {
+  checked: boolean;
+  disabled: boolean;
+  onToggle: () => void;
+  /** 고를 수 없는 까닭 등 행 아래 짧은 안내. */
+  note?: string | null;
 };
 
 function formatTime(value?: string | null) {
@@ -42,10 +55,12 @@ export default function OrderCard({
   order,
   tab,
   variant = 'row',
+  selection,
 }: {
   order: DriverListOrder;
   tab: string;
   variant?: 'next' | 'row';
+  selection?: OrderRowSelection;
 }) {
   const payment = getRedeliveryPaymentPresentation(order.redeliveryPayment);
   const itemLines = orderItemLines(order.items);
@@ -142,14 +157,8 @@ export default function OrderCard({
     .filter(Boolean)
     .join(' · ');
 
-  return (
-    <Link
-      href={`/board/${order.id}`}
-      prefetch={false}
-      data-testid={`driver-order-${order.id}`}
-      className="flex min-h-16 flex-col justify-center gap-0.5 py-3 text-inherit no-underline"
-      style={{ color: 'var(--color-text)' }}
-    >
+  const rowBody = (
+    <>
       <p
         className={cn(text, 'truncate')}
         style={{ fontWeight: 'var(--fw-bold)', fontVariantNumeric: 'tabular-nums' }}
@@ -178,6 +187,98 @@ export default function OrderCard({
         {second}
       </p>
       {paymentLine}
+    </>
+  );
+
+  // 수거 장소 줄은 수거 대기 행 아래에 붙인다. 지도 링크는 행 링크·고르기 칸 밖에 둔다(링크 안에 링크를 두지 않는다).
+  const pickup = tab === 'preparing' ? readPickupPlace(order) : null;
+  const rowPadding = pickup ? 'pt-3 pb-1' : 'py-3';
+  const row = selection ? (
+    // 한 번에 수거 고르기: 행 전체가 고르기 칸의 이름표이고 상세로 가지 않는다.
+    <label
+      data-testid={`driver-order-${order.id}`}
+      className={cn(
+        'flex min-h-16 items-center gap-3',
+        rowPadding,
+        selection.disabled ? 'cursor-not-allowed' : 'cursor-pointer',
+      )}
+      style={{ color: 'var(--color-text)' }}
+    >
+      <input
+        type="checkbox"
+        className="size-6 shrink-0"
+        style={{ accentColor: 'var(--color-text)' }}
+        checked={selection.checked}
+        disabled={selection.disabled}
+        onChange={selection.onToggle}
+      />
+      <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5">
+        {rowBody}
+        {selection.note && (
+          <p className={text} style={muted}>
+            {selection.note}
+          </p>
+        )}
+      </div>
+    </label>
+  ) : (
+    <Link
+      href={`/board/${order.id}`}
+      prefetch={false}
+      data-testid={`driver-order-${order.id}`}
+      className={cn(
+        'flex min-h-16 flex-col justify-center gap-0.5 text-inherit no-underline',
+        rowPadding,
+      )}
+      style={{ color: 'var(--color-text)' }}
+    >
+      {rowBody}
     </Link>
+  );
+
+  if (!pickup) return row;
+  return (
+    <div className="flex flex-col pb-3">
+      {row}
+      <PickupLine orderId={order.id} pickup={pickup} indent={Boolean(selection)} />
+    </div>
+  );
+}
+
+/** 수거 대기 행의 "수거: 가게 이름 · 주소"와 카카오맵 주소 보기 링크(주소가 있을 때만). */
+function PickupLine({
+  orderId,
+  pickup,
+  indent,
+}: {
+  orderId: string;
+  pickup: PickupPlace;
+  indent: boolean;
+}) {
+  return (
+    <div
+      data-testid={`driver-order-pickup-${orderId}`}
+      className={cn('flex items-center gap-3', indent && 'pl-9')}
+    >
+      <p className={cn(text, 'min-w-0 flex-1 truncate')} style={muted}>
+        {pickup.label}
+      </p>
+      {pickup.mapHref && (
+        <a
+          href={pickup.mapHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="카카오맵에서 수거지 보기"
+          className="inline-flex min-h-11 shrink-0 items-center underline underline-offset-4"
+          style={{
+            fontSize: 'var(--font-size-sm)',
+            fontWeight: 'var(--fw-bold)',
+            color: 'var(--color-text)',
+          }}
+        >
+          지도
+        </a>
+      )}
+    </div>
   );
 }

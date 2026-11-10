@@ -35,6 +35,24 @@ describe('DriverController 권한 계약', () => {
     ).resolves.toEqual({ id: 'order-1' });
     expect(driver.getOrder).toHaveBeenCalledWith('driver-1', 'order-1');
   });
+
+  it('오늘 완료 요약 경로를 같은 controller guard 아래에 노출하고 요청 기사 ID만 넘긴다', async () => {
+    const driver = {
+      getSummary: jest.fn().mockResolvedValue({ completedToday: 3 }),
+    };
+    const controller = new DriverController(driver as never);
+
+    expect(Reflect.getMetadata(PATH_METADATA, DriverController.prototype.getSummary)).toBe(
+      'summary',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, DriverController.prototype.getSummary)).toBe(
+      RequestMethod.GET,
+    );
+    await expect(controller.getSummary({ sub: 'driver-1', role: 'driver' })).resolves.toEqual({
+      completedToday: 3,
+    });
+    expect(driver.getSummary).toHaveBeenCalledWith('driver-1');
+  });
 });
 
 describe('GET /driver/orders status 쿼리 검증', () => {

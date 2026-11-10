@@ -122,6 +122,8 @@ function listView(order) {
 
 export const routes = [
   ['GET', /^\/driver\/orders$/, () => ({ body: ORDERS.map(listView) })],
+  // 작업 보드 진행 줄의 "오늘 완료 n곳"(GET /driver/summary). 없으면 보드 캡처가 fixture 없음으로 빠진다.
+  ['GET', /^\/driver\/summary$/, () => ({ body: { completedToday: 0 } })],
   [
     'GET',
     /^\/driver\/orders\/([^/]+)$/,
