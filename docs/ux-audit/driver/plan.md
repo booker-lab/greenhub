@@ -168,3 +168,21 @@
 - 내 수거가 5건 이상이면 "맡을 수 있는 주문" 묶음 제목이 첫 화면에서 빠지고 진행 줄과 "더 보기" 수로만 드러난다(의도한 5행 규칙의 결과, 운영에서 불편하면 다시 본다)
 - 판매자 시각 비교 fixture `modal-order-hold`(`scripts/visual/fixtures/seller.mjs`)는 이제 유형 미선택 화면을 찍으므로 다음 시각 비교 때 기준 이미지를 갱신해야 한다
 - 3절 보류 항목과 실기기 확인(카카오 첫 로그인 승인 대기 안내, 홈 화면 앱 안전 영역)은 그대로다
+
+## 8. 3차 배치 계획 (2026-11-10)
+
+사용자 결정(2026-11-10): 3절에서 파일럿 동안 보류했던 항목 중 **한 번에 수거**, **수거 장소 표시**, **오늘 완료 n건**을 진행하고, 1·2차 수정이 들어간 현재 상태로 **재감사**한다. 수거 장소는 가게 문서의 `name`·`address`를 실제 수거지로 본다(다르면 사용자가 알려 주기로 함). 오늘 완료는 손님 정보 없이 숫자만 보인다. 기준 `main` `39776528`(#845).
+
+### 응답 계약(API ↔ 기사 앱, 두 단위가 같이 쓴다)
+
+- 기사 주문 응답(목록·상세)의 `PREPARING` 주문에 `pickupStoreName?: string`, `pickupAddress?: string`(가게 문서 `name`·`address`, 비어 있으면 싣지 않음). 다른 상태에는 싣지 않는다.
+- 기사 주문 목록 응답에도 `storeId`를 싣는다(지금은 상세에만 있음, 한 번에 수거가 주문별 상태 변경 경로에 쓴다).
+- 새 `GET /driver/summary` → `{ completedToday: number }`: 요청 기사에게 배정된 주문 중 오늘(서울 날짜) 배송 완료된 수. 기존 목록 응답 모양(배열)은 바꾸지 않는다.
+
+| 단위 | 결과 | 변경 범위 |
+|---|---|---|
+| W-A API | 위 계약의 필드와 요약 API. 가게 문서는 노출 판정이 이미 읽는 것을 다시 쓰고(1·2차의 회차 문서와 같은 방식), 완료 수는 기존 인덱스로 센다(새 인덱스가 꼭 필요하면 `firestore.indexes.json`에 더하고 배포 순서를 PR에 적는다) | `apps/api/src/driver/**`, `apps/api/src/orders/driver-order-read-model.ts`, `apps/api/src/orders/driver-order-scope.service.ts`(+ spec), 필요 시 `firestore.indexes.json` |
+| W-B 기사 앱 | 한 번에 수거(내 수거 주문을 골라 확인 창 한 번 → 주문마다 기존 상태 변경을 차례로, 주문별 결과 표시, 같은 요청 자동 재전송 금지), 수거 대기 행·상세의 수거 장소와 지도 링크, 작업 보드 진행 줄의 "오늘 완료 n곳" | `apps/driver/src/app/board/**`, `apps/driver/src/components/**`, `apps/driver/src/lib/**`(+ 테스트, 기사 E2E 기대값) |
+| W-C 재감사 | 현재 `main`에서 가입~로그아웃 여정을 390×844로 다시 실행해 새 결함을 찾는다(1차 감사와 같은 형식, `findings.md`에 "2차 감사" 절과 `screenshots/reaudit/`). 수정은 하지 않는다 | `docs/ux-audit/driver/findings.md`, `docs/ux-audit/driver/screenshots/reaudit/` |
+
+W-A와 W-B는 위 계약으로 동시에 진행하고 통합 때 맞춘다. 로컬 스택은 W-C가 감사하는 동안 쓰고, W-A·W-B의 브라우저 확인은 통합 뒤 한 번에 한다.
