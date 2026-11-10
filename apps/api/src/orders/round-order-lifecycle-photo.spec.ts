@@ -96,4 +96,25 @@ describe('회차 직배송 완료 사진 게이트', () => {
       expect.objectContaining({ status: 'DELIVERED' }),
     );
   });
+
+  it('배송 완료 전이는 같은 시각으로 deliveredAt과 updatedAt을 남긴다', async () => {
+    const { service, update } = makeService({
+      ...baseOrder,
+      deliveryPhotoIds: ['photo-safe'],
+    });
+
+    await service.updateStatus({
+      storeId: 'store-safe',
+      orderId: 'order-safe',
+      expectedStatus: 'DELIVERING',
+      dto: { status: 'DELIVERED' },
+      requesterId: 'driver-safe',
+    });
+
+    const completedAt = new Date('2026-07-18T03:00:00.000Z');
+    expect(update).toHaveBeenCalledWith(
+      { path: 'orders/order-safe' },
+      expect.objectContaining({ deliveredAt: completedAt, updatedAt: completedAt }),
+    );
+  });
 });

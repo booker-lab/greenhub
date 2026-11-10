@@ -3,8 +3,12 @@
 // stage-based masking of customer contact data cannot diverge.
 
 export type DriverOrderView = 'list' | 'detail';
-// 주문 문서 밖에서 읽어 함께 싣는 값. 회차 배송 시작 시각은 노출 판정이 확인한 회차 문서에서 온다.
-export type DriverOrderProjectionContext = { roundDeliveryStartAt?: string | null };
+// 주문 문서 밖에서 읽어 함께 싣는 값. 회차 배송 시작 시각은 노출 판정이 확인한 회차 문서에서,
+// 수거 판매점은 노출 판정이 읽은 판매점 문서(stores/{storeId})에서 온다.
+export type DriverOrderProjectionContext = {
+  roundDeliveryStartAt?: string | null;
+  pickupStore?: Record<string, unknown> | null;
+};
 type DriverOrderItem = { productName: string; quantity: number };
 export type DriverOrderReadModel = Record<string, unknown> & {
   redeliveryPayment: {
@@ -57,6 +61,17 @@ export function projectDriverOrder(
     projected['deliveryDate'] = context.roundDeliveryStartAt;
   }
 
+  // 수거 장소는 수거 전(PREPARING) 주문에만 싣는다. 판매점 이름·주소는 손님 정보가 아니다.
+  if (order['status'] === 'PREPARING' && isRecord(context.pickupStore)) {
+    const pickupStoreName = nonEmptyTrimmed(context.pickupStore['name']);
+    const pickupAddress = nonEmptyTrimmed(context.pickupStore['address']);
+    if (pickupStoreName) projected['pickupStoreName'] = pickupStoreName;
+    if (pickupAddress) projected['pickupAddress'] = pickupAddress;
+  }
+
+  // 한 번에 수거가 주문별 상태 변경 경로(/stores/:storeId/orders/:orderId/status)에 쓴다.
+  projected['storeId'] = order['storeId'];
+
   if (view === 'list') {
     // 지도 검색용 기본 주소(동·호수 없는 deliveryAddress.address)는 전체 주소를 이미 싣는 행에만 싣는다.
     const deliveryAddress = projectDeliveryAddress(order['deliveryAddress']);
@@ -66,7 +81,6 @@ export function projectDriverOrder(
     return projected;
   }
 
-  projected['storeId'] = order['storeId'];
   projected['schemaVersion'] = order['schemaVersion'];
   projected['roundId'] = order['roundId'];
 
@@ -101,6 +115,12 @@ export function projectDriverOrder(
   }
 
   return projected;
+}
+
+function nonEmptyTrimmed(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 function projectRedeliveryPayment(payment: unknown): DriverOrderReadModel['redeliveryPayment'] {
