@@ -151,7 +151,7 @@ test('다음 배송지: 경로에서 처음 나오는 배송 중 주문만 고�
   assert.equal(pickNextDeliveryStop([]), null);
   // 지도 탭은 이 판단으로 다음 배송지를 고르고, 없으면 안내만 보인다.
   assert.match(mapSource, /const nextStop = pickNextDeliveryStop\(sorted\)/);
-  assert.match(mapSource, /아직 배송 중인 주문이 없습니다/);
+  assert.match(mapSource, /아직 배송 중인 주문이 없어요/);
 });
 
 test('주문 링크: 주소와 유효 좌표가 모두 없으면 링크를 만들지 않는다', () => {
@@ -179,7 +179,7 @@ test('지도 탭: 좌표 (0,0) 카카오맵 스킴과 경유지 조립이 제거
   assert.match(mapSource, /from '\.\/_lib\/map-navigation-link'/);
   assert.match(mapSource, /다음 배송지 카카오맵에서 열기/);
   // 다음 배송지 링크가 없으면 비활성 버튼과 안내를 보인다.
-  assert.match(mapSource, /다음 배송지 주소가 없어 지도를 열 수 없습니다/);
+  assert.match(mapSource, /다음 배송지 주소가 없어 지도를 열 수 없어요/);
   // 목록 행 지도 링크도 stale(error)에서는 fail-closed로 숨긴다.
   assert.match(mapSource, /const mapLink = error \? null : buildOrderMapLink\(order\)/);
 });
