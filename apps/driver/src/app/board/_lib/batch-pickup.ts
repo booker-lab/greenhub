@@ -90,7 +90,7 @@ export function isBatchPickupSelectable(order: BatchPickupCandidate): boolean {
 export function batchPickupBlockLabel(reason: BatchPickupBlockReason | null): string | null {
   if (reason === 'PAYMENT') return '결제 확인 전이라 고를 수 없어요';
   if (reason === 'NOT_ROUND_DIRECT' || reason === 'NO_STORE') {
-    return '주문을 열어 배송을 시작해 주세요';
+    return '한 번에 시작할 수 없어요. 고르기를 마친 뒤 주문을 열어 시작해 주세요';
   }
   return null;
 }
@@ -226,7 +226,7 @@ export function buildBatchPickupSummaryText(summary: BatchPickupSummary): {
   }
   if (summary.needsCheck > 0) {
     notes.push(
-      '확인 필요 주문은 처리됐는지 아직 몰라요. 목록을 다시 불러왔으니 배송 중 탭에서 확인해 주세요.',
+      '확인 필요 주문은 처리됐는지 아직 몰라요. 배송 중 탭에서 확인하고, 목록이 오래됐으면 다시 시도해 주세요.',
     );
   }
   return { line: parts.join(' · '), notes };
