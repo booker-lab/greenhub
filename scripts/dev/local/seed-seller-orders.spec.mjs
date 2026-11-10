@@ -105,13 +105,14 @@ test('시나리오 세트는 deterministic하고 slice 범위를 벗어나지 �
 
 test('Firestore REST 인코딩은 emulator 문서 형식을 따른다', () => {
   const fields = toFirestoreFields({
-    id: 'skip-me',
+    id: 'doc-1',
     storeId: 's',
     quantity: 2,
     flag: true,
     nothing: null,
   });
-  assert.ok(!('id' in fields.fields));
+  // API는 문서의 id 필드를 읽으므로(예: 사용자 문서 userData['id']) 빼지 않는다.
+  assert.equal(fields.fields.id.stringValue, 'doc-1');
   assert.equal(fields.fields.storeId.stringValue, 's');
   assert.equal(fields.fields.quantity.integerValue, '2');
   assert.equal(fields.fields.flag.booleanValue, true);
@@ -161,6 +162,13 @@ test('applyScenario: reset 시 기존 local 주문을 지우고 시나리오를 
       (c) => c.url.includes('/invites') || c.url.includes('/stores') || c.url.includes('/orders'),
     ),
   );
+  // 가게·주문 문서의 id 필드는 문서 ID와 같은 값이다(API가 쓰는 문서 모양과 같다).
+  const docWrites = writes.filter((w) => w.url.includes('/stores?') || w.url.includes('/orders?'));
+  assert.equal(docWrites.length, 2);
+  for (const c of docWrites) {
+    const documentId = new URL(c.url).searchParams.get('documentId');
+    assert.equal(JSON.parse(c.body).fields.id.stringValue, documentId);
+  }
 });
 
 test('local seller 초대 ID는 API 초대 토큰 형식을 따르고 invite 문서·register 요청에 같은 값을 쓴다', async () => {
