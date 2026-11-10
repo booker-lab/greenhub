@@ -14,3 +14,22 @@ export function groupPreparingOrders<T extends { assignedToMe?: unknown }>(
     available: orders.filter((order) => order.assignedToMe === false),
   };
 }
+
+export type PreparingFirstScreen<T> = { mine: T[]; available: T[]; hidden: number };
+
+/**
+ * 두 묶음을 합쳐 첫 화면 행 수(limit)만 남긴다. 내 수거가 먼저 채워지고 남는 자리를 맡을 수 있는 주문이 쓴다.
+ * hidden은 가려진 행 수의 합이라 "남은 n곳 더 보기"가 정확한 수를 보인다.
+ */
+export function takePreparingFirstScreen<T>(
+  groups: PreparingGroups<T>,
+  limit: number,
+): PreparingFirstScreen<T> {
+  const mine = groups.mine.slice(0, limit);
+  const available = groups.available.slice(0, Math.max(0, limit - mine.length));
+  return {
+    mine,
+    available,
+    hidden: groups.mine.length + groups.available.length - mine.length - available.length,
+  };
+}

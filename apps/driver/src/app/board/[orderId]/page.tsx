@@ -123,7 +123,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ orderId:
       >
         <div className="flex flex-col items-center gap-3 px-4">
           <p className={cn(text, 'text-center')} style={{ color: 'var(--driver-text-muted)' }}>
-            주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해 주세요.
+            주문 주소가 올바르지 않아요. 배송 목록에서 주문을 다시 선택해 주세요.
           </p>
           <Link
             href="/board"
@@ -419,7 +419,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
         if (recovery === 'STATE_CONFLICT') {
           toast.add({
             type: TOAST_WARNING,
-            description: '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.',
+            description: '이미 상태가 바뀌었을 수 있어요. 최신 상태를 다시 확인할게요.',
           });
           await readDetail(token);
           return;
@@ -431,7 +431,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
           setOrder(null);
           setReadError({
             kind: 'NOT_FOUND',
-            message: '주문을 찾을 수 없습니다',
+            message: '주문을 찾을 수 없어요',
           });
           setReadbackWarning(null);
           return;
@@ -490,7 +490,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
         const readbackKind = (readbackCause as { kind?: unknown } | null)?.kind;
         if (readbackKind === 'AUTH_ERROR' || readbackKind === 'NOT_FOUND') {
           const message =
-            readbackCause instanceof Error ? readbackCause.message : '주문을 찾을 수 없습니다';
+            readbackCause instanceof Error ? readbackCause.message : '주문을 찾을 수 없어요';
           hasOrderRef.current = false;
           setOrder(null);
           setReadError({
@@ -557,7 +557,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
       readError?.kind === 'AUTH_ERROR'
         ? '로그인 정보를 다시 확인해 주세요.'
         : readError?.kind === 'FETCH_ERROR'
-          ? '주문 정보를 불러오지 못했습니다'
+          ? '주문 정보를 불러오지 못했어요'
           : DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE;
     return (
       <div
@@ -755,7 +755,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
         <div className="flex flex-col gap-5">
           {readRefreshing && (
             <p className={text} style={mutedText}>
-              최신 정보를 확인하는 중입니다…
+              최신 정보를 확인하고 있어요…
             </p>
           )}
           {/* 응답 불확실(readbackWarning)이면 조회 실패 면을 따로 띄우지 않고 한 면·한 버튼으로 합친다(D-14).
@@ -1102,7 +1102,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
             setOrder(null);
             setReadError({
               kind: 'NOT_FOUND',
-              message: '주문을 찾을 수 없습니다',
+              message: '주문을 찾을 수 없어요',
             });
             setReadbackWarning(null);
             setHoldOpened(false);
@@ -1124,7 +1124,7 @@ function DeliveryHoldCard({ hold }: { hold: DeliveryHold }) {
         배송 보류 내용
       </p>
       <InfoRow label="보류 유형" value={HOLD_REASON_LABEL[hold.reasonCode]} />
-      <InfoRow label="보류 사유" value={hold.reasonMessage} />
+      <InfoRow label="손님에게 보인 사유" value={hold.reasonMessage} />
       <InfoRow label="책임" value={hold.customerResponsible ? '고객 책임' : '판매자 책임'} />
       <InfoRow label="재배송비" value={fee} />
       {hold.nextContactAt && (

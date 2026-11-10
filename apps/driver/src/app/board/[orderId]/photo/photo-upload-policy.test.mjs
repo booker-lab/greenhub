@@ -157,7 +157,7 @@ test('안내: 원인마다 문구가 다르고 예전 뭉뚱그린 문구를 쓰
   ];
   const messages = kinds.map((kind) => photoUploadFailureMessage(kind));
   assert.equal(new Set(messages).size, kinds.length);
-  for (const message of messages) assert.notEqual(message, '업로드 실패. 다시 시도해주세요.');
+  for (const message of messages) assert.notEqual(message, '업로드하지 못했어요. 다시 시도해 주세요.');
   // 불확실한 실패는 같은 사진 재시도를 안내한다(재촬영하면 새 키가 된다).
   assert.match(photoUploadFailureMessage('NETWORK'), /같은 사진으로 다시 시도/);
   assert.match(photoUploadFailureMessage('SERVER'), /같은 사진으로 다시 시도/);

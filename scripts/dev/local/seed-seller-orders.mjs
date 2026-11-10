@@ -245,10 +245,11 @@ export function toFirestoreValue(value) {
   return { stringValue: String(value) };
 }
 
+// `id`도 필드로 남긴다. API는 문서 ID와 같은 값의 `id` 필드를 함께 저장하고 읽는다
+// (가입 사용자 문서 `userData['id']`, 주문 생성 `id: orderId`). 시드 문서의 `id`는 문서 ID와 같은 값이다.
 export function toFirestoreFields(doc) {
   const fields = {};
   for (const [k, v] of Object.entries(doc)) {
-    if (k === 'id') continue;
     fields[k] = toFirestoreValue(v);
   }
   return { fields };

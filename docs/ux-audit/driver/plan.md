@@ -125,3 +125,46 @@
 - 로컬 이메일 로그인은 승인 대기 code를 읽지 않아 "로그인하지 못했어요"로 보인다(운영 카카오 경로만 대상, 로컬 하네스 한정)
 - 참고 의견으로 남긴 것: API가 같은 요청에서 회차 문서를 회차당 두 번 읽음(노출 판정 + 배송일, 주문 수와 무관), 수거 대기 두 묶음이 첫 화면에 최대 10행, 판매자 보류 창의 기본 유형도 "기상 악화"(기사 D-07과 같은 문제), 디자인 명세(`design-standard.md`·`design-direction.md`)의 "부재·문제 알리기" 표기, 상세 "배송 보류 내용" 카드의 "보류 사유" 줄, 일부 합니다체 문구(상태 충돌 안내, `HOLD_FEE_*`)
 - 3절에서 보류한 항목은 그대로다
+
+## 6. 2차 배치 계획 (2026-11-10)
+
+근거: 5절 "남은 것"의 참고 의견과 1차 검토 참고 의견. 기준 `main` `ae4f6593`(#841 병합)에서 다시 대조해 모두 남아 있음을 확인했다. 3절에서 보류한 사람 결정 항목은 이번에도 하지 않는다.
+
+| 단위 | 결과 | 변경 범위 | 항목 |
+|---|---|---|---|
+| V1 API 회차 읽기 | 기사 목록 조회가 회차 문서를 회차당 한 번만 읽고, 배송일은 노출 판정이 회차 직배송으로 본 주문에만 싣는다 | `apps/api/src/driver/**`, `apps/api/src/orders/driver-order-scope.service.ts`(+ spec) | 5절 참고: 회차 이중 읽기, 1차 검토: `deliveryDate` 조건이 노출 판정보다 넓음 |
+| V2 상세·보류 문구 | 주문 상세·보류 창의 남은 합니다체·내부 표현을 해요체로, 보류 내용 카드의 "보류 사유"를 손님에게 보인 사유로 | `apps/driver/src/app/board/[orderId]/**`, `apps/driver/src/app/board/_lib/**` | 5절 참고: 합니다체(상태 충돌·`HOLD_FEE_*`·재배송비 설명 등), "보류 사유" 줄 |
+| V3 목록·지도·내 정보 | 첫 화면 행 수·진행 숫자가 서로 맞고, 목록·지도 남은 합니다체를 정리하고, 로그아웃 버튼이 실패 뒤 굳지 않는다 | `apps/driver/src/app/board/_client.tsx`, `apps/driver/src/components/OrderCard.tsx`, `apps/driver/src/lib/preparing-groups.ts`, `apps/driver/src/app/map/**`, `apps/driver/src/app/profile/**` | 5절 참고: 수거 대기 첫 화면 최대 10행, 1차 검토: 점 띠·탭 숫자와 진행 문구 불일치, 로그아웃 버튼 고정 |
+| V4 판매자 보류 기본 유형 | 판매자 보류 창도 유형을 미리 고르지 않는다(기사 D-07과 같은 규칙) | `apps/seller/src/app/orders/[id]/_components/DeliveryHoldModal.tsx`, `apps/seller/src/app/orders/[id]/delivery-hold-form.ts`(+ 테스트, 판매자 E2E 기대값) | 5절 참고 |
+| V5 로컬 하네스 | 로컬 이메일 로그인 실패가 오류 화면으로 떨어지지 않고, 로그인 직후 목록이 바로 보이고, 승인 전 계정은 승인 대기 안내를 본다. 시드 공용 쓰기가 `id` 필드를 남긴다 | `apps/driver/src/app/login/page.tsx`, `apps/driver/src/auth.ts`(로컬 경로만), `scripts/dev/local/seed-seller-orders.mjs`(+ spec) | findings 0절 로컬 현상, 4절 후속 후보, 5절 남은 것 |
+
+통합 때 직접: 디자인 명세(`docs/specs/frontend/design-standard.md` 기사 앱 문단, `design-direction.md`)의 "부재·문제 알리기"·"오늘 배송 · 날짜"·"회차 날짜는 쓰지 않는다" 표기를 #841 이후 현재 화면에 맞춘다(`STALE_SPEC`).
+
+검증: 1차와 같다(단위별 로컬 검사 → 통합 뒤 CI 동일 검사·운영 빌드·로컬 스택 재검증). 사용량을 줄이려고 독립 반박 검토는 통합한 diff 전체를 한 번에 단위별로 나눠 본다.
+
+## 7. 실행 결과 (2026-11-10, 2차 배치)
+
+오케스트레이션: 단위별 격리 worktree 구현 5 → 통합한 diff 전체를 단위별로 나눈 독립 반박 검토 1(에이전트 6개, 실패 0). 통합은 cherry-pick(충돌 0, V2·V3가 함께 고친 `board-contract.test.mjs`도 자동 병합).
+
+| 단위 | 결과 | 검토 / 통합 때 더 고친 것 |
+|---|---|---|
+| V1 | 노출 판정이 읽은 회차 문서를 그대로 받아 배송일을 만든다(`filterVisibleOrdersWithRounds`). 목록 요청당 회차마다 1번만 읽고, 배송일은 `round_direct && pilotBase` 주문에만 싣는다. storeId 없는 주문·회차 조합도 막았다 | 막는 문제 없음. 회차 읽기 실패는 이전에도 노출 판정에서 요청 전체 실패였고 그대로다. 판정 뒤 배송일 값이 깨진 경우만 배송일을 뺀다 |
+| V2 | 상세·보류 창·사진 화면의 합니다체를 해요체로, 보류 내용 카드 "보류 사유" → "손님에게 보인 사유" | 막는 문제 없음. 통합 때 목록 조회 기본 오류 문구(`driver-list-read.ts`)도 맞춤 |
+| V3 | 수거 대기 두 묶음을 합쳐 첫 화면 5행(내 수거 먼저), 탭·점 띠·진행 줄 숫자 기준 통일, 목록·지도 해요체 | 막는 문제 없음. 로그아웃 버튼의 8초 해제 타이머 대신 `useFormStatus` 제출 대기 상태로 잠금 |
+| V4 | 판매자 보류 창 유형 기본 선택 없음(미선택이면 "보류 유형을 골라 주세요."로 막고 요청 안 보냄) | 막는 문제 없음. 판매자 재배송비 불일치 안내도 기사 앱과 같은 해요체로 |
+| V5 | 로컬 이메일 로그인: 실패는 `/login?error=LoginFailed`, 승인 전은 `ApprovalPending`, 성공은 전체 페이지 이동으로 목록이 바로 보임. 시드 `toFirestoreFields`가 `id`를 남김 | 막는 문제 없음. 돌려주는 이동 주소는 늘 `resolveDriverReturnPath`·고정 로그인 경로뿐이라 열린 리다이렉트가 다시 생기지 않음을 검토가 확인 |
+
+문서: 디자인 명세(`design-standard.md` 기사 앱 문단, `design-direction.md` §6)를 현재 화면에 맞춤(`STALE_SPEC`). 과거 점수 표는 그대로.
+
+### 검증
+
+- CI와 같은 검사 전부 통과: biome lint, API eslint, tsc(consumer·seller·driver·e2e·shared·ui), API tsc(build), build selection, CSS 변수
+- 단위 테스트: driver vitest 62 + node 360 + worker 4, seller 1,099, API jest 3,007 + 통합 38 + node 12, consumer 730 + 5, 스크립트 1,442, e2e 헬퍼 42
+- 운영 빌드: driver·seller `next build` 성공
+- 로컬 스택 브라우저 재검증(390×844): V5 로그인 세 경우(틀린 비밀번호·승인 전·정상 → 목록 바로 표시), V3 내 수거 6 + 맡을 수 있는 2에서 첫 화면 5행·"남은 3곳 더 보기"·진행 줄, 지도·로그아웃 확인, V2 보류 카드 라벨·주문 없음 문구, V4 판매자 보류 창 유형 미선택 저장 차단. 캡처: `screenshots/after2/`
+
+### 남은 것
+
+- 내 수거가 5건 이상이면 "맡을 수 있는 주문" 묶음 제목이 첫 화면에서 빠지고 진행 줄과 "더 보기" 수로만 드러난다(의도한 5행 규칙의 결과, 운영에서 불편하면 다시 본다)
+- 판매자 시각 비교 fixture `modal-order-hold`(`scripts/visual/fixtures/seller.mjs`)는 이제 유형 미선택 화면을 찍으므로 다음 시각 비교 때 기준 이미지를 갱신해야 한다
+- 3절 보류 항목과 실기기 확인(카카오 첫 로그인 승인 대기 안내, 홈 화면 앱 안전 영역)은 그대로다

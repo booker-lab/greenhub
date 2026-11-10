@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { groupPreparingOrders } from './preparing-groups.ts';
+import { groupPreparingOrders, takePreparingFirstScreen } from './preparing-groups.ts';
 
 const boardSource = await readFile(new URL('../app/board/_client.tsx', import.meta.url), 'utf8');
 
@@ -44,5 +44,32 @@ test('작업 보드 수거 대기 탭은 묶음 제목에 건수를 쓰고 배�
   );
   assert.match(boardSource, /title="내 수거"/);
   assert.match(boardSource, /title="맡을 수 있는 주문"/);
-  assert.match(boardSource, /\{orders\.length\}/);
+  assert.match(boardSource, /\{total\}/);
+});
+
+const rows = (prefix, count) => Array.from({ length: count }, (_, i) => ({ id: `${prefix}-${i}` }));
+
+test('첫 화면 5행은 두 묶음을 합쳐 세고 내 수거가 먼저 채운다', () => {
+  const shown = takePreparingFirstScreen({ mine: rows('m', 3), available: rows('a', 6) }, 5);
+  assert.equal(shown.mine.length, 3);
+  assert.equal(shown.available.length, 2);
+  assert.equal(shown.hidden, 4);
+});
+
+test('내 수거가 5행 이상이면 맡을 수 있는 주문은 첫 화면에 없고 더 보기에 센다', () => {
+  const shown = takePreparingFirstScreen({ mine: rows('m', 7), available: rows('a', 2) }, 5);
+  assert.equal(shown.mine.length, 5);
+  assert.equal(shown.available.length, 0);
+  assert.equal(shown.hidden, 4);
+});
+
+test('전체가 5행 이하면 더 보기가 없다', () => {
+  const shown = takePreparingFirstScreen({ mine: rows('m', 2), available: rows('a', 3) }, 5);
+  assert.equal(shown.hidden, 0);
+  assert.equal(shown.mine.length + shown.available.length, 5);
+});
+
+test('수거 대기 점 띠는 내 수거만 그리고 탭 숫자는 전체 행 수를 쓴다', () => {
+  assert.match(boardSource, /const myPreparing = preparingGroups \? preparingGroups\.mine : preparing/);
+  assert.match(boardSource, /count: preparing\.length/);
 });

@@ -1,3 +1,4 @@
+import { AuthError, CredentialsSignin } from 'next-auth';
 import Image from 'next/image';
 import { signIn } from '@/auth';
 import { AppButton } from '@/components/app-button';
@@ -5,16 +6,41 @@ import { PasswordField, TextField } from '@/components/fields';
 import { text } from '@/components/look';
 import { safeDriverReturnPath, resolveDriverReturnPath } from '@/lib/login-redirect';
 import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
+import { LocalCredentialForm } from './local-credential-form';
+import {
+  type LocalCredentialSignInResult,
+  localCredentialFailurePath,
+} from './local-credential-sign-in';
 import { resolveDriverLoginNotice } from './login-notice';
 
 // 로그인 뒤 돌아갈 곳(redirectTo)은 폼이 넘긴 callbackUrl을 다시 검증해 정한다. 허용하지 않으면 /board.
-async function localCredentialSignIn(formData: FormData) {
+// 성공·실패 모두 이동할 주소만 돌려주고 폼(LocalCredentialForm)이 전체 페이지로 이동한다
+// (서버 액션 안의 redirect는 클라이언트 이동이라 SessionProvider가 새 세션을 읽지 않는다).
+async function localCredentialSignIn(formData: FormData): Promise<LocalCredentialSignInResult> {
   'use server';
-  await signIn('credentials', {
-    email: formData.get('email'),
-    password: formData.get('password'),
-    redirectTo: resolveDriverReturnPath(formData.get('callbackUrl')),
-  });
+  const returnPath = resolveDriverReturnPath(formData.get('callbackUrl'));
+  try {
+    await signIn('credentials', {
+      email: formData.get('email'),
+      password: formData.get('password'),
+      redirectTo: returnPath,
+      redirect: false,
+    });
+  } catch (error) {
+    // Auth.js 실패(authorize 거절 CredentialsSignin, authorize 안 예외를 감싼 CallbackRouteError 등)만
+    // 로그인 화면 안내로 바꾼다. 승인 대기는 authorizeLocalDriver가 CredentialsSignin.code로 알린다.
+    // 그 밖의 오류(Next redirect·notFound 신호 포함)는 삼키지 않고 다시 던진다.
+    if (error instanceof AuthError) {
+      return {
+        redirectTo: localCredentialFailurePath({
+          code: error instanceof CredentialsSignin ? error.code : undefined,
+          returnPath,
+        }),
+      };
+    }
+    throw error;
+  }
+  return { redirectTo: returnPath };
 }
 
 async function kakaoSignIn(formData: FormData) {
@@ -151,7 +177,7 @@ export default async function LoginPage({
 
           {/* 로컬 파일럿 전용: 승인된 드라이버 Credentials 진입 */}
           {showLocalCredentials && (
-            <form action={localCredentialSignIn}>
+            <LocalCredentialForm signInAction={localCredentialSignIn}>
               {returnPath && <input type="hidden" name="callbackUrl" value={returnPath} />}
               <div className="mt-4 flex flex-col gap-3">
                 {/* ① 외형 유지: Mantine Divider(label 가운데) */}
@@ -169,7 +195,7 @@ export default async function LoginPage({
                   로그인
                 </AppButton>
               </div>
-            </form>
+            </LocalCredentialForm>
           )}
         </div>
       </div>

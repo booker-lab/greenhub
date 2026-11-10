@@ -13,7 +13,7 @@ import {
   toDriverListReadError,
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
-import { groupPreparingOrders } from '@/lib/preparing-groups';
+import { groupPreparingOrders, takePreparingFirstScreen } from '@/lib/preparing-groups';
 
 /** 복귀 재조회 묶음 간격. focus·visibilitychange가 이 간격 안에 겹치면 목록을 한 번만 다시 조회한다. */
 const REVALIDATE_COALESCE_MS = 1_500;
@@ -153,11 +153,11 @@ export default function BoardClient() {
         }
         if (shouldPreserveDriverListOnReadError(kind, hasSuccessfulReadRef.current)) {
           // refresh 실패는 마지막 정상 데이터를 지우지 않고 stale로 유지한다.
-          setError('최신 주문을 불러오지 못했습니다. 기존 목록을 보여줍니다.');
+          setError('최신 주문을 불러오지 못했어요. 기존 목록을 보여드려요.');
         } else {
           setPreparing([]);
           setDelivering([]);
-          setError('주문을 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+          setError('주문을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
         }
       })
       .finally(() => {
@@ -250,7 +250,7 @@ export default function BoardClient() {
       {/* 주문 목록 */}
       <main style={{ flex: 1, padding: '16px' }}>
         {loading ? (
-          <BoardMessage>주문을 불러오는 중입니다</BoardMessage>
+          <BoardMessage>주문을 불러오고 있어요</BoardMessage>
         ) : authRequired ? (
           <BoardMessage tone="danger" message="로그인이 끝났어요. 다시 로그인해 주세요.">
             {/* 인증 오류는 같은 토큰으로 재조회해도 반복되므로 재조회 버튼 없이 세션을 정리하고 로그인으로 보낸다. */}
@@ -272,8 +272,8 @@ export default function BoardClient() {
               </p>
               <p className={text} style={messageStyle}>
                 {tab === 'preparing'
-                  ? '마지막 확인 당시 수거할 주문이 없었습니다.'
-                  : '마지막 확인 당시 배송 중인 주문이 없었습니다.'}
+                  ? '마지막 확인 당시 수거할 주문이 없었어요.'
+                  : '마지막 확인 당시 배송 중인 주문이 없었어요.'}
               </p>
               <AppButton tone="brand-outline" onClick={() => setReloadKey((key) => key + 1)}>
                 다시 시도
@@ -283,7 +283,7 @@ export default function BoardClient() {
             <div className="flex flex-col gap-3">
               {refreshing && (
                 <p className={text} style={messageStyle}>
-                  최신 정보를 확인하는 중입니다…
+                  최신 정보를 확인하고 있어요…
                 </p>
               )}
               <div className="flex flex-col items-center justify-center gap-2.5">
@@ -300,20 +300,18 @@ export default function BoardClient() {
         ) : refreshing && hasSuccessfulRead && orders.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center gap-2.5">
             <p className={text} style={messageStyle}>
-              최신 정보를 확인하는 중입니다…
+              최신 정보를 확인하고 있어요…
             </p>
             <p className={text} style={messageStyle}>
               {tab === 'preparing'
-                ? '마지막 확인 당시 수거할 주문이 없었습니다.'
-                : '마지막 확인 당시 배송 중인 주문이 없었습니다.'}
+                ? '마지막 확인 당시 수거할 주문이 없었어요.'
+                : '마지막 확인 당시 배송 중인 주문이 없었어요.'}
             </p>
           </div>
         ) : orders.length === 0 ? (
           <div className="flex h-48 flex-col items-center justify-center gap-2.5">
             <p className={text} style={messageStyle}>
-              {tab === 'preparing'
-                ? '수거할 주문이 없어요'
-                : '배송 중인 주문이 없어요'}
+              {tab === 'preparing' ? '수거할 주문이 없어요' : '배송 중인 주문이 없어요'}
             </p>
             {tab === 'preparing' && (
               <button
@@ -334,7 +332,7 @@ export default function BoardClient() {
           <div className="flex flex-col gap-3">
             {refreshing && (
               <p className={text} style={messageStyle}>
-                최신 정보를 확인하는 중입니다…
+                최신 정보를 확인하고 있어요…
               </p>
             )}
             {error && (
@@ -397,21 +395,30 @@ function BoardMessage({
 const FIRST_SCREEN_ROWS = 5;
 
 function OrderList({ orders, tab }: { orders: DriverListOrder[]; tab: string }) {
+  const [expanded, setExpanded] = useState(false);
   // 수거 대기 탭은 내게 배정된 주문과 아직 아무도 맡지 않은 주문을 나눠 보인다.
   // 배정 여부가 없는 이전 API 응답이면 groupPreparingOrders가 null을 돌려 예전처럼 한 묶음이다.
   const groups = tab === 'preparing' ? groupPreparingOrders(orders) : null;
   if (groups) {
+    // 두 묶음을 합쳐 첫 화면 5행이다. 내 수거가 먼저 채우고, 더 보기는 가려진 전체 수를 보인다.
+    const shown = expanded
+      ? { mine: groups.mine, available: groups.available, hidden: 0 }
+      : takePreparingFirstScreen(groups, FIRST_SCREEN_ROWS);
     return (
       <>
-        {groups.mine.length > 0 && <OrderGroup title="내 수거" orders={groups.mine} tab={tab} />}
-        {groups.available.length > 0 && (
+        {shown.mine.length > 0 && (
+          <OrderGroup title="내 수거" total={groups.mine.length} orders={shown.mine} tab={tab} />
+        )}
+        {shown.available.length > 0 && (
           <OrderGroup
             title="맡을 수 있는 주문"
             hint="주문을 열어 배송을 시작하면 내 주문이 돼요."
-            orders={groups.available}
+            total={groups.available.length}
+            orders={shown.available}
             tab={tab}
           />
         )}
+        <ShowMoreButton hidden={shown.hidden} onClick={() => setExpanded(true)} />
       </>
     );
   }
@@ -420,11 +427,13 @@ function OrderList({ orders, tab }: { orders: DriverListOrder[]; tab: string }) 
   const next =
     tab === 'delivering' ? orders.find((order) => order.status === 'DELIVERING') : undefined;
   const rest = next ? orders.filter((order) => order !== next) : orders;
+  const visibleRest = expanded ? rest : rest.slice(0, FIRST_SCREEN_ROWS);
 
   return (
     <>
       {next && <OrderCard order={next} tab={tab} variant="next" />}
-      <OrderRows orders={rest} tab={tab} />
+      <OrderRows orders={visibleRest} tab={tab} />
+      <ShowMoreButton hidden={rest.length - visibleRest.length} onClick={() => setExpanded(true)} />
     </>
   );
 }
@@ -432,11 +441,14 @@ function OrderList({ orders, tab }: { orders: DriverListOrder[]; tab: string }) 
 function OrderGroup({
   title,
   hint,
+  total,
   orders,
   tab,
 }: {
   title: string;
   hint?: string;
+  /** 묶음 전체 행 수. orders는 첫 화면에 보이는 앞부분일 수 있다. */
+  total: number;
   orders: DriverListOrder[];
   tab: string;
 }) {
@@ -453,7 +465,7 @@ function OrderGroup({
       >
         {title}
         <span className="ml-1.5" style={{ fontVariantNumeric: 'tabular-nums' }}>
-          {orders.length}
+          {total}
         </span>
       </h2>
       {hint && (
@@ -467,42 +479,41 @@ function OrderGroup({
 }
 
 function OrderRows({ orders, tab }: { orders: DriverListOrder[]; tab: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? orders : orders.slice(0, FIRST_SCREEN_ROWS);
-  const hidden = orders.length - visible.length;
-
+  if (orders.length === 0) return null;
   return (
-    <>
-      {visible.length > 0 && (
-        <ul className="m-0 list-none p-0">
-          {visible.map((order, index) => (
-            <li key={order.id} style={index === 0 ? undefined : { borderTop: 'var(--border)' }}>
-              <OrderCard order={order} tab={tab} />
-            </li>
-          ))}
-        </ul>
-      )}
-      {hidden > 0 && (
-        <button
-          type="button"
-          className="flex min-h-12 w-full cursor-pointer appearance-none items-center justify-center rounded-[var(--radius)] border-0 p-0"
-          style={{
-            backgroundColor: 'var(--color-surface-muted)',
-            color: 'var(--color-text)',
-            fontSize: 'var(--font-size-md)',
-            fontWeight: 'var(--fw-bold)',
-          }}
-          onClick={() => setExpanded(true)}
-        >
-          남은 {hidden}곳 더 보기
-        </button>
-      )}
-    </>
+    <ul className="m-0 list-none p-0">
+      {orders.map((order, index) => (
+        <li key={order.id} style={index === 0 ? undefined : { borderTop: 'var(--border)' }}>
+          <OrderCard order={order} tab={tab} />
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ShowMoreButton({ hidden, onClick }: { hidden: number; onClick: () => void }) {
+  if (hidden <= 0) return null;
+  return (
+    <button
+      type="button"
+      className="flex min-h-12 w-full cursor-pointer appearance-none items-center justify-center rounded-[var(--radius)] border-0 p-0"
+      style={{
+        backgroundColor: 'var(--color-surface-muted)',
+        color: 'var(--color-text)',
+        fontSize: 'var(--font-size-md)',
+        fontWeight: 'var(--fw-bold)',
+      }}
+      onClick={onClick}
+    >
+      남은 {hidden}곳 더 보기
+    </button>
   );
 }
 
 /**
  * 배송지 점 띠와 진행 한 줄. 목록 API가 주는 값(배송 중·보류·수거 대기 주문)만으로 그린다.
+ * 숫자 기준: 점 띠와 진행 줄은 "내 주문"(배송 중·보류·내 수거)을 세고, 아무도 맡지 않은 주문은 점 띠에 그리지 않고
+ * 진행 줄의 "맡을 수 있는 n곳"으로만 센다. 탭 숫자는 탭의 전체 행 수(내 수거 + 맡을 수 있는 주문)다.
  * 끝낸 배송 수·도착 예상 시간은 기사 목록 응답에 없어 쓰지 않는다(design-direction.md §3.5).
  */
 function DeliveryProgress({
@@ -516,9 +527,11 @@ function DeliveryProgress({
   const toDeliver = delivering.length - held;
   // 배정 여부를 알면 수거는 내 주문만 세고, 아무도 맡지 않은 주문은 따로 센다.
   const preparingGroups = groupPreparingOrders(preparing);
+  // 점 띠에는 내 수거만 그린다. 배정 여부를 모르는 이전 응답이면 예전처럼 수거 대기 전체를 그린다.
+  const myPreparing = preparingGroups ? preparingGroups.mine : preparing;
   return (
     <div className="mt-2 flex flex-col gap-1.5">
-      {preparing.length + delivering.length > 0 && (
+      {myPreparing.length + delivering.length > 0 && (
         <div aria-hidden="true" className="flex flex-wrap gap-1.5">
           {delivering.map((order) => (
             <span
@@ -530,7 +543,7 @@ function DeliveryProgress({
               }}
             />
           ))}
-          {preparing.map((order) => (
+          {myPreparing.map((order) => (
             <span
               key={order.id}
               className="block size-2.5 rounded-full"
@@ -556,7 +569,7 @@ function DeliveryProgress({
             </span>
           </>
         )}
-        {' · '}수거 {preparingGroups ? preparingGroups.mine.length : preparing.length}곳
+        {' · '}수거 {myPreparing.length}곳
         {preparingGroups && preparingGroups.available.length > 0 && (
           <>
             {' · '}맡을 수 있는 {preparingGroups.available.length}곳
