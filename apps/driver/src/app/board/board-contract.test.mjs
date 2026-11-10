@@ -199,8 +199,8 @@ test('Detail read 실패는 NOT_FOUND·AUTH_ERROR·FETCH_ERROR로 분리된다',
   assert.match(detailHelperSource, /FETCH_ERROR/);
   assert.match(detailSource, /toDriverOrderReadError/);
   assert.match(detailSource, /readError/);
-  assert.match(detailSource, /주문을 찾을 수 없습니다/);
-  assert.match(detailSource, /주문 정보를 불러오지 못했습니다/);
+  assert.match(detailSource, /주문을 찾을 수 없어요/);
+  assert.match(detailSource, /주문 정보를 불러오지 못했어요/);
 });
 
 test('Detail read는 sequence guard와 manual retry를 제공한다', () => {

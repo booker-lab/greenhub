@@ -95,7 +95,7 @@ export function isHoldCommandAllowedStatus(status: string): boolean {
 // 403 duplicate-sequential / 409 race-loser / stale-submit 공통 수렴 메시지.
 // "실패했으니 다시 제출"이 아니라 상태 재확인을 안내한다.
 export const HOLD_STALE_CONVERGENCE_MESSAGE =
-  '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.';
+  '이미 상태가 바뀌었을 수 있어요. 최신 상태를 다시 확인할게요.';
 
 // HOLD ACK-uncertain(B/C/F/G/H) convergence contract (NO_RESEND + AUTHORITATIVE_GET).
 // 같은 HOLD를 자동 재전송하지 않고 parent authoritative GET으로 수렴한다.
@@ -209,7 +209,7 @@ export function DeliveryHoldModal({
     // 저장 버튼이 막혀 있지만, 어긋난 책임·재배송비는 보내지 않는다(안내는 입력칸 아래에 있다).
     if (responsibilityFeeHint) return;
     if (!token) {
-      setError('인증 정보를 확인할 수 없습니다.');
+      setError('인증 정보를 확인할 수 없어요.');
       return;
     }
     const deliveryHold = {
@@ -272,7 +272,7 @@ export function DeliveryHoldModal({
         // order를 신뢰하지 않고 NOT_FOUND 의미로 수렴한다. 자동 resend 없음.
         if (recovery === 'NOT_FOUND') {
           resetHoldFormFields();
-          setError('주문을 찾을 수 없습니다.');
+          setError('주문을 찾을 수 없어요.');
           onNotFound?.();
           onClose();
           return;
