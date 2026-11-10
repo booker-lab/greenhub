@@ -325,3 +325,37 @@ describe('관리자·판매자의 배송 방법 밖 전이 차단', () => {
     expect(context.settlements.createSettlement).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('배송 완료 시각 기록', () => {
+  const completions: Array<[string, Data, string, string]> = [
+    ['배정 기사의 예전 직배송 완료', legacyOrder({ deliveryMethod: 'direct' }), 'driver-1', 'driver'],
+    [
+      '판매자의 택배 발송 완료',
+      legacyOrder({ deliveryMethod: 'parcel', status: 'PREPARING', driverId: null }),
+      'seller-1',
+      'seller',
+    ],
+  ];
+
+  it.each(completions)('%s는 deliveredAt을 updatedAt과 같은 시각으로 남긴다', async (...args) => {
+    const [, order, requesterId, role] = args;
+    const context = makeContext(order);
+
+    await context.update(requesterId, role, 'DELIVERED');
+
+    const saved = context.memory.read('orders/order-1') as Data;
+    expect(saved['status']).toBe('DELIVERED');
+    expect(saved['deliveredAt']).toBeDefined();
+    expect(saved['deliveredAt']).toEqual(saved['updatedAt']);
+  });
+
+  it('배송 완료가 아닌 전이는 deliveredAt을 남기지 않는다', async () => {
+    const context = makeContext(
+      legacyOrder({ deliveryMethod: 'hub', pickupCode: '123456', hubAddress: '이천 거점' }),
+    );
+
+    await context.update('driver-1', 'driver', 'HUB_ARRIVED');
+
+    expect(context.memory.read('orders/order-1')).not.toHaveProperty('deliveredAt');
+  });
+});

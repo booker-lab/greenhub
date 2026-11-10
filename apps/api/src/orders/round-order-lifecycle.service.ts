@@ -601,6 +601,8 @@ export class RoundOrderLifecycleService {
       update['preparedAt'] = this.firestore.Timestamp.fromDate(date);
     }
     if (dto.status === 'DELIVERING') update['driverId'] = requesterId;
+    // 배송 완료 시각. 리뷰·환불로 상태와 updatedAt이 바뀌어도 남아 기사 오늘 완료 수가 이 값으로 센다.
+    if (dto.status === 'DELIVERED') update['deliveredAt'] = now;
     if (['HUB_ARRIVED', 'DELIVERED'].includes(dto.status) && dto.photoUrl) {
       update['deliveryPhotoUrl'] = dto.photoUrl;
     }

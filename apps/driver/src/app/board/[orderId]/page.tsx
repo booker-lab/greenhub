@@ -17,6 +17,7 @@ import { isApiTimeoutError } from '@/lib/api-timeout';
 import { splitDeliveryAddress } from '@/lib/address-parts';
 import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
+import { readPickupPlace } from '@/lib/pickup-place';
 import { buildOrderMapLink } from '../../map/_lib/map-navigation-link';
 import {
   buildDriverOrderDetailScope,
@@ -78,6 +79,9 @@ type Order = {
   redeliveryPayment?: RedeliveryPaymentActionability;
   // 배정 여부. 응답에 없으면 확인 창이 배정 사실을 단정하지 않는다(buildDriverStatusConfirmContent).
   assignedToMe?: boolean;
+  // 수거 대기 주문의 수거 가게 이름·주소(가게 문서 name·address). 없으면 수거 장소를 숨긴다.
+  pickupStoreName?: string;
+  pickupAddress?: string;
 };
 
 const METHOD_LABEL: Record<string, string> = {
@@ -606,6 +610,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
     hubName: order.hubName,
     hubAddress: order.hubAddress,
   });
+  // 수거 대기 주문의 수거 장소(가게 이름·주소)와 가게 주소 지도 링크. 필드가 없으면 null이고 숨긴다.
+  const pickup = readPickupPlace(order);
   const isRoundDirect =
     order.schemaVersion === 2 && Boolean(order.roundId) && order.deliveryMethod === 'direct';
   const paymentPresentation = getRedeliveryPaymentPresentation(order.redeliveryPayment);
@@ -788,6 +794,37 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 )}
               </ProblemPanel>
             )
+          )}
+
+          {/* 수거 대기에서는 먼저 들를 수거 장소를 배송지보다 위에 둔다. */}
+          {pickup && (
+            <div
+              className="flex flex-col gap-2 rounded-[var(--radius)] p-4"
+              style={{ backgroundColor: 'var(--color-surface-muted)' }}
+            >
+              <p
+                className={text}
+                style={{
+                  fontWeight: 'var(--fw-bold)',
+                  color: 'var(--color-text)',
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'anywhere',
+                }}
+              >
+                {pickup.label}
+              </p>
+              {pickup.mapHref && (
+                <a
+                  href={pickup.mapHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={actionButton}
+                  style={actionButtonStyle}
+                >
+                  카카오맵에서 수거지 보기
+                </a>
+              )}
+            </div>
           )}
 
           {/* 동·호수가 주인공: 위 15px 기본 주소, 아래 28px 동·호수(거점은 거점 이름). */}

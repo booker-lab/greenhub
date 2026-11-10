@@ -20,6 +20,12 @@ export class DriverController {
     return this.driver.getOrders(user.sub, query.status);
   }
 
+  // GET /driver/summary → { completedToday }: 본인 배정 주문 중 오늘(서울 날짜) 배송 완료된 수
+  @Get('summary')
+  getSummary(@CurrentUser() user: JwtPayload) {
+    return this.driver.getSummary(user.sub);
+  }
+
   @Get('orders/:orderId')
   getOrder(@Param('orderId') orderId: string, @CurrentUser() user: JwtPayload) {
     return this.driver.getOrder(user.sub, orderId);
