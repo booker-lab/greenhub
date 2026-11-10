@@ -220,7 +220,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.getByLabel('손님에게 보일 사유').fill('공동현관 출입 정보를 확인할 수 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
     // 고객 책임을 고르면 재배송비 칸이 기준 금액 10,000원으로 채워지고(D-09), 기사가 바꿀 수 있다.
-    await expect(page.getByLabel('재배송비')).toHaveValue('10000원');
+    await expect(page.getByLabel('재배송비')).toHaveValue('10,000원');
     // 저장 뒤 결과(손님 결제 전 재개 잠금·기사 앱 수정 불가)를 금액과 함께 칸 바로 아래에 알린다(R-02).
     await expect(
       page.getByText(

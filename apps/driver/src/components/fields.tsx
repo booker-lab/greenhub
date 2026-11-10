@@ -247,6 +247,7 @@ export function NumberField({
   min = 0,
   step = 1,
   suffix = '',
+  thousandSeparator = false,
 }: {
   label: string;
   value: number | string;
@@ -255,11 +256,18 @@ export function NumberField({
   min?: number;
   step?: number;
   suffix?: string;
+  /** 칸에 천 단위 구분(10,000)으로 보인다. 값(onChange)은 그대로 숫자다. */
+  thousandSeparator?: boolean;
 }) {
   const id = useId();
-  const display = value === '' ? '' : `${value}${suffix}`;
+  const numeric = typeof value === 'number' ? value : Number(String(value).replace(/[^0-9]/g, ''));
+  const shown =
+    thousandSeparator && value !== '' && Number.isFinite(numeric)
+      ? numeric.toLocaleString('ko-KR')
+      : value;
+  const display = value === '' ? '' : `${shown}${suffix}`;
   const stepBy = (direction: 1 | -1) => {
-    const current = typeof value === 'number' ? value : Number(value) || 0;
+    const current = Number.isFinite(numeric) ? numeric : 0;
     onChange(Math.max(min, current + direction * step));
   };
   const control =

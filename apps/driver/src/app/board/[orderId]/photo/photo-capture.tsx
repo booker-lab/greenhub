@@ -16,6 +16,7 @@ import {
   readDriverOrderCommandErrorCodeFromResponse,
   resolveDriverDetailBackAction,
 } from '../../_lib/driver-order-detail';
+import { rememberCompletedOrder } from '../../_lib/recent-completion';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
 import {
   type DecodedPhoto,
@@ -523,6 +524,9 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
         }
       }
 
+      // 완료 직후 휴대폰 뒤로가기로 이 주문 상세가 다시 열리면 "배송을 마친 주문이에요"로 안내한다(R-01).
+      // 저장소가 막혀도 예외 없이 넘어간다.
+      rememberCompletedOrder({ orderId, userId: session.user.id });
       leaving = true;
       router.replace('/board?tab=delivering');
     } catch (error) {

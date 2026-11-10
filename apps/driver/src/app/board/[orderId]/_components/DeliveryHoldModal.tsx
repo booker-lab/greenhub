@@ -401,6 +401,7 @@ export function DeliveryHoldModal({
                 min={0}
                 step={1000}
                 suffix="원"
+                thousandSeparator
                 onChange={(value) => {
                   setError('');
                   setRedeliveryFee(value);
