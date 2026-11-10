@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
+  customerResponsibleFeeNotice,
   DEFAULT_REDELIVERY_FEE_KRW,
   deliveryHoldResponsibilityFeeHint,
+  formatKrw,
   deliveryHoldSubmitError,
   HOLD_MESSAGE_REQUIRED_MESSAGE,
   HOLD_REASON_REQUIRED_MESSAGE,
@@ -229,4 +231,104 @@ test('D-08·D-15·D-24. 보류 창 이름·사유 안내·오류 지움', () => 
   const formAt = holdModalSource.indexOf('<RadioGroupField');
   const formEnd = holdModalSource.indexOf('{error &&', formAt);
   assert.equal((holdModalSource.slice(formAt, formEnd).match(/setError\(''\)/g) ?? []).length, 4);
+});
+
+test('R-02. 금액은 천 단위로 구분해 원을 붙인다', () => {
+  assert.equal(formatKrw(10000), '10,000원');
+  assert.equal(formatKrw(3000), '3,000원');
+  assert.equal(formatKrw(500), '500원');
+  assert.equal(formatKrw(MAX_REDELIVERY_FEE_KRW), '50,000원');
+});
+
+test('R-02. 고객 책임이면 재배송비 칸 아래에 금액·재개 잠금·수정 불가를 알린다', () => {
+  for (const reasonCode of NON_WEATHER) {
+    assert.equal(
+      customerResponsibleFeeNotice({
+        reasonCode,
+        customerResponsible: true,
+        redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+      }),
+      '손님이 재배송비 10,000원을 결제해야 다시 배송할 수 있어요. 저장한 뒤에는 기사 앱에서 바꿀 수 없어요.',
+      reasonCode,
+    );
+  }
+  // 금액은 지금 입력값을 따른다(문자열 입력 포함).
+  assert.equal(
+    customerResponsibleFeeNotice({
+      reasonCode: 'ACCESS_UNAVAILABLE',
+      customerResponsible: true,
+      redeliveryFee: '3000',
+    }),
+    '손님이 재배송비 3,000원을 결제해야 다시 배송할 수 있어요. 저장한 뒤에는 기사 앱에서 바꿀 수 없어요.',
+  );
+  // 고객 책임 아님·기상 보류(고객 책임 잠금)는 안내하지 않는다.
+  assert.equal(
+    customerResponsibleFeeNotice({
+      reasonCode: 'ACCESS_UNAVAILABLE',
+      customerResponsible: false,
+      redeliveryFee: 3000,
+    }),
+    null,
+  );
+  assert.equal(
+    customerResponsibleFeeNotice({ reasonCode: 'WEATHER', customerResponsible: true, redeliveryFee: 3000 }),
+    null,
+  );
+  // 금액 없음·상한 초과·정수 아님은 고칠 방법 안내(deliveryHoldResponsibilityFeeHint)만 보인다.
+  for (const redeliveryFee of ['', 0, MAX_REDELIVERY_FEE_KRW + 1, 1500.5]) {
+    assert.equal(
+      customerResponsibleFeeNotice({
+        reasonCode: 'ADDRESS_ISSUE',
+        customerResponsible: true,
+        redeliveryFee,
+      }),
+      null,
+      String(redeliveryFee),
+    );
+    assert.notEqual(
+      deliveryHoldResponsibilityFeeHint({
+        reasonCode: 'ADDRESS_ISSUE',
+        customerResponsible: true,
+        redeliveryFee,
+      }),
+      null,
+      String(redeliveryFee),
+    );
+  }
+  // 유형을 아직 고르지 않았어도 고객 책임·금액이 맞으면 결과를 미리 알린다.
+  assert.match(
+    customerResponsibleFeeNotice({ reasonCode: null, customerResponsible: true, redeliveryFee: 10000 }) ?? '',
+    /10,000원/,
+  );
+});
+
+test('R-02·R-09. 보류 창은 재배송비 칸 바로 아래에 고객 책임 안내를 두고, 도움말은 낱말 단위로 줄을 바꾼다', () => {
+  assert.match(holdModalSource, /const customerFeeNotice = customerResponsibleFeeNotice\(\{/);
+  const feeFieldAt = holdModalSource.indexOf('<NumberField');
+  const feeFieldEnd = holdModalSource.indexOf('/>', feeFieldAt);
+  const noticeAt = holdModalSource.indexOf('{customerFeeNotice && (', feeFieldEnd);
+  const hintAt = holdModalSource.indexOf('{responsibilityFeeHint && (', feeFieldEnd);
+  const nextFieldAt = holdModalSource.indexOf('<TextField', feeFieldEnd);
+  assert.ok(feeFieldAt !== -1 && noticeAt !== -1 && hintAt !== -1);
+  assert.ok(noticeAt < hintAt && hintAt < nextFieldAt, '안내는 재배송비 칸 바로 아래에 있다');
+  // 기준 금액 미리 채움·상한·기상 잠금은 그대로다.
+  const feeField = holdModalSource.slice(feeFieldAt, feeFieldEnd);
+  assert.match(feeField, /disabled=\{isWeather\}/);
+  assert.match(feeField, /value=\{redeliveryFee\}/);
+  assert.match(
+    holdModalSource,
+    /redeliveryFeeAfterResponsibilityChange\(\{ customerResponsible: checked, redeliveryFee \}\)/,
+  );
+  assert.match(
+    holdModalSource,
+    /redeliveryFee: isWeather \? null : parseRedeliveryFee\(redeliveryFee\)/,
+  );
+  // 안내·도움말은 낱말 중간에서 끊기지 않는다.
+  assert.match(
+    holdModalSource,
+    /const keepWords = \{ wordBreak: 'keep-all', overflowWrap: 'anywhere' \} as const;/,
+  );
+  const helpAt = holdModalSource.indexOf('id={reasonHelpId}');
+  assert.match(holdModalSource.slice(helpAt, helpAt + 200), /style=\{keepWords\}/);
+  assert.match(holdModalSource.slice(noticeAt, noticeAt + 200), /style=\{keepWords\}/);
 });

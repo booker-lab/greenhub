@@ -23,10 +23,10 @@ import {
   buildDriverOrderDetailScope,
   buildDriverStatusConfirmContent,
   classifyDriverOrderCommandError,
-  DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE,
   type DriverOrderReadback,
   type DriverOrderReadErrorKind,
   type DriverStatusConfirmKind,
+  type DriverStatusReadbackNotice,
   driverDetailListHref,
   driverOrderItemCount,
   isDriverHoldEntryVisible,
@@ -34,15 +34,17 @@ import {
   isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
   isDriverStatusConfirmCurrent,
-  isDriverTerminalCommandStatus,
   readDriverDetailBackContext,
   readDriverOrderCommandErrorCodeFromResponse,
+  resolveDriverCommandSuccessMessage,
   resolveDriverDetailBackAction,
-  resolveDriverStatusCommandReadback,
+  resolveDriverOrderNotFoundScreen,
+  resolveDriverStatusReadbackNotice,
   shouldPreserveDriverOrderOnReadError,
   toDriverOrderNetworkError,
   toDriverOrderReadError,
 } from '../_lib/driver-order-detail';
+import { wasOrderRecentlyCompleted } from '../_lib/recent-completion';
 import {
   getRedeliveryPaymentPresentation,
   isDeliveryStartAllowed,
@@ -103,13 +105,8 @@ const STATUS_APPLIED_READBACK_WARNING =
   "처리는 됐지만 최신 상태를 아직 확인하지 못했어요. 연결이 돌아오면 '상태 확인'을 눌러 주세요.";
 // 시간 초과(apiFetch 기본 제한, lib/api-timeout.ts)도 같은 ACK-uncertain 수렴을 따른다.
 const STATUS_TIMEOUT_CONVERGENCE_MESSAGE = '응답이 늦어요. 처리됐는지 확인하는 중이에요.';
-// 불확실 수렴 뒤 fresh GET 판정(resolveDriverStatusCommandReadback) 결과 안내.
-const STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE = '처리된 것을 확인했어요.';
-// 서버는 이미 적용된 같은 전이를 403/409 STATE_CONFLICT로 거절하므로 다시 눌러도 두 번 처리되지 않는다.
-const STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE =
-  '아직 처리되지 않았어요. 다시 눌러도 두 번 처리되지 않아요.';
-const STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE =
-  '주문이 진행 목록에서 빠졌어요. 목록에서 결과를 확인해 주세요.';
+// 불확실 수렴 뒤 fresh GET 판정 결과 안내(처리 확인·미반영·목록 수렴)는 resolveDriverStatusReadbackNotice가
+// 정하고, 자동 수렴과 "상태 확인"(R-08)이 같이 쓴다.
 
 export default function OrderDetailPage({ params }: { params: Promise<{ orderId: string }> }) {
   const { orderId: rawOrderId } = use(params);
@@ -180,6 +177,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
   // in-flight guard이며, React state의 비동기 반영만으로는 막을 수 없는 동일 frame
   // double-click/double-submit에서도 두 번째 PATCH dispatch를 차단한다.
   const inFlightRef = useRef(false);
+  // 응답 불확실 경고(readbackWarning)를 남긴 요청의 목표 상태. "상태 확인"이 다시 읽은 결과를
+  // 자동 수렴과 같은 규칙으로 안내하는 데만 쓴다(R-08). 이 값으로 요청을 다시 보내지 않는다.
+  const uncertainStatusRef = useRef<string | null>(null);
 
   const readDetail = useCallback(
     async (token: string, signal?: AbortSignal): Promise<DriverOrderReadback> => {
@@ -351,31 +351,19 @@ function OrderDetail({ orderId }: { orderId: string }) {
     // ACK-uncertain 수렴(authoritative GET) 결과로 마무리한다. 같은 PATCH는 자동 재전송하지 않는다.
     // 이미 전이됐으면 성공으로, 반영 안 됐으면 fresh 상태 그대로 다시 누를 수 있게 둔다.
     // 조회 실패면 readDetail이 남긴 FETCH_ERROR·불확실 경고로 fail-closed를 유지한다.
+    // 완료 전이 요청 뒤 상세 404(LEFT_DRIVER_SCOPE)는 완료 ACK 경로와 같이 목록 조회로 수렴한다.
     const settleUncertainReadback = (readback: DriverOrderReadback) => {
       if (!isCommandCurrent()) return;
-      const result = resolveDriverStatusCommandReadback({ requestedStatus: status, readback });
-      if (result === 'APPLIED') {
-        toast.add({ description: STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE });
-        if (isDriverTerminalCommandStatus(status)) router.replace('/board?tab=delivering');
-        return;
-      }
-      if (result === 'LEFT_DRIVER_SCOPE') {
-        // 완료 전이 요청 뒤 상세 404: 완료 ACK 경로와 같이 목록 조회로 수렴한다.
-        toast.add({
-          type: TOAST_WARNING,
-          description: STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE,
-        });
-        router.replace('/board?tab=delivering');
-        return;
-      }
-      if (result === 'NOT_APPLIED') {
-        toast.add({
-          type: TOAST_WARNING,
-          description: STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE,
-        });
-      }
+      const notice = resolveDriverStatusReadbackNotice({ requestedStatus: status, readback });
+      if (!notice) return;
+      toast.add(readbackNoticeToast(notice));
+      if (notice.goToList) router.replace('/board?tab=delivering');
     };
+    // 시작·재개 성공 알림(R-06)에 쓸 출발 상태와 동·호수(거점은 거점 이름)는 보낸 순간의 주문에서 읽는다.
+    const fromStatus = order.status;
+    const successPlace = readAddressParts(order).detail;
     inFlightRef.current = true;
+    uncertainStatusRef.current = status;
     setLoading(true);
     setReadbackWarning(null);
     try {
@@ -488,6 +476,14 @@ function OrderDetail({ orderId }: { orderId: string }) {
         setOrder(fresh);
         setReadError(null);
         setReadbackWarning(null);
+        // 정상 ACK 뒤 다시 읽어 요청한 상태가 확인됐을 때만 결과를 알린다(R-06). 불확실·충돌 경로는 위에서 끝났다.
+        const successMessage = resolveDriverCommandSuccessMessage({
+          requestedStatus: status,
+          fromStatus,
+          freshStatus: fresh.status,
+          place: successPlace,
+        });
+        if (successMessage) toast.add({ description: successMessage });
       } catch (readbackCause: unknown) {
         if (!isCommandCurrent()) return;
         // readback 단계의 AUTH_ERROR·NOT_FOUND 역시 authority loss이므로 이전 order를 남기지 않는다.
@@ -540,6 +536,22 @@ function OrderDetail({ orderId }: { orderId: string }) {
     }
   }
 
+  // "상태 확인"(R-08): 조회(GET)만 하고 다시 읽은 결과를 자동 수렴과 같은 규칙으로 안내한다.
+  // 읽기 실패·stale이면 안내 없이 경고를 그대로 둔다(fail-closed). 같은 요청은 다시 보내지 않는다.
+  async function recheckUncertainStatus() {
+    const token = session?.user.accessToken;
+    if (!token) return;
+    const requestedStatus = uncertainStatusRef.current;
+    const scope = liveScopeRef.current;
+    const readback = await readDetail(token);
+    // 조회 사이 주문·로그인 범위가 바뀌었으면 지난 범위의 결과를 알리지 않는다.
+    if (!requestedStatus || scope !== liveScopeRef.current) return;
+    const notice = resolveDriverStatusReadbackNotice({ requestedStatus, readback });
+    if (!notice) return;
+    toast.add(readbackNoticeToast(notice));
+    if (notice.goToList) router.replace('/board?tab=delivering');
+  }
+
   if (readLoading) {
     return (
       <div
@@ -557,12 +569,18 @@ function OrderDetail({ orderId }: { orderId: string }) {
 
   if (!order) {
     const isNotFound = readError?.kind !== 'AUTH_ERROR' && readError?.kind !== 'FETCH_ERROR';
+    // 이 기기에서 같은 사용자가 방금 완료한 주문이면(완료 직후 뒤로가기) 완료 안내로 바꾼다(R-01).
+    // 기억을 읽지 못하면 D-17 안내 그대로다.
+    const notFoundScreen = resolveDriverOrderNotFoundScreen({
+      recentlyCompleted:
+        isNotFound && wasOrderRecentlyCompleted({ orderId, userId: session?.user.id }),
+    });
     const message =
       readError?.kind === 'AUTH_ERROR'
         ? '로그인 정보를 다시 확인해 주세요.'
         : readError?.kind === 'FETCH_ERROR'
           ? '주문 정보를 불러오지 못했어요'
-          : DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE;
+          : notFoundScreen.message;
     return (
       <div
         style={{
@@ -578,7 +596,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
           </p>
           {isNotFound && (
             // 다른 기사가 맡았거나 끝난 주문은 다시 열어도 같으므로 목록으로 바꿔 보낸다(D-17).
-            <AppButton tone="brand-outline" onClick={() => router.replace('/board')}>
+            // 방금 완료한 주문이면 배송 중 탭으로 보낸다(R-01).
+            <AppButton tone="brand-outline" onClick={() => router.replace(notFoundScreen.listHref)}>
               배송 목록으로
             </AppButton>
           )}
@@ -627,12 +646,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
     hasReadbackWarning: readbackWarning !== null,
   });
   // 문 앞에서 가장 중요한 동·호수를 크게 쓴다. 거점은 거점 이름이 제목이고 주소가 보조다.
-  const addressParts = isHub
-    ? { base: order.hubAddress ?? '-', detail: order.hubName ?? null }
-    : (splitDeliveryAddress(order.address, order.deliveryAddress?.address) ?? {
-        base: '-',
-        detail: null,
-      });
+  const addressParts = readAddressParts(order);
   // 단계마다 보이는 전화는 하나다(판매자: 수거 대기·거점 배송 중, 소비자: 직배송 배송 중·보류). 노출 규칙은 API가 정한다.
   const contact =
     isPreparing && order.sellerPhone
@@ -771,13 +785,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
               <p className={text} style={problemText}>
                 {readbackWarning}
               </p>
-              <AppButton
-                tone="brand-outline"
-                onClick={() => {
-                  const token = session?.user.accessToken;
-                  if (token) void readDetail(token);
-                }}
-              >
+              <AppButton tone="brand-outline" onClick={() => void recheckUncertainStatus()}>
                 상태 확인
               </AppButton>
             </ProblemPanel>
@@ -1105,7 +1113,18 @@ function OrderDetail({ orderId }: { orderId: string }) {
           onLoading={setLoading}
           onSaved={() => {
             const token = session?.user.accessToken;
-            if (token) void readDetail(token);
+            if (!token) return;
+            // 보류 ACK 뒤 다시 읽어 보류 상태가 확인됐을 때만 결과를 알린다(R-06). stale·조회 실패면 알리지 않는다.
+            const fromStatus = order.status;
+            void readDetail(token).then((readback) => {
+              if (readback.kind !== 'order') return;
+              const successMessage = resolveDriverCommandSuccessMessage({
+                requestedStatus: 'DELIVERY_HELD',
+                fromStatus,
+                freshStatus: readback.status,
+              });
+              if (successMessage) toast.add({ description: successMessage });
+            });
           }}
           onConvergence={() => {
             const token = session?.user.accessToken;
@@ -1115,6 +1134,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
             // HOLD ACK-uncertain: 같은 HOLD를 자동 재전송하지 않고 parent authoritative GET으로
             // 수렴한다. fresh GET 성공이 warning을 해소하기 전에는 fail-closed로 같은 HOLD와
             // 다른 위험 command를 차단하고, manual recovery는 GET(상태 다시 확인)이다.
+            uncertainStatusRef.current = 'DELIVERY_HELD';
             setReadbackWarning(HOLD_UNCERTAIN_READBACK_WARNING);
             const token = session?.user.accessToken;
             if (token) void readDetail(token);
@@ -1148,6 +1168,26 @@ function OrderDetail({ orderId }: { orderId: string }) {
       )}
     </div>
   );
+}
+
+/** 제목에 쓰는 기본 주소와 동·호수. 거점은 거점 주소와 거점 이름이다. 나눌 수 없으면 detail은 null이다. */
+function readAddressParts(order: Order): { base: string; detail: string | null } {
+  if (order.deliveryMethod === 'hub') {
+    return { base: order.hubAddress ?? '-', detail: order.hubName ?? null };
+  }
+  return (
+    splitDeliveryAddress(order.address, order.deliveryAddress?.address) ?? {
+      base: '-',
+      detail: null,
+    }
+  );
+}
+
+/** 불확실 수렴 결과 안내의 토스트 값. 경고는 TOAST_WARNING으로 그린다. */
+function readbackNoticeToast(notice: DriverStatusReadbackNotice) {
+  return notice.tone === 'warning'
+    ? { type: TOAST_WARNING, description: notice.message }
+    : { description: notice.message };
 }
 
 function DeliveryHoldCard({ hold }: { hold: DeliveryHold }) {
@@ -1186,6 +1226,8 @@ function formatSchedule(value: string) {
   });
 }
 
+// 한국어 글이 낱말 중간에서 줄을 바꾸지 않게 한다(R-09). 긴 주소·낱말만 아무 데서나 끊는다.
+const keepWords = { wordBreak: 'keep-all', overflowWrap: 'anywhere' } as const;
 // 기사 ② 글자 값(design-direction.md §6): 보조 글자도 15px·거의 검정, 문제 글자는 빨강.
 const mutedText = { fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' } as const;
 const problemText = {
@@ -1220,12 +1262,18 @@ function ProblemPanel({ children }: { children: ReactNode }) {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
-      <p className={text} style={mutedText}>
+      <p className={text} style={{ ...mutedText, ...keepWords }}>
         {label}
       </p>{' '}
+      {/* 손님에게 보인 사유처럼 긴 값이 낱말 중간에서 줄을 바꾸지 않게 한다(R-09). */}
       <p
         className={cn(text, 'text-right')}
-        style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)', maxWidth: '60%' }}
+        style={{
+          color: 'var(--color-text)',
+          fontWeight: 'var(--fw-bold)',
+          maxWidth: '60%',
+          ...keepWords,
+        }}
       >
         {value}
       </p>

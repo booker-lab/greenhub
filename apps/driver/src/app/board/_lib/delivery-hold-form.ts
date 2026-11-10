@@ -73,6 +73,27 @@ export const HOLD_FEE_NOT_ALLOWED_HINT =
   '재배송비는 고객 책임일 때만 받을 수 있어요. 고객 책임을 선택하거나 재배송비를 지워 주세요.';
 export const HOLD_FEE_RANGE_HINT = `재배송비는 ${MAX_REDELIVERY_FEE_KRW.toLocaleString('ko-KR')}원 이하의 정수로 입력해 주세요.`;
 
+/** 금액을 천 단위로 구분해 "10,000원"처럼 쓴다. */
+export function formatKrw(amount: number): string {
+  return `${amount.toLocaleString('ko-KR')}원`;
+}
+
+/**
+ * "고객 책임"을 고르면 재배송비 칸 바로 아래에 보이는 결과 안내(R-02). 저장하면 손님에게 그 금액이 청구되고
+ * 결제 전까지 배송 재개가 잠기며, 기사 앱에는 보류 내용을 고치는 경로가 없다는 것을 알린다.
+ * 기상 보류·고객 책임 아님·금액 없음·상한 밖이면 null이다(금액 없음·상한 밖은 deliveryHoldResponsibilityFeeHint가 안내한다).
+ */
+export function customerResponsibleFeeNotice(args: {
+  reasonCode: string | null;
+  customerResponsible: boolean;
+  redeliveryFee: string | number;
+}): string | null {
+  if (args.reasonCode === 'WEATHER' || !args.customerResponsible) return null;
+  const fee = parseRedeliveryFee(args.redeliveryFee);
+  if (fee === null || !isRedeliveryFeeWithinLimit(fee)) return null;
+  return `손님이 재배송비 ${formatKrw(fee)}을 결제해야 다시 배송할 수 있어요. 저장한 뒤에는 기사 앱에서 바꿀 수 없어요.`;
+}
+
 /** 책임·재배송비가 어긋나거나 재배송비가 상한 이하 정수가 아니면 고칠 방법을 담은 안내, 맞으면 null. */
 export function deliveryHoldResponsibilityFeeHint(args: {
   reasonCode: string | null;
