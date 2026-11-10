@@ -49,10 +49,10 @@ const CAMERA_ON = '#ffffff';
 const CAMERA_BUTTON_INK = '#111111';
 
 const INVALID_ORDER_ADDRESS_MESSAGE =
-  '주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해주세요.';
+  '주문 주소가 올바르지 않아요. 배송 목록에서 주문을 다시 선택해 주세요.';
 // 명령을 보내기 전에 실패하므로 같은 사진으로 다시 시도해도 안전하다.
 const ORDER_STORE_UNKNOWN_MESSAGE =
-  '주문 정보를 확인하지 못해 사진을 올리지 않았습니다. 잠시 뒤 다시 시도하거나 주문 화면에서 확인해주세요.';
+  '주문 정보를 확인하지 못해 사진을 올리지 않았어요. 잠시 뒤 다시 시도하거나 주문 화면에서 확인해 주세요.';
 // 받는 형식은 JPEG 그대로다(2026-11-08 결정). 형식 이름 대신 바로 할 일을 안내한다.
 const NON_JPEG_PHOTO_MESSAGE =
   "이 사진 형식은 올릴 수 없어요. '카메라 촬영'이나 '카메라 앱으로 찍기'로 새로 찍어 주세요.";
@@ -198,7 +198,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     void video.play().catch(() => {
       if (!active) return;
       setFrameReady(false);
-      setError('카메라 미리보기를 재생할 수 없습니다. 다시 시도해주세요.');
+      setError('카메라 미리보기를 재생할 수 없어요. 다시 시도해 주세요.');
     });
 
     return () => {
@@ -246,8 +246,8 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     if (!navigator.mediaDevices?.getUserMedia) {
       setError(
         isRoundDirect
-          ? '카메라를 사용할 수 없습니다. 카메라 앱으로 찍거나 사진을 선택해 계속해주세요.'
-          : '카메라를 사용할 수 없습니다.',
+          ? '카메라를 사용할 수 없어요. 카메라 앱으로 찍거나 사진을 선택해 계속해 주세요.'
+          : '카메라를 사용할 수 없어요.',
       );
       return;
     }
@@ -272,8 +272,8 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
       if (cameraRequestRef.current !== requestId) return;
       setError(
         isRoundDirect
-          ? '카메라 접근 권한이 필요합니다. 카메라 앱으로 찍거나 사진을 선택해 계속해주세요.'
-          : '카메라 접근 권한이 필요합니다.',
+          ? '카메라 접근 권한이 필요해요. 카메라 앱으로 찍거나 사진을 선택해 계속해 주세요.'
+          : '카메라 접근 권한이 필요해요.',
       );
     }
   }
@@ -296,7 +296,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
       video.videoWidth <= 0 ||
       video.videoHeight <= 0
     ) {
-      setError('카메라 화면이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+      setError('카메라 화면이 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
       return;
     }
     if (preparingRef.current) return;
@@ -512,10 +512,10 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
         try {
           ack = (await response.json()) as { orderId?: unknown; status?: unknown };
         } catch {
-          throw new Error('결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.');
+          throw new Error('결과를 확인할 수 없어요. 주문 상태를 다시 확인해 주세요.');
         }
         if (ack.orderId !== orderId || ack.status !== 'HUB_ARRIVED') {
-          throw new Error('결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.');
+          throw new Error('결과를 확인할 수 없어요. 주문 상태를 다시 확인해 주세요.');
         }
       }
 
@@ -524,11 +524,11 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     } catch (error) {
       if (
         error instanceof Error &&
-        error.message.includes('결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.')
+        error.message.includes('결과를 확인할 수 없어요. 주문 상태를 다시 확인해 주세요.')
       ) {
         setError(error.message);
       } else {
-        setError('업로드 실패. 다시 시도해주세요.');
+        setError('업로드하지 못했어요. 다시 시도해 주세요.');
       }
     } finally {
       if (!leaving) {
@@ -647,7 +647,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             }}
           >
             <p className={text} style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}>
-              {isRoundDirect ? '문 앞 배송 완료 상태를 촬영해주세요' : '하차 물품을 촬영해주세요'}
+              {isRoundDirect ? '문 앞 배송 완료 상태를 촬영해 주세요' : '하차 물품을 촬영해 주세요'}
             </p>
             <AppButton
               onClick={startCamera}

@@ -25,13 +25,13 @@ const confirmDialogSource = await readFile(
   'utf8',
 );
 
-const CONVERGENCE_MESSAGE = '이미 상태가 변경되었을 수 있습니다. 최신 상태를 다시 확인합니다.';
+const CONVERGENCE_MESSAGE = '이미 상태가 바뀌었을 수 있어요. 최신 상태를 다시 확인할게요.';
 
 // 수렴 메시지는 상수로 단일 정의되어 양 경로에서 공유된다.
 test('수렴 메시지는 단일 상수로 정의된다', () => {
   assert.match(
     holdModalSource,
-    /HOLD_STALE_CONVERGENCE_MESSAGE =\s*\n\s*'이미 상태가 변경되었을 수 있습니다\. 최신 상태를 다시 확인합니다\.'/,
+    /HOLD_STALE_CONVERGENCE_MESSAGE =\s*\n\s*'이미 상태가 바뀌었을 수 있어요\. 최신 상태를 다시 확인할게요\.'/,
   );
   assert.match(detailSource, new RegExp(CONVERGENCE_MESSAGE.replace(/\./g, '\\.')));
 });

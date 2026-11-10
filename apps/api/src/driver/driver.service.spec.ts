@@ -875,8 +875,8 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
       firestore.doc.mock.calls.filter(([called]) => called === path).length;
     expect(readCount('stores/pilot')).toBe(1);
     expect(readCount('stores/legacy')).toBe(1);
-    // 노출 판정 1회 + 회차 배송일 1회. 같은 회차 주문이 늘어도 그대로다.
-    expect(readCount('saleRounds/round-valid')).toBe(2);
+    // 노출 판정에서 1회만 읽고 배송일은 그 문서를 그대로 쓴다. 같은 회차 주문이 늘어도 그대로다.
+    expect(readCount('saleRounds/round-valid')).toBe(1);
   });
 
   it('목록·상세에 요청 기사 본인 배정 여부만 assignedToMe로 싣는다', async () => {
@@ -920,7 +920,7 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     });
   });
 
-  it('회차 주문 목록 행에 회차 배송 시작 시각을 싣고 회차 문서는 회차마다 정해진 횟수만 읽는다', async () => {
+  it('회차 주문 목록 행에 회차 배송 시작 시각을 싣고 회차 문서는 회차마다 한 번만 읽는다', async () => {
     const records: Record<string, Data> = {
       'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
       'stores/legacy': { id: 'legacy', salesMode: 'legacy' },
@@ -982,15 +982,79 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     }
     const readCount = (path: string) =>
       firestore.doc.mock.calls.filter(([called]) => called === path).length;
-    // 주문 12건이어도 회차마다 노출 판정 1회 + 배송일 1회다.
-    expect(readCount('saleRounds/round-a')).toBe(2);
-    expect(readCount('saleRounds/round-b')).toBe(2);
+    // 주문 12건이어도 회차마다 노출 판정에서 1회만 읽고, 배송일은 그 문서를 그대로 쓴다.
+    expect(readCount('saleRounds/round-a')).toBe(1);
+    expect(readCount('saleRounds/round-b')).toBe(1);
     expect(
       firestore.doc.mock.calls.filter(([called]) => String(called).startsWith('saleRounds/')),
-    ).toHaveLength(4);
+    ).toHaveLength(2);
   });
 
-  it('회차 문서를 다시 읽지 못하면 목록은 그대로 두고 배송일만 뺀다', async () => {
+  it('배송일은 노출 판정이 회차 직배송으로 본 주문에만 싣고 legacy 판매점 주문에 남은 roundId로는 싣지 않는다', async () => {
+    const schedule = { deliveryStartAt: '2026-11-10T01:00:00.000Z' };
+    const { service, firestore } = makeService({
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'stores/legacy': { id: 'legacy', salesMode: 'legacy' },
+      'saleRounds/round-pilot': { id: 'round-pilot', storeId: 'pilot', schedule },
+      // 회차 문서의 id·storeId가 legacy 주문과 맞아도 판매점이 legacy면 회차 직배송이 아니다.
+      'saleRounds/round-legacy': { id: 'round-legacy', storeId: 'legacy', schedule },
+      // storeId가 없는 이전 주문과 storeId가 없는 회차 문서도 서로 맞는 것으로 보지 않는다.
+      'saleRounds/round-storeless': { id: 'round-storeless', schedule },
+      'orders/pilot': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-pilot',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+      'orders/legacy-open': {
+        storeId: 'legacy',
+        schemaVersion: 2,
+        roundId: 'round-legacy',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: '2026-01-01T00:01:00.000Z',
+      },
+      'orders/legacy-mine': {
+        storeId: 'legacy',
+        schemaVersion: 2,
+        roundId: 'round-legacy',
+        deliveryMethod: 'hub',
+        status: 'DELIVERING',
+        driverId: 'driver-1',
+        updatedAt: '2026-01-01T00:02:00.000Z',
+      },
+      'orders/storeless': {
+        roundId: 'round-storeless',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+        updatedAt: '2026-01-01T00:03:00.000Z',
+      },
+    });
+
+    const result = await service.getOrders('driver-1');
+
+    expect(result.map((order) => order.id)).toEqual([
+      'pilot',
+      'legacy-open',
+      'legacy-mine',
+      'storeless',
+    ]);
+    expect(result[0]['deliveryDate']).toBe('2026-11-10T01:00:00.000Z');
+    for (const order of result.slice(1)) expect(order).not.toHaveProperty('deliveryDate');
+    // legacy 판매점·storeId 없는 주문의 회차 문서는 노출 판정에 필요 없으므로 읽지 않는다.
+    expect(
+      firestore.doc.mock.calls
+        .map(([called]) => String(called))
+        .filter((called) => called.startsWith('saleRounds/')),
+    ).toEqual(['saleRounds/round-pilot']);
+  });
+
+  it('노출 판정 뒤 같은 회차 문서를 다시 읽지 않아 이후 읽기가 실패해도 배송일이 빠지지 않는다', async () => {
     const { service, firestore } = makeService({
       'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
       'saleRounds/round-a': {
@@ -1014,6 +1078,40 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
         return { get: jest.fn(async () => Promise.reject(new Error('unavailable'))) };
       }
       return baseDoc(path);
+    });
+
+    const result = await service.getOrders('driver-1');
+
+    expect(result.map((order) => order.id)).toEqual(['a']);
+    expect(result[0]['deliveryDate']).toBe('2026-11-10T01:00:00.000Z');
+    expect(roundReads).toBe(1);
+  });
+
+  it.each([
+    ['일정이 없는 회차', undefined],
+    [
+      '배송 시작 시각을 읽다 오류가 나는 회차',
+      {
+        deliveryStartAt: {
+          toMillis: () => {
+            throw new Error('broken');
+          },
+        },
+      },
+    ],
+    ['ISO로 바꿀 수 없는 배송 시작 시각', { deliveryStartAt: 8.64e15 + 1 }],
+  ])('%s면 목록은 그대로 두고 배송일만 뺀다', async (_label, schedule) => {
+    const { service } = makeService({
+      'stores/pilot': { id: 'pilot', salesMode: 'round_direct' },
+      'saleRounds/round-a': { id: 'round-a', storeId: 'pilot', schedule },
+      'orders/a': {
+        storeId: 'pilot',
+        schemaVersion: 2,
+        roundId: 'round-a',
+        deliveryMethod: 'direct',
+        status: 'PREPARING',
+        driverId: null,
+      },
     });
 
     const result = await service.getOrders('driver-1');

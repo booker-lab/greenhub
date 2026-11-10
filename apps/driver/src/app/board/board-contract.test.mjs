@@ -147,13 +147,13 @@ test('Board 재시도는 목록 fetch를 다시 실행한다', () => {
 test('Board는 initial loading과 background refreshing을 분리한다', () => {
   assert.match(boardSource, /refreshing/);
   assert.match(boardSource, /setRefreshing\(true\)/);
-  assert.match(boardSource, /최신 정보를 확인하는 중입니다/);
+  assert.match(boardSource, /최신 정보를 확인하고 있어요/);
 });
 
 test('Board는 성공한 조회를 기억하고 refresh 실패에 이전 목록을 유지한다', () => {
   assert.match(boardSource, /hasSuccessfulReadRef/);
   assert.match(boardSource, /hasSuccessfulRead/);
-  assert.match(boardSource, /기존 목록을 보여줍니다/);
+  assert.match(boardSource, /기존 목록을 보여드려요/);
 });
 
 test('Board는 request sequence로 stale 응답 덮어쓰기를 막는다', () => {
@@ -199,8 +199,8 @@ test('Detail read 실패는 NOT_FOUND·AUTH_ERROR·FETCH_ERROR로 분리된다',
   assert.match(detailHelperSource, /FETCH_ERROR/);
   assert.match(detailSource, /toDriverOrderReadError/);
   assert.match(detailSource, /readError/);
-  assert.match(detailSource, /주문을 찾을 수 없습니다/);
-  assert.match(detailSource, /주문 정보를 불러오지 못했습니다/);
+  assert.match(detailSource, /주문을 찾을 수 없어요/);
+  assert.match(detailSource, /주문 정보를 불러오지 못했어요/);
 });
 
 test('Detail read는 sequence guard와 manual retry를 제공한다', () => {
@@ -545,7 +545,7 @@ test('2. first failure는 error이며 empty가 아니다', () => {
     }),
     'INITIAL_READ_FAILURE',
   );
-  assert.match(boardSource, /주문을 불러오지 못했습니다\. 잠시 후 다시 시도해주세요/);
+  assert.match(boardSource, /주문을 불러오지 못했어요\. 잠시 후 다시 시도해 주세요/);
 });
 
 test('3. success [] → refresh failure는 stale-error state다 (fresh empty 금지)', () => {
@@ -617,7 +617,7 @@ test('5. success [orders] → refresh failure는 이전 목록 + warning을 유�
     }),
     'STALE_RESULTS_FAILURE',
   );
-  assert.match(boardSource, /최신 주문을 불러오지 못했습니다\. 기존 목록을 보여줍니다/);
+  assert.match(boardSource, /최신 주문을 불러오지 못했어요\. 기존 목록을 보여드려요/);
   assert.match(boardSource, /\(이전 목록 표시 중\)/);
   assert.match(boardSource, /<OrderList key=\{tab\} orders=\{orders\}/);
   // refresh 실패는 list를 지우지 않는다: stale 분기에는 setPreparing([])이 없다.
@@ -702,8 +702,8 @@ test('9. preparing/delivering 탭 count/filter 회귀 없음', () => {
     /order\.status\s*===\s*['"]DELIVERING['"]\s*\|\|\s*order\.status\s*===\s*['"]DELIVERY_HELD['"]/,
   );
   // stale-empty와 revalidating-empty도 탭 의미를 보존한다.
-  assert.match(boardSource, /마지막 확인 당시 수거할 주문이 없었습니다/);
-  assert.match(boardSource, /마지막 확인 당시 배송 중인 주문이 없었습니다/);
+  assert.match(boardSource, /마지막 확인 당시 수거할 주문이 없었어요/);
+  assert.match(boardSource, /마지막 확인 당시 배송 중인 주문이 없었어요/);
   assert.match(boardSource, /수거할 주문이 없어요/);
   assert.match(boardSource, /배송 중인 주문이 없어요/);
   assert.match(boardSource, /count: preparing\.length/);
@@ -719,7 +719,7 @@ test('10. focus/visibility revalidation 회귀 없음', () => {
   assert.match(boardSource, /setReloadKey\(\(key\)\s*=>\s*key\s*\+\s*1\)/);
   // background refresh는 loading과 분리된다.
   assert.match(boardSource, /setRefreshing\(true\)/);
-  assert.match(boardSource, /최신 정보를 확인하는 중입니다/);
+  assert.match(boardSource, /최신 정보를 확인하고 있어요/);
 });
 
 // DRIVER-LIST-AUTH-SCOPE-RECOVERY-02 focused regression.

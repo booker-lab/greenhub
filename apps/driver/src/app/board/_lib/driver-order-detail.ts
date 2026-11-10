@@ -40,11 +40,11 @@ export function classifyDriverOrderReadError(status: number): DriverOrderReadErr
 
 export function toDriverOrderReadError(
   status: number,
-  fallbackMessage = '주문 정보를 불러오지 못했습니다',
+  fallbackMessage = '주문 정보를 불러오지 못했어요',
 ): DriverOrderReadError {
   const kind = classifyDriverOrderReadError(status);
   if (kind === 'NOT_FOUND') {
-    return new DriverOrderReadError(kind, status, '주문을 찾을 수 없습니다');
+    return new DriverOrderReadError(kind, status, '주문을 찾을 수 없어요');
   }
   if (kind === 'AUTH_ERROR') {
     return new DriverOrderReadError(kind, status, '로그인 정보를 다시 확인해 주세요.');
@@ -53,7 +53,7 @@ export function toDriverOrderReadError(
 }
 
 export function toDriverOrderNetworkError(
-  fallbackMessage = '주문 정보를 불러오지 못했습니다',
+  fallbackMessage = '주문 정보를 불러오지 못했어요',
 ): DriverOrderReadError {
   return new DriverOrderReadError('FETCH_ERROR', null, fallbackMessage);
 }

@@ -40,6 +40,21 @@ function compareByPreparedThenUpdated(a: Record<string, any>, b: Record<string, 
   return aKey - bKey;
 }
 
+/**
+ * 노출 판정이 회차 직배송 기준으로 본 주문의 회차 문서에서 배송 시작 시각(ISO)을 꺼낸다.
+ * 배송일은 표시용이라 회차 문서가 없거나 일정 값을 읽지 못하면 목록은 그대로 두고 배송일만 뺀다.
+ */
+function roundDeliveryStartAt(round: Record<string, any> | null): string | null {
+  if (!round) return null;
+  try {
+    const schedule: unknown = round.schedule;
+    const millis = isRecord(schedule) ? timestampMillis(schedule['deliveryStartAt']) : null;
+    return millis === null ? null : new Date(millis).toISOString();
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class DriverService {
   private readonly driverScope: DriverOrderScopeService;
@@ -86,58 +101,20 @@ export class DriverService {
       }
     }
     const candidates = [...byId.values()].sort(compareByPreparedThenUpdated);
-    const visibleOrders = await this.driverScope.filterVisibleOrders(
+    // 노출 판정이 이미 읽은 회차 문서를 그대로 받아 배송일을 싣는다. 회차 문서는 요청당 회차마다 한 번만 읽는다.
+    const visibleEntries = await this.driverScope.filterVisibleOrdersWithRounds(
       candidates,
       driverId,
       authority,
     );
 
-    const roundDeliveryStarts = await this.readRoundDeliveryStarts(visibleOrders);
-
     return Promise.all(
-      visibleOrders.map((order) =>
+      visibleEntries.map(({ order, pilotRound }) =>
         this.toDriverOrder(order, driverId, 'list', {
-          roundDeliveryStartAt: roundDeliveryStarts.get(String(order.id)) ?? null,
+          roundDeliveryStartAt: roundDeliveryStartAt(pilotRound),
         }),
       ),
     );
-  }
-
-  /**
-   * 목록에 보일 회차 주문의 회차 배송 시작 시각(ISO)을 주문 ID별로 돌려준다.
-   * 회차 문서는 회차 ID마다 한 번만 읽어(같은 회차 주문이 많아도 읽기 수가 늘지 않는다) 노출 판정과 같은
-   * 기준(회차 문서의 id·storeId가 주문과 일치)을 만족할 때만 쓴다. 배송일은 표시용이라 회차 문서를 읽지
-   * 못하면 목록은 그대로 두고 배송일만 뺀다.
-   */
-  private async readRoundDeliveryStarts(orders: Record<string, any>[]): Promise<Map<string, string>> {
-    const roundIds = new Set<string>();
-    for (const order of orders) {
-      if (typeof order.roundId === 'string' && order.roundId.trim().length > 0) {
-        roundIds.add(order.roundId);
-      }
-    }
-    if (roundIds.size === 0) return new Map();
-
-    const rounds = new Map<string, Record<string, any> | undefined>();
-    await Promise.all(
-      [...roundIds].map(async (roundId) => {
-        const snapshot = await this.firestore
-          .doc(`saleRounds/${roundId}`)
-          .get()
-          .catch(() => null);
-        rounds.set(roundId, snapshot?.exists ? snapshot.data() : undefined);
-      }),
-    );
-
-    const starts = new Map<string, string>();
-    for (const order of orders) {
-      const round = typeof order.roundId === 'string' ? rounds.get(order.roundId) : undefined;
-      if (!round || round.id !== order.roundId || round.storeId !== order.storeId) continue;
-      const schedule: unknown = round.schedule;
-      const millis = isRecord(schedule) ? timestampMillis(schedule['deliveryStartAt']) : null;
-      if (millis !== null) starts.set(String(order.id), new Date(millis).toISOString());
-    }
-    return starts;
   }
 
   async getOrder(driverId: string, orderId: string) {

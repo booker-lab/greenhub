@@ -48,7 +48,15 @@ export interface DriverOrderMutationInput {
 type ScopeEvaluation = {
   mode: DriverOrderMode | 'invalid';
   pilotBase: boolean;
+  // 회차 직배송 기준(pilotBase)을 만족할 때 판정에 쓴 회차 문서 데이터.
+  pilotRound?: OrderRecord;
 };
+
+// 노출 판정을 통과한 주문과, 그 주문이 회차 직배송 기준으로 보였다면 판정에 쓴 회차 문서 데이터.
+export interface DriverVisibleOrderEntry<T extends OrderRecord> {
+  order: T;
+  pilotRound: OrderRecord | null;
+}
 
 @Injectable()
 export class DriverOrderScopeService {
@@ -106,6 +114,19 @@ export class DriverOrderScopeService {
     requesterId: string,
     authority?: DriverAuthority,
   ): Promise<T[]> {
+    const entries = await this.filterVisibleOrdersWithRounds(orders, requesterId, authority);
+    return entries.map((entry) => entry.order);
+  }
+
+  /**
+   * filterVisibleOrders와 같은 판정·순서로 보이는 주문을 돌려주되, 회차 직배송 기준으로 보인 주문에는
+   * 판정에 이미 읽은 회차 문서 데이터를 함께 싣는다. 호출자가 같은 회차 문서를 다시 읽지 않게 하려는 것이다.
+   */
+  async filterVisibleOrdersWithRounds<T extends OrderRecord>(
+    orders: T[],
+    requesterId: string,
+    authority?: DriverAuthority,
+  ): Promise<DriverVisibleOrderEntry<T>[]> {
     const verified = await this.authorityFor(requesterId, authority);
     const reads = new Map<string, Promise<DocumentSnapshotLike>>();
     const getDocument = (path: string) => {
@@ -116,10 +137,18 @@ export class DriverOrderScopeService {
       }
       return read;
     };
-    const visibility = await Promise.all(
-      orders.map((order) => this.isOrderVisibleWith(order, verified.requesterId, getDocument)),
+    const scopes = await Promise.all(
+      orders.map((order) => this.visibleScopeWith(order, verified.requesterId, getDocument)),
     );
-    return orders.filter((_, index) => visibility[index]);
+    const entries: DriverVisibleOrderEntry<T>[] = [];
+    orders.forEach((order, index) => {
+      const scope = scopes[index];
+      if (!scope) return;
+      const pilotRound =
+        scope.mode === 'round_direct' && scope.pilotBase ? (scope.pilotRound ?? null) : null;
+      entries.push({ order, pilotRound });
+    });
+    return entries;
   }
 
   async isDiscoveryEligible(
@@ -260,13 +289,22 @@ export class DriverOrderScopeService {
     requesterId: string,
     getDocument: (path: string) => Promise<DocumentSnapshotLike>,
   ): Promise<boolean> {
-    const scope = await this.resolveScope(order, order['storeId'], getDocument);
-    if (!this.isUsableScope(scope)) return false;
+    return (await this.visibleScopeWith(order, requesterId, getDocument)) !== null;
+  }
 
-    return (
-      this.isDiscoveryEligibleForScope(scope, order) ||
+  // 주문이 보이면 판정에 쓴 scope를, 보이지 않으면 null을 돌려준다.
+  private async visibleScopeWith(
+    order: OrderRecord,
+    requesterId: string,
+    getDocument: (path: string) => Promise<DocumentSnapshotLike>,
+  ): Promise<ScopeEvaluation | null> {
+    const scope = await this.resolveScope(order, order['storeId'], getDocument);
+    if (!this.isUsableScope(scope)) return null;
+
+    return this.isDiscoveryEligibleForScope(scope, order) ||
       this.isAssignedVisibleForScope(scope, order, requesterId)
-    );
+      ? scope
+      : null;
   }
 
   private async resolveScope(
@@ -301,7 +339,9 @@ export class DriverOrderScopeService {
     if (!roundSnapshot.exists) return { mode: 'round_direct', pilotBase: false };
     const round = roundSnapshot.data();
     const pilotBase = round?.['id'] === order['roundId'] && round?.['storeId'] === orderStoreId;
-    return { mode: 'round_direct', pilotBase };
+    return pilotBase && round
+      ? { mode: 'round_direct', pilotBase, pilotRound: round }
+      : { mode: 'round_direct', pilotBase };
   }
 
   private isDiscoveryEligibleForScope(scope: ScopeEvaluation, order: OrderRecord): boolean {

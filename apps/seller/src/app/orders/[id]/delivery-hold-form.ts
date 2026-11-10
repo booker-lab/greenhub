@@ -65,12 +65,12 @@ export function redeliveryFeeAfterResponsibilityChange(args: {
 
 export const HOLD_FEE_REQUIRED_HINT = '고객 책임이면 재배송비를 입력해 주세요.';
 export const HOLD_FEE_NOT_ALLOWED_HINT =
-  '재배송비는 고객 책임일 때만 받을 수 있습니다. 고객 책임을 선택하거나 재배송비를 지워 주세요.';
+  '재배송비는 고객 책임일 때만 받을 수 있어요. 고객 책임을 선택하거나 재배송비를 지워 주세요.';
 export const HOLD_FEE_RANGE_HINT = `재배송비는 ${MAX_REDELIVERY_FEE_KRW.toLocaleString('ko-KR')}원 이하의 정수로 입력해 주세요.`;
 
 /** 책임·재배송비가 어긋나거나 재배송비가 상한 이하 정수가 아니면 고칠 방법을 담은 안내, 맞으면 null. */
 export function deliveryHoldResponsibilityFeeHint(args: {
-  reasonCode: string;
+  reasonCode: string | null;
   customerResponsible: boolean;
   redeliveryFee: string | number;
 }): string | null {
@@ -83,8 +83,11 @@ export function deliveryHoldResponsibilityFeeHint(args: {
   return null;
 }
 
+export const HOLD_REASON_REQUIRED_MESSAGE = '보류 유형을 골라 주세요.';
+
 export interface DeliveryHoldFormValues {
-  reasonCode: HoldReason;
+  /** 기본 선택이 없다(null). 고르지 않으면 저장할 수 없다. */
+  reasonCode: HoldReason | null;
   reasonMessage: string;
   customerResponsible: boolean;
   redeliveryFee: string | number;
@@ -113,9 +116,11 @@ function toIsoOrNull(local: string): string | null | undefined {
 export function buildDeliveryHoldPayload(
   values: DeliveryHoldFormValues,
 ): { ok: true; payload: DeliveryHoldPayload } | { ok: false; error: string } {
+  const { reasonCode } = values;
+  if (!reasonCode) return { ok: false, error: HOLD_REASON_REQUIRED_MESSAGE };
   const reasonMessage = values.reasonMessage.trim();
   if (!reasonMessage) return { ok: false, error: '보류 사유를 입력해 주세요.' };
-  const isWeather = values.reasonCode === 'WEATHER';
+  const isWeather = reasonCode === 'WEATHER';
   if (isWeather && !values.nextDeliveryAt) {
     return { ok: false, error: '기상 보류는 새 배송 예정 시각을 입력해 주세요.' };
   }
@@ -129,7 +134,7 @@ export function buildDeliveryHoldPayload(
   return {
     ok: true,
     payload: {
-      reasonCode: values.reasonCode,
+      reasonCode,
       reasonMessage,
       customerResponsible: isWeather ? false : values.customerResponsible,
       redeliveryFee: isWeather ? null : parseRedeliveryFee(values.redeliveryFee),

@@ -176,10 +176,10 @@ export default function MapPage() {
         if (shouldPreserveDriverListOnReadError(kind, hasSuccessfulReadRef.current)) {
           // refresh 실패는 마지막 정상 route를 지우지 않고 stale로 유지한다.
           // stale route를 최신 경로로 오인시키지 않도록 navigation은 fail-closed한다.
-          setError('최신 경로를 불러오지 못했습니다. 이전 경로를 보여줍니다.');
+          setError('최신 경로를 불러오지 못했어요. 이전 경로를 보여드려요.');
         } else {
           setOrders([]);
-          setError('배송 경로를 불러오지 못했습니다. 잠시 후 다시 시도해주세요.');
+          setError('배송 경로를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
         }
       })
       .finally(() => {
@@ -291,7 +291,7 @@ export default function MapPage() {
               className={text}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
             >
-              배송 경로를 불러오는 중입니다
+              배송 경로를 불러오고 있어요
             </p>
           </div>
         ) : authRequired ? (
@@ -337,7 +337,7 @@ export default function MapPage() {
                 className={text}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' }}
               >
-                최신 정보를 확인하는 중입니다…
+                최신 정보를 확인하고 있어요…
               </p>
             )}
             {error && (
@@ -462,7 +462,7 @@ export default function MapPage() {
                     textAlign: 'center',
                   }}
                 >
-                  다음 배송지 주소가 없어 지도를 열 수 없습니다. 목록에서 주소를 확인해 주세요.
+                  다음 배송지 주소가 없어 지도를 열 수 없어요. 목록에서 주소를 확인해 주세요.
                 </p>
               ) : (
                 <p
@@ -473,7 +473,7 @@ export default function MapPage() {
                     textAlign: 'center',
                   }}
                 >
-                  아직 배송 중인 주문이 없습니다. 수거하고 배송을 시작하면 열 수 있습니다.
+                  아직 배송 중인 주문이 없어요. 수거하고 배송을 시작하면 열 수 있어요.
                 </p>
               )}
             </div>
@@ -500,7 +500,7 @@ export default function MapPage() {
                 textAlign: 'center',
               }}
             >
-              최신 경로 확인에 실패해 길안내를 열 수 없습니다. 다시 시도 후 최신 경로에서 열어
+              최신 경로 확인에 실패해 길안내를 열 수 없어요. 다시 시도한 뒤 최신 경로에서 열어
               주세요.
             </p>
           </div>

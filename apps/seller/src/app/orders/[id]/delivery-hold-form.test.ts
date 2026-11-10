@@ -7,6 +7,7 @@ import {
   HOLD_FEE_NOT_ALLOWED_HINT,
   HOLD_FEE_RANGE_HINT,
   HOLD_FEE_REQUIRED_HINT,
+  HOLD_REASON_REQUIRED_MESSAGE,
   HOLD_REASON_LABEL,
   isRedeliveryFeeWithinLimit,
   MAX_REDELIVERY_FEE_KRW,
@@ -254,5 +255,33 @@ describe('buildDeliveryHoldPayload', () => {
       ok: false,
       error: '날짜와 시각을 다시 확인해 주세요.',
     });
+  });
+});
+
+describe('보류 유형 기본 선택 없음', () => {
+  it('유형을 고르지 않으면 막고 payload를 만들지 않는다', () => {
+    const result = buildDeliveryHoldPayload({ ...base, reasonCode: null });
+    expect(result).toEqual({ ok: false, error: HOLD_REASON_REQUIRED_MESSAGE });
+    expect(HOLD_REASON_REQUIRED_MESSAGE).toBe('보류 유형을 골라 주세요.');
+  });
+
+  it('유형 미선택은 다른 입력 오류보다 먼저 안내한다', () => {
+    const result = buildDeliveryHoldPayload({ ...base, reasonCode: null, reasonMessage: '' });
+    expect(result).toEqual({ ok: false, error: HOLD_REASON_REQUIRED_MESSAGE });
+  });
+
+  it('고른 유형만 payload에 실린다', () => {
+    const result = buildDeliveryHoldPayload({ ...base, reasonCode: 'OTHER' });
+    expect(result.ok && result.payload.reasonCode).toBe('OTHER');
+  });
+
+  it('유형이 없으면 책임·재배송비 안내는 일반 규칙을 따른다', () => {
+    expect(
+      deliveryHoldResponsibilityFeeHint({
+        reasonCode: null,
+        customerResponsible: true,
+        redeliveryFee: '',
+      }),
+    ).toBe(HOLD_FEE_REQUIRED_HINT);
   });
 });

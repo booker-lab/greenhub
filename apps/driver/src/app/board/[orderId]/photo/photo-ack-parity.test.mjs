@@ -15,7 +15,7 @@ const legacyEnd = photoCaptureSource.indexOf('router.replace', legacyStart);
 assert.ok(legacyEnd !== -1, 'legacy branch 뒤에 board 이동이 있어야 한다');
 const legacySlice = photoCaptureSource.slice(legacyStart, legacyEnd);
 
-const UNCERTAINTY_COPY = '결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.';
+const UNCERTAINTY_COPY = '결과를 확인할 수 없어요. 주문 상태를 다시 확인해 주세요.';
 
 // 구현과 동일한 의미의 판정 미러다. 소스 계약이 바뀌면 아래 behavioral 테스트와
 // source-contract 테스트 중 최소 하나가 먼저 실패한다.
@@ -78,12 +78,12 @@ test('legacy-hub는 response.ok만으로 성공 처리하지 않고 semantic ACK
 });
 
 test('legacy-hub mismatch는 board 이동 없이 uncertainty path로 수렴한다', () => {
-  assert.match(legacySlice, /결과를 확인할 수 없습니다\. 주문 상태를 다시 확인하세요\./);
+  assert.match(legacySlice, /결과를 확인할 수 없어요\. 주문 상태를 다시 확인해 주세요\./);
   const ackCheckIndex = legacySlice.indexOf('ack.orderId');
   assert.ok(ackCheckIndex !== -1, 'ACK 검사가 legacy branch 안에 있어야 한다');
   // ACK 검사보다 앞에 board 이동이 있으면 안 된다: throw가 router.replace를 건너뛴다.
   assert.doesNotMatch(legacySlice, /router\.replace/);
-  assert.match(photoCaptureSource, /결과를 확인할 수 없습니다\. 주문 상태를 다시 확인하세요\./);
+  assert.match(photoCaptureSource, /결과를 확인할 수 없어요\. 주문 상태를 다시 확인해 주세요\./);
 });
 
 test('legacy-hub에 requestId/idempotency key 방식을 복사하지 않는다', () => {
@@ -133,7 +133,7 @@ test('round-direct 실패는 원인을 분류하고 주문 상태를 다시 읽�
   // 사진 연결 + DELIVERING 마무리는 서버의 사진 전제 DELIVERED 전이를 쓴다(사진 URL 없이).
   assert.match(roundDirectSlice, /JSON\.stringify\(\{\s*status:\s*['"]DELIVERED['"]\s*\}\)/);
   // round-direct 경로는 뭉뚱그린 실패 문구를 쓰지 않는다(그 문구는 legacy catch 전용).
-  assert.doesNotMatch(roundDirectSlice, /업로드 실패\. 다시 시도해주세요\./);
+  assert.doesNotMatch(roundDirectSlice, /업로드하지 못했어요\. 다시 시도해 주세요\./);
   // 성공 판정 전 board 이동 금지: 이동은 upload()의 공통 성공 지점 한 곳뿐이다.
   assert.doesNotMatch(roundDirectSlice, /router\.(replace|push)/);
 });

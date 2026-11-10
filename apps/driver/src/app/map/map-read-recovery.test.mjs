@@ -46,7 +46,7 @@ function nearestNeighborReference(orders) {
 // 1. initial loading: first authoritative GET before empty.
 test('Map initial loading precedes any empty render', () => {
   assert.match(mapSource, /const \[loading, setLoading\] = useState\(true\)/);
-  assert.match(mapSource, /배송 경로를 불러오는 중입니다/);
+  assert.match(mapSource, /배송 경로를 불러오고 있어요/);
   assert.match(mapSource, /\{loading \?/);
   const loadingPos = mapSource.indexOf('{loading ?');
   const emptyPos = mapSource.indexOf('배송할 주문이 없어요');
@@ -84,7 +84,7 @@ test('Map successful empty requires prior success and is separated from error', 
 
 // 4. initial fetch failure is not collapsed into empty.
 test('Map initial fetch failure shows error with retry, not empty', () => {
-  assert.match(mapSource, /배송 경로를 불러오지 못했습니다\. 잠시 후 다시 시도해주세요\./);
+  assert.match(mapSource, /배송 경로를 불러오지 못했어요\. 잠시 후 다시 시도해 주세요\./);
   assert.match(mapSource, /다시 시도/);
   // Initial failure clears to [] AND records an error (never a silent empty).
   // 401·403 authority loss는 별도 분기로 먼저 clear되므로 stale 판정은 공유 helper를 거친다.
@@ -92,7 +92,7 @@ test('Map initial fetch failure shows error with retry, not empty', () => {
     mapSource,
     /shouldPreserveDriverListOnReadError\(kind, hasSuccessfulReadRef\.current\)\) \{\s*\/\/ refresh 실패/s,
   );
-  assert.match(mapSource, /\} else \{\s*setOrders\(\[\]\);\s*setError\('배송 경로를 불러오지 못했습니다/s);
+  assert.match(mapSource, /\} else \{\s*setOrders\(\[\]\);\s*setError\('배송 경로를 불러오지 못했어요/s);
   // The old collapse (catch -> setOrders([]) with no setError) must be gone.
   assert.doesNotMatch(mapSource, /\.catch\(\(cause[^)]*\) => \{\s*if \(!active[^}]*return;\s*setOrders\(\[\]\);\s*\}\);/s);
 });
@@ -147,15 +147,15 @@ test('Map malformed payload is a fetch error, not an empty list', () => {
 test('Map refresh failure keeps previous route as stale with retry', () => {
   assert.match(mapSource, /const \[refreshing, setRefreshing\] = useState\(false\)/);
   assert.match(mapSource, /setRefreshing\(true\)/);
-  assert.match(mapSource, /최신 정보를 확인하는 중입니다/);
+  assert.match(mapSource, /최신 정보를 확인하고 있어요/);
   assert.match(mapSource, /hasSuccessfulReadRef/);
-  assert.match(mapSource, /최신 경로를 불러오지 못했습니다\. 이전 경로를 보여줍니다\./);
+  assert.match(mapSource, /최신 경로를 불러오지 못했어요\. 이전 경로를 보여드려요\./);
   assert.match(mapSource, /\(이전 경로 표시 중\)/);
   // Stale branch must not clear the retained route.
   const staleIfStart = mapSource.indexOf(
     'if (shouldPreserveDriverListOnReadError(kind, hasSuccessfulReadRef.current)) {',
   );
-  const staleSetErrorPos = mapSource.indexOf("setError('최신 경로를 불러오지 못했습니다");
+  const staleSetErrorPos = mapSource.indexOf("setError('최신 경로를 불러오지 못했어요");
   const staleSetErrorEnd = mapSource.indexOf("');", staleSetErrorPos) + 3;
   const staleBranch = mapSource.slice(staleIfStart, staleSetErrorEnd);
   assert.doesNotMatch(staleBranch, /setOrders\(\[\]\)/);
@@ -175,7 +175,7 @@ test('Map navigation is fail-closed on error and stale states', () => {
   assert.match(mapSource, /disabled/);
   assert.match(
     mapSource,
-    /최신 경로 확인에 실패해 길안내를 열 수 없습니다\. 다시 시도 후 최신 경로에서/,
+    /최신 경로 확인에 실패해 길안내를 열 수 없어요\. 다시 시도한 뒤 최신 경로에서/,
   );
 });
 

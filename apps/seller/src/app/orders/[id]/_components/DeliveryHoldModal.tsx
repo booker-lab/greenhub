@@ -192,7 +192,7 @@ export function DeliveryHoldModal({
   onClose,
   onSubmit,
 }: DeliveryHoldModalProps) {
-  const [reasonCode, setReasonCode] = useState<HoldReason>('WEATHER');
+  const [reasonCode, setReasonCode] = useState<HoldReason | null>(null);
   const [reasonMessage, setReasonMessage] = useState('');
   const [customerResponsible, setCustomerResponsible] = useState(false);
   const [redeliveryFee, setRedeliveryFee] = useState<string | number>('');
@@ -216,7 +216,7 @@ export function DeliveryHoldModal({
   // 창을 새로 열 때마다 빈 입력에서 시작한다.
   useEffect(() => {
     if (!opened) return;
-    setReasonCode('WEATHER');
+    setReasonCode(null);
     setReasonMessage('');
     setCustomerResponsible(false);
     setRedeliveryFee('');
@@ -293,7 +293,7 @@ export function DeliveryHoldModal({
               <RadioGroup
                 aria-labelledby={reasonLabelId}
                 name={reasonName}
-                value={reasonCode}
+                value={reasonCode ?? ''}
                 onValueChange={changeReason}
               >
                 <div className="mt-2.5 flex flex-col gap-2.5">
