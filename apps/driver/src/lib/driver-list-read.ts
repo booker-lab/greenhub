@@ -39,7 +39,7 @@ export function classifyDriverListReadStatus(status: number): DriverListReadErro
 
 export function toDriverListReadError(
   status: number,
-  fallbackMessage = '주문을 불러오지 못했습니다',
+  fallbackMessage = '주문을 불러오지 못했어요',
 ): DriverListReadError {
   const kind = classifyDriverListReadStatus(status);
   if (kind === 'AUTH_ERROR') {
@@ -49,7 +49,7 @@ export function toDriverListReadError(
 }
 
 export function toDriverListNetworkError(
-  fallbackMessage = '주문을 불러오지 못했습니다',
+  fallbackMessage = '주문을 불러오지 못했어요',
 ): DriverListReadError {
   return new DriverListReadError('FETCH_ERROR', null, fallbackMessage);
 }
