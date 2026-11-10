@@ -203,11 +203,19 @@ test.describe('Seller 회차 운영 화면 계약', () => {
     const holdDialog = page.getByRole('dialog', { name: '배송 보류' });
     await holdDialog.getByRole('radio', { name: '기타' }).check();
     await holdDialog.getByLabel('보류 사유').fill('포장 상태를 다시 확인해야 합니다.');
-    // 고객 책임이면 재배송비가 있어야 저장할 수 있다.
+    // 고객 책임을 고르면 재배송비 기준 금액 10,000원이 미리 채워진다(#841, 2026-11-08 사용자 결정).
+    const feeInput = holdDialog.getByLabel('재배송비', { exact: true });
     await holdDialog.getByRole('checkbox', { name: '고객 책임' }).check();
+    await expect(feeInput).toHaveValue('10,000원');
+    await expect(holdDialog.getByText('고객 책임이면 재배송비를 입력해 주세요.')).toHaveCount(0);
+    await expect(holdDialog.getByRole('button', { name: '보류 저장' })).toBeEnabled();
+    // 고객 책임인데 재배송비를 지우면 저장할 수 없다.
+    await feeInput.fill('');
     await expect(holdDialog.getByText('고객 책임이면 재배송비를 입력해 주세요.')).toBeVisible();
     await expect(holdDialog.getByRole('button', { name: '보류 저장' })).toBeDisabled();
+    // 고객 책임을 풀면 재배송비 칸도 비워지고 저장할 수 있다.
     await holdDialog.getByRole('checkbox', { name: '고객 책임' }).uncheck();
+    await expect(feeInput).toHaveValue('');
     await holdDialog.getByRole('button', { name: '보류 저장' }).click();
 
     await expect(holdDialog).toHaveCount(0);
