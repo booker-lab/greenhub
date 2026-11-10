@@ -929,6 +929,8 @@ function DeliveryProgress({
           fontSize: 'var(--font-size-sm)',
           color: 'var(--driver-text-muted)',
           fontVariantNumeric: 'tabular-nums',
+          // 항목이 늘어 두 줄이 될 때 "오늘 / 완료"처럼 낱말 중간에서 끊기지 않게 낱말 단위로 줄을 바꾼다.
+          wordBreak: 'keep-all',
         }}
       >
         남은 배송 {toDeliver}곳
