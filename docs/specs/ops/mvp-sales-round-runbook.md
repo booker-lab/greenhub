@@ -291,12 +291,57 @@ node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=round_dir
 
 ### 7.2 롤백 절차
 
-실제 롤백 승인 전에 다음 읽기 전용 예시로 현재값 `round_direct`, 예정값 `legacy`,
-프로젝트와 단일 대상을 먼저 확인한다.
+> **결정 대기(2026-11-10)**: 비상 롤백 경로와 `legacy` 전환 시 예전 구매 화면 노출은
+> `docs/BACKLOG.md` `ROLLBACK-PATH-AND-LEGACY-EXPOSURE`에서 사용자 결정을 기다린다. 결정 전까지
+> 아래 절차가 현재 계약이다.
+
+#### 7.2.1 읽기 전용 dry-run
+
+실제 롤백 승인 전과 첫 실회차 전에 현재값 `round_direct`, 예정값 `legacy`, 프로젝트와 단일
+대상을 읽기만 해서 확인한다. 운영 상태를 바꾸지 않는다.
+
+준비:
+
+1. 최신 `main`을 받고 저장소 루트에서 `pnpm install --frozen-lockfile`을 실행한다. 스크립트는
+   `scripts` 워크스페이스의 `firebase-admin`을 쓴다.
+2. 운영 서비스 계정을 환경 변수 `FIREBASE_SERVICE_ACCOUNT_JSON` 또는 로컬 파일
+   `apps/api/firebase-adminsdk.json`(gitignore 대상)으로 둔다. `project_id`가 `green-e4fe3`가 아니면
+   스크립트가 거부한다. 키 내용은 채팅·로그·문서·커밋에 남기지 않는다.
+3. 출시 책임자와 기술 담당자 2인이 확인한다. 한 사람이 겸하면 기록에 겸직을 적는다.
 
 ```powershell
 node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy
 ```
+
+통과 판정: 종료 코드 0이고 출력이 아래와 모두 일치한다.
+
+| 출력 줄 | 기대값 |
+| --- | --- |
+| 실행 모드 | `dry-run` |
+| 프로젝트 | `green-e4fe3` |
+| 대상 이름 / 대상 storeId | `디어 오키드` / `80189070-2c3d-45f2-bc11-68a870b13951` |
+| 현재 salesMode | `round_direct` |
+| 변경 예정값 | `legacy` |
+| 필수 확인 플래그 | `--confirm=80189070-2c3d-45f2-bc11-68a870b13951:round_direct:legacy` |
+| 마지막 줄 | `외부 상태 변경: 없음 (조회만 수행)` |
+
+중단: `[거부] …`와 종료 코드 1이면 멈추고 원인을 확인한다. 거부 사유는 대상 0건·2건 이상,
+문서 id·이름·ownerId·`active` 상태 손상, 이미 `legacy`, 인증 누락·프로젝트 불일치다.
+
+기록: 실행 시각(KST), 실행한 `main` SHA, 실행자(겸직 여부), 위 표의 출력 줄. 스크립트는 문서
+갱신 시각을 출력하지 않으므로 시각을 추정해 적지 않는다. 비밀값과 고객 정보는 적지 않는다.
+
+dry-run이 확인하지 않는 현재 사실(2026-11-10 코드 기준):
+
+- 관리자 화면의 판매 방식 전환(`PATCH /admin/stores/:storeId/sales-mode`,
+  `apps/api/src/admin/admin.service.ts` `setSalesMode`)은 `SCHEDULED`·`OPEN`·`CLOSED` 회차가 있으면
+  `round_direct → legacy`를 409로 거부한다(`admin-store-sales-mode.spec.ts`). 회차가 남아 있는 동안
+  비상 롤백은 아래 스크립트만 동작한다. 스크립트는 회차 상태를 확인하지 않는다.
+- `legacy`로 바꾸면 회차 주문 생성은 거부되지만(`apps/api/src/orders/round-order-create.service.ts`),
+  소비자 상품 상세는 예전 화면과 예전 구매 버튼을 보인다(`apps/consumer/src/app/products/[id]/ProductDetailClient.tsx`).
+  예전 흐름의 일반 E2E는 최근 100회 성공이 없다(BACKLOG `LEGACY-E2E-WORKFLOW-VARS`).
+
+#### 7.2.2 실제 롤백
 
 | 항목 | 계약 |
 | --- | --- |

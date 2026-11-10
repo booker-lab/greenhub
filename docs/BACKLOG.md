@@ -457,6 +457,15 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - 결제 전(`PENDING`)·이미 취소된 주문은 제외하고, 사유는 고정 문구 `고객 요청`, 멱등 키 `round-consumer-cancel:<orderId>`를 사용한다.
 - 계약 정본: `docs/specs/api/notifications.md`. 직접 근거: `legacy-consumer-cancel-convergence.spec.ts` S9~S12.
 
+### ROLLBACK-PATH-AND-LEGACY-EXPOSURE
+
+상태: `DECISION_REQUIRED` — 2026-11-10 롤백 dry-run 절차 정리 중 발견. 현재 절차는 `docs/specs/ops/mvp-sales-round-runbook.md` §7.2.
+
+- [ ] **비상 롤백 정본 경로**: 런북 §7.2.2는 스크립트(`scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=legacy`)만 적는다. 스크립트는 회차 상태를 보지 않고 바꾼다. 관리자 화면 판매 방식 전환(`PATCH /admin/stores/:storeId/sales-mode`, `apps/api/src/admin/admin.service.ts` `setSalesMode`)은 `SCHEDULED`·`OPEN`·`CLOSED` 회차가 있으면 409로 거부한다(`apps/api/src/admin/admin-store-sales-mode.spec.ts`). 첫 회차(12/1 배송)가 `SCHEDULED`인 지금부터 회차가 끝날 때까지 관리자 화면으로는 롤백할 수 없다. 정할 것: 비상시 스크립트를 정본으로 둘지, 관리자 화면에 비상 우회를 둘지.
+- [ ] **`legacy` 전환 시 예전 구매 노출**: `legacy`면 회차 주문 생성은 거부되지만(`apps/api/src/orders/round-order-create.service.ts`) 소비자 상품 상세는 예전 화면과 구매 버튼을 보인다(`apps/consumer/src/app/products/[id]/ProductDetailClient.tsx`). 예전 흐름의 일반 E2E는 최근 100회 성공이 없다(`LEGACY-E2E-WORKFLOW-VARS`). 정할 것: 비상 수단을 `legacy` 롤백으로 유지할지(그러면 예전 구매 흐름 검증 필요), 회차 마감·취소 등 다른 신규 주문 중단 수단으로 바꿀지.
+
+결정 뒤 런북 §7과 필요하면 코드 변경을 별도 Task로 한다.
+
 ### CONSUMER-UX-AUDIT-FOLLOWUPS
 
 상태: `DECISION_REQUIRED` — 2026-11-07 소비자 UX 감사(#826 병합) 뒤 남은 사람 결정·확인. 자료: `docs/ux-audit/consumer/plan.md` 3·10·11절. C-28·재주문·우선순위는 결정됐고, C-01 실기기 확인과 그 결과에 따른 C-02 판단이 남았다.
