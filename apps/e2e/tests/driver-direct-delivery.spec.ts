@@ -110,10 +110,9 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
       `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
     );
     await expect(directCard).toBeVisible();
-    // 상품마다 챙길 개수를 보인다. 배송판 행은 두 줄(1줄 주소, 2줄 받는 분·상품)이라 상품 줄을 한 줄에 이어 쓴다
-    // (design-direction.md §6 기사 ② D4-1, #799). 상세 화면은 상품마다 한 줄이다(아래 배송 시작 테스트).
-    await expect(directCard).toContainText('E2E 호접란 · 1개');
-    await expect(directCard).toContainText('E2E 미니 호접란 · 1개');
+    // 목록 행은 세 줄(주소, 배송일·받는 분, 상품 요약·수거 시각)이라 상품은 "첫 상품 외 N종 · 총 M개"로 줄여 쓴다(R-04).
+    // 상품마다 챙길 개수는 상세 화면이 상품마다 한 줄로 보인다(아래 배송 시작 테스트).
+    await expect(directCard).toContainText('E2E 호접란 외 1종 · 총 2개');
     // 수거 대기 행에는 수거 장소(가게 이름 · 주소)를 쓴다. fixture 가게에는 주소가 없어 이름만 보이고 지도 링크는 없다.
     const directPickup = page.getByTestId(
       `driver-order-pickup-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,

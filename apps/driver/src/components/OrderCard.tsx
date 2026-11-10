@@ -4,7 +4,12 @@ import Link from 'next/link';
 import { getRedeliveryPaymentPresentation } from '@/app/board/_lib/redelivery-payment';
 import { splitDeliveryAddress } from '@/lib/address-parts';
 import { formatDeliveryDayLabel } from '@/lib/delivery-day';
-import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
+import {
+  type DriverOrderItem,
+  orderItemLines,
+  orderItemsLabel,
+  orderItemsSummary,
+} from '@/lib/order-quantity';
 import { type PickupPlace, readPickupPlace } from '@/lib/pickup-place';
 import { text } from './look';
 
@@ -149,13 +154,11 @@ export default function OrderCard({
     );
   }
 
-  const second = [
-    order.buyerName ?? '소비자',
-    itemsText,
-    tab === 'preparing' ? `수거 ${formatTime(order.preparedAt)}` : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  // 행은 세 줄이다: 1줄 주소, 2줄 배송일·받는 분, 3줄 상품 요약(+ 수거 대기 탭의 수거 시각).
+  // 한 줄에 이어 붙이면 390px에서 상품 뒤쪽과 수거 시각이 늘 잘려, 수거 시각은 줄어들지 않는 칸에 따로 둔다.
+  const rowItemsText = orderItemsSummary(order.items) ?? itemsText;
+  const pickupTimeText = tab === 'preparing' ? `수거 ${formatTime(order.preparedAt)}` : null;
+  const buyerLine = [methodText, order.buyerName ?? '소비자'].filter(Boolean).join(' · ');
 
   const rowBody = (
     <>
@@ -183,9 +186,19 @@ export default function OrderCard({
           </span>
         )}
         {deliveryDayText && ' · '}
-        {methodText && `${methodText} · `}
-        {second}
+        {buyerLine}
       </p>
+      {(rowItemsText || pickupTimeText) && (
+        <p className={cn(text, 'flex min-w-0 gap-1')} style={muted}>
+          {rowItemsText && <span className="min-w-0 truncate">{rowItemsText}</span>}
+          {pickupTimeText && (
+            <span className="shrink-0" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {rowItemsText ? '· ' : ''}
+              {pickupTimeText}
+            </span>
+          )}
+        </p>
+      )}
       {paymentLine}
     </>
   );

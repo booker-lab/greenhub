@@ -34,3 +34,17 @@ export function orderItemLines(items: unknown): string[] | null {
   }
   return items.map((item) => `${item.productName.trim()} · ${item.quantity}개`);
 }
+
+/**
+ * 목록 행의 상품 요약 한 줄. 한 종이면 "상품 · N개", 여러 종이면 "첫 상품 외 N종 · 총 M개"로 줄여
+ * 390px 폭에서도 수거 시각이 잘리지 않게 한다(상품별 개수는 상세·다음 배송지 카드에서 본다).
+ * 상품 목록이 없거나 형식이 어긋나면 null이고, 화면은 기존 한 줄 표기(orderItemsLabel)로 대신한다.
+ */
+export function orderItemsSummary(items: unknown): string | null {
+  const lines = orderItemLines(items);
+  if (!lines) return null;
+  const list = items as DriverOrderItem[];
+  if (list.length === 1) return lines[0];
+  const total = list.reduce((sum, item) => sum + item.quantity, 0);
+  return `${list[0].productName.trim()} 외 ${list.length - 1}종 · 총 ${total}개`;
+}

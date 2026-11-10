@@ -30,6 +30,8 @@ type Order = {
   deliveryAddress?: { address?: string };
   hubName?: string;
   hubAddress?: string;
+  // 요청한 기사 본인에게 배정된 주문인지. 이전 API 응답에는 없다(수거 대기 묶음 나누기에 쓴다).
+  assignedToMe?: boolean;
   lat?: number;
   lng?: number;
 };
@@ -243,43 +245,17 @@ export default function MapPage() {
         )}
       </header>
 
-      {/* 지도 플레이스홀더 */}
-      <div
-        className="mx-4 mt-4 h-48"
+      {/* 지도는 없고 길안내는 행의 ‘지도’ 링크로 열린다. 첫 화면에 배송지가 더 보이게 한 줄로만 안내한다. */}
+      <p
+        className={cn(text, 'mx-4 mt-3')}
         style={{
-          borderRadius: 16,
-          backgroundColor: 'var(--color-surface-muted)',
-          border: 'var(--border)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          fontSize: 'var(--font-size-sm)',
+          color: 'var(--color-text-secondary)',
+          wordBreak: 'keep-all',
         }}
       >
-        <div className="flex flex-col items-center gap-1">
-          <svg
-            width="40"
-            height="40"
-            fill="none"
-            stroke="var(--color-text-disabled)"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-            focusable="false"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-            />
-          </svg>
-          <p
-            className={cn(text, 'text-center')}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-          >
-            배송지마다 ‘지도’를 누르면 카카오맵에서 길안내가 열려요.
-          </p>
-        </div>
-      </div>
+        배송지마다 ‘지도’를 누르면 카카오맵에서 길안내가 열려요.
+      </p>
 
       {/* 배송지 목록(상태 묶음) */}
       <div style={{ flex: 1, padding: '16px' }}>
@@ -355,7 +331,7 @@ export default function MapPage() {
             )}
             {groups.map((group) => (
               <section
-                key={group.status}
+                key={`${group.status}-${group.label}`}
                 className="flex flex-col gap-2.5"
                 aria-label={group.label}
               >
