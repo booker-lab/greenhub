@@ -291,9 +291,11 @@ node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=round_dir
 
 ### 7.2 롤백 절차
 
-> **결정 대기(2026-11-10)**: 비상 롤백 경로와 `legacy` 전환 시 예전 구매 화면 노출은
-> `docs/BACKLOG.md` `ROLLBACK-PATH-AND-LEGACY-EXPOSURE`에서 사용자 결정을 기다린다. 결정 전까지
-> 아래 절차가 현재 계약이다.
+> **비상 롤백 정본 경로(2026-11-10 사용자 결정)**: 비상 롤백은 아래 스크립트
+> (`scripts/enable-dear-orchid-round-direct.mjs`)로만 한다. 관리자 화면의 판매 방식 전환은 비상 롤백 경로가 아니다.
+>
+> **결정 대기**: `legacy` 전환 시 예전 구매 화면 노출은 `docs/BACKLOG.md`
+> `ROLLBACK-PATH-AND-LEGACY-EXPOSURE`에서 사용자 결정을 기다린다. 결정 전까지 아래 절차가 현재 계약이다.
 
 #### 7.2.1 읽기 전용 dry-run
 
@@ -335,8 +337,9 @@ dry-run이 확인하지 않는 현재 사실(2026-11-10 코드 기준):
 
 - 관리자 화면의 판매 방식 전환(`PATCH /admin/stores/:storeId/sales-mode`,
   `apps/api/src/admin/admin.service.ts` `setSalesMode`)은 `SCHEDULED`·`OPEN`·`CLOSED` 회차가 있으면
-  `round_direct → legacy`를 409로 거부한다(`admin-store-sales-mode.spec.ts`). 회차가 남아 있는 동안
-  비상 롤백은 아래 스크립트만 동작한다. 스크립트는 회차 상태를 확인하지 않는다.
+  `round_direct → legacy`를 409로 거부한다(`admin-store-sales-mode.spec.ts`). 그래서 비상 롤백은
+  회차 상태를 확인하지 않는 아래 스크립트를 정본으로 쓴다(2026-11-10 사용자 결정). 관리자 화면 전환은
+  끝나지 않은 회차가 없을 때의 평상시 전환에만 쓴다.
 - `legacy`로 바꾸면 회차 주문 생성은 거부되지만(`apps/api/src/orders/round-order-create.service.ts`),
   소비자 상품 상세는 예전 화면과 예전 구매 버튼을 보인다(`apps/consumer/src/app/products/[id]/ProductDetailClient.tsx`).
   예전 흐름의 일반 E2E는 최근 100회 성공이 없다(BACKLOG `LEGACY-E2E-WORKFLOW-VARS`).
