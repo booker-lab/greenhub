@@ -502,6 +502,9 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
         // 완료로 수렴했을 때만(정상 ACK·서버가 이미 완료) 알린다. 불확실·실패는 위에서 안내하고 머문다.
         // 알림은 루트 AppToaster가 그리므로 목록으로 옮긴 뒤에도 남는다.
         toast.add({ description: deliveryCompletedMessage(orderSummary) });
+        // 완료 직후 휴대폰 뒤로가기로 이 주문 상세가 다시 열리면 "배송을 마친 주문이에요"로 안내한다(R-01).
+        // 손님 배송이 끝난 회차 직배송만 기록한다(거점 도착은 배송 완료가 아니다). 저장소가 막혀도 예외 없이 넘어간다.
+        rememberCompletedOrder({ orderId, userId: session.user.id });
       } else {
         const photoUrl = await uploadLegacyHubPhoto(orderId, blob);
         const response = await apiFetch(
@@ -524,9 +527,6 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
         }
       }
 
-      // 완료 직후 휴대폰 뒤로가기로 이 주문 상세가 다시 열리면 "배송을 마친 주문이에요"로 안내한다(R-01).
-      // 저장소가 막혀도 예외 없이 넘어간다.
-      rememberCompletedOrder({ orderId, userId: session.user.id });
       leaving = true;
       router.replace('/board?tab=delivering');
     } catch (error) {

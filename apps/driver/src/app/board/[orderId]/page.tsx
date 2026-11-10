@@ -12,9 +12,9 @@ import { AppButton } from '@/components/app-button';
 import { TOAST_WARNING } from '@/components/app-toaster';
 import { text } from '@/components/look';
 import { Spinner } from '@/components/spinner';
+import { splitDeliveryAddress } from '@/lib/address-parts';
 import { apiFetch, apiRead } from '@/lib/api';
 import { isApiTimeoutError } from '@/lib/api-timeout';
-import { splitDeliveryAddress } from '@/lib/address-parts';
 import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
 import { readPickupPlace } from '@/lib/pickup-place';
@@ -180,6 +180,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
   // 응답 불확실 경고(readbackWarning)를 남긴 요청의 목표 상태. "상태 확인"이 다시 읽은 결과를
   // 자동 수렴과 같은 규칙으로 안내하는 데만 쓴다(R-08). 이 값으로 요청을 다시 보내지 않는다.
   const uncertainStatusRef = useRef<string | null>(null);
+  // "상태 확인"을 연달아 눌러도 조회·안내가 한 번만 나가게 한다.
+  const [rechecking, setRechecking] = useState(false);
+  const recheckingRef = useRef(false);
 
   const readDetail = useCallback(
     async (token: string, signal?: AbortSignal): Promise<DriverOrderReadback> => {
@@ -541,15 +544,23 @@ function OrderDetail({ orderId }: { orderId: string }) {
   async function recheckUncertainStatus() {
     const token = session?.user.accessToken;
     if (!token) return;
-    const requestedStatus = uncertainStatusRef.current;
-    const scope = liveScopeRef.current;
-    const readback = await readDetail(token);
-    // 조회 사이 주문·로그인 범위가 바뀌었으면 지난 범위의 결과를 알리지 않는다.
-    if (!requestedStatus || scope !== liveScopeRef.current) return;
-    const notice = resolveDriverStatusReadbackNotice({ requestedStatus, readback });
-    if (!notice) return;
-    toast.add(readbackNoticeToast(notice));
-    if (notice.goToList) router.replace('/board?tab=delivering');
+    if (recheckingRef.current) return;
+    recheckingRef.current = true;
+    setRechecking(true);
+    try {
+      const requestedStatus = uncertainStatusRef.current;
+      const scope = liveScopeRef.current;
+      const readback = await readDetail(token);
+      // 조회 사이 주문·로그인 범위가 바뀌었으면 지난 범위의 결과를 알리지 않는다.
+      if (!requestedStatus || scope !== liveScopeRef.current) return;
+      const notice = resolveDriverStatusReadbackNotice({ requestedStatus, readback });
+      if (!notice) return;
+      toast.add(readbackNoticeToast(notice));
+      if (notice.goToList) router.replace('/board?tab=delivering');
+    } finally {
+      recheckingRef.current = false;
+      setRechecking(false);
+    }
   }
 
   if (readLoading) {
@@ -785,7 +796,12 @@ function OrderDetail({ orderId }: { orderId: string }) {
               <p className={text} style={problemText}>
                 {readbackWarning}
               </p>
-              <AppButton tone="brand-outline" onClick={() => void recheckUncertainStatus()}>
+              <AppButton
+                tone="brand-outline"
+                loading={rechecking}
+                disabled={rechecking}
+                onClick={() => void recheckUncertainStatus()}
+              >
                 상태 확인
               </AppButton>
             </ProblemPanel>

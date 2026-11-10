@@ -5,6 +5,7 @@ import { Label } from '@greenhub/ui/components/label';
 import { cn } from '@greenhub/ui/lib/utils';
 import type * as React from 'react';
 import { useId, useState } from 'react';
+import { formatNumberFieldDisplay, readNumberFieldInput } from '@/lib/number-field-value';
 
 // ① 외형 유지(ui-stack-migration-plan.md §7): Mantine TextInput·PasswordInput·Textarea·NumberInput·Radio·Checkbox와
 // 같은 모양의 입력 부품. 값은 Mantine 9.7 기본(입력칸 gray-4 테두리, 비활성 gray-2 바탕·60% 불투명)과
@@ -261,11 +262,7 @@ export function NumberField({
 }) {
   const id = useId();
   const numeric = typeof value === 'number' ? value : Number(String(value).replace(/[^0-9]/g, ''));
-  const shown =
-    thousandSeparator && value !== '' && Number.isFinite(numeric)
-      ? numeric.toLocaleString('ko-KR')
-      : value;
-  const display = value === '' ? '' : `${shown}${suffix}`;
+  const display = formatNumberFieldDisplay(value, { suffix, thousandSeparator });
   const stepBy = (direction: 1 | -1) => {
     const current = Number.isFinite(numeric) ? numeric : 0;
     onChange(Math.max(min, current + direction * step));
@@ -283,8 +280,7 @@ export function NumberField({
           disabled={disabled}
           value={display}
           onChange={(event) => {
-            const digits = event.currentTarget.value.replace(/[^0-9]/g, '');
-            onChange(digits === '' ? '' : Math.max(min, Number(digits)));
+            onChange(readNumberFieldInput(display, event.currentTarget.value, min));
           }}
           onKeyDown={(event) => {
             if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
