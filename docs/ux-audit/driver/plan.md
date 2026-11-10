@@ -125,3 +125,19 @@
 - 로컬 이메일 로그인은 승인 대기 code를 읽지 않아 "로그인하지 못했어요"로 보인다(운영 카카오 경로만 대상, 로컬 하네스 한정)
 - 참고 의견으로 남긴 것: API가 같은 요청에서 회차 문서를 회차당 두 번 읽음(노출 판정 + 배송일, 주문 수와 무관), 수거 대기 두 묶음이 첫 화면에 최대 10행, 판매자 보류 창의 기본 유형도 "기상 악화"(기사 D-07과 같은 문제), 디자인 명세(`design-standard.md`·`design-direction.md`)의 "부재·문제 알리기" 표기, 상세 "배송 보류 내용" 카드의 "보류 사유" 줄, 일부 합니다체 문구(상태 충돌 안내, `HOLD_FEE_*`)
 - 3절에서 보류한 항목은 그대로다
+
+## 6. 2차 배치 계획 (2026-11-10)
+
+근거: 5절 "남은 것"의 참고 의견과 1차 검토 참고 의견. 기준 `main` `ae4f6593`(#841 병합)에서 다시 대조해 모두 남아 있음을 확인했다. 3절에서 보류한 사람 결정 항목은 이번에도 하지 않는다.
+
+| 단위 | 결과 | 변경 범위 | 항목 |
+|---|---|---|---|
+| V1 API 회차 읽기 | 기사 목록 조회가 회차 문서를 회차당 한 번만 읽고, 배송일은 노출 판정이 회차 직배송으로 본 주문에만 싣는다 | `apps/api/src/driver/**`, `apps/api/src/orders/driver-order-scope.service.ts`(+ spec) | 5절 참고: 회차 이중 읽기, 1차 검토: `deliveryDate` 조건이 노출 판정보다 넓음 |
+| V2 상세·보류 문구 | 주문 상세·보류 창의 남은 합니다체·내부 표현을 해요체로, 보류 내용 카드의 "보류 사유"를 손님에게 보인 사유로 | `apps/driver/src/app/board/[orderId]/**`, `apps/driver/src/app/board/_lib/**` | 5절 참고: 합니다체(상태 충돌·`HOLD_FEE_*`·재배송비 설명 등), "보류 사유" 줄 |
+| V3 목록·지도·내 정보 | 첫 화면 행 수·진행 숫자가 서로 맞고, 목록·지도 남은 합니다체를 정리하고, 로그아웃 버튼이 실패 뒤 굳지 않는다 | `apps/driver/src/app/board/_client.tsx`, `apps/driver/src/components/OrderCard.tsx`, `apps/driver/src/lib/preparing-groups.ts`, `apps/driver/src/app/map/**`, `apps/driver/src/app/profile/**` | 5절 참고: 수거 대기 첫 화면 최대 10행, 1차 검토: 점 띠·탭 숫자와 진행 문구 불일치, 로그아웃 버튼 고정 |
+| V4 판매자 보류 기본 유형 | 판매자 보류 창도 유형을 미리 고르지 않는다(기사 D-07과 같은 규칙) | `apps/seller/src/app/orders/[id]/_components/DeliveryHoldModal.tsx`, `apps/seller/src/app/orders/[id]/delivery-hold-form.ts`(+ 테스트, 판매자 E2E 기대값) | 5절 참고 |
+| V5 로컬 하네스 | 로컬 이메일 로그인 실패가 오류 화면으로 떨어지지 않고, 로그인 직후 목록이 바로 보이고, 승인 전 계정은 승인 대기 안내를 본다. 시드 공용 쓰기가 `id` 필드를 남긴다 | `apps/driver/src/app/login/page.tsx`, `apps/driver/src/auth.ts`(로컬 경로만), `scripts/dev/local/seed-seller-orders.mjs`(+ spec) | findings 0절 로컬 현상, 4절 후속 후보, 5절 남은 것 |
+
+통합 때 직접: 디자인 명세(`docs/specs/frontend/design-standard.md` 기사 앱 문단, `design-direction.md`)의 "부재·문제 알리기"·"오늘 배송 · 날짜"·"회차 날짜는 쓰지 않는다" 표기를 #841 이후 현재 화면에 맞춘다(`STALE_SPEC`).
+
+검증: 1차와 같다(단위별 로컬 검사 → 통합 뒤 CI 동일 검사·운영 빌드·로컬 스택 재검증). 사용량을 줄이려고 독립 반박 검토는 통합한 diff 전체를 한 번에 단위별로 나눠 본다.
