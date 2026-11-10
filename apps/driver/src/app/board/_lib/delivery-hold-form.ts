@@ -70,7 +70,7 @@ export function deliveryHoldSubmitError(args: {
 
 export const HOLD_FEE_REQUIRED_HINT = '고객 책임이면 재배송비를 입력해 주세요.';
 export const HOLD_FEE_NOT_ALLOWED_HINT =
-  '재배송비는 고객 책임일 때만 받을 수 있습니다. 고객 책임을 선택하거나 재배송비를 지워 주세요.';
+  '재배송비는 고객 책임일 때만 받을 수 있어요. 고객 책임을 선택하거나 재배송비를 지워 주세요.';
 export const HOLD_FEE_RANGE_HINT = `재배송비는 ${MAX_REDELIVERY_FEE_KRW.toLocaleString('ko-KR')}원 이하의 정수로 입력해 주세요.`;
 
 /** 책임·재배송비가 어긋나거나 재배송비가 상한 이하 정수가 아니면 고칠 방법을 담은 안내, 맞으면 null. */

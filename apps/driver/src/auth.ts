@@ -10,6 +10,7 @@ import {
 import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
+import { LOCAL_DRIVER_APPROVAL_PENDING_CODE } from '@/app/login/local-credential-sign-in';
 import {
   DRIVER_ADMIN_ACCOUNT_ERROR,
   DRIVER_APPROVAL_PENDING_ERROR,
@@ -133,6 +134,15 @@ function isLocalCredentialRuntime(): boolean {
   return true;
 }
 
+// 승인 전 기사의 로컬 이메일 로그인 거절. 로그인 화면 서버 액션이 code를 읽어 승인 대기 안내로 보낸다
+// (`app/login/local-credential-sign-in.ts`). 세션은 만들지 않는다.
+class LocalDriverApprovalPendingSignin extends CredentialsSignin {
+  constructor() {
+    super();
+    this.code = LOCAL_DRIVER_APPROVAL_PENDING_CODE;
+  }
+}
+
 async function authorizeLocalDriver(credentials: Record<string, unknown>) {
   if (typeof credentials.email !== 'string' || typeof credentials.password !== 'string') {
     return null;
@@ -146,11 +156,18 @@ async function authorizeLocalDriver(credentials: Record<string, unknown>) {
     }),
     signal: authUpstreamSignal(),
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    // API는 승인 전 기사를 403 + DRIVER_APPROVAL_PENDING으로 거절한다. 그 밖의 거절은 일반 실패(null).
+    if (res.status === 403 && (await readRejectionCode(res)) === DRIVER_APPROVAL_PENDING) {
+      throw new LocalDriverApprovalPendingSignin();
+    }
+    return null;
+  }
 
   const data = await res.json();
   if (data.user.role !== 'driver') return null;
-  if (data.user.driverApproved !== true) return null;
+  // API가 먼저 거절하지만, 응답의 승인 상태도 다시 확인해 같은 승인 대기 안내로 보낸다.
+  if (data.user.driverApproved !== true) throw new LocalDriverApprovalPendingSignin();
   return {
     id: data.user.id,
     email: data.user.email,

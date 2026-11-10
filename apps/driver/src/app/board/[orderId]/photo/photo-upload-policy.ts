@@ -70,9 +70,9 @@ export function planNextEncodeStep(
 export type PhotoEncodeFailureReason = 'DECODE_FAILED' | 'ENCODE_FAILED' | 'TOO_LARGE';
 
 export function photoEncodeFailureMessage(reason: PhotoEncodeFailureReason): string {
-  if (reason === 'DECODE_FAILED') return '사진을 읽을 수 없습니다. 다시 선택해주세요.';
-  if (reason === 'TOO_LARGE') return '사진 용량을 줄이지 못했습니다. 다시 촬영해주세요.';
-  return 'JPEG 사진을 만들 수 없습니다. 다시 시도해주세요.';
+  if (reason === 'DECODE_FAILED') return '사진을 읽을 수 없어요. 다시 선택해 주세요.';
+  if (reason === 'TOO_LARGE') return '사진 용량을 줄이지 못했어요. 다시 촬영해 주세요.';
+  return 'JPEG 사진을 만들 수 없어요. 다시 시도해 주세요.';
 }
 
 export type PhotoUploadFailureKind =
@@ -135,17 +135,17 @@ export function decideIdempotencyKey(args: {
 }
 
 export const PHOTO_UPLOAD_MESSAGES = {
-  TOO_LARGE: '사진 용량이 너무 큽니다. 다시 촬영하거나 다른 사진을 선택해주세요.',
-  NETWORK: '네트워크 연결이 불안정합니다. 재촬영하지 말고 같은 사진으로 다시 시도해주세요.',
-  SERVER: '서버 응답을 확인하지 못했습니다. 재촬영하지 말고 같은 사진으로 다시 시도해주세요.',
-  AUTHORITY: '이 주문을 처리할 권한이 없거나 로그인이 만료됐습니다. 다시 로그인한 뒤 확인해주세요.',
-  NOT_FOUND: '주문을 찾을 수 없습니다. 판매자 또는 운영팀에 연락해주세요.',
-  REJECTED: '사진을 등록하지 못했습니다. 다시 촬영해주세요.',
+  TOO_LARGE: '사진 용량이 너무 커요. 다시 촬영하거나 다른 사진을 선택해 주세요.',
+  NETWORK: '네트워크 연결이 불안정해요. 재촬영하지 말고 같은 사진으로 다시 시도해 주세요.',
+  SERVER: '서버 응답을 확인하지 못했어요. 재촬영하지 말고 같은 사진으로 다시 시도해 주세요.',
+  AUTHORITY: '이 주문을 처리할 권한이 없거나 로그인이 만료됐어요. 다시 로그인한 뒤 확인해 주세요.',
+  NOT_FOUND: '주문을 찾을 수 없어요. 판매자 또는 운영팀에 연락해 주세요.',
+  REJECTED: '사진을 등록하지 못했어요. 다시 촬영해 주세요.',
   STATE_CONFLICT_STUCK:
-    '이 주문에는 이미 배송 사진이 연결돼 있어 배송 완료를 마치지 못했습니다. 판매자 또는 운영팀에 연락해주세요.',
+    '이 주문에는 이미 배송 사진이 연결돼 있어 배송 완료를 마치지 못했어요. 판매자 또는 운영팀에 연락해 주세요.',
   STATUS_CHANGED:
-    '주문 상태가 바뀌어 배송 완료를 할 수 없습니다. 주문 화면에서 상태를 확인해주세요.',
-  STATUS_UNKNOWN_SUFFIX: ' (주문 상태도 확인하지 못했습니다.)',
+    '주문 상태가 바뀌어 배송 완료를 할 수 없어요. 주문 화면에서 상태를 확인해 주세요.',
+  STATUS_UNKNOWN_SUFFIX: ' (주문 상태도 확인하지 못했어요.)',
 } as const;
 
 export function photoUploadFailureMessage(kind: PhotoUploadFailureKind): string {

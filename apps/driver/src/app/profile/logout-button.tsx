@@ -10,8 +10,36 @@ import {
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
 import { useRef, useState } from 'react';
+import { useFormStatus } from 'react-dom';
 import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
+
+/**
+ * 로그아웃 주 버튼. 폼의 실제 제출 상태(useFormStatus)로 잠근다. server action이 끝나면(정상은 signOut
+ * 리다이렉트로 화면을 떠나고, 오류면 error boundary로 간다) 대기 상태가 풀리므로 시간으로 추정하지 않는다.
+ */
+function LogoutSubmitButton({
+  confirmMessage,
+  onOpenConfirm,
+}: {
+  confirmMessage: string | null;
+  onOpenConfirm: () => void;
+}) {
+  const { pending } = useFormStatus();
+  return (
+    <AppButton
+      type={confirmMessage ? 'button' : 'submit'}
+      fullWidth
+      tone="default"
+      size="md"
+      loading={pending}
+      disabled={pending}
+      onClick={confirmMessage ? onOpenConfirm : undefined}
+    >
+      로그아웃
+    </AppButton>
+  );
+}
 
 /**
  * 내 정보 로그아웃 버튼. 배송 중·보류 주문이 있으면(confirmMessage) 확인 창을 거친 뒤 같은 server action을 제출한다.
@@ -26,21 +54,10 @@ export function LogoutButton({
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [opened, setOpened] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
 
   return (
-    <form ref={formRef} action={action} onSubmit={() => setSubmitting(true)}>
-      <AppButton
-        type={confirmMessage ? 'button' : 'submit'}
-        fullWidth
-        tone="default"
-        size="md"
-        loading={submitting}
-        disabled={submitting}
-        onClick={confirmMessage ? () => setOpened(true) : undefined}
-      >
-        로그아웃
-      </AppButton>
+    <form ref={formRef} action={action}>
+      <LogoutSubmitButton confirmMessage={confirmMessage} onOpenConfirm={() => setOpened(true)} />
       {confirmMessage && (
         <Dialog open={opened} onOpenChange={setOpened}>
           <DialogPortal>
