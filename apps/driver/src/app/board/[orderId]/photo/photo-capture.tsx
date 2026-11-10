@@ -11,7 +11,11 @@ import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
 import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
-import { readDriverOrderCommandErrorCodeFromResponse } from '../../_lib/driver-order-detail';
+import {
+  readDriverDetailBackContext,
+  readDriverOrderCommandErrorCodeFromResponse,
+  resolveDriverDetailBackAction,
+} from '../../_lib/driver-order-detail';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
 import {
   type DecodedPhoto,
@@ -106,7 +110,7 @@ export default function PhotoCapture({ orderId: rawOrderId, mode }: PhotoCapture
       >
         <p
           className={cn(text, 'text-center')}
-          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}
+          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)', wordBreak: 'keep-all' }}
         >
           {INVALID_ORDER_ADDRESS_MESSAGE}
         </p>
@@ -569,7 +573,12 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           aria-label="뒤로가기"
           onClick={() => {
             stopStream();
-            router.back();
+            // 앱 안 이전 기록이 있을 때만 브라우저 뒤로, 없으면(새 탭·앱 재시작 뒤 복원) 그 주문 상세로 바꿔 보낸다(R-03).
+            if (resolveDriverDetailBackAction(readDriverDetailBackContext(window)) === 'back') {
+              router.back();
+              return;
+            }
+            router.replace(`/board/${encodeURIComponent(orderId)}`);
           }}
           style={{
             color: CAMERA_ON,
@@ -613,6 +622,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               style={{
                 color: CAMERA_ON,
                 fontSize: 'var(--font-size-sm)',
+                wordBreak: 'keep-all',
                 overflowWrap: 'anywhere',
               }}
             >
@@ -646,7 +656,10 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               gap: 24,
             }}
           >
-            <p className={text} style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}>
+            <p
+              className={cn(text, 'px-8 text-center')}
+              style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)', wordBreak: 'keep-all' }}
+            >
               {isRoundDirect ? '문 앞 배송 완료 상태를 촬영해 주세요' : '하차 물품을 촬영해 주세요'}
             </p>
             <AppButton
@@ -673,7 +686,12 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             {error && (
               <p
                 className={cn(text, 'px-8 text-center')}
-                style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}
+                style={{
+                  color: 'var(--color-danger)',
+                  fontSize: 'var(--font-size-sm)',
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'anywhere',
+                }}
               >
                 {error}
               </p>

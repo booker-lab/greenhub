@@ -222,3 +222,21 @@ test('미리보기 하단 버튼은 세로로 쌓고 확정 버튼은 전체 폭
   assert.doesNotMatch(bar, /flex-1/);
   assert.match(bar, /'올리는 중…'/);
 });
+
+test('R-03: 사진 화면 뒤로가기는 상세와 같은 판정을 쓰고 기록이 없으면 주문 상세로 replace한다', () => {
+  const start = photoCaptureSource.indexOf('aria-label="뒤로가기"');
+  assert.ok(start !== -1);
+  const slice = photoCaptureSource.slice(start, photoCaptureSource.indexOf('</button>', start));
+  const stop = slice.indexOf('stopStream()');
+  const decide = slice.indexOf(
+    'resolveDriverDetailBackAction(readDriverDetailBackContext(window))',
+  );
+  const back = slice.indexOf('router.back()');
+  const replace = slice.indexOf('router.replace(`/board/${encodeURIComponent(orderId)}`)');
+  assert.ok(stop !== -1 && stop < decide, '스트림 정리가 먼저여야 한다');
+  assert.ok(back > decide && replace > back, '기록 있으면 back, 없으면 상세 replace');
+});
+
+test('R-09: 사진 화면 안내 글은 낱말 중간에서 끊지 않는다', () => {
+  assert.ok((photoCaptureSource.match(/wordBreak: 'keep-all'/g) ?? []).length >= 4);
+});
