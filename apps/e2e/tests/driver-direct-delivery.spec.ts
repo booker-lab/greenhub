@@ -114,6 +114,12 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     // (design-direction.md §6 기사 ② D4-1, #799). 상세 화면은 상품마다 한 줄이다(아래 배송 시작 테스트).
     await expect(directCard).toContainText('E2E 호접란 · 1개');
     await expect(directCard).toContainText('E2E 미니 호접란 · 1개');
+    // 수거 대기 행에는 수거 장소(가게 이름 · 주소)를 쓴다. fixture 가게에는 주소가 없어 이름만 보이고 지도 링크는 없다.
+    const directPickup = page.getByTestId(
+      `driver-order-pickup-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
+    );
+    await expect(directPickup).toHaveText(`수거: E2E 회차 직배송 ${roundDirect.project}`);
+    await expect(directPickup.getByRole('link')).toHaveCount(0);
     await expect(
       page.getByTestId(
         `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_HUB)}`,
@@ -126,11 +132,39 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     ).toHaveCount(0);
   });
 
+  // 한 번에 수거: 내 수거 회차 직배송 주문을 골라 확인 창에서 주소·알림을 본다. 상태를 바꾸지 않도록 확인하지 않고 닫는다
+  // (배송 시작 요청 자체는 아래 상세 배송 시작 테스트와 같은 상태 변경 경로다). 위 배송 시작 테스트보다 먼저 돌아
+  // 고를 수 있는 내 수거 주문(BOARD_DIRECT·START_PREPARING)이 2건 있다.
+  test('수거 대기에서 여러 주문을 골라 한 번에 배송 시작 확인 창을 연다', async ({
+    page,
+    roundDirect,
+  }) => {
+    await page.goto(`${BASE}/board?tab=preparing`);
+
+    await page.getByRole('button', { name: '여러 주문 한 번에 배송 시작' }).click();
+    const directCard = page.getByTestId(
+      `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
+    );
+    await directCard.getByRole('checkbox').check();
+    await page.getByRole('button', { name: '1곳 배송 시작', exact: true }).click();
+
+    const batchDialog = page.getByRole('dialog', { name: '1곳 배송을 시작할까요?' });
+    await expect(batchDialog.getByText('손님 1명에게 배송 시작 알림이 가요.')).toBeVisible();
+    await expect(batchDialog.getByText('경기도 이천시 테스트로 1', { exact: true })).toBeVisible();
+    await batchDialog.getByRole('button', { name: '취소' }).click();
+    await expect(batchDialog).toHaveCount(0);
+
+    await page.getByRole('button', { name: '고르기 취소' }).click();
+    await expect(page.getByRole('button', { name: '여러 주문 한 번에 배송 시작' })).toBeVisible();
+  });
+
   test('준비된 직접배송 주문의 배송을 시작한다', async ({ page, roundDirect }) => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.START_PREPARING);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await expect(page.getByText('직배송')).toBeVisible();
+    // 수거 대기에서는 수거 장소(가게 이름)를 배송지보다 위에 쓴다. 배송 방식 글자는 정확히 맞춰 찾는다.
+    await expect(page.getByText(`수거: E2E 회차 직배송 ${roundDirect.project}`)).toBeVisible();
+    await expect(page.getByText('직배송', { exact: true })).toBeVisible();
     await expect(page.getByText('E2E 미니 호접란 · 1개', { exact: true })).toBeVisible();
     // 지도는 동·호수 없는 기본 주소로 검색한다.
     await expect(page.getByRole('link', { name: '카카오맵에서 주소 보기' })).toHaveAttribute(

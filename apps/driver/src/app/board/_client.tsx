@@ -1,19 +1,40 @@
 'use client';
 
+import { apiPathSegment } from '@greenhub/shared';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
-import OrderCard, { type DriverListOrder } from '@/components/OrderCard';
-import { apiRead } from '@/lib/api';
+import OrderCard, { type DriverListOrder, type OrderRowSelection } from '@/components/OrderCard';
+import { apiFetch, apiRead } from '@/lib/api';
 import {
   buildDriverListScope,
   shouldPreserveDriverListOnReadError,
   toDriverListReadError,
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
+import { readDriverSummaryCompletedToday } from '@/lib/driver-summary';
 import { groupPreparingOrders, takePreparingFirstScreen } from '@/lib/preparing-groups';
+import { BatchPickupConfirmDialog } from './_components/BatchPickupConfirmDialog';
+import {
+  BATCH_PICKUP_TARGET_STATUS,
+  type BatchPickupSummary,
+  batchPickupBlockLabel,
+  batchPickupBlockReason,
+  buildBatchPickupConfirmContent,
+  buildBatchPickupSummaryText,
+  isBatchPickupSelectable,
+  runBatchPickup,
+  summarizeBatchPickup,
+} from './_lib/batch-pickup';
+
+/** 한 번에 수거 고르기 행 상태. null이면 고르기 모드가 아니다. */
+type BatchSelection = {
+  selectedIds: ReadonlySet<string>;
+  disabled: boolean;
+  onToggle: (orderId: string) => void;
+};
 
 /** 복귀 재조회 묶음 간격. focus·visibilitychange가 이 간격 안에 겹치면 목록을 한 번만 다시 조회한다. */
 const REVALIDATE_COALESCE_MS = 1_500;
@@ -37,6 +58,51 @@ export default function BoardClient() {
   // user identity + role + access token scope가 바뀌면 이전 scope의
   // protected rows를 새 fetch 완료 전에 동기적으로 제거한다.
   const listScopeRef = useRef<string | null>(null);
+  // 오늘 완료 수(GET /driver/summary). 조회 실패·필드 없음이면 null이고 진행 줄의 그 부분만 숨긴다.
+  const [completedToday, setCompletedToday] = useState<number | null>(null);
+
+  // 한 번에 수거: 고르기 모드·고른 주문·확인 창·실행 중·결과 요약.
+  const [batchMode, setBatchMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [batchConfirmOpen, setBatchConfirmOpen] = useState(false);
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null);
+  const [batchSummary, setBatchSummary] = useState<BatchPickupSummary | null>(null);
+  // 실행 권한은 React state가 아니라 ref다. 같은 프레임의 두 번 누름도 두 번째 실행을 막는다.
+  const batchInFlightRef = useRef(false);
+  // 실행 세대. 화면 이탈·scope 전환·인증 상실이 올리면 이전 실행은 남은 요청을 보내지 않고 화면에 쓰지 않는다.
+  const batchSeqRef = useRef(0);
+  const mountedRef = useRef(false);
+  // 렌더 중 동기 갱신되는 live scope: 실행 중 세션이 바뀌면 effect 실행 전에도 남은 요청을 멈춘다.
+  const liveListScopeRef = useRef<string | null>(null);
+  liveListScopeRef.current = session?.user.accessToken
+    ? buildDriverListScope({
+        userId: session.user.id,
+        role: session.user.role,
+        token: session.user.accessToken,
+      })
+    : '__no_token__';
+
+  // 화면을 떠나면 진행 중인 한 번에 수거의 남은 요청을 보내지 않는다.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      batchSeqRef.current += 1;
+    };
+  }, []);
+
+  // 한 번에 수거 상태를 모두 버린다. 진행 중 실행은 세대가 바뀌어 남은 요청을 보내지 않는다.
+  const resetBatch = () => {
+    batchSeqRef.current += 1;
+    batchInFlightRef.current = false;
+    setBatchMode(false);
+    setSelectedIds(new Set());
+    setBatchConfirmOpen(false);
+    setBatchRunning(false);
+    setBatchProgress(null);
+    setBatchSummary(null);
+  };
 
   // focus 복귀·visibility 복귀 시 새 read를 수행한다. listener 누적 방지를 위해 cleanup한다.
   // 앱 복귀 한 번에 focus와 visibilitychange가 함께 오므로 짧은 간격 안의 중복은 한 번으로 묶는다.
@@ -73,6 +139,8 @@ export default function BoardClient() {
       setHasSuccessfulRead(false);
       setPreparing([]);
       setDelivering([]);
+      setCompletedToday(null);
+      resetBatch();
       setAuthRequired(true);
       setError(null);
       setLoading(false);
@@ -95,6 +163,9 @@ export default function BoardClient() {
       setHasSuccessfulRead(false);
       setPreparing([]);
       setDelivering([]);
+      setCompletedToday(null);
+      // 이전 scope에서 고른 주문·진행 중 한 번에 수거도 새 scope로 넘기지 않는다.
+      resetBatch();
       setError(null);
       setAuthRequired(false);
       setLoading(true);
@@ -147,6 +218,8 @@ export default function BoardClient() {
           setHasSuccessfulRead(false);
           setPreparing([]);
           setDelivering([]);
+          setCompletedToday(null);
+          resetBatch();
           setAuthRequired(true);
           setError(null);
           return;
@@ -166,6 +239,17 @@ export default function BoardClient() {
         setRefreshing(false);
       });
 
+    // 오늘 완료 수: 목록과 같은 조회 경로·scope 가드·재조회 시점이다. 실패하거나 필드가 없으면 그 부분만 숨긴다.
+    apiRead('/driver/summary', token, { signal: controller.signal })
+      .then(async (response) =>
+        response.ok ? readDriverSummaryCompletedToday(await response.json()) : null,
+      )
+      .catch(() => null)
+      .then((value) => {
+        if (!isCurrent()) return;
+        setCompletedToday(value);
+      });
+
     return () => {
       active = false;
       controller.abort();
@@ -175,6 +259,100 @@ export default function BoardClient() {
   const orders = tab === 'preparing' ? preparing : delivering;
   const retry = () => setReloadKey((key) => key + 1);
   const showProgress = hasSuccessfulRead && !authRequired;
+
+  // 한 번에 수거: 내 수거 중 회차 직배송이고 배송 시작이 허용되고 storeId가 있는 주문만 고를 수 있다.
+  // 목록이 최신이 아니면(조회 실패로 이전 목록 표시 중·다시 읽는 중) 보내지 않는다(상세 commandsAllowed와 같은 fail-closed).
+  const batchCandidates = preparing.filter(isBatchPickupSelectable);
+  const selectedOrders = batchCandidates.filter((order) => selectedIds.has(order.id));
+  const batchListFresh =
+    hasSuccessfulRead && !authRequired && error === null && !loading && !refreshing;
+  const batchEntryVisible =
+    tab === 'preparing' && !batchMode && batchCandidates.length >= 2 && batchListFresh;
+  const batchBarVisible = batchMode && tab === 'preparing' && !authRequired;
+  const batchConfirmVisible =
+    batchConfirmOpen && batchMode && selectedOrders.length > 0 && batchListFresh && !batchRunning;
+  // 조회로 고른 주문이 빠지거나 목록 신뢰도가 떨어지면 창을 닫고 버린다(다시 조건이 맞아도 저절로 뜨지 않게).
+  if (batchConfirmOpen && !batchConfirmVisible) setBatchConfirmOpen(false);
+  const batchConfirmContent = batchConfirmVisible
+    ? buildBatchPickupConfirmContent(selectedOrders)
+    : null;
+  const batchSelection: BatchSelection | null =
+    batchMode && tab === 'preparing'
+      ? {
+          selectedIds,
+          disabled: batchRunning,
+          onToggle: (orderId) =>
+            setSelectedIds((current) => {
+              const next = new Set(current);
+              if (next.has(orderId)) next.delete(orderId);
+              else next.add(orderId);
+              return next;
+            }),
+        }
+      : null;
+
+  async function startBatchPickup(targets: DriverListOrder[]) {
+    // 실행 중이면 두 번째 실행을 시작하지 않는다(ref 가드).
+    if (batchInFlightRef.current) return;
+    const token = session?.user.accessToken;
+    if (!token || targets.length === 0 || !batchListFresh) return;
+    batchSeqRef.current += 1;
+    const seq = batchSeqRef.current;
+    const startScope = liveListScopeRef.current;
+    // 화면을 떠났거나 세션 scope가 바뀌었거나 더 새 실행·초기화가 있으면 남은 요청을 보내지 않고 화면에 쓰지 않는다.
+    const batchStillCurrent = () =>
+      mountedRef.current && seq === batchSeqRef.current && liveListScopeRef.current === startScope;
+    batchInFlightRef.current = true;
+    setBatchConfirmOpen(false);
+    setBatchSummary(null);
+    setBatchRunning(true);
+    setBatchProgress({ done: 0, total: targets.length });
+    try {
+      // 주문마다 기존 상태 변경을 하나씩 차례로 보낸다. 같은 요청은 자동으로 다시 보내지 않는다.
+      const run = await runBatchPickup({
+        orders: targets,
+        isCurrent: batchStillCurrent,
+        send: (order) =>
+          apiFetch(
+            `/stores/${apiPathSegment(order.storeId)}/orders/${apiPathSegment(order.id)}/status`,
+            token,
+            { method: 'PATCH', body: JSON.stringify({ status: BATCH_PICKUP_TARGET_STATUS }) },
+          ),
+        onProgress: (done) => {
+          if (batchStillCurrent()) setBatchProgress({ done, total: targets.length });
+        },
+      });
+      if (!batchStillCurrent()) return;
+      if (run.stoppedBy === 'AUTH_LOST') {
+        // 인증 상실: 남은 주문은 보내지 않았다. 목록 조회의 401·403과 같이 보호 목록을 지우고 인증 오류 화면으로 간다.
+        // 진행 중인 목록 조회가 지운 목록을 다시 채우지 않도록 조회 순번도 무효화한다.
+        requestIdRef.current += 1;
+        hasSuccessfulReadRef.current = false;
+        setHasSuccessfulRead(false);
+        setPreparing([]);
+        setDelivering([]);
+        setCompletedToday(null);
+        setBatchMode(false);
+        setSelectedIds(new Set());
+        setAuthRequired(true);
+        setError(null);
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+      setBatchSummary(summarizeBatchPickup(run.results));
+      setBatchMode(false);
+      setSelectedIds(new Set());
+      // 결과는 목록을 다시 읽어 확인한다(시작한 주문은 배송 중 탭으로 옮겨 간다).
+      retry();
+    } finally {
+      if (seq === batchSeqRef.current) {
+        batchInFlightRef.current = false;
+        setBatchRunning(false);
+        setBatchProgress(null);
+      }
+    }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
@@ -215,7 +393,13 @@ export default function BoardClient() {
             배송 목록
           </h1>
         </div>
-        {showProgress && <DeliveryProgress preparing={preparing} delivering={delivering} />}
+        {showProgress && (
+          <DeliveryProgress
+            preparing={preparing}
+            delivering={delivering}
+            completedToday={completedToday}
+          />
+        )}
 
         {/* 탭: 선택 표시는 색 없이 검정 3px 밑줄과 굵은 검정 글자다. */}
         <div className="mt-2 flex">
@@ -249,6 +433,27 @@ export default function BoardClient() {
 
       {/* 주문 목록 */}
       <main style={{ flex: 1, padding: '16px' }}>
+        {batchSummary && !authRequired && (
+          <BatchSummaryPanel summary={batchSummary} onClose={() => setBatchSummary(null)} />
+        )}
+        {/* 고르기 모드 안내와 취소는 목록 상태(이전 목록 표시 중·빈 목록 포함)와 관계없이 늘 보여 모드에 갇히지 않게 한다. */}
+        {batchBarVisible && (
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className={text} style={messageStyle}>
+              배송을 시작할 내 수거 주문을 골라 주세요.
+            </p>
+            <TextButton
+              disabled={batchRunning}
+              onClick={() => {
+                setBatchMode(false);
+                setSelectedIds(new Set());
+                setBatchConfirmOpen(false);
+              }}
+            >
+              고르기 취소
+            </TextButton>
+          </div>
+        )}
         {loading ? (
           <BoardMessage>주문을 불러오고 있어요</BoardMessage>
         ) : authRequired ? (
@@ -294,7 +499,7 @@ export default function BoardClient() {
                   다시 시도
                 </AppButton>
               </div>
-              <OrderList key={tab} orders={orders} tab={tab} />
+              <OrderList key={tab} orders={orders} tab={tab} batch={batchSelection} />
             </div>
           )
         ) : refreshing && hasSuccessfulRead && orders.length === 0 ? (
@@ -345,11 +550,128 @@ export default function BoardClient() {
                 </AppButton>
               </div>
             )}
-            <OrderList key={tab} orders={orders} tab={tab} />
+            {batchEntryVisible && (
+              <TextButton
+                onClick={() => {
+                  setBatchSummary(null);
+                  setSelectedIds(new Set());
+                  setBatchMode(true);
+                }}
+              >
+                여러 주문 한 번에 배송 시작
+              </TextButton>
+            )}
+            <OrderList key={tab} orders={orders} tab={tab} batch={batchSelection} />
           </div>
         )}
       </main>
+
+      {/* 한 번에 수거: 고른 주문 수를 이름에 쓴 주요 버튼 하나를 하단 바 위에 고정한다(상세 주요 버튼과 같은 자리·크기). */}
+      {batchBarVisible && (
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 'calc(72px + env(safe-area-inset-bottom))',
+            padding: '12px 16px',
+            backgroundColor: 'var(--color-bg)',
+            boxShadow: 'var(--driver-bar-shadow)',
+          }}
+        >
+          <AppButton
+            fullWidth
+            size="xl"
+            loading={batchRunning}
+            disabled={batchRunning || selectedOrders.length === 0 || !batchListFresh}
+            onClick={() => {
+              if (batchInFlightRef.current) return;
+              setBatchConfirmOpen(true);
+            }}
+          >
+            {batchRunning && batchProgress
+              ? `배송 시작하는 중 ${batchProgress.done}/${batchProgress.total}`
+              : selectedOrders.length > 0
+                ? `${selectedOrders.length}곳 배송 시작`
+                : '주문을 골라 주세요'}
+          </AppButton>
+        </div>
+      )}
+
+      <BatchPickupConfirmDialog
+        opened={batchConfirmVisible}
+        content={batchConfirmContent}
+        confirmDisabled={batchRunning || !batchListFresh}
+        onClose={() => setBatchConfirmOpen(false)}
+        onConfirm={() => {
+          // 확인한 순간 고른 주문(목록 순서)으로 실행한다. 이후 조회가 바꾼 목록은 이 실행에 섞이지 않는다.
+          void startBatchPickup(selectedOrders);
+        }}
+      />
     </div>
+  );
+}
+
+function TextButton({
+  children,
+  disabled,
+  onClick,
+}: {
+  children: ReactNode;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="m-0 min-h-11 shrink-0 cursor-pointer appearance-none self-start border-0 bg-transparent p-0 underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-50"
+      style={{
+        fontSize: 'var(--font-size-md)',
+        fontWeight: 'var(--fw-bold)',
+        color: 'var(--color-text)',
+      }}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** 한 번에 수거 결과 요약. 시작·이미 바뀜·확인 필요 수를 보이고 닫을 수 있다. */
+function BatchSummaryPanel({
+  summary,
+  onClose,
+}: {
+  summary: BatchPickupSummary;
+  onClose: () => void;
+}) {
+  const { line, notes } = buildBatchPickupSummaryText(summary);
+  const problem = summary.alreadyChanged > 0 || summary.needsCheck > 0;
+  return (
+    <section
+      aria-label="한 번에 배송 시작 결과"
+      className="mb-3 flex flex-col gap-1.5 rounded-[var(--radius)] p-4"
+      style={{
+        // 문제 결과가 있으면 빨강 연한 면 + 검정 글자(상세 문제 면과 같다), 아니면 연회색 면.
+        backgroundColor: problem ? 'var(--color-danger-surface)' : 'var(--color-surface-muted)',
+      }}
+    >
+      <p
+        className={text}
+        style={{
+          fontWeight: 'var(--fw-bold)',
+          color: 'var(--color-text)',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {line}
+      </p>
+      {notes.map((note) => (
+        <p key={note} className={text} style={{ ...messageStyle, color: 'var(--color-text)' }}>
+          {note}
+        </p>
+      ))}
+      <TextButton onClick={onClose}>닫기</TextButton>
+    </section>
   );
 }
 
@@ -394,20 +716,39 @@ function BoardMessage({
 /** 첫 화면에 보이는 행 수. 넘치면 "남은 n곳 더 보기"로 남은 수를 밝힌다(design-direction.md §6). */
 const FIRST_SCREEN_ROWS = 5;
 
-function OrderList({ orders, tab }: { orders: DriverListOrder[]; tab: string }) {
+function OrderList({
+  orders,
+  tab,
+  batch = null,
+}: {
+  orders: DriverListOrder[];
+  tab: string;
+  /** 한 번에 수거 고르기 모드. 내 수거 행에만 고르기 칸을 둔다. */
+  batch?: BatchSelection | null;
+}) {
   const [expanded, setExpanded] = useState(false);
   // 수거 대기 탭은 내게 배정된 주문과 아직 아무도 맡지 않은 주문을 나눠 보인다.
   // 배정 여부가 없는 이전 API 응답이면 groupPreparingOrders가 null을 돌려 예전처럼 한 묶음이다.
   const groups = tab === 'preparing' ? groupPreparingOrders(orders) : null;
   if (groups) {
     // 두 묶음을 합쳐 첫 화면 5행이다. 내 수거가 먼저 채우고, 더 보기는 가려진 전체 수를 보인다.
+    // 고르기 모드에서는 내 수거를 모두 보여 가려진 주문을 고르지 못하는 일이 없게 한다.
     const shown = expanded
       ? { mine: groups.mine, available: groups.available, hidden: 0 }
-      : takePreparingFirstScreen(groups, FIRST_SCREEN_ROWS);
+      : takePreparingFirstScreen(
+          groups,
+          batch ? Math.max(FIRST_SCREEN_ROWS, groups.mine.length) : FIRST_SCREEN_ROWS,
+        );
     return (
       <>
         {shown.mine.length > 0 && (
-          <OrderGroup title="내 수거" total={groups.mine.length} orders={shown.mine} tab={tab} />
+          <OrderGroup
+            title="내 수거"
+            total={groups.mine.length}
+            orders={shown.mine}
+            tab={tab}
+            batch={batch}
+          />
         )}
         {shown.available.length > 0 && (
           <OrderGroup
@@ -444,6 +785,7 @@ function OrderGroup({
   total,
   orders,
   tab,
+  batch = null,
 }: {
   title: string;
   hint?: string;
@@ -451,6 +793,7 @@ function OrderGroup({
   total: number;
   orders: DriverListOrder[];
   tab: string;
+  batch?: BatchSelection | null;
 }) {
   return (
     <section className="flex flex-col gap-1" aria-label={title}>
@@ -473,18 +816,43 @@ function OrderGroup({
           {hint}
         </p>
       )}
-      <OrderRows orders={orders} tab={tab} />
+      <OrderRows orders={orders} tab={tab} batch={batch} />
     </section>
   );
 }
 
-function OrderRows({ orders, tab }: { orders: DriverListOrder[]; tab: string }) {
+/** 한 번에 수거 고르기 칸. 고를 수 없는 내 수거 주문은 꺼진 칸과 까닭을 보인다. */
+function toRowSelection(order: DriverListOrder, batch: BatchSelection): OrderRowSelection {
+  const reason = batchPickupBlockReason(order);
+  return {
+    checked: reason === null && batch.selectedIds.has(order.id),
+    disabled: batch.disabled || reason !== null,
+    onToggle: () => {
+      if (reason === null) batch.onToggle(order.id);
+    },
+    note: batchPickupBlockLabel(reason),
+  };
+}
+
+function OrderRows({
+  orders,
+  tab,
+  batch = null,
+}: {
+  orders: DriverListOrder[];
+  tab: string;
+  batch?: BatchSelection | null;
+}) {
   if (orders.length === 0) return null;
   return (
     <ul className="m-0 list-none p-0">
       {orders.map((order, index) => (
         <li key={order.id} style={index === 0 ? undefined : { borderTop: 'var(--border)' }}>
-          <OrderCard order={order} tab={tab} />
+          <OrderCard
+            order={order}
+            tab={tab}
+            selection={batch ? toRowSelection(order, batch) : undefined}
+          />
         </li>
       ))}
     </ul>
@@ -514,14 +882,17 @@ function ShowMoreButton({ hidden, onClick }: { hidden: number; onClick: () => vo
  * 배송지 점 띠와 진행 한 줄. 목록 API가 주는 값(배송 중·보류·수거 대기 주문)만으로 그린다.
  * 숫자 기준: 점 띠와 진행 줄은 "내 주문"(배송 중·보류·내 수거)을 세고, 아무도 맡지 않은 주문은 점 띠에 그리지 않고
  * 진행 줄의 "맡을 수 있는 n곳"으로만 센다. 탭 숫자는 탭의 전체 행 수(내 수거 + 맡을 수 있는 주문)다.
- * 끝낸 배송 수·도착 예상 시간은 기사 목록 응답에 없어 쓰지 않는다(design-direction.md §3.5).
+ * 줄 끝의 "오늘 완료 n곳"은 목록이 아니라 기사 요약(GET /driver/summary)의 값이고, 읽지 못하면 그 부분만 숨긴다.
+ * 도착 예상 시간은 기사 API에 없어 쓰지 않는다(design-direction.md §3.5).
  */
 function DeliveryProgress({
   preparing,
   delivering,
+  completedToday,
 }: {
   preparing: DriverListOrder[];
   delivering: DriverListOrder[];
+  completedToday: number | null;
 }) {
   const held = delivering.filter((order) => order.status === 'DELIVERY_HELD').length;
   const toDeliver = delivering.length - held;
@@ -573,6 +944,11 @@ function DeliveryProgress({
         {preparingGroups && preparingGroups.available.length > 0 && (
           <>
             {' · '}맡을 수 있는 {preparingGroups.available.length}곳
+          </>
+        )}
+        {completedToday !== null && (
+          <>
+            {' · '}오늘 완료 {completedToday}곳
           </>
         )}
       </p>
