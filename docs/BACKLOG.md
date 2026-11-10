@@ -179,7 +179,7 @@ deployment·activation·live round·actual payment/notification을 주장하지 
 - [ ] **파일럿 전 필수: PortOne 실연동(LIVE) 채널** (`PORTONE-CHANNEL-CHECK`). **2026-10-28: 첫 회차를 21일 미뤄 "12월 1일 배송 회차"(주문 11/22 10:00~11/30 00:00, 경매 11/30 07:00, 배송 12/1)로 옮김(#671 `ops-reschedule-round.yml`). LIVE 채널이 그 전에 안 나오면 같은 도구로 다시 미룬다.** 2026-10-13 사용자 PortOne 콘솔 확인: 운영 상점에 LIVE 채널이 없고 테스트 채널("카카오페이_테스트")만 있다. 이대로 11/1 첫 회차가 열리면 실제 돈이 오가지 않는 테스트 결제로 주문이 확정된다. PG 심사에 기간이 걸리므로 11/1 기준으로 일찍 신청한다. 순서는 `PORTONE-CHANNEL-CHECK` 참조. **2026-10-15**: 카카오페이 가맹점 심사가 아직 "심사중"(8/31 신청)이라 11/1 전 LIVE 전환이 불확실하다. **결정 필요(제안 기한 10/27)**: 그때까지 LIVE 채널이 없으면 자동 오픈 전에 첫 회차 일정을 옮긴다.
 - [x] **파일럿 전 필수: 디어 오키드 매장 판매자 계정 연결** (`DEAR-ORCHID-STORE-OWNER-LINK`). 2026-10-15 사용자 승인으로 카카오 관리자 겸 판매자 계정에 연결(run `38757569432`).
 - [ ] 파일럿 시작 직후 실제 결제·환불 1건 시험
-- [ ] 첫 실회차 전 `legacy` 롤백 읽기 전용 dry-run(운영 조회, 사용자 실행) — 런북 `docs/specs/ops/mvp-sales-round-runbook.md` §7.2의 `node scripts/enable-dear-orchid-round-direct.mjs --dry-run --target-mode=legacy`. `docs/memory.md`·보고서에 실행 기록이 없다. 롤백 대상 legacy 흐름의 일반 E2E는 최근 100회 성공이 없다(`LEGACY-E2E-WORKFLOW-VARS`). 옛 출시 체크리스트 "최종 출시 판정·rollback dry-run"에서 옮김(`docs/archive/BACKLOG_archive_20261107.md`).
+- [ ] 첫 실회차 전 비상 신규 주문 중단 준비 확인 — 2026-11-10 사용자 결정으로 비상 중단은 `legacy` 전환이 아니라 회차 마감·취소다(PR #844, 런북 `docs/specs/ops/mvp-sales-round-runbook.md` §7.2). 판매자 앱 "주문 마감"을 누를 셀러 운영자와 "회차 취소"를 실행할 관리자 계정·승인자를 정하고 기록한다. 옛 출시 체크리스트 "최종 출시 판정·rollback dry-run"에서 옮김(`docs/archive/BACKLOG_archive_20261107.md`).
 - [ ] 첫 두 실회차 모니터링·Closeout — 위 `상태 구분`의 first live round가 `NOT DONE`이다. 옛 출시 체크리스트·`docs/plans/PLAN_mvp_round_direct_launch_blockers.md` Phase 4~7 마지막 단계에서 옮김.
 
 ### 법무·출시 후보 정합성
