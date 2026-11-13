@@ -970,7 +970,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 fontWeight: 'var(--fw-bold)',
                 color: 'var(--color-text)',
               }}
-              disabled={loading || !commandsAllowed}
+              // 이 주문의 완료 사진이 대기열에 있으면 보류하지 않는다. 서버에서 이미 완료됐을 수 있고,
+              // 보류하면 대기 중인 사진이 상태 충돌로 멈춘다. 멈춘 항목은 "확인했어요"로 지운 뒤 보류할 수 있다.
+              disabled={loading || !commandsAllowed || pendingPhoto !== null}
               onClick={() => setHoldOpened(true)}
             >
               배송 못 함 · 보류하기

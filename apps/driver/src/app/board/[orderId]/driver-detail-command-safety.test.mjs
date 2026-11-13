@@ -72,7 +72,10 @@ test('B. PATCH dispatch CTA는 loading 중 명시적으로 disabled다', () => {
       (chunk.includes('updateStatus(') || chunk.includes('openStatusConfirm(')) &&
       chunk.includes('onClick'),
   );
-  assert.ok(dispatchButtons.length >= 4, `dispatch 버튼이 4개 이상이어야 한다 (${dispatchButtons.length})`);
+  assert.ok(
+    dispatchButtons.length >= 4,
+    `dispatch 버튼이 4개 이상이어야 한다 (${dispatchButtons.length})`,
+  );
   for (const chunk of dispatchButtons) {
     assert.match(
       chunk,
@@ -92,6 +95,14 @@ test('B. PATCH dispatch CTA는 loading 중 명시적으로 disabled다', () => {
   const roundDirectPhoto = navButtons.find((chunk) => chunk.includes('/photo/round-direct'));
   assert.ok(roundDirectPhoto);
   assert.match(roundDirectPhoto, /disabled=\{!commandsAllowed \|\| pendingPhoto !== null\}/);
+});
+
+// Y3: 이 주문 완료 사진이 대기열에 있으면 보류 버튼도 꺼진다(대기 사진이 상태 충돌로 멈추지 않게).
+test('보류 버튼은 이 주문 사진이 업로드 대기열에 있으면 꺼진다', () => {
+  const holdAt = detailSource.indexOf('onClick={() => setHoldOpened(true)}');
+  assert.ok(holdAt !== -1);
+  const chunk = detailSource.slice(detailSource.lastIndexOf('<button', holdAt), holdAt);
+  assert.match(chunk, /disabled=\{loading \|\| !commandsAllowed \|\| pendingPhoto !== null\}/);
 });
 
 // C. HoldModal double-submit → PATCH 1회: 로컬 submittingRef guard.
@@ -231,7 +242,10 @@ test('F. readback 불확실성은 PATCH 재호출 없이 warning과 fail-closed�
 
 // G. terminal ACK + reread loss → 기존 board convergence 계약 유지.
 test('G. terminal ACK 뒤 readback loss에서도 board navigation 계약이 유지된다', () => {
-  assert.match(detailSource, /const isTerminal = status === 'DELIVERED' \|\| status === 'HUB_ARRIVED'/);
+  assert.match(
+    detailSource,
+    /const isTerminal = status === 'DELIVERED' \|\| status === 'HUB_ARRIVED'/,
+  );
   assert.match(detailSource, /terminal은 board가 fresh fetch하므로 navigation 계약을 유지한다/);
   assert.match(detailSource, /router\.replace\('\/board\?tab=delivering'\)/);
   // detail에 머물도록 바꾸지 않는다: terminal 분기에 return이 끼어들지 않는다.
@@ -255,13 +269,14 @@ test('기존 command 안전계약이 유지된다', () => {
   assert.match(successBlock, /onClose\(\)/);
 });
 
-
-
 test('H1. STATUS uncertain constants exist without resend copy', () => {
   assert.match(detailSource, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE/);
   assert.match(detailSource, /STATUS_UNCERTAIN_READBACK_WARNING/);
   // 안내는 "명령" 같은 내부 말 없이 확인 중임과 "상태 확인" 하나만 권한다(D-14).
-  assert.match(detailSource, /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE = '처리됐는지 확인하는 중이에요\.'/);
+  assert.match(
+    detailSource,
+    /STATUS_UNCERTAIN_CONVERGENCE_MESSAGE = '처리됐는지 확인하는 중이에요\.'/,
+  );
   assert.match(
     detailSource,
     /처리됐는지 아직 확인하지 못했어요\. 연결이 돌아오면 '상태 확인'을 눌러 주세요\./,
@@ -487,7 +502,10 @@ test('R-06. 시작·재개·보류 저장 알림은 정상 ACK 뒤 다시 읽어
   const successBlock = detailSource.slice(freshAt, catchAt);
   assert.match(successBlock, /resolveDriverCommandSuccessMessage\(\{/);
   assert.match(successBlock, /freshStatus: fresh\.status/);
-  assert.match(successBlock, /if \(successMessage\) toast\.add\(\{ description: successMessage \}\)/);
+  assert.match(
+    successBlock,
+    /if \(successMessage\) toast\.add\(\{ description: successMessage \}\)/,
+  );
   // 성공 알림은 ACK 성공 경로와 보류 저장 뒤 조회 두 곳뿐이다(불확실·충돌 경로에는 없다).
   assert.equal((detailSource.match(/resolveDriverCommandSuccessMessage\(\{/g) ?? []).length, 2);
   const savedAt = detailSource.indexOf('onSaved={');
@@ -553,10 +571,7 @@ test('H7. HOLD uncertain constants exist without resend copy', () => {
   assert.match(holdModalSource, /HOLD_UNCERTAIN_CONVERGENCE_MESSAGE/);
   assert.match(holdModalSource, /HOLD_UNCERTAIN_READBACK_WARNING/);
   assert.match(detailSource, /HOLD_UNCERTAIN_READBACK_WARNING/);
-  assert.doesNotMatch(
-    holdModalSource,
-    /주문 상태를 확인하고 다시 시도해주세요/,
-  );
+  assert.doesNotMatch(holdModalSource, /주문 상태를 확인하고 다시 시도해주세요/);
   assert.doesNotMatch(holdModalSource, /setTimeout\(submit/);
   assert.doesNotMatch(holdModalSource, /setInterval/);
 });
@@ -710,8 +725,14 @@ test('10. 기존 409 race convergence가 유지된다', () => {
 // D-02. 배송 시작·재개는 확인 창을 거친 뒤에만 기존 updateStatus로 PATCH를 보낸다.
 test('D-02. 배송 시작·재개 버튼은 확인 창만 열고, PATCH는 확인 뒤 updateStatus 한 곳에서만 보낸다', () => {
   // 버튼은 확인 창을 연다.
-  assert.equal((detailSource.match(/onClick=\{\(\) => openStatusConfirm\('START'\)\}/g) ?? []).length, 2);
-  assert.equal((detailSource.match(/onClick=\{\(\) => openStatusConfirm\('RESUME'\)\}/g) ?? []).length, 1);
+  assert.equal(
+    (detailSource.match(/onClick=\{\(\) => openStatusConfirm\('START'\)\}/g) ?? []).length,
+    2,
+  );
+  assert.equal(
+    (detailSource.match(/onClick=\{\(\) => openStatusConfirm\('RESUME'\)\}/g) ?? []).length,
+    1,
+  );
   // DELIVERING 요청은 확인 창의 onConfirm 한 곳뿐이고, 창을 먼저 닫는다.
   assert.equal((detailSource.match(/updateStatus\('DELIVERING'\)/g) ?? []).length, 1);
   const confirmAt = detailSource.indexOf('<StatusConfirmDialog');
@@ -728,7 +749,10 @@ test('D-02. 배송 시작·재개 버튼은 확인 창만 열고, PATCH는 확�
   );
   // 창 열기도 in-flight·fail-closed 상태에서는 하지 않는다.
   const openAt = detailSource.indexOf('const openStatusConfirm');
-  assert.match(detailSource.slice(openAt, openAt + 200), /if \(loading \|\| !commandsAllowed\) return;/);
+  assert.match(
+    detailSource.slice(openAt, openAt + 200),
+    /if \(loading \|\| !commandsAllowed\) return;/,
+  );
   // 확인 창은 요청을 직접 보내지 않는다.
   assert.doesNotMatch(confirmDialogSource, /apiFetch|method: 'PATCH'|updateStatus\(/);
   // 보류 창과 같은 Dialog 구조·z 200(하단 탭 위).
@@ -754,11 +778,17 @@ test('D-14. 응답 불확실 안내는 조회 실패 면과 겹치지 않는 한
 });
 
 test('R-09. 확인 창 글과 보류 내용 카드 값은 낱말 중간에서 줄을 바꾸지 않는다', () => {
-  const keepWords = /const keepWords = \{ wordBreak: 'keep-all', overflowWrap: 'anywhere' \} as const;/;
+  const keepWords =
+    /const keepWords = \{ wordBreak: 'keep-all', overflowWrap: 'anywhere' \} as const;/;
   assert.match(confirmDialogSource, keepWords);
   assert.match(detailSource, keepWords);
   // 확인 창: 기본 주소·동·호수·배정 안내·손님 알림.
-  for (const field of ['content.placeBase}', 'content.place}', 'content.assignment}', 'content.notice}']) {
+  for (const field of [
+    'content.placeBase}',
+    'content.place}',
+    'content.assignment}',
+    'content.notice}',
+  ]) {
     const at = confirmDialogSource.indexOf(`{${field}`);
     assert.ok(at !== -1, field);
     const openAt = confirmDialogSource.lastIndexOf('<p', at);
