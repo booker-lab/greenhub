@@ -16,6 +16,8 @@ export const ORDER_STATUS_LABELS: Partial<Record<OrderStatus, string>> = {
   DELIVERED: '배송 완료',
   CANCELLED: '주문 취소',
   REVIEWED: '구매 확정',
+  // 고객 사유 종결(환불 없음). 취소(환불)와 구분한다.
+  CLOSED_UNDELIVERED: '배송 종결',
 };
 
 // 주문 상세 "배송 현황" 단계 이름. 단계는 진행 순서를 보여 주므로 첫 단계는 상태 이름('결제 완료')이 아니라
