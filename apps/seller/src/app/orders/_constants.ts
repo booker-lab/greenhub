@@ -19,6 +19,8 @@ export const STATUS_GROUP_MAP: Record<OrderStatus, OrderGroup> = {
   DELIVERED: 'DONE',
   PICKED_UP: 'DONE',
   REVIEWED: 'DONE',
+  // 고객 사유 종결(환불 없음)은 끝난 주문이라 완료 탭에 둔다(취소=환불과 구분).
+  CLOSED_UNDELIVERED: 'DONE',
   CANCELLED: 'CANCELLED',
 };
 
@@ -52,6 +54,7 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   DELIVERED: '배송 완료',
   CANCELLED: '취소',
   REVIEWED: '구매 확정',
+  CLOSED_UNDELIVERED: '고객 사유 종결',
 };
 
 /**
@@ -71,6 +74,7 @@ export const STATUS_TONE: Record<OrderStatus, 'default' | 'problem' | 'done'> = 
   DELIVERED: 'done',
   PICKED_UP: 'done',
   REVIEWED: 'done',
+  CLOSED_UNDELIVERED: 'done',
 };
 
 export const DELIVERY_LABEL: Record<string, string> = {

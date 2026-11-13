@@ -37,6 +37,8 @@ export const READONLY_STATUSES: OrderStatus[] = [
   'DELIVERED',
   'REVIEWED',
   'CANCELLED',
+  // 고객 사유 종결(환불 없음)은 되돌릴 수 없는 끝난 주문이다.
+  'CLOSED_UNDELIVERED',
 ];
 
 // 판매자 취소(결제 금액 환불)가 허용되는 상태. DELIVERY_HELD는 보류 해소 방법의 하나다 —
