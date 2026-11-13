@@ -7,6 +7,7 @@ import {
   formatClosureTimeKST,
   parseCustomerFaultClosureEligibility,
   shouldCheckCustomerFaultClosure,
+  shouldCheckCustomerFaultClosureSettlement,
 } from './customer-fault-closure';
 
 const hold = {
@@ -87,6 +88,31 @@ describe('판정 응답 읽기', () => {
       paymentDeadlineDate: '2026-11-16',
       redeliveryFee: 5000,
     });
+  });
+
+  it('이미 종결한 주문의 정산 없음 표시를 읽는다(true일 때만 true)', () => {
+    const closed = {
+      eligible: false,
+      reason: 'ALREADY_CLOSED',
+      closureReasonCode: 'RECEIPT_REFUSED',
+      eligibleAt: null,
+      paymentDeadlineDate: null,
+      redeliveryFee: 5000,
+    };
+    expect(
+      parseCustomerFaultClosureEligibility({ ...closed, settlementMissing: true }),
+    ).toMatchObject({ reason: 'ALREADY_CLOSED', settlementMissing: true });
+    expect(
+      parseCustomerFaultClosureEligibility({ ...closed, settlementMissing: 'yes' }),
+    ).toMatchObject({ settlementMissing: false });
+    expect(parseCustomerFaultClosureEligibility(closed)).toMatchObject({
+      settlementMissing: false,
+    });
+  });
+
+  it('종결 대상 판별: 종결한 주문은 정산 확인을 위해 판정을 묻는다', () => {
+    expect(shouldCheckCustomerFaultClosureSettlement({ status: 'CLOSED_UNDELIVERED' })).toBe(true);
+    expect(shouldCheckCustomerFaultClosureSettlement({ status: 'DELIVERED' })).toBe(false);
   });
 
   it('모양이 다르거나 eligible과 reason이 어긋나면 null(버튼을 숨긴다)', () => {

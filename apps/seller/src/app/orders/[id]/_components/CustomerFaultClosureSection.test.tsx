@@ -72,6 +72,37 @@ describe('CustomerFaultClosureRecordView', () => {
     expect(html).toContain('고객 사유 종결');
     expect(html).toContain('수령 거부로 11월 14일 10:30에 환불 없이 종결한 주문이에요');
     expect(html).toContain('손님과 연락한 내용: 11/14 통화, 받지 않겠다고 함');
+    expect(html).not.toContain('정산 다시 맞추기');
+  });
+
+  it('종결 뒤 정산이 없으면 안내와 "정산 다시 맞추기" 버튼을 보인다', () => {
+    const html = renderToStaticMarkup(
+      <CustomerFaultClosureRecordView
+        record={null}
+        settlementMissing
+        reconciling={false}
+        error="정산을 만들지 못했어요"
+        onReconcileSettlement={() => {}}
+      />,
+    );
+    expect(html).toContain('정산이 아직 만들어지지 않았어요');
+    expect(html).toContain('정산 다시 맞추기');
+    expect(html).toContain('<button');
+    expect(html).toContain('정산을 만들지 못했어요');
+  });
+
+  it('정산을 맞추는 중에는 버튼을 누를 수 없다', () => {
+    const html = renderToStaticMarkup(
+      <CustomerFaultClosureRecordView
+        record={null}
+        settlementMissing
+        reconciling
+        error={null}
+        onReconcileSettlement={() => {}}
+      />,
+    );
+    expect(html).toContain('맞추는 중...');
+    expect(html).toMatch(/<button[^>]*disabled/);
   });
 });
 
@@ -84,7 +115,7 @@ describe('CustomerFaultClosureSection', () => {
     customerFaultClosure: null,
   };
 
-  it('종결한 주문은 판정을 묻지 않고 기록을 보인다', () => {
+  it('종결한 주문은 기록을 보이고 종결 버튼은 없다(정산 확인 전에는 다시 맞추기 버튼도 없다)', () => {
     const html = renderToStaticMarkup(
       <CustomerFaultClosureSection
         storeId="store-1"
@@ -95,6 +126,7 @@ describe('CustomerFaultClosureSection', () => {
     );
     expect(html).toContain('환불 없이 종결한 주문이에요');
     expect(html).not.toContain('환불 없이 주문 종결');
+    expect(html).not.toContain('정산 다시 맞추기');
   });
 
   it('보류가 아닌 주문은 아무것도 그리지 않는다', () => {

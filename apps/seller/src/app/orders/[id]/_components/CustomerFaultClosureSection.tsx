@@ -23,7 +23,9 @@ import {
   customerFaultClosureBlockedMessage,
   describeCustomerFaultClosureEligible,
   describeCustomerFaultClosureRecord,
+  SETTLEMENT_RECONCILE_BUTTON_LABEL,
   shouldCheckCustomerFaultClosure,
+  shouldCheckCustomerFaultClosureSettlement,
 } from '../customer-fault-closure';
 import { useCustomerFaultClosure } from '../_hooks/useCustomerFaultClosure';
 
@@ -59,15 +61,26 @@ export function CustomerFaultClosureSection({
   order,
   onClosed,
 }: CustomerFaultClosureSectionProps) {
-  const enabled = shouldCheckCustomerFaultClosure(order);
-  const { eligibility, submitting, error, clearError, submit } = useCustomerFaultClosure(
-    storeId,
-    orderId,
-    enabled,
-  );
+  const closed = shouldCheckCustomerFaultClosureSettlement(order);
+  // 종결한 주문도 판정을 물어 정산이 없는지(종결 뒤 정산 생성 실패) 확인한다.
+  const enabled = closed || shouldCheckCustomerFaultClosure(order);
+  const { eligibility, submitting, error, clearError, submit, reconcileSettlement } =
+    useCustomerFaultClosure(storeId, orderId, enabled);
 
-  if (order.status === 'CLOSED_UNDELIVERED') {
-    return <CustomerFaultClosureRecordView record={order.customerFaultClosure ?? null} />;
+  if (closed) {
+    return (
+      <CustomerFaultClosureRecordView
+        record={order.customerFaultClosure ?? null}
+        settlementMissing={
+          eligibility?.reason === 'ALREADY_CLOSED' && eligibility.settlementMissing === true
+        }
+        reconciling={submitting}
+        error={error}
+        onReconcileSettlement={() => {
+          void reconcileSettlement();
+        }}
+      />
+    );
   }
   if (!enabled || !eligibility) return null;
   return (
@@ -85,12 +98,26 @@ export function CustomerFaultClosureSection({
   );
 }
 
-/** 종결한 주문의 기록. 손님과 연락한 메모는 판매자에게만 보인다. */
+interface CustomerFaultClosureRecordViewProps {
+  record: Order['customerFaultClosure'] | null;
+  /** 종결 뒤 정산 생성이 실패해 정산이 없다. */
+  settlementMissing?: boolean;
+  reconciling?: boolean;
+  error?: string | null;
+  onReconcileSettlement?: () => void;
+}
+
+/**
+ * 종결한 주문의 기록. 손님과 연락한 메모는 판매자에게만 보인다.
+ * 종결 뒤 정산이 만들어지지 않았으면 "정산 다시 맞추기"로 같은 종결 요청을 다시 보낸다.
+ */
 export function CustomerFaultClosureRecordView({
   record,
-}: {
-  record: Order['customerFaultClosure'] | null;
-}) {
+  settlementMissing = false,
+  reconciling = false,
+  error = null,
+  onReconcileSettlement,
+}: CustomerFaultClosureRecordViewProps) {
   const summary = describeCustomerFaultClosureRecord(record);
   return (
     <div
@@ -107,6 +134,27 @@ export function CustomerFaultClosureRecordView({
         <p className={TEXT} style={{ ...smallText, color: 'var(--color-text-secondary)' }}>
           손님과 연락한 내용: {record.memo}
         </p>
+      )}
+      {settlementMissing && onReconcileSettlement && (
+        <>
+          <p className={TEXT} style={{ ...smallText, color: 'var(--color-danger)' }}>
+            종결은 됐지만 정산이 아직 만들어지지 않았어요. 아래 버튼으로 다시 맞춰 주세요.
+          </p>
+          {error && (
+            <p className={TEXT} style={{ ...smallText, color: 'var(--color-danger)' }}>
+              {error}
+            </p>
+          )}
+          <Button
+            onClick={onReconcileSettlement}
+            disabled={reconciling}
+            size="md"
+            variant="outline-gray"
+            className="w-full"
+          >
+            {reconciling ? '맞추는 중...' : SETTLEMENT_RECONCILE_BUTTON_LABEL}
+          </Button>
+        </>
       )}
     </div>
   );

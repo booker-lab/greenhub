@@ -20,6 +20,9 @@ export const CUSTOMER_FAULT_CLOSURE_REASON_LABEL: Record<CustomerFaultClosureRea
 
 export const CUSTOMER_FAULT_CLOSURE_BUTTON_LABEL = '환불 없이 주문 종결';
 
+/** 종결 뒤 정산이 없을 때 보이는 버튼. 같은 종결 요청을 다시 보내 정산만 맞춘다. */
+export const SETTLEMENT_RECONCILE_BUTTON_LABEL = '정산 다시 맞추기';
+
 export const CUSTOMER_FAULT_CLOSURE_CONFIRM_MESSAGE =
   '환불 없이 주문을 종결해요. 결제 금액은 정산되고 상품은 직접 처리해 주세요. 되돌릴 수 없어요.';
 
@@ -56,6 +59,11 @@ export function shouldCheckCustomerFaultClosure(order: ClosureCheckOrder): boole
   return order.status === 'PREPARING' && order.redeliveryPayment?.required === true;
 }
 
+/** 종결한 주문인지: 종결 뒤 정산이 만들어졌는지 확인하려고 판정을 묻는다. */
+export function shouldCheckCustomerFaultClosureSettlement(order: Pick<Order, 'status'>): boolean {
+  return order.status === 'CLOSED_UNDELIVERED';
+}
+
 /** 서버 판정 응답을 읽는다. 모양이 다르면 null(버튼을 숨긴다 — fail closed). */
 export function parseCustomerFaultClosureEligibility(
   payload: unknown,
@@ -84,6 +92,10 @@ export function parseCustomerFaultClosureEligibility(
     paymentDeadlineDate:
       typeof record.paymentDeadlineDate === 'string' ? record.paymentDeadlineDate : null,
     redeliveryFee: typeof record.redeliveryFee === 'number' ? record.redeliveryFee : null,
+    // 이미 종결한 주문만 정산 없음 표시를 읽는다. true가 아니면 버튼을 보이지 않는다.
+    ...(reason === 'ALREADY_CLOSED'
+      ? { settlementMissing: record.settlementMissing === true }
+      : {}),
   };
 }
 

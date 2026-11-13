@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   buildCustomerFaultClosurePath,
   buildCustomerFaultClosureRequest,
+  buildSettlementReconcileRequest,
   loadCustomerFaultClosureEligibility,
 } from './useCustomerFaultClosure';
 
@@ -21,6 +22,12 @@ describe('고객 사유 종결 요청', () => {
     const init = buildCustomerFaultClosureRequest('  11/14 통화  ');
     expect(init.method).toBe('POST');
     expect(JSON.parse(String(init.body))).toEqual({ memo: '11/14 통화' });
+  });
+
+  it('정산 다시 맞추기는 같은 종결 POST를 고정 메모로 보낸다(이미 종결한 주문은 정산만 맞춘다)', () => {
+    const init = buildSettlementReconcileRequest();
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(String(init.body))).toEqual({ memo: '정산 다시 맞추기' });
   });
 
   it('판정을 읽고, 요청 실패나 잘못된 응답이면 null로 닫는다', async () => {
