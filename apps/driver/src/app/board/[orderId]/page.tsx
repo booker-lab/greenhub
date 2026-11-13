@@ -24,12 +24,12 @@ import {
   buildDriverOrderDetailScope,
   buildDriverStatusConfirmContent,
   classifyDriverOrderCommandError,
+  DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
   type DriverOrderReadback,
   type DriverOrderReadErrorKind,
   type DriverStatusConfirmKind,
   type DriverStatusReadbackNotice,
   driverDetailListHref,
-  DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
   driverOrderItemCount,
   isDriverHoldEntryVisible,
   isDriverHoldResumable,
@@ -1065,7 +1065,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
           {isHeld && isRoundDirect && !isDriverHoldResumable(order.deliveryHold) && (
             <p
               className={text}
-              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-danger)' }}
+              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-danger)', ...keepWords }}
               data-testid="driver-non-redeliverable-hold"
             >
               {DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE}
