@@ -1,6 +1,7 @@
 import { dateRangeKST, todayKST } from '@greenhub/shared';
 import { Injectable } from '@nestjs/common';
 import { FirestoreService } from '../firestore/firestore.service';
+import { StorageService } from '../firestore/storage.service';
 import {
   DRIVER_DISCOVERY_DELIVERY_METHODS,
   DRIVER_DISCOVERY_STATUS,
@@ -9,8 +10,11 @@ import {
 } from '../orders/driver-order-scope.service';
 import { throwDriverOrderNotFound } from '../orders/driver-order-error';
 import {
+  type DriverCompletedOrder,
   type DriverOrderProjectionContext,
   type DriverOrderView,
+  driverCompletedOrderPhotoId,
+  projectDriverCompletedOrder,
   projectDriverOrder,
 } from '../orders/driver-order-read-model';
 import { OrdersQueryService } from '../orders/orders-query.service';
@@ -71,6 +75,35 @@ function deliveredAtMillis(order: Record<string, unknown>): number | null {
   return order['status'] === 'DELIVERED' ? timestampMillis(order['updatedAt']) : null;
 }
 
+function compareIdAsc(a: Record<string, unknown>, b: Record<string, unknown>): number {
+  const aId = String(a['id']);
+  const bId = String(b['id']);
+  return aId < bId ? -1 : aId > bId ? 1 : 0;
+}
+
+type CompletedTodayRange = { startMillis: number; endMillis: number };
+type CompletedTodayEntry = { order: Record<string, unknown>; deliveredAt: number };
+
+/**
+ * 오늘 완료 판정의 단일 기준. 요약 수·완료 내역·사진 조회가 모두 이 판정을 써서 개수가 어긋나지 않는다.
+ * 본인 배정, 완료 계열 상태, 오늘 바뀐 주문(쿼리 조건)을 메모리에서도 다시 확인하고 완료 시각이 오늘이어야 한다.
+ */
+function completedTodayDeliveredAt(
+  order: Record<string, unknown>,
+  driverId: string,
+  { startMillis, endMillis }: CompletedTodayRange,
+): number | null {
+  if (order['driverId'] !== driverId) return null;
+  if (!(DRIVER_COMPLETED_ORDER_STATUSES as readonly unknown[]).includes(order['status'])) {
+    return null;
+  }
+  const updatedAt = timestampMillis(order['updatedAt']);
+  if (updatedAt === null || updatedAt < startMillis) return null;
+  const deliveredAt = deliveredAtMillis(order);
+  if (deliveredAt === null || deliveredAt < startMillis || deliveredAt >= endMillis) return null;
+  return deliveredAt;
+}
+
 @Injectable()
 export class DriverService {
   private readonly driverScope: DriverOrderScopeService;
@@ -79,6 +112,7 @@ export class DriverService {
     private readonly firestore: FirestoreService,
     private readonly ordersQuery: OrdersQueryService,
     driverScope?: DriverOrderScopeService,
+    private readonly storage?: StorageService,
   ) {
     this.driverScope = driverScope ?? new DriverOrderScopeService(firestore);
   }
@@ -150,12 +184,74 @@ export class DriverService {
 
   /**
    * 요청 기사에게 배정된 주문 중 오늘(서울 날짜) 배송 완료된 수. 손님 정보는 싣지 않는다.
-   * 오늘 배송 완료된 주문은 그 뒤 리뷰·취소가 있어도 마지막 변경 시각이 오늘 이후이므로, 기존
-   * (status, driverId, updatedAt) 복합 인덱스로 오늘 바뀐 본인 완료 계열 주문만 읽고 완료 시각으로 센다.
+   * 완료 내역(getCompletedToday)과 같은 읽기·판정(readCompletedToday)을 써서 수가 목록 길이와 같다.
    */
   async getSummary(driverId: string): Promise<{ completedToday: number }> {
     await this.driverScope.assertDriverAuthority(driverId);
+    const { entries } = await this.readCompletedToday(driverId);
+    return { completedToday: entries.length };
+  }
+
+  /**
+   * 오늘(서울 날짜) 완료 내역. 요약 수와 같은 판정을 써서 목록 길이가 항상 completedToday와 같다.
+   * 리뷰(REVIEWED)·배송 후 취소(CANCELLED)로 넘어간 주문도 status를 함께 실어 앱이 구분해 보이게 한다.
+   */
+  async getCompletedToday(
+    driverId: string,
+  ): Promise<{ date: string; orders: DriverCompletedOrder[] }> {
+    await this.driverScope.assertDriverAuthority(driverId);
+    const { date, entries } = await this.readCompletedToday(driverId);
+    const orders = [...entries]
+      .sort((a, b) => b.deliveredAt - a.deliveredAt || compareIdAsc(a.order, b.order))
+      .map(({ order, deliveredAt }) =>
+        projectDriverCompletedOrder(order, new Date(deliveredAt).toISOString()),
+      );
+    return { date, orders };
+  }
+
+  /**
+   * 오늘 완료 주문의 배송 사진 서명 URL(15분). 본인 배정·오늘 완료·회차 직배송 사진이 있는 주문만
+   * 허용하고, 그 밖에는 다른 기사 주문의 존재를 드러내지 않도록 모두 같은 404로 답한다.
+   */
+  async getCompletedTodayPhoto(
+    driverId: string,
+    orderId: string,
+  ): Promise<{ url: string; expiresAt: string }> {
+    const authority = await this.driverScope.assertDriverAuthority(driverId);
+    const snap = await this.firestore.doc(`orders/${orderId}`).get();
+    if (!snap.exists) throwDriverOrderNotFound('주문을 찾을 수 없습니다.');
+    const order = { id: orderId, ...snap.data() } as Record<string, unknown>;
     const { start, endExclusive } = dateRangeKST(todayKST());
+    const deliveredAt = completedTodayDeliveredAt(order, authority.requesterId, {
+      startMillis: start.getTime(),
+      endMillis: endExclusive.getTime(),
+    });
+    const photoId = deliveredAt === null ? null : driverCompletedOrderPhotoId(order);
+    if (photoId === null || typeof order['storeId'] !== 'string' || !this.storage) {
+      throwDriverOrderNotFound('배송 사진을 찾을 수 없습니다.');
+    }
+
+    // 판매자·기사 배송 사진 URL 경로(DeliveryPhotosController)와 같은 요청자 기준으로 서명한다.
+    const { url, expiresAt } = await this.storage.createDeliveryPhotoReadUrl({
+      storeId: order['storeId'],
+      orderId,
+      photoId,
+      requesterId: authority.requesterId,
+      requesterRole: authority.role,
+    });
+    return { url, expiresAt };
+  }
+
+  /**
+   * 요청 기사에게 배정된 주문 중 오늘(서울 날짜) 배송 완료된 주문과 완료 시각.
+   * 오늘 배송 완료된 주문은 그 뒤 리뷰·취소가 있어도 마지막 변경 시각이 오늘 이후이므로, 기존
+   * (status, driverId, updatedAt) 복합 인덱스로 오늘 바뀐 본인 완료 계열 주문만 읽고 완료 시각으로 거른다.
+   */
+  private async readCompletedToday(
+    driverId: string,
+  ): Promise<{ date: string; entries: CompletedTodayEntry[] }> {
+    const date = todayKST();
+    const { start, endExclusive } = dateRangeKST(date);
     const snap = await this.firestore
       .collection('orders')
       .where('status', 'in', [...DRIVER_COMPLETED_ORDER_STATUSES])
@@ -163,19 +259,15 @@ export class DriverService {
       .where('updatedAt', '>=', this.firestore.Timestamp.fromDate(start))
       .get();
 
-    const startMillis = start.getTime();
-    const endMillis = endExclusive.getTime();
-    let completedToday = 0;
+    const range = { startMillis: start.getTime(), endMillis: endExclusive.getTime() };
+    const entries: CompletedTodayEntry[] = [];
     for (const doc of snap.docs) {
-      const order = doc.data() as Record<string, unknown>;
-      // 쿼리 조건을 메모리에서도 다시 확인해, 조건 밖 문서가 섞여도 세지 않는다.
-      if (order['driverId'] !== driverId) continue;
-      const deliveredAt = deliveredAtMillis(order);
-      if (deliveredAt !== null && deliveredAt >= startMillis && deliveredAt < endMillis) {
-        completedToday += 1;
-      }
+      const order = { id: doc.id, ...doc.data() } as Record<string, unknown>;
+      // 쿼리 조건을 메모리에서도 다시 확인해, 조건 밖 문서가 섞여도 넣지 않는다.
+      const deliveredAt = completedTodayDeliveredAt(order, driverId, range);
+      if (deliveredAt !== null) entries.push({ order, deliveredAt });
     }
-    return { completedToday };
+    return { date, entries };
   }
 
   private async toDriverOrder(

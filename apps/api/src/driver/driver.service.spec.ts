@@ -1,3 +1,4 @@
+import { DRIVER_ORDER_AUTHORITY_DENIED, DRIVER_ORDER_NOT_FOUND } from '@greenhub/shared';
 import { NotFoundException } from '@nestjs/common';
 import { DriverOrderScopeService } from '../orders/driver-order-scope.service';
 import { OrdersQueryService } from '../orders/orders-query.service';
@@ -928,9 +929,7 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     });
 
     const list = await service.getOrders('driver-1');
-    expect(
-      Object.fromEntries(list.map((order) => [order.id, order['assignedToMe']])),
-    ).toEqual({
+    expect(Object.fromEntries(list.map((order) => [order.id, order['assignedToMe']]))).toEqual({
       mine: true,
       open: false,
       'legacy-open': false,
@@ -1566,5 +1565,415 @@ describe('DriverService 오늘 완료 요약', () => {
 
     await expect(service.getSummary('driver-1')).rejects.toThrow();
     expect(executedQueries).toHaveLength(0);
+  });
+
+  it.each([
+    ['서울 자정 직후', AFTER_MIDNIGHT, 4],
+    ['서울 자정 직전', BEFORE_MIDNIGHT, 2],
+  ])('%s 완료 내역 길이는 같은 fixture의 completedToday와 같다', async (_label, now, count) => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(now));
+    const { service } = makeService(summaryRecords());
+
+    const { completedToday } = await service.getSummary('driver-1');
+    const { orders } = await service.getCompletedToday('driver-1');
+
+    expect(completedToday).toBe(count);
+    expect(orders).toHaveLength(completedToday);
+  });
+});
+
+describe('DriverService 오늘 완료 내역·사진 다시 보기', () => {
+  // 서울 2026-11-11 00:30. 서울 오늘은 [2026-11-10T15:00Z, 2026-11-11T15:00Z)다.
+  const AFTER_MIDNIGHT = '2026-11-10T15:30:00.000Z';
+  // 서울 2026-11-10 23:30. 서울 오늘은 [2026-11-09T15:00Z, 2026-11-10T15:00Z)다.
+  const BEFORE_MIDNIGHT = '2026-11-10T14:30:00.000Z';
+  const LEGACY_PHOTO_URL =
+    'https://firebasestorage.googleapis.com/v0/b/bucket/o/legacy.jpg?alt=media&token=legacy-token';
+
+  // 노출하면 안 되는 손님·결제·좌표·판매점 필드를 모두 채운 회차 직배송 주문.
+  const roundDirect = (overrides: Data): Data => ({
+    driverId: 'driver-1',
+    storeId: 'pilot',
+    schemaVersion: 2,
+    roundId: 'round-1',
+    deliveryMethod: 'direct',
+    orderNumber: 'GH-0001',
+    userId: 'consumer-1',
+    buyerName: '김손님',
+    buyerPhone: '010-1111-2222',
+    deliveryPhone: '010-3333-4444',
+    sellerPhone: '02-555-6666',
+    requestNote: '받는 분 이영희, 문 앞에 두세요',
+    lat: 37.5,
+    lng: 127.0,
+    totalAmount: 33000,
+    deliveryFee: 3000,
+    paymentKey: 'pay-key-1',
+    payment: { method: 'card', amount: 33000, approvedAt: '2026-11-09T01:00:00.000Z' },
+    redeliveryPayment: { required: false },
+    address: '서울시 강남구 테헤란로 1 101동 1001호',
+    deliveryAddress: {
+      address: '서울시 강남구 테헤란로 1',
+      addressDetail: '101동 1001호',
+      zipCode: '06000',
+      recipientName: '이영희',
+      phone: '010-7777-8888',
+      lat: 37.5,
+      lng: 127.0,
+    },
+    productName: '몬스테라',
+    quantity: 3,
+    orderItems: [
+      { productId: 'p-1', productName: '몬스테라', quantity: 2, unitPrice: 10000 },
+      { productId: 'p-2', productName: '스투키', quantity: 1, unitPrice: 10000 },
+    ],
+    ...overrides,
+  });
+
+  function completedRecords(): Record<string, Data> {
+    return {
+      // 회차 직배송 사진이 있는 오늘 완료.
+      'orders/round-photo-delivered': roundDirect({
+        status: 'DELIVERED',
+        deliveryPhotoIds: ['photo-1'],
+        deliveredAt: timestamp('2026-11-10T15:05:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:05:00.000Z'),
+      }),
+      // 오늘 완료한 뒤 배송 후 환불로 취소된 회차 직배송 주문(사진은 그대로 보인다).
+      'orders/round-photo-cancelled': roundDirect({
+        status: 'CANCELLED',
+        deliveryPhotoIds: ['photo-2'],
+        deliveredAt: timestamp('2026-11-10T15:06:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:20:00.000Z'),
+      }),
+      // 오늘 완료 후 리뷰된 회차 직배송 주문(사진 없음).
+      'orders/round-reviewed-no-photo': roundDirect({
+        status: 'REVIEWED',
+        deliveryPhotoIds: [],
+        deliveredAt: timestamp('2026-11-10T15:04:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:21:00.000Z'),
+      }),
+      // 이전 방식 사진(토큰 다운로드 URL)만 있는 주문. 사진으로 치지 않고 URL도 싣지 않는다.
+      'orders/legacy-with-url': {
+        driverId: 'driver-1',
+        storeId: 'legacy-store',
+        deliveryMethod: 'direct',
+        status: 'DELIVERED',
+        buyerName: '박손님',
+        address: '서울시 마포구 1',
+        productName: '산세베리아',
+        quantity: 1,
+        deliveryPhotoUrl: LEGACY_PHOTO_URL,
+        deliveryPhotoIds: ['legacy-photo'],
+        deliveredAt: timestamp('2026-11-10T15:07:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:07:00.000Z'),
+      },
+      // deliveredAt을 쓰기 전에 완료돼 DELIVERED에 머문 주문은 updatedAt을 완료 시각으로 본다.
+      'orders/previous-delivered-today': {
+        driverId: 'driver-1',
+        storeId: 'legacy-store',
+        deliveryMethod: 'direct',
+        status: 'DELIVERED',
+        deliveryAddress: { address: '서울시 용산구 2', zipCode: '04000' },
+        productName: '고무나무',
+        quantity: 2,
+        updatedAt: timestamp('2026-11-10T15:08:00.000Z'),
+      },
+      // 서울 어제(자정 1초 전) 완료, 자정 뒤 리뷰된 회차 직배송 사진 주문.
+      'orders/yesterday-photo': roundDirect({
+        status: 'REVIEWED',
+        deliveryPhotoIds: ['photo-yesterday'],
+        deliveredAt: timestamp('2026-11-10T14:59:59.000Z'),
+        updatedAt: timestamp('2026-11-10T15:10:00.000Z'),
+      }),
+      // 다른 기사의 오늘 완료 사진 주문.
+      'orders/other-driver-photo': roundDirect({
+        driverId: 'driver-2',
+        status: 'DELIVERED',
+        deliveryPhotoIds: ['photo-other'],
+        deliveredAt: timestamp('2026-11-10T15:09:00.000Z'),
+        updatedAt: timestamp('2026-11-10T15:09:00.000Z'),
+      }),
+      // 배송 전 취소·배송 중 주문은 완료 내역이 아니다.
+      'orders/cancelled-before-delivery': roundDirect({
+        status: 'CANCELLED',
+        deliveryPhotoIds: ['photo-cancelled'],
+        updatedAt: timestamp('2026-11-10T15:11:00.000Z'),
+      }),
+      'orders/mine-delivering': roundDirect({
+        status: 'DELIVERING',
+        updatedAt: timestamp('2026-11-10T15:12:00.000Z'),
+      }),
+    };
+  }
+
+  const SIGNED = {
+    url: 'https://storage.googleapis.com/bucket/deliveryPhotos/x.jpg?X-Goog-Signature=sig',
+    expiresAt: '2026-11-10T15:45:00.000Z',
+  };
+
+  function makeCompletedService(
+    records: Record<string, Data>,
+    driver: Data = { role: 'driver', driverApproved: true },
+  ) {
+    const { firestore, executedQueries } = makeFirestore(records);
+    records['users/driver-1'] = { id: 'driver-1', ...driver };
+    const storage = { createDeliveryPhotoReadUrl: jest.fn().mockResolvedValue(SIGNED) };
+    const service = new DriverService(
+      firestore as never,
+      new OrdersQueryService(firestore as never),
+      new DriverOrderScopeService(firestore as never),
+      storage as never,
+    );
+    return { service, storage, firestore, executedQueries };
+  }
+
+  function collectKeys(value: unknown, keys = new Set<string>()): Set<string> {
+    if (Array.isArray(value)) {
+      for (const item of value) collectKeys(item, keys);
+    } else if (typeof value === 'object' && value !== null) {
+      for (const [key, nested] of Object.entries(value)) {
+        keys.add(key);
+        collectKeys(nested, keys);
+      }
+    }
+    return keys;
+  }
+
+  async function caught(promise: Promise<unknown>) {
+    return promise.then(
+      () => {
+        throw new Error('예외가 나야 합니다.');
+      },
+      (error: unknown) => error as { getStatus: () => number; getResponse: () => unknown },
+    );
+  }
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('서울 자정 직후에는 오늘 완료만 완료 시각 내림차순으로 싣고 요약 수와 길이가 같다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const { service } = makeCompletedService(completedRecords());
+
+    const result = await service.getCompletedToday('driver-1');
+    const summary = await service.getSummary('driver-1');
+
+    expect(result.date).toBe('2026-11-11');
+    expect(result.orders.map((order) => [order.id, order.status, order.deliveredAt])).toEqual([
+      ['previous-delivered-today', 'DELIVERED', '2026-11-10T15:08:00.000Z'],
+      ['legacy-with-url', 'DELIVERED', '2026-11-10T15:07:00.000Z'],
+      ['round-photo-cancelled', 'CANCELLED', '2026-11-10T15:06:00.000Z'],
+      ['round-photo-delivered', 'DELIVERED', '2026-11-10T15:05:00.000Z'],
+      ['round-reviewed-no-photo', 'REVIEWED', '2026-11-10T15:04:00.000Z'],
+    ]);
+    expect(result.orders).toHaveLength(summary.completedToday);
+  });
+
+  it('서울 자정 직전에는 그날 완료만 싣고 날짜도 그날이다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(BEFORE_MIDNIGHT));
+    const { service } = makeCompletedService(completedRecords());
+
+    const result = await service.getCompletedToday('driver-1');
+    const summary = await service.getSummary('driver-1');
+
+    expect(result.date).toBe('2026-11-10');
+    expect(result.orders.map((order) => order.id)).toEqual(['yesterday-photo']);
+    expect(result.orders).toHaveLength(summary.completedToday);
+  });
+
+  it('요약과 같은 (status, driverId, updatedAt) 인덱스 모양의 쿼리 하나로 읽는다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const { service, executedQueries } = makeCompletedService(completedRecords());
+
+    await service.getCompletedToday('driver-1');
+
+    expect(executedQueries).toHaveLength(1);
+    expect(executedQueries[0].map(([field, operator]) => [field, operator])).toEqual([
+      ['status', 'in'],
+      ['driverId', '=='],
+      ['updatedAt', '>='],
+    ]);
+  });
+
+  it('허용 목록 필드만 싣고 손님·결제·좌표·판매점 정보는 어느 깊이에도 없다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const { service } = makeCompletedService(completedRecords());
+
+    const result = await service.getCompletedToday('driver-1');
+    const keys = collectKeys(result.orders);
+
+    const allowed = new Set([
+      'id',
+      'status',
+      'deliveredAt',
+      'address',
+      'deliveryAddress',
+      'addressDetail',
+      'productName',
+      'quantity',
+      'items',
+      'hasPhoto',
+    ]);
+    expect([...keys].filter((key) => !allowed.has(key))).toEqual([]);
+    const serialized = JSON.stringify(result);
+    for (const secret of [
+      '김손님',
+      '이영희',
+      '010-',
+      '02-555',
+      '받는 분',
+      '37.5',
+      'round-1',
+      'GH-0001',
+      'consumer-1',
+      'pilot',
+      'pay-key-1',
+      '06000',
+      'legacy-token',
+      'photo-1',
+    ]) {
+      expect(serialized).not.toContain(secret);
+    }
+
+    const delivered = result.orders.find((order) => order.id === 'round-photo-delivered');
+    expect(delivered).toEqual({
+      id: 'round-photo-delivered',
+      status: 'DELIVERED',
+      deliveredAt: '2026-11-10T15:05:00.000Z',
+      address: '서울시 강남구 테헤란로 1 101동 1001호',
+      deliveryAddress: { address: '서울시 강남구 테헤란로 1', addressDetail: '101동 1001호' },
+      productName: '몬스테라',
+      quantity: 3,
+      items: [
+        { productName: '몬스테라', quantity: 2 },
+        { productName: '스투키', quantity: 1 },
+      ],
+      hasPhoto: true,
+    });
+    // 주문 문서에 전체 주소가 없으면 deliveryAddress.address로 대신하고 우편번호는 싣지 않는다.
+    expect(result.orders.find((order) => order.id === 'previous-delivered-today')).toEqual({
+      id: 'previous-delivered-today',
+      status: 'DELIVERED',
+      deliveredAt: '2026-11-10T15:08:00.000Z',
+      address: '서울시 용산구 2',
+      deliveryAddress: { address: '서울시 용산구 2' },
+      productName: '고무나무',
+      quantity: 2,
+      hasPhoto: false,
+    });
+  });
+
+  it('회차 직배송 사진이 있는 행만 hasPhoto이고, 이전 방식 사진 URL은 사진으로 치지 않고 싣지 않는다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const { service } = makeCompletedService(completedRecords());
+
+    const result = await service.getCompletedToday('driver-1');
+
+    expect(Object.fromEntries(result.orders.map((order) => [order.id, order.hasPhoto]))).toEqual({
+      'previous-delivered-today': false,
+      'legacy-with-url': false,
+      'round-photo-cancelled': true,
+      'round-photo-delivered': true,
+      'round-reviewed-no-photo': false,
+    });
+    const legacy = result.orders.find((order) => order.id === 'legacy-with-url');
+    expect(legacy).not.toHaveProperty('deliveryPhotoUrl');
+    expect(JSON.stringify(result)).not.toContain(LEGACY_PHOTO_URL);
+  });
+
+  it.each([
+    ['round-photo-delivered', 'photo-1'],
+    ['round-photo-cancelled', 'photo-2'],
+  ])(
+    '오늘 완료한 본인 회차 직배송 주문 %s는 첫 사진의 서명 URL을 준다',
+    async (orderId, photoId) => {
+      jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+      const { service, storage } = makeCompletedService(completedRecords());
+
+      await expect(service.getCompletedTodayPhoto('driver-1', orderId)).resolves.toEqual(SIGNED);
+
+      expect(storage.createDeliveryPhotoReadUrl).toHaveBeenCalledTimes(1);
+      expect(storage.createDeliveryPhotoReadUrl).toHaveBeenCalledWith({
+        storeId: 'pilot',
+        orderId,
+        photoId,
+        requesterId: 'driver-1',
+        requesterRole: 'driver',
+      });
+    },
+  );
+
+  it('여러 사진이 연결돼 있으면 첫 사진을 쓴다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const records = completedRecords();
+    records['orders/round-photo-delivered']['deliveryPhotoIds'] = ['photo-first', 'photo-second'];
+    const { service, storage } = makeCompletedService(records);
+
+    await service.getCompletedTodayPhoto('driver-1', 'round-photo-delivered');
+
+    expect(storage.createDeliveryPhotoReadUrl).toHaveBeenCalledWith(
+      expect.objectContaining({ photoId: 'photo-first' }),
+    );
+  });
+
+  it.each([
+    ['다른 기사 주문', 'other-driver-photo'],
+    ['서울 어제 완료', 'yesterday-photo'],
+    ['사진 없음', 'round-reviewed-no-photo'],
+    ['이전 방식 사진 URL만 있음', 'legacy-with-url'],
+    ['배송 전 취소', 'cancelled-before-delivery'],
+    ['배송 중', 'mine-delivering'],
+    ['없는 주문', 'missing-order'],
+  ])('%s이면 같은 404로 답하고 서명하지 않는다', async (_label, orderId) => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const { service, storage } = makeCompletedService(completedRecords());
+
+    const error = await caught(service.getCompletedTodayPhoto('driver-1', orderId));
+
+    expect(error).toBeInstanceOf(NotFoundException);
+    expect(error.getStatus()).toBe(404);
+    expect(error.getResponse()).toEqual(
+      expect.objectContaining({ statusCode: 404, code: DRIVER_ORDER_NOT_FOUND }),
+    );
+    expect(storage.createDeliveryPhotoReadUrl).not.toHaveBeenCalled();
+  });
+
+  it('다른 기사 주문의 404 응답은 사진 없는 본인 주문의 응답과 구분되지 않는다', async () => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const { service } = makeCompletedService(completedRecords());
+
+    const other = await caught(service.getCompletedTodayPhoto('driver-1', 'other-driver-photo'));
+    const mineNoPhoto = await caught(
+      service.getCompletedTodayPhoto('driver-1', 'round-reviewed-no-photo'),
+    );
+
+    expect(other.getResponse()).toEqual(mineNoPhoto.getResponse());
+  });
+
+  it.each([
+    ['승인 필드가 정확한 true가 아님', { role: 'driver', driverApproved: false }],
+    ['정지됨', { role: 'driver', driverApproved: true, suspended: true }],
+    ['driver 역할이 아님', { role: 'consumer', driverApproved: true }],
+  ])('%s이면 완료 내역·사진을 403으로 거부하고 주문을 읽지 않는다', async (_label, driver) => {
+    jest.spyOn(Date, 'now').mockReturnValue(Date.parse(AFTER_MIDNIGHT));
+    const { service, storage, firestore, executedQueries } = makeCompletedService(
+      completedRecords(),
+      driver,
+    );
+
+    for (const call of [
+      () => service.getCompletedToday('driver-1'),
+      () => service.getCompletedTodayPhoto('driver-1', 'round-photo-delivered'),
+    ]) {
+      const error = await caught(call());
+      expect(error.getStatus()).toBe(403);
+      expect(error.getResponse()).toEqual(
+        expect.objectContaining({ statusCode: 403, code: DRIVER_ORDER_AUTHORITY_DENIED }),
+      );
+    }
+    expect(executedQueries).toHaveLength(0);
+    const readPaths = firestore.doc.mock.calls.map(([path]) => path);
+    expect(readPaths.filter((path) => path.startsWith('orders/'))).toEqual([]);
+    expect(storage.createDeliveryPhotoReadUrl).not.toHaveBeenCalled();
   });
 });
