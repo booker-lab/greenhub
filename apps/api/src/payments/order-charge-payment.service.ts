@@ -72,6 +72,19 @@ export type OrderChargePaymentCheckResult =
   | 'lookup_failed'
   | 'finalized';
 
+/**
+ * 고객 사유 종결 직전 재배송비 확인 결과.
+ * - not_pending: 청구가 없거나 PENDING이 아니어서 PortOne을 조회하지 않았다(트랜잭션이 기존 판정표로 다시 본다).
+ * - not_paid: PortOne이 결제 없음·결제 전(READY)·실패·취소라고 답했다. 돈이 잡혀 있지 않다.
+ * - finalized: PortOne이 PAID라 웹훅과 같은 finalizePaid로 확정했다(재배송을 해야 하므로 종결 불가).
+ * - inconclusive: 조회 실패·시간 초과·간격 안 재조회·가상계좌 대기 등 결제 여부를 확정하지 못했다(종결 불가).
+ */
+export type ClosureChargeCheckResult = 'not_pending' | 'not_paid' | 'finalized' | 'inconclusive';
+
+// 종결을 막지 않는, 돈이 잡혀 있지 않은 PortOne 상태. CANCELLED는 결제사 쪽에서 이미 취소된 결제다.
+// 가상계좌 발급·결제 대기·부분 취소 등은 결제 여부를 확정할 수 없어 종결을 막는다.
+const CLOSURE_PROVIDER_NOT_PAID_STATUSES = new Set(['READY', 'FAILED', 'CANCELLED']);
+
 type MarkFailedOptions = {
   // 웹훅 밖 수렴 전용: 만든 지 충분히 지났고 주문에 더는 필요 없는 청구만 FAILED로 닫는다.
   onlyIfUnneededCreatedBeforeMs?: number;
@@ -222,6 +235,85 @@ export class OrderChargePaymentService {
     await this.finalizePaid(chargeId, paymentId, paymentData);
     const latest = (await chargeRef.get()).data() as Record<string, any> | undefined;
     return { status: String(latest?.['status'] ?? 'PENDING'), result: 'finalized' };
+  }
+
+  /**
+   * 고객 사유 종결(환불 없음) 직전에 판매자·관리자 요청으로 부르는 재배송비 확인.
+   * 결제 기한 마지막 날 늦게 결제했는데 웹훅이 늦거나 빠지면 청구가 PENDING으로 남는다. 그대로 종결하면
+   * 뒤늦은 확정이 재배송비만 돌려주고 주문은 환불 없이 끝나므로, PENDING이면 나이와 관계없이 PortOne에
+   * 직접 묻는다. PAID면 웹훅·scheduler와 같은 finalizePaid로 확정한다. 매분 scheduler의 조회 간격(5분·1시간)은
+   * 기다리지 않지만, 손님 결제 확인과 같은 청구별 하한(10초)은 지켜 겹친 요청이 PortOne을 연달아 부르지 않게 한다.
+   * PAID가 아니어도 청구를 FAILED로 닫지 않는다(손님이 같은 결제를 다시 시도할 수 있다). 오류를 밖으로 던지지 않는다.
+   */
+  async checkPendingChargeBeforeClosure(chargeId: string): Promise<ClosureChargeCheckResult> {
+    if (!ORDER_ID_PATTERN.test(chargeId)) return 'inconclusive';
+    const paymentId = `${PAYMENT_ID_PREFIX}${chargeId}`;
+    const chargeRef = this.firestore.doc(`orderCharges/${chargeId}`);
+    let claim: ClosureChargeCheckResult | 'claimed';
+    try {
+      claim = await this.firestore.runTransaction(
+        async (tx): Promise<ClosureChargeCheckResult | 'claimed'> => {
+          const snap = await tx.get(chargeRef);
+          if (!snap.exists) return 'not_pending';
+          const charge = snap.data() as Record<string, any>;
+          if (charge['status'] !== 'PENDING') return 'not_pending';
+          if (charge['type'] !== 'REDELIVERY_FEE' || charge['portonePaymentId'] !== paymentId) {
+            return 'inconclusive';
+          }
+          const now = Date.now();
+          const lastRequestedAt = charge[ORDER_CHARGE_PAYMENT_CHECK_FIELD];
+          if (
+            typeof lastRequestedAt === 'number' &&
+            now - lastRequestedAt >= 0 &&
+            now - lastRequestedAt < ORDER_CHARGE_PAYMENT_CHECK_MIN_INTERVAL_MS
+          ) {
+            // 다른 확인이 방금 조회를 시작했다. 결과를 모르므로 종결하지 않는다.
+            return 'inconclusive';
+          }
+          // status·updatedAt은 바꾸지 않는다.
+          tx.update(chargeRef, { [ORDER_CHARGE_PAYMENT_CHECK_FIELD]: now });
+          return 'claimed';
+        },
+      );
+    } catch (error) {
+      this.logClosureCheck('조회 기록 실패', chargeId, error);
+      return 'inconclusive';
+    }
+    if (claim !== 'claimed') return claim;
+
+    let paymentData: PaymentData;
+    try {
+      paymentData = await this.portone.getPayment(paymentId);
+    } catch (error) {
+      if (
+        error instanceof PortoneError &&
+        error.status === 404 &&
+        error.type === 'PAYMENT_NOT_FOUND'
+      ) {
+        // 결제창을 연 적이 없는 청구다. 돈이 없다.
+        return 'not_paid';
+      }
+      this.logClosureCheck('결제 조회 보류', chargeId, error);
+      return 'inconclusive';
+    }
+    if (paymentData.status === 'PAID') {
+      try {
+        await this.finalizePaid(chargeId, paymentId, paymentData);
+        return 'finalized';
+      } catch (error) {
+        this.logClosureCheck('확정 보류', chargeId, error);
+        return 'inconclusive';
+      }
+    }
+    return CLOSURE_PROVIDER_NOT_PAID_STATUSES.has(paymentData.status) ? 'not_paid' : 'inconclusive';
+  }
+
+  private logClosureCheck(stage: string, chargeId: string, error: unknown) {
+    const label =
+      error instanceof PortoneError
+        ? `status=${error.status} type=${error.type}`
+        : `error=${error instanceof Error ? error.message.replace(/[\r\n\t]/g, ' ').slice(0, 200) : 'unknown'}`;
+    this.logger.warn(`[CustomerFaultClosureCheck] ${stage} chargeId=${chargeId} ${label}`);
   }
 
   /**

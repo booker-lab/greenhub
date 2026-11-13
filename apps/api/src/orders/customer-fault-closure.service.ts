@@ -16,6 +16,7 @@ import {
   type CustomerFaultClosureRecord,
 } from '@greenhub/shared';
 import { FirestoreService } from '../firestore/firestore.service';
+import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
 import { timestampMillis } from '../sale-rounds/sale-round-state.contract';
 import { SettlementsService } from '../settlements/settlements.service';
 import { OrderCapacityService } from './order-capacity.service';
@@ -129,8 +130,9 @@ export function decideCustomerFaultClosure(
 /**
  * 현재 보류의 재배송비 청구 상태.
  * - 청구 없음·FAILED: 종결 가능.
- * - PENDING 24시간 미만: 진행 중. 24시간 이상: 버려진 결제로 보고 종결 가능(뒤늦은 결제는
- *   order-charge-payment의 "필요 없어진 결제" 경로가 자동 환불한다).
+ * - PENDING 24시간 미만: 진행 중. 24시간 이상: 버려진 결제로 보고 종결 가능(close()는 그 전에 PortOne에
+ *   직접 물어 결제되지 않았음을 확인한다. 종결 뒤 결제는 order-charge-payment의 "필요 없어진 결제" 경로가
+ *   자동 환불한다).
  * - PAID: 재배송을 해야 하므로 종결 불가.
  * - 연결 손상·청구 없음(링크만 있음)·REFUNDED·MISMATCHED·알 수 없는 값: 운영 확인.
  */
@@ -166,6 +168,24 @@ function classifyCharge(
   }
 }
 
+/** 종결 직전 PortOne 확인이 결제 여부를 확정하지 못했을 때(조회 실패·시간 초과 등). */
+export const CLOSURE_CHARGE_CHECK_FAILED_MESSAGE =
+  '재배송비 결제 상태를 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.';
+
+/** 회차가 취소됐거나 취소가 진행 중(취소 작업 소유·로컬 실패 뒤 재시도 대기)일 때. */
+export const CLOSURE_ROUND_CANCELLING_MESSAGE = '회차 취소가 진행 중이라 종결할 수 없어요.';
+
+/**
+ * 회차 취소가 시작됐거나 끝난 회차인지. 회차 취소는 남은 주문을 환불하며 종결 주문은 건너뛰므로,
+ * 취소가 시작된 뒤에는 환불 없는 종결을 허용하지 않는다(LOCAL_FAILED도 다시 시도될 취소다).
+ */
+export function isRoundCancellationStarted(round: OrderRecord | undefined): boolean {
+  if (!round) return false;
+  if (round['status'] === 'CANCELLED') return true;
+  const status = round['cancellation']?.['status'];
+  return status === 'CANCELLING' || status === 'LOCAL_FAILED';
+}
+
 const BLOCK_MESSAGES: Record<Exclude<CustomerFaultClosureBlockReason, 'OK'>, string> = {
   ALREADY_CLOSED: '이미 종결한 주문입니다.',
   NOT_ROUND_ORDER: '고객 사유 종결은 회차 주문만 할 수 있습니다.',
@@ -187,7 +207,8 @@ const BLOCK_MESSAGES: Record<Exclude<CustomerFaultClosureBlockReason, 'OK'>, str
  * 고객 사유 종결(환불 없음) — 회차 직배송 주문이 고객 책임 보류에서 수령 거부·재배송비 미결제로
  * 끝날 때 판매자(매장 주인)·관리자가 수동으로 종결한다(자동 종결 없음).
  *
- * 한 트랜잭션에서 주문·재배송비 청구·회차를 읽고 판정한 뒤 주문을 CLOSED_UNDELIVERED로 바꾸고
+ * 트랜잭션 전에 현재 보류의 PENDING 재배송비를 PortOne에 직접 확인한다(결제됐거나 확인하지 못하면 거절).
+ * 한 트랜잭션에서 주문·재배송비 청구·회차를 읽고 판정한 뒤(회차 취소가 시작됐으면 거절) 주문을 CLOSED_UNDELIVERED로 바꾸고
  * 보류를 해소하며 회차 보류 집계를 정확히 한 번 줄인다. 환불하지 않고 회차 수량·재고도 되돌리지
  * 않는다(상품은 판매자가 처리). 커밋 뒤 배송 완료와 같은 방식으로 정산을 만든다(이미 있으면 그대로).
  * 같은 요청을 다시 보내면 정산만 맞춘다(집계를 다시 줄이지 않는다).
@@ -201,6 +222,7 @@ export class CustomerFaultClosureService {
     private readonly firestore: FirestoreService,
     private readonly capacity: OrderCapacityService,
     private readonly settlements: SettlementsService,
+    private readonly chargePayments: OrderChargePaymentService,
   ) {}
 
   async getEligibility(storeId: string, orderId: string): Promise<CustomerFaultClosureEligibility> {
@@ -219,12 +241,22 @@ export class CustomerFaultClosureService {
         data: chargeSnap.exists ? (chargeSnap.data() as OrderRecord) : null,
       };
     }
-    return decideCustomerFaultClosure(order, charge, Date.now());
+    const decision = decideCustomerFaultClosure(order, charge, Date.now());
+    if (decision.reason === 'ALREADY_CLOSED') {
+      // 종결 뒤 정산 생성이 실패했으면 판매자 화면이 "정산 다시 맞추기"를 보인다.
+      return {
+        ...decision,
+        settlementMissing: !(await this.settlements.hasSettlement(orderId)),
+      };
+    }
+    return decision;
   }
 
   async close(input: CustomerFaultClosureInput) {
     const memo = input.memo.trim();
     if (!memo) throw new BadRequestException('손님과 연락한 내용을 적어 주세요.');
+
+    await this.confirmPendingChargeWithProvider(input);
 
     // Retry purity: 결정은 커밋된 시도의 반환값으로만 내린다.
     const committed = await this.firestore.runTransaction(async (tx) => {
@@ -261,6 +293,13 @@ export class CustomerFaultClosureService {
           throw new ForbiddenException(message);
         }
         throw new ConflictException(message);
+      }
+
+      // 회차 취소가 시작됐으면 그 취소가 주문을 환불하도록 둔다. 회차 취소 작업이 이 읽기 뒤에
+      // 회차 문서를 바꾸면 이 트랜잭션은 다시 실행돼 여기서 막힌다(집계 함수도 같은 회차 문서를 쓴다).
+      const roundSnap = await tx.get(this.firestore.doc(`saleRounds/${order['roundId']}`));
+      if (isRoundCancellationStarted(roundSnap.exists ? roundSnap.data() : undefined)) {
+        throw new ConflictException(CLOSURE_ROUND_CANCELLING_MESSAGE);
       }
 
       const now = this.firestore.Timestamp.now();
@@ -307,6 +346,35 @@ export class CustomerFaultClosureService {
       status: CUSTOMER_FAULT_CLOSED_STATUS,
       alreadyClosed: committed.alreadyClosed,
     };
+  }
+
+  /**
+   * 현재 보류에 연결된 재배송비가 PENDING이면 트랜잭션 전에 PortOne에 직접 묻는다(나이와 관계없이).
+   * 마감일 늦게 결제했는데 웹훅이 늦거나 빠진 청구를 버려진 결제로 보고 종결하면, 뒤늦은 확정이
+   * 재배송비만 돌려주고 주문은 환불 없이 끝난다. PAID면 기존 확정 경로로 확정한 뒤 거절하고(재배송을
+   * 해야 한다), 확인하지 못하면 거절한다(fail closed). 결제되지 않았으면 트랜잭션이 청구를 다시 읽어
+   * 기존 판정표(24시간 진행 중 등)를 그대로 적용한다.
+   */
+  private async confirmPendingChargeWithProvider(input: CustomerFaultClosureInput) {
+    const orderSnap = await this.firestore.doc(`orders/${input.orderId}`).get();
+    if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {
+      throw new NotFoundException();
+    }
+    const order = orderSnap.data() as OrderRecord;
+    if (order['status'] === CUSTOMER_FAULT_CLOSED_STATUS) return;
+    const chargeId = this.currentChargeId(order);
+    const heldAt = order['deliveryHold']?.['heldAt'];
+    // 다른 보류에 연결된 청구는 트랜잭션이 운영 확인(REDELIVERY_PAYMENT_NEEDS_REVIEW)으로 막는다.
+    if (!chargeId || typeof heldAt !== 'string' || order['redeliveryChargeHoldAt'] !== heldAt) {
+      return;
+    }
+    const result = await this.chargePayments.checkPendingChargeBeforeClosure(chargeId);
+    if (result === 'finalized') {
+      throw new ConflictException(BLOCK_MESSAGES.REDELIVERY_FEE_PAID);
+    }
+    if (result === 'inconclusive') {
+      throw new ConflictException(CLOSURE_CHARGE_CHECK_FAILED_MESSAGE);
+    }
   }
 
   /** 주문에 연결된 재배송비 청구 id. 없으면 null. */

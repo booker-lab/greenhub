@@ -4,6 +4,7 @@
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { createOccFirestore } from '../../test/helpers/firestore-occ-fake';
 import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
+import { PortoneError } from '../payments/portone.client';
 import { SaleRoundStateService } from '../sale-rounds/sale-round-state.service';
 import { readOrderPayoutHoldInTransaction } from '../settlements/_lib/order-payout-hold';
 import { SettlementsService } from '../settlements/settlements.service';
@@ -109,16 +110,48 @@ function seed(
   if (options.charge) occ.seed(CHARGE_PATH, chargeData(options.charge));
 }
 
-function makeService(occ: Occ) {
+/** PortOne 가짜. 기본은 결제창만 열린 결제(READY, 돈 없음)다. */
+function makePortone(getPayment?: jest.Mock) {
+  return {
+    getPayment:
+      getPayment ??
+      jest.fn().mockResolvedValue({
+        id: `order-charge-${CHARGE_ID}`,
+        status: 'READY',
+        amount: { total: FEE },
+      }),
+    refund: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+function paidPayment(transactionId = 'tx-paid') {
+  return {
+    id: `order-charge-${CHARGE_ID}`,
+    status: 'PAID',
+    amount: { total: FEE },
+    method: { type: 'CARD' },
+    transactionId,
+  };
+}
+
+function makeService(occ: Occ, options: { portone?: ReturnType<typeof makePortone> } = {}) {
   const capacity = new OrderCapacityService(occ.firestore as never);
   const settlements = new SettlementsService(
     occ.firestore as never,
     { get: () => undefined } as never,
   );
+  const portone = options.portone ?? makePortone();
+  const chargePayments = new OrderChargePaymentService(occ.firestore as never, portone as never);
   const createSettlement = jest.spyOn(settlements, 'createSettlement');
   const adjustHeld = jest.spyOn(capacity, 'adjustHeldOrderCountInTransaction');
-  const service = new CustomerFaultClosureService(occ.firestore as never, capacity, settlements);
-  return { service, createSettlement, adjustHeld };
+  const refundByOrderId = jest.spyOn(chargePayments, 'refundByOrderId');
+  const service = new CustomerFaultClosureService(
+    occ.firestore as never,
+    capacity,
+    settlements,
+    chargePayments,
+  );
+  return { service, createSettlement, adjustHeld, portone, refundByOrderId };
 }
 
 const closeInput = {
@@ -396,11 +429,26 @@ describe('CustomerFaultClosureService.close', () => {
     });
   });
 
-  it('환불·결제 서비스에 의존하지 않는다(환불 호출 경로가 없다)', () => {
+  it('본 결제 환불 서비스에 의존하지 않고, 재배송비 결제 서비스는 종결 전 확인에만 쓴다', async () => {
     const paramTypes: unknown[] =
       Reflect.getMetadata('design:paramtypes', CustomerFaultClosureService) ?? [];
     const names = paramTypes.map((type) => (type as { name?: string })?.name);
-    expect(names).toEqual(['FirestoreService', 'OrderCapacityService', 'SettlementsService']);
+    expect(names).toEqual([
+      'FirestoreService',
+      'OrderCapacityService',
+      'SettlementsService',
+      'OrderChargePaymentService',
+    ]);
+
+    // 결제되지 않은 PENDING 재배송비를 확인하고 종결해도 환불은 부르지 않는다.
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge: {} });
+    const { service, portone, refundByOrderId } = makeService(occ);
+    await service.close(closeInput);
+    expect(portone.getPayment).toHaveBeenCalledTimes(1);
+    expect(portone.refund).not.toHaveBeenCalled();
+    expect(refundByOrderId).not.toHaveBeenCalled();
   });
 
   it('수령 거부는 보류 다음 날 바로 종결하고 사유를 RECEIPT_REFUSED로 남긴다', async () => {
@@ -645,6 +693,288 @@ describe('CustomerFaultClosureController 권한', () => {
       2,
       expect.objectContaining({ actorRole: 'admin', actorId: 'admin-1' }),
     );
+  });
+});
+
+describe('종결 직전 PENDING 재배송비 PortOne 확인', () => {
+  // 1일째 결제를 시작했다가 그만둔 뒤 마감일 23:55에 같은 결제로 끝냈는데 웹훅이 늦어 30시간 된 PENDING으로 남은 경우.
+  const stalePending = { status: 'PENDING', createdAt: new Date(AFTER_WINDOW_MS - 30 * HOUR_MS) };
+
+  function expectUnchanged(occ: Occ, before: unknown, createSettlement: jest.SpyInstance) {
+    expect(occ.getData(ORDER_PATH)).toEqual(before);
+    expect(occ.getData(ROUND_PATH)!['counters']).toMatchObject({ heldOrderCount: 1 });
+    expect(createSettlement).not.toHaveBeenCalled();
+    expect(occ.getData(SETTLEMENT_PATH)).toBeUndefined();
+  }
+
+  it('24시간 넘은 PENDING이라도 PortOne이 PAID면 기존 확정 경로로 확정하고 종결을 거절한다(환불 없음)', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge: stalePending });
+    const before = occ.getData(ORDER_PATH);
+    const portone = makePortone(jest.fn().mockResolvedValue(paidPayment('tx-late-deadline')));
+    const { service, createSettlement } = makeService(occ, { portone });
+
+    const error = await service.close(closeInput).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as Error).message).toContain('재배송비가 결제된');
+    expect(portone.getPayment).toHaveBeenCalledWith(`order-charge-${CHARGE_ID}`);
+    // 재배송에 쓰는 결제로 확정됐다(필요 없어진 결제·환불이 아니다).
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({
+      status: 'PAID',
+      portoneTransactionId: 'tx-late-deadline',
+      paidAt: expect.anything(),
+    });
+    expect(occ.getData(CHARGE_PATH)!['unneededPaidAt']).toBeUndefined();
+    expect(portone.refund).not.toHaveBeenCalled();
+    expectUnchanged(occ, before, createSettlement);
+    // 다시 판정하면 결제 완료로 보인다.
+    await expect(service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      reason: 'REDELIVERY_FEE_PAID',
+    });
+  });
+
+  it.each([
+    ['PortOne 오류', () => Promise.reject(new PortoneError(500, 'INTERNAL', 'boom'))],
+    ['네트워크 오류', () => Promise.reject(new Error('timeout'))],
+    [
+      '가상계좌 발급(입금 대기)',
+      () => Promise.resolve({ status: 'VIRTUAL_ACCOUNT_ISSUED', amount: { total: FEE } }),
+    ],
+    ['결제 승인 대기', () => Promise.resolve({ status: 'PAY_PENDING', amount: { total: FEE } })],
+    [
+      '금액이 다른 PAID(확정 실패)',
+      () => Promise.resolve({ ...paidPayment(), amount: { total: FEE + 1 } }),
+    ],
+  ])('%s이면 결제 여부를 확정하지 못해 거절한다(fail closed)', async (_label, lookup) => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge: stalePending });
+    const before = occ.getData(ORDER_PATH);
+    const portone = makePortone(jest.fn().mockImplementation(lookup));
+    const { service, createSettlement } = makeService(occ, { portone });
+
+    const error = await service.close(closeInput).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as Error).message).toBe(
+      '재배송비 결제 상태를 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요.',
+    );
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'PENDING' });
+    expect(portone.refund).not.toHaveBeenCalled();
+    expectUnchanged(occ, before, createSettlement);
+  });
+
+  it('같은 청구를 방금 다른 요청이 조회했으면 PortOne을 다시 부르지 않고 거절한다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, {
+      order: linkedCharge,
+      charge: { ...stalePending, paymentCheckRequestedAtMs: AFTER_WINDOW_MS - 1000 },
+    });
+    const { service, portone, createSettlement } = makeService(occ);
+    const before = occ.getData(ORDER_PATH);
+
+    await expect(service.close(closeInput)).rejects.toThrow('확인하지 못했어요');
+    expect(portone.getPayment).not.toHaveBeenCalled();
+    expectUnchanged(occ, before, createSettlement);
+  });
+
+  it.each([
+    ['결제창만 열림(READY)', () => Promise.resolve({ status: 'READY', amount: { total: FEE } })],
+    ['결제 실패', () => Promise.resolve({ status: 'FAILED', amount: { total: FEE } })],
+    ['결제사 쪽 취소', () => Promise.resolve({ status: 'CANCELLED', amount: { total: FEE } })],
+    [
+      '결제 없음(404)',
+      () => Promise.reject(new PortoneError(404, 'PAYMENT_NOT_FOUND', 'not found')),
+    ],
+  ])('%s이면 결제되지 않은 것으로 확인하고 종결한다', async (_label, lookup) => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge: stalePending });
+    const portone = makePortone(jest.fn().mockImplementation(lookup));
+    const { service } = makeService(occ, { portone });
+
+    await expect(service.close(closeInput)).resolves.toMatchObject({ alreadyClosed: false });
+    expect(portone.getPayment).toHaveBeenCalledTimes(1);
+    // 청구는 FAILED로 닫지 않는다(조회 시각만 남는다).
+    expect(occ.getData(CHARGE_PATH)).toMatchObject({ status: 'PENDING' });
+    expect(occ.getData(ORDER_PATH)).toMatchObject({ status: 'CLOSED_UNDELIVERED' });
+  });
+
+  it('24시간이 안 된 PENDING은 결제되지 않았다고 확인돼도 기존 판정표대로 진행 중으로 막는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, {
+      order: linkedCharge,
+      charge: { status: 'PENDING', createdAt: new Date(AFTER_WINDOW_MS - HOUR_MS) },
+    });
+    const { service, portone } = makeService(occ);
+
+    await expect(service.close(closeInput)).rejects.toThrow('진행 중');
+    expect(portone.getPayment).toHaveBeenCalledTimes(1);
+  });
+
+  it('확인과 트랜잭션 사이에 결제가 확정되면 트랜잭션이 청구를 다시 읽어 거절한다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge: stalePending });
+    const portone = makePortone(
+      jest.fn().mockImplementation(async () => {
+        // PortOne이 READY라고 답한 직후 웹훅이 PAID로 확정한 상황.
+        occ.updateOutsideTransaction(CHARGE_PATH, { status: 'PAID', paidAt: new Date() });
+        return { status: 'READY', amount: { total: FEE } };
+      }),
+    );
+    const { service } = makeService(occ, { portone });
+
+    await expect(service.close(closeInput)).rejects.toThrow('재배송비가 결제된');
+    expect(occ.getData(ORDER_PATH)).toMatchObject({ status: 'DELIVERY_HELD' });
+  });
+
+  it.each([
+    ['FAILED', { status: 'FAILED' }],
+    ['PAID', { status: 'PAID' }],
+  ])('%s 청구는 PortOne에 묻지 않는다', async (_label, charge) => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge });
+    const { service, portone } = makeService(occ);
+
+    await service.close(closeInput).catch(() => undefined);
+    expect(portone.getPayment).not.toHaveBeenCalled();
+  });
+
+  it('유료 재배송 뒤 새 보류(이전 보류에 연결된 청구)는 PortOne에 묻지 않고 운영 확인으로 막는다', async () => {
+    setNow(Date.parse('2026-11-25T01:00:00.000Z'));
+    const occ = createOccFirestore();
+    const secondHeldAt = '2026-11-20T06:00:00.000Z';
+    seed(occ, {
+      order: { ...linkedCharge, deliveryHold: { ...baseHold, heldAt: secondHeldAt } },
+      charge: { status: 'PAID', paidAt: new Date(AFTER_WINDOW_MS) },
+    });
+    const { service, portone } = makeService(occ);
+
+    await expect(service.close(closeInput)).rejects.toThrow('운영팀');
+    expect(portone.getPayment).not.toHaveBeenCalled();
+    expect(occ.getData(ORDER_PATH)).toMatchObject({ status: 'DELIVERY_HELD' });
+  });
+});
+
+describe('회차 취소와 종결의 경합', () => {
+  it.each([
+    ['취소 작업 진행 중(CANCELLING)', { status: 'CLOSED', cancellation: { status: 'CANCELLING' } }],
+    [
+      '취소 로컬 실패 뒤 재시도 대기',
+      { status: 'CLOSED', cancellation: { status: 'LOCAL_FAILED' } },
+    ],
+    ['취소 완료', { status: 'CANCELLED', cancellation: { status: 'COMPLETED' } }],
+  ])('회차가 %s이면 종결을 거절하고 아무것도 바꾸지 않는다', async (_label, round) => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    occ.updateOutsideTransaction(ROUND_PATH, round);
+    const before = occ.getData(ORDER_PATH);
+    const { service, createSettlement } = makeService(occ);
+
+    const error = await service.close(closeInput).catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as Error).message).toBe('회차 취소가 진행 중이라 종결할 수 없어요.');
+    expect(occ.getData(ORDER_PATH)).toEqual(before);
+    expect(occ.getData(ROUND_PATH)!['counters']).toMatchObject({ heldOrderCount: 1 });
+    expect(createSettlement).not.toHaveBeenCalled();
+  });
+
+  it('종결 트랜잭션이 회차를 읽은 뒤 회차 취소가 시작되면 다시 읽어 거절한다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    occ.setBeforeCommit(() => {
+      occ.updateOutsideTransaction(ROUND_PATH, {
+        cancellation: { status: 'CANCELLING', ownerId: 'o', leaseId: 'l' },
+      });
+    });
+    const { service } = makeService(occ);
+
+    await expect(service.close(closeInput)).rejects.toThrow('회차 취소가 진행 중');
+    expect(occ.getData(ORDER_PATH)).toMatchObject({ status: 'DELIVERY_HELD' });
+    expect(occ.getData(ROUND_PATH)!['counters']).toMatchObject({ heldOrderCount: 1 });
+  });
+
+  it('회차 취소가 주문을 정리하는 중에 판매자가 종결하면 거절되고 회차 취소가 주문을 정리한다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    const { service } = makeService(occ);
+    let closureError: unknown = null;
+    const roundLifecycle = {
+      cancelForRound: jest.fn().mockImplementation(async ({ orderId }: { orderId: string }) => {
+        closureError = await service.close(closeInput).catch((e: unknown) => e);
+        // 회차 취소의 주문 취소(환불)를 흉내 낸다.
+        occ.updateOutsideTransaction(`orders/${orderId}`, {
+          status: 'CANCELLED',
+          cancellation: { status: 'COMPLETED' },
+        });
+      }),
+    };
+    const roundState = new SaleRoundStateService(occ.firestore as never, roundLifecycle as never);
+
+    await expect(
+      roundState.cancel({ storeId: 'store-1', roundId: 'round-1', reason: '판매자 회차 취소' }),
+    ).resolves.toMatchObject({ status: 'CANCELLED' });
+
+    expect(roundLifecycle.cancelForRound).toHaveBeenCalledTimes(1);
+    expect(closureError).toBeInstanceOf(ConflictException);
+    expect((closureError as Error).message).toContain('회차 취소가 진행 중');
+    expect(occ.getData(ORDER_PATH)).toMatchObject({ status: 'CANCELLED' });
+    expect(occ.getData(ORDER_PATH)!['customerFaultClosure']).toBeUndefined();
+  });
+});
+
+describe('종결 뒤 정산이 없을 때 다시 맞추기', () => {
+  it('종결 뒤 정산 생성이 실패하면 GET이 정산 없음을 알리고, 같은 POST로 정산을 맞춘 뒤에는 알리지 않는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    const { service, createSettlement, adjustHeld } = makeService(occ);
+    createSettlement.mockRejectedValueOnce(new Error('정산 쓰기 실패'));
+
+    await expect(service.close(closeInput)).rejects.toThrow('정산 쓰기 실패');
+    expect(occ.getData(ORDER_PATH)).toMatchObject({ status: 'CLOSED_UNDELIVERED' });
+    expect(occ.getData(SETTLEMENT_PATH)).toBeUndefined();
+
+    await expect(service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      reason: 'ALREADY_CLOSED',
+      settlementMissing: true,
+    });
+
+    await expect(
+      service.close({ ...closeInput, memo: '정산 다시 맞추기' }),
+    ).resolves.toMatchObject({ alreadyClosed: true });
+    expect(adjustHeld).toHaveBeenCalledTimes(1);
+    expect(occ.getData(SETTLEMENT_PATH)).toMatchObject({
+      completedStatus: 'CLOSED_UNDELIVERED',
+    });
+    // 종결 기록(메모)은 첫 종결 그대로다.
+    expect(occ.getData(ORDER_PATH)!['customerFaultClosure']).toMatchObject({
+      memo: closeInput.memo,
+    });
+    await expect(service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      reason: 'ALREADY_CLOSED',
+      settlementMissing: false,
+    });
+  });
+
+  it('종결 전 판정에는 정산 여부를 싣지 않는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    const { service } = makeService(occ);
+    const decision = await service.getEligibility('store-1', ORDER_ID);
+    expect(decision).toMatchObject({ reason: 'OK' });
+    expect(decision.settlementMissing).toBeUndefined();
   });
 });
 

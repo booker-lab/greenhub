@@ -37,6 +37,11 @@ export interface CustomerFaultClosureEligibility {
     /** 재배송비 결제 마지막 날(서울 YYYY-MM-DD) */
     paymentDeadlineDate: string | null;
     redeliveryFee: number | null;
+    /**
+     * 이미 종결한 주문(ALREADY_CLOSED)인데 정산이 없으면 true. 종결 뒤 정산 생성이 실패한 경우라
+     * 같은 종결 요청(POST)을 다시 보내 정산만 맞춘다. 그 밖의 판정에서는 없거나 false다.
+     */
+    settlementMissing?: boolean;
 }
 /** 고객 사유 종결을 검토할 수 있는 보류 사유인지. 알 수 없는 값은 false다. */
 export declare function isCustomerFaultClosableHoldReason(reasonCode: unknown): boolean;
