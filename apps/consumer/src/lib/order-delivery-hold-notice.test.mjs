@@ -107,12 +107,46 @@ test('고객 책임이 아닌 보류는 재배송비가 없다고 안내하고, 
   );
 });
 
+test('수령 거부는 다른 고객 사유처럼 사유 문구와 재배송비 결제 안내를 보인다', () => {
+  assert.deepEqual(
+    deliveryHoldNotice({
+      reasonCode: 'RECEIPT_REFUSED',
+      customerResponsible: true,
+      redeliveryFee: 10000,
+      redeliveryPaid: false,
+    }),
+    {
+      title: '수령을 거부하셔서 배송하지 못했어요',
+      lines: [
+        '받는 분이 상품 수령을 거부하셔서 배송하지 못했어요.',
+        '재배송비 10,000원을 결제하면 다시 배송해요.',
+      ],
+    },
+  );
+});
+
+test('상품 파손은 가게 취소·환불 안내만 보이고 재배송비 없음 줄을 붙이지 않는다', () => {
+  const notice = deliveryHoldNotice({
+    reasonCode: 'PRODUCT_DAMAGED',
+    customerResponsible: false,
+    redeliveryFee: null,
+    redeliveryPaid: false,
+  });
+  assert.deepEqual(notice, {
+    title: '상품이 파손돼 배송하지 못했어요',
+    lines: ['배송 중 상품이 파손돼 배송하지 못했어요. 가게에서 주문 취소·환불을 진행해요.'],
+  });
+  assert.ok(!notice.lines.includes(REDELIVERY_FREE_LINE));
+});
+
 test('어떤 문구에도 내부 용어(고객 책임·보류 코드)가 드러나지 않는다', () => {
   for (const reasonCode of [
     'WEATHER',
     'ACCESS_UNAVAILABLE',
     'ADDRESS_ISSUE',
     'CUSTOMER_UNREACHABLE',
+    'RECEIPT_REFUSED',
+    'PRODUCT_DAMAGED',
     'OTHER',
   ]) {
     for (const customerResponsible of [true, false]) {

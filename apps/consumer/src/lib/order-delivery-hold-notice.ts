@@ -7,14 +7,13 @@
  *
  * 정책(`apps/api/src/orders/delivery-hold-policy.ts`): 기상은 고객 책임·재배송비가 없다.
  * 그 밖에는 고객 책임이면 0원보다 큰 재배송비가 있고, 아니면 없다. 재배송비를 결제해야 재배송이 시작된다.
+ * 수령 거부는 늘 고객 책임(재배송비 결제)이다. 상품 파손은 다시 배송하지 않고 가게가 주문을 취소·환불하므로
+ * 재배송비 안내를 붙이지 않는다.
  */
 
-export type DeliveryHoldReasonCode =
-  | 'WEATHER'
-  | 'ACCESS_UNAVAILABLE'
-  | 'ADDRESS_ISSUE'
-  | 'CUSTOMER_UNREACHABLE'
-  | 'OTHER';
+import type { DeliveryHoldReasonCode } from '@greenhub/shared';
+
+export type { DeliveryHoldReasonCode };
 
 export interface DeliveryHoldNoticeInput {
   reasonCode: DeliveryHoldReasonCode;
@@ -30,7 +29,7 @@ export interface DeliveryHoldNotice {
 }
 
 const REASON_COPY: Record<
-  Exclude<DeliveryHoldReasonCode, 'OTHER'>,
+  Exclude<DeliveryHoldReasonCode, 'OTHER' | 'PRODUCT_DAMAGED'>,
   { title: string; sentence: string }
 > = {
   WEATHER: {
@@ -49,6 +48,16 @@ const REASON_COPY: Record<
     title: '연락이 닿지 않아 배송하지 못했어요',
     sentence: '받는 분과 연락이 닿지 않아 배송하지 못했어요.',
   },
+  RECEIPT_REFUSED: {
+    title: '수령을 거부하셔서 배송하지 못했어요',
+    sentence: '받는 분이 상품 수령을 거부하셔서 배송하지 못했어요.',
+  },
+};
+
+// 상품 파손은 다시 배송하지 않는다. 재배송비 안내 대신 가게가 취소·환불한다는 것만 알린다.
+const PRODUCT_DAMAGED_NOTICE: DeliveryHoldNotice = {
+  title: '상품이 파손돼 배송하지 못했어요',
+  lines: ['배송 중 상품이 파손돼 배송하지 못했어요. 가게에서 주문 취소·환불을 진행해요.'],
 };
 
 const OTHER_CUSTOMER_COPY = {
@@ -74,6 +83,9 @@ export function redeliveryFeeLine(fee: number): string {
 }
 
 export function deliveryHoldNotice(input: DeliveryHoldNoticeInput): DeliveryHoldNotice {
+  if (input.reasonCode === 'PRODUCT_DAMAGED') {
+    return { title: PRODUCT_DAMAGED_NOTICE.title, lines: [...PRODUCT_DAMAGED_NOTICE.lines] };
+  }
   const feeDue = input.customerResponsible && hasFee(input.redeliveryFee);
   const copy =
     input.reasonCode === 'OTHER'

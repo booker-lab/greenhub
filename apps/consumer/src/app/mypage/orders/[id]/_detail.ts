@@ -32,6 +32,8 @@ const DELIVERY_HOLD_REASONS = new Set<string>([
   'ACCESS_UNAVAILABLE',
   'ADDRESS_ISSUE',
   'CUSTOMER_UNREACHABLE',
+  'RECEIPT_REFUSED',
+  'PRODUCT_DAMAGED',
   'OTHER',
 ]);
 const REDELIVERY_PAYMENT_STATES = new Set<RedeliveryPaymentState>([

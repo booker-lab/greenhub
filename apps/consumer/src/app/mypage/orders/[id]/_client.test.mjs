@@ -340,6 +340,32 @@ test('배송 보류 안내는 사유 코드별 고정 문구로 보이고 직접
   assert.ok(!source.includes('재배송비: {'));
 });
 
+test('수령 거부·상품 파손 보류도 주문 상세가 보류 내용을 읽는다', () => {
+  for (const [reasonCode, customerResponsible, redeliveryFee] of [
+    ['RECEIPT_REFUSED', true, 10000],
+    ['PRODUCT_DAMAGED', false, null],
+  ]) {
+    const detail = readOrderDetail(
+      {
+        ...activeOrder,
+        status: 'DELIVERY_HELD',
+        deliveryHold: {
+          heldAt: '2026-07-21T01:00:00.000Z',
+          reasonCode,
+          reasonMessage: '현장 메모',
+          customerResponsible,
+          redeliveryFee,
+          nextContactAt: null,
+          nextDeliveryAt: null,
+        },
+      },
+      activeOrder.id,
+    );
+    assert.equal(detail?.status, 'DELIVERY_HELD', reasonCode);
+    assert.equal(detail?.deliveryHold?.reasonCode, reasonCode);
+  }
+});
+
 test('서버 redeliveryPayment 상태가 주문 상태와 독립적으로 결제 상태를 결정한다', () => {
   const hold = {
     heldAt: '2026-07-21T01:00:00.000Z',
