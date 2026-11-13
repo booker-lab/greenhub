@@ -314,6 +314,84 @@ export function resolveDriverStatusCommandReadback(args: {
   return 'UNKNOWN';
 }
 
+/** 불확실 수렴 뒤 fresh GET 판정(resolveDriverStatusCommandReadback) 결과 안내. */
+export const DRIVER_STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE = '처리된 것을 확인했어요.';
+// 서버는 이미 적용된 같은 전이를 403/409 STATE_CONFLICT로 거절하므로 다시 눌러도 두 번 처리되지 않는다.
+export const DRIVER_STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE =
+  '아직 처리되지 않았어요. 다시 눌러도 두 번 처리되지 않아요.';
+export const DRIVER_STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE =
+  '주문이 진행 목록에서 빠졌어요. 목록에서 결과를 확인해 주세요.';
+
+/**
+ * 상태 변경(시작·재개 등) 응답 불확실 뒤 다시 읽은 결과의 안내. 그 자동 수렴과 "상태 확인"(R-08)이 같은 규칙을 쓴다.
+ * 보류 저장 응답 불확실 뒤에는 불확실 경고를 띄우고 상세만 다시 읽는다. 이 안내는 "상태 확인"을 눌렀을 때만 나온다.
+ * - APPLIED: "처리된 것을 확인했어요"(완료 전이면 목록으로)
+ * - LEFT_DRIVER_SCOPE: 경고 + 목록으로(성공이라고 단정하지 않는다)
+ * - NOT_APPLIED: 경고 "아직 처리되지 않았어요. 다시 눌러도 두 번 처리되지 않아요."
+ * - UNKNOWN(조회 실패·stale): null — 안내 없이 불확실 경고를 그대로 둔다(fail-closed).
+ * 어떤 결과도 같은 요청을 다시 보내게 하지 않는다.
+ */
+export interface DriverStatusReadbackNotice {
+  tone: 'success' | 'warning';
+  message: string;
+  goToList: boolean;
+}
+
+export function resolveDriverStatusReadbackNotice(args: {
+  requestedStatus: string;
+  readback: DriverOrderReadback;
+}): DriverStatusReadbackNotice | null {
+  const result = resolveDriverStatusCommandReadback(args);
+  if (result === 'APPLIED') {
+    return {
+      tone: 'success',
+      message: DRIVER_STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE,
+      goToList: isDriverTerminalCommandStatus(args.requestedStatus),
+    };
+  }
+  if (result === 'LEFT_DRIVER_SCOPE') {
+    return {
+      tone: 'warning',
+      message: DRIVER_STATUS_LEFT_SCOPE_AFTER_UNCERTAIN_MESSAGE,
+      goToList: true,
+    };
+  }
+  if (result === 'NOT_APPLIED') {
+    return {
+      tone: 'warning',
+      message: DRIVER_STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE,
+      goToList: false,
+    };
+  }
+  return null;
+}
+
+export const DRIVER_RESUME_SUCCESS_MESSAGE = '배송을 다시 시작했어요.';
+export const DRIVER_START_SUCCESS_FALLBACK_MESSAGE = '배송을 시작했어요.';
+export const DRIVER_HOLD_SAVED_MESSAGE = '배송 보류를 저장했어요.';
+
+/**
+ * 정상 ACK 뒤 다시 읽어 요청한 상태가 확인됐을 때의 결과 알림(R-06).
+ * - 수거 대기 → 배송 중: "{동·호수} 배송을 시작했어요."(동·호수를 모르면 "배송을 시작했어요.")
+ * - 배송 보류 → 배송 중: "배송을 다시 시작했어요."
+ * - 배송 보류 저장: "배송 보류를 저장했어요."
+ * 다시 읽은 상태가 요청과 다르거나 그 밖의 전이면 null(알림 없음)이다. 불확실·충돌 경로는 이 함수를 쓰지 않는다.
+ */
+export function resolveDriverCommandSuccessMessage(args: {
+  requestedStatus: string;
+  fromStatus: string;
+  freshStatus: string;
+  place?: string | null;
+}): string | null {
+  if (args.freshStatus !== args.requestedStatus) return null;
+  if (args.requestedStatus === 'DELIVERY_HELD') return DRIVER_HOLD_SAVED_MESSAGE;
+  if (args.requestedStatus !== 'DELIVERING') return null;
+  if (args.fromStatus === 'DELIVERY_HELD') return DRIVER_RESUME_SUCCESS_MESSAGE;
+  if (args.fromStatus !== 'PREPARING') return null;
+  const place = args.place?.trim();
+  return place ? `${place} 배송을 시작했어요.` : DRIVER_START_SUCCESS_FALLBACK_MESSAGE;
+}
+
 /**
  * 배송 보류 진입 버튼을 보여도 되는가 (서버 허용 범위의 부분집합만 노출).
  *
@@ -339,6 +417,22 @@ export function isDriverHoldEntryVisible(args: {
  * 진행 중 주문만 보이므로, 404는 대개 다른 기사가 맡았거나 완료·취소된 주문이다.
  */
 export const DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE = '다른 기사가 맡았거나 이미 끝난 주문이에요.';
+
+/** 이 기기에서 방금 완료한 주문을 다시 열었을 때(완료 직후 뒤로가기, R-01)의 안내. */
+export const DRIVER_ORDER_COMPLETED_SCREEN_MESSAGE = '배송을 마친 주문이에요.';
+
+/**
+ * 주문 없음 화면의 안내와 "배송 목록으로" 이동 탭.
+ * 방금 완료한 주문(recent-completion.ts 기억)이면 완료 안내 + 배송 중 탭, 아니면 D-17 안내 + 기본 탭이다.
+ */
+export function resolveDriverOrderNotFoundScreen(args: { recentlyCompleted: boolean }): {
+  message: string;
+  listHref: string;
+} {
+  return args.recentlyCompleted
+    ? { message: DRIVER_ORDER_COMPLETED_SCREEN_MESSAGE, listHref: '/board?tab=delivering' }
+    : { message: DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE, listHref: '/board' };
+}
 
 /** 상세에서 목록으로 돌아갈 때 주문 상태에 맞는 탭. 배송 중·보류는 배송 중 탭, 그 밖은 기본(수거 대기) 탭이다. */
 export function driverDetailListHref(status: string | null | undefined): string {

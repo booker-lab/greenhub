@@ -4,12 +4,18 @@ import test from 'node:test';
 import {
   buildDriverOrderDetailScope,
   buildDriverStatusConfirmContent,
+  DRIVER_HOLD_SAVED_MESSAGE,
+  DRIVER_ORDER_COMPLETED_SCREEN_MESSAGE,
   DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE,
+  DRIVER_RESUME_SUCCESS_MESSAGE,
+  DRIVER_START_SUCCESS_FALLBACK_MESSAGE,
   driverDetailListHref,
   driverOrderItemCount,
   isDriverStatusConfirmCurrent,
   readDriverDetailBackContext,
+  resolveDriverCommandSuccessMessage,
   resolveDriverDetailBackAction,
+  resolveDriverOrderNotFoundScreen,
   classifyDriverOrderCommandError,
   classifyDriverOrderReadError,
   DriverOrderReadError,
@@ -469,4 +475,82 @@ test('D-02. 배송 재개 확인 창: 재배송 일정 알림, 배정 안내 없
   assert.equal(content.notice, '손님에게 재배송 일정 알림이 가요.');
   assert.equal(content.assignment, null);
   assert.equal(content.confirmLabel, '배송 재개');
+});
+
+test('R-01. 방금 완료한 주문의 주문 없음 화면은 완료 안내와 배송 중 탭으로 보낸다', () => {
+  assert.equal(DRIVER_ORDER_COMPLETED_SCREEN_MESSAGE, '배송을 마친 주문이에요.');
+  assert.deepEqual(resolveDriverOrderNotFoundScreen({ recentlyCompleted: true }), {
+    message: '배송을 마친 주문이에요.',
+    listHref: '/board?tab=delivering',
+  });
+  // 기억이 없거나 읽지 못하면 D-17 안내와 기본 탭 그대로다.
+  assert.deepEqual(resolveDriverOrderNotFoundScreen({ recentlyCompleted: false }), {
+    message: DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE,
+    listHref: '/board',
+  });
+});
+
+test('R-06. 시작·재개·보류 저장 결과 알림은 다시 읽은 상태가 요청과 같을 때만 고른다', () => {
+  const message = (args) => resolveDriverCommandSuccessMessage(args);
+  // 수거 대기 → 배송 중: 동·호수(거점은 거점 이름)를 앞에 쓴다. 모르면 동·호수 없이 쓴다.
+  assert.equal(
+    message({
+      requestedStatus: 'DELIVERING',
+      fromStatus: 'PREPARING',
+      freshStatus: 'DELIVERING',
+      place: '101동 1203호',
+    }),
+    '101동 1203호 배송을 시작했어요.',
+  );
+  for (const place of [null, undefined, '', '  ']) {
+    assert.equal(
+      message({
+        requestedStatus: 'DELIVERING',
+        fromStatus: 'PREPARING',
+        freshStatus: 'DELIVERING',
+        place,
+      }),
+      DRIVER_START_SUCCESS_FALLBACK_MESSAGE,
+    );
+  }
+  assert.equal(DRIVER_START_SUCCESS_FALLBACK_MESSAGE, '배송을 시작했어요.');
+  // 배송 보류 → 배송 중: 재개.
+  assert.equal(
+    message({
+      requestedStatus: 'DELIVERING',
+      fromStatus: 'DELIVERY_HELD',
+      freshStatus: 'DELIVERING',
+      place: '101동 1203호',
+    }),
+    '배송을 다시 시작했어요.',
+  );
+  assert.equal(DRIVER_RESUME_SUCCESS_MESSAGE, '배송을 다시 시작했어요.');
+  // 보류 저장.
+  assert.equal(
+    message({
+      requestedStatus: 'DELIVERY_HELD',
+      fromStatus: 'DELIVERING',
+      freshStatus: 'DELIVERY_HELD',
+    }),
+    '배송 보류를 저장했어요.',
+  );
+  assert.equal(DRIVER_HOLD_SAVED_MESSAGE, '배송 보류를 저장했어요.');
+  // 다시 읽은 상태가 요청과 다르면(다른 처리가 끼어듦) 알리지 않는다.
+  assert.equal(
+    message({ requestedStatus: 'DELIVERING', fromStatus: 'PREPARING', freshStatus: 'DELIVERY_HELD' }),
+    null,
+  );
+  assert.equal(
+    message({ requestedStatus: 'DELIVERY_HELD', fromStatus: 'DELIVERING', freshStatus: 'DELIVERING' }),
+    null,
+  );
+  // 그 밖의 전이(완료는 별도 안내, 알 수 없는 출발 상태)는 이 알림을 쓰지 않는다.
+  assert.equal(
+    message({ requestedStatus: 'DELIVERED', fromStatus: 'DELIVERING', freshStatus: 'DELIVERED' }),
+    null,
+  );
+  assert.equal(
+    message({ requestedStatus: 'DELIVERING', fromStatus: 'DELIVERING', freshStatus: 'DELIVERING' }),
+    null,
+  );
 });

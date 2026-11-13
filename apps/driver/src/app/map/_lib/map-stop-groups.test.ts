@@ -28,6 +28,35 @@ describe('groupMapStops', () => {
   });
 });
 
+describe('groupMapStops 수거 대기 나누기', () => {
+  it('assignedToMe를 알면 수거 대기를 내 수거와 맡을 수 있는 주문으로 나눈다', () => {
+    const groups = groupMapStops([
+      { id: 'o1', status: 'PREPARING', assignedToMe: false },
+      { id: 'd1', status: 'DELIVERING', assignedToMe: true },
+      { id: 'm1', status: 'PREPARING', assignedToMe: true },
+      { id: 'o2', status: 'PREPARING', assignedToMe: false },
+    ]);
+    expect(groups.map((group) => [group.label, group.orders.map((order) => order.id)])).toEqual([
+      ['배송 중', ['d1']],
+      ['내 수거', ['m1']],
+      ['맡을 수 있는 주문', ['o1', 'o2']],
+    ]);
+  });
+
+  it('한쪽이 비면 그 묶음은 뺀다', () => {
+    const groups = groupMapStops([{ id: 'o1', status: 'PREPARING', assignedToMe: false }]);
+    expect(groups.map((group) => group.label)).toEqual(['맡을 수 있는 주문']);
+  });
+
+  it('배정 여부를 모르는 주문이 하나라도 있으면 한 묶음("수거 대기")이다', () => {
+    const groups = groupMapStops([
+      { id: 'm1', status: 'PREPARING', assignedToMe: true },
+      { id: 'x', status: 'PREPARING' },
+    ]);
+    expect(groups.map((group) => [group.label, group.orders.length])).toEqual([['수거 대기', 2]]);
+  });
+});
+
 describe('isMapStop·countHeldOrders', () => {
   it('지도 목록은 배송 중·수거 대기만 올리고 보류는 수만 센다', () => {
     const orders = [

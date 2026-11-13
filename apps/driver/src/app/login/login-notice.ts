@@ -55,7 +55,7 @@ export function resolveDriverLoginNotice(params: {
   if (error === DRIVER_ADMIN_ACCOUNT_ERROR) {
     return {
       kind: 'admin-account',
-      title: '관리자 계정은 기사 앱을 쓸 수 없습니다',
+      title: '관리자 계정은 기사 앱을 쓸 수 없어요',
       body: '기사 계정으로 로그인해 주세요.',
       showOpsContact: false,
     };

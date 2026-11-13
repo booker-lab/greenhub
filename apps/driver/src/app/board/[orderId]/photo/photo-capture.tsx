@@ -11,7 +11,12 @@ import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
 import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
-import { readDriverOrderCommandErrorCodeFromResponse } from '../../_lib/driver-order-detail';
+import {
+  readDriverDetailBackContext,
+  readDriverOrderCommandErrorCodeFromResponse,
+  resolveDriverDetailBackAction,
+} from '../../_lib/driver-order-detail';
+import { rememberCompletedOrder } from '../../_lib/recent-completion';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
 import {
   type DecodedPhoto,
@@ -106,7 +111,7 @@ export default function PhotoCapture({ orderId: rawOrderId, mode }: PhotoCapture
       >
         <p
           className={cn(text, 'text-center')}
-          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}
+          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)', wordBreak: 'keep-all' }}
         >
           {INVALID_ORDER_ADDRESS_MESSAGE}
         </p>
@@ -497,6 +502,9 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
         // 완료로 수렴했을 때만(정상 ACK·서버가 이미 완료) 알린다. 불확실·실패는 위에서 안내하고 머문다.
         // 알림은 루트 AppToaster가 그리므로 목록으로 옮긴 뒤에도 남는다.
         toast.add({ description: deliveryCompletedMessage(orderSummary) });
+        // 완료 직후 휴대폰 뒤로가기로 이 주문 상세가 다시 열리면 "배송을 마친 주문이에요"로 안내한다(R-01).
+        // 손님 배송이 끝난 회차 직배송만 기록한다(거점 도착은 배송 완료가 아니다). 저장소가 막혀도 예외 없이 넘어간다.
+        rememberCompletedOrder({ orderId, userId: session.user.id });
       } else {
         const photoUrl = await uploadLegacyHubPhoto(orderId, blob);
         const response = await apiFetch(
@@ -569,7 +577,12 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           aria-label="뒤로가기"
           onClick={() => {
             stopStream();
-            router.back();
+            // 앱 안 이전 기록이 있을 때만 브라우저 뒤로, 없으면(새 탭·앱 재시작 뒤 복원) 그 주문 상세로 바꿔 보낸다(R-03).
+            if (resolveDriverDetailBackAction(readDriverDetailBackContext(window)) === 'back') {
+              router.back();
+              return;
+            }
+            router.replace(`/board/${encodeURIComponent(orderId)}`);
           }}
           style={{
             color: CAMERA_ON,
@@ -613,6 +626,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               style={{
                 color: CAMERA_ON,
                 fontSize: 'var(--font-size-sm)',
+                wordBreak: 'keep-all',
                 overflowWrap: 'anywhere',
               }}
             >
@@ -646,7 +660,10 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               gap: 24,
             }}
           >
-            <p className={text} style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}>
+            <p
+              className={cn(text, 'px-8 text-center')}
+              style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)', wordBreak: 'keep-all' }}
+            >
               {isRoundDirect ? '문 앞 배송 완료 상태를 촬영해 주세요' : '하차 물품을 촬영해 주세요'}
             </p>
             <AppButton
@@ -673,7 +690,12 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             {error && (
               <p
                 className={cn(text, 'px-8 text-center')}
-                style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}
+                style={{
+                  color: 'var(--color-danger)',
+                  fontSize: 'var(--font-size-sm)',
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'anywhere',
+                }}
               >
                 {error}
               </p>
