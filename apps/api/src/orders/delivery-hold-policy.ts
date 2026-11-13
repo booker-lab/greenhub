@@ -60,6 +60,10 @@ function assertProductDamagedHold(hold: DeliveryHoldPolicyInput): void {
   if (hold['redeliveryFee'] !== null && hold['redeliveryFee'] !== undefined) {
     throw new BadRequestException('상품 파손 보류에는 재배송비를 부과할 수 없습니다.');
   }
+  // 다시 배송하지 않으므로 새 배송 예정이 있으면 소비자 화면에 "다음 배송" 줄이 잘못 보인다.
+  if (hold['nextDeliveryAt'] !== null && hold['nextDeliveryAt'] !== undefined) {
+    throw new BadRequestException('상품 파손 보류에는 새 배송 예정을 둘 수 없습니다.');
+  }
 }
 
 // 기상 외 보류는 고객 책임 ⇔ 0원보다 큰 재배송비다. 유료 재배송 결제(redelivery-resume-gate)는

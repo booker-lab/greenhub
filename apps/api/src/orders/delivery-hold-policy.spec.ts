@@ -100,7 +100,7 @@ describe('assertDeliveryHoldPolicy 수령 거부·상품 파손', () => {
     }
   });
 
-  it('상품 파손은 판매자 책임·재배송비 없음만 받고 새 배송 일정은 요구하지 않는다', () => {
+  it('상품 파손은 판매자 책임·재배송비 없음만 받고 새 배송 일정은 받지 않는다', () => {
     const damaged = {
       reasonCode: 'PRODUCT_DAMAGED',
       reasonMessage: '배송 중 파손',
@@ -116,6 +116,7 @@ describe('assertDeliveryHoldPolicy 수령 거부·상품 파손', () => {
       { redeliveryFee: 10_000 },
       { redeliveryFee: 0 },
       { customerResponsible: true, redeliveryFee: 10_000 },
+      { nextDeliveryAt: '2026-11-20T01:00:00.000Z' },
     ]) {
       expect(rejectionOf({ ...damaged, ...input })).toBeInstanceOf(BadRequestException);
     }
