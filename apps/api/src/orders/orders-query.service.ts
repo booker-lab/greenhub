@@ -94,6 +94,7 @@ export class OrdersQueryService {
       'DELIVERY_HELD',
       'CANCELLED',
       'REVIEWED',
+      'CLOSED_UNDELIVERED',
     ];
     const VALID_SALE_TYPES = ['normal', 'group'];
 
@@ -249,13 +250,16 @@ export class OrdersQueryService {
       const withPayment = await this.withRedeliveryPayment({ id: orderId, ...order });
       return projectDriverOrder(withPayment, requester.sub, 'detail');
     }
-    return this.withReadModel(orderId, order, requester);
+    const detail = await this.withReadModel(orderId, order, requester);
+    return requester.role === 'admin' ? detail : withoutInternalClosureFields(detail);
   }
 
   async getMyOrders(requesterId: string) {
     const snap = await this.firestore.collection('orders').where('userId', '==', requesterId).get();
     return Promise.all(
-      snap.docs.map((d: any) => this.withRedeliveryPayment({ id: d.id, ...d.data() })),
+      snap.docs.map(async (d: any) =>
+        withoutInternalClosureFields(await this.withRedeliveryPayment({ id: d.id, ...d.data() })),
+      ),
     );
   }
 
@@ -406,4 +410,15 @@ export class OrdersQueryService {
     });
     return { ...privatePhotoOrder, deliveryPhotoUrl: signed.url };
   }
+}
+
+/**
+ * 손님 응답에서 고객 사유 종결의 내부 기록(판매자 연락 메모·처리자)을 뺀다.
+ * 종결 사유·보류 시각·재배송비·종결 시각만 남긴다.
+ */
+function withoutInternalClosureFields<T extends Record<string, any>>(order: T): T {
+  const closure = order['customerFaultClosure'];
+  if (!closure || typeof closure !== 'object') return order;
+  const { memo: _memo, actorId: _actorId, actorRole: _actorRole, ...visible } = closure;
+  return { ...order, customerFaultClosure: visible };
 }

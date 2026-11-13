@@ -27,6 +27,9 @@ export const ORDER_STATUSES = [
   'DELIVERED',
   'REVIEWED',
   'CANCELLED',
+  // 고객 사유 종결(환불 없음). 조회 필터용 값이며 상태 변경 API(PATCH status)로는 갈 수 없다 —
+  // 역할별 전이표(orders.helpers.ts)에 없고, 전용 API(customer-fault-closure.service.ts)만 쓴다.
+  'CLOSED_UNDELIVERED',
 ] as const;
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];

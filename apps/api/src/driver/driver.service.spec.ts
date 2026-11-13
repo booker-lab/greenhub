@@ -1160,6 +1160,24 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     expect(result).toEqual(await previousListIds(firestore, driverScope, 'driver-1', statuses));
   });
 
+  it('고객 사유 종결(CLOSED_UNDELIVERED) 주문은 본인 배정이어도 목록에 나오지 않는다', async () => {
+    const { service } = makeService({
+      ...mixedBoardRecords(),
+      'orders/mine-closed-undelivered': {
+        storeId: 'pilot',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+        status: 'CLOSED_UNDELIVERED',
+        preparedAt: timestamp('2026-11-10T01:00:00.000Z'),
+        updatedAt: timestamp('2026-11-10T01:00:00.000Z'),
+      },
+    });
+
+    const result = (await service.getOrders('driver-1')).map((order) => order.id);
+
+    expect(result).not.toContain('mine-closed-undelivered');
+  });
+
   it('driverId 필드가 없는 이전 미배정 주문도 목록에서 빠지지 않는다', async () => {
     const { service } = makeService(mixedBoardRecords());
 
@@ -1473,6 +1491,12 @@ describe('DriverService 오늘 완료 요약', () => {
         ...mine,
         status: 'DELIVERING',
         updatedAt: timestamp('2026-11-10T15:11:00.000Z'),
+      },
+      // 배송 보류 뒤 고객 사유로 종결된 주문: 배송 완료가 아니므로(deliveredAt 없음) 세지 않는다.
+      'orders/closed-undelivered-today': {
+        ...mine,
+        status: 'CLOSED_UNDELIVERED',
+        updatedAt: timestamp('2026-11-10T15:15:00.000Z'),
       },
       'orders/mine-hub-arrived': {
         ...mine,

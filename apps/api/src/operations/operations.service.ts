@@ -619,7 +619,12 @@ export class OperationsService {
   }
 
   private noLongerNeedsNotice(order: Record<string, unknown> | null) {
-    return order?.['status'] === 'DELIVERED' || order?.['status'] === 'CANCELLED';
+    return (
+      order?.['status'] === 'DELIVERED' ||
+      order?.['status'] === 'CANCELLED' ||
+      // 고객 사유 종결은 더 배송하지 않는 끝난 주문이라 지난 배송 안내를 다시 보내지 않는다.
+      order?.['status'] === 'CLOSED_UNDELIVERED'
+    );
   }
 
   private safeFailureReason(error: unknown) {
