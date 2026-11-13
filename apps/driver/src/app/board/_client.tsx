@@ -8,6 +8,7 @@ import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
 import OrderCard, { type DriverListOrder, type OrderRowSelection } from '@/components/OrderCard';
+import { PendingPhotoBadge, PendingPhotoBadgeProvider } from '@/components/pending-photo-notice';
 import { apiFetch, apiRead } from '@/lib/api';
 import {
   buildDriverListScope,
@@ -18,6 +19,20 @@ import {
 import { groupDeliveringOrders, takeDeliveringFirstScreen } from '@/lib/delivering-groups';
 import { readDriverSummaryCompletedToday } from '@/lib/driver-summary';
 import { groupPreparingOrders, takePreparingFirstScreen } from '@/lib/preparing-groups';
+import {
+  dismissPendingPhoto,
+  runAllPendingPhotosNow,
+  subscribePendingPhotoCompleted,
+  usePendingPhotos,
+} from './[orderId]/photo/pending-photo-client';
+import {
+  PENDING_PHOTO_MESSAGES,
+  type PendingPhotoBadgeKind,
+  type PendingPhotoSummary,
+  pendingPhotoBadgeKind,
+  pendingPhotoBannerTitle,
+  pendingPhotoStatusMessage,
+} from './[orderId]/photo/pending-photo-policy';
 import { BatchPickupConfirmDialog } from './_components/BatchPickupConfirmDialog';
 import {
   BATCH_PICKUP_TARGET_STATUS,
@@ -260,6 +275,27 @@ export default function BoardClient() {
 
   const orders = tab === 'preparing' ? preparing : delivering;
   const retry = () => setReloadKey((key) => key + 1);
+
+  // 사진 업로드 대기열(Y3): 배송 중 행에는 배지, 목록에 배송 중으로 없는 주문의 사진은 위쪽 안내로 보인다.
+  // 목록을 읽지 못했으면(오프라인 등) 모든 사진을 안내에 보인다. 읽는 중에는 보이지 않는다.
+  const pendingPhotos = usePendingPhotos(session?.user.id);
+  const pendingNow = Date.now();
+  const deliveringIds = new Set(
+    delivering.filter((order) => order.status === 'DELIVERING').map((order) => order.id),
+  );
+  const pendingBadges = new Map<string, PendingPhotoBadgeKind>();
+  const pendingUnlisted: PendingPhotoSummary[] = [];
+  for (const entry of pendingPhotos.entries) {
+    if (hasSuccessfulRead && deliveringIds.has(entry.orderId)) {
+      pendingBadges.set(entry.orderId, pendingPhotoBadgeKind(entry, pendingNow));
+    } else {
+      pendingUnlisted.push(entry);
+    }
+  }
+  const pendingBannerVisible = !loading && !authRequired && pendingUnlisted.length > 0;
+
+  // 대기열이 사진을 올려 완료로 수렴하면 목록을 다시 읽는다(그 주문은 배송 중에서 빠진다).
+  useEffect(() => subscribePendingPhotoCompleted(() => setReloadKey((key) => key + 1)), []);
   const showProgress = hasSuccessfulRead && !authRequired;
 
   // 한 번에 수거: 내 수거 중 회차 직배송이고 배송 시작이 허용되고 storeId가 있는 주문만 고를 수 있다.
@@ -434,57 +470,114 @@ export default function BoardClient() {
       </header>
 
       {/* 주문 목록 */}
-      <main style={{ flex: 1, padding: '16px' }}>
-        {batchSummary && !authRequired && (
-          <BatchSummaryPanel summary={batchSummary} onClose={() => setBatchSummary(null)} />
-        )}
-        {/* 고르기 모드 안내와 취소는 목록 상태(이전 목록 표시 중·빈 목록 포함)와 관계없이 늘 보여 모드에 갇히지 않게 한다. */}
-        {batchBarVisible && (
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className={text} style={messageStyle}>
-              배송을 시작할 내 수거 주문을 골라 주세요.
-            </p>
-            <TextButton
-              disabled={batchRunning}
-              onClick={() => {
-                setBatchMode(false);
-                setSelectedIds(new Set());
-                setBatchConfirmOpen(false);
-              }}
-            >
-              고르기 취소
-            </TextButton>
-          </div>
-        )}
-        {loading ? (
-          <BoardMessage>주문을 불러오고 있어요</BoardMessage>
-        ) : authRequired ? (
-          <BoardMessage tone="danger" message="로그인이 끝났어요. 다시 로그인해 주세요.">
-            {/* 인증 오류는 같은 토큰으로 재조회해도 반복되므로 재조회 버튼 없이 세션을 정리하고 로그인으로 보낸다. */}
-            <AppButton onClick={() => void signOut({ redirectTo: '/login' })}>
-              다시 로그인
-            </AppButton>
-          </BoardMessage>
-        ) : error && !hasSuccessfulRead ? (
-          <BoardMessage tone="danger" message={error}>
-            <AppButton tone="brand-outline" onClick={retry}>
-              다시 시도
-            </AppButton>
-          </BoardMessage>
-        ) : error && hasSuccessfulRead ? (
-          orders.length === 0 ? (
+      <PendingPhotoBadgeProvider value={pendingBadges}>
+        <main style={{ flex: 1, padding: '16px' }}>
+          {pendingBannerVisible && session?.user.id && (
+            <PendingPhotoBanner
+              entries={pendingUnlisted}
+              userId={session.user.id}
+              now={pendingNow}
+            />
+          )}
+          {batchSummary && !authRequired && (
+            <BatchSummaryPanel summary={batchSummary} onClose={() => setBatchSummary(null)} />
+          )}
+          {/* 고르기 모드 안내와 취소는 목록 상태(이전 목록 표시 중·빈 목록 포함)와 관계없이 늘 보여 모드에 갇히지 않게 한다. */}
+          {batchBarVisible && (
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className={text} style={messageStyle}>
+                배송을 시작할 내 수거 주문을 골라 주세요.
+              </p>
+              <TextButton
+                disabled={batchRunning}
+                onClick={() => {
+                  setBatchMode(false);
+                  setSelectedIds(new Set());
+                  setBatchConfirmOpen(false);
+                }}
+              >
+                고르기 취소
+              </TextButton>
+            </div>
+          )}
+          {loading ? (
+            <BoardMessage>주문을 불러오고 있어요</BoardMessage>
+          ) : authRequired ? (
+            <BoardMessage tone="danger" message="로그인이 끝났어요. 다시 로그인해 주세요.">
+              {/* 인증 오류는 같은 토큰으로 재조회해도 반복되므로 재조회 버튼 없이 세션을 정리하고 로그인으로 보낸다. */}
+              <AppButton onClick={() => void signOut({ redirectTo: '/login' })}>
+                다시 로그인
+              </AppButton>
+            </BoardMessage>
+          ) : error && !hasSuccessfulRead ? (
+            <BoardMessage tone="danger" message={error}>
+              <AppButton tone="brand-outline" onClick={retry}>
+                다시 시도
+              </AppButton>
+            </BoardMessage>
+          ) : error && hasSuccessfulRead ? (
+            orders.length === 0 ? (
+              <div className="flex h-48 flex-col items-center justify-center gap-2.5">
+                <p className={text} style={{ ...messageStyle, color: 'var(--color-danger)' }}>
+                  {error}
+                </p>
+                <p className={text} style={messageStyle}>
+                  {tab === 'preparing'
+                    ? '마지막 확인 당시 수거할 주문이 없었어요.'
+                    : '마지막 확인 당시 배송 중인 주문이 없었어요.'}
+                </p>
+                <AppButton tone="brand-outline" onClick={() => setReloadKey((key) => key + 1)}>
+                  다시 시도
+                </AppButton>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-3">
+                {refreshing && (
+                  <p className={text} style={messageStyle}>
+                    최신 정보를 확인하고 있어요…
+                  </p>
+                )}
+                <div className="flex flex-col items-center justify-center gap-2.5">
+                  <p className={text} style={{ ...messageStyle, color: 'var(--color-danger)' }}>
+                    {error} (이전 목록 표시 중)
+                  </p>
+                  <AppButton tone="brand-outline" onClick={retry}>
+                    다시 시도
+                  </AppButton>
+                </div>
+                <OrderList key={tab} orders={orders} tab={tab} batch={batchSelection} />
+              </div>
+            )
+          ) : refreshing && hasSuccessfulRead && orders.length === 0 ? (
             <div className="flex h-48 flex-col items-center justify-center gap-2.5">
-              <p className={text} style={{ ...messageStyle, color: 'var(--color-danger)' }}>
-                {error}
+              <p className={text} style={messageStyle}>
+                최신 정보를 확인하고 있어요…
               </p>
               <p className={text} style={messageStyle}>
                 {tab === 'preparing'
                   ? '마지막 확인 당시 수거할 주문이 없었어요.'
                   : '마지막 확인 당시 배송 중인 주문이 없었어요.'}
               </p>
-              <AppButton tone="brand-outline" onClick={() => setReloadKey((key) => key + 1)}>
-                다시 시도
-              </AppButton>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className="flex h-48 flex-col items-center justify-center gap-2.5">
+              <p className={text} style={messageStyle}>
+                {tab === 'preparing' ? '수거할 주문이 없어요' : '배송 중인 주문이 없어요'}
+              </p>
+              {tab === 'preparing' && (
+                <button
+                  type="button"
+                  className="m-0 inline min-h-11 cursor-pointer appearance-none border-0 bg-transparent p-0 underline"
+                  style={{
+                    fontSize: 'var(--font-size-md)',
+                    fontWeight: 'var(--fw-bold)',
+                    color: 'var(--color-text)',
+                  }}
+                  onClick={() => router.push('/map')}
+                >
+                  지도에서 경로 보기
+                </button>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-3">
@@ -493,80 +586,32 @@ export default function BoardClient() {
                   최신 정보를 확인하고 있어요…
                 </p>
               )}
-              <div className="flex flex-col items-center justify-center gap-2.5">
-                <p className={text} style={{ ...messageStyle, color: 'var(--color-danger)' }}>
-                  {error} (이전 목록 표시 중)
-                </p>
-                <AppButton tone="brand-outline" onClick={retry}>
-                  다시 시도
-                </AppButton>
-              </div>
+              {error && (
+                <div className="flex flex-col items-center justify-center gap-2.5">
+                  <p className={text} style={{ ...messageStyle, color: 'var(--color-danger)' }}>
+                    {error} (이전 목록 표시 중)
+                  </p>
+                  <AppButton tone="brand-outline" onClick={retry}>
+                    다시 시도
+                  </AppButton>
+                </div>
+              )}
+              {batchEntryVisible && (
+                <TextButton
+                  onClick={() => {
+                    setBatchSummary(null);
+                    setSelectedIds(new Set());
+                    setBatchMode(true);
+                  }}
+                >
+                  여러 주문 한 번에 배송 시작
+                </TextButton>
+              )}
               <OrderList key={tab} orders={orders} tab={tab} batch={batchSelection} />
             </div>
-          )
-        ) : refreshing && hasSuccessfulRead && orders.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center gap-2.5">
-            <p className={text} style={messageStyle}>
-              최신 정보를 확인하고 있어요…
-            </p>
-            <p className={text} style={messageStyle}>
-              {tab === 'preparing'
-                ? '마지막 확인 당시 수거할 주문이 없었어요.'
-                : '마지막 확인 당시 배송 중인 주문이 없었어요.'}
-            </p>
-          </div>
-        ) : orders.length === 0 ? (
-          <div className="flex h-48 flex-col items-center justify-center gap-2.5">
-            <p className={text} style={messageStyle}>
-              {tab === 'preparing' ? '수거할 주문이 없어요' : '배송 중인 주문이 없어요'}
-            </p>
-            {tab === 'preparing' && (
-              <button
-                type="button"
-                className="m-0 inline min-h-11 cursor-pointer appearance-none border-0 bg-transparent p-0 underline"
-                style={{
-                  fontSize: 'var(--font-size-md)',
-                  fontWeight: 'var(--fw-bold)',
-                  color: 'var(--color-text)',
-                }}
-                onClick={() => router.push('/map')}
-              >
-                지도에서 경로 보기
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-3">
-            {refreshing && (
-              <p className={text} style={messageStyle}>
-                최신 정보를 확인하고 있어요…
-              </p>
-            )}
-            {error && (
-              <div className="flex flex-col items-center justify-center gap-2.5">
-                <p className={text} style={{ ...messageStyle, color: 'var(--color-danger)' }}>
-                  {error} (이전 목록 표시 중)
-                </p>
-                <AppButton tone="brand-outline" onClick={retry}>
-                  다시 시도
-                </AppButton>
-              </div>
-            )}
-            {batchEntryVisible && (
-              <TextButton
-                onClick={() => {
-                  setBatchSummary(null);
-                  setSelectedIds(new Set());
-                  setBatchMode(true);
-                }}
-              >
-                여러 주문 한 번에 배송 시작
-              </TextButton>
-            )}
-            <OrderList key={tab} orders={orders} tab={tab} batch={batchSelection} />
-          </div>
-        )}
-      </main>
+          )}
+        </main>
+      </PendingPhotoBadgeProvider>
 
       {/* 한 번에 수거: 고른 주문 수를 이름에 쓴 주요 버튼 하나를 하단 바 위에 고정한다(상세 주요 버튼과 같은 자리·크기). */}
       {batchBarVisible && (
@@ -681,6 +726,87 @@ const messageStyle = {
   fontSize: 'var(--font-size-sm)',
   color: 'var(--driver-text-muted)',
 } as const;
+
+/**
+ * 목록에 배송 중으로 보이지 않는 주문의 대기열 사진 안내(Y3). 기다리는 사진은 "지금 올리기"로 모두 올리고,
+ * 멈춘 사진은 원인·주문 보기·확인(지우기)을 보인다.
+ */
+function PendingPhotoBanner({
+  entries,
+  userId,
+  now,
+}: {
+  entries: PendingPhotoSummary[];
+  userId: string;
+  now: number;
+}) {
+  const [running, setRunning] = useState(false);
+  const waiting = entries.filter((entry) => entry.state !== 'failed');
+  const failed = entries.filter((entry) => entry.state === 'failed');
+  return (
+    <section
+      aria-label="처리 중인 사진"
+      className="mb-3 flex flex-col gap-1.5 rounded-[var(--radius)] p-4"
+      style={{
+        backgroundColor:
+          failed.length > 0 ? 'var(--color-danger-surface)' : 'var(--color-surface-muted)',
+      }}
+    >
+      <p
+        className={text}
+        style={{
+          fontWeight: 'var(--fw-bold)',
+          color: 'var(--color-text)',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
+        {pendingPhotoBannerTitle(entries.length)}
+      </p>
+      {waiting.length > 0 && (
+        <>
+          <p className={text} style={{ ...messageStyle, color: 'var(--color-text)' }}>
+            {PENDING_PHOTO_MESSAGES.WAITING}
+          </p>
+          <TextButton
+            disabled={running}
+            onClick={() => {
+              if (running) return;
+              setRunning(true);
+              void runAllPendingPhotosNow().finally(() => setRunning(false));
+            }}
+          >
+            {running ? '올리는 중…' : '지금 올리기'}
+          </TextButton>
+        </>
+      )}
+      {failed.map((entry) => (
+        <div key={entry.orderId} className="flex flex-col gap-1 pt-1.5">
+          <PendingPhotoBadge kind="failed" />
+          <p className={text} style={{ ...messageStyle, color: 'var(--color-text)' }}>
+            {pendingPhotoStatusMessage(entry, now)}
+          </p>
+          <div className="flex flex-wrap items-center gap-4">
+            <Link
+              href={`/board/${encodeURIComponent(entry.orderId)}`}
+              prefetch={false}
+              className="inline-flex min-h-11 items-center underline underline-offset-4"
+              style={{
+                fontSize: 'var(--font-size-md)',
+                fontWeight: 'var(--fw-bold)',
+                color: 'var(--color-text)',
+              }}
+            >
+              주문 보기
+            </Link>
+            <TextButton onClick={() => void dismissPendingPhoto(userId, entry.orderId)}>
+              확인했어요
+            </TextButton>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
 
 function BoardMessage({
   children,

@@ -8,6 +8,29 @@ const photoPolicySource = await readFile(
   'utf8',
 );
 const photoEncodeSource = await readFile(new URL('./photo-encode.ts', import.meta.url), 'utf8');
+// 회차 직배송 보내기·결과 분류(화면·대기열 공용)와 사진 업로드 대기열(Y3) 모듈.
+const sendSource = await readFile(new URL('./round-direct-send.ts', import.meta.url), 'utf8');
+const pendingPolicySource = await readFile(
+  new URL('./pending-photo-policy.ts', import.meta.url),
+  'utf8',
+);
+const pendingRunnerSource = await readFile(
+  new URL('./pending-photo-runner.ts', import.meta.url),
+  'utf8',
+);
+const pendingClientSource = await readFile(
+  new URL('./pending-photo-client.ts', import.meta.url),
+  'utf8',
+);
+const pendingStoreSource = await readFile(
+  new URL('./pending-photo-store.ts', import.meta.url),
+  'utf8',
+);
+const pendingUploaderSource = await readFile(
+  new URL('./pending-photo-uploader.tsx', import.meta.url),
+  'utf8',
+);
+const providersSource = await readFile(new URL('../../../providers.tsx', import.meta.url), 'utf8');
 
 const legacyStart = photoCaptureSource.indexOf('uploadLegacyHubPhoto(orderId');
 assert.ok(legacyStart !== -1, 'legacy-hub upload branch가 있어야 한다');
@@ -99,9 +122,11 @@ test('legacy-hub 중복 dispatch는 ref 기반 in-flight guard로 막는다', ()
 });
 
 test('round-direct keyed ACK 계약 회귀 없음', () => {
-  assert.match(photoCaptureSource, /form\.append\(['"]idempotencyKey['"]/);
+  // 보내기·ACK 판정은 화면·대기열 공용 모듈(round-direct-send)이 맡고 화면은 그 함수를 쓴다.
+  assert.match(photoCaptureSource, /sendRoundDirectPhoto\(\{/);
+  assert.match(sendSource, /form\.append\(['"]idempotencyKey['"],\s*args\.idempotencyKey\)/);
   // ACK 판정은 순수 함수로 옮겼다: orderId·photoId·DELIVERED를 모두 확인한다.
-  assert.match(photoCaptureSource, /isDeliveryPhotoAck\(result,\s*orderId\)/);
+  assert.match(sendSource, /isDeliveryPhotoAck\(result,\s*orderId\)/);
   assert.match(photoPolicySource, /ack\.orderId\s*===\s*orderId/);
   assert.match(photoPolicySource, /typeof ack\.photoId\s*===\s*['"]string['"]/);
   assert.match(photoPolicySource, /ack\.status\s*===\s*['"]DELIVERED['"]/);
@@ -121,10 +146,10 @@ test('round-direct 멱등 키는 사진·직전 실패 기준으로 재사용/�
   assert.doesNotMatch(photoCaptureSource, /requestIdRef\.current\s*\?\?=/);
 });
 
-test('round-direct 실패는 원인을 분류하고 주문 상태를 다시 읽어 수렴한다', () => {
-  assert.match(roundDirectSlice, /readDriverOrderCommandErrorCodeFromResponse\(response\)/);
-  assert.match(roundDirectSlice, /classifyPhotoUploadFailure\(\{\s*kind:\s*['"]network['"]\s*\}\)/);
-  assert.match(roundDirectSlice, /classifyPhotoUploadFailure\(\{\s*kind:\s*['"]ack['"]\s*\}\)/);
+test('round-direct 실패는 원인을 분류하고 확정 거절만 주문 상태를 다시 읽어 수렴한다', () => {
+  assert.match(sendSource, /readDriverOrderCommandErrorCodeFromResponse\(response\)/);
+  assert.match(sendSource, /classifyPhotoUploadFailure\(\{\s*kind:\s*['"]network['"]\s*\}\)/);
+  assert.match(sendSource, /classifyPhotoUploadFailure\(\{\s*kind:\s*['"]ack['"]\s*\}\)/);
   assert.match(
     roundDirectSlice,
     /apiRead\(`\/driver\/orders\/\$\{encodeURIComponent\(orderId\)\}`/,
@@ -175,9 +200,7 @@ test('완료 알림은 회차 직배송 완료 수렴 뒤에만 띄우고 불확
   const uploadSlice = photoCaptureSource.slice(
     photoCaptureSource.indexOf('async function upload()'),
   );
-  const gateAt = uploadSlice.indexOf(
-    'if (!(await uploadRoundDirect(token, blob, storeId))) return;',
-  );
+  const gateAt = uploadSlice.indexOf('if (!(await uploadRoundDirect(token, blob))) return;');
   const toastAt = uploadSlice.indexOf('toast.add({ description: deliveryCompletedMessage(');
   const legacyAt = uploadSlice.indexOf('uploadLegacyHubPhoto(orderId');
   const moveAt = uploadSlice.indexOf("router.replace('/board?tab=delivering')");
@@ -193,9 +216,7 @@ test('최근 완료 기억은 회차 직배송 완료 수렴 뒤, 목록 이동 
   const uploadSlice = photoCaptureSource.slice(
     photoCaptureSource.indexOf('async function upload()'),
   );
-  const gateAt = uploadSlice.indexOf(
-    'if (!(await uploadRoundDirect(token, blob, storeId))) return;',
-  );
+  const gateAt = uploadSlice.indexOf('if (!(await uploadRoundDirect(token, blob))) return;');
   const rememberAt = uploadSlice.indexOf(
     'rememberCompletedOrder({ orderId, userId: session.user.id });',
   );
@@ -230,18 +251,18 @@ test('JPEG가 아닌 사진은 형식 이름 대신 카메라 촬영으로 다�
 test('촬영 화면 주소 안내는 기사 주문 조회 응답에서 같은 주문일 때만 읽는다', () => {
   assert.match(photoCaptureSource, /readPhotoOrderSummary\(await response\.json\(\), orderId\)/);
   assert.match(photoCaptureSource, /isRoundDirect && orderSummary && \(/);
-  // 업로드는 여전히 매번 판매자 ID를 조회 응답에서 확인한다.
-  assert.match(photoCaptureSource, /const storeId = await readOrderStoreId\(token\);/);
+  // 업로드는 여전히 판매자 ID를 조회 응답에서 확인한다(같은 키 재전송만 그 요청 때 확인한 값을 다시 쓴다).
+  assert.match(photoCaptureSource, /const read = await readOrderStoreId\(token\);/);
+  assert.match(photoCaptureSource, /const storeRead = await readOrderStoreId\(token\);/);
 });
 
 // D-06: 미리보기 상태 버튼은 세로로 쌓아 확정 버튼을 한 줄 전체 폭으로 둔다.
 test('미리보기 하단 버튼은 세로로 쌓고 확정 버튼은 전체 폭이다', () => {
-  const barAt = photoCaptureSource.indexOf('{(captured || isRoundDirect) && (');
+  const barAt = photoCaptureSource.indexOf('{!showPendingPanel && (captured || isRoundDirect) && (');
   assert.ok(barAt !== -1);
-  const bar = photoCaptureSource.slice(
-    barAt,
-    photoCaptureSource.indexOf('{error && captured', barAt),
-  );
+  const barEnd = photoCaptureSource.indexOf('error && captured && (', barAt);
+  assert.ok(barEnd > barAt);
+  const bar = photoCaptureSource.slice(barAt, barEnd);
   assert.match(bar, /flexDirection: 'column'/);
   assert.equal((bar.match(/\bfullWidth\b/g) ?? []).length, 2);
   assert.doesNotMatch(bar, /flex-1/);
@@ -264,4 +285,113 @@ test('R-03: 사진 화면 뒤로가기는 상세와 같은 판정을 쓰고 기�
 
 test('R-09: 사진 화면 안내 글은 낱말 중간에서 끊지 않는다', () => {
   assert.ok((photoCaptureSource.match(/wordBreak: 'keep-all'/g) ?? []).length >= 4);
+});
+
+// ── Y3 사진 업로드 대기열 ─────────────────────────────────────────────
+
+// 주석(설명에 나오는 이름)은 빼고 코드만 본다.
+function codeOnly(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+}
+
+const roundDirectFnStart = photoCaptureSource.indexOf('async function uploadRoundDirect(');
+const roundDirectFn = photoCaptureSource.slice(
+  roundDirectFnStart,
+  photoCaptureSource.indexOf('async function uploadPendingNow(', roundDirectFnStart),
+);
+const queueFn = photoCaptureSource.slice(
+  photoCaptureSource.indexOf('async function queueOrExplain('),
+  roundDirectFnStart,
+);
+
+test('Y3: 불확실한 결과는 상세 조회(완료 주문은 404)에 기대지 않고 같은 키·같은 사진으로 대기열에 넣는다', () => {
+  const enqueueAt = roundDirectFn.indexOf("shouldEnqueuePendingPhoto({ phase: 'sent', failure })");
+  const recoverAt = roundDirectFn.indexOf('recoverAfterUploadFailure(');
+  assert.ok(enqueueAt !== -1 && recoverAt > enqueueAt, '불확실 분기가 상태 재조회보다 앞서야 한다');
+  const branch = roundDirectFn.slice(enqueueAt, recoverAt);
+  assert.match(branch, /return queueOrExplain\(\{ phase: 'sent', failure \}, storeId, requestId, blob\);/);
+  assert.match(branch, /uncertainStoreIdRef\.current = storeId;/);
+  // 대기열에는 보낸 인코딩 결과 그대로(같은 Blob의 바이트)와 같은 키를 넣는다. 다시 인코딩하지 않는다.
+  assert.match(queueFn, /bytes: await photo\.arrayBuffer\(\)/);
+  assert.match(queueFn, /idempotencyKey,/);
+  assert.doesNotMatch(queueFn, /encodeDeliveryJpeg|randomUUID/);
+  // 저장소를 쓸 수 없으면 예전 안내(같은 사진으로 다시 시도)로 남는다.
+  assert.match(queueFn, /photoUploadFailureMessage\(input\.failure\)/);
+  assert.match(queueFn, /ORDER_STORE_UNKNOWN_MESSAGE/);
+});
+
+test('Y3: 보내기 전 실패(오프라인·판매자 ID 확인 실패)는 storeId 없이 대기열에 넣고 주문이 안 보이면(404·403) 넣지 않는다', () => {
+  assert.match(
+    roundDirectFn,
+    /navigator\.onLine === false\) \{\s*return queueOrExplain\(\{ phase: 'pre-send', reason: 'OFFLINE' \}, null, requestId, blob\);/,
+  );
+  assert.match(roundDirectFn, /if \(read\.kind === 'absent'\) \{\s*setError\(ORDER_STORE_UNKNOWN_MESSAGE\);/);
+  assert.match(roundDirectFn, /reason: 'ORDER_UNKNOWN' \},\s*null,\s*requestId,\s*blob/);
+});
+
+test('Y3: 이 주문 사진이 대기열에 있으면 새 키로 보내지 않고 재촬영을 막는다', () => {
+  assert.match(roundDirectFn, /if \(userId && \(await findPendingPhoto\(userId, orderId\)\)\) \{/);
+  assert.ok(
+    roundDirectFn.indexOf('findPendingPhoto(') < roundDirectFn.indexOf('decideIdempotencyKey('),
+    '대기열 확인이 키 결정보다 앞서야 한다',
+  );
+  assert.match(photoCaptureSource, /\{!showPendingPanel && !stream && !captured && \(/);
+  assert.match(photoCaptureSource, /\{!showPendingPanel && isRoundDirect && \(\s*<input/);
+  assert.match(photoCaptureSource, /\{!showPendingPanel && captured && \(/);
+  // "지금 올리기"는 자동 실행과 같은 함수(같은 잠금)를 쓴다.
+  assert.match(photoCaptureSource, /await runPendingPhotoNow\(orderId\)/);
+});
+
+test('Y3: 대기열은 사진 업로드 POST만 다시 보내고 PATCH DELIVERED·새 키·재인코딩을 만들지 않는다', () => {
+  for (const raw of [pendingRunnerSource, pendingClientSource, pendingPolicySource, sendSource]) {
+    const source = codeOnly(raw);
+    assert.doesNotMatch(source, /method:\s*['"]PATCH['"]/);
+    assert.doesNotMatch(source, /\/status`/);
+    assert.doesNotMatch(source, /randomUUID|encodeDeliveryJpeg/);
+  }
+  assert.match(sendSource, /\/delivery-photos`/);
+  assert.match(pendingRunnerSource, /sendRoundDirectPhoto\(\{/);
+  assert.match(pendingRunnerSource, /new Blob\(\[bytes\], \{ type: 'image\/jpeg' \}\)/);
+});
+
+test('Y3: 대기열 완료 알림·최근 완료 기억은 같은 키 재전송 ACK 뒤 한 곳에서만 남긴다', () => {
+  const at = pendingClientSource.indexOf('function onCompleted(');
+  assert.ok(at !== -1);
+  const block = pendingClientSource.slice(at, pendingClientSource.indexOf('\n}\n', at));
+  assert.match(block, /toast\.add\(\{ description: PENDING_PHOTO_MESSAGES\.COMPLETED \}\)/);
+  assert.match(block, /rememberCompletedOrder\(\{ orderId: entry\.orderId, userId: entry\.userId \}\)/);
+  assert.equal((pendingClientSource.match(/toast\.add\(/g) ?? []).length, 1);
+  assert.equal((pendingClientSource.match(/rememberCompletedOrder\(/g) ?? []).length, 1);
+  // 실행기는 완료(ack)에서만 onCompleted를 부른다.
+  const doneAt = pendingRunnerSource.indexOf("if (outcome.action === 'done') {");
+  assert.ok(doneAt !== -1);
+  assert.match(
+    pendingRunnerSource.slice(doneAt, doneAt + 200),
+    /await deps\.store\.delete\(key\);[\s\S]*deps\.onCompleted\?\.\(counted\);/,
+  );
+  assert.equal((pendingRunnerSource.match(/deps\.onCompleted\?\.\(/g) ?? []).length, 1);
+});
+
+test('Y3: 토큰은 저장하지 않고 실행마다 getSession()으로 새로 받는다', () => {
+  assert.doesNotMatch(pendingPolicySource, /accessToken/);
+  assert.doesNotMatch(pendingStoreSource, /accessToken/);
+  assert.match(pendingClientSource, /await getSession\(\{ broadcast: false \}\)/);
+  // Service Worker·Background Sync를 쓰지 않는다.
+  for (const source of [pendingClientSource, pendingRunnerSource, pendingUploaderSource]) {
+    assert.doesNotMatch(codeOnly(source), /serviceWorker|SyncManager|sync\.register/);
+  }
+});
+
+test('Y3: 업로드 대기열 실행기는 SessionProvider 안에 있고 앱 열기·연결 복구·화면 복귀·페이지 복원에 깨어난다', () => {
+  const providerAt = providersSource.indexOf('<SessionProvider');
+  const uploaderAt = providersSource.indexOf('<PendingPhotoUploader />');
+  const providerEnd = providersSource.indexOf('</SessionProvider>');
+  assert.ok(providerAt !== -1 && uploaderAt > providerAt && uploaderAt < providerEnd);
+  assert.match(pendingUploaderSource, /status !== 'authenticated'/);
+  assert.match(pendingUploaderSource, /addEventListener\('online', kick\)/);
+  assert.match(pendingUploaderSource, /addEventListener\('pageshow', kick\)/);
+  assert.match(pendingUploaderSource, /addEventListener\('visibilitychange', handleVisibility\)/);
+  assert.match(pendingUploaderSource, /subscribePendingPhotoKick\(kick\)/);
+  assert.match(pendingUploaderSource, /removeEventListener\('online', kick\)/);
+  assert.match(pendingUploaderSource, /removeEventListener\('pageshow', kick\)/);
 });

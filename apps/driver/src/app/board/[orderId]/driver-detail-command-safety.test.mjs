@@ -86,8 +86,12 @@ test('B. PATCH dispatch CTA는 loading 중 명시적으로 disabled다', () => {
   );
   assert.ok(navButtons.length >= 2, '사진 네비게이션 버튼이 유지되어야 한다');
   for (const chunk of navButtons) {
-    assert.match(chunk, /disabled=\{!commandsAllowed\}/);
+    // 회차 직배송 사진 버튼은 이 주문 사진이 업로드 대기열에 있어도 꺼진다(Y3).
+    assert.match(chunk, /disabled=\{!commandsAllowed( \|\| pendingPhoto !== null)?\}/);
   }
+  const roundDirectPhoto = navButtons.find((chunk) => chunk.includes('/photo/round-direct'));
+  assert.ok(roundDirectPhoto);
+  assert.match(roundDirectPhoto, /disabled=\{!commandsAllowed \|\| pendingPhoto !== null\}/);
 });
 
 // C. HoldModal double-submit → PATCH 1회: 로컬 submittingRef guard.

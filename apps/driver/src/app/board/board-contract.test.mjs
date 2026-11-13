@@ -27,6 +27,11 @@ const photoPolicySource = await readFile(
   new URL('./[orderId]/photo/photo-upload-policy.ts', import.meta.url),
   'utf8',
 );
+// 회차 직배송 사진 보내기·결과 분류는 사진 화면과 업로드 대기열이 함께 쓰는 모듈로 옮겼다(Y3).
+const roundDirectSendSource = await readFile(
+  new URL('./[orderId]/photo/round-direct-send.ts', import.meta.url),
+  'utf8',
+);
 const pilotPhotoRouteSource = await readFile(
   new URL('./[orderId]/photo/round-direct/page.tsx', import.meta.url),
   'utf8',
@@ -291,19 +296,24 @@ test('사진 화면은 명령 경로의 판매자 ID를 주소창이 아니라 �
   assert.doesNotMatch(photoCaptureSource, /useSearchParams|searchParams/);
   assert.match(photoCaptureSource, /readDriverOrderStoreId\(await response\.json\(\), orderId\)/);
   // 사진·명령을 보내기 전에 판매자 ID를 확인한다. 확인하지 못하면 아무 명령도 보내지 않는다.
+  // 거점: upload()가 먼저 읽는다.
   const uploadAt = photoCaptureSource.indexOf('async function upload()');
   const readAt = photoCaptureSource.indexOf('await readOrderStoreId(token)', uploadAt);
   const legacyAt = photoCaptureSource.indexOf('uploadLegacyHubPhoto(orderId', uploadAt);
-  const roundDirectAt = photoCaptureSource.indexOf(
-    'uploadRoundDirect(token, blob, storeId)',
-    uploadAt,
-  );
   assert.ok(uploadAt !== -1 && readAt > uploadAt, 'upload()가 판매자 ID를 먼저 읽어야 한다');
-  assert.ok(readAt < legacyAt && readAt < roundDirectAt, '판매자 ID 확인이 업로드보다 앞서야 한다');
+  assert.ok(readAt < legacyAt, '판매자 ID 확인이 거점 업로드보다 앞서야 한다');
+  // 회차 직배송: uploadRoundDirect가 보내기 전에 읽는다. 같은 키 재전송만 그 요청 때 확인한 값을 다시 쓴다.
+  const roundStart = photoCaptureSource.indexOf('async function uploadRoundDirect(');
+  const roundEnd = photoCaptureSource.indexOf('async function uploadPendingNow(', roundStart);
+  const round = photoCaptureSource.slice(roundStart, roundEnd);
+  const roundReadAt = round.indexOf('await readOrderStoreId(token)');
+  const sendAt = round.indexOf('sendRoundDirectPhoto(');
+  assert.ok(roundStart !== -1 && roundReadAt !== -1 && roundReadAt < sendAt);
+  assert.match(round, /let storeId = uncertainStoreIdRef\.current;/);
 });
 
 test('기사 명령 경로의 ID 조각은 apiPathSegment로 검사·인코딩한다', () => {
-  for (const source of [detailSource, photoCaptureSource, holdModalSource]) {
+  for (const source of [detailSource, photoCaptureSource, holdModalSource, roundDirectSendSource]) {
     const paths = [...source.matchAll(/`\/stores\/\$\{([^}]*)\}\/orders\/\$\{([^}]*)\}/g)];
     assert.ok(paths.length > 0, '명령 경로가 있어야 한다');
     for (const [path, storePart, orderPart] of paths) {
@@ -396,7 +406,7 @@ test('사진 화면은 화면이 숨으면 카메라를 끄고 리스너를 정�
   assert.match(block, /\}, \[stream\]\);/);
   // 복귀 때는 자동으로 켜지 않고 기존 촬영 시작 버튼 상태(!stream && !captured)로 돌아간다.
   assert.doesNotMatch(block, /startCamera\(/);
-  assert.match(photoCaptureSource, /\{!stream && !captured && \(/);
+  assert.match(photoCaptureSource, /!stream && !captured && \(/);
   // 언마운트 정지와 늦게 도착한 getUserMedia 정지는 그대로다.
   assert.match(
     photoCaptureSource,
@@ -420,9 +430,10 @@ test('Pilot 사진 화면은 JPEG 파일 대체 경로와 기존 업로드 계�
   assert.match(photoCaptureSource, /loadImageSource\(file\)/);
   assert.match(photoCaptureSource, /URL\.createObjectURL\(nextBlob\)/);
   assert.match(photoCaptureSource, /URL\.revokeObjectURL\(captured\)/);
-  assert.match(photoCaptureSource, /form\.append\(['"]photo['"],\s*blob/);
-  assert.match(photoCaptureSource, /form\.append\(['"]idempotencyKey['"]/);
-  assert.match(photoCaptureSource, /isDeliveryPhotoAck\(result,\s*orderId\)/);
+  assert.match(photoCaptureSource, /sendRoundDirectPhoto\(\{/);
+  assert.match(roundDirectSendSource, /form\.append\(['"]photo['"],\s*args\.photo/);
+  assert.match(roundDirectSendSource, /form\.append\(['"]idempotencyKey['"]/);
+  assert.match(roundDirectSendSource, /isDeliveryPhotoAck\(result,\s*orderId\)/);
   assert.match(photoPolicySource, /ack\.photoId/);
   assert.match(photoPolicySource, /ack\.orderId\s*===\s*orderId/);
   assert.match(photoPolicySource, /ack\.status\s*===\s*['"]DELIVERED['"]/);

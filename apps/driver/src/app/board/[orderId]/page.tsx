@@ -11,6 +11,7 @@ import { type ReactNode, use, useCallback, useEffect, useRef, useState } from 'r
 import { AppButton } from '@/components/app-button';
 import { TOAST_WARNING } from '@/components/app-toaster';
 import { text } from '@/components/look';
+import { PendingPhotoNotice } from '@/components/pending-photo-notice';
 import { Spinner } from '@/components/spinner';
 import { splitDeliveryAddress } from '@/lib/address-parts';
 import { apiFetch, apiRead } from '@/lib/api';
@@ -56,6 +57,7 @@ import {
   HOLD_UNCERTAIN_READBACK_WARNING,
 } from './_components/DeliveryHoldModal';
 import { StatusConfirmDialog } from './_components/StatusConfirmDialog';
+import { subscribePendingPhotoCompleted, usePendingPhotos } from './photo/pending-photo-client';
 
 type Order = {
   id?: string;
@@ -158,6 +160,21 @@ function OrderDetail({ orderId }: { orderId: string }) {
   // readback 실패는 command 실패와 분리한다: ACK된 명령은 재전송하지 않고 상태 재확인만 안내한다.
   const [readbackWarning, setReadbackWarning] = useState<string | null>(null);
   const [readKey, setReadKey] = useState(0);
+  // 이 주문의 완료 사진이 이 기기 대기열에 있으면(Y3) 안내와 "지금 다시 올리기"를 보이고 사진 완료 버튼을 끈다.
+  const pendingPhotos = usePendingPhotos(session?.user.id);
+  const pendingPhoto = pendingPhotos.entries.find((entry) => entry.orderId === orderId) ?? null;
+  const pendingPhotoNotice =
+    pendingPhoto && session?.user.id ? (
+      <PendingPhotoNotice entry={pendingPhoto} userId={session.user.id} />
+    ) : null;
+  // 대기열이 이 주문을 완료로 수렴하면 다시 조회한다(완료 주문은 "배송을 마친 주문이에요"로 바뀐다).
+  useEffect(
+    () =>
+      subscribePendingPhotoCompleted((completedOrderId) => {
+        if (completedOrderId === orderId) setReadKey((key) => key + 1);
+      }),
+    [orderId],
+  );
   const readSeqRef = useRef(0);
   const commandSeqRef = useRef(0);
   const hasOrderRef = useRef(false);
@@ -605,6 +622,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
           <p className={cn(text, 'text-center')} style={{ color: 'var(--driver-text-muted)' }}>
             {message}
           </p>
+          {/* 완료 사진이 아직 대기열에 있으면 여기서도 보인다(서버가 이미 완료해 조회가 404일 수 있다). */}
+          {pendingPhotoNotice && <div className="w-full max-w-md">{pendingPhotoNotice}</div>}
           {isNotFound && (
             // 다른 기사가 맡았거나 끝난 주문은 다시 열어도 같으므로 목록으로 바꿔 보낸다(D-17).
             // 방금 완료한 주문이면 배송 중 탭으로 보낸다(R-01).
@@ -819,6 +838,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
               </ProblemPanel>
             )
           )}
+
+          {pendingPhotoNotice}
 
           {/* 수거 대기에서는 먼저 들를 수거 장소를 배송지보다 위에 둔다. */}
           {pickup && (
@@ -1056,7 +1077,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
               fullWidth
               size="xl"
               loading={loading}
-              disabled={!commandsAllowed}
+              // 이 주문의 사진이 대기열에 있으면 새로 찍지 않는다(같은 키·같은 사진만 다시 보낸다).
+              disabled={!commandsAllowed || pendingPhoto !== null}
               onClick={() =>
                 router.push(`/board/${encodeURIComponent(orderId)}/photo/round-direct`)
               }

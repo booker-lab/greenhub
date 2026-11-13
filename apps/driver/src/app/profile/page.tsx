@@ -7,11 +7,7 @@ import { ColorSchemeSetting } from '@greenhub/ui/components/color-scheme-setting
 import { cn } from '@greenhub/ui/lib/utils';
 import { card, text, titleH4 } from '@/components/look';
 import { getApiBaseUrl } from '@/lib/api-base-url';
-import {
-  type ActiveDeliverySummary,
-  logoutConfirmMessage,
-  summarizeActiveDeliveries,
-} from '@/lib/logout-confirm';
+import { type ActiveDeliverySummary, summarizeActiveDeliveries } from '@/lib/logout-confirm';
 import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
 import { profileImageSrc } from '@/lib/profile-image';
 import { LogoutButton } from './logout-button';
@@ -230,9 +226,10 @@ export default async function ProfilePage() {
             </div>
           </Card>
 
-          {/* 로그아웃: 배송 중·보류 주문이 있으면 확인 창을 거친다 */}
+          {/* 로그아웃: 배송 중·보류 주문이나 올리지 못한 사진이 있으면 확인 창을 거친다.
+              사진 수는 이 기기 저장소에만 있어 확인 문구는 클라이언트 컴포넌트가 만든다. */}
           <LogoutButton
-            confirmMessage={logoutConfirmMessage(activeDeliveries)}
+            activeDeliveries={activeDeliveries}
             action={async () => {
               'use server';
               await revokeApiSession();
