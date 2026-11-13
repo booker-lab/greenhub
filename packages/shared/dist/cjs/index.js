@@ -38,3 +38,4 @@ __exportStar(require("./session-authority.js"), exports);
 __exportStar(require("./color-scheme.js"), exports);
 __exportStar(require("./content-security-policy.js"), exports);
 __exportStar(require("./csp-report.js"), exports);
+__exportStar(require("./driver-application.js"), exports);
