@@ -22,6 +22,7 @@ import {
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
+import { deliveryTransitionViolation } from './orders.helpers';
 import {
   isAllowedRedeliveryFee,
   MAX_REDELIVERY_FEE_KRW,
@@ -104,6 +105,19 @@ export class RoundOrderLifecycleService {
           );
         }
         throw new ConflictException('주문 취소가 진행 중이어서 주문 상태를 변경할 수 없습니다.');
+      }
+      // 진입 검사는 트랜잭션 밖에서 읽은 주문으로 했다. 재배송하지 않는 보류(상품 파손)의 해제 금지는
+      // 최신 주문으로 다시 본다(그 사이 보류가 바뀌어도 취소 외 전이를 막는다).
+      const holdLockViolation = deliveryTransitionViolation(
+        order['status'] as OrderStatus,
+        input.dto.status,
+        order,
+      );
+      if (holdLockViolation) {
+        if (input.requesterRole === 'driver') {
+          throwDriverOrderStateConflict(holdLockViolation, true);
+        }
+        throw new ForbiddenException(holdLockViolation);
       }
       if (input.requesterRole === 'driver') {
         const mutationInput = {

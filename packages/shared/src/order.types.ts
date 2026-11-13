@@ -55,14 +55,39 @@ export interface OrderAcquisitionSnapshot {
   capturedAt: string // ISO8601
 }
 
+/**
+ * 배송 보류 사유 코드. 서버 DTO(apps/api/src/orders/dto/update-status.dto.ts)가 받는 값과 같다.
+ * - PRODUCT_DAMAGED(상품 파손): 판매자·기사 책임이고 다시 배송하지 않는다. 기사가 배송 중에만 남긴다.
+ * - RECEIPT_REFUSED(수령 거부): 고객 책임(단순 변심과 같음)이고 재배송비를 결제해야 다시 배송한다.
+ */
+export type DeliveryHoldReasonCode =
+  | 'WEATHER'
+  | 'ACCESS_UNAVAILABLE'
+  | 'ADDRESS_ISSUE'
+  | 'CUSTOMER_UNREACHABLE'
+  | 'RECEIPT_REFUSED'
+  | 'PRODUCT_DAMAGED'
+  | 'OTHER'
+
+/**
+ * 재배송하지 않는 보류 사유. 이 보류는 주문 취소(전액 환불)로만 끝나고 재배송 준비·배송 재개로
+ * 돌아가지 않는다(apps/api/src/orders/orders.helpers.ts deliveryTransitionViolation).
+ */
+export const NON_REDELIVERABLE_HOLD_REASONS: readonly DeliveryHoldReasonCode[] = [
+  'PRODUCT_DAMAGED',
+]
+
+/** 재배송하지 않는(취소로만 끝나는) 보류 사유인지 확인한다. 알 수 없는 값은 false다. */
+export function isNonRedeliverableHoldReason(reasonCode: unknown): boolean {
+  return (
+    typeof reasonCode === 'string' &&
+    (NON_REDELIVERABLE_HOLD_REASONS as readonly string[]).includes(reasonCode)
+  )
+}
+
 export interface DeliveryHoldSnapshot {
   heldAt: string // ISO8601
-  reasonCode:
-    | 'WEATHER'
-    | 'ACCESS_UNAVAILABLE'
-    | 'ADDRESS_ISSUE'
-    | 'CUSTOMER_UNREACHABLE'
-    | 'OTHER'
+  reasonCode: DeliveryHoldReasonCode
   reasonMessage: string
   customerResponsible: boolean
   redeliveryFee: number | null

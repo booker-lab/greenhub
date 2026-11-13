@@ -31,11 +31,13 @@ export const ORDER_STATUSES = [
 
 export type OrderStatus = (typeof ORDER_STATUSES)[number];
 
-const DELIVERY_HOLD_REASONS = [
+export const DELIVERY_HOLD_REASONS = [
   'WEATHER',
   'ACCESS_UNAVAILABLE',
   'ADDRESS_ISSUE',
   'CUSTOMER_UNREACHABLE',
+  'RECEIPT_REFUSED',
+  'PRODUCT_DAMAGED',
   'OTHER',
 ] as const;
 
