@@ -1,6 +1,7 @@
 'use client';
 
 import { apiPathSegment } from '@greenhub/shared';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
@@ -919,6 +920,7 @@ function ShowMoreButton({ hidden, onClick }: { hidden: number; onClick: () => vo
  * 숫자 기준: 점 띠와 진행 줄은 "내 주문"(배송 중·보류·내 수거)을 세고, 아무도 맡지 않은 주문은 점 띠에 그리지 않고
  * 진행 줄의 "맡을 수 있는 n곳"으로만 센다. 탭 숫자는 탭의 전체 행 수(내 수거 + 맡을 수 있는 주문)다.
  * 줄 끝의 "오늘 완료 n곳"은 목록이 아니라 기사 요약(GET /driver/summary)의 값이고, 읽지 못하면 그 부분만 숨긴다.
+ * 1곳 이상이면 오늘 완료 내역(/board/completed)으로 가는 링크다.
  * 도착 예상 시간은 기사 API에 없어 쓰지 않는다(design-direction.md §3.5).
  */
 function DeliveryProgress({
@@ -984,11 +986,22 @@ function DeliveryProgress({
             {' · '}맡을 수 있는 {preparingGroups.available.length}곳
           </>
         )}
-        {completedToday !== null && (
+        {completedToday !== null && completedToday > 0 && (
           <>
-            {' · '}오늘 완료 {completedToday}곳
+            {' · '}
+            {/* 손님 문의에 답할 때 오늘 마친 배송·사진을 다시 보는 화면으로 간다. 0곳이면 볼 것이 없어 글자만 둔다. */}
+            <Link
+              href="/board/completed"
+              prefetch={false}
+              // 글줄 높이는 그대로 두고 위아래 여백으로 누를 자리만 넓힌다(인라인 요소의 세로 여백은 줄을 밀지 않는다).
+              className="py-2 underline underline-offset-4"
+              style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
+            >
+              오늘 완료 {completedToday}곳
+            </Link>
           </>
         )}
+        {completedToday === 0 && <>{' · '}오늘 완료 0곳</>}
       </p>
     </div>
   );

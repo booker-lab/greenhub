@@ -1,6 +1,7 @@
 import { auth, signOut } from '@/auth';
 import { redirect } from 'next/navigation';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Card } from '@greenhub/ui/components/card';
 import { ColorSchemeSetting } from '@greenhub/ui/components/color-scheme-setting';
 import { cn } from '@greenhub/ui/lib/utils';
@@ -168,6 +169,36 @@ export default async function ProfilePage() {
                 1.0.0
               </p>
             </div>
+          </Card>
+
+          {/* 오늘 완료 내역: 손님 문의에 답할 때 오늘 마친 배송과 완료 사진을 다시 본다. */}
+          <Card className={cn(card, 'p-0')}>
+            <Link
+              href="/board/completed"
+              prefetch={false}
+              className="flex min-h-14 items-center justify-between gap-4 p-4 no-underline"
+              style={{ color: 'var(--color-text)' }}
+            >
+              <p className={text} style={{ fontWeight: 'var(--fw-bold)' }}>
+                오늘 완료 내역
+              </p>
+              <svg
+                width="20"
+                height="20"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+                focusable="false"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M9 5l7 7-7 7"
+                />
+              </svg>
+            </Link>
           </Card>
 
           {/* 운영팀 연락(소비자 고객센터와 같은 번호, ops-contact.ts) */}
