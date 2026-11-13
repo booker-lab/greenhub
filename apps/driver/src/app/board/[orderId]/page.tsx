@@ -59,7 +59,12 @@ import {
   HOLD_UNCERTAIN_READBACK_WARNING,
 } from './_components/DeliveryHoldModal';
 import { StatusConfirmDialog } from './_components/StatusConfirmDialog';
-import { subscribePendingPhotoCompleted, usePendingPhotos } from './photo/pending-photo-client';
+import {
+  failStalePendingPhoto,
+  subscribePendingPhotoCompleted,
+  usePendingPhotos,
+} from './photo/pending-photo-client';
+import { isPendingPhotoStaleForOrderStatus } from './photo/pending-photo-policy';
 
 type Order = {
   id?: string;
@@ -177,6 +182,20 @@ function OrderDetail({ orderId }: { orderId: string }) {
       }),
     [orderId],
   );
+  // 최신 조회가 이 주문을 보류·수거 대기로 보이면 대기 중인 예전 사진을 멈춘다(사진 바이트 삭제).
+  // 다시 배송 중이 되어도 그 사진이 새 배송을 완료하지 않게 한다. 보내는 중이면 실행기가 건드리지 않는다.
+  const staleUserId = session?.user.id;
+  const staleOrderStatus = order?.id === orderId ? order.status : null;
+  const staleReadSettled =
+    readError === null && readbackWarning === null && !readLoading && !readRefreshing;
+  const pendingPhotoState = pendingPhoto?.state ?? null;
+  useEffect(() => {
+    if (!staleUserId || !staleReadSettled || pendingPhotoState === null) return;
+    if (pendingPhotoState === 'failed' || !isPendingPhotoStaleForOrderStatus(staleOrderStatus)) {
+      return;
+    }
+    void failStalePendingPhoto(staleUserId, orderId);
+  }, [staleUserId, staleReadSettled, staleOrderStatus, pendingPhotoState, orderId]);
   const readSeqRef = useRef(0);
   const commandSeqRef = useRef(0);
   const hasOrderRef = useRef(false);
@@ -710,7 +729,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
       })
     : null;
   const openStatusConfirm = (kind: DriverStatusConfirmKind) => {
-    if (loading || !commandsAllowed) return;
+    if (loading || !commandsAllowed || pendingPhoto !== null) return;
     setConfirmKind(kind);
   };
   // 앱 안 이전 기록이 있을 때만 브라우저 뒤로, 없으면(알림·메신저 링크로 바로 연 경우) 목록으로 바꿔 보낸다(D-16).
@@ -1060,7 +1079,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 fullWidth
                 size="xl"
                 loading={loading}
-                disabled={loading || !commandsAllowed}
+                // 이 주문의 예전 배송 사진이 대기열에 있으면 다시 배송을 시작하지 않는다. 그 사진이 새 배송을
+                // 완료하지 않도록, 멈춘 항목을 "확인했어요"로 지운 뒤 시작할 수 있다.
+                disabled={loading || !commandsAllowed || pendingPhoto !== null}
                 onClick={() => openStatusConfirm('RESUME')}
               >
                 배송 재개
@@ -1077,7 +1098,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 fullWidth
                 size="xl"
                 loading={loading}
-                disabled={loading || !commandsAllowed}
+                // 이 주문의 예전 배송 사진이 대기열에 있으면 다시 배송을 시작하지 않는다. 그 사진이 새 배송을
+                // 완료하지 않도록, 멈춘 항목을 "확인했어요"로 지운 뒤 시작할 수 있다.
+                disabled={loading || !commandsAllowed || pendingPhoto !== null}
                 onClick={() => openStatusConfirm('START')}
               >
                 수거 완료 / 배송 시작
@@ -1108,7 +1131,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 fullWidth
                 size="xl"
                 loading={loading}
-                disabled={loading || !commandsAllowed}
+                // 이 주문의 예전 배송 사진이 대기열에 있으면 다시 배송을 시작하지 않는다. 그 사진이 새 배송을
+                // 완료하지 않도록, 멈춘 항목을 "확인했어요"로 지운 뒤 시작할 수 있다.
+                disabled={loading || !commandsAllowed || pendingPhoto !== null}
                 onClick={() => openStatusConfirm('START')}
               >
                 수거 완료 / 배송 시작

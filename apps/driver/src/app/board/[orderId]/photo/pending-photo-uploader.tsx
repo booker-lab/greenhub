@@ -10,13 +10,30 @@ import { getPendingPhotoRunner, subscribePendingPhotoKick } from './pending-phot
  * 깨우는 때: 로그인된 앱 열기·세션(토큰) 바뀜, 연결 복구('online'), 화면 복귀(visibilitychange visible),
  * 페이지 복원(pageshow), 새 항목·"지금 올리기" 직후. 화면이 보이는 동안은 다음 차례 시각에 다시 깨운다
  * (간격 30초·1분·2분·5분 상한 + 흔들림, pending-photo-policy). 화면이 숨으면 타이머를 걸지 않는다.
- * 세션이 없으면(만료 포함) 돌리지 않고 항목은 그 사용자에게 묶인 채 남는다.
+ * 세션이 없으면(만료 포함) 보내지 않고 항목은 그 사용자에게 묶인 채 남는다. 단 12시간 만료와 사진 바이트
+ * 삭제는 세션 없이도 한다.
  */
 export function PendingPhotoUploader() {
   const { data: session, status } = useSession();
   const userId = session?.user?.id;
   const accessToken = session?.user?.accessToken;
   const tokenError = session?.user?.tokenError === true;
+
+  // 로그인되지 않았거나 세션을 쓸 수 없어도(만료·토큰 오류) 앱을 열 때·화면 복귀 때 12시간 지난 항목의
+  // 사진 바이트를 지운다(runAll은 세션이 없으면 만료 정리만 하고 보내거나 다른 항목을 지우지 않는다).
+  const sessionUsable =
+    status === 'authenticated' && Boolean(userId) && Boolean(accessToken) && !tokenError;
+  useEffect(() => {
+    if (status === 'loading' || sessionUsable) return;
+    const runner = getPendingPhotoRunner();
+    if (!runner) return;
+    const expire = () => {
+      if (document.visibilityState !== 'hidden') void runner.runAll().catch(() => null);
+    };
+    expire();
+    document.addEventListener('visibilitychange', expire);
+    return () => document.removeEventListener('visibilitychange', expire);
+  }, [status, sessionUsable]);
 
   // accessToken이 바뀌면(세션 갱신) 다시 깨운다: 401로 멈춘 항목이 새 토큰으로 이어서 올라간다.
   useEffect(() => {

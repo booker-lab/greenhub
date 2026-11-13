@@ -59,6 +59,8 @@ type SentRequest = {
   token: string;
   method: string;
   idempotencyKey: string | null;
+  /** 보내지 않았으면 null. */
+  expectedHoldAt: string | null;
   photo: Uint8Array;
   photoType: string;
 };
@@ -97,6 +99,7 @@ function makeHarness(
       token,
       method: init.method,
       idempotencyKey: form.get('idempotencyKey') as string | null,
+      expectedHoldAt: form.get('expectedHoldAt') as string | null,
       photo: new Uint8Array(0),
       photoType: photo instanceof Blob ? photo.type : '',
     };
@@ -136,6 +139,7 @@ function makeHarness(
   const runner = createPendingPhotoRunner(deps);
   return {
     runner,
+    deps,
     store,
     sent,
     completed,
@@ -504,6 +508,189 @@ describe('사진 업로드 대기열 실행기', () => {
   });
 });
 
+describe('촬영 뒤 새 보류(Y3 at-most-once)', () => {
+  it('항목에 남은 보류 표시를 그대로 싣고(없음은 none), 모르던 이전 항목은 싣지 않는다', async () => {
+    const harness = makeHarness({
+      entries: [
+        makeEntry({ orderId: 'order-1', expectedHoldAt: '2026-11-13T08:00:00.000Z' }),
+        makeEntry({ orderId: 'order-2', expectedHoldAt: null }),
+        makeEntry({ orderId: 'order-3' }),
+      ],
+      responses: [ack('order-1'), ack('order-2'), ack('order-3')],
+    });
+
+    await harness.runner.runAll();
+
+    expect(harness.sent.map((request) => request.expectedHoldAt)).toEqual([
+      '2026-11-13T08:00:00.000Z',
+      'none',
+      null,
+    ]);
+  });
+
+  it('409 DELIVERY_PHOTO_STALE_HOLD면 다시 보내지 않고 바이트를 지운 채 멈춘다', async () => {
+    const harness = makeHarness({
+      entries: [makeEntry({ expectedHoldAt: null })],
+      responses: [
+        json(409, {
+          statusCode: 409,
+          message: '보류',
+          error: 'Conflict',
+          code: 'DELIVERY_PHOTO_STALE_HOLD',
+        }),
+      ],
+    });
+
+    await expect(harness.runner.runOrder('order-1')).resolves.toBe('failed');
+    const entry = harness.store.raw.get('driver-1:order-1') as PendingPhotoEntry;
+    expect(entry.state).toBe('failed');
+    expect(entry.lastFailure).toBe('STALE_HOLD');
+    expect(entry.bytes).toBeNull();
+    expect(harness.failed.map((failed) => failed.lastFailure)).toEqual(['STALE_HOLD']);
+
+    harness.advance(10 * 60_000);
+    await harness.runner.runAll({ manual: true });
+    expect(harness.sent).toHaveLength(1);
+  });
+
+  it('주문 조회가 보류로 보이면 기다리는 항목을 STALE_HOLD로 멈추고 바이트를 지운다', async () => {
+    const harness = makeHarness({ entries: [makeEntry({ nextAttemptAt: NOW + 60_000 })] });
+
+    await expect(harness.runner.failStalePhoto('driver-1', 'order-1')).resolves.toBe('stale');
+
+    const entry = harness.store.raw.get('driver-1:order-1') as PendingPhotoEntry;
+    expect(entry.state).toBe('failed');
+    expect(entry.lastFailure).toBe('STALE_HOLD');
+    expect(entry.bytes).toBeNull();
+    // 다른 사용자 키·없는 항목·이미 멈춘 항목은 건드리지 않는다.
+    await expect(harness.runner.failStalePhoto('driver-2', 'order-1')).resolves.toBe('none');
+    await expect(harness.runner.failStalePhoto('driver-1', 'order-1')).resolves.toBe('none');
+    harness.advance(60_000);
+    await harness.runner.runAll();
+    expect(harness.sent).toHaveLength(0);
+  });
+
+  it('이 탭이 보내는 중이면 멈추지 않고, 보낸 결과(ACK)로 끝낸다', async () => {
+    let release!: (response: Response) => void;
+    const harness = makeHarness({
+      entries: [makeEntry()],
+      responses: [() => new Promise<Response>((resolve) => (release = resolve))],
+    });
+
+    const run = harness.runner.runOrder('order-1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(harness.sent).toHaveLength(1);
+    await expect(harness.runner.failStalePhoto('driver-1', 'order-1')).resolves.toBe('busy');
+    expect((harness.store.raw.get('driver-1:order-1') as PendingPhotoEntry).state).toBe('sending');
+    release(ack());
+    await expect(run).resolves.toBe('done');
+    expect(harness.store.raw.size).toBe(0);
+  });
+
+  it('다른 탭이 보내는 중(잠금 없음: 살아 있는 보내는 중 표시, 잠금 있음: 잠금을 쥠)이면 멈추지 않는다', async () => {
+    const leased = makeEntry({ state: 'sending', leaseUntil: NOW + PENDING_PHOTO_LEASE_MS });
+    const noLocks = makeHarness({ entries: [leased] });
+    await expect(noLocks.runner.failStalePhoto('driver-1', 'order-1')).resolves.toBe('busy');
+    expect((noLocks.store.raw.get('driver-1:order-1') as PendingPhotoEntry).state).toBe('sending');
+
+    const heldElsewhere: PendingPhotoLockManager = {
+      request: async (_name, _options, callback) => callback(null),
+    };
+    const locked = makeHarness({ entries: [makeEntry()], locks: heldElsewhere });
+    await expect(locked.runner.failStalePhoto('driver-1', 'order-1')).resolves.toBe('busy');
+    expect((locked.store.raw.get('driver-1:order-1') as PendingPhotoEntry).state).toBe('waiting');
+
+    // 잠금을 쥐면 닫힌 탭이 남긴 보내는 중 표시는 흔적이므로 멈춘다.
+    const free: PendingPhotoLockManager = {
+      request: async (_name, _options, callback) => callback({}),
+    };
+    const closedTab = makeHarness({ entries: [leased], locks: free });
+    await expect(closedTab.runner.failStalePhoto('driver-1', 'order-1')).resolves.toBe('stale');
+  });
+});
+
+describe('보내기 직전 시도 기록(탭이 보내는 도중 닫혀도 남는다)', () => {
+  it('보내는 중 표시를 쥔 뒤 보내기 전에 보낸 횟수·마지막 보낸 시각을 저장소에 먼저 쓴다', async () => {
+    let release!: (response: Response) => void;
+    const harness = makeHarness({
+      entries: [makeEntry({ attempts: 1, lastAttemptAt: NOW - 60_000 })],
+      responses: [() => new Promise<Response>((resolve) => (release = resolve))],
+    });
+
+    const run = harness.runner.runOrder('order-1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // 응답을 기다리는 동안(탭이 여기서 닫힐 수 있다) 저장소에 이미 이번 전송이 남아 있다.
+    const inFlight = harness.store.raw.get('driver-1:order-1') as PendingPhotoEntry;
+    expect(inFlight.state).toBe('sending');
+    expect(inFlight.attempts).toBe(2);
+    expect(inFlight.lastAttemptAt).toBe(NOW);
+
+    release(json(503, {}));
+    await expect(run).resolves.toBe('retry');
+    // 결과 반영 때 두 번 세지 않는다.
+    expect((harness.store.raw.get('driver-1:order-1') as PendingPhotoEntry).attempts).toBe(2);
+  });
+
+  it('보내는 도중 닫힌 탭의 항목은 다음 실행이 30초 간격과 앞선 전송(409 확인 재전송)을 안다', async () => {
+    // 처음 보내기 전 실패로 넣은 항목(서버가 본 적 없음)을 보내는 도중 탭이 닫혔다.
+    const harness = makeHarness({
+      entries: [makeEntry({ attempts: 0, lastAttemptAt: 0, lastFailure: 'OFFLINE' })],
+      responses: [
+        () => new Promise<Response>(() => {}),
+        json(409, { code: 'DRIVER_ORDER_STATE_CONFLICT' }),
+      ],
+    });
+    void harness.runner.runOrder('order-1');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const left = harness.store.raw.get('driver-1:order-1') as PendingPhotoEntry;
+    expect(left.attempts).toBe(1);
+
+    // 닫힌 탭: 다른 실행기(새 탭)가 같은 저장소를 본다.
+    const nextTab = createPendingPhotoRunner({
+      ...harness.deps,
+      locks: { request: async (_name, _options, callback) => callback({}) },
+    });
+    harness.advance(10_000);
+    await expect(nextTab.runOrder('order-1', { manual: true })).resolves.toBe('not-due');
+    harness.advance(20_000);
+    await expect(nextTab.runOrder('order-1', { manual: true })).resolves.toBe('retry');
+    const after = harness.store.raw.get('driver-1:order-1') as PendingPhotoEntry;
+    // 앞서 보낸 요청이 있었으므로 409는 바로 멈추지 않고 확인 재전송을 기다린다.
+    expect(after.lastFailure).toBe('CONFLICT_UNCONFIRMED');
+    expect(after.state).toBe('waiting');
+  });
+});
+
+describe('세션 없이도 하는 12시간 만료 정리', () => {
+  it('로그아웃 상태로 앱을 열어도 12시간 지난 항목은 바이트를 지운 채 멈추고, 그 밖의 항목은 그대로 둔다', async () => {
+    const harness = makeHarness({
+      entries: [
+        makeEntry({ orderId: 'old', createdAt: NOW - PENDING_PHOTO_MAX_AGE_MS }),
+        makeEntry({
+          userId: 'driver-2',
+          orderId: 'old-2',
+          createdAt: NOW - PENDING_PHOTO_MAX_AGE_MS,
+        }),
+        makeEntry({ orderId: 'fresh' }),
+      ],
+      sessions: [null],
+    });
+
+    await expect(harness.runner.runAll()).resolves.toBeNull();
+
+    for (const key of ['driver-1:old', 'driver-2:old-2']) {
+      const entry = harness.store.raw.get(key) as PendingPhotoEntry;
+      expect(entry.state).toBe('failed');
+      expect(entry.lastFailure).toBe('EXPIRED');
+      expect(entry.bytes).toBeNull();
+    }
+    const fresh = harness.store.raw.get('driver-1:fresh') as PendingPhotoEntry;
+    expect(fresh.state).toBe('waiting');
+    expect(fresh.bytes).not.toBeNull();
+    expect(harness.sent).toHaveLength(0);
+  });
+});
+
 describe('메모리 저장소', () => {
   it('깨진 항목은 읽을 때 버리고 지운다', async () => {
     const store = createMemoryPendingPhotoStore([
@@ -588,5 +775,26 @@ describe('회차 직배송 사진 보내기(화면·대기열 공용)', () => {
       }),
     ).resolves.toEqual({ kind: 'failure', failure: 'REJECTED', status: null });
     expect(called).toBe(false);
+  });
+});
+
+describe('회차 직배송 사진 보내기: 촬영 뒤 새 보류', () => {
+  it('409 DELIVERY_PHOTO_STALE_HOLD는 STALE_HOLD 확정 거절이고, 보류 표시를 준 대로 싣는다', async () => {
+    const forms: FormData[] = [];
+    const result = await sendRoundDirectPhoto({
+      post: async (_path, _token, init) => {
+        forms.push(init.body);
+        return json(409, { statusCode: 409, code: 'DELIVERY_PHOTO_STALE_HOLD' });
+      },
+      token: 'token-1',
+      storeId: 'store-1',
+      orderId: 'order-1',
+      idempotencyKey: KEY,
+      photo: new Blob([photoBytes()], { type: 'image/jpeg' }),
+      expectedHoldAt: '2026-11-13T08:00:00.000Z',
+    });
+
+    expect(result).toEqual({ kind: 'failure', failure: 'STALE_HOLD', status: 409 });
+    expect(forms[0].get('expectedHoldAt')).toBe('2026-11-13T08:00:00.000Z');
   });
 });

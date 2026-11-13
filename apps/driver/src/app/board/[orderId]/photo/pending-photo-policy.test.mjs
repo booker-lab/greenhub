@@ -6,6 +6,7 @@ import {
   decidePendingPhotoOutcome,
   expirePendingPhoto,
   isPendingPhotoDue,
+  isPendingPhotoStaleForOrderStatus,
   isUncertainPendingSendFailure,
   nextPendingPhotoWakeAt,
   PENDING_PHOTO_BACKOFF_MS,
@@ -20,8 +21,10 @@ import {
   pendingPhotoKey,
   pendingPhotoLockName,
   pendingPhotoManualReadyAt,
+  pendingPhotoStaleOrderIds,
   pendingPhotoStatusMessage,
   readPendingPhotoEntry,
+  recordPendingPhotoSend,
   shouldEnqueuePendingPhoto,
   toPendingPhotoSummary,
 } from './pending-photo-policy.ts';
@@ -406,4 +409,100 @@ test('배지·안내 문구', () => {
   assert.equal(PENDING_PHOTO_MESSAGES.NOT_FOUND, PHOTO_UPLOAD_MESSAGES.NOT_FOUND);
   assert.equal(PENDING_PHOTO_MESSAGES.TOO_LARGE, PHOTO_UPLOAD_MESSAGES.TOO_LARGE);
   assert.equal(PENDING_PHOTO_MESSAGES.REJECTED, PHOTO_UPLOAD_MESSAGES.REJECTED);
+});
+
+test('촬영 때 본 보류 표시(expectedHoldAt)는 항목에 남고, 없는 이전 항목은 그대로 읽는다(형식 버전 그대로)', () => {
+  const legacy = readPendingPhotoEntry(entry());
+  assert.ok(legacy);
+  assert.equal('expectedHoldAt' in legacy, false);
+  assert.equal(readPendingPhotoEntry(entry({ expectedHoldAt: null }))?.expectedHoldAt, null);
+  assert.equal(
+    readPendingPhotoEntry(entry({ expectedHoldAt: '2026-11-13T08:00:00.000Z' }))?.expectedHoldAt,
+    '2026-11-13T08:00:00.000Z',
+  );
+  for (const broken of ['', 7, 'x'.repeat(41), {}]) {
+    assert.equal(readPendingPhotoEntry(entry({ expectedHoldAt: broken })), null, String(broken));
+  }
+  const created = createPendingPhotoEntry({
+    userId: 'driver-1',
+    orderId: 'order-1',
+    storeId: 'store-1',
+    idempotencyKey: KEY,
+    bytes: bytes(),
+    now: NOW,
+    random: 0,
+    input: { phase: 'sent', failure: 'NETWORK' },
+    expectedHoldAt: null,
+  });
+  assert.equal(created?.expectedHoldAt, null);
+  const unknown = createPendingPhotoEntry({
+    userId: 'driver-1',
+    orderId: 'order-1',
+    storeId: 'store-1',
+    idempotencyKey: KEY,
+    bytes: bytes(),
+    now: NOW,
+    random: 0,
+    input: { phase: 'pre-send', reason: 'OFFLINE' },
+  });
+  assert.equal(unknown && 'expectedHoldAt' in unknown, false);
+});
+
+test('촬영 뒤 새 보류로 거절(STALE_HOLD)되면 다시 보내지 않고 바이트를 지운 채 멈춘다', () => {
+  const outcome = decidePendingPhotoOutcome({
+    entry: entry({ attempts: 2 }),
+    result: { kind: 'failure', failure: 'STALE_HOLD', status: 409 },
+    now: NOW,
+    random: 0,
+  });
+  assert.equal(outcome.action, 'fail');
+  assert.equal(outcome.entry.state, 'failed');
+  assert.equal(outcome.entry.lastFailure, 'STALE_HOLD');
+  assert.equal(outcome.entry.bytes, null);
+  // 멈춘 STALE_HOLD 항목도 저장소에서 다시 읽힌다.
+  assert.ok(readPendingPhotoEntry(outcome.entry));
+  assert.equal(
+    pendingPhotoStatusMessage(outcome.entry, NOW),
+    '보류 뒤 다시 배송 중이라 예전 사진은 쓸 수 없어요. 사진을 다시 찍어 주세요.',
+  );
+  assert.equal(PENDING_PHOTO_MESSAGES.STALE_HOLD, PHOTO_UPLOAD_MESSAGES.STALE_HOLD);
+});
+
+test('주문 조회가 보류·수거 대기로 보인 대기 항목만 멈출 대상이다(완료·배송 중·멈춘 항목은 아니다)', () => {
+  assert.equal(isPendingPhotoStaleForOrderStatus('DELIVERY_HELD'), true);
+  assert.equal(isPendingPhotoStaleForOrderStatus('PREPARING'), true);
+  for (const status of ['DELIVERING', 'DELIVERED', 'REVIEWED', undefined, null]) {
+    assert.equal(isPendingPhotoStaleForOrderStatus(status), false, String(status));
+  }
+  const entries = [
+    entry({ orderId: 'held' }),
+    entry({ orderId: 'prep', state: 'sending', leaseUntil: NOW + 1 }),
+    entry({ orderId: 'delivering' }),
+    entry({ orderId: 'done' }),
+    entry({ orderId: 'gone' }),
+    entry({ orderId: 'held-failed', state: 'failed', bytes: null, lastFailure: 'EXPIRED' }),
+  ].map(toPendingPhotoSummary);
+  assert.deepEqual(
+    pendingPhotoStaleOrderIds(entries, [
+      { id: 'held', status: 'DELIVERY_HELD' },
+      { id: 'prep', status: 'PREPARING' },
+      { id: 'delivering', status: 'DELIVERING' },
+      { id: 'done', status: 'DELIVERED' },
+      { id: 'held-failed', status: 'DELIVERY_HELD' },
+    ]),
+    ['held', 'prep'],
+  );
+});
+
+test('보내기 직전 기록은 보내는 중 항목에만 보낸 횟수·마지막 보낸 시각을 남긴다', () => {
+  const sending = entry({
+    state: 'sending',
+    leaseUntil: NOW + PENDING_PHOTO_LEASE_MS,
+    attempts: 1,
+  });
+  const recorded = recordPendingPhotoSend(sending, NOW + 5);
+  assert.equal(recorded?.attempts, 2);
+  assert.equal(recorded?.lastAttemptAt, NOW + 5);
+  assert.equal(recorded?.state, 'sending');
+  assert.equal(recordPendingPhotoSend(entry(), NOW), null);
 });

@@ -21,6 +21,7 @@ import { readDriverSummaryCompletedToday } from '@/lib/driver-summary';
 import { groupPreparingOrders, takePreparingFirstScreen } from '@/lib/preparing-groups';
 import {
   dismissPendingPhoto,
+  failStalePendingPhoto,
   runAllPendingPhotosNow,
   subscribePendingPhotoCompleted,
   usePendingPhotos,
@@ -31,6 +32,7 @@ import {
   type PendingPhotoSummary,
   pendingPhotoBadgeKind,
   pendingPhotoBannerTitle,
+  pendingPhotoStaleOrderIds,
   pendingPhotoStatusMessage,
 } from './[orderId]/photo/pending-photo-policy';
 import { BatchPickupConfirmDialog } from './_components/BatchPickupConfirmDialog';
@@ -51,6 +53,8 @@ type BatchSelection = {
   selectedIds: ReadonlySet<string>;
   disabled: boolean;
   onToggle: (orderId: string) => void;
+  /** 사진 업로드 대기열에 항목이 있는 주문 ID. 이 주문은 고를 수 없다. */
+  pendingPhotoOrderIds: ReadonlySet<string>;
 };
 
 /** 복귀 재조회 묶음 간격. focus·visibilitychange가 이 간격 안에 겹치면 목록을 한 번만 다시 조회한다. */
@@ -296,11 +300,31 @@ export default function BoardClient() {
 
   // 대기열이 사진을 올려 완료로 수렴하면 목록을 다시 읽는다(그 주문은 배송 중에서 빠진다).
   useEffect(() => subscribePendingPhotoCompleted(() => setReloadKey((key) => key + 1)), []);
+
+  // 최신 목록이 대기 사진의 주문을 보류·수거 대기로 보이면 그 예전 사진을 멈춘다(사진 바이트 삭제).
+  // 다시 배송 중이 되어도 그 사진이 새 배송을 완료하지 않게 한다. 보내는 중이면 실행기가 건드리지 않는다.
+  const staleListSettled =
+    hasSuccessfulRead && !authRequired && error === null && !loading && !refreshing;
+  const staleUserId = session?.user.id;
+  const staleOrderKey = staleListSettled
+    ? pendingPhotoStaleOrderIds(pendingPhotos.entries, [...preparing, ...delivering]).join(',')
+    : '';
+  useEffect(() => {
+    if (!staleUserId || staleOrderKey.length === 0) return;
+    for (const orderId of staleOrderKey.split(','))
+      void failStalePendingPhoto(staleUserId, orderId);
+  }, [staleUserId, staleOrderKey]);
+  // 한 번에 수거에서 뺄 주문: 이 주문의 사진이 대기열에 있다(올리는 중·멈춤 확인 전 모두).
+  const pendingPhotoOrderIds: ReadonlySet<string> = new Set(
+    pendingPhotos.entries.map((entry) => entry.orderId),
+  );
   const showProgress = hasSuccessfulRead && !authRequired;
 
   // 한 번에 수거: 내 수거 중 회차 직배송이고 배송 시작이 허용되고 storeId가 있는 주문만 고를 수 있다.
   // 목록이 최신이 아니면(조회 실패로 이전 목록 표시 중·다시 읽는 중) 보내지 않는다(상세 commandsAllowed와 같은 fail-closed).
-  const batchCandidates = preparing.filter(isBatchPickupSelectable);
+  const batchCandidates = preparing.filter((order) =>
+    isBatchPickupSelectable(order, { pendingPhotoOrderIds }),
+  );
   const selectedOrders = batchCandidates.filter((order) => selectedIds.has(order.id));
   const batchListFresh =
     hasSuccessfulRead && !authRequired && error === null && !loading && !refreshing;
@@ -319,6 +343,7 @@ export default function BoardClient() {
       ? {
           selectedIds,
           disabled: batchRunning,
+          pendingPhotoOrderIds,
           onToggle: (orderId) =>
             setSelectedIds((current) => {
               const next = new Set(current);
@@ -986,7 +1011,9 @@ function OrderGroup({
 
 /** 한 번에 수거 고르기 칸. 고를 수 없는 내 수거 주문은 꺼진 칸과 까닭을 보인다. */
 function toRowSelection(order: DriverListOrder, batch: BatchSelection): OrderRowSelection {
-  const reason = batchPickupBlockReason(order);
+  const reason = batchPickupBlockReason(order, {
+    pendingPhotoOrderIds: batch.pendingPhotoOrderIds,
+  });
   return {
     checked: reason === null && batch.selectedIds.has(order.id),
     disabled: batch.disabled || reason !== null,

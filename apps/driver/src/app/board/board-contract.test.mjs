@@ -294,7 +294,7 @@ test('직배송 사진 링크는 정확한 Pilot 경로로 분리하고 legacy �
 
 test('사진 화면은 명령 경로의 판매자 ID를 주소창이 아니라 주문 조회 응답에서 읽는다', () => {
   assert.doesNotMatch(photoCaptureSource, /useSearchParams|searchParams/);
-  assert.match(photoCaptureSource, /readDriverOrderStoreId\(await response\.json\(\), orderId\)/);
+  assert.match(photoCaptureSource, /const storeId = readDriverOrderStoreId\(payload, orderId\);/);
   // 사진·명령을 보내기 전에 판매자 ID를 확인한다. 확인하지 못하면 아무 명령도 보내지 않는다.
   // 거점: upload()가 먼저 읽는다.
   const uploadAt = photoCaptureSource.indexOf('async function upload()');
@@ -956,4 +956,32 @@ test('19. Board·Map은 같은 목록 read 소유자를 공유하고 ad-hoc 분�
   // session loading guard는 양쪽에 보존된다.
   assert.match(boardSource, /if \(sessionStatus === 'loading'\) return;/);
   assert.match(mapSource, /if \(sessionStatus === 'loading'\) return;/);
+});
+
+// Y3: 예전 배송 사진이 대기열에 있는 주문은 한 번에 수거로 다시 배송을 시작하지 않는다.
+test('한 번에 수거 고르기는 사진 대기열에 항목이 있는 주문을 빼고 행에 까닭을 보인다', () => {
+  assert.match(
+    boardSource,
+    /const pendingPhotoOrderIds: ReadonlySet<string> = new Set\(\n\s*pendingPhotos\.entries\.map\(\(entry\) => entry\.orderId\),\n\s*\);/,
+  );
+  assert.match(
+    boardSource,
+    /preparing\.filter\(\(order\) =>\n\s*isBatchPickupSelectable\(order, \{ pendingPhotoOrderIds \}\),\n\s*\)/,
+  );
+  assert.match(
+    boardSource,
+    /batchPickupBlockReason\(order, \{\n\s*pendingPhotoOrderIds: batch\.pendingPhotoOrderIds,\n\s*\}\)/,
+  );
+});
+
+test('최신 목록이 대기 사진의 주문을 보류·수거 대기로 보이면 그 사진을 멈춘다', () => {
+  assert.match(
+    boardSource,
+    /const staleListSettled =\n\s*hasSuccessfulRead && !authRequired && error === null && !loading && !refreshing;/,
+  );
+  assert.match(
+    boardSource,
+    /pendingPhotoStaleOrderIds\(pendingPhotos\.entries, \[\.\.\.preparing, \.\.\.delivering\]\)/,
+  );
+  assert.match(boardSource, /void failStalePendingPhoto\(staleUserId, orderId\);/);
 });

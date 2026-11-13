@@ -147,7 +147,9 @@ test('round-direct 멱등 키는 사진·직전 실패 기준으로 재사용/�
 });
 
 test('round-direct 실패는 원인을 분류하고 확정 거절만 주문 상태를 다시 읽어 수렴한다', () => {
-  assert.match(sendSource, /readDriverOrderCommandErrorCodeFromResponse\(response\)/);
+  // 기사 명령 공통 코드에 더해 이 경로 전용 코드(촬영 뒤 새 보류)만 읽는다.
+  assert.match(sendSource, /readPhotoErrorCode\(response\)/);
+  assert.match(sendSource, /readDriverOrderErrorCode\(body\)/);
   assert.match(sendSource, /classifyPhotoUploadFailure\(\{\s*kind:\s*['"]network['"]\s*\}\)/);
   assert.match(sendSource, /classifyPhotoUploadFailure\(\{\s*kind:\s*['"]ack['"]\s*\}\)/);
   assert.match(
@@ -249,11 +251,35 @@ test('JPEG가 아닌 사진은 형식 이름 대신 카메라 촬영으로 다�
 
 // D-05: 주소 안내는 화면을 열 때 기사 주문 조회 응답에서 같은 주문일 때만 읽는다.
 test('촬영 화면 주소 안내는 기사 주문 조회 응답에서 같은 주문일 때만 읽는다', () => {
-  assert.match(photoCaptureSource, /readPhotoOrderSummary\(await response\.json\(\), orderId\)/);
+  assert.match(photoCaptureSource, /summary: readPhotoOrderSummary\(payload, orderId\)/);
   assert.match(photoCaptureSource, /isRoundDirect && orderSummary && \(/);
   // 업로드는 여전히 판매자 ID를 조회 응답에서 확인한다(같은 키 재전송만 그 요청 때 확인한 값을 다시 쓴다).
   assert.match(photoCaptureSource, /const read = await readOrderStoreId\(token\);/);
   assert.match(photoCaptureSource, /const storeRead = await readOrderStoreId\(token\);/);
+});
+
+// 촬영 뒤 새 보류(Y3): 화면을 열 때 본 보류 표시를 사진 요청과 대기열 항목에 싣는다.
+test('촬영 화면은 열 때 본 보류 표시를 사진 요청·대기열 항목에 싣고, 거절되면 사진을 다시 찍게 한다', () => {
+  assert.match(photoCaptureSource, /holdAt: readDriverOrderHoldAt\(payload, orderId\)/);
+  assert.match(photoCaptureSource, /loadedHoldAtRef\.current = loaded\.holdAt/);
+  // 새 키는 화면을 열 때 본 값으로 시작하고, 모를 때만 판매자 ID 조회 응답 값을 쓴다.
+  assert.match(photoCaptureSource, /requestHoldAtRef\.current = loadedHoldAtRef\.current;/);
+  assert.match(
+    photoCaptureSource,
+    /if \(requestHoldAtRef\.current === undefined\) requestHoldAtRef\.current = read\.holdAt;/,
+  );
+  assert.match(roundDirectSlice, /expectedHoldAt: requestHoldAtRef\.current,\n\s*\}\);/);
+  const queueAt = photoCaptureSource.indexOf('createPendingPhotoEntry({');
+  assert.ok(queueAt !== -1);
+  assert.match(
+    photoCaptureSource.slice(queueAt, photoCaptureSource.indexOf('});', queueAt)),
+    /expectedHoldAt: requestHoldAtRef\.current/,
+  );
+  const staleAt = photoCaptureSource.indexOf("if (failure === 'STALE_HOLD') {");
+  assert.ok(staleAt !== -1);
+  const stale = photoCaptureSource.slice(staleAt, photoCaptureSource.indexOf('}', staleAt));
+  assert.match(stale, /setBlob\(null\)/);
+  assert.match(stale, /loadedHoldAtRef\.current = undefined/);
 });
 
 // D-06: 미리보기 상태 버튼은 세로로 쌓아 확정 버튼을 한 줄 전체 폭으로 둔다.
@@ -394,4 +420,16 @@ test('Y3: 업로드 대기열 실행기는 SessionProvider 안에 있고 앱 열
   assert.match(pendingUploaderSource, /subscribePendingPhotoKick\(kick\)/);
   assert.match(pendingUploaderSource, /removeEventListener\('online', kick\)/);
   assert.match(pendingUploaderSource, /removeEventListener\('pageshow', kick\)/);
+});
+
+test('Y3: 세션이 없거나 쓸 수 없어도 앱 열기·화면 복귀 때 12시간 만료 정리(runAll)를 돌린다', () => {
+  assert.match(pendingUploaderSource, /if \(status === 'loading' \|\| sessionUsable\) return;/);
+  const effectAt = pendingUploaderSource.indexOf("if (status === 'loading' || sessionUsable) return;");
+  const effect = pendingUploaderSource.slice(
+    effectAt,
+    pendingUploaderSource.indexOf('}, [status, sessionUsable]);', effectAt),
+  );
+  assert.match(effect, /void runner\.runAll\(\)/);
+  assert.match(effect, /addEventListener\('visibilitychange', expire\)/);
+  assert.match(effect, /removeEventListener\('visibilitychange', expire\)/);
 });

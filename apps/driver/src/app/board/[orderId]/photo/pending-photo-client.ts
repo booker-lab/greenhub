@@ -189,6 +189,19 @@ export async function runPendingPhotoNow(orderId: string): Promise<PendingPhotoR
   return result;
 }
 
+/**
+ * 주문 조회(상세·목록)가 이 주문을 보류·수거 대기로 보였을 때 대기 중인 예전 사진을 멈춘다.
+ * 보내는 중이면(이 탭·다른 탭) 건드리지 않는다. 저장소를 쓸 수 없으면 아무것도 하지 않는다.
+ */
+export async function failStalePendingPhoto(
+  userId: string,
+  orderId: string,
+): Promise<PendingPhotoRunResult> {
+  const runner = getPendingPhotoRunner();
+  if (!runner) return 'none';
+  return runner.failStalePhoto(userId, orderId);
+}
+
 /** 로그인한 사용자의 모든 사진을 지금 올린다(목록 안내의 "지금 올리기"). */
 export async function runAllPendingPhotosNow(): Promise<void> {
   const runner = getPendingPhotoRunner();

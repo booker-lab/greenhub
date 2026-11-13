@@ -51,6 +51,7 @@ import {
   type PhotoUploadFailureKind,
   photoEncodeFailureMessage,
   photoUploadFailureMessage,
+  readDriverOrderHoldAt,
   readDriverOrderStatus,
   readDriverOrderStoreId,
   resolvePhotoUploadFailure,
@@ -78,8 +79,14 @@ const ORDER_STORE_UNKNOWN_MESSAGE =
 const NON_JPEG_PHOTO_MESSAGE =
   "이 사진 형식은 올릴 수 없어요. '카메라 촬영'이나 '카메라 앱으로 찍기'로 새로 찍어 주세요.";
 
-/** 판매자 ID 확인 결과. absent는 주문이 보이지 않음(404·403), unknown은 네트워크·5xx·형식 오류. */
-type OrderStoreIdRead = { kind: 'ok'; storeId: string } | { kind: 'absent' } | { kind: 'unknown' };
+/**
+ * 판매자 ID 확인 결과. absent는 주문이 보이지 않음(404·403), unknown은 네트워크·5xx·형식 오류.
+ * holdAt은 같은 응답의 가장 최근 보류 표시(모르면 undefined).
+ */
+type OrderStoreIdRead =
+  | { kind: 'ok'; storeId: string; holdAt: string | null | undefined }
+  | { kind: 'absent' }
+  | { kind: 'unknown' };
 
 function encodeErrorMessage(cause: unknown): string {
   return photoEncodeFailureMessage(
@@ -93,18 +100,22 @@ function stopMediaStream(mediaStream: MediaStream | null) {
   });
 }
 
-// 촬영 화면 안내 줄용 주소·받는 분. 읽지 못하면 null이고 화면은 안내 줄만 숨긴다.
+// 촬영 화면 안내 줄용 주소·받는 분과 그때의 보류 표시. 읽지 못하면 null이고 화면은 안내 줄만 숨긴다.
 async function fetchPhotoOrderSummary(
   orderId: string,
   token: string,
   signal: AbortSignal,
-): Promise<PhotoOrderSummary | null> {
+): Promise<{ summary: PhotoOrderSummary | null; holdAt: string | null | undefined } | null> {
   try {
     const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token, {
       signal,
     });
     if (!response.ok) return null;
-    return readPhotoOrderSummary(await response.json(), orderId);
+    const payload: unknown = await response.json();
+    return {
+      summary: readPhotoOrderSummary(payload, orderId),
+      holdAt: readDriverOrderHoldAt(payload, orderId),
+    };
   } catch {
     return null;
   }
@@ -176,6 +187,11 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
   // 결과가 불확실했던 요청의 판매자 ID. 같은 키 재전송은 이 값을 그대로 쓴다: 서버가 이미 완료했으면
   // 기사 주문 조회가 404라 다시 읽을 수 없다(조회는 완료 여부의 근거가 아니다).
   const uncertainStoreIdRef = useRef<string | null>(null);
+  // 촬영 때 본 주문 보류 표시(deliveryHoldAt). 화면을 열 때 읽은 값이고, 모르면 undefined다.
+  // 서버는 사진 요청의 이 값과 지금 보류 표시가 다르면(촬영 뒤 보류 → 다시 배송 중) 예전 사진을 거절한다.
+  const loadedHoldAtRef = useRef<string | null | undefined>(undefined);
+  // 지금 멱등 키로 보내는 요청의 보류 표시. 같은 키 재전송·대기열 항목은 이 값을 그대로 쓴다.
+  const requestHoldAtRef = useRef<string | null | undefined>(undefined);
   const uploadInFlightRef = useRef(false);
   // 사진 업로드 대기열(회차 직배송만). 이 주문의 항목이 있으면 재촬영을 막고 상태와 "지금 올리기"를 보인다.
   const userId = session?.user?.id ?? null;
@@ -197,11 +213,13 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     if (!isRoundDirect || !accessToken || orderSummaryLoadedForRef.current === orderId) return;
     setOrderSummary(null);
     const controller = new AbortController();
-    void fetchPhotoOrderSummary(orderId, accessToken, controller.signal).then((summary) => {
-      // 읽지 못하면 안내 줄만 숨긴다. 업로드 동작에는 영향이 없다.
-      if (controller.signal.aborted || !summary) return;
+    void fetchPhotoOrderSummary(orderId, accessToken, controller.signal).then((loaded) => {
+      // 읽지 못하면 안내 줄만 숨긴다. 보류 표시는 업로드 때 판매자 ID 조회 응답에서 대신 읽는다.
+      if (controller.signal.aborted || !loaded) return;
+      if (loaded.holdAt !== undefined) loadedHoldAtRef.current = loaded.holdAt;
+      if (!loaded.summary) return;
       orderSummaryLoadedForRef.current = orderId;
-      setOrderSummary(summary);
+      setOrderSummary(loaded.summary);
     });
     return () => controller.abort();
   }, [isRoundDirect, accessToken, orderId]);
@@ -431,8 +449,11 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
       const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token);
       if (response.status === 404 || response.status === 403) return { kind: 'absent' };
       if (!response.ok) return { kind: 'unknown' };
-      const storeId = readDriverOrderStoreId(await response.json(), orderId);
-      return isSafeApiPathSegment(storeId) ? { kind: 'ok', storeId } : { kind: 'unknown' };
+      const payload: unknown = await response.json();
+      const storeId = readDriverOrderStoreId(payload, orderId);
+      return isSafeApiPathSegment(storeId)
+        ? { kind: 'ok', storeId, holdAt: readDriverOrderHoldAt(payload, orderId) }
+        : { kind: 'unknown' };
     } catch {
       return { kind: 'unknown' };
     }
@@ -489,6 +510,12 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     }
     if (resolution.action === 'complete') return true;
     if (resolution.action === 'show') setError(resolution.message);
+    if (failure === 'STALE_HOLD') {
+      // 촬영 뒤 보류가 있었다: 이 사진은 다시 보내지 않는다. 새로 찍으면 그때의 보류 표시를 다시 읽는다.
+      loadedHoldAtRef.current = undefined;
+      setCaptured(null);
+      setBlob(null);
+    }
     return false;
   }
 
@@ -513,6 +540,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           now: Date.now(),
           random: Math.random(),
           input,
+          expectedHoldAt: requestHoldAtRef.current,
         });
         queued = entry ? await enqueuePendingPhoto(entry) : false;
       } catch {
@@ -547,7 +575,11 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
       keyDecision === 'renew' || requestIdRef.current === null
         ? globalThis.crypto.randomUUID()
         : requestIdRef.current;
-    if (requestId !== requestIdRef.current) uncertainStoreIdRef.current = null;
+    if (requestId !== requestIdRef.current) {
+      uncertainStoreIdRef.current = null;
+      // 새 요청은 화면을 열 때 본 보류 표시로 시작한다(모르면 아래 판매자 ID 조회 응답에서 읽는다).
+      requestHoldAtRef.current = loadedHoldAtRef.current;
+    }
     requestIdRef.current = requestId;
     requestPhotoRef.current = blob;
 
@@ -571,6 +603,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
         );
       }
       storeId = read.storeId;
+      if (requestHoldAtRef.current === undefined) requestHoldAtRef.current = read.holdAt;
     }
 
     const result = await sendRoundDirectPhoto({
@@ -580,6 +613,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
       orderId,
       idempotencyKey: requestId,
       photo: blob,
+      expectedHoldAt: requestHoldAtRef.current,
     });
     if (result.kind === 'ack') {
       lastFailureRef.current = null;

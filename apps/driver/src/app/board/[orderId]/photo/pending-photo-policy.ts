@@ -51,6 +51,8 @@ const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9_-]{8,128}$/;
 /** 서버 SAFE_ID_PATTERN(주문·판매자 ID)과 같은 형식. ':'가 없어 저장 키가 모호하지 않다. */
 const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_USER_ID_LENGTH = 256;
+/** 서버 expectedHoldAt 형식 상한(ISO 시각). */
+const MAX_HOLD_AT_LENGTH = 40;
 
 /** 결과가 불확실한 실패(photo-upload-policy isUncertainPhotoUploadFailure와 같다). */
 export function isUncertainPendingSendFailure(kind: PhotoUploadFailureKind): boolean {
@@ -78,6 +80,8 @@ export type PendingPhotoFailure =
   | 'TOO_LARGE'
   | 'REJECTED'
   | 'STATE_CONFLICT'
+  // 사진을 찍은 뒤 주문이 보류됐다(보류·수거 대기로 돌아감 또는 그 뒤 다시 배송 중). 예전 사진은 쓰지 않는다.
+  | 'STALE_HOLD'
   | 'EXPIRED';
 
 const RETRYABLE_FAILURES: readonly PendingPhotoFailure[] = [
@@ -96,6 +100,7 @@ const TERMINAL_FAILURES: readonly PendingPhotoFailure[] = [
   'TOO_LARGE',
   'REJECTED',
   'STATE_CONFLICT',
+  'STALE_HOLD',
   'EXPIRED',
 ];
 
@@ -118,6 +123,12 @@ export interface PendingPhotoEntry {
   nextAttemptAt: number;
   /** 보내는 중 표시 만료 시각. 보내는 중이 아니면 0. */
   leaseUntil: number;
+  /**
+   * 촬영 때 본 주문 보류 표시(기사 상세 deliveryHoldAt). 문자열은 그 heldAt, null은 보류 이력 없음.
+   * 없으면(이 값을 모르던 항목·이전 항목) 사진 요청에 싣지 않는다(서버가 확인하지 않는 이전 동작).
+   * 항목 형식 버전(v)은 그대로다: 이 필드가 없는 이전 항목도 그대로 읽는다.
+   */
+  expectedHoldAt?: string | null;
 }
 
 /** 화면 표시용 요약. 사진 바이트를 들고 다니지 않는다. */
@@ -201,6 +212,16 @@ export function readPendingPhotoEntry(
     return null;
   }
   if (storageKey !== undefined && storageKey !== pendingPhotoKey(userId, orderId)) return null;
+  const { expectedHoldAt } = entry;
+  if (
+    expectedHoldAt !== undefined &&
+    expectedHoldAt !== null &&
+    (typeof expectedHoldAt !== 'string' ||
+      expectedHoldAt.length === 0 ||
+      expectedHoldAt.length > MAX_HOLD_AT_LENGTH)
+  ) {
+    return null;
+  }
   return {
     v: PENDING_PHOTO_ENTRY_VERSION,
     userId,
@@ -215,6 +236,7 @@ export function readPendingPhotoEntry(
     state,
     nextAttemptAt,
     leaseUntil,
+    ...(expectedHoldAt === undefined ? {} : { expectedHoldAt }),
   };
 }
 
@@ -239,6 +261,7 @@ function toPendingFailure(kind: PhotoUploadFailureKind): PendingPhotoFailure {
   if (kind === 'NETWORK' || kind === 'SERVER' || kind === 'ACK_UNCONFIRMED') return kind;
   if (kind === 'AUTHORITY' || kind === 'NOT_FOUND' || kind === 'TOO_LARGE') return kind;
   if (kind === 'STATE_CONFLICT') return 'STATE_CONFLICT';
+  if (kind === 'STALE_HOLD') return 'STALE_HOLD';
   return 'REJECTED';
 }
 
@@ -263,6 +286,8 @@ export function createPendingPhotoEntry(args: {
   now: number;
   random: number;
   input: PendingPhotoEnqueueInput;
+  /** 촬영 때 본 보류 표시. 모르면 undefined(싣지 않는다). */
+  expectedHoldAt?: string | null;
 }): PendingPhotoEntry | null {
   if (!shouldEnqueuePendingPhoto(args.input)) return null;
   const sent = args.input.phase === 'sent';
@@ -286,6 +311,7 @@ export function createPendingPhotoEntry(args: {
     state: 'waiting',
     nextAttemptAt,
     leaseUntil: 0,
+    ...(args.expectedHoldAt === undefined ? {} : { expectedHoldAt: args.expectedHoldAt }),
   });
 }
 
@@ -333,6 +359,19 @@ export function claimPendingPhotoLease(
   return { ...entry, state: 'sending', leaseUntil: now + PENDING_PHOTO_LEASE_MS };
 }
 
+/**
+ * 실제로 보내기 직전, 보내는 중 표시를 쥔 항목에 이번 전송을 먼저 기록한다(보낸 횟수·마지막 보낸 시각).
+ * 보내는 도중 탭이 닫혀도 저장소에 남아, 다음 실행이 30초 간격과 "앞서 보낸 요청이 있었다"(409 확인
+ * 재전송 판단)를 안다. 보내는 중이 아닌 항목은 바꾸지 않는다(null).
+ */
+export function recordPendingPhotoSend(
+  entry: PendingPhotoEntry,
+  now: number,
+): PendingPhotoEntry | null {
+  if (entry.state !== 'sending' || entry.bytes === null) return null;
+  return { ...entry, attempts: entry.attempts + 1, lastAttemptAt: now };
+}
+
 /** 보내는 중 표시를 풀어 다시 기다림으로 둔다(실행이 중간에 끝난 경우). */
 export function releasePendingPhotoLease(entry: PendingPhotoEntry): PendingPhotoEntry {
   if (entry.state !== 'sending') return entry;
@@ -375,6 +414,7 @@ export type PendingPhotoOutcome =
 
 /**
  * 같은 키 재전송 결과로 다음 항목 상태를 정한다. entry는 이번 전송 전 항목이고, 이번 전송을 세어 넣는다.
+ * (실행기는 보내기 직전 recordPendingPhotoSend로 저장소에 먼저 세어 두지만, 판단에는 세기 전 항목을 준다.)
  * - ACK → 끝(항목 삭제).
  * - 불확실(네트워크·시간 초과·5xx/408/429·응답 미확인) → 간격을 두고 다시.
  * - 401(세션을 한 번 다시 받아도) → 같은 사용자의 유효한 세션을 기다리며 다시.
@@ -447,6 +487,39 @@ export function expirePendingPhoto(
   return failPendingPhoto(entry, 'EXPIRED');
 }
 
+/**
+ * 기사 주문 조회(상세·목록)가 이 상태로 보이면 대기 중인 사진은 그 배송에 더는 쓸 수 없다.
+ * 보류됐거나 수거 대기로 돌아간 주문은 다시 배송 중이 되면 새 사진을 찍어야 한다.
+ * 완료(DELIVERED·REVIEWED)는 같은 키 재전송이 ACK로 수렴해야 하므로 여기에 넣지 않는다.
+ */
+const STALE_PHOTO_ORDER_STATUSES: readonly string[] = ['DELIVERY_HELD', 'PREPARING'];
+
+export function isPendingPhotoStaleForOrderStatus(status: unknown): boolean {
+  return typeof status === 'string' && STALE_PHOTO_ORDER_STATUSES.includes(status);
+}
+
+/**
+ * 조회한 주문 상태로 멈출 대기 항목의 주문 ID들. 이미 멈춘 항목은 뺀다.
+ * 보내는 중인지(잠금·보내는 중 표시)는 실행기(failStalePhoto)가 다시 본다.
+ */
+export function pendingPhotoStaleOrderIds(
+  entries: readonly PendingPhotoSummary[],
+  orders: readonly { id?: unknown; status?: unknown }[],
+): string[] {
+  const statusById = new Map<string, unknown>();
+  for (const order of orders) {
+    if (typeof order.id === 'string') statusById.set(order.id, order.status);
+  }
+  return entries
+    .filter(
+      (entry) =>
+        entry.state !== 'failed' &&
+        statusById.has(entry.orderId) &&
+        isPendingPhotoStaleForOrderStatus(statusById.get(entry.orderId)),
+    )
+    .map((entry) => entry.orderId);
+}
+
 /** 로그인한 사용자 항목과 다른 사용자 항목으로 나눈다. 실행은 내 항목만 하고 다른 사용자 항목은 지운다. */
 export function partitionPendingPhotosByUser<T extends { userId: string }>(
   entries: readonly T[],
@@ -504,6 +577,8 @@ export const PENDING_PHOTO_MESSAGES = {
   REJECTED: '사진을 등록하지 못했어요. 다시 촬영해 주세요.',
   AUTHORITY: '처리 권한이 없어요',
   STATE_CONFLICT: '주문 상태가 바뀌었어요. 목록에서 확인해 주세요',
+  // 사진 화면 안내(photo-upload-policy PHOTO_UPLOAD_MESSAGES.STALE_HOLD)와 같은 문구다.
+  STALE_HOLD: '보류 뒤 다시 배송 중이라 예전 사진은 쓸 수 없어요. 사진을 다시 찍어 주세요.',
   EXPIRED: '올리지 못한 채 12시간이 지났어요. 주문 화면에서 확인해 주세요',
 } as const;
 
@@ -515,6 +590,8 @@ export function pendingPhotoStatusMessage(entry: PendingPhotoSummary, now: numbe
         return PENDING_PHOTO_MESSAGES.AUTHORITY;
       case 'STATE_CONFLICT':
         return PENDING_PHOTO_MESSAGES.STATE_CONFLICT;
+      case 'STALE_HOLD':
+        return PENDING_PHOTO_MESSAGES.STALE_HOLD;
       case 'EXPIRED':
         return PENDING_PHOTO_MESSAGES.EXPIRED;
       case 'NOT_FOUND':

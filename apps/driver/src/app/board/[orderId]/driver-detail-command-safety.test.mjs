@@ -77,9 +77,10 @@ test('B. PATCH dispatch CTA는 loading 중 명시적으로 disabled다', () => {
     `dispatch 버튼이 4개 이상이어야 한다 (${dispatchButtons.length})`,
   );
   for (const chunk of dispatchButtons) {
+    // 배송 재개·수거 완료/배송 시작은 이 주문 사진이 대기열에 있어도 꺼진다(Y3, 아래 테스트).
     assert.match(
       chunk,
-      /disabled=\{loading \|\| !commandsAllowed\}/,
+      /disabled=\{loading \|\| !commandsAllowed( \|\| pendingPhoto !== null)?\}/,
       'dispatch CTA는 disabled={loading || !commandsAllowed}여야 한다',
     );
   }
@@ -103,6 +104,44 @@ test('보류 버튼은 이 주문 사진이 업로드 대기열에 있으면 꺼
   assert.ok(holdAt !== -1);
   const chunk = detailSource.slice(detailSource.lastIndexOf('<button', holdAt), holdAt);
   assert.match(chunk, /disabled=\{loading \|\| !commandsAllowed \|\| pendingPhoto !== null\}/);
+});
+
+// Y3: 예전 배송 사진이 대기열에 있으면 다시 배송을 시작하지 않는다(그 사진이 새 배송을 완료하지 않게).
+test('배송 재개·수거 완료/배송 시작은 이 주문 사진이 업로드 대기열에 있으면 꺼지고 확인 창도 열지 않는다', () => {
+  const buttons = detailSource
+    .split('<AppButton')
+    .slice(1)
+    .map((chunk) => chunk.slice(0, chunk.indexOf('</AppButton>')));
+  const startButtons = buttons.filter(
+    (chunk) =>
+      chunk.includes("openStatusConfirm('RESUME')") || chunk.includes("openStatusConfirm('START')"),
+  );
+  assert.equal(startButtons.length, 3);
+  for (const chunk of startButtons) {
+    assert.match(chunk, /disabled=\{loading \|\| !commandsAllowed \|\| pendingPhoto !== null\}/);
+  }
+  assert.match(
+    detailSource,
+    /const openStatusConfirm = \(kind: DriverStatusConfirmKind\) => \{\n\s*if \(loading \|\| !commandsAllowed \|\| pendingPhoto !== null\) return;/,
+  );
+});
+
+test('최신 상세가 보류·수거 대기로 보이면 대기 중인 예전 사진을 멈춘다(보내는 중 판정은 실행기가 한다)', () => {
+  assert.match(
+    detailSource,
+    /const staleReadSettled =\n\s*readError === null && readbackWarning === null && !readLoading && !readRefreshing;/,
+  );
+  const effectAt = detailSource.indexOf('void failStalePendingPhoto(staleUserId, orderId);');
+  assert.ok(effectAt !== -1);
+  const effect = detailSource.slice(
+    detailSource.lastIndexOf('useEffect(() => {', effectAt),
+    effectAt,
+  );
+  assert.match(effect, /!staleReadSettled/);
+  assert.match(
+    effect,
+    /pendingPhotoState === 'failed' \|\| !isPendingPhotoStaleForOrderStatus\(staleOrderStatus\)/,
+  );
 });
 
 // C. HoldModal double-submit → PATCH 1회: 로컬 submittingRef guard.
@@ -751,7 +790,8 @@ test('D-02. 배송 시작·재개 버튼은 확인 창만 열고, PATCH는 확�
   const openAt = detailSource.indexOf('const openStatusConfirm');
   assert.match(
     detailSource.slice(openAt, openAt + 200),
-    /if \(loading \|\| !commandsAllowed\) return;/,
+    // 이 주문 사진이 대기열에 있어도 열지 않는다(Y3).
+    /if \(loading \|\| !commandsAllowed \|\| pendingPhoto !== null\) return;/,
   );
   // 확인 창은 요청을 직접 보내지 않는다.
   assert.doesNotMatch(confirmDialogSource, /apiFetch|method: 'PATCH'|updateStatus\(/);
