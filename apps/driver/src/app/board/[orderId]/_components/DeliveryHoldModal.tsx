@@ -27,8 +27,15 @@ import { text } from '@/components/look';
 import { apiFetch } from '@/lib/api';
 import {
   customerResponsibleFeeNotice,
+  type DriverHoldReason,
   deliveryHoldResponsibilityFeeHint,
   deliveryHoldSubmitError,
+  driverHoldReasonOptions,
+  holdResponsibilityAfterReasonChange,
+  isCustomerResponsibleOnlyReason,
+  isNonRedeliverableDriverHoldReason,
+  isSellerResponsibleOnlyReason,
+  PRODUCT_DAMAGED_HOLD_NOTICE,
   parseRedeliveryFee,
   redeliveryFeeAfterResponsibilityChange,
 } from '../../_lib/delivery-hold-form';
@@ -37,11 +44,7 @@ import {
   readDriverOrderCommandErrorCodeFromResponse,
 } from '../../_lib/driver-order-detail';
 
-export type HoldReason =
-  | 'WEATHER'
-  | 'ACCESS_UNAVAILABLE'
-  | 'ADDRESS_ISSUE'
-  | 'CUSTOMER_UNREACHABLE';
+export type HoldReason = DriverHoldReason;
 
 export type DeliveryHold = {
   reasonCode: HoldReason;
@@ -57,6 +60,8 @@ export const HOLD_REASON_LABEL: Record<HoldReason, string> = {
   ACCESS_UNAVAILABLE: '출입 불가',
   ADDRESS_ISSUE: '주소 오류',
   CUSTOMER_UNREACHABLE: '고객 연락 불가',
+  RECEIPT_REFUSED: '수령 거부',
+  PRODUCT_DAMAGED: '상품 파손',
 };
 
 interface DeliveryHoldModalProps {
@@ -129,7 +134,11 @@ export function DeliveryHoldModal({
   const [nextContactAt, setNextContactAt] = useState('');
   const [nextDeliveryAt, setNextDeliveryAt] = useState('');
   const [error, setError] = useState('');
-  const isWeather = reasonCode === 'WEATHER';
+  // 기상·상품 파손은 고객 책임·재배송비를 잠그고, 수령 거부는 고객 책임을 켠 채 잠근다.
+  const responsibilityLockedOff = isSellerResponsibleOnlyReason(reasonCode);
+  const responsibilityLockedOn = isCustomerResponsibleOnlyReason(reasonCode);
+  // 상품 파손은 다시 배송하지 않으므로 새 배송 예정을 받지 않는다.
+  const isNonRedeliverable = isNonRedeliverableDriverHoldReason(reasonCode);
   // 기상 외 보류는 고객 책임 ⇔ 재배송비(0원 초과). 어긋나면 저장을 막고 고칠 방법을 보인다.
   const responsibilityFeeHint = deliveryHoldResponsibilityFeeHint({
     reasonCode,
@@ -178,10 +187,14 @@ export function DeliveryHoldModal({
     const next = value as HoldReason;
     setError('');
     setReasonCode(next);
-    if (next === 'WEATHER') {
-      setCustomerResponsible(false);
-      setRedeliveryFee('');
-    }
+    const fields = holdResponsibilityAfterReasonChange({
+      reasonCode: next,
+      customerResponsible,
+      redeliveryFee,
+    });
+    setCustomerResponsible(fields.customerResponsible);
+    setRedeliveryFee(fields.redeliveryFee);
+    if (isNonRedeliverableDriverHoldReason(next)) setNextDeliveryAt('');
   }
 
   // "고객 책임"을 고르면 비어 있는 재배송비 칸에 기준 금액을 채우고, 풀면 비운다(D-09).
@@ -222,10 +235,11 @@ export function DeliveryHoldModal({
     const deliveryHold = {
       reasonCode,
       reasonMessage: message,
-      customerResponsible: isWeather ? false : customerResponsible,
-      redeliveryFee: isWeather ? null : parseRedeliveryFee(redeliveryFee),
+      customerResponsible: responsibilityLockedOff ? false : customerResponsible,
+      redeliveryFee: responsibilityLockedOff ? null : parseRedeliveryFee(redeliveryFee),
       nextContactAt: nextContactAt ? new Date(nextContactAt).toISOString() : null,
-      nextDeliveryAt: nextDeliveryAt ? new Date(nextDeliveryAt).toISOString() : null,
+      nextDeliveryAt:
+        nextDeliveryAt && !isNonRedeliverable ? new Date(nextDeliveryAt).toISOString() : null,
     };
 
     setError('');
@@ -363,11 +377,16 @@ export function DeliveryHoldModal({
                 label="보류 유형"
                 value={reasonCode ?? ''}
                 onChange={changeReason}
-                options={Object.entries(HOLD_REASON_LABEL).map(([value, label]) => ({
+                options={driverHoldReasonOptions(orderStatus).map((value) => ({
                   value,
-                  label,
+                  label: HOLD_REASON_LABEL[value],
                 }))}
               />
+              {isNonRedeliverable && (
+                <p className={`${text} text-sm/[1.45] text-ui-red`} style={keepWords}>
+                  {PRODUCT_DAMAGED_HOLD_NOTICE}
+                </p>
+              )}
               <div className="flex flex-col gap-1">
                 {/* 이 글은 손님 주문 화면에 그대로 보이고 저장하면 보류 알림이 간다(D-08). 내부 메모처럼 쓰지 않게 알린다. */}
                 <TextareaField
@@ -391,13 +410,13 @@ export function DeliveryHoldModal({
               <CheckboxField
                 label="고객 책임"
                 checked={customerResponsible}
-                disabled={isWeather}
+                disabled={responsibilityLockedOff || responsibilityLockedOn}
                 onChange={changeCustomerResponsible}
               />
               <NumberField
                 label="재배송비"
                 value={redeliveryFee}
-                disabled={isWeather}
+                disabled={responsibilityLockedOff}
                 min={0}
                 step={1000}
                 suffix="원"
@@ -428,6 +447,7 @@ export function DeliveryHoldModal({
                 label="새 배송 예정"
                 type="datetime-local"
                 value={nextDeliveryAt}
+                disabled={isNonRedeliverable}
                 onChange={(event) => {
                   setError('');
                   setNextDeliveryAt(event.currentTarget.value);

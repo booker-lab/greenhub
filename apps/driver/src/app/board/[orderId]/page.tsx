@@ -29,8 +29,10 @@ import {
   type DriverStatusConfirmKind,
   type DriverStatusReadbackNotice,
   driverDetailListHref,
+  DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
   driverOrderItemCount,
   isDriverHoldEntryVisible,
+  isDriverHoldResumable,
   isDriverOrderCommandAllowed,
   isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
@@ -1040,8 +1042,19 @@ function OrderDetail({ orderId }: { orderId: string }) {
             boxShadow: 'var(--driver-bar-shadow)',
           }}
         >
+          {/* 상품 파손 보류는 다시 배송하지 않는다. 재개 버튼 대신 가게로 돌려줄 것을 안내한다. */}
+          {isHeld && isRoundDirect && !isDriverHoldResumable(order.deliveryHold) && (
+            <p
+              className={text}
+              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-danger)' }}
+              data-testid="driver-non-redeliverable-hold"
+            >
+              {DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE}
+            </p>
+          )}
           {isHeld &&
             isRoundDirect &&
+            isDriverHoldResumable(order.deliveryHold) &&
             (deliveryStartAllowed ? (
               <AppButton
                 fullWidth

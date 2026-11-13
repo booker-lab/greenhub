@@ -5,12 +5,14 @@ import {
   buildDriverOrderDetailScope,
   buildDriverStatusConfirmContent,
   DRIVER_HOLD_SAVED_MESSAGE,
+  DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
   DRIVER_ORDER_COMPLETED_SCREEN_MESSAGE,
   DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE,
   DRIVER_RESUME_SUCCESS_MESSAGE,
   DRIVER_START_SUCCESS_FALLBACK_MESSAGE,
   driverDetailListHref,
   driverOrderItemCount,
+  isDriverHoldResumable,
   isDriverStatusConfirmCurrent,
   readDriverDetailBackContext,
   resolveDriverCommandSuccessMessage,
@@ -655,4 +657,24 @@ test('R-06. 시작·재개·보류 저장 결과 알림은 다시 읽은 상태�
     message({ requestedStatus: 'DELIVERING', fromStatus: 'DELIVERING', freshStatus: 'DELIVERING' }),
     null,
   );
+});
+
+test('상품 파손 보류는 배송 재개 대상이 아니고, 상세는 재개 버튼 대신 가게로 돌려줄 것을 안내한다', async () => {
+  assert.equal(isDriverHoldResumable({ reasonCode: 'PRODUCT_DAMAGED' }), false);
+  for (const reasonCode of ['WEATHER', 'RECEIPT_REFUSED', 'ACCESS_UNAVAILABLE', 'CUSTOMER_UNREACHABLE']) {
+    assert.equal(isDriverHoldResumable({ reasonCode }), true, reasonCode);
+  }
+  // 보류 내용이 없으면 기존처럼 결제 게이트(deliveryStartAllowed)가 재개를 판정한다.
+  assert.equal(isDriverHoldResumable(null), true);
+  assert.equal(
+    DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
+    '상품을 가게로 돌려주세요. 판매자가 확인한 뒤 주문을 취소·환불해요.',
+  );
+  const pageSource = await readFile(new URL('../[orderId]/page.tsx', import.meta.url), 'utf8');
+  const noticeAt = pageSource.indexOf('!isDriverHoldResumable(order.deliveryHold) && (');
+  const resumeGuardAt = pageSource.indexOf('isDriverHoldResumable(order.deliveryHold) &&', noticeAt + 1);
+  const resumeButtonAt = pageSource.indexOf("openStatusConfirm('RESUME')");
+  assert.ok(noticeAt !== -1, '파손 보류 안내가 있다');
+  assert.ok(resumeGuardAt > noticeAt && resumeGuardAt < resumeButtonAt, '재개 버튼은 재개 가능한 보류에만');
+  assert.ok(pageSource.includes('{DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE}'));
 });

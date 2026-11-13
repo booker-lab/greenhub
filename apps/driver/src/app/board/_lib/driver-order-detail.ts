@@ -412,6 +412,22 @@ export function isDriverHoldEntryVisible(args: {
   return args.isRoundDirect && args.status === 'DELIVERING';
 }
 
+/** 상품 파손 보류 주문에서 배송 재개 버튼 대신 보이는 안내. */
+export const DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE =
+  '상품을 가게로 돌려주세요. 판매자가 확인한 뒤 주문을 취소·환불해요.';
+
+/**
+ * 보류 주문을 기사가 다시 배송할 수 있는 보류인가. 상품 파손(PRODUCT_DAMAGED)은 다시 배송하지 않고
+ * 판매자 취소·환불로만 끝나므로 서버가 배송 재개를 거절한다(apps/api/src/orders/orders.helpers.ts
+ * deliveryTransitionViolation, @greenhub/shared NON_REDELIVERABLE_HOLD_REASONS). 앱 간 import 없이
+ * 순수 함수로 두므로 재배송하지 않는 사유가 늘면 함께 바꾼다.
+ */
+export function isDriverHoldResumable(
+  hold: { reasonCode?: unknown } | null | undefined,
+): boolean {
+  return hold?.reasonCode !== 'PRODUCT_DAMAGED';
+}
+
 /**
  * 주문 없음(NOT_FOUND) 화면 안내(D-17). 기사 상세 GET은 본인 배정이거나 아직 아무도 맡지 않은
  * 진행 중 주문만 보이므로, 404는 대개 다른 기사가 맡았거나 완료·취소된 주문이다.
