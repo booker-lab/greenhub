@@ -92,6 +92,11 @@ export function projectDriverOrder(
     projected['requestNote'] = order['requestNote'];
   }
 
+  // 가장 최근 보류의 표시(heldAt)만 싣는다(사유·연락처 등은 싣지 않는다). 기사 앱이 배송 사진을 찍을 때
+  // 이 값을 함께 보내, 촬영 뒤 새 보류가 생긴 재배송을 예전 사진으로 완료하지 않게 한다(delivery-photos).
+  // 보류는 재개 뒤에도 문서에 남으므로 배송 중 주문에도 싣는다. 보류 이력이 없으면 null이다.
+  projected['deliveryHoldAt'] = projectDeliveryHoldAt(order['deliveryHold']);
+
   if (order['status'] === 'DELIVERY_HELD') {
     const deliveryHold = projectDeliveryHold(order['deliveryHold']);
     if (deliveryHold) projected['deliveryHold'] = deliveryHold;
@@ -174,6 +179,11 @@ function deliveryAddressValue(value: unknown): unknown {
   return isRecord(value) ? value['address'] : undefined;
 }
 
+function projectDeliveryHoldAt(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  return nonEmptyTrimmed(value['heldAt']) === undefined ? null : (value['heldAt'] as string);
+}
+
 function projectDeliveryHold(value: unknown): Record<string, unknown> | undefined {
   if (!isRecord(value)) return undefined;
   return {
@@ -184,4 +194,77 @@ function projectDeliveryHold(value: unknown): Record<string, unknown> | undefine
     nextContactAt: value['nextContactAt'],
     nextDeliveryAt: value['nextDeliveryAt'],
   };
+}
+
+// ── 오늘 완료 내역(GET /driver/completed-today) ──────────────────────────────
+
+export type DriverCompletedOrderStatus = 'DELIVERED' | 'REVIEWED' | 'CANCELLED';
+export type DriverCompletedOrder = {
+  id: string;
+  status: DriverCompletedOrderStatus;
+  deliveredAt: string;
+  address: string;
+  deliveryAddress?: { address: string; addressDetail?: string };
+  productName: string;
+  quantity: number;
+  items?: DriverOrderItem[];
+  hasPhoto: boolean;
+};
+
+/**
+ * 회차 직배송 완료 사진의 photoId. 사진은 회차 직배송 주문에만 deliveryPhotoIds로 연결되고
+ * 서명 URL로만 읽는다(이전 주문의 deliveryPhotoUrl 다운로드 주소는 쓰지 않는다).
+ * 회차 직배송 판정은 배송 사진 업로드 경로(StorageService)와 같은 주문 필드 기준이다.
+ */
+export function driverCompletedOrderPhotoId(order: Record<string, unknown>): string | null {
+  const isRoundDirect =
+    order['schemaVersion'] === 2 &&
+    typeof order['roundId'] === 'string' &&
+    order['roundId'].length > 0 &&
+    order['deliveryMethod'] === 'direct';
+  if (!isRoundDirect || !Array.isArray(order['deliveryPhotoIds'])) return null;
+  const photoId = order['deliveryPhotoIds'].find(
+    (value: unknown): value is string => typeof value === 'string' && value.length > 0,
+  );
+  return photoId ?? null;
+}
+
+/**
+ * 기사가 오늘 끝낸 배송을 다시 볼 때 쓰는 허용 목록 투영. 손님 이름·연락처·요청사항, 손님·판매점 ID,
+ * 좌표, 결제 정보와 사진 주소는 싣지 않는다. 배송 완료 시각은 호출하는 쪽이 오늘 판정에 쓴 값을 넘긴다.
+ */
+export function projectDriverCompletedOrder(
+  order: Record<string, any>,
+  deliveredAt: string,
+): DriverCompletedOrder {
+  const deliveryAddress = projectCompletedDeliveryAddress(order['deliveryAddress']);
+  const address =
+    typeof order['address'] === 'string' ? order['address'] : (deliveryAddress?.address ?? '');
+  const projected: DriverCompletedOrder = {
+    id: order['id'],
+    status: order['status'],
+    deliveredAt,
+    address,
+    productName: typeof order['productName'] === 'string' ? order['productName'] : '',
+    quantity: typeof order['quantity'] === 'number' ? order['quantity'] : 0,
+    hasPhoto: driverCompletedOrderPhotoId(order) !== null,
+  };
+  if (deliveryAddress) projected.deliveryAddress = deliveryAddress;
+  const items = projectItems(order['orderItems']);
+  if (items) projected.items = items;
+  return projected;
+}
+
+// 기본 주소와 동·호수만 싣는다(우편번호 등 그 밖의 필드는 싣지 않는다).
+function projectCompletedDeliveryAddress(
+  value: unknown,
+): DriverCompletedOrder['deliveryAddress'] | undefined {
+  const base = projectDeliveryAddress(value);
+  if (!base || typeof base['address'] !== 'string') return undefined;
+  const projected: NonNullable<DriverCompletedOrder['deliveryAddress']> = {
+    address: base['address'],
+  };
+  const addressDetail = isRecord(value) ? nonEmptyTrimmed(value['addressDetail']) : undefined;
+  if (addressDetail) projected.addressDetail = addressDetail;
+  return projected;
 }

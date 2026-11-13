@@ -17,14 +17,28 @@ export function summarizeActiveDeliveries(payload: unknown): ActiveDeliverySumma
   return { delivering, held };
 }
 
-/** 배송 중·보류 주문이 있으면 확인 문구, 없거나 셀 수 없으면 null. */
-export function logoutConfirmMessage(summary: ActiveDeliverySummary | null): string | null {
-  if (!summary) return null;
-  const { delivering, held } = summary;
-  if (delivering > 0 && held > 0) {
-    return `배송 중인 주문 ${delivering}건, 보류 중인 주문 ${held}건이 있어요. 로그아웃할까요?`;
+/**
+ * 배송 중·보류 주문이나 올리지 못한 사진(이 기기 사진 업로드 대기열)이 있으면 확인 문구, 없거나 셀 수 없으면 null.
+ * 로그아웃은 대기열을 지우므로 사진이 있으면 지워진다고 알린다.
+ */
+export function logoutConfirmMessage(
+  summary: ActiveDeliverySummary | null,
+  pendingPhotos = 0,
+): string | null {
+  const parts: string[] = [];
+  if (summary) {
+    const { delivering, held } = summary;
+    if (delivering > 0 && held > 0) {
+      parts.push(`배송 중인 주문 ${delivering}건, 보류 중인 주문 ${held}건이 있어요.`);
+    } else if (delivering > 0) {
+      parts.push(`배송 중인 주문 ${delivering}건이 있어요.`);
+    } else if (held > 0) {
+      parts.push(`보류 중인 주문 ${held}건이 있어요.`);
+    }
   }
-  if (delivering > 0) return `배송 중인 주문 ${delivering}건이 있어요. 로그아웃할까요?`;
-  if (held > 0) return `보류 중인 주문 ${held}건이 있어요. 로그아웃할까요?`;
-  return null;
+  if (Number.isInteger(pendingPhotos) && pendingPhotos > 0) {
+    parts.push(`올리지 못한 사진 ${pendingPhotos}건이 지워져요.`);
+  }
+  if (parts.length === 0) return null;
+  return `${parts.join(' ')} 로그아웃할까요?`;
 }

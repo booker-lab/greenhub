@@ -94,6 +94,25 @@ describe('회차 직배송 사진 업로드 HTTP 경계', () => {
     );
   });
 
+  it('촬영 때 본 보류 표시(expectedHoldAt)를 함께 보내면 서비스로 전달하고, 보내지 않으면 싣지 않는다', async () => {
+    const withHold = await upload('driver')
+      .field('idempotencyKey', IDEMPOTENCY_KEY)
+      .field('expectedHoldAt', 'none')
+      .attach('photo', JPEG, { filename: 'delivery.jpg', contentType: 'image/jpeg' });
+    expect(withHold.status).toBe(200);
+    expect(deliveryPhotos.uploadAndComplete).toHaveBeenLastCalledWith(
+      expect.objectContaining({ idempotencyKey: IDEMPOTENCY_KEY, expectedHoldAt: 'none' }),
+    );
+
+    const legacy = await upload('driver')
+      .field('idempotencyKey', IDEMPOTENCY_KEY)
+      .attach('photo', JPEG, { filename: 'delivery.jpg', contentType: 'image/jpeg' });
+    expect(legacy.status).toBe(200);
+    expect(deliveryPhotos.uploadAndComplete.mock.lastCall?.[0]).not.toHaveProperty(
+      'expectedHoldAt',
+    );
+  });
+
   it.each([
     'consumer',
     'seller',
@@ -114,6 +133,30 @@ describe('회차 직배송 사진 업로드 HTTP 경계', () => {
         req
           .field('idempotencyKey', IDEMPOTENCY_KEY)
           .field('extra', 'x')
+          .attach('photo', JPEG, { filename: 'delivery.jpg', contentType: 'image/jpeg' }),
+    ],
+    [
+      '보류 표시와 함께 보낸 추가 텍스트 필드',
+      (req: request.Test) =>
+        req
+          .field('idempotencyKey', IDEMPOTENCY_KEY)
+          .field('expectedHoldAt', 'none')
+          .field('extra', 'x')
+          .attach('photo', JPEG, { filename: 'delivery.jpg', contentType: 'image/jpeg' }),
+    ],
+    [
+      '두 번 보낸 멱등 키',
+      (req: request.Test) =>
+        req
+          .field('idempotencyKey', IDEMPOTENCY_KEY)
+          .field('idempotencyKey', IDEMPOTENCY_KEY)
+          .attach('photo', JPEG, { filename: 'delivery.jpg', contentType: 'image/jpeg' }),
+    ],
+    [
+      '멱등 키 없음',
+      (req: request.Test) =>
+        req
+          .field('expectedHoldAt', 'none')
           .attach('photo', JPEG, { filename: 'delivery.jpg', contentType: 'image/jpeg' }),
     ],
     [

@@ -20,7 +20,10 @@ import {
   deliveryHoldResponsibilityFeeHint,
   HOLD_REASON_LABEL,
   type HoldReason,
+  holdResponsibilityAfterReasonChange,
+  isCustomerResponsibleOnlyReason,
   redeliveryFeeAfterResponsibilityChange,
+  SELLER_HOLD_REASON_OPTIONS,
 } from '../delivery-hold-form';
 
 interface DeliveryHoldModalProps {
@@ -225,13 +228,17 @@ export function DeliveryHoldModal({
     setFormError('');
   }, [opened]);
 
+  // 기상은 고객 책임·재배송비를 비우고, 수령 거부는 고객 책임을 켜고 빈 재배송비 칸을 기준 금액으로 채운다.
   function changeReason(value: string) {
     const next = value as HoldReason;
     setReasonCode(next);
-    if (next === 'WEATHER') {
-      setCustomerResponsible(false);
-      setRedeliveryFee('');
-    }
+    const fields = holdResponsibilityAfterReasonChange({
+      reasonCode: next,
+      customerResponsible,
+      redeliveryFee,
+    });
+    setCustomerResponsible(fields.customerResponsible);
+    setRedeliveryFee(fields.redeliveryFee);
   }
 
   // 고객 책임을 고르면 빈 재배송비 칸을 기준 금액으로 채우고, 풀면 비운다(판매자가 금액을 바꿀 수 있다).
@@ -297,8 +304,8 @@ export function DeliveryHoldModal({
                 onValueChange={changeReason}
               >
                 <div className="mt-2.5 flex flex-col gap-2.5">
-                  {Object.entries(HOLD_REASON_LABEL).map(([value, label]) => (
-                    <RadioItem key={value} value={value} label={label} />
+                  {SELLER_HOLD_REASON_OPTIONS.map((value) => (
+                    <RadioItem key={value} value={value} label={HOLD_REASON_LABEL[value]} />
                   ))}
                 </div>
               </RadioGroup>
@@ -324,7 +331,7 @@ export function DeliveryHoldModal({
               id={customerId}
               label="고객 책임"
               checked={customerResponsible}
-              disabled={isWeather}
+              disabled={isWeather || isCustomerResponsibleOnlyReason(reasonCode)}
               onCheckedChange={changeCustomerResponsible}
             />
             <Field>

@@ -281,8 +281,10 @@ describe('드라이버 local-runtime 인증 source-read 회귀 계약', () => {
     assert.match(formSource, /^'use client';/);
     assert.match(
       formSource,
-      /const \{ redirectTo \} = await signInAction\(formData\);\s*window\.location\.assign\(redirectTo\);/,
+      /const \{ redirectTo \} = await signInAction\(formData\);\s*window\.location\.replace\(redirectTo\);/,
     );
+    // 로그인 화면 기록을 남기면 복귀한 화면에서 뒤로가기가 /login → (로그인 상태라) 같은 화면으로 맴돈다(findings §5.4).
+    assert.doesNotMatch(formSource, /window\.location\.assign/);
   });
 
   it('Kakao Driver auth가 local 지원과 공존한다 (provider 등록 유지)', () => {

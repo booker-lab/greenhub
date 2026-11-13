@@ -340,6 +340,32 @@ test('배송 보류 안내는 사유 코드별 고정 문구로 보이고 직접
   assert.ok(!source.includes('재배송비: {'));
 });
 
+test('수령 거부·상품 파손 보류도 주문 상세가 보류 내용을 읽는다', () => {
+  for (const [reasonCode, customerResponsible, redeliveryFee] of [
+    ['RECEIPT_REFUSED', true, 10000],
+    ['PRODUCT_DAMAGED', false, null],
+  ]) {
+    const detail = readOrderDetail(
+      {
+        ...activeOrder,
+        status: 'DELIVERY_HELD',
+        deliveryHold: {
+          heldAt: '2026-07-21T01:00:00.000Z',
+          reasonCode,
+          reasonMessage: '현장 메모',
+          customerResponsible,
+          redeliveryFee,
+          nextContactAt: null,
+          nextDeliveryAt: null,
+        },
+      },
+      activeOrder.id,
+    );
+    assert.equal(detail?.status, 'DELIVERY_HELD', reasonCode);
+    assert.equal(detail?.deliveryHold?.reasonCode, reasonCode);
+  }
+});
+
 test('서버 redeliveryPayment 상태가 주문 상태와 독립적으로 결제 상태를 결정한다', () => {
   const hold = {
     heldAt: '2026-07-21T01:00:00.000Z',
@@ -747,6 +773,58 @@ test('재배송비 결제 응답은 서버 스냅샷 금액과 PortOne 식별자
       }),
     );
   }
+});
+
+test('고객 사유 종결 주문은 종결 기록(사유·시각)만 읽고 보류 경고·배송 현황을 숨긴다', () => {
+  const closed = readOrderDetail(
+    {
+      ...activeOrder,
+      id: 'round-order-closed',
+      status: 'CLOSED_UNDELIVERED',
+      deliveryHold: {
+        heldAt: '2026-11-13T06:00:00.000Z',
+        reasonCode: 'RECEIPT_REFUSED',
+        reasonMessage: '수령 거부',
+        customerResponsible: true,
+        redeliveryFee: 5000,
+        nextContactAt: null,
+        nextDeliveryAt: null,
+        resolvedAt: '2026-11-14T01:30:00.000Z',
+      },
+      customerFaultClosure: {
+        reasonCode: 'RECEIPT_REFUSED',
+        heldAt: '2026-11-13T06:00:00.000Z',
+        redeliveryFee: 5000,
+        closedAt: '2026-11-14T01:30:00.000Z',
+      },
+    },
+    'round-order-closed',
+  );
+  assert.ok(closed);
+  assert.equal(closed.status, 'CLOSED_UNDELIVERED');
+  assert.deepEqual(closed.customerFaultClosure, {
+    reasonCode: 'RECEIPT_REFUSED',
+    closedAt: '2026-11-14T01:30:00.000Z',
+  });
+  assert.equal(closed.canRequestCancellation, false);
+  assert.equal(isDeliveryHoldActive(closed), false);
+
+  // 종결 기록 모양이 달라도 주문 상세는 읽고 기록만 비운다. 다른 상태 주문은 기록을 읽지 않는다.
+  const malformed = readOrderDetail(
+    { ...activeOrder, status: 'CLOSED_UNDELIVERED', customerFaultClosure: { reasonCode: 'X' } },
+    activeOrder.id,
+  );
+  assert.equal(malformed?.customerFaultClosure, null);
+  assert.equal(readOrderDetail(activeOrder, activeOrder.id)?.customerFaultClosure, null);
+
+  // 화면: 종결 안내를 보이고 배송 현황 단계는 그리지 않는다.
+  assert.match(source, /isClosedUndelivered && \(/);
+  assert.match(source, /CLOSED_UNDELIVERED_MESSAGE/);
+  assert.match(
+    source,
+    /!isCancelled && detail\.status !== 'DELIVERY_HELD' && !isClosedUndelivered/,
+  );
+  assert.match(source, /customerFaultClosureWarning\(/);
 });
 
 test('기존 서버 취소·재배송비·주문 사진 조회 계약만 사용한다', () => {
@@ -1308,7 +1386,9 @@ test('결제 확인 중 주문은 배송 현황 단계 대신 결제 안내와 �
 
   // 배송 현황 단계는 결제 확인 중일 때 그리지 않고 안내 문장으로 바꾼다.
   const timeline = source.slice(
-    source.indexOf("{!isCancelled && detail.status !== 'DELIVERY_HELD' && ("),
+    source.indexOf(
+      "{!isCancelled && detail.status !== 'DELIVERY_HELD' && !isClosedUndelivered && (",
+    ),
     source.indexOf('data-testid="order-support"'),
   );
   assert.match(

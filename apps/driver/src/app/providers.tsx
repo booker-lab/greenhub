@@ -4,6 +4,7 @@ import type { Session } from 'next-auth';
 import { useEffect, useRef } from 'react';
 import { getSession, SessionProvider, useSession, signOut } from 'next-auth/react';
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
+import { PendingPhotoUploader } from '@/app/board/[orderId]/photo/pending-photo-uploader';
 import { AppToaster } from '@/components/app-toaster';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { getApiBaseUrl } from '@/lib/api-base-url';
@@ -104,6 +105,8 @@ export default function Providers({
       <SessionProvider session={session}>
         <SessionKeepAlive />
         <SessionAuthorityRecheck />
+        {/* 배송 완료 사진 업로드 대기열: 앱이 열려 있는 동안 같은 키·같은 사진으로 다시 올린다(Y3). */}
+        <PendingPhotoUploader />
         <TokenErrorGuard>{children}</TokenErrorGuard>
       </SessionProvider>
     </AppToaster>

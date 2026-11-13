@@ -117,7 +117,11 @@ export function buildOrderSummaryPath(storeId: string): string {
   return `/stores/${encodeURIComponent(storeId)}/orders/summary`;
 }
 
-/** 끝난 주문 건수를 탭 묶음(완료·취소)으로 바꾼다. 응답 모양이 다르면 오류로 닫는다(0건으로 속이지 않는다). */
+/**
+ * 끝난 주문 건수를 탭 묶음(완료·취소)으로 바꾼다. 응답 모양이 다르면 오류로 닫는다(0건으로 속이지 않는다).
+ * 고객 사유 종결(CLOSED_UNDELIVERED)은 완료에 센다. 이 상태를 모르는 이전 API 응답에는 키가 없으므로
+ * 없으면 0건으로 보고, 있는데 숫자가 아니면 오류로 닫는다.
+ */
 export function parseArchivedGroupCounts(payload: unknown): { DONE: number; CANCELLED: number } {
   const counts =
     typeof payload === 'object' && payload !== null
@@ -125,12 +129,16 @@ export function parseArchivedGroupCounts(payload: unknown): { DONE: number; CANC
       : undefined;
   if (typeof counts === 'object' && counts !== null) {
     const read = (key: string) => (counts as Record<string, unknown>)[key];
-    const values = ['DELIVERED', 'PICKED_UP', 'REVIEWED', 'CANCELLED'].map(read);
+    const closedRaw = read('CLOSED_UNDELIVERED');
+    const values = [
+      ...['DELIVERED', 'PICKED_UP', 'REVIEWED', 'CANCELLED'].map(read),
+      closedRaw === undefined ? 0 : closedRaw,
+    ];
     if (
       values.every((value) => typeof value === 'number' && Number.isInteger(value) && value >= 0)
     ) {
-      const [delivered, pickedUp, reviewed, cancelled] = values as number[];
-      return { DONE: delivered + pickedUp + reviewed, CANCELLED: cancelled };
+      const [delivered, pickedUp, reviewed, cancelled, closed] = values as number[];
+      return { DONE: delivered + pickedUp + reviewed + closed, CANCELLED: cancelled };
     }
   }
   throw new Error('주문 건수 응답 형식이 올바르지 않습니다.');

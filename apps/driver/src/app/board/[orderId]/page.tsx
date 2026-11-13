@@ -11,6 +11,7 @@ import { type ReactNode, use, useCallback, useEffect, useRef, useState } from 'r
 import { AppButton } from '@/components/app-button';
 import { TOAST_WARNING } from '@/components/app-toaster';
 import { text } from '@/components/look';
+import { PendingPhotoNotice } from '@/components/pending-photo-notice';
 import { Spinner } from '@/components/spinner';
 import { splitDeliveryAddress } from '@/lib/address-parts';
 import { apiFetch, apiRead } from '@/lib/api';
@@ -23,6 +24,7 @@ import {
   buildDriverOrderDetailScope,
   buildDriverStatusConfirmContent,
   classifyDriverOrderCommandError,
+  DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
   type DriverOrderReadback,
   type DriverOrderReadErrorKind,
   type DriverStatusConfirmKind,
@@ -30,6 +32,7 @@ import {
   driverDetailListHref,
   driverOrderItemCount,
   isDriverHoldEntryVisible,
+  isDriverHoldResumable,
   isDriverOrderCommandAllowed,
   isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
@@ -56,6 +59,12 @@ import {
   HOLD_UNCERTAIN_READBACK_WARNING,
 } from './_components/DeliveryHoldModal';
 import { StatusConfirmDialog } from './_components/StatusConfirmDialog';
+import {
+  failStalePendingPhoto,
+  subscribePendingPhotoCompleted,
+  usePendingPhotos,
+} from './photo/pending-photo-client';
+import { isPendingPhotoStaleForOrderStatus } from './photo/pending-photo-policy';
 
 type Order = {
   id?: string;
@@ -158,6 +167,35 @@ function OrderDetail({ orderId }: { orderId: string }) {
   // readback 실패는 command 실패와 분리한다: ACK된 명령은 재전송하지 않고 상태 재확인만 안내한다.
   const [readbackWarning, setReadbackWarning] = useState<string | null>(null);
   const [readKey, setReadKey] = useState(0);
+  // 이 주문의 완료 사진이 이 기기 대기열에 있으면(Y3) 안내와 "지금 다시 올리기"를 보이고 사진 완료 버튼을 끈다.
+  const pendingPhotos = usePendingPhotos(session?.user.id);
+  const pendingPhoto = pendingPhotos.entries.find((entry) => entry.orderId === orderId) ?? null;
+  const pendingPhotoNotice =
+    pendingPhoto && session?.user.id ? (
+      <PendingPhotoNotice entry={pendingPhoto} userId={session.user.id} />
+    ) : null;
+  // 대기열이 이 주문을 완료로 수렴하면 다시 조회한다(완료 주문은 "배송을 마친 주문이에요"로 바뀐다).
+  useEffect(
+    () =>
+      subscribePendingPhotoCompleted((completedOrderId) => {
+        if (completedOrderId === orderId) setReadKey((key) => key + 1);
+      }),
+    [orderId],
+  );
+  // 최신 조회가 이 주문을 보류·수거 대기로 보이면 대기 중인 예전 사진을 멈춘다(사진 바이트 삭제).
+  // 다시 배송 중이 되어도 그 사진이 새 배송을 완료하지 않게 한다. 보내는 중이면 실행기가 건드리지 않는다.
+  const staleUserId = session?.user.id;
+  const staleOrderStatus = order?.id === orderId ? order.status : null;
+  const staleReadSettled =
+    readError === null && readbackWarning === null && !readLoading && !readRefreshing;
+  const pendingPhotoState = pendingPhoto?.state ?? null;
+  useEffect(() => {
+    if (!staleUserId || !staleReadSettled || pendingPhotoState === null) return;
+    if (pendingPhotoState === 'failed' || !isPendingPhotoStaleForOrderStatus(staleOrderStatus)) {
+      return;
+    }
+    void failStalePendingPhoto(staleUserId, orderId);
+  }, [staleUserId, staleReadSettled, staleOrderStatus, pendingPhotoState, orderId]);
   const readSeqRef = useRef(0);
   const commandSeqRef = useRef(0);
   const hasOrderRef = useRef(false);
@@ -605,6 +643,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
           <p className={cn(text, 'text-center')} style={{ color: 'var(--driver-text-muted)' }}>
             {message}
           </p>
+          {/* 완료 사진이 아직 대기열에 있으면 여기서도 보인다(서버가 이미 완료해 조회가 404일 수 있다). */}
+          {pendingPhotoNotice && <div className="w-full max-w-md">{pendingPhotoNotice}</div>}
           {isNotFound && (
             // 다른 기사가 맡았거나 끝난 주문은 다시 열어도 같으므로 목록으로 바꿔 보낸다(D-17).
             // 방금 완료한 주문이면 배송 중 탭으로 보낸다(R-01).
@@ -689,7 +729,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
       })
     : null;
   const openStatusConfirm = (kind: DriverStatusConfirmKind) => {
-    if (loading || !commandsAllowed) return;
+    if (loading || !commandsAllowed || pendingPhoto !== null) return;
     setConfirmKind(kind);
   };
   // 앱 안 이전 기록이 있을 때만 브라우저 뒤로, 없으면(알림·메신저 링크로 바로 연 경우) 목록으로 바꿔 보낸다(D-16).
@@ -820,6 +860,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
             )
           )}
 
+          {pendingPhotoNotice}
+
           {/* 수거 대기에서는 먼저 들를 수거 장소를 배송지보다 위에 둔다. */}
           {pickup && (
             <div
@@ -949,7 +991,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 fontWeight: 'var(--fw-bold)',
                 color: 'var(--color-text)',
               }}
-              disabled={loading || !commandsAllowed}
+              // 이 주문의 완료 사진이 대기열에 있으면 보류하지 않는다. 서버에서 이미 완료됐을 수 있고,
+              // 보류하면 대기 중인 사진이 상태 충돌로 멈춘다. 멈춘 항목은 "확인했어요"로 지운 뒤 보류할 수 있다.
+              disabled={loading || !commandsAllowed || pendingPhoto !== null}
               onClick={() => setHoldOpened(true)}
             >
               배송 못 함 · 보류하기
@@ -1017,14 +1061,27 @@ function OrderDetail({ orderId }: { orderId: string }) {
             boxShadow: 'var(--driver-bar-shadow)',
           }}
         >
+          {/* 상품 파손 보류는 다시 배송하지 않는다. 재개 버튼 대신 가게로 돌려줄 것을 안내한다. */}
+          {isHeld && isRoundDirect && !isDriverHoldResumable(order.deliveryHold) && (
+            <p
+              className={text}
+              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-danger)', ...keepWords }}
+              data-testid="driver-non-redeliverable-hold"
+            >
+              {DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE}
+            </p>
+          )}
           {isHeld &&
             isRoundDirect &&
+            isDriverHoldResumable(order.deliveryHold) &&
             (deliveryStartAllowed ? (
               <AppButton
                 fullWidth
                 size="xl"
                 loading={loading}
-                disabled={loading || !commandsAllowed}
+                // 이 주문의 예전 배송 사진이 대기열에 있으면 다시 배송을 시작하지 않는다. 그 사진이 새 배송을
+                // 완료하지 않도록, 멈춘 항목을 "확인했어요"로 지운 뒤 시작할 수 있다.
+                disabled={loading || !commandsAllowed || pendingPhoto !== null}
                 onClick={() => openStatusConfirm('RESUME')}
               >
                 배송 재개
@@ -1041,7 +1098,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 fullWidth
                 size="xl"
                 loading={loading}
-                disabled={loading || !commandsAllowed}
+                // 이 주문의 예전 배송 사진이 대기열에 있으면 다시 배송을 시작하지 않는다. 그 사진이 새 배송을
+                // 완료하지 않도록, 멈춘 항목을 "확인했어요"로 지운 뒤 시작할 수 있다.
+                disabled={loading || !commandsAllowed || pendingPhoto !== null}
                 onClick={() => openStatusConfirm('START')}
               >
                 수거 완료 / 배송 시작
@@ -1056,7 +1115,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
               fullWidth
               size="xl"
               loading={loading}
-              disabled={!commandsAllowed}
+              // 이 주문의 사진이 대기열에 있으면 새로 찍지 않는다(같은 키·같은 사진만 다시 보낸다).
+              disabled={!commandsAllowed || pendingPhoto !== null}
               onClick={() =>
                 router.push(`/board/${encodeURIComponent(orderId)}/photo/round-direct`)
               }
@@ -1071,7 +1131,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 fullWidth
                 size="xl"
                 loading={loading}
-                disabled={loading || !commandsAllowed}
+                // 이 주문의 예전 배송 사진이 대기열에 있으면 다시 배송을 시작하지 않는다. 그 사진이 새 배송을
+                // 완료하지 않도록, 멈춘 항목을 "확인했어요"로 지운 뒤 시작할 수 있다.
+                disabled={loading || !commandsAllowed || pendingPhoto !== null}
                 onClick={() => openStatusConfirm('START')}
               >
                 수거 완료 / 배송 시작

@@ -83,9 +83,18 @@ export type PhotoUploadFailureKind =
   // 확정 거절: 서버가 이 요청을 처리하지 않았다.
   | 'TOO_LARGE'
   | 'STATE_CONFLICT'
+  // 사진을 찍은 뒤 주문이 보류됐다가 다시 배송 중이 됐다(서버 409 DELIVERY_PHOTO_STALE_HOLD).
+  // 예전 사진으로 재배송을 완료하지 않는다. 다시 찍어야 한다.
+  | 'STALE_HOLD'
   | 'AUTHORITY'
   | 'NOT_FOUND'
   | 'REJECTED';
+
+/** 서버가 촬영 뒤 새 보류를 이유로 사진을 거절할 때 싣는 코드(apps/api delivery-photos.service.ts). */
+export const DELIVERY_PHOTO_STALE_HOLD_CODE = 'DELIVERY_PHOTO_STALE_HOLD';
+
+/** 사진 요청의 expectedHoldAt 필드에 "촬영 때 보류 이력 없음"을 싣는 값. */
+export const DELIVERY_PHOTO_NO_HOLD = 'none';
 
 export type PhotoUploadFailureInput =
   | { kind: 'network' }
@@ -101,6 +110,7 @@ export function classifyPhotoUploadFailure(input: PhotoUploadFailureInput): Phot
   if (status === 401) return 'AUTHORITY';
   if (code === 'DRIVER_ORDER_AUTHORITY_DENIED') return 'AUTHORITY';
   if (code === 'DRIVER_ORDER_NOT_FOUND' || status === 404) return 'NOT_FOUND';
+  if (code === DELIVERY_PHOTO_STALE_HOLD_CODE && status === 409) return 'STALE_HOLD';
   if (code === 'DRIVER_ORDER_STATE_CONFLICT' && (status === 403 || status === 409)) {
     return 'STATE_CONFLICT';
   }
@@ -141,6 +151,7 @@ export const PHOTO_UPLOAD_MESSAGES = {
   AUTHORITY: '이 주문을 처리할 권한이 없거나 로그인이 만료됐어요. 다시 로그인한 뒤 확인해 주세요.',
   NOT_FOUND: '주문을 찾을 수 없어요. 판매자 또는 운영팀에 연락해 주세요.',
   REJECTED: '사진을 등록하지 못했어요. 다시 촬영해 주세요.',
+  STALE_HOLD: '보류 뒤 다시 배송 중이라 예전 사진은 쓸 수 없어요. 사진을 다시 찍어 주세요.',
   STATE_CONFLICT_STUCK:
     '이 주문에는 이미 배송 사진이 연결돼 있어 배송 완료를 마치지 못했어요. 판매자 또는 운영팀에 연락해 주세요.',
   STATUS_CHANGED:
@@ -163,6 +174,8 @@ export function photoUploadFailureMessage(kind: PhotoUploadFailureKind): string 
       return PHOTO_UPLOAD_MESSAGES.NOT_FOUND;
     case 'STATE_CONFLICT':
       return PHOTO_UPLOAD_MESSAGES.STATE_CONFLICT_STUCK;
+    case 'STALE_HOLD':
+      return PHOTO_UPLOAD_MESSAGES.STALE_HOLD;
     default:
       return PHOTO_UPLOAD_MESSAGES.REJECTED;
   }
@@ -238,4 +251,23 @@ export function readDriverOrderStoreId(payload: unknown, orderId: string): strin
     return null;
   }
   return order.storeId;
+}
+
+/**
+ * 기사 주문 상세 응답에서 같은 주문의 가장 최근 보류 표시(deliveryHoldAt)를 읽는다.
+ * - 문자열: 그 보류의 heldAt, null: 보류 이력 없음.
+ * - undefined: 같은 주문 응답이 아니거나 이 값을 싣지 않는 이전 API라 모른다(사진 요청에 싣지 않는다).
+ */
+export function readDriverOrderHoldAt(
+  payload: unknown,
+  orderId: string,
+): string | null | undefined {
+  if (typeof payload !== 'object' || payload === null) return undefined;
+  const order = payload as { id?: unknown; deliveryHoldAt?: unknown };
+  if (order.id !== orderId) return undefined;
+  if (order.deliveryHoldAt === null) return null;
+  if (typeof order.deliveryHoldAt === 'string' && order.deliveryHoldAt.length > 0) {
+    return order.deliveryHoldAt;
+  }
+  return undefined;
 }

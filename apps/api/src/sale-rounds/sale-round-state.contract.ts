@@ -145,8 +145,12 @@ export function isCapacityFull(round: SaleRoundRecord) {
   );
 }
 
+/**
+ * 회차 완료·회차 취소가 아직 정리해야 하는 주문인지. 배송 완료·리뷰·고객 사유 종결(환불 없음)은
+ * 끝난 주문이라 회차 완료를 막지 않고 회차 취소도 건너뛴다(종결 주문은 환불하지 않는다).
+ */
 export function isRoundOrderCancellationPending(order: Record<string, any>) {
-  if (['DELIVERED', 'REVIEWED'].includes(order.status)) return false;
+  if (['DELIVERED', 'REVIEWED', 'CLOSED_UNDELIVERED'].includes(order.status)) return false;
   if (order.status === 'CANCELLED') {
     return order.cancellation?.status != null && order.cancellation.status !== 'COMPLETED';
   }

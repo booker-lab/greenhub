@@ -14,6 +14,7 @@ import {
   photoEncodeFailureMessage,
   photoUploadFailureMessage,
   planNextEncodeStep,
+  readDriverOrderHoldAt,
   readDriverOrderStatus,
   readDriverOrderStoreId,
   resolvePhotoUploadFailure,
@@ -304,4 +305,44 @@ test('주문 재조회: 명령 경로의 판매자 ID는 같은 주문 응답의
   assert.equal(readDriverOrderStoreId({ id: 'o1' }, 'o1'), null);
   assert.equal(readDriverOrderStoreId(null, 'o1'), null);
   assert.equal(readDriverOrderStoreId('store-1', 'o1'), null);
+});
+
+test('촬영 뒤 새 보류 거절(409 DELIVERY_PHOTO_STALE_HOLD)은 확정 거절이고 다시 찍으라고 안내한다', () => {
+  const kind = classifyPhotoUploadFailure({
+    kind: 'http',
+    status: 409,
+    code: 'DELIVERY_PHOTO_STALE_HOLD',
+  });
+  assert.equal(kind, 'STALE_HOLD');
+  assert.equal(isUncertainPhotoUploadFailure(kind), false);
+  // 확정 거절이라 같은 키를 다시 쓰지 않는다.
+  assert.equal(
+    decideIdempotencyKey({ hasKey: true, photoChanged: false, lastFailure: kind }),
+    'renew',
+  );
+  assert.equal(
+    photoUploadFailureMessage(kind),
+    '보류 뒤 다시 배송 중이라 예전 사진은 쓸 수 없어요. 사진을 다시 찍어 주세요.',
+  );
+  assert.deepEqual(
+    resolvePhotoUploadFailure({ failure: kind, orderStatus: 'DELIVERING', finishAttempted: false }),
+    { action: 'show', message: PHOTO_UPLOAD_MESSAGES.STALE_HOLD },
+  );
+  // 다른 코드의 409는 그대로 상태 충돌이다.
+  assert.equal(
+    classifyPhotoUploadFailure({ kind: 'http', status: 409, code: null }),
+    'STATE_CONFLICT',
+  );
+});
+
+test('기사 상세 응답의 보류 표시는 같은 주문일 때만 읽고, 싣지 않은 이전 응답은 모른다(undefined)', () => {
+  assert.equal(
+    readDriverOrderHoldAt({ id: 'o1', deliveryHoldAt: '2026-11-13T08:00:00.000Z' }, 'o1'),
+    '2026-11-13T08:00:00.000Z',
+  );
+  assert.equal(readDriverOrderHoldAt({ id: 'o1', deliveryHoldAt: null }, 'o1'), null);
+  assert.equal(readDriverOrderHoldAt({ id: 'o1' }, 'o1'), undefined);
+  assert.equal(readDriverOrderHoldAt({ id: 'o2', deliveryHoldAt: null }, 'o1'), undefined);
+  assert.equal(readDriverOrderHoldAt({ id: 'o1', deliveryHoldAt: '' }, 'o1'), undefined);
+  assert.equal(readDriverOrderHoldAt(null, 'o1'), undefined);
 });

@@ -1,7 +1,14 @@
 import type { GiftInfo, SelectedProductOption } from './benchmark.types.js';
+import type { CustomerFaultClosureRecord } from './customer-fault-closure.js';
 import type { PostDeliveryRefundRecord } from './post-delivery-refund.js';
 import type { ClientOrderRequestId } from './sale-round.types.js';
-export type OrderStatus = 'PENDING' | 'RECRUITING' | 'CONFIRMED' | 'ACCEPTED' | 'PREPARING' | 'DELIVERING' | 'DELIVERY_HELD' | 'HUB_ARRIVED' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED' | 'REVIEWED';
+export type OrderStatus = 'PENDING' | 'RECRUITING' | 'CONFIRMED' | 'ACCEPTED' | 'PREPARING' | 'DELIVERING' | 'DELIVERY_HELD' | 'HUB_ARRIVED' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED' | 'REVIEWED'
+/**
+ * 고객 사유 종결(환불 없음). 고객 책임 보류에서 수령 거부·재배송비 미결제로 판매자가 종결한
+ * 회차 직배송 주문이다. 결제 금액은 정산되고 상품은 판매자가 처리한다. 취소(CANCELLED=환불)와
+ * 다르며 이 상태에서 다른 상태로 가는 전이는 없다(apps/api/src/orders/customer-fault-closure.service.ts).
+ */
+ | 'CLOSED_UNDELIVERED';
 export type DeliveryMethod = 'direct' | 'hub' | 'parcel';
 export type SaleType = 'normal' | 'group';
 /** 주문 요청사항(받는 분·토퍼 문구·배송 요청 등 자유 입력) 최대 글자 수 */
@@ -34,9 +41,22 @@ export interface OrderAcquisitionSnapshot {
     landingUrl: string | null;
     capturedAt: string;
 }
+/**
+ * 배송 보류 사유 코드. 서버 DTO(apps/api/src/orders/dto/update-status.dto.ts)가 받는 값과 같다.
+ * - PRODUCT_DAMAGED(상품 파손): 판매자·기사 책임이고 다시 배송하지 않는다. 기사가 배송 중에만 남긴다.
+ * - RECEIPT_REFUSED(수령 거부): 고객 책임(단순 변심과 같음)이고 재배송비를 결제해야 다시 배송한다.
+ */
+export type DeliveryHoldReasonCode = 'WEATHER' | 'ACCESS_UNAVAILABLE' | 'ADDRESS_ISSUE' | 'CUSTOMER_UNREACHABLE' | 'RECEIPT_REFUSED' | 'PRODUCT_DAMAGED' | 'OTHER';
+/**
+ * 재배송하지 않는 보류 사유. 이 보류는 주문 취소(전액 환불)로만 끝나고 재배송 준비·배송 재개로
+ * 돌아가지 않는다(apps/api/src/orders/orders.helpers.ts deliveryTransitionViolation).
+ */
+export declare const NON_REDELIVERABLE_HOLD_REASONS: readonly DeliveryHoldReasonCode[];
+/** 재배송하지 않는(취소로만 끝나는) 보류 사유인지 확인한다. 알 수 없는 값은 false다. */
+export declare function isNonRedeliverableHoldReason(reasonCode: unknown): boolean;
 export interface DeliveryHoldSnapshot {
     heldAt: string;
-    reasonCode: 'WEATHER' | 'ACCESS_UNAVAILABLE' | 'ADDRESS_ISSUE' | 'CUSTOMER_UNREACHABLE' | 'OTHER';
+    reasonCode: DeliveryHoldReasonCode;
     reasonMessage: string;
     customerResponsible: boolean;
     redeliveryFee: number | null;
@@ -93,6 +113,7 @@ export interface Order {
     gift?: GiftInfo | null;
     packageLabel?: string | null;
     postDeliveryRefund?: PostDeliveryRefundRecord | null;
+    customerFaultClosure?: CustomerFaultClosureRecord | null;
     createdAt: string;
     updatedAt: string;
     productName?: string;

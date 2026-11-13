@@ -23,7 +23,7 @@ import {
 export const LOCAL_DRIVER_APPROVAL_PENDING_CODE = 'local-driver-approval-pending';
 
 export type LocalCredentialSignInResult = {
-  // 같은 출처 앱 경로. 폼이 window.location.assign으로 전체 이동한다.
+  // 같은 출처 앱 경로. 폼이 window.location.replace로 전체 이동한다(로그인 화면 기록을 남기지 않는다).
   redirectTo: string;
 };
 

@@ -68,12 +68,27 @@ export type BatchPickupBlockReason =
   | 'NOT_MINE'
   | 'NOT_ROUND_DIRECT'
   | 'PAYMENT'
-  | 'NO_STORE';
+  | 'NO_STORE'
+  // 이 주문의 예전 배송 사진이 이 기기 대기열에 있다(올리는 중·멈춤 확인 전). 다시 배송을 시작하면
+  // 그 사진이 새 배송을 완료할 수 있어 고르지 않는다.
+  | 'PENDING_PHOTO';
 
-export function batchPickupBlockReason(order: BatchPickupCandidate): BatchPickupBlockReason | null {
+/** 고르기 판정에 쓰는 이 기기 상태. */
+export type BatchPickupContext = {
+  /** 사진 업로드 대기열에 항목이 있는 주문 ID(상태 무관). */
+  pendingPhotoOrderIds?: ReadonlySet<string>;
+};
+
+export function batchPickupBlockReason(
+  order: BatchPickupCandidate,
+  context: BatchPickupContext = {},
+): BatchPickupBlockReason | null {
   if (order.status !== 'PREPARING') return 'NOT_PREPARING';
   // 맡을 수 있는 주문(미배정)과 배정 여부를 모르는 이전 응답은 고를 수 없다.
   if (order.assignedToMe !== true) return 'NOT_MINE';
+  if (typeof order.id === 'string' && context.pendingPhotoOrderIds?.has(order.id)) {
+    return 'PENDING_PHOTO';
+  }
   if (!isRoundDirectListOrder(order)) return 'NOT_ROUND_DIRECT';
   if (!isDeliveryStartAllowed(order.redeliveryPayment)) return 'PAYMENT';
   // storeId가 없으면(이전 API) 상태 변경 경로를 만들 수 없다. 형식이 어긋난 값도 보내지 않는다.
@@ -82,13 +97,17 @@ export function batchPickupBlockReason(order: BatchPickupCandidate): BatchPickup
   return null;
 }
 
-export function isBatchPickupSelectable(order: BatchPickupCandidate): boolean {
-  return batchPickupBlockReason(order) === null;
+export function isBatchPickupSelectable(
+  order: BatchPickupCandidate,
+  context: BatchPickupContext = {},
+): boolean {
+  return batchPickupBlockReason(order, context) === null;
 }
 
 /** 내 수거 행에 쓰는 짧은 안내. 미배정·수거 대기가 아닌 주문은 행에 고르기 칸을 두지 않으므로 null이다. */
 export function batchPickupBlockLabel(reason: BatchPickupBlockReason | null): string | null {
   if (reason === 'PAYMENT') return '결제 확인 전이라 고를 수 없어요';
+  if (reason === 'PENDING_PHOTO') return '처리 중인 사진이 있어 고를 수 없어요';
   if (reason === 'NOT_ROUND_DIRECT' || reason === 'NO_STORE') {
     return '한 번에 시작할 수 없어요. 고르기를 마친 뒤 주문을 열어 시작해 주세요';
   }

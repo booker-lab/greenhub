@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   type BatchPickupCandidate,
   type BatchPickupResponse,
+  batchPickupBlockLabel,
   batchPickupBlockReason,
   buildBatchPickupConfirmContent,
   buildBatchPickupSummaryText,
@@ -111,6 +112,17 @@ describe('한 번에 수거 선택 가능 판정', () => {
     expect(batchPickupBlockReason(candidate({ deliveryMethod: 'hub' }))).toBe('NOT_ROUND_DIRECT');
     expect(batchPickupBlockReason(candidate({ deliveryDate: undefined }))).toBe('NOT_ROUND_DIRECT');
     expect(batchPickupBlockReason(candidate({ deliveryDate: null }))).toBe('NOT_ROUND_DIRECT');
+  });
+
+  it('이 주문의 배송 사진이 이 기기 대기열에 있으면(올리는 중·멈춤 확인 전) 고를 수 없고 까닭을 보인다', () => {
+    const context = { pendingPhotoOrderIds: new Set(['order-1']) };
+    expect(batchPickupBlockReason(candidate(), context)).toBe('PENDING_PHOTO');
+    expect(isBatchPickupSelectable(candidate(), context)).toBe(false);
+    expect(batchPickupBlockLabel('PENDING_PHOTO')).toBe('처리 중인 사진이 있어 고를 수 없어요');
+    // 다른 주문의 항목은 영향을 주지 않는다.
+    expect(isBatchPickupSelectable(candidate({ id: 'order-2' }), context)).toBe(true);
+    // 내 주문이 아닌 행은 고르기 칸 자체가 없다(NOT_MINE이 먼저다).
+    expect(batchPickupBlockReason(candidate({ assignedToMe: false }), context)).toBe('NOT_MINE');
   });
 
   it('수거 대기가 아니면 고를 수 없다', () => {

@@ -34,12 +34,13 @@ export const STORE_ORDER_ACTIVE_STATUSES = [
   'HUB_ARRIVED',
 ] as const;
 
-/** 끝난 주문 상태(완료·취소). 계속 쌓이므로 최신순으로 나눠 받는다. */
+/** 끝난 주문 상태(완료·취소·고객 사유 종결). 계속 쌓이므로 최신순으로 나눠 받는다. */
 export const STORE_ORDER_ARCHIVED_STATUSES = [
   'DELIVERED',
   'PICKED_UP',
   'REVIEWED',
   'CANCELLED',
+  'CLOSED_UNDELIVERED',
 ] as const;
 
 export const STORE_ORDER_QUERY_SCOPES = ['active', 'archive'] as const;

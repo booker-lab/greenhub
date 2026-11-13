@@ -85,6 +85,12 @@ export class SettlementsService {
   // 비트랜잭션이면 둘 다 exists=false를 읽고 둘 다 set → 후자가 전자를 덮어써 settledAt 갱신.
   // 수수료율: 같은 트랜잭션에서 가게 문서의 commissionRate(0~1)를 읽어 쓰고, 없으면 서버 기본값.
   // 쓴 요율은 platformFeeRate로 정산에 남는다. 이미 만든 정산은 다시 계산하지 않는다.
+  /** 주문의 정산 문서가 있는지(문서 id = 주문 id). 상태는 보지 않는다. */
+  async hasSettlement(orderId: string): Promise<boolean> {
+    const snap = await this.firestore.doc(`settlements/${orderId}`).get();
+    return snap.exists;
+  }
+
   async createSettlement(order: Record<string, unknown>, completedStatus: string): Promise<void> {
     const orderId = order['id'] as string;
     const ref = this.firestore.doc(`settlements/${orderId}`);

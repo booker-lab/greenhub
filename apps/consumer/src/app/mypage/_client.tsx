@@ -24,6 +24,7 @@ const STATUS_TONES: Partial<Record<OrderStatus, StatusDotTone>> = {
   DELIVERED: 'done',
   CANCELLED: 'done',
   REVIEWED: 'done',
+  CLOSED_UNDELIVERED: 'done',
 };
 
 // ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 md 16)·Stack·Group(gap md 16 기본, wrap)·

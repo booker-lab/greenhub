@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import {
   DAY_MS,
+  DONE_ORDER_STATUSES,
   evaluateAll,
   evaluateM1,
   evaluateM2,
@@ -166,6 +167,20 @@ describe('O1 배송 마감 지남', () => {
       }),
     );
     assert.equal(item.level, GREEN);
+  });
+
+  test('고객 사유 종결(CLOSED_UNDELIVERED)은 끝난 주문이라 마감이 지나도 올리지 않는다', () => {
+    const item = evaluateO1(
+      base({
+        rounds,
+        roundOrders: [
+          { roundId: 'r-past', status: 'CLOSED_UNDELIVERED', orderNumber: 'E-1', storeId: 'store-a', totalAmount: 30000 },
+        ],
+      }),
+    );
+    assert.equal(item.level, GREEN);
+    assert.deepEqual(item.entries, []);
+    assert.ok(DONE_ORDER_STATUSES.includes('CLOSED_UNDELIVERED'));
   });
 
   test('회차 없는 주문: 희망 배송일이 어제면 🔴, 오늘이면 아직 아니다', () => {

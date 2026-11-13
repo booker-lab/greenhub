@@ -41,7 +41,7 @@
 
 | ID | 왜 보는지 | 이상 기준 | 사람이 내릴 결정 |
 |---|---|---|---|
-| O1 배송 마감 지남 | 손님이 이미 기다리고 있다 | 🔴 회차의 `schedule.deliveryEndAt`이 지났는데 주문이 미완료(`DELIVERED`·`PICKED_UP`·`REVIEWED`·`CANCELLED`가 아님). 회차가 없는 일반 주문은 `requestedDeliveryDate`가 지난 것으로 본다. 날짜가 없는 주문은 `updatedAt`이 48시간 넘게 그대로면 🟡로 올리고 "짐작"이라고 표시한다 | 판매자·기사에게 연락할지, 손님에게 안내할지, 필요하면 어드민에서 강제 환불할지 |
+| O1 배송 마감 지남 | 손님이 이미 기다리고 있다 | 🔴 회차의 `schedule.deliveryEndAt`이 지났는데 주문이 미완료(`DELIVERED`·`PICKED_UP`·`REVIEWED`·`CANCELLED`·`CLOSED_UNDELIVERED`가 아님). 회차가 없는 일반 주문은 `requestedDeliveryDate`가 지난 것으로 본다. 날짜가 없는 주문은 `updatedAt`이 48시간 넘게 그대로면 🟡로 올리고 "짐작"이라고 표시한다 | 판매자·기사에게 연락할지, 손님에게 안내할지, 필요하면 어드민에서 강제 환불할지 |
 | O2 오늘 배송인데 준비 전 | 아침에 알면 오늘 안에 막을 수 있다 | 🟡 오늘(KST)이 `schedule.deliveryStartAt`인 회차의 주문이 아직 `ACCEPTED`·`CONFIRMED`(준비 시작 전) | 판매자에게 확인 연락을 할지 |
 | O3 기사 미배정 | 준비가 끝났는데 가져갈 사람이 없다 | 🟡 O2와 같은 회차에서 `PREPARING`이면서 `driverId`가 없음(직배송 `deliveryMethod=='direct'`만 해당) | 기사에게 배정을 요청하거나 직접 연락할지 |
 | O4 배송 보류 장기화 | 보류는 사람이 풀어야 끝난다 | 🟡 `DELIVERY_HELD`이면서 `deliveryHold.resolvedAt`이 없고 `deliveryHold.heldAt`이 24시간을 넘음 | 재배송 일정을 잡을지, 취소할지 |
