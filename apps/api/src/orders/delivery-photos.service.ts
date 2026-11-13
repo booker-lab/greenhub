@@ -25,6 +25,20 @@ type OrderRecord = Record<string, unknown>;
 
 const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+/**
+ * 같은 키·같은 사진 재전송을 이미 끝난 완료로 받아 줄 주문 상태.
+ * 기사 앱은 응답을 잃은 사진을 기기에 두었다가 나중에 다시 보내므로(사진 업로드 대기열),
+ * 그 사이 손님이 후기를 남겨 REVIEWED가 됐어도 같은 사진이 이미 연결돼 있으면 완료로 수렴한다.
+ * REVIEWED 재전송은 상태 전이·정산·완료 알림을 새로 만들지 않는다.
+ */
+const COMPLETED_RETRY_STATUSES: readonly unknown[] = ['DELIVERED', 'REVIEWED'];
+
+type CompletedRetryStatus = 'DELIVERED' | 'REVIEWED';
+
+function isCompletedRetryStatus(status: unknown): status is CompletedRetryStatus {
+  return COMPLETED_RETRY_STATUSES.includes(status);
+}
+
 interface UploadDeliveryPhotoInput {
   storeId: string;
   orderId: string;
@@ -92,7 +106,7 @@ export class DeliveryPhotosService {
       uploaded = reconciled;
     }
 
-    let alreadyCompleted = false;
+    let alreadyCompleted: CompletedRetryStatus | null = null;
     try {
       alreadyCompleted = await this.attachPhoto({
         ...input,
@@ -130,7 +144,7 @@ export class DeliveryPhotosService {
       throw error;
     }
 
-    if (!alreadyCompleted) {
+    if (alreadyCompleted === null) {
       await this.lifecycle.updateStatus(
         input.storeId,
         input.orderId,
@@ -138,9 +152,11 @@ export class DeliveryPhotosService {
         { status: 'DELIVERED' },
         input.requesterRole,
       );
-    } else {
+    } else if (alreadyCompleted === 'DELIVERED') {
       await this.lifecycle.reconcileDeliveryCompletion(input.storeId, input.orderId);
     }
+    // REVIEWED: 배송 완료 후속효과(정산·완료 알림)는 DELIVERED 단계에서 이미 지났다.
+    // 같은 사진 재전송은 새 전이·정산·알림 없이 완료 응답만 돌려준다.
 
     return { orderId: input.orderId, photoId, status: 'DELIVERED' as const };
   }
@@ -159,8 +175,8 @@ export class DeliveryPhotosService {
       photoId: string;
       storagePath: string;
     },
-  ): Promise<boolean> {
-    let alreadyCompleted = false;
+  ): Promise<CompletedRetryStatus | null> {
+    let alreadyCompleted: CompletedRetryStatus | null = null;
     await this.firestore.runTransaction(async (transaction) => {
       const orderRef = this.firestore.doc(`orders/${input.orderId}`);
       const snapshot = await transaction.get(orderRef);
@@ -169,7 +185,8 @@ export class DeliveryPhotosService {
       }
       const order = snapshot.data() as OrderRecord;
       const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
-      if (photoIds.includes(input.photoId) && order['status'] === 'DELIVERED') {
+      const status = order['status'];
+      if (photoIds.includes(input.photoId) && isCompletedRetryStatus(status)) {
         try {
           await this.driverScope.assertPilotBaseInTransaction(transaction, order, input.storeId);
         } catch (error) {
@@ -189,7 +206,7 @@ export class DeliveryPhotosService {
         if (order['driverId'] !== authority.requesterId) {
           throwDriverOrderAuthorityDenied('담당 기사만 배송 사진을 처리할 수 있습니다.');
         }
-        alreadyCompleted = true;
+        alreadyCompleted = status;
         return;
       }
 
@@ -230,7 +247,7 @@ export class DeliveryPhotosService {
     photoId: string,
   ): Promise<void> {
     const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
-    const isAttachedRetry = photoIds.includes(photoId) && order['status'] === 'DELIVERED';
+    const isAttachedRetry = photoIds.includes(photoId) && isCompletedRetryStatus(order['status']);
 
     if (isAttachedRetry) {
       try {
@@ -275,7 +292,7 @@ export class DeliveryPhotosService {
       typeof order['roundId'] !== 'string' ||
       order['roundId'].trim().length === 0 ||
       order['deliveryMethod'] !== 'direct' ||
-      order['status'] !== 'DELIVERED' ||
+      !isCompletedRetryStatus(order['status']) ||
       !photoIds.includes(photoId)
     ) {
       throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
@@ -304,7 +321,7 @@ export class DeliveryPhotosService {
       typeof order['roundId'] !== 'string' ||
       order['roundId'].trim().length === 0 ||
       order['deliveryMethod'] !== 'direct' ||
-      order['status'] !== 'DELIVERED' ||
+      !isCompletedRetryStatus(order['status']) ||
       !photoIds.includes(photoId)
     ) {
       throwDriverOrderAuthorityDenied('유효한 round_direct Pilot 주문이 아닙니다.');
