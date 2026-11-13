@@ -98,6 +98,8 @@ FSM 표만 근거로 Firestore 주문 상태를 직접 수정하지 않는다.
     | 'ACCESS_UNAVAILABLE'
     | 'ADDRESS_ISSUE'
     | 'CUSTOMER_UNREACHABLE'
+    | 'RECEIPT_REFUSED'
+    | 'PRODUCT_DAMAGED'
     | 'OTHER'
   reasonMessage: string
   customerResponsible: boolean
@@ -112,6 +114,9 @@ FSM 표만 근거로 Firestore 주문 상태를 직접 수정하지 않는다.
 
 - `WEATHER`는 고객 책임 유료 재배송으로 취급하지 않는다.
 - `WEATHER` 외 보류는 고객 책임이면 0원보다 큰 재배송비가 있어야 하고, 고객 책임이 아니면 재배송비를 둘 수 없다. 어긋나면 API가 `400`으로 거절한다(`delivery-hold-policy.ts`).
+- `RECEIPT_REFUSED`(수령 거부)는 고객 책임으로만 받는다. 고객 책임이 아니거나 재배송비가 없으면 `400`이다.
+- `PRODUCT_DAMAGED`(상품 파손)는 `customerResponsible === false`, 재배송비 없음만 받고 새 배송 시각은 요구하지 않는다. 배송 중(`DELIVERING`)인 기사 요청만 받고 판매자·관리자·`PREPARING` 보류는 `400`이다(`assertDeliveryHoldOrigin`).
+- 재배송하지 않는 보류(`@greenhub/shared` `NON_REDELIVERABLE_HOLD_REASONS`, 현재 `PRODUCT_DAMAGED`)에서는 `→ CANCELLED` 외 전이를 모든 역할에서 거절한다(판매자·관리자 `403`, 기사 `DRIVER_ORDER_STATE_CONFLICT`, `orders.helpers.ts` `deliveryTransitionViolation`). 취소는 기존 판매자 취소 경로로 본 결제와 결제된 재배송비를 전액 환불한다.
 - 고객 책임 첫 배송 실패에 양수 재배송비가 필요하면 주문자 본인이 `REDELIVERY_FEE` charge를 생성·결제한다.
 - 같은 hold에 charge를 중복 생성하지 않는다.
 - **유료 재배송은 결제 완료 전 실제 배송을 다시 시작하면 안 된다.**

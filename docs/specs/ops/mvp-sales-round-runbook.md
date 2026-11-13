@@ -222,12 +222,14 @@ node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=round_dir
 | --- | --- |
 | `WEATHER` | 판매자 책임, 재배송비 없음, 새 배송 시각 필수. 즉시 안내 후 새 일정으로 재개 |
 | `ACCESS_UNAVAILABLE|ADDRESS_ISSUE|CUSTOMER_UNREACHABLE|OTHER` | 실제 원인과 책임을 기록. 고객 책임이면 다음 연락·배송 시각과 양수 재배송비를 확인 |
+| `RECEIPT_REFUSED`(수령 거부) | 고객 책임(단순 변심과 같음)으로만 기록하고 양수 재배송비 필수. 다른 고객 사유처럼 기사·판매자 모두 남길 수 있고, 결제 뒤에만 재배송. 환불은 이 보류의 결과가 아니다 |
+| `PRODUCT_DAMAGED`(상품 파손) | 판매자·기사 책임, 재배송비 없음, 재배송 불가. 배송 중(`DELIVERING`)인 담당 기사만 기록한다. 기사는 상품을 가게로 돌려주고, 판매자가 확인한 뒤 주문 취소(`DELIVERY_HELD → CANCELLED`, 본 결제·결제된 재배송비 전액 환불)로 마무리한다. 재배송 준비·배송 재개는 어떤 역할도 할 수 없다 |
 | 첫 고객 사유 실패 | 주문자 본인만 멱등 키로 재배송비 1건 생성·결제. 결제 전 재배송 금지 |
 | 유료 재배송 실패 | 자동 환불 판단 금지. `REDELIVERY_FAILED`, `requiresOperationalReview`를 확인하고 상품 상태·재판매 가능성·고객 연락 기록을 대표자에게 전달 |
 
 재배송비 기준 금액은 10,000원이다(2026-11-08 결정). 기사·판매자 보류 창에서 고객 책임을 고르면 재배송비 칸에 미리 채워지고, 실제 사정에 맞게 바꿀 수 있다(상한 50,000원).
 
-보류 해소는 셀러가 `PREPARING|CANCELLED`, 담당 기사가 `DELIVERING`으로만 수행한다. `REDELIVERY_FAILED`에는 자동 조치가 없으므로 환불이나 문자 조치를 임의로 연결하지 않는다.
+보류 해소는 셀러가 `PREPARING|CANCELLED`, 담당 기사가 `DELIVERING`으로만 수행한다(상품 파손 보류는 `CANCELLED`만). `REDELIVERY_FAILED`에는 자동 조치가 없으므로 환불이나 문자 조치를 임의로 연결하지 않는다.
 
 셀러는 판매자 앱 주문 상세에서 처리한다.
 
