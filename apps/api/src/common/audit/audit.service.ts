@@ -12,6 +12,7 @@ export type AuditAction =
   | 'auth.kakao.forbidden'
   | 'auth.withdrawn' // 소비자 회원 탈퇴(개인정보 익명화·세션 폐기)
   | 'payment.amount_tampered' // 금액 위변조 감지
+  | 'payment.context_mismatch' // 결제 상점·통화·채널 불일치(운영 TEST 채널 포함)
   | 'payment.webhook.invalid_sig'; // 서명 검증 실패
 
 export interface AuditLog {
