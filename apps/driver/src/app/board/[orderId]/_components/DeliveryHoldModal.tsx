@@ -26,6 +26,7 @@ import {
 import { text } from '@/components/look';
 import { apiFetch } from '@/lib/api';
 import {
+  customerResponsibleFeeNotice,
   deliveryHoldResponsibilityFeeHint,
   deliveryHoldSubmitError,
   parseRedeliveryFee,
@@ -131,6 +132,12 @@ export function DeliveryHoldModal({
   const isWeather = reasonCode === 'WEATHER';
   // 기상 외 보류는 고객 책임 ⇔ 재배송비(0원 초과). 어긋나면 저장을 막고 고칠 방법을 보인다.
   const responsibilityFeeHint = deliveryHoldResponsibilityFeeHint({
+    reasonCode,
+    customerResponsible,
+    redeliveryFee,
+  });
+  // 고객 책임이면 저장 뒤 결과(손님 청구·재개 잠금·기사 앱 수정 불가)를 금액과 함께 칸 바로 아래에 알린다(R-02).
+  const customerFeeNotice = customerResponsibleFeeNotice({
     reasonCode,
     customerResponsible,
     redeliveryFee,
@@ -373,7 +380,11 @@ export function DeliveryHoldModal({
                   aria-describedby={reasonHelpId}
                   required
                 />
-                <p id={reasonHelpId} className={`${text} text-sm/[1.45] text-ui-ink`}>
+                <p
+                  id={reasonHelpId}
+                  className={`${text} text-sm/[1.45] text-ui-ink`}
+                  style={keepWords}
+                >
                   손님 주문 화면에 그대로 보여요. 저장하면 손님에게 배송 보류 알림이 가요.
                 </p>
               </div>
@@ -390,11 +401,17 @@ export function DeliveryHoldModal({
                 min={0}
                 step={1000}
                 suffix="원"
+                thousandSeparator
                 onChange={(value) => {
                   setError('');
                   setRedeliveryFee(value);
                 }}
               />
+              {customerFeeNotice && (
+                <p className={`${text} text-sm/[1.45] text-ui-ink`} style={keepWords}>
+                  {customerFeeNotice}
+                </p>
+              )}
               {responsibilityFeeHint && (
                 <p className={`${text} text-sm/[1.45] text-ui-red`}>{responsibilityFeeHint}</p>
               )}
@@ -437,3 +454,6 @@ export function DeliveryHoldModal({
     </Dialog>
   );
 }
+
+// 한국어 안내가 낱말 중간에서 줄을 바꾸지 않게 한다(R-09). 긴 낱말만 아무 데서나 끊는다.
+const keepWords = { wordBreak: 'keep-all', overflowWrap: 'anywhere' } as const;

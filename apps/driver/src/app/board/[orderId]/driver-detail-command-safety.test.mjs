@@ -7,6 +7,7 @@ import {
   isDriverTerminalCommandStatus,
   readDriverOrderErrorCode,
   resolveDriverStatusCommandReadback,
+  resolveDriverStatusReadbackNotice,
   shouldPreserveDriverOrderOnReadError,
 } from '../_lib/driver-order-detail.ts';
 
@@ -16,6 +17,10 @@ import {
 // 403/409 convergence, readback uncertainty no-resend.
 // photo flow·server·FSM·board refresh 계약은 건드리지 않는다.
 const detailSource = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
+const helperSource = await readFile(
+  new URL('../_lib/driver-order-detail.ts', import.meta.url),
+  'utf8',
+);
 const holdModalSource = await readFile(
   new URL('./_components/DeliveryHoldModal.tsx', import.meta.url),
   'utf8',
@@ -384,23 +389,110 @@ test('T3. settleUncertainReadback은 재전송 없이 성공·목록 수렴·미
   assert.ok(end !== -1, 'settle 정의는 in-flight 선점보다 앞(디스패치 전)에 있다');
   const block = detailSource.slice(at, end);
   assert.match(block, /if \(!isCommandCurrent\(\)\) return;/);
+  // 판정·안내는 "상태 확인"과 같은 규칙(resolveDriverStatusReadbackNotice) 하나로 한다(R-08).
   assert.match(
     block,
-    /resolveDriverStatusCommandReadback\(\{ requestedStatus: status, readback \}\)/,
+    /resolveDriverStatusReadbackNotice\(\{ requestedStatus: status, readback \}\)/,
   );
-  assert.match(block, /result === 'APPLIED'/);
-  assert.match(block, /STATUS_APPLIED_AFTER_UNCERTAIN_MESSAGE/);
-  assert.match(block, /result === 'LEFT_DRIVER_SCOPE'/);
-  assert.match(block, /router\.replace\('\/board\?tab=delivering'\)/);
-  assert.match(block, /result === 'NOT_APPLIED'/);
-  assert.match(block, /STATUS_NOT_APPLIED_AFTER_UNCERTAIN_MESSAGE/);
+  assert.match(block, /if \(!notice\) return;/);
+  assert.match(block, /toast\.add\(readbackNoticeToast\(notice\)\)/);
+  assert.match(block, /if \(notice\.goToList\) router\.replace\('\/board\?tab=delivering'\)/);
   // 같은 명령을 자동으로 다시 보내지 않는다.
   assert.doesNotMatch(block, /apiFetch\(/);
   assert.doesNotMatch(block, /updateStatus\(/);
   assert.doesNotMatch(block, /setTimeout/);
+  // 판정 규칙은 resolveDriverStatusCommandReadback 위에 선다.
+  const noticeAt = helperSource.indexOf('export function resolveDriverStatusReadbackNotice');
+  assert.ok(noticeAt !== -1);
+  assert.match(
+    helperSource.slice(noticeAt, noticeAt + 300),
+    /resolveDriverStatusCommandReadback\(args\)/,
+  );
   // 미반영 안내는 서버 중복 차단(STATE_CONFLICT)에 근거해 다시 눌러도 된다고 안내한다.
-  assert.match(detailSource, /아직 처리되지 않았어요\. 다시 눌러도 두 번 처리되지 않아요\./);
+  assert.match(helperSource, /아직 처리되지 않았어요\. 다시 눌러도 두 번 처리되지 않아요\./);
   assert.match(detailSource, /응답이 늦어요\. 처리됐는지 확인하는 중이에요\./);
+});
+
+test('T3b. 불확실 수렴 결과 안내는 처리 확인·미반영·목록 수렴만 고르고 읽기 실패는 안내하지 않는다', () => {
+  const notice = (requestedStatus, readback) =>
+    resolveDriverStatusReadbackNotice({ requestedStatus, readback });
+  assert.deepEqual(notice('DELIVERING', { kind: 'order', status: 'DELIVERING' }), {
+    tone: 'success',
+    message: '처리된 것을 확인했어요.',
+    goToList: false,
+  });
+  assert.deepEqual(notice('DELIVERY_HELD', { kind: 'order', status: 'DELIVERY_HELD' }), {
+    tone: 'success',
+    message: '처리된 것을 확인했어요.',
+    goToList: false,
+  });
+  // 완료 전이가 확인되면(상세가 보이는 드문 경우) 목록으로 간다.
+  assert.equal(notice('DELIVERED', { kind: 'order', status: 'DELIVERED' })?.goToList, true);
+  assert.deepEqual(notice('DELIVERING', { kind: 'order', status: 'PREPARING' }), {
+    tone: 'warning',
+    message: '아직 처리되지 않았어요. 다시 눌러도 두 번 처리되지 않아요.',
+    goToList: false,
+  });
+  assert.deepEqual(notice('DELIVERY_HELD', { kind: 'order', status: 'DELIVERING' }), {
+    tone: 'warning',
+    message: '아직 처리되지 않았어요. 다시 눌러도 두 번 처리되지 않아요.',
+    goToList: false,
+  });
+  assert.deepEqual(notice('DELIVERED', { kind: 'error', errorKind: 'NOT_FOUND' }), {
+    tone: 'warning',
+    message: '주문이 진행 목록에서 빠졌어요. 목록에서 결과를 확인해 주세요.',
+    goToList: true,
+  });
+  // 읽기 실패·권한 상실·stale·비완료 404는 안내 없이 경고를 유지한다(fail-closed).
+  assert.equal(notice('DELIVERING', { kind: 'error', errorKind: 'FETCH_ERROR' }), null);
+  assert.equal(notice('DELIVERING', { kind: 'error', errorKind: 'AUTH_ERROR' }), null);
+  assert.equal(notice('DELIVERING', { kind: 'error', errorKind: 'NOT_FOUND' }), null);
+  assert.equal(notice('DELIVERY_HELD', { kind: 'stale' }), null);
+});
+
+test('R-08. "상태 확인"은 조회만 하고 다시 읽은 결과를 자동 수렴과 같은 규칙으로 안내한다', () => {
+  const at = detailSource.indexOf('async function recheckUncertainStatus()');
+  assert.ok(at !== -1, '"상태 확인" 처리 함수가 있어야 한다');
+  const end = detailSource.indexOf('if (readLoading) {', at);
+  const block = detailSource.slice(at, end);
+  assert.match(block, /const readback = await readDetail\(token\);/);
+  assert.match(block, /const requestedStatus = uncertainStatusRef\.current;/);
+  // 조회 사이 범위가 바뀌면 지난 범위 결과를 알리지 않는다.
+  assert.match(block, /const scope = liveScopeRef\.current;/);
+  assert.match(block, /if \(!requestedStatus \|\| scope !== liveScopeRef\.current\) return;/);
+  assert.match(block, /resolveDriverStatusReadbackNotice\(\{ requestedStatus, readback \}\)/);
+  assert.match(block, /if \(!notice\) return;/);
+  // 같은 요청을 다시 보내지 않는다.
+  assert.doesNotMatch(block, /apiFetch\(|updateStatus\(|method: 'PATCH'|setTimeout/);
+  // 목표 상태는 상태 변경 요청과 보류 불확실 수렴에서만 기록한다.
+  assert.equal((detailSource.match(/uncertainStatusRef\.current = /g) ?? []).length, 2);
+  assert.match(detailSource, /uncertainStatusRef\.current = status;/);
+  const holdAt = detailSource.indexOf('onUncertainConvergence={');
+  const holdBlock = detailSource.slice(holdAt, holdAt + 1000);
+  assert.ok(
+    holdBlock.indexOf("uncertainStatusRef.current = 'DELIVERY_HELD';") <
+      holdBlock.indexOf('setReadbackWarning(HOLD_UNCERTAIN_READBACK_WARNING)'),
+  );
+});
+
+test('R-06. 시작·재개·보류 저장 알림은 정상 ACK 뒤 다시 읽어 확인했을 때만 띄운다', () => {
+  const fnAt = detailSource.indexOf('async function updateStatus');
+  const freshAt = detailSource.indexOf('setOrder(fresh);', fnAt);
+  const catchAt = detailSource.indexOf('} catch (readbackCause: unknown) {', freshAt);
+  assert.ok(freshAt !== -1 && catchAt !== -1);
+  const successBlock = detailSource.slice(freshAt, catchAt);
+  assert.match(successBlock, /resolveDriverCommandSuccessMessage\(\{/);
+  assert.match(successBlock, /freshStatus: fresh\.status/);
+  assert.match(successBlock, /if \(successMessage\) toast\.add\(\{ description: successMessage \}\)/);
+  // 성공 알림은 ACK 성공 경로와 보류 저장 뒤 조회 두 곳뿐이다(불확실·충돌 경로에는 없다).
+  assert.equal((detailSource.match(/resolveDriverCommandSuccessMessage\(\{/g) ?? []).length, 2);
+  const savedAt = detailSource.indexOf('onSaved={');
+  const savedBlock = detailSource.slice(savedAt, detailSource.indexOf('onConvergence={', savedAt));
+  assert.match(savedBlock, /void readDetail\(token\)\.then\(\(readback\) => \{/);
+  assert.match(savedBlock, /if \(readback\.kind !== 'order'\) return;/);
+  assert.match(savedBlock, /requestedStatus: 'DELIVERY_HELD'/);
+  assert.match(savedBlock, /freshStatus: readback\.status/);
+  assert.doesNotMatch(savedBlock, /apiFetch\(|method: 'PATCH'/);
 });
 
 test('T4. readDetail은 수렴 판정용 결과를 돌려주고 시간 초과는 FETCH_ERROR로 끝낸다', () => {
@@ -647,11 +739,29 @@ test('D-14. 응답 불확실 안내는 조회 실패 면과 겹치지 않는 한
   const block = detailSource.slice(warningAt, readErrorAt);
   assert.equal((block.match(/<AppButton/g) ?? []).length, 1);
   assert.match(block, />\s*상태 확인\s*</);
-  assert.match(block, /void readDetail\(token\)/);
+  // 버튼은 조회 뒤 결과를 안내하는 recheckUncertainStatus(R-08)만 부른다.
+  assert.match(block, /onClick=\{\(\) => void recheckUncertainStatus\(\)\}/);
   assert.doesNotMatch(block, /updateStatus|apiFetch/);
   assert.match(
     holdModalSource,
     /HOLD_UNCERTAIN_READBACK_WARNING =\s*"보류됐는지 아직 확인하지 못했어요\. 연결이 돌아오면 '상태 확인'을 눌러 주세요\."/,
   );
   assert.doesNotMatch(holdModalSource, /보류 명령|바로 다시 보내지 마세요/);
+});
+
+test('R-09. 확인 창 글과 보류 내용 카드 값은 낱말 중간에서 줄을 바꾸지 않는다', () => {
+  const keepWords = /const keepWords = \{ wordBreak: 'keep-all', overflowWrap: 'anywhere' \} as const;/;
+  assert.match(confirmDialogSource, keepWords);
+  assert.match(detailSource, keepWords);
+  // 확인 창: 기본 주소·동·호수·배정 안내·손님 알림.
+  for (const field of ['content.placeBase}', 'content.place}', 'content.assignment}', 'content.notice}']) {
+    const at = confirmDialogSource.indexOf(`{${field}`);
+    assert.ok(at !== -1, field);
+    const openAt = confirmDialogSource.lastIndexOf('<p', at);
+    assert.match(confirmDialogSource.slice(openAt, at), /keepWords/, field);
+  }
+  // 보류 내용 카드: InfoRow의 이름·값.
+  const rowAt = detailSource.indexOf('function InfoRow');
+  const rowBlock = detailSource.slice(rowAt, detailSource.indexOf('\n}\n', rowAt));
+  assert.equal((rowBlock.match(/\.\.\.keepWords/g) ?? []).length, 2);
 });

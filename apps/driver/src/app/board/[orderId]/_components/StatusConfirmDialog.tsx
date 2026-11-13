@@ -66,7 +66,7 @@ export function StatusConfirmDialog({
                 <div className="flex flex-col gap-4">
                   <div className="flex flex-col gap-1">
                     {content.placeBase && (
-                      <p className={text} style={mutedText}>
+                      <p className={text} style={{ ...mutedText, ...keepWords }}>
                         {content.placeBase}
                       </p>
                     )}
@@ -77,8 +77,7 @@ export function StatusConfirmDialog({
                         fontWeight: 'var(--fw-extrabold)',
                         lineHeight: 1.3,
                         color: 'var(--color-text)',
-                        wordBreak: 'keep-all',
-                        overflowWrap: 'anywhere',
+                        ...keepWords,
                       }}
                     >
                       {content.place}
@@ -98,11 +97,11 @@ export function StatusConfirmDialog({
                   </div>
                   <div className="flex flex-col gap-1">
                     {content.assignment && (
-                      <p className={text} style={{ color: 'var(--color-text)' }}>
+                      <p className={text} style={{ color: 'var(--color-text)', ...keepWords }}>
                         {content.assignment}
                       </p>
                     )}
-                    <p className={text} style={{ color: 'var(--color-text)' }}>
+                    <p className={text} style={{ color: 'var(--color-text)', ...keepWords }}>
                       {content.notice}
                     </p>
                   </div>
@@ -125,3 +124,5 @@ export function StatusConfirmDialog({
 }
 
 const mutedText = { fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' } as const;
+// 한국어 안내가 낱말 중간에서 줄을 바꾸지 않게 한다(R-09). 긴 주소 낱말만 아무 데서나 끊는다.
+const keepWords = { wordBreak: 'keep-all', overflowWrap: 'anywhere' } as const;

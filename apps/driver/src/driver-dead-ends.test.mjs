@@ -100,7 +100,7 @@ test('로그인 안내 문구는 error·reason 값을 구분한다', () => {
 
   const admin = resolveDriverLoginNotice({ error: DRIVER_ADMIN_ACCOUNT_ERROR });
   assert.equal(admin?.kind, 'admin-account');
-  assert.match(admin?.title ?? '', /관리자 계정은 기사 앱을 쓸 수 없습니다/);
+  assert.match(admin?.title ?? '', /관리자 계정은 기사 앱을 쓸 수 없어요/);
   assert.match(admin?.body ?? '', /기사 계정으로 로그인해 주세요/);
   // 관리자 계정에는 세션이 생기지 않으므로 로그아웃 버튼 같은 세션 정리 수단을 두지 않는다.
   assert.equal('offerSignOut' in (admin ?? {}), false);

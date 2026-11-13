@@ -110,10 +110,9 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
       `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
     );
     await expect(directCard).toBeVisible();
-    // 상품마다 챙길 개수를 보인다. 배송판 행은 두 줄(1줄 주소, 2줄 받는 분·상품)이라 상품 줄을 한 줄에 이어 쓴다
-    // (design-direction.md §6 기사 ② D4-1, #799). 상세 화면은 상품마다 한 줄이다(아래 배송 시작 테스트).
-    await expect(directCard).toContainText('E2E 호접란 · 1개');
-    await expect(directCard).toContainText('E2E 미니 호접란 · 1개');
+    // 목록 행은 세 줄(주소, 배송일·받는 분, 상품 요약·수거 시각)이라 상품은 "첫 상품 외 N종 · 총 M개"로 줄여 쓴다(R-04).
+    // 상품마다 챙길 개수는 상세 화면이 상품마다 한 줄로 보인다(아래 배송 시작 테스트).
+    await expect(directCard).toContainText('E2E 호접란 외 1종 · 총 2개');
     // 수거 대기 행에는 수거 장소(가게 이름 · 주소)를 쓴다. fixture 가게에는 주소가 없어 이름만 보이고 지도 링크는 없다.
     const directPickup = page.getByTestId(
       `driver-order-pickup-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
@@ -221,7 +220,13 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.getByLabel('손님에게 보일 사유').fill('공동현관 출입 정보를 확인할 수 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
     // 고객 책임을 고르면 재배송비 칸이 기준 금액 10,000원으로 채워지고(D-09), 기사가 바꿀 수 있다.
-    await expect(page.getByLabel('재배송비')).toHaveValue('10000원');
+    await expect(page.getByLabel('재배송비')).toHaveValue('10,000원');
+    // 저장 뒤 결과(손님 결제 전 재개 잠금·기사 앱 수정 불가)를 금액과 함께 칸 바로 아래에 알린다(R-02).
+    await expect(
+      page.getByText(
+        '손님이 재배송비 10,000원을 결제해야 다시 배송할 수 있어요. 저장한 뒤에는 기사 앱에서 바꿀 수 없어요.',
+      ),
+    ).toBeVisible();
     await expect(page.getByRole('button', { name: '보류하기', exact: true })).toBeEnabled();
     // 재배송비를 지우면 저장할 수 없다.
     await page.getByLabel('재배송비').fill('');
@@ -229,6 +234,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await expect(page.getByRole('button', { name: '보류하기', exact: true })).toBeDisabled();
     await page.getByLabel('재배송비').fill('3000');
     await expect(page.getByText('고객 책임이면 재배송비를 입력해 주세요.')).toHaveCount(0);
+    await expect(page.getByText(/손님이 재배송비 3,000원을 결제해야/)).toBeVisible();
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T09:00');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T11:00');
     await page.getByRole('button', { name: '보류하기', exact: true }).click();

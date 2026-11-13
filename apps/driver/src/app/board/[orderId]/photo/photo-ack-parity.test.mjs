@@ -188,6 +188,31 @@ test('완료 알림은 회차 직배송 완료 수렴 뒤에만 띄우고 불확
   assert.doesNotMatch(roundDirectSlice, /toast\.add\(/);
 });
 
+// R-01: 상세가 "배송을 마친 주문이에요"로 안내하려면 사진 화면이 완료 수렴 뒤에만 기억을 남겨야 한다.
+test('최근 완료 기억은 회차 직배송 완료 수렴 뒤, 목록 이동 전에만 남기고 거점·실패 경로에는 남기지 않는다', () => {
+  const uploadSlice = photoCaptureSource.slice(
+    photoCaptureSource.indexOf('async function upload()'),
+  );
+  const gateAt = uploadSlice.indexOf(
+    'if (!(await uploadRoundDirect(token, blob, storeId))) return;',
+  );
+  const rememberAt = uploadSlice.indexOf(
+    'rememberCompletedOrder({ orderId, userId: session.user.id });',
+  );
+  const legacyAt = uploadSlice.indexOf('uploadLegacyHubPhoto(orderId');
+  const moveAt = uploadSlice.indexOf("router.replace('/board?tab=delivering')");
+  const catchAt = uploadSlice.indexOf('} catch (error) {');
+  assert.ok(gateAt !== -1 && rememberAt > gateAt, '기억은 완료 판정 뒤에 있어야 한다');
+  assert.ok(
+    rememberAt < legacyAt,
+    '기억은 회차 분기 안에 있어야 한다(거점 도착은 배송 완료가 아니다)',
+  );
+  assert.ok(rememberAt < moveAt && moveAt < catchAt, '기억은 목록 이동 전, catch 밖에 있어야 한다');
+  assert.equal((photoCaptureSource.match(/rememberCompletedOrder\(/g) ?? []).length, 1);
+  assert.doesNotMatch(legacySlice, /rememberCompletedOrder\(/);
+  assert.doesNotMatch(roundDirectSlice, /rememberCompletedOrder\(/);
+});
+
 // D-21: 받는 형식(JPEG)은 그대로 두고 안내 문구만 할 일 중심으로 바꾼다.
 test('JPEG가 아닌 사진은 형식 이름 대신 카메라 촬영으로 다시 찍도록 안내한다', () => {
   assert.match(
@@ -221,4 +246,22 @@ test('미리보기 하단 버튼은 세로로 쌓고 확정 버튼은 전체 폭
   assert.equal((bar.match(/\bfullWidth\b/g) ?? []).length, 2);
   assert.doesNotMatch(bar, /flex-1/);
   assert.match(bar, /'올리는 중…'/);
+});
+
+test('R-03: 사진 화면 뒤로가기는 상세와 같은 판정을 쓰고 기록이 없으면 주문 상세로 replace한다', () => {
+  const start = photoCaptureSource.indexOf('aria-label="뒤로가기"');
+  assert.ok(start !== -1);
+  const slice = photoCaptureSource.slice(start, photoCaptureSource.indexOf('</button>', start));
+  const stop = slice.indexOf('stopStream()');
+  const decide = slice.indexOf(
+    'resolveDriverDetailBackAction(readDriverDetailBackContext(window))',
+  );
+  const back = slice.indexOf('router.back()');
+  const replace = slice.indexOf('router.replace(`/board/${encodeURIComponent(orderId)}`)');
+  assert.ok(stop !== -1 && stop < decide, '스트림 정리가 먼저여야 한다');
+  assert.ok(back > decide && replace > back, '기록 있으면 back, 없으면 상세 replace');
+});
+
+test('R-09: 사진 화면 안내 글은 낱말 중간에서 끊지 않는다', () => {
+  assert.ok((photoCaptureSource.match(/wordBreak: 'keep-all'/g) ?? []).length >= 4);
 });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
-import { orderItemLines, orderItemsLabel } from './order-quantity.ts';
+import { orderItemLines, orderItemsLabel, orderItemsSummary } from './order-quantity.ts';
 
 const cardSource = await readFile(new URL('../components/OrderCard.tsx', import.meta.url), 'utf8');
 const detailSource = await readFile(
@@ -68,4 +68,31 @@ test('목록 카드와 상세는 상품 줄을 우선하고 없으면 기존 표
     detailSource,
     /itemLines \? \(\s*<ItemLines lines=\{itemLines\} \/>/,
   );
+});
+
+test('목록 행 상품 요약은 한 종이면 개수, 여러 종이면 "외 N종 · 총 M개"로 줄인다', () => {
+  assert.equal(orderItemsSummary([{ productName: '산세베리아', quantity: 3 }]), '산세베리아 · 3개');
+  assert.equal(
+    orderItemsSummary([
+      { productName: 'E2E 호접란', quantity: 1 },
+      { productName: 'E2E 미니 호접란', quantity: 1 },
+    ]),
+    'E2E 호접란 외 1종 · 총 2개',
+  );
+  assert.equal(
+    orderItemsSummary([
+      { productName: '동양란', quantity: 2 },
+      { productName: '호접란', quantity: 1 },
+      { productName: '난초', quantity: 4 },
+    ]),
+    '동양란 외 2종 · 총 7개',
+  );
+  assert.equal(orderItemsSummary(undefined), null);
+  assert.equal(orderItemsSummary([{ productName: '', quantity: 1 }]), null);
+});
+
+test('목록 행은 상품 요약과 수거 시각을 둘째 줄과 따로 셋째 줄에 둔다', () => {
+  assert.match(cardSource, /orderItemsSummary\(order\.items\) \?\? itemsText/);
+  assert.match(cardSource, /className="shrink-0"/);
+  assert.doesNotMatch(cardSource, /const second = \[/);
 });

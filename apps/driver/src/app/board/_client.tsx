@@ -14,6 +14,7 @@ import {
   toDriverListReadError,
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
+import { groupDeliveringOrders, takeDeliveringFirstScreen } from '@/lib/delivering-groups';
 import { readDriverSummaryCompletedToday } from '@/lib/driver-summary';
 import { groupPreparingOrders, takePreparingFirstScreen } from '@/lib/preparing-groups';
 import { BatchPickupConfirmDialog } from './_components/BatchPickupConfirmDialog';
@@ -765,16 +766,47 @@ function OrderList({
   }
 
   // 배송 중 탭에서는 보류가 아닌 첫 배송지를 "다음 배송지"로 크게 보인다. 순서는 목록 응답 순서다.
-  const next =
-    tab === 'delivering' ? orders.find((order) => order.status === 'DELIVERING') : undefined;
-  const rest = next ? orders.filter((order) => order !== next) : orders;
-  const visibleRest = expanded ? rest : rest.slice(0, FIRST_SCREEN_ROWS);
+  // 보류 주문이 있으면 "배송할 주문"과 "보류" 묶음으로 나누고, 보류 묶음은 첫 화면 행 수를 따로 센다.
+  const delivering = tab === 'delivering' ? groupDeliveringOrders(orders) : null;
+  if (delivering) {
+    const shown = expanded
+      ? { ...delivering, hidden: 0 }
+      : takeDeliveringFirstScreen(delivering, FIRST_SCREEN_ROWS);
+    const nextCard = shown.next && <OrderCard order={shown.next} tab={tab} variant="next" />;
+    const toDeliverTotal = delivering.rest.length + (delivering.next ? 1 : 0);
+    return (
+      <>
+        {delivering.held.length > 0 ? (
+          <>
+            {toDeliverTotal > 0 && (
+              <OrderGroup
+                title="배송할 주문"
+                total={toDeliverTotal}
+                orders={shown.rest}
+                tab={tab}
+                lead={nextCard}
+              />
+            )}
+            <OrderGroup title="보류" total={delivering.held.length} orders={shown.held} tab={tab} />
+          </>
+        ) : (
+          <>
+            {nextCard}
+            <OrderRows orders={shown.rest} tab={tab} />
+          </>
+        )}
+        <ShowMoreButton hidden={shown.hidden} onClick={() => setExpanded(true)} />
+      </>
+    );
+  }
 
   return (
     <>
-      {next && <OrderCard order={next} tab={tab} variant="next" />}
-      <OrderRows orders={visibleRest} tab={tab} />
-      <ShowMoreButton hidden={rest.length - visibleRest.length} onClick={() => setExpanded(true)} />
+      <OrderRows orders={expanded ? orders : orders.slice(0, FIRST_SCREEN_ROWS)} tab={tab} />
+      <ShowMoreButton
+        hidden={expanded ? 0 : Math.max(0, orders.length - FIRST_SCREEN_ROWS)}
+        onClick={() => setExpanded(true)}
+      />
     </>
   );
 }
@@ -782,6 +814,7 @@ function OrderList({
 function OrderGroup({
   title,
   hint,
+  lead,
   total,
   orders,
   tab,
@@ -789,6 +822,8 @@ function OrderGroup({
 }: {
   title: string;
   hint?: string;
+  /** 행 목록 앞에 두는 카드(배송 중 탭의 "다음 배송지"). */
+  lead?: ReactNode;
   /** 묶음 전체 행 수. orders는 첫 화면에 보이는 앞부분일 수 있다. */
   total: number;
   orders: DriverListOrder[];
@@ -816,6 +851,7 @@ function OrderGroup({
           {hint}
         </p>
       )}
+      {lead}
       <OrderRows orders={orders} tab={tab} batch={batch} />
     </section>
   );
