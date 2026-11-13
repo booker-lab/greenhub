@@ -1,7 +1,8 @@
 // 소비자 앱 화면 확인용 고정 데이터 — 프런트 개편 1순위 동선(회차 구매).
-// 스토어는 회차 직판(round_direct) 모드다. 회차 일정·상품은 seller.mjs와 맞춘다.
+// 스토어는 회차 직판(round_direct) 모드다. 상품과 회차 구성(예정·판매 중·마감)은 seller.mjs와 맞춘다.
+// 회차·주문·알림·후기 날짜는 모두 기준 시각(clock.mjs) 상대값이다(아래 "날짜"). 고정 날짜를 쓰지 않는다.
 // 화면을 추가할 때 경로를 여기에 더한다.
-import { hoursFromNow } from '../clock.mjs';
+import { hoursFromNow, visualNow } from '../clock.mjs';
 
 const STORE_ID = 'store-visual-0001';
 const STORE_NAME = '디어 오키드';
@@ -17,6 +18,78 @@ export const user = {
 };
 
 const CREATED_AT = '2026-08-01T01:00:00.000Z';
+
+// ── 날짜: 기준 시각이 어느 날·어느 요일이어도 주 1회 회차의 요일 관계가 그대로다 ──
+// 목요일 오전 10시 주문 시작 → 일요일 밤 12시(월요일 0시) 주문 마감 → 월요일 오전 7시 경매
+// → 화요일 0시 배송 시작 → 화요일 오전 9시 도착. 모두 한국 시간이다.
+const HOUR_MS = 60 * 60 * 1000;
+const MINUTE_MS = 60 * 1000;
+const WEEK_MS = 7 * 24 * HOUR_MS;
+const KST_OFFSET_MS = 9 * HOUR_MS;
+const NOW_MS = Date.parse(visualNow());
+const KST_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+const MONDAY = 1;
+const THURSDAY = 4;
+
+/** beforeMs 이전(같으면 그 시각)에서 가장 가까운 한국 시간 weekday요일(0=일 … 6=토) hour시의 UTC ms. */
+function lastKstWeekdayHour(weekday, hour, beforeMs) {
+  // 한국 시간을 UTC처럼 읽는 축에서 센다. 그 축의 0(1970-01-01 0시)은 목요일이다.
+  const inWeek = (((weekday - THURSDAY + 7) % 7) * 24 + hour) * HOUR_MS;
+  const kstMs = beforeMs + KST_OFFSET_MS;
+  return Math.floor((kstMs - inWeek) / WEEK_MS) * WEEK_MS + inWeek - KST_OFFSET_MS;
+}
+/** ISO 시각에서 hours시간 minutes분 뒤(음수면 앞)의 UTC ISO. */
+function after(iso, hours, minutes = 0) {
+  return new Date(Date.parse(iso) + hours * HOUR_MS + minutes * MINUTE_MS).toISOString();
+}
+/** ISO 시각의 한국 시간 날짜·요일·시. */
+function kstParts(iso) {
+  const kst = new Date(Date.parse(iso) + KST_OFFSET_MS);
+  return {
+    year: kst.getUTCFullYear(),
+    month: kst.getUTCMonth() + 1,
+    day: kst.getUTCDate(),
+    weekday: KST_WEEKDAYS[kst.getUTCDay()],
+    hour: kst.getUTCHours(),
+  };
+}
+/** 한국 시간 날짜 글자. separator '-'면 '2026-11-17', ''면 '20261117'. */
+function kstDate(iso, separator) {
+  const { year, month, day } = kstParts(iso);
+  return [year, String(month).padStart(2, '0'), String(day).padStart(2, '0')].join(separator);
+}
+/** 예: '화요일 오전 9시'. 알림 문구에 쓴다. */
+function kstWeekdayHour(iso) {
+  const { weekday, hour } = kstParts(iso);
+  return `${weekday}요일 ${hour < 12 ? '오전' : '오후'} ${hour % 12 === 0 ? 12 : hour % 12}시`;
+}
+/** 주문 시작·마감 시각(UTC ms)에서 그 회차의 경매·배송 일정을 만든다. */
+function weeklySchedule(orderOpenMs, orderCloseMs) {
+  const orderCloseAt = new Date(orderCloseMs).toISOString();
+  return {
+    orderOpenAt: new Date(orderOpenMs).toISOString(),
+    orderCloseAt,
+    auctionAt: after(orderCloseAt, 7),
+    deliveryStartAt: after(orderCloseAt, 24),
+    deliveryEndAt: after(orderCloseAt, 33),
+  };
+}
+// 판매 중 회차의 주문·알림은 주문 시작 뒤 EVENT_WINDOW_HOURS시간 안에 생긴 일이다(아래 ORDERS). 그 일들이 기준 시각보다
+// 뒤가 되지 않게, 주문 시작은 "기준 시각 EVENT_WINDOW_HOURS시간 전" 이전의 마지막 목요일 오전 10시로 잡는다.
+const EVENT_WINDOW_HOURS = 10;
+const OPEN_ORDER_OPEN_MS = lastKstWeekdayHour(THURSDAY, 10, NOW_MS - EVENT_WINDOW_HOURS * HOUR_MS);
+// 판매 중 회차: 주문 마감은 기준 시각 뒤 첫 월요일 0시(일요일 밤 12시)다. 그래서 언제 찍어도 주문을 받는 중이다.
+// 기준 시각이 목요일 오후 8시~일요일이면 실제와 같은 한 주짜리 회차이고(주문 시작 뒤 86시간에 마감),
+// 월요일~목요일 오후 8시 전이면 주문 시작이 지난주 목요일이라 주문 기간만 한 주 더 길다(요일 관계는 같다).
+const OPEN_SCHEDULE = weeklySchedule(
+  OPEN_ORDER_OPEN_MS,
+  lastKstWeekdayHour(MONDAY, 0, NOW_MS) + WEEK_MS,
+);
+// 마감된 회차: 판매 중 회차보다 주문 시작이 한 주 앞선 회차. 도착(화요일 오전 9시)까지 모두 기준 시각 전이다.
+const CLOSED_SCHEDULE = weeklySchedule(
+  OPEN_ORDER_OPEN_MS - WEEK_MS,
+  OPEN_ORDER_OPEN_MS - WEEK_MS + 86 * HOUR_MS,
+);
 
 // ── 상품: 홈 스토어 판별(resolveHomeStoreId)은 상품 storeId가 한 곳일 때만 성립한다 ──
 // varietyId를 두지 않아 /varieties 조회를 만들지 않는다. 이미지는 하네스가 외부를 막으므로 비운다.
@@ -152,14 +225,18 @@ const BANNER = {
   isActive: true,
 };
 
-// ── 회차: seller.mjs와 같은 일정. 공개 목록에는 DRAFT를 넣지 않는다 ──
+// ── 회차: seller.mjs와 같은 구성(예정·판매 중·마감). 공개 목록에는 DRAFT를 넣지 않는다 ──
 // 홈은 OPEN 회차를 "이번 주 판매"로, CLOSED 회차를 "지난 회차"로 보인다.
 // SCHEDULED 회차는 OPEN 회차가 있으면 홈에 나오지 않지만, 목록에는 실제처럼 둔다.
-function saleRound(id, name, status, schedule, counters = {}) {
+// 회차 이름("11월 17일 배송 회차")은 배송 시작일(한국 시간)로 만든다.
+function saleRound(id, status, schedule, counters = {}) {
+  const delivery = kstParts(schedule.deliveryStartAt);
+  // 회차는 주문 시작 이틀 전에 만든 것으로 둔다.
+  const createdAt = after(schedule.orderOpenAt, -48);
   return {
     id,
     storeId: STORE_ID,
-    name,
+    name: `${delivery.month}월 ${delivery.day}일 배송 회차`,
     status,
     closeReason: status === 'CLOSED' ? 'SCHEDULE_ENDED' : null,
     cancellation: null,
@@ -183,51 +260,30 @@ function saleRound(id, name, status, schedule, counters = {}) {
     carrotLandingUrl: null,
     cancelledAt: null,
     completedAt: null,
-    createdAt: '2026-09-28T15:00:00.000Z',
-    updatedAt: '2026-09-28T15:00:00.000Z',
+    createdAt,
+    updatedAt: createdAt,
   };
 }
 const SALE_ROUNDS = [
   // 다가오는 회차는 고정 시각(clock.mjs) 기준 상대값이다. 날짜가 지나도 "예정" 화면이 그대로 찍힌다.
-  saleRound('round-scheduled', '11월 3일 배송 회차', 'SCHEDULED', {
+  saleRound('round-scheduled', 'SCHEDULED', {
     orderOpenAt: hoursFromNow(-14),
     orderCloseAt: hoursFromNow(72),
     auctionAt: hoursFromNow(79),
     deliveryStartAt: hoursFromNow(96),
     deliveryEndAt: hoursFromNow(105),
   }),
-  saleRound(
-    'round-open',
-    '10월 6일 배송 회차',
-    'OPEN',
-    {
-      orderOpenAt: '2026-10-01T01:00:00.000Z',
-      orderCloseAt: '2026-10-04T15:00:00.000Z',
-      auctionAt: '2026-10-04T22:00:00.000Z',
-      deliveryStartAt: '2026-10-05T15:00:00.000Z',
-      deliveryEndAt: '2026-10-06T00:00:00.000Z',
-    },
-    {
-      reservedDeliveryAddresses: 1,
-      reservedItemQuantity: 2,
-      orderedDeliveryAddresses: 6,
-      orderedItemQuantity: 16,
-      heldOrderCount: 1,
-    },
-  ),
-  saleRound(
-    'round-closed',
-    '9월 29일 배송 회차',
-    'CLOSED',
-    {
-      orderOpenAt: '2026-09-24T01:00:00.000Z',
-      orderCloseAt: '2026-09-27T15:00:00.000Z',
-      auctionAt: '2026-09-27T22:00:00.000Z',
-      deliveryStartAt: '2026-09-28T15:00:00.000Z',
-      deliveryEndAt: '2026-09-29T00:00:00.000Z',
-    },
-    { orderedDeliveryAddresses: 15, orderedItemQuantity: 27 },
-  ),
+  saleRound('round-open', 'OPEN', OPEN_SCHEDULE, {
+    reservedDeliveryAddresses: 1,
+    reservedItemQuantity: 2,
+    orderedDeliveryAddresses: 6,
+    orderedItemQuantity: 16,
+    heldOrderCount: 1,
+  }),
+  saleRound('round-closed', 'CLOSED', CLOSED_SCHEDULE, {
+    orderedDeliveryAddresses: 15,
+    orderedItemQuantity: 27,
+  }),
 ];
 // 판매 중 회차의 상품별 확정 수량. 두 번째 상품은 한도(10개)를 채워 API가 공개 조회에서
 // 계산해 주는 품절(SOLD_OUT) 화면을 확인한다.
@@ -257,6 +313,7 @@ function roundItems(round) {
 // ── 주문: 회차 주문(schemaVersion 2) — 결제완료·배송중·취소 한 건씩 ──
 // 소비자 화면 검증 조건: orderNumber=YYYYMMDD-NNNNNN, saleType normal, deliveryMethod direct,
 // deliveryFee 0, orderItems[].unitPrice×quantity=subtotalAmount, 합계=totalAmount.
+// 주문 시각은 그 회차 주문 시작(목요일 오전 10시) 기준 상대값이고, 주문번호 앞자리는 주문한 날(한국 시간)이다.
 const DELIVERY_ADDRESS = {
   address: '경기도 이천시 중리천로 115',
   addressDetail: '101동 1203호',
@@ -274,12 +331,12 @@ function orderItem(round, productIndex, quantity) {
     subtotalAmount: product.price * quantity,
   };
 }
-function roundOrder(id, orderNumber, round, status, lines, extra = {}) {
+function roundOrder(id, sequence, round, status, lines, extra) {
   const orderItems = lines.map(([index, quantity]) => orderItem(round, index, quantity));
   const first = orderItems[0];
   return {
     id,
-    orderNumber,
+    orderNumber: `${kstDate(extra.createdAt, '')}-${sequence}`,
     schemaVersion: 2,
     storeId: STORE_ID,
     userId: user.id,
@@ -298,7 +355,7 @@ function roundOrder(id, orderNumber, round, status, lines, extra = {}) {
     pickupCode: null,
     totalAmount: orderItems.reduce((sum, item) => sum + item.subtotalAmount, 0),
     // 회차 결제 화면과 같은 규칙: 배송 시작일(한국시간) 날짜
-    requestedDeliveryDate: round.id === 'round-closed' ? '2026-09-29' : '2026-10-06',
+    requestedDeliveryDate: kstDate(round.schedule.deliveryStartAt, '-'),
     preparedAt: null,
     cancelReason: null,
     groupBuyConsent: null,
@@ -313,28 +370,48 @@ function roundOrder(id, orderNumber, round, status, lines, extra = {}) {
 }
 const ROUND_OPEN = SALE_ROUNDS.find((r) => r.id === 'round-open');
 const ROUND_CLOSED = SALE_ROUNDS.find((r) => r.id === 'round-closed');
+const OPEN_ORDER_OPEN_AT = ROUND_OPEN.schedule.orderOpenAt;
+const CLOSED_ORDER_OPEN_AT = ROUND_CLOSED.schedule.orderOpenAt;
+// 판매 중 회차 주문 두 건은 주문 시작 당일(목요일)에 생겼다: 오전 11시 5분 주문 → 오후 3시 40분 취소,
+// 오후 7시 20분 주문. 모두 주문 시작 뒤 EVENT_WINDOW_HOURS시간 안이다.
+const ORDER_ACCEPTED = roundOrder(
+  'order-round-accepted',
+  '000012',
+  ROUND_OPEN,
+  'ACCEPTED',
+  [
+    [0, 1],
+    [1, 2],
+  ],
+  {
+    requestNote: '현관 앞에 두고 문자 주세요.',
+    createdAt: after(OPEN_ORDER_OPEN_AT, 9, 20),
+    updatedAt: after(OPEN_ORDER_OPEN_AT, 9, 21),
+  },
+);
+// 마감된 회차 주문: 토요일 오후 2시 10분 주문 → 화요일 오전 7시 30분 배송 시작.
+const ORDER_DELIVERING = roundOrder(
+  'order-round-delivering',
+  '000031',
+  ROUND_CLOSED,
+  'DELIVERING',
+  [[2, 1]],
+  {
+    createdAt: after(CLOSED_ORDER_OPEN_AT, 52, 10),
+    updatedAt: after(CLOSED_ORDER_OPEN_AT, 117, 30),
+  },
+);
+const ORDER_CANCELLED = roundOrder('order-round-cancelled', '000004', ROUND_OPEN, 'CANCELLED', [[1, 1]], {
+  cancelReason: '고객 요청',
+  createdAt: after(OPEN_ORDER_OPEN_AT, 1, 5),
+  updatedAt: after(OPEN_ORDER_OPEN_AT, 5, 40),
+});
 const ORDERS = [
-  roundOrder(
-    'order-round-accepted',
-    '20261002-000012',
-    ROUND_OPEN,
-    'ACCEPTED',
-    [
-      [0, 1],
-      [1, 2],
-    ],
-    {
-      requestNote: '현관 앞에 두고 문자 주세요.',
-      createdAt: '2026-10-02T03:20:00.000Z',
-      updatedAt: '2026-10-02T03:21:00.000Z',
-    },
-  ),
-  roundOrder('order-round-delivering', '20260926-000031', ROUND_CLOSED, 'DELIVERING', [[2, 1]], {
-    createdAt: '2026-09-26T05:10:00.000Z',
-    updatedAt: '2026-09-28T22:30:00.000Z',
-  }),
+  ORDER_ACCEPTED,
+  ORDER_DELIVERING,
   // 비교 기능 화면(후기·관리 안내·다시 주문·옵션·선물·포장 라벨)을 보는 배송 완료 주문.
-  roundOrder('order-round-delivered', '20260925-000020', ROUND_CLOSED, 'DELIVERED', [[0, 1]], {
+  // 금요일 오후 1시 주문 → 화요일 오전 9시 10분 배송 완료.
+  roundOrder('order-round-delivered', '000020', ROUND_CLOSED, 'DELIVERED', [[0, 1]], {
     orderItems: [
       {
         ...orderItem(ROUND_CLOSED, 0, 1),
@@ -354,22 +431,19 @@ const ORDERS = [
       cardMessage: '늘 고마워요. 건강하세요!',
     },
     packageLabel: '김그린',
-    createdAt: '2026-09-25T04:00:00.000Z',
-    updatedAt: '2026-09-29T00:10:00.000Z',
+    createdAt: after(CLOSED_ORDER_OPEN_AT, 27),
+    updatedAt: after(CLOSED_ORDER_OPEN_AT, 119, 10),
   }),
-  roundOrder('order-round-cancelled', '20261001-000004', ROUND_OPEN, 'CANCELLED', [[1, 1]], {
-    cancelReason: '고객 요청',
-    createdAt: '2026-10-01T02:05:00.000Z',
-    updatedAt: '2026-10-01T06:40:00.000Z',
-  }),
+  ORDER_CANCELLED,
 ];
 // MY 주문 목록(/orders)에는 넣지 않고 주문 상세로만 여는 주문. 목록 화면(mypage)의 촬영 결과를 바꾸지 않는다.
 // - order-round-held: 고객 사유 배송 보류 + 재배송비 결제 대기(결제 수단 고르기·재배송비 결제 버튼).
 //   결제 수단이 2개 이상일 때만 결제 수단 고르기가 보이므로 paymentMethodScreens(--set payment-methods)에서 찍는다.
-const HELD_AT = '2026-09-29T01:30:00.000Z';
+// 토요일 오후 2시 40분 주문 → 화요일 오전 10시 30분 배송 보류.
+const HELD_AT = after(CLOSED_ORDER_OPEN_AT, 120, 30);
 const DETAIL_ONLY_ORDERS = [
-  roundOrder('order-round-held', '20260926-000040', ROUND_CLOSED, 'DELIVERY_HELD', [[2, 1]], {
-    createdAt: '2026-09-26T05:40:00.000Z',
+  roundOrder('order-round-held', '000040', ROUND_CLOSED, 'DELIVERY_HELD', [[2, 1]], {
+    createdAt: after(CLOSED_ORDER_OPEN_AT, 52, 40),
     updatedAt: HELD_AT,
     deliveryHold: {
       heldAt: HELD_AT,
@@ -442,27 +516,28 @@ function notification(id, orderId, templateCode, message, sentAt) {
     createdAt: sentAt,
   };
 }
+// 알림은 그 주문의 상태가 바뀐 시각에 보낸 것이다. 문구 안 회차 이름·도착 시각·주문번호도 회차·주문에서 만든다.
 const NOTIFICATIONS = [
   notification(
     'notice-0003',
-    'order-round-accepted',
+    ORDER_ACCEPTED.id,
     'ROUND_ORDER_CONFIRMED',
-    '[그린러브] 10월 6일 배송 회차 주문이 접수되었습니다. 화요일 오전 9시까지 문 앞에 배송합니다.',
-    '2026-10-02T03:21:00.000Z',
+    `[그린러브] ${ROUND_OPEN.name} 주문이 접수되었습니다. ${kstWeekdayHour(ROUND_OPEN.schedule.deliveryEndAt)}까지 문 앞에 배송합니다.`,
+    ORDER_ACCEPTED.updatedAt,
   ),
   notification(
     'notice-0002',
-    'order-round-cancelled',
+    ORDER_CANCELLED.id,
     'ORDER_CANCELLED',
-    '[그린러브] 주문(20261001-000004)이 취소되었습니다. 결제 금액은 3~5영업일 안에 환불됩니다.',
-    '2026-10-01T06:40:00.000Z',
+    `[그린러브] 주문(${ORDER_CANCELLED.orderNumber})이 취소되었습니다. 결제 금액은 3~5영업일 안에 환불됩니다.`,
+    ORDER_CANCELLED.updatedAt,
   ),
   notification(
     'notice-0001',
-    'order-round-delivering',
+    ORDER_DELIVERING.id,
     'ORDER_DELIVERING',
     '[그린러브] 주문하신 동양란 v3가 배송을 시작했습니다.',
-    '2026-09-28T22:30:00.000Z',
+    ORDER_DELIVERING.updatedAt,
   ),
 ];
 
@@ -501,6 +576,7 @@ const REVIEW_STATS = {
   'product-1': { count: 24, average: 4.8 },
   'product-2': { count: 9, average: 4.6 },
 };
+// 후기는 지난 회차들이 도착한 다음 날(수요일)에 한 주 간격으로 달렸다. 판매 중 회차 주문 시작 기준 상대값이다.
 const REVIEWS = [
   {
     id: 'review-1',
@@ -508,7 +584,7 @@ const REVIEWS = [
     rating: 5,
     text: '꽃대가 사진보다 튼실하게 왔어요. 화요일 아침에 정확히 문 앞에 있었습니다.',
     authorName: '이*연',
-    createdAt: '2026-09-30T02:00:00.000Z',
+    createdAt: after(OPEN_ORDER_OPEN_AT, -23),
   },
   {
     id: 'review-2',
@@ -516,7 +592,7 @@ const REVIEWS = [
     rating: 5,
     text: '도자기 화분으로 골랐는데 선물하기 좋네요. 관리법 카드도 들어 있었어요.',
     authorName: '정*호',
-    createdAt: '2026-09-23T05:00:00.000Z',
+    createdAt: after(OPEN_ORDER_OPEN_AT, -188),
   },
   {
     id: 'review-3',
@@ -524,7 +600,7 @@ const REVIEWS = [
     rating: 4,
     text: '반쯤 핀 상태로 와서 일주일 뒤에 활짝 폈어요.',
     authorName: '최*은',
-    createdAt: '2026-09-16T08:00:00.000Z',
+    createdAt: after(OPEN_ORDER_OPEN_AT, -353),
   },
 ];
 const benchmarkRoutes = [
@@ -594,7 +670,7 @@ export const scenarioRoutes = {
     [
       'GET',
       /^\/orders$/,
-      () => ({ body: [{ id: 'order-broken', status: 'ACCEPTED', createdAt: '2026-10-30T01:00:00.000Z' }] }),
+      () => ({ body: [{ id: 'order-broken', status: 'ACCEPTED', createdAt: hoursFromNow(-24) }] }),
     ],
   ],
   scheduled: [
@@ -775,9 +851,15 @@ export const routes = [
   ...benchmarkRoutes,
 ];
 
+// 결제 화면 "결제 직전 확인" 체크박스의 접근성 이름. 앱 글자와 같아야 한다
+// (apps/consumer/src/app/checkout/_components/CheckoutForm.tsx의 Checkbox label).
+const CHECKOUT_CONFIRM = '주문 상품·수량·회차 가격을 확인했어요(필수)';
+
 /**
  * 자동 캡처 대상 화면. id는 파일 이름, group은 보고서 묶음이다.
  * auth: false면 로그인 없이 연다.
+ * devLogin: true는 하네스 전용 이메일 로그인 칸(E2E_TEST)을 쓰는 화면이다. 운영 빌드(--prod)에는 그 칸이 없어
+ * 정상 판정에서 빠진다(셀러 firestore: true 화면과 같은 처리). dev 촬영으로 비교한다.
  */
 export const screens = [
   { id: 'home', group: '둘러보기', title: '홈 · 회차 진행 중', path: '/', auth: false },
@@ -816,6 +898,7 @@ export const screens = [
     title: '로그인 · 이메일 로그인 실패 (하네스 전용 칸)',
     path: '/login',
     auth: false,
+    devLogin: true,
     scenario: 'login-failed',
     steps: [
       { fill: { label: '이메일', value: 'wrong@example.com' } },
@@ -879,7 +962,7 @@ export const screens = [
     title: '결제 · 결제 버튼 직전(변경 확인)',
     path: '/checkout?from=cart',
     storage: true,
-    steps: [{ check: '상품·가격·회차 변경 내용을 확인했습니다.' }],
+    steps: [{ check: CHECKOUT_CONFIRM }],
   },
   {
     id: 'checkout-processing',
@@ -890,7 +973,7 @@ export const screens = [
     scenario: 'order-slow',
     portone: 'success',
     steps: [
-      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { check: CHECKOUT_CONFIRM },
       { press: '카카오페이로 결제하기' },
     ],
   },
@@ -904,7 +987,7 @@ export const screens = [
     portone: 'success',
     expectedErrors: ['status of 409 \\(Conflict\\).*/stores/store-visual-0001/orders\\)$'],
     steps: [
-      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { check: CHECKOUT_CONFIRM },
       { press: '카카오페이로 결제하기' },
     ],
   },
@@ -916,7 +999,7 @@ export const screens = [
     storage: true,
     portone: 'cancel',
     steps: [
-      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { check: CHECKOUT_CONFIRM },
       { press: '카카오페이로 결제하기' },
     ],
   },
@@ -931,7 +1014,7 @@ export const screens = [
     expectPath: '/order/success',
     steps: [
       { fill: { label: '요청사항 (선택)', value: '문 앞에 두세요' } },
-      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { check: CHECKOUT_CONFIRM },
       { press: '카카오페이로 결제하기' },
       { waitPath: '/order/success' },
     ],
@@ -1258,7 +1341,7 @@ export const benchmarkScreens = [
       { fill: { label: '이름', value: '박엄마', nth: 0 } },
       { fill: { label: '이름', value: '김그린', nth: 1 } },
       { fill: { label: '카드 문구', value: '늘 고마워요. 건강하세요!' } },
-      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { check: CHECKOUT_CONFIRM },
       { press: '카카오페이로 결제하기' },
       { waitPath: '/order/success' },
     ],
@@ -1276,7 +1359,7 @@ export const benchmarkScreens = [
     steps: [
       { click: '문구 넣기' },
       { fill: { label: '라벨 문구', value: '祝 開業 그린상회' } },
-      { check: '상품·가격·회차 변경 내용을 확인했습니다.' },
+      { check: CHECKOUT_CONFIRM },
       { press: '카카오페이로 결제하기' },
       { waitPath: '/order/success' },
     ],
@@ -1456,7 +1539,7 @@ export const paymentMethodScreens = [
     title: '결제 · 결제 수단 고르기(카카오페이·네이버페이·카드)',
     path: '/checkout?from=cart',
     storage: true,
-    steps: [{ check: '상품·가격·회차 변경 내용을 확인했습니다.' }],
+    steps: [{ check: CHECKOUT_CONFIRM }],
   },
   {
     id: 'order-redelivery-fee',

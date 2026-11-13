@@ -59,6 +59,7 @@ node scripts/visual/start.mjs driver --prod      # 운영 빌드(next build && n
 - **서비스워커**: 운영과 같게 막지 않는다(막으면 앱의 등록 스크립트가 `navigator.serviceWorker`가 없어 오류를 낸다).
 - **셀러 Firestore 화면**: 셀러 앱은 `NODE_ENV=production`에서 로컬 Firebase 런타임(에뮬레이터)을 거절한다(`apps/seller/src/lib/firebase.ts`). 그래서 `--prod`에서는 에뮬레이터를 띄우지 않고, `firestore: true` 화면(홈·준비·회차 상세·새 회차·상품 목록·회차 취소 모달)은 정상 판정에서 빠진다(문제: "Firestore 에뮬레이터 없음"). 이 화면들은 dev 촬영으로 비교한다.
 - 빌드 기록은 `next-build.log`, 서버 기록은 `next-start.log`. 빌드 산출물(`.next`)과 빌드가 고치는 파일(`next-env.d.ts`·앱 `AGENTS.md`, 셀러는 저장소에 들어 있는 `public/sw.js`도 다시 만든다)은 커밋하지 않는다. 끝나면 `git checkout apps/seller/public/sw.js`로 되돌린다.
+- **하네스 전용 로그인 화면**: 이메일 로그인 칸은 `E2E_TEST=true`일 때만 있어 운영 빌드에는 없다. 그 칸을 쓰는 `devLogin: true` 화면(소비자 `login-error`)은 `--prod`에서 steps를 건너뛰고 정상 판정에서 빠진다(문제: "하네스 전용 이메일 로그인 칸 없음"). 이 화면은 dev 촬영으로 비교한다.
 - 실측(2026-10-30, 같은 커밋 두 번): 기사 36장·소비자 66장·셀러 108장(Firestore 21장 제외) 정상 판정 통과. 비교 결과는 `docs/specs/frontend/ui-stack-migration-plan.md` P0.5에 적었다.
 
 ## 기준 시각
@@ -71,6 +72,11 @@ node scripts/visual/start.mjs driver --prod      # 운영 빌드(next build && n
   - `--phone`은 휴대폰 브라우저가 실제 시각으로 돌므로 서버 시계를 고정하지 않는다. PC 브라우저로 직접 볼 때도 브라우저는 실제 시각이라, 기준 시각과 날짜가 다르면 같은 hydration 경고가 날 수 있다.
   - 기준 시각이 실제보다 30일 넘게 앞이면 서버가 만든 세션 쿠키가 브라우저에서 이미 만료돼 로그인이 안 된다.
 - fixture의 다가오는 회차 일정은 이 시각 기준 상대값이다(`hoursFromNow`). 날짜가 지나도 "예정" 화면이 그대로 찍힌다.
+- 소비자 fixture(`fixtures/consumer.mjs`)는 판매 중·마감 회차와 주문·알림·후기 날짜, 회차 이름·주문번호·알림 문구 안 날짜도 모두 이 시각에서 만든다. 고정 날짜가 없어 언제 찍어도 홈 마감 띠가 시간을 세고 상품을 살 수 있는 화면이 찍힌다.
+  - 요일 관계는 그대로다(한국 시간): 목요일 오전 10시 주문 시작 → 일요일 밤 12시 주문 마감 → 월요일 오전 7시 경매 → 화요일 오전 9시 도착.
+  - 판매 중 회차의 주문 마감은 기준 시각 뒤 첫 일요일 밤 12시이고, 주문 시작은 기준 시각 10시간 전보다 앞선 마지막 목요일 오전 10시다. 마감된 회차는 주문 시작이 그보다 한 주 앞선 회차다. 주문·알림·후기 시각은 모두 기준 시각보다 앞이다.
+  - 기준 시각이 월요일~목요일 오후 8시 전이면 판매 중 회차의 주문 시작이 지난주 목요일이 된다(주문 기간만 한 주 더 길다).
+  - 판매자·기사 fixture의 지난 회차·주문 날짜는 고정 날짜 그대로다.
 - `shots.mjs`는 브라우저 시계를 이 시각에 고정하고(`page.clock.setFixedTime`, 타이머는 돈다), CSS 애니메이션을 멈춘 채 찍는다.
 - 다른 날 찍은 캡처와 비교하려면 두 번 모두 같은 `--now`로 서버를 띄운다. 기준 시각이 다르면 `diff.mjs`가 비교하지 않는다.
 
@@ -95,7 +101,7 @@ node scripts/visual/report.mjs consumer@after,seller@baseline --after after --be
 - 화면이 일부러 만든 오류 응답(주문 거절 409 등)에 브라우저가 남기는 리소스 오류 줄은 `expectedErrors: ['<정규식>']`로만 뺀다.
 - 화면마다 `manifest.json`에 쓰기 요청(`writes`, 본문 포함)·브라우저 저장소(`storage`)를, `<id>-<viewport>.aria.yml`에 접근성 트리(Playwright `ariaSnapshot`)를 남긴다. 비교는 아래 "작업 전·후 동작·접근성 비교".
 - **색 구성**(`--color-scheme dark`, 기본 `light`): 브라우저 `colorScheme`만 바꿔 `prefers-color-scheme: dark`로 찍는다(다크 모드 D5, `design-direction.md` §9). 값은 `manifest.json`의 `colorScheme`에 남고, 색 구성이 다른 묶음끼리는 이어 찍기·`diff.mjs`·`parity.mjs`를 하지 않는다(옵션 전 묶음은 밝음으로 본다). label은 따로 둔다(예: `--label after-dark`).
-- **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 가짜 API에 닿지 못한 요청 0(취소된 요청 제외), 하네스가 지원하지 않는 화면 0(`--prod`의 셀러 Firestore 화면), 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
+- **정상 촬영 판정**(`soundness.mjs`): fixture 없는 API 경로 0, 콘솔 오류 0, 가짜 API에 닿지 못한 요청 0(취소된 요청 제외), 하네스가 지원하지 않는 화면 0(`--prod`의 셀러 Firestore 화면·소비자 하네스 전용 로그인 화면), 누를 글자·입력칸 없음 0, 도착 주소 = 의도한 주소(`path`의 pathname, 의도한 이동은 fixture `expectPath`)일 때만 정상이다. 정상이 아닌 캡처가 하나라도 있으면 `shots.mjs`는 종료 코드 1이고, `diff.mjs`는 그 화면을 비교하지 않고 실패로 본다. 작업 전·후가 같은 오류 화면이면 차이 0이어도 아무것도 증명하지 못하기 때문이다.
 - **렌더 결정성**: 브라우저는 `--disable-partial-raster`로 띄운다. Chromium이 바뀐 영역만 다시 래스터하면 그리는 이력에 따라 글자·둥근 모서리의 안티앨리어싱이 채널 2~40만큼 달라져, 같은 커밋 두 번 촬영이 브라우저 컨텍스트마다 약 5~15% 어긋났다(2026-10-30 기사 화면 실측). 끄면 20번 중 20번 같았다.
 - `next dev`는 힙 사용량이 상한(시스템 메모리의 50%)의 80%를 넘으면 스스로 재시작한다("Server is approaching the used memory threshold, restarting..."). 한 서버로 여러 번 연달아 찍다가 재시작하면, 그 사이 찍힌 화면은 연결 오류나 덜 그려진 상태(로딩)가 된다. `start.mjs`가 재시작 횟수를 `dev-restarts.txt`에 적고 `shots.mjs`가 재시작이 걸친 화면과 그 바로 다음 화면을 정상 판정에서 뺀다("next dev 메모리 재시작 중·직후 촬영"). 그 화면만 `--only`로 다시 찍는다. 세 앱 서버와 에뮬레이터를 한 컨테이너에서 같이 띄우면 더 자주 일어난다. 그래서 `start.mjs seller`는 다른 앱 하네스가 떠 있으면 시작하지 않는다(`--allow-concurrent`로 무시). 판매자가 떠 있을 때 다른 앱을 띄우면 경고만 한다.
 - 캡처는 `%TEMP%\greenhub-visual\<app>\shots\<label>\`에 PNG와 `manifest.json`으로 남는다.

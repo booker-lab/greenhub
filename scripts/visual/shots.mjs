@@ -358,7 +358,11 @@ async function shootOnce(context, screen, viewportName) {
     await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => {});
     await page.waitForTimeout(800);
   }
-  const stepNote = screen.steps ? await runSteps(page, screen.steps, { apiBase }) : null;
+  // 하네스 전용 이메일 로그인 칸(E2E_TEST)은 운영 빌드에 없다. 그 칸을 쓰는 화면(fixture devLogin: true)은
+  // steps를 건너뛰고 지원하지 않는 화면으로 남긴다(아래 unsupported, 셀러 Firestore 화면과 같은 처리).
+  const noDevLogin = Boolean(screen.devLogin && runtime.prod);
+  const stepNote =
+    screen.steps && !noDevLogin ? await runSteps(page, screen.steps, { apiBase }) : null;
   // 의도한 이동(expectPath)이 있으면 그 주소에 도착할 때까지 기다린다(navigation.mjs). 시간 안에 도착하지 않으면
   // 기다리기만 멈추고 그대로 찍는다 — 판정(주소 다름)은 soundness.mjs가 그대로 한다.
   if (screen.expectPath) {
@@ -420,6 +424,7 @@ async function shootOnce(context, screen, viewportName) {
     ...(screen.firestore && !runtime.emulator
       ? { unsupported: 'Firestore 에뮬레이터 없음(운영 빌드·--phone)' }
       : {}),
+    ...(noDevLogin ? { unsupported: '하네스 전용 이메일 로그인 칸 없음(운영 빌드)' } : {}),
     // 이 화면이나 바로 앞 화면을 찍는 사이 next dev가 메모리 재시작을 했으면 연결 오류나 덜 그려진 화면일 수 있다.
     ...(devRestartCount() !== restartsAtPreviousStart
       ? { devRestarted: 'next dev 메모리 재시작 중·직후 촬영(이 화면만 다시 찍는다)' }
