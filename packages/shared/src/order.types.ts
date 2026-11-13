@@ -1,4 +1,5 @@
 import type { GiftInfo, SelectedProductOption } from './benchmark.types.js'
+import type { CustomerFaultClosureRecord } from './customer-fault-closure.js'
 import type { PostDeliveryRefundRecord } from './post-delivery-refund.js'
 import type { ClientOrderRequestId } from './sale-round.types.js'
 
@@ -15,6 +16,12 @@ export type OrderStatus =
   | 'DELIVERED'
   | 'CANCELLED'
   | 'REVIEWED'
+  /**
+   * 고객 사유 종결(환불 없음). 고객 책임 보류에서 수령 거부·재배송비 미결제로 판매자가 종결한
+   * 회차 직배송 주문이다. 결제 금액은 정산되고 상품은 판매자가 처리한다. 취소(CANCELLED=환불)와
+   * 다르며 이 상태에서 다른 상태로 가는 전이는 없다(apps/api/src/orders/customer-fault-closure.service.ts).
+   */
+  | 'CLOSED_UNDELIVERED'
 
 export type DeliveryMethod = 'direct' | 'hub' | 'parcel'
 
@@ -55,14 +62,39 @@ export interface OrderAcquisitionSnapshot {
   capturedAt: string // ISO8601
 }
 
+/**
+ * 배송 보류 사유 코드. 서버 DTO(apps/api/src/orders/dto/update-status.dto.ts)가 받는 값과 같다.
+ * - PRODUCT_DAMAGED(상품 파손): 판매자·기사 책임이고 다시 배송하지 않는다. 기사가 배송 중에만 남긴다.
+ * - RECEIPT_REFUSED(수령 거부): 고객 책임(단순 변심과 같음)이고 재배송비를 결제해야 다시 배송한다.
+ */
+export type DeliveryHoldReasonCode =
+  | 'WEATHER'
+  | 'ACCESS_UNAVAILABLE'
+  | 'ADDRESS_ISSUE'
+  | 'CUSTOMER_UNREACHABLE'
+  | 'RECEIPT_REFUSED'
+  | 'PRODUCT_DAMAGED'
+  | 'OTHER'
+
+/**
+ * 재배송하지 않는 보류 사유. 이 보류는 주문 취소(전액 환불)로만 끝나고 재배송 준비·배송 재개로
+ * 돌아가지 않는다(apps/api/src/orders/orders.helpers.ts deliveryTransitionViolation).
+ */
+export const NON_REDELIVERABLE_HOLD_REASONS: readonly DeliveryHoldReasonCode[] = [
+  'PRODUCT_DAMAGED',
+]
+
+/** 재배송하지 않는(취소로만 끝나는) 보류 사유인지 확인한다. 알 수 없는 값은 false다. */
+export function isNonRedeliverableHoldReason(reasonCode: unknown): boolean {
+  return (
+    typeof reasonCode === 'string' &&
+    (NON_REDELIVERABLE_HOLD_REASONS as readonly string[]).includes(reasonCode)
+  )
+}
+
 export interface DeliveryHoldSnapshot {
   heldAt: string // ISO8601
-  reasonCode:
-    | 'WEATHER'
-    | 'ACCESS_UNAVAILABLE'
-    | 'ADDRESS_ISSUE'
-    | 'CUSTOMER_UNREACHABLE'
-    | 'OTHER'
+  reasonCode: DeliveryHoldReasonCode
   reasonMessage: string
   customerResponsible: boolean
   redeliveryFee: number | null
@@ -130,6 +162,7 @@ export interface Order {
   gift?: GiftInfo | null
   packageLabel?: string | null       // 포장 겉면 라벨 문구 — 회차 주문만, 선물이면 보내는 분 이름, 없으면 키가 없다
   postDeliveryRefund?: PostDeliveryRefundRecord | null // 배송 후 환불 기록 — 환불한 주문만 존재
+  customerFaultClosure?: CustomerFaultClosureRecord | null // 고객 사유 종결 기록 — 종결한 주문만 존재
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
   // Denormalized fields — 드라이버 앱 실시간 표시용

@@ -82,6 +82,37 @@ describe('배송 완료 후속효과 복구 계약', () => {
     );
   });
 
+  // Y3 사진 업로드 대기열: 같은 사진 재전송마다 재조정이 다시 불려도 정산은 같은 DELIVERED 주문 한 건으로,
+  // 완료 알림은 같은 멱등 키(order-transition:…:DELIVERING:DELIVERED)로만 요청한다.
+  // 실제 한 건 보장은 정산 transaction 존재 확인과 알림 발송 claim이 맡는다(각 spec).
+  it('같은 사진 재전송으로 재조정이 반복돼도 정산·완료 알림은 같은 주문·같은 키로만 요청한다', async () => {
+    const context = makeService();
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await (context.service as any).reconcileDeliveryCompletion('store-safe', 'order-safe');
+    }
+    await context.notices.drain();
+
+    for (const call of context.settlements.createSettlement.mock.calls) {
+      expect(call).toEqual([expect.objectContaining({ id: 'order-safe' }), 'DELIVERED']);
+    }
+    const keys = context.notifications.sendToUser.mock.calls.map((call) => call[4]);
+    expect(keys.length).toBeGreaterThan(0);
+    expect(new Set(keys)).toEqual(new Set(['order-transition:order-safe:DELIVERING:DELIVERED']));
+  });
+
+  it('REVIEWED 주문은 재조정하지 않는다(사진 재전송이 정산·완료 알림을 새로 만들지 않는다)', async () => {
+    const context = makeService({ status: 'REVIEWED' });
+
+    await expect(
+      (context.service as any).reconcileDeliveryCompletion('store-safe', 'order-safe'),
+    ).rejects.toThrow();
+    await context.notices.drain();
+
+    expect(context.settlements.createSettlement).not.toHaveBeenCalled();
+    expect(context.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+
   it('정산 실패 뒤 같은 재조정 요청이 정산과 완료 알림을 다시 처리한다', async () => {
     const context = makeService();
     context.settlements.createSettlement

@@ -14,8 +14,14 @@ export const HOUR_MS = 60 * 60 * 1000;
 export const DAY_MS = 24 * HOUR_MS;
 const KST_OFFSET_MS = 9 * HOUR_MS;
 
-/** 끝난 주문 상태. 이 상태가 아니면 미완료다(§2-2 O1). */
-export const DONE_ORDER_STATUSES = Object.freeze(['DELIVERED', 'PICKED_UP', 'REVIEWED', 'CANCELLED']);
+/** 끝난 주문 상태. 이 상태가 아니면 미완료다(§2-2 O1). CLOSED_UNDELIVERED는 고객 사유 종결(환불 없음)이다. */
+export const DONE_ORDER_STATUSES = Object.freeze([
+  'DELIVERED',
+  'PICKED_UP',
+  'REVIEWED',
+  'CANCELLED',
+  'CLOSED_UNDELIVERED',
+]);
 /** 결제 전 주문. 손님이 결제를 끝내지 않은 주문이라 배송 지연으로 보지 않는다. */
 export const UNPAID_ORDER_STATUS = 'PENDING';
 /** 회차 없는 미완료 주문 조회에 쓰는 진행 중 상태(결제 전·끝난 상태 제외). */

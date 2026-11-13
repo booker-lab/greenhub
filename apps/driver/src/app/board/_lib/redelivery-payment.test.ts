@@ -70,6 +70,33 @@ describe('getRedeliveryPaymentPresentation', () => {
     }
   });
 
+  // findings §5.4: fixture에 없어 화면으로 보지 못한 상태. 결제 상태 값과 무관하게 requiresRecovery가 이긴다.
+  it('requiresRecovery면 결제 상태와 무관하게 운영 확인 필요(빨강)와 운영팀 번호 해요체 안내를 보인다', () => {
+    for (const status of ['MISSING', 'PENDING', 'PAID'] as const) {
+      const view = getRedeliveryPaymentPresentation(
+        payment({
+          status,
+          chargeId: 'c1',
+          canPay: true,
+          paid: status === 'PAID',
+          requiresRecovery: true,
+        }),
+      );
+      expect(view).toEqual({
+        label: '운영 확인 필요',
+        description: `운영팀 ${DRIVER_OPS_CONTACT.phone}로 연락해 주세요.`,
+        color: 'red',
+        needsOps: true,
+      });
+      // 운영 확인이 끝나기 전에는 배송 시작·재개를 잠근다.
+      expect(
+        isDeliveryStartAllowed(
+          payment({ status, chargeId: 'c1', paid: status === 'PAID', requiresRecovery: true }),
+        ),
+      ).toBe(false);
+    }
+  });
+
   it('어떤 문구에도 "서버"가 없다', () => {
     const states = [
       payment({ status: 'MISSING', canPay: true }),

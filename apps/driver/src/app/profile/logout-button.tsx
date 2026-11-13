@@ -11,8 +11,13 @@ import {
 } from '@greenhub/ui/components/dialog';
 import { useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
+import {
+  clearPendingPhotoQueue,
+  usePendingPhotoCount,
+} from '@/app/board/[orderId]/photo/pending-photo-client';
 import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
+import { type ActiveDeliverySummary, logoutConfirmMessage } from '@/lib/logout-confirm';
 
 /**
  * 로그아웃 주 버튼. 폼의 실제 제출 상태(useFormStatus)로 잠근다. server action이 끝나면(정상은 signOut
@@ -42,21 +47,32 @@ function LogoutSubmitButton({
 }
 
 /**
- * 내 정보 로그아웃 버튼. 배송 중·보류 주문이 있으면(confirmMessage) 확인 창을 거친 뒤 같은 server action을 제출한다.
- * 확인 문구가 없으면(주문이 없거나 건수를 읽지 못함) 예전처럼 바로 제출한다.
+ * 내 정보 로그아웃 버튼. 배송 중·보류 주문이나 올리지 못한 사진이 있으면(confirmMessage) 확인 창을 거친 뒤
+ * 같은 server action을 제출한다. 확인 문구가 없으면(주문·사진이 없거나 건수를 읽지 못함) 예전처럼 바로 제출한다.
+ *
+ * 로그아웃은 이 기기의 사진 업로드 대기열을 지운다(세션 만료로 끝난 로그아웃은 지우지 않는다).
+ * 확인 창에서는 지운 뒤 제출하고, 바로 제출할 때는 제출과 함께 지운다(건수를 읽기 전에 누른 경우도 덮는다).
  */
 export function LogoutButton({
   action,
-  confirmMessage,
+  activeDeliveries,
 }: {
   action: () => Promise<void>;
-  confirmMessage: string | null;
+  activeDeliveries: ActiveDeliverySummary | null;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [opened, setOpened] = useState(false);
+  const pendingPhotos = usePendingPhotoCount();
+  const confirmMessage = logoutConfirmMessage(activeDeliveries, pendingPhotos);
 
   return (
-    <form ref={formRef} action={action}>
+    <form
+      ref={formRef}
+      action={action}
+      onSubmit={() => {
+        void clearPendingPhotoQueue();
+      }}
+    >
       <LogoutSubmitButton confirmMessage={confirmMessage} onOpenConfirm={() => setOpened(true)} />
       {confirmMessage && (
         <Dialog open={opened} onOpenChange={setOpened}>
@@ -81,7 +97,10 @@ export function LogoutButton({
                       tone="red"
                       onClick={() => {
                         setOpened(false);
-                        formRef.current?.requestSubmit();
+                        // 올리지 못한 사진을 먼저 지우고 로그아웃을 제출한다.
+                        void clearPendingPhotoQueue().finally(() =>
+                          formRef.current?.requestSubmit(),
+                        );
                       }}
                     >
                       로그아웃

@@ -5,12 +5,14 @@ import {
   buildDriverOrderDetailScope,
   buildDriverStatusConfirmContent,
   DRIVER_HOLD_SAVED_MESSAGE,
+  DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
   DRIVER_ORDER_COMPLETED_SCREEN_MESSAGE,
   DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE,
   DRIVER_RESUME_SUCCESS_MESSAGE,
   DRIVER_START_SUCCESS_FALLBACK_MESSAGE,
   driverDetailListHref,
   driverOrderItemCount,
+  isDriverHoldResumable,
   isDriverStatusConfirmCurrent,
   readDriverDetailBackContext,
   resolveDriverCommandSuccessMessage,
@@ -380,6 +382,8 @@ test('D-16. 브라우저 값 읽기: 처음 연 경로를 읽지 못하면 처�
     referrer: '',
     origin: 'https://d.example',
     onLandingPage: true,
+    currentPathname: '/board/o1',
+    previousPathname: undefined,
   });
   const landedOnBoard = readDriverDetailBackContext(
     win({
@@ -401,6 +405,106 @@ test('D-16. 브라우저 값 읽기: 처음 연 경로를 읽지 못하면 처�
   );
   assert.equal(broken.canGoBack, undefined);
   assert.equal(broken.onLandingPage, true);
+});
+
+// 세션이 끝나 다시 로그인한 뒤(callbackUrl 복귀) 상세·사진 화면의 뒤로가기(findings §5.4).
+// 바로 앞 기록이 로그인 화면이면 back은 /login으로 가고, 로그인한 기사라 proxy가 같은 화면으로 다시 보낸다.
+// 로그아웃(signOut)이 남긴 같은 화면 기록으로 가도 같은 화면이 다시 뜰 뿐이다. 둘 다 부모 화면으로 replace한다.
+test('로그인 복귀: 바로 앞 기록이 로그인 화면이거나 같은 화면이면 back 대신 부모 화면으로 보낸다', () => {
+  const base = {
+    canGoBack: true,
+    historyLength: 4,
+    referrer: '',
+    origin: 'https://d.example',
+    onLandingPage: true,
+    currentPathname: '/board/o1',
+  };
+  assert.equal(resolveDriverDetailBackAction({ ...base, previousPathname: '/login' }), 'list');
+  assert.equal(resolveDriverDetailBackAction({ ...base, previousPathname: '/board/o1' }), 'list');
+  // 앱 안에서 정상으로 들어온 경우(목록 → 상세, 상세 → 사진)는 그대로 back이다.
+  assert.equal(resolveDriverDetailBackAction({ ...base, previousPathname: '/board' }), 'back');
+  assert.equal(
+    resolveDriverDetailBackAction({
+      ...base,
+      currentPathname: '/board/o1/photo/round-direct',
+      previousPathname: '/board/o1',
+    }),
+    'back',
+  );
+  // 앞 기록을 읽지 못하면 이전 판정 그대로다.
+  assert.equal(resolveDriverDetailBackAction({ ...base, previousPathname: undefined }), 'back');
+  assert.equal(resolveDriverDetailBackAction({ ...base, canGoBack: false }), 'list');
+});
+
+test('로그인 복귀: Navigation API가 없으면 처음 연 화면의 referrer가 로그인 화면일 때 부모 화면으로 보낸다', () => {
+  const ctx = {
+    historyLength: 3,
+    origin: 'https://d.example',
+    onLandingPage: true,
+    currentPathname: '/board/o1',
+  };
+  assert.equal(
+    resolveDriverDetailBackAction({
+      ...ctx,
+      referrer: 'https://d.example/login?reason=expired&callbackUrl=%2Fboard%2Fo1',
+    }),
+    'list',
+  );
+  assert.equal(
+    resolveDriverDetailBackAction({ ...ctx, referrer: 'https://d.example/board' }),
+    'back',
+  );
+  // 앱 안 이동 뒤에는 referrer가 바뀌지 않으므로 보지 않는다.
+  assert.equal(
+    resolveDriverDetailBackAction({
+      ...ctx,
+      onLandingPage: false,
+      referrer: 'https://d.example/login?callbackUrl=%2Fboard%2Fo1',
+    }),
+    'back',
+  );
+});
+
+test('로그인 복귀: 브라우저 값 읽기는 Navigation API의 바로 앞 기록 경로를 읽는다', () => {
+  const win = (navigation) => ({
+    history: { length: 3 },
+    location: { origin: 'https://d.example', pathname: '/board/o1' },
+    document: { referrer: '' },
+    navigation,
+  });
+  const entries = [
+    { url: 'https://d.example/board' },
+    { url: 'https://d.example/login?reason=expired&callbackUrl=%2Fboard%2Fo1' },
+    { url: 'https://d.example/board/o1' },
+  ];
+  const afterLogin = readDriverDetailBackContext(
+    win({ canGoBack: true, currentEntry: { index: 2 }, entries: () => entries }),
+  );
+  assert.equal(afterLogin.previousPathname, '/login');
+  assert.equal(afterLogin.currentPathname, '/board/o1');
+  assert.equal(resolveDriverDetailBackAction(afterLogin), 'list');
+  const fromBoard = readDriverDetailBackContext(
+    win({ canGoBack: true, currentEntry: { index: 1 }, entries: () => entries }),
+  );
+  assert.equal(fromBoard.previousPathname, '/board');
+  // 첫 기록·깨진 값·entries 없음은 undefined(이전 판정 그대로).
+  for (const navigation of [
+    { canGoBack: false, currentEntry: { index: 0 }, entries: () => entries },
+    { canGoBack: true, currentEntry: null, entries: () => entries },
+    { canGoBack: true, currentEntry: { index: 1 }, entries: () => [{ url: null }, {}] },
+    { canGoBack: true, currentEntry: { index: 1 }, entries: () => [{ url: '::' }, {}] },
+    {
+      canGoBack: true,
+      currentEntry: { index: 1 },
+      entries: () => {
+        throw new Error('blocked');
+      },
+    },
+    { canGoBack: true },
+    undefined,
+  ]) {
+    assert.equal(readDriverDetailBackContext(win(navigation)).previousPathname, undefined);
+  }
 });
 
 test('D-17. 주문 없음 화면은 이유를 해요체로 알린다', () => {
@@ -553,4 +657,24 @@ test('R-06. 시작·재개·보류 저장 결과 알림은 다시 읽은 상태�
     message({ requestedStatus: 'DELIVERING', fromStatus: 'DELIVERING', freshStatus: 'DELIVERING' }),
     null,
   );
+});
+
+test('상품 파손 보류는 배송 재개 대상이 아니고, 상세는 재개 버튼 대신 가게로 돌려줄 것을 안내한다', async () => {
+  assert.equal(isDriverHoldResumable({ reasonCode: 'PRODUCT_DAMAGED' }), false);
+  for (const reasonCode of ['WEATHER', 'RECEIPT_REFUSED', 'ACCESS_UNAVAILABLE', 'CUSTOMER_UNREACHABLE']) {
+    assert.equal(isDriverHoldResumable({ reasonCode }), true, reasonCode);
+  }
+  // 보류 내용이 없으면 기존처럼 결제 게이트(deliveryStartAllowed)가 재개를 판정한다.
+  assert.equal(isDriverHoldResumable(null), true);
+  assert.equal(
+    DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
+    '상품을 가게로 돌려주세요. 판매자가 확인한 뒤 주문을 취소·환불해요.',
+  );
+  const pageSource = await readFile(new URL('../[orderId]/page.tsx', import.meta.url), 'utf8');
+  const noticeAt = pageSource.indexOf('!isDriverHoldResumable(order.deliveryHold) && (');
+  const resumeGuardAt = pageSource.indexOf('isDriverHoldResumable(order.deliveryHold) &&', noticeAt + 1);
+  const resumeButtonAt = pageSource.indexOf("openStatusConfirm('RESUME')");
+  assert.ok(noticeAt !== -1, '파손 보류 안내가 있다');
+  assert.ok(resumeGuardAt > noticeAt && resumeGuardAt < resumeButtonAt, '재개 버튼은 재개 가능한 보류에만');
+  assert.ok(pageSource.includes('{DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE}'));
 });

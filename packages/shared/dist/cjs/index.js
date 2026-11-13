@@ -25,6 +25,7 @@ __exportStar(require("./store.types.js"), exports);
 __exportStar(require("./sale-round.types.js"), exports);
 __exportStar(require("./settlement.types.js"), exports);
 __exportStar(require("./post-delivery-refund.js"), exports);
+__exportStar(require("./customer-fault-closure.js"), exports);
 __exportStar(require("./date.js"), exports);
 __exportStar(require("./group-buy.js"), exports);
 __exportStar(require("./features.js"), exports);

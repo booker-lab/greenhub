@@ -29,11 +29,43 @@ async function purgeProtectedPageEntries() {
   );
 }
 
+// 배송 사진(손님 문 앞 사진)은 서명 URL로 Storage에서 직접 받는다. 이전 워커는 이 응답을 기본
+// "cross-origin" NetworkFirst 규칙으로 1시간 남겼고(불투명 응답 포함), 이미지 최적화·정적 이미지 캐시에도
+// 남을 수 있었다. 새 워커는 next.config.ts의 같은 판정으로 NetworkOnly로 두고, 남은 항목은 활성화 때와
+// 이후 같은 사진 요청 때 지운다. 판정은 next.config.ts의 배송 사진 NetworkOnly 규칙과 같아야 한다.
+const PHOTO_CACHE_NAMES = ['cross-origin', 'next-image', 'static-image-assets'];
+
+function isDeliveryPhotoUrl(href) {
+  const url = new URL(href);
+  return (
+    url.hostname === 'storage.googleapis.com' ||
+    url.hostname.endsWith('.storage.googleapis.com') ||
+    url.hostname === 'firebasestorage.googleapis.com' ||
+    url.href.includes('deliveryPhotos')
+  );
+}
+
+async function purgeDeliveryPhotoEntries() {
+  await Promise.all(
+    PHOTO_CACHE_NAMES.map(async (cacheName) => {
+      if (!(await self.caches.has(cacheName))) return;
+      const cache = await self.caches.open(cacheName);
+      const requests = await cache.keys();
+      await Promise.all(
+        requests
+          .filter((request) => isDeliveryPhotoUrl(request.url))
+          .map((request) => cache.delete(request, { ignoreVary: true })),
+      );
+    }),
+  );
+}
+
 self.addEventListener('activate', (event) => {
-  event.waitUntil(purgeProtectedPageEntries());
+  event.waitUntil(Promise.all([purgeProtectedPageEntries(), purgeDeliveryPhotoEntries()]));
 });
 
 // 응답은 workbox 라우트가 만든다. 여기서는 respondWith 없이 정리만 이어 붙인다.
 self.addEventListener('fetch', (event) => {
   if (isProtectedUrl(event.request.url)) event.waitUntil(purgeProtectedPageEntries());
+  else if (isDeliveryPhotoUrl(event.request.url)) event.waitUntil(purgeDeliveryPhotoEntries());
 });

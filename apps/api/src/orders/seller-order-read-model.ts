@@ -49,6 +49,16 @@ const DELIVERY_HOLD_FIELDS = [
   'resolvedAt',
 ] as const;
 
+// 고객 사유 종결 기록. 판매자 본인이 남긴 연락 메모까지 보여 주고 처리자 id는 싣지 않는다.
+const CUSTOMER_FAULT_CLOSURE_FIELDS = [
+  'reasonCode',
+  'heldAt',
+  'redeliveryFee',
+  'actorRole',
+  'memo',
+  'closedAt',
+] as const;
+
 const PAYMENT_FIELDS = [
   'required',
   'holdAt',
@@ -103,6 +113,9 @@ export function projectSellerOrder(order: OrderRecord, view: SellerOrderReadView
 
     const deliveryHold = projectFields(order['deliveryHold'], DELIVERY_HOLD_FIELDS);
     if (deliveryHold) projected['deliveryHold'] = deliveryHold;
+
+    const closure = projectFields(order['customerFaultClosure'], CUSTOMER_FAULT_CLOSURE_FIELDS);
+    if (closure) projected['customerFaultClosure'] = closure;
 
     const payment = projectFields(order['redeliveryPayment'], PAYMENT_FIELDS);
     if (payment) projected['redeliveryPayment'] = payment;

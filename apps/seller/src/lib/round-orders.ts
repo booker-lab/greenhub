@@ -50,6 +50,8 @@ const BUCKET_OF_STATUS: Record<OrderStatus, RoundOrderBucket> = {
   DELIVERED: 'DONE',
   PICKED_UP: 'DONE',
   REVIEWED: 'DONE',
+  // 고객 사유 종결(환불 없음)은 끝난 주문이라 완료 칸에 센다.
+  CLOSED_UNDELIVERED: 'DONE',
   CANCELLED: 'CANCELLED',
 };
 

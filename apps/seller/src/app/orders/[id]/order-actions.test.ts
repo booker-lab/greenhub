@@ -148,3 +148,40 @@ describe('재배송 준비로 돌리기 확인 문구', () => {
     expect(resolveHoldReleaseMode({})).toBe('FREE');
   });
 });
+
+describe('재배송하지 않는 보류(상품 파손)', () => {
+  const hold = (reasonCode: DeliveryHoldSnapshot['reasonCode']) =>
+    ({
+      heldAt: '2026-11-13T01:00:00.000Z',
+      reasonCode,
+      reasonMessage: '현장 메모',
+      customerResponsible: false,
+      redeliveryFee: null,
+      nextContactAt: null,
+      nextDeliveryAt: null,
+      resolvedAt: null,
+    }) satisfies DeliveryHoldSnapshot;
+
+  it('상품 파손 보류는 재배송 준비 버튼을 숨기고 취소만 남긴다', () => {
+    const actions = resolveOrderDetailActions({
+      status: 'DELIVERY_HELD',
+      deliveryMethod: 'direct',
+      roundId: 'round-1',
+      deliveryHold: hold('PRODUCT_DAMAGED'),
+    });
+    expect(actions.releaseHold).toBe(false);
+    expect(actions.cancel).toBe(true);
+  });
+
+  it('수령 거부 등 다른 보류는 재배송 준비 버튼이 그대로다', () => {
+    for (const reasonCode of ['RECEIPT_REFUSED', 'WEATHER', 'ACCESS_UNAVAILABLE'] as const) {
+      const actions = resolveOrderDetailActions({
+        status: 'DELIVERY_HELD',
+        deliveryMethod: 'direct',
+        roundId: 'round-1',
+        deliveryHold: hold(reasonCode),
+      });
+      expect(actions.releaseHold, reasonCode).toBe(true);
+    }
+  });
+});

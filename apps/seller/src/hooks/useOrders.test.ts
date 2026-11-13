@@ -314,7 +314,28 @@ describe('Seller 주문 목록 범위(전체 이력 대신 필요한 범위만)'
         archivedStatusCounts: { DELIVERED: 3, PICKED_UP: 1, REVIEWED: 2, CANCELLED: 4 },
       }),
     ).toEqual({ DONE: 6, CANCELLED: 4 });
+    // 고객 사유 종결(환불 없음)은 완료로 센다.
+    expect(
+      parseArchivedGroupCounts({
+        archivedStatusCounts: {
+          DELIVERED: 3,
+          PICKED_UP: 1,
+          REVIEWED: 2,
+          CANCELLED: 4,
+          CLOSED_UNDELIVERED: 2,
+        },
+      }),
+    ).toEqual({ DONE: 8, CANCELLED: 4 });
     for (const bad of [
+      {
+        archivedStatusCounts: {
+          DELIVERED: 1,
+          PICKED_UP: 0,
+          REVIEWED: 0,
+          CANCELLED: 0,
+          CLOSED_UNDELIVERED: '1',
+        },
+      },
       {},
       { archivedStatusCounts: { DELIVERED: 1, PICKED_UP: 0, REVIEWED: 0 } },
       { archivedStatusCounts: { DELIVERED: -1, PICKED_UP: 0, REVIEWED: 0, CANCELLED: 0 } },

@@ -70,7 +70,22 @@ function resolveApiOrigin(): string {
 
 const apiOriginPattern = new RegExp(`^${escapeRegExp(resolveApiOrigin())}/`);
 
-const networkOnlyRuntimeCaching = [
+export const networkOnlyRuntimeCaching = [
+  // 배송 사진(손님 문 앞 사진)은 15분 서명 URL로 Storage에서 직접 받는다. 이 규칙이 없으면 기본
+  // "cross-origin" NetworkFirst 규칙이 응답(불투명 응답 포함)을 1시간 Cache Storage에 남겨 로그아웃·
+  // 다른 기사 로그인 뒤에도 기기에 남는다. 다른 출처 전체가 아니라 Storage 호스트(서명 URL의
+  // storage.googleapis.com·버킷 하위 도메인, 다운로드 URL의 firebasestorage.googleapis.com)와
+  // deliveryPhotos 경로를 가리키는 요청(/_next/image?url=… 포함)만 막는다. 카카오 프로필 사진 등
+  // 다른 출처 정적 응답은 기본 규칙 그대로 둔다. worker/index.js가 같은 판정으로 남은 항목을 지운다.
+  {
+    urlPattern: ({ url }: { url: URL }) =>
+      url.hostname === 'storage.googleapis.com' ||
+      url.hostname.endsWith('.storage.googleapis.com') ||
+      url.hostname === 'firebasestorage.googleapis.com' ||
+      url.href.includes('deliveryPhotos'),
+    handler: 'NetworkOnly' as const,
+    options: { cacheName: 'delivery-photos-network-only' },
+  },
   // 드라이버 API 도메인 전체(/driver/orders, 상세, 인증 토큰 교환 등)
   {
     urlPattern: apiOriginPattern,

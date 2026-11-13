@@ -12,6 +12,7 @@ import {
 } from '@/lib/order-quantity';
 import { type PickupPlace, readPickupPlace } from '@/lib/pickup-place';
 import { text } from './look';
+import { PendingPhotoBadge, usePendingPhotoBadge } from './pending-photo-notice';
 
 // 기사 ② 방향(design-direction.md §6 "한 손 배송 목록"): 틀은 흰 바탕·검정 글자이고 색은 문제 상태(빨강)에만 쓴다.
 // 배송 중 탭의 첫 배송지는 동·호수를 크게 쓴 "다음 배송지"(variant="next"), 나머지는 두 줄 행(variant="row")이다.
@@ -68,6 +69,12 @@ export default function OrderCard({
   selection?: OrderRowSelection;
 }) {
   const payment = getRedeliveryPaymentPresentation(order.redeliveryPayment);
+  // 배송 중 주문의 완료 사진이 이 기기 대기열에 있으면 행에 상태 배지를 붙인다(Y3).
+  const pendingPhotoKind = usePendingPhotoBadge(order.id);
+  const pendingPhoto =
+    order.status === 'DELIVERING' && pendingPhotoKind ? (
+      <PendingPhotoBadge kind={pendingPhotoKind} />
+    ) : null;
   const itemLines = orderItemLines(order.items);
   const isHub = order.deliveryMethod === 'hub';
   const isHeld = order.status === 'DELIVERY_HELD';
@@ -126,6 +133,7 @@ export default function OrderCard({
           >
             {parts.detail ?? parts.base}
           </h2>
+          {pendingPhoto}
         </div>
         {/* 건넬 상품을 크게: 상품마다 한 줄(20px 굵게). */}
         <div className="mt-3 flex flex-col">
@@ -168,6 +176,7 @@ export default function OrderCard({
       >
         {parts.detail ? `${parts.detail} · ${parts.base}` : parts.base}
       </p>
+      {pendingPhoto}
       <p className={cn(text, 'truncate')} style={muted}>
         {isHeld && (
           <span style={{ color: 'var(--color-danger)', fontWeight: 'var(--fw-bold)' }}>

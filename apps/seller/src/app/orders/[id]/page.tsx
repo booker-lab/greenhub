@@ -11,6 +11,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { CancelOrderModal } from './_components/CancelOrderModal';
+import { CustomerFaultClosureSection } from './_components/CustomerFaultClosureSection';
 import { DeliveryHoldModal } from './_components/DeliveryHoldModal';
 import { OrderInfoSection } from './_components/OrderInfoSection';
 import { OrderOperationsSection } from './_components/OrderOperationsSection';
@@ -273,7 +274,8 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
   const canPrepare = actions.prepare;
   const canCancel = actions.cancel;
   const canShipParcel = actions.shipParcel;
-  const isHeld = actions.releaseHold;
+  // 상품 파손 보류는 재배송 준비 버튼이 없어도 보류 주문이다(취소 버튼 문구·확인 창 제목에 쓴다).
+  const isHeld = order.status === 'DELIVERY_HELD';
   const showFooter =
     !isReadonly &&
     !showPrepareForm &&
@@ -380,7 +382,15 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
             />
           )}
 
-          {isReadonly && order.status !== 'CANCELLED' && (
+          {/* 고객 책임 보류의 환불 없는 종결(수령 거부·재배송비 미결제) 또는 종결 기록 */}
+          <CustomerFaultClosureSection
+            storeId={storeId}
+            orderId={orderId}
+            order={order}
+            onClosed={handleReconciled}
+          />
+
+          {isReadonly && order.status !== 'CANCELLED' && order.status !== 'CLOSED_UNDELIVERED' && (
             <PostDeliveryRefundSection
               storeId={storeId}
               orderId={orderId}

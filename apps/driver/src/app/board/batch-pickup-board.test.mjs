@@ -19,7 +19,11 @@ const startAt = boardSource.indexOf('async function startBatchPickup(');
 const startBlock = boardSource.slice(startAt, boardSource.indexOf('\n  return (', startAt));
 
 test('고를 수 있는 주문은 순수 판정(isBatchPickupSelectable)으로만 정한다', () => {
-  assert.match(boardSource, /const batchCandidates = preparing\.filter\(isBatchPickupSelectable\)/);
+  // 이 기기 사진 대기열에 항목이 있는 주문도 같은 순수 판정이 뺀다(Y3).
+  assert.match(
+    boardSource,
+    /const batchCandidates = preparing\.filter\(\(order\) =>\n\s*isBatchPickupSelectable\(order, \{ pendingPhotoOrderIds \}\),\n\s*\);/,
+  );
   assert.match(
     boardSource,
     /const selectedOrders = batchCandidates\.filter\(\(order\) => selectedIds\.has\(order\.id\)\)/,

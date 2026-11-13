@@ -10,7 +10,7 @@ function createCacheStorage(seed) {
   const caches = new Map(
     Object.entries(seed).map(([name, paths]) => [
       name,
-      new Set(paths.map((path) => `${APP}${path}`)),
+      new Set(paths.map((path) => (path.startsWith('https://') ? path : `${APP}${path}`))),
     ]),
   );
   const deleteCalls = [];
@@ -32,7 +32,7 @@ function createCacheStorage(seed) {
     Object.fromEntries(
       [...caches].map(([name, entries]) => [
         name,
-        [...entries].map((url) => url.slice(APP.length)).sort(),
+        [...entries].map((url) => (url.startsWith(APP) ? url.slice(APP.length) : url)).sort(),
       ]),
     );
   return { storage, snapshot, deleteCalls };
@@ -119,3 +119,59 @@ test('보호 경로 판정은 next.config의 NetworkOnly 규칙과 같은 정규
 function sortedSeed() {
   return Object.fromEntries(Object.entries(SEED).map(([name, paths]) => [name, [...paths].sort()]));
 }
+
+// 서명 URL 배송 사진(손님 문 앞 사진)과 다른 출처 정적 응답이 섞인 이전 워커 캐시
+const SIGNED_PHOTO =
+  'https://storage.googleapis.com/demo.appspot.com/deliveryPhotos/order-1/abc.jpg?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Signature=f00';
+const VHOST_PHOTO =
+  'https://demo.appspot.com.storage.googleapis.com/deliveryPhotos/order-2/def.jpg?X-Goog-Signature=f01';
+const DOWNLOAD_PHOTO =
+  'https://firebasestorage.googleapis.com/v0/b/demo.appspot.com/o/deliveryPhotos%2Forder-3_1.jpg?alt=media&token=t';
+const KAKAO_PROFILE = 'https://k.kakaocdn.net/dn/profile/img_640x640.jpg';
+const PHOTO_SEED = {
+  'cross-origin': [SIGNED_PHOTO, VHOST_PHOTO, DOWNLOAD_PHOTO, KAKAO_PROFILE],
+  'next-image': [
+    `/_next/image?url=${encodeURIComponent(DOWNLOAD_PHOTO)}&w=640&q=75`,
+    '/_next/image?url=%2Ficons%2Ficon-192x192.png&w=96&q=75',
+  ],
+  'static-image-assets': ['/icons/icon-192x192.png'],
+};
+const PHOTO_AFTER_PURGE = {
+  'cross-origin': [KAKAO_PROFILE],
+  'next-image': ['/_next/image?url=%2Ficons%2Ficon-192x192.png&w=96&q=75'],
+  'static-image-assets': ['/icons/icon-192x192.png'],
+};
+
+test('새 서비스워커 활성화 때 이전 워커가 남긴 배송 사진 항목을 지우고 다른 출처 정적 응답은 남긴다', async () => {
+  const { storage, snapshot, deleteCalls } = createCacheStorage(PHOTO_SEED);
+  const listeners = await loadWorker(storage);
+
+  await dispatch(listeners.get('activate'));
+
+  assert.deepEqual(snapshot(), PHOTO_AFTER_PURGE);
+  assert.ok(deleteCalls.every((options) => options?.ignoreVary === true));
+});
+
+test('활성화 뒤 늦게 남은 배송 사진 항목은 다음 배송 사진 요청 때 지운다', async () => {
+  const { storage, snapshot } = createCacheStorage(PHOTO_SEED);
+  const listeners = await loadWorker(storage);
+  const fetchListener = listeners.get('fetch');
+
+  assert.equal(await dispatch(fetchListener, { request: { url: KAKAO_PROFILE } }), 0);
+  assert.equal(await dispatch(fetchListener, { request: { url: SIGNED_PHOTO } }), 1);
+  assert.deepEqual(snapshot(), PHOTO_AFTER_PURGE);
+});
+
+test('배송 사진 판정은 next.config의 배송 사진 NetworkOnly 규칙과 같은 조건을 쓴다', async () => {
+  const worker = await readFile(new URL('./index.js', import.meta.url), 'utf8');
+  const config = await readFile(new URL('../next.config.ts', import.meta.url), 'utf8');
+  for (const condition of [
+    "url.hostname === 'storage.googleapis.com'",
+    "url.hostname.endsWith('.storage.googleapis.com')",
+    "url.hostname === 'firebasestorage.googleapis.com'",
+    "url.href.includes('deliveryPhotos')",
+  ]) {
+    assert.ok(worker.includes(condition), `worker/index.js 배송 사진 판정에 ${condition}가 없다`);
+    assert.ok(config.includes(condition), `next.config.ts 배송 사진 판정에 ${condition}가 없다`);
+  }
+});

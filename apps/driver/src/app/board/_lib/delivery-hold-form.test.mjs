@@ -17,6 +17,11 @@ import {
   isRedeliveryFeeWithinLimit,
   MAX_REDELIVERY_FEE_KRW,
   parseRedeliveryFee,
+  DRIVER_HOLD_REASONS,
+  driverHoldReasonOptions,
+  HOLD_RECEIPT_REFUSED_RESPONSIBILITY_HINT,
+  holdResponsibilityAfterReasonChange,
+  PRODUCT_DAMAGED_HOLD_NOTICE,
 } from './delivery-hold-form.ts';
 
 const holdModalSource = await readFile(
@@ -123,7 +128,7 @@ test('보류 모달은 어긋난 책임·재배송비를 저장 버튼에서 막
   // 보내는 재배송비도 같은 판단으로 읽는다.
   assert.match(
     holdModalSource,
-    /redeliveryFee: isWeather \? null : parseRedeliveryFee\(redeliveryFee\)/,
+    /redeliveryFee: responsibilityLockedOff \? null : parseRedeliveryFee\(redeliveryFee\)/,
   );
   // submit도 PATCH 전에 어긋난 조합을 돌려보낸다.
   const fnAt = holdModalSource.indexOf('async function submit');
@@ -313,7 +318,7 @@ test('R-02·R-09. 보류 창은 재배송비 칸 바로 아래에 고객 책임 
   assert.ok(noticeAt < hintAt && hintAt < nextFieldAt, '안내는 재배송비 칸 바로 아래에 있다');
   // 기준 금액 미리 채움·상한·기상 잠금은 그대로다.
   const feeField = holdModalSource.slice(feeFieldAt, feeFieldEnd);
-  assert.match(feeField, /disabled=\{isWeather\}/);
+  assert.match(feeField, /disabled=\{responsibilityLockedOff\}/);
   assert.match(feeField, /value=\{redeliveryFee\}/);
   assert.match(
     holdModalSource,
@@ -321,7 +326,7 @@ test('R-02·R-09. 보류 창은 재배송비 칸 바로 아래에 고객 책임 
   );
   assert.match(
     holdModalSource,
-    /redeliveryFee: isWeather \? null : parseRedeliveryFee\(redeliveryFee\)/,
+    /redeliveryFee: responsibilityLockedOff \? null : parseRedeliveryFee\(redeliveryFee\)/,
   );
   // 안내·도움말은 낱말 중간에서 끊기지 않는다.
   assert.match(
@@ -331,4 +336,102 @@ test('R-02·R-09. 보류 창은 재배송비 칸 바로 아래에 고객 책임 
   const helpAt = holdModalSource.indexOf('id={reasonHelpId}');
   assert.match(holdModalSource.slice(helpAt, helpAt + 200), /style=\{keepWords\}/);
   assert.match(holdModalSource.slice(noticeAt, noticeAt + 200), /style=\{keepWords\}/);
+});
+
+test('상품 파손은 배송 중일 때만 고를 수 있고, 수령 거부는 언제나 고를 수 있다', () => {
+  assert.deepEqual(DRIVER_HOLD_REASONS, [
+    'WEATHER',
+    'ACCESS_UNAVAILABLE',
+    'ADDRESS_ISSUE',
+    'CUSTOMER_UNREACHABLE',
+    'RECEIPT_REFUSED',
+    'PRODUCT_DAMAGED',
+  ]);
+  assert.ok(driverHoldReasonOptions('DELIVERING').includes('PRODUCT_DAMAGED'));
+  assert.ok(!driverHoldReasonOptions('PREPARING').includes('PRODUCT_DAMAGED'));
+  assert.ok(driverHoldReasonOptions('PREPARING').includes('RECEIPT_REFUSED'));
+  assert.match(holdModalSource, /options=\{driverHoldReasonOptions\(orderStatus\)\.map/);
+  assert.match(holdModalSource, /RECEIPT_REFUSED: '수령 거부'/);
+  assert.match(holdModalSource, /PRODUCT_DAMAGED: '상품 파손'/);
+});
+
+test('수령 거부를 고르면 고객 책임을 켜고 빈 재배송비를 10,000원으로 채우며, 고객 책임 없이는 막는다', () => {
+  assert.deepEqual(
+    holdResponsibilityAfterReasonChange({
+      reasonCode: 'RECEIPT_REFUSED',
+      customerResponsible: false,
+      redeliveryFee: '',
+    }),
+    { customerResponsible: true, redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW },
+  );
+  assert.deepEqual(
+    holdResponsibilityAfterReasonChange({
+      reasonCode: 'RECEIPT_REFUSED',
+      customerResponsible: true,
+      redeliveryFee: 7000,
+    }),
+    { customerResponsible: true, redeliveryFee: 7000 },
+  );
+  assert.equal(
+    deliveryHoldResponsibilityFeeHint({
+      reasonCode: 'RECEIPT_REFUSED',
+      customerResponsible: false,
+      redeliveryFee: '',
+    }),
+    HOLD_RECEIPT_REFUSED_RESPONSIBILITY_HINT,
+  );
+  assert.equal(
+    deliveryHoldResponsibilityFeeHint({
+      reasonCode: 'RECEIPT_REFUSED',
+      customerResponsible: true,
+      redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+    }),
+    null,
+  );
+  assert.match(
+    customerResponsibleFeeNotice({
+      reasonCode: 'RECEIPT_REFUSED',
+      customerResponsible: true,
+      redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+    }) ?? '',
+    /10,000원/,
+  );
+  // 모달은 수령 거부일 때 고객 책임 칸을 켠 채 잠근다.
+  assert.match(holdModalSource, /disabled=\{responsibilityLockedOff \|\| responsibilityLockedOn\}/);
+});
+
+test('상품 파손은 기상처럼 책임·재배송비를 잠그고 새 배송 예정을 보내지 않는다', () => {
+  assert.deepEqual(
+    holdResponsibilityAfterReasonChange({
+      reasonCode: 'PRODUCT_DAMAGED',
+      customerResponsible: true,
+      redeliveryFee: 10000,
+    }),
+    { customerResponsible: false, redeliveryFee: '' },
+  );
+  assert.equal(
+    deliveryHoldResponsibilityFeeHint({
+      reasonCode: 'PRODUCT_DAMAGED',
+      customerResponsible: true,
+      redeliveryFee: 10000,
+    }),
+    null,
+  );
+  assert.equal(
+    customerResponsibleFeeNotice({
+      reasonCode: 'PRODUCT_DAMAGED',
+      customerResponsible: true,
+      redeliveryFee: 10000,
+    }),
+    null,
+  );
+  assert.equal(
+    deliveryHoldSubmitError({ reasonCode: 'PRODUCT_DAMAGED', reasonMessage: '파손', nextDeliveryAt: '' }),
+    null,
+  );
+  assert.match(holdModalSource, /customerResponsible: responsibilityLockedOff \? false : customerResponsible/);
+  assert.match(holdModalSource, /nextDeliveryAt && !isNonRedeliverable \? new Date\(nextDeliveryAt\)/);
+  assert.match(holdModalSource, /disabled=\{isNonRedeliverable\}/);
+  assert.match(holdModalSource, /\{PRODUCT_DAMAGED_HOLD_NOTICE\}/);
+  assert.match(PRODUCT_DAMAGED_HOLD_NOTICE, /가게로 돌려주세요/);
 });
