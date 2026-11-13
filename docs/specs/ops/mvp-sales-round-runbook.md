@@ -258,6 +258,7 @@ node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=round_dir
   이 경로를 직접 읽거나 쓰지 않는다.
 - 같은 재시도는 같은 `idempotencyKey`와 같은 JPEG를 사용한다. 같은 키로 다른 사진을 덮어쓰지 않는다.
 - 서버가 사진 연결과 `DELIVERED`를 모두 반환한 뒤에만 성공으로 기록한다.
+- 사진만 연결되고 완료되지 않은 주문을 보류하면 서버가 그 사진을 연결에서 떼어 `detachedDeliveryPhotos`(사유 `HOLD`)에 남기므로, 재배송 때는 새 사진을 올려야 완료된다(보류 전 사진 재전송은 409 `DELIVERY_PHOTO_STALE_HOLD`, Storage 객체는 보관 기록 기준으로 파기). 이 동작 배포 전에 보류를 거쳐 사진이 남은 주문은 완료가 거절되므로 한 번 더 보류했다가 재개해 새 사진을 올린다.
 - 사진 없는 직접 완료, Firebase Storage 직접 업로드, 공개 URL 저장을 금지한다.
 - 읽기 URL은 주문자 본인, 스토어 소유자, 담당 기사, 관리자에게만 15분 동안 발급된다.
 - 서명 URL 장애 시 원본 경로나 공개 URL로 우회하지 않는다. 권한·주문 상태·연결 `photoId`를 재확인하고 GET 재시도 후 기술 담당자에게 전달한다.
