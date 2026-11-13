@@ -6,6 +6,7 @@ import {
   evaluateAll,
   evaluateM1,
   evaluateM2,
+  evaluateM3,
   evaluateO1,
   evaluateO2,
   evaluateO3,
@@ -127,6 +128,43 @@ describe('M2 수수료율 차이', () => {
       }),
     );
     assert.equal(item.level, GREEN);
+  });
+});
+
+describe('M3 종결됐는데 정산 없음', () => {
+  const closed = [
+    { id: 'c1', status: 'CLOSED_UNDELIVERED', storeId: 'store-a', orderNumber: '20261020-000021', totalAmount: 28000, customerFaultClosure: { closedAt: iso(NOW - 2 * DAY_MS) } },
+    { id: 'c2', status: 'CLOSED_UNDELIVERED', storeId: 'store-b', orderNumber: '20261020-000022', totalAmount: 15000, customerFaultClosure: { closedAt: iso(NOW - DAY_MS) } },
+    { id: 'c3', status: 'CLOSED_UNDELIVERED', storeId: 'store-b', orderNumber: '20261020-000023', totalAmount: 9000 },
+  ];
+
+  test('고객 사유 종결 주문에 정산 문서가 없으면 1건부터 🔴, 종결 날짜(KST)를 메모로 남긴다', () => {
+    const item = evaluateM3(base({ closedOrders: closed, closedOrderSettlementsById: { c2: { status: 'pending' } } }));
+    assert.equal(item.level, RED);
+    assert.deepEqual(
+      item.entries.map((e) => [e.orderNumber, e.storeName, e.amount, e.note]),
+      [
+        ['20261020-000021', '디어 오키드', 28000, '종결 2026-10-20 · 정산 없음'],
+        ['20261020-000023', '난플렉스', 9000, '종결 시각 모름 · 정산 없음'],
+      ],
+    );
+  });
+
+  test('정산이 상태와 관계없이 있으면 🟢, 종결 상태가 아닌 주문은 보지 않는다', () => {
+    const item = evaluateM3(
+      base({
+        closedOrders: [...closed.slice(0, 2), { ...closed[2], status: 'DELIVERED' }],
+        closedOrderSettlementsById: { c1: { status: 'cancelled' }, c2: { status: 'paid' } },
+      }),
+    );
+    assert.equal(item.level, GREEN);
+    assert.equal(item.count, 0);
+  });
+
+  test('정산 읽기에 실패하면 🟢으로 채우지 않고 확인 못 함으로 둔다', () => {
+    const item = evaluateM3(base({ closedOrders: closed, failedSources: ['settlements.byClosedOrder'] }));
+    assert.equal(item.level, null);
+    assert.equal(item.checked, false);
   });
 });
 
@@ -452,7 +490,11 @@ describe('전체 보고', () => {
     assert.equal(report.date, '2026-10-22');
     assert.equal(report.overall, GREEN);
     assert.deepEqual(report.counts, { red: 0, yellow: 0 });
-    assert.equal(report.items.length, 12);
+    assert.equal(report.items.length, 13);
+    assert.deepEqual(
+      report.items.map((i) => i.id),
+      ['S0', 'M1', 'M2', 'M3', 'O1', 'O2', 'O3', 'O4', 'P1', 'P2', 'S1', 'S2', 'S3'],
+    );
   });
 
   test('stores에서 가게 이름을 찾아 쓴다', () => {
@@ -494,6 +536,8 @@ describe('전체 보고', () => {
       openOrdersWithoutRound: [{ storeId: 'store-a' }, { storeId: 'store-t' }],
       heldOrders: [{ storeId: 'store-t' }],
       operationIssues: [{ storeId: 'store-t' }],
+      closedOrders: [{ id: 'c-a', storeId: 'store-a' }, { id: 'c-t', storeId: 'store-t' }],
+      closedOrderSettlementsById: { 'c-a': { status: 'pending' }, 'c-t': { status: 'pending' } },
       drivers: [{ role: 'driver' }],
       invites: [{ expiresAt: ts(NOW + HOUR_MS) }],
       auditLogs: [{ action: 'auth.login.failed' }],
@@ -509,6 +553,8 @@ describe('전체 보고', () => {
     assert.equal(result.openOrdersWithoutRound.length, 1);
     assert.equal(result.heldOrders.length, 0);
     assert.equal(result.operationIssues.length, 0);
+    assert.deepEqual(result.closedOrders.map((o) => o.id), ['c-a']);
+    assert.deepEqual(Object.keys(result.closedOrderSettlementsById), ['c-a']);
     assert.equal(result.drivers, collected.drivers);
     assert.equal(result.invites, collected.invites);
     assert.equal(result.auditLogs, collected.auditLogs);

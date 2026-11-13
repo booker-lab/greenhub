@@ -22,6 +22,8 @@ export const DONE_ORDER_STATUSES = Object.freeze([
   'CANCELLED',
   'CLOSED_UNDELIVERED',
 ]);
+/** 고객 사유 종결(환불 없음) 상태. 종결 뒤 배송 완료와 같은 정산이 생겨야 한다(§2-1 M3). */
+export const CUSTOMER_FAULT_CLOSED_STATUS = 'CLOSED_UNDELIVERED';
 /** 결제 전 주문. 손님이 결제를 끝내지 않은 주문이라 배송 지연으로 보지 않는다. */
 export const UNPAID_ORDER_STATUS = 'PENDING';
 /** 회차 없는 미완료 주문 조회에 쓰는 진행 중 상태(결제 전·끝난 상태 제외). */
@@ -193,6 +195,12 @@ export const ITEM_DEFS = Object.freeze({
     sources: ['stores', 'settlements.recent'],
     decision: '요율 변경 전에 만든 정산이면 그대로 둔다. 변경 뒤 정산인데 다르면 기술 확인',
   },
+  M3: {
+    id: 'M3',
+    title: '종결됐는데 정산 없음',
+    sources: ['orders.closedUndelivered', 'settlements.byClosedOrder', 'stores'],
+    decision: '판매자에게 주문 상세 "정산 다시 맞추기"를 누르도록 안내하거나, 관리자가 같은 종결 요청을 다시 보내 정산만 맞출지',
+  },
   O1: {
     id: 'O1',
     title: '배송 마감 지남',
@@ -255,7 +263,7 @@ export const ITEM_DEFS = Object.freeze({
   },
 });
 
-export const ITEM_ORDER = Object.freeze(['S0', 'M1', 'M2', 'O1', 'O2', 'O3', 'O4', 'P1', 'P2', 'S1', 'S2', 'S3']);
+export const ITEM_ORDER = Object.freeze(['S0', 'M1', 'M2', 'M3', 'O1', 'O2', 'O3', 'O4', 'P1', 'P2', 'S1', 'S2', 'S3']);
 
 // ── 판정 ─────────────────────────────────────────────────────────────────────
 
@@ -313,6 +321,26 @@ export function evaluateM2(input) {
     failedSources: input.failedSources,
     extra: entries.length > 0 ? { summary: `${entries.length}곳 · 요율 변경 시점 확인` } : {},
   });
+}
+
+/**
+ * M3: 고객 사유 종결(CLOSED_UNDELIVERED) 주문인데 정산 문서(문서 id = 주문 id)가 없음. 1건부터 🔴.
+ * 종결은 커밋 뒤 정산을 만들고, 그 단계가 실패하면 판매자가 "정산 다시 맞추기"를 누르기 전까지 정산이 없다.
+ * 정산 상태는 보지 않는다(API hasSettlement와 같이 문서가 있으면 정산이 있는 것). 오래된 종결도 정산이 없는 한
+ * 판매자가 돈을 받지 못하므로 기간으로 자르지 않는다.
+ */
+export function evaluateM3(input) {
+  const storeNames = input.storeNames ?? {};
+  const settlements = input.closedOrderSettlementsById ?? {};
+  const entries = [];
+  for (const order of list(input.closedOrders)) {
+    if (order?.status !== CUSTOMER_FAULT_CLOSED_STATUS) continue;
+    if (settlements[order.id]) continue;
+    const closedDate = kstDateOf(order.customerFaultClosure?.closedAt);
+    const note = `${closedDate ? `종결 ${closedDate}` : '종결 시각 모름'} · 정산 없음`;
+    entries.push(orderEntry(order, storeNames, RED, note, amountOf(order.totalAmount)));
+  }
+  return makeItem(ITEM_DEFS.M3, { entries, failedSources: input.failedSources });
 }
 
 function formatRate(rate) {
@@ -561,8 +589,8 @@ export function keyAgeDays(keyCreatedAt, now) {
 
 /**
  * 수집 결과 전체를 판정해 보고 한 덩어리를 만든다.
- * collected: { now, stores(가게 이름의 출처), paidSettlements, ordersById, paymentsById, recentSettlements, rounds,
- *   roundOrders, openOrdersWithoutRound, heldOrders, drivers, invites, auditLogs, operationIssues,
+ * collected: { now, stores(가게 이름의 출처), paidSettlements, ordersById, paymentsById, recentSettlements,
+ *   closedOrders, closedOrderSettlementsById, rounds, roundOrders, openOrdersWithoutRound, heldOrders, drivers, invites, auditLogs, operationIssues,
  *   failures: [{source, message}], stop: {code, message} | null, keyCreatedAt }
  */
 export function evaluateAll(collected) {
@@ -586,6 +614,7 @@ export function evaluateAll(collected) {
         evaluateS0(input),
         evaluateM1(input),
         evaluateM2(input),
+        evaluateM3(input),
         evaluateO1(input),
         evaluateO2(input),
         evaluateO3(input),
@@ -617,8 +646,10 @@ export function excludeStores(collected, storeIds) {
   const keep = (item) => !excluded.has(item?.storeId);
   const paidSettlements = list(collected.paidSettlements).filter(keep);
   const keptSettlementIds = new Set(paidSettlements.map((settlement) => settlement.id));
-  const pickKept = (byId) =>
-    Object.fromEntries(Object.entries(byId ?? {}).filter(([id]) => keptSettlementIds.has(id)));
+  const pickKept = (byId, keptIds = keptSettlementIds) =>
+    Object.fromEntries(Object.entries(byId ?? {}).filter(([id]) => keptIds.has(id)));
+  const closedOrders = list(collected.closedOrders).filter(keep);
+  const keptClosedOrderIds = new Set(closedOrders.map((order) => order.id));
   return {
     ...collected,
     stores: list(collected.stores).filter((store) => !excluded.has(store?.id)),
@@ -626,6 +657,8 @@ export function excludeStores(collected, storeIds) {
     ordersById: pickKept(collected.ordersById),
     paymentsById: pickKept(collected.paymentsById),
     recentSettlements: list(collected.recentSettlements).filter(keep),
+    closedOrders,
+    closedOrderSettlementsById: pickKept(collected.closedOrderSettlementsById, keptClosedOrderIds),
     rounds: list(collected.rounds).filter(keep),
     roundOrders: list(collected.roundOrders).filter(keep),
     openOrdersWithoutRound: list(collected.openOrdersWithoutRound).filter(keep),

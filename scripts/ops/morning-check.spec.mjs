@@ -47,6 +47,8 @@ const FORBIDDEN_FIELDS = [
   'ownerId',
   'usedBy',
   'createdBy',
+  'memo',
+  'customerFaultClosure.memo',
 ];
 /** 손님 정보 표식. 가짜 문서에 심어 두고 보고에 섞이는지 본다. */
 const PII_MARKERS = ['손님홍길동', '010-0000-0000', '서울시 표식구', 'buyer@fixture.example.test', '선물메모표식'];
@@ -186,6 +188,7 @@ function seedData() {
     },
     settlements: {
       'order-m1': { status: 'paid', storeId: 'store-a', orderNumber: '20261021-000012', netAmount: 32000, platformFeeRate: 0.05, paidAt: ts(NOW - DAY), settledAt: ts(NOW - 5 * DAY) },
+      'order-m3-ok': { status: 'pending', storeId: 'store-a', orderNumber: '20261020-000022', netAmount: 14250, platformFeeRate: 0.05, completedStatus: 'CLOSED_UNDELIVERED' },
       'order-ok': { status: 'pending', storeId: 'store-a', orderNumber: '20261021-000099', netAmount: 1000, platformFeeRate: 0.05, settledAt: ts(NOW - DAY) },
     },
     orders: {
@@ -194,6 +197,8 @@ function seedData() {
       'order-o2': { status: 'ACCEPTED', storeId: 'store-a', orderNumber: '20261022-000001', roundId: 'round-today', deliveryMethod: 'direct', totalAmount: 30000, updatedAt: ts(NOW), ...pii },
       'order-o3': { status: 'PREPARING', storeId: 'store-a', orderNumber: '20261022-000002', roundId: 'round-today', deliveryMethod: 'direct', driverId: null, totalAmount: 30000, updatedAt: ts(NOW), ...pii },
       'order-normal': { status: 'ACCEPTED', storeId: 'store-b', orderNumber: '20261019-000003', roundId: null, requestedDeliveryDate: '2026-10-20', updatedAt: ts(NOW - 2 * DAY), ...pii },
+      'order-m3': { status: 'CLOSED_UNDELIVERED', storeId: 'store-b', orderNumber: '20261020-000021', roundId: 'round-old', deliveryMethod: 'direct', totalAmount: 28000, updatedAt: ts(NOW - 2 * DAY), customerFaultClosure: { reasonCode: 'RECEIPT_REFUSED', closedAt: new Date(NOW - 2 * DAY).toISOString(), memo: PII_MARKERS[4], actorId: 'user-secret-id' }, ...pii },
+      'order-m3-ok': { status: 'CLOSED_UNDELIVERED', storeId: 'store-a', orderNumber: '20261020-000022', roundId: 'round-old', deliveryMethod: 'direct', totalAmount: 15000, updatedAt: ts(NOW - 2 * DAY), customerFaultClosure: { reasonCode: 'RECEIPT_REFUSED', closedAt: new Date(NOW - 2 * DAY).toISOString(), memo: PII_MARKERS[4] }, ...pii },
       'order-o4': { status: 'DELIVERY_HELD', storeId: 'store-b', orderNumber: '20261019-000004', roundId: null, deliveryHold: { heldAt: new Date(NOW - 2 * DAY).toISOString(), resolvedAt: null, reasonCode: 'ABSENT', reasonMessage: PII_MARKERS[4] }, updatedAt: ts(NOW - 2 * DAY), ...pii },
     },
     payments: {
@@ -485,6 +490,7 @@ describe('수집기(가짜 Firestore)', () => {
       S0: '🟢',
       M1: '🔴',
       M2: '🟡',
+      M3: '🔴',
       O1: '🔴',
       O2: '🟡',
       O3: '🟡',
@@ -497,6 +503,8 @@ describe('수집기(가짜 Firestore)', () => {
     });
     const o1 = report.items.find((item) => item.id === 'O1');
     assert.deepEqual(o1.entries.map((e) => e.orderNumber).sort(), ['20261019-000003', '20261021-000015']);
+    const m3 = report.items.find((item) => item.id === 'M3');
+    assert.deepEqual(m3.entries.map((e) => [e.orderNumber, e.storeName, e.amount]), [['20261020-000021', '난플렉스', 28000]]);
     assert.equal(report.overall, '🔴');
     // stdout JSON과 저장 파일이 같은 보고다.
     assert.deepEqual(JSON.parse(lines.join('\n')), report);
@@ -519,6 +527,7 @@ describe('수집기(가짜 Firestore)', () => {
     // store-b의 회차 지연·희망일 지남·배송 보류 주문이 빠진다. store-a 기록은 그대로다.
     assert.equal(item('O1').level, '🟢');
     assert.equal(item('O4').level, '🟢');
+    assert.equal(item('M3').level, '🟢');
     assert.equal(item('M1').level, '🔴');
     assert.equal(item('S3').level, '🔴');
     assert.equal(report.excludedStores, 1);
