@@ -380,6 +380,8 @@ test('D-16. 브라우저 값 읽기: 처음 연 경로를 읽지 못하면 처�
     referrer: '',
     origin: 'https://d.example',
     onLandingPage: true,
+    currentPathname: '/board/o1',
+    previousPathname: undefined,
   });
   const landedOnBoard = readDriverDetailBackContext(
     win({
@@ -401,6 +403,106 @@ test('D-16. 브라우저 값 읽기: 처음 연 경로를 읽지 못하면 처�
   );
   assert.equal(broken.canGoBack, undefined);
   assert.equal(broken.onLandingPage, true);
+});
+
+// 세션이 끝나 다시 로그인한 뒤(callbackUrl 복귀) 상세·사진 화면의 뒤로가기(findings §5.4).
+// 바로 앞 기록이 로그인 화면이면 back은 /login으로 가고, 로그인한 기사라 proxy가 같은 화면으로 다시 보낸다.
+// 로그아웃(signOut)이 남긴 같은 화면 기록으로 가도 같은 화면이 다시 뜰 뿐이다. 둘 다 부모 화면으로 replace한다.
+test('로그인 복귀: 바로 앞 기록이 로그인 화면이거나 같은 화면이면 back 대신 부모 화면으로 보낸다', () => {
+  const base = {
+    canGoBack: true,
+    historyLength: 4,
+    referrer: '',
+    origin: 'https://d.example',
+    onLandingPage: true,
+    currentPathname: '/board/o1',
+  };
+  assert.equal(resolveDriverDetailBackAction({ ...base, previousPathname: '/login' }), 'list');
+  assert.equal(resolveDriverDetailBackAction({ ...base, previousPathname: '/board/o1' }), 'list');
+  // 앱 안에서 정상으로 들어온 경우(목록 → 상세, 상세 → 사진)는 그대로 back이다.
+  assert.equal(resolveDriverDetailBackAction({ ...base, previousPathname: '/board' }), 'back');
+  assert.equal(
+    resolveDriverDetailBackAction({
+      ...base,
+      currentPathname: '/board/o1/photo/round-direct',
+      previousPathname: '/board/o1',
+    }),
+    'back',
+  );
+  // 앞 기록을 읽지 못하면 이전 판정 그대로다.
+  assert.equal(resolveDriverDetailBackAction({ ...base, previousPathname: undefined }), 'back');
+  assert.equal(resolveDriverDetailBackAction({ ...base, canGoBack: false }), 'list');
+});
+
+test('로그인 복귀: Navigation API가 없으면 처음 연 화면의 referrer가 로그인 화면일 때 부모 화면으로 보낸다', () => {
+  const ctx = {
+    historyLength: 3,
+    origin: 'https://d.example',
+    onLandingPage: true,
+    currentPathname: '/board/o1',
+  };
+  assert.equal(
+    resolveDriverDetailBackAction({
+      ...ctx,
+      referrer: 'https://d.example/login?reason=expired&callbackUrl=%2Fboard%2Fo1',
+    }),
+    'list',
+  );
+  assert.equal(
+    resolveDriverDetailBackAction({ ...ctx, referrer: 'https://d.example/board' }),
+    'back',
+  );
+  // 앱 안 이동 뒤에는 referrer가 바뀌지 않으므로 보지 않는다.
+  assert.equal(
+    resolveDriverDetailBackAction({
+      ...ctx,
+      onLandingPage: false,
+      referrer: 'https://d.example/login?callbackUrl=%2Fboard%2Fo1',
+    }),
+    'back',
+  );
+});
+
+test('로그인 복귀: 브라우저 값 읽기는 Navigation API의 바로 앞 기록 경로를 읽는다', () => {
+  const win = (navigation) => ({
+    history: { length: 3 },
+    location: { origin: 'https://d.example', pathname: '/board/o1' },
+    document: { referrer: '' },
+    navigation,
+  });
+  const entries = [
+    { url: 'https://d.example/board' },
+    { url: 'https://d.example/login?reason=expired&callbackUrl=%2Fboard%2Fo1' },
+    { url: 'https://d.example/board/o1' },
+  ];
+  const afterLogin = readDriverDetailBackContext(
+    win({ canGoBack: true, currentEntry: { index: 2 }, entries: () => entries }),
+  );
+  assert.equal(afterLogin.previousPathname, '/login');
+  assert.equal(afterLogin.currentPathname, '/board/o1');
+  assert.equal(resolveDriverDetailBackAction(afterLogin), 'list');
+  const fromBoard = readDriverDetailBackContext(
+    win({ canGoBack: true, currentEntry: { index: 1 }, entries: () => entries }),
+  );
+  assert.equal(fromBoard.previousPathname, '/board');
+  // 첫 기록·깨진 값·entries 없음은 undefined(이전 판정 그대로).
+  for (const navigation of [
+    { canGoBack: false, currentEntry: { index: 0 }, entries: () => entries },
+    { canGoBack: true, currentEntry: null, entries: () => entries },
+    { canGoBack: true, currentEntry: { index: 1 }, entries: () => [{ url: null }, {}] },
+    { canGoBack: true, currentEntry: { index: 1 }, entries: () => [{ url: '::' }, {}] },
+    {
+      canGoBack: true,
+      currentEntry: { index: 1 },
+      entries: () => {
+        throw new Error('blocked');
+      },
+    },
+    { canGoBack: true },
+    undefined,
+  ]) {
+    assert.equal(readDriverDetailBackContext(win(navigation)).previousPathname, undefined);
+  }
 });
 
 test('D-17. 주문 없음 화면은 이유를 해요체로 알린다', () => {

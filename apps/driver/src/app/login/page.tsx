@@ -1,5 +1,6 @@
 import { AuthError, CredentialsSignin } from 'next-auth';
 import Image from 'next/image';
+import { redirect, RedirectType } from 'next/navigation';
 import { signIn } from '@/auth';
 import { AppButton } from '@/components/app-button';
 import { PasswordField, TextField } from '@/components/fields';
@@ -14,7 +15,7 @@ import {
 import { resolveDriverLoginNotice } from './login-notice';
 
 // 로그인 뒤 돌아갈 곳(redirectTo)은 폼이 넘긴 callbackUrl을 다시 검증해 정한다. 허용하지 않으면 /board.
-// 성공·실패 모두 이동할 주소만 돌려주고 폼(LocalCredentialForm)이 전체 페이지로 이동한다
+// 성공·실패 모두 이동할 주소만 돌려주고 폼(LocalCredentialForm)이 로그인 화면 기록을 바꿔치기하며 전체 페이지로 이동한다
 // (서버 액션 안의 redirect는 클라이언트 이동이라 SessionProvider가 새 세션을 읽지 않는다).
 async function localCredentialSignIn(formData: FormData): Promise<LocalCredentialSignInResult> {
   'use server';
@@ -43,9 +44,16 @@ async function localCredentialSignIn(formData: FormData): Promise<LocalCredentia
   return { redirectTo: returnPath };
 }
 
+// 카카오 인증 화면으로는 로그인 화면 기록을 바꿔치기(replace)해 간다. 서버 액션 redirect의 기본값(push)이면
+// /login 기록이 남아, 로그인 뒤 돌아온 화면에서 뒤로가기가 /login으로 가고 로그인한 기사라 proxy가 같은
+// 화면으로 다시 보내 제자리를 맴돈다. signIn은 redirect: false면 인증 주소만 돌려주고 state·PKCE 쿠키는 그대로 싣는다.
 async function kakaoSignIn(formData: FormData) {
   'use server';
-  await signIn('kakao', { redirectTo: resolveDriverReturnPath(formData.get('callbackUrl')) });
+  const authorizeUrl = await signIn('kakao', {
+    redirectTo: resolveDriverReturnPath(formData.get('callbackUrl')),
+    redirect: false,
+  });
+  redirect(authorizeUrl, RedirectType.replace);
 }
 
 type SearchParamValue = string | string[] | undefined;

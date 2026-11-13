@@ -166,9 +166,21 @@ test('로그인 화면은 callbackUrl을 검증해 카카오·로컬 로그인 �
   );
   assert.match(
     loginSource,
-    /signIn\('kakao', \{ redirectTo: resolveDriverReturnPath\(formData\.get\('callbackUrl'\)\) \}\)/,
+    /signIn\('kakao', \{\s*redirectTo: resolveDriverReturnPath\(formData\.get\('callbackUrl'\)\),\s*redirect: false,\s*\}\)/,
   );
   assert.doesNotMatch(loginSource, /redirectTo: '\/board'/);
+});
+
+// findings §5.4: 세션이 끝나 다시 로그인한 뒤 /login 기록이 남으면, 복귀한 화면에서 (하드웨어) 뒤로가기가
+// /login으로 가고 로그인한 기사라 proxy가 같은 화면으로 다시 보낸다. 카카오 인증 화면으로 갈 때 로그인 화면
+// 기록을 바꿔치기(replace)해 남기지 않는다(서버 액션 redirect의 기본값은 push).
+test('카카오 로그인은 로그인 화면 기록을 남기지 않고(replace) 카카오 인증 화면으로 간다', () => {
+  assert.match(loginSource, /import \{ redirect, RedirectType \} from 'next\/navigation';/);
+  const start = loginSource.indexOf('async function kakaoSignIn(');
+  assert.ok(start !== -1, 'kakaoSignIn 서버 액션이 있어야 한다');
+  const action = loginSource.slice(start, loginSource.indexOf('\n}\n', start));
+  assert.match(action, /const authorizeUrl = await signIn\('kakao', \{/);
+  assert.match(action, /redirect\(authorizeUrl, RedirectType\.replace\);/);
 });
 
 test('Auth.js 오류는 로그인 화면으로 오고 로그인 화면이 error를 읽는다', () => {

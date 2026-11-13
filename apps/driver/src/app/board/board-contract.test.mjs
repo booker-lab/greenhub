@@ -112,6 +112,25 @@ test('Driver Card는 결제 대기·완료·운영 확인 상태를 표시한다
   assert.match(paymentSource, /운영 확인 필요/);
 });
 
+// findings §5.4: 운영 확인 필요(requiresRecovery) 결제 상태의 운영팀 전화 버튼. fixture에 없는 상태라 화면 대신 소스로 잇는다.
+test('운영 확인 필요 결제 상태면 상세가 운영팀 tel 링크 버튼을 둔다', () => {
+  assert.match(detailSource, /import \{ DRIVER_OPS_CONTACT \} from '@\/lib\/ops-contact';/);
+  const blockAt = detailSource.indexOf('{paymentPresentation.needsOps && (');
+  assert.ok(blockAt !== -1, '운영팀 전화 링크는 needsOps로만 보여야 한다');
+  const block = detailSource.slice(blockAt, detailSource.indexOf('</a>', blockAt));
+  assert.match(block, /<a\s+href=\{DRIVER_OPS_CONTACT\.phoneHref\}/);
+  assert.match(block, /\{DRIVER_OPS_CONTACT\.label\}에 전화/);
+  // 링크는 결제 상태 안내 블록(paymentPresentation) 안에만 있다.
+  const cardAt = detailSource.indexOf('{paymentPresentation && (');
+  assert.ok(cardAt !== -1 && cardAt < blockAt);
+  assert.equal(detailSource.match(/DRIVER_OPS_CONTACT\.phoneHref/g)?.length, 1);
+  // 표시 판정: needsOps는 운영 확인 필요에서만 true다.
+  assert.match(
+    paymentSource,
+    /payment\.requiresRecovery \|\| RECOVERY_STATES\.includes\(payment\.status\)/,
+  );
+});
+
 test('Driver 배송 시작 판정은 required·paid·requiresRecovery만 사용하고 canPay를 사용하지 않는다', () => {
   // canPay는 표시 문구(재배송비 결제 전, D-03)에만 쓰고 버튼 잠금 판정에는 쓰지 않는다.
   const gateAt = paymentSource.indexOf('export function isDeliveryStartAllowed');

@@ -445,6 +445,8 @@ export function driverDetailListHref(status: string | null | undefined): string 
  * - historyLength: `history.length`(같은 탭에서 앞서 본 다른 사이트도 센다).
  * - referrer·origin: 처음 연 문서가 같은 출처에서 왔는지.
  * - onLandingPage: 이 문서를 처음 연 경로에 아직 머물러 있는지(앱 안 이동을 아직 하지 않았는지).
+ * - currentPathname: 지금 화면 경로.
+ * - previousPathname: Navigation API로 읽은 바로 앞 기록 경로. 지원하지 않거나 읽지 못하면 undefined.
  */
 export interface DriverDetailBackContext {
   canGoBack?: boolean;
@@ -452,6 +454,20 @@ export interface DriverDetailBackContext {
   referrer: string;
   origin: string;
   onLandingPage: boolean;
+  currentPathname?: string;
+  previousPathname?: string;
+}
+
+// 로그인 화면 경로(`lib/login-redirect.ts`의 DRIVER_LOGIN_PATH와 같은 값). 이 파일은 node:test가 직접
+// 불러오므로 '@/' 별칭을 쓰지 않고 값을 둔다.
+const DRIVER_LOGIN_PATHNAME = '/login';
+
+function pathnameOf(url: string): string | null {
+  try {
+    return new URL(url).pathname;
+  } catch {
+    return null;
+  }
 }
 
 function isSameOriginReferrer(referrer: string, origin: string): boolean {
@@ -474,13 +490,30 @@ function isSameOriginReferrer(referrer: string, origin: string): boolean {
  * - referrer는 Referrer-Policy·홈 화면 바로가기 실행에서 비어 있을 수 있다. 처음 연 화면에서 비어 있으면 list로 보낸다.
  * - 앱 안에서 다른 화면을 들렀다가 처음 연 상세 경로로 돌아오면(예: 상세 → 사진 → 뒤로) 처음 연 화면으로 보고
  *   referrer로 판정한다. 이때 list로 가도 앱 안에 머문다.
+ *
+ * 세션이 끝나 다시 로그인한 뒤(callbackUrl 복귀) 바로 앞 기록이 로그인 화면이면 back은 /login으로 가고,
+ * 로그인한 기사라 proxy가 같은 화면으로 다시 보내 제자리를 맴돈다. 세션 종료 로그아웃이 남긴 같은 화면 기록으로
+ * 가도 같은 화면이 다시 뜰 뿐이다. 두 경우 모두 list(부모 화면 replace)로 보낸다. Navigation API가 없으면
+ * 처음 연 화면의 referrer가 로그인 화면일 때만 알아챈다(카카오 로그인은 다른 출처를 거쳐 referrer에 경로가 남지
+ * 않을 수 있다).
  */
 export function resolveDriverDetailBackAction(context: DriverDetailBackContext): 'back' | 'list' {
-  if (typeof context.canGoBack === 'boolean') return context.canGoBack ? 'back' : 'list';
+  if (typeof context.canGoBack === 'boolean') {
+    if (!context.canGoBack) return 'list';
+    const previous = context.previousPathname;
+    if (
+      previous !== undefined &&
+      (previous === DRIVER_LOGIN_PATHNAME || previous === context.currentPathname)
+    ) {
+      return 'list';
+    }
+    return 'back';
+  }
   if (context.historyLength <= 1) return 'list';
   // document.referrer는 앱 안 이동으로 바뀌지 않으므로 처음 연 화면일 때만 본다.
-  if (context.onLandingPage && !isSameOriginReferrer(context.referrer, context.origin)) {
-    return 'list';
+  if (context.onLandingPage) {
+    if (!isSameOriginReferrer(context.referrer, context.origin)) return 'list';
+    if (pathnameOf(context.referrer) === DRIVER_LOGIN_PATHNAME) return 'list';
   }
   return 'back';
 }
@@ -489,9 +522,28 @@ type DriverDetailBackBrowser = {
   history: { length: number };
   location: { origin: string; pathname: string };
   document: { referrer: string };
-  navigation?: { canGoBack?: unknown };
+  navigation?: {
+    canGoBack?: unknown;
+    currentEntry?: { index?: unknown } | null;
+    entries?: () => ArrayLike<{ url?: unknown }>;
+  };
   performance?: { getEntriesByType?: (type: string) => ArrayLike<{ name: string }> };
 };
+
+/** Navigation API로 바로 앞 기록의 경로를 읽는다(같은 출처 기록만 보인다). 읽지 못하면 undefined. */
+function readPreviousPathname(
+  navigation: DriverDetailBackBrowser['navigation'],
+): string | undefined {
+  try {
+    const index = navigation?.currentEntry?.index;
+    if (typeof index !== 'number' || index < 1) return undefined;
+    const url = navigation?.entries?.()[index - 1]?.url;
+    if (typeof url !== 'string') return undefined;
+    return pathnameOf(url) ?? undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 /** 브라우저 값을 읽어 판정 입력을 만든다. 처음 연 경로를 읽지 못하면 처음 연 화면으로 본다(앱 밖으로 나가지 않는 쪽). */
 export function readDriverDetailBackContext(win: DriverDetailBackBrowser): DriverDetailBackContext {
@@ -509,6 +561,8 @@ export function readDriverDetailBackContext(win: DriverDetailBackBrowser): Drive
     referrer: win.document.referrer,
     origin: win.location.origin,
     onLandingPage,
+    currentPathname: win.location.pathname,
+    previousPathname: readPreviousPathname(win.navigation),
   };
 }
 
