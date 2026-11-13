@@ -273,7 +273,8 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
   const canPrepare = actions.prepare;
   const canCancel = actions.cancel;
   const canShipParcel = actions.shipParcel;
-  const isHeld = actions.releaseHold;
+  // 상품 파손 보류는 재배송 준비 버튼이 없어도 보류 주문이다(취소 버튼 문구·확인 창 제목에 쓴다).
+  const isHeld = order.status === 'DELIVERY_HELD';
   const showFooter =
     !isReadonly &&
     !showPrepareForm &&
