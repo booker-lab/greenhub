@@ -26,6 +26,19 @@ type OrderRecord = Record<string, unknown>;
 const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 /**
+ * 촬영 때 기사 앱이 본 주문 보류 표시(deliveryHold.heldAt). 'none'은 그때 보류 이력이 없었다는 뜻이다.
+ * 값은 서버가 쓴 ISO 시각을 그대로 돌려받으므로 형식만 좁게 본다.
+ */
+export const DELIVERY_PHOTO_NO_HOLD = 'none';
+const EXPECTED_HOLD_AT_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/;
+
+/**
+ * 촬영 뒤 새 보류가 생겼다(보류 → 다시 배송 중). 예전 사진으로 재배송을 완료하지 않는다.
+ * 기존 기사 오류 코드(DRIVER_ORDER_*)와 구분되는 이 경로 전용 코드다.
+ */
+export const DELIVERY_PHOTO_STALE_HOLD = 'DELIVERY_PHOTO_STALE_HOLD';
+
+/**
  * 같은 키·같은 사진 재전송을 이미 끝난 완료로 받아 줄 주문 상태.
  * 기사 앱은 응답을 잃은 사진을 기기에 두었다가 나중에 다시 보내므로(사진 업로드 대기열),
  * 그 사이 손님이 후기를 남겨 REVIEWED가 됐어도 같은 사진이 이미 연결돼 있으면 완료로 수렴한다.
@@ -34,6 +47,9 @@ const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 const COMPLETED_RETRY_STATUSES: readonly unknown[] = ['DELIVERED', 'REVIEWED'];
 
 type CompletedRetryStatus = 'DELIVERED' | 'REVIEWED';
+
+/** undefined: 확인하지 않음, null: 촬영 때 보류 이력 없음, 문자열: 그때 본 heldAt. */
+type ExpectedHoldAt = string | null | undefined;
 
 function isCompletedRetryStatus(status: unknown): status is CompletedRetryStatus {
   return COMPLETED_RETRY_STATUSES.includes(status);
@@ -47,6 +63,11 @@ interface UploadDeliveryPhotoInput {
   idempotencyKey: string;
   content: Buffer;
   contentType: string;
+  /**
+   * 촬영 때 본 보류 표시. 없으면(이전 앱) 확인하지 않는다. null은 그때 보류 이력이 없었다는 뜻이다.
+   * 문자열 그대로(검사 전 값)를 받아 서비스가 형식을 판정한다.
+   */
+  expectedHoldAt?: unknown;
 }
 
 interface ReadDeliveryPhotoInput {
@@ -78,6 +99,7 @@ export class DeliveryPhotosService {
     this.assertSafeId(input.storeId, 'storeId');
     this.assertSafeId(input.orderId, 'orderId');
     this.assertIdempotencyKey(input.idempotencyKey);
+    const expectedHoldAt = this.parseExpectedHoldAt(input.expectedHoldAt);
     if (input.contentType !== 'image/jpeg') {
       throw new BadRequestException('JPEG 배송 사진만 업로드할 수 있습니다.');
     }
@@ -87,7 +109,7 @@ export class DeliveryPhotosService {
     const content = stripJpegMetadata(input.content);
     const contentSha256 = createHash('sha256').update(content).digest('hex');
     const order = await this.readOrder(input);
-    await this.assertPreUploadEligibility(order, input, photoId);
+    await this.assertPreUploadEligibility(order, input, photoId, expectedHoldAt);
 
     let uploaded: { orderId: string; photoId: string; path: string; created: boolean };
     try {
@@ -112,6 +134,7 @@ export class DeliveryPhotosService {
         ...input,
         photoId,
         storagePath: uploaded.path,
+        expectedHoldAt,
       });
     } catch (error) {
       if (uploaded.created) {
@@ -174,6 +197,7 @@ export class DeliveryPhotosService {
     input: UploadDeliveryPhotoInput & {
       photoId: string;
       storagePath: string;
+      expectedHoldAt: ExpectedHoldAt;
     },
   ): Promise<CompletedRetryStatus | null> {
     let alreadyCompleted: CompletedRetryStatus | null = null;
@@ -218,6 +242,8 @@ export class DeliveryPhotosService {
         expectedStatus: 'DELIVERING',
         nextStatus: 'DELIVERED',
       });
+      // 사진을 연결하거나(처음) 연결된 사진으로 완료하기(전이만 빠졌던 재전송) 전에 본다.
+      this.assertHoldUnchangedSinceCapture(order, input.expectedHoldAt);
 
       if (photoIds.includes(input.photoId)) return;
       if (photoIds.length > 0) {
@@ -245,6 +271,7 @@ export class DeliveryPhotosService {
     order: OrderRecord,
     input: UploadDeliveryPhotoInput,
     photoId: string,
+    expectedHoldAt: ExpectedHoldAt,
   ): Promise<void> {
     const photoIds = this.readPhotoIds(order['deliveryPhotoIds']);
     const isAttachedRetry = photoIds.includes(photoId) && isCompletedRetryStatus(order['status']);
@@ -274,6 +301,9 @@ export class DeliveryPhotosService {
       expectedStatus: 'DELIVERING',
       nextStatus: 'DELIVERED',
     });
+    // Storage 객체를 쓰기 전에 거절한다. 그 사이 보류가 생기면 연결 트랜잭션이 다시 거절하고
+    // 이번 요청이 만든 객체를 지운다(attach 실패 보상 경로).
+    this.assertHoldUnchangedSinceCapture(order, expectedHoldAt);
 
     if (photoIds.length > 0 && !photoIds.includes(photoId)) {
       throwDriverOrderStateConflict('배송 사진이 이미 연결되어 있습니다.', true);
@@ -455,6 +485,34 @@ export class DeliveryPhotosService {
 
   private createPhotoId(orderId: string, idempotencyKey: string): string {
     return createHash('sha256').update(`${orderId}:${idempotencyKey}`).digest('hex').slice(0, 32);
+  }
+
+  /** undefined: 확인하지 않는다(이전 앱). null: 촬영 때 보류 이력이 없었다. */
+  private parseExpectedHoldAt(value: unknown): ExpectedHoldAt {
+    if (value === undefined) return undefined;
+    if (value === DELIVERY_PHOTO_NO_HOLD) return null;
+    if (typeof value === 'string' && value.length <= 40 && EXPECTED_HOLD_AT_PATTERN.test(value)) {
+      return value;
+    }
+    throw new BadRequestException('촬영 때 보류 표시 형식이 올바르지 않습니다.');
+  }
+
+  /**
+   * 촬영 뒤 새 보류가 생겼으면(heldAt이 달라졌으면) 거절한다. 보류는 매번 새 heldAt을 쓰고 재개 뒤에도
+   * 남으므로, 시각 비교 없이 같은 값인지만 본다(기기 시계와 무관하다).
+   * 이미 같은 사진으로 완료된 주문(DELIVERED·REVIEWED ACK)은 이 판정 전에 끝난다.
+   */
+  private assertHoldUnchangedSinceCapture(order: OrderRecord, expected: ExpectedHoldAt): void {
+    if (expected === undefined) return;
+    const heldAt = (order['deliveryHold'] as OrderRecord | null | undefined)?.['heldAt'];
+    const current = typeof heldAt === 'string' && heldAt.trim().length > 0 ? heldAt : null;
+    if (current === expected) return;
+    throw new ConflictException({
+      statusCode: 409,
+      message: '사진을 찍은 뒤 배송 보류가 있었습니다. 다시 배송할 때 찍은 사진만 쓸 수 있습니다.',
+      error: 'Conflict',
+      code: DELIVERY_PHOTO_STALE_HOLD,
+    });
   }
 
   private assertIdempotencyKey(value: string) {

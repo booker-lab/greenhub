@@ -710,6 +710,35 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     );
   });
 
+  it('상세에 가장 최근 보류 표시(heldAt)만 deliveryHoldAt으로 싣고, 재개 뒤 배송 중에도 남긴다', async () => {
+    const { service } = makeService({
+      'orders/resumed': {
+        status: 'DELIVERING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+        deliveryHold: {
+          heldAt: '2026-08-26T00:00:00.000Z',
+          reasonCode: 'ACCESS_UNAVAILABLE',
+          reasonMessage: '출입 불가',
+          resolvedAt: '2026-08-26T01:00:00.000Z',
+        },
+      },
+      'orders/fresh': {
+        status: 'DELIVERING',
+        deliveryMethod: 'direct',
+        driverId: 'driver-1',
+      },
+    });
+
+    const resumed = await service.getOrder('driver-1', 'resumed');
+    expect(resumed.deliveryHoldAt).toBe('2026-08-26T00:00:00.000Z');
+    // 배송 중 주문에는 보류 사유 등 다른 보류 필드를 싣지 않는다.
+    expect(resumed).not.toHaveProperty('deliveryHold');
+    await expect(service.getOrder('driver-1', 'fresh')).resolves.toMatchObject({
+      deliveryHoldAt: null,
+    });
+  });
+
   it('상세도 목록과 동일한 visibility contract를 적용하고 arbitrary read를 거부한다', async () => {
     const { service } = makeService({
       'orders/unassigned-direct': {

@@ -92,6 +92,11 @@ export function projectDriverOrder(
     projected['requestNote'] = order['requestNote'];
   }
 
+  // 가장 최근 보류의 표시(heldAt)만 싣는다(사유·연락처 등은 싣지 않는다). 기사 앱이 배송 사진을 찍을 때
+  // 이 값을 함께 보내, 촬영 뒤 새 보류가 생긴 재배송을 예전 사진으로 완료하지 않게 한다(delivery-photos).
+  // 보류는 재개 뒤에도 문서에 남으므로 배송 중 주문에도 싣는다. 보류 이력이 없으면 null이다.
+  projected['deliveryHoldAt'] = projectDeliveryHoldAt(order['deliveryHold']);
+
   if (order['status'] === 'DELIVERY_HELD') {
     const deliveryHold = projectDeliveryHold(order['deliveryHold']);
     if (deliveryHold) projected['deliveryHold'] = deliveryHold;
@@ -172,6 +177,11 @@ function projectDeliveryAddress(value: unknown): Record<string, unknown> | undef
 
 function deliveryAddressValue(value: unknown): unknown {
   return isRecord(value) ? value['address'] : undefined;
+}
+
+function projectDeliveryHoldAt(value: unknown): string | null {
+  if (!isRecord(value)) return null;
+  return nonEmptyTrimmed(value['heldAt']) === undefined ? null : (value['heldAt'] as string);
 }
 
 function projectDeliveryHold(value: unknown): Record<string, unknown> | undefined {

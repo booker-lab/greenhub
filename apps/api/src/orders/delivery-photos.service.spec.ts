@@ -104,6 +104,9 @@ function makeService(initialOrder: Data) {
   return {
     firestore,
     getOrder: () => order,
+    patchOrder: (changes: Data) => {
+      order = { ...order, ...changes };
+    },
     lifecycle,
     driverScope,
     issueWriter,
@@ -560,4 +563,157 @@ describe('회차 직배송 사진 API 서비스 계약', () => {
       expiresAt: '2026-07-18T03:15:00.000Z',
     });
   });
+});
+
+describe('촬영 뒤 새 보류가 생긴 재배송의 예전 사진(expectedHoldAt)', () => {
+  const HELD_BEFORE = '2026-07-17T01:00:00.000Z';
+  const HELD_AFTER = '2026-07-18T02:00:00.000Z';
+  const ROUND_ORDER = {
+    id: 'order-safe',
+    storeId: 'store-safe',
+    userId: 'consumer-safe',
+    driverId: 'driver-safe',
+    schemaVersion: 2,
+    roundId: 'round-safe',
+    deliveryMethod: 'direct',
+    status: 'DELIVERING',
+    deliveryPhotoIds: [],
+  };
+
+  async function expectStaleHold(promise: Promise<unknown>) {
+    const error = await promise.then(
+      () => null,
+      (cause: unknown) => cause,
+    );
+    expect(error).toBeInstanceOf(ConflictException);
+    expect((error as ConflictException).getResponse()).toEqual(
+      expect.objectContaining({ statusCode: 409, code: 'DELIVERY_PHOTO_STALE_HOLD' }),
+    );
+  }
+
+  it('보류 없이 찍은 사진(none)은 그 뒤 보류·재개된 주문을 Storage 저장 전에 409로 거절하고 완료하지 않는다', async () => {
+    const context = makeService({
+      ...ROUND_ORDER,
+      deliveryHold: { heldAt: HELD_AFTER, resolvedAt: '2026-07-18T02:30:00.000Z' },
+    });
+
+    await expectStaleHold(
+      context.service.uploadAndComplete(uploadInput({ expectedHoldAt: 'none' })),
+    );
+
+    expect(context.storage.uploadDeliveryPhoto).not.toHaveBeenCalled();
+    expect(context.transaction.update).not.toHaveBeenCalled();
+    expect(context.retention.saveRecord).not.toHaveBeenCalled();
+    expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
+    expect(context.getOrder().deliveryPhotoIds).toEqual([]);
+  });
+
+  it('이전 보류를 보고 찍은 사진도 그 뒤 새 보류가 있었으면 거절한다', async () => {
+    const context = makeService({
+      ...ROUND_ORDER,
+      deliveryHold: { heldAt: HELD_AFTER, resolvedAt: '2026-07-18T02:30:00.000Z' },
+    });
+
+    await expectStaleHold(
+      context.service.uploadAndComplete(uploadInput({ expectedHoldAt: HELD_BEFORE })),
+    );
+    expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('저장 뒤 연결 전에 새 보류가 생기면 트랜잭션이 거절하고 이번 요청이 만든 객체를 지운다', async () => {
+    const context = makeService(ROUND_ORDER);
+    const upload = context.storage.uploadDeliveryPhoto.getMockImplementation();
+    context.storage.uploadDeliveryPhoto.mockImplementationOnce(async (input: Data) => {
+      const result = await upload?.(input);
+      // 저장과 연결 사이에 보류 → 재개가 끝났다.
+      context.patchOrder({ deliveryHold: { heldAt: HELD_AFTER, resolvedAt: HELD_AFTER } });
+      return result;
+    });
+
+    await expectStaleHold(
+      context.service.uploadAndComplete(uploadInput({ expectedHoldAt: 'none' })),
+    );
+
+    const path = context.storage.uploadDeliveryPhoto.mock.calls[0][0];
+    expect(context.storage.deleteObject).toHaveBeenCalledWith(
+      `deliveryPhotos/order-safe/${path.photoId}.jpg`,
+    );
+    expect(context.transaction.update).not.toHaveBeenCalled();
+    expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
+    expect(context.getOrder().deliveryPhotoIds).toEqual([]);
+  });
+
+  it('사진은 연결됐지만 완료 전이만 빠진 채 보류·재개된 주문도 예전 사진으로 완료하지 않는다', async () => {
+    const context = makeService(ROUND_ORDER);
+    const photoId = createHash('sha256').update('order-safe:request-safe').digest('hex').slice(0, 32);
+    context.patchOrder({
+      deliveryPhotoIds: [photoId],
+      deliveryHold: { heldAt: HELD_AFTER, resolvedAt: HELD_AFTER },
+    });
+
+    await expectStaleHold(
+      context.service.uploadAndComplete(uploadInput({ expectedHoldAt: 'none' })),
+    );
+    expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('촬영 때 본 보류 표시와 같으면(보류 없음·같은 보류) 그대로 완료한다', async () => {
+    const none = makeService(ROUND_ORDER);
+    await expect(
+      none.service.uploadAndComplete(uploadInput({ expectedHoldAt: 'none' })),
+    ).resolves.toEqual(expect.objectContaining({ status: 'DELIVERED' }));
+    expect(none.lifecycle.updateStatus).toHaveBeenCalledTimes(1);
+
+    const same = makeService({
+      ...ROUND_ORDER,
+      deliveryHold: { heldAt: HELD_BEFORE, resolvedAt: HELD_AFTER },
+    });
+    await expect(
+      same.service.uploadAndComplete(uploadInput({ expectedHoldAt: HELD_BEFORE })),
+    ).resolves.toEqual(expect.objectContaining({ status: 'DELIVERED' }));
+    expect(same.lifecycle.updateStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['DELIVERED', 'REVIEWED'])(
+    '같은 사진으로 이미 %s인 주문의 재전송은 보류 표시가 달라도 ACK한다',
+    async (status) => {
+      const photoId = createHash('sha256')
+        .update('order-safe:request-safe')
+        .digest('hex')
+        .slice(0, 32);
+      const context = makeService({
+        ...ROUND_ORDER,
+        status,
+        deliveryPhotoIds: [photoId],
+        deliveryHold: { heldAt: HELD_AFTER, resolvedAt: HELD_AFTER },
+      });
+
+      await expect(
+        context.service.uploadAndComplete(uploadInput({ expectedHoldAt: 'none' })),
+      ).resolves.toEqual({ orderId: 'order-safe', photoId, status: 'DELIVERED' });
+      expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
+    },
+  );
+
+  it('보류 표시를 보내지 않은 이전 앱 요청은 확인하지 않는다', async () => {
+    const context = makeService({
+      ...ROUND_ORDER,
+      deliveryHold: { heldAt: HELD_AFTER, resolvedAt: HELD_AFTER },
+    });
+
+    await expect(context.service.uploadAndComplete(uploadInput())).resolves.toEqual(
+      expect.objectContaining({ status: 'DELIVERED' }),
+    );
+  });
+
+  it.each(['', 'yesterday', '2026-07-18', 'x'.repeat(41)])(
+    '형식이 맞지 않는 보류 표시(%s)는 400이고 저장하지 않는다',
+    async (expectedHoldAt) => {
+      const context = makeService(ROUND_ORDER);
+      await expect(
+        context.service.uploadAndComplete(uploadInput({ expectedHoldAt })),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(context.storage.uploadDeliveryPhoto).not.toHaveBeenCalled();
+    },
+  );
 });
