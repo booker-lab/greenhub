@@ -1,4 +1,5 @@
 import type { GiftInfo, SelectedProductOption } from './benchmark.types.js'
+import type { CustomerFaultClosureRecord } from './customer-fault-closure.js'
 import type { PostDeliveryRefundRecord } from './post-delivery-refund.js'
 import type { ClientOrderRequestId } from './sale-round.types.js'
 
@@ -15,6 +16,12 @@ export type OrderStatus =
   | 'DELIVERED'
   | 'CANCELLED'
   | 'REVIEWED'
+  /**
+   * 고객 사유 종결(환불 없음). 고객 책임 보류에서 수령 거부·재배송비 미결제로 판매자가 종결한
+   * 회차 직배송 주문이다. 결제 금액은 정산되고 상품은 판매자가 처리한다. 취소(CANCELLED=환불)와
+   * 다르며 이 상태에서 다른 상태로 가는 전이는 없다(apps/api/src/orders/customer-fault-closure.service.ts).
+   */
+  | 'CLOSED_UNDELIVERED'
 
 export type DeliveryMethod = 'direct' | 'hub' | 'parcel'
 
@@ -155,6 +162,7 @@ export interface Order {
   gift?: GiftInfo | null
   packageLabel?: string | null       // 포장 겉면 라벨 문구 — 회차 주문만, 선물이면 보내는 분 이름, 없으면 키가 없다
   postDeliveryRefund?: PostDeliveryRefundRecord | null // 배송 후 환불 기록 — 환불한 주문만 존재
+  customerFaultClosure?: CustomerFaultClosureRecord | null // 고객 사유 종결 기록 — 종결한 주문만 존재
   createdAt: string // ISO8601
   updatedAt: string // ISO8601
   // Denormalized fields — 드라이버 앱 실시간 표시용

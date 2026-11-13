@@ -1,0 +1,37 @@
+/** 종결 사유. 수령 거부는 바로, 그 밖의 고객 책임 보류는 재배송비 결제 기한이 지나야 종결할 수 있다. */
+export type CustomerFaultClosureReasonCode = 'RECEIPT_REFUSED' | 'REDELIVERY_FEE_UNPAID';
+export type CustomerFaultClosureActorRole = 'seller' | 'admin';
+/** 판매자가 손님과 연락한 내용을 남기는 메모의 최대 글자 수. 손님에게는 보내지 않는다. */
+export declare const CUSTOMER_FAULT_CLOSURE_MEMO_MAX_LENGTH = 200;
+/** 재배송비를 결제할 수 있는 날 수. 보류한 날은 세지 않는다(보류일 + 3일째 되는 날 끝까지). */
+export declare const REDELIVERY_FEE_PAYMENT_DAYS = 3;
+/** 주문 문서의 customerFaultClosure 칸. 종결한 주문에만 있다. */
+export interface CustomerFaultClosureRecord {
+    reasonCode: CustomerFaultClosureReasonCode;
+    /** 종결한 보류의 heldAt(ISO8601) */
+    heldAt: string;
+    /** 그 보류의 재배송비(원). 결제되지 않았으므로 받은 돈이 아니다. */
+    redeliveryFee: number | null;
+    actorRole: CustomerFaultClosureActorRole;
+    actorId: string;
+    /** 판매자가 손님과 연락한 기록(내부용) */
+    memo: string;
+    closedAt: string;
+}
+/** 고객 사유 종결을 검토할 수 있는 보류 사유인지. 알 수 없는 값은 false다. */
+export declare function isCustomerFaultClosableHoldReason(reasonCode: unknown): boolean;
+/** 보류 사유로 정한 종결 사유. 수령 거부만 따로 두고 나머지는 재배송비 미결제다. */
+export declare function customerFaultClosureReasonFor(holdReasonCode: unknown): CustomerFaultClosureReasonCode;
+/**
+ * 재배송비 결제 마지막 날(서울 날짜 YYYY-MM-DD). 보류한 날은 세지 않으므로 보류일 + 3일이다.
+ * 이 날 끝(23:59:59)까지 결제할 수 있다. heldAt이 잘못되면 null(fail closed).
+ */
+export declare function redeliveryFeePaymentDeadlineDateKST(heldAt: unknown): string | null;
+/**
+ * 재배송비 미결제로 종결할 수 있게 되는 시각(UTC ms): 보류일 + 4일의 서울 00:00.
+ * heldAt이 잘못되면 null(fail closed — 종결할 수 없다).
+ */
+export declare function customerFaultClosureEligibleAtMs(heldAt: unknown): number | null;
+/** 서울 날짜 YYYY-MM-DD 또는 시각(ms)을 "11월 17일"처럼 쓴다. 잘못된 값이면 null. */
+export declare function formatKoreanMonthDayKST(value: string | number | null | undefined): string | null;
+//# sourceMappingURL=customer-fault-closure.d.ts.map

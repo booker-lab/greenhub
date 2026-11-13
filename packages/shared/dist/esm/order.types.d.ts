@@ -1,7 +1,14 @@
 import type { GiftInfo, SelectedProductOption } from './benchmark.types.js';
+import type { CustomerFaultClosureRecord } from './customer-fault-closure.js';
 import type { PostDeliveryRefundRecord } from './post-delivery-refund.js';
 import type { ClientOrderRequestId } from './sale-round.types.js';
-export type OrderStatus = 'PENDING' | 'RECRUITING' | 'CONFIRMED' | 'ACCEPTED' | 'PREPARING' | 'DELIVERING' | 'DELIVERY_HELD' | 'HUB_ARRIVED' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED' | 'REVIEWED';
+export type OrderStatus = 'PENDING' | 'RECRUITING' | 'CONFIRMED' | 'ACCEPTED' | 'PREPARING' | 'DELIVERING' | 'DELIVERY_HELD' | 'HUB_ARRIVED' | 'PICKED_UP' | 'DELIVERED' | 'CANCELLED' | 'REVIEWED'
+/**
+ * 고객 사유 종결(환불 없음). 고객 책임 보류에서 수령 거부·재배송비 미결제로 판매자가 종결한
+ * 회차 직배송 주문이다. 결제 금액은 정산되고 상품은 판매자가 처리한다. 취소(CANCELLED=환불)와
+ * 다르며 이 상태에서 다른 상태로 가는 전이는 없다(apps/api/src/orders/customer-fault-closure.service.ts).
+ */
+ | 'CLOSED_UNDELIVERED';
 export type DeliveryMethod = 'direct' | 'hub' | 'parcel';
 export type SaleType = 'normal' | 'group';
 /** 주문 요청사항(받는 분·토퍼 문구·배송 요청 등 자유 입력) 최대 글자 수 */
@@ -106,6 +113,7 @@ export interface Order {
     gift?: GiftInfo | null;
     packageLabel?: string | null;
     postDeliveryRefund?: PostDeliveryRefundRecord | null;
+    customerFaultClosure?: CustomerFaultClosureRecord | null;
     createdAt: string;
     updatedAt: string;
     productName?: string;
