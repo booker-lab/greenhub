@@ -26,7 +26,7 @@
   schedule window를 함께 확인한다. 저장된 `OPEN` 상태만으로 시작 전 주문을 허용하지 않는다.
 - `DRAFT|SCHEDULED` 회차 편집은 실제 write transaction에서 fresh status를 재확인하고, live
   reservation·ordered item을 삭제하거나 가격·상품·한도 snapshot을 혼합하지 않는다.
-- `DELIVERY_HELD` 또는 그 밖의 미완료 주문이 남아 있으면 `COMPLETED` 전환을 거부한다.
+- `DELIVERY_HELD` 또는 그 밖의 미완료 주문이 남아 있으면 `COMPLETED` 전환을 거부한다. 끝난 주문은 `DELIVERED|REVIEWED|CANCELLED|CLOSED_UNDELIVERED`(고객 사유 종결)이며, 회차 취소는 `CLOSED_UNDELIVERED` 주문을 환불하지 않고 건너뛴다.
 - 판매자는 자신이 소유한 스토어 회차만 변경할 수 있고 관리자는 이 소유권 검사에서 예외다.
 - 판매자 회차 목록·상세 조회도 스토어 `ownerId`를 서버에서 확인하며, 역할만으로 다른 스토어 회차를 읽을 수 없다.
 - 결제 주문이 있는 회차 취소는 결제별 환불을 성공시킨 뒤 `CANCELLED`로 확정하며 중복 취소는 환불을 다시 적용하지 않는다.
@@ -73,6 +73,7 @@ proof나 production deployment·activation·first live round를 의미하지 않
 - 스토어 소유자 또는 담당 기사만 배송 보류를 만들 수 있다. 보류 진입과 `PREPARING`·`DELIVERING`·`CANCELLED` 해소는 주문 변경과 같은 트랜잭션에서 `heldOrderCount`를 증감한다.
 - 고객은 주문 마감 전까지 MY에서 직접 취소할 수 있고, 취소 완료 시 회차 한도를 복구한다. 결제가 확인된 주문의 직접 취소도 `ORDER_CANCELLED` 거래성 알림을 보낸다.
 - 주문 마감 후 고객 직접 취소는 막고 대표자가 매입 여부와 상품 상태를 확인해 처리한다.
+- 고객 사유 종결(환불 없음, 2026-11-13 사용자 결정, **배포 전 법무 검토 필요**): 회차 직배송 주문이 고객 책임 보류(기상·상품 파손 제외)로 `DELIVERY_HELD` 또는 재배송비 결제 대기 `PREPARING`일 때, 손님이 수령을 거부했으면(`RECEIPT_REFUSED`) 바로, 그 밖에는 재배송비 결제 기한(보류일 서울 날짜 + 3일 끝)이 지난 보류일 + 4일 00:00(서울)부터 판매자(스토어 소유자)·관리자가 수동으로 `CLOSED_UNDELIVERED`로 종결할 수 있다(`POST /stores/:storeId/orders/:orderId/customer-fault-closure`, 손님과 연락한 메모 필수). 취소가 진행 중이거나 현재 보류의 재배송비가 `PAID`이거나 결제 시작 24시간 이내 `PENDING`이면 거절하고, 결제 연결 손상·`MISMATCHED`·`REFUNDED`는 운영 확인 대상으로 거절한다. 한 트랜잭션에서 주문 상태·보류 해소·`customerFaultClosure` 기록·`heldOrderCount -1`(정확히 한 번)을 쓰고, 환불과 회차 수량·재고 반환은 하지 않는다. 커밋 뒤 배송 완료처럼 정산을 만든다(`completedStatus=CLOSED_UNDELIVERED`, 멱등). 재요청은 정산만 맞추고, `CLOSED_UNDELIVERED`에서 나가는 전이는 없으며 일반 상태 변경으로는 이 상태에 갈 수 없다. 종결 뒤 늦은 재배송비 결제는 "필요 없어진 결제"로 자동 환불된다. 손님 알림톡은 보내지 않고(`ORDER_CANCELLED`는 환불 안내라 맞지 않음, 새 템플릿은 외부 승인 필요) 주문 상세 화면에서 안내한다. 판매자 연락 메모·처리자는 손님 응답에 싣지 않는다(`apps/api/src/orders/customer-fault-closure.service.ts`, 기한 계산 `packages/shared/src/customer-fault-closure.ts`). 약관 개정안 초안은 운영 런북 §6.4(법무 검토 전, 미게시)에 있다.
 - 소비자는 본인 주문, 판매자는 소유 스토어 주문, 기사는 자신에게 배정된 주문만 조회한다. 관리자는 운영 권한으로 조회할 수 있다.
 - 취소는 외부 환불 claim과 로컬 `LOCAL_PENDING|LOCAL_FAILED` 상태를 분리한다. 외부 환불 성공 뒤 로컬 정리가 실패해도 재시도에서 환불을 중복 호출하지 않는다.
 
