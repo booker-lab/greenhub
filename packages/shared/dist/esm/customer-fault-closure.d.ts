@@ -18,6 +18,26 @@ export interface CustomerFaultClosureRecord {
     memo: string;
     closedAt: string;
 }
+/**
+ * 종결할 수 있는지 판정한 결과 이유. 서버(GET 판정·POST 종결)와 판매자 화면이 같은 값을 쓴다.
+ * - PAYMENT_WINDOW_OPEN: 재배송비 결제 기한이 아직 남았다(eligibleAt부터 종결할 수 있다).
+ * - REDELIVERY_PAYMENT_IN_PROGRESS: 결제를 시작한 지 24시간이 안 된 재배송비가 있다.
+ * - REDELIVERY_PAYMENT_NEEDS_REVIEW: 재배송비 결제 연결이 어긋났거나 환불·불일치 상태라 운영 확인이 필요하다.
+ * - INVALID_HOLD: 보류 기록(보류 시각·재배송비)을 확인할 수 없다.
+ */
+export type CustomerFaultClosureBlockReason = 'OK' | 'ALREADY_CLOSED' | 'NOT_ROUND_ORDER' | 'NOT_DIRECT_DELIVERY' | 'NOT_HELD' | 'HOLD_REASON_NOT_ELIGIBLE' | 'NOT_CUSTOMER_RESPONSIBLE' | 'INVALID_HOLD' | 'CANCELLATION_IN_PROGRESS' | 'REDELIVERY_FEE_PAID' | 'REDELIVERY_PAYMENT_NEEDS_REVIEW' | 'PAYMENT_WINDOW_OPEN' | 'REDELIVERY_PAYMENT_IN_PROGRESS';
+/** GET stores/:storeId/orders/:orderId/customer-fault-closure 응답 */
+export interface CustomerFaultClosureEligibility {
+    eligible: boolean;
+    reason: CustomerFaultClosureBlockReason;
+    /** 종결하면 남길 사유. 고객 책임 보류가 아니면 null */
+    closureReasonCode: CustomerFaultClosureReasonCode | null;
+    /** 재배송비 미결제로 종결할 수 있게 되는 시각(ISO8601). 수령 거부는 보류 시각과 같다. */
+    eligibleAt: string | null;
+    /** 재배송비 결제 마지막 날(서울 YYYY-MM-DD) */
+    paymentDeadlineDate: string | null;
+    redeliveryFee: number | null;
+}
 /** 고객 사유 종결을 검토할 수 있는 보류 사유인지. 알 수 없는 값은 false다. */
 export declare function isCustomerFaultClosableHoldReason(reasonCode: unknown): boolean;
 /** 보류 사유로 정한 종결 사유. 수령 거부만 따로 두고 나머지는 재배송비 미결제다. */
