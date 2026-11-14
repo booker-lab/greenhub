@@ -11,6 +11,10 @@ import { AuthController } from '../../auth/auth.controller';
 import { AuthService } from '../../auth/auth.service';
 import { JWT_ALGORITHM, JWT_AUDIENCE, type TokenType } from '../../auth/token-claims';
 import { RAILWAY_TRUST_PROXY_HOPS } from '../../config/runtime-config';
+import { signDriverApplicationTicket } from '../../driver-applications/application-ticket';
+import { DriverApplicationTicketGuard } from '../../driver-applications/driver-application-ticket.guard';
+import { DriverApplicationsController } from '../../driver-applications/driver-applications.controller';
+import { DriverApplicationsService } from '../../driver-applications/driver-applications.service';
 import {
   ClientThrottlerGuard,
   clientIp,
@@ -27,6 +31,8 @@ const THROTTLE_MESSAGE = '요청이 너무 많아요. 잠시 후 다시 시도�
 const DEFAULT_LIMIT = 100;
 const AUTH_LIMIT = 10;
 const RELAYED_AUTH_LIMIT = 120;
+// 기사 가입 신청 저장(PUT /driver-applications/me)은 @Throttle 10/분.
+const DRIVER_APPLICATION_WRITE_LIMIT = 10;
 
 @Controller('probe')
 class ProbeController {
@@ -71,14 +77,27 @@ async function createApp(trustProxyHops: number | false): Promise<INestApplicati
         errorMessage: THROTTLE_MESSAGE,
       }),
     ],
-    controllers: [AuthController, ProbeController],
+    controllers: [AuthController, ProbeController, DriverApplicationsController],
     providers: [
       { provide: AuthService, useValue: authService },
+      {
+        provide: DriverApplicationsService,
+        useValue: { getMine: jest.fn(() => ({})), upsertMine: jest.fn(async () => ({})) },
+      },
       { provide: ConfigService, useValue: config },
       JwtService,
       { provide: APP_GUARD, useClass: ClientThrottlerGuard },
     ],
-  }).compile();
+  })
+    // 집계 기준만 본다. 티켓 경로 가드는 통과시키고 신청자만 싣는다.
+    .overrideGuard(DriverApplicationTicketGuard)
+    .useValue({
+      canActivate: (ctx: { switchToHttp: () => { getRequest: () => Record<string, unknown> } }) => {
+        ctx.switchToHttp().getRequest()['driverApplicant'] = { userId: 'driver-x', user: {} };
+        return true;
+      },
+    })
+    .compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   app.set('trust proxy', trustProxyHops);
@@ -373,6 +392,56 @@ describe('ClientThrottlerGuard 집계 기준', () => {
     expect(statuses[RELAYED_AUTH_LIMIT]).toBe(429);
     // 다른 클라이언트 IP는 별도 버킷이다.
     expect((await kakaoLogin('203.0.113.71')).status).toBe(200);
+  });
+});
+
+describe('ClientThrottlerGuard 기사 가입 신청 집계', () => {
+  let app: INestApplication<App>;
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  const ticket = (sub: string, secret = ACCESS_SECRET) =>
+    signDriverApplicationTicket(signer, secret, sub);
+
+  it('PUT /driver-applications/me는 같은 서버 IP를 나눠 써도 신청 티켓의 사용자별로 10회를 센다', async () => {
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
+    const server = app.getHttpServer();
+    const shared = '203.0.113.80';
+    const put = (token: string) =>
+      request(server)
+        .put('/driver-applications/me')
+        .set('X-Forwarded-For', shared)
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+
+    const driverA = await hit(DRIVER_APPLICATION_WRITE_LIMIT + 1, () => put(ticket('driver-a')));
+    expect(driverA.slice(0, DRIVER_APPLICATION_WRITE_LIMIT).every((status) => status === 200)).toBe(
+      true,
+    );
+    expect(driverA[DRIVER_APPLICATION_WRITE_LIMIT]).toBe(429);
+
+    expect((await put(ticket('driver-b'))).status).toBe(200);
+  });
+
+  it('서명이 틀린 티켓이나 access token은 사용자 키로 인정하지 않고 IP 버킷으로 센다', async () => {
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
+    const server = app.getHttpServer();
+    let counter = 0;
+
+    const statuses = await hit(DRIVER_APPLICATION_WRITE_LIMIT + 1, () => {
+      counter += 1;
+      const token =
+        counter % 2 === 0 ? ticket(`forged-${counter}`, 'wrong-secret') : accessToken(`a-${counter}`);
+      return request(server)
+        .put('/driver-applications/me')
+        .set('X-Forwarded-For', '203.0.113.81')
+        .set('Authorization', `Bearer ${token}`)
+        .send({});
+    });
+
+    expect(statuses[DRIVER_APPLICATION_WRITE_LIMIT]).toBe(429);
   });
 });
 

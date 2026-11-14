@@ -251,6 +251,8 @@ describe('AdminService 기사 목록 이어받기', () => {
         driverApproved: false,
         suspended: false,
         createdAt: 2,
+        // 신청 정보가 없는 기존 대기 계정(관리자 화면: "신청 정보 없음")
+        driverApplication: null,
       },
       expect.objectContaining({ id: 'd-001' }),
     ]);
@@ -259,6 +261,46 @@ describe('AdminService 기사 목록 이어받기', () => {
     const next = await service.getDrivers({ limit: 2, cursor: first.nextCursor } as never);
     expect(next.drivers.map((d) => d['id'])).toEqual(['d-000']);
     expect(next).toMatchObject({ hasMore: false, nextCursor: null });
+  });
+
+  it('가입 신청은 정해진 칸만 싣고 저장 문서의 다른 칸은 내려주지 않는다', async () => {
+    const users = seedUsers(1);
+    users[0] = {
+      ...users[0],
+      driverApplication: {
+        realName: '김기사',
+        phone: '01012345678',
+        vehicleType: 'van',
+        availableDays: ['mon', 'sat'],
+        availableArea: '이천시',
+        consentVersion: 'driver-application-2026-11-13',
+        consentedAt: 10,
+        status: 'submitted',
+        revision: 3,
+        submittedAt: 5,
+        updatedAt: 10,
+        internalNote: '내려주지 않음',
+      },
+    } as never;
+    const { firestore } = makeListFirestore({ users });
+
+    const result = await makeService(firestore).getDrivers({});
+
+    expect(result.drivers[0]['driverApplication']).toEqual({
+      realName: '김기사',
+      phone: '01012345678',
+      vehicleType: 'van',
+      availableDays: ['mon', 'sat'],
+      availableArea: '이천시',
+      consentVersion: 'driver-application-2026-11-13',
+      consentedAt: 10,
+      status: 'submitted',
+      revision: 3,
+      submittedAt: 5,
+      updatedAt: 10,
+    });
+    expect(result.drivers[0]).not.toHaveProperty('passwordHash');
+    expect(result.drivers[0]).not.toHaveProperty('fcmToken');
   });
 
   it('상태 필터는 읽은 쪽 안에서 거르고, 더 있으면 hasMore를 그대로 알린다', async () => {

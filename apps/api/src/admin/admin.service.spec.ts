@@ -23,6 +23,14 @@ describe('AdminService driver session 보강', () => {
     };
     deliveringQuery.where.mockReturnValue(deliveringQuery);
     const firestore = {
+      // 기사 승인은 트랜잭션으로 읽고 쓴다. 이 검사에서는 같은 문서 참조로 바로 반영한다.
+      runTransaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          get: (ref: { get: () => Promise<unknown> }) => ref.get(),
+          update: (ref: { update: (patch: unknown) => Promise<void> }, patch: unknown) =>
+            ref.update(patch),
+        }),
+      ),
       collection: jest.fn(() => deliveringQuery),
       doc: jest.fn((path: string) =>
         path.startsWith('refreshTokens/') ? refreshTokenRef : userRef,

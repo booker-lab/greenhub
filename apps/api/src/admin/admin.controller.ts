@@ -7,6 +7,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import {
   AdminSettlementFilterDto,
+  ApproveDriverDto,
   ArchiveStoreDto,
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
@@ -124,8 +125,13 @@ export class AdminController {
   }
 
   @Patch('drivers/:userId/approve')
-  approveDriver(@Param('userId') userId: string, @CurrentUser() user: JwtPayload) {
-    return this.admin.approveDriver(userId, user.sub);
+  approveDriver(
+    @Param('userId') userId: string,
+    @Body() dto: ApproveDriverDto | undefined,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    // 이전 화면은 본문 없이 보낸다(회차 비교 없음).
+    return this.admin.approveDriver(userId, user.sub, dto?.expectedRevision);
   }
 
   @Patch('drivers/:userId/suspend')

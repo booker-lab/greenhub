@@ -31,6 +31,8 @@ export const WITHDRAWAL_ERASED_USER_FIELDS = [
   'kakaoId',
   'passwordHash',
   'notificationPreferences',
+  // 기사 가입 신청(실명·휴대폰 등). 지금 탈퇴는 소비자만 하지만 같은 목록으로 함께 지운다.
+  'driverApplication',
 ] as const;
 
 // 트랜잭션 뒤에 지우는 그 사용자의 문서: [컬렉션, 사용자 uid를 담는 필드].

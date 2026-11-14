@@ -135,6 +135,15 @@ export class QueryAdminOrdersDto extends AdminListPageQuery {
   status?: OrderStatus;
 }
 
+export class ApproveDriverDto {
+  // 관리자가 보고 승인한 가입 신청 회차(신청 정보가 없으면 0). 그 사이 기사가 신청을 고쳤으면 409.
+  // 보내지 않으면(이전 화면) 회차를 비교하지 않는다.
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expectedRevision?: number;
+}
+
 export class SuspendUserDto {
   @IsBoolean()
   suspended: boolean;

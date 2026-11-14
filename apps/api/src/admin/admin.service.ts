@@ -22,6 +22,10 @@ import {
   type AdminAuditEntry,
 } from '../common/audit/audit.service';
 import { toFirestoreData } from '../common/firestore/firestore-data';
+import {
+  DRIVER_APPLICATION_CHANGED,
+  driverApplicationRevisionOf,
+} from '../driver-applications/driver-application.record';
 import { FirestoreService } from '../firestore/firestore.service';
 import { customerOrderLabel } from '../notifications/customer-order-label';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -65,7 +69,6 @@ import {
 import type { GenerateInviteDto } from './dto/invite.dto';
 import {
   ADMIN_DRIVER_LIST_DEFAULT_LIMIT,
-  ADMIN_DRIVER_LIST_FIELDS,
   ADMIN_DRIVER_LIST_MAX_LIMIT,
   ADMIN_ORDER_LIST_DEFAULT_LIMIT,
   ADMIN_ORDER_LIST_MAX_LIMIT,
@@ -74,6 +77,7 @@ import {
   readAdminListCursor,
   readStoreNames,
   resolveAdminListLimit,
+  toAdminDriverRow,
   toAdminOrderRow,
 } from './admin-lists';
 
@@ -807,9 +811,7 @@ export class AdminService {
     const docs = snap.docs.slice(0, limit);
     const hasMore = snap.docs.length > limit;
 
-    let drivers = docs.map((d: any) =>
-      pickListFields({ id: d.id, ...d.data() }, ADMIN_DRIVER_LIST_FIELDS),
-    );
+    let drivers = docs.map((d: any) => toAdminDriverRow({ id: d.id, ...d.data() }));
 
     if (dto.status === 'pending') {
       drivers = drivers.filter((d: any) => !d.driverApproved && !d.suspended);
@@ -827,33 +829,49 @@ export class AdminService {
     };
   }
 
-  async approveDriver(userId: string, actorId: string) {
+  // 승인 대기 기사를 승인한다. 관리자가 본 가입 신청 회차(expectedRevision, 신청이 없으면 0)를 보내면
+  // 그 사이 기사가 신청을 고쳤을 때 409로 거절한다(다시 확인). 기사의 신청 저장과 겹쳐도 한쪽만 이기도록
+  // 트랜잭션 안에서 읽고 쓴다. 신청 정보가 없는 기존 대기 계정도 승인할 수 있다(2026-11-13 결정).
+  async approveDriver(userId: string, actorId: string, expectedRevision?: number) {
     const ref = this.firestore.doc(`users/${userId}`);
-    const snap = await ref.get();
-    if (!snap.exists) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
+    const applicationRevision = await this.firestore.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new NotFoundException('드라이버를 찾을 수 없습니다.');
 
-    const data = snap.data()!;
-    if (data['role'] !== 'driver') {
-      throw new BadRequestException('드라이버 계정이 아닙니다.');
-    }
-    // 승인 대기(목록의 pending 판정과 같은 기준)만 승인한다. 정지된 기사를 승인으로 되살리지 않는다.
-    if (data['suspended'] === true) {
-      throw new ConflictException('정지된 기사는 승인할 수 없습니다. 먼저 정지를 풀어 주세요.');
-    }
-    if (data['driverApproved'] === true) {
-      throw new ConflictException('이미 승인된 기사입니다.');
-    }
+      const data = snap.data()!;
+      if (data['role'] !== 'driver') {
+        throw new BadRequestException('드라이버 계정이 아닙니다.');
+      }
+      // 승인 대기(목록의 pending 판정과 같은 기준)만 승인한다. 정지된 기사를 승인으로 되살리지 않는다.
+      if (data['suspended'] === true) {
+        throw new ConflictException('정지된 기사는 승인할 수 없습니다. 먼저 정지를 풀어 주세요.');
+      }
+      if (data['driverApproved'] === true) {
+        throw new ConflictException('이미 승인된 기사입니다.');
+      }
+      const revision = driverApplicationRevisionOf(data);
+      if (expectedRevision !== undefined && expectedRevision !== revision) {
+        throw new ConflictException({
+          statusCode: 409,
+          message: '가입 신청 내용이 바뀌었습니다. 다시 확인해 주세요.',
+          error: 'Conflict',
+          code: DRIVER_APPLICATION_CHANGED,
+        });
+      }
 
-    await ref.update({
-      driverApproved: true,
-      updatedAt: this.firestore.Timestamp.now(),
+      tx.update(ref, {
+        driverApproved: true,
+        updatedAt: this.firestore.Timestamp.now(),
+      });
+      return revision;
     });
+    // 어떤 신청 회차를 보고 승인했는지 남긴다(신청이 없었으면 null). 신청 값은 남기지 않는다.
     await this.recordAdmin({
       action: 'admin.driver.approved',
       actorId,
       targetType: 'driver',
       targetId: userId,
-      before: { driverApproved: data['driverApproved'] === true },
+      before: { driverApproved: false, applicationRevision: applicationRevision || null },
       after: { driverApproved: true },
     });
     return { userId, driverApproved: true };

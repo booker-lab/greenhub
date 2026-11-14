@@ -52,6 +52,8 @@ function makeService(options: { unlink?: 'unlinked' | 'not_configured' | 'failed
     savedAddresses: [{ id: 'a1', address: '경기도 이천시' }],
     fcmToken: 'fcm-token',
     notificationPreferences: { orderStatus: true },
+    // 기사 가입 신청 칸도 탈퇴 때 지운다(WITHDRAWAL_ERASED_USER_FIELDS).
+    driverApplication: { realName: '홍길동', phone: '01000000000', status: 'submitted', revision: 1 },
     activeSessionIds: ['sid-1'],
   });
   occ.seed(`refreshTokens/${UID}`, { sessions: { 'sid-1': { token: 'hashed', createdAt: 1 } } });
@@ -153,6 +155,7 @@ describe('AuthService.withdraw', () => {
       'kakaoId',
       'passwordHash',
       'notificationPreferences',
+      'driverApplication',
     ]) {
       expect(user).not.toHaveProperty(field);
     }

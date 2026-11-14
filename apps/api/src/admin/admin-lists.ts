@@ -1,4 +1,8 @@
 import { BadRequestException } from '@nestjs/common';
+import {
+  readDriverApplication,
+  toDriverApplicationView,
+} from '../driver-applications/driver-application.record';
 import type { FirestoreService } from '../firestore/firestore.service';
 
 // 관리자 목록 응답(판매자·주문·기사)의 허용 필드와 이어받기(커서) 규칙.
@@ -40,7 +44,18 @@ export const ADMIN_DRIVER_LIST_FIELDS = [
   'driverApproved',
   'suspended',
   'createdAt',
+  // 승인 전 기사가 기사 앱 `/apply`에서 낸 가입 신청(실명·휴대폰·차량 종류·요일·지역·회차·시각).
+  // 관리자 승인 화면이 보고 승인한다. 없으면 null(신청 정보 없음).
+  'driverApplication',
 ] as const;
+
+/** 관리자 기사 목록 한 줄. 가입 신청은 정해진 칸만 담고, 없으면 null. */
+export function toAdminDriverRow(data: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...pickListFields(data, ADMIN_DRIVER_LIST_FIELDS),
+    driverApplication: toDriverApplicationView(readDriverApplication(data)),
+  };
+}
 
 export function pickListFields(data: Record<string, unknown>, fields: readonly string[]) {
   const picked: Record<string, unknown> = {};

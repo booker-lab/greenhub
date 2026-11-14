@@ -1,5 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
+import { DRIVER_APPLICATION_TICKET_AUDIENCE } from '../driver-applications/application-ticket';
 import * as admin from 'firebase-admin';
 import * as bcrypt from 'bcrypt';
 import type { AuditService } from '../common/audit/audit.service';
@@ -28,6 +29,20 @@ jest.mock('bcrypt', () => {
 
 // 테스트 refresh token이 속한 세션 id.
 const SID = 'sid-1';
+
+// 승인 전 기사 카카오 로그인은 access/refresh token 없이 가입 신청 티켓 하나만 서명한다.
+function expectOnlyApplicationTicketSigned(jwt: { sign: jest.Mock }, userId: string) {
+  expect(jwt.sign).toHaveBeenCalledTimes(1);
+  expect(jwt.sign).toHaveBeenCalledWith(
+    { sub: userId, typ: 'driver_application' },
+    expect.objectContaining({
+      secret: 'access-secret',
+      audience: DRIVER_APPLICATION_TICKET_AUDIENCE,
+      algorithm: 'HS256',
+      expiresIn: 30 * 60,
+    }),
+  );
+}
 
 describe('AuthService', () => {
   function makeKakaoLoginService(options: {
@@ -127,8 +142,13 @@ describe('AuthService', () => {
       },
     };
     const jwt = {
-      sign: jest.fn((_payload: Record<string, unknown>, options: { secret?: string }) =>
-        options.secret === 'access-secret' ? 'access-token' : 'refresh-token',
+      sign: jest.fn(
+        (_payload: Record<string, unknown>, options: { secret?: string; audience?: string }) =>
+          options.audience === DRIVER_APPLICATION_TICKET_AUDIENCE
+            ? 'driver-application-ticket'
+            : options.secret === 'access-secret'
+              ? 'access-token'
+              : 'refresh-token',
       ),
       verify: jest.fn(),
     };
@@ -323,10 +343,12 @@ describe('AuthService', () => {
           message: '승인된 드라이버만 로그인할 수 있습니다.',
           error: 'Forbidden',
           code: DRIVER_APPROVAL_PENDING,
+          applicationStatus: 'none',
         }),
       });
 
-      expect(jwt.sign).not.toHaveBeenCalled();
+      // access/refresh token 대신 가입 신청 티켓 하나만 서명한다.
+      expectOnlyApplicationTicketSigned(jwt, 'driver-1');
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
       expect(userRef.set).not.toHaveBeenCalled();
     });
@@ -427,13 +449,18 @@ describe('AuthService', () => {
         service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' }),
       ).rejects.toMatchObject({
         status: 403,
-        response: expect.objectContaining({ code: DRIVER_APPROVAL_PENDING }),
+        response: expect.objectContaining({
+          code: DRIVER_APPROVAL_PENDING,
+          applicationStatus: 'none',
+          applicationTicket: 'driver-application-ticket',
+        }),
       });
 
       expect(userRef.set).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'driver', driverApproved: false }),
       );
-      expect(jwt.sign).not.toHaveBeenCalled();
+      const createdUserId = (userRef.set.mock.calls[0][0] as { id: string }).id;
+      expectOnlyApplicationTicketSigned(jwt, createdUserId);
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
     });
 
@@ -536,7 +563,8 @@ describe('AuthService', () => {
     ])('%s approval driver는 token 발급 전에 email login이 거부되고 승인 대기 code를 붙인다', async (_label, approval) => {
       const { jwt, refreshTokenRef, service } = await makeEmailLoginService(approval);
 
-      await expect(service.login({ email: 'driver@example.com', password })).rejects.toMatchObject({
+      const rejection = service.login({ email: 'driver@example.com', password });
+      await expect(rejection).rejects.toMatchObject({
         status: 403,
         response: expect.objectContaining({
           statusCode: 403,
@@ -544,6 +572,10 @@ describe('AuthService', () => {
           error: 'Forbidden',
           code: DRIVER_APPROVAL_PENDING,
         }),
+      });
+      // 가입 신청 티켓은 카카오 로그인 거절에만 싣는다.
+      await expect(rejection).rejects.not.toMatchObject({
+        response: expect.objectContaining({ applicationTicket: expect.anything() }),
       });
       expect(jwt.sign).not.toHaveBeenCalled();
       expect(refreshTokenRef.set).not.toHaveBeenCalled();

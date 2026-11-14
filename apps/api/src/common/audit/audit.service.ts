@@ -11,6 +11,8 @@ export type AuditAction =
   | 'auth.token.stolen' // refresh token 재사용 감지
   | 'auth.kakao.forbidden'
   | 'auth.withdrawn' // 소비자 회원 탈퇴(개인정보 익명화·세션 폐기)
+  | 'driver.application.submitted' // 승인 전 기사가 가입 신청을 처음 냄(바뀐 칸 이름·회차만, 값 없음)
+  | 'driver.application.updated' // 승인 전 기사가 가입 신청을 고침(바뀐 칸 이름·회차만, 값 없음)
   | 'payment.amount_tampered' // 금액 위변조 감지
   | 'payment.webhook.invalid_sig'; // 서명 검증 실패
 
