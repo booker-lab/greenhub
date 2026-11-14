@@ -12,7 +12,10 @@ const SECRET = "kakao-login-ticket-spec-secret";
 const KAKAO_ID = "4242";
 const jwt = new JwtService();
 
-function makeService(users: Record<string, Record<string, unknown>>) {
+function makeService(
+  users: Record<string, Record<string, unknown>>,
+  options: { applicationEnabled?: boolean } = {},
+) {
   const initial: Record<string, Record<string, unknown>> = {};
   for (const [id, data] of Object.entries(users)) {
     initial[`users/${id}`] = { id, kakaoId: KAKAO_ID, storeId: null, ...data };
@@ -35,6 +38,10 @@ function makeService(users: Record<string, Record<string, unknown>>) {
     new ConfigService({
       JWT_SECRET: SECRET,
       JWT_REFRESH_SECRET: `${SECRET}-refresh`,
+      // 가입 신청은 기본으로 꺼져 있다(H1). 이 파일은 켠 상태를 기본으로 확인한다.
+      ...(options.applicationEnabled === false
+        ? {}
+        : { DRIVER_APPLICATION_ENABLED: "true" }),
     }),
     kakaoClient as never,
     audit as never,
@@ -140,5 +147,58 @@ describe("기사 앱 카카오 로그인의 가입 신청 티켓", () => {
     expect(body.code).toBe(DRIVER_APPROVAL_PENDING);
     expect(body).not.toHaveProperty("applicationTicket");
     expect(body).not.toHaveProperty("applicationStatus");
+  });
+
+  describe("가입 신청 기능이 꺼져 있으면(DRIVER_APPLICATION_ENABLED 미설정)", () => {
+    it("처음 들어온 기사도 승인 대기 계정만 만들고 403에 티켓·상태를 싣지 않는다", async () => {
+      const { service, records } = makeService({}, { applicationEnabled: false });
+
+      const { status, body } = await rejectionOf(
+        service.kakaoLogin({ kakaoAccessToken: "token", targetRole: "driver" }),
+      );
+
+      expect(status).toBe(403);
+      expect(body.code).toBe(DRIVER_APPROVAL_PENDING);
+      expect(body).not.toHaveProperty("applicationTicket");
+      expect(body).not.toHaveProperty("applicationStatus");
+      const created = [...records.entries()].find(
+        ([path, data]) => path.startsWith("users/") && data?.role === "driver",
+      );
+      expect(created?.[1]).toMatchObject({ driverApproved: false });
+    });
+
+    it("신청을 낸 승인 대기 기사에게도 티켓을 주지 않는다", async () => {
+      const { service } = makeService(
+        {
+          "driver-1": {
+            role: "driver",
+            driverApproved: false,
+            driverApplication: { status: "submitted", revision: 2 },
+          },
+        },
+        { applicationEnabled: false },
+      );
+
+      const { status, body } = await rejectionOf(
+        service.kakaoLogin({ kakaoAccessToken: "token", targetRole: "driver" }),
+      );
+
+      expect(status).toBe(403);
+      expect(body).not.toHaveProperty("applicationTicket");
+      expect(body).not.toHaveProperty("applicationStatus");
+    });
+
+    it("승인된 기사의 로그인은 그대로 세션 토큰을 받는다", async () => {
+      const { service } = makeService(
+        { "driver-1": { role: "driver", driverApproved: true } },
+        { applicationEnabled: false },
+      );
+
+      const result = await service.kakaoLogin({
+        kakaoAccessToken: "token",
+        targetRole: "driver",
+      });
+      expect(result.accessToken).toEqual(expect.any(String));
+    });
   });
 });

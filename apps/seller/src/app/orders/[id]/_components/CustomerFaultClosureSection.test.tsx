@@ -71,6 +71,13 @@ describe('CustomerFaultClosurePanel', () => {
     expect(html).not.toContain('<button');
   });
 
+  it('기능이 꺼져 있으면 버튼 없이 약관 개정 안내만 보인다(H1)', () => {
+    const html = panel({ ...eligible, eligible: false, reason: 'FEATURE_DISABLED' });
+    expect(html).toContain('환불 없는 종결은 약관 개정 뒤 사용할 수 있어요.');
+    expect(html).not.toContain('환불 없이 주문 종결');
+    expect(html).not.toContain('<button');
+  });
+
   it('종결 대상이 아니면 아무것도 그리지 않는다', () => {
     expect(panel({ ...eligible, eligible: false, reason: 'NOT_HELD' })).toBe('');
   });

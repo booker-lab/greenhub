@@ -43,6 +43,7 @@ const base = {
     paymentRequestedAt: '2026-11-13T06:00:00.000Z',
   },
   redeliveryPaid: false,
+  closureEnabled: true,
 };
 
 test('재배송비를 기다리는 고객 책임 보류는 결제 요청일로 센 결제 마지막 날과 종결 가능성을 알린다', () => {
@@ -112,6 +113,20 @@ test('기상·상품 파손·고객 책임 아님·결제 완료·해소·택배
     { ...base, deliveryHold: null },
   ];
   for (const input of cases) assert.equal(customerFaultClosureWarning(input), null);
+});
+
+test('고객 사유 종결 기능이 꺼져 있으면(없음 포함) 수령 거부·재배송비 미결제 경고를 모두 숨긴다(H1)', () => {
+  const { closureEnabled: _enabled, ...missing } = base;
+  const receiptRefused = { ...base.deliveryHold, reasonCode: 'RECEIPT_REFUSED' };
+  for (const input of [
+    { ...base, closureEnabled: false },
+    missing,
+    { ...base, closureEnabled: 'true' },
+    { ...base, closureEnabled: false, deliveryHold: receiptRefused },
+    { ...missing, deliveryHold: receiptRefused },
+  ]) {
+    assert.equal(customerFaultClosureWarning(input), null);
+  }
 });
 
 test('종결 안내는 환불되지 않는 이유와 상품 처리를 알린다', () => {

@@ -101,6 +101,11 @@ export interface OrderDetailView {
   canRequestCancellation: boolean;
   /** 고객 사유 종결(CLOSED_UNDELIVERED) 주문만 있다. 기록이 없거나 모양이 다르면 null. */
   customerFaultClosure: CustomerFaultClosureView | null;
+  /**
+   * API의 고객 사유 종결 기능 스위치(H1). 서버가 true를 보냈을 때만 true다(없거나 다른 값이면 꺼짐).
+   * 꺼져 있으면 종결 전 경고를 보이지 않는다.
+   */
+  customerFaultClosureEnabled: boolean;
 }
 
 export interface RedeliveryPayment {
@@ -406,6 +411,7 @@ export function readOrderDetail(value: unknown, requestedOrderId: string): Order
       : status === 'RECRUITING',
     customerFaultClosure:
       status === 'CLOSED_UNDELIVERED' ? readCustomerFaultClosure(value.customerFaultClosure) : null,
+    customerFaultClosureEnabled: value.customerFaultClosureEnabled === true,
   };
 }
 

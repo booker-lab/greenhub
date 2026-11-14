@@ -910,12 +910,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       })
     : null;
   // 고객 책임 보류에서 재배송비를 기다리는 동안 환불 없는 종결 가능성을 미리 알린다.
+  // 고객 사유 종결 기능이 꺼져 있으면(API customerFaultClosureEnabled가 true가 아님) 알리지 않는다.
   const closureWarning = customerFaultClosureWarning({
     isRoundOrder: detail.isRoundOrder,
     deliveryMethod: detail.deliveryMethod,
     status: detail.status,
     deliveryHold: detail.deliveryHold,
     redeliveryPaid: paymentIsDone,
+    closureEnabled: detail.customerFaultClosureEnabled,
   });
   const isClosedUndelivered = detail.status === 'CLOSED_UNDELIVERED';
   // 배송 보류·취소는 문제 상태라 빨강 계열 배지로 보인다

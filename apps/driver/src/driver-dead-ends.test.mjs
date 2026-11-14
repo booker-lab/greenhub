@@ -89,8 +89,27 @@ test('로그인 안내 문구는 error·reason 값을 구분한다', () => {
   assert.equal(pending?.title, '가입 신청이 접수됐어요');
   assert.equal(pending?.body, '관리자가 승인하면 다시 로그인해 주세요.');
   assert.equal(pending?.showOpsContact, true);
-  // 낸 신청은 30분 동안 신청 화면에서 고칠 수 있다(티켓 쿠키, 없으면 신청 화면이 재로그인 안내).
-  assert.deepEqual(pending?.action, { href: '/apply', label: '신청 내용 수정' });
+  // 신청 티켓 없이 온 승인 대기(가입 신청 기능이 꺼진 API·이전 API·쿠키 저장 실패)에는 수정 링크가 없다.
+  assert.equal(pending?.action, undefined);
+  // 콜백이 신청 티켓을 담고 보낸 접수 안내(application=submitted)만 30분 동안 고칠 수 있는 링크를 보인다.
+  const submitted = resolveDriverLoginNotice({
+    error: DRIVER_APPROVAL_PENDING_ERROR,
+    application: 'submitted',
+  });
+  assert.equal(submitted?.kind, 'approval-pending');
+  assert.equal(submitted?.title, '가입 신청이 접수됐어요');
+  assert.deepEqual(submitted?.action, { href: '/apply', label: '신청 내용 수정' });
+  assert.equal(
+    resolveDriverLoginNotice({ error: DRIVER_APPROVAL_PENDING_ERROR, application: 'none' })?.action,
+    undefined,
+  );
+  assert.deepEqual(
+    resolveDriverLoginNotice({
+      error: DRIVER_APPROVAL_PENDING_ERROR,
+      application: ['submitted', 'x'],
+    })?.action,
+    { href: '/apply', label: '신청 내용 수정' },
+  );
   // 승인 대기가 아닌 안내에는 신청 수정 링크가 없다.
   for (const error of ['AccessDenied', DRIVER_ADMIN_ACCOUNT_ERROR, DRIVER_LOGIN_FAILED_ERROR]) {
     assert.equal(resolveDriverLoginNotice({ error })?.action, undefined, error);
@@ -193,7 +212,7 @@ test('Auth.js 오류는 로그인 화면으로 오고 로그인 화면이 error�
   assert.match(authSource, /pages:\s*\{\s*signIn: '\/login',[\s\S]{0,300}error: '\/login',\s*\}/);
   assert.match(
     loginSource,
-    /resolveDriverLoginNotice\(\{ error, reason, hasReturnPath: returnPath !== null \}\)/,
+    /resolveDriverLoginNotice\(\{\s*error,\s*reason,\s*hasReturnPath: returnPath !== null,\s*application,\s*\}\)/,
   );
   assert.doesNotMatch(loginSource, /pending/);
   assert.doesNotMatch(loginSource, /signOut/);
@@ -250,7 +269,7 @@ test('카카오 로그인은 승인 전 기사를 세션 없이 승인 대기 �
   assert.match(pendingScope, /\} catch \{\s*return APPROVAL_PENDING_LOGIN_URL;\s*\}/);
   assert.match(
     pendingScope,
-    /return driverApplicationRedirectPath\(application\.status, APPROVAL_PENDING_LOGIN_URL\);/,
+    /return driverApplicationRedirectPath\(\s*application\.status,\s*DRIVER_APPLICATION_SUBMITTED_LOGIN_URL,\s*\);/,
   );
   assert.doesNotMatch(pendingScope, /user\.accessToken/);
   // 다른 역할(code 없는 403)만 false → AccessDenied("기사용 계정이 아니에요")로 보낸다.

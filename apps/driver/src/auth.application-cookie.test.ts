@@ -219,7 +219,7 @@ describe('카카오 signIn 콜백의 가입 신청 티켓 처리', () => {
     const { result } = await signInWith(
       pendingResponse({ applicationTicket: TICKET, applicationStatus: 'submitted' }),
     );
-    expect(result).toBe('/login?error=ApprovalPending');
+    expect(result).toBe('/login?error=ApprovalPending&application=submitted');
     expect(state.cookieSets).toHaveLength(1);
   });
 
@@ -229,7 +229,7 @@ describe('카카오 signIn 콜백의 가입 신청 티켓 처리', () => {
     expect(state.cookieSets[0].options).toMatchObject({ secure: false, httpOnly: true });
   });
 
-  it('티켓이 없는 승인 대기 거절(이전 API)은 쿠키 없이 승인 대기 안내로 보낸다', async () => {
+  it('티켓이 없는 승인 대기 거절(가입 신청 기능이 꺼진 API·이전 API)은 쿠키 없이 승인 대기 안내(수정 링크 없음)로 보낸다', async () => {
     const { result } = await signInWith(pendingResponse({}));
     expect(result).toBe('/login?error=ApprovalPending');
     expect(state.cookieSets).toEqual([]);

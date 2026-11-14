@@ -65,12 +65,18 @@ export default async function LoginPage({
     error?: SearchParamValue;
     reason?: SearchParamValue;
     callbackUrl?: SearchParamValue;
+    application?: SearchParamValue;
   }>;
 }) {
-  const { error, reason, callbackUrl } = await searchParams;
+  const { error, reason, callbackUrl, application } = await searchParams;
   // 세션이 끝나 돌아온 경우 보던 화면 경로(같은 출처 앱 경로만). 없으면 로그인 뒤 /board로 간다.
   const returnPath = safeDriverReturnPath(callbackUrl);
-  const notice = resolveDriverLoginNotice({ error, reason, hasReturnPath: returnPath !== null });
+  const notice = resolveDriverLoginNotice({
+    error,
+    reason,
+    hasReturnPath: returnPath !== null,
+    application,
+  });
   // Local pilot runtime에서만 승인된 드라이버의 Credentials 진입을 노출한다.
   // 운영/Preview에서는 카카오 로그인만 사용한다.
   const showLocalCredentials =

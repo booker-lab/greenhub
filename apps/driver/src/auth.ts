@@ -13,6 +13,7 @@ import Kakao from 'next-auth/providers/kakao';
 import { LOCAL_DRIVER_APPROVAL_PENDING_CODE } from '@/app/login/local-credential-sign-in';
 import {
   DRIVER_ADMIN_ACCOUNT_ERROR,
+  DRIVER_APPLICATION_SUBMITTED_LOGIN_URL,
   DRIVER_APPROVAL_PENDING_ERROR,
   DRIVER_LOGIN_FAILED_ERROR,
 } from '@/app/login/login-notice';
@@ -443,7 +444,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // 신청 전이면 신청 화면, 낸 뒤면 접수 안내(신청 내용 수정 링크)로 보낸다. 이 콜백은
             // `GET /api/auth/callback/kakao` 라우트 핸들러 안에서 돌아 cookies()로 쓴 쿠키가
             // Auth.js 리다이렉트 응답에 붙는다(`src/auth.application-cookie.test.ts`).
-            // 티켓이 없거나 형식이 다르거나 쿠키를 쓰지 못하면 지금처럼 승인 대기 안내로만 보낸다.
+            // 티켓이 없거나 형식이 다르거나 쿠키를 쓰지 못하면 지금처럼 승인 대기 안내로만 보낸다
+            // (가입 신청 기능이 꺼진 API는 티켓을 싣지 않는다). 접수 안내의 "신청 내용 수정" 링크는
+            // 티켓을 담은 경우(DRIVER_APPLICATION_SUBMITTED_LOGIN_URL)에만 보인다.
             const application = readDriverApplicationRejection(body);
             if (!application) return APPROVAL_PENDING_LOGIN_URL;
             try {
@@ -451,7 +454,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             } catch {
               return APPROVAL_PENDING_LOGIN_URL;
             }
-            return driverApplicationRedirectPath(application.status, APPROVAL_PENDING_LOGIN_URL);
+            return driverApplicationRedirectPath(
+              application.status,
+              DRIVER_APPLICATION_SUBMITTED_LOGIN_URL,
+            );
           }
           // false → Auth.js가 `?error=AccessDenied`("기사용 계정이 아니에요")로 보낸다.
           if (rejection === 'other-role') return false;

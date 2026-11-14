@@ -1,6 +1,9 @@
 import { Module } from "@nestjs/common";
 import { AuthModule } from "../auth/auth.module";
-import { DriverApplicationTicketGuard } from "./driver-application-ticket.guard";
+import {
+  DriverApplicationEnabledGuard,
+  DriverApplicationTicketGuard,
+} from "./driver-application-ticket.guard";
 import { DriverApplicationsController } from "./driver-applications.controller";
 import { DriverApplicationsService } from "./driver-applications.service";
 
@@ -8,6 +11,10 @@ import { DriverApplicationsService } from "./driver-applications.service";
 @Module({
   imports: [AuthModule],
   controllers: [DriverApplicationsController],
-  providers: [DriverApplicationsService, DriverApplicationTicketGuard],
+  providers: [
+    DriverApplicationsService,
+    DriverApplicationEnabledGuard,
+    DriverApplicationTicketGuard,
+  ],
 })
 export class DriverApplicationsModule {}

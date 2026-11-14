@@ -8,6 +8,10 @@ import {
 } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { JwtService } from "@nestjs/jwt";
+import {
+  DRIVER_APPLICATION_ENABLED_ENV,
+  isLegalGatedFeatureEnabled,
+} from "../config/runtime-config";
 import { FirestoreService } from "../firestore/firestore.service";
 import {
   bearerFromHeaders,
@@ -26,6 +30,9 @@ export const DRIVER_APPLICATION_TICKET_INVALID =
 export const DRIVER_ALREADY_APPROVED = "DRIVER_ALREADY_APPROVED";
 // 기사가 아닌 계정·정지된 기사 → 403, 운영팀 문의 안내.
 export const DRIVER_APPLICATION_NOT_ALLOWED = "DRIVER_APPLICATION_NOT_ALLOWED";
+
+// 가입 신청 기능이 꺼져 있음(DRIVER_APPLICATION_ENABLED가 'true'가 아님) → 403. 티켓이 맞아도 막는다(H1).
+export const DRIVER_APPLICATION_DISABLED = "DRIVER_APPLICATION_DISABLED";
 
 export interface DriverApplicant {
   userId: string;
@@ -68,6 +75,33 @@ export function applicantStateRejection(
         error: "Forbidden",
         code: DRIVER_APPLICATION_NOT_ALLOWED,
       });
+  }
+}
+
+export function driverApplicationDisabled(): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    message: "지금은 기사 가입 신청을 받지 않습니다. 운영팀에 문의해 주세요.",
+    error: "Forbidden",
+    code: DRIVER_APPLICATION_DISABLED,
+  });
+}
+
+/**
+ * 기사 가입 신청 기능 스위치(DRIVER_APPLICATION_ENABLED). 법무 검토·약관 개정 게시 전에는 꺼 둔다(H1).
+ * 꺼져 있으면 티켓을 확인하거나 사용자 문서를 읽기 전에 403 DRIVER_APPLICATION_DISABLED로 거절한다.
+ * 404 대신 403 + code로 거절해 배포·경로 오류(404)와 구분하고, 종결 스위치
+ * (CUSTOMER_FAULT_CLOSURE_DISABLED)와 같은 모양을 쓴다. 기사 앱은 403을 운영팀 문의 안내로 보인다.
+ */
+@Injectable()
+export class DriverApplicationEnabledGuard implements CanActivate {
+  constructor(private readonly config: ConfigService) {}
+
+  canActivate(): boolean {
+    if (!isLegalGatedFeatureEnabled(this.config, DRIVER_APPLICATION_ENABLED_ENV)) {
+      throw driverApplicationDisabled();
+    }
+    return true;
   }
 }
 

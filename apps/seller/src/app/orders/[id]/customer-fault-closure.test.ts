@@ -115,6 +115,22 @@ describe('판정 응답 읽기', () => {
     expect(shouldCheckCustomerFaultClosureSettlement({ status: 'DELIVERED' })).toBe(false);
   });
 
+  it('기능이 꺼진 판정(FEATURE_DISABLED)을 읽고, eligible=true와 함께 오면 null이다', () => {
+    const disabled = {
+      eligible: false,
+      reason: 'FEATURE_DISABLED',
+      closureReasonCode: 'REDELIVERY_FEE_UNPAID',
+      eligibleAt: '2026-11-16T15:00:00.000Z',
+      paymentDeadlineDate: '2026-11-16',
+      redeliveryFee: 5000,
+    };
+    expect(parseCustomerFaultClosureEligibility(disabled)).toMatchObject({
+      eligible: false,
+      reason: 'FEATURE_DISABLED',
+    });
+    expect(parseCustomerFaultClosureEligibility({ ...disabled, eligible: true })).toBeNull();
+  });
+
   it('모양이 다르거나 eligible과 reason이 어긋나면 null(버튼을 숨긴다)', () => {
     for (const bad of [
       null,
@@ -131,6 +147,12 @@ describe('판정 응답 읽기', () => {
 });
 
 describe('안내 문구', () => {
+  it('기능이 꺼져 있으면 약관 개정 뒤 쓸 수 있다고 안내한다(H1)', () => {
+    expect(
+      customerFaultClosureBlockedMessage({ reason: 'FEATURE_DISABLED', eligibleAt: null }),
+    ).toBe('환불 없는 종결은 약관 개정 뒤 사용할 수 있어요.');
+  });
+
   it('결제 기한 안이면 종결 가능 시각(한국 시간)을 알려 준다', () => {
     expect(
       customerFaultClosureBlockedMessage({

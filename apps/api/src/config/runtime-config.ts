@@ -91,6 +91,29 @@ export function shouldEnableScheduledJobs(values: RuntimeConfigValues = process.
   return readString(values, 'GREENHUB_SCHEDULES_ENABLED') !== 'false';
 }
 
+/**
+ * 법무 검토 전 기능 스위치(2026-11-14 사용자 결정 H1). 약관·개인정보처리방침 개정이 게시되기 전에는
+ * 출시 묶음이 실수로 켜지 않도록 기본으로 끈다. 값이 정확히 문자열 'true'일 때만 켜고, 비었거나
+ * 다른 값('TRUE'·' true'·'1' 등)이면 끈 것으로 본다(fail closed). 켜는 일은 법무 검토·개정 게시 뒤
+ * 운영 책임자가 배포 환경 변수를 직접 바꾸는 일이다(docs/specs/ops/mvp-sales-round-runbook.md §6.4·§10).
+ * - DRIVER_APPLICATION_ENABLED: 기사 가입 신청(카카오 로그인 거절의 신청 티켓, GET·PUT /driver-applications/me)
+ * - CUSTOMER_FAULT_CLOSURE_ENABLED: 고객 사유 종결(환불 없음) 판정·종결
+ */
+export const DRIVER_APPLICATION_ENABLED_ENV = 'DRIVER_APPLICATION_ENABLED';
+export const CUSTOMER_FAULT_CLOSURE_ENABLED_ENV = 'CUSTOMER_FAULT_CLOSURE_ENABLED';
+
+export type LegalGatedFeatureEnv =
+  | typeof DRIVER_APPLICATION_ENABLED_ENV
+  | typeof CUSTOMER_FAULT_CLOSURE_ENABLED_ENV;
+
+/** 설정이 없으면(테스트에서 직접 만든 서비스 등) 끈 것으로 본다. */
+export function isLegalGatedFeatureEnabled(
+  config: { get(key: LegalGatedFeatureEnv): unknown } | null | undefined,
+  key: LegalGatedFeatureEnv,
+): boolean {
+  return config?.get(key) === 'true';
+}
+
 export type SchedulerTriggerSettings = {
   invokerEmail: string;
   audience: string;

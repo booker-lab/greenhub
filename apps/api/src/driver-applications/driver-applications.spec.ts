@@ -16,6 +16,7 @@ import { FirestoreService } from "../firestore/firestore.service";
 import { signDriverApplicationTicket } from "./application-ticket";
 import {
   DRIVER_ALREADY_APPROVED,
+  DRIVER_APPLICATION_DISABLED,
   DRIVER_APPLICATION_NOT_ALLOWED,
   DRIVER_APPLICATION_TICKET_INVALID,
   DriverApplicationTicketGuard,
@@ -47,7 +48,10 @@ const VALID_BODY = {
   consentVersion: DRIVER_APPLICATION_CONSENT_VERSION,
 };
 
-async function createApp(users: Record<string, Record<string, unknown>>) {
+async function createApp(
+  users: Record<string, Record<string, unknown>>,
+  options: { config?: Record<string, string> } = {},
+) {
   const { firestore, records } = createMemoryFirestore(
     Object.fromEntries(
       Object.entries(users).map(([id, data]) => [`users/${id}`, data]),
@@ -62,7 +66,13 @@ async function createApp(users: Record<string, Record<string, unknown>>) {
       JwtService,
       {
         provide: ConfigService,
-        useValue: new ConfigService({ JWT_SECRET: SECRET }),
+        // 가입 신청은 기본으로 꺼져 있다(H1). 켠 상태를 기본으로 두고 끈 상태는 따로 확인한다.
+        useValue: new ConfigService(
+          options.config ?? {
+            JWT_SECRET: SECRET,
+            DRIVER_APPLICATION_ENABLED: "true",
+          },
+        ),
       },
       { provide: FirestoreService, useValue: firestore },
       { provide: AuditService, useValue: audit },
@@ -159,6 +169,65 @@ describe("기사 가입 신청 티켓 가드", () => {
       .get("/driver-applications/me")
       .set("Authorization", `Bearer ${ticketFor("driver-1")}`);
     expect(res.status).toBe(401);
+  });
+});
+
+describe("가입 신청 기능 스위치(DRIVER_APPLICATION_ENABLED)", () => {
+  let app: INestApplication<App>;
+
+  afterEach(async () => {
+    await app?.close();
+  });
+
+  it.each([
+    ["미설정", { JWT_SECRET: SECRET }],
+    ["false", { JWT_SECRET: SECRET, DRIVER_APPLICATION_ENABLED: "false" }],
+    ["대문자 TRUE", { JWT_SECRET: SECRET, DRIVER_APPLICATION_ENABLED: "TRUE" }],
+  ])(
+    "스위치가 %s일 때 맞는 티켓으로도 GET·PUT 모두 403 DRIVER_APPLICATION_DISABLED이고 아무것도 쓰지 않는다",
+    async (_label, config) => {
+      let records: Map<string, unknown>;
+      let audit: { log: jest.Mock };
+      ({ app, records, audit } = await createApp(
+        { "driver-1": PENDING_DRIVER },
+        { config },
+      ));
+      for (const send of [
+        () => request(app.getHttpServer()).get("/driver-applications/me"),
+        () =>
+          request(app.getHttpServer())
+            .put("/driver-applications/me")
+            .send(VALID_BODY),
+      ]) {
+        const res = await send().set(
+          "Authorization",
+          `Bearer ${ticketFor("driver-1")}`,
+        );
+        expect(res.status).toBe(403);
+        expect(res.body.code).toBe(DRIVER_APPLICATION_DISABLED);
+      }
+      expect(records.get("users/driver-1")).toEqual(PENDING_DRIVER);
+      expect(audit.log).not.toHaveBeenCalled();
+    },
+  );
+
+  it("꺼져 있으면 티켓이 없어도 같은 403으로 거절한다(티켓 확인보다 먼저)", async () => {
+    ({ app } = await createApp(
+      { "driver-1": PENDING_DRIVER },
+      { config: { JWT_SECRET: SECRET } },
+    ));
+    const res = await request(app.getHttpServer()).get("/driver-applications/me");
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe(DRIVER_APPLICATION_DISABLED);
+  });
+
+  it("켜져 있으면 맞는 티켓으로 조회한다", async () => {
+    ({ app } = await createApp({ "driver-1": PENDING_DRIVER }));
+    const res = await request(app.getHttpServer())
+      .get("/driver-applications/me")
+      .set("Authorization", `Bearer ${ticketFor("driver-1")}`);
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("none");
   });
 });
 

@@ -31,6 +31,9 @@ jest.mock('bcrypt', () => {
 const SID = 'sid-1';
 
 // 승인 전 기사 카카오 로그인은 access/refresh token 없이 가입 신청 티켓 하나만 서명한다.
+// 가입 신청(Z4)은 법무 검토 전 기능이라 기본으로 꺼져 있다(H1). 티켓을 확인하는 테스트만 켠다.
+const DRIVER_APPLICATION_ON = { DRIVER_APPLICATION_ENABLED: 'true' };
+
 function expectOnlyApplicationTicketSigned(jwt: { sign: jest.Mock }, userId: string) {
   expect(jwt.sign).toHaveBeenCalledTimes(1);
   expect(jwt.sign).toHaveBeenCalledWith(
@@ -326,6 +329,7 @@ describe('AuthService', () => {
       ['invalid', { driverApproved: 'true' }],
     ])('기존 %s driver는 토큰 발급 전에 카카오 로그인이 거부되고 승인 대기 code를 붙인다', async (_label, approval) => {
       const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({
+        config: DRIVER_APPLICATION_ON,
         user: {
           id: 'driver-1',
           role: 'driver',
@@ -443,7 +447,9 @@ describe('AuthService', () => {
     );
 
     it('신규 driver는 승인 대기 document만 생성하고 authenticated session은 만들지 않는다', async () => {
-      const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({});
+      const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({
+        config: DRIVER_APPLICATION_ON,
+      });
 
       await expect(
         service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' }),
@@ -462,6 +468,33 @@ describe('AuthService', () => {
       const createdUserId = (userRef.set.mock.calls[0][0] as { id: string }).id;
       expectOnlyApplicationTicketSigned(jwt, createdUserId);
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it('가입 신청 기능이 꺼져 있으면(기본) 승인 대기 거절에 티켓·상태를 싣지 않고 아무것도 서명하지 않는다', async () => {
+      const configs: Record<string, string>[] = [
+        {},
+        { DRIVER_APPLICATION_ENABLED: 'false' },
+        { DRIVER_APPLICATION_ENABLED: 'TRUE' },
+      ];
+      for (const config of configs) {
+        const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+          config,
+          user: { id: 'driver-1', role: 'driver', storeId: null, suspended: false, driverApproved: false },
+        });
+
+        const rejection = service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' });
+        await expect(rejection).rejects.toMatchObject({
+          status: 403,
+          response: { code: DRIVER_APPROVAL_PENDING },
+        });
+        const response = await rejection.catch((error: { getResponse: () => object }) =>
+          error.getResponse(),
+        );
+        expect(response).not.toHaveProperty('applicationTicket');
+        expect(response).not.toHaveProperty('applicationStatus');
+        expect(jwt.sign).not.toHaveBeenCalled();
+        expect(refreshTokenRef.set).not.toHaveBeenCalled();
+      }
     });
 
     it('승인된 비정지 driver는 기존 카카오 로그인 토큰 발행을 유지한다', async () => {

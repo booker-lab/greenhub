@@ -3,10 +3,10 @@
  *
  * 승인 전 기사의 카카오 로그인은 API가 403 `DRIVER_APPROVAL_PENDING`으로 거절하면서 30분짜리
  * 가입 신청 티켓(`applicationTicket`)과 신청 상태(`applicationStatus`: none·submitted)를 함께 준다
- * (`apps/api/src/auth/auth.service.ts`). 기사 앱 카카오 signIn 콜백은 세션을 만들지 않고 티켓만
+ * (`apps/api/src/auth/auth.service.ts`, API의 가입 신청 기능이 켜졌을 때만). 기사 앱 카카오 signIn 콜백은 세션을 만들지 않고 티켓만
  * httpOnly 쿠키(경로 `/apply`, 30분)에 담은 뒤
  * - 신청 전(none) → `/apply`(신청 화면)
- * - 신청 뒤(submitted) → `/login?error=ApprovalPending`(접수 안내 + "신청 내용 수정" 링크)
+ * - 신청 뒤(submitted) → `/login?error=ApprovalPending&application=submitted`(접수 안내 + "신청 내용 수정" 링크)
  * 로 보낸다. 티켓은 브라우저 스크립트가 읽을 수 없고 `/apply` 화면·서버 액션만 서버에서 읽는다.
  */
 

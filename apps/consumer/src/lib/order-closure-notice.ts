@@ -7,6 +7,10 @@
  * 종결 안내를 보이지 않는다(수령 거부는 요청과 무관하게 바로 종결될 수 있어 그대로 알린다).
  * 기한 계산은 API·판매자 앱과 같은 공유 함수(@greenhub/shared customer-fault-closure)를 쓴다.
  * 종결된 주문(CLOSED_UNDELIVERED)은 환불되지 않는 이유와 상품 처리를 알린다.
+ *
+ * 고객 사유 종결은 약관 개정 전이라 API에서 기본으로 꺼져 있다(2026-11-14 사용자 결정 H1). 종결 전 경고는
+ * 주문 상세 응답의 customerFaultClosureEnabled가 true일 때만 보인다(값이 없으면 꺼진 것으로 본다).
+ * 이미 종결된 주문의 안내는 기능 스위치와 관계없이 보인다.
  */
 
 import {
@@ -39,6 +43,8 @@ export interface ClosureWarningInput {
   } | null;
   /** 재배송비 결제가 끝났으면 종결 경고를 보이지 않는다. */
   redeliveryPaid: boolean;
+  /** API가 알려 준 고객 사유 종결 기능 스위치. true가 아니면 종결 경고를 보이지 않는다. */
+  closureEnabled: boolean;
 }
 
 /**
@@ -48,6 +54,7 @@ export interface ClosureWarningInput {
 export function customerFaultClosureWarning(input: ClosureWarningInput): string | null {
   const hold = input.deliveryHold;
   if (
+    input.closureEnabled !== true ||
     !input.isRoundOrder ||
     input.deliveryMethod !== 'direct' ||
     (input.status !== 'DELIVERY_HELD' && input.status !== 'PREPARING') ||

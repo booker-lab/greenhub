@@ -66,7 +66,10 @@ async function createApp(trustProxyHops: number | false): Promise<INestApplicati
         ? ACCESS_SECRET
         : key === 'JWT_REFRESH_SECRET'
           ? REFRESH_SECRET
-          : undefined,
+          : // 기사 가입 신청 스위치(기본 꺼짐, H1)를 켜 집계 경로까지 가게 한다.
+            key === 'DRIVER_APPLICATION_ENABLED'
+            ? 'true'
+            : undefined,
     ),
   };
 

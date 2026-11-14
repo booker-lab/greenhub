@@ -26,8 +26,10 @@ export interface CustomerFaultClosureRecord {
  * - REDELIVERY_PAYMENT_IN_PROGRESS: 결제를 시작한 지 24시간이 안 된 재배송비가 있다.
  * - REDELIVERY_PAYMENT_NEEDS_REVIEW: 재배송비 결제 연결이 어긋났거나 환불·불일치 상태라 운영 확인이 필요하다.
  * - INVALID_HOLD: 보류 기록(보류 시각·재배송비)을 확인할 수 없다.
+ * - FEATURE_DISABLED: 고객 사유 종결 기능이 꺼져 있다(API 환경 변수 CUSTOMER_FAULT_CLOSURE_ENABLED가 'true'가
+ *   아님). 약관 개정 전이라 기본으로 끈다(2026-11-14 사용자 결정 H1). 이미 종결한 주문은 ALREADY_CLOSED 그대로다.
  */
-export type CustomerFaultClosureBlockReason = 'OK' | 'ALREADY_CLOSED' | 'NOT_ROUND_ORDER' | 'NOT_DIRECT_DELIVERY' | 'NOT_HELD' | 'HOLD_REASON_NOT_ELIGIBLE' | 'NOT_CUSTOMER_RESPONSIBLE' | 'INVALID_HOLD' | 'CANCELLATION_IN_PROGRESS' | 'REDELIVERY_FEE_PAID' | 'REDELIVERY_PAYMENT_NEEDS_REVIEW' | 'PAYMENT_NOT_REQUESTED' | 'PAYMENT_WINDOW_OPEN' | 'REDELIVERY_PAYMENT_IN_PROGRESS';
+export type CustomerFaultClosureBlockReason = 'OK' | 'ALREADY_CLOSED' | 'NOT_ROUND_ORDER' | 'NOT_DIRECT_DELIVERY' | 'NOT_HELD' | 'HOLD_REASON_NOT_ELIGIBLE' | 'NOT_CUSTOMER_RESPONSIBLE' | 'INVALID_HOLD' | 'CANCELLATION_IN_PROGRESS' | 'REDELIVERY_FEE_PAID' | 'REDELIVERY_PAYMENT_NEEDS_REVIEW' | 'PAYMENT_NOT_REQUESTED' | 'PAYMENT_WINDOW_OPEN' | 'REDELIVERY_PAYMENT_IN_PROGRESS' | 'FEATURE_DISABLED';
 /** GET stores/:storeId/orders/:orderId/customer-fault-closure 응답 */
 export interface CustomerFaultClosureEligibility {
     eligible: boolean;

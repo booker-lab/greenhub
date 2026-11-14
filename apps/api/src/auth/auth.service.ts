@@ -12,7 +12,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import type { DriverApplicationStatus } from '@greenhub/shared';
-import { getConfigValues, isProductionRuntime } from '../config/runtime-config';
+import {
+  DRIVER_APPLICATION_ENABLED_ENV,
+  getConfigValues,
+  isLegalGatedFeatureEnabled,
+  isProductionRuntime,
+} from '../config/runtime-config';
 import * as bcrypt from 'bcrypt';
 import * as admin from 'firebase-admin';
 import { randomUUID } from 'node:crypto';
@@ -94,6 +99,7 @@ const DRIVER_APPROVAL_PENDING_MESSAGE = '승인된 드라이버만 로그인할 
 
 // 승인 전 기사 거절. 상태 403·message·error 형태는 그대로 두고 기계 판독용 code만 더한다.
 // 카카오 로그인 거절에는 가입 신청 티켓과 신청 상태를 함께 싣는다(이메일 로그인에는 싣지 않는다).
+// 가입 신청 기능이 꺼져 있으면(DRIVER_APPLICATION_ENABLED가 'true'가 아님) 카카오 거절에도 싣지 않는다.
 function driverApprovalPending(application?: {
   applicationTicket: string;
   applicationStatus: DriverApplicationStatus;
@@ -604,8 +610,11 @@ export class AuthService {
       // 승인 전 기사에게는 세션 대신 30분짜리 가입 신청 티켓을 준다. 기사 앱은 이 티켓으로 `/apply`에서
       // 신청 정보를 내고 고친다(`GET·PUT /driver-applications/me`). 정지는 위에서 401로 끝났고,
       // 탈퇴한 문서처럼 신청할 수 없는 계정에는 티켓을 싣지 않는다.
+      // 가입 신청은 법무 검토 전 기능이라 DRIVER_APPLICATION_ENABLED='true'일 때만 티켓·상태를 싣는다(H1).
+      // 꺼져 있으면 기사 앱은 티켓 없는 거절로 보고 승인 대기 안내만 보인다.
       throw driverApprovalPending(
-        driverApplicantState(userData) === 'pending'
+        isLegalGatedFeatureEnabled(this.config, DRIVER_APPLICATION_ENABLED_ENV) &&
+          driverApplicantState(userData) === 'pending'
           ? {
               applicationTicket: signDriverApplicationTicket(
                 this.jwt,

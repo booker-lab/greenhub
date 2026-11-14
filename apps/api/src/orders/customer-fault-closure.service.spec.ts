@@ -2,6 +2,7 @@
 // 가짜 Firestore(OCC 하네스)로 실제 CustomerFaultClosureService·OrderCapacityService·SettlementsService를 구동한다.
 
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createOccFirestore } from '../../test/helpers/firestore-occ-fake';
 import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
 import { PortoneError } from '../payments/portone.client';
@@ -10,6 +11,7 @@ import { readOrderPayoutHoldInTransaction } from '../settlements/_lib/order-payo
 import { SettlementsService } from '../settlements/settlements.service';
 import { CustomerFaultClosureController } from './customer-fault-closure.controller';
 import {
+  CUSTOMER_FAULT_CLOSURE_DISABLED,
   CustomerFaultClosureService,
   decideCustomerFaultClosure,
 } from './customer-fault-closure.service';
@@ -140,7 +142,10 @@ function paidPayment(transactionId = 'tx-paid') {
   };
 }
 
-function makeService(occ: Occ, options: { portone?: ReturnType<typeof makePortone> } = {}) {
+function makeService(
+  occ: Occ,
+  options: { portone?: ReturnType<typeof makePortone>; closureEnabled?: boolean } = {},
+) {
   const capacity = new OrderCapacityService(occ.firestore as never);
   const settlements = new SettlementsService(
     occ.firestore as never,
@@ -151,11 +156,16 @@ function makeService(occ: Occ, options: { portone?: ReturnType<typeof makePorton
   const createSettlement = jest.spyOn(settlements, 'createSettlement');
   const adjustHeld = jest.spyOn(capacity, 'adjustHeldOrderCountInTransaction');
   const refundByOrderId = jest.spyOn(chargePayments, 'refundByOrderId');
+  // 고객 사유 종결은 기본으로 꺼져 있다(H1). 이 파일은 켠 상태를 기본으로 확인하고, 끈 상태는 따로 본다.
+  const config = new ConfigService(
+    options.closureEnabled === false ? {} : { CUSTOMER_FAULT_CLOSURE_ENABLED: 'true' },
+  );
   const service = new CustomerFaultClosureService(
     occ.firestore as never,
     capacity,
     settlements,
     chargePayments,
+    config,
   );
   return { service, createSettlement, adjustHeld, portone, refundByOrderId };
 }
@@ -517,6 +527,8 @@ describe('CustomerFaultClosureService.close', () => {
       'OrderCapacityService',
       'SettlementsService',
       'OrderChargePaymentService',
+      // 기능 스위치(CUSTOMER_FAULT_CLOSURE_ENABLED) 읽기 전용
+      'ConfigService',
     ]);
 
     // 결제되지 않은 PENDING 재배송비를 확인하고 종결해도 환불은 부르지 않는다.
@@ -742,6 +754,110 @@ describe('CustomerFaultClosureService.close', () => {
     expect(occ.getData(ROUND_PATH)?.['counters']?.['heldOrderCount']).toBe(1);
     expect(adjustHeld).not.toHaveBeenCalled();
     expect(createSettlement).not.toHaveBeenCalled();
+  });
+});
+
+describe('고객 사유 종결 기능 스위치(CUSTOMER_FAULT_CLOSURE_ENABLED)', () => {
+  it('꺼져 있으면 종결할 수 있는 주문도 GET이 eligible=false·FEATURE_DISABLED다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    const off = makeService(occ, { closureEnabled: false });
+    await expect(off.service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      eligible: false,
+      reason: 'FEATURE_DISABLED',
+    });
+    // 켜면 같은 주문이 종결 가능하다.
+    const on = makeService(occ);
+    await expect(on.service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      eligible: true,
+      reason: 'OK',
+    });
+  });
+
+  it('설정 없이 만든 서비스도 꺼진 것으로 본다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    const capacity = new OrderCapacityService(occ.firestore as never);
+    const settlements = new SettlementsService(occ.firestore as never, { get: () => undefined } as never);
+    const chargePayments = new OrderChargePaymentService(occ.firestore as never, makePortone() as never);
+    const service = new CustomerFaultClosureService(
+      occ.firestore as never,
+      capacity,
+      settlements,
+      chargePayments,
+    );
+    expect(service.isEnabled()).toBe(false);
+    await expect(service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      reason: 'FEATURE_DISABLED',
+    });
+  });
+
+  it('꺼져 있으면 POST는 403 CUSTOMER_FAULT_CLOSURE_DISABLED이고 주문·집계·정산·PortOne을 건드리지 않는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge: {} });
+    const before = structuredClone(occ.getData(ORDER_PATH));
+    const { service, createSettlement, adjustHeld, portone } = makeService(occ, {
+      closureEnabled: false,
+    });
+
+    const error = await service.close(closeInput).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      statusCode: 403,
+      code: CUSTOMER_FAULT_CLOSURE_DISABLED,
+    });
+    expect(occ.getData(ORDER_PATH)).toEqual(before);
+    expect(occ.getData(ROUND_PATH)!['counters']).toMatchObject({ heldOrderCount: 1 });
+    expect(occ.getData(SETTLEMENT_PATH)).toBeUndefined();
+    expect(adjustHeld).not.toHaveBeenCalled();
+    expect(createSettlement).not.toHaveBeenCalled();
+    expect(portone.getPayment).not.toHaveBeenCalled();
+  });
+
+  it('꺼져 있어도 다른 매장·없는 주문은 404다', async () => {
+    const occ = createOccFirestore();
+    seed(occ);
+    const { service } = makeService(occ, { closureEnabled: false });
+    await expect(
+      service.close({ ...closeInput, storeId: 'store-2' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.close({ ...closeInput, orderId: 'missing' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('꺼져 있어도 이미 종결한 주문은 기록을 보여 주고 정산 다시 맞추기(같은 POST)를 받는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    // 켜져 있을 때 종결했는데 정산 생성이 실패했고, 그 뒤 기능을 껐다.
+    const on = makeService(occ);
+    on.createSettlement.mockRejectedValueOnce(new Error('정산 쓰기 실패'));
+    await expect(on.service.close(closeInput)).rejects.toThrow('정산 쓰기 실패');
+    expect(occ.getData(SETTLEMENT_PATH)).toBeUndefined();
+
+    const off = makeService(occ, { closureEnabled: false });
+    await expect(off.service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      eligible: false,
+      reason: 'ALREADY_CLOSED',
+      closureReasonCode: 'REDELIVERY_FEE_UNPAID',
+      settlementMissing: true,
+    });
+    await expect(
+      off.service.close({ ...closeInput, memo: '정산 다시 맞추기' }),
+    ).resolves.toMatchObject({ alreadyClosed: true, status: 'CLOSED_UNDELIVERED' });
+    expect(off.adjustHeld).not.toHaveBeenCalled();
+    expect(occ.getData(SETTLEMENT_PATH)).toMatchObject({ completedStatus: 'CLOSED_UNDELIVERED' });
+    expect(occ.getData(ORDER_PATH)!['customerFaultClosure']).toMatchObject({
+      memo: closeInput.memo,
+    });
+    await expect(off.service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      reason: 'ALREADY_CLOSED',
+      settlementMissing: false,
+    });
   });
 });
 

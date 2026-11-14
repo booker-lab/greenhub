@@ -845,6 +845,27 @@ test('고객 사유 종결 주문은 종결 기록(사유·시각)만 읽고 보
   assert.match(source, /customerFaultClosureWarning\(/);
 });
 
+test('고객 사유 종결 기능 스위치는 서버가 true를 보냈을 때만 켜고 종결 전 경고에 넘긴다(H1)', () => {
+  assert.equal(readOrderDetail(activeOrder, activeOrder.id)?.customerFaultClosureEnabled, false);
+  for (const value of [false, 'true', 1, null]) {
+    assert.equal(
+      readOrderDetail({ ...activeOrder, customerFaultClosureEnabled: value }, activeOrder.id)
+        ?.customerFaultClosureEnabled,
+      false,
+    );
+  }
+  assert.equal(
+    readOrderDetail({ ...activeOrder, customerFaultClosureEnabled: true }, activeOrder.id)
+      ?.customerFaultClosureEnabled,
+    true,
+  );
+  assert.match(source, /closureEnabled: detail\.customerFaultClosureEnabled,/);
+  // 이미 종결된 주문 안내는 스위치와 관계없이 보인다.
+  const closedAt = source.indexOf('isClosedUndelivered && (');
+  assert.ok(closedAt > 0);
+  assert.doesNotMatch(source.slice(closedAt, closedAt + 80), /customerFaultClosureEnabled/);
+});
+
 test('기존 서버 취소·재배송비·주문 사진 조회 계약만 사용한다', () => {
   assert.match(source, /\/orders\/\$\{detail\.id\}\/cancel/);
   assert.match(source, /\/orders\/\$\{detail\.id\}\/redelivery-fee/);
