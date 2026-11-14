@@ -218,8 +218,10 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '출입 불가' }).check();
     await page.getByLabel('손님에게 보일 사유').fill('공동현관 출입 정보를 확인할 수 없습니다.');
-    await page.getByRole('checkbox', { name: '고객 책임' }).check();
-    // 고객 책임을 고르면 재배송비 칸이 기준 금액 10,000원으로 채워지고(D-09), 기사가 바꿀 수 있다.
+    // 출입 불가는 고객 사유라 고르면 고객 책임이 켜지고 재배송비 기준 금액 10,000원이 채워진다(S-04).
+    // 잠기지 않아 기사가 끌 수 있고, 금액도 바꿀 수 있다.
+    await expect(page.getByRole('checkbox', { name: '고객 책임' })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: '고객 책임' })).toBeEnabled();
     await expect(page.getByLabel('재배송비')).toHaveValue('10,000원');
     // 저장 뒤 결과(손님 결제 전 재개 잠금·기사 앱 수정 불가)를 금액과 함께 칸 바로 아래에 알린다(R-02).
     await expect(
@@ -256,7 +258,9 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '주소 오류' }).check();
     await page.getByLabel('손님에게 보일 사유').fill('상세 주소가 없어 배송지를 확인할 수 없습니다.');
-    await page.getByRole('checkbox', { name: '고객 책임' }).check();
+    // 고객 사유라 고객 책임이 켜진 채 기준 금액이 채워진다(S-04). 금액만 바꾼다.
+    await expect(page.getByRole('checkbox', { name: '고객 책임' })).toBeChecked();
+    await expect(page.getByLabel('재배송비')).toHaveValue('10,000원');
     await page.getByLabel('재배송비').fill('3000');
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T09:30');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T11:30');
@@ -279,7 +283,9 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '고객 연락 불가' }).check();
     await page.getByLabel('손님에게 보일 사유').fill('배송지 확인을 위해 연락했으나 응답이 없습니다.');
-    await page.getByRole('checkbox', { name: '고객 책임' }).check();
+    // 고객 사유라 고객 책임이 켜진 채 기준 금액이 채워진다(S-04). 금액만 바꾼다.
+    await expect(page.getByRole('checkbox', { name: '고객 책임' })).toBeChecked();
+    await expect(page.getByLabel('재배송비')).toHaveValue('10,000원');
     await page.getByLabel('재배송비').fill('3000');
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T10:00');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T12:00');

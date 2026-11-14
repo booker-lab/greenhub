@@ -21,6 +21,7 @@ import {
   driverHoldReasonOptions,
   HOLD_RECEIPT_REFUSED_RESPONSIBILITY_HINT,
   holdResponsibilityAfterReasonChange,
+  isCustomerResponsibleDefaultReason,
   PRODUCT_DAMAGED_HOLD_NOTICE,
 } from './delivery-hold-form.ts';
 
@@ -398,6 +399,80 @@ test('수령 거부를 고르면 고객 책임을 켜고 빈 재배송비를 10,
   );
   // 모달은 수령 거부일 때 고객 책임 칸을 켠 채 잠근다.
   assert.match(holdModalSource, /disabled=\{responsibilityLockedOff \|\| responsibilityLockedOn\}/);
+});
+
+test('S-04: 출입 불가·주소 오류·고객 연락 불가를 고르면 고객 책임을 켜고 10,000원을 채우며 R-02 안내가 보인다', () => {
+  for (const reasonCode of NON_WEATHER) {
+    assert.equal(isCustomerResponsibleDefaultReason(reasonCode), true, reasonCode);
+    const fields = holdResponsibilityAfterReasonChange({
+      reasonCode,
+      customerResponsible: false,
+      redeliveryFee: '',
+    });
+    assert.deepEqual(fields, {
+      customerResponsible: true,
+      redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+    });
+    // 기본값 그대로 저장할 수 있고, 저장 뒤 결과(손님 청구)를 칸 아래에서 알린다.
+    assert.equal(deliveryHoldResponsibilityFeeHint({ reasonCode, ...fields }), null);
+    assert.equal(
+      customerResponsibleFeeNotice({ reasonCode, ...fields }),
+      '손님이 재배송비 10,000원을 결제해야 다시 배송할 수 있어요. 저장한 뒤에는 기사 앱에서 바꿀 수 없어요.',
+    );
+  }
+  for (const reasonCode of ['WEATHER', 'RECEIPT_REFUSED', 'PRODUCT_DAMAGED', null]) {
+    assert.equal(isCustomerResponsibleDefaultReason(reasonCode), false, String(reasonCode));
+  }
+});
+
+test('S-04: 세 사유는 잠그지 않아 끌 수 있고, 끄면 재배송비를 비워 무료 재배송으로 저장한다', () => {
+  for (const reasonCode of NON_WEATHER) {
+    const redeliveryFee = redeliveryFeeAfterResponsibilityChange({
+      customerResponsible: false,
+      redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+    });
+    assert.equal(redeliveryFee, '');
+    assert.equal(
+      deliveryHoldResponsibilityFeeHint({ reasonCode, customerResponsible: false, redeliveryFee }),
+      null,
+    );
+    assert.equal(
+      customerResponsibleFeeNotice({ reasonCode, customerResponsible: false, redeliveryFee }),
+      null,
+    );
+  }
+  // 모달은 기상·상품 파손(꺼진 채)·수령 거부(켜진 채)만 고객 책임 칸을 잠근다.
+  assert.match(holdModalSource, /const responsibilityLockedOn = isCustomerResponsibleOnlyReason\(reasonCode\);/);
+});
+
+test('S-04: 유형을 바꾸면 이전 유형에서 켜고 끈 상태를 남기지 않고 새 유형의 기본값으로 돌아간다', () => {
+  // 출입 불가에서 고객 책임을 끈 뒤 주소 오류로 바꾸면 다시 켜지고 기준 금액이 채워진다.
+  assert.deepEqual(
+    holdResponsibilityAfterReasonChange({
+      reasonCode: 'ADDRESS_ISSUE',
+      customerResponsible: false,
+      redeliveryFee: '',
+    }),
+    { customerResponsible: true, redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW },
+  );
+  // 앞 유형에서 바꾼 금액도 기준 금액으로 돌아간다(유형을 바꾸면 기본값부터 다시 고른다).
+  assert.deepEqual(
+    holdResponsibilityAfterReasonChange({
+      reasonCode: 'CUSTOMER_UNREACHABLE',
+      customerResponsible: true,
+      redeliveryFee: 3000,
+    }),
+    { customerResponsible: true, redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW },
+  );
+  // 세 사유에서 기상으로 바꾸면 꺼지고 비워진다.
+  assert.deepEqual(
+    holdResponsibilityAfterReasonChange({
+      reasonCode: 'WEATHER',
+      customerResponsible: true,
+      redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+    }),
+    { customerResponsible: false, redeliveryFee: '' },
+  );
 });
 
 test('상품 파손은 기상처럼 책임·재배송비를 잠그고 새 배송 예정을 보내지 않는다', () => {

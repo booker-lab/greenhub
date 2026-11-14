@@ -228,7 +228,8 @@ export function DeliveryHoldModal({
     setFormError('');
   }, [opened]);
 
-  // 기상은 고객 책임·재배송비를 비우고, 수령 거부는 고객 책임을 켜고 빈 재배송비 칸을 기준 금액으로 채운다.
+  // 유형을 바꾸면 그 유형의 기본값으로 돌아간다. 기상은 고객 책임·재배송비를 비우고, 수령 거부와 출입 불가·
+  // 주소 오류·고객 연락 불가는 고객 책임을 켜고 재배송비 기준 금액을 채운다(세 사유는 끌 수 있다, S-04).
   function changeReason(value: string) {
     const next = value as HoldReason;
     setReasonCode(next);
