@@ -53,6 +53,8 @@ export type DeliveryHold = {
   redeliveryFee: number | null;
   nextContactAt: string | null;
   nextDeliveryAt: string | null;
+  /** 보류한 때의 주문 상태(상세 응답). 이 값이 생기기 전 보류면 없다. */
+  heldFromStatus?: 'PREPARING' | 'DELIVERING';
 };
 
 export const HOLD_REASON_LABEL: Record<HoldReason, string> = {

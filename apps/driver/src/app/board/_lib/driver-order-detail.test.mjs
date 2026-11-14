@@ -707,20 +707,26 @@ test('상품 파손 보류는 배송 재개 대상이 아니고, 상세는 재�
 });
 
 // S-05(2026-11-14): 고객 사유 보류 상품은 그날 가게로 돌려준다.
-test('고객 책임 보류(상품 파손 제외, 풀리지 않음)만 반납 안내 대상이다', async () => {
+test('고객 책임 보류(상품 파손 제외, 풀리지 않음, 배송 중에 보류)만 반납 안내 대상이다', async () => {
   const { isCustomerResponsibleHold, DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE } = await import(
     './driver-order-detail.ts'
   );
+  const delivering = { heldFromStatus: 'DELIVERING' };
   assert.equal(
     isCustomerResponsibleHold({
       customerResponsible: true,
       reasonCode: 'RECEIPT_REFUSED',
       resolvedAt: null,
+      ...delivering,
     }),
     true,
   );
   assert.equal(
-    isCustomerResponsibleHold({ customerResponsible: true, reasonCode: 'ACCESS_UNAVAILABLE' }),
+    isCustomerResponsibleHold({
+      customerResponsible: true,
+      reasonCode: 'ACCESS_UNAVAILABLE',
+      ...delivering,
+    }),
     true,
   );
   assert.equal(
@@ -728,6 +734,7 @@ test('고객 책임 보류(상품 파손 제외, 풀리지 않음)만 반납 안
       customerResponsible: false,
       reasonCode: 'WEATHER',
       resolvedAt: null,
+      ...delivering,
     }),
     false,
   );
@@ -736,6 +743,7 @@ test('고객 책임 보류(상품 파손 제외, 풀리지 않음)만 반납 안
       customerResponsible: true,
       reasonCode: 'PRODUCT_DAMAGED',
       resolvedAt: null,
+      ...delivering,
     }),
     false,
   );
@@ -744,6 +752,7 @@ test('고객 책임 보류(상품 파손 제외, 풀리지 않음)만 반납 안
       customerResponsible: true,
       reasonCode: 'ACCESS_UNAVAILABLE',
       resolvedAt: '2026-11-14T01:00:00.000Z',
+      ...delivering,
     }),
     false,
   );
@@ -752,4 +761,18 @@ test('고객 책임 보류(상품 파손 제외, 풀리지 않음)만 반납 안
     DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE,
     '상품을 오늘 가게로 돌려주세요. 재배송이 정해지면 다시 수거해요.',
   );
+});
+
+test('수거 전(PREPARING)에 보류했거나 보류한 때 상태를 모르면 반납 안내를 보이지 않는다(S-05)', async () => {
+  const { isCustomerResponsibleHold } = await import('./driver-order-detail.ts');
+  const customerHold = {
+    customerResponsible: true,
+    reasonCode: 'CUSTOMER_UNREACHABLE',
+    resolvedAt: null,
+  };
+  // 판매자가 수거 전에 보류한 주문: 기사는 상품을 받은 적이 없다.
+  assert.equal(isCustomerResponsibleHold({ ...customerHold, heldFromStatus: 'PREPARING' }), false);
+  // 이 칸이 생기기 전 보류는 단정하지 않는다.
+  assert.equal(isCustomerResponsibleHold(customerHold), false);
+  assert.equal(isCustomerResponsibleHold({ ...customerHold, heldFromStatus: 'DELIVERING' }), true);
 });

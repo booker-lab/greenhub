@@ -1192,6 +1192,9 @@ export class OrdersLifecycleService {
         nextContactAt: hold['nextContactAt'] ?? null,
         nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
         resolvedAt: null,
+        // 보류한 때의 주문 상태(PREPARING·DELIVERING). 기사가 상품을 들고 있는지(배송 중에 보류) 알려 준다.
+        // 요청 값이 아니라 서버가 읽은 현재 상태로 적는다.
+        heldFromStatus: order['status'],
       };
       // 보류 회차 번호. 보류·재개 알림의 멱등 키와 반복 상한(order-transition-notice)에 쓴다.
       update['deliveryHoldCount'] = readDeliveryHoldCount(order) + 1;

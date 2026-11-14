@@ -390,3 +390,45 @@ describe('레거시(회차 아님) 보류 경로도 연결 사진을 뗀다', ()
     });
   });
 });
+
+// S-05: 기사 앱은 배송 중에 보류한 주문(기사가 상품을 들고 있음)에만 "오늘 가게로 돌려주세요"를 보인다.
+// 그 판단 근거로 보류 기록에 보류한 때의 주문 상태를 서버가 남긴다(요청 값은 쓰지 않는다).
+describe('보류 기록에 보류한 때의 주문 상태(heldFromStatus)를 남긴다', () => {
+  it.each([
+    ['회차', 'DELIVERING', 'driver-1', 'driver', false],
+    ['회차', 'PREPARING', 'seller-1', 'seller', false],
+    ['레거시', 'DELIVERING', 'driver-1', 'driver', true],
+    ['레거시', 'PREPARING', 'seller-1', 'seller', true],
+  ])('%s %s 보류', async (_path, fromStatus, requesterId, role, legacy) => {
+    const context = makeContext(
+      legacy
+        ? {
+            id: 'order-1',
+            storeId: 'store-round',
+            userId: 'consumer-1',
+            saleType: 'normal',
+            status: fromStatus,
+            deliveryMethod: 'direct',
+            driverId: 'driver-1',
+          }
+        : roundOrder({ status: fromStatus }),
+    );
+    if (legacy) {
+      context.memory.records.set('stores/store-round', {
+        id: 'store-round',
+        ownerId: 'seller-1',
+        salesMode: 'legacy',
+      });
+    }
+
+    await context.update(requesterId, role, {
+      status: 'DELIVERY_HELD',
+      // 요청에 실린 값은 무시하고 서버가 읽은 현재 상태로 적는다.
+      deliveryHold: { ...holdInput, heldFromStatus: 'BOGUS' },
+    });
+
+    const held = context.memory.read(ORDER_PATH)!;
+    expect(held['status']).toBe('DELIVERY_HELD');
+    expect(held['deliveryHold']['heldFromStatus']).toBe(fromStatus);
+  });
+});

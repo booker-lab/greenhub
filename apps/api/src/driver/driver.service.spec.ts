@@ -710,6 +710,43 @@ describe('DriverService 주문 노출 범위와 읽기 계약', () => {
     );
   });
 
+  it('상세 보류 정보에 보류한 때의 주문 상태(heldFromStatus)를 PREPARING·DELIVERING일 때만 싣는다(S-05)', async () => {
+    const heldOrder = (heldFromStatus: unknown) => ({
+      status: 'DELIVERY_HELD',
+      deliveryMethod: 'direct',
+      driverId: 'driver-1',
+      deliveryHold: {
+        heldAt: '2026-08-26T00:00:00.000Z',
+        reasonCode: 'CUSTOMER_UNREACHABLE',
+        reasonMessage: '연락 안 됨',
+        customerResponsible: true,
+        redeliveryFee: 3000,
+        nextContactAt: null,
+        nextDeliveryAt: null,
+        resolvedAt: null,
+        ...(heldFromStatus === undefined ? {} : { heldFromStatus }),
+      },
+    });
+    const { service } = makeService({
+      'orders/delivering-hold': heldOrder('DELIVERING'),
+      'orders/preparing-hold': heldOrder('PREPARING'),
+      'orders/legacy-hold': heldOrder(undefined),
+      'orders/bogus-hold': heldOrder('DELIVERED'),
+    });
+
+    await expect(service.getOrder('driver-1', 'delivering-hold')).resolves.toMatchObject({
+      deliveryHold: { heldFromStatus: 'DELIVERING' },
+    });
+    await expect(service.getOrder('driver-1', 'preparing-hold')).resolves.toMatchObject({
+      deliveryHold: { heldFromStatus: 'PREPARING' },
+    });
+    for (const id of ['legacy-hold', 'bogus-hold']) {
+      await expect(service.getOrder('driver-1', id)).resolves.not.toHaveProperty(
+        'deliveryHold.heldFromStatus',
+      );
+    }
+  });
+
   it('상세에 가장 최근 보류 표시(heldAt)만 deliveryHoldAt으로 싣고, 재개 뒤 배송 중에도 남긴다', async () => {
     const { service } = makeService({
       'orders/resumed': {

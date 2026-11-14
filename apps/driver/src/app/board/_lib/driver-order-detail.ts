@@ -416,15 +416,26 @@ export function isDriverHoldEntryVisible(args: {
 export const DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE =
   '상품을 오늘 가게로 돌려주세요. 재배송이 정해지면 다시 수거해요.';
 
-/** 고객 책임으로 보류된(아직 풀리지 않은) 주문인지. 상품 파손은 따로 안내하므로 뺀다. */
+/**
+ * 반납 안내(DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE) 대상: 고객 책임으로 보류된(아직 풀리지 않은) 주문 중
+ * 배송 중에 보류해 기사가 상품을 들고 있는 주문. 상품 파손은 따로 안내하므로 뺀다.
+ * 수거 전(PREPARING)에 보류한 주문은 기사가 상품을 받지 않았으므로 돌려줄 것이 없다. 보류한 때 상태
+ * (deliveryHold.heldFromStatus, 서버가 보류 시 적음)를 모르는 이전 보류도 단정하지 않고 숨긴다.
+ */
 export function isCustomerResponsibleHold(
   hold:
-    | { customerResponsible?: unknown; reasonCode?: unknown; resolvedAt?: unknown }
+    | {
+        customerResponsible?: unknown;
+        reasonCode?: unknown;
+        resolvedAt?: unknown;
+        heldFromStatus?: unknown;
+      }
     | null
     | undefined,
 ): boolean {
   if (!hold || hold.customerResponsible !== true) return false;
   if (hold.reasonCode === 'PRODUCT_DAMAGED') return false;
+  if (hold.heldFromStatus !== 'DELIVERING') return false;
   return hold.resolvedAt === null || hold.resolvedAt === undefined;
 }
 

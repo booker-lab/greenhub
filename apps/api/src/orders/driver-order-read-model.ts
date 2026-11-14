@@ -213,6 +213,11 @@ function projectDeliveryHold(value: unknown): Record<string, unknown> | undefine
     redeliveryFee: value['redeliveryFee'],
     nextContactAt: value['nextContactAt'],
     nextDeliveryAt: value['nextDeliveryAt'],
+    // 보류한 때의 주문 상태. 배송 중(상품을 들고 있음)에 보류한 주문에만 "오늘 가게로 돌려주세요"를 보인다(S-05).
+    // 이 칸이 생기기 전 보류는 싣지 않는다(기사 앱은 모르면 반납 안내를 숨긴다).
+    ...(value['heldFromStatus'] === 'PREPARING' || value['heldFromStatus'] === 'DELIVERING'
+      ? { heldFromStatus: value['heldFromStatus'] }
+      : {}),
   };
 }
 
