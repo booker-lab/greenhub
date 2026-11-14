@@ -132,7 +132,12 @@ function FieldFrame({
         </FieldLabel>
       )}
       {description && (
-        <FieldDescription id={descriptionId} className="m-0">
+        // ② 방향(design-standard §3): 굵지 않은 설명 글씨는 15px(text-sm, 줄 높이 1.45)·보조 글자색.
+        // 공용 FieldDescription 기본값(13px·gray-6, 흰 바탕 대비 3.3:1)을 이 화면에서만 덮어쓴다.
+        <FieldDescription
+          id={descriptionId}
+          className="m-0 text-sm leading-[1.45] text-muted-foreground"
+        >
           {description}
         </FieldDescription>
       )}
@@ -141,7 +146,7 @@ function FieldFrame({
         <p
           id={errorId}
           data-slot="field-error"
-          className="m-0 text-xs leading-[1.2] font-normal text-ui-red"
+          className="m-0 text-sm leading-[1.45] font-normal text-[var(--color-danger)]"
         >
           {error}
         </p>
