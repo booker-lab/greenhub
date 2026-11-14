@@ -178,7 +178,7 @@ gcloud compute addresses describe greenhub-api-egress --region=asia-northeast3 -
 `greenhub-round-direct-e2e` 프로젝트에 R1~R7과 같은 구성을 만들고(프로젝트·서비스 이름만 바꿈) `greenhub-api-staging`을 띄운다. 이 단계에서 정한다.
 
 - **프록시 홉 수 실측**: 2026-10-18 Railway 실측과 같은 기준(접속자마다 다른 요청 한도 버킷, 클라이언트가 보낸 `X-Forwarded-For` 무시). **부하분산기 경유와 run.app 직접은 홉 수가 다를 수 있다.** 운영은 부하분산기 경유 값을 쓴다.
-- 회차 E2E 1회(회차 64 + 세션 12), 원격 E2E 예산 규칙(`development-authority.md` §4.1)을 따른다.
+- 회차 E2E 1회(회차 66 + 세션 12), 원격 E2E 예산 규칙(`development-authority.md` §4.1)을 따른다.
 - **배포 방법**: 시험 서비스는 수동으로 배포한다. 시험용 배포 workflow나 Workload Identity Federation은 두지 않는다(배포가 드물고, 운영 공급자 R5는 `production-deploy.yml`·`production` Environment 전용이다). 이미지는 운영 저장소에 이미 올라간 것을 digest로 그대로 쓴다. 이를 위해 시험 프로젝트 Cloud Run 서비스 에이전트(`service-1066622638505@serverless-robot-prod.iam.gserviceaccount.com`)에 운영 저장소 `greenhub` 읽기(`artifactregistry.reader`)만 준다(2026-10-24 사용자 승인). 시험이 끝나면 지울 수 있다.
 - **실행 기록(2026-10-23, 이 절차서가 `main`에 오르기 전 다른 세션 안내로 만든 것)**: 시험 프로젝트에 다음이 이미 있다.
   - 켠 API: `run`·`artifactregistry`·`secretmanager`·`compute`·`iamcredentials`·`sts`
