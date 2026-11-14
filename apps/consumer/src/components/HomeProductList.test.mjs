@@ -23,7 +23,8 @@ test('round_direct 홈은 useSaleRounds 정본과 요구된 안내 순서를 사
     '이번 주 판매',
     '주문 마감',
     '경기도 이천시 직접배송',
-    '화요일 오전 9시까지 문 앞 배송',
+    // 배송 약속은 회차 도착 시각에서 만든다(문장·대체 문구는 lib/round-schedule-label 테스트가 고정한다).
+    'formatRoundDeliveryPromise(currentRound?.schedule.deliveryEndAt)',
     '지난 회차',
   ];
   const positions = labels.map((label) => roundDirectSource.indexOf(label));
@@ -33,6 +34,8 @@ test('round_direct 홈은 useSaleRounds 정본과 요구된 안내 순서를 사
     positions,
     [...positions].sort((a, b) => a - b),
   );
+  // 요일만 적은 고정 문구를 화면에 직접 쓰지 않는다.
+  assert.doesNotMatch(roundDirectSource, /화요일/);
 });
 
 test('회차 상품 링크는 productId와 roundId를 함께 보존한다', () => {

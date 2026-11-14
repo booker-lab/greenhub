@@ -41,3 +41,19 @@ export function formatOrderDeliveryDate(value: unknown): string | null {
     Number(parts.find((part) => part.type === type)?.value);
   return formatCalendarDay(read('year'), read('month'), read('day'));
 }
+
+/** 배송 예정일을 읽지 못할 때 주문 완료 화면에 쓰는 고정 문구. */
+export const ORDER_DELIVERY_NOTICE_FALLBACK =
+  '화요일 오전 9시까지 문 앞에 배송해요. 경기도 이천시 직접배송 주문이에요.';
+
+/**
+ * 주문 완료 화면의 배송 안내 본문. 날짜는 주문의 배송 예정일에서 읽는다.
+ * 예: "11월 10일(화) 오전 9시까지 문 앞에 배송해요. 경기도 이천시 직접배송 주문이에요."
+ * 읽을 수 없으면 고정 문구.
+ */
+export function formatOrderDeliveryNotice(requestedDeliveryDate: unknown): string {
+  const day = formatOrderDeliveryDate(requestedDeliveryDate);
+  return day
+    ? `${day} 오전 9시까지 문 앞에 배송해요. 경기도 이천시 직접배송 주문이에요.`
+    : ORDER_DELIVERY_NOTICE_FALLBACK;
+}

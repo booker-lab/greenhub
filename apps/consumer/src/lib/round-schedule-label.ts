@@ -57,6 +57,20 @@ export function formatRoundDay(value: string): string | null {
   return `${day.month}월 ${day.day}일(${day.weekday})`;
 }
 
+/** 회차 도착 시각을 읽지 못할 때 홈 요약 상자에 쓰는 고정 문구. */
+export const ROUND_DELIVERY_PROMISE_FALLBACK = '화요일 오전 9시까지 문 앞 배송';
+
+/**
+ * 홈 요약 상자의 배송 약속 한 줄. 회차 도착 시각(schedule.deliveryEndAt)을 그대로 읽는다.
+ * 예: "11월 10일(화) 오전 9시까지 문 앞 배송", 자정이면 "11월 9일(월) 밤 12시까지 문 앞 배송".
+ * 회차가 없거나 값을 읽지 못하면 고정 문구.
+ */
+export function formatRoundDeliveryPromise(deliveryEndAt: unknown): string {
+  // new Date(null)은 1970년으로 읽히므로 글자가 아닌 값은 먼저 거른다.
+  const time = typeof deliveryEndAt === 'string' ? formatRoundTime(deliveryEndAt) : null;
+  return time ? `${time}까지 문 앞 배송` : ROUND_DELIVERY_PROMISE_FALLBACK;
+}
+
 /** 예: "11월 8일(일) 밤 12시까지" */
 export function formatOrderCloseLabel(value: string): string {
   const time = formatRoundTime(value);

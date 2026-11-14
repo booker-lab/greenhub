@@ -35,6 +35,7 @@ import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
 import {
   formatOrderCloseStatus,
   formatOrderOpenLabel,
+  formatRoundDeliveryPromise,
   isRoundOrderClosed,
   roundSectionTitle,
 } from '@/lib/round-schedule-label';
@@ -329,7 +330,8 @@ function RoundDirectHome({
             className={`${TEXT_SM} mt-1.5`}
             style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-primary-dark)' }}
           >
-            화요일 오전 9시까지 문 앞 배송
+            {/* 회차 도착 시각에서 만든다(값을 읽지 못하면 고정 문구). */}
+            {formatRoundDeliveryPromise(currentRound?.schedule.deliveryEndAt)}
           </p>
           {isFeatureOn('demand-signals') && currentRound?.demand && currentRound.demand.buyerCount > 0 && (
             <p
