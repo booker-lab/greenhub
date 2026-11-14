@@ -111,6 +111,7 @@ PATCH /admin/stores/:storeId/restore
 
 현재 archive는 물리 삭제가 아니다.
 
+- 본문(`{ confirmStoreIdPrefix?: string }`)은 선택이며 전역 `ValidationPipe`를 거친다(문자열이 아니거나 모르는 칸이면 400, 본문 없음·`{}`는 확인 값 없음). 직접 근거: `apps/api/src/admin/admin-body-validation.spec.ts`.
 - 주문 또는 settlement가 하나라도 존재하면 본문 `confirmStoreIdPrefix`(가게 ID 앞 8자리, 앞뒤 공백·대소문자 무시)가 맞아야 archive한다. 없거나 틀리면 412. 화면은 412를 받으면 입력창으로 ID를 받아 다시 보낸다(2026-10-30 결정: 주문이 있는 테스트 가게 정리). 이때 행동 기록 `after`에 `hadRecords: true`를 남긴다
 - 이미 치운 판매자면 409
 - 허용되면 `status: archived`, `archivedAt`, 치우기 전 상태 `archivedFromStatus` 기록
@@ -295,6 +296,8 @@ PATCH /admin/drivers/:userId/approve
 ```ts
 { expectedRevision?: number } // 본 가입 신청 회차, 신청 정보가 없으면 0. 본문 없이 보내면 비교하지 않는다.
 ```
+
+- 본문은 전역 `ValidationPipe`(whitelist·forbidNonWhitelisted)를 거친다. `expectedRevision`이 0 이상의 정수가 아니거나 모르는 칸이 있으면 400. 본문이 없거나 `{}`면 회차를 비교하지 않는다. 가입 신청 기능 스위치(`DRIVER_APPLICATION_ENABLED`)와 관계없이 동작한다(이미 저장된 신청 정보만 보인다). 직접 근거: `apps/api/src/admin/admin-body-validation.spec.ts`.
 
 - 사용자 존재 확인
 - `role === driver` 확인
@@ -512,6 +515,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-14 | 보안 검토: 기사 승인·판매자 치우기의 선택 본문을 `Dto | undefined` 대신 DTO 클래스로 받아 전역 `ValidationPipe`가 검증(잘못된 `expectedRevision`·모르는 칸 400, 본문 없음 유지) |
 | 2026-11-13 | 기사 목록에 가입 신청(`driverApplication`)을 싣고, 승인에 `expectedRevision`(본 신청 회차) 낙관적 동시성 검사·409 `DRIVER_APPLICATION_CHANGED`·감사 `applicationRevision`, 신청 없는 기존 대기 계정 승인 유지 |
 | 2026-10-24 | 코드 대조: 소비자 목록 허용 필드·탈퇴 제외, 정지 대상 제한·자기 정지 400(#578·#594), 정산 지급의 주문 보류 409(#603), 정산 날짜 `YYYY-MM-DD`·배너 URL 제약(#578), 후기·입점 문의 관리 경로(#555·#590) 반영 |
 | 2026-10-23 | 주문·기사 목록 커서 이어받기, 치운 판매자 숨김·주문 차단과 복구 상태(#593)를 §3·§5·§7·§11에 반영 |
