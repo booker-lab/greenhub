@@ -513,7 +513,7 @@ export default function CategoryPage() {
 
   return (
     <div className="mx-auto max-w-[720px] px-4 pb-24">
-      <div className="px-4 pt-5 pb-4">
+      <div className="pt-5 pb-4">
         <h3
           className="m-0 text-[22px] leading-[1.4]"
           style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
@@ -521,7 +521,7 @@ export default function CategoryPage() {
           상품
         </h3>
       </div>
-      <div className="px-4">{content}</div>
+      <div>{content}</div>
     </div>
   );
 }
