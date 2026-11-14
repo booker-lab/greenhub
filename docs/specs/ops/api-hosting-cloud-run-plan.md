@@ -105,7 +105,7 @@
 
 - `greenhub-round-direct-e2e`에 시험 서비스를 띄운다. Railway 스테이징과 같은 변수에 `GREENHUB_ENVIRONMENT_NAME=staging`, 고정 IP를 쓴다.
 - **프록시 홉 수 실측**: 2026-10-18 Railway 실측과 같은 기준이다. 접속자마다 다른 요청 한도 버킷이어야 하고, 클라이언트가 보낸 `X-Forwarded-For`는 무시돼야 한다. 그 값을 `TRUST_PROXY_HOPS`로 고정한다.
-- **회차 E2E 1회**(회차 64 + 세션 12)를 시험용 Cloud Run 대상으로 실행한다.
+- **회차 E2E 1회**(회차 66 + 세션 12)를 시험용 Cloud Run 대상으로 실행한다.
   - 이를 위해 `ROUND_DIRECT_E2E_API_ORIGIN`과 세 앱 브랜치 미지정 Preview env의 API 주소를 시험용 Cloud Run으로 바꾼다. 실행 뒤 되돌릴지는 여기서 정한다.
   - 원격 E2E 예산 규칙(`development-authority.md` §4.1)을 따른다.
 - **확인**: E2E 통과·fixture 잔여 0, `/health` 200·commit 일치, 홉 수 실측 기록
