@@ -18,9 +18,10 @@ test('홈 화면이 사업자 footer를 가져와 상품 목록 다음에 렌더
   assert.ok(footerIndex > productListIndex);
 });
 
-// 디자인 기준(docs/specs/frontend/design-standard.md §5): 머리띠 → 마감 띠 → 배너 → 상품.
+// 디자인 기준(docs/specs/frontend/design-standard.md §5): 머리띠 → 배송일 제목 → 도감 타일 → 운영 배너.
+// 배너는 상품 목록에 넘겨 목록이 자리를 정한다(회차 홈은 타일 아래, 예전 판매 홈은 목록 위).
 // 사업자 관계 안내(카카오 채널 승인 증빙)는 홈에 계속 두되 상품 목록과 footer 사이로 옮겼다.
-test('배너는 상품 목록 위에, 운영 관계 안내는 상품 목록과 footer 사이에 렌더링한다', () => {
+test('배너는 상품 목록에 넘기고, 운영 관계 안내는 상품 목록과 footer 사이에 렌더링한다', () => {
   assert.match(
     pageSource,
     /import BusinessRelationshipNotice from '@\/components\/BusinessRelationshipNotice';/,

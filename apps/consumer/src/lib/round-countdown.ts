@@ -1,19 +1,19 @@
 import type { SaleRoundSchedule, SaleRoundStatus } from '@greenhub/shared';
 
-// 홈 마감 띠와 상품 카드 태그에 쓰는 회차 시간 계산. 모두 한국시간 기준이다.
-// 띠 문구에는 "주문 마감"을 쓰지 않는다(홈의 주문 마감 안내 문구와 겹치지 않게).
+// 홈 마감 알약과 상품 카드 태그에 쓰는 회차 시간 계산. 모두 한국시간 기준이다.
+// 알약 문구에는 "주문 마감"을 쓰지 않는다(홈의 주문 마감 안내 문구와 겹치지 않게).
 
 export interface CountdownTarget {
   label: string;
   at: string;
 }
 
-/** 주문 받는 중이면 마감까지, 판매 예정이면 주문 시작까지 센다. 그 밖의 상태는 띠를 숨긴다. */
+/** 주문 받는 중이면 마감까지, 판매 예정이면 주문 시작까지 센다. 그 밖의 상태는 알약을 숨긴다. */
 export function countdownTarget(
   status: SaleRoundStatus,
   schedule: Pick<SaleRoundSchedule, 'orderOpenAt' | 'orderCloseAt'>,
 ): CountdownTarget | null {
-  if (status === 'OPEN') return { label: '이번 회차 마감까지', at: schedule.orderCloseAt };
+  if (status === 'OPEN') return { label: '마감까지', at: schedule.orderCloseAt };
   if (status === 'SCHEDULED') return { label: '주문 시작까지', at: schedule.orderOpenAt };
   return null;
 }

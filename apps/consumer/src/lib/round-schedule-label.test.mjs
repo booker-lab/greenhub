@@ -12,6 +12,7 @@ new Function('module', 'exports', compiled)(module, module.exports);
 const {
   formatRoundTime,
   formatRoundDay,
+  formatRoundMonthDay,
   formatOrderCloseLabel,
   formatOrderOpenLabel,
   formatOrderCloseStatus,
@@ -72,6 +73,21 @@ test('배송일은 "12월 1일(화)"로 쓰고 자정은 전날로 읽는다', (
   // 2026-11-09 00:30 KST도 formatRoundTime과 같이 전날로 읽는다.
   assert.equal(formatRoundDay('2026-11-08T15:30:00.000Z'), '11월 8일(일)');
   assert.equal(formatRoundDay('not-a-date'), null);
+});
+
+test('홈 배송일 제목은 요일 없이 "12월 1일"로 쓰고 자정 도착은 전날로 읽는다', () => {
+  // 2026-12-01 09:00 KST
+  assert.equal(formatRoundMonthDay('2026-12-01T00:00:00.000Z'), '12월 1일');
+  // 2026-11-09 00:00 KST, 00:30 KST → 11월 8일
+  assert.equal(formatRoundMonthDay('2026-11-08T15:00:00.000Z'), '11월 8일');
+  assert.equal(formatRoundMonthDay('2026-11-08T15:30:00.000Z'), '11월 8일');
+  // 2026-12-01 00:00 KST → 11월 30일, 2027-01-01 00:00 KST → 12월 31일
+  assert.equal(formatRoundMonthDay('2026-11-30T15:00:00.000Z'), '11월 30일');
+  assert.equal(formatRoundMonthDay('2026-12-31T15:00:00.000Z'), '12월 31일');
+  // 2026-11-09 01:00 KST는 그날이다.
+  assert.equal(formatRoundMonthDay('2026-11-08T16:00:00.000Z'), '11월 9일');
+  assert.equal(formatRoundMonthDay('not-a-date'), null);
+  assert.equal(formatRoundMonthDay(''), null);
 });
 
 // 2026-11-07 00:09 KST
