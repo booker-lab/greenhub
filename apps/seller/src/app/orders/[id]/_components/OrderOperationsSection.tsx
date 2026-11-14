@@ -28,6 +28,7 @@ const TONE: Record<string, 'default' | 'problem' | 'done'> = {
   brand: 'default',
   red: 'problem',
   yellow: 'default',
+  neutral: 'default',
   gray: 'done',
 };
 
@@ -72,6 +73,20 @@ function getRedeliveryPaymentPresentation(payment: Order['redeliveryPayment']) {
     };
   }
 
+  // 결제 건이 아직 없지만 손님이 결제할 수 있는 정상 대기(S-03, 기사 앱 D-03과 같은 분기). 결제 요청 알림은
+  // 판매자가 "재배송 준비로 돌리기"를 눌러야 나가므로 운영 문제가 아니라 판매자가 할 일로 알린다.
+  if (
+    payment.status === 'MISSING' &&
+    payment.canPay === true &&
+    payment.requiresRecovery === false
+  ) {
+    return {
+      label: '재배송비 결제 전',
+      description: "'재배송 준비로 돌리기'를 누르면 손님에게 결제 요청이 가요.",
+      color: 'neutral',
+    };
+  }
+
   if (payment.status === 'PENDING') {
     return {
       label: '재배송비 결제 대기',
@@ -87,7 +102,7 @@ function getRedeliveryPaymentPresentation(payment: Order['redeliveryPayment']) {
   };
 }
 
-function RedeliveryPaymentPanel({ payment }: { payment: Order['redeliveryPayment'] }) {
+export function RedeliveryPaymentPanel({ payment }: { payment: Order['redeliveryPayment'] }) {
   const presentation = getRedeliveryPaymentPresentation(payment);
   if (!presentation) return null;
 

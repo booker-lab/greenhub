@@ -49,7 +49,8 @@ interface CustomerFaultClosureSectionProps {
 
 const smallText = { fontSize: 'var(--font-size-sm)' } as const;
 // PostDeliveryRefundSection과 같은 글자·버튼·확인 창 모양을 쓴다.
-const TEXT = 'm-0 p-0 text-base font-normal';
+// 낱말 중간에서 줄이 갈리지 않게 keep-all로 어절 단위 줄바꿈을 하고, 긴 메모 등은 anywhere로 넘침을 막는다(S-06).
+const TEXT = 'm-0 p-0 text-base font-normal [word-break:keep-all] [overflow-wrap:anywhere]';
 
 /**
  * 고객 사유 종결(환불 없음). 고객 책임 보류 주문에서 손님이 수령을 거부했거나 재배송비를 기한까지

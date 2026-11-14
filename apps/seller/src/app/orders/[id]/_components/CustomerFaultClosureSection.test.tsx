@@ -43,6 +43,15 @@ describe('CustomerFaultClosurePanel', () => {
     expect(html).not.toContain('환불 없이 주문 종결');
   });
 
+  it('안내 글은 낱말 중간에서 줄을 바꾸지 않는다(S-06: keep-all + overflow-wrap anywhere)', () => {
+    const blocked = panel({ ...eligible, eligible: false, reason: 'PAYMENT_WINDOW_OPEN' });
+    expect(blocked).toContain('[word-break:keep-all]');
+    expect(blocked).toContain('[overflow-wrap:anywhere]');
+    const html = panel(eligible);
+    expect(html).toContain('[word-break:keep-all]');
+    expect(html).toContain('[overflow-wrap:anywhere]');
+  });
+
   it('결제가 진행 중이면 그 이유를 보인다', () => {
     const html = panel({ ...eligible, eligible: false, reason: 'REDELIVERY_PAYMENT_IN_PROGRESS' });
     expect(html).toContain('재배송비 결제가 진행 중이에요');
