@@ -5,8 +5,9 @@ import { InputSection, inputClassName } from '@greenhub/ui/components/input';
 import { cn } from '@greenhub/ui/lib/utils';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { Search, SearchX } from 'lucide-react';
 import ProductRequestBox from '@/components/benchmark/ProductRequestBox';
+import EmptyStateIcon from '@/components/EmptyStateIcon';
 import ProductCard from '@/components/ProductCard';
 import { useProducts } from '@/hooks/useProducts';
 import { matchesPlantQuery } from '@/lib/benchmark-format';
@@ -22,7 +23,6 @@ import {
 // 아래 sm 12)·Stack(gap md 16·sm 12)·SimpleGrid cols 2(gap sm 12)·Text(p, 16px·줄 높이 1.55, size xl은 20px·1.65,
 // Text span도 Text라 부모 15px가 아니라 16px·줄 높이 1.55)·Button light(sm)와 같은 값.
 const TEXT = 'm-0 p-0 text-[16px] leading-[1.55]';
-const XL_TEXT = 'm-0 p-0 text-[20px] leading-[1.65]';
 const EMPTY_STACK = 'flex flex-col items-center justify-start gap-4 py-16';
 const DISABLED_TEXT_STYLE = {
   fontSize: 'var(--font-size-sm)',
@@ -162,7 +162,7 @@ function SearchView({ urlQuery }: { urlQuery: string }) {
 
         {!loading && !error && !hasQuery && (
           <div className={EMPTY_STACK}>
-            <p className={XL_TEXT}>🔍</p>
+            <EmptyStateIcon icon={Search} />
             <p className={TEXT} style={DISABLED_TEXT_STYLE}>
               찾고 싶은 상품을 검색해보세요.
             </p>
@@ -171,7 +171,7 @@ function SearchView({ urlQuery }: { urlQuery: string }) {
 
         {!loading && hasQuery && filtered.length === 0 && (
           <div className={EMPTY_STACK}>
-            <p className={XL_TEXT}>😢</p>
+            <EmptyStateIcon icon={SearchX} />
             <p className={TEXT} style={DISABLED_TEXT_STYLE}>
               <span className={TEXT} style={QUERY_STYLE}>
                 "{query}"

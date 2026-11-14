@@ -53,3 +53,32 @@ export function dogamLabelParts(product: DogamSource | undefined | null): string
 export function dogamLabel(product: DogamSource | undefined | null): string {
   return dogamLabelParts(product).join(' · ');
 }
+
+export interface FlowerLookRow {
+  label: string;
+  value: string;
+}
+
+function lookValue(labels: Record<string, string>, raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const key = raw.trim();
+  if (!key) return null;
+  return labels[key] ?? key;
+}
+
+/**
+ * 상품 상세 "이 꽃의 모습" 표의 줄(design-direction.md §4.3): 개화 상태 → 향기 → 관리 난이도.
+ * 값이 없는 줄은 빼고, 하나도 없으면 빈 배열이다(상자를 그리지 않는다).
+ */
+export function flowerLookRows(
+  product: Pick<Product, 'selection'> | undefined | null,
+): FlowerLookRow[] {
+  const selection = product?.selection;
+  if (!selection) return [];
+  const candidates: [string, string | null][] = [
+    ['개화 상태', lookValue(BLOOM_LABEL, selection.bloomCondition)],
+    ['향기', lookValue(FRAGRANCE_LABEL, selection.fragrance)],
+    ['관리 난이도', lookValue(CARE_LABEL, selection.careLevel)],
+  ];
+  return candidates.flatMap(([label, value]) => (value ? [{ label, value }] : []));
+}

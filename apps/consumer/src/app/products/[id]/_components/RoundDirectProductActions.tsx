@@ -219,20 +219,16 @@ export default function RoundDirectProductActions({ product, roundProduct }: Pro
           <p className="m-0 p-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
             {store.name}
           </p>
-          <div className="mt-3 flex flex-col items-stretch justify-start gap-1">
-            <p
-              className="m-0 p-0 text-sm font-normal"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              📍 {PUBLIC_BUSINESS_INFO.address}
-            </p>
-            <p
-              className="m-0 p-0 text-sm font-normal"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              📞 {PUBLIC_BUSINESS_INFO.phone}
-            </p>
-          </div>
+          {/* 이모지 대신 글자 라벨을 앞에 둔 이름–값 줄(design-direction.md §3.1). */}
+          <dl
+            className="m-0 mt-3 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-sm font-normal"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            <dt className="m-0 p-0">주소</dt>
+            <dd className="m-0 p-0">{PUBLIC_BUSINESS_INFO.address}</dd>
+            <dt className="m-0 p-0">전화</dt>
+            <dd className="m-0 p-0">{PUBLIC_BUSINESS_INFO.phone}</dd>
+          </dl>
         </div>
       )}
 
