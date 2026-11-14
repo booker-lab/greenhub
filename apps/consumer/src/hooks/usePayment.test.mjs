@@ -160,6 +160,23 @@ test.after(() => {
   }
 });
 
+/** setState 기록에서 결제 안내({ kind, message })만 고른다. */
+function noticeChanges(changes) {
+  return changes.filter(
+    (change) => change !== null && typeof change === 'object' && 'kind' in change,
+  );
+}
+
+/** setState 기록에서 결제 안내({ kind, message })의 문구만 꺼낸다. */
+function noticeMessages(changes) {
+  return noticeChanges(changes).map((change) => change.message);
+}
+
+/** setState 기록에 남은 마지막 결제 안내의 종류(canceled·failed). */
+function lastNoticeKind(changes) {
+  return noticeChanges(changes).at(-1)?.kind;
+}
+
 function loadHook({ paymentResponses = [], onPayment } = {}) {
   const paymentCalls = [];
   const stateChanges = [];
@@ -435,8 +452,10 @@ test('결제창 취소·실패(code 응답) 뒤 재시도는 새 clientOrderRequ
   await result.requestPayment();
   assert.equal(stateChanges.at(-1), 'error');
   // PG 원문 메시지 대신 고객 문구를 오류로 남긴다.
-  assert.ok(stateChanges.includes('결제를 취소했어요. 장바구니는 그대로 남아 있어요.'));
-  assert.ok(!stateChanges.includes('사용자가 결제를 취소했습니다.'));
+  assert.ok(noticeMessages(stateChanges).includes('결제를 취소했어요. 장바구니는 그대로 남아 있어요.'));
+  assert.ok(!noticeMessages(stateChanges).includes('사용자가 결제를 취소했습니다.'));
+  // 고객이 결제창을 닫은 안내는 종류가 canceled다(화면이 중립 면으로 그린다).
+  assert.equal(lastNoticeKind(stateChanges), 'canceled');
   await result.requestPayment();
 
   assert.equal(requestBodies.length, 2);
@@ -476,6 +495,38 @@ test('서버가 4xx로 확정 거절하면 다음 시도는 새 clientOrderReque
   }
 });
 
+test('결제 안내 종류는 고객이 결제창을 닫은 경우만 canceled이고 그 밖의 실패·거절은 failed다', async () => {
+  globalThis.fetch = async () => jsonResponse(successfulRoundResponse);
+  const cases = [
+    [{ code: 'FAILURE_TYPE_PG', message: 'canceled', pgCode: 'PAY_PROCESS_CANCELED' }, 'canceled'],
+    [{ code: 'FAILURE_TYPE_PG', message: '[PAY_PROCESS_CANCELED] 결제 취소' }, 'canceled'],
+    // '취소'라는 글자가 있어도 고객이 닫지 않은 PG 실패는 문제 안내다.
+    [{ code: 'FAILURE_TYPE_PG', message: '취소된 카드입니다' }, 'failed'],
+    [{ code: 'FAILURE_TYPE_PG', message: '[PG_ERROR] 한도 초과' }, 'failed'],
+  ];
+  for (const [response, kind] of cases) {
+    const { result, stateChanges } = createRoundHook(undefined, { paymentResponses: [response] });
+    await result.requestPayment();
+    assert.equal(stateChanges.at(-1), 'error');
+    assert.equal(lastNoticeKind(stateChanges), kind, JSON.stringify(response));
+  }
+
+  // 주문 생성 거절·연결 실패는 결제창을 열기 전 실패라 언제나 failed다.
+  globalThis.fetch = async () =>
+    jsonResponse({ statusCode: 409, error: 'Conflict', message: '재고가 부족해요.' }, false, 409);
+  const rejected = createRoundHook();
+  await rejected.result.requestPayment();
+  assert.equal(lastNoticeKind(rejected.stateChanges), 'failed');
+  assert.deepEqual(noticeMessages(rejected.stateChanges), ['재고가 부족해요.']);
+
+  globalThis.fetch = async () => {
+    throw new TypeError('Failed to fetch');
+  };
+  const offline = createRoundHook();
+  await offline.result.requestPayment();
+  assert.equal(lastNoticeKind(offline.stateChanges), 'failed');
+});
+
 test('회차 주문 마감 409 거절이면 마감을 알리고 결제창을 열지 않는다', async () => {
   for (const message of ['현재 주문 가능한 회차가 아닙니다.', '주문 마감된 회차입니다.']) {
     let fetchCount = 0;
@@ -491,8 +542,8 @@ test('회차 주문 마감 409 거절이면 마감을 알리고 결제창을 열
     assert.equal(paymentCalls.length, 0);
     // 마감 신호(true)를 올리고, 오류 문구는 API 원문 대신 고객 문구로 둔다.
     assert.ok(stateChanges.includes(true), message);
-    assert.ok(stateChanges.includes('이번 회차 주문이 마감됐어요.'));
-    assert.ok(!stateChanges.includes(message));
+    assert.ok(noticeMessages(stateChanges).includes('이번 회차 주문이 마감됐어요.'));
+    assert.ok(!noticeMessages(stateChanges).includes(message));
     assert.equal(stateChanges.at(-1), 'error');
   }
 });
@@ -503,7 +554,7 @@ test('회차 마감이 아닌 거절·단일 상품 주문의 409는 마감 신�
   const round = createRoundHook();
   await round.result.requestPayment();
   assert.ok(!round.stateChanges.includes(true));
-  assert.ok(round.stateChanges.includes('이번 회차 배송지 한도가 마감되었습니다.'));
+  assert.ok(noticeMessages(round.stateChanges).includes('이번 회차 배송지 한도가 마감되었습니다.'));
 
   // 회차 상품 없이 주문하는 단일 상품 결제는 회차 마감 안내 대상이 아니다.
   globalThis.fetch = async () =>
@@ -543,10 +594,10 @@ test('회차 결제 예약 한도 409 거절이면 한도 신호와 기다릴 �
   assert.equal(paymentCalls.length, 0);
   // 시도 시작에 한도 신호를 내리고(false), 거절을 알아보면 올린다(true).
   assert.equal(stateChanges.indexOf(false) < stateChanges.indexOf(true), true);
-  assert.ok(stateChanges.includes(HOLD_LIMIT_CUSTOMER_MESSAGE));
-  assert.ok(!stateChanges.includes(HOLD_LIMIT_API_MESSAGE));
+  assert.ok(noticeMessages(stateChanges).includes(HOLD_LIMIT_CUSTOMER_MESSAGE));
+  assert.ok(!noticeMessages(stateChanges).includes(HOLD_LIMIT_API_MESSAGE));
   // 회차 마감 안내와 섞지 않는다.
-  assert.ok(!stateChanges.includes('이번 회차 주문이 마감됐어요.'));
+  assert.ok(!noticeMessages(stateChanges).includes('이번 회차 주문이 마감됐어요.'));
   assert.equal(stateChanges.at(-1), 'error');
 });
 
@@ -575,7 +626,7 @@ test('다른 409 거절·단일 상품 주문의 같은 문구는 예약 한도 
   const round = createRoundHook();
   await round.result.requestPayment();
   assert.ok(!round.stateChanges.includes(true));
-  assert.ok(!round.stateChanges.includes(HOLD_LIMIT_CUSTOMER_MESSAGE));
+  assert.ok(!noticeMessages(round.stateChanges).includes(HOLD_LIMIT_CUSTOMER_MESSAGE));
 
   globalThis.fetch = async () => jsonResponse({ message: HOLD_LIMIT_API_MESSAGE }, false, 409);
   const loaded = loadHook();
@@ -587,7 +638,7 @@ test('다른 409 거절·단일 상품 주문의 같은 문구는 예약 한도 
   });
   await single.requestPayment();
   assert.ok(!loaded.stateChanges.includes(true));
-  assert.ok(!loaded.stateChanges.includes(HOLD_LIMIT_CUSTOMER_MESSAGE));
+  assert.ok(!noticeMessages(loaded.stateChanges).includes(HOLD_LIMIT_CUSTOMER_MESSAGE));
 });
 
 test('5xx·408·429·응답 손상처럼 처리 여부가 불확실하면 같은 clientOrderRequestId를 유지한다', async () => {
@@ -1034,8 +1085,8 @@ test('결제 설정·연결 실패·주문 응답 손상은 원문 대신 해요
     const { result, stateChanges } = createRoundHook();
     await result.requestPayment();
     assert.equal(fetchCount, 0);
-    assert.ok(stateChanges.includes('지금은 결제를 시작할 수 없어요. 잠시 후 다시 시도해 주세요.'));
-    assert.ok(!stateChanges.includes('결제 설정을 확인할 수 없습니다.'));
+    assert.ok(noticeMessages(stateChanges).includes('지금은 결제를 시작할 수 없어요. 잠시 후 다시 시도해 주세요.'));
+    assert.ok(!noticeMessages(stateChanges).includes('결제 설정을 확인할 수 없습니다.'));
   } finally {
     if (savedStoreId === undefined) delete process.env.NEXT_PUBLIC_PORTONE_STORE_ID;
     else process.env.NEXT_PUBLIC_PORTONE_STORE_ID = savedStoreId;
@@ -1047,14 +1098,14 @@ test('결제 설정·연결 실패·주문 응답 손상은 원문 대신 해요
   };
   const offline = createRoundHook();
   await offline.result.requestPayment();
-  assert.ok(offline.stateChanges.includes('연결이 불안정해요. 잠시 후 다시 시도해 주세요.'));
-  assert.ok(!offline.stateChanges.includes('Failed to fetch'));
+  assert.ok(noticeMessages(offline.stateChanges).includes('연결이 불안정해요. 잠시 후 다시 시도해 주세요.'));
+  assert.ok(!noticeMessages(offline.stateChanges).includes('Failed to fetch'));
 
   // API가 안내 문구 없이 거절하면 일반 주문 실패 안내를 보인다.
   globalThis.fetch = async () => jsonResponse({}, false, 400);
   const rejected = createRoundHook();
   await rejected.result.requestPayment();
-  assert.ok(rejected.stateChanges.includes('주문을 만들지 못했어요. 잠시 후 다시 시도해 주세요.'));
+  assert.ok(noticeMessages(rejected.stateChanges).includes('주문을 만들지 못했어요. 잠시 후 다시 시도해 주세요.'));
 
   // 결제 금액이 장바구니와 다르면 서버 같은 내부 말 없이 장바구니 확인을 안내한다.
   globalThis.fetch = async () =>
@@ -1066,7 +1117,7 @@ test('결제 설정·연결 실패·주문 응답 손상은 원문 대신 해요
   await mismatch.result.requestPayment();
   assert.equal(mismatch.paymentCalls.length, 0);
   assert.ok(
-    mismatch.stateChanges.includes(
+    noticeMessages(mismatch.stateChanges).includes(
       '결제 금액이 장바구니와 달라 결제를 시작하지 않았어요. 장바구니에서 다시 확인해 주세요.',
     ),
   );

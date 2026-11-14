@@ -59,7 +59,11 @@ import {
   readCheckoutDraftStorage,
   saveCheckoutDraft,
 } from '@/lib/payment-checkout-draft';
-import { paymentFailureMessage } from '@/lib/payment-failure-message';
+import {
+  failedPaymentNotice,
+  type PaymentFailureNotice,
+  paymentFailureNotice,
+} from '@/lib/payment-failure-message';
 import { attachPaymentPageGuard, type PaymentPagePhase } from '@/lib/payment-page-guard';
 import {
   buildPaymentRedirectUrl,
@@ -355,7 +359,9 @@ function SingleCheckoutContent() {
       canPay={canPay}
       error={
         error ??
-        (productUnavailable ? '상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.' : null)
+        (productUnavailable
+          ? failedPaymentNotice('상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.')
+          : null)
       }
       onPay={requestPayment}
       singleSummary={{ quantity, deliveryMethod, requestedDeliveryDate }}
@@ -374,7 +380,8 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
   const [deliveryPhone, setDeliveryPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('kakaopay');
   const [state, setState] = useState<PaymentPagePhase>('idle');
-  const [error, setError] = useState<string | null>(null);
+  // 문구와 종류를 함께 둔다: 고객이 결제창을 닫은 안내(canceled)만 중립 면, 그 밖은 빨강 면으로 그린다.
+  const [error, setError] = useState<PaymentFailureNotice | null>(null);
   const paymentAttemptIds = useRef(new Map<string, string>());
   // 이탈 경고·같은 탭 복귀 판단은 렌더를 기다리지 않고 이 값으로 한다(C-01).
   const phase = useRef<PaymentPagePhase>('idle');
@@ -417,7 +424,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
     if (state !== 'idle' && state !== 'error') return;
     const generation = attemptGeneration.current;
     if (cartValidationError) {
-      setError(cartValidationError);
+      setError(failedPaymentNotice(cartValidationError));
       transition('error');
       return;
     }
@@ -429,7 +436,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       configuration = readPortonePaymentConfiguration(paymentMethod);
     } catch {
       // 결제 설정 원문 대신 고객 문구를 보인다.
-      setError(CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE);
+      setError(failedPaymentNotice(CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE));
       transition('error');
       return;
     }
@@ -475,7 +482,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setError(body.message ?? ORDER_CREATE_FAILED_MESSAGE);
+        setError(failedPaymentNotice(body.message ?? ORDER_CREATE_FAILED_MESSAGE));
         transition('error');
         return;
       }
@@ -514,8 +521,8 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       // 같은 탭 복귀로 상태를 되돌린 뒤 늦게 끝난 이전 결제창 결과는 무시한다.
       if (generation !== attemptGeneration.current) return;
       if (response && 'code' in response) {
-        // PG 원문 코드는 화면에 쓰지 않고 고객 문구로 바꾼다.
-        setError(paymentFailureMessage(response));
+        // PG 원문 코드는 화면에 쓰지 않고 고객 문구로 바꾼다. 취소인지 실패인지도 함께 담는다.
+        setError(paymentFailureNotice(response));
         transition('error');
         return;
       }
@@ -539,7 +546,7 @@ function LegacyCartCheckoutContent({ cartItems }: { cartItems: CartItem[] }) {
       onPaymentMethodChange={setPaymentMethod}
       isLoading={isLoading}
       canPay={canPay}
-      error={cartValidationError ?? error}
+      error={cartValidationError ? failedPaymentNotice(cartValidationError) : error}
       onPay={handlePay}
     />
   );
@@ -714,7 +721,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
   const scheduleError = resolveRoundScheduleError(saleRounds.status, saleRounds.error, !!schedule);
   const staleDetail = staleRoundsDetail(saleRounds.error);
   // 마감 안내가 보이면 같은 뜻의 오류(API 거절 문구·회차 확인 안내)를 겹쳐 보이지 않는다.
-  const formError = roundClosed ? null : (scheduleError ?? error);
+  const formError = roundClosed ? null : scheduleError ? failedPaymentNotice(scheduleError) : error;
   const deliveryPhoneValid = isKoreanMobilePhone(deliveryPhone.trim());
   const canPay =
     !roundClosed &&

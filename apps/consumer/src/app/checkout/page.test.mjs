@@ -115,7 +115,13 @@ const requireForTest = (specifier) => {
   }
   if (specifier === '@/lib/payment-page-guard') return { attachPaymentPageGuard: () => () => {} };
   if (specifier === '@/lib/payment-failure-message') {
-    return { paymentFailureMessage: () => '결제를 취소했어요. 장바구니는 그대로 남아 있어요.' };
+    return {
+      failedPaymentNotice: (message) => ({ kind: 'failed', message }),
+      paymentFailureNotice: () => ({
+        kind: 'canceled',
+        message: '결제를 취소했어요. 장바구니는 그대로 남아 있어요.',
+      }),
+    };
   }
   if (specifier === '@/lib/korean-mobile-phone') {
     return { isKoreanMobilePhone: () => true, ROUND_DELIVERY_PHONE_ERROR: '' };
@@ -384,7 +390,7 @@ test('legacy checkout은 장바구니 필수 정보가 없으면 결제 호출 �
   assert.match(legacyCheckoutSource, /getCartValidationError\(cartItems\)/);
   assert.match(legacyCheckoutSource, /!cartValidationError/);
   assert.match(legacyCheckoutSource, /if \(cartValidationError\)/);
-  assert.match(legacyCheckoutSource, /setError\(cartValidationError\)/);
+  assert.match(legacyCheckoutSource, /setError\(failedPaymentNotice\(cartValidationError\)\)/);
 });
 
 test('legacy checkout도 모바일 리다이렉트 복귀 URL과 남은 미결제 상품 수를 결제 전에 남긴다', () => {
@@ -563,7 +569,11 @@ test('단건 checkout은 상품 조회에 실패하면 URL 금액 대신 금액�
       await harness.runEffectsAndSettle();
       const rendered = harness.render();
       assert.equal(rendered.totalAmount, 0);
-      assert.equal(rendered.error, '상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+      // 상품 확인 실패는 결제 취소가 아니라 문제 안내(failed)다.
+      assert.deepEqual(rendered.error, {
+        kind: 'failed',
+        message: '상품 정보를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+      });
     },
   );
 });
@@ -613,8 +623,11 @@ test('legacy checkout 결제창 실패는 PG 원문 대신 고객 문구로 보�
   const start = source.indexOf('function LegacyCartCheckoutContent');
   const end = source.indexOf('function RoundCartCheckoutContent', start);
   const legacyCheckoutSource = source.slice(start, end);
-  assert.match(legacyCheckoutSource, /setError\(paymentFailureMessage\(response\)\)/);
+  // 문구와 종류(취소·실패)를 한 값으로 남긴다. 종류를 문구 비교로 가리지 않는다.
+  assert.match(legacyCheckoutSource, /setError\(paymentFailureNotice\(response\)\)/);
   assert.doesNotMatch(legacyCheckoutSource, /setError\(response\.message/);
+  assert.match(legacyCheckoutSource, /useState<PaymentFailureNotice \| null>\(null\)/);
+  assert.doesNotMatch(source, /=== PAYMENT_CANCELED_MESSAGE/);
 });
 
 /** 장바구니 checkout을 저장소에 결제 상품이 없는(invalid) 상태로 그려 화면 요소와 이동을 기록한다. */
@@ -857,7 +870,7 @@ test('회차 checkout은 마감 거절 응답·지나간 마감 시각에 결제
   assert.match(roundCheckoutSource, /const canPay =\s*!roundClosed &&/);
   assert.match(
     roundCheckoutSource,
-    /const formError = roundClosed \? null : \(scheduleError \?\? error\);/,
+    /const formError = roundClosed\s*\? null\s*: scheduleError\s*\? failedPaymentNotice\(scheduleError\)\s*: error;/,
   );
   assert.match(roundCheckoutSource, /error=\{formError\}/);
   assert.match(roundCheckoutSource, /closedNotice=\{\s*roundClosed \? \(\s*<RoundClosedNotice/);
@@ -870,9 +883,15 @@ test('결제 화면 문구는 해요체이고 결제 설정 원문 대신 고객
   const end = source.indexOf('function RoundCartCheckoutContent', start);
   const legacyCheckoutSource = source.slice(start, end);
 
-  assert.match(legacyCheckoutSource, /setError\(CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE\)/);
+  assert.match(
+    legacyCheckoutSource,
+    /setError\(failedPaymentNotice\(CHECKOUT_PAYMENT_UNAVAILABLE_MESSAGE\)\)/,
+  );
   assert.doesNotMatch(legacyCheckoutSource, /caught\.message/);
-  assert.match(legacyCheckoutSource, /setError\(body\.message \?\? ORDER_CREATE_FAILED_MESSAGE\)/);
+  assert.match(
+    legacyCheckoutSource,
+    /setError\(failedPaymentNotice\(body\.message \?\? ORDER_CREATE_FAILED_MESSAGE\)\)/,
+  );
   // 화면에 그리는 문자열 상수·안내에 합니다체가 남지 않는다.
   const quoted = [...source.matchAll(/'([^'\n]*[가-힣][^'\n]*)'/g)].map((match) => match[1]);
   for (const text of quoted) assert.doesNotMatch(text, /니다\.?$/, text);

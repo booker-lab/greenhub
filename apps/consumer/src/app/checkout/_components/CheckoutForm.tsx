@@ -26,6 +26,7 @@ import PackageLabelFields, {
 import { LoadingButton } from '@/components/LoadingButton';
 import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
+import type { PaymentFailureNotice } from '@/lib/payment-failure-message';
 import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';
 import { roundPayBlockers } from '@/lib/payment-readiness';
 
@@ -52,7 +53,8 @@ export interface CheckoutFormProps {
   onPaymentMethodChange: (m: PaymentMethod) => void;
   isLoading: boolean;
   canPay: boolean;
-  error: string | null;
+  /** 결제 버튼 위 안내. kind가 canceled(고객이 결제창을 닫음)면 중립 면, failed면 빨강 면으로 그린다. */
+  error: PaymentFailureNotice | null;
   /** 오류 안내 아래에 둘 다음 행동(예: 결제 예약 한도로 막혔을 때 주문 내역으로 가기, C-02). 오류가 있을 때만 보인다. */
   errorAction?: ReactNode;
   onPay: () => void;
@@ -651,11 +653,16 @@ export default function CheckoutForm({
       </div>
 
       {error && (
-        // Mantine Alert(light red·mb sm, role="alert") 계산값
-        <Alert variant="destructive" role="alert" className="mb-3">
+        // Mantine Alert(mb sm, role="alert") 계산값. 고객이 결제창을 닫은 안내는 문제 상태가 아니라 중립 면이고,
+        // 결제 실패·주문 거절·결제 불가는 빨강 면이다(design-standard.md §2 "빨강은 문제 상태에만").
+        <Alert
+          variant={error.kind === 'canceled' ? 'secondary' : 'destructive'}
+          role="alert"
+          className="mb-3"
+        >
           <AlertDescription>
             <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
-              {error}
+              {error.message}
             </p>
             {errorAction}
           </AlertDescription>

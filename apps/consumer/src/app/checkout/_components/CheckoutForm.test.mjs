@@ -253,6 +253,6 @@ test('오류 안내 아래 다음 행동은 오류 상자 안에서 문구 뒤�
   assert.match(formSource, /errorAction\?: ReactNode;/);
   assert.match(
     formSource,
-    /\{error && \([\s\S]*?<Alert variant="destructive" role="alert"[\s\S]*?\{error\}\s*<\/p>\s*\{errorAction\}\s*<\/AlertDescription>/,
+    /\{error && \([\s\S]*?<Alert\s+variant=\{error\.kind === 'canceled' \? 'secondary' : 'destructive'\}\s+role="alert"[\s\S]*?\{error\.message\}\s*<\/p>\s*\{errorAction\}\s*<\/AlertDescription>/,
   );
 });
