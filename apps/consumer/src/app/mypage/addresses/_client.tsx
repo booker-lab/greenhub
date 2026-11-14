@@ -20,8 +20,10 @@ import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useId, useState } from 'react';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
 import type { AddressFormData } from '@/hooks/useAddresses';
 import { useAddresses } from '@/hooks/useAddresses';
+import { addressDeleteConfirmContent } from '@/lib/confirm-dialog-content';
 import { MyPageBackButton } from '../_back-button';
 import { currentMyPageLoginUrl } from '../_login';
 
@@ -93,7 +95,8 @@ function AddressCard({
         <UiButton type="button" size="xs" variant="outline-gray" onClick={onEdit}>
           수정
         </UiButton>
-        <UiButton type="button" size="xs" variant="outline-destructive" onClick={onDelete}>
+        {/* ② 방향(design-standard §5): 여는 버튼은 검정 글자 외곽선. 삭제는 확인창을 거친다. */}
+        <UiButton type="button" size="xs" variant="plain" onClick={onDelete}>
           삭제
         </UiButton>
       </div>
@@ -271,19 +274,28 @@ export default function AddressesClient() {
     null,
   );
   const [actionError, setActionError] = useState<string | null>(null);
+  // 삭제 확인창: 닫힘 → 열림 → 처리 중(확정 뒤 삭제 요청이 끝날 때까지) 중 하나이고, 열린 동안 지울 배송지를 함께 든다.
+  const [deleteDialog, setDeleteDialog] = useState<
+    { state: 'closed' } | { state: 'open' | 'submitting'; addr: SavedAddress }
+  >({ state: 'closed' });
 
   if (status === 'unauthenticated') {
     router.replace(currentMyPageLoginUrl());
     return null;
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('이 배송지를 삭제할까요?')) return;
+  // 확인창의 확정. 처리 중에는 창이 닫히지 않고, 끝나면(성공·실패 모두) 닫는다. 실패 안내는 화면 위 상자가 맡는다.
+  async function handleDelete() {
+    if (deleteDialog.state !== 'open') return;
+    const { addr } = deleteDialog;
+    setDeleteDialog({ state: 'submitting', addr });
     setActionError(null);
     try {
-      await deleteAddress(id);
+      await deleteAddress(addr.id);
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : '삭제 중 오류가 발생했습니다.');
+    } finally {
+      setDeleteDialog({ state: 'closed' });
     }
   }
 
@@ -369,7 +381,7 @@ export default function AddressesClient() {
               key={addr.id}
               addr={addr}
               onEdit={() => setModal({ mode: 'edit', addr })}
-              onDelete={() => handleDelete(addr.id)}
+              onDelete={() => setDeleteDialog({ state: 'open', addr })}
               onSetDefault={() => handleSetDefault(addr.id)}
             />
           ))}
@@ -394,6 +406,15 @@ export default function AddressesClient() {
             : (data) => updateAddress((modal as { mode: 'edit'; addr: SavedAddress }).addr.id, data)
         }
         onClose={() => setModal(null)}
+      />
+
+      <ConfirmDialog
+        state={deleteDialog.state}
+        content={
+          deleteDialog.state === 'closed' ? null : addressDeleteConfirmContent(deleteDialog.addr)
+        }
+        onConfirm={handleDelete}
+        onClose={() => setDeleteDialog({ state: 'closed' })}
       />
     </div>
   );

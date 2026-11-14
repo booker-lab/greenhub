@@ -5,6 +5,10 @@ import ts from 'typescript';
 
 const source = await readFile(new URL('./_client.tsx', import.meta.url), 'utf8');
 const helperSource = await readFile(new URL('./_detail.ts', import.meta.url), 'utf8');
+const confirmContentSource = await readFile(
+  new URL('../../../../lib/confirm-dialog-content.ts', import.meta.url),
+  'utf8',
+);
 const hookSource = await readFile(
   new URL('../../../../hooks/useOrderStatus.ts', import.meta.url),
   'utf8',
@@ -1019,7 +1023,8 @@ test('stale network/server read는 표시를 유지하지만 최신 상태 명�
   // stale이어도 기존 상세 표시 자체는 유지된다.
   assert.match(source, /보이는 정보가 최신이 아닐 수 있어요/);
   // 명령을 막을 때는 해요체 고객 문구 하나로 상태 확인을 안내한다.
-  assert.equal((source.match(/setActionError\(ORDER_DETAIL_STALE_MESSAGE\)/g) ?? []).length, 3);
+  // 취소는 확인창을 열 때와 확정할 때 두 번 확인한다(열어 둔 사이 조회가 낡을 수 있다).
+  assert.equal((source.match(/setActionError\(ORDER_DETAIL_STALE_MESSAGE\)/g) ?? []).length, 4);
 });
 
 test('재시도 경로는 refetch를 호출하고 stale 해소를 전제로 actionability를 복원한다', () => {
@@ -1207,7 +1212,9 @@ test('재배송비 결제 뒤 서버 결제 확인을 요청한다(결제창 성
 test('주문 취소 안내·확인창·실패 문구는 내부 동작 대신 고객 기준으로 말한다', () => {
   // 회차 주문 취소 안내와 확인창
   assert.match(source, /'주문 마감 전까지 취소할 수 있어요\. 결제한 수단으로 환불돼요\.'/);
-  assert.match(source, /\? '주문을 취소할까요\?'/);
+  // 확인은 브라우저 기본 창이 아니라 그린러브 확인창이 맡는다(글자는 lib/confirm-dialog-content 테스트가 고정한다).
+  assert.doesNotMatch(source, /\bconfirm\(/);
+  assert.match(source, /<ConfirmDialog\s+state=\{cancelDialog\}\s+content=\{orderCancelConfirmContent\(/);
   // 결과를 모를 때는 고객 문구 하나로 '상태 다시 확인'을 안내한다.
   assert.match(source, /const CANCEL_UNCERTAIN_MESSAGE = '취소가 처리됐는지 아직 확인하지 못했어요\.'/);
   assert.match(source, /setActionError\(CANCEL_UNCERTAIN_MESSAGE\)/);
@@ -1267,7 +1274,9 @@ test('구매 확정·재배송비 흐름 문구는 내부 표현 대신 고객 �
   // 재배송비 결제가 실패·환불 상태면 결제 FAILED/REFUNDED 응답과 복구 필요 표시 모두 고객센터 안내로 보인다.
   assert.match(redeliveryHandler, /message: REDELIVERY_PAYMENT_NEEDS_SUPPORT_MESSAGE/);
   // 공동구매 취소 확인창·안내도 해요체로 말한다.
-  assert.match(source, /'공동구매 참여를 취소할까요\?\\n취소하면 되돌릴 수 없어요\.'/);
+  // 확인창 글자는 lib/confirm-dialog-content가 만든다(같은 문구를 제목과 빨간 한 줄로 나눠 쓴다).
+  assert.match(confirmContentSource, /title: '공동구매 참여를 취소할까요\?'/);
+  assert.match(confirmContentSource, /warning: '취소하면 되돌릴 수 없어요\.'/);
   assert.match(source, /'모집 중인 공동구매 참여를 취소할 수 있어요\.'/);
   assert.doesNotMatch(source, /하시겠습니까/);
 });

@@ -120,9 +120,9 @@ export default function WithdrawClient() {
           </Alert>
         )}
 
+        {/* ② 방향(design-standard §5): 확인 단계는 위 체크박스다. 확정 버튼은 초록 한 가지(빨간 채움 버튼 금지). */}
         <LoadingButton
           type="button"
-          variant="destructive"
           size="md"
           className="w-full"
           disabled={!confirmed}
