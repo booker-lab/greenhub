@@ -26,7 +26,7 @@ export default function OfflinePage() {
         신호가 없어요.
       </h1>
       <p className={text} style={{ color: 'var(--color-text)', wordBreak: 'keep-all' }}>
-        사진은 휴대폰에 저장돼 있어요. 신호가 잡히면 앱을 다시 열어 주세요.
+        신호가 잡히면 앱을 다시 열어 주세요. 올리지 못한 사진은 휴대폰에 저장돼 있어요.
       </p>
       <ReopenButton />
     </main>

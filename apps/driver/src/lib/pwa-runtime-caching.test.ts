@@ -98,7 +98,7 @@ describe('서비스워커 오프라인 대체 문서(S-01)', () => {
   it('대체 문서는 주문·손님 정보나 세션을 읽지 않는 고정 문구다', () => {
     const text = offlinePageSource.replace(/\s+/g, ' ');
     expect(text).toContain('신호가 없어요.');
-    expect(text).toContain('사진은 휴대폰에 저장돼 있어요. 신호가 잡히면 앱을 다시 열어 주세요.');
+    expect(text).toContain('신호가 잡히면 앱을 다시 열어 주세요. 올리지 못한 사진은 휴대폰에 저장돼 있어요.');
     for (const source of [offlinePageSource, reopenSource]) {
       expect(source).not.toMatch(
         /@\/lib\/api|auth\(|useSession|getSession|headers\(|cookies\(|fetch\(/,
