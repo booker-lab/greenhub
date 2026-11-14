@@ -3,8 +3,10 @@
 import type { Category, ColorOption, Product, SaleType, SalesMode } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
 import { Button } from '@greenhub/ui/components/button';
+import { Sprout } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import BlockSkeleton from '@/components/BlockSkeleton';
+import EmptyStateIcon from '@/components/EmptyStateIcon';
 import ProductCard from '@/components/ProductCard';
 import RoundTileGrid from '@/components/RoundTile';
 import { useProducts } from '@/hooks/useProducts';
@@ -56,7 +58,6 @@ const SKELETON_KEYS = ['first', 'second', 'third', 'fourth'];
 // UnstyledButton·Button light(sm·xs)와 같은 값. text-sm·xl은 tokens.css에서 Mantine과 같은 크기·줄 높이다.
 // Mantine Button은 vertical-align: middle이라 블록 안에 놓인 버튼에는 align-middle을 준다.
 const TEXT_SM = 'm-0 p-0 text-sm';
-const TEXT_XL = 'm-0 p-0 text-xl';
 const GRID = 'grid grid-cols-2 gap-3';
 const ALERT_STACK = 'flex flex-col items-center justify-start gap-3 py-12';
 const EMPTY_STACK = 'flex flex-col items-center justify-start gap-4 py-16';
@@ -198,7 +199,7 @@ function RoundDirectCategory({
   if (currentItems.length === 0 && pastRoundItems.length === 0) {
     return (
       <div className={EMPTY_STACK}>
-        <p className={TEXT_XL}>🌱</p>
+        <EmptyStateIcon icon={Sprout} />
         <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
           현재 또는 지난 판매 회차에 판매 중인 호접란이 없습니다.
         </p>
@@ -423,7 +424,7 @@ function LegacyCategory({
       )}
       {!loading && !error && products.length === 0 && (
         <div className={EMPTY_STACK}>
-          <p className={TEXT_XL}>🌱</p>
+          <EmptyStateIcon icon={Sprout} />
           <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
             해당 카테고리 상품이 없습니다.
           </p>

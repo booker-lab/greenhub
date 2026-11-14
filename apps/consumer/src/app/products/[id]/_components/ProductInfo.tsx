@@ -1,7 +1,7 @@
 import type { Product, Variety } from '@greenhub/shared';
 import { Badge } from '@greenhub/ui/components/badge';
 import { HideOnErrorImage } from '@/components/ResilientImage';
-import { BLOOM_LABEL, CARE_LABEL, FRAGRANCE_LABEL } from '@/lib/dogam-label';
+import { flowerLookRows } from '@/lib/dogam-label';
 import { isFeatureOn } from '@/lib/features';
 
 interface Props {
@@ -17,32 +17,10 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
   const description = product.content?.description ?? product.description ?? null;
   const displayColors = product.selection?.colors ?? product.colors ?? [];
 
-  const careCards = [
-    product.selection?.bloomCondition
-      ? {
-          icon: '🌸',
-          label: '개화 상태',
-          value: BLOOM_LABEL[product.selection.bloomCondition] ?? product.selection.bloomCondition,
-        }
-      : null,
-    product.selection?.fragrance
-      ? {
-          icon: '💨',
-          label: '향기',
-          value: FRAGRANCE_LABEL[product.selection.fragrance] ?? product.selection.fragrance,
-        }
-      : null,
-    product.selection?.careLevel
-      ? {
-          icon: '⭐',
-          label: '관리 난이도',
-          value: CARE_LABEL[product.selection.careLevel] ?? product.selection.careLevel,
-        }
-      : null,
-  ].filter((c): c is { icon: string; label: string; value: string } => c !== null);
+  // "이 꽃의 모습" 표(design-direction.md §4.3): 값이 있는 줄만 남는다.
+  const lookRows = flowerLookRows(product);
 
-  // Mantine Stack(gap 0·px md·pt lg)·Text(16/1.55)·Title order 2(26px·줄 높이 1.35)·Badge sm·Divider(gray-3)·
-  // Paper(radius md 8px·p md)·SimpleGrid(spacing xs 10px) 계산값
+  // Mantine Stack(gap 0·px md·pt lg)·Text(16/1.55)·Title order 2(26px·줄 높이 1.35)·Badge sm·Divider(gray-3) 계산값
   return (
     <div className="flex flex-col gap-0 px-4 pt-5">
       {headline && (
@@ -94,24 +72,32 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
         </>
       )}
 
-      {careCards.length > 0 && (
+      {lookRows.length > 0 && (
+        // 테두리 없는 연회색 면(design-direction.md §3.1). 이름–값 2열 표라 dl로 쓴다.
         <div
-          className="mb-4 rounded-[8px] p-4"
-          style={{
-            background: 'var(--color-surface-muted)',
-            border: '1px solid var(--color-border)',
-          }}
+          className="mb-4 p-4"
+          style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
         >
-          <div
-            className="grid gap-2.5"
-            style={{ gridTemplateColumns: `repeat(${careCards.length}, minmax(0, 1fr))` }}
+          <h2
+            className="m-0 mb-3 leading-[1.55]"
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-bold)',
+              color: 'var(--color-text)',
+            }}
           >
-            {careCards.map(({ icon, label, value }) => (
-              <div key={label} className="flex flex-col items-center gap-1">
-                <p className="m-0 text-xl" style={{ lineHeight: 1 }}>
-                  {icon}
-                </p>
-                <p
+            이 꽃의 모습
+          </h2>
+          <dl className="m-0 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-1.5">
+            {lookRows.map(({ label, value }) => (
+              <div key={label} className="contents">
+                <dt
+                  className="m-0 leading-[1.55]"
+                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                >
+                  {label}
+                </dt>
+                <dd
                   className="m-0 leading-[1.55]"
                   style={{
                     fontSize: 'var(--font-size-sm)',
@@ -120,16 +106,10 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
                   }}
                 >
                   {value}
-                </p>
-                <p
-                  className="m-0 leading-[1.55]"
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-                >
-                  {label}
-                </p>
+                </dd>
               </div>
             ))}
-          </div>
+          </dl>
         </div>
       )}
 

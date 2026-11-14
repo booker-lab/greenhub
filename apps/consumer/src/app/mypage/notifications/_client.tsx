@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
+import EmptyStateIcon from '@/components/EmptyStateIcon';
 import { useNotifications } from '@/hooks/useNotifications';
 import { MyPageBackButton } from '../_back-button';
 import { currentMyPageLoginUrl } from '../_login';
@@ -305,7 +306,7 @@ export default function NotificationsClient() {
 
       {!loading && !error && notifications.length === 0 && (
         <div className="flex flex-col items-center justify-start gap-4 px-5 py-[60px]">
-          <p className="m-0 p-0 text-[20px] leading-[1.65]">🔔</p>
+          <EmptyStateIcon icon={Bell} />
           <p
             className={TEXT}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
