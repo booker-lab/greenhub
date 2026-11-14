@@ -16,7 +16,12 @@ import {
   toDriverListReadError,
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
-import { groupDeliveringOrders, takeDeliveringFirstScreen } from '@/lib/delivering-groups';
+import {
+  countDeliveryProgress,
+  groupDeliveringOrders,
+  inFlightPhotoOrderIds,
+  takeDeliveringFirstScreen,
+} from '@/lib/delivering-groups';
 import { readDriverSummaryCompletedToday } from '@/lib/driver-summary';
 import { groupPreparingOrders, takePreparingFirstScreen } from '@/lib/preparing-groups';
 import {
@@ -318,6 +323,9 @@ export default function BoardClient() {
   const pendingPhotoOrderIds: ReadonlySet<string> = new Set(
     pendingPhotos.entries.map((entry) => entry.orderId),
   );
+  // "사진 올리는 중"·다음 배송지 제외·남은 배송 수: 앱이 아직 올릴 사진만 센다. 멈춘(사진 등록 실패) 사진은
+  // 다시 보내지 않으므로 그 주문은 배송할 주문에 남는다(지도 탭과 같은 규칙).
+  const photoPendingOrderIds = inFlightPhotoOrderIds(pendingPhotos.entries);
   const showProgress = hasSuccessfulRead && !authRequired;
 
   // 한 번에 수거: 내 수거 중 회차 직배송이고 배송 시작이 허용되고 storeId가 있는 주문만 고를 수 있다.
@@ -460,6 +468,7 @@ export default function BoardClient() {
           <DeliveryProgress
             preparing={preparing}
             delivering={delivering}
+            photoPendingOrderIds={photoPendingOrderIds}
             completedToday={completedToday}
           />
         )}
@@ -575,7 +584,7 @@ export default function BoardClient() {
                   orders={orders}
                   tab={tab}
                   batch={batchSelection}
-                  pendingPhotoOrderIds={pendingPhotoOrderIds}
+                  photoPendingOrderIds={photoPendingOrderIds}
                 />
               </div>
             )
@@ -643,7 +652,7 @@ export default function BoardClient() {
                 orders={orders}
                 tab={tab}
                 batch={batchSelection}
-                pendingPhotoOrderIds={pendingPhotoOrderIds}
+                photoPendingOrderIds={photoPendingOrderIds}
               />
             </div>
           )}
@@ -885,14 +894,14 @@ function OrderList({
   orders,
   tab,
   batch = null,
-  pendingPhotoOrderIds,
+  photoPendingOrderIds,
 }: {
   orders: DriverListOrder[];
   tab: string;
   /** 한 번에 수거 고르기 모드. 내 수거 행에만 고르기 칸을 둔다. */
   batch?: BatchSelection | null;
-  /** 완료 사진이 이 기기 대기열에 있는 주문 ID. 배송 중 탭에서 "다음 배송지" 후보에서 뺀다. */
-  pendingPhotoOrderIds: ReadonlySet<string>;
+  /** 앱이 아직 올릴 완료 사진이 있는 주문 ID(멈춤 제외). 배송 중 탭에서 "다음 배송지" 후보에서 뺀다. */
+  photoPendingOrderIds: ReadonlySet<string>;
 }) {
   const [expanded, setExpanded] = useState(false);
   // 수거 대기 탭은 내게 배정된 주문과 아직 아무도 맡지 않은 주문을 나눠 보인다.
@@ -936,7 +945,7 @@ function OrderList({
   // 완료 사진이 대기열에 있는 주문은 이미 들른 곳이라 다음 배송지 후보에서 빼고 "사진 올리는 중" 묶음에 둔다(S-02).
   // 보류·사진 올리는 중 주문이 있으면 묶음으로 나누고, 그 묶음들은 첫 화면 행 수를 따로 센다.
   const delivering =
-    tab === 'delivering' ? groupDeliveringOrders(orders, pendingPhotoOrderIds) : null;
+    tab === 'delivering' ? groupDeliveringOrders(orders, photoPendingOrderIds) : null;
   if (delivering) {
     const shown = expanded
       ? { ...delivering, hidden: 0 }
@@ -1105,7 +1114,7 @@ function ShowMoreButton({ hidden, onClick }: { hidden: number; onClick: () => vo
 const progressItem = { whiteSpace: 'nowrap' } as const;
 
 /**
- * 배송지 점 띠와 진행 한 줄. 목록 API가 주는 값(배송 중·보류·수거 대기 주문)만으로 그린다.
+ * 배송지 점 띠와 진행 한 줄. 목록 API가 주는 값(배송 중·보류·수거 대기 주문)과 이 기기 사진 대기열로 그린다.
  * 숫자 기준: 점 띠와 진행 줄은 "내 주문"(배송 중·보류·내 수거)을 세고, 아무도 맡지 않은 주문은 점 띠에 그리지 않고
  * 진행 줄의 "맡을 수 있는 n곳"으로만 센다. 탭 숫자는 탭의 전체 행 수(내 수거 + 맡을 수 있는 주문)다.
  * 줄 끝의 "오늘 완료 n곳"은 목록이 아니라 기사 요약(GET /driver/summary)의 값이고, 읽지 못하면 그 부분만 숨긴다.
@@ -1115,14 +1124,18 @@ const progressItem = { whiteSpace: 'nowrap' } as const;
 function DeliveryProgress({
   preparing,
   delivering,
+  photoPendingOrderIds,
   completedToday,
 }: {
   preparing: DriverListOrder[];
   delivering: DriverListOrder[];
+  /** 앱이 아직 올릴 완료 사진이 있는 주문 ID(멈춤 제외). 남은 배송에서 빼고 따로 센다. */
+  photoPendingOrderIds: ReadonlySet<string>;
   completedToday: number | null;
 }) {
-  const held = delivering.filter((order) => order.status === 'DELIVERY_HELD').length;
-  const toDeliver = delivering.length - held;
+  // 사진을 찍어 앱이 올리고 있는 주문은 이미 들른 곳이라 남은 배송에 세지 않고 "사진 올리는 중"으로 따로 센다.
+  // 지도 탭 머리의 "배송 중 n · 사진 올리는 중 m"·"남은 배송지가 없어요"와 같은 수다.
+  const { toDeliver, photoPending, held } = countDeliveryProgress(delivering, photoPendingOrderIds);
   // 배정 여부를 알면 수거는 내 주문만 세고, 아무도 맡지 않은 주문은 따로 센다.
   const preparingGroups = groupPreparingOrders(preparing);
   // 점 띠에는 내 수거만 그린다. 배정 여부를 모르는 이전 응답이면 예전처럼 수거 대기 전체를 그린다.
@@ -1161,6 +1174,12 @@ function DeliveryProgress({
         }}
       >
         <span style={progressItem}>남은 배송 {toDeliver}곳</span>
+        {photoPending > 0 && (
+          <>
+            {' · '}
+            <span style={progressItem}>사진 올리는 중 {photoPending}곳</span>
+          </>
+        )}
         {held > 0 && (
           <>
             {' · '}

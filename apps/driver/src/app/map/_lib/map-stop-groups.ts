@@ -22,7 +22,7 @@ export function isMapStop(order: { status?: string }): boolean {
 
 /**
  * 배송 중 → 사진 올리는 중 → 수거 대기(내 수거 → 맡을 수 있는 주문) 순서로, 주문이 있는 묶음만 돌려준다.
- * pendingPhotoOrderIds는 완료 사진이 이 기기 대기열에 있는 주문 ID다.
+ * pendingPhotoOrderIds는 앱이 아직 올릴 완료 사진이 있는 주문 ID다(inFlightPhotoOrderIds, 멈춘 사진 제외).
  */
 export function groupMapStops<T extends { id?: string; status?: string; assignedToMe?: unknown }>(
   route: readonly T[],

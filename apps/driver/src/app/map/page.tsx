@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { apiRead } from '@/lib/api';
+import { inFlightPhotoOrderIds } from '@/lib/delivering-groups';
 import {
   buildDriverListScope,
   shouldPreserveDriverListOnReadError,
@@ -209,12 +210,13 @@ export default function MapPage() {
   const sorted = useMemo(() => nearestNeighbor(stops), [stops]);
   // 완료 사진이 이 기기 대기열에 있는 주문은 이미 들른 곳이다(3차 재감사 S-02). 작업 보드와 같이
   // 다음 배송지에서 빼고 "사진 올리는 중" 묶음에 두며, 행에 대기열 상태 배지를 붙인다.
+  // 멈춘(사진 등록 실패) 사진은 다시 보내지 않으므로 배지만 붙이고 그 주문은 배송 중·다음 배송지 후보에 남긴다.
   const pendingPhotos = usePendingPhotos(session?.user.id);
   const pendingNow = Date.now();
   const pendingBadges = new Map<string, PendingPhotoBadgeKind>(
     pendingPhotos.entries.map((entry) => [entry.orderId, pendingPhotoBadgeKind(entry, pendingNow)]),
   );
-  const pendingPhotoOrderIds: ReadonlySet<string> = new Set(pendingBadges.keys());
+  const pendingPhotoOrderIds = inFlightPhotoOrderIds(pendingPhotos.entries);
   // 좌표가 없어 정렬 결과는 경로 순서가 아니므로 번호 대신 상태로 묶어 보인다(배송 중 → 사진 올리는 중 → 수거 대기).
   const groups = groupMapStops(sorted, pendingPhotoOrderIds);
   // 주문에는 배송지 좌표가 없으므로 여러 곳 경유 길안내 대신

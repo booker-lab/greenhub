@@ -83,6 +83,7 @@ export function buildKakaoMapRouteUrl(name: unknown, lat: unknown, lng: unknown)
  * 수거 대기(PREPARING) 주문은 아직 맡지 않은 주문일 수 있어 고르지 않는다.
  * 기사 목록 API가 주는 배송 중 주문은 모두 요청한 기사에게 배정된 주문이다.
  * 완료 사진이 이 기기 대기열에 있는 주문(pendingPhotoOrderIds)은 이미 들른 곳이라 고르지 않는다(3차 재감사 S-02).
+ * pendingPhotoOrderIds는 inFlightPhotoOrderIds로 만들어 멈춘(사진 등록 실패) 사진의 주문은 다시 고를 수 있게 한다.
  */
 export function pickNextDeliveryStop<T extends { id?: string; status?: string }>(
   route: readonly T[],
