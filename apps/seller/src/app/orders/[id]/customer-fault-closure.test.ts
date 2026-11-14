@@ -140,6 +140,24 @@ describe('안내 문구', () => {
     ).toBe('손님이 재배송비를 결제하지 않으면 11월 17일 00:00부터 종결할 수 있어요.');
   });
 
+  it('결제 요청 전이면 결제 요청을 먼저 보내라고 안내한다(S-15)', () => {
+    expect(
+      customerFaultClosureBlockedMessage({ reason: 'PAYMENT_NOT_REQUESTED', eligibleAt: null }),
+    ).toBe(
+      "손님에게 재배송비 결제 요청을 보낸 뒤 3일이 지나야 종결할 수 있어요. 먼저 '재배송 준비로 돌리기'를 눌러 주세요.",
+    );
+    expect(
+      parseCustomerFaultClosureEligibility({
+        eligible: false,
+        reason: 'PAYMENT_NOT_REQUESTED',
+        closureReasonCode: 'REDELIVERY_FEE_UNPAID',
+        eligibleAt: null,
+        paymentDeadlineDate: null,
+        redeliveryFee: 5000,
+      }),
+    ).toMatchObject({ eligible: false, reason: 'PAYMENT_NOT_REQUESTED', eligibleAt: null });
+  });
+
   it('결제 진행 중·결제 완료·운영 확인·취소 진행은 이유를 알려 준다', () => {
     expect(
       customerFaultClosureBlockedMessage({

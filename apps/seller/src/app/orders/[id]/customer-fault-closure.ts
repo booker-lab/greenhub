@@ -38,6 +38,7 @@ const BLOCK_REASONS: readonly CustomerFaultClosureBlockReason[] = [
   'CANCELLATION_IN_PROGRESS',
   'REDELIVERY_FEE_PAID',
   'REDELIVERY_PAYMENT_NEEDS_REVIEW',
+  'PAYMENT_NOT_REQUESTED',
   'PAYMENT_WINDOW_OPEN',
   'REDELIVERY_PAYMENT_IN_PROGRESS',
 ];
@@ -112,12 +113,20 @@ export function formatClosureTimeKST(iso: string | null | undefined): string | n
 }
 
 /**
+ * 결제 요청 전이라 종결할 수 없을 때의 안내(S-15). 종결 기한은 손님에게 재배송비 결제 요청을 보낸 날부터 센다.
+ */
+export const CUSTOMER_FAULT_CLOSURE_PAYMENT_NOT_REQUESTED_MESSAGE =
+  "손님에게 재배송비 결제 요청을 보낸 뒤 3일이 지나야 종결할 수 있어요. 먼저 '재배송 준비로 돌리기'를 눌러 주세요.";
+
+/**
  * 버튼 대신 보여 줄 안내. null이면 아무것도 보여 주지 않는다(종결 대상이 아닌 주문).
  */
 export function customerFaultClosureBlockedMessage(
   eligibility: Pick<CustomerFaultClosureEligibility, 'reason' | 'eligibleAt'>,
 ): string | null {
   switch (eligibility.reason) {
+    case 'PAYMENT_NOT_REQUESTED':
+      return CUSTOMER_FAULT_CLOSURE_PAYMENT_NOT_REQUESTED_MESSAGE;
     case 'PAYMENT_WINDOW_OPEN': {
       const at = formatClosureTimeKST(eligibility.eligibleAt);
       return at

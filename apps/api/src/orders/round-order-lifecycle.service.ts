@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { redeliveryPaymentRequestedAtOf } from '@greenhub/shared';
 import {
   assertCancellationClaim,
   timestampMillis,
@@ -654,6 +655,22 @@ export class RoundOrderLifecycleService {
       update['deliveryHold'] = {
         ...(order['deliveryHold'] as Record<string, unknown>),
         resolvedAt: this.toIso(now),
+      };
+    } else if (
+      order['status'] === 'DELIVERY_HELD' &&
+      dto.status === 'PREPARING' &&
+      isCurrentRedeliveryPaymentRequired(order)
+    ) {
+      // 유료 고객 책임 보류를 '재배송 준비로 돌리기'하면 커밋 뒤 손님에게 재배송비 결제 요청 알림톡
+      // (ORDER_REDELIVERY_PAYMENT_REQUESTED)이 간다. 고객 사유 종결 기한은 이 요청 시각부터 세므로(S-15)
+      // 같은 트랜잭션에서 보류 기록에 남긴다. 이 보류에 이미 요청 시각이 있으면 처음 값을 그대로 둔다
+      // (다시 요청해도 기한을 늦추지 않는다). 새 보류는 deliveryHold를 통째로 바꾸므로 시각도 새로 시작한다.
+      // 손님이 요청 전에 미리 결제했거나 알림 상한을 넘어 알림톡이 나가지 않아도 적는다. 결제한 보류는
+      // 종결 판정이 REDELIVERY_FEE_PAID로 먼저 막는다.
+      const hold = order['deliveryHold'] as Record<string, unknown>;
+      update['deliveryHold'] = {
+        ...hold,
+        paymentRequestedAt: redeliveryPaymentRequestedAtOf(hold) ?? this.toIso(now),
       };
     }
     return update;

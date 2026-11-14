@@ -3,6 +3,7 @@ import { OrderChargePaymentService } from '../payments/order-charge-payment.serv
 import { OrderChargesService } from './order-charges.service';
 import { OrdersQueryService } from './orders-query.service';
 import { RoundOrderLifecycleService } from './round-order-lifecycle.service';
+import { decideCustomerFaultClosure } from './customer-fault-closure.service';
 import { createInMemoryFirestore } from '../../test/helpers/in-memory-firestore';
 import { createSettledOrdersLifecycle } from '../../test/helpers/settled-orders-lifecycle';
 
@@ -469,5 +470,102 @@ describe('재배송 준비(HELD → PREPARING) 결제 요청 알림', () => {
       resolvedAt: expect.any(String),
     });
     expect(context.notifications.sendToUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('재배송비 결제 요청 시각(deliveryHold.paymentRequestedAt, S-15)', () => {
+  function releaseHold(context: ReturnType<typeof makeContext>) {
+    return context.lifecycle.updateStatus(
+      'store-1',
+      'order-1',
+      'seller-1',
+      { status: 'PREPARING' } as never,
+      'seller',
+    );
+  }
+
+  it('회차 유료 고객 책임 보류를 재배송 준비로 돌리면 PREPARING과 같은 쓰기에 요청 시각을 남기고 종결 기한이 그때부터 시작한다', async () => {
+    const context = makeContext({ chargeStatus: 'PENDING' });
+    expect(context.memory.read('orders/order-1')?.deliveryHold).not.toHaveProperty(
+      'paymentRequestedAt',
+    );
+    const before = Date.now();
+
+    await expect(releaseHold(context)).resolves.toMatchObject({ status: 'PREPARING' });
+
+    const order = context.memory.read('orders/order-1')!;
+    const requestedAt = order.deliveryHold.paymentRequestedAt;
+    expect(order).toMatchObject({
+      status: 'PREPARING',
+      deliveryHold: { heldAt: holdAt, resolvedAt: null, paymentRequestedAt: expect.any(String) },
+    });
+    expect(Date.parse(requestedAt)).toBeGreaterThanOrEqual(before);
+    expect(Date.parse(requestedAt)).toBeLessThanOrEqual(Date.now());
+    expect(context.notifications.sendToUser).toHaveBeenCalledWith(
+      'consumer-1',
+      'ORDER_REDELIVERY_PAYMENT_REQUESTED',
+      { orderId: 'order-1' },
+      'order-1',
+      'order-transition:order-1:DELIVERY_HELD:PREPARING:hold-1',
+    );
+    // 보류(8월 26일)가 아니라 요청 시각부터 센 기한이라 지금은 아직 종결할 수 없다(결제 시도 없는 경우로 본다).
+    const { redeliveryChargeId: _chargeId, redeliveryChargeHoldAt: _chargeHoldAt, ...unlinked } =
+      order;
+    expect(decideCustomerFaultClosure({ ...unlinked, id: 'order-1' }, null, Date.now())).toMatchObject(
+      { eligible: false, reason: 'PAYMENT_WINDOW_OPEN' },
+    );
+  });
+
+  it('이 보류에 이미 요청 시각이 있으면 다시 요청해도 처음 시각을 그대로 둔다', async () => {
+    const firstRequestedAt = '2026-08-27T01:00:00.000Z';
+    const context = makeContext({
+      chargeStatus: 'PENDING',
+      orderOverrides: {
+        deliveryHold: {
+          heldAt: holdAt,
+          reasonCode: 'ACCESS_UNAVAILABLE',
+          reasonMessage: '배송지 출입 불가',
+          customerResponsible: true,
+          redeliveryFee: 5_000,
+          nextContactAt: null,
+          nextDeliveryAt: null,
+          resolvedAt: null,
+          paymentRequestedAt: firstRequestedAt,
+        },
+      },
+    });
+
+    await expect(releaseHold(context)).resolves.toMatchObject({ status: 'PREPARING' });
+
+    expect(context.memory.read('orders/order-1')?.deliveryHold).toMatchObject({
+      paymentRequestedAt: firstRequestedAt,
+      resolvedAt: null,
+    });
+  });
+
+  it('무료(고객 책임 아님) 보류를 돌리면 결제 요청이 없으므로 요청 시각을 남기지 않는다', async () => {
+    const context = makeContext({
+      omitCharge: true,
+      orderOverrides: {
+        redeliveryChargeId: null,
+        redeliveryChargeHoldAt: null,
+        deliveryHold: {
+          heldAt: holdAt,
+          reasonCode: 'OTHER',
+          reasonMessage: '판매자 배송 처리 지연',
+          customerResponsible: false,
+          redeliveryFee: null,
+          nextContactAt: null,
+          nextDeliveryAt: null,
+          resolvedAt: null,
+        },
+      },
+    });
+
+    await expect(releaseHold(context)).resolves.toMatchObject({ status: 'PREPARING' });
+
+    const hold = context.memory.read('orders/order-1')?.deliveryHold;
+    expect(hold).toMatchObject({ resolvedAt: expect.any(String) });
+    expect(hold).not.toHaveProperty('paymentRequestedAt');
   });
 });

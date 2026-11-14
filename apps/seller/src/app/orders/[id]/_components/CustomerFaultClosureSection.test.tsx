@@ -43,6 +43,19 @@ describe('CustomerFaultClosurePanel', () => {
     expect(html).not.toContain('환불 없이 주문 종결');
   });
 
+  it('결제 요청 전이면 버튼 대신 먼저 결제 요청을 보내라고 안내한다(S-15)', () => {
+    const html = panel({
+      ...eligible,
+      eligible: false,
+      reason: 'PAYMENT_NOT_REQUESTED',
+      eligibleAt: null,
+      paymentDeadlineDate: null,
+    });
+    expect(html).toContain('손님에게 재배송비 결제 요청을 보낸 뒤 3일이 지나야 종결할 수 있어요.');
+    expect(html).toContain('재배송 준비로 돌리기');
+    expect(html).not.toContain('<button');
+  });
+
   it('안내 글은 낱말 중간에서 줄을 바꾸지 않는다(S-06: keep-all + overflow-wrap anywhere)', () => {
     const blocked = panel({ ...eligible, eligible: false, reason: 'PAYMENT_WINDOW_OPEN' });
     expect(blocked).toContain('[word-break:keep-all]');

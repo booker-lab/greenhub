@@ -10,6 +10,7 @@ import {
   customerFaultClosureReasonFor,
   isCustomerFaultClosableHoldReason,
   redeliveryFeePaymentDeadlineDateKST,
+  redeliveryPaymentRequestedAtOf,
   type CustomerFaultClosureActorRole,
   type CustomerFaultClosureBlockReason,
   type CustomerFaultClosureEligibility,
@@ -52,7 +53,12 @@ type ChargeRead = {
 /**
  * 고객 사유 종결 판정(순수 함수). GET 판정과 POST 종결이 같은 규칙을 쓴다.
  * 검사 순서: 이미 종결 → 회차 주문 → 직배송 → 취소 진행 → 보류 상태 → 보류 사유·책임 →
- * 보류 기록 → 재배송비 청구(결제 완료·운영 확인) → 결제 기한 → 진행 중 결제(24시간).
+ * 보류 기록 → 재배송비 청구(결제 완료·운영 확인) → 결제 요청 여부·결제 기한 → 진행 중 결제(24시간).
+ *
+ * 재배송비 미결제 기한은 보류 시각이 아니라 손님에게 결제 요청을 보낸 시각(deliveryHold.paymentRequestedAt)부터
+ * 센다(S-15). 요청 전 보류(DELIVERY_HELD)는 PAYMENT_NOT_REQUESTED로 막는다. 결제 요청 뒤 준비 상태(PREPARING)인데
+ * 요청 시각이 없으면(이 칸이 생기기 전에 돌린 주문) 기한을 알 수 없으므로 INVALID_HOLD로 막는다(fail closed).
+ * 수령 거부는 요청과 무관하게 바로 종결할 수 있다.
  */
 export function decideCustomerFaultClosure(
   order: OrderRecord,
@@ -68,7 +74,8 @@ export function decideCustomerFaultClosure(
     isCustomerFaultClosableHoldReason(hold['reasonCode'])
       ? customerFaultClosureReasonFor(hold['reasonCode'])
       : null;
-  const windowEligibleAtMs = customerFaultClosureEligibleAtMs(heldAt);
+  const paymentRequestedAt = redeliveryPaymentRequestedAtOf(hold);
+  const windowEligibleAtMs = customerFaultClosureEligibleAtMs(paymentRequestedAt);
   const eligibleAtMs =
     closureReasonCode === 'RECEIPT_REFUSED' ? timestampMillis(heldAt) : windowEligibleAtMs;
   const base = {
@@ -77,7 +84,9 @@ export function decideCustomerFaultClosure(
       closureReasonCode && eligibleAtMs !== null && Number.isFinite(eligibleAtMs)
         ? new Date(eligibleAtMs).toISOString()
         : null,
-    paymentDeadlineDate: closureReasonCode ? redeliveryFeePaymentDeadlineDateKST(heldAt) : null,
+    paymentDeadlineDate: closureReasonCode
+      ? redeliveryFeePaymentDeadlineDateKST(paymentRequestedAt)
+      : null,
     redeliveryFee: fee,
   };
   const block = (reason: CustomerFaultClosureBlockReason): CustomerFaultClosureEligibility => ({
@@ -113,15 +122,24 @@ export function decideCustomerFaultClosure(
   }
   if (hold['customerResponsible'] !== true) return block('NOT_CUSTOMER_RESPONSIBLE');
   // 고객 책임 보류는 0원보다 큰 재배송비가 함께 있어야 한다(delivery-hold-policy).
-  if (!isCurrentRedeliveryPaymentRequired(order) || windowEligibleAtMs === null) {
+  if (!isCurrentRedeliveryPaymentRequired(order) || !Number.isFinite(timestampMillis(heldAt))) {
     return block('INVALID_HOLD');
   }
 
   const chargeState = classifyCharge(order, charge, nowMs);
   if (chargeState === 'PAID') return block('REDELIVERY_FEE_PAID');
   if (chargeState === 'NEEDS_REVIEW') return block('REDELIVERY_PAYMENT_NEEDS_REVIEW');
-  if (closureReasonCode !== 'RECEIPT_REFUSED' && nowMs < windowEligibleAtMs) {
-    return block('PAYMENT_WINDOW_OPEN');
+  if (closureReasonCode !== 'RECEIPT_REFUSED') {
+    if (windowEligibleAtMs === null) {
+      // 요청 시각 칸이 있는데 읽을 수 없거나, 요청 뒤 준비 상태인데 시각이 없으면 기한을 알 수 없다.
+      const requestedAtRecorded =
+        hold['paymentRequestedAt'] !== undefined && hold['paymentRequestedAt'] !== null;
+      if (requestedAtRecorded || order['status'] !== 'DELIVERY_HELD') {
+        return block('INVALID_HOLD');
+      }
+      return block('PAYMENT_NOT_REQUESTED');
+    }
+    if (nowMs < windowEligibleAtMs) return block('PAYMENT_WINDOW_OPEN');
   }
   if (chargeState === 'IN_PROGRESS') return block('REDELIVERY_PAYMENT_IN_PROGRESS');
   return block('OK');
@@ -199,6 +217,8 @@ const BLOCK_MESSAGES: Record<Exclude<CustomerFaultClosureBlockReason, 'OK'>, str
   REDELIVERY_FEE_PAID: '재배송비가 결제된 주문은 종결할 수 없습니다. 재배송을 진행해 주세요.',
   REDELIVERY_PAYMENT_NEEDS_REVIEW:
     '재배송비 결제 상태를 확인할 수 없어 종결할 수 없습니다. 운영팀에 문의해 주세요.',
+  PAYMENT_NOT_REQUESTED:
+    "손님에게 재배송비 결제 요청을 보낸 뒤 3일이 지나야 종결할 수 있습니다. 먼저 '재배송 준비로 돌리기'를 눌러 주세요.",
   PAYMENT_WINDOW_OPEN: '재배송비 결제 기한이 지나지 않아 아직 종결할 수 없습니다.',
   REDELIVERY_PAYMENT_IN_PROGRESS: '재배송비 결제가 진행 중이어서 종결할 수 없습니다.',
 };

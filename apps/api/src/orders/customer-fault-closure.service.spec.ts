@@ -29,8 +29,10 @@ const SETTLEMENT_PATH = `settlements/${ORDER_ID}`;
 const HOUR_MS = 60 * 60 * 1000;
 const FEE = 5000;
 
-// 서울 2026-11-13 15:00 보류 → 16일 끝까지 결제 가능 → 17일 00:00(UTC 11-16T15:00)부터 종결 가능.
-const HELD_AT = '2026-11-13T06:00:00.000Z';
+// 기한은 보류가 아니라 결제 요청 시각부터 센다(S-15). 서울 2026-11-10 15:00 보류, 13일 15:00 결제 요청
+// → 16일 끝까지 결제 가능 → 17일 00:00(UTC 11-16T15:00)부터 종결 가능. 보류일로 셌다면 14일 00:00부터였다.
+const HELD_AT = '2026-11-10T06:00:00.000Z';
+const PAYMENT_REQUESTED_AT = '2026-11-13T06:00:00.000Z';
 const ELIGIBLE_AT_MS = Date.parse('2026-11-16T15:00:00.000Z');
 const BEFORE_BOUNDARY_MS = Date.parse('2026-11-16T14:59:00.000Z'); // 서울 16일 23:59
 const AFTER_WINDOW_MS = Date.parse('2026-11-17T01:00:00.000Z'); // 서울 17일 10:00
@@ -45,7 +47,11 @@ const baseHold = {
   nextContactAt: null,
   nextDeliveryAt: null,
   resolvedAt: null,
+  paymentRequestedAt: PAYMENT_REQUESTED_AT,
 };
+
+/** 판매자가 '재배송 준비로 돌리기'를 누르기 전(결제 요청 전) 보류. */
+const { paymentRequestedAt: _requested, ...holdBeforeRequest } = baseHold;
 
 function orderData(overrides: Record<string, unknown> = {}) {
   return {
@@ -276,6 +282,79 @@ describe('decideCustomerFaultClosure 판정표', () => {
       eligible: true,
       reason: 'OK',
     });
+  });
+
+  it('보류일 기준으로는 지났어도 결제 요청일 기준 기한 안이면 막는다(서울 14일 10:00)', () => {
+    expect(decideCustomerFaultClosure(orderData(), null, WITHIN_WINDOW_MS)).toMatchObject({
+      eligible: false,
+      reason: 'PAYMENT_WINDOW_OPEN',
+      eligibleAt: '2026-11-16T15:00:00.000Z',
+      paymentDeadlineDate: '2026-11-16',
+    });
+  });
+
+  it('결제 요청 전 보류는 아무리 오래 지나도 PAYMENT_NOT_REQUESTED로 막는다', () => {
+    const order = orderData({ deliveryHold: { ...holdBeforeRequest } });
+    for (const nowMs of [AFTER_WINDOW_MS, AFTER_WINDOW_MS + 30 * 24 * HOUR_MS]) {
+      expect(decideCustomerFaultClosure(order, null, nowMs)).toEqual({
+        eligible: false,
+        reason: 'PAYMENT_NOT_REQUESTED',
+        closureReasonCode: 'REDELIVERY_FEE_UNPAID',
+        eligibleAt: null,
+        paymentDeadlineDate: null,
+        redeliveryFee: FEE,
+      });
+    }
+    // 요청 칸이 null이어도 요청 전이다.
+    expect(
+      decideCustomerFaultClosure(
+        orderData({ deliveryHold: { ...baseHold, paymentRequestedAt: null } }),
+        null,
+        AFTER_WINDOW_MS,
+      ),
+    ).toMatchObject({ reason: 'PAYMENT_NOT_REQUESTED' });
+  });
+
+  it('요청 전이라도 결제된 재배송비·운영 확인이 필요한 결제는 그 이유를 먼저 보인다', () => {
+    const order = orderData({ ...linkedCharge, deliveryHold: { ...holdBeforeRequest } });
+    const paid = { chargeId: CHARGE_ID, exists: true, data: chargeData({ status: 'PAID' }) };
+    expect(decideCustomerFaultClosure(order, paid, AFTER_WINDOW_MS)).toMatchObject({
+      reason: 'REDELIVERY_FEE_PAID',
+    });
+  });
+
+  it('수령 거부는 결제 요청 전에도 바로 종결할 수 있다', () => {
+    expect(
+      decideCustomerFaultClosure(
+        orderData({ deliveryHold: { ...holdBeforeRequest, reasonCode: 'RECEIPT_REFUSED' } }),
+        null,
+        Date.parse(HELD_AT) + 60_000,
+      ),
+    ).toEqual({
+      eligible: true,
+      reason: 'OK',
+      closureReasonCode: 'RECEIPT_REFUSED',
+      eligibleAt: HELD_AT,
+      paymentDeadlineDate: null,
+      redeliveryFee: FEE,
+    });
+  });
+
+  it('요청 시각이 손상됐거나, 요청 뒤 PREPARING인데 시각이 없으면 기한을 알 수 없어 INVALID_HOLD로 막는다', () => {
+    expect(
+      decideCustomerFaultClosure(
+        orderData({ deliveryHold: { ...baseHold, paymentRequestedAt: 'broken' } }),
+        null,
+        AFTER_WINDOW_MS,
+      ),
+    ).toMatchObject({ reason: 'INVALID_HOLD', eligibleAt: null });
+    expect(
+      decideCustomerFaultClosure(
+        orderData({ status: 'PREPARING', deliveryHold: { ...holdBeforeRequest } }),
+        null,
+        AFTER_WINDOW_MS,
+      ),
+    ).toMatchObject({ reason: 'INVALID_HOLD' });
   });
 
   it('결제 요청 뒤 PREPARING으로 돌아와 결제를 기다리는 주문도 종결할 수 있다', () => {
@@ -642,6 +721,27 @@ describe('CustomerFaultClosureService.close', () => {
       eligible: true,
       reason: 'OK',
     });
+  });
+
+  it('결제 요청 전 보류는 종결 요청을 새 안내로 거절하고 주문·집계를 바꾸지 않는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: { deliveryHold: { ...holdBeforeRequest } } });
+    const { service, adjustHeld, createSettlement } = makeService(occ);
+
+    await expect(service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      eligible: false,
+      reason: 'PAYMENT_NOT_REQUESTED',
+    });
+    const attempt = service.close(closeInput);
+    await expect(attempt).rejects.toBeInstanceOf(ConflictException);
+    await expect(attempt).rejects.toThrow(
+      "손님에게 재배송비 결제 요청을 보낸 뒤 3일이 지나야 종결할 수 있습니다. 먼저 '재배송 준비로 돌리기'를 눌러 주세요.",
+    );
+    expect(occ.getData(ORDER_PATH)).toMatchObject({ status: 'DELIVERY_HELD' });
+    expect(occ.getData(ROUND_PATH)?.['counters']?.['heldOrderCount']).toBe(1);
+    expect(adjustHeld).not.toHaveBeenCalled();
+    expect(createSettlement).not.toHaveBeenCalled();
   });
 });
 
@@ -1158,5 +1258,27 @@ describe('종결 기록의 읽기 범위', () => {
     expect(projectSellerOrder(occ.getData(ORDER_PATH)!, 'list')).not.toHaveProperty(
       'customerFaultClosure',
     );
+  });
+});
+
+describe('재배송비 결제 요청 시각의 읽기 범위(S-15)', () => {
+  it('판매자 상세와 손님 주문 응답에 보류의 결제 요청 시각이 실린다', async () => {
+    const occ = createOccFirestore();
+    seed(occ, { order: { status: 'PREPARING' } });
+    const order = occ.getData(ORDER_PATH)!;
+
+    expect(projectSellerOrder(order, 'detail')['deliveryHold']).toMatchObject({
+      heldAt: HELD_AT,
+      paymentRequestedAt: PAYMENT_REQUESTED_AT,
+    });
+
+    const query = new OrdersQueryService(occ.firestore as never);
+    const detail = await query.getOrderById(ORDER_ID, { sub: 'user-1', role: 'consumer' });
+    const [mine] = await query.getMyOrders('user-1');
+    for (const consumerOrder of [detail, mine]) {
+      expect(consumerOrder['deliveryHold']).toMatchObject({
+        paymentRequestedAt: PAYMENT_REQUESTED_AT,
+      });
+    }
   });
 });

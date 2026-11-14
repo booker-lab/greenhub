@@ -295,6 +295,24 @@ test('해제된 배송 보류는 경고로 남기지 않고 결제 후 배송 �
 
   assert.equal(held?.deliveryHold?.resolvedAt, null);
   assert.equal(delivered?.deliveryHold?.resolvedAt, '2026-07-22T02:00:00.000Z');
+  // 결제 요청 시각(S-15): 요청 전 보류는 null로 읽고, 요청 뒤 보류는 그 시각을 읽는다.
+  assert.equal(held?.deliveryHold?.paymentRequestedAt, null);
+  const requested = read('requested', {
+    status: 'PREPARING',
+    deliveryHold: {
+      ...baseHold,
+      resolvedAt: null,
+      paymentRequestedAt: '2026-07-21T03:00:00.000Z',
+    },
+    redeliveryPayment: paidPayment,
+  });
+  assert.equal(requested?.deliveryHold?.paymentRequestedAt, '2026-07-21T03:00:00.000Z');
+  const brokenRequest = read('broken-request', {
+    status: 'PREPARING',
+    deliveryHold: { ...baseHold, resolvedAt: null, paymentRequestedAt: 'not-a-date' },
+    redeliveryPayment: paidPayment,
+  });
+  assert.equal(brokenRequest?.deliveryHold?.paymentRequestedAt, null);
   assert.deepEqual(
     [held, awaitingResume, delivered, resumedFree, invalidResolvedAt].map((detail) =>
       detail ? isDeliveryHoldActive(detail) : 'unreadable',
