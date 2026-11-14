@@ -18,7 +18,7 @@ import { apiFetch, apiRead } from '@/lib/api';
 import { isApiTimeoutError } from '@/lib/api-timeout';
 import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
 import { type DriverOrderItem, orderItemLines, orderItemsLabel } from '@/lib/order-quantity';
-import { readPickupPlace } from '@/lib/pickup-place';
+import { isDamagedHold, readPickupPlace, readReturnPlace } from '@/lib/pickup-place';
 import { buildOrderMapLink } from '../../map/_lib/map-navigation-link';
 import {
   buildDriverOrderDetailScope,
@@ -90,7 +90,7 @@ type Order = {
   redeliveryPayment?: RedeliveryPaymentActionability;
   // 배정 여부. 응답에 없으면 확인 창이 배정 사실을 단정하지 않는다(buildDriverStatusConfirmContent).
   assignedToMe?: boolean;
-  // 수거 대기 주문의 수거 가게 이름·주소(가게 문서 name·address). 없으면 수거 장소를 숨긴다.
+  // 수거 대기·상품 파손 보류 주문의 가게 이름·주소(가게 문서 name·address). 없으면 수거·반납 장소를 숨긴다.
   pickupStoreName?: string;
   pickupAddress?: string;
 };
@@ -672,7 +672,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
   const isPreparing = order.status === 'PREPARING';
   const isHeld = order.status === 'DELIVERY_HELD';
   const isHub = order.deliveryMethod === 'hub';
-  // 소비자 이름은 넣지 않고 주소(거점은 거점 주소)만으로 외부 지도 링크를 만든다.
+  // 손님 이름은 넣지 않고 주소(거점은 거점 주소)만으로 외부 지도 링크를 만든다.
   const mapLink = buildOrderMapLink({
     deliveryMethod: order.deliveryMethod,
     // 상세 주소(동·호수)가 붙지 않은 기본 주소가 있으면 그것으로 검색한다.
@@ -682,6 +682,9 @@ function OrderDetail({ orderId }: { orderId: string }) {
   });
   // 수거 대기 주문의 수거 장소(가게 이름·주소)와 가게 주소 지도 링크. 필드가 없으면 null이고 숨긴다.
   const pickup = readPickupPlace(order);
+  // 상품 파손 보류 주문은 상품을 돌려줄 가게(반납 장소)를 보인다(3차 재감사 S-11). 필드가 없으면 null이고 숨긴다.
+  const returnPlace = readReturnPlace(order);
+  const storePlace = pickup ?? returnPlace;
   const isRoundDirect =
     order.schemaVersion === 2 && Boolean(order.roundId) && order.deliveryMethod === 'direct';
   const paymentPresentation = getRedeliveryPaymentPresentation(order.redeliveryPayment);
@@ -698,15 +701,18 @@ function OrderDetail({ orderId }: { orderId: string }) {
   });
   // 문 앞에서 가장 중요한 동·호수를 크게 쓴다. 거점은 거점 이름이 제목이고 주소가 보조다.
   const addressParts = readAddressParts(order);
-  // 단계마다 보이는 전화는 하나다(판매자: 수거 대기·거점 배송 중, 소비자: 직배송 배송 중·보류). 노출 규칙은 API가 정한다.
+  // 단계마다 보이는 전화는 하나다(판매자: 수거 대기·거점 배송 중·상품 파손 보류, 손님: 직배송 배송 중·보류).
+  // 노출 규칙은 API가 정한다. 상품 파손 보류는 가게로 반납하므로 판매자 전화를 먼저 쓴다(S-11).
   const contact =
-    isPreparing && order.sellerPhone
+    (isPreparing || isDamagedHold(order)) && order.sellerPhone
       ? { label: '판매자', phone: order.sellerPhone }
       : (isDelivering || isHeld) && !isHub && order.buyerPhone
-        ? { label: '소비자', phone: order.buyerPhone }
+        ? { label: '손님', phone: order.buyerPhone }
         : isDelivering && isHub && order.sellerPhone
           ? { label: '판매자', phone: order.sellerPhone }
           : null;
+  // 가게(수거·반납)가 함께 나오는 단계에서는 판매자 전화 옆 지도 버튼이 손님 배송지임을 밝힌다(S-13).
+  const customerMapSearchLabel = isPreparing || isDamagedHold(order) ? '배송지 보기' : '주소 보기';
   const preparedAtStr = order.preparedAt
     ? new Date(order.preparedAt).toLocaleTimeString('ko-KR', {
         hour: '2-digit',
@@ -862,8 +868,8 @@ function OrderDetail({ orderId }: { orderId: string }) {
 
           {pendingPhotoNotice}
 
-          {/* 수거 대기에서는 먼저 들를 수거 장소를 배송지보다 위에 둔다. */}
-          {pickup && (
+          {/* 수거 대기에서는 먼저 들를 수거 장소를, 상품 파손 보류에서는 상품을 돌려줄 가게를 배송지보다 위에 둔다. */}
+          {storePlace && (
             <div
               className="flex flex-col gap-2 rounded-[var(--radius)] p-4"
               style={{ backgroundColor: 'var(--color-surface-muted)' }}
@@ -877,17 +883,17 @@ function OrderDetail({ orderId }: { orderId: string }) {
                   overflowWrap: 'anywhere',
                 }}
               >
-                {pickup.label}
+                {storePlace.label}
               </p>
-              {pickup.mapHref && (
+              {storePlace.mapHref && (
                 <a
-                  href={pickup.mapHref}
+                  href={storePlace.mapHref}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={actionButton}
                   style={actionButtonStyle}
                 >
-                  카카오맵에서 수거지 보기
+                  {pickup ? '카카오맵에서 수거지 보기' : '카카오맵에서 가게 보기'}
                 </a>
               )}
             </div>
@@ -969,7 +975,7 @@ function OrderDetail({ orderId }: { orderId: string }) {
                     className={actionButton}
                     style={actionButtonStyle}
                   >
-                    카카오맵에서 {mapLink.kind === 'route' ? '길찾기' : '주소 보기'}
+                    카카오맵에서 {mapLink.kind === 'route' ? '길찾기' : customerMapSearchLabel}
                   </a>
                 )}
               </div>

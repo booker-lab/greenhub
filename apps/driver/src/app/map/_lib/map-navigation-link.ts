@@ -82,15 +82,25 @@ export function buildKakaoMapRouteUrl(name: unknown, lat: unknown, lng: unknown)
  * 다음 배송지: 경로 순서에서 처음 나오는 배송 중(DELIVERING) 주문.
  * 수거 대기(PREPARING) 주문은 아직 맡지 않은 주문일 수 있어 고르지 않는다.
  * 기사 목록 API가 주는 배송 중 주문은 모두 요청한 기사에게 배정된 주문이다.
+ * 완료 사진이 이 기기 대기열에 있는 주문(pendingPhotoOrderIds)은 이미 들른 곳이라 고르지 않는다(3차 재감사 S-02).
  */
-export function pickNextDeliveryStop<T extends { status?: string }>(route: readonly T[]): T | null {
-  return route.find((order) => order.status === 'DELIVERING') ?? null;
+export function pickNextDeliveryStop<T extends { id?: string; status?: string }>(
+  route: readonly T[],
+  pendingPhotoOrderIds: ReadonlySet<string> = new Set(),
+): T | null {
+  return (
+    route.find(
+      (order) =>
+        order.status === 'DELIVERING' &&
+        !(typeof order.id === 'string' && pendingPhotoOrderIds.has(order.id)),
+    ) ?? null
+  );
 }
 
 /**
  * 주문 1건의 외부 지도 링크.
  * 유효 좌표가 있으면 길찾기, 없으면 주소 검색, 둘 다 없으면 null(링크 미노출).
- * 소비자 이름은 외부 지도 URL에 넣지 않는다(목적지 라벨은 주소·거점명만 사용).
+ * 손님 이름은 외부 지도 URL에 넣지 않는다(목적지 라벨은 주소·거점명만 사용).
  */
 export function buildOrderMapLink(order: MapLinkOrder): MapLink | null {
   const address = destinationAddress(order);

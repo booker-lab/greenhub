@@ -94,7 +94,9 @@ test('목록이 최신이 아니면 실행·확인을 막고 확인 창은 주�
 test('수거 장소는 행·상세 모두 readPickupPlace로 그리고 상세에서는 배송지보다 위에 있다', () => {
   assert.match(cardSource, /readPickupPlace\(order\)/);
   assert.match(detailSource, /const pickup = readPickupPlace\(order\);/);
-  const pickupAt = detailSource.indexOf('{pickup && (');
+  // 상품 파손 보류의 반납 장소도 같은 자리(배송지 위)에 그린다(S-11).
+  assert.match(detailSource, /const storePlace = pickup \?\? returnPlace;/);
+  const pickupAt = detailSource.indexOf('{storePlace && (');
   const addressAt = detailSource.indexOf('{addressParts.detail ?? addressParts.base}');
   assert.ok(pickupAt !== -1 && addressAt !== -1 && pickupAt < addressAt);
   // 행의 지도 링크는 상세 링크 밖에 둔다(링크 안 링크 금지).

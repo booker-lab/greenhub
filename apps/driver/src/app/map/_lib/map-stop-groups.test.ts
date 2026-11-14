@@ -28,6 +28,31 @@ describe('groupMapStops', () => {
   });
 });
 
+describe('groupMapStops 사진 올리는 중', () => {
+  it('완료 사진이 대기열에 있는 배송 중 주문은 "배송 중"에서 빼고 "사진 올리는 중"에 둔다(S-02)', () => {
+    const groups = groupMapStops(
+      [
+        { id: 'd1', status: 'DELIVERING' },
+        { id: 'p1', status: 'PREPARING' },
+        { id: 'd2', status: 'DELIVERING' },
+        { id: 'd3', status: 'DELIVERING' },
+      ],
+      new Set(['d1', 'p1']),
+    );
+    expect(groups.map((group) => [group.label, group.orders.map((order) => order.id)])).toEqual([
+      ['배송 중', ['d2', 'd3']],
+      ['사진 올리는 중', ['d1']],
+      // 수거 대기 주문은 대기열 ID와 겹쳐도 수거 대기 묶음에 그대로 둔다.
+      ['수거 대기', ['p1']],
+    ]);
+  });
+
+  it('배송 중이 모두 사진 대기면 "배송 중" 묶음은 빠진다', () => {
+    const groups = groupMapStops([{ id: 'd1', status: 'DELIVERING' }], new Set(['d1']));
+    expect(groups.map((group) => group.label)).toEqual(['사진 올리는 중']);
+  });
+});
+
 describe('groupMapStops 수거 대기 나누기', () => {
   it('assignedToMe를 알면 수거 대기를 내 수거와 맡을 수 있는 주문으로 나눈다', () => {
     const groups = groupMapStops([

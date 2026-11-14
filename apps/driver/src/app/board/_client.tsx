@@ -570,7 +570,13 @@ export default function BoardClient() {
                     다시 시도
                   </AppButton>
                 </div>
-                <OrderList key={tab} orders={orders} tab={tab} batch={batchSelection} />
+                <OrderList
+                  key={tab}
+                  orders={orders}
+                  tab={tab}
+                  batch={batchSelection}
+                  pendingPhotoOrderIds={pendingPhotoOrderIds}
+                />
               </div>
             )
           ) : refreshing && hasSuccessfulRead && orders.length === 0 ? (
@@ -632,7 +638,13 @@ export default function BoardClient() {
                   여러 주문 한 번에 배송 시작
                 </TextButton>
               )}
-              <OrderList key={tab} orders={orders} tab={tab} batch={batchSelection} />
+              <OrderList
+                key={tab}
+                orders={orders}
+                tab={tab}
+                batch={batchSelection}
+                pendingPhotoOrderIds={pendingPhotoOrderIds}
+              />
             </div>
           )}
         </main>
@@ -873,11 +885,14 @@ function OrderList({
   orders,
   tab,
   batch = null,
+  pendingPhotoOrderIds,
 }: {
   orders: DriverListOrder[];
   tab: string;
   /** 한 번에 수거 고르기 모드. 내 수거 행에만 고르기 칸을 둔다. */
   batch?: BatchSelection | null;
+  /** 완료 사진이 이 기기 대기열에 있는 주문 ID. 배송 중 탭에서 "다음 배송지" 후보에서 뺀다. */
+  pendingPhotoOrderIds: ReadonlySet<string>;
 }) {
   const [expanded, setExpanded] = useState(false);
   // 수거 대기 탭은 내게 배정된 주문과 아직 아무도 맡지 않은 주문을 나눠 보인다.
@@ -918,8 +933,10 @@ function OrderList({
   }
 
   // 배송 중 탭에서는 보류가 아닌 첫 배송지를 "다음 배송지"로 크게 보인다. 순서는 목록 응답 순서다.
-  // 보류 주문이 있으면 "배송할 주문"과 "보류" 묶음으로 나누고, 보류 묶음은 첫 화면 행 수를 따로 센다.
-  const delivering = tab === 'delivering' ? groupDeliveringOrders(orders) : null;
+  // 완료 사진이 대기열에 있는 주문은 이미 들른 곳이라 다음 배송지 후보에서 빼고 "사진 올리는 중" 묶음에 둔다(S-02).
+  // 보류·사진 올리는 중 주문이 있으면 묶음으로 나누고, 그 묶음들은 첫 화면 행 수를 따로 센다.
+  const delivering =
+    tab === 'delivering' ? groupDeliveringOrders(orders, pendingPhotoOrderIds) : null;
   if (delivering) {
     const shown = expanded
       ? { ...delivering, hidden: 0 }
@@ -928,7 +945,7 @@ function OrderList({
     const toDeliverTotal = delivering.rest.length + (delivering.next ? 1 : 0);
     return (
       <>
-        {delivering.held.length > 0 ? (
+        {delivering.held.length > 0 || delivering.photoPending.length > 0 ? (
           <>
             {toDeliverTotal > 0 && (
               <OrderGroup
@@ -939,7 +956,23 @@ function OrderList({
                 lead={nextCard}
               />
             )}
-            <OrderGroup title="보류" total={delivering.held.length} orders={shown.held} tab={tab} />
+            {delivering.photoPending.length > 0 && (
+              <OrderGroup
+                title="사진 올리는 중"
+                hint="사진을 찍은 주문이에요. 신호가 잡히면 앱이 올리고 배송을 마쳐요."
+                total={delivering.photoPending.length}
+                orders={shown.photoPending}
+                tab={tab}
+              />
+            )}
+            {delivering.held.length > 0 && (
+              <OrderGroup
+                title="보류"
+                total={delivering.held.length}
+                orders={shown.held}
+                tab={tab}
+              />
+            )}
           </>
         ) : (
           <>
@@ -1068,6 +1101,9 @@ function ShowMoreButton({ hidden, onClick }: { hidden: number; onClick: () => vo
   );
 }
 
+/** 진행 줄 한 항목. 항목 안에서는 줄을 바꾸지 않는다. */
+const progressItem = { whiteSpace: 'nowrap' } as const;
+
 /**
  * 배송지 점 띠와 진행 한 줄. 목록 API가 주는 값(배송 중·보류·수거 대기 주문)만으로 그린다.
  * 숫자 기준: 점 띠와 진행 줄은 "내 주문"(배송 중·보류·내 수거)을 세고, 아무도 맡지 않은 주문은 점 띠에 그리지 않고
@@ -1120,23 +1156,31 @@ function DeliveryProgress({
           fontSize: 'var(--font-size-sm)',
           color: 'var(--driver-text-muted)',
           fontVariantNumeric: 'tabular-nums',
-          // 항목이 늘어 두 줄이 될 때 "오늘 / 완료"처럼 낱말 중간에서 끊기지 않게 낱말 단위로 줄을 바꾼다.
-          wordBreak: 'keep-all',
+          // 항목이 늘어 두 줄이 될 때 "오늘 / 완료"처럼 항목 중간에서 끊기지 않게 항목마다 nowrap으로 묶고
+          // 줄은 항목 사이(" · " 뒤)에서만 바꾼다(3차 재감사 S-07). keep-all은 띄어쓰기 사이를 막지 못한다.
         }}
       >
-        남은 배송 {toDeliver}곳
+        <span style={progressItem}>남은 배송 {toDeliver}곳</span>
         {held > 0 && (
           <>
             {' · '}
-            <span style={{ color: 'var(--color-danger)', fontWeight: 'var(--fw-bold)' }}>
+            <span
+              style={{
+                ...progressItem,
+                color: 'var(--color-danger)',
+                fontWeight: 'var(--fw-bold)',
+              }}
+            >
               보류 {held}곳
             </span>
           </>
         )}
-        {' · '}수거 {myPreparing.length}곳
+        {' · '}
+        <span style={progressItem}>수거 {myPreparing.length}곳</span>
         {preparingGroups && preparingGroups.available.length > 0 && (
           <>
-            {' · '}맡을 수 있는 {preparingGroups.available.length}곳
+            {' · '}
+            <span style={progressItem}>맡을 수 있는 {preparingGroups.available.length}곳</span>
           </>
         )}
         {completedToday !== null && completedToday > 0 && (
@@ -1148,13 +1192,18 @@ function DeliveryProgress({
               prefetch={false}
               // 글줄 높이는 그대로 두고 위아래 여백으로 누를 자리만 넓힌다(인라인 요소의 세로 여백은 줄을 밀지 않는다).
               className="py-2 underline underline-offset-4"
-              style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
+              style={{ ...progressItem, color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
             >
               오늘 완료 {completedToday}곳
             </Link>
           </>
         )}
-        {completedToday === 0 && <>{' · '}오늘 완료 0곳</>}
+        {completedToday === 0 && (
+          <>
+            {' · '}
+            <span style={progressItem}>오늘 완료 0곳</span>
+          </>
+        )}
       </p>
     </div>
   );

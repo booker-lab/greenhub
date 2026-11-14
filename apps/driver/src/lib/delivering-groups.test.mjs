@@ -55,8 +55,41 @@ test('전체가 첫 화면 행 수 이하면 더 보기가 없다', () => {
   assert.deepEqual(ids(shown.held), ['h1']);
 });
 
-test('배송 중 탭은 보류가 있을 때 묶음 제목에 건수를 쓰고 묶음 판단을 순수 함수에 맡긴다', () => {
-  assert.match(boardSource, /groupDeliveringOrders\(orders\)/);
+test('완료 사진이 대기열에 있는 배송 중 주문은 다음 배송지가 아니고 "사진 올리는 중" 묶음이다(S-02)', () => {
+  const groups = groupDeliveringOrders(
+    [order('d1'), order('d2'), order('h1', 'DELIVERY_HELD'), order('d3')],
+    new Set(['d1', 'h1']),
+  );
+  // 방금 사진을 찍은 d1 대신 다음 주문이 다음 배송지다.
+  assert.equal(groups.next?.id, 'd2');
+  assert.deepEqual(ids(groups.rest), ['d3']);
+  assert.deepEqual(ids(groups.photoPending), ['d1']);
+  // 보류 주문은 대기열 ID와 겹쳐도 보류 묶음에 둔다.
+  assert.deepEqual(ids(groups.held), ['h1']);
+
+  const allPending = groupDeliveringOrders([order('d1'), order('d2')], new Set(['d1', 'd2']));
+  assert.equal(allPending.next, undefined);
+  assert.deepEqual(allPending.rest, []);
+  assert.deepEqual(ids(allPending.photoPending), ['d1', 'd2']);
+
+  // 대기열을 넘기지 않으면 예전과 같다.
+  assert.deepEqual(ids(groupDeliveringOrders([order('d1')]).photoPending), []);
+});
+
+test('사진 올리는 중 묶음도 첫 화면 행 수를 따로 센다', () => {
+  const pending = new Set(Array.from({ length: 7 }, (_, i) => `p-${i}`));
+  const groups = groupDeliveringOrders([...many('d', 3), ...many('p', 7)], pending);
+  const shown = takeDeliveringFirstScreen(groups, 5);
+  assert.equal(shown.next?.id, 'd-0');
+  assert.equal(shown.rest.length, 2);
+  assert.equal(shown.photoPending.length, 5);
+  assert.equal(shown.hidden, 2);
+});
+
+test('배송 중 탭은 보류·사진 대기가 있을 때 묶음 제목에 건수를 쓰고 묶음 판단을 순수 함수에 맡긴다', () => {
+  assert.match(boardSource, /groupDeliveringOrders\(orders, pendingPhotoOrderIds\)/);
   assert.match(boardSource, /title="배송할 주문"/);
-  assert.match(boardSource, /title="보류" total=\{delivering\.held\.length\}/);
+  assert.match(boardSource, /title="사진 올리는 중"/);
+  assert.match(boardSource, /total=\{delivering\.photoPending\.length\}/);
+  assert.match(boardSource, /title="보류"\s+total=\{delivering\.held\.length\}/);
 });

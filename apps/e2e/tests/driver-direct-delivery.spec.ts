@@ -166,7 +166,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await expect(page.getByText('직배송', { exact: true })).toBeVisible();
     await expect(page.getByText('E2E 미니 호접란 · 1개', { exact: true })).toBeVisible();
     // 지도는 동·호수 없는 기본 주소로 검색한다.
-    await expect(page.getByRole('link', { name: '카카오맵에서 주소 보기' })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: '카카오맵에서 배송지 보기' })).toHaveAttribute(
       'href',
       `https://map.kakao.com/link/search/${encodeURIComponent('경기도 이천시 테스트로 1')}`,
     );
@@ -178,7 +178,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
 
     await expect(page.getByText('배송 중')).toBeVisible();
     await expect(page.getByRole('button', { name: '수거 완료 / 배송 시작' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /소비자에게 전화/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /손님에게 전화/ })).toBeVisible();
   });
 
   test('기상 사유는 고객 책임과 재배송비 없이 새 일정으로 보류한다', async ({
