@@ -1455,6 +1455,111 @@ describe('DriverService 수거 장소와 목록 판매점 ID', () => {
   });
 });
 
+describe('DriverService 상품 파손 보류의 반납 장소', () => {
+  // 상품 파손 보류는 재배송하지 않고 기사가 상품을 가게로 돌려준다(3차 재감사 S-11).
+  function damagedRecords(): Record<string, Data> {
+    const held = (reasonCode: string, extra: Data = {}): Data => ({
+      storeId: 'pilot',
+      schemaVersion: 2,
+      roundId: 'round-a',
+      deliveryMethod: 'direct',
+      status: 'DELIVERY_HELD',
+      driverId: 'driver-1',
+      buyerName: '김그린',
+      buyerPhone: '010-1111-1111',
+      deliveryPhone: '010-3333-3333',
+      sellerPhone: '02-555-6666',
+      address: '서울시 중구 손님로 7 101동 202호',
+      deliveryHold: {
+        heldAt: '2026-11-13T01:00:00.000Z',
+        reasonCode,
+        reasonMessage: '사유 메모 010-7777-7777',
+        customerResponsible: false,
+        redeliveryFee: null,
+        nextContactAt: null,
+        nextDeliveryAt: null,
+        resolvedAt: null,
+      },
+      ...extra,
+    });
+    return {
+      'stores/pilot': {
+        id: 'pilot',
+        salesMode: 'round_direct',
+        name: ' 그린 화원 ',
+        address: ' 서울시 중구 세종대로 1 ',
+        ownerPhone: '010-9999-9999',
+        businessNumber: '123-45-67890',
+      },
+      'saleRounds/round-a': { id: 'round-a', storeId: 'pilot' },
+      'orders/damaged': held('PRODUCT_DAMAGED'),
+      'orders/refused': held('RECEIPT_REFUSED'),
+      // 보류가 풀려 배송 중으로 돌아간 주문은 예전 보류 기록이 남아 있어도 반납 대상이 아니다.
+      'orders/resumed': held('PRODUCT_DAMAGED', { status: 'DELIVERING' }),
+      'orders/other-driver-damaged': held('PRODUCT_DAMAGED', { driverId: 'driver-2' }),
+    };
+  }
+
+  it('상세는 상품 파손 보류에만 가게 이름·주소와 판매자 전화를 싣는다', async () => {
+    const { service } = makeService(damagedRecords());
+
+    const damaged = await service.getOrder('driver-1', 'damaged');
+    expect(damaged).toMatchObject({
+      pickupStoreName: '그린 화원',
+      pickupAddress: '서울시 중구 세종대로 1',
+      sellerPhone: '02-555-6666',
+      // 손님 전화는 보류 단계 규칙 그대로다.
+      buyerPhone: '010-3333-3333',
+      deliveryHold: { reasonCode: 'PRODUCT_DAMAGED' },
+    });
+
+    for (const id of ['refused', 'resumed']) {
+      const order = await service.getOrder('driver-1', id);
+      expect(order).not.toHaveProperty('pickupStoreName');
+      expect(order).not.toHaveProperty('pickupAddress');
+      expect(order).not.toHaveProperty('sellerPhone');
+    }
+    // 판매점의 다른 필드(대표 전화·사업자 번호)는 싣지 않는다.
+    const serialized = JSON.stringify(damaged);
+    expect(serialized).not.toContain('010-9999-9999');
+    expect(serialized).not.toContain('123-45-67890');
+  });
+
+  it('다른 기사의 상품 파손 보류는 보이지 않는다', async () => {
+    const { service } = makeService(damagedRecords());
+
+    await expect(service.getOrder('driver-1', 'other-driver-damaged')).rejects.toThrow();
+    const listed = await service.getOrders('driver-1');
+    expect(listed.map((order) => order.id)).not.toContain('other-driver-damaged');
+  });
+
+  it('목록은 보류 사유 코드와 반납 장소만 더 싣고 전화번호·보류 사유 글은 싣지 않는다', async () => {
+    const { service } = makeService(damagedRecords());
+
+    const listed = await service.getOrders('driver-1');
+    const byId = Object.fromEntries(listed.map((order) => [order.id, order]));
+
+    expect(byId['damaged']).toMatchObject({
+      deliveryHoldReasonCode: 'PRODUCT_DAMAGED',
+      pickupStoreName: '그린 화원',
+      pickupAddress: '서울시 중구 세종대로 1',
+    });
+    expect(byId['refused']['deliveryHoldReasonCode']).toBe('RECEIPT_REFUSED');
+    expect(byId['refused']).not.toHaveProperty('pickupStoreName');
+    // 배송 중 주문에는 보류 사유 코드를 싣지 않는다.
+    expect(byId['resumed']).not.toHaveProperty('deliveryHoldReasonCode');
+    expect(byId['resumed']).not.toHaveProperty('pickupStoreName');
+    for (const order of listed) {
+      for (const field of ['sellerPhone', 'buyerPhone', 'deliveryPhone', 'deliveryHold']) {
+        expect(order).not.toHaveProperty(field);
+      }
+      const serialized = JSON.stringify(order);
+      expect(serialized).not.toContain('사유 메모');
+      expect(serialized).not.toContain('010-9999-9999');
+    }
+  });
+});
+
 describe('DriverService 오늘 완료 요약', () => {
   // 서울 2026-11-11 00:30. 서울 오늘의 시작은 2026-11-10T15:00:00Z다.
   const AFTER_MIDNIGHT = '2026-11-10T15:30:00.000Z';
