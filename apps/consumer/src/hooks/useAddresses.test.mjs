@@ -13,6 +13,17 @@ const compiled = ts.transpileModule(source, {
   fileName: 'useAddresses.ts',
 }).outputText;
 
+// 표시용 오류 문구는 실제 lib/load-error-message를 쓴다(문구 규칙은 그 파일의 테스트가 검증한다).
+const loadErrorMessageModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/load-error-message.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(loadErrorMessageModule, loadErrorMessageModule.exports);
+
 const API = 'https://api.example.test';
 const TOKEN = 'test-token';
 
@@ -59,6 +70,8 @@ function createDriver(initialAddresses, failOverrides = {}) {
     fetchCalls.push({ url, method, headers: init.headers, body: init.body });
 
     if (url === `${API}/auth/me` && method === 'GET') {
+      // 'network'는 연결 자체가 안 된 실패(fetch가 던지는 브라우저 원문)다.
+      if (fail.read === 'network') throw new TypeError('Failed to fetch');
       if (fail.read) return { ok: false, status: 500, json: async () => ({}) };
       return {
         ok: true,
@@ -159,6 +172,9 @@ function createDriver(initialAddresses, failOverrides = {}) {
     }
     if (specifier === '@/lib/api-base-url') {
       return { getApiBaseUrl: () => API };
+    }
+    if (specifier === '@/lib/load-error-message') {
+      return loadErrorMessageModule.exports;
     }
     if (specifier === '@greenhub/shared') {
       return {};
@@ -415,4 +431,35 @@ test('refetch 실패와 정상 empty addresses를 구분한다', async () => {
     driver.get().addresses.map((a) => a.id),
     ['addr-a'],
   );
+});
+
+test('조회 실패 error는 상태 코드·브라우저 원문이 아닌 고객 문구다 (HTTP 500)', async () => {
+  const driver = createDriver([], { read: true });
+  await driver.settle();
+
+  assert.equal(driver.get().error, '배송지를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+  assert.doesNotMatch(driver.get().error, /\d|조회 오류|[A-Za-z]/);
+  assert.deepEqual(driver.get().addresses, []);
+  assert.equal(driver.get().loading, false);
+});
+
+test('조회 실패 error는 연결 실패(Failed to fetch)면 연결 안내 문구다', async () => {
+  const driver = createDriver([], { read: 'network' });
+  await driver.settle();
+
+  assert.equal(driver.get().error, loadErrorMessageModule.exports.CONNECTION_UNSTABLE_MESSAGE);
+  assert.equal(driver.get().error, '연결이 불안정해요. 잠시 후 다시 시도해 주세요.');
+  assert.doesNotMatch(driver.get().error, /Failed to fetch/);
+  assert.equal(driver.get().loading, false);
+});
+
+test('배송지 화면은 조회 실패를 한 번만 안내하고 다시 받는 버튼을 하나만 둔다', async () => {
+  const clientSource = await readFile(
+    new URL('../app/mypage/addresses/_client.tsx', import.meta.url),
+    'utf8',
+  );
+  assert.equal(clientSource.match(/onClick=\{\(\) => refetch\(\)\}/g)?.length, 1);
+  assert.match(clientSource, /다시 시도/);
+  assert.doesNotMatch(clientSource, /다시 조회/);
+  assert.doesNotMatch(clientSource, /배송지 정보를 불러오지 못했습니다/);
 });

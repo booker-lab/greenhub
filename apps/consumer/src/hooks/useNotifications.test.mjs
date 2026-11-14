@@ -22,6 +22,17 @@ const compiled = ts.transpileModule(hookSource, {
   fileName: 'useNotifications.ts',
 }).outputText;
 
+// 표시용 오류 문구는 실제 lib/load-error-message를 쓴다(문구 규칙은 그 파일의 테스트가 검증한다).
+const loadErrorMessageModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(
+    await readFile(new URL('../lib/load-error-message.ts', import.meta.url), 'utf8'),
+    { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+  ).outputText,
+)(loadErrorMessageModule, loadErrorMessageModule.exports);
+
 const API_BASE_URL = 'https://api.example.test';
 const EXPECTED_URL = `${API_BASE_URL}/notifications/me`;
 const USER_A = { user: { id: 'user-a', accessToken: 'token-a' } };
@@ -123,6 +134,7 @@ function mountHook({ session = USER_A, fetchImpl }) {
     if (specifier === 'react') return { useCallback, useEffect, useRef, useState };
     if (specifier === 'next-auth/react') return { useSession: () => ({ data: currentSession }) };
     if (specifier === '@/lib/api-base-url') return { getApiBaseUrl: () => API_BASE_URL };
+    if (specifier === '@/lib/load-error-message') return loadErrorMessageModule.exports;
     throw new Error(`예상하지 못한 알림 조회 모듈 요청: ${specifier}`);
   };
   new Function('require', 'module', 'exports', compiled)(
@@ -219,7 +231,25 @@ test('3. initial error는 빈 성공으로 위장하지 않는다', async () => 
   const harness = mountHook({ fetchImpl: async () => errorResponse(500) });
   await harness.settle();
 
-  assert.match(harness.get().error ?? '', /500/);
+  // 화면에 그대로 보이는 문구라 상태 코드·원문 대신 고객 문구를 넘긴다.
+  assert.equal(harness.get().error, '알림을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+  assert.doesNotMatch(harness.get().error, /\d|조회 오류|[A-Za-z]/);
+  assert.deepEqual(harness.get().notifications, []);
+  assert.equal(harness.get().loading, false);
+});
+
+// 3-1. 연결 실패는 연결 안내로 바꾼다
+test('3-1. 연결 실패(Failed to fetch)의 error는 연결 안내 문구다', async () => {
+  const harness = mountHook({
+    fetchImpl: async () => {
+      throw new TypeError('Failed to fetch');
+    },
+  });
+  await harness.settle();
+
+  assert.equal(harness.get().error, loadErrorMessageModule.exports.CONNECTION_UNSTABLE_MESSAGE);
+  assert.equal(harness.get().error, '연결이 불안정해요. 잠시 후 다시 시도해 주세요.');
+  assert.doesNotMatch(harness.get().error, /Failed to fetch/);
   assert.deepEqual(harness.get().notifications, []);
   assert.equal(harness.get().loading, false);
 });
@@ -418,5 +448,8 @@ test('client retry는 실제 fetch lifecycle에 연결되고 상태 우선순위
   assert.match(clientSource, /!loading && !error && notifications\.length === 0/);
   assert.match(clientSource, /loading && notifications\.length === 0/);
   assert.match(clientSource, /이전 목록을 표시합니다/);
+  // 같은 실패를 두 번 안내하지 않는다: 고정 실패 문장 없이 훅의 고객 문구만 쓴다.
+  assert.doesNotMatch(clientSource, /최신 알림을 불러오지 못했습니다/);
+  assert.doesNotMatch(clientSource, /다시 조회/);
   assert.doesNotMatch(clientSource, /location\.reload/);
 });
