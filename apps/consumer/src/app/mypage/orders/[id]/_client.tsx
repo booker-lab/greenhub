@@ -18,6 +18,11 @@ import {
 } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
+import {
+  CLOSED_UNDELIVERED_MESSAGE,
+  CLOSED_UNDELIVERED_TITLE,
+  customerFaultClosureWarning,
+} from '@/lib/order-closure-notice';
 import { deliveryHoldNotice, REDELIVERY_UNPAID_NOTICE } from '@/lib/order-delivery-hold-notice';
 import { formatOrderDeliveryDate } from '@/lib/order-delivery-date';
 import {
@@ -904,6 +909,15 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         redeliveryPaid: paymentIsDone,
       })
     : null;
+  // 고객 책임 보류에서 재배송비를 기다리는 동안 환불 없는 종결 가능성을 미리 알린다.
+  const closureWarning = customerFaultClosureWarning({
+    isRoundOrder: detail.isRoundOrder,
+    deliveryMethod: detail.deliveryMethod,
+    status: detail.status,
+    deliveryHold: detail.deliveryHold,
+    redeliveryPaid: paymentIsDone,
+  });
+  const isClosedUndelivered = detail.status === 'CLOSED_UNDELIVERED';
   // 배송 보류·취소는 문제 상태라 빨강 계열 배지로 보인다
   // ② 방향(design-standard §5): 상태는 점 + 글자. 배송 보류=빨강, 취소·결제 대기·완료=회색, 나머지 검정.
   const statusTone: StatusDotTone =
@@ -912,7 +926,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       : detail.status === 'CANCELLED' ||
           detail.status === 'PENDING' ||
           detail.status === 'DELIVERED' ||
-          detail.status === 'REVIEWED'
+          detail.status === 'REVIEWED' ||
+          detail.status === 'CLOSED_UNDELIVERED'
         ? 'done'
         : 'default';
 
@@ -1102,6 +1117,11 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                 다음 배송: {formatDateTime(detail.deliveryHold.nextDeliveryAt)}
               </p>
             )}
+            {closureWarning && (
+              <p className="m-0 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
+                {closureWarning}
+              </p>
+            )}
             {detail.redeliveryPayment.required && (
               <div className="mt-2.5 flex flex-col gap-1.5">
                 {paymentIsDone && (
@@ -1244,6 +1264,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </DetailAlert>
       )}
 
+      {isClosedUndelivered && (
+        <DetailAlert variant="warning" className="mb-5" title={CLOSED_UNDELIVERED_TITLE}>
+          <p className="m-0 text-sm" data-testid="order-closed-undelivered">
+            {CLOSED_UNDELIVERED_MESSAGE}
+          </p>
+        </DetailAlert>
+      )}
+
       {isCancelled && (
         <DetailAlert variant="destructive" className="mb-5 text-center">
           <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-bold)' }}>
@@ -1323,7 +1351,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
         </DetailAlert>
       )}
 
-      {!isCancelled && detail.status !== 'DELIVERY_HELD' && (
+      {!isCancelled && detail.status !== 'DELIVERY_HELD' && !isClosedUndelivered && (
         <div>
           <p className="m-0 mb-4 text-sm" style={{ fontWeight: 'var(--fw-bold)' }}>
             배송 현황

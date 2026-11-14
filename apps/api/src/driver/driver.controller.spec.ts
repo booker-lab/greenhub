@@ -1,11 +1,16 @@
 import { type INestApplication, RequestMethod, ValidationPipe } from '@nestjs/common';
 import { GUARDS_METADATA, METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
+import { ConfigService } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
 import request from 'supertest';
+import { JwtStrategy } from '../auth/strategies/jwt.strategy';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { sanitizedValidationPipeOptions } from '../common/validation/sanitized-validation';
+import { FirestoreService } from '../firestore/firestore.service';
 import { DriverController } from './driver.controller';
 import { DriverService } from './driver.service';
 
@@ -35,6 +40,147 @@ describe('DriverController 권한 계약', () => {
     ).resolves.toEqual({ id: 'order-1' });
     expect(driver.getOrder).toHaveBeenCalledWith('driver-1', 'order-1');
   });
+
+  it('오늘 완료 요약 경로를 같은 controller guard 아래에 노출하고 요청 기사 ID만 넘긴다', async () => {
+    const driver = {
+      getSummary: jest.fn().mockResolvedValue({ completedToday: 3 }),
+    };
+    const controller = new DriverController(driver as never);
+
+    expect(Reflect.getMetadata(PATH_METADATA, DriverController.prototype.getSummary)).toBe(
+      'summary',
+    );
+    expect(Reflect.getMetadata(METHOD_METADATA, DriverController.prototype.getSummary)).toBe(
+      RequestMethod.GET,
+    );
+    await expect(controller.getSummary({ sub: 'driver-1', role: 'driver' })).resolves.toEqual({
+      completedToday: 3,
+    });
+    expect(driver.getSummary).toHaveBeenCalledWith('driver-1');
+  });
+
+  it('오늘 완료 내역·사진 경로를 같은 controller guard 아래에 노출하고 메서드별 역할을 바꾸지 않는다', async () => {
+    const driver = {
+      getCompletedToday: jest.fn().mockResolvedValue({ date: '2026-11-11', orders: [] }),
+      getCompletedTodayPhoto: jest
+        .fn()
+        .mockResolvedValue({ url: 'https://signed', expiresAt: '2026-11-11T00:15:00.000Z' }),
+    };
+    const controller = new DriverController(driver as never);
+    const { getCompletedToday, getCompletedTodayPhoto } = DriverController.prototype;
+
+    expect(Reflect.getMetadata(PATH_METADATA, getCompletedToday)).toBe('completed-today');
+    expect(Reflect.getMetadata(PATH_METADATA, getCompletedTodayPhoto)).toBe(
+      'completed-today/:orderId/photo',
+    );
+    for (const handler of [getCompletedToday, getCompletedTodayPhoto]) {
+      expect(Reflect.getMetadata(METHOD_METADATA, handler)).toBe(RequestMethod.GET);
+      expect(Reflect.getMetadata(ROLES_KEY, handler)).toBeUndefined();
+      expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toBeUndefined();
+    }
+    await expect(
+      controller.getCompletedToday({ sub: 'driver-1', role: 'driver' }),
+    ).resolves.toEqual({ date: '2026-11-11', orders: [] });
+    expect(driver.getCompletedToday).toHaveBeenCalledWith('driver-1');
+    await controller.getCompletedTodayPhoto('order-1', { sub: 'driver-1', role: 'driver' });
+    expect(driver.getCompletedTodayPhoto).toHaveBeenCalledWith('driver-1', 'order-1');
+  });
+});
+
+describe('GET /driver/completed-today 경로', () => {
+  let app: INestApplication;
+  const driver = {
+    getOrder: jest.fn(),
+    getCompletedToday: jest.fn(),
+    getCompletedTodayPhoto: jest.fn(),
+  };
+  let currentUser: Record<string, unknown> | undefined;
+
+  async function createApp(options: { realAuth: boolean }) {
+    let builder = Test.createTestingModule({
+      imports: options.realAuth
+        ? [PassportModule, JwtModule.register({ secret: 'test-secret' })]
+        : [],
+      controllers: [DriverController],
+      providers: [
+        { provide: DriverService, useValue: driver },
+        ...(options.realAuth
+          ? [
+              {
+                provide: ConfigService,
+                useValue: new ConfigService({ JWT_SECRET: 'test-secret' }),
+              },
+              { provide: FirestoreService, useValue: { doc: jest.fn() } },
+              JwtStrategy,
+            ]
+          : []),
+      ],
+    });
+    if (!options.realAuth) {
+      builder = builder.overrideGuard(JwtAuthGuard).useValue({ canActivate: () => true });
+    }
+    const module = await builder.compile();
+    app = module.createNestApplication();
+    if (!options.realAuth) {
+      app.use((req: Record<string, unknown>, _res: unknown, next: () => void) => {
+        req.user = currentUser;
+        next();
+      });
+    }
+    await app.init();
+  }
+
+  beforeEach(() => {
+    currentUser = { sub: 'driver-1', role: 'driver' };
+    driver.getCompletedToday.mockResolvedValue({ date: '2026-11-11', orders: [] });
+    driver.getCompletedTodayPhoto.mockResolvedValue({
+      url: 'https://signed',
+      expiresAt: '2026-11-11T00:15:00.000Z',
+    });
+  });
+
+  afterEach(async () => {
+    await app?.close();
+    jest.clearAllMocks();
+  });
+
+  it('완료 내역·사진 경로는 orders/:orderId 상세에 가려지지 않는다', async () => {
+    await createApp({ realAuth: false });
+
+    await request(app.getHttpServer())
+      .get('/driver/completed-today')
+      .expect(200, { date: '2026-11-11', orders: [] });
+    await request(app.getHttpServer())
+      .get('/driver/completed-today/order-1/photo')
+      .expect(200, { url: 'https://signed', expiresAt: '2026-11-11T00:15:00.000Z' });
+
+    expect(driver.getCompletedToday).toHaveBeenCalledWith('driver-1');
+    expect(driver.getCompletedTodayPhoto).toHaveBeenCalledWith('driver-1', 'order-1');
+    expect(driver.getOrder).not.toHaveBeenCalled();
+  });
+
+  it.each([['/driver/completed-today'], ['/driver/completed-today/order-1/photo']])(
+    '%s — driver 역할이 아니면 서비스에 닿기 전에 403',
+    async (path) => {
+      currentUser = { sub: 'consumer-1', role: 'consumer' };
+      await createApp({ realAuth: false });
+
+      await request(app.getHttpServer()).get(path).expect(403);
+      expect(driver.getCompletedToday).not.toHaveBeenCalled();
+      expect(driver.getCompletedTodayPhoto).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([['/driver/completed-today'], ['/driver/completed-today/order-1/photo']])(
+    '%s — 토큰이 없으면 401',
+    async (path) => {
+      await createApp({ realAuth: true });
+
+      await request(app.getHttpServer()).get(path).expect(401);
+      expect(driver.getCompletedToday).not.toHaveBeenCalled();
+      expect(driver.getCompletedTodayPhoto).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('GET /driver/orders status 쿼리 검증', () => {
@@ -75,14 +221,13 @@ describe('GET /driver/orders status 쿼리 검증', () => {
     expect(driver.getOrders).toHaveBeenCalledWith('driver-1', undefined);
   });
 
-  it.each([
-    ['PREPARING'],
-    ['PREPARING,DELIVERING'],
-    ['PREPARING,DELIVERING,DELIVERY_HELD'],
-  ])('기사 노출 상태 목록 %s는 문자열 그대로 넘긴다', async (status) => {
-    await list(`?status=${status}`).expect(200);
-    expect(driver.getOrders).toHaveBeenCalledWith('driver-1', status);
-  });
+  it.each([['PREPARING'], ['PREPARING,DELIVERING'], ['PREPARING,DELIVERING,DELIVERY_HELD']])(
+    '기사 노출 상태 목록 %s는 문자열 그대로 넘긴다',
+    async (status) => {
+      await list(`?status=${status}`).expect(200);
+      expect(driver.getOrders).toHaveBeenCalledWith('driver-1', status);
+    },
+  );
 
   it.each([
     ['기사 노출 대상이 아닌 상태', '?status=PICKED_UP'],

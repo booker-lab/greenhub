@@ -1,6 +1,11 @@
 'use client';
 
-import type { OperationIssueActionType, OperationIssueStatus, Order } from '@greenhub/shared';
+import {
+  isNonRedeliverableHoldReason,
+  type OperationIssueActionType,
+  type OperationIssueStatus,
+  type Order,
+} from '@greenhub/shared';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import {
@@ -9,6 +14,7 @@ import {
   ISSUE_LABELS,
   type OrderOperationIssue,
 } from '../operation-issues';
+import { HOLD_REASON_LABEL } from '../delivery-hold-form';
 import { Row } from './OrderRow';
 
 // ② 디자인 방향(D2·2026-11-01 결정): 카드는 그림자·바깥 테두리 없이 흰 면. 흰 카드 안의 기록 카드는 테두리 대신
@@ -34,6 +40,10 @@ const ACTION_LABELS: Record<OperationIssueActionType, string> = {
   RETRY_REFUND: '환불 재시도',
   RESEND_SMS: '문자 재발송',
 };
+
+// 상품 파손 보류는 다시 배송하지 않는다. 재배송 준비 버튼 대신 취소·환불로 마무리하도록 알린다.
+export const NON_REDELIVERABLE_HOLD_BANNER =
+  '상품 파손 · 재배송 불가 — 상품을 돌려받은 뒤 주문 취소·환불을 진행해 주세요';
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat('ko-KR', {
@@ -248,7 +258,27 @@ export function OrderOperationsSection({
               {order.status === 'DELIVERY_HELD' ? '조치 중' : '해소 기록'}
             </StatusDot>
           </div>
+          {order.status === 'DELIVERY_HELD' &&
+            isNonRedeliverableHoldReason(order.deliveryHold.reasonCode) && (
+              <p
+                className={`${TEXT} mb-2.5`}
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 'var(--fw-bold)',
+                  color: 'var(--color-danger)',
+                }}
+                data-testid="seller-non-redeliverable-hold"
+              >
+                {NON_REDELIVERABLE_HOLD_BANNER}
+              </p>
+            )}
           <div className="flex flex-col gap-1.5">
+            <Row
+              label="보류 유형"
+              value={
+                HOLD_REASON_LABEL[order.deliveryHold.reasonCode] ?? order.deliveryHold.reasonCode
+              }
+            />
             <Row label="보류 사유" value={order.deliveryHold.reasonMessage} />
             <Row label="발생 시각" value={formatDateTime(order.deliveryHold.heldAt)} />
             <Row

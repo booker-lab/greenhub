@@ -1,6 +1,7 @@
 // orders.helpers.ts — 순수 함수 및 FSM 상수 (NestJS DI 의존 없음)
 // orders.service.ts 500라인 초과 분리 (CLAUDE.md Fatal Constraint 준수)
 
+import { isNonRedeliverableHoldReason } from '@greenhub/shared';
 import type { OrderStatus } from './dto/update-status.dto';
 
 const SELLER_CANCELLABLE: OrderStatus[] = ['ACCEPTED', 'CONFIRMED', 'PREPARING'];
@@ -95,12 +96,23 @@ export function calcDeliveryFee(
  * - 배송 완료(DELIVERED): 준비 중에서 바로 완료(택배 발송 완료)는 택배(parcel) 주문만. 거점 주문은 고객
  *   픽업 확인(HUB_ARRIVED → PICKED_UP)으로만 끝나므로 금지한다. 배송 방법을 알 수 없으면 거절한다.
  * - 배송 시작(DELIVERING): 기사가 나르는 직배송(direct)·거점(hub) 주문만.
+ * - 재배송하지 않는 보류(상품 파손): 주문 취소(전액 환불)로만 끝난다. 판매자의 재배송 준비, 기사의
+ *   배송 재개, 관리자 전이 모두 막는다.
  */
 export function deliveryTransitionViolation(
   current: OrderStatus,
   next: OrderStatus,
   order: Record<string, unknown>,
 ): string | null {
+  if (
+    current === 'DELIVERY_HELD' &&
+    next !== 'CANCELLED' &&
+    isNonRedeliverableHoldReason(
+      (order['deliveryHold'] as Record<string, unknown> | null | undefined)?.['reasonCode'],
+    )
+  ) {
+    return '상품 파손 보류 주문은 다시 배송할 수 없습니다. 주문 취소·환불로 마무리해 주세요.';
+  }
   const method = order['deliveryMethod'];
   if (next === 'HUB_ARRIVED') {
     if (order['roundId'] || order['schemaVersion'] === 2) {

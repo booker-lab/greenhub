@@ -1,26 +1,76 @@
+import { AuthError, CredentialsSignin } from 'next-auth';
 import Image from 'next/image';
+import { redirect, RedirectType } from 'next/navigation';
 import { signIn } from '@/auth';
 import { AppButton } from '@/components/app-button';
 import { PasswordField, TextField } from '@/components/fields';
 import { text } from '@/components/look';
+import { safeDriverReturnPath, resolveDriverReturnPath } from '@/lib/login-redirect';
+import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
+import { LocalCredentialForm } from './local-credential-form';
+import {
+  type LocalCredentialSignInResult,
+  localCredentialFailurePath,
+} from './local-credential-sign-in';
 import { resolveDriverLoginNotice } from './login-notice';
 
-async function localCredentialSignIn(formData: FormData) {
+// 로그인 뒤 돌아갈 곳(redirectTo)은 폼이 넘긴 callbackUrl을 다시 검증해 정한다. 허용하지 않으면 /board.
+// 성공·실패 모두 이동할 주소만 돌려주고 폼(LocalCredentialForm)이 로그인 화면 기록을 바꿔치기하며 전체 페이지로 이동한다
+// (서버 액션 안의 redirect는 클라이언트 이동이라 SessionProvider가 새 세션을 읽지 않는다).
+async function localCredentialSignIn(formData: FormData): Promise<LocalCredentialSignInResult> {
   'use server';
-  await signIn('credentials', {
-    email: formData.get('email'),
-    password: formData.get('password'),
-    redirectTo: '/board',
-  });
+  const returnPath = resolveDriverReturnPath(formData.get('callbackUrl'));
+  try {
+    await signIn('credentials', {
+      email: formData.get('email'),
+      password: formData.get('password'),
+      redirectTo: returnPath,
+      redirect: false,
+    });
+  } catch (error) {
+    // Auth.js 실패(authorize 거절 CredentialsSignin, authorize 안 예외를 감싼 CallbackRouteError 등)만
+    // 로그인 화면 안내로 바꾼다. 승인 대기는 authorizeLocalDriver가 CredentialsSignin.code로 알린다.
+    // 그 밖의 오류(Next redirect·notFound 신호 포함)는 삼키지 않고 다시 던진다.
+    if (error instanceof AuthError) {
+      return {
+        redirectTo: localCredentialFailurePath({
+          code: error instanceof CredentialsSignin ? error.code : undefined,
+          returnPath,
+        }),
+      };
+    }
+    throw error;
+  }
+  return { redirectTo: returnPath };
 }
+
+// 카카오 인증 화면으로는 로그인 화면 기록을 바꿔치기(replace)해 간다. 서버 액션 redirect의 기본값(push)이면
+// /login 기록이 남아, 로그인 뒤 돌아온 화면에서 뒤로가기가 /login으로 가고 로그인한 기사라 proxy가 같은
+// 화면으로 다시 보내 제자리를 맴돈다. signIn은 redirect: false면 인증 주소만 돌려주고 state·PKCE 쿠키는 그대로 싣는다.
+async function kakaoSignIn(formData: FormData) {
+  'use server';
+  const authorizeUrl = await signIn('kakao', {
+    redirectTo: resolveDriverReturnPath(formData.get('callbackUrl')),
+    redirect: false,
+  });
+  redirect(authorizeUrl, RedirectType.replace);
+}
+
+type SearchParamValue = string | string[] | undefined;
 
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ pending?: string | string[]; error?: string | string[] }>;
+  searchParams: Promise<{
+    error?: SearchParamValue;
+    reason?: SearchParamValue;
+    callbackUrl?: SearchParamValue;
+  }>;
 }) {
-  const { pending, error } = await searchParams;
-  const notice = resolveDriverLoginNotice({ pending, error });
+  const { error, reason, callbackUrl } = await searchParams;
+  // 세션이 끝나 돌아온 경우 보던 화면 경로(같은 출처 앱 경로만). 없으면 로그인 뒤 /board로 간다.
+  const returnPath = safeDriverReturnPath(callbackUrl);
+  const notice = resolveDriverLoginNotice({ error, reason, hasReturnPath: returnPath !== null });
   // Local pilot runtime에서만 승인된 드라이버의 Credentials 진입을 노출한다.
   // 운영/Preview에서는 카카오 로그인만 사용한다.
   const showLocalCredentials =
@@ -69,7 +119,7 @@ export default async function LoginPage({
             </p>
           </div>
 
-          {/* 승인 대기·로그인 거절·관리자 계정·로그인 실패 안내 */}
+          {/* 승인 대기·다른 역할·관리자 계정·로그인 실패·로그인 만료 안내 */}
           {notice && (
             // ① 외형 유지: Mantine Alert(light, radius md). 빨강은 Mantine red light, 노랑은 theme.ts의 경고 토큰이다.
             <div
@@ -90,17 +140,26 @@ export default async function LoginPage({
                 <p className={text} style={{ fontSize: 'var(--font-size-sm)' }}>
                   {notice.body}
                 </p>
+                {notice.showOpsContact && (
+                  <p className={`${text} mt-2`} style={{ fontSize: 'var(--font-size-sm)' }}>
+                    {DRIVER_OPS_CONTACT.label}{' '}
+                    <a
+                      href={DRIVER_OPS_CONTACT.phoneHref}
+                      className="font-bold underline underline-offset-2"
+                    >
+                      {DRIVER_OPS_CONTACT.phone}
+                    </a>
+                    <br />
+                    운영 시간 {DRIVER_OPS_CONTACT.hours}
+                  </p>
+                )}
               </div>
             </div>
           )}
 
           {/* 카카오 로그인 */}
-          <form
-            action={async () => {
-              'use server';
-              await signIn('kakao', { redirectTo: '/board' });
-            }}
-          >
+          <form action={kakaoSignIn}>
+            {returnPath && <input type="hidden" name="callbackUrl" value={returnPath} />}
             <AppButton
               type="submit"
               fullWidth
@@ -126,7 +185,8 @@ export default async function LoginPage({
 
           {/* 로컬 파일럿 전용: 승인된 드라이버 Credentials 진입 */}
           {showLocalCredentials && (
-            <form action={localCredentialSignIn}>
+            <LocalCredentialForm signInAction={localCredentialSignIn}>
+              {returnPath && <input type="hidden" name="callbackUrl" value={returnPath} />}
               <div className="mt-4 flex flex-col gap-3">
                 {/* ① 외형 유지: Mantine Divider(label 가운데) */}
                 <div className="flex items-center text-xs/[1.55] whitespace-nowrap text-ui-gray-6 before:me-2.5 before:h-px before:flex-1 before:border-t before:border-ui-gray-3 before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-ui-gray-3 after:content-['']">
@@ -143,7 +203,7 @@ export default async function LoginPage({
                   로그인
                 </AppButton>
               </div>
-            </form>
+            </LocalCredentialForm>
           )}
         </div>
       </div>

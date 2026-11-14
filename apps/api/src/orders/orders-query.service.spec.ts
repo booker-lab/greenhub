@@ -843,7 +843,13 @@ describe('OrdersQueryService 주문 목록 범위 줄이기', () => {
     const service = new OrdersQueryService(firestore as never);
 
     await expect(service.getArchivedOrderCounts('store-1', seller)).resolves.toEqual({
-      archivedStatusCounts: { DELIVERED: 1, PICKED_UP: 1, REVIEWED: 1, CANCELLED: 2 },
+      archivedStatusCounts: {
+        DELIVERED: 1,
+        PICKED_UP: 1,
+        REVIEWED: 1,
+        CANCELLED: 2,
+        CLOSED_UNDELIVERED: 0,
+      },
     });
     expect(calls).toHaveLength(STORE_ORDER_ARCHIVED_STATUSES.length);
     expect(calls.every((call) => call.counted)).toBe(true);

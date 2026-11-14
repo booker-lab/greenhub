@@ -46,10 +46,10 @@ function nearestNeighborReference(orders) {
 // 1. initial loading: first authoritative GET before empty.
 test('Map initial loading precedes any empty render', () => {
   assert.match(mapSource, /const \[loading, setLoading\] = useState\(true\)/);
-  assert.match(mapSource, /배송 경로를 불러오는 중입니다/);
+  assert.match(mapSource, /배송 경로를 불러오고 있어요/);
   assert.match(mapSource, /\{loading \?/);
   const loadingPos = mapSource.indexOf('{loading ?');
-  const emptyPos = mapSource.indexOf('오늘 배송 주문이 없습니다');
+  const emptyPos = mapSource.indexOf('배송할 주문이 없어요');
   assert.ok(loadingPos !== -1 && emptyPos !== -1 && loadingPos < emptyPos);
   assert.match(mapSource, /if \(background\) \{\s*setRefreshing\(true\);\s*\} else \{\s*setLoading\(true\);\s*\}/s);
 });
@@ -63,7 +63,9 @@ test('Map successful results render filtered route list', () => {
   );
   assert.match(mapSource, /setHasSuccessfulRead\(true\)/);
   assert.match(mapSource, /hasSuccessfulReadRef\.current = true/);
-  assert.match(mapSource, /sorted\.map\(\(order, idx\)/);
+  // 목록은 상태 묶음(배송 중 → 수거 대기)으로 그린다(D-20).
+  assert.match(mapSource, /const groups = groupMapStops\(sorted\);/);
+  assert.match(mapSource, /groups\.map\(\(group\)/);
   // 다음 배송지는 경로의 첫 주문이 아니라 첫 배송 중 주문이다.
   assert.match(mapSource, /const nextStop = pickNextDeliveryStop\(sorted\)/);
   assert.match(mapSource, /nextStop \? buildOrderMapLink\(nextStop\) : null/);
@@ -72,17 +74,17 @@ test('Map successful results render filtered route list', () => {
 
 // 3. successful empty: only after authoritative success with zero filtered rows.
 test('Map successful empty requires prior success and is separated from error', () => {
-  assert.match(mapSource, /오늘 배송 주문이 없습니다/);
+  assert.match(mapSource, /배송할 주문이 없어요/);
   assert.match(mapSource, /error && !hasSuccessfulRead/);
   const errorOnlyPos = mapSource.indexOf('error && !hasSuccessfulRead');
-  const emptyPos = mapSource.indexOf('오늘 배송 주문이 없습니다');
+  const emptyPos = mapSource.indexOf('배송할 주문이 없어요');
   assert.ok(errorOnlyPos !== -1 && emptyPos !== -1 && errorOnlyPos < emptyPos);
   assert.match(mapSource, /setError\(null\)/);
 });
 
 // 4. initial fetch failure is not collapsed into empty.
 test('Map initial fetch failure shows error with retry, not empty', () => {
-  assert.match(mapSource, /배송 경로를 불러오지 못했습니다\. 잠시 후 다시 시도해주세요\./);
+  assert.match(mapSource, /배송 경로를 불러오지 못했어요\. 잠시 후 다시 시도해 주세요\./);
   assert.match(mapSource, /다시 시도/);
   // Initial failure clears to [] AND records an error (never a silent empty).
   // 401·403 authority loss는 별도 분기로 먼저 clear되므로 stale 판정은 공유 helper를 거친다.
@@ -90,7 +92,7 @@ test('Map initial fetch failure shows error with retry, not empty', () => {
     mapSource,
     /shouldPreserveDriverListOnReadError\(kind, hasSuccessfulReadRef\.current\)\) \{\s*\/\/ refresh 실패/s,
   );
-  assert.match(mapSource, /\} else \{\s*setOrders\(\[\]\);\s*setError\('배송 경로를 불러오지 못했습니다/s);
+  assert.match(mapSource, /\} else \{\s*setOrders\(\[\]\);\s*setError\('배송 경로를 불러오지 못했어요/s);
   // The old collapse (catch -> setOrders([]) with no setError) must be gone.
   assert.doesNotMatch(mapSource, /\.catch\(\(cause[^)]*\) => \{\s*if \(!active[^}]*return;\s*setOrders\(\[\]\);\s*\}\);/s);
 });
@@ -110,10 +112,10 @@ test('Map auth loss clears protected route data and shows auth state', () => {
   assert.match(mapSource, /if \(!token\) \{/);
   assert.match(mapSource, /setOrders\(\[\]\)/);
   assert.match(mapSource, /setAuthRequired\(true\)/);
-  assert.match(mapSource, /로그인이 필요합니다\. 세션을 다시 확인해 주세요\./);
+  assert.match(mapSource, /로그인이 끝났어요\. 다시 로그인해 주세요\./);
   assert.match(mapSource, /\) : authRequired \? \(/);
   const authPos = mapSource.indexOf(') : authRequired ?');
-  const emptyPos = mapSource.indexOf('오늘 배송 주문이 없습니다');
+  const emptyPos = mapSource.indexOf('배송할 주문이 없어요');
   assert.ok(authPos !== -1 && emptyPos !== -1 && authPos < emptyPos);
   // Success memory resets so the next authed read starts as initial loading.
   assert.match(mapSource, /hasSuccessfulReadRef\.current = false/);
@@ -145,15 +147,15 @@ test('Map malformed payload is a fetch error, not an empty list', () => {
 test('Map refresh failure keeps previous route as stale with retry', () => {
   assert.match(mapSource, /const \[refreshing, setRefreshing\] = useState\(false\)/);
   assert.match(mapSource, /setRefreshing\(true\)/);
-  assert.match(mapSource, /최신 정보를 확인하는 중입니다/);
+  assert.match(mapSource, /최신 정보를 확인하고 있어요/);
   assert.match(mapSource, /hasSuccessfulReadRef/);
-  assert.match(mapSource, /최신 경로를 불러오지 못했습니다\. 이전 경로를 보여줍니다\./);
+  assert.match(mapSource, /최신 경로를 불러오지 못했어요\. 이전 경로를 보여드려요\./);
   assert.match(mapSource, /\(이전 경로 표시 중\)/);
   // Stale branch must not clear the retained route.
   const staleIfStart = mapSource.indexOf(
     'if (shouldPreserveDriverListOnReadError(kind, hasSuccessfulReadRef.current)) {',
   );
-  const staleSetErrorPos = mapSource.indexOf("setError('최신 경로를 불러오지 못했습니다");
+  const staleSetErrorPos = mapSource.indexOf("setError('최신 경로를 불러오지 못했어요");
   const staleSetErrorEnd = mapSource.indexOf("');", staleSetErrorPos) + 3;
   const staleBranch = mapSource.slice(staleIfStart, staleSetErrorEnd);
   assert.doesNotMatch(staleBranch, /setOrders\(\[\]\)/);
@@ -173,7 +175,7 @@ test('Map navigation is fail-closed on error and stale states', () => {
   assert.match(mapSource, /disabled/);
   assert.match(
     mapSource,
-    /최신 경로 확인에 실패해 길안내를 열 수 없습니다\. 다시 시도 후 최신 경로에서/,
+    /최신 경로 확인에 실패해 길안내를 열 수 없어요\. 다시 시도한 뒤 최신 경로에서/,
   );
 });
 
@@ -202,7 +204,9 @@ test('Map nearestNeighbor implementation is preserved', () => {
   assert.match(mapSource, /visited\.has\(o\.id\)/);
   assert.match(mapSource, /if \(!o\.lat \|\| !o\.lng \|\| !current\.lat \|\| !current\.lng\)/);
   // O(n²) 정렬은 렌더마다가 아니라 목록이 바뀔 때만 계산한다.
-  assert.match(mapSource, /const sorted = useMemo\(\(\) => nearestNeighbor\(orders\), \[orders\]\);/);
+  assert.match(mapSource, /const sorted = useMemo\(\(\) => nearestNeighbor\(stops\), \[stops\]\);/);
+  // 보류 주문은 정렬·목록에 넣지 않고 수만 센다.
+  assert.match(mapSource, /const stops = useMemo\(\(\) => orders\.filter\(isMapStop\), \[orders\]\);/);
 });
 
 // 11b. nearestNeighbor: empty and single inputs are identity.
@@ -372,4 +376,23 @@ test('Map auth-loss exposes no navigation and stale fail-close is preserved', ()
   );
   assert.match(mapSource, /sorted\.length > 0 && error && hasSuccessfulRead/);
   assert.match(mapSource, /disabled/);
+});
+
+// 16. D-20: 경로처럼 보이는 1~n 번호를 두지 않고, 행 주소는 동·호수를 먼저 쓴다.
+test('Map rows are grouped by status without route-like numbering', () => {
+  assert.doesNotMatch(mapSource, /idx \+ 1/);
+  assert.doesNotMatch(mapSource, /번 배송지/);
+  assert.match(mapSource, /const addr = mapStopAddressLine\(order\);/);
+  assert.match(mapSource, /보류 \{heldCount\}곳은 작업 보드에서 확인해요\./);
+});
+
+// 17. D-23: 인증 오류 화면은 같은 토큰 재시도 없이 다시 로그인만 둔다.
+test('Map auth state offers only re-login, not same-token retry', () => {
+  const authBranch = mapSource.slice(
+    mapSource.indexOf(') : authRequired ?'),
+    mapSource.indexOf(') : error && !hasSuccessfulRead ?'),
+  );
+  assert.match(authBranch, /signOut\(\{ redirectTo: '\/login' \}\)/);
+  assert.match(authBranch, /다시 로그인/);
+  assert.doesNotMatch(authBranch, /다시 시도|setReloadKey/);
 });

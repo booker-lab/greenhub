@@ -39,9 +39,11 @@ type OrderStatus =
   | 'DELIVERED'
   | 'CANCELLED'
   | 'REVIEWED'
+  | 'CLOSED_UNDELIVERED'
 ```
 
 `DELIVERY_HELD`는 회차 직배송 배송 실패·재배송 흐름의 현재 상태다.
+`CLOSED_UNDELIVERED`는 고객 사유 종결(환불 없음, §8E)이다. 끝난 주문이며 나가는 전이가 없고, 역할별 FSM(일반 `PATCH :orderId/status`)으로는 갈 수 없다. `CANCELLED`(환불)와 다르다.
 
 ## 3. 역할별 FSM
 
@@ -98,6 +100,8 @@ FSM 표만 근거로 Firestore 주문 상태를 직접 수정하지 않는다.
     | 'ACCESS_UNAVAILABLE'
     | 'ADDRESS_ISSUE'
     | 'CUSTOMER_UNREACHABLE'
+    | 'RECEIPT_REFUSED'
+    | 'PRODUCT_DAMAGED'
     | 'OTHER'
   reasonMessage: string
   customerResponsible: boolean
@@ -112,6 +116,9 @@ FSM 표만 근거로 Firestore 주문 상태를 직접 수정하지 않는다.
 
 - `WEATHER`는 고객 책임 유료 재배송으로 취급하지 않는다.
 - `WEATHER` 외 보류는 고객 책임이면 0원보다 큰 재배송비가 있어야 하고, 고객 책임이 아니면 재배송비를 둘 수 없다. 어긋나면 API가 `400`으로 거절한다(`delivery-hold-policy.ts`).
+- `RECEIPT_REFUSED`(수령 거부)는 고객 책임으로만 받는다. 고객 책임이 아니거나 재배송비가 없으면 `400`이다.
+- `PRODUCT_DAMAGED`(상품 파손)는 `customerResponsible === false`, 재배송비 없음만 받고 새 배송 시각은 요구하지 않는다. 배송 중(`DELIVERING`)인 기사 요청만 받고 판매자·관리자·`PREPARING` 보류는 `400`이다(`assertDeliveryHoldOrigin`).
+- 재배송하지 않는 보류(`@greenhub/shared` `NON_REDELIVERABLE_HOLD_REASONS`, 현재 `PRODUCT_DAMAGED`)에서는 `→ CANCELLED` 외 전이를 모든 역할에서 거절한다(판매자·관리자 `403`, 기사 `DRIVER_ORDER_STATE_CONFLICT`, `orders.helpers.ts` `deliveryTransitionViolation`). 취소는 기존 판매자 취소 경로로 본 결제와 결제된 재배송비를 전액 환불한다.
 - 고객 책임 첫 배송 실패에 양수 재배송비가 필요하면 주문자 본인이 `REDELIVERY_FEE` charge를 생성·결제한다.
 - 같은 hold에 charge를 중복 생성하지 않는다.
 - **유료 재배송은 결제 완료 전 실제 배송을 다시 시작하면 안 된다.**
@@ -229,6 +236,26 @@ POST /admin/orders/:orderId/post-delivery-refund             # 관리자 환불(
 - `postDeliveryRefund`는 `cancellation`과 별도 칸이다(`cancellation`은 재시도 기록 때 통째로 다시 쓰인다). 시작 기록이 있으면 같은 요청 재시도가 기간·정산 조건을 다시 묻지 않고 처음 사유·처리자로 이어서 끝낸다. 환불 실패는 `REFUND_FAILED`, 로컬 확정 실패는 `LOCAL_FAILED`로 남는다. 판매자 `GET` 판정은 시작 기록이 있어도 끝나지 않았으면 `ALREADY_REFUNDED`로 보지 않는다: `REFUND_FAILED`·`LOCAL_FAILED`면 `RETRY_AVAILABLE`(`eligible: true`, 판매자 화면 "배송 후 환불 다시 시도"), `REFUNDING`이면 `CANCELLATION_IN_PROGRESS`, 완료(`completedAt` 또는 `CANCELLED`)면 `ALREADY_REFUNDED`(2026-10-24 수정).
 - 이미 다른 경로로 취소된 주문, 다른 취소가 진행 중인 주문, 옛 일반 주문은 거부한다.
 - 직접 증거: `apps/api/src/orders/post-delivery-refund.service.spec.ts`(3일차 성공·8일차·지급 완료·정산 없음·배송 전 거부, 중복 요청 환불 1회, 실패 뒤 재시도, 본 결제만 환불된 뒤 재배송비 재시도, 재배송비 미완료 시 완료·알림 없음, 판정 `RETRY_AVAILABLE`·`CANCELLATION_IN_PROGRESS`, 관리자 10일차), `apps/api/src/admin/admin-post-delivery-refund.service.spec.ts`.
+
+### 8E. 고객 사유 종결(환불 없음) — `IMPLEMENTED`, 배포 전 법무 검토 필요
+
+2026-11-13 사용자 결정. 회차 직배송 주문이 고객 책임 보류에서 손님의 수령 거부·재배송비 미결제로 끝날 때 판매자가 환불 없이 종결한다(신선 화훼 청약철회 제한은 구매 때 고지). 상품은 판매자가 처리한다.
+
+```text
+GET  /stores/:storeId/orders/:orderId/customer-fault-closure   # 종결 가능 여부 { eligible, reason, closureReasonCode, eligibleAt, paymentDeadlineDate, redeliveryFee, settlementMissing? }
+POST /stores/:storeId/orders/:orderId/customer-fault-closure   # 종결 { memo }
+```
+
+- 역할: `seller`(스토어 `ownerId` 일치) 또는 `admin`. 다른 스토어 판매자는 403, 다른 스토어의 주문은 404.
+- 본문: `memo`(1~200자, 제어문자 금지, 필수) — 판매자가 손님과 연락한 기록. 손님에게 보내거나 손님 주문 응답(`GET /orders/:id`, `GET /orders`)에 싣지 않는다(손님 응답의 `customerFaultClosure`는 `reasonCode`·`heldAt`·`redeliveryFee`·`closedAt`만).
+- POST는 transaction 전에 현재 보류에 연결된 재배송비가 `PENDING`이면(나이와 관계없이) PortOne에 직접 조회한다(`OrderChargePaymentService.checkPendingChargeBeforeClosure`, 손님 결제 확인과 같은 청구별 10초 하한). `PAID`면 웹훅과 같은 `finalizePaid`로 확정하고 409("재배송비가 결제된 주문은 종결할 수 없습니다"), 조회 실패·시간 초과·가상계좌 대기 등 확정할 수 없으면 409("재배송비 결제 상태를 확인하지 못했어요. 잠시 뒤 다시 시도해 주세요."), 결제 없음(404)·`READY`·`FAILED`·`CANCELLED`면 계속한다(청구를 `FAILED`로 닫지 않는다). GET은 PortOne을 부르지 않는다.
+- 한 transaction에서 판정(`decideCustomerFaultClosure`, GET과 같은 규칙): 회차 주문(`schemaVersion 2` + `roundId`) → 직배송 → 취소 진행 중 아님 → `DELIVERY_HELD`(미해소 보류) 또는 `PREPARING` + 미해소 유료 재배송 → 보류 사유가 `WEATHER`·`PRODUCT_DAMAGED`가 아님 → `customerResponsible === true`와 양수 재배송비·유효한 `heldAt` → 현재 보류의 재배송비 청구(`orderCharges/{redeliveryChargeId}`): `PAID` 거절, 연결 손상·청구 없음·`MISMATCHED`·`REFUNDED`·알 수 없는 값 거절(운영 확인) → 결제 기한(`RECEIPT_REFUSED`는 바로, 그 밖에는 `eligibleAt` = 보류일 서울 날짜 + 4일 00:00 KST, 결제는 보류일 + 3일 끝까지 가능) → `PENDING` 생성 24시간 미만이면 거절("재배송비 결제가 진행 중"), 24시간 이상·`FAILED`·청구 없음은 허용. 구조 조건 실패는 403, 상태·시간·결제 조건 실패는 409. 같은 transaction에서 회차가 `CANCELLED`이거나 회차 취소가 시작됐으면(`cancellation.status` `CANCELLING`·`LOCAL_FAILED`) 409("회차 취소가 진행 중이라 종결할 수 없어요.") — 회차 취소가 그 주문을 환불한다.
+- 쓰기: `status: CLOSED_UNDELIVERED`, `deliveryHold.resolvedAt`, `customerFaultClosure { reasonCode: RECEIPT_REFUSED|REDELIVERY_FEE_UNPAID, heldAt, redeliveryFee, actorRole, actorId, memo, closedAt }`, `adjustHeldOrderCountInTransaction(-1)` 정확히 한 번. 환불·reservation·round/item capacity 반환 없음.
+- 커밋 뒤 `settlements.createSettlement(order, 'CLOSED_UNDELIVERED')`(이미 있으면 그대로). 지급 보류 대상이 아니다(취소·취소 진행이 아니므로). 같은 요청 재시도(이미 `CLOSED_UNDELIVERED`)는 집계·주문을 건드리지 않고 정산만 맞춘다(`alreadyClosed: true`). 정산 생성이 실패하면 GET이 `reason: ALREADY_CLOSED`와 함께 `settlementMissing: true`(정산 문서 없음)를 주고, 판매자 주문 상세가 "정산 다시 맞추기" 버튼으로 같은 POST를 다시 보낸다.
+- 종결 뒤 PortOne이 확정한 재배송비 결제는 `order-charge-payment`의 "필요 없어진 결제"(`unneeded_charge_refund`)로 기록하고 자동 환불한다. 새 재배송비 결제 생성은 보류가 해소돼 409.
+- 손님 알림톡은 보내지 않는다. `ORDER_CANCELLED`는 환불을 안내해 맞지 않고, 새 템플릿은 외부(카카오·ALIGO) 승인이 필요하다. 손님은 주문 상세 화면에서 안내를 본다.
+- 회차 완료는 이 상태를 끝난 주문으로 보고, 회차 취소는 이 주문을 건너뛴다(`isRoundOrderCancellationPending`). 판매자 끝난 주문 목록·건수(`scope=archive`, `summary.archivedStatusCounts.CLOSED_UNDELIVERED`)에 포함된다. 기사 목록·오늘 완료 수에는 들어가지 않는다.
+- 직접 증거: `apps/api/src/orders/customer-fault-closure.service.spec.ts`(판정표·경계 23:59/00:00 KST·집계 1회·재시도 정산만·환불 의존 없음·종결 전 PortOne 확인·회차 취소 경합·정산 없음 표시·정산 `completedStatus`·늦은 결제 자동 환불·지급 보류 아님·회차 완료/취소·손님 응답 메모 제외), `apps/api/src/orders/customer-fault-closure-status-guard.spec.ts`(일반 PATCH 차단).
 
 ### 8A. Legacy consumer cancel (RECRUITING group) — `IMPLEMENTATION COMPLETE`
 
@@ -451,6 +478,8 @@ POST /admin/orders/:orderId/post-delivery-refund             # 관리자 환불(
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-13 | §8E 종결 전 `PENDING` 재배송비 PortOne 확인(확인 못 하면 409), 회차 취소 시작 뒤 종결 409, GET `settlementMissing`과 판매자 "정산 다시 맞추기" |
+| 2026-11-13 | 고객 사유 종결(환불 없음) `CLOSED_UNDELIVERED` 상태와 `customer-fault-closure` endpoint 추가(§2·§8E) — 배포 전 법무 검토 필요 |
 | 2026-10-24 | 배송 후 환불·회차 취소: 재배송비 환불을 본 결제와 따로 확인하고 `PAID`로 남은 재배송비가 있으면 완료하지 않음, 판매자 판정 `RETRY_AVAILABLE` 추가(§8D) |
 | 2026-10-24 | 코드 대조: Driver 전이의 배송 방법 제약(`deliveryTransitionViolation`, #549) 추가 |
 | 2026-10-21 | 배송 후 환불(Section 8D): 판매자 7일·관리자 무기한 전액 환불 endpoint, `postDeliveryRefund` 기록, 수량 미반환, 고정 사유 알림 |

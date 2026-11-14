@@ -4,17 +4,28 @@ import type { Session } from 'next-auth';
 import { useEffect, useRef } from 'react';
 import { getSession, SessionProvider, useSession, signOut } from 'next-auth/react';
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
+import { PendingPhotoUploader } from '@/app/board/[orderId]/photo/pending-photo-uploader';
 import { AppToaster } from '@/components/app-toaster';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { buildDriverLoginPath } from '@/lib/login-redirect';
 import { startSessionKeepAlive } from '@/lib/session-refresh';
+
+// 세션이 끝나 로그아웃시킬 때 보낼 로그인 화면 주소. 보던 화면 경로를 callbackUrl로 싣고
+// "로그인이 끝났어요" 안내(reason=expired)를 붙인다. 로그인 화면 자신 등 허용하지 않는 경로는 싣지 않는다.
+function sessionEndedLoginUrl(): string {
+  return buildDriverLoginPath({
+    returnPath: `${window.location.pathname}${window.location.search}`,
+    sessionEnded: true,
+  });
+}
 
 function TokenErrorGuard({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   useFirebaseAuth();
   useEffect(() => {
     if (session?.user?.tokenError) {
-      signOut({ callbackUrl: '/login' });
+      signOut({ callbackUrl: sessionEndedLoginUrl() });
     }
   }, [session?.user?.tokenError]);
   return <>{children}</>;
@@ -71,7 +82,7 @@ function SessionAuthorityRecheck() {
           void recheckSessionAfterRejection({
             update: () => updateRef.current({}),
             fetchImpl: (input, init) => window.fetch(input, init),
-            signOut: () => signOut({ callbackUrl: '/login' }),
+            signOut: () => signOut({ callbackUrl: sessionEndedLoginUrl() }),
           });
         },
       }),
@@ -94,6 +105,8 @@ export default function Providers({
       <SessionProvider session={session}>
         <SessionKeepAlive />
         <SessionAuthorityRecheck />
+        {/* 배송 완료 사진 업로드 대기열: 앱이 열려 있는 동안 같은 키·같은 사진으로 다시 올린다(Y3). */}
+        <PendingPhotoUploader />
         <TokenErrorGuard>{children}</TokenErrorGuard>
       </SessionProvider>
     </AppToaster>

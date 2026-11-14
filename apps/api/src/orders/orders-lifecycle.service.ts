@@ -10,7 +10,7 @@ import { FirestoreService } from '../firestore/firestore.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
-import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
+import { assertDeliveryHoldOrigin, assertDeliveryHoldPolicy } from './delivery-hold-policy';
 import {
   isLegacyDeliveryPhotoUrlForOrder,
   LEGACY_DELIVERY_PHOTO_URL_MESSAGE,
@@ -73,6 +73,8 @@ export const DELIVERY_HOLD_CUSTOMER_REASONS: Readonly<Record<string, string>> = 
   ACCESS_UNAVAILABLE: '배송지 출입이 어려워 배송이 보류되었습니다.',
   ADDRESS_ISSUE: '배송지 주소를 확인할 수 없어 배송이 보류되었습니다.',
   CUSTOMER_UNREACHABLE: '수령인과 연락이 닿지 않아 배송이 보류되었습니다.',
+  RECEIPT_REFUSED: '수령을 거부하셔서 배송하지 못했습니다.',
+  PRODUCT_DAMAGED: '배송 중 상품이 파손되어 배송하지 못했습니다.',
   OTHER: '배송 진행이 어려워 배송이 보류되었습니다.',
 };
 
@@ -179,6 +181,8 @@ export class OrdersLifecycleService {
       notificationVariables['reason'] = this.resolveDeliveryHoldCustomerReason(
         dto.deliveryHold?.reasonCode,
       );
+      // 상품 파손은 배송 중인 기사만 남긴다. 쓰기 트랜잭션이 상태가 그대로인지 다시 확인한다.
+      assertDeliveryHoldOrigin(dto.deliveryHold?.reasonCode, currentStatus, role ?? 'consumer');
     }
 
     if (order['schemaVersion'] === 2 && order['roundId']) {
@@ -1160,6 +1164,8 @@ export class OrdersLifecycleService {
       update['preparedAt'] = this.firestore.Timestamp.fromDate(date);
     }
     if (dto.status === 'DELIVERING') update['driverId'] = requesterId;
+    // 배송 완료 시각. 리뷰·환불로 상태와 updatedAt이 바뀌어도 남아 기사 오늘 완료 수가 이 값으로 센다.
+    if (dto.status === 'DELIVERED') update['deliveredAt'] = now;
     if ((dto.status === 'HUB_ARRIVED' || dto.status === 'DELIVERED') && dto.photoUrl) {
       update['deliveryPhotoUrl'] = dto.photoUrl;
     }

@@ -394,7 +394,7 @@ test('기사 주문 조회는 apiRead를 쓰고 명령은 apiFetch로 한 번만
     photoCaptureSource,
     /apiRead\(`\/driver\/orders\/\$\{encodeURIComponent\(orderId\)\}`, token\)/,
   );
-  // 모든 apiRead 호출은 /driver/orders 조회뿐이다.
+  // 모든 apiRead 호출은 기사 조회(/driver/orders 목록·상세, 작업 보드의 /driver/summary 요약)뿐이다.
   for (const source of [
     boardSource,
     mapSource,
@@ -403,11 +403,15 @@ test('기사 주문 조회는 apiRead를 쓰고 명령은 apiFetch로 한 번만
     holdModalSource,
   ]) {
     for (const call of source.match(/apiRead\([^,]*,/g) ?? []) {
-      assert.match(call, /^apiRead\(['`]\/driver\/orders/, call);
+      assert.match(call, /^apiRead\(['`]\/driver\/(?:orders|summary['`])/, call);
     }
   }
-  // 명령(PATCH·POST)은 apiFetch로 한 번 보내며 apiRead로 감싸지 않는다.
-  for (const source of [detailSource, photoCaptureSource, holdModalSource]) {
+  assert.match(
+    boardSource,
+    /apiRead\('\/driver\/summary', token, \{ signal: controller\.signal \}\)/,
+  );
+  // 명령(PATCH·POST)은 apiFetch로 한 번 보내며 apiRead로 감싸지 않는다(작업 보드의 한 번에 수거 포함).
+  for (const source of [boardSource, detailSource, photoCaptureSource, holdModalSource]) {
     const commandCount = (source.match(/method: '(?:PATCH|POST)'/g) ?? []).length;
     const commandCalls = [
       ...source.matchAll(/(\w+)\(\s*`[^`]*`,\s*token,\s*\{\s*method: '(?:PATCH|POST)'/g),
@@ -453,7 +457,7 @@ test('첫 화면 세션은 proxy가 확인한 값을 쓰고 세션 유지·토�
   assert.doesNotMatch(providersSource, /refetchInterval=|refetchOnWindowFocus=/);
   assert.match(
     providersSource,
-    /if \(session\?\.user\?\.tokenError\) \{\s*signOut\(\{ callbackUrl: '\/login' \}\);/,
+    /if \(session\?\.user\?\.tokenError\) \{\s*signOut\(\{ callbackUrl: sessionEndedLoginUrl\(\) \}\);/,
   );
   assert.match(
     providersSource,

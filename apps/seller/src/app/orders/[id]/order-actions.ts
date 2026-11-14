@@ -1,4 +1,4 @@
-import type { Order } from '@greenhub/shared';
+import { isNonRedeliverableHoldReason, type Order } from '@greenhub/shared';
 import { CANCELLABLE_STATUSES } from './_lib';
 
 // 주문 상세 하단 버튼 — 상태별로 판매자에게 허용된 전이(API orders.helpers.ts SELLER_TRANSITIONS)만 보인다.
@@ -13,14 +13,17 @@ export interface OrderDetailActions {
    * 예전(회차 아님) 주문은 재배송비 결제를 만들 수 없고, 택배·거점은 기사 직배송이 아니다.
    */
   hold: boolean;
-  /** DELIVERY_HELD → PREPARING(재배송 준비) */
+  /** DELIVERY_HELD → PREPARING(재배송 준비). 재배송하지 않는 보류(상품 파손)는 취소로만 끝나 숨긴다. */
   releaseHold: boolean;
   /** → CANCELLED(결제 금액 환불) */
   cancel: boolean;
 }
 
 export function resolveOrderDetailActions(
-  order: Pick<Order, 'status' | 'deliveryMethod' | 'roundId' | 'redeliveryPayment'>,
+  order: Pick<
+    Order,
+    'status' | 'deliveryMethod' | 'roundId' | 'redeliveryPayment' | 'deliveryHold'
+  >,
 ): OrderDetailActions {
   // 회차 주문은 회차 ID로 가린다. 판매자 상세 응답(seller-order-read-model)에는 schemaVersion이 없다.
   const isRoundDirect =
@@ -34,7 +37,10 @@ export function resolveOrderDetailActions(
     // 서버는 그 주문을 이미 회차 보류 건수에 세고 있어, 새 보류가 한 번 더 세면 회차 완료가 막힌다.
     hold:
       order.status === 'PREPARING' && isRoundDirect && order.redeliveryPayment?.required !== true,
-    releaseHold: order.status === 'DELIVERY_HELD',
+    // 상품 파손 보류는 서버가 재배송 준비 전이를 거절한다(orders.helpers.ts deliveryTransitionViolation).
+    releaseHold:
+      order.status === 'DELIVERY_HELD' &&
+      !isNonRedeliverableHoldReason(order.deliveryHold?.reasonCode),
     cancel: CANCELLABLE_STATUSES.includes(order.status),
   };
 }

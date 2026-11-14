@@ -143,7 +143,7 @@ test.describe('드라이버 디자인 시스템 — 인증 화면 (세션 주입
 
   test('배송 보드 — 헤더 + 탭 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/board`)
-    await expect(page.locator('text=오늘 배송')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=배송 목록')).toBeVisible({ timeout: 10_000 })
     await expect(page.locator('text=수거 대기')).toBeVisible()
     await expect(page.locator('text=배송 중')).toBeVisible()
     const errors: string[] = []
@@ -195,7 +195,7 @@ test.describe('드라이버 디자인 시스템 — 인증 화면 (세션 주입
 
   test('지도 페이지 — 렌더링', async ({ page }) => {
     await page.goto(`${BASE}/map`)
-    await expect(page.locator('text=오늘 배송 경로')).toBeVisible({ timeout: 10_000 })
+    await expect(page.locator('text=배송지 지도')).toBeVisible({ timeout: 10_000 })
     const errors: string[] = []
     page.on('pageerror', (e) => errors.push(e.message))
     await page.waitForTimeout(500)

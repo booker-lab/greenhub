@@ -257,6 +257,25 @@ const QUERY_CONTRACTS: QueryContract[] = [
     ],
   },
   {
+    // 기사 오늘 완료 수: 본인 배정 완료 계열 주문 중 오늘(서울) 바뀐 것만 읽는다.
+    id: 'driver-completed-orders-by-updated-at',
+    sourceFile: 'apps/api/src/driver/driver.service.ts',
+    sourcePatterns: [
+      'async getSummary(driverId: string)',
+      ".collection('orders')",
+      ".where('status', 'in', [...DRIVER_COMPLETED_ORDER_STATUSES])",
+      ".where('driverId', '==', driverId)",
+      ".where('updatedAt', '>=', this.firestore.Timestamp.fromDate(start))",
+    ],
+    collectionGroup: 'orders',
+    queryScope: 'COLLECTION',
+    fields: [
+      { fieldPath: 'status', order: 'ASCENDING' },
+      { fieldPath: 'driverId', order: 'ASCENDING' },
+      { fieldPath: 'updatedAt', order: 'ASCENDING' },
+    ],
+  },
+  {
     id: 'varieties-by-name',
     sourceFile: 'apps/api/src/varieties/varieties.service.ts',
     sourcePatterns: ["ref.orderBy('subCategory').orderBy('name')"],

@@ -1,4 +1,10 @@
-import { type Order, type OrderStatus, toDateStrKST, todayKST } from '@greenhub/shared';
+import {
+  isNonRedeliverableHoldReason,
+  type Order,
+  type OrderStatus,
+  toDateStrKST,
+  todayKST,
+} from '@greenhub/shared';
 
 export function toDate(v: unknown): Date {
   if (v && typeof v === 'object' && 'toDate' in v) return (v as { toDate(): Date }).toDate();
@@ -31,6 +37,8 @@ export const READONLY_STATUSES: OrderStatus[] = [
   'DELIVERED',
   'REVIEWED',
   'CANCELLED',
+  // 고객 사유 종결(환불 없음)은 되돌릴 수 없는 끝난 주문이다.
+  'CLOSED_UNDELIVERED',
 ];
 
 // 판매자 취소(결제 금액 환불)가 허용되는 상태. DELIVERY_HELD는 보류 해소 방법의 하나다 —
@@ -47,9 +55,16 @@ export const CANCELLABLE_STATUSES: OrderStatus[] = [
 // (결제 확정 때 totalAmount와 같은지 확인한 금액)를 환불하고, 환불이 실패하면 취소를 끝내지 않는다.
 // 회차 주문은 결제된 재배송비도 함께 환불한다. 취소된 주문을 되돌리는 전이는 없다.
 export function describeSellerCancelRefund(
-  order: Pick<Order, 'status' | 'totalAmount' | 'redeliveryPayment'>,
+  order: Pick<Order, 'status' | 'totalAmount' | 'redeliveryPayment' | 'deliveryHold'>,
 ): string {
   const amount = `₩${order.totalAmount.toLocaleString()}`;
+  // 상품 파손은 판매자·기사 책임이라 고객이 낸 돈을 모두 돌려준다(이전 보류에서 결제된 재배송비 포함).
+  if (
+    order.status === 'DELIVERY_HELD' &&
+    isNonRedeliverableHoldReason(order.deliveryHold?.reasonCode)
+  ) {
+    return `상품 파손으로 결제 금액 ${amount} 전액을 환불해요. 결제된 재배송비가 있으면 함께 환불하고, 되돌릴 수 없어요.`;
+  }
   const withRedeliveryFee =
     order.status === 'DELIVERY_HELD' || order.redeliveryPayment?.paid === true;
   return withRedeliveryFee

@@ -81,6 +81,21 @@ const USER_ROLES = ['consumer', 'seller', 'driver', 'admin'] as const;
 // 기사 앱 `apps/driver/src/auth.ts`가 같은 값을 읽어 로그인 화면 안내로 바꾼다.
 export const KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT = 'KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT';
 
+// 승인 전 기사의 로그인(카카오·이메일)을 거절할 때 붙이는 code.
+// 기사 앱 `apps/driver/src/auth.ts`가 같은 값을 읽어 "가입 신청 접수·승인 대기" 안내로 바꾼다.
+export const DRIVER_APPROVAL_PENDING = 'DRIVER_APPROVAL_PENDING';
+const DRIVER_APPROVAL_PENDING_MESSAGE = '승인된 드라이버만 로그인할 수 있습니다.';
+
+// 승인 전 기사 거절. 상태 403·message·error 형태는 그대로 두고 기계 판독용 code만 더한다.
+function driverApprovalPending(): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    message: DRIVER_APPROVAL_PENDING_MESSAGE,
+    error: 'Forbidden',
+    code: DRIVER_APPROVAL_PENDING,
+  });
+}
+
 // 계정이 없거나 비밀번호가 없는 계정의 로그인도 실제 계정과 같은 비용(cost 12)의 bcrypt 비교를
 // 거치게 하는 고정 해시. 어떤 비밀번호와도 일치하지 않는 무작위 값으로 만들었다.
 const DUMMY_PASSWORD_HASH = '$2b$12$kXNeYjWNPfuITzHstqiwSOrcnNfjK8UxQARUTuW1gPuNecbN11Dt.';
@@ -372,7 +387,7 @@ export class AuthService {
     }
 
     if (userData['role'] === 'driver' && userData['driverApproved'] !== true) {
-      throw new ForbiddenException('승인된 드라이버만 로그인할 수 있습니다.');
+      throw driverApprovalPending();
     }
 
     const { accessToken, refreshToken } = await this.issueTokens({
@@ -575,7 +590,7 @@ export class AuthService {
     }
 
     if (role === 'driver' && userData['driverApproved'] !== true) {
-      throw new ForbiddenException('승인된 드라이버만 로그인할 수 있습니다.');
+      throw driverApprovalPending();
     }
 
     const { accessToken, refreshToken } = await this.issueTokens({

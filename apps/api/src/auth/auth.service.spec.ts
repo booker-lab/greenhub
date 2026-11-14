@@ -4,7 +4,11 @@ import * as admin from 'firebase-admin';
 import * as bcrypt from 'bcrypt';
 import type { AuditService } from '../common/audit/audit.service';
 import type { FirestoreService } from '../firestore/firestore.service';
-import { AuthService, KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT } from './auth.service';
+import {
+  AuthService,
+  DRIVER_APPROVAL_PENDING,
+  KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT,
+} from './auth.service';
 import type { KakaoClient } from './kakao.client';
 import { emailIdentityKey } from './email-identity';
 import { hashRefreshToken, sealRotatedRefreshToken } from './refresh-token-store';
@@ -300,7 +304,7 @@ describe('AuthService', () => {
       ['undefined', { driverApproved: undefined }],
       ['null', { driverApproved: null }],
       ['invalid', { driverApproved: 'true' }],
-    ])('기존 %s driver는 토큰 발급 전에 카카오 로그인이 거부된다', async (_label, approval) => {
+    ])('기존 %s driver는 토큰 발급 전에 카카오 로그인이 거부되고 승인 대기 code를 붙인다', async (_label, approval) => {
       const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({
         user: {
           id: 'driver-1',
@@ -311,9 +315,16 @@ describe('AuthService', () => {
         },
       });
 
-      await expect(
-        service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' }),
-      ).rejects.toMatchObject({ status: 403 });
+      const rejection = service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' });
+      await expect(rejection).rejects.toMatchObject({ status: 403 });
+      await expect(rejection).rejects.toMatchObject({
+        response: expect.objectContaining({
+          statusCode: 403,
+          message: '승인된 드라이버만 로그인할 수 있습니다.',
+          error: 'Forbidden',
+          code: DRIVER_APPROVAL_PENDING,
+        }),
+      });
 
       expect(jwt.sign).not.toHaveBeenCalled();
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
@@ -331,9 +342,12 @@ describe('AuthService', () => {
         },
       });
 
-      await expect(
-        service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'consumer' }),
-      ).rejects.toMatchObject({ status: 403 });
+      const rejection = service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'consumer' });
+      await expect(rejection).rejects.toMatchObject({ status: 403 });
+      // 역할 불일치 거절에는 승인 대기 code를 붙이지 않는다.
+      await expect(rejection).rejects.not.toMatchObject({
+        response: expect.objectContaining({ code: DRIVER_APPROVAL_PENDING }),
+      });
 
       expect(audit.log).toHaveBeenCalledWith(
         'auth.kakao.forbidden',
@@ -385,6 +399,9 @@ describe('AuthService', () => {
       await expect(rejection).rejects.not.toMatchObject({
         response: expect.objectContaining({ code: KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT }),
       });
+      await expect(rejection).rejects.not.toMatchObject({
+        response: expect.objectContaining({ code: DRIVER_APPROVAL_PENDING }),
+      });
       expect(jwt.sign).not.toHaveBeenCalled();
     });
 
@@ -408,7 +425,10 @@ describe('AuthService', () => {
 
       await expect(
         service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' }),
-      ).rejects.toMatchObject({ status: 403 });
+      ).rejects.toMatchObject({
+        status: 403,
+        response: expect.objectContaining({ code: DRIVER_APPROVAL_PENDING }),
+      });
 
       expect(userRef.set).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'driver', driverApproved: false }),
@@ -513,11 +533,17 @@ describe('AuthService', () => {
     it.each([
       ['false', { driverApproved: false }],
       ['missing', {}],
-    ])('%s approval driver는 token 발급 전에 email login이 거부된다', async (_label, approval) => {
+    ])('%s approval driver는 token 발급 전에 email login이 거부되고 승인 대기 code를 붙인다', async (_label, approval) => {
       const { jwt, refreshTokenRef, service } = await makeEmailLoginService(approval);
 
       await expect(service.login({ email: 'driver@example.com', password })).rejects.toMatchObject({
         status: 403,
+        response: expect.objectContaining({
+          statusCode: 403,
+          message: '승인된 드라이버만 로그인할 수 있습니다.',
+          error: 'Forbidden',
+          code: DRIVER_APPROVAL_PENDING,
+        }),
       });
       expect(jwt.sign).not.toHaveBeenCalled();
       expect(refreshTokenRef.set).not.toHaveBeenCalled();

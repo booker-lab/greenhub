@@ -36,6 +36,7 @@ const ORDER_STATUSES = new Set<OrderStatus>([
   'DELIVERED',
   'CANCELLED',
   'REVIEWED',
+  'CLOSED_UNDELIVERED',
 ]);
 const SUCCESS_STATUSES = new Set<OrderStatus>(['ACCEPTED', 'RECRUITING']);
 const WAITING_OR_CANCELLED_STATUSES = new Set<OrderStatus>(['PENDING', 'CANCELLED']);

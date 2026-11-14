@@ -10,8 +10,14 @@ import {
 import NextAuth, { CredentialsSignin } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
-import { DRIVER_ADMIN_ACCOUNT_ERROR } from '@/app/login/login-notice';
+import { LOCAL_DRIVER_APPROVAL_PENDING_CODE } from '@/app/login/local-credential-sign-in';
+import {
+  DRIVER_ADMIN_ACCOUNT_ERROR,
+  DRIVER_APPROVAL_PENDING_ERROR,
+  DRIVER_LOGIN_FAILED_ERROR,
+} from '@/app/login/login-notice';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { classifyKakaoLoginRejection } from '@/lib/login-redirect';
 
 const API = getApiBaseUrl();
 const ACCESS_TOKEN_TTL = 55 * 60 * 1000;
@@ -128,6 +134,15 @@ function isLocalCredentialRuntime(): boolean {
   return true;
 }
 
+// 승인 전 기사의 로컬 이메일 로그인 거절. 로그인 화면 서버 액션이 code를 읽어 승인 대기 안내로 보낸다
+// (`app/login/local-credential-sign-in.ts`). 세션은 만들지 않는다.
+class LocalDriverApprovalPendingSignin extends CredentialsSignin {
+  constructor() {
+    super();
+    this.code = LOCAL_DRIVER_APPROVAL_PENDING_CODE;
+  }
+}
+
 async function authorizeLocalDriver(credentials: Record<string, unknown>) {
   if (typeof credentials.email !== 'string' || typeof credentials.password !== 'string') {
     return null;
@@ -141,11 +156,18 @@ async function authorizeLocalDriver(credentials: Record<string, unknown>) {
     }),
     signal: authUpstreamSignal(),
   });
-  if (!res.ok) return null;
+  if (!res.ok) {
+    // API는 승인 전 기사를 403 + DRIVER_APPROVAL_PENDING으로 거절한다. 그 밖의 거절은 일반 실패(null).
+    if (res.status === 403 && (await readRejectionCode(res)) === DRIVER_APPROVAL_PENDING) {
+      throw new LocalDriverApprovalPendingSignin();
+    }
+    return null;
+  }
 
   const data = await res.json();
   if (data.user.role !== 'driver') return null;
-  if (data.user.driverApproved !== true) return null;
+  // API가 먼저 거절하지만, 응답의 승인 상태도 다시 확인해 같은 승인 대기 안내로 보낸다.
+  if (data.user.driverApproved !== true) throw new LocalDriverApprovalPendingSignin();
   return {
     id: data.user.id,
     email: data.user.email,
@@ -174,6 +196,13 @@ const SESSION_ALLOWED_ROLES = [DRIVER_APP_ROLE];
 // (`apps/api/src/auth/auth.service.ts`의 KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT).
 const KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT = 'KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT';
 const ADMIN_ACCOUNT_LOGIN_URL = `/login?error=${DRIVER_ADMIN_ACCOUNT_ERROR}`;
+// API가 승인 전 기사의 로그인을 거절할 때 붙이는 code
+// (`apps/api/src/auth/auth.service.ts`의 DRIVER_APPROVAL_PENDING).
+const DRIVER_APPROVAL_PENDING = 'DRIVER_APPROVAL_PENDING';
+const APPROVAL_PENDING_LOGIN_URL = `/login?error=${DRIVER_APPROVAL_PENDING_ERROR}`;
+// 일시 실패(응답 없음·시간 초과·5xx 등)와 정지 계정은 "기사용 계정이 아니에요"(AccessDenied)와 나눠
+// 일반 실패 안내로 보낸다. 어느 쪽도 세션을 만들지 않는다.
+const LOGIN_FAILED_URL = `/login?error=${DRIVER_LOGIN_FAILED_ERROR}`;
 
 async function readRejectionCode(res: Response): Promise<unknown> {
   try {
@@ -368,7 +397,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async signIn({ user, account }) {
       if (account?.provider === 'credentials') return true;
       if (account?.provider !== 'kakao') return false;
-      if (!account.access_token) return false;
+      if (!account.access_token) return LOGIN_FAILED_URL;
 
       // API 응답이 없거나 늦으면(시간 제한 초과 포함) 세션을 만들지 않는다.
       let data: {
@@ -387,26 +416,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           signal: authUpstreamSignal(),
         });
         if (!res.ok) {
-          // 관리자 계정은 세션을 만들지 않고 로그인 화면에서 기사 계정 안내를 보인다.
-          if (
-            res.status === 403 &&
-            (await readRejectionCode(res)) === KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT
-          ) {
-            return ADMIN_ACCOUNT_LOGIN_URL;
-          }
-          return false;
+          // 세션을 만들지 않고 거절 종류별 로그인 화면 안내로 보낸다.
+          // 관리자 계정·승인 전 기사는 API가 403에 붙인 code로, 다른 역할은 code 없는 403으로 나눈다.
+          const rejection = classifyKakaoLoginRejection({
+            status: res.status,
+            code: res.status === 403 ? await readRejectionCode(res) : undefined,
+            adminAccountCode: KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT,
+            approvalPendingCode: DRIVER_APPROVAL_PENDING,
+          });
+          if (rejection === 'admin-account') return ADMIN_ACCOUNT_LOGIN_URL;
+          if (rejection === 'approval-pending') return APPROVAL_PENDING_LOGIN_URL;
+          // false → Auth.js가 `?error=AccessDenied`("기사용 계정이 아니에요")로 보낸다.
+          if (rejection === 'other-role') return false;
+          return LOGIN_FAILED_URL;
         }
         data = await res.json();
       } catch {
-        return false;
+        return LOGIN_FAILED_URL;
       }
-      if (!data?.user) return false;
+      if (!data?.user) return LOGIN_FAILED_URL;
       // API가 역할을 먼저 거르지만, 앱도 응답의 실제 역할을 다시 제한한다.
       if (data.user.role === 'admin') return ADMIN_ACCOUNT_LOGIN_URL;
       if (data.user.role !== DRIVER_APP_ROLE) return false;
 
-      if (!data.user.driverApproved) {
-        return '/login?pending=true';
+      // API는 승인 전 기사에게 토큰을 주지 않고 DRIVER_APPROVAL_PENDING으로 거절한다.
+      // 앱도 응답의 승인 상태를 다시 확인하고, 승인 전이면 세션 없이 같은 승인 대기 안내로 보낸다.
+      if (data.user.driverApproved !== true) {
+        return APPROVAL_PENDING_LOGIN_URL;
       }
 
       user.id = data.user.id;
@@ -459,7 +495,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   pages: {
     signIn: '/login',
-    // signIn 콜백 거절(AccessDenied: 승인 전 기사·다른 역할) 등 오류 종류 실패도 Auth.js 기본
+    // signIn 콜백 거절(AccessDenied: 다른 역할) 등 오류 종류 실패도 Auth.js 기본
     // 오류 페이지가 아니라 로그인 화면(`?error=`)으로 보내 안내 문구를 보인다.
     error: '/login',
   },

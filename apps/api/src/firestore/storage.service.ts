@@ -374,7 +374,10 @@ export class StorageService {
     if (photoIds.length > 0 && !photoIds.includes(input.photoId)) {
       throw new ConflictException('배송 사진이 이미 연결되어 있습니다.');
     }
-    const isRetry = order['status'] === 'DELIVERED' && photoIds.includes(input.photoId);
+    // 같은 사진 재전송(이미 연결됨)은 완료 뒤 후기(REVIEWED)까지 받아 준다. 판정은 DeliveryPhotosService와 같다.
+    const isRetry =
+      (order['status'] === 'DELIVERED' || order['status'] === 'REVIEWED') &&
+      photoIds.includes(input.photoId);
     if (order['status'] !== 'DELIVERING' && !isRetry) {
       throw new ForbiddenException('배송 중인 주문에만 사진을 업로드할 수 있습니다.');
     }

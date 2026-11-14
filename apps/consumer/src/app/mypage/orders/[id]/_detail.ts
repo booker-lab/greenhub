@@ -1,4 +1,5 @@
 import type {
+  CustomerFaultClosureReasonCode,
   OrderStatus,
   RedeliveryPaymentActionability,
   RedeliveryPaymentState,
@@ -21,6 +22,7 @@ const ORDER_STATUSES = new Set<OrderStatus>([
   'DELIVERED',
   'CANCELLED',
   'REVIEWED',
+  'CLOSED_UNDELIVERED',
 ]);
 // 회차 주문 소비자 직접 취소는 서버가 `orderCloseAt > now`(주문 마감 전)를 함께 요구한다
 // (round-order-lifecycle.service `assertRoundOpen`). 회차 주문은 saleType 'normal'이라
@@ -32,6 +34,8 @@ const DELIVERY_HOLD_REASONS = new Set<string>([
   'ACCESS_UNAVAILABLE',
   'ADDRESS_ISSUE',
   'CUSTOMER_UNREACHABLE',
+  'RECEIPT_REFUSED',
+  'PRODUCT_DAMAGED',
   'OTHER',
 ]);
 const REDELIVERY_PAYMENT_STATES = new Set<RedeliveryPaymentState>([
@@ -68,6 +72,12 @@ export interface DeliveryHoldView {
   resolvedAt: string | null;
 }
 
+/** 고객 사유 종결 기록 중 손님에게 보이는 부분(서버가 판매자 메모·처리자를 빼고 준다). */
+export interface CustomerFaultClosureView {
+  reasonCode: CustomerFaultClosureReasonCode;
+  closedAt: string | null;
+}
+
 export interface OrderDetailView {
   id: string;
   orderNumber: string;
@@ -87,6 +97,8 @@ export interface OrderDetailView {
   deliveryPhotoUrl: string | null;
   redeliveryPayment: RedeliveryPaymentActionability;
   canRequestCancellation: boolean;
+  /** 고객 사유 종결(CLOSED_UNDELIVERED) 주문만 있다. 기록이 없거나 모양이 다르면 null. */
+  customerFaultClosure: CustomerFaultClosureView | null;
 }
 
 export interface RedeliveryPayment {
@@ -297,6 +309,15 @@ function readRedeliveryPaymentActionability(
   };
 }
 
+function readCustomerFaultClosure(value: unknown): CustomerFaultClosureView | null {
+  if (!isRecord(value)) return null;
+  if (value.reasonCode !== 'RECEIPT_REFUSED' && value.reasonCode !== 'REDELIVERY_FEE_UNPAID') {
+    return null;
+  }
+  const closedAt = readNullableIso(value.closedAt);
+  return { reasonCode: value.reasonCode, closedAt: closedAt ?? null };
+}
+
 function readAddress(value: unknown) {
   if (!isRecord(value) || !isNonEmptyString(value.address)) return null;
   if (value.addressDetail !== undefined && typeof value.addressDetail !== 'string') return null;
@@ -379,6 +400,8 @@ export function readOrderDetail(value: unknown, requestedOrderId: string): Order
     canRequestCancellation: isRoundOrder
       ? ROUND_CANCELLABLE_STATUSES.has(status)
       : status === 'RECRUITING',
+    customerFaultClosure:
+      status === 'CLOSED_UNDELIVERED' ? readCustomerFaultClosure(value.customerFaultClosure) : null,
   };
 }
 

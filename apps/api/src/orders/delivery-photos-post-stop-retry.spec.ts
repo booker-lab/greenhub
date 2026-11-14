@@ -324,4 +324,107 @@ describe('post-stop identical photo retry (PILOT-STOP-COMPLETED-PHOTO-IDEMPOTENT
     expect(context.lifecycle.reconcileDeliveryCompletion).toHaveBeenCalledWith(storeId, orderId);
     expect(context.retention.saveRecord).toHaveBeenCalledTimes(1);
   });
+  // Y3 사진 업로드 대기열: 응답을 잃은 사진을 기기에 두었다가 같은 키·같은 바이트로 다시 보낸다.
+  // 그 사이 손님이 후기를 남겨 REVIEWED가 됐어도 완료 ACK로 수렴하고, 새 전이·정산·알림은 만들지 않는다.
+  it('T7: round_direct REVIEWED 뒤 같은 키·같은 사진 재전송은 ACK하고 새 전이·정산·알림을 만들지 않는다', async () => {
+    const context = makeContext({
+      storeId: 'store-direct',
+      storeSalesMode: 'round_direct',
+      orderOverrides: { status: 'REVIEWED' },
+      round: { id: 'round-ok', storeId: 'store-direct' },
+    });
+    const before = { ...context.docs.get('orders/order-post-stop') };
+
+    const result = await context.service.uploadAndComplete({ ...context.input });
+
+    expect(result).toEqual({
+      orderId: 'order-post-stop',
+      photoId: context.photoId,
+      status: 'DELIVERED',
+    });
+    expect(context.docs.get('orders/order-post-stop')).toEqual(before);
+    expect(context.retention.saveRecord).not.toHaveBeenCalled();
+    expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
+    // 정산·완료 알림 재조정(reconcileDeliveryCompletion)도 부르지 않는다.
+    expect(context.lifecycle.reconcileDeliveryCompletion).not.toHaveBeenCalled();
+    expect(context.storage.deleteObject).not.toHaveBeenCalled();
+  });
+
+  it('T8: legacy로 바뀐 판매점의 REVIEWED 주문도 같은 사진 재전송만 ACK한다', async () => {
+    const context = makeContext({
+      storeSalesMode: 'legacy',
+      orderOverrides: { status: 'REVIEWED' },
+    });
+
+    await expect(context.service.uploadAndComplete({ ...context.input })).resolves.toMatchObject({
+      photoId: context.photoId,
+      status: 'DELIVERED',
+    });
+    expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
+    expect(context.lifecycle.reconcileDeliveryCompletion).not.toHaveBeenCalled();
+  });
+
+  it('T9: REVIEWED 주문에 다른 키(다른 사진)·다른 기사·미연결 사진은 그대로 거절한다', async () => {
+    const otherKey = makeContext({
+      storeId: 'store-direct',
+      storeSalesMode: 'round_direct',
+      orderOverrides: { status: 'REVIEWED' },
+      round: { id: 'round-ok', storeId: 'store-direct' },
+    });
+    await expect(
+      otherKey.service.uploadAndComplete({
+        ...otherKey.input,
+        idempotencyKey: 'different-key-87654321',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(otherKey.storage.uploadDeliveryPhoto).not.toHaveBeenCalled();
+
+    const otherDriver = makeContext({
+      storeId: 'store-direct',
+      storeSalesMode: 'round_direct',
+      requesterId: 'driver-other',
+      orderOverrides: { status: 'REVIEWED' },
+      round: { id: 'round-ok', storeId: 'store-direct' },
+    });
+    await expect(
+      otherDriver.service.uploadAndComplete({ ...otherDriver.input }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(otherDriver.storage.uploadDeliveryPhoto).not.toHaveBeenCalled();
+
+    const unattached = makeContext({
+      storeId: 'store-direct',
+      storeSalesMode: 'round_direct',
+      orderOverrides: { status: 'REVIEWED', deliveryPhotoIds: [] },
+      round: { id: 'round-ok', storeId: 'store-direct' },
+      preexistingStorage: [],
+    });
+    await expect(
+      unattached.service.uploadAndComplete({ ...unattached.input }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(unattached.storage.uploadDeliveryPhoto).not.toHaveBeenCalled();
+    expect(unattached.lifecycle.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('T10: DELIVERED 뒤 같은 사진 재전송을 여러 번 해도 완료 전이는 한 번이고 재조정만 반복한다', async () => {
+    const context = makeContext({
+      storeId: 'store-direct',
+      storeSalesMode: 'round_direct',
+      round: { id: 'round-ok', storeId: 'store-direct' },
+    });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      await expect(context.service.uploadAndComplete({ ...context.input })).resolves.toMatchObject({
+        photoId: context.photoId,
+        status: 'DELIVERED',
+      });
+    }
+    expect(context.lifecycle.updateStatus).not.toHaveBeenCalled();
+    expect(context.retention.saveRecord).not.toHaveBeenCalled();
+    // 정산 한 건·완료 알림 한 번은 재조정의 멱등(정산 transaction 존재 확인·고정 알림 키)이 맡는다.
+    expect(context.lifecycle.reconcileDeliveryCompletion).toHaveBeenCalledTimes(3);
+    expect(context.lifecycle.reconcileDeliveryCompletion).toHaveBeenCalledWith(
+      'store-direct',
+      'order-post-stop',
+    );
+  });
 });

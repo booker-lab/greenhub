@@ -110,10 +110,15 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
       `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
     );
     await expect(directCard).toBeVisible();
-    // 상품마다 챙길 개수를 보인다. 배송판 행은 두 줄(1줄 주소, 2줄 받는 분·상품)이라 상품 줄을 한 줄에 이어 쓴다
-    // (design-direction.md §6 기사 ② D4-1, #799). 상세 화면은 상품마다 한 줄이다(아래 배송 시작 테스트).
-    await expect(directCard).toContainText('E2E 호접란 · 1개');
-    await expect(directCard).toContainText('E2E 미니 호접란 · 1개');
+    // 목록 행은 세 줄(주소, 배송일·받는 분, 상품 요약·수거 시각)이라 상품은 "첫 상품 외 N종 · 총 M개"로 줄여 쓴다(R-04).
+    // 상품마다 챙길 개수는 상세 화면이 상품마다 한 줄로 보인다(아래 배송 시작 테스트).
+    await expect(directCard).toContainText('E2E 호접란 외 1종 · 총 2개');
+    // 수거 대기 행에는 수거 장소(가게 이름 · 주소)를 쓴다. fixture 가게에는 주소가 없어 이름만 보이고 지도 링크는 없다.
+    const directPickup = page.getByTestId(
+      `driver-order-pickup-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
+    );
+    await expect(directPickup).toHaveText(`수거: E2E 회차 직배송 ${roundDirect.project}`);
+    await expect(directPickup.getByRole('link')).toHaveCount(0);
     await expect(
       page.getByTestId(
         `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_HUB)}`,
@@ -126,11 +131,39 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     ).toHaveCount(0);
   });
 
+  // 한 번에 수거: 내 수거 회차 직배송 주문을 골라 확인 창에서 주소·알림을 본다. 상태를 바꾸지 않도록 확인하지 않고 닫는다
+  // (배송 시작 요청 자체는 아래 상세 배송 시작 테스트와 같은 상태 변경 경로다). 위 배송 시작 테스트보다 먼저 돌아
+  // 고를 수 있는 내 수거 주문(BOARD_DIRECT·START_PREPARING)이 2건 있다.
+  test('수거 대기에서 여러 주문을 골라 한 번에 배송 시작 확인 창을 연다', async ({
+    page,
+    roundDirect,
+  }) => {
+    await page.goto(`${BASE}/board?tab=preparing`);
+
+    await page.getByRole('button', { name: '여러 주문 한 번에 배송 시작' }).click();
+    const directCard = page.getByTestId(
+      `driver-order-${roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.BOARD_DIRECT)}`,
+    );
+    await directCard.getByRole('checkbox').check();
+    await page.getByRole('button', { name: '1곳 배송 시작', exact: true }).click();
+
+    const batchDialog = page.getByRole('dialog', { name: '1곳 배송을 시작할까요?' });
+    await expect(batchDialog.getByText('손님 1명에게 배송 시작 알림이 가요.')).toBeVisible();
+    await expect(batchDialog.getByText('경기도 이천시 테스트로 1', { exact: true })).toBeVisible();
+    await batchDialog.getByRole('button', { name: '취소' }).click();
+    await expect(batchDialog).toHaveCount(0);
+
+    await page.getByRole('button', { name: '고르기 취소' }).click();
+    await expect(page.getByRole('button', { name: '여러 주문 한 번에 배송 시작' })).toBeVisible();
+  });
+
   test('준비된 직접배송 주문의 배송을 시작한다', async ({ page, roundDirect }) => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.START_PREPARING);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await expect(page.getByText('직배송')).toBeVisible();
+    // 수거 대기에서는 수거 장소(가게 이름)를 배송지보다 위에 쓴다. 배송 방식 글자는 정확히 맞춰 찾는다.
+    await expect(page.getByText(`수거: E2E 회차 직배송 ${roundDirect.project}`)).toBeVisible();
+    await expect(page.getByText('직배송', { exact: true })).toBeVisible();
     await expect(page.getByText('E2E 미니 호접란 · 1개', { exact: true })).toBeVisible();
     // 지도는 동·호수 없는 기본 주소로 검색한다.
     await expect(page.getByRole('link', { name: '카카오맵에서 주소 보기' })).toHaveAttribute(
@@ -138,6 +171,10 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
       `https://map.kakao.com/link/search/${encodeURIComponent('경기도 이천시 테스트로 1')}`,
     );
     await page.getByRole('button', { name: '수거 완료 / 배송 시작' }).click();
+    // 손님 알림이 가는 전환이라 확인 창에서 한 번 더 확인한다(D-02). 확인 전에는 요청을 보내지 않는다.
+    const startDialog = page.getByRole('dialog', { name: '배송을 시작할까요?' });
+    await expect(startDialog.getByText('손님에게 배송 시작 알림이 가요.')).toBeVisible();
+    await startDialog.getByRole('button', { name: '배송 시작', exact: true }).click();
 
     await expect(page.getByText('배송 중')).toBeVisible();
     await expect(page.getByRole('button', { name: '수거 완료 / 배송 시작' })).toHaveCount(0);
@@ -151,16 +188,16 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_WEATHER);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
+    await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '기상 악화' }).check();
-    await page.getByLabel('보류 사유').fill('강풍으로 안전한 배송이 어렵습니다.');
+    await page.getByLabel('손님에게 보일 사유').fill('강풍으로 안전한 배송이 어렵습니다.');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T08:00');
 
     await expect(page.getByRole('checkbox', { name: '고객 책임' })).not.toBeChecked();
     await expect(page.getByLabel('재배송비')).toBeDisabled();
-    await page.getByRole('button', { name: '배송 보류 저장' }).click();
+    await page.getByRole('button', { name: '보류하기', exact: true }).click();
 
-    await expect(page.getByRole('dialog', { name: '배송 보류 기록' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: '배송 보류' })).toHaveCount(0);
     // 보류 상태는 상세 머리(banner)에 빨간 점 + 글자로 보이고, 본문에는 "배송 보류 내용" 상자가 생긴다
     // (design-direction.md §6 기사 ② D4-2, #800).
     await expect(page.getByRole('banner').getByText('배송 보류', { exact: true })).toBeVisible();
@@ -178,18 +215,29 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_ACCESS);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
+    await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '출입 불가' }).check();
-    await page.getByLabel('보류 사유').fill('공동현관 출입 정보를 확인할 수 없습니다.');
+    await page.getByLabel('손님에게 보일 사유').fill('공동현관 출입 정보를 확인할 수 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
-    // 고객 책임이면 재배송비를 넣어야 저장할 수 있다.
+    // 고객 책임을 고르면 재배송비 칸이 기준 금액 10,000원으로 채워지고(D-09), 기사가 바꿀 수 있다.
+    await expect(page.getByLabel('재배송비')).toHaveValue('10,000원');
+    // 저장 뒤 결과(손님 결제 전 재개 잠금·기사 앱 수정 불가)를 금액과 함께 칸 바로 아래에 알린다(R-02).
+    await expect(
+      page.getByText(
+        '손님이 재배송비 10,000원을 결제해야 다시 배송할 수 있어요. 저장한 뒤에는 기사 앱에서 바꿀 수 없어요.',
+      ),
+    ).toBeVisible();
+    await expect(page.getByRole('button', { name: '보류하기', exact: true })).toBeEnabled();
+    // 재배송비를 지우면 저장할 수 없다.
+    await page.getByLabel('재배송비').fill('');
     await expect(page.getByText('고객 책임이면 재배송비를 입력해 주세요.')).toBeVisible();
-    await expect(page.getByRole('button', { name: '배송 보류 저장' })).toBeDisabled();
+    await expect(page.getByRole('button', { name: '보류하기', exact: true })).toBeDisabled();
     await page.getByLabel('재배송비').fill('3000');
     await expect(page.getByText('고객 책임이면 재배송비를 입력해 주세요.')).toHaveCount(0);
+    await expect(page.getByText(/손님이 재배송비 3,000원을 결제해야/)).toBeVisible();
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T09:00');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T11:00');
-    await page.getByRole('button', { name: '배송 보류 저장' }).click();
+    await page.getByRole('button', { name: '보류하기', exact: true }).click();
 
     await expect(page.getByText('출입 불가')).toBeVisible();
     await expect(page.getByText('고객 책임')).toBeVisible();
@@ -205,14 +253,14 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_ADDRESS);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
+    await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '주소 오류' }).check();
-    await page.getByLabel('보류 사유').fill('상세 주소가 없어 배송지를 확인할 수 없습니다.');
+    await page.getByLabel('손님에게 보일 사유').fill('상세 주소가 없어 배송지를 확인할 수 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
     await page.getByLabel('재배송비').fill('3000');
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T09:30');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T11:30');
-    await page.getByRole('button', { name: '배송 보류 저장' }).click();
+    await page.getByRole('button', { name: '보류하기', exact: true }).click();
 
     await expect(page.getByText('주소 오류')).toBeVisible();
     await expect(page.getByText('고객 책임')).toBeVisible();
@@ -228,14 +276,14 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     const orderId = roundDirect.orderId(ORDER_FIXTURE_SUFFIXES.HOLD_UNREACHABLE);
     await page.goto(`${BASE}/board/${orderId}`);
 
-    await page.getByRole('button', { name: '부재·문제 알리기' }).click();
+    await page.getByRole('button', { name: '배송 못 함 · 보류하기' }).click();
     await page.getByRole('radio', { name: '고객 연락 불가' }).check();
-    await page.getByLabel('보류 사유').fill('배송지 확인을 위해 연락했으나 응답이 없습니다.');
+    await page.getByLabel('손님에게 보일 사유').fill('배송지 확인을 위해 연락했으나 응답이 없습니다.');
     await page.getByRole('checkbox', { name: '고객 책임' }).check();
     await page.getByLabel('재배송비').fill('3000');
     await page.getByLabel('다음 연락 예정').fill('2026-07-22T10:00');
     await page.getByLabel('새 배송 예정').fill('2026-07-22T12:00');
-    await page.getByRole('button', { name: '배송 보류 저장' }).click();
+    await page.getByRole('button', { name: '보류하기', exact: true }).click();
 
     await expect(page.getByText('고객 연락 불가')).toBeVisible();
     await expect(page.getByText('고객 책임')).toBeVisible();
@@ -260,6 +308,9 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
     await expect(page.getByRole('button', { name: '배송 재개' })).toBeVisible();
     await expect(page.getByText('재배송비 결제 완료')).toBeVisible();
     await page.getByRole('button', { name: '배송 재개' }).click();
+    const resumeDialog = page.getByRole('dialog', { name: '배송을 다시 시작할까요?' });
+    await expect(resumeDialog.getByText('손님에게 재배송 일정 알림이 가요.')).toBeVisible();
+    await resumeDialog.getByRole('button', { name: '배송 재개', exact: true }).click();
 
     // 재개 PATCH(재배송 알림톡 멱등 기록·발송 포함)와 상세 재조회가 끝나야 배송 중으로 바뀐다.
     await expect(page.getByRole('banner').getByText('배송 중', { exact: true })).toBeVisible({

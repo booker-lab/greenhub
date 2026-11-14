@@ -674,6 +674,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### LEGACY-E2E-WORKFLOW-VARS
 - [ ] (2026-10-09: `sync-preview`의 자동 디스패치를 끄고 수동 실행만 남김) 일반 E2E `e2e.yml`은 저장소 수준 `vars.ROUND_DIRECT_E2E_*`를 읽지만 값이 `round-direct-e2e` 환경에만 있어 대상 확인 단계에서 매번 실패한다(최근 100회 성공 없음). legacy 판매 재도입 전에 설정 출처를 고치고 legacy 흐름을 새 코드로 검증한다.
 
+### SELLER-PRODUCT-E2E-REMOTE-FIREBASE
+- [ ] 2026-11-10 `ae4f6593` 원격 회차 E2E(run `42836237176`)에서 `seller-product-lifecycle`(#832·#839)이 chromium·mobile 모두 실패했다. 등록 API는 성공했지만 목록에서 카드를 찾지 못했다. 원인: 판매자 상품 목록은 브라우저가 Firestore `products`를 직접 구독하는데(`apps/seller/src/hooks/useStoreProducts.ts`), Vercel 판매자 프로젝트의 `NEXT_PUBLIC_FIREBASE_*`가 production·preview·development 공용 한 항목이라 브랜치 없는 exact Preview도 운영 Firebase를 본다. E2E는 staging API로 `greenhub-round-direct-e2e`에 저장한다. 로컬 러너는 앱을 E2E Firebase 설정으로 직접 빌드해 통과했다. 그래서 회차 E2E 실행 목록에서 다시 뺐다(66→64건). 테스트 파일은 남아 있다. 원격에서 돌리려면 판매자 Preview(브랜치 미지정)의 Firebase 설정을 E2E 프로젝트로 나누거나(외부 설정 변경, 승인 필요, 모든 판매자 Preview에 영향) 상품 목록을 API로 읽게 바꾼다. 둘 중 하나를 정한 뒤 다시 넣는다.
+
 ### EXACT-PREVIEW-WORKFLOW-CREDENTIALS
 - [ ] `create-exact-preview-deployment.yml`은 앱별 Vercel 토큰(`VERCEL_EXACT_PREVIEW_{CONSUMER,SELLER,DRIVER}_TOKEN`) 미등록으로 성공한 적이 없다. 현재 exact Preview는 로컬 Vercel CLI 권한으로 `preview-exact/<scope>/<sha>` ref를 사용해 만든다. 워크플로 경로로 옮길지 결정한다.
 

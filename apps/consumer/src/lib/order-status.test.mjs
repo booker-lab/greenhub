@@ -42,6 +42,7 @@ test('주문 상태 이름표는 모든 주문 상태를 고객 말로 고정한
     DELIVERED: '배송 완료',
     CANCELLED: '주문 취소',
     REVIEWED: '구매 확정',
+    CLOSED_UNDELIVERED: '배송 종결',
   });
 });
 

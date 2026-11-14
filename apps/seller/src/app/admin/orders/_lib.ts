@@ -16,12 +16,15 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   DELIVERED: '배송 완료',
   REVIEWED: '구매 확정',
   CANCELLED: '취소',
+  CLOSED_UNDELIVERED: '고객 사유 종결',
 };
 
 // 상태 점의 색(design-direction.md §5 어드민 "상태"): 문제(배송 보류)=빨강, 끝남(취소·결제 대기)=회색, 나머지 검정.
 export function getStatusTone(status: OrderStatus): 'problem' | 'done' | 'default' {
   if (status === 'DELIVERY_HELD') return 'problem';
-  if (status === 'CANCELLED' || status === 'PENDING') return 'done';
+  if (status === 'CANCELLED' || status === 'PENDING' || status === 'CLOSED_UNDELIVERED') {
+    return 'done';
+  }
   return 'default';
 }
 

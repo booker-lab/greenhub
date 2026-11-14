@@ -398,10 +398,10 @@ export class NotificationsService {
       .where('productId', '==', productId)
       .get();
 
-    // PENDING·CANCELLED·REVIEWED(종료 상태) 제외 — CONFIRMED 이후 상태(PREPARING 등)도 포함
+    // PENDING·CANCELLED·REVIEWED·CLOSED_UNDELIVERED(종료 상태) 제외 — CONFIRMED 이후 상태(PREPARING 등)도 포함
     // LEGACY-CONSUMER-CANCEL: exclusive cancellation ownership을 가진 RECRUITING 주문은
     // group broadcast(확정/미달 취소 등)에서 제외해 claim 무시 last-write-wins와 중복 알림을 방지한다.
-    const terminalStatuses = ['PENDING', 'CANCELLED', 'REVIEWED'];
+    const terminalStatuses = ['PENDING', 'CANCELLED', 'REVIEWED', 'CLOSED_UNDELIVERED'];
     const promises = snap.docs
       .filter((doc) => !terminalStatuses.includes(doc.data()['status'] as string))
       .filter((doc) => !this.isLegacyCancellationOwned(doc.data() as Record<string, unknown>))

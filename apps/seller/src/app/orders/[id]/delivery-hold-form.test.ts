@@ -1,15 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildDeliveryHoldPayload,
+  DEFAULT_REDELIVERY_FEE_KRW,
   type DeliveryHoldFormValues,
   deliveryHoldResponsibilityFeeHint,
   HOLD_FEE_NOT_ALLOWED_HINT,
   HOLD_FEE_RANGE_HINT,
   HOLD_FEE_REQUIRED_HINT,
+  HOLD_PRODUCT_DAMAGED_SELLER_ERROR,
+  HOLD_RECEIPT_REFUSED_RESPONSIBILITY_HINT,
+  HOLD_REASON_REQUIRED_MESSAGE,
+  holdResponsibilityAfterReasonChange,
   HOLD_REASON_LABEL,
   isRedeliveryFeeWithinLimit,
   MAX_REDELIVERY_FEE_KRW,
   parseRedeliveryFee,
+  redeliveryFeeAfterResponsibilityChange,
+  SELLER_HOLD_REASON_OPTIONS,
 } from './delivery-hold-form';
 
 const base: DeliveryHoldFormValues = {
@@ -79,14 +86,93 @@ describe('재배송비·책임 규칙(기사 앱·서버와 같음)', () => {
     ).toBeNull();
   });
 
-  it('보류 유형은 서버가 받는 다섯 가지다', () => {
+  it('보류 유형은 서버가 받는 일곱 가지이고, 판매자 창에서는 상품 파손을 뺀다', () => {
     expect(Object.keys(HOLD_REASON_LABEL)).toEqual([
       'WEATHER',
       'ACCESS_UNAVAILABLE',
       'ADDRESS_ISSUE',
       'CUSTOMER_UNREACHABLE',
+      'RECEIPT_REFUSED',
+      'PRODUCT_DAMAGED',
       'OTHER',
     ]);
+    expect(HOLD_REASON_LABEL.RECEIPT_REFUSED).toBe('수령 거부');
+    expect(HOLD_REASON_LABEL.PRODUCT_DAMAGED).toBe('상품 파손');
+    expect(SELLER_HOLD_REASON_OPTIONS).toEqual([
+      'WEATHER',
+      'ACCESS_UNAVAILABLE',
+      'ADDRESS_ISSUE',
+      'CUSTOMER_UNREACHABLE',
+      'RECEIPT_REFUSED',
+      'OTHER',
+    ]);
+  });
+});
+
+describe('고객 책임 체크와 재배송비 기준 금액(2026-11-08 결정, 기사 앱과 같음)', () => {
+  it('기준 금액은 10,000원이고 상한 이하의 정수다', () => {
+    expect(DEFAULT_REDELIVERY_FEE_KRW).toBe(10_000);
+    expect(isRedeliveryFeeWithinLimit(DEFAULT_REDELIVERY_FEE_KRW)).toBe(true);
+  });
+
+  it('체크하면 빈 재배송비(빈 칸·0원)를 기준 금액으로 채운다', () => {
+    for (const redeliveryFee of ['', 0, '0']) {
+      expect(
+        redeliveryFeeAfterResponsibilityChange({ customerResponsible: true, redeliveryFee }),
+      ).toBe(DEFAULT_REDELIVERY_FEE_KRW);
+    }
+  });
+
+  it('체크할 때 이미 적은 금액은 그대로 둔다', () => {
+    expect(
+      redeliveryFeeAfterResponsibilityChange({ customerResponsible: true, redeliveryFee: 5000 }),
+    ).toBe(5000);
+    expect(
+      redeliveryFeeAfterResponsibilityChange({ customerResponsible: true, redeliveryFee: '7000' }),
+    ).toBe('7000');
+  });
+
+  it('체크를 풀면 재배송비를 비운다', () => {
+    for (const redeliveryFee of ['', DEFAULT_REDELIVERY_FEE_KRW, 3000, '60000']) {
+      expect(
+        redeliveryFeeAfterResponsibilityChange({ customerResponsible: false, redeliveryFee }),
+      ).toBe('');
+    }
+  });
+
+  it('채운 기준 금액은 책임·재배송비 규칙을 통과하고, 풀어 비운 칸도 어긋나지 않는다', () => {
+    const checkedFee = redeliveryFeeAfterResponsibilityChange({
+      customerResponsible: true,
+      redeliveryFee: '',
+    });
+    expect(
+      deliveryHoldResponsibilityFeeHint({
+        ...base,
+        customerResponsible: true,
+        redeliveryFee: checkedFee,
+      }),
+    ).toBeNull();
+    const uncheckedFee = redeliveryFeeAfterResponsibilityChange({
+      customerResponsible: false,
+      redeliveryFee: checkedFee,
+    });
+    expect(
+      deliveryHoldResponsibilityFeeHint({
+        ...base,
+        customerResponsible: false,
+        redeliveryFee: uncheckedFee,
+      }),
+    ).toBeNull();
+  });
+
+  it('기준 금액을 상한 넘게 바꾸면 상한 안내는 그대로 나온다', () => {
+    expect(
+      deliveryHoldResponsibilityFeeHint({
+        ...base,
+        customerResponsible: true,
+        redeliveryFee: MAX_REDELIVERY_FEE_KRW + 1,
+      }),
+    ).toBe(HOLD_FEE_RANGE_HINT);
   });
 });
 
@@ -184,6 +270,104 @@ describe('buildDeliveryHoldPayload', () => {
     expect(buildDeliveryHoldPayload({ ...base, nextContactAt: 'not-a-date' })).toEqual({
       ok: false,
       error: '날짜와 시각을 다시 확인해 주세요.',
+    });
+  });
+});
+
+describe('보류 유형 기본 선택 없음', () => {
+  it('유형을 고르지 않으면 막고 payload를 만들지 않는다', () => {
+    const result = buildDeliveryHoldPayload({ ...base, reasonCode: null });
+    expect(result).toEqual({ ok: false, error: HOLD_REASON_REQUIRED_MESSAGE });
+    expect(HOLD_REASON_REQUIRED_MESSAGE).toBe('보류 유형을 골라 주세요.');
+  });
+
+  it('유형 미선택은 다른 입력 오류보다 먼저 안내한다', () => {
+    const result = buildDeliveryHoldPayload({ ...base, reasonCode: null, reasonMessage: '' });
+    expect(result).toEqual({ ok: false, error: HOLD_REASON_REQUIRED_MESSAGE });
+  });
+
+  it('고른 유형만 payload에 실린다', () => {
+    const result = buildDeliveryHoldPayload({ ...base, reasonCode: 'OTHER' });
+    expect(result.ok && result.payload.reasonCode).toBe('OTHER');
+  });
+
+  it('유형이 없으면 책임·재배송비 안내는 일반 규칙을 따른다', () => {
+    expect(
+      deliveryHoldResponsibilityFeeHint({
+        reasonCode: null,
+        customerResponsible: true,
+        redeliveryFee: '',
+      }),
+    ).toBe(HOLD_FEE_REQUIRED_HINT);
+  });
+});
+
+describe('수령 거부·상품 파손', () => {
+  it('수령 거부를 고르면 고객 책임을 켜고 빈 재배송비를 기준 금액으로 채운다', () => {
+    expect(
+      holdResponsibilityAfterReasonChange({
+        reasonCode: 'RECEIPT_REFUSED',
+        customerResponsible: false,
+        redeliveryFee: '',
+      }),
+    ).toEqual({ customerResponsible: true, redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW });
+    expect(
+      holdResponsibilityAfterReasonChange({
+        reasonCode: 'RECEIPT_REFUSED',
+        customerResponsible: true,
+        redeliveryFee: 7000,
+      }),
+    ).toEqual({ customerResponsible: true, redeliveryFee: 7000 });
+  });
+
+  it('기상·상품 파손은 책임·재배송비를 비우고, 그 밖 유형은 그대로 둔다', () => {
+    for (const reasonCode of ['WEATHER', 'PRODUCT_DAMAGED']) {
+      expect(
+        holdResponsibilityAfterReasonChange({
+          reasonCode,
+          customerResponsible: true,
+          redeliveryFee: 10000,
+        }),
+      ).toEqual({ customerResponsible: false, redeliveryFee: '' });
+    }
+    expect(
+      holdResponsibilityAfterReasonChange({
+        reasonCode: 'ADDRESS_ISSUE',
+        customerResponsible: true,
+        redeliveryFee: 10000,
+      }),
+    ).toEqual({ customerResponsible: true, redeliveryFee: 10000 });
+  });
+
+  it('수령 거부는 고객 책임이 아니면 막고, 고객 책임·재배송비와 함께 보낸다', () => {
+    expect(
+      deliveryHoldResponsibilityFeeHint({
+        reasonCode: 'RECEIPT_REFUSED',
+        customerResponsible: false,
+        redeliveryFee: '',
+      }),
+    ).toBe(HOLD_RECEIPT_REFUSED_RESPONSIBILITY_HINT);
+    expect(
+      buildDeliveryHoldPayload({
+        ...base,
+        reasonCode: 'RECEIPT_REFUSED',
+        customerResponsible: true,
+        redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+      }),
+    ).toEqual({
+      ok: true,
+      payload: expect.objectContaining({
+        reasonCode: 'RECEIPT_REFUSED',
+        customerResponsible: true,
+        redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+      }),
+    });
+  });
+
+  it('판매자는 상품 파손 보류를 보낼 수 없다', () => {
+    expect(buildDeliveryHoldPayload({ ...base, reasonCode: 'PRODUCT_DAMAGED' })).toEqual({
+      ok: false,
+      error: HOLD_PRODUCT_DAMAGED_SELLER_ERROR,
     });
   });
 });

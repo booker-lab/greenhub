@@ -4,6 +4,8 @@ import { OperationIssuesModule } from '../operations/operation-issues.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { RetentionModule } from '../retention/retention.module';
 import { SettlementsModule } from '../settlements/settlements.module';
+import { CustomerFaultClosureController } from './customer-fault-closure.controller';
+import { CustomerFaultClosureService } from './customer-fault-closure.service';
 import { DeliveryPhotosController } from './delivery-photos.controller';
 import { DeliveryPhotosService } from './delivery-photos.service';
 import { OrderCapacityModule } from './order-capacity.module';
@@ -34,6 +36,7 @@ import { DriverOrderScopeService } from './driver-order-scope.service';
     OrdersController,
     DeliveryPhotosController,
     PostDeliveryRefundController,
+    CustomerFaultClosureController,
   ],
   providers: [
     OrdersService,
@@ -47,6 +50,7 @@ import { DriverOrderScopeService } from './driver-order-scope.service';
     OrderChargesService,
     DeliveryPhotosService,
     PostDeliveryRefundService,
+    CustomerFaultClosureService,
   ],
   exports: [
     OrdersService,

@@ -413,6 +413,46 @@ describe('배송 사진 Storage 계약', () => {
     }
   });
 
+  it('완료(DELIVERED·REVIEWED) 주문은 이미 연결된 같은 사진 ID 재전송만 받고 다른 사진 ID는 막는다', async () => {
+    const content = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x02, 0xff, 0xd9]);
+    const input = {
+      storeId: 'store-safe',
+      orderId: 'order-safe',
+      photoId: 'photo-safe',
+      requesterId: 'driver-safe',
+      requesterRole: 'driver' as const,
+      content,
+      contentType: 'image/jpeg' as const,
+    };
+    for (const status of ['DELIVERED', 'REVIEWED']) {
+      const order = {
+        storeId: 'store-safe',
+        driverId: 'driver-safe',
+        schemaVersion: 2,
+        roundId: 'round-safe',
+        deliveryMethod: 'direct',
+        status,
+        deliveryPhotoIds: ['photo-safe'],
+      };
+      const attached = makeService(order);
+      await expect(attached.service.uploadDeliveryPhoto(input)).resolves.toMatchObject({
+        photoId: 'photo-safe',
+      });
+
+      const other = makeService(order);
+      await expect(
+        other.service.uploadDeliveryPhoto({ ...input, photoId: 'photo-other' }),
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(other.save).not.toHaveBeenCalled();
+
+      const unattached = makeService({ ...order, deliveryPhotoIds: [] });
+      await expect(unattached.service.uploadDeliveryPhoto(input)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+      expect(unattached.save).not.toHaveBeenCalled();
+    }
+  });
+
   it('주문에 연결되지 않은 사진 ID는 권한이 있어도 서명 URL을 발급하지 않는다', async () => {
     const { file, service } = makeService({
       storeId: 'store-safe',

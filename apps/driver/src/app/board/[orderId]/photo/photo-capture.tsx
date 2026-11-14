@@ -1,6 +1,7 @@
 'use client';
 
 import { apiPathSegment, isSafeApiPathSegment, readRouteParam } from '@greenhub/shared';
+import { toast } from '@greenhub/ui/components/toast';
 import { cn } from '@greenhub/ui/lib/utils';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -10,7 +11,11 @@ import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
 import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
-import { readDriverOrderCommandErrorCodeFromResponse } from '../../_lib/driver-order-detail';
+import {
+  readDriverDetailBackContext,
+  resolveDriverDetailBackAction,
+} from '../../_lib/driver-order-detail';
+import { rememberCompletedOrder } from '../../_lib/recent-completion';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
 import {
   type DecodedPhoto,
@@ -19,15 +24,39 @@ import {
   PhotoEncodeError,
 } from './photo-encode';
 import {
-  classifyPhotoUploadFailure,
+  deliveryCompletedMessage,
+  type PhotoOrderSummary,
+  photoOrderSummaryLine,
+  readPhotoOrderSummary,
+} from './photo-order-summary';
+import {
+  dismissPendingPhoto,
+  enqueuePendingPhoto,
+  findPendingPhoto,
+  runPendingPhotoNow,
+  subscribePendingPhotoCompleted,
+  usePendingPhotos,
+} from './pending-photo-client';
+import {
+  createPendingPhotoEntry,
+  PENDING_PHOTO_MESSAGES,
+  type PendingPhotoEnqueueInput,
+  type PendingPhotoSummary,
+  pendingPhotoBadgeKind,
+  pendingPhotoStatusMessage,
+  shouldEnqueuePendingPhoto,
+} from './pending-photo-policy';
+import {
   decideIdempotencyKey,
-  isDeliveryPhotoAck,
   type PhotoUploadFailureKind,
   photoEncodeFailureMessage,
+  photoUploadFailureMessage,
+  readDriverOrderHoldAt,
   readDriverOrderStatus,
   readDriverOrderStoreId,
   resolvePhotoUploadFailure,
 } from './photo-upload-policy';
+import { sendRoundDirectPhoto } from './round-direct-send';
 
 type PhotoMode = 'legacy' | 'round-direct';
 
@@ -42,10 +71,22 @@ const CAMERA_ON = '#ffffff';
 const CAMERA_BUTTON_INK = '#111111';
 
 const INVALID_ORDER_ADDRESS_MESSAGE =
-  '주문 주소가 올바르지 않습니다. 배송 목록에서 주문을 다시 선택해주세요.';
+  '주문 주소가 올바르지 않아요. 배송 목록에서 주문을 다시 선택해 주세요.';
 // 명령을 보내기 전에 실패하므로 같은 사진으로 다시 시도해도 안전하다.
 const ORDER_STORE_UNKNOWN_MESSAGE =
-  '주문 정보를 확인하지 못해 사진을 올리지 않았습니다. 잠시 뒤 다시 시도하거나 주문 화면에서 확인해주세요.';
+  '주문 정보를 확인하지 못해 사진을 올리지 않았어요. 잠시 뒤 다시 시도하거나 주문 화면에서 확인해 주세요.';
+// 받는 형식은 JPEG 그대로다(2026-11-08 결정). 형식 이름 대신 바로 할 일을 안내한다.
+const NON_JPEG_PHOTO_MESSAGE =
+  "이 사진 형식은 올릴 수 없어요. '카메라 촬영'이나 '카메라 앱으로 찍기'로 새로 찍어 주세요.";
+
+/**
+ * 판매자 ID 확인 결과. absent는 주문이 보이지 않음(404·403), unknown은 네트워크·5xx·형식 오류.
+ * holdAt은 같은 응답의 가장 최근 보류 표시(모르면 undefined).
+ */
+type OrderStoreIdRead =
+  | { kind: 'ok'; storeId: string; holdAt: string | null | undefined }
+  | { kind: 'absent' }
+  | { kind: 'unknown' };
 
 function encodeErrorMessage(cause: unknown): string {
   return photoEncodeFailureMessage(
@@ -57,6 +98,27 @@ function stopMediaStream(mediaStream: MediaStream | null) {
   mediaStream?.getTracks().forEach((track) => {
     track.stop();
   });
+}
+
+// 촬영 화면 안내 줄용 주소·받는 분과 그때의 보류 표시. 읽지 못하면 null이고 화면은 안내 줄만 숨긴다.
+async function fetchPhotoOrderSummary(
+  orderId: string,
+  token: string,
+  signal: AbortSignal,
+): Promise<{ summary: PhotoOrderSummary | null; holdAt: string | null | undefined } | null> {
+  try {
+    const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token, {
+      signal,
+    });
+    if (!response.ok) return null;
+    const payload: unknown = await response.json();
+    return {
+      summary: readPhotoOrderSummary(payload, orderId),
+      holdAt: readDriverOrderHoldAt(payload, orderId),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export default function PhotoCapture({ orderId: rawOrderId, mode }: PhotoCaptureProps) {
@@ -79,7 +141,7 @@ export default function PhotoCapture({ orderId: rawOrderId, mode }: PhotoCapture
       >
         <p
           className={cn(text, 'text-center')}
-          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}
+          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)', wordBreak: 'keep-all' }}
         >
           {INVALID_ORDER_ADDRESS_MESSAGE}
         </p>
@@ -103,6 +165,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
   // 새로고침·직접 진입 등으로 세션을 다시 받는 동안에는 완료 버튼을 막는다
   // (세션 없이 누르면 업로드가 조용히 무시되어 화면에 머문다).
   const sessionReady = Boolean(session?.user?.accessToken);
+  const accessToken = session?.user?.accessToken;
   const router = useRouter();
   const videoRef = useRef<HTMLVideoElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -121,7 +184,45 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
   const requestIdRef = useRef<string | null>(null);
   const requestPhotoRef = useRef<Blob | null>(null);
   const lastFailureRef = useRef<PhotoUploadFailureKind | null>(null);
+  // 결과가 불확실했던 요청의 판매자 ID. 같은 키 재전송은 이 값을 그대로 쓴다: 서버가 이미 완료했으면
+  // 기사 주문 조회가 404라 다시 읽을 수 없다(조회는 완료 여부의 근거가 아니다).
+  const uncertainStoreIdRef = useRef<string | null>(null);
+  // 촬영 때 본 주문 보류 표시(deliveryHoldAt). 화면을 열 때 읽은 값이고, 모르면 undefined다.
+  // 서버는 사진 요청의 이 값과 지금 보류 표시가 다르면(촬영 뒤 보류 → 다시 배송 중) 예전 사진을 거절한다.
+  const loadedHoldAtRef = useRef<string | null | undefined>(undefined);
+  // 지금 멱등 키로 보내는 요청의 보류 표시. 같은 키 재전송·대기열 항목은 이 값을 그대로 쓴다.
+  const requestHoldAtRef = useRef<string | null | undefined>(undefined);
   const uploadInFlightRef = useRef(false);
+  // 사진 업로드 대기열(회차 직배송만). 이 주문의 항목이 있으면 재촬영을 막고 상태와 "지금 올리기"를 보인다.
+  const userId = session?.user?.id ?? null;
+  const pendingPhotos = usePendingPhotos(isRoundDirect ? userId : null);
+  const pendingEntry = pendingPhotos.entries.find((entry) => entry.orderId === orderId) ?? null;
+  // 방금 대기열에 넣었는가: 저장소를 다시 읽기 전에도 안내를 바로 보인다.
+  const [queuedNow, setQueuedNow] = useState(false);
+  const [pendingNote, setPendingNote] = useState('');
+  const [pendingRunning, setPendingRunning] = useState(false);
+  const showPendingPanel = isRoundDirect && (pendingEntry !== null || queuedNow);
+  // 촬영 화면 제목 아래 "어느 집" 안내(회차 직배송만). 읽지 못하면 null이고 안내 줄만 숨긴다.
+  const [orderSummary, setOrderSummary] = useState<PhotoOrderSummary | null>(null);
+  // 안내 줄을 읽어 온 주문 ID. 다른 주문으로 바뀌면 이전 주문의 주소를 남기지 않고 다시 읽는다.
+  const orderSummaryLoadedForRef = useRef<string | null>(null);
+
+  // 화면을 열 때 기사 주문 조회로 주소·받는 분을 한 번 읽는다. 업로드 때 판매자 ID는 여기 값을 쓰지 않고
+  // 매번 조회 응답에서 다시 확인한다(readOrderStoreId).
+  useEffect(() => {
+    if (!isRoundDirect || !accessToken || orderSummaryLoadedForRef.current === orderId) return;
+    setOrderSummary(null);
+    const controller = new AbortController();
+    void fetchPhotoOrderSummary(orderId, accessToken, controller.signal).then((loaded) => {
+      // 읽지 못하면 안내 줄만 숨긴다. 보류 표시는 업로드 때 판매자 ID 조회 응답에서 대신 읽는다.
+      if (controller.signal.aborted || !loaded) return;
+      if (loaded.holdAt !== undefined) loadedHoldAtRef.current = loaded.holdAt;
+      if (!loaded.summary) return;
+      orderSummaryLoadedForRef.current = orderId;
+      setOrderSummary(loaded.summary);
+    });
+    return () => controller.abort();
+  }, [isRoundDirect, accessToken, orderId]);
 
   useEffect(() => {
     if (!stream) {
@@ -151,7 +252,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     void video.play().catch(() => {
       if (!active) return;
       setFrameReady(false);
-      setError('카메라 미리보기를 재생할 수 없습니다. 다시 시도해주세요.');
+      setError('카메라 미리보기를 재생할 수 없어요. 다시 시도해 주세요.');
     });
 
     return () => {
@@ -194,13 +295,42 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     };
   }, []);
 
+  // 대기열이 이 주문의 사진을 올려 완료로 수렴하면(자동·지금 올리기) 목록으로 옮긴다.
+  useEffect(() => {
+    if (!isRoundDirect) return;
+    return subscribePendingPhotoCompleted((completedOrderId) => {
+      if (completedOrderId === orderId) router.replace('/board?tab=delivering');
+    });
+  }, [isRoundDirect, orderId, router]);
+
+  // 대기열 안내를 보이는 동안 카메라는 끈다(재촬영으로 새 키를 만들지 않는다).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: stopStream은 ref와 상태 setter만 쓰므로 매 렌더 새 함수여도 동작이 같다
+  useEffect(() => {
+    if (showPendingPanel && streamRef.current) stopStream();
+  }, [showPendingPanel]);
+
+  // 보이던 항목이 저장소에서 사라지면(완료·삭제) "방금 넣음" 표시를 내린다.
+  // 넣은 직후 저장소를 다시 읽기 전(아직 항목이 안 보이는 때)에는 내리지 않는다.
+  const hasPendingEntry = pendingEntry !== null;
+  const sawPendingEntryRef = useRef(false);
+  useEffect(() => {
+    if (hasPendingEntry) {
+      sawPendingEntryRef.current = true;
+      return;
+    }
+    if (sawPendingEntryRef.current) {
+      sawPendingEntryRef.current = false;
+      setQueuedNow(false);
+    }
+  }, [hasPendingEntry]);
+
   async function startCamera() {
     setError('');
     if (!navigator.mediaDevices?.getUserMedia) {
       setError(
         isRoundDirect
-          ? '카메라를 사용할 수 없습니다. 카메라 앱으로 찍거나 사진을 선택해 계속해주세요.'
-          : '카메라를 사용할 수 없습니다.',
+          ? '카메라를 사용할 수 없어요. 카메라 앱으로 찍거나 사진을 선택해 계속해 주세요.'
+          : '카메라를 사용할 수 없어요.',
       );
       return;
     }
@@ -225,8 +355,8 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
       if (cameraRequestRef.current !== requestId) return;
       setError(
         isRoundDirect
-          ? '카메라 접근 권한이 필요합니다. 카메라 앱으로 찍거나 사진을 선택해 계속해주세요.'
-          : '카메라 접근 권한이 필요합니다.',
+          ? '카메라 접근 권한이 필요해요. 카메라 앱으로 찍거나 사진을 선택해 계속해 주세요.'
+          : '카메라 접근 권한이 필요해요.',
       );
     }
   }
@@ -249,7 +379,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
       video.videoWidth <= 0 ||
       video.videoHeight <= 0
     ) {
-      setError('카메라 화면이 아직 준비되지 않았습니다. 잠시 후 다시 시도해주세요.');
+      setError('카메라 화면이 아직 준비되지 않았어요. 잠시 후 다시 시도해 주세요.');
       return;
     }
     if (preparingRef.current) return;
@@ -284,7 +414,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     setBlob(null);
 
     if (file.type !== 'image/jpeg') {
-      setError('JPEG 사진만 선택할 수 있습니다.');
+      setError(NON_JPEG_PHOTO_MESSAGE);
       return;
     }
     if (preparingRef.current) return;
@@ -313,15 +443,19 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
   }
 
   // 명령 경로의 판매자 ID는 주소창 쿼리가 아니라 기사 주문 조회 응답에서 읽는다.
-  // 같은 주문의 응답이 아니거나 형식이 맞지 않으면 null이고, 그때는 명령을 보내지 않는다.
-  async function readOrderStoreId(token: string): Promise<string | null> {
+  // 같은 주문의 응답이 아니거나 형식이 맞지 않으면 ok가 아니고, 그때는 명령을 보내지 않는다.
+  async function readOrderStoreId(token: string): Promise<OrderStoreIdRead> {
     try {
       const response = await apiRead(`/driver/orders/${encodeURIComponent(orderId)}`, token);
-      if (!response.ok) return null;
-      const storeId = readDriverOrderStoreId(await response.json(), orderId);
-      return isSafeApiPathSegment(storeId) ? storeId : null;
+      if (response.status === 404 || response.status === 403) return { kind: 'absent' };
+      if (!response.ok) return { kind: 'unknown' };
+      const payload: unknown = await response.json();
+      const storeId = readDriverOrderStoreId(payload, orderId);
+      return isSafeApiPathSegment(storeId)
+        ? { kind: 'ok', storeId, holdAt: readDriverOrderHoldAt(payload, orderId) }
+        : { kind: 'unknown' };
     } catch {
-      return null;
+      return { kind: 'unknown' };
     }
   }
 
@@ -376,11 +510,62 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     }
     if (resolution.action === 'complete') return true;
     if (resolution.action === 'show') setError(resolution.message);
+    if (failure === 'STALE_HOLD') {
+      // 촬영 뒤 보류가 있었다: 이 사진은 다시 보내지 않는다. 새로 찍으면 그때의 보류 표시를 다시 읽는다.
+      loadedHoldAtRef.current = undefined;
+      setCaptured(null);
+      setBlob(null);
+    }
     return false;
   }
 
-  // 회차 직배송 업로드. 완료(서버가 이미 완료한 경우 포함)면 true, 안내를 띄웠으면 false.
-  async function uploadRoundDirect(token: string, blob: Blob, storeId: string): Promise<boolean> {
+  // 보내기 전 실패·불확실한 결과를 사진 업로드 대기열에 넣는다. 넣었으면 안내를 바꾸고, 저장소를 쓸 수 없으면
+  // 대기열 없이 예전 안내로 남는다(같은 키·같은 사진 재시도는 그대로 가능하다).
+  async function queueOrExplain(
+    input: PendingPhotoEnqueueInput,
+    storeId: string | null,
+    idempotencyKey: string,
+    photo: Blob,
+  ): Promise<false> {
+    let queued = false;
+    if (userId && shouldEnqueuePendingPhoto(input)) {
+      try {
+        // 보낸(또는 보내려던) 인코딩 결과 그대로 저장한다. 다시 인코딩하지 않는다(인코딩은 결정적이지 않다).
+        const entry = createPendingPhotoEntry({
+          userId,
+          orderId,
+          storeId,
+          idempotencyKey,
+          bytes: await photo.arrayBuffer(),
+          now: Date.now(),
+          random: Math.random(),
+          input,
+          expectedHoldAt: requestHoldAtRef.current,
+        });
+        queued = entry ? await enqueuePendingPhoto(entry) : false;
+      } catch {
+        queued = false;
+      }
+    }
+    if (queued) {
+      setQueuedNow(true);
+      return false;
+    }
+    setError(
+      input.phase === 'pre-send'
+        ? ORDER_STORE_UNKNOWN_MESSAGE
+        : photoUploadFailureMessage(input.failure),
+    );
+    return false;
+  }
+
+  // 회차 직배송 업로드. 완료(같은 키 재전송 ACK 포함)면 true, 안내를 띄웠거나 대기열에 넣었으면 false.
+  async function uploadRoundDirect(token: string, blob: Blob): Promise<boolean> {
+    // 이 주문의 사진이 이미 대기열에 있으면 새 키로 보내지 않는다(대기열 안내가 "지금 올리기"를 맡는다).
+    if (userId && (await findPendingPhoto(userId, orderId))) {
+      setQueuedNow(true);
+      return false;
+    }
     const keyDecision = decideIdempotencyKey({
       hasKey: requestIdRef.current !== null,
       photoChanged: requestPhotoRef.current !== blob,
@@ -390,43 +575,73 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
       keyDecision === 'renew' || requestIdRef.current === null
         ? globalThis.crypto.randomUUID()
         : requestIdRef.current;
+    if (requestId !== requestIdRef.current) {
+      uncertainStoreIdRef.current = null;
+      // 새 요청은 화면을 열 때 본 보류 표시로 시작한다(모르면 아래 판매자 ID 조회 응답에서 읽는다).
+      requestHoldAtRef.current = loadedHoldAtRef.current;
+    }
     requestIdRef.current = requestId;
     requestPhotoRef.current = blob;
 
-    let failure: PhotoUploadFailureKind;
-    try {
-      const form = new FormData();
-      form.append('photo', blob, 'delivery.jpg');
-      form.append('idempotencyKey', requestId);
-      const response = await apiFetch(
-        `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/delivery-photos`,
-        token,
-        { method: 'POST', body: form },
-      );
-      if (response.ok) {
-        let result: unknown = null;
-        try {
-          result = await response.json();
-        } catch {
-          result = null;
-        }
-        if (isDeliveryPhotoAck(result, orderId)) {
-          lastFailureRef.current = null;
-          return true;
-        }
-        failure = classifyPhotoUploadFailure({ kind: 'ack' });
-      } else {
-        failure = classifyPhotoUploadFailure({
-          kind: 'http',
-          status: response.status,
-          code: await readDriverOrderCommandErrorCodeFromResponse(response),
-        });
+    // 같은 키 재전송이면 그 요청 때 확인한 판매자 ID를 쓴다(완료된 주문은 조회가 404다).
+    let storeId = uncertainStoreIdRef.current;
+    if (storeId === null) {
+      if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+        return queueOrExplain({ phase: 'pre-send', reason: 'OFFLINE' }, null, requestId, blob);
       }
-    } catch {
-      failure = classifyPhotoUploadFailure({ kind: 'network' });
+      const read = await readOrderStoreId(token);
+      if (read.kind === 'absent') {
+        setError(ORDER_STORE_UNKNOWN_MESSAGE);
+        return false;
+      }
+      if (read.kind === 'unknown') {
+        return queueOrExplain(
+          { phase: 'pre-send', reason: 'ORDER_UNKNOWN' },
+          null,
+          requestId,
+          blob,
+        );
+      }
+      storeId = read.storeId;
+      if (requestHoldAtRef.current === undefined) requestHoldAtRef.current = read.holdAt;
     }
+
+    const result = await sendRoundDirectPhoto({
+      post: apiFetch,
+      token,
+      storeId,
+      orderId,
+      idempotencyKey: requestId,
+      photo: blob,
+      expectedHoldAt: requestHoldAtRef.current,
+    });
+    if (result.kind === 'ack') {
+      lastFailureRef.current = null;
+      uncertainStoreIdRef.current = null;
+      return true;
+    }
+    const failure = result.failure;
     lastFailureRef.current = failure;
+    if (shouldEnqueuePendingPhoto({ phase: 'sent', failure })) {
+      // 결과 불확실: 상세 조회(완료 주문은 404)에 기대지 않고 같은 키·같은 사진 재전송으로만 수렴한다.
+      uncertainStoreIdRef.current = storeId;
+      return queueOrExplain({ phase: 'sent', failure }, storeId, requestId, blob);
+    }
+    uncertainStoreIdRef.current = null;
     return recoverAfterUploadFailure(token, failure, storeId);
+  }
+
+  // 대기열 안내의 "지금 올리기". 자동 실행과 같은 함수·같은 잠금을 쓴다(새 키·새 사진을 만들지 않는다).
+  async function uploadPendingNow() {
+    if (pendingRunning) return;
+    setPendingRunning(true);
+    setPendingNote('');
+    try {
+      const result = await runPendingPhotoNow(orderId);
+      if (result === 'not-due') setPendingNote(PENDING_PHOTO_MESSAGES.SOON);
+    } finally {
+      setPendingRunning(false);
+    }
   }
 
   async function upload() {
@@ -436,16 +651,26 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
     setUploading(true);
     setError('');
     const token = session.user.accessToken;
+    // 완료로 목록에 옮겨 가는 중이면 잠금을 풀지 않는다(옮겨 가기 전 버튼이 다시 켜져 같은 요청·완료 알림이 두 번 나가지 않게).
+    let leaving = false;
     try {
-      // 사진·명령을 보내기 전에 주문 응답에서 판매자 ID를 확인한다. 실패하면 아무 명령도 보내지 않는다.
-      const storeId = await readOrderStoreId(token);
-      if (!storeId) {
-        setError(ORDER_STORE_UNKNOWN_MESSAGE);
-        return;
-      }
       if (isRoundDirect) {
-        if (!(await uploadRoundDirect(token, blob, storeId))) return;
+        // 판매자 ID 확인·보내기·불확실 결과의 대기열 저장은 uploadRoundDirect가 맡는다.
+        if (!(await uploadRoundDirect(token, blob))) return;
+        // 완료로 수렴했을 때만(정상 ACK·서버가 이미 완료) 알린다. 불확실·실패는 위에서 안내하고 머문다.
+        // 알림은 루트 AppToaster가 그리므로 목록으로 옮긴 뒤에도 남는다.
+        toast.add({ description: deliveryCompletedMessage(orderSummary) });
+        // 완료 직후 휴대폰 뒤로가기로 이 주문 상세가 다시 열리면 "배송을 마친 주문이에요"로 안내한다(R-01).
+        // 손님 배송이 끝난 회차 직배송만 기록한다(거점 도착은 배송 완료가 아니다). 저장소가 막혀도 예외 없이 넘어간다.
+        rememberCompletedOrder({ orderId, userId: session.user.id });
       } else {
+        // 사진·명령을 보내기 전에 주문 응답에서 판매자 ID를 확인한다. 실패하면 아무 명령도 보내지 않는다.
+        const storeRead = await readOrderStoreId(token);
+        if (storeRead.kind !== 'ok') {
+          setError(ORDER_STORE_UNKNOWN_MESSAGE);
+          return;
+        }
+        const storeId = storeRead.storeId;
         const photoUrl = await uploadLegacyHubPhoto(orderId, blob);
         const response = await apiFetch(
           `/stores/${apiPathSegment(storeId)}/orders/${apiPathSegment(orderId)}/status`,
@@ -460,26 +685,29 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
         try {
           ack = (await response.json()) as { orderId?: unknown; status?: unknown };
         } catch {
-          throw new Error('결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.');
+          throw new Error('결과를 확인할 수 없어요. 주문 상태를 다시 확인해 주세요.');
         }
         if (ack.orderId !== orderId || ack.status !== 'HUB_ARRIVED') {
-          throw new Error('결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.');
+          throw new Error('결과를 확인할 수 없어요. 주문 상태를 다시 확인해 주세요.');
         }
       }
 
+      leaving = true;
       router.replace('/board?tab=delivering');
     } catch (error) {
       if (
         error instanceof Error &&
-        error.message.includes('결과를 확인할 수 없습니다. 주문 상태를 다시 확인하세요.')
+        error.message.includes('결과를 확인할 수 없어요. 주문 상태를 다시 확인해 주세요.')
       ) {
         setError(error.message);
       } else {
-        setError('업로드 실패. 다시 시도해주세요.');
+        setError('업로드하지 못했어요. 다시 시도해 주세요.');
       }
     } finally {
-      uploadInFlightRef.current = false;
-      setUploading(false);
+      if (!leaving) {
+        uploadInFlightRef.current = false;
+        setUploading(false);
+      }
     }
   }
 
@@ -504,7 +732,8 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           display: 'flex',
           alignItems: 'center',
           gap: 12,
-          padding: '16px',
+          // 홈 화면 앱(viewportFit cover·투명 상태 표시줄)에서 제목·주소 줄이 상태 표시줄에 가리지 않게 안전 영역만큼 내린다.
+          padding: 'calc(16px + env(safe-area-inset-top)) 16px 16px',
           background: 'linear-gradient(to bottom, rgba(0,0,0,0.6), transparent)',
         }}
       >
@@ -513,7 +742,12 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           aria-label="뒤로가기"
           onClick={() => {
             stopStream();
-            router.back();
+            // 앱 안 이전 기록이 있을 때만 브라우저 뒤로, 없으면(새 탭·앱 재시작 뒤 복원) 그 주문 상세로 바꿔 보낸다(R-03).
+            if (resolveDriverDetailBackAction(readDriverDetailBackContext(window)) === 'back') {
+              router.back();
+              return;
+            }
+            router.replace(`/board/${encodeURIComponent(orderId)}`);
           }}
           style={{
             color: CAMERA_ON,
@@ -540,20 +774,57 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             />
           </svg>
         </button>
-        <h1
-          className="m-0 leading-[1.3]"
-          style={{
-            color: CAMERA_ON,
-            fontSize: 'var(--font-size-md)',
-            fontWeight: 'var(--fw-bold)',
-          }}
-        >
-          {isRoundDirect ? '배송 완료 사진' : '거점 하차 인증 사진'}
-        </h1>
+        <div style={{ minWidth: 0 }}>
+          <h1
+            className="m-0 leading-[1.3]"
+            style={{
+              color: CAMERA_ON,
+              fontSize: 'var(--font-size-md)',
+              fontWeight: 'var(--fw-bold)',
+            }}
+          >
+            {isRoundDirect ? '배송 완료 사진' : '거점 하차 인증 사진'}
+          </h1>
+          {isRoundDirect && orderSummary && (
+            <p
+              className={cn(text, 'm-0 leading-[1.3]')}
+              style={{
+                color: CAMERA_ON,
+                fontSize: 'var(--font-size-sm)',
+                wordBreak: 'keep-all',
+                overflowWrap: 'anywhere',
+              }}
+            >
+              {photoOrderSummaryLine(orderSummary)}
+            </p>
+          )}
+        </div>
       </header>
 
       <div style={{ flex: 1, position: 'relative' }}>
-        {isRoundDirect && (
+        {showPendingPanel && (
+          <PendingPhotoPanel
+            entry={pendingEntry}
+            justQueued={queuedNow}
+            note={pendingNote}
+            running={pendingRunning}
+            onUploadNow={() => void uploadPendingNow()}
+            onDismiss={() => {
+              // 멈춘 사진을 확인하면 그 키·사진은 버리고 새로 찍게 한다.
+              if (userId) void dismissPendingPhoto(userId, orderId);
+              setQueuedNow(false);
+              requestIdRef.current = null;
+              requestPhotoRef.current = null;
+              lastFailureRef.current = null;
+              uncertainStoreIdRef.current = null;
+              setCaptured(null);
+              setBlob(null);
+              setError('');
+            }}
+            onList={() => router.replace('/board?tab=delivering')}
+          />
+        )}
+        {!showPendingPanel && isRoundDirect && (
           <input
             ref={fileInputRef}
             type="file"
@@ -564,7 +835,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             style={{ display: 'none' }}
           />
         )}
-        {!stream && !captured && (
+        {!showPendingPanel && !stream && !captured && (
           <div
             style={{
               position: 'absolute',
@@ -576,8 +847,11 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               gap: 24,
             }}
           >
-            <p className={text} style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)' }}>
-              {isRoundDirect ? '문 앞 배송 완료 상태를 촬영해주세요' : '하차 물품을 촬영해주세요'}
+            <p
+              className={cn(text, 'px-8 text-center')}
+              style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)', wordBreak: 'keep-all' }}
+            >
+              {isRoundDirect ? '문 앞 배송 완료 상태를 촬영해 주세요' : '하차 물품을 촬영해 주세요'}
             </p>
             <AppButton
               onClick={startCamera}
@@ -603,7 +877,12 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             {error && (
               <p
                 className={cn(text, 'px-8 text-center')}
-                style={{ color: 'var(--color-danger)', fontSize: 'var(--font-size-sm)' }}
+                style={{
+                  color: 'var(--color-danger)',
+                  fontSize: 'var(--font-size-sm)',
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'anywhere',
+                }}
               >
                 {error}
               </p>
@@ -611,7 +890,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           </div>
         )}
 
-        {stream && (
+        {!showPendingPanel && stream && (
           <>
             <video
               ref={videoRef}
@@ -654,7 +933,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           </>
         )}
 
-        {captured && (
+        {!showPendingPanel && captured && (
           <Image
             src={captured}
             alt="촬영 미리보기"
@@ -672,7 +951,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
         )}
       </div>
 
-      {(captured || isRoundDirect) && (
+      {!showPendingPanel && (captured || isRoundDirect) && (
         <div
           style={{
             position: 'absolute',
@@ -680,8 +959,10 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             left: 0,
             right: 0,
             display: 'flex',
+            // 좁은 폭(360px)에서도 확정 버튼 글자가 잘리지 않게 한 줄 전체 폭으로 두고, 재촬영은 그 위에 쌓는다.
+            flexDirection: 'column',
             gap: 12,
-            padding: '16px 16px 32px',
+            padding: '16px 16px max(32px, calc(16px + env(safe-area-inset-bottom)))',
             background: 'linear-gradient(to top, rgba(0,0,0,0.7), transparent)',
           }}
         >
@@ -691,7 +972,7 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               disabled={uploading}
               tone="white-outline"
               size="lg"
-              className="flex-1"
+              fullWidth
             >
               재촬영
             </AppButton>
@@ -700,19 +981,20 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
             onClick={upload}
             disabled={!captured || uploading || !sessionReady}
             size="lg"
-            className="flex-1"
+            fullWidth
             leftSection={uploading ? <Spinner size={18} className="text-white" /> : null}
           >
-            {uploading ? '업로드 중...' : isRoundDirect ? '사진을 등록하고 배송 완료' : '업로드'}
+            {uploading ? '올리는 중…' : isRoundDirect ? '사진을 등록하고 배송 완료' : '업로드'}
           </AppButton>
         </div>
       )}
 
-      {error && captured && (
+      {!showPendingPanel && error && captured && (
         <div
           style={{
             position: 'absolute',
-            top: 80,
+            // 제목 아래 주소 줄이 있으면 머리가 길어지므로 그만큼 내려 가리지 않는다.
+            top: `calc(${orderSummary ? 104 : 80}px + env(safe-area-inset-top))`,
             left: 16,
             right: 16,
             backgroundColor: 'var(--color-danger)',
@@ -726,6 +1008,99 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           {error}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * 사진 업로드 대기열 안내(회차 직배송). 이 주문의 사진이 대기열에 있으면 재촬영 대신 이 안내를 보인다.
+ * - 기다림: 저장 안내 + "지금 올리기"(자동 실행과 같은 함수·잠금).
+ * - 보내는 중: 올리는 중 안내(버튼 꺼짐).
+ * - 멈춤: 원인 안내 + "확인했어요"(항목을 지우면 다시 촬영할 수 있다).
+ */
+function PendingPhotoPanel({
+  entry,
+  justQueued,
+  note,
+  running,
+  onUploadNow,
+  onDismiss,
+  onList,
+}: {
+  entry: PendingPhotoSummary | null;
+  justQueued: boolean;
+  note: string;
+  running: boolean;
+  onUploadNow: () => void;
+  onDismiss: () => void;
+  onList: () => void;
+}) {
+  const now = Date.now();
+  const kind = entry ? pendingPhotoBadgeKind(entry, now) : 'waiting';
+  const message =
+    entry && (kind !== 'waiting' || !justQueued)
+      ? pendingPhotoStatusMessage(entry, now)
+      : PENDING_PHOTO_MESSAGES.ENQUEUED;
+  return (
+    <div
+      role="status"
+      style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+        padding: 24,
+      }}
+    >
+      <p
+        className={cn(text, 'text-center')}
+        style={{
+          color: kind === 'failed' ? 'var(--color-danger)' : CAMERA_ON,
+          fontSize: 'var(--font-size-md)',
+          fontWeight: 'var(--fw-bold)',
+          wordBreak: 'keep-all',
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {message}
+      </p>
+      {note && (
+        <p
+          className={cn(text, 'text-center')}
+          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)', wordBreak: 'keep-all' }}
+        >
+          {note}
+        </p>
+      )}
+      {kind === 'failed' ? (
+        <AppButton
+          onClick={onDismiss}
+          tone="white"
+          size="lg"
+          fullWidth
+          style={{ color: CAMERA_BUTTON_INK }}
+        >
+          확인했어요
+        </AppButton>
+      ) : (
+        <AppButton
+          onClick={onUploadNow}
+          loading={running || kind === 'sending'}
+          disabled={running || kind === 'sending' || entry === null}
+          tone="white"
+          size="lg"
+          fullWidth
+          style={{ color: CAMERA_BUTTON_INK }}
+        >
+          {kind === 'sending' ? '올리는 중…' : '지금 올리기'}
+        </AppButton>
+      )}
+      <AppButton onClick={onList} tone="white-outline" size="lg" fullWidth>
+        목록으로
+      </AppButton>
     </div>
   );
 }
