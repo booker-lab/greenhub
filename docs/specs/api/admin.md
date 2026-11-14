@@ -278,6 +278,8 @@ GET /admin/drivers?status=pending|approved|suspended&limit=<n>&cursor=<id>
 
 현재 구현은 Firestore에서 `role == driver`를 `createdAt DESC`로 한 쪽(`limit` 기본 100·상한 200) 읽은 뒤, status는 그 쪽 안에서 service 메모리로 거른다. 걸러진 결과가 비어도 다음 쪽이 있으면 `hasMore`·`nextCursor`를 돌려준다. seller 관리자 화면은 지금 status를 보내지 않고 받은 쪽 안에서 탭을 거른다.
 
+각 줄은 `id`·`name`·`email`·`phone`·`driverApproved`·`suspended`·`createdAt`과 `driverApplication`(기사 앱 `/apply`에서 낸 가입 신청: `realName`·`phone`(010+8자리)·`vehicleType`·`availableDays`·`availableArea`·`consentVersion`·`consentedAt`·`status`·`revision`·`submittedAt`·`updatedAt`만, 없으면 `null`)을 싣는다(`apps/api/src/admin/admin-lists.ts` `toAdminDriverRow`). 신청 정보 계약은 `docs/specs/api/auth.md` §5 "기사 가입 신청 정보"가 정본이다. 관리자 화면 승인 대기 상자는 실명·휴대폰·차량 종류·요일·지역·신청(수정) 시각을 보이고, 신청이 없으면 "신청 정보 없음"이라고 쓴다.
+
 status 판정:
 
 - `pending`: `!driverApproved && !suspended`
@@ -290,10 +292,18 @@ status 판정:
 PATCH /admin/drivers/:userId/approve
 ```
 
+```ts
+{ expectedRevision?: number } // 본 가입 신청 회차, 신청 정보가 없으면 0. 본문 없이 보내면 비교하지 않는다.
+```
+
 - 사용자 존재 확인
 - `role === driver` 확인
 - 승인 대기(목록 `pending`과 같은 `!driverApproved && !suspended`)만 승인한다. 정지된 기사·이미 승인된 기사는 409(정지된 기사는 먼저 정지를 풀어야 한다)
+- `expectedRevision`이 저장된 가입 신청 회차(신청이 없으면 0)와 다르면 409 `code: DRIVER_APPLICATION_CHANGED`로 거절한다(관리자 화면은 "신청 내용이 바뀌었어요. 다시 확인해 주세요." 안내 뒤 목록을 다시 읽는다). 읽기·판정·쓰기는 한 트랜잭션이라 기사의 신청 저장과 겹쳐도 한쪽만 이긴다.
 - `driverApproved: true`
+- 신청 정보가 없는 기존 대기 계정도 승인할 수 있다(2026-11-13 결정). 거절 기능은 없다.
+- 어드민 행동 기록 `admin.driver.approved`의 `before`에 `applicationRevision`(본 회차, 신청이 없으면 `null`)을 남긴다. 신청 값은 남기지 않는다.
+- 직접 근거: `apps/api/src/admin/admin-driver-approve-revision.spec.ts`, `apps/api/src/admin/admin-lists.spec.ts`.
 
 이 endpoint가 관리자 승인 경로라는 계약은 유지되며, 2026-08-24 감사에서 확인한 다음 우회는 현재 구현에서 닫혔다.
 
@@ -502,6 +512,7 @@ settlement 지급처럼 금전 상태를 변경하는 admin mutation은 정상·
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-13 | 기사 목록에 가입 신청(`driverApplication`)을 싣고, 승인에 `expectedRevision`(본 신청 회차) 낙관적 동시성 검사·409 `DRIVER_APPLICATION_CHANGED`·감사 `applicationRevision`, 신청 없는 기존 대기 계정 승인 유지 |
 | 2026-10-24 | 코드 대조: 소비자 목록 허용 필드·탈퇴 제외, 정지 대상 제한·자기 정지 400(#578·#594), 정산 지급의 주문 보류 409(#603), 정산 날짜 `YYYY-MM-DD`·배너 URL 제약(#578), 후기·입점 문의 관리 경로(#555·#590) 반영 |
 | 2026-10-23 | 주문·기사 목록 커서 이어받기, 치운 판매자 숨김·주문 차단과 복구 상태(#593)를 §3·§5·§7·§11에 반영 |
 | 2026-10-21 | 관리자 배송 후 환불(§5) endpoint와 행동 기록 `admin.order.post_delivery_refunded` 추가. 지급 뒤 환불의 회수 완료는 운영 기록(`SETTLEMENT_RECOVERY_REQUIRED`) 닫기로 처리 |
