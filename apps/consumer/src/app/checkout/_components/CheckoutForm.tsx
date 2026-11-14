@@ -524,7 +524,11 @@ export default function CheckoutForm({
         {!manualAddress && (
           <button
             type="button"
-            className="m-0 self-start border-0 bg-transparent p-0 text-sm underline"
+            className={cn(
+              // 눌리는 높이 44px(design-standard §4). 글자 크기와 밑줄은 그대로다.
+              'm-0 inline-flex items-center self-start border-0 bg-transparent p-0 text-sm underline',
+              TOUCH_HEIGHT,
+            )}
             style={{ color: 'var(--color-text-secondary)' }}
             onClick={() => startManualAddress(null)}
           >
