@@ -11,6 +11,7 @@ import { useCart } from '@/hooks/useCart';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
 import { isFeatureOn } from '@/lib/features';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
+import { formatOrderDeliveryNotice } from '@/lib/order-delivery-date';
 import { ORDER_STATUS_LABELS } from '@/lib/order-status';
 import { clearCheckoutDraft } from '@/lib/payment-checkout-draft';
 import { paymentFailureMessage } from '@/lib/payment-failure-message';
@@ -489,10 +490,11 @@ function OrderSuccessContent() {
                         color: 'var(--color-primary-dark)',
                       }}
                     >
-                      화요일 배송 안내
+                      배송 안내
                     </p>
                     <p className="m-0 text-sm">
-                      화요일 오전 9시까지 문 앞에 배송해요. 경기도 이천시 직접배송 주문이에요.
+                      {/* 날짜는 주문의 배송 예정일에서 읽는다(읽지 못하면 고정 문구). */}
+                      {formatOrderDeliveryNotice(order?.requestedDeliveryDate)}
                     </p>
                   </div>
                 )}

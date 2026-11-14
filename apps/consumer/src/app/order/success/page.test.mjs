@@ -81,6 +81,19 @@ new Function(
   }).outputText,
 )(orderStatusModule, orderStatusModule.exports);
 
+const deliveryDateSource = await readFile(
+  new URL('../../../lib/order-delivery-date.ts', import.meta.url),
+  'utf8',
+);
+const deliveryDateModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(deliveryDateSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(deliveryDateModule, deliveryDateModule.exports);
+
 const pageModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -94,6 +107,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/payment-redirect') return redirectModule.exports;
   if (specifier === '@/lib/order-cancel-reason') return cancelReasonModule.exports;
   if (specifier === '@/lib/order-status') return orderStatusModule.exports;
+  if (specifier === '@/lib/order-delivery-date') return deliveryDateModule.exports;
   if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
   if (specifier === '@/lib/payment-checkout-draft') return draftModule.exports;
   if (specifier === '@/hooks/useCart') return { useCart: () => ({ removeRoundItems: () => {} }) };
@@ -241,10 +255,13 @@ test('기존 단일 상품·legacy 성공 화면은 서버 주문번호가 없�
   assert.match(source, /공동구매 목표를 달성하면 주문이 확정돼요\./);
 });
 
-test('회차 성공 화면은 화요일 오전 9시 문 앞 배송 약속과 서버 상품 요약을 표시한다', () => {
+test('회차 성공 화면은 주문의 배송 예정일로 만든 문 앞 배송 약속과 서버 상품 요약을 표시한다', () => {
   assert.match(source, /회차 주문번호/);
   assert.match(source, /주문 상품/);
-  assert.match(source, /화요일 오전 9시까지 문 앞에 배송해요\./);
+  // 문장과 대체 문구는 lib/order-delivery-date 테스트가 고정한다. 화면은 요일을 직접 쓰지 않는다.
+  assert.match(source, /formatOrderDeliveryNotice\(order\?\.requestedDeliveryDate\)/);
+  assert.match(source, />\s*배송 안내\s*</);
+  assert.doesNotMatch(source, /화요일/);
   assert.match(source, /successOrder\.items\.map/);
 });
 
