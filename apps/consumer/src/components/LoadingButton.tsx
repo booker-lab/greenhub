@@ -1,43 +1,27 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
+import { LoadingButton as UiLoadingButton } from '@greenhub/ui/components/loading-button';
 import { cn } from '@greenhub/ui/lib/utils';
 import type * as React from 'react';
 
-// ① 외형 유지(UI 교체 P5): 소비자 앱의 Mantine Button loading 모양.
-// 소비자 globals.css는 Mantine Loader.css를 불러오지 않아, Button loading의 Loader가 스타일 없는 빈 span으로
-// 그려져 보이지 않는다. 그래서 지금 소비자 화면의 loading 버튼은 변형 색 위에 흰 15% 막(blur 12px)만 덮이고 글자는 아래로
-// 내려가 감춰진 모양이다. packages/ui LoadingButton(Loader 표시)과 달리 그 모양을 그대로 둔다.
-// 누를 수 없고(aria-disabled) 커서는 not-allowed다. loading이 아니면 Button과 같다.
-// Loader를 보일지는 ② 방향 적용 또는 P6 정리에서 정한다.
+// 소비자 화면의 처리 중 버튼. 공용 @greenhub/ui LoadingButton을 그대로 쓴다(판매자 앱·소비자 배송지/로그인 화면과 같은 모양):
+// 처리 중에는 변형 색 위에 흰 15% 막을 덮고, 글자를 아래로 내려 감춘 자리 가운데에 글자색 도는 원(Loader)을 보인다.
+// 글자는 읽기 도구에 남고, 누를 수 없으며(aria-disabled) 초점은 버튼에 남는다. loading이 아니면 Button과 같다.
+// 예전에는 Mantine Loader 스타일이 없어 도는 표시 없이 빈 알약으로 보이던 모양을 그대로 옮겨 두었다.
+// 공용 Loader에는 움직임 줄이기 대응이 없어, prefers-reduced-motion에서는 여기서 회전만 멈춘다(원은 그대로 보인다).
+const REDUCED_MOTION_LOADER = 'motion-reduce:[&_[data-slot=loader]]:after:animate-none';
+
 function LoadingButton({
   loading = false,
-  disabled,
   className,
-  children,
   ...props
-}: React.ComponentProps<typeof Button> & { loading?: boolean }) {
-  if (!loading) {
-    return (
-      <Button disabled={disabled} className={className} {...props}>
-        {children}
-      </Button>
-    );
-  }
+}: React.ComponentProps<typeof UiLoadingButton>) {
   return (
-    <Button
-      disabled
-      focusableWhenDisabled
-      data-loading=""
-      className={cn(
-        "cursor-not-allowed before:absolute before:-inset-px before:rounded-[inherit] before:bg-white/15 before:content-[''] before:[filter:blur(12px)]",
-        className,
-      )}
+    <UiLoadingButton
+      loading={loading}
+      className={cn(loading && REDUCED_MOTION_LOADER, className)}
       {...props}
-    >
-      {/* Mantine: 글자 칸(inner)은 opacity 0·translateY(100%)로 아래로 내려 감춘다(읽기 도구에는 남는다). */}
-      <span className="flex h-full translate-y-full items-center opacity-0">{children}</span>
-    </Button>
+    />
   );
 }
 
