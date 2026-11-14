@@ -140,6 +140,13 @@ export default async function LoginPage({
                 <p className={text} style={{ fontSize: 'var(--font-size-sm)' }}>
                   {notice.body}
                 </p>
+                {notice.action && (
+                  <p className={`${text} mt-2`} style={{ fontSize: 'var(--font-size-sm)' }}>
+                    <a href={notice.action.href} className="font-bold underline underline-offset-2">
+                      {notice.action.label}
+                    </a>
+                  </p>
+                )}
                 {notice.showOpsContact && (
                   <p className={`${text} mt-2`} style={{ fontSize: 'var(--font-size-sm)' }}>
                     {DRIVER_OPS_CONTACT.label}{' '}

@@ -17,6 +17,11 @@ import {
   DRIVER_LOGIN_FAILED_ERROR,
 } from '@/app/login/login-notice';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { storeDriverApplicationTicket } from '@/lib/driver-application-cookie';
+import {
+  driverApplicationRedirectPath,
+  readDriverApplicationRejection,
+} from '@/lib/driver-application-ticket';
 import { classifyKakaoLoginRejection } from '@/lib/login-redirect';
 
 const API = getApiBaseUrl();
@@ -204,13 +209,20 @@ const APPROVAL_PENDING_LOGIN_URL = `/login?error=${DRIVER_APPROVAL_PENDING_ERROR
 // 일반 실패 안내로 보낸다. 어느 쪽도 세션을 만들지 않는다.
 const LOGIN_FAILED_URL = `/login?error=${DRIVER_LOGIN_FAILED_ERROR}`;
 
-async function readRejectionCode(res: Response): Promise<unknown> {
+async function readRejectionBody(res: Response): Promise<unknown> {
   try {
-    const body = (await res.json()) as { code?: unknown } | null;
-    return body?.code;
+    return (await res.json()) as unknown;
   } catch {
     return undefined;
   }
+}
+
+function rejectionCodeOf(body: unknown): unknown {
+  return typeof body === 'object' && body !== null ? (body as { code?: unknown }).code : undefined;
+}
+
+async function readRejectionCode(res: Response): Promise<unknown> {
+  return rejectionCodeOf(await readRejectionBody(res));
 }
 
 function isExplicitSessionRevocationStatus(status: unknown): boolean {
@@ -418,14 +430,29 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (!res.ok) {
           // 세션을 만들지 않고 거절 종류별 로그인 화면 안내로 보낸다.
           // 관리자 계정·승인 전 기사는 API가 403에 붙인 code로, 다른 역할은 code 없는 403으로 나눈다.
+          const body = res.status === 403 ? await readRejectionBody(res) : undefined;
           const rejection = classifyKakaoLoginRejection({
             status: res.status,
-            code: res.status === 403 ? await readRejectionCode(res) : undefined,
+            code: rejectionCodeOf(body),
             adminAccountCode: KAKAO_LOGIN_DRIVER_APP_ADMIN_ACCOUNT,
             approvalPendingCode: DRIVER_APPROVAL_PENDING,
           });
           if (rejection === 'admin-account') return ADMIN_ACCOUNT_LOGIN_URL;
-          if (rejection === 'approval-pending') return APPROVAL_PENDING_LOGIN_URL;
+          if (rejection === 'approval-pending') {
+            // 승인 전 기사: 세션 대신 API가 준 가입 신청 티켓만 httpOnly 쿠키(경로 /apply, 30분)에 담고
+            // 신청 전이면 신청 화면, 낸 뒤면 접수 안내(신청 내용 수정 링크)로 보낸다. 이 콜백은
+            // `GET /api/auth/callback/kakao` 라우트 핸들러 안에서 돌아 cookies()로 쓴 쿠키가
+            // Auth.js 리다이렉트 응답에 붙는다(`src/auth.application-cookie.test.ts`).
+            // 티켓이 없거나 형식이 다르거나 쿠키를 쓰지 못하면 지금처럼 승인 대기 안내로만 보낸다.
+            const application = readDriverApplicationRejection(body);
+            if (!application) return APPROVAL_PENDING_LOGIN_URL;
+            try {
+              await storeDriverApplicationTicket(application.ticket);
+            } catch {
+              return APPROVAL_PENDING_LOGIN_URL;
+            }
+            return driverApplicationRedirectPath(application.status, APPROVAL_PENDING_LOGIN_URL);
+          }
           // false → Auth.js가 `?error=AccessDenied`("기사용 계정이 아니에요")로 보낸다.
           if (rejection === 'other-role') return false;
           return LOGIN_FAILED_URL;

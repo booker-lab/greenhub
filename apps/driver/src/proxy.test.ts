@@ -21,6 +21,7 @@ vi.mock('@/lib/content-security-policy', () => import('./lib/content-security-po
 vi.mock('@/app/login/login-notice', () => import('./app/login/login-notice'));
 vi.mock('@/lib/initial-session', () => import('./lib/initial-session'));
 vi.mock('@/lib/login-redirect', () => import('./lib/login-redirect'));
+vi.mock('@/lib/driver-application-ticket', () => import('./lib/driver-application-ticket'));
 
 const { config, proxy } = await import('./proxy');
 const { decodeInitialSession, encodeInitialSession, INITIAL_SESSION_HEADER } = await import(
@@ -177,6 +178,28 @@ describe('기사 proxy 로그인 화면', () => {
   });
 });
 
+describe('기사 proxy 가입 신청 화면', () => {
+  it('세션 없이(신청 티켓 쿠키로) 여는 화면이라 로그인으로 보내지 않는다', async () => {
+    const response = await run('/apply', { cookie: 'greenhub-driver-apply=a.b.c' });
+    expect(response.headers.get('location')).toBeNull();
+    expect(response.headers.get('x-middleware-next')).toBe('1');
+    expect(nonceOf(response)).toBeTruthy();
+  });
+
+  it('이미 기사 세션이 있으면(승인된 기사) 작업 보드로 보낸다', async () => {
+    state.session = { user: { role: 'driver' } };
+    const response = await run('/apply');
+    expect(response.status).toBe(307);
+    expect(response.headers.get('location')).toBe('https://driver.example.test/board');
+  });
+
+  it('로그인 화면 callbackUrl로 가입 신청 화면을 받지 않는다', async () => {
+    state.session = { user: { role: 'driver' } };
+    const response = await run('/login?callbackUrl=%2Fapply');
+    expect(response.headers.get('location')).toBe('https://driver.example.test/board');
+  });
+});
+
 describe('기사 proxy 첫 화면 세션 전달', () => {
   const driverSession = {
     user: { id: 'driver-1', name: '김기사', role: 'driver', accessToken: 'access-1' },
@@ -242,7 +265,7 @@ describe('기사 proxy matcher', () => {
     unstable_doesMiddlewareMatch({ config, url, headers });
 
   it('보호 경로와 공개 페이지에서 실행된다', () => {
-    for (const path of ['/', '/login', '/board', '/board/order-1', '/map', '/profile']) {
+    for (const path of ['/', '/login', '/apply', '/board', '/board/order-1', '/map', '/profile']) {
       expect(matches(path)).toBe(true);
     }
   });

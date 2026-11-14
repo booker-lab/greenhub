@@ -4,7 +4,7 @@
  * - 세션이 끝나 로그인 화면으로 보낼 때 보던 화면 경로를 `callbackUrl`로 싣고,
  *   로그인 뒤(또는 이미 로그인한 채 `/login`을 열었을 때) 그 경로로 돌려보낸다.
  * - `callbackUrl`은 같은 출처의 앱 경로만 허용한다(열린 리다이렉트 방지). 로그인 화면 자신과
- *   `/api`는 돌아갈 곳이 아니므로 거절한다(`/login?callbackUrl=%2Flogin` 자기 순환 방지).
+ *   `/api`, 가입 신청 화면(`/apply`)은 돌아갈 곳이 아니므로 거절한다(`/login?callbackUrl=%2Flogin` 자기 순환 방지).
  *   허용하지 않는 값은 모두 작업 보드(`/board`).
  */
 
@@ -22,8 +22,8 @@ const MAX_RETURN_PATH_LENGTH = 2048;
 // biome-ignore lint/suspicious/noControlCharactersInRegex: 제어 문자 거부가 목적이다.
 const FORBIDDEN_CHARS = /[\u0000-\u001f\u007f\\]/;
 
-// 돌아갈 곳이 아닌 경로(로그인 화면 자신, Auth.js·API 경로).
-const EXCLUDED_PREFIXES = [DRIVER_LOGIN_PATH, '/api'];
+// 돌아갈 곳이 아닌 경로(로그인 화면 자신, Auth.js·API 경로, 승인 전 기사의 가입 신청 화면).
+const EXCLUDED_PREFIXES = [DRIVER_LOGIN_PATH, '/api', '/apply'];
 
 function isExcludedPathname(pathname: string): boolean {
   return EXCLUDED_PREFIXES.some(
