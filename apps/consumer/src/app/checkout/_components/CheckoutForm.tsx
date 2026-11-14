@@ -578,11 +578,11 @@ export default function CheckoutForm({
 
           <div
             className="p-4"
-            style={{ background: 'var(--color-deadline-surface)', borderRadius: 'var(--radius)' }}
+            style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
           >
             <p
               className="m-0 mb-1 text-sm"
-              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-deadline-text)' }}
+              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-text)' }}
             >
               결제 직전 확인
             </p>
