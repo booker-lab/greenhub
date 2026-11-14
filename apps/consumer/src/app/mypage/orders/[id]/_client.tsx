@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ReactNode, use, useEffect, useId, useState } from 'react';
 import OrderDetailExtras from '@/components/benchmark/OrderDetailExtras';
+import { ConfirmDialog, type ConfirmDialogState } from '@/components/ConfirmDialog';
 import { LoadingButton } from '@/components/LoadingButton';
 import {
   ORDER_STATUS_POLL_INTERVAL_MS,
@@ -17,6 +18,7 @@ import {
   useOrderStatus,
 } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { orderCancelConfirmContent } from '@/lib/confirm-dialog-content';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
 import {
   CLOSED_UNDELIVERED_MESSAGE,
@@ -330,6 +332,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     checkPendingPayment: true,
   });
   const [cancelOutcome, setCancelOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
+  // 취소 확인창: 닫힘 → 열림 → 처리 중(확정 뒤 요청·재확인이 끝날 때까지) 중 하나다.
+  const [cancelDialog, setCancelDialog] = useState<ConfirmDialogState>('closed');
   const [reviewOutcome, setReviewOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   const [redeliveryOutcome, setRedeliveryOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   // 재배송비도 주문 결제와 같은 결제수단 중에서 고른다(카카오페이가 없는 손님도 카드로 낼 수 있게).
@@ -356,17 +360,33 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
   }
 
-  async function handleCancel() {
+  // 취소 버튼: 취소할 수 있는 상태인지 본 뒤 확인창을 연다. 요청은 확인창의 확정(handleCancel)이 보낸다.
+  function openCancelDialog() {
     if (!session?.user?.accessToken || !detail?.canRequestCancellation) return;
     if (isAuthoritativelyCancelled) return;
     if (isStaleRead) {
       setActionError(ORDER_DETAIL_STALE_MESSAGE);
       return;
     }
-    const message = detail.isRoundOrder
-      ? '주문을 취소할까요?'
-      : '공동구매 참여를 취소할까요?\n취소하면 되돌릴 수 없어요.';
-    if (!confirm(message)) return;
+    setCancelDialog('open');
+  }
+
+  async function handleCancel() {
+    if (
+      !session?.user?.accessToken ||
+      !detail?.canRequestCancellation ||
+      isAuthoritativelyCancelled
+    ) {
+      setCancelDialog('closed');
+      return;
+    }
+    if (isStaleRead) {
+      setCancelDialog('closed');
+      setActionError(ORDER_DETAIL_STALE_MESSAGE);
+      return;
+    }
+    // 처리 중에는 확인창이 Esc·바깥 누름으로 닫히지 않는다. 끝나면(성공·실패 모두) 닫고 결과는 화면이 알린다.
+    setCancelDialog('submitting');
     setCancelOutcome({ kind: 'executing' });
     setActionError(null);
     try {
@@ -438,6 +458,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       // 그 밖의 예외도 내부 오류 글자 대신 같은 고객 문구로 상태 확인을 안내한다.
       setCancelOutcome({ kind: 'uncertain', message: CANCEL_UNCERTAIN_MESSAGE });
       setActionError(CANCEL_UNCERTAIN_MESSAGE);
+    } finally {
+      setCancelDialog('closed');
     }
   }
 
@@ -1231,17 +1253,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           {cancelOutcome.kind === 'reconciling' && (
             <p className="m-0 mb-3 text-sm">취소가 접수됐어요. 최신 주문 상태를 확인하고 있어요.</p>
           )}
+          {/* ② 방향(design-standard §5): 여는 버튼은 검정 글자 외곽선. 되돌릴 수 없음은 확인창이 알린다. */}
           <LoadingButton
             className="w-full"
-            variant="outline-destructive"
+            variant="plain"
             loading={cancelBusy}
             disabled={cancelBusy || isStaleRead || cancelOutcome.kind === 'reconcile-failed'}
-            onClick={handleCancel}
+            onClick={openCancelDialog}
           >
             {detail.isRoundOrder ? '주문 취소' : '공동구매 참여 취소'}
           </LoadingButton>
         </DetailAlert>
       )}
+
+      <ConfirmDialog
+        state={cancelDialog}
+        content={orderCancelConfirmContent({
+          orderNumber: detail.orderNumber,
+          isRoundOrder: detail.isRoundOrder,
+          paymentPending: isPaymentPendingOrder(detail.status),
+          totalAmount: detail.totalAmount,
+          productNames: detail.items.map((item) => item.productName),
+        })}
+        onConfirm={handleCancel}
+        onClose={() => setCancelDialog('closed')}
+      />
 
       {showCancelReconcileWarning && (
         <DetailAlert variant="warning" className="mb-5" title="취소 확인됨 · 상태 재확인 필요">

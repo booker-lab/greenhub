@@ -1125,6 +1125,24 @@ export const screens = [
     steps: [{ click: '수정' }],
     viewport: true,
   },
+  // 되돌릴 수 없는 동작의 확인창(주문 취소·배송지 삭제): 열린 창을 지금 보이는 화면으로 찍는다.
+  // 버튼은 접근성 이름으로 누른다('삭제'는 배송지마다 있어 첫째를 누른다).
+  {
+    id: 'modal-order-cancel',
+    group: 'MY',
+    title: '주문 상세 · 주문 취소 확인창',
+    path: '/mypage/orders/order-round-accepted',
+    steps: [{ press: '주문 취소' }],
+    viewport: true,
+  },
+  {
+    id: 'modal-address-delete',
+    group: 'MY',
+    title: '배송지 · 삭제 확인창',
+    path: '/mypage/addresses',
+    steps: [{ press: '삭제' }],
+    viewport: true,
+  },
   {
     id: 'notifications-empty',
     group: 'MY',
