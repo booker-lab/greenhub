@@ -24,6 +24,7 @@ import {
   buildDriverOrderDetailScope,
   buildDriverStatusConfirmContent,
   classifyDriverOrderCommandError,
+  DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE,
   DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
   type DriverOrderReadback,
   type DriverOrderReadErrorKind,
@@ -31,6 +32,7 @@ import {
   type DriverStatusReadbackNotice,
   driverDetailListHref,
   driverOrderItemCount,
+  isCustomerResponsibleHold,
   isDriverHoldEntryVisible,
   isDriverHoldResumable,
   isDriverOrderCommandAllowed,
@@ -1007,6 +1009,17 @@ function OrderDetail({ orderId }: { orderId: string }) {
           )}
 
           {isHeld && order.deliveryHold && <DeliveryHoldCard hold={order.deliveryHold} />}
+
+          {/* 고객 사유 보류 상품은 그날 가게로 돌려준다(S-05). */}
+          {isHeld && isCustomerResponsibleHold(order.deliveryHold) && (
+            <p
+              className={text}
+              style={{ fontWeight: 'var(--fw-bold)', ...keepWords }}
+              data-testid="driver-customer-hold-return"
+            >
+              {DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE}
+            </p>
+          )}
 
           {paymentPresentation && (
             <div
