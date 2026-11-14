@@ -79,12 +79,14 @@ const requireForTest = (specifier) => {
   }
   if (
     specifier === '@greenhub/ui/components/alert' ||
-    specifier === '@greenhub/ui/components/button' ||
+    specifier === '@/components/Button' ||
     specifier === '@greenhub/ui/components/checkbox' ||
     specifier === '@greenhub/ui/components/field' ||
     specifier === '@greenhub/ui/components/input' ||
     specifier === '@/components/LoadingButton' ||
-    specifier === '@greenhub/ui/components/textarea'
+    specifier === '@greenhub/ui/components/textarea' ||
+    specifier === '@greenhub/ui/lib/utils' ||
+    specifier === '@/lib/touch-target'
   ) {
     return {};
   }

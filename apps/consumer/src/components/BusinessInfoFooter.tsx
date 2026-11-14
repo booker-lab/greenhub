@@ -78,6 +78,8 @@ export default function BusinessInfoFooter() {
       aria-labelledby="business-info-title"
     >
       <p style={{ ...infoTextStyle, fontWeight: 'var(--fw-bold)', margin: 0 }}>고객센터</p>
+      {/* 전화번호 링크: 글자 크기는 그대로 두고 눌리는 줄 높이만 44px로 올린다(design-standard §4, 줄 34px + 위아래 5px).
+          늘어난 높이만큼 위아래 여백을 당겨(위 2 - 5, 아래 -5) 앞뒤 줄 위치는 그대로 둔다. */}
       <a
         href={PUBLIC_BUSINESS_INFO.phoneHref}
         style={{
@@ -86,7 +88,9 @@ export default function BusinessInfoFooter() {
           fontSize: 22,
           fontVariantNumeric: 'tabular-nums',
           fontWeight: 'var(--fw-extrabold)',
-          marginTop: 2,
+          marginBottom: -5,
+          marginTop: -3,
+          padding: '5px 0',
           textDecoration: 'none',
         }}
       >

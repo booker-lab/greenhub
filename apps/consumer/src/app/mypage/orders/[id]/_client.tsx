@@ -2,13 +2,13 @@
 
 import type { OrderStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ReactNode, use, useEffect, useId, useState } from 'react';
+import { Button, ButtonLabel, ButtonLink } from '@/components/Button';
 import OrderDetailExtras from '@/components/benchmark/OrderDetailExtras';
 import { ConfirmDialog, type ConfirmDialogState } from '@/components/ConfirmDialog';
 import { LoadingButton } from '@/components/LoadingButton';
@@ -119,7 +119,8 @@ function getTimelineSteps(order: OrderDetailView): OrderStatus[] {
 // 제목으로 이름을 붙이고(aria-labelledby), 본문은 aria-describedby로 잇는다.
 // Mantine SegmentedControl(fullWidth·size sm·withItemsBorders·theme 기본 반경 16px) 계산값과 DOM.
 // 바깥 div role=radiogroup, 항목마다 숨긴 input type=radio(name 공유, id = name-value) + label(htmlFor).
-// 바탕 gray-1·안쪽 여백 4px, 글자 15px·600·줄 높이 1.55·좌우 10px·위아래 3px, 기본 gray-7, 고른 항목 검정,
+// 바탕 gray-1·안쪽 여백 4px, 글자 15px·600·좌우 10px·한 줄 높이 44px(눌리는 영역, Mantine 값은 줄 높이 1.55·위아래 3px),
+// 기본 gray-7, 고른 항목 검정,
 // 고른 항목 아래 흰 면 + shadow-xs(모서리 16 - 4 = 12px), 항목 사이 1px gray-3 구분선(첫 항목·고른 항목 앞뒤는 없음).
 // 비활성이면 글자 gray-5·not-allowed. Mantine은 흰 면(FloatingIndicator)을 JS로 고른 항목 위치에 옮기지만,
 // 정지 상태의 위치·크기는 고른 항목(label)과 같으므로 그 항목 안의 면으로 그린다.
@@ -172,7 +173,8 @@ function SegmentedChoice<T extends string>({
               htmlFor={id}
               data-active={(selected && !disabled) || undefined}
               data-disabled={disabled || undefined}
-              className={`relative block cursor-pointer overflow-hidden rounded-[12px] px-2.5 py-[3px] text-center text-[15px] leading-[1.55] font-semibold text-ellipsis whitespace-nowrap select-none [-webkit-tap-highlight-color:transparent] peer-focus-visible:outline-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid ${
+              // 한 줄 라벨의 줄 높이를 44px로 두어 눌리는 영역을 맞춘다(design-standard §4).
+              className={`relative block cursor-pointer overflow-hidden rounded-[12px] px-2.5 py-0 text-center text-[15px] leading-11 font-semibold text-ellipsis whitespace-nowrap select-none [-webkit-tap-highlight-color:transparent] peer-focus-visible:outline-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid ${
                 disabled
                   ? 'cursor-not-allowed text-ui-gray-5'
                   : selected

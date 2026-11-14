@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -11,6 +10,7 @@ import {
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
 import { useRef, useState } from 'react';
+import { Button } from '@/components/Button';
 import { LoadingButton } from '@/components/LoadingButton';
 import type { ConfirmDialogContent, ConfirmRow } from '@/lib/confirm-dialog-content';
 

@@ -73,7 +73,7 @@ const requireForTest = (specifier) => {
     specifier === '@greenhub/ui/components/alert' ||
     specifier === '@greenhub/ui/components/badge' ||
     specifier === '@greenhub/ui/components/status-dot' ||
-    specifier === '@greenhub/ui/components/button' ||
+    specifier === '@/components/Button' ||
     specifier === 'lucide-react' ||
     specifier === '@/hooks/useSaleRounds' ||
     specifier === '@/lib/round-schedule-label'

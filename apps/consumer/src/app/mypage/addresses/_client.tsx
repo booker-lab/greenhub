@@ -2,7 +2,6 @@
 
 import type { SavedAddress } from '@greenhub/shared';
 import { AlertDescription, Alert as UiAlert } from '@greenhub/ui/components/alert';
-import { Button as UiButton } from '@greenhub/ui/components/button';
 import { CloseIcon, closeButtonClassName } from '@greenhub/ui/components/close-button';
 import {
   Dialog,
@@ -16,14 +15,17 @@ import {
 } from '@greenhub/ui/components/dialog';
 import { FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { cn } from '@greenhub/ui/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useId, useState } from 'react';
+import { Button as UiButton } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { LoadingButton } from '@/components/LoadingButton';
 import type { AddressFormData } from '@/hooks/useAddresses';
 import { useAddresses } from '@/hooks/useAddresses';
 import { addressDeleteConfirmContent } from '@/lib/confirm-dialog-content';
+import { TOUCH_HEIGHT, TOUCH_ICON } from '@/lib/touch-target';
 import { MyPageBackButton } from '../_back-button';
 import { currentMyPageLoginUrl } from '../_login';
 
@@ -35,6 +37,10 @@ const DISABLED_TEXT_STYLE = {
   color: 'var(--color-text-secondary)',
   fontSize: 'var(--font-size-sm)',
 } as const;
+
+// 창 닫기 버튼: X 그림(공용 28px 버튼의 70% = 19.6px)과 가운데 위치는 그대로 두고 눌리는 영역만 44×44px로 넓힌다.
+const DIALOG_CLOSE_TOUCH = `${TOUCH_ICON} top-2 right-[3px]`;
+const DIALOG_CLOSE_ICON_STYLE = { width: 19.6, height: 19.6 } as const;
 
 const EMPTY_FORM: AddressFormData = { label: '', address: '', addressDetail: '', zipCode: '' };
 
@@ -86,16 +92,17 @@ function AddressCard({
           </p>
         </div>
       </div>
+      {/* 흰 면·검정 글자 외곽선 버튼(연회색 외곽선 글자는 연회색 면 위 대비 3.0:1이었다, design-standard §4) */}
       <div className="mt-2.5 flex flex-row flex-wrap items-center justify-start gap-2.5">
         {!addr.isDefault && (
-          <UiButton type="button" size="xs" variant="outline-gray" onClick={onSetDefault}>
+          <UiButton type="button" size="xs" variant="plain" onClick={onSetDefault}>
             기본으로 설정
           </UiButton>
         )}
-        <UiButton type="button" size="xs" variant="outline-gray" onClick={onEdit}>
+        <UiButton type="button" size="xs" variant="plain" onClick={onEdit}>
           수정
         </UiButton>
-        {/* ② 방향(design-standard §5): 여는 버튼은 검정 글자 외곽선. 삭제는 확인창을 거친다. */}
+        {/* ② 방향(design-standard §4·§5): 카드의 버튼은 모두 검정 글자 외곽선(plain)·높이 44px. 삭제는 확인창을 거친다. */}
         <UiButton type="button" size="xs" variant="plain" onClick={onDelete}>
           삭제
         </UiButton>
@@ -165,9 +172,9 @@ function AddressFormModal({
             <DialogClose
               data-slot="dialog-close"
               aria-label="닫기"
-              className={closeButtonClassName}
+              className={cn(closeButtonClassName, DIALOG_CLOSE_TOUCH)}
             >
-              <CloseIcon />
+              <CloseIcon style={DIALOG_CLOSE_ICON_STYLE} />
             </DialogClose>
             <DialogHeader className="rounded-t-[8px]">
               <DialogTitle
@@ -250,7 +257,7 @@ function AddressField({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-[8px]"
+        className={`${TOUCH_HEIGHT} rounded-[8px]`}
       />
     </div>
   );
@@ -339,14 +346,8 @@ export default function AddressesClient() {
                   <p className={TEXT} style={SMALL_TEXT_STYLE}>
                     {error}
                   </p>
-                  {/* Mantine Button white red(흰 면·red-6 글자) */}
-                  <UiButton
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    className="bg-background text-ui-red hover:bg-background"
-                    onClick={() => refetch()}
-                  >
+                  {/* 흰 면·검정 글자 외곽선(알림 화면의 "다시 시도"와 같다. 흰 면 위 빨강 글자는 대비 3.3:1이었다) */}
+                  <UiButton type="button" size="xs" variant="plain" onClick={() => refetch()}>
                     다시 시도
                   </UiButton>
                 </div>

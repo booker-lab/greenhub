@@ -65,12 +65,17 @@ export default function QuickAddToast({
           }}
         >
           <span>{toast.message}</span>
-          {/* 실패(다른 회차·예전 판매 상품과 섞임)도 장바구니에서 비워야 다음으로 갈 수 있다 */}
+          {/* 실패(다른 회차·예전 판매 상품과 섞임)도 장바구니에서 비워야 다음으로 갈 수 있다.
+              눌리는 줄 높이는 44px이고(design-standard §4), 늘어난 만큼 위아래 여백을 당겨 알림 높이는 그대로 둔다. */}
           <Link
             href="/cart"
             style={{
+              alignItems: 'center',
               color: toast.tone === 'success' ? 'var(--color-primary-light)' : 'var(--color-bg)',
+              display: 'inline-flex',
               flexShrink: 0,
+              margin: '-11px 0',
+              minHeight: 'var(--touch-target)',
               textDecoration: toast.tone === 'success' ? 'none' : 'underline',
             }}
           >

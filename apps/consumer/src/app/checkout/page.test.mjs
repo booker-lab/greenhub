@@ -155,7 +155,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/features') return { isFeatureOn: () => false };
   if (specifier === '@/lib/round-schedule-label') return { formatRoundTime: () => null };
   if (
-    specifier === '@greenhub/ui/components/button' ||
+    specifier === '@/components/Button' ||
     specifier === 'next/navigation' ||
     specifier === 'next/script' ||
     specifier === 'next-auth/react' ||
@@ -661,7 +661,7 @@ function renderInvalidCartCheckout() {
         useSearchParams: () => new URLSearchParams('from=cart'),
       };
     }
-    if (specifier === '@greenhub/ui/components/button') return { Button: ButtonStub };
+    if (specifier === '@/components/Button') return { Button: ButtonStub };
     return requireForTest(specifier);
   };
   const renderModule = { exports: {} };
@@ -816,7 +816,7 @@ function renderRoundClosedNotice() {
       };
       return { Fragment: Symbol('Fragment'), jsx, jsxs: jsx };
     }
-    if (specifier === '@greenhub/ui/components/button') return { Button: ButtonStub };
+    if (specifier === '@/components/Button') return { Button: ButtonStub };
     return requireForTest(specifier);
   };
   const renderModule = { exports: {} };

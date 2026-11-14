@@ -2,10 +2,10 @@
 
 import type { Category, ColorOption, Product, SaleType, SalesMode } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import { Sprout } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import BlockSkeleton from '@/components/BlockSkeleton';
+import { Button } from '@/components/Button';
 import EmptyStateIcon from '@/components/EmptyStateIcon';
 import ProductCard from '@/components/ProductCard';
 import RoundTileGrid from '@/components/RoundTile';

@@ -1,11 +1,11 @@
 'use client';
 
 import type { OrderStatus } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import { CircleAlert, CircleCheck, CircleX, Clock } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/Button';
 import OrderSuccessGuide from '@/components/benchmark/OrderSuccessGuide';
 import { useCart } from '@/hooks/useCart';
 import { useOrderStatus } from '@/hooks/useOrderStatus';

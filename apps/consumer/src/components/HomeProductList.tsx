@@ -2,7 +2,6 @@
 
 import type { Product, SaleRoundItem, SalesMode } from '@greenhub/shared';
 import { getGroupBuyStatus, normalizeSalesMode } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -15,6 +14,7 @@ import {
   useState,
 } from 'react';
 import BlockSkeleton from '@/components/BlockSkeleton';
+import { Button } from '@/components/Button';
 import DeadlineSection from '@/components/DeadlineSection';
 import HomeRoundHero from '@/components/HomeRoundHero';
 import ProductCard from '@/components/ProductCard';

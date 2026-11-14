@@ -6,11 +6,11 @@ import {
   ORDER_REQUEST_NOTE_MAX_LENGTH,
 } from '@greenhub/shared';
 import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
 import { Field, FieldDescription, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { Textarea } from '@greenhub/ui/components/textarea';
+import { cn } from '@greenhub/ui/lib/utils';
 import {
   type ComponentProps,
   type CSSProperties,
@@ -19,6 +19,7 @@ import {
   useId,
   useState,
 } from 'react';
+import { Button } from '@/components/Button';
 import GiftFields, { type GiftState } from '@/components/benchmark/GiftFields';
 import PackageLabelFields, {
   type PackageLabelState,
@@ -29,6 +30,7 @@ import type { PaymentMethod } from '@/hooks/usePayment';
 import type { PaymentFailureNotice } from '@/lib/payment-failure-message';
 import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';
 import { roundPayBlockers } from '@/lib/payment-readiness';
+import { TOUCH_CHECKBOX, TOUCH_HEIGHT } from '@/lib/touch-target';
 
 const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
@@ -161,6 +163,7 @@ function TextInput({
   error,
   required,
   style,
+  className,
   ...props
 }: Omit<ComponentProps<typeof Input>, 'size'> & {
   label?: ReactNode;
@@ -179,12 +182,14 @@ function TextInput({
       required={required}
       style={style}
     >
+      {/* 입력칸 높이 44px(design-standard §4). 공용 Input 기본 36px는 그대로다. */}
       <Input
         id={id}
         required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         {...props}
+        className={cn(TOUCH_HEIGHT, className)}
       />
     </FieldFrame>
   );
@@ -468,7 +473,8 @@ export default function CheckoutForm({
                 : undefined
             }
           />
-          <Button variant="outline-gray" onClick={openAddressSearch}>
+          {/* 검정 글자 외곽선(plain). 회색 외곽선 글자는 대비 3.3:1이었다(design-standard §4). */}
+          <Button variant="plain" onClick={openAddressSearch}>
             주소 검색
           </Button>
         </div>
@@ -599,6 +605,7 @@ export default function CheckoutForm({
             </p>
             <Checkbox
               label="주문 상품·수량·회차 가격을 확인했어요(필수)"
+              className={TOUCH_CHECKBOX}
               checked={roundDetailsConfirmed}
               onCheckedChange={(checked) => setRoundDetailsConfirmed(checked)}
             />

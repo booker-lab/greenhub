@@ -2,13 +2,14 @@
 
 import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button } from '@greenhub/ui/components/button';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { Button } from '@/components/Button';
+import { LoadingButton } from '@/components/LoadingButton';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { TOUCH_ICON } from '@/lib/touch-target';
 import { currentMyPageLoginUrl } from '../../_login';
 
 const API_URL = getApiBaseUrl();
@@ -178,7 +179,7 @@ function SettingsHeader({ onBack }: { onBack: () => void }) {
         type="button"
         aria-label="뒤로 가기"
         variant="ghost"
-        className="px-0 hover:bg-transparent"
+        className={`${TOUCH_ICON} justify-start px-0 hover:bg-transparent`}
         style={{ color: 'var(--color-text)' }}
         onClick={onBack}
       >

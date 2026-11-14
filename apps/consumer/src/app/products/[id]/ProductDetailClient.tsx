@@ -2,10 +2,10 @@
 
 import type { Product, SaleRoundItem, SalesMode, Variety } from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
-import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { notFound, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Button, ButtonLink } from '@/components/Button';
 import DetailExtras from '@/components/benchmark/DetailExtras';
 import PanelExtras from '@/components/benchmark/PanelExtras';
 import ProductTopBar from '@/components/ProductTopBar';

@@ -1,14 +1,15 @@
 'use client';
 
 import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useState } from 'react';
+import { Button } from '@/components/Button';
+import { LoadingButton } from '@/components/LoadingButton';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { TOUCH_CHECKBOX, TOUCH_ICON } from '@/lib/touch-target';
 import {
   requestWithdrawal,
   WITHDRAW_ERASED_ITEMS,
@@ -68,7 +69,7 @@ export default function WithdrawClient() {
         <Button
           type="button"
           variant="ghost"
-          className="ps-0 hover:bg-transparent"
+          className={`${TOUCH_ICON} justify-start px-0 hover:bg-transparent`}
           style={{ color: 'var(--color-text)' }}
           onClick={() => router.back()}
           aria-label="뒤로 가기"
@@ -107,6 +108,7 @@ export default function WithdrawClient() {
           checked={confirmed}
           onCheckedChange={setConfirmed}
           label="위 내용을 확인했고 탈퇴합니다."
+          className={TOUCH_CHECKBOX}
           data-testid="withdraw-confirm"
         />
 
