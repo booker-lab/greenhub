@@ -68,6 +68,19 @@ const compiled = ts.transpileModule(testableSource, {
   fileName: 'page.tsx',
 }).outputText;
 
+const checkoutAddressSource = await readFile(
+  new URL('../../lib/checkout-address.ts', import.meta.url),
+  'utf8',
+);
+const checkoutAddressModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(checkoutAddressSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(checkoutAddressModule, checkoutAddressModule.exports);
+
 const pageModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -86,6 +99,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/hooks/useSaleRounds') return { useSaleRounds: () => ({}) };
   if (specifier === '@/lib/acquisition') return { getAcquisitionSnapshot: () => null };
   if (specifier === '@/lib/cartValidation') return { getCartValidationError: () => null };
+  if (specifier === '@/lib/checkout-address') return checkoutAddressModule.exports;
   if (specifier === '@/lib/checkout-round-closed') return roundClosedModule.exports;
   if (specifier === '@/lib/checkout-hold-limit') {
     return {

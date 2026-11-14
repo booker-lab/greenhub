@@ -26,6 +26,16 @@ import PackageLabelFields, {
 import { LoadingButton } from '@/components/LoadingButton';
 import { type CartItem, isRoundCartItem } from '@/hooks/useCart';
 import type { PaymentMethod } from '@/hooks/usePayment';
+import {
+  ADDRESS_MAX_LENGTH,
+  ADDRESS_SEARCH_UNAVAILABLE_MESSAGE,
+  hasDeliveryAddress,
+  isIcheonAddressPrefix,
+  MANUAL_ADDRESS_PLACEHOLDER,
+  normalizeManualAddress,
+  normalizeManualZipCode,
+  readPostcodeConstructor,
+} from '@/lib/checkout-address';
 import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';
 import { roundPayBlockers } from '@/lib/payment-readiness';
 
@@ -220,6 +230,9 @@ export default function CheckoutForm({
 }: CheckoutFormProps) {
   const [roundDetailsConfirmed, setRoundDetailsConfirmed] = useState(false);
   const [deliveryPhoneTouched, setDeliveryPhoneTouched] = useState(false);
+  // 주소 직접 입력: 우편번호 검색을 쓸 수 없거나 고객이 고르면 주소·우편번호 칸을 직접 적게 연다.
+  const [manualAddress, setManualAddress] = useState(false);
+  const [addressSearchNotice, setAddressSearchNotice] = useState<string | null>(null);
   const isRoundCheckout = items.length > 0 && items.every(isRoundCartItem);
   // 선물하기(gift)를 켜면 배송 연락처(받는 분 휴대폰)를 선물 칸의 "받는 분" 묶음으로 옮긴다.
   const giftOn = isRoundCheckout && Boolean(benchmark?.gift?.value.enabled);
@@ -239,7 +252,7 @@ export default function CheckoutForm({
   const payBlockers =
     !closedNotice && isRoundCheckout && roundPayReadiness && !effectiveCanPay && !isLoading
       ? roundPayBlockers({
-          hasAddress: Boolean(address.address && address.zipCode),
+          hasAddress: hasDeliveryAddress(address),
           isIcheonAddress,
           phoneValid: roundPayReadiness.phoneValid,
           giftReady: roundPayReadiness.giftReady,
@@ -253,17 +266,32 @@ export default function CheckoutForm({
     if (confirmationKey) setRoundDetailsConfirmed(false);
   }, [confirmationKey]);
 
+  function startManualAddress(notice: string | null) {
+    setManualAddress(true);
+    setAddressSearchNotice(notice);
+  }
+
   function openAddressSearch() {
-    new window.daum.Postcode({
-      oncomplete(data) {
-        onAddressChange({
-          ...address,
-          address: data.address,
-          zipCode: data.zonecode,
-          addressDetail: '',
-        });
-      },
-    }).open();
+    const Postcode = readPostcodeConstructor(window);
+    if (!Postcode) {
+      startManualAddress(ADDRESS_SEARCH_UNAVAILABLE_MESSAGE);
+      return;
+    }
+    try {
+      new Postcode({
+        oncomplete(data) {
+          setAddressSearchNotice(null);
+          onAddressChange({
+            ...address,
+            address: data.address,
+            zipCode: data.zonecode,
+            addressDetail: '',
+          });
+        },
+      }).open();
+    } catch {
+      startManualAddress(ADDRESS_SEARCH_UNAVAILABLE_MESSAGE);
+    }
   }
 
   const buttonLabel = isLoading ? '처리 중...' : paymentButtonLabel(paymentMethod);
@@ -452,11 +480,21 @@ export default function CheckoutForm({
           <TextInput
             style={{ flex: 1 }}
             label={isRoundCheckout ? '이천시 배송 가능 주소' : undefined}
-            placeholder="주소 검색 후 자동 입력 *"
+            placeholder={manualAddress ? MANUAL_ADDRESS_PLACEHOLDER : '주소 검색 후 자동 입력 *'}
             value={address.address}
-            readOnly
+            readOnly={!manualAddress}
+            maxLength={manualAddress ? ADDRESS_MAX_LENGTH : undefined}
+            onChange={
+              manualAddress
+                ? (e) =>
+                    onAddressChange({ ...address, address: normalizeManualAddress(e.target.value) })
+                : undefined
+            }
             error={
-              isRoundCheckout && address.address && !isIcheonAddress
+              isRoundCheckout &&
+              address.address &&
+              !isIcheonAddress &&
+              !(manualAddress && isIcheonAddressPrefix(address.address))
                 ? '경기도 이천시 주소만 주문할 수 있어요.'
                 : undefined
             }
@@ -465,12 +503,38 @@ export default function CheckoutForm({
             주소 검색
           </Button>
         </div>
+        {addressSearchNotice && (
+          <p role="status" className="m-0 text-sm" style={{ color: 'var(--color-danger)' }}>
+            {addressSearchNotice}
+          </p>
+        )}
+        {!manualAddress && (
+          <button
+            type="button"
+            className="m-0 self-start border-0 bg-transparent p-0 text-sm underline"
+            style={{ color: 'var(--color-text-secondary)' }}
+            onClick={() => startManualAddress(null)}
+          >
+            주소 검색이 안 되나요? 직접 입력하기
+          </button>
+        )}
         <TextInput
           placeholder="상세 주소"
           value={address.addressDetail}
           onChange={(e) => onAddressChange({ ...address, addressDetail: e.target.value })}
         />
-        <TextInput placeholder="우편번호 (자동 입력)" value={address.zipCode} readOnly />
+        <TextInput
+          placeholder={manualAddress ? '우편번호 (모르면 비워 두세요)' : '우편번호 (자동 입력)'}
+          value={address.zipCode}
+          readOnly={!manualAddress}
+          inputMode={manualAddress ? 'numeric' : undefined}
+          onChange={
+            manualAddress
+              ? (e) =>
+                  onAddressChange({ ...address, zipCode: normalizeManualZipCode(e.target.value) })
+              : undefined
+          }
+        />
         {!giftOn && (
           <TextInput
             label={isRoundCheckout ? '배송 연락처 (필수)' : '연락처'}
