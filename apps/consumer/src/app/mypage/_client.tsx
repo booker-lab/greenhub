@@ -12,6 +12,7 @@ import A2HSButton from '@/components/A2HSButton';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { useOrders } from '@/hooks/useOrders';
 import { isFeatureOn } from '@/lib/features';
+import { orderCardHeadline, orderCardOrderedLabel } from '@/lib/order-card-line';
 import { orderListPendingPaymentNotice } from '@/lib/order-pending-payment';
 import { ORDER_STATUS_LABELS as STATUS_LABELS } from '@/lib/order-status';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
@@ -40,12 +41,6 @@ const sectionTitleStyle = {
   fontSize: 'var(--font-size-lg)',
   fontWeight: 'var(--fw-extrabold)',
 } as const;
-
-function formatDate(iso: string) {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return '';
-  return `${d.getMonth() + 1}월 ${d.getDate()}일`;
-}
 
 interface OrderListSummary {
   representativeName: string;
@@ -125,6 +120,9 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
   const summary = readOrderListSummary(order);
   // 결제 확인 중 주문은 결제를 끝내지 않은 시도일 수 있어 실제 접수된 주문과 구분되게 설명 한 줄을 붙인다.
   const pendingNotice = orderListPendingPaymentNotice(order.status);
+  // 굵은 첫 줄은 "언제 오는지"(도착일), 오른쪽 위는 "n월 n일 주문"이다(design-standard §5, lib/order-card-line.ts).
+  const headline = orderCardHeadline(order);
+  const orderedLabel = orderCardOrderedLabel(order.createdAt);
 
   return (
     <button
@@ -144,12 +142,14 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
         <StatusDot tone={tone} size={13} className="font-bold">
           {label}
         </StatusDot>
-        <p
-          className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-        >
-          {formatDate(order.createdAt)}
-        </p>
+        {orderedLabel && (
+          <p
+            className={TEXT}
+            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+          >
+            {orderedLabel}
+          </p>
+        )}
       </div>
       <div className="flex flex-row flex-nowrap items-start justify-start gap-3">
         <div
@@ -173,21 +173,18 @@ function OrderCard({ order, onClick }: { order: Order; onClick: () => void }) {
           />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p
-            className={`${TEXT} mb-1`}
-            style={{
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--fw-bold)',
-              color: 'var(--color-text)',
-            }}
-          >
-            {order.saleType === 'group' ? '[공동구매] ' : ''}
-            {order.deliveryMethod === 'hub'
-              ? '거점 픽업'
-              : order.deliveryMethod === 'parcel'
-                ? '택배'
-                : '직배송'}
-          </p>
+          {headline && (
+            <p
+              className={`${TEXT} mb-1`}
+              style={{
+                fontSize: 'var(--font-size-sm)',
+                fontWeight: 'var(--fw-bold)',
+                color: 'var(--color-text)',
+              }}
+            >
+              {headline}
+            </p>
+          )}
           {summary && (
             <p
               className={`${TEXT} mb-1`}

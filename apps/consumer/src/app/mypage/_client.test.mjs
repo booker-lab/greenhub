@@ -65,6 +65,10 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/order-pending-payment') {
     return { orderListPendingPaymentNotice: () => null };
   }
+  // 주문 카드 첫 줄·주문한 날 라벨(lib/order-card-line.ts, 자체 테스트가 따로 있다).
+  if (specifier === '@/lib/order-card-line') {
+    return { orderCardHeadline: () => null, orderCardOrderedLabel: () => null };
+  }
   // 비로그인 복귀 주소 함수(mypage/_login.ts, 자체 테스트가 따로 있다).
   if (specifier === './_login') return { currentMyPageLoginUrl: () => '/login' };
   throw new Error(`예상하지 못한 MY 주문 목록 모듈 요청: ${specifier}`);
@@ -249,4 +253,19 @@ test('결제 확인 중 주문 카드는 공용 판단 함수로 자동 취소 �
   // 목록에서 숨기지 않는다: 카드 목록은 주문 상태로 거르지 않는다.
   assert.match(source, /\{orders\.map\(\(order\) => \(/);
   assert.doesNotMatch(source, /orders\.filter\(/);
+});
+
+test('주문 카드 첫 줄과 오른쪽 위 날짜는 공용 판단 함수가 고르고, 값이 없으면 줄을 그리지 않는다', () => {
+  assert.match(
+    source,
+    /import \{ orderCardHeadline, orderCardOrderedLabel \} from '@\/lib\/order-card-line'/,
+  );
+  assert.match(source, /const headline = orderCardHeadline\(order\)/);
+  assert.match(source, /const orderedLabel = orderCardOrderedLabel\(order\.createdAt\)/);
+  // 취소 주문(첫 줄 숨김)·읽을 수 없는 주문 날짜에서 빈 줄을 남기지 않는다.
+  assert.match(source, /\{headline && \(\s*<p[\s\S]*?\{headline\}\s*<\/p>\s*\)\}/);
+  assert.match(source, /\{orderedLabel && \(\s*<p[\s\S]*?\{orderedLabel\}\s*<\/p>\s*\)\}/);
+  // 라벨 없는 날짜와 화면 안 수령 방식 분기를 다시 두지 않는다.
+  assert.doesNotMatch(source, /formatDate\(/);
+  assert.doesNotMatch(source, /'직배송'|'택배'|'거점 픽업'/);
 });
