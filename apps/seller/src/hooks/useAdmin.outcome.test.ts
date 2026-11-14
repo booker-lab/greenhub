@@ -228,7 +228,7 @@ describe('9. user/driver command consumers preserve reason', () => {
   it('drivers _client는 approve/suspend reason을 표시한다', () => {
     expect(driversClient).toContain('describeAdminCommandOutcome(outcome,');
     expect(driversClient).toContain('notify(');
-    expect(driversClient).toContain('approve(pending.userId)');
+    expect(driversClient).toContain('approve(pending.userId, pending.expectedRevision ?? 0)');
     expect(driversClient).toMatch(/toggleSuspend\(\s*pending\.userId,/);
   });
 

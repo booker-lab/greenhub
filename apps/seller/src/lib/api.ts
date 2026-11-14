@@ -5,6 +5,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
+    // 서버가 실패 응답에 붙인 기계 판독용 code(예: DRIVER_APPLICATION_CHANGED). 없으면 undefined.
+    public code?: string,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -62,8 +64,15 @@ export async function apiJson<T = unknown>(
 ): Promise<T> {
   const res = await apiFetch(path, token, options);
   if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { message?: unknown } | null;
-    throw new ApiError(res.status, apiErrorMessage(res.status, body?.message, options.method));
+    const body = (await res.json().catch(() => ({}))) as {
+      message?: unknown;
+      code?: unknown;
+    } | null;
+    throw new ApiError(
+      res.status,
+      apiErrorMessage(res.status, body?.message, options.method),
+      typeof body?.code === 'string' ? body.code : undefined,
+    );
   }
   return (await res.json().catch(() => ({}))) as T;
 }

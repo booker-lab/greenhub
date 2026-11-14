@@ -211,6 +211,49 @@ describe('Admin PendingDrivers 승인 대기 상자', () => {
     expect(onApprove).toHaveBeenCalledWith('p1');
   });
 
+  it('가입 신청이 있으면 실명·휴대폰·차량 종류·요일·지역·신청·수정 시각을 보인다', () => {
+    const tree = PendingDrivers({
+      ...pendingProps,
+      drivers: [
+        driver('p1', {
+          driverApplication: {
+            realName: '김신청',
+            phone: '01012345678',
+            vehicleType: 'van',
+            availableDays: ['sat', 'mon'],
+            availableArea: '이천시 전역',
+            consentVersion: 'driver-application-2026-11-13',
+            consentedAt: '2026-11-13T03:00:00.000Z',
+            status: 'submitted',
+            revision: 2,
+            submittedAt: '2026-11-13T01:00:00.000Z',
+            updatedAt: '2026-11-13T03:00:00.000Z',
+          },
+        }),
+      ],
+    });
+    const texts = textsOf(tree).join('');
+    expect(texts).toContain('실명 김신청');
+    expect(texts).toContain('010-1234-5678');
+    expect(texts).toContain('승합');
+    expect(texts).toContain(
+      '요일 월·토 · 지역 이천시 전역 · 신청 2026-11-13 10:00 · 수정 2026-11-13 12:00',
+    );
+    expect(texts).not.toContain('신청 정보 없음');
+  });
+
+  it('신청 정보 없이 만들어진 기존 대기 계정은 "신청 정보 없음"이라고 쓰고 승인은 그대로 둔다', () => {
+    const onApprove = vi.fn();
+    const tree = PendingDrivers({
+      ...pendingProps,
+      drivers: [driver('p1', { driverApplication: null })],
+      onApprove,
+    });
+    expect(textsOf(tree)).toContain('신청 정보 없음');
+    handlersFor(tree, '승인…')[0]();
+    expect(onApprove).toHaveBeenCalledWith('p1');
+  });
+
   it('처리 중인 기사는 승인 버튼 대신 처리 중 표시를 한다', () => {
     const tree = PendingDrivers({ ...pendingProps, processingId: 'p1' });
     const texts = textsOf(tree);

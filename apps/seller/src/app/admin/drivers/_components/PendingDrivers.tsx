@@ -3,8 +3,35 @@
 import { Button } from '@greenhub/ui/components/button';
 import type { AdminDriver } from '@/hooks/useAdmin';
 import { ADMIN_SUB, formatAdminDate, parseAdminTime } from '../../_components/adminList';
-import { waitingDays } from '../_lib';
+import {
+  DRIVER_APPLICATION_MISSING_LABEL,
+  type DriverApplicationSummary,
+  describeDriverApplication,
+  waitingDays,
+} from '../_lib';
 import { DriverPhone, driverName } from './DriverList';
+
+// 가입 신청 요약 두 줄: 실명 · 휴대폰 · 차량 종류 / 요일 · 지역 · 신청(수정) 시각.
+function ApplicationLines({ summary }: { summary: DriverApplicationSummary }) {
+  const second = [
+    summary.days ? `요일 ${summary.days}` : null,
+    summary.area ? `지역 ${summary.area}` : null,
+    summary.submittedAt ? `신청 ${summary.submittedAt}` : null,
+    summary.updatedAt ? `수정 ${summary.updatedAt}` : null,
+  ].filter((part): part is string => part !== null);
+  return (
+    <>
+      <p className={ADMIN_SUB}>
+        <span className="font-semibold text-foreground">실명 {summary.realName}</span>
+        {' · '}
+        <DriverPhone phone={summary.phone} />
+        {' · '}
+        <span className="whitespace-nowrap">{summary.vehicle}</span>
+      </p>
+      {second.length > 0 && <p className={ADMIN_SUB}>{second.join(' · ')}</p>}
+    </>
+  );
+}
 
 interface PendingDriversProps {
   drivers: AdminDriver[];
@@ -17,8 +44,9 @@ interface PendingDriversProps {
 }
 
 // ② 방향(design-direction.md §5 어드민 "기사"): 승인 대기는 표 위 1px 테두리 요약 상자로 뺀다.
-// 이름 · 연락처 · 신청일과 대기 일수, 초록 "승인…" 하나. 거절 API가 없어 "거절…"은 두지 않고(2026-11-01),
-// 대기 중인 사람에게 "정지"를 보이지 않는다. 배송 가능 지역은 데이터가 없어 쓰지 않는다.
+// 이름 · 연락처 · 신청일과 대기 일수, 초록 "승인…" 하나. 거절 기능은 두지 않고(2026-11-01, 2026-11-13 다시 결정),
+// 대기 중인 사람에게 "정지"를 보이지 않는다. 기사 앱 `/apply`에서 낸 가입 신청이 있으면 실명·휴대폰·차량 종류·
+// 요일·지역·신청(수정) 시각을 보이고, 신청 정보 없이 만들어진 기존 대기 계정은 "신청 정보 없음"이라고 쓴다.
 export function PendingDrivers({
   drivers,
   count,
@@ -45,6 +73,7 @@ export function PendingDrivers({
           const applied = formatAdminDate(appliedAt);
           const days = waitingDays(appliedAt);
           const processing = processingId === driver.id;
+          const application = describeDriverApplication(driver.driverApplication);
           return (
             <li
               key={driver.id}
@@ -69,6 +98,11 @@ export function PendingDrivers({
                     </>
                   )}
                 </p>
+                {application ? (
+                  <ApplicationLines summary={application} />
+                ) : (
+                  <p className={ADMIN_SUB}>{DRIVER_APPLICATION_MISSING_LABEL}</p>
+                )}
               </div>
               <Button
                 onClick={() => onApprove(driver.id)}

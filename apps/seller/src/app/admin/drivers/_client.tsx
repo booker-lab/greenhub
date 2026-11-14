@@ -8,6 +8,7 @@ import {
   type AdminCommandOutcome,
   describeActiveDeliveryWarning,
   describeAdminCommandOutcome,
+  driverApplicationRevision,
   useAdminDrivers,
 } from '@/hooks/useAdmin';
 import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
@@ -58,7 +59,8 @@ export default function DriversClient() {
     try {
       let outcome: AdminCommandOutcome;
       if (pending.action === 'approve') {
-        outcome = await approve(pending.userId);
+        // 본 가입 신청 회차를 보낸다. 그 사이 바뀌었으면 "신청 내용이 바뀌었어요" 안내 뒤 목록을 다시 읽는다.
+        outcome = await approve(pending.userId, pending.expectedRevision ?? 0);
       } else {
         const result = await toggleSuspend(
           pending.userId,
@@ -94,6 +96,8 @@ export default function DriversClient() {
       phone: driver?.phone ?? null,
       createdAt: driver?.createdAt,
       action,
+      application: driver?.driverApplication ?? null,
+      expectedRevision: driver ? driverApplicationRevision(driver) : 0,
     });
   };
 
