@@ -353,20 +353,12 @@ export default function AddressesClient() {
         </div>
       )}
 
+      {/* 조회 실패 안내와 "다시 시도"는 위 빨강 상자 한 번만 보인다(목록 자리에 같은 안내를 다시 쓰지 않는다). */}
       {loading ? (
         <p className={`${TEXT} py-10 text-center`} style={DISABLED_TEXT_STYLE}>
           불러오는 중...
         </p>
-      ) : error && addresses.length === 0 ? (
-        <div className="flex flex-col items-center justify-start gap-3 py-12">
-          <p className={`${TEXT} text-center`} style={DISABLED_TEXT_STYLE}>
-            배송지 정보를 불러오지 못했습니다.
-          </p>
-          <UiButton type="button" onClick={() => refetch()}>
-            다시 조회
-          </UiButton>
-        </div>
-      ) : addresses.length === 0 ? (
+      ) : error && addresses.length === 0 ? null : addresses.length === 0 ? (
         <p className={`${TEXT} py-12 text-center`} style={DISABLED_TEXT_STYLE}>
           등록된 배송지가 없습니다.
         </p>
