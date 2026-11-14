@@ -1273,7 +1273,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {isCancelled && (
-        <DetailAlert variant="destructive" className="mb-5 text-center">
+        // 취소는 문제 상태가 아니라 끝난 상태라 빨강 대신 중립 면이다(design-standard.md §2·§5).
+        <DetailAlert variant="secondary" className="mb-5">
           <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-bold)' }}>
             주문이 취소됐어요
           </p>

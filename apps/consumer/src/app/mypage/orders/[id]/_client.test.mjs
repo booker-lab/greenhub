@@ -1405,3 +1405,16 @@ test('결제를 마치지 않은 주문의 취소 안내는 환불을 약속하�
   assert.match(source, /isPaymentPendingOrder\(detail\.status\)/);
   assert.match(source, /결제를 마치지 않은 주문이에요\. 필요 없으면 지금 취소할 수 있어요\./);
 });
+
+test('취소된 주문 안내는 빨강(문제 상태)이 아니라 중립 면이고 가운데 정렬하지 않는다', () => {
+  const start = source.indexOf('{isCancelled && (');
+  assert.notEqual(start, -1);
+  const cancelledNotice = source.slice(start, source.indexOf('</DetailAlert>', start));
+  assert.match(cancelledNotice, /<DetailAlert variant="secondary" className="mb-5">/);
+  assert.doesNotMatch(cancelledNotice, /destructive|text-center/);
+  // 문구는 E2E가 그대로 기다린다.
+  assert.match(cancelledNotice, /주문이 취소됐어요/);
+  assert.match(cancelledNotice, /사유: \{cancelReasonText\}/);
+  // 안내 상자의 역할(alert)은 DetailAlert가 그대로 준다.
+  assert.match(source, /function DetailAlert\([\s\S]*?role="alert"/);
+});
