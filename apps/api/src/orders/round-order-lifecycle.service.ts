@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
+import { redeliveryPaymentRequestedAtOf } from '@greenhub/shared';
 import {
   assertCancellationClaim,
   timestampMillis,
@@ -22,6 +23,7 @@ import {
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
+import { detachDeliveryPhotosOnHold, hasCurrentCycleDeliveryPhoto } from './delivery-photo-cycle';
 import { deliveryTransitionViolation } from './orders.helpers';
 import {
   isAllowedRedeliveryFee,
@@ -158,10 +160,12 @@ export class RoundOrderLifecycleService {
         }
         throw new ConflictException(message);
       }
+      // 이번 배송 회차에 연결된 사진만 완료 근거로 본다. 보류 전 사진은 보류 전이가 떼고,
+      // 연결 시점을 알 수 없는 예전 연결은 보류 이력이 있으면 인정하지 않는다(delivery-photo-cycle).
       if (
         input.dto.status === 'DELIVERED' &&
         order['deliveryMethod'] === 'direct' &&
-        (!Array.isArray(order['deliveryPhotoIds']) || order['deliveryPhotoIds'].length === 0)
+        !hasCurrentCycleDeliveryPhoto(order)
       ) {
         if (input.requesterRole === 'driver') {
           throwDriverOrderStateConflict('배송 사진 연결 후에만 배송을 완료할 수 있습니다.');
@@ -639,9 +643,14 @@ export class RoundOrderLifecycleService {
         nextContactAt: hold['nextContactAt'] ?? null,
         nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
         resolvedAt: null,
+        // 보류한 때의 주문 상태(PREPARING·DELIVERING). 기사가 상품을 들고 있는지(배송 중에 보류) 알려 준다.
+        // 요청 값이 아니라 서버가 읽은 현재 상태로 적는다.
+        heldFromStatus: order['status'],
       };
       // 보류 회차 번호. 보류·재개 알림의 멱등 키와 반복 상한(order-transition-notice)에 쓴다.
       update['deliveryHoldCount'] = readDeliveryHoldCount(order) + 1;
+      // 완료되지 않은 채 연결된 사진은 이 보류로 떼어 다음 배송 회차가 사진 없이 시작한다.
+      Object.assign(update, detachDeliveryPhotosOnHold(order, dto.status, this.toIso(now)));
     } else if (
       (dto.status === 'DELIVERING' && isCurrentRedeliveryPaymentRequired(order)) ||
       (order['status'] === 'DELIVERY_HELD' && !isCurrentRedeliveryPaymentRequired(order))
@@ -649,6 +658,22 @@ export class RoundOrderLifecycleService {
       update['deliveryHold'] = {
         ...(order['deliveryHold'] as Record<string, unknown>),
         resolvedAt: this.toIso(now),
+      };
+    } else if (
+      order['status'] === 'DELIVERY_HELD' &&
+      dto.status === 'PREPARING' &&
+      isCurrentRedeliveryPaymentRequired(order)
+    ) {
+      // 유료 고객 책임 보류를 '재배송 준비로 돌리기'하면 커밋 뒤 손님에게 재배송비 결제 요청 알림톡
+      // (ORDER_REDELIVERY_PAYMENT_REQUESTED)이 간다. 고객 사유 종결 기한은 이 요청 시각부터 세므로(S-15)
+      // 같은 트랜잭션에서 보류 기록에 남긴다. 이 보류에 이미 요청 시각이 있으면 처음 값을 그대로 둔다
+      // (다시 요청해도 기한을 늦추지 않는다). 새 보류는 deliveryHold를 통째로 바꾸므로 시각도 새로 시작한다.
+      // 손님이 요청 전에 미리 결제했거나 알림 상한을 넘어 알림톡이 나가지 않아도 적는다. 결제한 보류는
+      // 종결 판정이 REDELIVERY_FEE_PAID로 먼저 막는다.
+      const hold = order['deliveryHold'] as Record<string, unknown>;
+      update['deliveryHold'] = {
+        ...hold,
+        paymentRequestedAt: redeliveryPaymentRequestedAtOf(hold) ?? this.toIso(now),
       };
     }
     return update;

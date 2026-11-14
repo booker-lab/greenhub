@@ -1,5 +1,13 @@
-import type { AdminDriver, DriverStatus } from '@/hooks/useAdmin';
-import { formatAdminDate } from '../_components/adminFormat';
+import {
+  DRIVER_AVAILABLE_DAY_LABELS,
+  DRIVER_VEHICLE_TYPE_LABELS,
+  formatDriverApplicationPhone,
+  isDriverAvailableDay,
+  isDriverVehicleType,
+  sortDriverAvailableDays,
+} from '@greenhub/shared';
+import type { AdminDriver, AdminDriverApplication, DriverStatus } from '@/hooks/useAdmin';
+import { formatAdminDate, formatAdminDateTime } from '../_components/adminFormat';
 
 export type DriverAction = 'approve' | 'suspend' | 'unsuspend';
 
@@ -11,6 +19,48 @@ export interface PendingAction {
   phone?: string | null;
   createdAt?: unknown;
   action: DriverAction;
+  /** 승인할 때 본 가입 신청(신청 정보가 없으면 null). 보내지 않으면 확인창에 신청 줄을 쓰지 않는다. */
+  application?: AdminDriverApplication | null;
+  /** 승인할 때 본 가입 신청 회차(신청 정보가 없으면 0). 서버가 그 사이 바뀌었으면 409로 거절한다. */
+  expectedRevision?: number;
+}
+
+export const DRIVER_APPLICATION_MISSING_LABEL = '신청 정보 없음';
+
+/** 승인 대기 상자·확인창에 보일 가입 신청 요약. 신청이 없으면 null. */
+export interface DriverApplicationSummary {
+  realName: string;
+  phone: string;
+  vehicle: string;
+  /** "월·수·토"처럼 월~일 순서. 고르지 않았으면 null. */
+  days: string | null;
+  area: string | null;
+  /** 처음 신청 시각(한국 시간 "2026-11-13 21:14"). */
+  submittedAt: string | null;
+  /** 고친 적이 있으면 마지막 수정 시각, 아니면 null. */
+  updatedAt: string | null;
+}
+
+export function describeDriverApplication(
+  application: AdminDriverApplication | null | undefined,
+): DriverApplicationSummary | null {
+  if (!application || application.status !== 'submitted') return null;
+  const days = sortDriverAvailableDays(
+    Array.isArray(application.availableDays) ? application.availableDays : [],
+  ).filter(isDriverAvailableDay);
+  const submittedAt = formatAdminDateTime(application.submittedAt);
+  const updatedAt = formatAdminDateTime(application.updatedAt);
+  return {
+    realName: application.realName?.trim() || '이름 없음',
+    phone: formatDriverApplicationPhone(application.phone ?? ''),
+    vehicle: isDriverVehicleType(application.vehicleType)
+      ? DRIVER_VEHICLE_TYPE_LABELS[application.vehicleType]
+      : '알 수 없음',
+    days: days.length > 0 ? days.map((day) => DRIVER_AVAILABLE_DAY_LABELS[day]).join('·') : null,
+    area: application.availableArea?.trim() || null,
+    submittedAt,
+    updatedAt: application.revision > 1 && updatedAt !== submittedAt ? updatedAt : null,
+  };
 }
 
 // ② 방향(design-direction.md §5 어드민 "기사"): 승인 대기는 표 위 요약 상자로 빼고, 표는 전체 · 활동 중 · 정지 탭이다.
@@ -69,10 +119,10 @@ export const DRIVER_ACTION_LABEL: Record<DriverAction, string> = {
 
 /**
  * 확인창 내용(design-direction.md §5 어드민 "위험 동작 확인창"): 제목 = 동작 + 대상, 한 줄 결과, 대상 정보(이메일·연락처·신청일).
- * 배송 가능 지역은 데이터가 없어 쓰지 않는다. 이름이 비면 자리표시자.
+ * 승인은 가입 신청(실명·휴대폰·차량 종류·요일·지역)도 보이고, 신청이 없으면 "신청 정보 없음". 이름이 비면 자리표시자.
  */
 export function describeDriverConfirm(
-  pending: Pick<PendingAction, 'name' | 'email' | 'phone' | 'createdAt' | 'action'>,
+  pending: Pick<PendingAction, 'name' | 'email' | 'phone' | 'createdAt' | 'action' | 'application'>,
 ): {
   title: string;
   lead: string;
@@ -89,6 +139,21 @@ export function describeDriverConfirm(
   const date = formatAdminDate(pending.createdAt);
   if (date) facts.push({ label: pending.action === 'approve' ? '신청일' : '가입일', value: date });
   if (pending.action === 'approve') {
+    // 가입 신청이 있으면 신청한 실명·휴대폰·차량·요일·지역을 확인창에서 한 번 더 보인다.
+    if (pending.application !== undefined) {
+      const summary = describeDriverApplication(pending.application);
+      if (summary) {
+        facts.push(
+          { label: '실명', value: summary.realName },
+          { label: '휴대폰', value: summary.phone },
+          { label: '차량 종류', value: summary.vehicle },
+        );
+        if (summary.days) facts.push({ label: '활동 요일', value: summary.days });
+        if (summary.area) facts.push({ label: '활동 지역', value: summary.area });
+      } else {
+        facts.push({ label: '가입 신청', value: DRIVER_APPLICATION_MISSING_LABEL });
+      }
+    }
     return {
       title: `${name} 님을 기사로 승인`,
       lead: '승인하면 기사 앱에서 배송 목록을 받고, 배송 중인 주문의 받는 분 전화번호를 볼 수 있습니다.',

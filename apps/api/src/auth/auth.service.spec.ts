@@ -1,5 +1,6 @@
 import type { ConfigService } from '@nestjs/config';
 import type { JwtService } from '@nestjs/jwt';
+import { DRIVER_APPLICATION_TICKET_AUDIENCE } from '../driver-applications/application-ticket';
 import * as admin from 'firebase-admin';
 import * as bcrypt from 'bcrypt';
 import type { AuditService } from '../common/audit/audit.service';
@@ -28,6 +29,23 @@ jest.mock('bcrypt', () => {
 
 // 테스트 refresh token이 속한 세션 id.
 const SID = 'sid-1';
+
+// 승인 전 기사 카카오 로그인은 access/refresh token 없이 가입 신청 티켓 하나만 서명한다.
+// 가입 신청(Z4)은 법무 검토 전 기능이라 기본으로 꺼져 있다(H1). 티켓을 확인하는 테스트만 켠다.
+const DRIVER_APPLICATION_ON = { DRIVER_APPLICATION_ENABLED: 'true' };
+
+function expectOnlyApplicationTicketSigned(jwt: { sign: jest.Mock }, userId: string) {
+  expect(jwt.sign).toHaveBeenCalledTimes(1);
+  expect(jwt.sign).toHaveBeenCalledWith(
+    { sub: userId, typ: 'driver_application' },
+    expect.objectContaining({
+      secret: 'access-secret',
+      audience: DRIVER_APPLICATION_TICKET_AUDIENCE,
+      algorithm: 'HS256',
+      expiresIn: 30 * 60,
+    }),
+  );
+}
 
 describe('AuthService', () => {
   function makeKakaoLoginService(options: {
@@ -127,8 +145,13 @@ describe('AuthService', () => {
       },
     };
     const jwt = {
-      sign: jest.fn((_payload: Record<string, unknown>, options: { secret?: string }) =>
-        options.secret === 'access-secret' ? 'access-token' : 'refresh-token',
+      sign: jest.fn(
+        (_payload: Record<string, unknown>, options: { secret?: string; audience?: string }) =>
+          options.audience === DRIVER_APPLICATION_TICKET_AUDIENCE
+            ? 'driver-application-ticket'
+            : options.secret === 'access-secret'
+              ? 'access-token'
+              : 'refresh-token',
       ),
       verify: jest.fn(),
     };
@@ -306,6 +329,7 @@ describe('AuthService', () => {
       ['invalid', { driverApproved: 'true' }],
     ])('기존 %s driver는 토큰 발급 전에 카카오 로그인이 거부되고 승인 대기 code를 붙인다', async (_label, approval) => {
       const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({
+        config: DRIVER_APPLICATION_ON,
         user: {
           id: 'driver-1',
           role: 'driver',
@@ -323,10 +347,12 @@ describe('AuthService', () => {
           message: '승인된 드라이버만 로그인할 수 있습니다.',
           error: 'Forbidden',
           code: DRIVER_APPROVAL_PENDING,
+          applicationStatus: 'none',
         }),
       });
 
-      expect(jwt.sign).not.toHaveBeenCalled();
+      // access/refresh token 대신 가입 신청 티켓 하나만 서명한다.
+      expectOnlyApplicationTicketSigned(jwt, 'driver-1');
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
       expect(userRef.set).not.toHaveBeenCalled();
     });
@@ -421,20 +447,54 @@ describe('AuthService', () => {
     );
 
     it('신규 driver는 승인 대기 document만 생성하고 authenticated session은 만들지 않는다', async () => {
-      const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({});
+      const { jwt, refreshTokenRef, service, userRef } = makeKakaoLoginService({
+        config: DRIVER_APPLICATION_ON,
+      });
 
       await expect(
         service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' }),
       ).rejects.toMatchObject({
         status: 403,
-        response: expect.objectContaining({ code: DRIVER_APPROVAL_PENDING }),
+        response: expect.objectContaining({
+          code: DRIVER_APPROVAL_PENDING,
+          applicationStatus: 'none',
+          applicationTicket: 'driver-application-ticket',
+        }),
       });
 
       expect(userRef.set).toHaveBeenCalledWith(
         expect.objectContaining({ role: 'driver', driverApproved: false }),
       );
-      expect(jwt.sign).not.toHaveBeenCalled();
+      const createdUserId = (userRef.set.mock.calls[0][0] as { id: string }).id;
+      expectOnlyApplicationTicketSigned(jwt, createdUserId);
       expect(refreshTokenRef.set).not.toHaveBeenCalled();
+    });
+
+    it('가입 신청 기능이 꺼져 있으면(기본) 승인 대기 거절에 티켓·상태를 싣지 않고 아무것도 서명하지 않는다', async () => {
+      const configs: Record<string, string>[] = [
+        {},
+        { DRIVER_APPLICATION_ENABLED: 'false' },
+        { DRIVER_APPLICATION_ENABLED: 'TRUE' },
+      ];
+      for (const config of configs) {
+        const { jwt, refreshTokenRef, service } = makeKakaoLoginService({
+          config,
+          user: { id: 'driver-1', role: 'driver', storeId: null, suspended: false, driverApproved: false },
+        });
+
+        const rejection = service.kakaoLogin({ kakaoAccessToken: 'token', targetRole: 'driver' });
+        await expect(rejection).rejects.toMatchObject({
+          status: 403,
+          response: { code: DRIVER_APPROVAL_PENDING },
+        });
+        const response = await rejection.catch((error: { getResponse: () => object }) =>
+          error.getResponse(),
+        );
+        expect(response).not.toHaveProperty('applicationTicket');
+        expect(response).not.toHaveProperty('applicationStatus');
+        expect(jwt.sign).not.toHaveBeenCalled();
+        expect(refreshTokenRef.set).not.toHaveBeenCalled();
+      }
     });
 
     it('승인된 비정지 driver는 기존 카카오 로그인 토큰 발행을 유지한다', async () => {
@@ -536,7 +596,8 @@ describe('AuthService', () => {
     ])('%s approval driver는 token 발급 전에 email login이 거부되고 승인 대기 code를 붙인다', async (_label, approval) => {
       const { jwt, refreshTokenRef, service } = await makeEmailLoginService(approval);
 
-      await expect(service.login({ email: 'driver@example.com', password })).rejects.toMatchObject({
+      const rejection = service.login({ email: 'driver@example.com', password });
+      await expect(rejection).rejects.toMatchObject({
         status: 403,
         response: expect.objectContaining({
           statusCode: 403,
@@ -544,6 +605,10 @@ describe('AuthService', () => {
           error: 'Forbidden',
           code: DRIVER_APPROVAL_PENDING,
         }),
+      });
+      // 가입 신청 티켓은 카카오 로그인 거절에만 싣는다.
+      await expect(rejection).rejects.not.toMatchObject({
+        response: expect.objectContaining({ applicationTicket: expect.anything() }),
       });
       expect(jwt.sign).not.toHaveBeenCalled();
       expect(refreshTokenRef.set).not.toHaveBeenCalled();

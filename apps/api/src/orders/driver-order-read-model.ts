@@ -61,8 +61,17 @@ export function projectDriverOrder(
     projected['deliveryDate'] = context.roundDeliveryStartAt;
   }
 
-  // 수거 장소는 수거 전(PREPARING) 주문에만 싣는다. 판매점 이름·주소는 손님 정보가 아니다.
-  if (order['status'] === 'PREPARING' && isRecord(context.pickupStore)) {
+  // 상품 파손 보류는 다시 배송하지 않고 상품을 가게로 돌려준다. 목록 행이 반납할 주문임을 밝히도록
+  // 보류 사유 코드만 싣는다(사유 글·연락처 등은 싣지 않는다).
+  const damagedHold = isDamagedHold(order);
+  if (view === 'list' && order['status'] === 'DELIVERY_HELD') {
+    const reasonCode = isRecord(order['deliveryHold']) ? order['deliveryHold']['reasonCode'] : null;
+    if (typeof reasonCode === 'string') projected['deliveryHoldReasonCode'] = reasonCode;
+  }
+
+  // 수거 장소는 수거 전(PREPARING) 주문과, 상품을 가게로 돌려줄 상품 파손 보류 주문에만 싣는다(반납 장소).
+  // 판매점 이름·주소는 손님 정보가 아니다.
+  if ((order['status'] === 'PREPARING' || damagedHold) && isRecord(context.pickupStore)) {
     const pickupStoreName = nonEmptyTrimmed(context.pickupStore['name']);
     const pickupAddress = nonEmptyTrimmed(context.pickupStore['address']);
     if (pickupStoreName) projected['pickupStoreName'] = pickupStoreName;
@@ -102,10 +111,12 @@ export function projectDriverOrder(
     if (deliveryHold) projected['deliveryHold'] = deliveryHold;
   }
 
+  // 판매자 전화는 본인 배정 주문의 수거 대기·거점 배송 중·상품 파손 보류(가게로 반납) 단계에서만 노출한다.
   if (
     isAssignedToRequester &&
     (order['status'] === 'PREPARING' ||
-      (order['status'] === 'DELIVERING' && order['deliveryMethod'] === 'hub'))
+      (order['status'] === 'DELIVERING' && order['deliveryMethod'] === 'hub') ||
+      damagedHold)
   ) {
     projected['sellerPhone'] = order['sellerPhone'];
   }
@@ -120,6 +131,15 @@ export function projectDriverOrder(
   }
 
   return projected;
+}
+
+// 상품 파손(PRODUCT_DAMAGED) 보류 중인 주문인가. 이 보류는 재배송하지 않고 기사가 상품을 가게로 돌려준다.
+function isDamagedHold(order: Record<string, any>): boolean {
+  return (
+    order['status'] === 'DELIVERY_HELD' &&
+    isRecord(order['deliveryHold']) &&
+    order['deliveryHold']['reasonCode'] === 'PRODUCT_DAMAGED'
+  );
 }
 
 function nonEmptyTrimmed(value: unknown): string | undefined {
@@ -193,6 +213,11 @@ function projectDeliveryHold(value: unknown): Record<string, unknown> | undefine
     redeliveryFee: value['redeliveryFee'],
     nextContactAt: value['nextContactAt'],
     nextDeliveryAt: value['nextDeliveryAt'],
+    // 보류한 때의 주문 상태. 배송 중(상품을 들고 있음)에 보류한 주문에만 "오늘 가게로 돌려주세요"를 보인다(S-05).
+    // 이 칸이 생기기 전 보류는 싣지 않는다(기사 앱은 모르면 반납 안내를 숨긴다).
+    ...(value['heldFromStatus'] === 'PREPARING' || value['heldFromStatus'] === 'DELIVERING'
+      ? { heldFromStatus: value['heldFromStatus'] }
+      : {}),
   };
 }
 

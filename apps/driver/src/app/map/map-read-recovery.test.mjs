@@ -63,11 +63,11 @@ test('Map successful results render filtered route list', () => {
   );
   assert.match(mapSource, /setHasSuccessfulRead\(true\)/);
   assert.match(mapSource, /hasSuccessfulReadRef\.current = true/);
-  // 목록은 상태 묶음(배송 중 → 수거 대기)으로 그린다(D-20).
-  assert.match(mapSource, /const groups = groupMapStops\(sorted\);/);
+  // 목록은 상태 묶음(배송 중 → 사진 올리는 중 → 수거 대기)으로 그린다(D-20, S-02).
+  assert.match(mapSource, /const groups = groupMapStops\(sorted, pendingPhotoOrderIds\);/);
   assert.match(mapSource, /groups\.map\(\(group\)/);
   // 다음 배송지는 경로의 첫 주문이 아니라 첫 배송 중 주문이다.
-  assert.match(mapSource, /const nextStop = pickNextDeliveryStop\(sorted\)/);
+  assert.match(mapSource, /const nextStop = pickNextDeliveryStop\(sorted, pendingPhotoOrderIds\)/);
   assert.match(mapSource, /nextStop \? buildOrderMapLink\(nextStop\) : null/);
   assert.doesNotMatch(mapSource, /buildOrderMapLink\(sorted\[0\]\)/);
 });

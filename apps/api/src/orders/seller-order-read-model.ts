@@ -47,6 +47,8 @@ const DELIVERY_HOLD_FIELDS = [
   'nextContactAt',
   'nextDeliveryAt',
   'resolvedAt',
+  // 손님에게 재배송비 결제 요청을 보낸 시각(S-15). 고객 사유 종결 기한의 기준이며 개인정보가 아니다.
+  'paymentRequestedAt',
 ] as const;
 
 // 고객 사유 종결 기록. 판매자 본인이 남긴 연락 메모까지 보여 주고 처리자 id는 싣지 않는다.

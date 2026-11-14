@@ -11,6 +11,7 @@ import { FirestoreService } from '../firestore/firestore.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { signDriverApplicationTicket } from '../driver-applications/application-ticket';
 
 type Role = 'consumer' | 'seller' | 'driver' | 'admin';
 
@@ -109,6 +110,20 @@ describe('AuthController 토큰 검증·firebase-token 역할 경계', () => {
       .set('Authorization', `Bearer ${tokenFor('consumer', claims, options)}`)
       .expect(401);
     expect(authService.getSession).not.toHaveBeenCalled();
+    expect(firestore.doc).not.toHaveBeenCalled();
+  });
+
+  it('승인 전 기사의 가입 신청 티켓(같은 JWT_SECRET)은 access token으로 쓸 수 없다', async () => {
+    const ticket = signDriverApplicationTicket(jwt, JWT_SECRET, 'driver-1');
+
+    for (const path of ['/auth/session', '/auth/firebase-token']) {
+      await request(app.getHttpServer())
+        .get(path)
+        .set('Authorization', `Bearer ${ticket}`)
+        .expect(401);
+    }
+    expect(authService.getSession).not.toHaveBeenCalled();
+    expect(authService.getFirebaseToken).not.toHaveBeenCalled();
     expect(firestore.doc).not.toHaveBeenCalled();
   });
 });

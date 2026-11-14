@@ -24,6 +24,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { recordReport } from './morning-check-history.mjs';
 import {
+  CUSTOMER_FAULT_CLOSED_STATUS,
   DAY_MS,
   evaluateAll,
   excludeStores,
@@ -62,6 +63,7 @@ export const FIELD_ALLOWLIST = Object.freeze({
     'deliveryHold.heldAt',
     'deliveryHold.resolvedAt',
     'deliveryHold.reasonCode',
+    'customerFaultClosure.closedAt',
   ],
   payments: ['status', 'refundedAt', 'refundAmount'],
   stores: ['name', 'status', 'commissionRate'],
@@ -77,6 +79,9 @@ const FIELDS = Object.freeze({
   recentSettlements: ['storeId', 'platformFeeRate', 'settledAt'],
   ordersById: ['status', 'storeId', 'orderNumber'],
   paymentsById: ['status', 'refundedAt', 'refundAmount'],
+  // 종결 기록(customerFaultClosure)은 연락 메모가 있어 종결 시각만 고른다.
+  closedOrders: ['status', 'storeId', 'orderNumber', 'totalAmount', 'customerFaultClosure.closedAt'],
+  closedOrderSettlements: ['status'],
   stores: ['name', 'status', 'commissionRate'],
   saleRounds: ['storeId', 'name', 'status', 'schedule.deliveryStartAt', 'schedule.deliveryEndAt'],
   roundOrders: ['status', 'storeId', 'orderNumber', 'roundId', 'deliveryMethod', 'driverId', 'totalAmount', 'updatedAt'],
@@ -245,6 +250,25 @@ export async function collect(db, { now }) {
     [],
   );
 
+  // M3: 고객 사유 종결 주문과 그 정산(문서 id = 주문 id). 정산 생성이 실패한 종결을 찾는다.
+  const closedOrders = await read(
+    'orders.closedUndelivered',
+    () =>
+      selectQuery(db, 'orders', FIELDS.closedOrders, (q) => q.where('status', '==', CUSTOMER_FAULT_CLOSED_STATUS)),
+    [],
+  );
+  const closedOrderSettlementsById = await read(
+    'settlements.byClosedOrder',
+    () =>
+      getAllMasked(
+        db,
+        'settlements',
+        closedOrders.map((order) => order.id),
+        FIELDS.closedOrderSettlements,
+      ),
+    {},
+  );
+
   // 회차 일정은 ISO 문자열이고 시차 표기(Z·+09:00)가 섞일 수 있어 문자열 범위 조회 대신 전체를 읽어 메모리에서 고른다.
   // 파일럿 규모라 읽기 수가 작다. 고른 회차만 주문을 조회한다(§3-3 "최근 7일 안이거나 오늘 시작").
   const allRounds = await read('saleRounds', () => selectQuery(db, 'saleRounds', FIELDS.saleRounds), []);
@@ -314,6 +338,8 @@ export async function collect(db, { now }) {
     ordersById,
     paymentsById,
     recentSettlements,
+    closedOrders,
+    closedOrderSettlementsById,
     rounds,
     roundOrders,
     openOrdersWithoutRound,

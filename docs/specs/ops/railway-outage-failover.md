@@ -85,6 +85,7 @@
 - **결제**: `PORTONE_V2_SECRET`, `PORTONE_WEBHOOK_SECRET`, `PORTONE_STORE_ID`(코드는 안 읽고 운영 설정 점검이 확인)
 - **알림**: `ALIGO_API_KEY`, `ALIGO_USER_ID`, `ALIGO_SENDER_KEY`, `ALIGO_SENDER_PHONE`, `ALIGO_TEMPLATE_CODES_JSON`, `ALIGO_OUTBOUND_PROXY_URL`, `OPS_TELEGRAM_BOT_TOKEN`, `OPS_TELEGRAM_CHAT_ID`
 - **기타 외부**: `KAKAO_ADMIN_KEY`, `KAKAO_APP_ID`, `GEMINI_API_KEY`
+- **법무 검토 전 기능 스위치(선택, 기본 꺼짐)**: `DRIVER_APPLICATION_ENABLED`, `CUSTOMER_FAULT_CLOSURE_ENABLED`. 정확히 `true`일 때만 켜지고, 운영에서 켜져 있을 때만 같은 값으로 옮긴다(`mvp-sales-round-runbook.md` §10)
 - **배포 환경 표식**: Railway가 넣는 `RAILWAY_ENVIRONMENT_NAME`·`RAILWAY_GIT_COMMIT_SHA`
   - Cloud Run에는 대신 `GREENHUB_ENVIRONMENT_NAME=production`, `GREENHUB_COMMIT_SHA=<SHA>`를 넣는다(#605 C1).
   - Railway 밖에서는 `TRUST_PROXY_HOPS`가 없으면 기동하지 않는다.

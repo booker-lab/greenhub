@@ -10,7 +10,7 @@ import {
   orderItemsLabel,
   orderItemsSummary,
 } from '@/lib/order-quantity';
-import { type PickupPlace, readPickupPlace } from '@/lib/pickup-place';
+import { isDamagedHold, type PickupPlace, readPickupPlace } from '@/lib/pickup-place';
 import { text } from './look';
 import { PendingPhotoBadge, usePendingPhotoBadge } from './pending-photo-notice';
 
@@ -24,9 +24,11 @@ export type DriverListOrder = Order & {
   assignedToMe?: boolean;
   /** 회차 주문의 회차 배송 시작 시각(ISO). 회차가 없는 주문에는 없다. */
   deliveryDate?: string | null;
-  /** 수거 대기 주문의 수거 가게 이름·주소. 다른 상태와 이전 API 응답에는 없다. */
+  /** 수거 대기·상품 파손 보류 주문의 가게 이름·주소. 다른 상태와 이전 API 응답에는 없다. */
   pickupStoreName?: string;
   pickupAddress?: string;
+  /** 보류 주문의 보류 사유 코드(목록 응답). 다른 상태와 이전 API 응답에는 없다. */
+  deliveryHoldReasonCode?: string;
 };
 
 /** 한 번에 수거 고르기 칸. 있으면 행은 주문 상세로 가는 링크 대신 고르기 칸이 된다. */
@@ -56,6 +58,10 @@ const itemStyle = {
 } as const;
 
 const muted = { fontSize: 'var(--font-size-sm)', color: 'var(--driver-text-muted)' } as const;
+// 한국어 글이 낱말 중간에서 줄을 바꾸지 않게 한다(R-09·3차 재감사 S-06). 긴 주소·낱말만 아무 데서나 끊는다.
+const keepWords = { wordBreak: 'keep-all', overflowWrap: 'anywhere' } as const;
+// 받는 분 이름이 없을 때 쓰는 말. 기사 앱 글은 모두 "손님"이다(3차 재감사 S-12).
+const BUYER_FALLBACK = '손님';
 
 export default function OrderCard({
   order,
@@ -78,6 +84,8 @@ export default function OrderCard({
   const itemLines = orderItemLines(order.items);
   const isHub = order.deliveryMethod === 'hub';
   const isHeld = order.status === 'DELIVERY_HELD';
+  // 상품 파손 보류는 다시 배송하지 않고 가게로 돌려준다. 다른 보류와 구분해 행에 밝힌다(S-11).
+  const damagedHold = isDamagedHold(order);
   // 거점은 거점 이름이 주인공이고 주소가 보조다. 직배송은 동·호수(상세 주소)가 주인공이다.
   const parts = isHub
     ? { base: order.hubAddress ?? '-', detail: order.hubName ?? '거점' }
@@ -98,6 +106,7 @@ export default function OrderCard({
       className={text}
       style={{
         ...muted,
+        ...keepWords,
         color: payment.color === 'red' ? 'var(--color-danger)' : 'var(--driver-text-muted)',
         fontWeight: payment.color === 'red' ? 'var(--fw-bold)' : 'var(--fw-regular)',
       }}
@@ -117,7 +126,7 @@ export default function OrderCard({
         style={{ backgroundColor: 'var(--color-surface-muted)', color: 'var(--color-text)' }}
       >
         <div className="flex flex-col gap-1">
-          <p className={text} style={muted}>
+          <p className={text} style={{ ...muted, ...keepWords }}>
             다음 배송지{deliveryDayText ? ` · ${deliveryDayText}` : ''}
             {methodText ? ` · ${methodText}` : ''}
             {parts.detail ? ` · ${parts.base}` : ''}
@@ -128,7 +137,7 @@ export default function OrderCard({
               fontSize: parts.detail ? 28 : 'var(--font-size-xl)',
               fontWeight: 'var(--fw-extrabold)',
               lineHeight: 1.3,
-              wordBreak: 'keep-all',
+              ...keepWords,
             }}
           >
             {parts.detail ?? parts.base}
@@ -155,7 +164,7 @@ export default function OrderCard({
               )}
         </div>
         <p className={cn(text, 'mt-1')} style={muted}>
-          받는 분 {order.buyerName ?? '소비자'}
+          받는 분 {order.buyerName ?? BUYER_FALLBACK}
         </p>
         {paymentLine && <div className="mt-1">{paymentLine}</div>}
       </Link>
@@ -166,7 +175,7 @@ export default function OrderCard({
   // 한 줄에 이어 붙이면 390px에서 상품 뒤쪽과 수거 시각이 늘 잘려, 수거 시각은 줄어들지 않는 칸에 따로 둔다.
   const rowItemsText = orderItemsSummary(order.items) ?? itemsText;
   const pickupTimeText = tab === 'preparing' ? `수거 ${formatTime(order.preparedAt)}` : null;
-  const buyerLine = [methodText, order.buyerName ?? '소비자'].filter(Boolean).join(' · ');
+  const buyerLine = [methodText, order.buyerName ?? BUYER_FALLBACK].filter(Boolean).join(' · ');
 
   const rowBody = (
     <>
@@ -185,7 +194,7 @@ export default function OrderCard({
               className="mr-1.5 inline-block size-2 rounded-full align-middle"
               style={{ backgroundColor: 'var(--color-danger)' }}
             />
-            배송 보류
+            {damagedHold ? '상품 파손 · 가게로 반납' : '배송 보류'}
           </span>
         )}
         {isHeld && ' · '}

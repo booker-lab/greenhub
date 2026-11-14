@@ -83,7 +83,10 @@ test('API 결과의 PREPARING·DELIVERING·DELIVERY_HELD를 각각의 Board 탭�
 test('주문 카드는 안정적인 test id와 배송 보류 상태 배지를 제공한다', () => {
   assert.match(cardSource, /data-testid=\{`driver-order-\$\{order\.id\}`\}/);
   assert.match(cardSource, /order\.status\s*===\s*['"]DELIVERY_HELD['"]/);
-  assert.match(cardSource, />\s*배송 보류\s*</);
+  assert.match(cardSource, /'배송 보류'/);
+  // 상품 파손 보류는 다른 보류와 구분해 가게로 반납할 주문임을 밝힌다(S-11).
+  assert.match(cardSource, /damagedHold \? '상품 파손 · 가게로 반납' : '배송 보류'/);
+  assert.match(cardSource, /const damagedHold = isDamagedHold\(order\);/);
 });
 
 test('Driver 상세는 Driver detail API를 사용하고 raw Firestore 주문을 읽지 않는다', () => {
@@ -649,7 +652,7 @@ test('5. success [orders] → refresh failure는 이전 목록 + warning을 유�
   );
   assert.match(boardSource, /최신 주문을 불러오지 못했어요\. 기존 목록을 보여드려요/);
   assert.match(boardSource, /\(이전 목록 표시 중\)/);
-  assert.match(boardSource, /<OrderList key=\{tab\} orders=\{orders\}/);
+  assert.match(boardSource, /<OrderList\s+key=\{tab\}\s+orders=\{orders\}/);
   // refresh 실패는 list를 지우지 않는다: stale 분기에는 setPreparing([])이 없다.
   // 401·403 authority loss는 별도 분기로 먼저 clear되므로 stale 판정은 공유 helper를 거친다.
   const catchBlock = boardSource.slice(boardSource.indexOf('.catch('), boardSource.indexOf('.finally('));
@@ -893,7 +896,7 @@ test('16. 같은 scope의 network/5xx 실패는 stale을 유지한다 (PR #110/#
   assert.equal(failed5xx.hasSuccess, true);
   // Board stale 분기는 이전 목록 렌더를 유지한다.
   assert.match(boardSource, /\(이전 목록 표시 중\)/);
-  assert.match(boardSource, /<OrderList key=\{tab\} orders=\{orders\}/);
+  assert.match(boardSource, /<OrderList\s+key=\{tab\}\s+orders=\{orders\}/);
 });
 
 test('17. user/token A → B 전환은 새 fetch 완료 전에 A 데이터를 동기 clear한다', () => {
@@ -984,4 +987,59 @@ test('최신 목록이 대기 사진의 주문을 보류·수거 대기로 보�
     /pendingPhotoStaleOrderIds\(pendingPhotos\.entries, \[\.\.\.preparing, \.\.\.delivering\]\)/,
   );
   assert.match(boardSource, /void failStalePendingPhoto\(staleUserId, orderId\);/);
+});
+
+// ── 3차 재감사(S-06·S-07·S-11·S-12·S-13) ─────────────────────────────────────
+
+test('목록 행 결제 줄과 다음 배송지 카드 윗줄은 낱말 중간에서 줄을 바꾸지 않는다(S-06)', () => {
+  assert.match(
+    cardSource,
+    /const keepWords = \{ wordBreak: 'keep-all', overflowWrap: 'anywhere' \} as const;/,
+  );
+  const paymentAt = cardSource.indexOf('const paymentLine = payment && (');
+  const paymentBlock = cardSource.slice(paymentAt, cardSource.indexOf('</p>', paymentAt));
+  assert.match(paymentBlock, /\.\.\.keepWords/);
+  const nextTopAt = cardSource.indexOf('다음 배송지{deliveryDayText');
+  const nextTop = cardSource.slice(cardSource.lastIndexOf('<p', nextTopAt), nextTopAt);
+  assert.match(nextTop, /\.\.\.keepWords/);
+});
+
+test('진행 줄은 항목마다 nowrap으로 묶어 항목 사이에서만 줄을 바꾼다(S-07)', () => {
+  assert.match(boardSource, /const progressItem = \{ whiteSpace: 'nowrap' \} as const;/);
+  for (const item of [
+    /<span style=\{progressItem\}>남은 배송 \{toDeliver\}곳<\/span>/,
+    /<span style=\{progressItem\}>수거 \{myPreparing\.length\}곳<\/span>/,
+    /<span style=\{progressItem\}>\s*맡을 수 있는 \{preparingGroups\.available\.length\}곳\s*<\/span>/,
+  ]) {
+    assert.match(boardSource, item);
+  }
+  const linkAt = boardSource.indexOf('href="/board/completed"');
+  assert.match(boardSource.slice(linkAt, linkAt + 400), /style=\{\{\s*\.\.\.progressItem/);
+});
+
+test('상품 파손 보류 상세는 반납할 가게와 판매자 전화를 보인다(S-11)', () => {
+  assert.match(detailSource, /const returnPlace = readReturnPlace\(order\);/);
+  // 반납 장소 지도 버튼은 수거지와 구분한다.
+  assert.match(detailSource, /pickup \? '카카오맵에서 수거지 보기' : '카카오맵에서 가게 보기'/);
+  // 상품 파손 보류는 판매자 전화를 먼저 쓴다(API가 이 보류에만 sellerPhone을 싣는다).
+  assert.match(detailSource, /\(isPreparing \|\| isDamagedHold\(order\)\) && order\.sellerPhone/);
+});
+
+test('기사 앱 글은 "소비자" 대신 "손님"이다(S-12)', () => {
+  for (const source of [detailSource, cardSource, mapSource]) {
+    assert.doesNotMatch(source, /소비자/);
+  }
+  assert.match(detailSource, /\{ label: '손님', phone: order\.buyerPhone \}/);
+  assert.match(cardSource, /const BUYER_FALLBACK = '손님';/);
+});
+
+test('가게가 함께 나오는 단계(수거 대기·상품 파손 보류)에서는 손님 주소 버튼을 "배송지 보기"로 쓴다(S-13)', () => {
+  assert.match(
+    detailSource,
+    /const customerMapSearchLabel =\s*isPreparing \|\| isDamagedHold\(order\) \? '배송지 보기' : '주소 보기';/,
+  );
+  assert.match(
+    detailSource,
+    /카카오맵에서 \{mapLink\.kind === 'route' \? '길찾기' : customerMapSearchLabel\}/,
+  );
 });

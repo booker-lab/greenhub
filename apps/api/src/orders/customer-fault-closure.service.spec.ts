@@ -2,6 +2,7 @@
 // 가짜 Firestore(OCC 하네스)로 실제 CustomerFaultClosureService·OrderCapacityService·SettlementsService를 구동한다.
 
 import { ConflictException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { createOccFirestore } from '../../test/helpers/firestore-occ-fake';
 import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
 import { PortoneError } from '../payments/portone.client';
@@ -10,6 +11,7 @@ import { readOrderPayoutHoldInTransaction } from '../settlements/_lib/order-payo
 import { SettlementsService } from '../settlements/settlements.service';
 import { CustomerFaultClosureController } from './customer-fault-closure.controller';
 import {
+  CUSTOMER_FAULT_CLOSURE_DISABLED,
   CustomerFaultClosureService,
   decideCustomerFaultClosure,
 } from './customer-fault-closure.service';
@@ -29,8 +31,10 @@ const SETTLEMENT_PATH = `settlements/${ORDER_ID}`;
 const HOUR_MS = 60 * 60 * 1000;
 const FEE = 5000;
 
-// 서울 2026-11-13 15:00 보류 → 16일 끝까지 결제 가능 → 17일 00:00(UTC 11-16T15:00)부터 종결 가능.
-const HELD_AT = '2026-11-13T06:00:00.000Z';
+// 기한은 보류가 아니라 결제 요청 시각부터 센다(S-15). 서울 2026-11-10 15:00 보류, 13일 15:00 결제 요청
+// → 16일 끝까지 결제 가능 → 17일 00:00(UTC 11-16T15:00)부터 종결 가능. 보류일로 셌다면 14일 00:00부터였다.
+const HELD_AT = '2026-11-10T06:00:00.000Z';
+const PAYMENT_REQUESTED_AT = '2026-11-13T06:00:00.000Z';
 const ELIGIBLE_AT_MS = Date.parse('2026-11-16T15:00:00.000Z');
 const BEFORE_BOUNDARY_MS = Date.parse('2026-11-16T14:59:00.000Z'); // 서울 16일 23:59
 const AFTER_WINDOW_MS = Date.parse('2026-11-17T01:00:00.000Z'); // 서울 17일 10:00
@@ -45,7 +49,11 @@ const baseHold = {
   nextContactAt: null,
   nextDeliveryAt: null,
   resolvedAt: null,
+  paymentRequestedAt: PAYMENT_REQUESTED_AT,
 };
+
+/** 판매자가 '재배송 준비로 돌리기'를 누르기 전(결제 요청 전) 보류. */
+const { paymentRequestedAt: _requested, ...holdBeforeRequest } = baseHold;
 
 function orderData(overrides: Record<string, unknown> = {}) {
   return {
@@ -134,7 +142,10 @@ function paidPayment(transactionId = 'tx-paid') {
   };
 }
 
-function makeService(occ: Occ, options: { portone?: ReturnType<typeof makePortone> } = {}) {
+function makeService(
+  occ: Occ,
+  options: { portone?: ReturnType<typeof makePortone>; closureEnabled?: boolean } = {},
+) {
   const capacity = new OrderCapacityService(occ.firestore as never);
   const settlements = new SettlementsService(
     occ.firestore as never,
@@ -145,11 +156,16 @@ function makeService(occ: Occ, options: { portone?: ReturnType<typeof makePorton
   const createSettlement = jest.spyOn(settlements, 'createSettlement');
   const adjustHeld = jest.spyOn(capacity, 'adjustHeldOrderCountInTransaction');
   const refundByOrderId = jest.spyOn(chargePayments, 'refundByOrderId');
+  // 고객 사유 종결은 기본으로 꺼져 있다(H1). 이 파일은 켠 상태를 기본으로 확인하고, 끈 상태는 따로 본다.
+  const config = new ConfigService(
+    options.closureEnabled === false ? {} : { CUSTOMER_FAULT_CLOSURE_ENABLED: 'true' },
+  );
   const service = new CustomerFaultClosureService(
     occ.firestore as never,
     capacity,
     settlements,
     chargePayments,
+    config,
   );
   return { service, createSettlement, adjustHeld, portone, refundByOrderId };
 }
@@ -276,6 +292,79 @@ describe('decideCustomerFaultClosure 판정표', () => {
       eligible: true,
       reason: 'OK',
     });
+  });
+
+  it('보류일 기준으로는 지났어도 결제 요청일 기준 기한 안이면 막는다(서울 14일 10:00)', () => {
+    expect(decideCustomerFaultClosure(orderData(), null, WITHIN_WINDOW_MS)).toMatchObject({
+      eligible: false,
+      reason: 'PAYMENT_WINDOW_OPEN',
+      eligibleAt: '2026-11-16T15:00:00.000Z',
+      paymentDeadlineDate: '2026-11-16',
+    });
+  });
+
+  it('결제 요청 전 보류는 아무리 오래 지나도 PAYMENT_NOT_REQUESTED로 막는다', () => {
+    const order = orderData({ deliveryHold: { ...holdBeforeRequest } });
+    for (const nowMs of [AFTER_WINDOW_MS, AFTER_WINDOW_MS + 30 * 24 * HOUR_MS]) {
+      expect(decideCustomerFaultClosure(order, null, nowMs)).toEqual({
+        eligible: false,
+        reason: 'PAYMENT_NOT_REQUESTED',
+        closureReasonCode: 'REDELIVERY_FEE_UNPAID',
+        eligibleAt: null,
+        paymentDeadlineDate: null,
+        redeliveryFee: FEE,
+      });
+    }
+    // 요청 칸이 null이어도 요청 전이다.
+    expect(
+      decideCustomerFaultClosure(
+        orderData({ deliveryHold: { ...baseHold, paymentRequestedAt: null } }),
+        null,
+        AFTER_WINDOW_MS,
+      ),
+    ).toMatchObject({ reason: 'PAYMENT_NOT_REQUESTED' });
+  });
+
+  it('요청 전이라도 결제된 재배송비·운영 확인이 필요한 결제는 그 이유를 먼저 보인다', () => {
+    const order = orderData({ ...linkedCharge, deliveryHold: { ...holdBeforeRequest } });
+    const paid = { chargeId: CHARGE_ID, exists: true, data: chargeData({ status: 'PAID' }) };
+    expect(decideCustomerFaultClosure(order, paid, AFTER_WINDOW_MS)).toMatchObject({
+      reason: 'REDELIVERY_FEE_PAID',
+    });
+  });
+
+  it('수령 거부는 결제 요청 전에도 바로 종결할 수 있다', () => {
+    expect(
+      decideCustomerFaultClosure(
+        orderData({ deliveryHold: { ...holdBeforeRequest, reasonCode: 'RECEIPT_REFUSED' } }),
+        null,
+        Date.parse(HELD_AT) + 60_000,
+      ),
+    ).toEqual({
+      eligible: true,
+      reason: 'OK',
+      closureReasonCode: 'RECEIPT_REFUSED',
+      eligibleAt: HELD_AT,
+      paymentDeadlineDate: null,
+      redeliveryFee: FEE,
+    });
+  });
+
+  it('요청 시각이 손상됐거나, 요청 뒤 PREPARING인데 시각이 없으면 기한을 알 수 없어 INVALID_HOLD로 막는다', () => {
+    expect(
+      decideCustomerFaultClosure(
+        orderData({ deliveryHold: { ...baseHold, paymentRequestedAt: 'broken' } }),
+        null,
+        AFTER_WINDOW_MS,
+      ),
+    ).toMatchObject({ reason: 'INVALID_HOLD', eligibleAt: null });
+    expect(
+      decideCustomerFaultClosure(
+        orderData({ status: 'PREPARING', deliveryHold: { ...holdBeforeRequest } }),
+        null,
+        AFTER_WINDOW_MS,
+      ),
+    ).toMatchObject({ reason: 'INVALID_HOLD' });
   });
 
   it('결제 요청 뒤 PREPARING으로 돌아와 결제를 기다리는 주문도 종결할 수 있다', () => {
@@ -438,6 +527,8 @@ describe('CustomerFaultClosureService.close', () => {
       'OrderCapacityService',
       'SettlementsService',
       'OrderChargePaymentService',
+      // 기능 스위치(CUSTOMER_FAULT_CLOSURE_ENABLED) 읽기 전용
+      'ConfigService',
     ]);
 
     // 결제되지 않은 PENDING 재배송비를 확인하고 종결해도 환불은 부르지 않는다.
@@ -641,6 +732,131 @@ describe('CustomerFaultClosureService.close', () => {
     await expect(service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
       eligible: true,
       reason: 'OK',
+    });
+  });
+
+  it('결제 요청 전 보류는 종결 요청을 새 안내로 거절하고 주문·집계를 바꾸지 않는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: { deliveryHold: { ...holdBeforeRequest } } });
+    const { service, adjustHeld, createSettlement } = makeService(occ);
+
+    await expect(service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      eligible: false,
+      reason: 'PAYMENT_NOT_REQUESTED',
+    });
+    const attempt = service.close(closeInput);
+    await expect(attempt).rejects.toBeInstanceOf(ConflictException);
+    await expect(attempt).rejects.toThrow(
+      "손님에게 재배송비 결제 요청을 보낸 뒤 3일이 지나야 종결할 수 있습니다. 먼저 '재배송 준비로 돌리기'를 눌러 주세요.",
+    );
+    expect(occ.getData(ORDER_PATH)).toMatchObject({ status: 'DELIVERY_HELD' });
+    expect(occ.getData(ROUND_PATH)?.['counters']?.['heldOrderCount']).toBe(1);
+    expect(adjustHeld).not.toHaveBeenCalled();
+    expect(createSettlement).not.toHaveBeenCalled();
+  });
+});
+
+describe('고객 사유 종결 기능 스위치(CUSTOMER_FAULT_CLOSURE_ENABLED)', () => {
+  it('꺼져 있으면 종결할 수 있는 주문도 GET이 eligible=false·FEATURE_DISABLED다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    const off = makeService(occ, { closureEnabled: false });
+    await expect(off.service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      eligible: false,
+      reason: 'FEATURE_DISABLED',
+    });
+    // 켜면 같은 주문이 종결 가능하다.
+    const on = makeService(occ);
+    await expect(on.service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      eligible: true,
+      reason: 'OK',
+    });
+  });
+
+  it('설정 없이 만든 서비스도 꺼진 것으로 본다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    const capacity = new OrderCapacityService(occ.firestore as never);
+    const settlements = new SettlementsService(occ.firestore as never, { get: () => undefined } as never);
+    const chargePayments = new OrderChargePaymentService(occ.firestore as never, makePortone() as never);
+    const service = new CustomerFaultClosureService(
+      occ.firestore as never,
+      capacity,
+      settlements,
+      chargePayments,
+    );
+    expect(service.isEnabled()).toBe(false);
+    await expect(service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      reason: 'FEATURE_DISABLED',
+    });
+  });
+
+  it('꺼져 있으면 POST는 403 CUSTOMER_FAULT_CLOSURE_DISABLED이고 주문·집계·정산·PortOne을 건드리지 않는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge: {} });
+    const before = structuredClone(occ.getData(ORDER_PATH));
+    const { service, createSettlement, adjustHeld, portone } = makeService(occ, {
+      closureEnabled: false,
+    });
+
+    const error = await service.close(closeInput).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ForbiddenException);
+    expect((error as ForbiddenException).getResponse()).toMatchObject({
+      statusCode: 403,
+      code: CUSTOMER_FAULT_CLOSURE_DISABLED,
+    });
+    expect(occ.getData(ORDER_PATH)).toEqual(before);
+    expect(occ.getData(ROUND_PATH)!['counters']).toMatchObject({ heldOrderCount: 1 });
+    expect(occ.getData(SETTLEMENT_PATH)).toBeUndefined();
+    expect(adjustHeld).not.toHaveBeenCalled();
+    expect(createSettlement).not.toHaveBeenCalled();
+    expect(portone.getPayment).not.toHaveBeenCalled();
+  });
+
+  it('꺼져 있어도 다른 매장·없는 주문은 404다', async () => {
+    const occ = createOccFirestore();
+    seed(occ);
+    const { service } = makeService(occ, { closureEnabled: false });
+    await expect(
+      service.close({ ...closeInput, storeId: 'store-2' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.close({ ...closeInput, orderId: 'missing' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('꺼져 있어도 이미 종결한 주문은 기록을 보여 주고 정산 다시 맞추기(같은 POST)를 받는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ);
+    // 켜져 있을 때 종결했는데 정산 생성이 실패했고, 그 뒤 기능을 껐다.
+    const on = makeService(occ);
+    on.createSettlement.mockRejectedValueOnce(new Error('정산 쓰기 실패'));
+    await expect(on.service.close(closeInput)).rejects.toThrow('정산 쓰기 실패');
+    expect(occ.getData(SETTLEMENT_PATH)).toBeUndefined();
+
+    const off = makeService(occ, { closureEnabled: false });
+    await expect(off.service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      eligible: false,
+      reason: 'ALREADY_CLOSED',
+      closureReasonCode: 'REDELIVERY_FEE_UNPAID',
+      settlementMissing: true,
+    });
+    await expect(
+      off.service.close({ ...closeInput, memo: '정산 다시 맞추기' }),
+    ).resolves.toMatchObject({ alreadyClosed: true, status: 'CLOSED_UNDELIVERED' });
+    expect(off.adjustHeld).not.toHaveBeenCalled();
+    expect(occ.getData(SETTLEMENT_PATH)).toMatchObject({ completedStatus: 'CLOSED_UNDELIVERED' });
+    expect(occ.getData(ORDER_PATH)!['customerFaultClosure']).toMatchObject({
+      memo: closeInput.memo,
+    });
+    await expect(off.service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      reason: 'ALREADY_CLOSED',
+      settlementMissing: false,
     });
   });
 });
@@ -1158,5 +1374,27 @@ describe('종결 기록의 읽기 범위', () => {
     expect(projectSellerOrder(occ.getData(ORDER_PATH)!, 'list')).not.toHaveProperty(
       'customerFaultClosure',
     );
+  });
+});
+
+describe('재배송비 결제 요청 시각의 읽기 범위(S-15)', () => {
+  it('판매자 상세와 손님 주문 응답에 보류의 결제 요청 시각이 실린다', async () => {
+    const occ = createOccFirestore();
+    seed(occ, { order: { status: 'PREPARING' } });
+    const order = occ.getData(ORDER_PATH)!;
+
+    expect(projectSellerOrder(order, 'detail')['deliveryHold']).toMatchObject({
+      heldAt: HELD_AT,
+      paymentRequestedAt: PAYMENT_REQUESTED_AT,
+    });
+
+    const query = new OrdersQueryService(occ.firestore as never);
+    const detail = await query.getOrderById(ORDER_ID, { sub: 'user-1', role: 'consumer' });
+    const [mine] = await query.getMyOrders('user-1');
+    for (const consumerOrder of [detail, mine]) {
+      expect(consumerOrder['deliveryHold']).toMatchObject({
+        paymentRequestedAt: PAYMENT_REQUESTED_AT,
+      });
+    }
   });
 });

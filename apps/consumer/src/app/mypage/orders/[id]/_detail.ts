@@ -70,6 +70,8 @@ export interface DeliveryHoldView {
   nextContactAt: string | null;
   nextDeliveryAt: string | null;
   resolvedAt: string | null;
+  /** 판매자가 재배송비 결제 요청을 보낸 시각(S-15). 요청 전이거나 읽을 수 없으면 null이다. */
+  paymentRequestedAt: string | null;
 }
 
 /** 고객 사유 종결 기록 중 손님에게 보이는 부분(서버가 판매자 메모·처리자를 빼고 준다). */
@@ -99,6 +101,11 @@ export interface OrderDetailView {
   canRequestCancellation: boolean;
   /** 고객 사유 종결(CLOSED_UNDELIVERED) 주문만 있다. 기록이 없거나 모양이 다르면 null. */
   customerFaultClosure: CustomerFaultClosureView | null;
+  /**
+   * API의 고객 사유 종결 기능 스위치(H1). 서버가 true를 보냈을 때만 true다(없거나 다른 값이면 꺼짐).
+   * 꺼져 있으면 종결 전 경고를 보이지 않는다.
+   */
+  customerFaultClosureEnabled: boolean;
 }
 
 export interface RedeliveryPayment {
@@ -218,6 +225,8 @@ function readDeliveryHold(value: unknown): DeliveryHoldView | null {
     nextContactAt,
     nextDeliveryAt,
     resolvedAt: readResolvedAt(value.resolvedAt),
+    // 읽을 수 없는 값은 요청 전(null)으로 읽는다. 종결 안내를 보이지 않는 쪽이다(fail closed).
+    paymentRequestedAt: readNullableIso(value.paymentRequestedAt) ?? null,
   };
 }
 
@@ -402,6 +411,7 @@ export function readOrderDetail(value: unknown, requestedOrderId: string): Order
       : status === 'RECRUITING',
     customerFaultClosure:
       status === 'CLOSED_UNDELIVERED' ? readCustomerFaultClosure(value.customerFaultClosure) : null,
+    customerFaultClosureEnabled: value.customerFaultClosureEnabled === true,
   };
 }
 

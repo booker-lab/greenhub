@@ -12,6 +12,7 @@ import {
   HOLD_REASON_REQUIRED_MESSAGE,
   holdResponsibilityAfterReasonChange,
   HOLD_REASON_LABEL,
+  isCustomerResponsibleDefaultReason,
   isRedeliveryFeeWithinLimit,
   MAX_REDELIVERY_FEE_KRW,
   parseRedeliveryFee,
@@ -320,7 +321,7 @@ describe('수령 거부·상품 파손', () => {
     ).toEqual({ customerResponsible: true, redeliveryFee: 7000 });
   });
 
-  it('기상·상품 파손은 책임·재배송비를 비우고, 그 밖 유형은 그대로 둔다', () => {
+  it('기상·상품 파손은 책임·재배송비를 비운다', () => {
     for (const reasonCode of ['WEATHER', 'PRODUCT_DAMAGED']) {
       expect(
         holdResponsibilityAfterReasonChange({
@@ -330,13 +331,6 @@ describe('수령 거부·상품 파손', () => {
         }),
       ).toEqual({ customerResponsible: false, redeliveryFee: '' });
     }
-    expect(
-      holdResponsibilityAfterReasonChange({
-        reasonCode: 'ADDRESS_ISSUE',
-        customerResponsible: true,
-        redeliveryFee: 10000,
-      }),
-    ).toEqual({ customerResponsible: true, redeliveryFee: 10000 });
   });
 
   it('수령 거부는 고객 책임이 아니면 막고, 고객 책임·재배송비와 함께 보낸다', () => {
@@ -369,5 +363,81 @@ describe('수령 거부·상품 파손', () => {
       ok: false,
       error: HOLD_PRODUCT_DAMAGED_SELLER_ERROR,
     });
+  });
+});
+
+describe('S-04 고객 사유(출입 불가·주소 오류·고객 연락 불가) 기본값', () => {
+  const CUSTOMER_DEFAULT = ['ACCESS_UNAVAILABLE', 'ADDRESS_ISSUE', 'CUSTOMER_UNREACHABLE'] as const;
+
+  it('세 사유만 고객 사유 기본값 대상이다(수령 거부·기상·상품 파손·기타는 아니다)', () => {
+    for (const reasonCode of CUSTOMER_DEFAULT) {
+      expect(isCustomerResponsibleDefaultReason(reasonCode)).toBe(true);
+    }
+    for (const reasonCode of ['RECEIPT_REFUSED', 'WEATHER', 'PRODUCT_DAMAGED', 'OTHER', null]) {
+      expect(isCustomerResponsibleDefaultReason(reasonCode)).toBe(false);
+    }
+  });
+
+  it('고르면 고객 책임을 켜고 기준 금액을 채워 그대로 저장할 수 있다', () => {
+    for (const reasonCode of CUSTOMER_DEFAULT) {
+      const fields = holdResponsibilityAfterReasonChange({
+        reasonCode,
+        customerResponsible: false,
+        redeliveryFee: '',
+      });
+      expect(fields).toEqual({ customerResponsible: true, redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW });
+      const result = buildDeliveryHoldPayload({ ...base, reasonCode, ...fields });
+      expect(result.ok && result.payload).toMatchObject({
+        customerResponsible: true,
+        redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+      });
+    }
+  });
+
+  it('잠그지 않아 끌 수 있고, 끄면 재배송비를 비워 무료 재배송으로 저장한다', () => {
+    for (const reasonCode of CUSTOMER_DEFAULT) {
+      const redeliveryFee = redeliveryFeeAfterResponsibilityChange({
+        customerResponsible: false,
+        redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+      });
+      expect(redeliveryFee).toBe('');
+      const result = buildDeliveryHoldPayload({
+        ...base,
+        reasonCode,
+        customerResponsible: false,
+        redeliveryFee,
+      });
+      expect(result.ok && result.payload).toMatchObject({
+        customerResponsible: false,
+        redeliveryFee: null,
+      });
+    }
+  });
+
+  it('유형을 바꾸면 이전 유형의 상태를 남기지 않고 새 유형의 기본값으로 돌아간다', () => {
+    // 출입 불가에서 끈 뒤 주소 오류로 바꾸면 다시 켜지고 기준 금액이 채워진다.
+    expect(
+      holdResponsibilityAfterReasonChange({
+        reasonCode: 'ADDRESS_ISSUE',
+        customerResponsible: false,
+        redeliveryFee: '',
+      }),
+    ).toEqual({ customerResponsible: true, redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW });
+    // 앞 유형에서 바꾼 금액도 기준 금액으로 돌아간다.
+    expect(
+      holdResponsibilityAfterReasonChange({
+        reasonCode: 'CUSTOMER_UNREACHABLE',
+        customerResponsible: true,
+        redeliveryFee: 3000,
+      }),
+    ).toEqual({ customerResponsible: true, redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW });
+    // 세 사유에서 기타로 바꾸면 기타의 기본값(고객 책임 아님·재배송비 없음)으로 돌아간다.
+    expect(
+      holdResponsibilityAfterReasonChange({
+        reasonCode: 'OTHER',
+        customerResponsible: true,
+        redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW,
+      }),
+    ).toEqual({ customerResponsible: false, redeliveryFee: '' });
   });
 });

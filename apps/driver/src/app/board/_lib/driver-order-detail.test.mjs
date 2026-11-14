@@ -4,28 +4,28 @@ import test from 'node:test';
 import {
   buildDriverOrderDetailScope,
   buildDriverStatusConfirmContent,
+  classifyDriverOrderCommandError,
+  classifyDriverOrderReadError,
   DRIVER_HOLD_SAVED_MESSAGE,
   DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE,
   DRIVER_ORDER_COMPLETED_SCREEN_MESSAGE,
   DRIVER_ORDER_NOT_FOUND_SCREEN_MESSAGE,
   DRIVER_RESUME_SUCCESS_MESSAGE,
   DRIVER_START_SUCCESS_FALLBACK_MESSAGE,
+  DriverOrderReadError,
   driverDetailListHref,
   driverOrderItemCount,
   isDriverHoldResumable,
-  isDriverStatusConfirmCurrent,
-  readDriverDetailBackContext,
-  resolveDriverCommandSuccessMessage,
-  resolveDriverDetailBackAction,
-  resolveDriverOrderNotFoundScreen,
-  classifyDriverOrderCommandError,
-  classifyDriverOrderReadError,
-  DriverOrderReadError,
   isDriverOrderCommandAuthLoss,
   isDriverOrderCommandContinuationCurrent,
   isDriverOrderStatusAck,
+  isDriverStatusConfirmCurrent,
+  readDriverDetailBackContext,
   readDriverOrderCommandErrorCodeFromResponse,
   readDriverOrderErrorCode,
+  resolveDriverCommandSuccessMessage,
+  resolveDriverDetailBackAction,
+  resolveDriverOrderNotFoundScreen,
   toDriverOrderNetworkError,
   toDriverOrderReadError,
 } from './driver-order-detail.ts';
@@ -220,11 +220,11 @@ test('5. 404 + DRIVER_ORDER_NOT_FOUND는 NOT_FOUND다', () => {
 // 6. unknown/missing-code 403 → fail-closed AUTHORITY_LOSS.
 test('6. code 없는 unknown 403은 fail-closed AUTHORITY_LOSS다', () => {
   assert.equal(classifyDriverOrderCommandError({ status: 403, code: null }), 'AUTHORITY_LOSS');
+  assert.equal(classifyDriverOrderCommandError({ status: 403, code: undefined }), 'AUTHORITY_LOSS');
   assert.equal(
-    classifyDriverOrderCommandError({ status: 403, code: undefined }),
+    classifyDriverOrderCommandError({ status: 403, code: 'SOME_UNKNOWN' }),
     'AUTHORITY_LOSS',
   );
-  assert.equal(classifyDriverOrderCommandError({ status: 403, code: 'SOME_UNKNOWN' }), 'AUTHORITY_LOSS');
   assert.equal(classifyDriverOrderCommandError({ status: 403, code: '' }), 'AUTHORITY_LOSS');
 });
 
@@ -243,9 +243,17 @@ test('7. malformed error body는 null이며 crash 없이 fail-closed 분류한�
     'DRIVER_ORDER_AUTHORITY_DENIED',
   );
   // Response json 파싱 실패도 throw 없이 null이다.
-  const malformed = { json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } };
+  const malformed = {
+    json: async () => {
+      throw new SyntaxError('Unexpected end of JSON input');
+    },
+  };
   assert.equal(await readDriverOrderCommandErrorCodeFromResponse(malformed), null);
-  const emptyThrow = { json: async () => { throw new Error('empty body'); } };
+  const emptyThrow = {
+    json: async () => {
+      throw new Error('empty body');
+    },
+  };
   assert.equal(
     classifyDriverOrderCommandError({
       status: 409,
@@ -641,11 +649,19 @@ test('R-06. 시작·재개·보류 저장 결과 알림은 다시 읽은 상태�
   assert.equal(DRIVER_HOLD_SAVED_MESSAGE, '배송 보류를 저장했어요.');
   // 다시 읽은 상태가 요청과 다르면(다른 처리가 끼어듦) 알리지 않는다.
   assert.equal(
-    message({ requestedStatus: 'DELIVERING', fromStatus: 'PREPARING', freshStatus: 'DELIVERY_HELD' }),
+    message({
+      requestedStatus: 'DELIVERING',
+      fromStatus: 'PREPARING',
+      freshStatus: 'DELIVERY_HELD',
+    }),
     null,
   );
   assert.equal(
-    message({ requestedStatus: 'DELIVERY_HELD', fromStatus: 'DELIVERING', freshStatus: 'DELIVERING' }),
+    message({
+      requestedStatus: 'DELIVERY_HELD',
+      fromStatus: 'DELIVERING',
+      freshStatus: 'DELIVERING',
+    }),
     null,
   );
   // 그 밖의 전이(완료는 별도 안내, 알 수 없는 출발 상태)는 이 알림을 쓰지 않는다.
@@ -661,7 +677,12 @@ test('R-06. 시작·재개·보류 저장 결과 알림은 다시 읽은 상태�
 
 test('상품 파손 보류는 배송 재개 대상이 아니고, 상세는 재개 버튼 대신 가게로 돌려줄 것을 안내한다', async () => {
   assert.equal(isDriverHoldResumable({ reasonCode: 'PRODUCT_DAMAGED' }), false);
-  for (const reasonCode of ['WEATHER', 'RECEIPT_REFUSED', 'ACCESS_UNAVAILABLE', 'CUSTOMER_UNREACHABLE']) {
+  for (const reasonCode of [
+    'WEATHER',
+    'RECEIPT_REFUSED',
+    'ACCESS_UNAVAILABLE',
+    'CUSTOMER_UNREACHABLE',
+  ]) {
     assert.equal(isDriverHoldResumable({ reasonCode }), true, reasonCode);
   }
   // 보류 내용이 없으면 기존처럼 결제 게이트(deliveryStartAllowed)가 재개를 판정한다.
@@ -672,9 +693,86 @@ test('상품 파손 보류는 배송 재개 대상이 아니고, 상세는 재�
   );
   const pageSource = await readFile(new URL('../[orderId]/page.tsx', import.meta.url), 'utf8');
   const noticeAt = pageSource.indexOf('!isDriverHoldResumable(order.deliveryHold) && (');
-  const resumeGuardAt = pageSource.indexOf('isDriverHoldResumable(order.deliveryHold) &&', noticeAt + 1);
+  const resumeGuardAt = pageSource.indexOf(
+    'isDriverHoldResumable(order.deliveryHold) &&',
+    noticeAt + 1,
+  );
   const resumeButtonAt = pageSource.indexOf("openStatusConfirm('RESUME')");
   assert.ok(noticeAt !== -1, '파손 보류 안내가 있다');
-  assert.ok(resumeGuardAt > noticeAt && resumeGuardAt < resumeButtonAt, '재개 버튼은 재개 가능한 보류에만');
+  assert.ok(
+    resumeGuardAt > noticeAt && resumeGuardAt < resumeButtonAt,
+    '재개 버튼은 재개 가능한 보류에만',
+  );
   assert.ok(pageSource.includes('{DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE}'));
+});
+
+// S-05(2026-11-14): 고객 사유 보류 상품은 그날 가게로 돌려준다.
+test('고객 책임 보류(상품 파손 제외, 풀리지 않음, 배송 중에 보류)만 반납 안내 대상이다', async () => {
+  const { isCustomerResponsibleHold, DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE } = await import(
+    './driver-order-detail.ts'
+  );
+  const delivering = { heldFromStatus: 'DELIVERING' };
+  assert.equal(
+    isCustomerResponsibleHold({
+      customerResponsible: true,
+      reasonCode: 'RECEIPT_REFUSED',
+      resolvedAt: null,
+      ...delivering,
+    }),
+    true,
+  );
+  assert.equal(
+    isCustomerResponsibleHold({
+      customerResponsible: true,
+      reasonCode: 'ACCESS_UNAVAILABLE',
+      ...delivering,
+    }),
+    true,
+  );
+  assert.equal(
+    isCustomerResponsibleHold({
+      customerResponsible: false,
+      reasonCode: 'WEATHER',
+      resolvedAt: null,
+      ...delivering,
+    }),
+    false,
+  );
+  assert.equal(
+    isCustomerResponsibleHold({
+      customerResponsible: true,
+      reasonCode: 'PRODUCT_DAMAGED',
+      resolvedAt: null,
+      ...delivering,
+    }),
+    false,
+  );
+  assert.equal(
+    isCustomerResponsibleHold({
+      customerResponsible: true,
+      reasonCode: 'ACCESS_UNAVAILABLE',
+      resolvedAt: '2026-11-14T01:00:00.000Z',
+      ...delivering,
+    }),
+    false,
+  );
+  assert.equal(isCustomerResponsibleHold(null), false);
+  assert.equal(
+    DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE,
+    '상품을 오늘 가게로 돌려주세요. 재배송이 정해지면 다시 수거해요.',
+  );
+});
+
+test('수거 전(PREPARING)에 보류했거나 보류한 때 상태를 모르면 반납 안내를 보이지 않는다(S-05)', async () => {
+  const { isCustomerResponsibleHold } = await import('./driver-order-detail.ts');
+  const customerHold = {
+    customerResponsible: true,
+    reasonCode: 'CUSTOMER_UNREACHABLE',
+    resolvedAt: null,
+  };
+  // 판매자가 수거 전에 보류한 주문: 기사는 상품을 받은 적이 없다.
+  assert.equal(isCustomerResponsibleHold({ ...customerHold, heldFromStatus: 'PREPARING' }), false);
+  // 이 칸이 생기기 전 보류는 단정하지 않는다.
+  assert.equal(isCustomerResponsibleHold(customerHold), false);
+  assert.equal(isCustomerResponsibleHold({ ...customerHold, heldFromStatus: 'DELIVERING' }), true);
 });

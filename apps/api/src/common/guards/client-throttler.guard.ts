@@ -13,6 +13,11 @@ import {
 } from '@nestjs/throttler';
 import { AuthController } from '../../auth/auth.controller';
 import { hasExpectedTokenClaims, JWT_ALGORITHM, type TokenType } from '../../auth/token-claims';
+import {
+  bearerFromHeaders,
+  verifyDriverApplicationTicket,
+} from '../../driver-applications/application-ticket';
+import { DriverApplicationsController } from '../../driver-applications/driver-applications.controller';
 
 const MAX_SUBJECT_LENGTH = 128;
 const MAX_EMAIL_LENGTH = 320;
@@ -63,6 +68,8 @@ function isHandler(context: ExecutionContext | undefined, handler: unknown): boo
  *
  * - 서명 검증된 access token이 있으면 사용자(`sub`) 단위로 집계한다.
  * - `/auth/refresh`는 서명 검증된 refresh token의 `sub` 단위로 집계한다.
+ * - `/driver-applications/*`(승인 전 기사 가입 신청)는 서명 검증된 신청 티켓의 `sub` 단위로 집계한다.
+ *   기사 앱 서버가 대신 호출해 여러 기사가 같은 서버 IP를 나눠 쓰기 때문이다.
  * - `/auth/login`은 클라이언트 IP + 정규화한 이메일 해시 단위로 집계해, 서버 간 호출처럼
  *   같은 IP를 공유하는 사용자들이 하나의 버킷에 묶이지 않게 한다. 여기에 더해 요청 본문과
  *   무관한 클라이언트 IP 버킷(`LOGIN_PER_IP_LIMIT`/분)을 함께 적용해, 이메일을 바꿔 가며
@@ -134,6 +141,15 @@ export class ClientThrottlerGuard extends ThrottlerGuard {
     if (isHandler(context, AuthController.prototype.refresh)) {
       const sub = this.verifiedSubject(req.body?.refreshToken, 'refresh');
       return sub ? `user:${sub}` : `ip:${ip}`;
+    }
+
+    if (context?.getClass() === DriverApplicationsController) {
+      const applicant = verifyDriverApplicationTicket(
+        this.jwt,
+        this.config.get<string>('JWT_SECRET'),
+        bearerFromHeaders(req.headers),
+      );
+      return applicant ? `driver-application:${applicant}` : `ip:${ip}`;
     }
 
     const sub = this.verifiedSubject(bearerToken(req), 'access');

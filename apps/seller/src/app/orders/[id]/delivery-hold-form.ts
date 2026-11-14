@@ -8,6 +8,8 @@
  *   재배송비를 둘 수 없다. 유료 재배송 결제는 둘이 함께일 때만 열리기 때문이다.
  * - 재배송비는 상한(MAX_REDELIVERY_FEE_KRW) 이하의 정수다(apps/api/src/orders/dto/update-status.dto.ts).
  * - 수령 거부는 고객 책임(단순 변심과 같음)으로만 남기므로 고객 책임 칸을 켠 채 잠근다.
+ * - 출입 불가·주소 오류·고객 연락 불가는 고객 사유라 고르면 고객 책임을 켜고 재배송비 기준 금액을 채우지만
+ *   끌 수 있다(2026-11-14 사용자 결정 S-04).
  * - 상품 파손은 배송 중인 기사만 남긴다. 판매자 보류 창에는 고를 수 없고, 상세에서 사유 이름만 보인다.
  */
 
@@ -38,6 +40,18 @@ export function isSellerResponsibleOnlyReason(reasonCode: string | null): boolea
 /** 고객 책임으로만 남기는 유형. 고객 책임 칸을 켠 채 잠그고 재배송비만 바꿀 수 있다. */
 export function isCustomerResponsibleOnlyReason(reasonCode: string | null): boolean {
   return reasonCode === 'RECEIPT_REFUSED';
+}
+
+/**
+ * 고객 사유로 보는 유형(출입 불가·주소 오류·고객 연락 불가). 2026-11-14 사용자 결정(S-04): 고르면 고객 책임을
+ * 켜고 재배송비 기준 금액을 채우지만, 수령 거부와 달리 잠그지 않아 끌 수 있다(끄면 재배송비를 비운다).
+ */
+export function isCustomerResponsibleDefaultReason(reasonCode: string | null): boolean {
+  return (
+    reasonCode === 'ACCESS_UNAVAILABLE' ||
+    reasonCode === 'ADDRESS_ISSUE' ||
+    reasonCode === 'CUSTOMER_UNREACHABLE'
+  );
 }
 
 /** 입력칸 값(숫자 또는 문자열)을 재배송비로 읽는다. 0원 이하·숫자 아님은 재배송비 없음(null)이다. */
@@ -80,8 +94,13 @@ export function redeliveryFeeAfterResponsibilityChange(args: {
 }
 
 /**
- * 보류 유형을 바꾼 뒤의 고객 책임·재배송비 칸 값. 기상·상품 파손은 둘 다 비우고, 수령 거부는 고객 책임을
- * 켜고 빈 재배송비 칸을 기준 금액으로 채운다(이미 적은 금액은 둔다). 그 밖의 유형은 그대로 둔다.
+ * 보류 유형을 바꾼 뒤의 고객 책임·재배송비 칸 값. 유형을 바꾸면 그 유형의 기본값으로 돌아가 이전 유형에서
+ * 켜고 끈 상태가 남지 않는다(S-04).
+ * - 기상·상품 파손: 둘 다 비운다(칸이 잠긴다).
+ * - 수령 거부: 고객 책임을 켜고 빈 재배송비 칸을 기준 금액으로 채운다(이미 적은 금액은 둔다, 칸이 잠긴다).
+ * - 출입 불가·주소 오류·고객 연락 불가: 고객 책임을 켜고 재배송비를 기준 금액으로 다시 채운다. 이전 유형에서
+ *   적은 금액도 기준 금액으로 바뀐다. 끌 수 있다.
+ * - 그 밖(기타): 고객 책임을 끄고 재배송비를 비운다(필요하면 직접 켠다).
  */
 export function holdResponsibilityAfterReasonChange(args: {
   reasonCode: string | null;
@@ -100,7 +119,10 @@ export function holdResponsibilityAfterReasonChange(args: {
       }),
     };
   }
-  return { customerResponsible: args.customerResponsible, redeliveryFee: args.redeliveryFee };
+  if (isCustomerResponsibleDefaultReason(args.reasonCode)) {
+    return { customerResponsible: true, redeliveryFee: DEFAULT_REDELIVERY_FEE_KRW };
+  }
+  return { customerResponsible: false, redeliveryFee: '' };
 }
 
 export const HOLD_RECEIPT_REFUSED_RESPONSIBILITY_HINT =

@@ -2,8 +2,10 @@
  * 고객 사유 종결(환불 없음) 공유 정의 — SSOT
  *
  * 회차 직배송 주문이 고객 책임 사유로 배송 보류됐고 손님이 수령을 거부했거나(RECEIPT_REFUSED)
- * 재배송비를 기한(보류일 다음 날부터 3일째 되는 날 끝)까지 결제하지 않으면, 판매자가 환불 없이
- * 주문을 종결(CLOSED_UNDELIVERED)할 수 있다. 살아 있는 꽃이라 청약철회가 제한된다는 점은
+ * 재배송비를 기한(결제 요청을 보낸 날 다음 날부터 3일째 되는 날 끝)까지 결제하지 않으면, 판매자가 환불 없이
+ * 주문을 종결(CLOSED_UNDELIVERED)할 수 있다. 기한은 보류한 때가 아니라 판매자가 '재배송 준비로 돌리기'로
+ * 손님에게 결제 요청(ORDER_REDELIVERY_PAYMENT_REQUESTED)을 보낸 때(deliveryHold.paymentRequestedAt)부터
+ * 센다(2026-11-14 사용자 결정 S-15). 요청 전에는 재배송비 미결제로 종결할 수 없다. 살아 있는 꽃이라 청약철회가 제한된다는 점은
  * 구매 때 고지한다. API(판정)·판매자 앱(버튼·안내)·소비자 앱(안내 문구)이 같은 날짜 계산을 쓰도록
  * 여기서만 정의한다.
  */
@@ -17,7 +19,7 @@ export type CustomerFaultClosureActorRole = 'seller' | 'admin'
 /** 판매자가 손님과 연락한 내용을 남기는 메모의 최대 글자 수. 손님에게는 보내지 않는다. */
 export const CUSTOMER_FAULT_CLOSURE_MEMO_MAX_LENGTH = 200
 
-/** 재배송비를 결제할 수 있는 날 수. 보류한 날은 세지 않는다(보류일 + 3일째 되는 날 끝까지). */
+/** 재배송비를 결제할 수 있는 날 수. 결제 요청을 보낸 날은 세지 않는다(요청일 + 3일째 되는 날 끝까지). */
 export const REDELIVERY_FEE_PAYMENT_DAYS = 3
 
 /** 종결할 수 없는 보류 사유: 기상(고객 책임 아님)·상품 파손(판매자·기사 책임, 취소·환불로만 끝남). */
@@ -39,10 +41,14 @@ export interface CustomerFaultClosureRecord {
 
 /**
  * 종결할 수 있는지 판정한 결과 이유. 서버(GET 판정·POST 종결)와 판매자 화면이 같은 값을 쓴다.
+ * - PAYMENT_NOT_REQUESTED: 손님에게 재배송비 결제 요청을 아직 보내지 않았다(판매자가 '재배송 준비로 돌리기'를
+ *   눌러야 요청이 가고 기한이 시작된다). 수령 거부는 해당하지 않는다.
  * - PAYMENT_WINDOW_OPEN: 재배송비 결제 기한이 아직 남았다(eligibleAt부터 종결할 수 있다).
  * - REDELIVERY_PAYMENT_IN_PROGRESS: 결제를 시작한 지 24시간이 안 된 재배송비가 있다.
  * - REDELIVERY_PAYMENT_NEEDS_REVIEW: 재배송비 결제 연결이 어긋났거나 환불·불일치 상태라 운영 확인이 필요하다.
  * - INVALID_HOLD: 보류 기록(보류 시각·재배송비)을 확인할 수 없다.
+ * - FEATURE_DISABLED: 고객 사유 종결 기능이 꺼져 있다(API 환경 변수 CUSTOMER_FAULT_CLOSURE_ENABLED가 'true'가
+ *   아님). 약관 개정 전이라 기본으로 끈다(2026-11-14 사용자 결정 H1). 이미 종결한 주문은 ALREADY_CLOSED 그대로다.
  */
 export type CustomerFaultClosureBlockReason =
   | 'OK'
@@ -56,8 +62,10 @@ export type CustomerFaultClosureBlockReason =
   | 'CANCELLATION_IN_PROGRESS'
   | 'REDELIVERY_FEE_PAID'
   | 'REDELIVERY_PAYMENT_NEEDS_REVIEW'
+  | 'PAYMENT_NOT_REQUESTED'
   | 'PAYMENT_WINDOW_OPEN'
   | 'REDELIVERY_PAYMENT_IN_PROGRESS'
+  | 'FEATURE_DISABLED'
 
 /** GET stores/:storeId/orders/:orderId/customer-fault-closure 응답 */
 export interface CustomerFaultClosureEligibility {
@@ -65,9 +73,12 @@ export interface CustomerFaultClosureEligibility {
   reason: CustomerFaultClosureBlockReason
   /** 종결하면 남길 사유. 고객 책임 보류가 아니면 null */
   closureReasonCode: CustomerFaultClosureReasonCode | null
-  /** 재배송비 미결제로 종결할 수 있게 되는 시각(ISO8601). 수령 거부는 보류 시각과 같다. */
+  /**
+   * 재배송비 미결제로 종결할 수 있게 되는 시각(ISO8601). 수령 거부는 보류 시각과 같다.
+   * 그 밖의 사유는 결제 요청 전이면 null이다.
+   */
   eligibleAt: string | null
-  /** 재배송비 결제 마지막 날(서울 YYYY-MM-DD) */
+  /** 재배송비 결제 마지막 날(서울 YYYY-MM-DD). 결제 요청 전이면 null이다. */
   paymentDeadlineDate: string | null
   redeliveryFee: number | null
   /**
@@ -103,30 +114,41 @@ function parseMillis(value: unknown): number | null {
 }
 
 /** 주어진 시각이 속한 서울 날짜의 00:00(UTC 기준 ms). */
-function seoulMidnightOf(heldAtMs: number): number {
-  const shifted = heldAtMs + KST_OFFSET_MS
+function seoulMidnightOf(atMs: number): number {
+  const shifted = atMs + KST_OFFSET_MS
   return shifted - (((shifted % DAY_MS) + DAY_MS) % DAY_MS) - KST_OFFSET_MS
 }
 
 /**
- * 재배송비 결제 마지막 날(서울 날짜 YYYY-MM-DD). 보류한 날은 세지 않으므로 보류일 + 3일이다.
- * 이 날 끝(23:59:59)까지 결제할 수 있다. heldAt이 잘못되면 null(fail closed).
+ * 현재 보류의 재배송비 결제 요청 시각(deliveryHold.paymentRequestedAt, ISO8601). 요청 전(칸 없음·null)이거나
+ * 읽을 수 없는 값이면 null이다. 서버는 유료 고객 책임 보류를 '재배송 준비로 돌리기'(DELIVERY_HELD → PREPARING)할
+ * 때 같은 트랜잭션에서 처음 한 번만 적는다.
  */
-export function redeliveryFeePaymentDeadlineDateKST(heldAt: unknown): string | null {
-  const heldAtMs = parseMillis(heldAt)
-  if (heldAtMs === null) return null
-  const deadlineStart = seoulMidnightOf(heldAtMs) + REDELIVERY_FEE_PAYMENT_DAYS * DAY_MS
+export function redeliveryPaymentRequestedAtOf(hold: unknown): string | null {
+  if (typeof hold !== 'object' || hold === null) return null
+  const value = (hold as Record<string, unknown>)['paymentRequestedAt']
+  return typeof value === 'string' && parseMillis(value) !== null ? value : null
+}
+
+/**
+ * 재배송비 결제 마지막 날(서울 날짜 YYYY-MM-DD). 결제 요청을 보낸 날은 세지 않으므로 요청일 + 3일이다.
+ * 이 날 끝(23:59:59)까지 결제할 수 있다. 요청 시각이 없거나 잘못되면 null(fail closed).
+ */
+export function redeliveryFeePaymentDeadlineDateKST(paymentRequestedAt: unknown): string | null {
+  const requestedAtMs = parseMillis(paymentRequestedAt)
+  if (requestedAtMs === null) return null
+  const deadlineStart = seoulMidnightOf(requestedAtMs) + REDELIVERY_FEE_PAYMENT_DAYS * DAY_MS
   return new Date(deadlineStart + KST_OFFSET_MS).toISOString().slice(0, 10)
 }
 
 /**
- * 재배송비 미결제로 종결할 수 있게 되는 시각(UTC ms): 보류일 + 4일의 서울 00:00.
- * heldAt이 잘못되면 null(fail closed — 종결할 수 없다).
+ * 재배송비 미결제로 종결할 수 있게 되는 시각(UTC ms): 결제 요청일 + 4일의 서울 00:00.
+ * 요청 시각이 없거나 잘못되면 null(fail closed — 종결할 수 없다).
  */
-export function customerFaultClosureEligibleAtMs(heldAt: unknown): number | null {
-  const heldAtMs = parseMillis(heldAt)
-  if (heldAtMs === null) return null
-  return seoulMidnightOf(heldAtMs) + (REDELIVERY_FEE_PAYMENT_DAYS + 1) * DAY_MS
+export function customerFaultClosureEligibleAtMs(paymentRequestedAt: unknown): number | null {
+  const requestedAtMs = parseMillis(paymentRequestedAt)
+  if (requestedAtMs === null) return null
+  return seoulMidnightOf(requestedAtMs) + (REDELIVERY_FEE_PAYMENT_DAYS + 1) * DAY_MS
 }
 
 /** 서울 날짜 YYYY-MM-DD 또는 시각(ms)을 "11월 17일"처럼 쓴다. 잘못된 값이면 null. */

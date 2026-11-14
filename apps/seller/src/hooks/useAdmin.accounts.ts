@@ -2,6 +2,7 @@
 
 import type { SalesMode } from '@greenhub/shared';
 import { apiJson } from '@/lib/api';
+import { buildDriverApproveRequest, executeDriverApprove } from './useAdmin.driverApprove';
 import { readActiveDeliveryCount } from './useAdmin.driverSuspend';
 import {
   pick,
@@ -153,8 +154,18 @@ export function useAdminDrivers() {
     '드라이버 목록',
   );
 
-  const approve = async (userId: string): Promise<AdminCommandOutcome> => {
-    return runAdminCommand(token, `/admin/drivers/${userId}/approve`, { method: 'PATCH' }, reload);
+  // 승인 대기 상자에서 본 가입 신청 회차(신청 정보가 없으면 0)를 함께 보낸다. 그 사이 신청이 바뀌었으면
+  // 서버가 409로 거절하고, 목록을 다시 읽은 뒤 "신청 내용이 바뀌었어요" 거절로 돌려준다.
+  const approve = async (
+    userId: string,
+    expectedRevision: number,
+  ): Promise<AdminCommandOutcome> => {
+    const request = buildDriverApproveRequest(userId, expectedRevision);
+    return executeDriverApprove({
+      missingToken: !token,
+      invoke: () => apiJson(request.path, token as string, request.init).then(() => undefined),
+      reload,
+    });
   };
 
   // 정지 응답의 배송 중 배정 주문 수(세지 못했으면 null)를 함께 돌려준다. 정지 해제·실패는 0.

@@ -63,6 +63,12 @@ export interface DeliveryHoldSnapshot {
     nextContactAt: string | null;
     nextDeliveryAt: string | null;
     resolvedAt: string | null;
+    /**
+     * 손님에게 재배송비 결제 요청을 보낸 시각(ISO8601). 유료 고객 책임 보류를 판매자가 '재배송 준비로 돌리기'
+     * (DELIVERY_HELD → PREPARING)할 때 서버가 같은 트랜잭션에서 처음 한 번만 적는다(다시 요청해도 처음 값을 둔다).
+     * 고객 사유 종결 기한은 이 시각부터 센다. 요청 전이거나 이 칸이 생기기 전 보류면 없거나 null이다.
+     */
+    paymentRequestedAt?: string | null;
 }
 export type RedeliveryPaymentState = 'NOT_REQUIRED' | 'MISSING' | 'PENDING' | 'PAID' | 'FAILED' | 'REFUNDED' | 'MISMATCHED';
 export interface RedeliveryPaymentActionability {

@@ -142,6 +142,22 @@ export type InviteRevokeOutcome =
 
 export type DriverStatus = 'all' | 'pending' | 'approved' | 'suspended';
 
+/** 승인 전 기사가 기사 앱 `/apply`에서 낸 가입 신청(API `toDriverApplicationView`, 시각은 ISO 문자열). */
+export interface AdminDriverApplication {
+  realName: string;
+  /** 010 + 8자리(하이픈 없음) */
+  phone: string;
+  vehicleType: string;
+  availableDays: string[];
+  availableArea: string | null;
+  consentVersion: string | null;
+  consentedAt: unknown;
+  status: 'submitted';
+  revision: number;
+  submittedAt: unknown;
+  updatedAt: unknown;
+}
+
 export interface AdminDriver {
   id: string;
   name: string;
@@ -150,6 +166,8 @@ export interface AdminDriver {
   driverApproved: boolean;
   suspended?: boolean;
   createdAt: unknown;
+  /** 가입 신청. 신청 정보 없이 만들어진 기존 대기 계정은 null(또는 이전 API에서는 없음). */
+  driverApplication?: AdminDriverApplication | null;
 }
 
 export interface BannerCta {

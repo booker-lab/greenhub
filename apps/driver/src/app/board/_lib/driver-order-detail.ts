@@ -227,10 +227,7 @@ export function classifyDriverOrderCommandError(args: {
   if (status === 401) return 'AUTHORITY_LOSS';
   if (code === 'DRIVER_ORDER_AUTHORITY_DENIED') return 'AUTHORITY_LOSS';
   if (code === 'DRIVER_ORDER_NOT_FOUND') return 'NOT_FOUND';
-  if (
-    code === 'DRIVER_ORDER_STATE_CONFLICT' &&
-    (status === 403 || status === 409)
-  ) {
+  if (code === 'DRIVER_ORDER_STATE_CONFLICT' && (status === 403 || status === 409)) {
     return 'STATE_CONFLICT';
   }
   if (status === 403) return 'AUTHORITY_LOSS';
@@ -412,6 +409,36 @@ export function isDriverHoldEntryVisible(args: {
   return args.isRoundDirect && args.status === 'DELIVERING';
 }
 
+/**
+ * 고객 사유(고객 책임) 보류 주문에서 보이는 할 일 안내(2026-11-14 결정, 3차 재감사 S-05).
+ * 살아 있는 꽃이라 그날 가게로 돌려주고, 재배송이 정해지면 다시 수거한다.
+ */
+export const DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE =
+  '상품을 오늘 가게로 돌려주세요. 재배송이 정해지면 다시 수거해요.';
+
+/**
+ * 반납 안내(DRIVER_CUSTOMER_HOLD_RETURN_MESSAGE) 대상: 고객 책임으로 보류된(아직 풀리지 않은) 주문 중
+ * 배송 중에 보류해 기사가 상품을 들고 있는 주문. 상품 파손은 따로 안내하므로 뺀다.
+ * 수거 전(PREPARING)에 보류한 주문은 기사가 상품을 받지 않았으므로 돌려줄 것이 없다. 보류한 때 상태
+ * (deliveryHold.heldFromStatus, 서버가 보류 시 적음)를 모르는 이전 보류도 단정하지 않고 숨긴다.
+ */
+export function isCustomerResponsibleHold(
+  hold:
+    | {
+        customerResponsible?: unknown;
+        reasonCode?: unknown;
+        resolvedAt?: unknown;
+        heldFromStatus?: unknown;
+      }
+    | null
+    | undefined,
+): boolean {
+  if (!hold || hold.customerResponsible !== true) return false;
+  if (hold.reasonCode === 'PRODUCT_DAMAGED') return false;
+  if (hold.heldFromStatus !== 'DELIVERING') return false;
+  return hold.resolvedAt === null || hold.resolvedAt === undefined;
+}
+
 /** 상품 파손 보류 주문에서 배송 재개 버튼 대신 보이는 안내. */
 export const DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE =
   '상품을 가게로 돌려주세요. 판매자가 확인한 뒤 주문을 취소·환불해요.';
@@ -422,9 +449,7 @@ export const DRIVER_NON_REDELIVERABLE_HOLD_MESSAGE =
  * deliveryTransitionViolation, @greenhub/shared NON_REDELIVERABLE_HOLD_REASONS). 앱 간 import 없이
  * 순수 함수로 두므로 재배송하지 않는 사유가 늘면 함께 바꾼다.
  */
-export function isDriverHoldResumable(
-  hold: { reasonCode?: unknown } | null | undefined,
-): boolean {
+export function isDriverHoldResumable(hold: { reasonCode?: unknown } | null | undefined): boolean {
   return hold?.reasonCode !== 'PRODUCT_DAMAGED';
 }
 
@@ -589,7 +614,9 @@ export function driverOrderItemCount(
 ): number | null {
   if (Array.isArray(items) && items.length > 0) {
     const quantities = items.map((item) => (item as { quantity?: unknown } | null)?.quantity);
-    if (quantities.every((value) => typeof value === 'number' && Number.isInteger(value) && value > 0)) {
+    if (
+      quantities.every((value) => typeof value === 'number' && Number.isInteger(value) && value > 0)
+    ) {
       return (quantities as number[]).reduce((sum, value) => sum + value, 0);
     }
   }

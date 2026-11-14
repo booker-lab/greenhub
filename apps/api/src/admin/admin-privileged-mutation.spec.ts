@@ -314,7 +314,12 @@ describe('Admin privileged mutation HTTP authorization boundary', () => {
         expect(harness.serviceBoundary.markAsPaid).toHaveBeenCalledWith('settlement-1', 'admin-1');
         break;
       case 'approveDriver':
-        expect(harness.serviceBoundary.approveDriver).toHaveBeenCalledWith('driver-1', 'admin-1');
+        // 본문 없는 이전 화면 요청은 회차를 비교하지 않는다(expectedRevision undefined).
+        expect(harness.serviceBoundary.approveDriver).toHaveBeenCalledWith(
+          'driver-1',
+          'admin-1',
+          undefined,
+        );
         break;
       case 'suspendDriver':
         expect(harness.serviceBoundary.suspendDriver).toHaveBeenCalledWith(

@@ -69,6 +69,10 @@ test('로그인 화면과 API 경로는 돌아갈 곳이 아니다(자기 순환
     '/api/auth/signout',
     '/%61pi/auth/session',
     '/%E0%A4%A',
+    // 승인 전 기사의 가입 신청 화면은 로그인 뒤 돌아갈 곳이 아니다.
+    '/apply',
+    '/apply?x=1',
+    '/%61pply',
   ]) {
     assert.equal(safeDriverReturnPath(raw), null, raw);
     assert.equal(resolveDriverReturnPath(raw), '/board', raw);

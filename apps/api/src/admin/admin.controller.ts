@@ -7,6 +7,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import {
   AdminSettlementFilterDto,
+  ApproveDriverDto,
   ArchiveStoreDto,
   QueryAdminSettlementsDto,
   QueryAdminOrdersDto,
@@ -54,10 +55,11 @@ export class AdminController {
   @Patch('stores/:storeId/archive')
   archiveStore(
     @Param('storeId') storeId: string,
-    @Body() dto: ArchiveStoreDto | undefined,
+    @Body() dto: ArchiveStoreDto,
     @CurrentUser() user: JwtPayload,
   ) {
-    // 기록 없는 판매자는 본문 없이 보낸다.
+    // 기록 없는 판매자는 본문 없이 보낸다. 본문 타입을 `| undefined`로 두면 design:paramtypes가 Object가 돼
+    // 전역 ValidationPipe가 검증을 건너뛰므로 DTO 클래스만 쓴다. 본문이 없으면 ValidationPipe가 {}로 검증한다.
     return this.admin.archiveStore(storeId, user.sub, dto?.confirmStoreIdPrefix);
   }
 
@@ -124,8 +126,15 @@ export class AdminController {
   }
 
   @Patch('drivers/:userId/approve')
-  approveDriver(@Param('userId') userId: string, @CurrentUser() user: JwtPayload) {
-    return this.admin.approveDriver(userId, user.sub);
+  approveDriver(
+    @Param('userId') userId: string,
+    @Body() dto: ApproveDriverDto,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    // 이전 화면은 본문 없이 보낸다(회차 비교 없음). 본문 타입을 `| undefined`로 두면 design:paramtypes가
+    // Object가 돼 전역 ValidationPipe(whitelist·forbidNonWhitelisted·@IsInt·@Min)가 검증을 건너뛴다.
+    // 본문이 없으면 ValidationPipe가 {}로 검증한 뒤 원래 값(undefined)을 넘기므로 `?.`로 읽는다.
+    return this.admin.approveDriver(userId, user.sub, dto?.expectedRevision);
   }
 
   @Patch('drivers/:userId/suspend')

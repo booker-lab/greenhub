@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { signOut, useSession } from 'next-auth/react';
 import { apiRead } from '@/lib/api';
+import { inFlightPhotoOrderIds } from '@/lib/delivering-groups';
 import {
   buildDriverListScope,
   shouldPreserveDriverListOnReadError,
@@ -17,8 +18,14 @@ import {
   mapStopAddressLine,
 } from './_lib/map-stop-groups';
 import { cn } from '@greenhub/ui/lib/utils';
+import { usePendingPhotos } from '@/app/board/[orderId]/photo/pending-photo-client';
+import {
+  type PendingPhotoBadgeKind,
+  pendingPhotoBadgeKind,
+} from '@/app/board/[orderId]/photo/pending-photo-policy';
 import { AppButton } from '@/components/app-button';
 import { text, titleH4 } from '@/components/look';
+import { PendingPhotoBadge } from '@/components/pending-photo-notice';
 
 type Order = {
   id: string;
@@ -201,24 +208,35 @@ export default function MapPage() {
   const heldCount = countHeldOrders(orders);
   // O(n²) 정렬이라 목록이 바뀔 때만 다시 계산한다.
   const sorted = useMemo(() => nearestNeighbor(stops), [stops]);
-  // 좌표가 없어 정렬 결과는 경로 순서가 아니므로 번호 대신 상태로 묶어 보인다(배송 중 → 수거 대기).
-  const groups = groupMapStops(sorted);
+  // 완료 사진이 이 기기 대기열에 있는 주문은 이미 들른 곳이다(3차 재감사 S-02). 작업 보드와 같이
+  // 다음 배송지에서 빼고 "사진 올리는 중" 묶음에 두며, 행에 대기열 상태 배지를 붙인다.
+  // 멈춘(사진 등록 실패) 사진은 다시 보내지 않으므로 배지만 붙이고 그 주문은 배송 중·다음 배송지 후보에 남긴다.
+  const pendingPhotos = usePendingPhotos(session?.user.id);
+  const pendingNow = Date.now();
+  const pendingBadges = new Map<string, PendingPhotoBadgeKind>(
+    pendingPhotos.entries.map((entry) => [entry.orderId, pendingPhotoBadgeKind(entry, pendingNow)]),
+  );
+  const pendingPhotoOrderIds = inFlightPhotoOrderIds(pendingPhotos.entries);
+  // 좌표가 없어 정렬 결과는 경로 순서가 아니므로 번호 대신 상태로 묶어 보인다(배송 중 → 사진 올리는 중 → 수거 대기).
+  const groups = groupMapStops(sorted, pendingPhotoOrderIds);
   // 주문에는 배송지 좌표가 없으므로 여러 곳 경유 길안내 대신
   // 다음 배송지 1곳만 연다. 유효 좌표가 없으면 주소 검색 링크로 연다.
-  // 다음 배송지는 이미 수거해 배송 중인 내 주문에서만 고른다.
-  const nextStop = pickNextDeliveryStop(sorted);
+  // 다음 배송지는 이미 수거해 배송 중인 내 주문에서만 고르고, 사진이 대기 중인 주문은 고르지 않는다.
+  const nextStop = pickNextDeliveryStop(sorted, pendingPhotoOrderIds);
+  const hasPhotoPendingStop = sorted.some(
+    (order) => order.status === 'DELIVERING' && pendingPhotoOrderIds.has(order.id),
+  );
   const nextStopLink = nextStop ? buildOrderMapLink(nextStop) : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100dvh' }}>
-      {/* 헤더 */}
+      {/* 헤더: 작업 보드처럼 머리 아래 선 없이 흰 바탕이다(design-standard.md 기사 앱, 3차 재감사 S-14). */}
       <header
         style={{
           position: 'sticky',
           top: 0,
           zIndex: 10,
           backgroundColor: 'var(--color-bg)',
-          borderBottom: 'var(--border)',
           padding: '16px',
         }}
       >
@@ -332,7 +350,7 @@ export default function MapPage() {
             {groups.map((group) => (
               <section
                 key={`${group.status}-${group.label}`}
-                className="flex flex-col gap-2.5"
+                className="flex flex-col gap-1"
                 aria-label={group.label}
               >
                 <h2
@@ -349,56 +367,65 @@ export default function MapPage() {
                     {group.orders.length}
                   </span>
                 </h2>
-                {group.orders.map((order) => {
-                  // 동·호수(상세 주소)를 앞에 쓴다. 거점은 거점 이름이 앞이다.
-                  const addr = mapStopAddressLine(order);
-                  // stale(error) 상태에서는 목록 행 지도 링크도 fail-closed로 숨긴다.
-                  const mapLink = error ? null : buildOrderMapLink(order);
-                  return (
-                    <div
-                      key={order.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 12,
-                        backgroundColor: 'var(--color-bg)',
-                        borderRadius: 12,
-                        border: 'var(--border)',
-                        padding: '12px 16px',
-                      }}
-                    >
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p
-                          className={cn(text, 'truncate')}
-                          style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
-                        >
-                          {addr}
-                        </p>
-                        <p
-                          className={cn(text, 'truncate')}
-                          style={{
-                            fontSize: 'var(--font-size-sm)',
-                            color: 'var(--driver-text-muted)',
-                          }}
-                        >
-                          {order.buyerName ?? '소비자'}
-                        </p>
-                      </div>
-                      {mapLink && (
-                        <AppButton
-                          href={mapLink.href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          size="xs"
-                          tone="brand-light"
-                          aria-label={`${addr} 카카오맵에서 열기`}
-                        >
-                          지도
-                        </AppButton>
-                      )}
-                    </div>
-                  );
-                })}
+                {/* 행은 작업 보드 행과 같은 모양이다: 카드 테두리 없이 행 사이 선만 긋는다(S-14). */}
+                <ul className="m-0 list-none p-0">
+                  {group.orders.map((order, index) => {
+                    // 동·호수(상세 주소)를 앞에 쓴다. 거점은 거점 이름이 앞이다.
+                    const addr = mapStopAddressLine(order);
+                    // stale(error) 상태에서는 목록 행 지도 링크도 fail-closed로 숨긴다.
+                    const mapLink = error ? null : buildOrderMapLink(order);
+                    const pendingKind =
+                      order.status === 'DELIVERING' ? pendingBadges.get(order.id) : undefined;
+                    return (
+                      <li
+                        key={order.id}
+                        data-testid={`driver-map-stop-${order.id}`}
+                        className="flex min-h-16 items-center gap-3 py-3"
+                        style={index === 0 ? undefined : { borderTop: 'var(--border)' }}
+                      >
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                          <p
+                            className={cn(text, 'truncate')}
+                            style={{
+                              fontWeight: 'var(--fw-bold)',
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            {addr}
+                          </p>
+                          {pendingKind && <PendingPhotoBadge kind={pendingKind} />}
+                          <p
+                            className={cn(text, 'truncate')}
+                            style={{
+                              fontSize: 'var(--font-size-sm)',
+                              color: 'var(--driver-text-muted)',
+                            }}
+                          >
+                            {order.buyerName ?? '손님'}
+                          </p>
+                        </div>
+                        {mapLink && (
+                          // 전화·길 찾기와 같은 면(--driver-action-surface)·검정 글자. 초록은 주요 버튼에만 쓴다(S-14).
+                          <a
+                            href={mapLink.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            aria-label={`${addr} 카카오맵에서 열기`}
+                            className="inline-flex min-h-11 shrink-0 items-center justify-center rounded-full px-4 no-underline"
+                            style={{
+                              backgroundColor: 'var(--driver-action-surface)',
+                              color: 'var(--color-text)',
+                              fontSize: 'var(--font-size-sm)',
+                              fontWeight: 'var(--fw-bold)',
+                            }}
+                          >
+                            지도
+                          </a>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
               </section>
             ))}
           </div>
@@ -439,6 +466,19 @@ export default function MapPage() {
                   }}
                 >
                   다음 배송지 주소가 없어 지도를 열 수 없어요. 목록에서 주소를 확인해 주세요.
+                </p>
+              ) : hasPhotoPendingStop ? (
+                // 배송 중 주문이 모두 사진을 찍은 주문이면 더 갈 곳이 없다. 사진은 대기열이 올린다.
+                <p
+                  className={text}
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    color: 'var(--color-text-secondary)',
+                    textAlign: 'center',
+                    wordBreak: 'keep-all',
+                  }}
+                >
+                  남은 배송지가 없어요. 찍은 사진은 신호가 잡히면 앱이 올려요.
                 </p>
               ) : (
                 <p

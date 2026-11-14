@@ -5,38 +5,73 @@ import {
   formatKoreanMonthDayKST,
   isCustomerFaultClosableHoldReason,
   redeliveryFeePaymentDeadlineDateKST,
+  redeliveryPaymentRequestedAtOf,
 } from './customer-fault-closure.js';
 
-describe('고객 사유 종결 날짜 계산(서울 기준)', () => {
-  it('11월 13일 오후 보류는 16일까지 결제할 수 있고 17일 00:00부터 종결할 수 있다', () => {
-    const heldAt = '2026-11-13T06:00:00.000Z'; // 서울 11월 13일 15:00
-    expect(redeliveryFeePaymentDeadlineDateKST(heldAt)).toBe('2026-11-16');
-    expect(customerFaultClosureEligibleAtMs(heldAt)).toBe(Date.parse('2026-11-16T15:00:00.000Z'));
+describe('고객 사유 종결 날짜 계산(결제 요청 시각 기준, 서울)', () => {
+  it('11월 13일 오후에 결제를 요청하면 16일까지 결제할 수 있고 17일 00:00부터 종결할 수 있다', () => {
+    const requestedAt = '2026-11-13T06:00:00.000Z'; // 서울 11월 13일 15:00
+    expect(redeliveryFeePaymentDeadlineDateKST(requestedAt)).toBe('2026-11-16');
+    expect(customerFaultClosureEligibleAtMs(requestedAt)).toBe(
+      Date.parse('2026-11-16T15:00:00.000Z'),
+    );
   });
 
-  it('UTC로는 전날인 서울 새벽 보류도 서울 날짜로 센다', () => {
-    const heldAt = '2026-11-12T15:30:00.000Z'; // 서울 11월 13일 00:30
-    expect(redeliveryFeePaymentDeadlineDateKST(heldAt)).toBe('2026-11-16');
-    expect(customerFaultClosureEligibleAtMs(heldAt)).toBe(Date.parse('2026-11-16T15:00:00.000Z'));
+  it('UTC로는 전날인 서울 새벽 요청도 서울 날짜로 센다', () => {
+    const requestedAt = '2026-11-12T15:30:00.000Z'; // 서울 11월 13일 00:30
+    expect(redeliveryFeePaymentDeadlineDateKST(requestedAt)).toBe('2026-11-16');
+    expect(customerFaultClosureEligibleAtMs(requestedAt)).toBe(
+      Date.parse('2026-11-16T15:00:00.000Z'),
+    );
   });
 
-  it('서울 23:59 보류는 그날을 보류일로 센다', () => {
-    const heldAt = '2026-11-13T14:59:59.000Z'; // 서울 11월 13일 23:59:59
-    expect(redeliveryFeePaymentDeadlineDateKST(heldAt)).toBe('2026-11-16');
-    expect(customerFaultClosureEligibleAtMs(heldAt)).toBe(Date.parse('2026-11-16T15:00:00.000Z'));
+  it('서울 23:59 요청은 그날을 요청일로 세고, 00:00 요청은 다음 날을 요청일로 센다', () => {
+    const lateRequest = '2026-11-13T14:59:59.000Z'; // 서울 11월 13일 23:59:59
+    expect(redeliveryFeePaymentDeadlineDateKST(lateRequest)).toBe('2026-11-16');
+    expect(customerFaultClosureEligibleAtMs(lateRequest)).toBe(
+      Date.parse('2026-11-16T15:00:00.000Z'),
+    );
+    const midnightRequest = '2026-11-13T15:00:00.000Z'; // 서울 11월 14일 00:00
+    expect(redeliveryFeePaymentDeadlineDateKST(midnightRequest)).toBe('2026-11-17');
+    expect(customerFaultClosureEligibleAtMs(midnightRequest)).toBe(
+      Date.parse('2026-11-17T15:00:00.000Z'),
+    );
   });
 
   it('월말을 넘겨도 날짜가 이어진다', () => {
-    const heldAt = '2026-11-29T03:00:00.000Z'; // 서울 11월 29일
-    expect(redeliveryFeePaymentDeadlineDateKST(heldAt)).toBe('2026-12-02');
-    expect(customerFaultClosureEligibleAtMs(heldAt)).toBe(Date.parse('2026-12-02T15:00:00.000Z'));
+    const requestedAt = '2026-11-29T03:00:00.000Z'; // 서울 11월 29일
+    expect(redeliveryFeePaymentDeadlineDateKST(requestedAt)).toBe('2026-12-02');
+    expect(customerFaultClosureEligibleAtMs(requestedAt)).toBe(
+      Date.parse('2026-12-02T15:00:00.000Z'),
+    );
   });
 
-  it('잘못된 보류 시각이면 null이다(종결할 수 없다)', () => {
+  it('요청 시각이 없거나 잘못되면 null이다(종결할 수 없다)', () => {
     for (const value of [null, undefined, '', '   ', 'not-a-date', 123]) {
       expect(redeliveryFeePaymentDeadlineDateKST(value)).toBeNull();
       expect(customerFaultClosureEligibleAtMs(value)).toBeNull();
     }
+  });
+});
+
+describe('redeliveryPaymentRequestedAtOf', () => {
+  it('보류 시각이 아니라 결제 요청 시각을 기한의 기준으로 읽는다', () => {
+    const hold = {
+      heldAt: '2026-11-10T06:00:00.000Z',
+      paymentRequestedAt: '2026-11-13T06:00:00.000Z',
+    };
+    const requestedAt = redeliveryPaymentRequestedAtOf(hold);
+    expect(requestedAt).toBe('2026-11-13T06:00:00.000Z');
+    expect(redeliveryFeePaymentDeadlineDateKST(requestedAt)).toBe('2026-11-16');
+  });
+
+  it('요청 전(칸 없음·null)이거나 읽을 수 없는 값이면 null이다', () => {
+    expect(redeliveryPaymentRequestedAtOf({ heldAt: '2026-11-10T06:00:00.000Z' })).toBeNull();
+    expect(redeliveryPaymentRequestedAtOf({ paymentRequestedAt: null })).toBeNull();
+    expect(redeliveryPaymentRequestedAtOf({ paymentRequestedAt: 'broken' })).toBeNull();
+    expect(redeliveryPaymentRequestedAtOf({ paymentRequestedAt: 1_700_000_000_000 })).toBeNull();
+    expect(redeliveryPaymentRequestedAtOf(null)).toBeNull();
+    expect(redeliveryPaymentRequestedAtOf(undefined)).toBeNull();
   });
 });
 

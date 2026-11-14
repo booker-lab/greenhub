@@ -53,6 +53,8 @@ export type DeliveryHold = {
   redeliveryFee: number | null;
   nextContactAt: string | null;
   nextDeliveryAt: string | null;
+  /** 보류한 때의 주문 상태(상세 응답). 이 값이 생기기 전 보류면 없다. */
+  heldFromStatus?: 'PREPARING' | 'DELIVERING';
 };
 
 export const HOLD_REASON_LABEL: Record<HoldReason, string> = {
@@ -135,6 +137,7 @@ export function DeliveryHoldModal({
   const [nextDeliveryAt, setNextDeliveryAt] = useState('');
   const [error, setError] = useState('');
   // 기상·상품 파손은 고객 책임·재배송비를 잠그고, 수령 거부는 고객 책임을 켠 채 잠근다.
+  // 출입 불가·주소 오류·고객 연락 불가는 고르면 켜지지만 잠그지 않아 기사가 끌 수 있다(S-04).
   const responsibilityLockedOff = isSellerResponsibleOnlyReason(reasonCode);
   const responsibilityLockedOn = isCustomerResponsibleOnlyReason(reasonCode);
   // 상품 파손은 다시 배송하지 않으므로 새 배송 예정을 받지 않는다.

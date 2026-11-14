@@ -295,6 +295,24 @@ test('해제된 배송 보류는 경고로 남기지 않고 결제 후 배송 �
 
   assert.equal(held?.deliveryHold?.resolvedAt, null);
   assert.equal(delivered?.deliveryHold?.resolvedAt, '2026-07-22T02:00:00.000Z');
+  // 결제 요청 시각(S-15): 요청 전 보류는 null로 읽고, 요청 뒤 보류는 그 시각을 읽는다.
+  assert.equal(held?.deliveryHold?.paymentRequestedAt, null);
+  const requested = read('requested', {
+    status: 'PREPARING',
+    deliveryHold: {
+      ...baseHold,
+      resolvedAt: null,
+      paymentRequestedAt: '2026-07-21T03:00:00.000Z',
+    },
+    redeliveryPayment: paidPayment,
+  });
+  assert.equal(requested?.deliveryHold?.paymentRequestedAt, '2026-07-21T03:00:00.000Z');
+  const brokenRequest = read('broken-request', {
+    status: 'PREPARING',
+    deliveryHold: { ...baseHold, resolvedAt: null, paymentRequestedAt: 'not-a-date' },
+    redeliveryPayment: paidPayment,
+  });
+  assert.equal(brokenRequest?.deliveryHold?.paymentRequestedAt, null);
   assert.deepEqual(
     [held, awaitingResume, delivered, resumedFree, invalidResolvedAt].map((detail) =>
       detail ? isDeliveryHoldActive(detail) : 'unreadable',
@@ -825,6 +843,27 @@ test('고객 사유 종결 주문은 종결 기록(사유·시각)만 읽고 보
     /!isCancelled && detail\.status !== 'DELIVERY_HELD' && !isClosedUndelivered/,
   );
   assert.match(source, /customerFaultClosureWarning\(/);
+});
+
+test('고객 사유 종결 기능 스위치는 서버가 true를 보냈을 때만 켜고 종결 전 경고에 넘긴다(H1)', () => {
+  assert.equal(readOrderDetail(activeOrder, activeOrder.id)?.customerFaultClosureEnabled, false);
+  for (const value of [false, 'true', 1, null]) {
+    assert.equal(
+      readOrderDetail({ ...activeOrder, customerFaultClosureEnabled: value }, activeOrder.id)
+        ?.customerFaultClosureEnabled,
+      false,
+    );
+  }
+  assert.equal(
+    readOrderDetail({ ...activeOrder, customerFaultClosureEnabled: true }, activeOrder.id)
+      ?.customerFaultClosureEnabled,
+    true,
+  );
+  assert.match(source, /closureEnabled: detail\.customerFaultClosureEnabled,/);
+  // 이미 종결된 주문 안내는 스위치와 관계없이 보인다.
+  const closedAt = source.indexOf('isClosedUndelivered && (');
+  assert.ok(closedAt > 0);
+  assert.doesNotMatch(source.slice(closedAt, closedAt + 80), /customerFaultClosureEnabled/);
 });
 
 test('기존 서버 취소·재배송비·주문 사진 조회 계약만 사용한다', () => {

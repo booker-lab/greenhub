@@ -125,8 +125,15 @@ const precacheExclude = [
   /PretendardVariable\.subset\.\d+\.[0-9a-f]+\.woff2$/,
 ];
 
+// 신호가 없어 화면 문서를 받지 못하면(위 NetworkOnly 규칙 포함 모든 런타임 규칙이 실패) 브라우저 오류 화면
+// 대신 미리 받아 둔 오프라인 대체 문서를 보인다(S-01). next-pwa는 각 규칙에 실패 때만 도는 handlerDidError를
+// 더할 뿐 응답을 캐시에 쓰지 않으므로 로그인 검사 화면은 그대로 NetworkOnly다. 대체 문서(src/app/~offline)는
+// 세션·주문 정보를 읽지 않는 고정 화면이고, 미리 받는 것은 이 문서뿐이다.
+export const pwaFallbacks = { document: '/~offline' } as const;
+
 export default withBundleAnalyzer(withPWA({
   dest: "public",
+  fallbacks: pwaFallbacks,
   cacheOnFrontEndNav: false,
   aggressiveFrontEndNavCaching: false,
   // 전파 복구 시 자동 새로고침이 진행 중인 사진 업로드를 끊지 않도록 끈다

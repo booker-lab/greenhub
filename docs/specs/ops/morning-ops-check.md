@@ -36,6 +36,7 @@
 |---|---|---|---|
 | M1 지급 후 환불 | 판매자에게 이미 지급한 정산의 주문이 환불되면 정산은 `paid`로 두고 회수 필요(`recoveryRequired`·`recoveryAmount`)를 표시하며 관리자만 닫는 운영 기록(`SETTLEMENT_RECOVERY_REQUIRED`)을 연다(2026-10-21 결정 ④, #592). 돌려받을 돈이 남아 있는지 매일 본다 | 🔴 정산 `status=='paid'`인데 주문 `status=='CANCELLED'`이거나 결제 `refundedAt`이 있음. 1건부터 | 판매자에게 돌려받은 뒤 관리자 회수 완료 처리 |
 | M2 수수료율 차이 | 정산은 생성 때 가게 `commissionRate`(없으면 `PLATFORM_FEE_RATE`)를 쓰고 이미 만든 정산은 다시 계산하지 않는다(2026-10-21 결정 ②, #592). 그래서 요율을 바꾼 직후에는 그 전에 만든 정산과 값이 다를 수 있다 | 🟡 `stores.commissionRate`가 있고, 그 가게 최근 정산의 `platformFeeRate`와 다름. 평소에는 한 줄만 보이고, 새로 생기거나 바뀐 날에만 가게별로 자세히 보인다 | 요율 변경 전에 만든 정산이면 그대로 둔다. 변경 뒤 만든 정산인데 다르면 기술 확인 |
+| M3 종결됐는데 정산 없음 | 고객 사유 종결(환불 없음, `CLOSED_UNDELIVERED`)은 종결 트랜잭션이 커밋된 뒤 배송 완료와 같은 정산을 만든다. 이 단계가 실패하면 주문은 종결된 채 정산이 없고, 판매자가 주문 상세 "정산 다시 맞추기"를 누르기 전까지 판매자는 돈을 받지 못한다. 판매자가 돌아오지 않아도 사람이 알게 매일 본다 | 🔴 주문 `status=='CLOSED_UNDELIVERED'`인데 같은 id의 `settlements` 문서가 없음(정산 상태는 보지 않는다). 1건부터. 종결 시점으로 자르지 않는다(정산이 없는 한 계속 뜬다) | 판매자에게 "정산 다시 맞추기"를 안내하거나, 관리자가 같은 종결 요청(`POST .../customer-fault-closure`)을 다시 보내 정산만 맞춘다 |
 
 ### 2-2. 주문 흐름
 
@@ -101,6 +102,8 @@
 | `settlements` | 최근 30일 `settledAt` | `storeId`, `platformFeeRate`, `settledAt` |
 | `orders` | M1 대상 문서 id로 `getAll` | `status`, `storeId`, `orderNumber` |
 | `payments` | M1 대상 문서 id로 `getAll` | `status`, `refundedAt`, `refundAmount` |
+| `orders` | `status=='CLOSED_UNDELIVERED'`(M3) | `status`, `storeId`, `orderNumber`, `totalAmount`, `customerFaultClosure.closedAt` |
+| `settlements` | M3 대상 주문 id로 `getAll` | `status` |
 | `stores` | 전체(파일럿 규모) | `name`, `status`, `commissionRate` |
 | `saleRounds` | 배송 마감이 최근 7일 안이거나 배송 시작이 오늘인 회차 | `storeId`, `name`, `status`, `schedule.deliveryStartAt`, `schedule.deliveryEndAt` |
 | `orders` | 위 회차 id별 `roundId==` | `status`, `storeId`, `orderNumber`, `roundId`, `deliveryMethod`, `driverId`, `totalAmount`, `updatedAt` |
@@ -111,7 +114,7 @@
 | `auditLogs` | `createdAt` 최근 8일 | `action`, `createdAt` |
 | `operationIssues` | `status=='OPEN'` | `type`, `severity`, `storeId`, `createdAt` |
 
-**읽지 않는 필드(금지 목록, 테스트로 고정)**: `deliveryAddress`, `deliveryPhone`, `requestNote`, `gift`, `buyerName`, `buyerPhone`, `address`, `userId`, `deliveryHold.reasonMessage`, `recipientEmail`, `ip`, `detail`, `passwordHash`, `savedAddresses`, `activeSessionIds`, 이름·전화·이메일 필드 전부. 이 목록은 문서마다 필드가 늘어날 수 있으므로, 허용 목록 방식이 기준이고 금지 목록은 검사용이다.
+**읽지 않는 필드(금지 목록, 테스트로 고정)**: `deliveryAddress`, `deliveryPhone`, `requestNote`, `gift`, `buyerName`, `buyerPhone`, `address`, `userId`, `deliveryHold.reasonMessage`, `customerFaultClosure.memo`(손님과 연락한 내용), `recipientEmail`, `ip`, `detail`, `passwordHash`, `savedAddresses`, `activeSessionIds`, 이름·전화·이메일 필드 전부. 이 목록은 문서마다 필드가 늘어날 수 있으므로, 허용 목록 방식이 기준이고 금지 목록은 검사용이다.
 
 **회차 조회**: 회차 일정(`schedule.*`)은 ISO 문자열이고 시차 표기(`Z`·`+09:00`)가 섞일 수 있어 문자열 범위 조회를 쓰지 않는다. `saleRounds`는 위 필드만 전체를 읽어 메모리에서 고르고, 고른 회차의 주문만 조회한다(파일럿 규모).
 
@@ -217,6 +220,7 @@ S1~S3은 운영에 접근하지 않으므로 S0과 나란히 진행할 수 있�
 - 기계 계정 통로 없음: `apps/api/src/admin/admin.controller.ts:19-21`(JWT + admin 역할만), API 키·내부 토큰 가드 없음
 - 클라이언트 규칙: `firestore.rules:52-54`(orders 차단), `:147-149`(그 밖 기본 차단)
 - 지급 후 환불: `apps/api/src/settlements/settlements.service.ts` `cancelSettlement`(paid면 회수 필요 표시·`SETTLEMENT_RECOVERY_REQUIRED` 운영 기록, #592)
+- 종결 뒤 정산: `apps/api/src/orders/customer-fault-closure.service.ts` `close`(커밋 뒤 `createSettlement`, 실패하면 500·재시도로 정산만 맞춤), `getEligibility`(`settlementMissing`), `settlements.service.ts` `hasSettlement`(문서가 있으면 정산 있음)
 - 수수료율: `apps/api/src/settlements/settlements.service.ts` 정산 생성(가게 `commissionRate`, 없으면 `PLATFORM_FEE_RATE`, #592)
 - 결제 시각: `apps/api/src/payments/payment-finalization.service.ts:668-684`(`payments` 문서)
 - 기사 미배정: `apps/api/src/orders/driver-order-scope.service.ts:308`

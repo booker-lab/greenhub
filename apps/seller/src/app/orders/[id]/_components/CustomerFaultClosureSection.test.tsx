@@ -43,9 +43,38 @@ describe('CustomerFaultClosurePanel', () => {
     expect(html).not.toContain('환불 없이 주문 종결');
   });
 
+  it('결제 요청 전이면 버튼 대신 먼저 결제 요청을 보내라고 안내한다(S-15)', () => {
+    const html = panel({
+      ...eligible,
+      eligible: false,
+      reason: 'PAYMENT_NOT_REQUESTED',
+      eligibleAt: null,
+      paymentDeadlineDate: null,
+    });
+    expect(html).toContain('손님에게 재배송비 결제 요청을 보낸 뒤 3일이 지나야 종결할 수 있어요.');
+    expect(html).toContain('재배송 준비로 돌리기');
+    expect(html).not.toContain('<button');
+  });
+
+  it('안내 글은 낱말 중간에서 줄을 바꾸지 않는다(S-06: keep-all + overflow-wrap anywhere)', () => {
+    const blocked = panel({ ...eligible, eligible: false, reason: 'PAYMENT_WINDOW_OPEN' });
+    expect(blocked).toContain('[word-break:keep-all]');
+    expect(blocked).toContain('[overflow-wrap:anywhere]');
+    const html = panel(eligible);
+    expect(html).toContain('[word-break:keep-all]');
+    expect(html).toContain('[overflow-wrap:anywhere]');
+  });
+
   it('결제가 진행 중이면 그 이유를 보인다', () => {
     const html = panel({ ...eligible, eligible: false, reason: 'REDELIVERY_PAYMENT_IN_PROGRESS' });
     expect(html).toContain('재배송비 결제가 진행 중이에요');
+    expect(html).not.toContain('<button');
+  });
+
+  it('기능이 꺼져 있으면 버튼 없이 약관 개정 안내만 보인다(H1)', () => {
+    const html = panel({ ...eligible, eligible: false, reason: 'FEATURE_DISABLED' });
+    expect(html).toContain('환불 없는 종결은 약관 개정 뒤 사용할 수 있어요.');
+    expect(html).not.toContain('환불 없이 주문 종결');
     expect(html).not.toContain('<button');
   });
 

@@ -180,6 +180,37 @@ consumer | seller | driver
 - 이미 발급된 비driver 세션(이전에 허용되던 관리자 세션 등)은 기사 앱 `jwt` callback이 갱신 전에 `null`로 끝내고(쿠키 삭제), `GET /auth/session` 재검증의 앱 허용 role도 `driver`뿐이다. proxy도 `driver`가 아닌 세션을 기사 화면에 들이지 않는다(관리자면 `AdminAccount` 안내).
 - 직접 근거: `apps/api/src/auth/auth.service.spec.ts`(기사 앱 관리자 거절·consumer/seller 앱 관리자 유지), `apps/driver/src/driver-dead-ends.test.mjs`(기사 앱 허용 역할 계약).
 
+### 기사 가입 신청 정보(2026-11-13 결정)
+
+카카오는 휴대폰 번호를 주지 않고 이름도 별명이거나 `kakao-{id}`일 수 있어, 관리자가 승인 전에 볼 정보를 기사에게서 직접 받는다. 승인 게이트(아래 "의도된 Driver 계약")는 그대로이고, 신청은 세션 없이 짧은 티켓으로만 한다.
+
+- **받는 정보**: 필수 — 실명(2~20자, 글자로 시작·끝, 숫자·기호 없음), 휴대폰(010 + 8자리로 정규화해 저장), 차량 종류(`sedan` 승용·`van` 승합·`truck` 화물·`motorcycle` 오토바이), 개인정보 수집·이용 동의(`consentVersion` + `consentedAt`). 선택 — 활동 가능 요일(`mon`~`sun` 배열), 활동 가능 지역(100자 이하 한 줄). 차량 번호·면허번호·생년월일·계좌·사진·자유 메모는 받지 않는다(DTO가 모르는 칸을 400으로 거부). 규칙 정본은 `packages/shared/src/driver-application.ts`이고 API DTO와 기사 앱 폼이 같은 규칙을 쓴다.
+- **기능 스위치(2026-11-14 결정 H1)**: 가입 신청은 API 환경 변수 `DRIVER_APPLICATION_ENABLED`가 정확히 `true`일 때만 동작한다. 비었거나 다른 값이면 꺼짐(fail closed, 개인정보처리방침 개정 게시 전 기본값). 꺼져 있으면 `kakao-login` 승인 대기 거절(403 `DRIVER_APPROVAL_PENDING`)에 `applicationTicket`·`applicationStatus`를 싣지 않고(아무것도 서명하지 않음), 기사 앱은 티켓 없는 거절로 보고 "신청 내용 수정" 링크 없는 승인 대기 안내만 보인다. `GET·PUT /driver-applications/me`는 티켓 확인보다 먼저 403 `{ code: DRIVER_APPLICATION_DISABLED }`로 거절한다(맞는 티켓이어도). 404 대신 403 + code를 쓰는 이유: 배포·경로 오류(404)와 구분하고 고객 사유 종결 스위치(`CUSTOMER_FAULT_CLOSURE_DISABLED`)와 같은 모양을 쓰기 위해서다. 관리자 기사 목록·승인은 이미 저장된 신청 정보만 보이므로 스위치와 관계없이 동작한다. 켜는 일은 법무 검토·게시 뒤 운영 책임자의 수동 환경 변경이다(`docs/specs/ops/mvp-sales-round-runbook.md` §10). 직접 근거: `auth.driver-application-ticket.spec.ts`·`auth.service.spec.ts`(꺼짐·켜짐), `driver-applications.spec.ts`("가입 신청 기능 스위치").
+- **가입 신청 티켓**: (스위치가 켜졌을 때) `POST /auth/kakao-login`(`targetRole: driver`)이 승인 전·정지 아님·탈퇴 아님인 기사를 거절할 때, 기존 403 `DRIVER_APPROVAL_PENDING` 본문(`statusCode`·`message`·`error`·`code`)에 `applicationTicket`과 `applicationStatus`(`none`|`submitted`)를 더한다. 티켓은 JWT_SECRET·HS256으로 서명한 JWT(`typ: driver_application`, `aud: greenhub-driver-application`, `sub`=사용자 id, 30분)다. `JwtStrategy`와 `ClientThrottlerGuard`는 `hasExpectedTokenClaims`로 typ·aud가 다른 이 티켓을 access token으로 받지 않는다. 이메일 `login`의 승인 대기 거절과 정지(401)·탈퇴 표시 문서에는 티켓을 싣지 않는다. 직접 근거: `apps/api/src/auth/auth.driver-application-ticket.spec.ts`, `apps/api/src/driver-applications/application-ticket.spec.ts`, `apps/api/src/auth/auth.token-boundary.spec.ts`.
+- **신청 API**: `GET /driver-applications/me`(상태·저장된 신청·실명 처음 값 — 카카오 이름이 `kakao-`로 시작하거나 규칙에 맞지 않으면 빈 값), `PUT /driver-applications/me`(내기·고치기). `Authorization: Bearer <티켓>`만 받고, `DriverApplicationTicketGuard`가 요청마다 사용자 문서를 다시 읽어 `role: driver`·승인 전·정지 아님·탈퇴 아님만 통과시킨다. 거절 code: 티켓 없음·만료·위조·계정 없음·탈퇴 401 `DRIVER_APPLICATION_TICKET_INVALID`, 이미 승인 403 `DRIVER_ALREADY_APPROVED`, 기사 아님·정지 403 `DRIVER_APPLICATION_NOT_ALLOWED`.
+- **저장**: `users/{uid}.driverApplication = { realName, phone, vehicleType, availableDays, availableArea, consentVersion, consentedAt, status: 'submitted', revision, submittedAt, updatedAt }`. 트랜잭션 안에서 계정 상태를 다시 확인하므로 관리자 승인과 겹치면 한쪽만 이긴다. 바뀐 칸이 있을 때만 `revision`을 1 올리고(처음 1, `submittedAt`은 유지), 내고 고칠 수 있는 횟수는 20회(넘으면 409 `DRIVER_APPLICATION_REVISION_LIMIT`)다. 동의 문안 버전은 `DRIVER_APPLICATION_CONSENT_VERSION`과 같아야 받고, 낼 때마다 `consentedAt`을 다시 기록한다. 승인 상태(`driverApproved`)는 바꾸지 않는다.
+- **감사**: `auditLogs`에 `driver.application.submitted`·`driver.application.updated`를 `detail: { revision, changedFields }`로 남긴다. 바뀐 칸의 **이름만** 남기고 실명·휴대폰 등 값은 남기지 않는다. 바뀐 칸이 없으면 남기지 않는다. 기록 실패는 저장을 되돌리지 않는다.
+- **요청 한도**: `PUT`은 1분 10회. 기사 앱 서버가 대신 호출해 여러 기사가 같은 서버 IP를 나눠 쓰므로 `ClientThrottlerGuard`가 서명 검증된 티켓의 `sub` 단위(`driver-application:{sub}`)로 세고, 티켓이 없거나 틀리면 IP 단위다(`client-throttler.guard.spec.ts`).
+- **탈퇴**: `driverApplication`은 `WITHDRAWAL_ERASED_USER_FIELDS`에 들어 있어 탈퇴 때 지운다(지금 탈퇴는 소비자만 가능).
+- **기사 앱**: 카카오 `signIn` 콜백은 세션 없이 티켓만 httpOnly·Secure(localhost 제외)·SameSite=Lax·경로 `/apply`·30분 쿠키(`greenhub-driver-apply`)에 담고, `none`이면 `/apply`, `submitted`면 `/login?error=ApprovalPending`("신청 내용 수정" 링크 → `/apply`)으로 보낸다. 티켓이 없거나 쿠키를 쓰지 못하면 지금처럼 승인 대기 안내로만 보낸다. 쿠키 전달 근거: 콜백은 `GET /api/auth/callback/kakao` 라우트 핸들러 안에서 돌고, Next 16.4.2 라우트 핸들러는 'action' 단계로 시작해 `finalizeResponse`에서 `cookies()`로 바꾼 값을 Auth.js 302 응답에 Set-Cookie로 붙인다(`apps/driver/src/auth.application-cookie.test.ts`가 설치된 next·next-auth 소스와 next의 `appendMutableCookies` 실행, 콜백 실행으로 고정). 이 경로에서는 next가 Auth.js 응답 쿠키를 다시 직렬화하면서 `Max-Age=0`을 버려, 지우려던 PKCE·state 확인 쿠키가 빈 값의 세션 쿠키로 남는다(다음 로그인 시작 때 덮어써져 기능 영향 없음). `/apply` 화면은 GET으로 처음 값, 서버 액션 PUT으로 저장하고, 저장·만료·"카카오로 다시 로그인" 때 쿠키를 지운다. 이미 승인된 기사는 `/board`로 보낸다. proxy는 `/apply`를 세션 검사 경로로 두지 않고(기사 세션이 있으면 `/board`), 로그인 뒤 돌아갈 곳에서 `/apply`를 뺀다.
+- **거절 기능**: 이번에는 만들지 않는다(승인만, 2026-11-13). 신청 정보가 없는 기존 대기 계정도 승인할 수 있다(`docs/specs/api/admin.md` §7).
+- **운영 사용 조건**: 아래 개인정보처리방침 개정안이 법무 검토를 거쳐 게시되기 전에는 운영에서 신청 화면을 쓰지 않는다(`docs/specs/ops/mvp-sales-round-runbook.md` §10).
+- **후속(이번 범위 밖)**: 미승인 신청을 신청 후 30일 뒤 파기하는 정기 작업은 아직 없다. 구현 전까지는 운영자가 정기 점검으로 파기한다.
+
+#### 개인정보처리방침 개정안 — 기사 지원자(법무 검토 전, 미게시)
+
+아래는 기사 가입 신청을 개인정보처리방침에 반영하기 위한 **초안**이다. 법무 검토 전이며 공개 처리방침 화면(`apps/consumer/src/app/privacy/page.tsx`)과 정본(`docs/specs/legal/consumer-legal-documents.md`)·시행일은 바꾸지 않았다. 게시 여부와 문구는 법무 검토로 확정한다.
+
+> **기사 지원자의 개인정보**
+>
+> | 구분 | 내용 |
+> |---|---|
+> | 수집 항목 | (필수) 실명, 휴대폰 번호, 차량 종류 / (선택) 활동 가능 요일, 활동 가능 지역. 카카오 로그인으로 받는 카카오 계정 식별자·이름·이메일은 회원 정보와 같다. |
+> | 수집 방법 | 기사 앱 가입 신청 화면에 지원자가 직접 입력 |
+> | 이용 목적 | 기사 가입 심사(승인 여부 판단)와 승인 뒤 배송 업무 연락 |
+> | 보유·이용 기간 | 승인된 기사: 기사로 활동하는 기간(탈퇴·활동 종료 시 파기). 승인되지 않은 신청: 신청 후 30일이 지나면 파기 |
+> | 동의 거부 | 동의하지 않을 수 있으나, 이 경우 기사 가입 신청을 할 수 없음 |
+
 공개 `RegisterDto.role`도 현재 다음을 허용한다.
 
 ```text
@@ -328,6 +359,13 @@ POST /auth/register
 POST /auth/login
 POST /auth/kakao-login
 POST /auth/refresh
+```
+
+승인 전 기사의 가입 신청(세션 대신 `kakao-login` 거절 응답의 신청 티켓으로만, §5 "기사 가입 신청 정보"):
+
+```text
+GET /driver-applications/me
+PUT /driver-applications/me
 ```
 
 `register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `login`은 클라이언트 IP+정규화한 이메일 단위로 세고, 이메일과 무관한 클라이언트 IP 단위 1분 60회 상한을 함께 둔다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다(`apps/api/src/auth/auth.controller.ts`). `refresh`는 서명 검증된 refresh token의 사용자 단위로 세고(검증 실패 시 IP 단위), 그 밖의 인증 요청은 서명 검증된 access token의 사용자 단위, 없으면 클라이언트 IP 단위로 센다. 집계 기준은 `ClientThrottlerGuard`가 정하고, 클라이언트 IP는 `trust proxy` 홉 수(`TRUST_PROXY_HOPS`, 미설정 시 Railway 런타임 2·그 밖 0, 단 Railway 밖 배포 환경(`GREENHUB_ENVIRONMENT_NAME` 있음)은 미설정이면 기동을 거부한다, `apps/api/src/config/runtime-config.ts` `resolveTrustProxyHops`, #605)로 해석한 Express `req.ip`다. 이 한도와 집계 기준은 `apps/api/src/common/guards/client-throttler.guard.spec.ts`가 검증한다.
@@ -491,6 +529,8 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-14 | 가입 신청 기능 스위치 `DRIVER_APPLICATION_ENABLED`(정확히 `true`만 켬, 기본 꺼짐 — H1): 꺼지면 `kakao-login` 거절에 티켓·상태 없음, `GET·PUT /driver-applications/me` 403 `DRIVER_APPLICATION_DISABLED`. 기사 앱 접수 안내의 "신청 내용 수정" 링크는 티켓을 담은 경우(`application=submitted`)에만 |
+| 2026-11-13 | 기사 가입 신청 정보(Z4): `kakao-login` 승인 대기 거절의 가입 신청 티켓(`typ: driver_application`, 30분)·`applicationStatus`, `GET·PUT /driver-applications/me`(티켓 가드·요청마다 계정 재확인·회차·20회 상한·칸 이름만 감사·티켓 사용자 단위 한도), 탈퇴 시 `driverApplication` 삭제, 기사 앱 `/apply`와 티켓 쿠키, 개인정보처리방침 개정안(법무 검토 전, 미게시)·30일 파기 작업 후속 |
 | 2026-10-27 | 결제사(카카오페이) 연동 심사용 이메일 로그인: 운영 API `login`은 `emailLoginAllowedUntil`이 남은 계정만 통과(그 밖은 조회·bcrypt 비교 뒤 같은 403), 소비자 앱 Credentials provider를 모든 런타임에 등록하되 E2E 헤더 게이트는 테스트 게이트 런타임에서만, 로그인 폼은 `?method=email`에서 노출, 계정은 `ops-create-email-review-account.yml`로 생성 |
 | 2026-10-24 | 강제 재검증 결과가 `null`이고 세션 조회도 비어 있으면 세 앱이 `signOut`해 현재 탭도 로그인 화면으로 바꾼다(`recheckSessionAfterRejection`). `auth-session-lifecycle.spec.ts`에 현재 탭 `/login` 전환 확인 추가 |
 | 2026-10-24 | 화면의 API 요청이 401/403으로 거절되면 세 앱 `Providers`가 `update({})`로 세션을 재사용 없이 다시 검증해 그 자리에서 끊는다(`watchApiAuthorityRejections`). `auth-session-lifecycle.spec.ts` 정지·철회 시험을 "폐기 뒤 화면 API 거절 → 즉시 세션 종료" 확인으로 변경 |

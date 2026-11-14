@@ -93,7 +93,10 @@ describe('DriversClient read recovery wiring', () => {
   });
 
   it('approve/suspend wiring을 유지한다', () => {
-    expect(source).toContain('approve(pending.userId)');
+    // 승인은 본 가입 신청 회차(없으면 0)를 함께 보낸다.
+    expect(source).toContain('approve(pending.userId, pending.expectedRevision ?? 0)');
+    expect(source).toContain('expectedRevision: driver ? driverApplicationRevision(driver) : 0');
+    expect(source).toContain('application: driver?.driverApplication ?? null');
     expect(source).toMatch(/toggleSuspend\(\s*pending\.userId,/);
     expect(source).toContain('onAction={handleAction}');
     // 승인은 요약 상자에서 같은 확인창 경로(handleAction)로 들어온다.

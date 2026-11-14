@@ -1,5 +1,9 @@
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
+  CUSTOMER_FAULT_CLOSURE_ENABLED_ENV,
+  DRIVER_APPLICATION_ENABLED_ENV,
+  isLegalGatedFeatureEnabled,
   isProductionRuntime,
   RuntimeConfigurationError,
   resolveAdcProjectIds,
@@ -373,5 +377,29 @@ describe('배포 커밋 SHA', () => {
     ).toBeNull();
     expect(resolveDeployedCommitSha({ GREENHUB_COMMIT_SHA: 'not a sha' })).toBeNull();
     expect(resolveDeployedCommitSha({})).toBeNull();
+  });
+});
+
+describe('법무 검토 전 기능 스위치(H1)', () => {
+  const keys = [DRIVER_APPLICATION_ENABLED_ENV, CUSTOMER_FAULT_CLOSURE_ENABLED_ENV] as const;
+
+  it.each(keys)('%s는 정확히 문자열 true일 때만 켠다', (key) => {
+    expect(isLegalGatedFeatureEnabled(new ConfigService({ [key]: 'true' }), key)).toBe(true);
+    for (const value of [undefined, '', 'false', 'TRUE', 'True', ' true', 'true ', '1', 'yes']) {
+      expect(isLegalGatedFeatureEnabled(new ConfigService({ [key]: value }), key)).toBe(false);
+    }
+  });
+
+  it('설정이 없으면 끈 것으로 본다', () => {
+    for (const key of keys) {
+      expect(isLegalGatedFeatureEnabled(undefined, key)).toBe(false);
+      expect(isLegalGatedFeatureEnabled(null, key)).toBe(false);
+    }
+  });
+
+  it('두 스위치는 서로 독립이다', () => {
+    const config = new ConfigService({ [DRIVER_APPLICATION_ENABLED_ENV]: 'true' });
+    expect(isLegalGatedFeatureEnabled(config, DRIVER_APPLICATION_ENABLED_ENV)).toBe(true);
+    expect(isLegalGatedFeatureEnabled(config, CUSTOMER_FAULT_CLOSURE_ENABLED_ENV)).toBe(false);
   });
 });

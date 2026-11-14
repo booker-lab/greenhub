@@ -53,6 +53,11 @@ const SAFE_ID_PATTERN = /^[A-Za-z0-9_-]{1,128}$/;
 const MAX_USER_ID_LENGTH = 256;
 /** 서버 expectedHoldAt 형식 상한(ISO 시각). */
 const MAX_HOLD_AT_LENGTH = 40;
+/**
+ * 대기열 항목에 남기는 주소 표시(동·호수) 상한. 받는 분 이름·전화번호는 남기지 않고, 이보다 긴 값
+ * (상세 주소를 나누지 못한 긴 전체 주소 등)은 남기지 않는다(기기에 남는 개인정보를 짧은 표시로 한정).
+ */
+export const PENDING_PHOTO_ADDRESS_LABEL_MAX_LENGTH = 40;
 
 /** 결과가 불확실한 실패(photo-upload-policy isUncertainPhotoUploadFailure와 같다). */
 export function isUncertainPendingSendFailure(kind: PhotoUploadFailureKind): boolean {
@@ -129,6 +134,25 @@ export interface PendingPhotoEntry {
    * 항목 형식 버전(v)은 그대로다: 이 필드가 없는 이전 항목도 그대로 읽는다.
    */
   expectedHoldAt?: string | null;
+  /**
+   * 알림·로그아웃 확인에 쓰는 주소 표시(동·호수, 예: "101동 1203호"). 받는 분 이름·전화번호는 넣지 않는다.
+   * 없으면(모르던 항목·이전 항목) 주소 없이 안내한다. 항목을 지우면 함께 지워진다.
+   * 항목 형식 버전(v)은 그대로다: 이 필드가 없는 이전 항목도 그대로 읽는다.
+   */
+  addressLabel?: string;
+}
+
+/**
+ * 대기열에 남길 주소 표시로 다듬는다. 앞뒤 공백을 걷고 연속 공백을 하나로 줄인다.
+ * 문자열이 아니거나 비었거나 상한보다 길거나 제어 문자가 있으면 null(남기지 않는다).
+ */
+export function normalizePendingPhotoAddressLabel(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const label = value.replace(/\s+/g, ' ').trim();
+  if (label.length === 0 || label.length > PENDING_PHOTO_ADDRESS_LABEL_MAX_LENGTH) return null;
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: 제어 문자가 섞인 저장 값을 걸러 낸다
+  if (/[\u0000-\u001f\u007f]/.test(label)) return null;
+  return label;
 }
 
 /** 화면 표시용 요약. 사진 바이트를 들고 다니지 않는다. */
@@ -213,6 +237,9 @@ export function readPendingPhotoEntry(
   }
   if (storageKey !== undefined && storageKey !== pendingPhotoKey(userId, orderId)) return null;
   const { expectedHoldAt } = entry;
+  // 주소 표시는 화면 안내에만 쓰므로, 형식이 맞지 않으면 항목(사진)은 그대로 두고 표시만 버린다.
+  const addressLabel =
+    entry.addressLabel === undefined ? null : normalizePendingPhotoAddressLabel(entry.addressLabel);
   if (
     expectedHoldAt !== undefined &&
     expectedHoldAt !== null &&
@@ -237,6 +264,7 @@ export function readPendingPhotoEntry(
     nextAttemptAt,
     leaseUntil,
     ...(expectedHoldAt === undefined ? {} : { expectedHoldAt }),
+    ...(addressLabel === null ? {} : { addressLabel }),
   };
 }
 
@@ -288,6 +316,8 @@ export function createPendingPhotoEntry(args: {
   input: PendingPhotoEnqueueInput;
   /** 촬영 때 본 보류 표시. 모르면 undefined(싣지 않는다). */
   expectedHoldAt?: string | null;
+  /** 주소 표시(동·호수). 모르면 undefined·null(남기지 않는다). */
+  addressLabel?: string | null;
 }): PendingPhotoEntry | null {
   if (!shouldEnqueuePendingPhoto(args.input)) return null;
   const sent = args.input.phase === 'sent';
@@ -312,6 +342,7 @@ export function createPendingPhotoEntry(args: {
     nextAttemptAt,
     leaseUntil: 0,
     ...(args.expectedHoldAt === undefined ? {} : { expectedHoldAt: args.expectedHoldAt }),
+    ...(args.addressLabel == null ? {} : { addressLabel: args.addressLabel }),
   });
 }
 
@@ -563,13 +594,23 @@ export function pendingPhotoBadgeKind(
   return isPendingPhotoLeaseActive(entry, now) ? 'sending' : 'waiting';
 }
 
+/**
+ * 기다리는 사진을 바로 올리는 버튼 이름. 사진 화면·주문 상세·목록 안내가 같은 이름을 쓴다(S-10).
+ * 목록 안내(board/_client.tsx)는 같은 글자를 직접 쓰며, 같은지는 photo-ack-parity.test.mjs가 확인한다.
+ */
+export const PENDING_PHOTO_UPLOAD_NOW_LABEL = '지금 올리기';
+
 export const PENDING_PHOTO_MESSAGES = {
-  ENQUEUED:
-    '사진을 휴대폰에 저장했어요. 신호가 잡히면 앱이 자동으로 올려요. 앱을 열어 두면 더 빨리 올라가요.',
-  WAITING: '사진을 휴대폰에 저장했어요. 신호가 잡히면 앱이 자동으로 올려요.',
+  // 사진 화면(방금 넣음 포함)·주문 상세·목록 안내가 같은 문구를 쓴다(S-10). 실행기는 앱이 열려 있을 때만
+  // 돌므로(PendingPhotoUploader) 앱을 닫으면 다시 열 때 올라간다는 사실을 함께 쓴다(S-01).
+  WAITING:
+    '사진을 휴대폰에 저장했어요. 앱이 열려 있을 때 신호가 잡히면 자동으로 올려요. 앱을 닫으면 다시 열 때 올라가요.',
   SENDING: '사진을 올리고 있어요.',
   SESSION: '로그인을 다시 확인하면 이어서 올려요.',
+  // 주소 표시를 모르는 이전 항목의 완료 알림(pendingPhotoCompletedMessage).
   COMPLETED: '배송 완료 사진을 올렸어요',
+  // 신호가 없을 때 사진 화면의 "목록으로"를 끄며 보이는 안내(S-01). 화면 이동은 서버 응답이 있어야 한다.
+  OFFLINE_LIST: '신호가 잡히면 목록으로 갈 수 있어요.',
   SOON: '조금 전에 보낸 사진의 결과를 기다리고 있어요. 잠시 뒤 다시 올려요.',
   // 아래 셋은 사진 화면 안내(photo-upload-policy PHOTO_UPLOAD_MESSAGES)와 같은 문구다.
   NOT_FOUND: '주문을 찾을 수 없어요. 판매자 또는 운영팀에 연락해 주세요.',
@@ -605,6 +646,29 @@ export function pendingPhotoStatusMessage(entry: PendingPhotoSummary, now: numbe
   if (isPendingPhotoLeaseActive(entry, now)) return PENDING_PHOTO_MESSAGES.SENDING;
   if (entry.lastFailure === 'SESSION') return PENDING_PHOTO_MESSAGES.SESSION;
   return PENDING_PHOTO_MESSAGES.WAITING;
+}
+
+/**
+ * 대기열이 사진을 올려 배송 완료로 수렴했을 때의 알림. 정상 완료 알림(deliveryCompletedMessage
+ * "○○동 ○○호 배송을 완료했어요.")과 같은 형식에 "(사진 올림)"을 붙인다. 주소 표시가 없으면 예전 문구다.
+ */
+export function pendingPhotoCompletedMessage(entry: { addressLabel?: string }): string {
+  const label = normalizePendingPhotoAddressLabel(entry.addressLabel);
+  return label ? `${label} 배송을 완료했어요(사진 올림).` : PENDING_PHOTO_MESSAGES.COMPLETED;
+}
+
+/**
+ * 로그아웃 확인 문구에 쓰는 대기 사진 주소 표시 목록. 멈춘(failed) 항목은 사진 바이트가 이미 지워져
+ * 올릴 사진이 아니므로 뺀다. 먼저 넣은 순서이고, 주소 표시를 모르는 항목은 null이다.
+ */
+export function pendingPhotoLogoutLabels(
+  entries: readonly Pick<PendingPhotoSummary, 'state' | 'createdAt' | 'addressLabel'>[],
+): (string | null)[] {
+  return entries
+    .filter((entry) => entry.state !== 'failed')
+    .slice()
+    .sort((a, b) => a.createdAt - b.createdAt)
+    .map((entry) => normalizePendingPhotoAddressLabel(entry.addressLabel));
 }
 
 /** 목록에 없는 주문의 사진 안내 제목. */

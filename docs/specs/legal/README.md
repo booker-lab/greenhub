@@ -13,6 +13,7 @@
   - `apps/consumer/src/app/terms/page.tsx`
 - 공개 사업자 정보 정본: `apps/consumer/src/lib/publicBusinessInfo.ts`
 - 공개 경로: `/privacy`, `/terms`
+- 미게시 초안: 기사 지원자 개인정보 항목(실명·휴대폰·차량 종류·활동 요일·지역, 승인 기사는 활동 기간·미승인 신청은 신청 후 30일 뒤 파기)은 `docs/specs/api/auth.md` §5 "개인정보처리방침 개정안 — 기사 지원자"에 있다. 법무 검토 전이며 공개 페이지·정본에는 아직 반영하지 않았다.
 
 이 문서는 RC-D 실제 사용 정합성의 현재 사실을 관리한다. 공개 페이지의 시행일과 이전 버전은
 실제 계약·처리 흐름이 바뀔 때 함께 갱신한다. 이 문서와 공개 페이지의 일치는 production 배포,

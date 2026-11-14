@@ -1,6 +1,7 @@
 import { runtimeCaching as defaultRuntimeCaching } from '@ducanh2912/next-pwa';
 import { describe, expect, it } from 'vitest';
-import { networkOnlyRuntimeCaching } from '../../next.config';
+import { readFileSync } from 'node:fs';
+import { networkOnlyRuntimeCaching, pwaFallbacks } from '../../next.config';
 
 type Rule = {
   urlPattern: unknown;
@@ -70,5 +71,39 @@ describe('서비스워커 런타임 캐시: 배송 사진', () => {
     expect(firstMatch(`${APP_ORIGIN}/icons/icon-192x192.png`)?.options?.cacheName).toBe(
       'static-image-assets',
     );
+  });
+});
+
+describe('서비스워커 오프라인 대체 문서(S-01)', () => {
+  const offlinePageSource = readFileSync(
+    new URL('../app/~offline/page.tsx', import.meta.url),
+    'utf8',
+  );
+  const reopenSource = readFileSync(
+    new URL('../app/~offline/reopen-button.tsx', import.meta.url),
+    'utf8',
+  );
+
+  it('신호 없이 문서를 받지 못하면 /~offline을 보이고, 로그인 검사 화면은 그대로 NetworkOnly다', () => {
+    expect(pwaFallbacks).toEqual({ document: '/~offline' });
+    for (const path of ['/board', '/board/order-1', '/board/order-1/photo', '/map', '/profile']) {
+      const rule = firstMatch(`${APP_ORIGIN}${path}`);
+      expect(rule?.handler, path).toBe('NetworkOnly');
+      expect(rule?.options?.cacheName, path).toBe('driver-protected-pages-network-only');
+    }
+    // 대체 문서는 로그인 검사 경로가 아니다(설치 때 미리 받는 문서에 세션이 실리지 않는다).
+    expect(/^\/(?:board|map|profile)(?:\/|$)/.test(pwaFallbacks.document)).toBe(false);
+  });
+
+  it('대체 문서는 주문·손님 정보나 세션을 읽지 않는 고정 문구다', () => {
+    const text = offlinePageSource.replace(/\s+/g, ' ');
+    expect(text).toContain('신호가 없어요.');
+    expect(text).toContain('신호가 잡히면 앱을 다시 열어 주세요. 올리지 못한 사진은 휴대폰에 저장돼 있어요.');
+    for (const source of [offlinePageSource, reopenSource]) {
+      expect(source).not.toMatch(
+        /@\/lib\/api|auth\(|useSession|getSession|headers\(|cookies\(|fetch\(/,
+      );
+    }
+    expect(reopenSource).toMatch(/window\.location\.reload\(\)/);
   });
 });

@@ -94,5 +94,17 @@ describe('apiJson 실패 응답', () => {
     const error = await caught(apiJson('/sale-rounds/r1', 't', { method: 'PATCH', body: '{}' }));
     expect(error.status).toBe(400);
     expect(error.message).toBe('판매 마감 시간이 지났어요.');
+    expect(error.code).toBeUndefined();
+  });
+
+  it('서버가 붙인 기계 판독용 code를 함께 담는다', async () => {
+    stubFetch(409, {
+      statusCode: 409,
+      message: '가입 신청 내용이 바뀌었습니다. 다시 확인해 주세요.',
+      code: 'DRIVER_APPLICATION_CHANGED',
+    });
+    const error = await caught(apiJson('/admin/drivers/d1/approve', 't', { method: 'PATCH' }));
+    expect(error.status).toBe(409);
+    expect(error.code).toBe('DRIVER_APPLICATION_CHANGED');
   });
 });

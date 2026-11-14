@@ -11,6 +11,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldOrigin, assertDeliveryHoldPolicy } from './delivery-hold-policy';
+import { detachDeliveryPhotosOnHold } from './delivery-photo-cycle';
 import {
   isLegacyDeliveryPhotoUrlForOrder,
   LEGACY_DELIVERY_PHOTO_URL_MESSAGE,
@@ -322,7 +323,15 @@ export class OrdersLifecycleService {
               (latestOrderSnap.data() ?? {}) as Record<string, any>,
             );
           }
-          t.update(orderRef, this.withSellerCancelCompletion(update, sellerCancelClaim, now));
+          // 갱신은 이 트랜잭션에서 읽은 최신 주문으로 다시 만든다(보류 때 떼는 연결 사진이 최신이어야 한다).
+          const latestUpdate = this.buildStatusUpdate(
+            latestOrderSnap.data()!,
+            dto,
+            requesterId,
+            now,
+            confirmedCancelReason,
+          );
+          t.update(orderRef, this.withSellerCancelCompletion(latestUpdate, sellerCancelClaim, now));
         });
       } else {
         if (nextStatus === 'DELIVERING') {
@@ -1183,9 +1192,14 @@ export class OrdersLifecycleService {
         nextContactAt: hold['nextContactAt'] ?? null,
         nextDeliveryAt: hold['nextDeliveryAt'] ?? null,
         resolvedAt: null,
+        // 보류한 때의 주문 상태(PREPARING·DELIVERING). 기사가 상품을 들고 있는지(배송 중에 보류) 알려 준다.
+        // 요청 값이 아니라 서버가 읽은 현재 상태로 적는다.
+        heldFromStatus: order['status'],
       };
       // 보류 회차 번호. 보류·재개 알림의 멱등 키와 반복 상한(order-transition-notice)에 쓴다.
       update['deliveryHoldCount'] = readDeliveryHoldCount(order) + 1;
+      // 완료되지 않은 채 연결된 사진은 이 보류로 떼어 다음 배송 회차가 사진 없이 시작한다.
+      Object.assign(update, detachDeliveryPhotosOnHold(order, dto.status, this.toIso(now)));
     } else if (
       (dto.status === 'DELIVERING' && isCurrentRedeliveryPaymentRequired(order)) ||
       (order['status'] === 'DELIVERY_HELD' && !isCurrentRedeliveryPaymentRequired(order))

@@ -168,8 +168,11 @@ test('작업 보드 진행 줄의 "오늘 완료 n곳"은 1곳 이상일 때만 
   const block = boardSource.slice(at, boardSource.indexOf('</Link>', at));
   assert.match(block, /<Link\s+href="\/board\/completed"/);
   assert.match(block, /오늘 완료 \{completedToday\}곳/);
-  // 0곳은 링크 없이 글자만 둔다.
-  assert.match(boardSource, /\{completedToday === 0 && <>\{' · '\}오늘 완료 0곳<\/>\}/);
+  // 0곳은 링크 없이 글자만 둔다. 항목마다 nowrap으로 묶어 항목 중간에서 줄을 바꾸지 않는다(S-07).
+  assert.match(
+    boardSource,
+    /\{completedToday === 0 && \(\s*<>\s*\{' · '\}\s*<span style=\{progressItem\}>오늘 완료 0곳<\/span>\s*<\/>\s*\)\}/,
+  );
   assert.equal(boardSource.match(/href="\/board\/completed"/g)?.length, 1);
 });
 

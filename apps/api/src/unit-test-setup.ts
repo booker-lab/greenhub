@@ -25,3 +25,7 @@ delete process.env.FIRESTORE_EMULATOR_HOST;
 delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
 delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+// 법무 검토 전 기능 스위치(H1)는 호스트 셸 값과 무관하게 꺼진 상태에서 시작한다.
+// 켠 동작은 각 테스트가 ConfigService 값으로 직접 넣는다.
+delete process.env.DRIVER_APPLICATION_ENABLED;
+delete process.env.CUSTOMER_FAULT_CLOSURE_ENABLED;

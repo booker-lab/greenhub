@@ -2,6 +2,7 @@
 
 import {
   isNonRedeliverableHoldReason,
+  redeliveryPaymentRequestedAtOf,
   type OperationIssueActionType,
   type OperationIssueStatus,
   type Order,
@@ -28,6 +29,7 @@ const TONE: Record<string, 'default' | 'problem' | 'done'> = {
   brand: 'default',
   red: 'problem',
   yellow: 'default',
+  neutral: 'default',
   gray: 'done',
 };
 
@@ -53,7 +55,10 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
-function getRedeliveryPaymentPresentation(payment: Order['redeliveryPayment']) {
+function getRedeliveryPaymentPresentation(
+  payment: Order['redeliveryPayment'],
+  paymentRequested: boolean,
+) {
   if (!payment?.required) return null;
 
   if (payment.requiresRecovery || ['FAILED', 'REFUNDED', 'MISMATCHED'].includes(payment.status)) {
@@ -72,6 +77,29 @@ function getRedeliveryPaymentPresentation(payment: Order['redeliveryPayment']) {
     };
   }
 
+  // 결제 건이 아직 없지만 손님이 결제할 수 있는 정상 대기(S-03, 기사 앱 D-03과 같은 분기). 결제 요청 알림은
+  // 판매자가 "재배송 준비로 돌리기"를 눌러야 나가므로 운영 문제가 아니라 판매자가 할 일로 알린다.
+  // 이미 눌렀으면(재배송 준비로 돌린 PREPARING이거나 보류 기록에 결제 요청 시각이 있다) 손님이 결제창을 열기
+  // 전까지 결제 건이 없어도 판매자가 할 일은 없으므로 요청을 보냈다고만 알린다.
+  if (
+    payment.status === 'MISSING' &&
+    payment.canPay === true &&
+    payment.requiresRecovery === false
+  ) {
+    if (paymentRequested) {
+      return {
+        label: '결제 요청을 보냈어요',
+        description: '손님이 결제하면 다시 배송할 수 있어요.',
+        color: 'neutral',
+      };
+    }
+    return {
+      label: '재배송비 결제 전',
+      description: "'재배송 준비로 돌리기'를 누르면 손님에게 결제 요청이 가요.",
+      color: 'neutral',
+    };
+  }
+
   if (payment.status === 'PENDING') {
     return {
       label: '재배송비 결제 대기',
@@ -87,8 +115,20 @@ function getRedeliveryPaymentPresentation(payment: Order['redeliveryPayment']) {
   };
 }
 
-function RedeliveryPaymentPanel({ payment }: { payment: Order['redeliveryPayment'] }) {
-  const presentation = getRedeliveryPaymentPresentation(payment);
+export function RedeliveryPaymentPanel({
+  payment,
+  orderStatus,
+  deliveryHold,
+}: {
+  payment: Order['redeliveryPayment'];
+  /** 주문 상태. 재배송 준비로 돌린 뒤(PREPARING)면 결제 요청을 이미 보냈다. */
+  orderStatus?: Order['status'];
+  /** 현재 보류 기록. paymentRequestedAt이 있으면 결제 요청을 이미 보냈다. */
+  deliveryHold?: Order['deliveryHold'];
+}) {
+  const paymentRequested =
+    orderStatus === 'PREPARING' || redeliveryPaymentRequestedAtOf(deliveryHold) !== null;
+  const presentation = getRedeliveryPaymentPresentation(payment, paymentRequested);
   if (!presentation) return null;
 
   return (
@@ -246,7 +286,11 @@ export function OrderOperationsSection({
 }) {
   return (
     <>
-      <RedeliveryPaymentPanel payment={order.redeliveryPayment} />
+      <RedeliveryPaymentPanel
+        payment={order.redeliveryPayment}
+        orderStatus={order.status}
+        deliveryHold={order.deliveryHold}
+      />
 
       {order.deliveryHold && (
         <div className={`${PAPER} p-4`}>

@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { STORE_ORDER_ACTIVE_STATUSES, STORE_ORDER_ARCHIVED_STATUSES } from './dto/query-orders.dto';
 import {
@@ -868,5 +869,52 @@ describe('OrdersQueryService 주문 목록 범위 줄이기', () => {
       );
     }
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('손님 주문 상세의 고객 사유 종결 기능 스위치(customerFaultClosureEnabled)', () => {
+  const records: RecordMap = {
+    'stores/store-1': { ownerId: 'seller-1' },
+    'orders/order-1': {
+      id: 'order-1',
+      storeId: 'store-1',
+      userId: 'consumer-1',
+      status: 'DELIVERY_HELD',
+      totalAmount: 10000,
+    },
+  };
+  const serviceWith = (config?: Record<string, string>) =>
+    new OrdersQueryService(
+      makeFirestore(records) as never,
+      undefined,
+      undefined,
+      config ? new ConfigService(config) : undefined,
+    );
+
+  it.each([
+    ['설정 없음', undefined],
+    ['미설정', {}],
+    ['false', { CUSTOMER_FAULT_CLOSURE_ENABLED: 'false' }],
+    ['대문자 TRUE', { CUSTOMER_FAULT_CLOSURE_ENABLED: 'TRUE' }],
+  ])('스위치가 %s일 때 손님 응답에 false를 싣는다', async (_label, config) => {
+    await expect(
+      serviceWith(config).getOrderById('order-1', requester('consumer-1', 'consumer')),
+    ).resolves.toMatchObject({ id: 'order-1', customerFaultClosureEnabled: false });
+  });
+
+  it("'true'면 손님·관리자 응답에 true를 싣는다", async () => {
+    const service = serviceWith({ CUSTOMER_FAULT_CLOSURE_ENABLED: 'true' });
+    await expect(
+      service.getOrderById('order-1', requester('consumer-1', 'consumer')),
+    ).resolves.toMatchObject({ customerFaultClosureEnabled: true });
+    await expect(
+      service.getOrderById('order-1', requester('admin-1', 'admin')),
+    ).resolves.toMatchObject({ customerFaultClosureEnabled: true });
+  });
+
+  it('판매자 응답에는 싣지 않는다(판매자 화면은 판정 API로 본다)', async () => {
+    const service = serviceWith({ CUSTOMER_FAULT_CLOSURE_ENABLED: 'true' });
+    const result = await service.getOrderById('order-1', requester('seller-1', 'seller'));
+    expect(result).not.toHaveProperty('customerFaultClosureEnabled');
   });
 });

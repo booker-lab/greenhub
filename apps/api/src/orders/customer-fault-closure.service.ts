@@ -4,17 +4,24 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   customerFaultClosureEligibleAtMs,
   customerFaultClosureReasonFor,
   isCustomerFaultClosableHoldReason,
   redeliveryFeePaymentDeadlineDateKST,
+  redeliveryPaymentRequestedAtOf,
   type CustomerFaultClosureActorRole,
   type CustomerFaultClosureBlockReason,
   type CustomerFaultClosureEligibility,
   type CustomerFaultClosureRecord,
 } from '@greenhub/shared';
+import {
+  CUSTOMER_FAULT_CLOSURE_ENABLED_ENV,
+  isLegalGatedFeatureEnabled,
+} from '../config/runtime-config';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
 import { timestampMillis } from '../sale-rounds/sale-round-state.contract';
@@ -28,6 +35,33 @@ import {
 } from './redelivery-resume-gate';
 
 type OrderRecord = Record<string, any>;
+
+/**
+ * 고객 사유 종결 기능이 꺼져 있을 때(CUSTOMER_FAULT_CLOSURE_ENABLED가 'true'가 아님) 종결 요청 거절 code.
+ * 약관 개정 전이라 기본으로 끈다(H1). 이미 종결한 주문의 정산 다시 맞추기는 꺼져 있어도 받는다.
+ */
+export const CUSTOMER_FAULT_CLOSURE_DISABLED = 'CUSTOMER_FAULT_CLOSURE_DISABLED';
+
+export function customerFaultClosureDisabled(): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    message: '환불 없는 종결은 약관 개정 뒤 사용할 수 있습니다.',
+    error: 'Forbidden',
+    code: CUSTOMER_FAULT_CLOSURE_DISABLED,
+  });
+}
+
+/**
+ * 기능이 꺼져 있을 때의 판정. 이미 종결한 주문(ALREADY_CLOSED)은 기록과 정산 다시 맞추기를 위해 그대로 두고,
+ * 그 밖의 주문은 종결할 수 없음(FEATURE_DISABLED)으로 바꾼다.
+ */
+export function applyCustomerFaultClosureSwitch(
+  decision: CustomerFaultClosureEligibility,
+  enabled: boolean,
+): CustomerFaultClosureEligibility {
+  if (enabled || decision.reason === 'ALREADY_CLOSED') return decision;
+  return { ...decision, eligible: false, reason: 'FEATURE_DISABLED' };
+}
 
 /** 결제를 시작한 재배송비(PENDING)를 진행 중으로 보는 시간. 지나면 버려진 결제로 보고 종결을 허용한다. */
 export const REDELIVERY_PAYMENT_IN_PROGRESS_MS = 24 * 60 * 60 * 1000;
@@ -52,7 +86,12 @@ type ChargeRead = {
 /**
  * 고객 사유 종결 판정(순수 함수). GET 판정과 POST 종결이 같은 규칙을 쓴다.
  * 검사 순서: 이미 종결 → 회차 주문 → 직배송 → 취소 진행 → 보류 상태 → 보류 사유·책임 →
- * 보류 기록 → 재배송비 청구(결제 완료·운영 확인) → 결제 기한 → 진행 중 결제(24시간).
+ * 보류 기록 → 재배송비 청구(결제 완료·운영 확인) → 결제 요청 여부·결제 기한 → 진행 중 결제(24시간).
+ *
+ * 재배송비 미결제 기한은 보류 시각이 아니라 손님에게 결제 요청을 보낸 시각(deliveryHold.paymentRequestedAt)부터
+ * 센다(S-15). 요청 전 보류(DELIVERY_HELD)는 PAYMENT_NOT_REQUESTED로 막는다. 결제 요청 뒤 준비 상태(PREPARING)인데
+ * 요청 시각이 없으면(이 칸이 생기기 전에 돌린 주문) 기한을 알 수 없으므로 INVALID_HOLD로 막는다(fail closed).
+ * 수령 거부는 요청과 무관하게 바로 종결할 수 있다.
  */
 export function decideCustomerFaultClosure(
   order: OrderRecord,
@@ -68,7 +107,8 @@ export function decideCustomerFaultClosure(
     isCustomerFaultClosableHoldReason(hold['reasonCode'])
       ? customerFaultClosureReasonFor(hold['reasonCode'])
       : null;
-  const windowEligibleAtMs = customerFaultClosureEligibleAtMs(heldAt);
+  const paymentRequestedAt = redeliveryPaymentRequestedAtOf(hold);
+  const windowEligibleAtMs = customerFaultClosureEligibleAtMs(paymentRequestedAt);
   const eligibleAtMs =
     closureReasonCode === 'RECEIPT_REFUSED' ? timestampMillis(heldAt) : windowEligibleAtMs;
   const base = {
@@ -77,7 +117,9 @@ export function decideCustomerFaultClosure(
       closureReasonCode && eligibleAtMs !== null && Number.isFinite(eligibleAtMs)
         ? new Date(eligibleAtMs).toISOString()
         : null,
-    paymentDeadlineDate: closureReasonCode ? redeliveryFeePaymentDeadlineDateKST(heldAt) : null,
+    paymentDeadlineDate: closureReasonCode
+      ? redeliveryFeePaymentDeadlineDateKST(paymentRequestedAt)
+      : null,
     redeliveryFee: fee,
   };
   const block = (reason: CustomerFaultClosureBlockReason): CustomerFaultClosureEligibility => ({
@@ -113,15 +155,24 @@ export function decideCustomerFaultClosure(
   }
   if (hold['customerResponsible'] !== true) return block('NOT_CUSTOMER_RESPONSIBLE');
   // 고객 책임 보류는 0원보다 큰 재배송비가 함께 있어야 한다(delivery-hold-policy).
-  if (!isCurrentRedeliveryPaymentRequired(order) || windowEligibleAtMs === null) {
+  if (!isCurrentRedeliveryPaymentRequired(order) || !Number.isFinite(timestampMillis(heldAt))) {
     return block('INVALID_HOLD');
   }
 
   const chargeState = classifyCharge(order, charge, nowMs);
   if (chargeState === 'PAID') return block('REDELIVERY_FEE_PAID');
   if (chargeState === 'NEEDS_REVIEW') return block('REDELIVERY_PAYMENT_NEEDS_REVIEW');
-  if (closureReasonCode !== 'RECEIPT_REFUSED' && nowMs < windowEligibleAtMs) {
-    return block('PAYMENT_WINDOW_OPEN');
+  if (closureReasonCode !== 'RECEIPT_REFUSED') {
+    if (windowEligibleAtMs === null) {
+      // 요청 시각 칸이 있는데 읽을 수 없거나, 요청 뒤 준비 상태인데 시각이 없으면 기한을 알 수 없다.
+      const requestedAtRecorded =
+        hold['paymentRequestedAt'] !== undefined && hold['paymentRequestedAt'] !== null;
+      if (requestedAtRecorded || order['status'] !== 'DELIVERY_HELD') {
+        return block('INVALID_HOLD');
+      }
+      return block('PAYMENT_NOT_REQUESTED');
+    }
+    if (nowMs < windowEligibleAtMs) return block('PAYMENT_WINDOW_OPEN');
   }
   if (chargeState === 'IN_PROGRESS') return block('REDELIVERY_PAYMENT_IN_PROGRESS');
   return block('OK');
@@ -186,7 +237,10 @@ export function isRoundCancellationStarted(round: OrderRecord | undefined): bool
   return status === 'CANCELLING' || status === 'LOCAL_FAILED';
 }
 
-const BLOCK_MESSAGES: Record<Exclude<CustomerFaultClosureBlockReason, 'OK'>, string> = {
+const BLOCK_MESSAGES: Record<
+  Exclude<CustomerFaultClosureBlockReason, 'OK' | 'FEATURE_DISABLED'>,
+  string
+> = {
   ALREADY_CLOSED: '이미 종결한 주문입니다.',
   NOT_ROUND_ORDER: '고객 사유 종결은 회차 주문만 할 수 있습니다.',
   NOT_DIRECT_DELIVERY: '고객 사유 종결은 직배송 주문만 할 수 있습니다.',
@@ -199,6 +253,8 @@ const BLOCK_MESSAGES: Record<Exclude<CustomerFaultClosureBlockReason, 'OK'>, str
   REDELIVERY_FEE_PAID: '재배송비가 결제된 주문은 종결할 수 없습니다. 재배송을 진행해 주세요.',
   REDELIVERY_PAYMENT_NEEDS_REVIEW:
     '재배송비 결제 상태를 확인할 수 없어 종결할 수 없습니다. 운영팀에 문의해 주세요.',
+  PAYMENT_NOT_REQUESTED:
+    "손님에게 재배송비 결제 요청을 보낸 뒤 3일이 지나야 종결할 수 있습니다. 먼저 '재배송 준비로 돌리기'를 눌러 주세요.",
   PAYMENT_WINDOW_OPEN: '재배송비 결제 기한이 지나지 않아 아직 종결할 수 없습니다.',
   REDELIVERY_PAYMENT_IN_PROGRESS: '재배송비 결제가 진행 중이어서 종결할 수 없습니다.',
 };
@@ -213,6 +269,10 @@ const BLOCK_MESSAGES: Record<Exclude<CustomerFaultClosureBlockReason, 'OK'>, str
  * 않는다(상품은 판매자가 처리). 커밋 뒤 배송 완료와 같은 방식으로 정산을 만든다(이미 있으면 그대로).
  * 같은 요청을 다시 보내면 정산만 맞춘다(집계를 다시 줄이지 않는다).
  *
+ * 법무 검토 전 기능이라 CUSTOMER_FAULT_CLOSURE_ENABLED='true'일 때만 판정·종결한다(H1). 꺼져 있으면 GET은
+ * FEATURE_DISABLED(이미 종결한 주문은 ALREADY_CLOSED 그대로), POST는 403 CUSTOMER_FAULT_CLOSURE_DISABLED로
+ * 주문을 건드리지 않는다. 이미 종결한 주문의 정산 다시 맞추기(같은 POST)는 꺼져 있어도 받는다.
+ *
  * 손님 알림은 보내지 않는다. 기존 알림톡 템플릿(ORDER_CANCELLED)은 환불을 안내하므로 맞지 않고,
  * 새 템플릿은 외부(카카오·ALIGO) 승인이 필요하다. 손님은 주문 상세 화면에서 종결 안내를 본다.
  */
@@ -223,7 +283,14 @@ export class CustomerFaultClosureService {
     private readonly capacity: OrderCapacityService,
     private readonly settlements: SettlementsService,
     private readonly chargePayments: OrderChargePaymentService,
+    // 설정이 없으면(테스트에서 직접 만든 서비스 등) 기능이 꺼진 것으로 본다(fail closed).
+    @Optional() private readonly config?: ConfigService,
   ) {}
+
+  /** 고객 사유 종결 기능 스위치(CUSTOMER_FAULT_CLOSURE_ENABLED). 정확히 'true'일 때만 켠다. */
+  isEnabled(): boolean {
+    return isLegalGatedFeatureEnabled(this.config, CUSTOMER_FAULT_CLOSURE_ENABLED_ENV);
+  }
 
   async getEligibility(storeId: string, orderId: string): Promise<CustomerFaultClosureEligibility> {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
@@ -241,7 +308,10 @@ export class CustomerFaultClosureService {
         data: chargeSnap.exists ? (chargeSnap.data() as OrderRecord) : null,
       };
     }
-    const decision = decideCustomerFaultClosure(order, charge, Date.now());
+    const decision = applyCustomerFaultClosureSwitch(
+      decideCustomerFaultClosure(order, charge, Date.now()),
+      this.isEnabled(),
+    );
     if (decision.reason === 'ALREADY_CLOSED') {
       // 종결 뒤 정산 생성이 실패했으면 판매자 화면이 "정산 다시 맞추기"를 보인다.
       return {
@@ -255,6 +325,11 @@ export class CustomerFaultClosureService {
   async close(input: CustomerFaultClosureInput) {
     const memo = input.memo.trim();
     if (!memo) throw new BadRequestException('손님과 연락한 내용을 적어 주세요.');
+
+    // 기능이 꺼져 있으면 이미 종결한 주문의 정산 다시 맞추기만 받는다. 종결 전 주문은 PortOne 확인(뒤늦은
+    // 결제 확정이 주문을 바꿀 수 있다)이나 트랜잭션 전에 거절해 주문을 건드리지 않는다.
+    const enabled = this.isEnabled();
+    if (!enabled) await this.assertAlreadyClosedWhileDisabled(input);
 
     await this.confirmPendingChargeWithProvider(input);
 
@@ -270,6 +345,8 @@ export class CustomerFaultClosureService {
         // 이미 종결됨: 집계·주문은 건드리지 않고 정산만 이어서 맞춘다.
         return { order, alreadyClosed: true };
       }
+      // 기능이 꺼져 있으면 트랜잭션 안에서도 다시 막는다(앞 확인과 이 읽기 사이에 상태가 바뀐 경우).
+      if (!enabled) throw customerFaultClosureDisabled();
 
       const chargeId = this.currentChargeId(order);
       let charge: ChargeRead = null;
@@ -346,6 +423,17 @@ export class CustomerFaultClosureService {
       status: CUSTOMER_FAULT_CLOSED_STATUS,
       alreadyClosed: committed.alreadyClosed,
     };
+  }
+
+  /** 기능이 꺼져 있을 때: 없는 주문은 404, 종결 전 주문은 403 CUSTOMER_FAULT_CLOSURE_DISABLED. */
+  private async assertAlreadyClosedWhileDisabled(input: CustomerFaultClosureInput) {
+    const orderSnap = await this.firestore.doc(`orders/${input.orderId}`).get();
+    if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {
+      throw new NotFoundException();
+    }
+    if (orderSnap.data()?.['status'] !== CUSTOMER_FAULT_CLOSED_STATUS) {
+      throw customerFaultClosureDisabled();
+    }
   }
 
   /**

@@ -102,6 +102,16 @@ export const PLAIN_KEYS = Object.freeze([
   { key: 'AI_DAILY_GENERATION_LIMIT', hint: 'Railway 운영 변수', optional: true },
   { key: 'GREENHUB_FEATURES', hint: 'Railway 운영 변수(기능 토글)', optional: true },
   {
+    key: 'DRIVER_APPLICATION_ENABLED',
+    hint: '기사 가입 신청 스위치. 비우면 꺼짐(true만 켬). 법무 검토·개정 게시 뒤 운영 책임자만 켠다',
+    optional: true,
+  },
+  {
+    key: 'CUSTOMER_FAULT_CLOSURE_ENABLED',
+    hint: '고객 사유 종결 스위치. 비우면 꺼짐(true만 켬). 약관 개정 게시 뒤 운영 책임자만 켠다',
+    optional: true,
+  },
+  {
     key: 'FLOWER_AUCTION_API_URL',
     hint: 'aT 경락가격 요청 주소. 기본 주소를 쓰면 비움',
     optional: true,

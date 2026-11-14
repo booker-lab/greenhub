@@ -13,6 +13,7 @@ import { FirestoreRetryableErrorFilter } from './common/filters/firestore-retrya
 import { ClientThrottlerGuard } from './common/guards/client-throttler.guard';
 import { shouldEnableScheduledJobs, validateRuntimeConfig, isApiUnitTestEnv } from './config/runtime-config';
 import { DriverModule } from './driver/driver.module';
+import { DriverApplicationsModule } from './driver-applications/driver-applications.module';
 import { EngagementModule } from './engagement/engagement.module';
 import { FirestoreModule } from './firestore/firestore.module';
 import { HubsModule } from './hubs/hubs.module';
@@ -78,6 +79,8 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
     HubsModule,
     AdminModule,
     DriverModule,
+    // 승인 전 기사의 가입 신청(카카오 로그인 거절 응답의 신청 티켓으로만 들어온다)
+    DriverApplicationsModule,
     VarietiesModule,
     AiModule,
     SaleRoundsModule,

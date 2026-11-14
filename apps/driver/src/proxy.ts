@@ -3,6 +3,7 @@ import type { Session } from 'next-auth';
 import { DRIVER_ADMIN_ACCOUNT_ERROR } from '@/app/login/login-notice';
 import { auth } from '@/auth';
 import { buildContentSecurityPolicy, createCspNonce } from '@/lib/content-security-policy';
+import { DRIVER_APPLY_PATH } from '@/lib/driver-application-ticket';
 import { encodeInitialSession, INITIAL_SESSION_HEADER } from '@/lib/initial-session';
 import {
   buildDriverLoginPath,
@@ -74,7 +75,7 @@ const authGate = auth((request) => {
   return continueWithCsp(request, session);
 });
 
-// 이미 로그인한 기사가 로그인 화면을 열면 callbackUrl(같은 출처 앱 경로만) 또는 /board로 보낸다.
+// 이미 로그인한 기사가 로그인 화면(또는 가입 신청 화면)을 열면 callbackUrl(같은 출처 앱 경로만) 또는 /board로 보낸다.
 // 로그인 화면(서버 컴포넌트)에서 인자 없이 `await auth()`로 세션을 읽으면 위 경고처럼 갱신된
 // 쿠키가 버려지므로, 같은 auth() 래퍼로 감싸 갱신된 쿠키를 리다이렉트·통과 응답 모두에 싣는다.
 // callbackUrl이 로그인 화면 자신이면 `/board`로 바꿔 자기 순환(`/login?callbackUrl=%2Flogin`)을 막는다.
@@ -101,7 +102,9 @@ type AuthGateContext = Parameters<typeof authGate>[1];
 export function proxy(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
   // auth()는 두 번째 인자를 위 콜백에 그대로 넘길 뿐 쓰지 않는다.
-  if (pathname === DRIVER_LOGIN_PATH) {
+  // 가입 신청 화면(/apply)은 세션이 아니라 신청 티켓 쿠키로 여는 화면이라 로그인 검사 경로가 아니다.
+  // 이미 기사 세션이 있으면(승인된 기사) 로그인 화면과 같이 작업 보드로 보낸다.
+  if (pathname === DRIVER_LOGIN_PATH || pathname === DRIVER_APPLY_PATH) {
     return loginGate(request, event as unknown as AuthGateContext);
   }
   // 로그인 검사가 없는 경로에서는 세션을 읽거나 갱신하지 않는다.

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { inFlightPhotoOrderIds } from '../../../lib/delivering-groups';
 import { countHeldOrders, groupMapStops, isMapStop, mapStopAddressLine } from './map-stop-groups';
 
 describe('groupMapStops', () => {
@@ -25,6 +26,48 @@ describe('groupMapStops', () => {
       { status: 'PREPARING', label: '수거 대기', orders: [{ id: 'p1', status: 'PREPARING' }] },
     ]);
     expect(groupMapStops([])).toEqual([]);
+  });
+});
+
+describe('groupMapStops 사진 올리는 중', () => {
+  it('완료 사진이 대기열에 있는 배송 중 주문은 "배송 중"에서 빼고 "사진 올리는 중"에 둔다(S-02)', () => {
+    const groups = groupMapStops(
+      [
+        { id: 'd1', status: 'DELIVERING' },
+        { id: 'p1', status: 'PREPARING' },
+        { id: 'd2', status: 'DELIVERING' },
+        { id: 'd3', status: 'DELIVERING' },
+      ],
+      new Set(['d1', 'p1']),
+    );
+    expect(groups.map((group) => [group.label, group.orders.map((order) => order.id)])).toEqual([
+      ['배송 중', ['d2', 'd3']],
+      ['사진 올리는 중', ['d1']],
+      // 수거 대기 주문은 대기열 ID와 겹쳐도 수거 대기 묶음에 그대로 둔다.
+      ['수거 대기', ['p1']],
+    ]);
+  });
+
+  it('배송 중이 모두 사진 대기면 "배송 중" 묶음은 빠진다', () => {
+    const groups = groupMapStops([{ id: 'd1', status: 'DELIVERING' }], new Set(['d1']));
+    expect(groups.map((group) => group.label)).toEqual(['사진 올리는 중']);
+  });
+
+  it('멈춘(failed) 사진의 주문은 다시 보내지 않으므로 "배송 중"에 남는다', () => {
+    const groups = groupMapStops(
+      [
+        { id: 'd1', status: 'DELIVERING' },
+        { id: 'd2', status: 'DELIVERING' },
+      ],
+      inFlightPhotoOrderIds([
+        { orderId: 'd1', state: 'failed' },
+        { orderId: 'd2', state: 'waiting' },
+      ]),
+    );
+    expect(groups.map((group) => [group.label, group.orders.map((order) => order.id)])).toEqual([
+      ['배송 중', ['d1']],
+      ['사진 올리는 중', ['d2']],
+    ]);
   });
 });
 

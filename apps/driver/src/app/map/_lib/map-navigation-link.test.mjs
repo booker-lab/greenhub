@@ -9,6 +9,7 @@ import {
   pickNextDeliveryStop,
   toValidCoordinate,
 } from './map-navigation-link.ts';
+import { inFlightPhotoOrderIds } from '../../../lib/delivering-groups.ts';
 
 const mapSource = await readFile(new URL('../page.tsx', import.meta.url), 'utf8');
 
@@ -150,8 +151,58 @@ test('다음 배송지: 경로에서 처음 나오는 배송 중 주문만 고�
   assert.equal(pickNextDeliveryStop([{ id: 'a', status: 'PREPARING' }]), null);
   assert.equal(pickNextDeliveryStop([]), null);
   // 지도 탭은 이 판단으로 다음 배송지를 고르고, 없으면 안내만 보인다.
-  assert.match(mapSource, /const nextStop = pickNextDeliveryStop\(sorted\)/);
+  assert.match(mapSource, /const nextStop = pickNextDeliveryStop\(sorted, pendingPhotoOrderIds\)/);
   assert.match(mapSource, /아직 배송 중인 주문이 없어요/);
+});
+
+test('다음 배송지: 완료 사진이 대기열에 있는 배송 중 주문은 고르지 않는다(S-02)', () => {
+  const route = [
+    { id: 'unclaimed', status: 'PREPARING' },
+    { id: 'just-done', status: 'DELIVERING' },
+    { id: 'mine-2', status: 'DELIVERING' },
+  ];
+  assert.equal(pickNextDeliveryStop(route, new Set(['just-done']))?.id, 'mine-2');
+  // 배송 중 주문이 모두 사진 대기면 다음 배송지가 없고, 지도 탭은 남은 배송지가 없다고 안내한다.
+  assert.equal(pickNextDeliveryStop(route, new Set(['just-done', 'mine-2'])), null);
+  // 대기열에 수거 대기 주문 ID가 있어도 결과는 같다(배송 중만 본다).
+  assert.equal(pickNextDeliveryStop(route, new Set(['unclaimed']))?.id, 'just-done');
+  assert.match(mapSource, /남은 배송지가 없어요\. 찍은 사진은 신호가 잡히면 앱이 올려요\./);
+});
+
+test('다음 배송지: 멈춘(failed) 사진의 주문은 다시 보내지 않으므로 다음 배송지로 고른다', () => {
+  // 사진을 넣은 뒤 보류·재개로 STALE_HOLD 멈춤이 된 주문이 다시 배송 중이고 유일한 배송 중 주문이다.
+  const route = [{ id: 'redelivery', status: 'DELIVERING' }];
+  const stopped = inFlightPhotoOrderIds([{ orderId: 'redelivery', state: 'failed' }]);
+  assert.equal(pickNextDeliveryStop(route, stopped)?.id, 'redelivery');
+  // 아직 올릴 사진이면 예전처럼 고르지 않는다.
+  const sending = inFlightPhotoOrderIds([{ orderId: 'redelivery', state: 'sending' }]);
+  assert.equal(pickNextDeliveryStop(route, sending), null);
+  // 지도 탭은 묶음·다음 배송지·안내 판단을 멈춤을 뺀 대기열로 하고, 배지는 대기열 전체로 붙인다.
+  assert.match(
+    mapSource,
+    /const pendingPhotoOrderIds = inFlightPhotoOrderIds\(pendingPhotos\.entries\);/,
+  );
+  assert.match(
+    mapSource,
+    /pendingPhotos\.entries\.map\(\(entry\) => \[entry\.orderId, pendingPhotoBadgeKind/,
+  );
+});
+
+test('지도 탭 행은 작업 보드 행 모양이고 "지도"는 전화·길 찾기 면·검정 글자다(S-14)', () => {
+  // 머리 아래 선·행 카드 테두리·연두 버튼을 쓰지 않는다.
+  assert.doesNotMatch(mapSource, /borderBottom: 'var\(--border\)'/);
+  assert.doesNotMatch(mapSource, /tone="brand-light"/);
+  assert.doesNotMatch(mapSource, /borderRadius: 12,\s*border: 'var\(--border\)'/);
+  // 행 사이에만 선을 긋고, "지도"는 --driver-action-surface 면 + 검정 글자다.
+  assert.match(mapSource, /index === 0 \? undefined : \{ borderTop: 'var\(--border\)' \}/);
+  assert.match(
+    mapSource,
+    /backgroundColor: 'var\(--driver-action-surface\)',\s*color: 'var\(--color-text\)'/,
+  );
+  // 사진 대기 주문 행에는 대기열 상태 배지를 붙이고, 받는 분이 없으면 "손님"이다(S-12).
+  assert.match(mapSource, /<PendingPhotoBadge kind=\{pendingKind\} \/>/);
+  assert.match(mapSource, /order\.buyerName \?\? '손님'/);
+  assert.doesNotMatch(mapSource, /소비자/);
 });
 
 test('주문 링크: 주소와 유효 좌표가 모두 없으면 링크를 만들지 않는다', () => {

@@ -3,8 +3,14 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import {
+  CUSTOMER_FAULT_CLOSURE_ENABLED_ENV,
+  isLegalGatedFeatureEnabled,
+} from '../config/runtime-config';
 import { FirestoreService } from '../firestore/firestore.service';
 import { StorageService } from '../firestore/storage.service';
 import {
@@ -56,6 +62,8 @@ export class OrdersQueryService {
     private readonly firestore: FirestoreService,
     private readonly storage?: StorageService,
     private readonly driverScope: DriverOrderScopeService = new DriverOrderScopeService(firestore),
+    // 설정이 없으면(테스트에서 직접 만든 서비스 등) 고객 사유 종결 기능이 꺼진 것으로 본다.
+    @Optional() private readonly config?: ConfigService,
   ) {}
 
   async getOrder(storeId: string, orderId: string, requesterInput: OrderRequesterInput) {
@@ -251,7 +259,14 @@ export class OrdersQueryService {
       return projectDriverOrder(withPayment, requester.sub, 'detail');
     }
     const detail = await this.withReadModel(orderId, order, requester);
-    return requester.role === 'admin' ? detail : withoutInternalClosureFields(detail);
+    // 고객 사유 종결 기능 스위치(H1). 손님 화면은 이 값이 true일 때만 종결 전 경고를 보인다(없으면 꺼짐).
+    const customerFaultClosureEnabled = isLegalGatedFeatureEnabled(
+      this.config,
+      CUSTOMER_FAULT_CLOSURE_ENABLED_ENV,
+    );
+    return requester.role === 'admin'
+      ? { ...detail, customerFaultClosureEnabled }
+      : { ...withoutInternalClosureFields(detail), customerFaultClosureEnabled };
   }
 
   async getMyOrders(requesterId: string) {
