@@ -8,11 +8,11 @@ import type {
   Product,
   SaleType,
 } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
 import { useSession } from 'next-auth/react';
 import { Suspense, useEffect, useRef, useState } from 'react';
+import { Button } from '@/components/Button';
 import { EMPTY_GIFT, type GiftState, giftPayload } from '@/components/benchmark/GiftFields';
 import {
   EMPTY_PACKAGE_LABEL,

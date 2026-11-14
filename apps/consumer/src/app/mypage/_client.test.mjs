@@ -45,7 +45,7 @@ const requireForTest = (specifier) => {
     return { Fragment: Symbol('Fragment'), jsx: () => null, jsxs: () => null };
   }
   if (
-    specifier === '@greenhub/ui/components/button' ||
+    specifier === '@/components/Button' ||
     specifier === '@greenhub/ui/components/status-dot' ||
     specifier === 'lucide-react' ||
     specifier === 'next-auth/react' ||

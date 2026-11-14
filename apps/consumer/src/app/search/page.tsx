@@ -1,11 +1,11 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { InputSection, inputClassName } from '@greenhub/ui/components/input';
 import { cn } from '@greenhub/ui/lib/utils';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Search, SearchX } from 'lucide-react';
+import { Button } from '@/components/Button';
 import ProductRequestBox from '@/components/benchmark/ProductRequestBox';
 import EmptyStateIcon from '@/components/EmptyStateIcon';
 import ProductCard from '@/components/ProductCard';
@@ -18,6 +18,7 @@ import {
   readSearchQuery,
   SEARCH_URL_SYNC_DELAY_MS,
 } from '@/lib/nav-search-query';
+import { TOUCH_HEIGHT } from '@/lib/touch-target';
 
 // ① 외형 유지(UI 교체 P5): Mantine Container size sm(720px·좌우 md 16·아래 96)·Box(좌우 md 16, 위 lg 20·md 16,
 // 아래 sm 12)·Stack(gap md 16·sm 12)·SimpleGrid cols 2(gap sm 12)·Text(p, 16px·줄 높이 1.55, size xl은 20px·1.65,
@@ -33,8 +34,9 @@ const QUERY_STYLE = { fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }
 // (Mantine은 rightSectionPointerEvents를 주지 않으면 pointer-events를 정하지 않는다).
 // 지우기 단추는 Mantine ActionIcon transparent sm(22px, 1px 투명 테두리, radius 16, 16px·줄 높이 1, 누르면 1px 내려감,
 // 초점 링 mantine-focus-auto)과 같은 값.
+// 지우기(✕) 버튼: 눌리는 영역 44×44px(design-standard §4). 입력칸 오른쪽 칸도 같은 폭으로 둔다.
 const CLEAR_BUTTON =
-  'relative inline-flex size-[22px] min-h-[22px] min-w-[22px] cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[16px] border border-solid border-transparent bg-transparent p-0 text-start text-[16px] leading-none no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px';
+  'relative inline-flex size-11 min-h-11 min-w-11 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[16px] border border-solid border-transparent bg-transparent p-0 text-start text-[16px] leading-none no-underline select-none touch-manipulation [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px';
 
 // 검색어는 주소의 ?q=와 맞춘다. 결과에서 상세로 갔다가 뒤로 오거나 /search?q=호접란 링크로 들어와도
 // 검색어와 결과가 남는다. useSearchParams는 정적 화면에서 Suspense 경계가 있어야 하므로(Next 16)
@@ -123,10 +125,10 @@ function SearchView({ urlQuery }: { urlQuery: string }) {
               // biome-ignore lint/a11y/noAutofocus: 교체 전(Mantine TextInput autoFocus)과 같은 동작이다.
               autoFocus={!urlQuery}
               data-slot="input"
-              className={cn(inputClassName, 'ps-[34px]', query && 'pe-[34px]')}
+              className={cn(inputClassName, TOUCH_HEIGHT, 'ps-[34px]', query && 'pe-11')}
             />
             {query ? (
-              <InputSection side="right" className="pointer-events-auto">
+              <InputSection side="right" className="pointer-events-auto w-11">
                 <button
                   type="button"
                   className={CLEAR_BUTTON}

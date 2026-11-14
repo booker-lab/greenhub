@@ -2,7 +2,6 @@
 
 import type { Notification, NotificationTemplateCode } from '@greenhub/shared';
 import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
 import {
   AlarmClock,
   Bell,
@@ -23,6 +22,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
+import { Button } from '@/components/Button';
 import EmptyStateIcon from '@/components/EmptyStateIcon';
 import { useNotifications } from '@/hooks/useNotifications';
 import { MyPageBackButton } from '../_back-button';

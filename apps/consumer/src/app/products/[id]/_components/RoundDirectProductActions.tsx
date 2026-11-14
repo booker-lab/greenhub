@@ -1,10 +1,10 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { Button } from '@/components/Button';
 import KakaoChannelCta from '@/components/benchmark/KakaoChannelCta';
 import OptionSheet, { type OptionSelection } from '@/components/benchmark/OptionSheet';
 import GreenLoveBrandSection from '@/components/GreenLoveBrandSection';
@@ -24,10 +24,11 @@ interface Props {
   roundProduct: RoundProductActionContext;
 }
 
-// Mantine ActionIcon(size 40·subtle dark·radius xl) 계산값: 40px 정사각, 모서리 32px, 투명 1px 테두리, dark-9 글자,
+// Mantine ActionIcon(subtle dark·radius xl) 계산값: 정사각, 모서리 32px, 투명 1px 테두리, dark-9 글자,
 // 줄 높이 1, 글꼴은 물려받는다. hover(가능한 기기만) dark-2 면, 비활성은 gray-2 면·gray-5 글자.
+// 크기는 눌리는 영역 44px(--touch-target, design-standard §4)이다.
 const QUANTITY_BUTTON =
-  'relative m-0 inline-flex size-10 min-h-10 min-w-10 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px enabled:[@media(hover:hover)]:hover:bg-ui-dark-light-hover disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:active:translate-y-0';
+  'relative m-0 inline-flex size-11 min-h-11 min-w-11 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px enabled:[@media(hover:hover)]:hover:bg-ui-dark-light-hover disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:active:translate-y-0';
 
 export default function RoundDirectProductActions({ product, roundProduct }: Props) {
   const router = useRouter();

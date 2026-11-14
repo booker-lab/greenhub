@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
+import { Button } from '@/components/Button';
 
 interface Props {
   totalAmount: number;

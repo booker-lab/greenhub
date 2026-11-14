@@ -1,7 +1,6 @@
 'use client';
 
 import type { Order, OrderStatus } from '@greenhub/shared';
-import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
@@ -9,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import { useEffect } from 'react';
 import A2HSButton from '@/components/A2HSButton';
+import { Button, ButtonLink } from '@/components/Button';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { useOrders } from '@/hooks/useOrders';
 import { isFeatureOn } from '@/lib/features';

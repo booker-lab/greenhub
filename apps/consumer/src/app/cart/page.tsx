@@ -2,12 +2,12 @@
 import { Alert } from '@greenhub/ui/components/alert';
 import { Badge } from '@greenhub/ui/components/badge';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
-import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { ShoppingBag } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button, ButtonLabel, ButtonLink } from '@/components/Button';
 import { CartArrivalLine, CartUpsell, IcheonPrecheck } from '@/components/benchmark/CartExtras';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
 import { type CartItem, isRoundCartItem, type RoundCartItem, useCart } from '@/hooks/useCart';
@@ -349,10 +349,11 @@ function validationRetryState(validation: ValidationState): 'hidden' | 'checking
   if (!unverified) return 'hidden';
   return validation.status === 'ready' ? 'ready' : 'checking';
 }
-// Mantine ActionIcon(size 36·subtle dark·radius xl) 계산값: UnstyledButton 위에 36px 정사각, 투명 1px 테두리,
+// Mantine ActionIcon(subtle dark·radius xl) 계산값: UnstyledButton 위에 정사각, 투명 1px 테두리,
 // dark-9 글자, 줄 높이 1, 글꼴은 물려받는다. 마우스를 올리면(hover 가능한 기기만) dark-light-hover(dark-2) 면.
+// 크기는 눌리는 영역 44px(--touch-target, design-standard §4)이다.
 const QUANTITY_BUTTON =
-  'relative m-0 inline-flex size-9 min-h-9 min-w-9 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-ui-dark-light-hover';
+  'relative m-0 inline-flex size-11 min-h-11 min-w-11 cursor-pointer appearance-none items-center justify-center overflow-hidden rounded-[32px] border border-solid border-transparent bg-transparent p-0 text-left leading-none text-ui-dark-light-text no-underline select-none [font-family:inherit] [font-size:inherit] [font-weight:inherit] [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:translate-y-px [@media(hover:hover)]:hover:bg-ui-dark-light-hover';
 // 꺼진 수량 버튼: 꺼진 글자색, 누름·마우스 올림 반응 없음.
 const QUANTITY_BUTTON_DISABLED =
   'disabled:cursor-default disabled:text-[var(--color-text-disabled)] disabled:active:translate-y-0 [@media(hover:hover)]:disabled:hover:bg-transparent';
@@ -610,126 +611,131 @@ export default function CartPage() {
                     style={{ objectFit: 'cover' }}
                   />
                 </Link>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div className="flex flex-nowrap items-start justify-between gap-1">
-                    <Link
-                      href={productHref}
-                      className="m-0 p-0 text-sm"
-                      style={{
-                        fontWeight: 'var(--fw-extrabold)',
-                        color: 'var(--color-text)',
-                        display: 'block',
-                        minWidth: 0,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        textDecoration: 'none',
-                      }}
-                    >
-                      {item.name}
-                    </Link>
-                    <Button
-                      variant="ghost"
-                      size="compact-sm"
-                      aria-label={`${item.name} 삭제`}
-                      onClick={() => removeItem(item.productId)}
-                      style={{ flexShrink: 0 }}
-                    >
-                      삭제
-                    </Button>
-                  </div>
-                  {roundItem ? (
-                    <>
-                      <span
-                        style={{
-                          background: 'var(--color-surface-muted)',
-                          borderRadius: 'var(--radius-tag)',
-                          color: 'var(--color-text)',
-                          display: 'inline-block',
-                          fontSize: 'var(--font-size-xs)',
-                          fontWeight: 'var(--fw-bold)',
-                          marginTop: 4,
-                          padding: '2px 7px',
-                        }}
-                      >
-                        회차 가격 {roundItem.roundPrice.toLocaleString('ko-KR')}원
-                      </span>
-                      {roundItem.optionLabel && (
-                        <p
-                          className="m-0 mt-1 p-0 text-sm font-normal"
-                          style={{ color: 'var(--color-text-secondary)' }}
-                        >
-                          {roundItem.optionLabel}
-                          {roundItem.optionPriceDelta
-                            ? ` (+${roundItem.optionPriceDelta.toLocaleString('ko-KR')}원)`
-                            : ''}
-                        </p>
-                      )}
-                      {soldOut && (
+                {/* 줄 배치(design-standard §4): 첫 줄은 상품 이름(긴 이름은 자르지 않고 줄을 나눈다), 둘째 줄 왼쪽은 가격·상태,
+                    오른쪽은 44px "삭제", 셋째 줄은 수량과 금액이다. 읽는 순서(이름 → 삭제 → 가격·상태)는 그대로다. */}
+                <div
+                  className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-1"
+                  style={{ flex: 1, minWidth: 0 }}
+                >
+                  <Link
+                    href={productHref}
+                    className="col-span-2 m-0 justify-self-start p-0 text-sm [overflow-wrap:anywhere] [word-break:keep-all]"
+                    style={{
+                      fontWeight: 'var(--fw-extrabold)',
+                      color: 'var(--color-text)',
+                      display: 'block',
+                      minWidth: 0,
+                      textDecoration: 'none',
+                    }}
+                  >
+                    {item.name}
+                  </Link>
+                  <Button
+                    variant="ghost"
+                    size="compact-sm"
+                    className="col-start-2 row-start-2 self-start"
+                    aria-label={`${item.name} 삭제`}
+                    onClick={() => removeItem(item.productId)}
+                  >
+                    삭제
+                  </Button>
+                  <div className="col-start-1 row-start-2 min-w-0 self-center">
+                    {roundItem ? (
+                      <>
                         <span
                           style={{
                             background: 'var(--color-surface-muted)',
                             borderRadius: 'var(--radius-tag)',
-                            color: 'var(--color-text-secondary)',
+                            color: 'var(--color-text)',
                             display: 'inline-block',
                             fontSize: 'var(--font-size-xs)',
                             fontWeight: 'var(--fw-bold)',
-                            marginLeft: 6,
                             marginTop: 4,
                             padding: '2px 7px',
                           }}
                         >
-                          품절
+                          회차 가격 {roundItem.roundPrice.toLocaleString('ko-KR')}원
                         </span>
-                      )}
-                      {!isGuest && <RoundValidationNotice validation={itemValidation} />}
-                    </>
-                  ) : (
-                    <>
-                      {item.saleType === 'group' && (
-                        <Badge size="xs" variant="light" className="mt-1">
-                          공동구매
-                        </Badge>
-                      )}
-                      {item.requestedDeliveryDate && (
-                        <p
-                          className="m-0 mt-1 p-0 text-sm font-normal"
-                          style={{ color: 'var(--color-text-secondary)' }}
-                        >
-                          배송 희망일{' '}
-                          {new Date(item.requestedDeliveryDate).toLocaleDateString('ko-KR', {
-                            month: 'long',
-                            day: 'numeric',
-                            weekday: 'short',
-                          })}
-                        </p>
-                      )}
-                      {itemIssues.length > 0 && (
-                        // Mantine Alert light orange(orange-1 면·orange-9 글자, p xs, 본문 검정 15px)
-                        <Alert role="alert" className="mt-3 bg-ui-orange-light p-2.5 text-ui-orange-light-text">
-                          <div className="overflow-hidden text-[15px] text-ellipsis text-ui-ink">
-                            <div className="flex flex-col gap-1">
-                              {itemIssues.map((issue) => (
-                                <p key={issue.code} className="m-0 p-0 text-sm font-normal">
-                                  {issue.itemMessage}
-                                </p>
-                              ))}
-                              {/* 링크 의미(a)를 유지한다: Mantine Button component={Link} light orange xs */}
-                              <ButtonLink
-                                render={<Link href={productHref} />}
-                                variant="light"
-                                size="xs"
-                                className="mt-1 bg-ui-orange-light text-ui-orange-light-text"
-                              >
-                                <ButtonLabel>다시 선택하기</ButtonLabel>
-                              </ButtonLink>
+                        {roundItem.optionLabel && (
+                          <p
+                            className="m-0 mt-1 p-0 text-sm font-normal"
+                            style={{ color: 'var(--color-text-secondary)' }}
+                          >
+                            {roundItem.optionLabel}
+                            {roundItem.optionPriceDelta
+                              ? ` (+${roundItem.optionPriceDelta.toLocaleString('ko-KR')}원)`
+                              : ''}
+                          </p>
+                        )}
+                        {soldOut && (
+                          <span
+                            style={{
+                              background: 'var(--color-surface-muted)',
+                              borderRadius: 'var(--radius-tag)',
+                              color: 'var(--color-text-secondary)',
+                              display: 'inline-block',
+                              fontSize: 'var(--font-size-xs)',
+                              fontWeight: 'var(--fw-bold)',
+                              marginLeft: 6,
+                              marginTop: 4,
+                              padding: '2px 7px',
+                            }}
+                          >
+                            품절
+                          </span>
+                        )}
+                        {!isGuest && <RoundValidationNotice validation={itemValidation} />}
+                      </>
+                    ) : (
+                      <>
+                        {item.saleType === 'group' && (
+                          <Badge size="xs" variant="light" className="mt-1">
+                            공동구매
+                          </Badge>
+                        )}
+                        {item.requestedDeliveryDate && (
+                          <p
+                            className="m-0 mt-1 p-0 text-sm font-normal"
+                            style={{ color: 'var(--color-text-secondary)' }}
+                          >
+                            배송 희망일{' '}
+                            {new Date(item.requestedDeliveryDate).toLocaleDateString('ko-KR', {
+                              month: 'long',
+                              day: 'numeric',
+                              weekday: 'short',
+                            })}
+                          </p>
+                        )}
+                        {itemIssues.length > 0 && (
+                          // Mantine Alert light orange(orange-1 면·orange-9 글자, p xs, 본문 검정 15px)
+                          <Alert
+                            role="alert"
+                            className="mt-3 bg-ui-orange-light p-2.5 text-ui-orange-light-text"
+                          >
+                            <div className="overflow-hidden text-[15px] text-ellipsis text-ui-ink">
+                              <div className="flex flex-col gap-1">
+                                {itemIssues.map((issue) => (
+                                  <p key={issue.code} className="m-0 p-0 text-sm font-normal">
+                                    {issue.itemMessage}
+                                  </p>
+                                ))}
+                                {/* 링크 의미(a)를 유지한다: Mantine Button component={Link} light orange xs */}
+                                <ButtonLink
+                                  render={<Link href={productHref} />}
+                                  variant="light"
+                                  size="xs"
+                                  className="mt-1 bg-ui-orange-light text-ui-orange-light-text"
+                                >
+                                  <ButtonLabel>다시 선택하기</ButtonLabel>
+                                </ButtonLink>
+                              </div>
                             </div>
-                          </div>
-                        </Alert>
-                      )}
-                    </>
-                  )}
-                  <div className="mt-3 flex flex-nowrap items-center justify-between gap-4">
+                          </Alert>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <div className="col-span-2 mt-3 flex flex-nowrap items-center justify-between gap-4">
                     <div
                       className="flex flex-nowrap items-center justify-start gap-0.5 px-0.5"
                       style={{
