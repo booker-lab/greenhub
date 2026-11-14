@@ -48,20 +48,31 @@ export function formatRoundTime(value: string): string | null {
   return `${at.month}월 ${at.day}일(${at.weekday}) ${period} ${hour12}시${minute}`;
 }
 
-/** 예: "12월 1일(화)". 자정·0시대는 전날로 읽는다(formatRoundTime과 같은 규칙). 잘못된 값이면 null. */
-export function formatRoundDay(value: string): string | null {
+/** 그 시각을 읽는 한국 날짜. 자정·0시대는 전날로 읽는다(formatRoundTime과 같은 규칙). 잘못된 값이면 null. */
+function roundDayParts(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   const at = kstParts(date);
-  const day = at.hour === 0 ? kstParts(new Date(date.getTime() - DAY_MS)) : at;
-  return `${day.month}월 ${day.day}일(${day.weekday})`;
+  return at.hour === 0 ? kstParts(new Date(date.getTime() - DAY_MS)) : at;
 }
 
-/** 회차 도착 시각을 읽지 못할 때 홈 요약 상자에 쓰는 고정 문구. */
+/** 예: "12월 1일(화)". 자정·0시대는 전날로 읽는다(formatRoundTime과 같은 규칙). 잘못된 값이면 null. */
+export function formatRoundDay(value: string): string | null {
+  const day = roundDayParts(value);
+  return day ? `${day.month}월 ${day.day}일(${day.weekday})` : null;
+}
+
+/** 홈 배송일 제목에 쓰는 요일 없는 날짜. 예: "12월 1일". 규칙은 formatRoundDay와 같다. 잘못된 값이면 null. */
+export function formatRoundMonthDay(value: string): string | null {
+  const day = roundDayParts(value);
+  return day ? `${day.month}월 ${day.day}일` : null;
+}
+
+/** 회차 도착 시각을 읽지 못할 때 홈 제목 구역에 쓰는 고정 문구. */
 export const ROUND_DELIVERY_PROMISE_FALLBACK = '화요일 오전 9시까지 문 앞 배송';
 
 /**
- * 홈 요약 상자의 배송 약속 한 줄. 회차 도착 시각(schedule.deliveryEndAt)을 그대로 읽는다.
+ * 홈 제목 구역의 배송 약속 한 줄. 회차 도착 시각(schedule.deliveryEndAt)을 그대로 읽는다.
  * 예: "11월 10일(화) 오전 9시까지 문 앞 배송", 자정이면 "11월 9일(월) 밤 12시까지 문 앞 배송".
  * 회차가 없거나 값을 읽지 못하면 고정 문구.
  */

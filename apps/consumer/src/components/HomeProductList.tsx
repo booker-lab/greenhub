@@ -5,13 +5,21 @@ import { getGroupBuyStatus, normalizeSalesMode } from '@greenhub/shared';
 import { Button } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { type ReactNode, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import BlockSkeleton from '@/components/BlockSkeleton';
 import DeadlineSection from '@/components/DeadlineSection';
+import HomeRoundHero from '@/components/HomeRoundHero';
 import ProductCard from '@/components/ProductCard';
 import QuickAddToast, { type QuickAddToastState } from '@/components/QuickAddToast';
 import ResilientImage, { PRODUCT_IMAGE_FALLBACK } from '@/components/ResilientImage';
-import RoundCountdownStrip from '@/components/RoundCountdownStrip';
 import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
 import {
@@ -32,13 +40,7 @@ import {
   roundProductHref,
 } from '@/lib/round-quick-add';
 import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
-import {
-  formatOrderCloseStatus,
-  formatOrderOpenLabel,
-  formatRoundDeliveryPromise,
-  isRoundOrderClosed,
-  roundSectionTitle,
-} from '@/lib/round-schedule-label';
+import { roundSectionTitle } from '@/lib/round-schedule-label';
 import { findNextRoundAfterClose, formatNextRoundNotice } from '@/lib/round-next-notice';
 import { homePrefetchStoreId, useHomeStorePrefetch } from './home-store-prefetch';
 import { resolveHomeStoreId } from './home-store-selection';
@@ -171,6 +173,21 @@ const sectionTitleStyle = {
   letterSpacing: '-0.01em',
 } as const;
 
+// 회차 홈의 운영 배너 자리(design-standard.md §5): 현재 회차 타일 아래, 연회색 면. 첫 화면의 색 면은 마감 알약
+// 하나라서 배너 면 색을 이 자리에서만 바꾼다(HeroBanner의 --home-banner-surface). 배너가 꺼져 있으면
+// (HeroBanner가 null) 빈 자리가 간격을 차지하지 않게 숨긴다.
+const ROUND_BANNER_STYLE = {
+  '--home-banner-surface': 'var(--color-surface-muted)',
+} as CSSProperties;
+
+function RoundBannerSlot({ banner }: { banner?: ReactNode }) {
+  return (
+    <div className="empty:hidden [&>*]:mb-0" style={ROUND_BANNER_STYLE}>
+      {banner}
+    </div>
+  );
+}
+
 function RoundDirectHome({
   rounds,
   currentRound,
@@ -184,7 +201,12 @@ function RoundDirectHome({
   refetch,
   storeId,
   card,
-}: ReturnType<typeof useSaleRounds> & { storeId: string | null; card: CardContextValue }) {
+  banner,
+}: ReturnType<typeof useSaleRounds> & {
+  storeId: string | null;
+  card: CardContextValue;
+  banner?: ReactNode;
+}) {
   const { addItem } = useCart();
   const router = useRouter();
   const [toast, setToast] = useState<QuickAddToastState | null>(null);
@@ -215,7 +237,8 @@ function RoundDirectHome({
         className="flex flex-col items-stretch justify-start gap-4"
         aria-label="판매 회차 불러오는 중"
       >
-        <BlockSkeleton height={112} />
+        {/* 제목 구역(배송일 제목·안내 줄·단계 표시) 자리 */}
+        <BlockSkeleton height={212} />
         <div className={GRID}>
           {[...Array(4)].map((_, index) => (
             <BlockSkeleton key={index} height={260} />
@@ -227,15 +250,18 @@ function RoundDirectHome({
 
   if (status === 'error') {
     return (
-      <div className={ALERT_STACK} role="alert">
-        {/* error는 useSaleRounds가 만든 고객 문구다(연결 안내 또는 "판매 회차를 불러오지 못했어요"). */}
-        <p className={TEXT_SM} style={SECONDARY_COLOR}>
-          {error ?? saleRoundsErrorMessage(null)}
-        </p>
-        <Button type="button" variant="light" onClick={refetch}>
-          다시 시도
-        </Button>
-      </div>
+      <>
+        <div className={ALERT_STACK} role="alert">
+          {/* error는 useSaleRounds가 만든 고객 문구다(연결 안내 또는 "판매 회차를 불러오지 못했어요"). */}
+          <p className={TEXT_SM} style={SECONDARY_COLOR}>
+            {error ?? saleRoundsErrorMessage(null)}
+          </p>
+          <Button type="button" variant="light" onClick={refetch}>
+            다시 시도
+          </Button>
+        </div>
+        <RoundBannerSlot banner={banner} />
+      </>
     );
   }
 
@@ -279,8 +305,10 @@ function RoundDirectHome({
           </Button>
         </div>
       )}
+      {/* 배송일 제목 구역. 예전 연회색 요약 상자의 안내 줄(주문 마감·배송 지역·배송 약속·다음 회차)이 여기로 왔다. */}
+      <HomeRoundHero round={currentRound} nextRoundNotice={nextRoundNotice} />
       <section aria-labelledby="current-round-title">
-        <div className="flex flex-row flex-nowrap items-baseline justify-between gap-2.5">
+        <div className="mb-3 flex flex-row flex-nowrap items-baseline justify-between gap-2.5">
           <h2 id="current-round-title" className="m-0 leading-[1.35]" style={sectionTitleStyle}>
             {currentRound ? roundSectionTitle(currentRound.status) : '이번 주 판매'}
           </h2>
@@ -291,54 +319,6 @@ function RoundDirectHome({
             >
               {currentRound.name}
               {currentRound.status === 'CLOSED' ? ' · 주문 마감' : ''}
-            </p>
-          )}
-        </div>
-        <div
-          className="mt-3 mb-4 flex flex-col items-stretch justify-start gap-0.5 p-4"
-          style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
-        >
-          {currentRound?.status === 'SCHEDULED' && (
-            <p
-              className={TEXT_SM}
-              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-primary-dark)' }}
-            >
-              {formatOrderOpenLabel(currentRound.schedule.orderOpenAt)}
-            </p>
-          )}
-          <p className={TEXT_SM} style={SECONDARY_COLOR}>
-            {/* 주문 마감 시각이 지났으면 "~까지" 대신 "주문 마감됨 · 시각"으로 쓴다. */}
-            {currentRound
-              ? formatOrderCloseStatus(
-                  currentRound.schedule.orderCloseAt,
-                  isRoundOrderClosed(currentRound, Date.now()),
-                )
-              : '주문 마감 일정 준비 중'}
-          </p>
-          {nextRoundNotice && (
-            <p
-              className={TEXT_SM}
-              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-primary-dark)' }}
-            >
-              {nextRoundNotice}
-            </p>
-          )}
-          <p className={TEXT_SM} style={SECONDARY_COLOR}>
-            경기도 이천시 직접배송
-          </p>
-          <p
-            className={`${TEXT_SM} mt-1.5`}
-            style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-primary-dark)' }}
-          >
-            {/* 회차 도착 시각에서 만든다(값을 읽지 못하면 고정 문구). */}
-            {formatRoundDeliveryPromise(currentRound?.schedule.deliveryEndAt)}
-          </p>
-          {isFeatureOn('demand-signals') && currentRound?.demand && currentRound.demand.buyerCount > 0 && (
-            <p
-              className={`${TEXT_SM} mt-0.5`}
-              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
-            >
-              이번 회차 {currentRound.demand.buyerCount}곳에서 주문했어요
             </p>
           )}
         </div>
@@ -360,6 +340,8 @@ function RoundDirectHome({
           </div>
         )}
       </section>
+
+      <RoundBannerSlot banner={banner} />
 
       {!(isFeatureOn('hide-empty-past') && pastRounds.length === 0) && (
       <>
@@ -579,7 +561,7 @@ export function useHomeCardContext(
 }
 
 // 홈은 정적으로 만들어 CDN에 두므로 빌드 때는 주소 쿼리를 알 수 없다. 정적 HTML에는 storeId 없이 그린
-// 첫 화면(배너·불러오는 중 표시)을 두고, 브라우저에서는 주소의 storeId로 다시 그린다.
+// 첫 화면(불러오는 중 표시)을 두고, 브라우저에서는 주소의 storeId로 다시 그린다.
 export default function HomeProductList({ banner }: { banner?: ReactNode }) {
   return (
     <Suspense fallback={<HomeProductListBody banner={banner} requestedStoreId={null} />}>
@@ -650,7 +632,7 @@ function HomeProductListBody({
   } else if (storeMode.salesMode === 'round_direct') {
     content = (
       <BenchmarkCardProvider value={card}>
-        <RoundDirectHome {...saleRounds} storeId={storeMode.storeId} card={card} />
+        <RoundDirectHome {...saleRounds} storeId={storeMode.storeId} card={card} banner={banner} />
       </BenchmarkCardProvider>
     );
   } else {
@@ -666,18 +648,14 @@ function HomeProductListBody({
     );
   }
 
+  // 회차 홈은 배너를 현재 회차 타일 아래에 둔다(RoundDirectHome). 판매 방식을 알기 전에는 자리를 정할 수 없어
+  // 그리지 않는다(위에 먼저 그리면 회차 홈의 첫 화면이 배너만큼 밀렸다가 올라온다).
+  const bannerOnTop = storeMode.status !== 'loading' && !isRoundDirect;
+
   return (
-    <>
-      {isRoundDirect && saleRounds.currentRound && (
-        <RoundCountdownStrip
-          status={saleRounds.currentRound.status}
-          schedule={saleRounds.currentRound.schedule}
-        />
-      )}
-      <div className="px-4 pt-4">
-        {banner}
-        {content}
-      </div>
-    </>
+    <div className="px-4 pt-4">
+      {bannerOnTop && banner}
+      {content}
+    </div>
   );
 }
