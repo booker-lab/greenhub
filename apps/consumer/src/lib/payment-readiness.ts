@@ -7,7 +7,7 @@
  */
 
 export interface RoundPayReadinessInput {
-  /** 주소 검색으로 주소·우편번호가 채워졌는지. */
+  /** 배송지 주소가 채워졌는지(주소 검색 또는 직접 입력). */
   hasAddress: boolean;
   isIcheonAddress: boolean;
   /** 배송 연락처가 휴대폰 번호 형식인지. */
@@ -21,7 +21,7 @@ export interface RoundPayReadinessInput {
 }
 
 export const PAY_BLOCKER_MESSAGES = {
-  address: '배송지 주소를 검색해 입력해 주세요.',
+  address: '배송지 주소를 검색하거나 직접 입력해 주세요.',
   icheon: '경기도 이천시 주소만 주문할 수 있어요. 배송지를 바꿔 주세요.',
   phone: '배송 연락처를 휴대폰 번호로 적어 주세요.',
   gift: '선물 받는 분과 보내는 분 이름을 적어 주세요.',

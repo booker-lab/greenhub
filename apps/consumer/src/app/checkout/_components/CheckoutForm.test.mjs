@@ -57,6 +57,19 @@ new Function(
   }).outputText,
 )(readinessModule, readinessModule.exports);
 
+const checkoutAddressSource = await readFile(
+  new URL('../../../lib/checkout-address.ts', import.meta.url),
+  'utf8',
+);
+const checkoutAddressModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(checkoutAddressSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(checkoutAddressModule, checkoutAddressModule.exports);
+
 const formModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -94,6 +107,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/components/benchmark/PackageLabelFields') return { default: () => null };
   if (specifier === '@/lib/payment-method-options') return loadPaymentMethodOptions({});
   if (specifier === '@/lib/payment-readiness') return readinessModule.exports;
+  if (specifier === '@/lib/checkout-address') return checkoutAddressModule.exports;
   throw new Error(`예상하지 못한 결제 폼 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(
@@ -255,4 +269,18 @@ test('오류 안내 아래 다음 행동은 오류 상자 안에서 문구 뒤�
     formSource,
     /\{error && \([\s\S]*?<Alert variant="destructive" role="alert"[\s\S]*?\{error\}\s*<\/p>\s*\{errorAction\}\s*<\/AlertDescription>/,
   );
+});
+
+test('주소 검색을 쓸 수 없거나 고객이 고르면 주소·우편번호를 직접 적게 연다(빠진 기능 1순위)', () => {
+  // 스크립트가 없으면 window.daum을 바로 부르지 않고 직접 입력으로 넘어간다.
+  assert.ok(formSource.includes('const Postcode = readPostcodeConstructor(window);'));
+  assert.ok(formSource.includes('startManualAddress(ADDRESS_SEARCH_UNAVAILABLE_MESSAGE);'));
+  assert.ok(!formSource.includes('new window.daum.Postcode'));
+  // 검색이 되더라도 고객이 직접 입력을 고를 수 있다.
+  assert.ok(formSource.includes('주소 검색이 안 되나요? 직접 입력하기'));
+  assert.ok(formSource.includes('readOnly={!manualAddress}'));
+  // 결제 가능·빠진 조건은 우편번호 없이 주소로 판단한다.
+  assert.ok(formSource.includes('hasAddress: hasDeliveryAddress(address),'));
+  assert.equal((pageSource.match(/hasDeliveryAddress\(address\) &&/g) ?? []).length, 3);
+  assert.ok(!pageSource.includes('!!address.zipCode'));
 });
