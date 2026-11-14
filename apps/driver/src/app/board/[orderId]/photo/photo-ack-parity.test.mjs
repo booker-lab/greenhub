@@ -31,6 +31,12 @@ const pendingUploaderSource = await readFile(
   'utf8',
 );
 const providersSource = await readFile(new URL('../../../providers.tsx', import.meta.url), 'utf8');
+// 같은 대기열 안내를 보이는 주문 상세 안내(PendingPhotoNotice)·목록 안내(PendingPhotoBanner).
+const pendingNoticeSource = await readFile(
+  new URL('../../../../components/pending-photo-notice.tsx', import.meta.url),
+  'utf8',
+);
+const boardClientSource = await readFile(new URL('../../_client.tsx', import.meta.url), 'utf8');
 
 const legacyStart = photoCaptureSource.indexOf('uploadLegacyHubPhoto(orderId');
 assert.ok(legacyStart !== -1, 'legacy-hub upload branch가 있어야 한다');
@@ -384,7 +390,8 @@ test('Y3: 대기열 완료 알림·최근 완료 기억은 같은 키 재전송 
   const at = pendingClientSource.indexOf('function onCompleted(');
   assert.ok(at !== -1);
   const block = pendingClientSource.slice(at, pendingClientSource.indexOf('\n}\n', at));
-  assert.match(block, /toast\.add\(\{ description: PENDING_PHOTO_MESSAGES\.COMPLETED \}\)/);
+  // 어느 배송인지 주소 표시(동·호수)로 알린다(S-08). 주소를 모르는 이전 항목은 예전 문구다(정책 함수).
+  assert.match(block, /toast\.add\(\{ description: pendingPhotoCompletedMessage\(entry\) \}\)/);
   assert.match(block, /rememberCompletedOrder\(\{ orderId: entry\.orderId, userId: entry\.userId \}\)/);
   assert.equal((pendingClientSource.match(/toast\.add\(/g) ?? []).length, 1);
   assert.equal((pendingClientSource.match(/rememberCompletedOrder\(/g) ?? []).length, 1);
@@ -432,4 +439,34 @@ test('Y3: 세션이 없거나 쓸 수 없어도 앱 열기·화면 복귀 때 12
   assert.match(effect, /void runner\.runAll\(\)/);
   assert.match(effect, /addEventListener\('visibilitychange', expire\)/);
   assert.match(effect, /removeEventListener\('visibilitychange', expire\)/);
+});
+
+test('S-08: 대기열에 넣을 때 동·호수(주소 표시)만 남기고 받는 분 이름은 남기지 않는다', () => {
+  assert.match(queueFn, /addressLabel: orderSummary\?\.place,/);
+  assert.doesNotMatch(queueFn, /recipient|buyerName|phone/);
+});
+
+test('S-01: 사진 화면 대기 안내는 신호가 없으면 "목록으로"를 끄고 앱 안에서 안내하며, 신호가 잡히면 다시 켠다', () => {
+  const at = photoCaptureSource.indexOf('function PendingPhotoPanel(');
+  assert.ok(at !== -1);
+  const panel = photoCaptureSource.slice(at);
+  // useOnlineStatus는 'online'·'offline' 이벤트로 다시 그린다(lib/online-status).
+  assert.match(panel, /const online = useOnlineStatus\(\);/);
+  assert.match(panel, /onClick=\{online \? onList : undefined\}\s*disabled=\{!online\}/);
+  assert.match(panel, /\{!online && \([\s\S]*?PENDING_PHOTO_MESSAGES\.OFFLINE_LIST/);
+});
+
+test('S-10: 사진 화면·주문 상세·목록 대기 안내가 같은 버튼 이름("지금 올리기")과 같은 문구를 쓴다', () => {
+  // 사진 화면: 방금 넣었을 때도 상세·목록과 같은 WAITING 문구다.
+  assert.match(photoCaptureSource, /: PENDING_PHOTO_MESSAGES\.WAITING;/);
+  assert.match(photoCaptureSource, /'올리는 중…' : PENDING_PHOTO_UPLOAD_NOW_LABEL\}/);
+  // 주문 상세: 상태 문구(pendingPhotoStatusMessage → WAITING)와 같은 버튼 이름.
+  assert.match(pendingNoticeSource, /\{PENDING_PHOTO_UPLOAD_NOW_LABEL\}/);
+  assert.match(pendingNoticeSource, /pendingPhotoStatusMessage\(entry, now\)/);
+  // 목록 안내: 같은 문구 상수와 같은 글자의 버튼 이름.
+  assert.match(boardClientSource, /\{PENDING_PHOTO_MESSAGES\.WAITING\}/);
+  assert.match(boardClientSource, /'올리는 중…' : '지금 올리기'/);
+  for (const source of [photoCaptureSource, pendingNoticeSource, boardClientSource]) {
+    assert.doesNotMatch(codeOnly(source), /지금 다시 올리기|더 빨리 올라가요/);
+  }
 });

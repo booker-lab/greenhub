@@ -13,7 +13,7 @@ import { useRef, useState } from 'react';
 import { useFormStatus } from 'react-dom';
 import {
   clearPendingPhotoQueue,
-  usePendingPhotoCount,
+  usePendingPhotoLogoutLabels,
 } from '@/app/board/[orderId]/photo/pending-photo-client';
 import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
@@ -62,8 +62,9 @@ export function LogoutButton({
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const [opened, setOpened] = useState(false);
-  const pendingPhotos = usePendingPhotoCount();
-  const confirmMessage = logoutConfirmMessage(activeDeliveries, pendingPhotos);
+  // 올리지 못한 사진마다 주소 표시(동·호수). 확인 문구가 지워질 사진과 완료되지 않는 배송을 알린다.
+  const pendingPhotoLabels = usePendingPhotoLogoutLabels();
+  const confirmMessage = logoutConfirmMessage(activeDeliveries, pendingPhotoLabels);
 
   return (
     <form

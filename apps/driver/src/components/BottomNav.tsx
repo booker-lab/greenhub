@@ -1,7 +1,10 @@
 'use client';
 
+import { toast } from '@greenhub/ui/components/toast';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import type { MouseEvent } from 'react';
+import { OFFLINE_NAVIGATION_MESSAGE, readOnlineStatus } from '@/lib/online-status';
 import { text } from './look';
 
 const TABS = [
@@ -67,6 +70,17 @@ const TABS = [
   },
 ] as const;
 
+/**
+ * 신호가 없다고 확실할 때(navigator.onLine === false) 탭 이동을 막고 앱 안에 머문다(S-01).
+ * 탭 화면은 서비스워커가 NetworkOnly로 두어 신호 없이 옮기면 앱 밖 오류 화면으로 나가고, 앱이 닫혀
+ * 사진 업로드 대기열도 멈춘다. 누를 때마다 지금 상태를 읽으므로 신호가 잡히면 바로 다시 옮길 수 있다.
+ */
+function guardOfflineNavigation(event: MouseEvent<HTMLAnchorElement>) {
+  if (readOnlineStatus(typeof navigator === 'undefined' ? null : navigator)) return;
+  event.preventDefault();
+  toast.add({ description: OFFLINE_NAVIGATION_MESSAGE });
+}
+
 export default function BottomNav() {
   const pathname = usePathname();
 
@@ -96,6 +110,7 @@ export default function BottomNav() {
               key={tab.href}
               href={tab.href}
               aria-current={active ? 'page' : undefined}
+              onClick={guardOfflineNavigation}
               className="flex-1 cursor-pointer text-inherit no-underline"
             >
               <div className="flex h-full flex-col items-center justify-center gap-1">

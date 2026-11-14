@@ -3,7 +3,9 @@ import { ApiTimeoutError } from '../../../../lib/api-timeout';
 import {
   PENDING_PHOTO_LEASE_MS,
   PENDING_PHOTO_MAX_AGE_MS,
+  PENDING_PHOTO_MESSAGES,
   type PendingPhotoEntry,
+  pendingPhotoCompletedMessage,
   pendingPhotoKey,
 } from './pending-photo-policy';
 import {
@@ -796,5 +798,46 @@ describe('회차 직배송 사진 보내기: 촬영 뒤 새 보류', () => {
 
     expect(result).toEqual({ kind: 'failure', failure: 'STALE_HOLD', status: 409 });
     expect(forms[0].get('expectedHoldAt')).toBe('2026-11-13T08:00:00.000Z');
+  });
+});
+
+describe('자동 업로드 완료 알림의 주소 표시(S-08)', () => {
+  it('항목에 남긴 동·호수를 완료 항목으로 넘기고, 항목을 지우면 주소 표시도 함께 지워진다', async () => {
+    const harness = makeHarness({
+      entries: [makeEntry({ addressLabel: '101동 1203호' })],
+      responses: [ack()],
+    });
+
+    await expect(harness.runner.runOrder('order-1')).resolves.toBe('done');
+
+    expect(harness.completed).toHaveLength(1);
+    expect(harness.completed[0]?.addressLabel).toBe('101동 1203호');
+    expect(pendingPhotoCompletedMessage(harness.completed[0] as PendingPhotoEntry)).toBe(
+      '101동 1203호 배송을 완료했어요(사진 올림).',
+    );
+    expect(harness.store.raw.size).toBe(0);
+  });
+
+  it('주소 표시가 없는 이전 항목도 그대로 올리고 예전 완료 문구를 쓴다', async () => {
+    const harness = makeHarness({ entries: [makeEntry()], responses: [ack()] });
+
+    await expect(harness.runner.runOrder('order-1')).resolves.toBe('done');
+
+    expect(harness.completed[0] && 'addressLabel' in harness.completed[0]).toBe(false);
+    expect(pendingPhotoCompletedMessage(harness.completed[0] as PendingPhotoEntry)).toBe(
+      PENDING_PHOTO_MESSAGES.COMPLETED,
+    );
+  });
+
+  it('재시도로 다시 쓴 항목에도 주소 표시가 남는다', async () => {
+    const harness = makeHarness({
+      entries: [makeEntry({ addressLabel: '101동 1203호' })],
+      responses: [json(503, {})],
+    });
+
+    await expect(harness.runner.runOrder('order-1')).resolves.toBe('retry');
+
+    const stored = await harness.store.get(pendingPhotoKey('driver-1', 'order-1'));
+    expect(stored?.addressLabel).toBe('101동 1203호');
   });
 });

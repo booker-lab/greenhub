@@ -11,6 +11,7 @@ import { AppButton } from '@/components/app-button';
 import { text } from '@/components/look';
 import { Spinner } from '@/components/spinner';
 import { apiFetch, apiRead } from '@/lib/api';
+import { useOnlineStatus } from '@/lib/online-status';
 import {
   readDriverDetailBackContext,
   resolveDriverDetailBackAction,
@@ -40,6 +41,7 @@ import {
 import {
   createPendingPhotoEntry,
   PENDING_PHOTO_MESSAGES,
+  PENDING_PHOTO_UPLOAD_NOW_LABEL,
   type PendingPhotoEnqueueInput,
   type PendingPhotoSummary,
   pendingPhotoBadgeKind,
@@ -541,6 +543,8 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           random: Math.random(),
           input,
           expectedHoldAt: requestHoldAtRef.current,
+          // 나중에 올라갔을 때 알림·로그아웃 확인에 쓰는 동·호수만 남긴다(받는 분 이름은 남기지 않는다, S-08).
+          addressLabel: orderSummary?.place,
         });
         queued = entry ? await enqueuePendingPhoto(entry) : false;
       } catch {
@@ -1014,9 +1018,12 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
 
 /**
  * 사진 업로드 대기열 안내(회차 직배송). 이 주문의 사진이 대기열에 있으면 재촬영 대신 이 안내를 보인다.
- * - 기다림: 저장 안내 + "지금 올리기"(자동 실행과 같은 함수·잠금).
+ * - 기다림: 저장 안내 + "지금 올리기"(자동 실행과 같은 함수·잠금). 문구·버튼 이름은 상세·목록 안내와 같다.
  * - 보내는 중: 올리는 중 안내(버튼 꺼짐).
  * - 멈춤: 원인 안내 + "확인했어요"(항목을 지우면 다시 촬영할 수 있다).
+ * - 신호가 없으면(navigator.onLine === false) "목록으로"를 끄고 신호가 잡히면 갈 수 있다고 안내한다(S-01).
+ *   보호 화면은 서버 응답이 있어야 열려, 신호 없이 옮기면 앱 밖 오류 화면으로 나가 대기열이 멈춘다.
+ *   'online' 이벤트에 다시 켠다.
  */
 function PendingPhotoPanel({
   entry,
@@ -1035,12 +1042,13 @@ function PendingPhotoPanel({
   onDismiss: () => void;
   onList: () => void;
 }) {
+  const online = useOnlineStatus();
   const now = Date.now();
   const kind = entry ? pendingPhotoBadgeKind(entry, now) : 'waiting';
   const message =
     entry && (kind !== 'waiting' || !justQueued)
       ? pendingPhotoStatusMessage(entry, now)
-      : PENDING_PHOTO_MESSAGES.ENQUEUED;
+      : PENDING_PHOTO_MESSAGES.WAITING;
   return (
     <div
       role="status"
@@ -1095,12 +1103,26 @@ function PendingPhotoPanel({
           fullWidth
           style={{ color: CAMERA_BUTTON_INK }}
         >
-          {kind === 'sending' ? '올리는 중…' : '지금 올리기'}
+          {kind === 'sending' ? '올리는 중…' : PENDING_PHOTO_UPLOAD_NOW_LABEL}
         </AppButton>
       )}
-      <AppButton onClick={onList} tone="white-outline" size="lg" fullWidth>
+      <AppButton
+        onClick={online ? onList : undefined}
+        disabled={!online}
+        tone="white-outline"
+        size="lg"
+        fullWidth
+      >
         목록으로
       </AppButton>
+      {!online && (
+        <p
+          className={cn(text, 'text-center')}
+          style={{ color: CAMERA_ON, fontSize: 'var(--font-size-sm)', wordBreak: 'keep-all' }}
+        >
+          {PENDING_PHOTO_MESSAGES.OFFLINE_LIST}
+        </p>
+      )}
     </div>
   );
 }

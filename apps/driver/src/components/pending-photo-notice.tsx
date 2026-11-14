@@ -8,6 +8,7 @@ import {
 import {
   PENDING_PHOTO_BADGE_LABEL,
   PENDING_PHOTO_MESSAGES,
+  PENDING_PHOTO_UPLOAD_NOW_LABEL,
   type PendingPhotoBadgeKind,
   type PendingPhotoSummary,
   pendingPhotoBadgeKind,
@@ -52,8 +53,8 @@ export function PendingPhotoBadge({ kind }: { kind: PendingPhotoBadgeKind }) {
 }
 
 /**
- * 주문 상세의 대기열 안내. 기다리는 사진은 "지금 다시 올리기"(자동 실행과 같은 함수·잠금),
- * 멈춘 사진은 원인과 "확인했어요"(항목 지우기)를 보인다.
+ * 주문 상세의 대기열 안내. 기다리는 사진은 "지금 올리기"(자동 실행과 같은 함수·잠금, 사진 화면·목록 안내와
+ * 같은 버튼 이름·같은 안내 문구), 멈춘 사진은 원인과 "확인했어요"(항목 지우기)를 보인다.
  */
 export function PendingPhotoNotice({
   entry,
@@ -110,7 +111,7 @@ export function PendingPhotoNotice({
               .finally(() => setRunning(false));
           }}
         >
-          지금 다시 올리기
+          {PENDING_PHOTO_UPLOAD_NOW_LABEL}
         </AppButton>
       )}
     </section>

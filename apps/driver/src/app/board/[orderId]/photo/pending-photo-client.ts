@@ -16,10 +16,11 @@ import { useEffect, useState } from 'react';
 import { apiFetch, apiRead } from '@/lib/api';
 import { rememberCompletedOrder } from '../../_lib/recent-completion';
 import {
-  PENDING_PHOTO_MESSAGES,
   type PendingPhotoEntry,
   type PendingPhotoSummary,
+  pendingPhotoCompletedMessage,
   pendingPhotoKey,
+  pendingPhotoLogoutLabels,
   toPendingPhotoSummary,
 } from './pending-photo-policy';
 import {
@@ -116,7 +117,8 @@ function browserLocks(): PendingPhotoLockManager | null {
 }
 
 function onCompleted(entry: PendingPhotoEntry) {
-  toast.add({ description: PENDING_PHOTO_MESSAGES.COMPLETED });
+  // 기사는 이미 다른 집에 있을 수 있어 어느 배송인지 주소 표시(동·호수)로 알린다(S-08).
+  toast.add({ description: pendingPhotoCompletedMessage(entry) });
   // 완료 직후 상세(404)가 "배송을 마친 주문이에요"로 안내하도록 같은 기억을 남긴다(R-01).
   rememberCompletedOrder({ orderId: entry.orderId, userId: entry.userId });
   for (const listener of [...completedListeners]) {
@@ -296,16 +298,19 @@ export function usePendingPhotos(userId: string | null | undefined): PendingPhot
   return view;
 }
 
-/** 이 기기 대기열의 사진 수(모든 사용자). 로그아웃 확인 문구에 쓴다. 읽지 못하면 0. */
-export function usePendingPhotoCount(): number {
-  const [count, setCount] = useState(0);
+/**
+ * 이 기기 대기열에서 아직 올리지 못한 사진(모든 사용자, 멈춘 항목 제외)의 주소 표시 목록.
+ * 길이가 사진 수이고 주소 표시를 모르는 항목은 null이다. 로그아웃 확인 문구에 쓴다. 읽지 못하면 빈 목록.
+ */
+export function usePendingPhotoLogoutLabels(): (string | null)[] {
+  const [labels, setLabels] = useState<(string | null)[]>([]);
   useEffect(() => {
     const store = getPendingPhotoStore();
     if (!store) return;
     let active = true;
     const load = () => {
       void store.list().then((entries) => {
-        if (active) setCount(entries.length);
+        if (active) setLabels(pendingPhotoLogoutLabels(entries));
       });
     };
     load();
@@ -315,5 +320,5 @@ export function usePendingPhotoCount(): number {
       unsubscribe();
     };
   }, []);
-  return count;
+  return labels;
 }

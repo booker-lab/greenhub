@@ -9,17 +9,22 @@ import {
   isPendingPhotoStaleForOrderStatus,
   isUncertainPendingSendFailure,
   nextPendingPhotoWakeAt,
+  normalizePendingPhotoAddressLabel,
+  PENDING_PHOTO_ADDRESS_LABEL_MAX_LENGTH,
   PENDING_PHOTO_BACKOFF_MS,
   PENDING_PHOTO_LEASE_MS,
   PENDING_PHOTO_MAX_AGE_MS,
   PENDING_PHOTO_MESSAGES,
   PENDING_PHOTO_MIN_RESEND_GAP_MS,
+  PENDING_PHOTO_UPLOAD_NOW_LABEL,
   partitionPendingPhotosByUser,
   pendingPhotoBackoffMs,
   pendingPhotoBadgeKind,
   pendingPhotoBannerTitle,
+  pendingPhotoCompletedMessage,
   pendingPhotoKey,
   pendingPhotoLockName,
+  pendingPhotoLogoutLabels,
   pendingPhotoManualReadyAt,
   pendingPhotoStaleOrderIds,
   pendingPhotoStatusMessage,
@@ -398,10 +403,15 @@ test('배지·안내 문구', () => {
     pendingPhotoBadgeKind(entry({ state: 'failed', bytes: null, lastFailure: 'AUTHORITY' }), NOW),
     'failed',
   );
+  // 사진 화면·상세·목록이 같은 문구 하나를 쓴다(S-10). 앱이 열려 있을 때만 올린다는 사실을 쓴다(S-01).
   assert.equal(
-    PENDING_PHOTO_MESSAGES.ENQUEUED,
-    '사진을 휴대폰에 저장했어요. 신호가 잡히면 앱이 자동으로 올려요. 앱을 열어 두면 더 빨리 올라가요.',
+    PENDING_PHOTO_MESSAGES.WAITING,
+    '사진을 휴대폰에 저장했어요. 앱이 열려 있을 때 신호가 잡히면 자동으로 올려요. 앱을 닫으면 다시 열 때 올라가요.',
   );
+  assert.equal('ENQUEUED' in PENDING_PHOTO_MESSAGES, false);
+  assert.doesNotMatch(Object.values(PENDING_PHOTO_MESSAGES).join('\n'), /더 빨리|지금 다시 올리기/);
+  assert.equal(PENDING_PHOTO_UPLOAD_NOW_LABEL, '지금 올리기');
+  assert.equal(PENDING_PHOTO_MESSAGES.OFFLINE_LIST, '신호가 잡히면 목록으로 갈 수 있어요.');
   assert.equal(PENDING_PHOTO_MESSAGES.COMPLETED, '배송 완료 사진을 올렸어요');
   assert.equal(pendingPhotoBannerTitle(3), '처리 중인 사진 3건');
   assert.equal(pendingPhotoStatusMessage(entry(), NOW), PENDING_PHOTO_MESSAGES.WAITING);
@@ -505,4 +515,119 @@ test('보내기 직전 기록은 보내는 중 항목에만 보낸 횟수·마�
   assert.equal(recorded?.lastAttemptAt, NOW + 5);
   assert.equal(recorded?.state, 'sending');
   assert.equal(recordPendingPhotoSend(entry(), NOW), null);
+});
+
+test('주소 표시(동·호수)는 항목에 남고, 없는 이전 항목은 그대로 읽는다(형식 버전 그대로, S-08)', () => {
+  const legacy = readPendingPhotoEntry(entry());
+  assert.ok(legacy);
+  assert.equal('addressLabel' in legacy, false);
+  assert.equal(
+    readPendingPhotoEntry(entry({ addressLabel: '101동 1203호' }))?.addressLabel,
+    '101동 1203호',
+  );
+  // 공백은 다듬어 남긴다.
+  assert.equal(
+    readPendingPhotoEntry(entry({ addressLabel: '  101동   1203호 ' }))?.addressLabel,
+    '101동 1203호',
+  );
+  // 형식이 맞지 않는 주소 표시는 화면 안내에만 쓰이므로 표시만 버리고 사진 항목은 그대로 읽는다.
+  for (const broken of [
+    '',
+    '   ',
+    7,
+    null,
+    {},
+    'x'.repeat(PENDING_PHOTO_ADDRESS_LABEL_MAX_LENGTH + 1),
+    '101동\u0000',
+  ]) {
+    const read = readPendingPhotoEntry(entry({ addressLabel: broken }));
+    assert.ok(read, String(broken));
+    assert.equal('addressLabel' in read, false, String(broken));
+    assert.ok(read.bytes);
+  }
+  // 멈춘 항목도 주소 표시를 남긴다(사진 바이트만 지운다).
+  const failed = readPendingPhotoEntry(
+    entry({ state: 'failed', bytes: null, lastFailure: 'AUTHORITY', addressLabel: '101동 1203호' }),
+  );
+  assert.equal(failed?.addressLabel, '101동 1203호');
+  assert.equal(
+    toPendingPhotoSummary(readPendingPhotoEntry(entry({ addressLabel: '101동 1203호' })))
+      .addressLabel,
+    '101동 1203호',
+  );
+
+  const base = {
+    userId: 'driver-1',
+    orderId: 'order-1',
+    storeId: 'store-1',
+    idempotencyKey: KEY,
+    bytes: bytes(),
+    now: NOW,
+    random: 0,
+    input: { phase: 'pre-send', reason: 'OFFLINE' },
+  };
+  assert.equal(
+    createPendingPhotoEntry({ ...base, addressLabel: '101동 1203호' })?.addressLabel,
+    '101동 1203호',
+  );
+  for (const unknown of [undefined, null]) {
+    const created = createPendingPhotoEntry({ ...base, addressLabel: unknown });
+    assert.ok(created);
+    assert.equal('addressLabel' in created, false);
+  }
+  // 받는 분 이름·전화번호 필드는 항목 형식에 없다(주소 표시 한 줄만 남긴다).
+  const created = createPendingPhotoEntry({ ...base, addressLabel: '101동 1203호' });
+  assert.deepEqual(
+    Object.keys(created).filter((key) => /recipient|buyer|phone|name/i.test(key)),
+    [],
+  );
+});
+
+test('주소 표시 다듬기', () => {
+  assert.equal(normalizePendingPhotoAddressLabel('101동 1203호'), '101동 1203호');
+  assert.equal(normalizePendingPhotoAddressLabel('\t101동\n1203호 '), '101동 1203호');
+  assert.equal(normalizePendingPhotoAddressLabel(''), null);
+  assert.equal(normalizePendingPhotoAddressLabel(undefined), null);
+  assert.equal(
+    normalizePendingPhotoAddressLabel('가'.repeat(PENDING_PHOTO_ADDRESS_LABEL_MAX_LENGTH)),
+    '가'.repeat(PENDING_PHOTO_ADDRESS_LABEL_MAX_LENGTH),
+  );
+  assert.equal(
+    normalizePendingPhotoAddressLabel('가'.repeat(PENDING_PHOTO_ADDRESS_LABEL_MAX_LENGTH + 1)),
+    null,
+  );
+});
+
+test('자동 업로드 완료 알림은 정상 완료 알림과 같은 형식에 "(사진 올림)"을 붙이고, 주소를 모르면 예전 문구다(S-08)', () => {
+  assert.equal(
+    pendingPhotoCompletedMessage({ addressLabel: '101동 1203호' }),
+    '101동 1203호 배송을 완료했어요(사진 올림).',
+  );
+  assert.equal(pendingPhotoCompletedMessage({}), '배송 완료 사진을 올렸어요');
+  assert.equal(pendingPhotoCompletedMessage({ addressLabel: '' }), '배송 완료 사진을 올렸어요');
+});
+
+test('로그아웃 확인용 주소 표시는 올릴 사진(멈춤 제외)만 먼저 넣은 순서로 모은다(S-09)', () => {
+  assert.deepEqual(
+    pendingPhotoLogoutLabels([
+      entry({ createdAt: NOW + 2, addressLabel: '102동 304호' }),
+      entry({ createdAt: NOW, addressLabel: '101동 1203호' }),
+      entry({ createdAt: NOW + 1 }),
+      entry({
+        createdAt: NOW - 1,
+        state: 'failed',
+        bytes: null,
+        lastFailure: 'EXPIRED',
+        addressLabel: '103동 1호',
+      }),
+      entry({
+        createdAt: NOW + 3,
+        state: 'sending',
+        leaseUntil: NOW + 10,
+        addressLabel: '104동 2호',
+      }),
+    ]),
+    ['101동 1203호', null, '102동 304호', '104동 2호'],
+  );
+  assert.deepEqual(pendingPhotoLogoutLabels([]), []);
 });
