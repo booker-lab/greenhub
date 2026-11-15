@@ -169,11 +169,11 @@ export function RoundPurchaseNotices() {
 
       <div
         className="mt-4 p-4"
-        style={{ background: 'var(--color-deadline-surface)', borderRadius: 'var(--radius)' }}
+        style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
       >
         <p
           className="m-0 mb-1 p-0 text-sm"
-          style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-deadline-text)' }}
+          style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
         >
           기상 상황에 따른 배송 연기
         </p>

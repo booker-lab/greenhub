@@ -23,7 +23,7 @@ const CANCEL_CODE_PATTERN = /CANCEL/i;
 const BRACKETED_CANCEL_CODE_PATTERN = /\[[^\]]*CANCEL[^\]]*\]/i;
 const USER_CANCEL_SENTENCE_PATTERN = /결제를\s*취소|사용자가?\s*취소/;
 
-function isCanceled({ code, message, pgCode }: PaymentFailureInput): boolean {
+export function isPaymentCanceled({ code, message, pgCode }: PaymentFailureInput): boolean {
   if ([code, pgCode].some((value) => typeof value === 'string' && CANCEL_CODE_PATTERN.test(value))) {
     return true;
   }
@@ -33,7 +33,31 @@ function isCanceled({ code, message, pgCode }: PaymentFailureInput): boolean {
   );
 }
 
+/**
+ * 결제 화면 안내의 종류. canceled는 고객이 결제창을 닫은 경우라 문제 상태가 아니고(중립 면),
+ * failed는 그 밖의 실패·거절이다(빨강 면, design-standard.md §2 "빨강은 문제 상태에만").
+ */
+export type PaymentFailureKind = 'canceled' | 'failed';
+
+/** 화면에 보일 문구와 종류를 함께 담는다. 종류를 문구 비교로 다시 가리지 않게 한 값으로 묶는다. */
+export interface PaymentFailureNotice {
+  kind: PaymentFailureKind;
+  message: string;
+}
+
+/** 결제창 실패 응답을 고객 문구와 종류로 바꾼다. 원문 코드·메시지는 돌려주지 않는다. */
+export function paymentFailureNotice(failure: PaymentFailureInput): PaymentFailureNotice {
+  return isPaymentCanceled(failure)
+    ? { kind: 'canceled', message: PAYMENT_CANCELED_MESSAGE }
+    : { kind: 'failed', message: PAYMENT_NOT_COMPLETED_MESSAGE };
+}
+
+/** 결제 취소가 아닌 실패·거절 안내(주문 생성 거절, 결제 불가, 상품 확인 실패 등)를 같은 모양으로 만든다. */
+export function failedPaymentNotice(message: string): PaymentFailureNotice {
+  return { kind: 'failed', message };
+}
+
 /** 결제창 실패 응답을 고객 문구로 바꾼다. 원문 코드·메시지는 돌려주지 않는다. */
 export function paymentFailureMessage(failure: PaymentFailureInput): string {
-  return isCanceled(failure) ? PAYMENT_CANCELED_MESSAGE : PAYMENT_NOT_COMPLETED_MESSAGE;
+  return paymentFailureNotice(failure).message;
 }

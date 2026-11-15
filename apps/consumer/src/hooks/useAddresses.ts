@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import type { SavedAddress } from '@greenhub/shared';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { customerLoadErrorMessage } from '@/lib/load-error-message';
 
 const API_URL = getApiBaseUrl();
 
@@ -63,7 +64,8 @@ export function useAddresses(): UseAddressesResult {
         setError(null);
       } catch (e: unknown) {
         if (cancelled) return;
-        setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+        // 화면에는 상태 코드·브라우저 원문 대신 고객 문구를 넘긴다.
+        setError(customerLoadErrorMessage(e, '배송지를'));
       } finally {
         if (!cancelled) setLoading(false);
       }

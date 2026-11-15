@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession } from 'next-auth/react';
 import type { Notification } from '@greenhub/shared';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { customerLoadErrorMessage } from '@/lib/load-error-message';
 
 const API_URL = getApiBaseUrl();
 const LEGACY_READ_KEY = 'gh_read_notifications';
@@ -130,7 +131,8 @@ export function useNotifications(): UseNotificationsResult {
         if (cancelled || requestSequenceRef.current !== requestId) return;
         // 실패는 기존 성공 데이터를 삭제하지 않는다: notifications 유지, error만 교체한다.
         // previous success + refresh failure는 stale list + failure로 표현된다.
-        setError(e instanceof Error ? e.message : '오류가 발생했습니다.');
+        // 화면에는 상태 코드·브라우저 원문 대신 고객 문구를 넘긴다.
+        setError(customerLoadErrorMessage(e, '알림을'));
         setLoading(false);
       }
     }

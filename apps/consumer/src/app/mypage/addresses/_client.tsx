@@ -2,7 +2,6 @@
 
 import type { SavedAddress } from '@greenhub/shared';
 import { AlertDescription, Alert as UiAlert } from '@greenhub/ui/components/alert';
-import { Button as UiButton } from '@greenhub/ui/components/button';
 import { CloseIcon, closeButtonClassName } from '@greenhub/ui/components/close-button';
 import {
   Dialog,
@@ -16,12 +15,17 @@ import {
 } from '@greenhub/ui/components/dialog';
 import { FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { cn } from '@greenhub/ui/lib/utils';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useId, useState } from 'react';
+import { Button as UiButton } from '@/components/Button';
+import { ConfirmDialog } from '@/components/ConfirmDialog';
+import { LoadingButton } from '@/components/LoadingButton';
 import type { AddressFormData } from '@/hooks/useAddresses';
 import { useAddresses } from '@/hooks/useAddresses';
+import { addressDeleteConfirmContent } from '@/lib/confirm-dialog-content';
+import { TOUCH_HEIGHT, TOUCH_ICON } from '@/lib/touch-target';
 import { MyPageBackButton } from '../_back-button';
 import { currentMyPageLoginUrl } from '../_login';
 
@@ -33,6 +37,10 @@ const DISABLED_TEXT_STYLE = {
   color: 'var(--color-text-secondary)',
   fontSize: 'var(--font-size-sm)',
 } as const;
+
+// 창 닫기 버튼: X 그림(공용 28px 버튼의 70% = 19.6px)과 가운데 위치는 그대로 두고 눌리는 영역만 44×44px로 넓힌다.
+const DIALOG_CLOSE_TOUCH = `${TOUCH_ICON} top-2 right-[3px]`;
+const DIALOG_CLOSE_ICON_STYLE = { width: 19.6, height: 19.6 } as const;
 
 const EMPTY_FORM: AddressFormData = { label: '', address: '', addressDetail: '', zipCode: '' };
 
@@ -84,16 +92,18 @@ function AddressCard({
           </p>
         </div>
       </div>
+      {/* 흰 면·검정 글자 외곽선 버튼(연회색 외곽선 글자는 연회색 면 위 대비 3.0:1이었다, design-standard §4) */}
       <div className="mt-2.5 flex flex-row flex-wrap items-center justify-start gap-2.5">
         {!addr.isDefault && (
-          <UiButton type="button" size="xs" variant="outline-gray" onClick={onSetDefault}>
+          <UiButton type="button" size="xs" variant="plain" onClick={onSetDefault}>
             기본으로 설정
           </UiButton>
         )}
-        <UiButton type="button" size="xs" variant="outline-gray" onClick={onEdit}>
+        <UiButton type="button" size="xs" variant="plain" onClick={onEdit}>
           수정
         </UiButton>
-        <UiButton type="button" size="xs" variant="outline-destructive" onClick={onDelete}>
+        {/* ② 방향(design-standard §4·§5): 카드의 버튼은 모두 검정 글자 외곽선(plain)·높이 44px. 삭제는 확인창을 거친다. */}
+        <UiButton type="button" size="xs" variant="plain" onClick={onDelete}>
           삭제
         </UiButton>
       </div>
@@ -162,9 +172,9 @@ function AddressFormModal({
             <DialogClose
               data-slot="dialog-close"
               aria-label="닫기"
-              className={closeButtonClassName}
+              className={cn(closeButtonClassName, DIALOG_CLOSE_TOUCH)}
             >
-              <CloseIcon />
+              <CloseIcon style={DIALOG_CLOSE_ICON_STYLE} />
             </DialogClose>
             <DialogHeader className="rounded-t-[8px]">
               <DialogTitle
@@ -247,7 +257,7 @@ function AddressField({
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded-[8px]"
+        className={`${TOUCH_HEIGHT} rounded-[8px]`}
       />
     </div>
   );
@@ -271,19 +281,28 @@ export default function AddressesClient() {
     null,
   );
   const [actionError, setActionError] = useState<string | null>(null);
+  // 삭제 확인창: 닫힘 → 열림 → 처리 중(확정 뒤 삭제 요청이 끝날 때까지) 중 하나이고, 열린 동안 지울 배송지를 함께 든다.
+  const [deleteDialog, setDeleteDialog] = useState<
+    { state: 'closed' } | { state: 'open' | 'submitting'; addr: SavedAddress }
+  >({ state: 'closed' });
 
   if (status === 'unauthenticated') {
     router.replace(currentMyPageLoginUrl());
     return null;
   }
 
-  async function handleDelete(id: string) {
-    if (!confirm('이 배송지를 삭제할까요?')) return;
+  // 확인창의 확정. 처리 중에는 창이 닫히지 않고, 끝나면(성공·실패 모두) 닫는다. 실패 안내는 화면 위 상자가 맡는다.
+  async function handleDelete() {
+    if (deleteDialog.state !== 'open') return;
+    const { addr } = deleteDialog;
+    setDeleteDialog({ state: 'submitting', addr });
     setActionError(null);
     try {
-      await deleteAddress(id);
+      await deleteAddress(addr.id);
     } catch (e: unknown) {
       setActionError(e instanceof Error ? e.message : '삭제 중 오류가 발생했습니다.');
+    } finally {
+      setDeleteDialog({ state: 'closed' });
     }
   }
 
@@ -327,14 +346,8 @@ export default function AddressesClient() {
                   <p className={TEXT} style={SMALL_TEXT_STYLE}>
                     {error}
                   </p>
-                  {/* Mantine Button white red(흰 면·red-6 글자) */}
-                  <UiButton
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    className="bg-background text-ui-red hover:bg-background"
-                    onClick={() => refetch()}
-                  >
+                  {/* 흰 면·검정 글자 외곽선(알림 화면의 "다시 시도"와 같다. 흰 면 위 빨강 글자는 대비 3.3:1이었다) */}
+                  <UiButton type="button" size="xs" variant="plain" onClick={() => refetch()}>
                     다시 시도
                   </UiButton>
                 </div>
@@ -353,20 +366,12 @@ export default function AddressesClient() {
         </div>
       )}
 
+      {/* 조회 실패 안내와 "다시 시도"는 위 빨강 상자 한 번만 보인다(목록 자리에 같은 안내를 다시 쓰지 않는다). */}
       {loading ? (
         <p className={`${TEXT} py-10 text-center`} style={DISABLED_TEXT_STYLE}>
           불러오는 중...
         </p>
-      ) : error && addresses.length === 0 ? (
-        <div className="flex flex-col items-center justify-start gap-3 py-12">
-          <p className={`${TEXT} text-center`} style={DISABLED_TEXT_STYLE}>
-            배송지 정보를 불러오지 못했습니다.
-          </p>
-          <UiButton type="button" onClick={() => refetch()}>
-            다시 조회
-          </UiButton>
-        </div>
-      ) : addresses.length === 0 ? (
+      ) : error && addresses.length === 0 ? null : addresses.length === 0 ? (
         <p className={`${TEXT} py-12 text-center`} style={DISABLED_TEXT_STYLE}>
           등록된 배송지가 없습니다.
         </p>
@@ -377,7 +382,7 @@ export default function AddressesClient() {
               key={addr.id}
               addr={addr}
               onEdit={() => setModal({ mode: 'edit', addr })}
-              onDelete={() => handleDelete(addr.id)}
+              onDelete={() => setDeleteDialog({ state: 'open', addr })}
               onSetDefault={() => handleSetDefault(addr.id)}
             />
           ))}
@@ -402,6 +407,15 @@ export default function AddressesClient() {
             : (data) => updateAddress((modal as { mode: 'edit'; addr: SavedAddress }).addr.id, data)
         }
         onClose={() => setModal(null)}
+      />
+
+      <ConfirmDialog
+        state={deleteDialog.state}
+        content={
+          deleteDialog.state === 'closed' ? null : addressDeleteConfirmContent(deleteDialog.addr)
+        }
+        onConfirm={handleDelete}
+        onClose={() => setDeleteDialog({ state: 'closed' })}
       />
     </div>
   );

@@ -17,7 +17,11 @@ import {
   isRoundOrderClosedRejection,
   ROUND_ORDER_CLOSED_MESSAGE,
 } from '@/lib/checkout-round-closed';
-import { paymentFailureMessage } from '@/lib/payment-failure-message';
+import {
+  type PaymentFailureKind,
+  type PaymentFailureNotice,
+  paymentFailureNotice,
+} from '@/lib/payment-failure-message';
 import { attachPaymentPageGuard } from '@/lib/payment-page-guard';
 import {
   buildPaymentRedirectUrl,
@@ -71,7 +75,8 @@ export type UsePaymentOptions = BasePaymentOptions &
 interface UsePaymentResult {
   state: PaymentState;
   orderId: string | null;
-  error: string | null;
+  /** 화면에 보일 안내. 고객이 결제창을 닫은 경우만 kind가 canceled이고 그 밖의 실패·거절은 failed다. */
+  error: PaymentFailureNotice | null;
   /** 회차 결제에서 주문 생성 API가 회차 주문 마감으로 거절했는지(C-13). 한 번 알아보면 이 화면에서는 유지한다. */
   roundOrderClosed: boolean;
   /**
@@ -268,7 +273,7 @@ function isSettledRejection(status: number): boolean {
 export function usePayment(options: UsePaymentOptions): UsePaymentResult {
   const [state, setState] = useState<PaymentState>('idle');
   const [orderId, setOrderId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<PaymentFailureNotice | null>(null);
   const [roundOrderClosed, setRoundOrderClosed] = useState(false);
   const [checkoutHoldLimited, setCheckoutHoldLimited] = useState(false);
   const paymentAttemptId = useRef<string | null>(null);
@@ -312,6 +317,8 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
     // 결제창 취소 뒤 같은 ID를 다시 쓰지 않는 이유(C-02 확인): API는 같은 ID·같은 내용이면 주문 상태를
     // 보지 않고 기존 주문을 돌려준다. 결제 실패 알림으로 이미 취소된 주문이면 결제가 승인돼도 자동 환불된다.
     let attemptSettled = false;
+    // 고객이 결제창을 닫은 경우만 canceled로 바꾼다. 화면은 이 값으로 안내 면(중립·빨강)을 고른다.
+    let failureKind: PaymentFailureKind = 'failed';
 
     try {
       let configuration: ReturnType<typeof readPortonePaymentConfiguration>;
@@ -391,14 +398,16 @@ export function usePayment(options: UsePaymentOptions): UsePaymentResult {
       if (response && 'code' in response) {
         attemptSettled = true;
         // PG 원문 코드("[PAY_PROCESS_CANCELED] …")는 화면에 쓰지 않고 고객 문구로 바꾼다.
-        throw new Error(paymentFailureMessage(response));
+        const notice = paymentFailureNotice(response);
+        failureKind = notice.kind;
+        throw new Error(notice.message);
       }
 
       transition('done');
     } catch (e: unknown) {
       if (generation !== attemptGeneration.current) return;
       if (attemptSettled) paymentAttemptId.current = null;
-      setError(checkoutPaymentErrorMessage(e));
+      setError({ kind: failureKind, message: checkoutPaymentErrorMessage(e) });
       transition('error');
     }
   }

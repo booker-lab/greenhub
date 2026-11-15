@@ -36,12 +36,17 @@ const test = base.extend<RoundDirectConsumerFixtures>({
 });
 
 test.describe('Consumer 회차 직배송 공개 화면 계약', () => {
-  test('홈은 현재 회차와 주문 마감, 화요일 배송 약속을 표시한다', async ({ page, roundDirect }) => {
+  test('홈은 현재 회차와 주문 마감, 회차 도착일 배송 약속을 표시한다', async ({ page, roundDirect }) => {
     await page.goto(`${BASE}/?storeId=${encodeURIComponent(roundDirect.storeId)}`);
 
     await expect(page.getByRole('heading', { name: /이번 주 판매/ })).toBeVisible();
     await expect(page.getByText(/주문 마감/)).toBeVisible();
-    await expect(page.getByText(/화요일 오전 9시까지 문 앞 배송/)).toBeVisible();
+    // 문구는 회차 도착 시각(시드: 실행 시각 + 3일 9시간)에서 만들어지므로 날짜·시각 형식만 본다.
+    await expect(
+      page.getByText(
+        /\d+월 \d+일\([일월화수목금토]\) (오전|오후|밤) \d+시( \d+분)?까지 문 앞 배송/,
+      ),
+    ).toBeVisible();
   });
 
   test('홈은 현재·지난 회차 상품만 노출하고 공동구매 진입을 숨긴다', async ({ page, roundDirect }) => {

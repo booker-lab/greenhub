@@ -18,7 +18,7 @@ const schedule = {
 
 test('주문 받는 중이면 마감까지, 판매 예정이면 주문 시작까지 센다', () => {
   assert.deepEqual(countdownTarget('OPEN', schedule), {
-    label: '이번 회차 마감까지',
+    label: '마감까지',
     at: schedule.orderCloseAt,
   });
   assert.deepEqual(countdownTarget('SCHEDULED', schedule), {
@@ -27,13 +27,13 @@ test('주문 받는 중이면 마감까지, 판매 예정이면 주문 시작까
   });
 });
 
-test('마감·완료·취소·초안 회차는 띠를 숨긴다', () => {
+test('마감·완료·취소·초안 회차는 알약을 숨긴다', () => {
   for (const status of ['CLOSED', 'COMPLETED', 'CANCELLED', 'DRAFT']) {
     assert.equal(countdownTarget(status, schedule), null);
   }
 });
 
-test('띠 문구는 홈의 "주문 마감" 안내와 겹치지 않는다', () => {
+test('알약 문구는 홈의 "주문 마감" 안내와 겹치지 않는다', () => {
   for (const status of ['OPEN', 'SCHEDULED']) {
     assert.doesNotMatch(countdownTarget(status, schedule).label, /주문 마감/);
   }
