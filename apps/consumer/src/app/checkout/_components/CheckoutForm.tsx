@@ -6,11 +6,11 @@ import {
   ORDER_REQUEST_NOTE_MAX_LENGTH,
 } from '@greenhub/shared';
 import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
 import { Field, FieldDescription, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { Textarea } from '@greenhub/ui/components/textarea';
+import { cn } from '@greenhub/ui/lib/utils';
 import {
   type ComponentProps,
   type CSSProperties,
@@ -19,6 +19,7 @@ import {
   useId,
   useState,
 } from 'react';
+import { Button } from '@/components/Button';
 import GiftFields, { type GiftState } from '@/components/benchmark/GiftFields';
 import PackageLabelFields, {
   type PackageLabelState,
@@ -36,8 +37,10 @@ import {
   normalizeManualZipCode,
   readPostcodeConstructor,
 } from '@/lib/checkout-address';
+import type { PaymentFailureNotice } from '@/lib/payment-failure-message';
 import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';
 import { roundPayBlockers } from '@/lib/payment-readiness';
+import { TOUCH_CHECKBOX, TOUCH_HEIGHT } from '@/lib/touch-target';
 
 const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
   direct: '꽃차 직배송',
@@ -62,7 +65,8 @@ export interface CheckoutFormProps {
   onPaymentMethodChange: (m: PaymentMethod) => void;
   isLoading: boolean;
   canPay: boolean;
-  error: string | null;
+  /** 결제 버튼 위 안내. kind가 canceled(고객이 결제창을 닫음)면 중립 면, failed면 빨강 면으로 그린다. */
+  error: PaymentFailureNotice | null;
   /** 오류 안내 아래에 둘 다음 행동(예: 결제 예약 한도로 막혔을 때 주문 내역으로 가기, C-02). 오류가 있을 때만 보인다. */
   errorAction?: ReactNode;
   onPay: () => void;
@@ -140,7 +144,12 @@ function FieldFrame({
         </FieldLabel>
       )}
       {description && (
-        <FieldDescription id={descriptionId} className="m-0">
+        // ② 방향(design-standard §3): 굵지 않은 설명 글씨는 15px(text-sm, 줄 높이 1.45)·보조 글자색.
+        // 공용 FieldDescription 기본값(13px·gray-6, 흰 바탕 대비 3.3:1)을 이 화면에서만 덮어쓴다.
+        <FieldDescription
+          id={descriptionId}
+          className="m-0 text-sm leading-[1.45] text-muted-foreground"
+        >
           {description}
         </FieldDescription>
       )}
@@ -149,7 +158,7 @@ function FieldFrame({
         <p
           id={errorId}
           data-slot="field-error"
-          className="m-0 text-xs leading-[1.2] font-normal text-ui-red"
+          className="m-0 text-sm leading-[1.45] font-normal text-[var(--color-danger)]"
         >
           {error}
         </p>
@@ -164,6 +173,7 @@ function TextInput({
   error,
   required,
   style,
+  className,
   ...props
 }: Omit<ComponentProps<typeof Input>, 'size'> & {
   label?: ReactNode;
@@ -182,12 +192,14 @@ function TextInput({
       required={required}
       style={style}
     >
+      {/* 입력칸 높이 44px(design-standard §4). 공용 Input 기본 36px는 그대로다. */}
       <Input
         id={id}
         required={required}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy}
         {...props}
+        className={cn(TOUCH_HEIGHT, className)}
       />
     </FieldFrame>
   );
@@ -499,7 +511,8 @@ export default function CheckoutForm({
                 : undefined
             }
           />
-          <Button variant="outline-gray" onClick={openAddressSearch}>
+          {/* 검정 글자 외곽선(plain). 회색 외곽선 글자는 대비 3.3:1이었다(design-standard §4). */}
+          <Button variant="plain" onClick={openAddressSearch}>
             주소 검색
           </Button>
         </div>
@@ -511,7 +524,11 @@ export default function CheckoutForm({
         {!manualAddress && (
           <button
             type="button"
-            className="m-0 self-start border-0 bg-transparent p-0 text-sm underline"
+            className={cn(
+              // 눌리는 높이 44px(design-standard §4). 글자 크기와 밑줄은 그대로다.
+              'm-0 inline-flex items-center self-start border-0 bg-transparent p-0 text-sm underline',
+              TOUCH_HEIGHT,
+            )}
             style={{ color: 'var(--color-text-secondary)' }}
             onClick={() => startManualAddress(null)}
           >
@@ -642,11 +659,11 @@ export default function CheckoutForm({
 
           <div
             className="p-4"
-            style={{ background: 'var(--color-deadline-surface)', borderRadius: 'var(--radius)' }}
+            style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
           >
             <p
               className="m-0 mb-1 text-sm"
-              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-deadline-text)' }}
+              style={{ fontWeight: 'var(--fw-extrabold)', color: 'var(--color-text)' }}
             >
               결제 직전 확인
             </p>
@@ -656,6 +673,7 @@ export default function CheckoutForm({
             </p>
             <Checkbox
               label="주문 상품·수량·회차 가격을 확인했어요(필수)"
+              className={TOUCH_CHECKBOX}
               checked={roundDetailsConfirmed}
               onCheckedChange={(checked) => setRoundDetailsConfirmed(checked)}
             />
@@ -715,11 +733,16 @@ export default function CheckoutForm({
       </div>
 
       {error && (
-        // Mantine Alert(light red·mb sm, role="alert") 계산값
-        <Alert variant="destructive" role="alert" className="mb-3">
+        // Mantine Alert(mb sm, role="alert") 계산값. 고객이 결제창을 닫은 안내는 문제 상태가 아니라 중립 면이고,
+        // 결제 실패·주문 거절·결제 불가는 빨강 면이다(design-standard.md §2 "빨강은 문제 상태에만").
+        <Alert
+          variant={error.kind === 'canceled' ? 'secondary' : 'destructive'}
+          role="alert"
+          className="mb-3"
+        >
           <AlertDescription>
             <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
-              {error}
+              {error.message}
             </p>
             {errorAction}
           </AlertDescription>

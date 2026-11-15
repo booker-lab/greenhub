@@ -2,7 +2,6 @@
 
 import type { Notification, NotificationTemplateCode } from '@greenhub/shared';
 import { Alert, AlertDescription } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
 import {
   AlarmClock,
   Bell,
@@ -23,6 +22,8 @@ import {
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
+import { Button } from '@/components/Button';
+import EmptyStateIcon from '@/components/EmptyStateIcon';
 import { useNotifications } from '@/hooks/useNotifications';
 import { MyPageBackButton } from '../_back-button';
 import { currentMyPageLoginUrl } from '../_login';
@@ -305,7 +306,7 @@ export default function NotificationsClient() {
 
       {!loading && !error && notifications.length === 0 && (
         <div className="flex flex-col items-center justify-start gap-4 px-5 py-[60px]">
-          <p className="m-0 p-0 text-[20px] leading-[1.65]">🔔</p>
+          <EmptyStateIcon icon={Bell} />
           <p
             className={TEXT}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
@@ -326,11 +327,12 @@ export default function NotificationsClient() {
             <div className="p-4">
               <Alert role="alert" variant="destructive">
                 <AlertDescription>
+                  {/* 실패 안내는 훅이 만든 고객 문구 한 번만 보인다. */}
                   <p className={TEXT} style={SMALL_TEXT_STYLE}>
-                    최신 알림을 불러오지 못했습니다. 이전 목록을 표시합니다.
+                    {error}
                   </p>
                   <p className={`${TEXT} mt-1`} style={SMALL_TEXT_STYLE}>
-                    {error}
+                    이전 목록을 표시합니다.
                   </p>
                 </AlertDescription>
               </Alert>

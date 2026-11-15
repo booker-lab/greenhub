@@ -2,14 +2,15 @@
 
 import type { OrderStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button, ButtonLabel, ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { type ReactNode, use, useEffect, useId, useState } from 'react';
+import { Button, ButtonLabel, ButtonLink } from '@/components/Button';
 import OrderDetailExtras from '@/components/benchmark/OrderDetailExtras';
+import { ConfirmDialog, type ConfirmDialogState } from '@/components/ConfirmDialog';
 import { LoadingButton } from '@/components/LoadingButton';
 import {
   ORDER_STATUS_POLL_INTERVAL_MS,
@@ -17,6 +18,7 @@ import {
   useOrderStatus,
 } from '@/hooks/useOrderStatus';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { orderCancelConfirmContent } from '@/lib/confirm-dialog-content';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
 import {
   CLOSED_UNDELIVERED_MESSAGE,
@@ -117,7 +119,8 @@ function getTimelineSteps(order: OrderDetailView): OrderStatus[] {
 // 제목으로 이름을 붙이고(aria-labelledby), 본문은 aria-describedby로 잇는다.
 // Mantine SegmentedControl(fullWidth·size sm·withItemsBorders·theme 기본 반경 16px) 계산값과 DOM.
 // 바깥 div role=radiogroup, 항목마다 숨긴 input type=radio(name 공유, id = name-value) + label(htmlFor).
-// 바탕 gray-1·안쪽 여백 4px, 글자 15px·600·줄 높이 1.55·좌우 10px·위아래 3px, 기본 gray-7, 고른 항목 검정,
+// 바탕 gray-1·안쪽 여백 4px, 글자 15px·600·좌우 10px·한 줄 높이 44px(눌리는 영역, Mantine 값은 줄 높이 1.55·위아래 3px),
+// 기본 gray-7, 고른 항목 검정,
 // 고른 항목 아래 흰 면 + shadow-xs(모서리 16 - 4 = 12px), 항목 사이 1px gray-3 구분선(첫 항목·고른 항목 앞뒤는 없음).
 // 비활성이면 글자 gray-5·not-allowed. Mantine은 흰 면(FloatingIndicator)을 JS로 고른 항목 위치에 옮기지만,
 // 정지 상태의 위치·크기는 고른 항목(label)과 같으므로 그 항목 안의 면으로 그린다.
@@ -170,7 +173,8 @@ function SegmentedChoice<T extends string>({
               htmlFor={id}
               data-active={(selected && !disabled) || undefined}
               data-disabled={disabled || undefined}
-              className={`relative block cursor-pointer overflow-hidden rounded-[12px] px-2.5 py-[3px] text-center text-[15px] leading-[1.55] font-semibold text-ellipsis whitespace-nowrap select-none [-webkit-tap-highlight-color:transparent] peer-focus-visible:outline-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid ${
+              // 한 줄 라벨의 줄 높이를 44px로 두어 눌리는 영역을 맞춘다(design-standard §4).
+              className={`relative block cursor-pointer overflow-hidden rounded-[12px] px-2.5 py-0 text-center text-[15px] leading-11 font-semibold text-ellipsis whitespace-nowrap select-none [-webkit-tap-highlight-color:transparent] peer-focus-visible:outline-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid ${
                 disabled
                   ? 'cursor-not-allowed text-ui-gray-5'
                   : selected
@@ -330,6 +334,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     checkPendingPayment: true,
   });
   const [cancelOutcome, setCancelOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
+  // 취소 확인창: 닫힘 → 열림 → 처리 중(확정 뒤 요청·재확인이 끝날 때까지) 중 하나다.
+  const [cancelDialog, setCancelDialog] = useState<ConfirmDialogState>('closed');
   const [reviewOutcome, setReviewOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   const [redeliveryOutcome, setRedeliveryOutcome] = useState<CommandOutcome>(IDLE_COMMAND_OUTCOME);
   // 재배송비도 주문 결제와 같은 결제수단 중에서 고른다(카카오페이가 없는 손님도 카드로 낼 수 있게).
@@ -356,17 +362,33 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     }
   }
 
-  async function handleCancel() {
+  // 취소 버튼: 취소할 수 있는 상태인지 본 뒤 확인창을 연다. 요청은 확인창의 확정(handleCancel)이 보낸다.
+  function openCancelDialog() {
     if (!session?.user?.accessToken || !detail?.canRequestCancellation) return;
     if (isAuthoritativelyCancelled) return;
     if (isStaleRead) {
       setActionError(ORDER_DETAIL_STALE_MESSAGE);
       return;
     }
-    const message = detail.isRoundOrder
-      ? '주문을 취소할까요?'
-      : '공동구매 참여를 취소할까요?\n취소하면 되돌릴 수 없어요.';
-    if (!confirm(message)) return;
+    setCancelDialog('open');
+  }
+
+  async function handleCancel() {
+    if (
+      !session?.user?.accessToken ||
+      !detail?.canRequestCancellation ||
+      isAuthoritativelyCancelled
+    ) {
+      setCancelDialog('closed');
+      return;
+    }
+    if (isStaleRead) {
+      setCancelDialog('closed');
+      setActionError(ORDER_DETAIL_STALE_MESSAGE);
+      return;
+    }
+    // 처리 중에는 확인창이 Esc·바깥 누름으로 닫히지 않는다. 끝나면(성공·실패 모두) 닫고 결과는 화면이 알린다.
+    setCancelDialog('submitting');
     setCancelOutcome({ kind: 'executing' });
     setActionError(null);
     try {
@@ -438,6 +460,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       // 그 밖의 예외도 내부 오류 글자 대신 같은 고객 문구로 상태 확인을 안내한다.
       setCancelOutcome({ kind: 'uncertain', message: CANCEL_UNCERTAIN_MESSAGE });
       setActionError(CANCEL_UNCERTAIN_MESSAGE);
+    } finally {
+      setCancelDialog('closed');
     }
   }
 
@@ -1231,17 +1255,31 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           {cancelOutcome.kind === 'reconciling' && (
             <p className="m-0 mb-3 text-sm">취소가 접수됐어요. 최신 주문 상태를 확인하고 있어요.</p>
           )}
+          {/* ② 방향(design-standard §5): 여는 버튼은 검정 글자 외곽선. 되돌릴 수 없음은 확인창이 알린다. */}
           <LoadingButton
             className="w-full"
-            variant="outline-destructive"
+            variant="plain"
             loading={cancelBusy}
             disabled={cancelBusy || isStaleRead || cancelOutcome.kind === 'reconcile-failed'}
-            onClick={handleCancel}
+            onClick={openCancelDialog}
           >
             {detail.isRoundOrder ? '주문 취소' : '공동구매 참여 취소'}
           </LoadingButton>
         </DetailAlert>
       )}
+
+      <ConfirmDialog
+        state={cancelDialog}
+        content={orderCancelConfirmContent({
+          orderNumber: detail.orderNumber,
+          isRoundOrder: detail.isRoundOrder,
+          paymentPending: isPaymentPendingOrder(detail.status),
+          totalAmount: detail.totalAmount,
+          productNames: detail.items.map((item) => item.productName),
+        })}
+        onConfirm={handleCancel}
+        onClose={() => setCancelDialog('closed')}
+      />
 
       {showCancelReconcileWarning && (
         <DetailAlert variant="warning" className="mb-5" title="취소 확인됨 · 상태 재확인 필요">
@@ -1273,7 +1311,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {isCancelled && (
-        <DetailAlert variant="destructive" className="mb-5 text-center">
+        // 취소는 문제 상태가 아니라 끝난 상태라 빨강 대신 중립 면이다(design-standard.md §2·§5).
+        <DetailAlert variant="secondary" className="mb-5">
           <p className="m-0 text-base" style={{ fontWeight: 'var(--fw-bold)' }}>
             주문이 취소됐어요
           </p>

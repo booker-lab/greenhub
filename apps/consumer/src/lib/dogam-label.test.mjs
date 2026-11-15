@@ -16,7 +16,7 @@ new Function('module', 'exports', 'require', compiled)(module, module.exports, (
   assert.equal(name, '@greenhub/shared');
   return shared;
 });
-const { dogamLabel } = module.exports;
+const { dogamLabel, flowerLookRows } = module.exports;
 
 test('도감 라벨은 개화·꽃대·향·관리·크기·빛·놓을 곳 순서로 한 줄을 만든다', () => {
   assert.equal(
@@ -34,4 +34,46 @@ test('빈 칸은 건너뛰고 값이 없으면 빈 문자열이다', () => {
   assert.equal(dogamLabel({ size: { heightCm: 45 } }), '높이 약 45cm');
   assert.equal(dogamLabel({}), '');
   assert.equal(dogamLabel(undefined), '');
+});
+
+test('"이 꽃의 모습" 표는 개화 상태·향기·관리 난이도 순서로 이름과 값을 만든다', () => {
+  assert.deepEqual(
+    flowerLookRows({
+      selection: { bloomCondition: 'half', fragrance: 'light', careLevel: 'easy' },
+    }),
+    [
+      { label: '개화 상태', value: '반개화' },
+      { label: '향기', value: '은은함' },
+      { label: '관리 난이도', value: '쉬움' },
+    ],
+  );
+});
+
+test('"이 꽃의 모습" 표는 값이 없는 줄을 빼고, 하나도 없으면 줄이 없다', () => {
+  // 개화만 있음
+  assert.deepEqual(flowerLookRows({ selection: { bloomCondition: 'bud' } }), [
+    { label: '개화 상태', value: '봉오리' },
+  ]);
+  // 가운데(향기)만 빠짐: 구분자나 빈 줄 없이 두 줄
+  assert.deepEqual(flowerLookRows({ selection: { bloomCondition: 'full', careLevel: 'hard' } }), [
+    { label: '개화 상태', value: '활짝 핌' },
+    { label: '관리 난이도', value: '어려움' },
+  ]);
+  // 셋 다 없음
+  assert.deepEqual(flowerLookRows({ selection: {} }), []);
+  assert.deepEqual(flowerLookRows({}), []);
+  assert.deepEqual(flowerLookRows(undefined), []);
+  assert.deepEqual(flowerLookRows(null), []);
+});
+
+test('"이 꽃의 모습" 표는 빈 문자열·공백·문자열이 아닌 값을 줄로 만들지 않는다', () => {
+  assert.deepEqual(
+    flowerLookRows({ selection: { bloomCondition: '', fragrance: '   ', careLevel: null } }),
+    [],
+  );
+  assert.deepEqual(flowerLookRows({ selection: { bloomCondition: 0, fragrance: undefined } }), []);
+  // 표에 없는 값은 받은 글자를 그대로 쓴다(null·undefined 글자를 만들지 않는다).
+  assert.deepEqual(flowerLookRows({ selection: { bloomCondition: ' 만개 직전 ' } }), [
+    { label: '개화 상태', value: '만개 직전' },
+  ]);
 });

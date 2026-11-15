@@ -1,7 +1,7 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { useEffect, useState } from 'react';
+import { Button } from '@/components/Button';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;

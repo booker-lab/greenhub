@@ -40,13 +40,14 @@ export default async function HeroBanner() {
   return (
     // 글자와 사진을 나란히 놓는다. 사진을 글자 밑에 깔면 좁은 화면에서 제목·버튼이 사진 위로 겹친다.
     // ① 외형 유지(UI 교체 P5): Mantine Box(div, 아래 lg 20)와 같은 값.
+    // 면 색은 놓이는 자리가 --home-banner-surface로 바꿀 수 있다(회차 홈은 타일 아래 연회색, HomeProductList).
     <div
       className="mb-5"
       style={{
         display: 'flex',
         borderRadius: 'var(--radius)',
         overflow: 'hidden',
-        backgroundColor: 'var(--color-primary-surface)',
+        backgroundColor: 'var(--home-banner-surface, var(--color-primary-surface))',
         minHeight: 200,
       }}
     >

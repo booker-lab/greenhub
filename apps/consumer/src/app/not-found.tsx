@@ -1,6 +1,7 @@
 import { SearchX } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import EmptyStateIcon from '@/components/EmptyStateIcon';
 
 export const metadata: Metadata = {
   title: '페이지를 찾을 수 없어요',
@@ -13,21 +14,7 @@ export default function NotFound() {
   return (
     <div className="mx-auto max-w-[720px] px-4 py-16">
       <div className="flex flex-col items-center justify-start gap-4">
-        <div
-          aria-hidden
-          style={{
-            alignItems: 'center',
-            background: 'var(--color-surface-muted)',
-            borderRadius: 'var(--radius-full)',
-            color: 'var(--color-text-secondary)',
-            display: 'flex',
-            height: 72,
-            justifyContent: 'center',
-            width: 72,
-          }}
-        >
-          <SearchX size={32} strokeWidth={1.8} />
-        </div>
+        <EmptyStateIcon icon={SearchX} />
         <h1
           className="m-0 text-center leading-[1.3]"
           style={{

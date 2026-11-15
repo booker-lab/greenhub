@@ -30,8 +30,9 @@ const requireForTest = (specifier) => {
   if (
     specifier === '@greenhub/ui/components/alert' ||
     specifier === '@greenhub/ui/components/badge' ||
-    specifier === '@greenhub/ui/components/button' ||
-    specifier === '@greenhub/ui/components/loading-button' ||
+    specifier === '@/components/Button' ||
+    specifier === '@/components/LoadingButton' ||
+    specifier === '@/lib/touch-target' ||
     specifier === 'lucide-react' ||
     specifier === 'next-auth/react' ||
     specifier === 'next/navigation'
