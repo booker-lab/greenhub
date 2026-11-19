@@ -9,6 +9,7 @@ import { useEffect, useState } from 'react';
 import { Button } from '@/components/Button';
 import { LoadingButton } from '@/components/LoadingButton';
 import { getApiBaseUrl } from '@/lib/api-base-url';
+import { CONNECTION_UNSTABLE_MESSAGE, isConnectionFailure } from '@/lib/load-error-message';
 import { TOUCH_ICON } from '@/lib/touch-target';
 import { currentMyPageLoginUrl } from '../../_login';
 
@@ -68,6 +69,15 @@ function readPreferencePair(value: unknown): MarketingPreferences | null {
 function readMarketingPreferences(value: unknown): MarketingPreferences | null {
   if (!isRecord(value)) return null;
   return readPreferencePair(value['notificationPreferences']);
+}
+
+/**
+ * 화면에 보일 실패 안내. 연결이 끊긴 실패는 브라우저 원문("Failed to fetch") 대신 앱 공통 연결 안내를 쓰고,
+ * 그 밖에는 이 화면이 만든 한국어 문구를 그대로 쓴다.
+ */
+function settingsErrorMessage(cause: unknown, fallback: string): string {
+  if (isConnectionFailure(cause)) return CONNECTION_UNSTABLE_MESSAGE;
+  return cause instanceof Error ? cause.message : fallback;
 }
 
 async function fetchMarketingPreferences(
@@ -258,7 +268,7 @@ function LegacyNotificationSettingsPage() {
       .catch((cause: unknown) => {
         if (cancelled) return;
         setPreferences(null);
-        setError(cause instanceof Error ? cause.message : '현재 상태를 확인할 수 없습니다.');
+        setError(settingsErrorMessage(cause, '현재 상태를 확인할 수 없습니다.'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -281,7 +291,7 @@ function LegacyNotificationSettingsPage() {
       const label = CHANNELS.find((candidate) => candidate.id === channel)?.title ?? '마케팅';
       setNotice(`${label} 동의를 철회했습니다.`);
     } catch (cause: unknown) {
-      setError(cause instanceof Error ? cause.message : '마케팅 동의 철회에 실패했습니다.');
+      setError(settingsErrorMessage(cause, '마케팅 동의 철회에 실패했습니다.'));
     } finally {
       setPendingChannel(null);
     }

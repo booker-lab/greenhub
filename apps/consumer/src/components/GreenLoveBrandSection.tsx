@@ -23,16 +23,6 @@ export default function GreenLoveBrandSection() {
       <div className="flex flex-col items-stretch justify-start gap-4">
         <div className="flex flex-col items-stretch justify-start gap-1">
           <p
-            className={`${TEXT} uppercase`}
-            style={{
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--fw-bold)',
-              color: 'var(--color-primary-dark)',
-            }}
-          >
-            Green Love
-          </p>
-          <p
             className={TEXT}
             style={{
               fontSize: 'var(--font-size-lg)',

@@ -1175,9 +1175,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           }))}
                         />
                       )}
+                      {/* 결제는 행동이라 기본 초록(--primary)이다. 빨강은 둘레의 보류 안내 면에만 쓴다(design-standard §2). */}
                       <LoadingButton
                         className="mt-2.5"
-                        variant="destructive"
                         loading={redeliveryBusy}
                         disabled={redeliveryBusy || isStaleRead}
                         onClick={handleRedeliveryPayment}
