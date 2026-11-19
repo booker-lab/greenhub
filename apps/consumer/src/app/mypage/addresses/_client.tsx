@@ -24,6 +24,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { LoadingButton } from '@/components/LoadingButton';
 import type { AddressFormData } from '@/hooks/useAddresses';
 import { useAddresses } from '@/hooks/useAddresses';
+import { MANUAL_ADDRESS_PLACEHOLDER } from '@/lib/checkout-address';
 import { addressDeleteConfirmContent } from '@/lib/confirm-dialog-content';
 import { TOUCH_HEIGHT, TOUCH_ICON } from '@/lib/touch-target';
 import { MyPageBackButton } from '../_back-button';
@@ -194,13 +195,13 @@ function AddressFormModal({
                   />
                   <AddressField
                     label="우편번호 *"
-                    placeholder="예: 06232"
+                    placeholder="숫자 5자리"
                     value={form.zipCode}
                     onChange={(value) => set('zipCode', value)}
                   />
                   <AddressField
                     label="주소 *"
-                    placeholder="예: 서울 강남구 테헤란로 152"
+                    placeholder={MANUAL_ADDRESS_PLACEHOLDER}
                     value={form.address}
                     onChange={(value) => set('address', value)}
                   />
