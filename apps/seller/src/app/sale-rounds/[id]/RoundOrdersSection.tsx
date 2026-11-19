@@ -190,7 +190,9 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
                         fontSize: 'var(--font-size-lg)',
                         fontWeight: 'var(--fw-extrabold)',
                         fontVariantNumeric: 'tabular-nums',
-                        color: 'var(--color-text)',
+                        // 0은 회색으로 물러난다(design-direction §3.5).
+                        color:
+                          stat.count === 0 ? 'var(--color-text-secondary)' : 'var(--color-text)',
                       }}
                     >
                       {stat.count.toLocaleString()}건
@@ -213,7 +215,7 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
             {showBulkButton && (
               <div>
                 <Button
-                  className="w-full"
+                  className="h-11 w-full"
                   onClick={() => setConfirming(true)}
                   disabled={running || !storeId}
                 >

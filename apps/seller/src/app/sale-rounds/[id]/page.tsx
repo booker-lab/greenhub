@@ -74,6 +74,23 @@ const CLOSE_REASON_LABEL = {
   MANUAL: '수동 마감',
 } as const;
 
+// 요약 카드의 주문 마감 한 줄. 회차 목록 카드와 같은 형식("9월 28일 (월) 00:00", 한국 시간)이다.
+const ORDER_CLOSE_FORMAT = new Intl.DateTimeFormat('ko-KR', {
+  timeZone: 'Asia/Seoul',
+  month: 'short',
+  day: 'numeric',
+  weekday: 'short',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
+/** 주문 마감 시각 글자. 날짜를 읽지 못하면 null(줄을 그리지 않는다). */
+function formatOrderCloseAt(value: string): string | null {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : ORDER_CLOSE_FORMAT.format(date);
+}
+
 const ACTION_META: Record<
   RoundAction,
   {
@@ -152,10 +169,13 @@ function SummaryStat({
   label,
   value,
   alert = false,
+  muted = false,
 }: {
   label: string;
   value: string;
   alert?: boolean;
+  /** 값이 0일 때: 회색으로 물러난다(design-direction §3.5). 문제 표시(alert)가 우선이다. */
+  muted?: boolean;
 }) {
   return (
     <div
@@ -182,7 +202,11 @@ function SummaryStat({
           fontSize: 'var(--font-size-lg)',
           fontWeight: 'var(--fw-extrabold)',
           fontVariantNumeric: 'tabular-nums',
-          color: alert ? 'var(--color-danger)' : 'var(--color-text)',
+          color: alert
+            ? 'var(--color-danger)'
+            : muted
+              ? 'var(--color-text-secondary)'
+              : 'var(--color-text)',
         }}
       >
         {value}
@@ -195,12 +219,14 @@ function RoundSummary({ round }: { round: SellerSaleRound }) {
   const status = STATUS_META[round.status];
   const attentionCount =
     round.counters.heldOrderCount + (round.cancellation?.status === 'LOCAL_FAILED' ? 1 : 0);
+  const orderCloseAt = formatOrderCloseAt(round.schedule.orderCloseAt);
 
   return (
     <div className={`${PAPER} p-4`}>
       <div className={`${COLUMN} gap-4`}>
         <div className="flex flex-row flex-wrap items-start justify-between gap-4">
-          <div>
+          {/* 이름·주문 마감 쪽이 줄어들고(min-w-0) 확인 필요 버튼은 오른쪽 자리를 지킨다. */}
+          <div className="min-w-0 flex-1">
             <div className="flex flex-row flex-wrap items-center justify-start gap-2.5">
               <StatusDot tone={status.tone}>{status.label}</StatusDot>
               {round.closeReason && (
@@ -210,12 +236,30 @@ function RoundSummary({ round }: { round: SellerSaleRound }) {
             <p className={TEXT} style={{ marginTop: 6, fontWeight: 'var(--fw-bold)' }}>
               {round.name}
             </p>
+            {/* 이 화면에서 먼저 읽혀야 하는 주문 마감 일시(design-standard §5). 잠긴 회차는 아래 폼이 읽기 전용이라 여기서 읽는다. */}
+            {/* 라벨은 따로 감싸지 않는다: 회차 E2E가 상태 글자 '주문 마감'을 정확히 일치로 하나만 찾는다(seller-sale-rounds.spec.ts). */}
+            {orderCloseAt && (
+              <p
+                className={`${TEXT} break-keep`}
+                style={{
+                  marginTop: 4,
+                  fontSize: 'var(--font-size-sm)',
+                  color: 'var(--color-text-secondary)',
+                }}
+              >
+                주문 마감{' '}
+                <span className="font-bold whitespace-nowrap text-foreground tabular-nums">
+                  {orderCloseAt}
+                </span>
+              </p>
+            )}
           </div>
           {attentionCount > 0 && (
             <ButtonLink
               render={<Link href="/orders?tab=ACTION_REQUIRED" />}
               size="xs"
               variant="light-destructive"
+              className="h-11 shrink-0"
             >
               확인 필요 {attentionCount.toLocaleString()}건
             </ButtonLink>
@@ -234,6 +278,7 @@ function RoundSummary({ round }: { round: SellerSaleRound }) {
             label="배송 보류"
             value={`${round.counters.heldOrderCount.toLocaleString()}건`}
             alert={round.counters.heldOrderCount > 0}
+            muted={round.counters.heldOrderCount === 0}
           />
         </div>
       </div>
@@ -442,6 +487,7 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
         {availableAction && (
           <Button
             variant={ACTION_BUTTON_VARIANT[availableAction]}
+            className="h-11"
             onClick={() => {
               clearOperationError();
               setActionError(null);
@@ -472,6 +518,7 @@ function SaleRoundDetail({ roundId, onRetry }: { roundId: string; onRetry: () =>
         {cancelAction && (
           <Button
             variant="subtle-destructive"
+            className="h-11"
             onClick={() => {
               clearOperationError();
               setActionError(null);
