@@ -80,7 +80,10 @@ export default function AdminReviewsPage() {
   return (
     <div className="flex flex-col gap-3">
       <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">숨긴 후기</h3>
-      <p className="m-0 p-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+      <p
+        className="m-0 p-0 text-sm [word-break:keep-all]"
+        style={{ color: 'var(--color-text-secondary)' }}
+      >
         숨긴 후기는 고객 화면과 별점에서 빠져 있어요. 사유에 맞지 않게 숨긴 후기는 다시 보이게 해
         주세요.
       </p>
@@ -101,15 +104,18 @@ export default function AdminReviewsPage() {
               {describeListCap(cap)}
             </p>
           )}
-          {items.map((review) => (
-            <HiddenReviewCard
-              key={review.id}
-              review={review}
-              busy={busyId === review.id}
-              error={errors[review.id] ?? null}
-              onUnhide={() => askUnhide(review)}
-            />
-          ))}
+          {/* 행 사이 여백 없이 1px 선으로 나눈 줄 목록(어드민 목록 규칙). */}
+          <div>
+            {items.map((review) => (
+              <HiddenReviewCard
+                key={review.id}
+                review={review}
+                busy={busyId === review.id}
+                error={errors[review.id] ?? null}
+                onUnhide={() => askUnhide(review)}
+              />
+            ))}
+          </div>
         </>
       )}
       <UnhideConfirmModal
