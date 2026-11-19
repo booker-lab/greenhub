@@ -1146,6 +1146,33 @@ export const routes = [
           : { eligible: false, reason: 'SETTLEMENT_PAID', deadline: null, amount: 33000 },
     }),
   ],
+  // 고객 사유 종결(환불 없음) 판정(주문 상세). 앱은 고객 책임 보류로 재배송비를 기다리는 회차 직배송 주문과
+  // 종결한 주문에서만 묻는다. order-round-held는 보류(서울 10월 6일) 뒤 결제 기한(10월 9일)이 지났고 결제 대기가
+  // 24시간을 넘어 종결할 수 있다(API customer-fault-closure.service 판정과 같은 값, 날짜는 고정 주문 날짜 기준).
+  [
+    'GET',
+    /^\/stores\/[^/]+\/orders\/([^/]+)\/customer-fault-closure$/,
+    ({ params: [id] }) => ({
+      body:
+        id === 'order-round-held'
+          ? {
+              eligible: true,
+              reason: 'OK',
+              closureReasonCode: 'REDELIVERY_FEE_UNPAID',
+              eligibleAt: '2026-10-09T15:00:00.000Z',
+              paymentDeadlineDate: '2026-10-09',
+              redeliveryFee: 5000,
+            }
+          : {
+              eligible: false,
+              reason: 'NOT_HELD',
+              closureReasonCode: null,
+              eligibleAt: null,
+              paymentDeadlineDate: null,
+              redeliveryFee: null,
+            },
+    }),
+  ],
   ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
   // 조치(문자 재발송·환불 재시도) 뒤 앱이 기록 한 건을 다시 읽는다.
   [
@@ -1199,6 +1226,21 @@ export const routes = [
   ['GET', /^\/admin\/users$/, () => ({ body: { users: ADMIN_USERS }, delay: 700 })],
   ['GET', /^\/admin\/invite$/, () => ({ body: ADMIN_INVITES })],
   ['GET', /^\/admin\/stores$/, () => ({ body: { stores: ADMIN_STORES } })],
+  // 상품별 경매 시세(회차 가격·구매 목록). fixture 상품은 시세를 연결하지 않아(marketRef 없음) 모두 null이다.
+  [
+    'GET',
+    /^\/stores\/[^/]+\/market-prices$/,
+    ({ url }) => ({
+      body: {
+        summaries: Object.fromEntries(
+          (url.searchParams.get('productIds') ?? '')
+            .split(',')
+            .filter(Boolean)
+            .map((id) => [id, null]),
+        ),
+      },
+    }),
+  ],
   ['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: SALE_ROUNDS } })],
   [
     'GET',
@@ -1753,9 +1795,9 @@ export const screens = [
   {
     id: 'modal-order-cancel-short',
     group: '판매자 · 모달',
-    title: '주문 상세 · 강제 취소(사유 5자 미만)',
+    title: '주문 상세 · 주문 취소(사유 5자 미만)',
     path: '/orders/order-with-contact',
-    steps: [{ click: '강제 취소' }, { fill: '짧음' }],
+    steps: [{ click: '주문 취소' }, { fill: '짧음' }],
     viewport: true,
   },
   {
@@ -1790,9 +1832,9 @@ export const screens = [
   {
     id: 'order-cancel-submit',
     group: '판매자 · 주문 상세 동작',
-    title: '주문 상세 · 강제 취소 확정 누름',
+    title: '주문 상세 · 주문 취소 확정 누름',
     path: '/orders/order-with-contact',
-    steps: [{ click: '강제 취소' }, { fill: '손님이 취소를 요청함' }, { click: '취소 확정' }],
+    steps: [{ click: '주문 취소' }, { fill: '손님이 취소를 요청함' }, { click: '취소 확정' }],
   },
   {
     id: 'order-post-delivery-refund-submit',
@@ -1896,9 +1938,9 @@ export const screens = [
   {
     id: 'modal-order-cancel',
     group: '판매자 · 모달',
-    title: '주문 상세 · 강제 취소',
+    title: '주문 상세 · 주문 취소',
     path: '/orders/order-with-contact',
-    steps: [{ click: '강제 취소' }],
+    steps: [{ click: '주문 취소' }],
     viewport: true,
   },
   // 어드민 주문 필터 — 가게 검색 Select(열림·거름·맞는 가게 없음), 상태 Select 열림, 고른 상태의 주문 없음.
