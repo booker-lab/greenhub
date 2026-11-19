@@ -133,14 +133,19 @@ describe('InviteHistoryTable 받는 사람 표시', () => {
     expect(textsOf(tree).filter((t) => t.includes('seller@example.com'))).toHaveLength(2);
   });
 
-  it('받는 사람이 없거나 필드가 없는 기존 초대는 이메일 없이 휴대폰 행에만 미지정 안내를 둔다', () => {
+  it('받는 사람이 없거나 필드가 없는 기존 초대는 휴대폰 행과 표 모두 미지정 안내를 둔다', () => {
     const tree = InviteHistoryTable({
       ...baseProps,
       invites: [{ ...invite('test-invite-aaa'), recipientEmail: null }, invite('test-invite-bbb')],
     });
     const recipientTexts = textsOf(tree).filter((t) => t.includes('받는 사람'));
-    // 휴대폰 행은 둘째 줄 왼쪽에 "받는 사람 지정 안 함"을 두고, 데스크톱 행은 받는 사람 줄을 그리지 않는다.
-    expect(recipientTexts).toEqual(['받는 사람 지정 안 함', '받는 사람 지정 안 함']);
+    // 세 폭에서 보이는 정보를 맞춘다(2026-11-19): 휴대폰 행 2건 + 표 2건 모두 "받는 사람 지정 안 함".
+    expect(recipientTexts).toEqual([
+      '받는 사람 지정 안 함',
+      '받는 사람 지정 안 함',
+      '받는 사람 지정 안 함',
+      '받는 사람 지정 안 함',
+    ]);
   });
 });
 
