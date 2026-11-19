@@ -199,10 +199,22 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
       {displayColors.length > 0 && !(isFeatureOn('detail-images') && product.varietyId) && (
         <div className="mb-5 flex flex-wrap items-center gap-2.5" style={{ flexWrap: 'wrap' }}>
           {displayColors.map((color) => (
-            // Mantine Badge radius="xl"(32px)
-            <Badge key={color} variant="outline-gray" size="sm" className="rounded-[32px]">
+            // 색상 태그: 장바구니 "회차 가격" 태그와 같은 연회색 면 + 검정 13px 굵은 글자(design-standard §3).
+            // 공용 Badge sm(10px·회색 글자 대비 3.3:1)은 글자 크기와 대비 기준에 못 미쳐 쓰지 않는다.
+            <span
+              key={color}
+              style={{
+                background: 'var(--color-surface-muted)',
+                borderRadius: 'var(--radius-tag)',
+                color: 'var(--color-text)',
+                display: 'inline-block',
+                fontSize: 'var(--font-size-xs)',
+                fontWeight: 'var(--fw-bold)',
+                padding: '2px 7px',
+              }}
+            >
               {color}
-            </Badge>
+            </span>
           ))}
         </div>
       )}
