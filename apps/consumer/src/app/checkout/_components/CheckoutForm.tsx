@@ -102,6 +102,7 @@ function formatDeliveryDate(iso: string): string {
 // ① 외형 유지: Mantine TextInput·Textarea(InputWrapper)와 같은 구조·연결. 라벨(for) → 설명(p) → 입력칸 → 오류(p).
 // 입력칸은 오류·설명을 aria-describedby로 가리키고 오류가 있으면 aria-invalid다. Mantine 감싸개는 역할이 없는
 // div라 Field의 role="group"은 지운다. 필수 표시는 FieldLabel required(" *", aria-hidden)와 입력칸 required.
+// 라벨 글자에 "(필수)"가 이미 있는 칸은 requiredMark={false}로 빨간 별표를 뺀다(빨강은 문제 상태에만, design-standard §2).
 function useFieldIds(description: ReactNode, error: ReactNode) {
   const id = useId();
   const descriptionId = description ? `${id}-description` : undefined;
@@ -122,6 +123,7 @@ function FieldFrame({
   error,
   errorId,
   required,
+  requiredMark = true,
   style,
   children,
 }: {
@@ -132,6 +134,7 @@ function FieldFrame({
   error?: ReactNode;
   errorId?: string;
   required?: boolean;
+  requiredMark?: boolean;
   style?: CSSProperties;
   children: ReactNode;
 }) {
@@ -139,7 +142,12 @@ function FieldFrame({
     // biome-ignore lint/a11y/useValidAriaRole: Field 기본 role="group"을 지워 Mantine 감싸개(역할 없는 div)와 같은 접근성 트리로 둔다.
     <Field role={undefined} style={style}>
       {label && (
-        <FieldLabel htmlFor={id} required={required}>
+        <FieldLabel
+          htmlFor={id}
+          required={required && requiredMark}
+          // 별표를 빼도 라벨 배치는 별표가 있을 때와 같게 둔다(FieldLabel required의 inline-block).
+          className={required && !requiredMark ? 'inline-block' : undefined}
+        >
           {label}
         </FieldLabel>
       )}
@@ -172,6 +180,7 @@ function TextInput({
   description,
   error,
   required,
+  requiredMark,
   style,
   className,
   ...props
@@ -179,6 +188,7 @@ function TextInput({
   label?: ReactNode;
   description?: ReactNode;
   error?: ReactNode;
+  requiredMark?: boolean;
 }) {
   const { id, descriptionId, errorId, describedBy } = useFieldIds(description, error);
   return (
@@ -190,6 +200,7 @@ function TextInput({
       error={error}
       errorId={errorId}
       required={required}
+      requiredMark={requiredMark}
       style={style}
     >
       {/* 입력칸 높이 44px(design-standard §4). 공용 Input 기본 36px는 그대로다. */}
@@ -568,6 +579,8 @@ export default function CheckoutForm({
             error={deliveryPhoneTouched && deliveryPhoneError ? deliveryPhoneError : undefined}
             autoComplete="tel"
             required
+            // 회차 결제의 라벨은 "(필수)"를 글자로 쓰므로 별표를 겹쳐 쓰지 않는다.
+            requiredMark={!isRoundCheckout}
           />
         )}
         {isRoundCheckout && benchmark?.gift && (
