@@ -372,11 +372,11 @@ function RoundValidationNotice({ validation }: { validation: RoundCartValidation
   }
   if (validation.status === 'eligible') {
     return (
-      <p
-        className="m-0 mt-1.5 p-0 text-xs"
-        style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
-      >
-        구매 가능
+      // 상태는 초록 글자가 아니라 점 + 글자다(초록은 행동에만, design-standard §5 "장바구니").
+      <p className="m-0 mt-1.5 p-0">
+        <StatusDot size={13} className="font-bold">
+          구매 가능
+        </StatusDot>
       </p>
     );
   }

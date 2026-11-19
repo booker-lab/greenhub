@@ -496,7 +496,8 @@ test('회차 주문이 마감되면 도착 안내와 이번 회차 추가 제안
 
 test('회차 안내와 상품별 확인 표시는 내부 용어("서버") 없이 고객 문구로 보인다', () => {
   assert.match(source, /이번 회차 상품을 한 번에 결제해요\./);
-  assert.match(source, />\s*구매 가능\s*<\/p>/);
+  // 구매 가능은 초록 글자가 아니라 점 + 글자(StatusDot)다.
+  assert.match(source, /<StatusDot size=\{13\} className="font-bold">\s*구매 가능\s*<\/StatusDot>/);
   assert.match(source, />\s*구매 가능 여부 확인 중\s*<\/p>/);
   assert.doesNotMatch(source, /서버 확인 완료|서버에서 확인해 한 번에 결제|서버에서 구매 가능 여부 확인 중/);
 });
