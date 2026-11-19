@@ -59,8 +59,9 @@ export default function ProductCTABar({
           padding: '12px 16px',
         }}
       >
+        {/* 장바구니는 글자 폭만 쓰고 주 버튼이 남은 폭을 다 쓴다. 금액이 7자리여도 "n원 바로 구매"가 잘리지 않는다. */}
         <Button
-          className="flex-1"
+          className="flex-none"
           variant="outline"
           size="lg"
           disabled={!canAddToCart}
@@ -69,7 +70,7 @@ export default function ProductCTABar({
           {addToCartLabel}
         </Button>
         <Button
-          className="flex-[2]"
+          className="min-w-0 flex-1"
           size="lg"
           disabled={!canBuy}
           onClick={onBuyNow}
