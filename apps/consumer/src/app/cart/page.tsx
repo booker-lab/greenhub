@@ -619,7 +619,8 @@ export default function CartPage() {
                 >
                   <Link
                     href={productHref}
-                    className="col-span-2 m-0 justify-self-start p-0 text-sm [overflow-wrap:anywhere] [word-break:keep-all]"
+                    // 누르는 높이 44px: 글자 줄(22px) 위아래로 11px씩 넓히고 같은 만큼 음수 여백으로 배치는 그대로 둔다.
+                    className="col-span-2 -my-[11px] justify-self-start px-0 py-[11px] text-sm [overflow-wrap:anywhere] [word-break:keep-all]"
                     style={{
                       fontWeight: 'var(--fw-extrabold)',
                       color: 'var(--color-text)',
