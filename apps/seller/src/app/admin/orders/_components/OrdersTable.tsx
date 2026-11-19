@@ -86,7 +86,8 @@ export function OrderStatus({ order, size = 15 }: { order: AdminOrder; size?: 13
   );
 }
 
-/** 주문번호 · 가린 주문자 — 낱말 덩어리마다 줄바꿈 금지. */
+/** 주문번호 · 가린 주문자 — 낱말 덩어리마다 줄바꿈 금지.
+ * 태블릿(641~1100) 표 칸은 좁아 "·"만 줄 끝에 남으므로, 그 폭에서는 구분자를 숨기고 주문자를 둘째 줄로 내린다. */
 function OrderIdentity({ order }: { order: AdminOrder }) {
   const buyer = maskPersonName(order.buyerName);
   return (
@@ -94,8 +95,8 @@ function OrderIdentity({ order }: { order: AdminOrder }) {
       <span className="whitespace-nowrap tabular-nums">{orderNumberLabel(order)}</span>
       {buyer && (
         <>
-          {' · '}
-          <span className="whitespace-nowrap">{buyer}</span>
+          <span className="min-[641px]:max-[1100px]:hidden"> · </span>
+          <span className="whitespace-nowrap min-[641px]:max-[1100px]:block">{buyer}</span>
         </>
       )}
     </>

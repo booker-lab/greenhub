@@ -88,9 +88,20 @@ function PayoutAccount({ account }: { account: AdminPayoutAccount | null }) {
   );
 }
 
-function RowStatus({ s, size = 15 }: { s: AdminSettlement; size?: 13 | 15 }) {
+/** align="end"는 휴대폰 행 2줄용 — 상태가 꺾여도 줄마다 오른쪽 끝선에 붙는다. */
+function RowStatus({
+  s,
+  size = 15,
+  align = 'start',
+}: {
+  s: AdminSettlement;
+  size?: 13 | 15;
+  align?: 'start' | 'end';
+}) {
   return (
-    <span className="inline-flex flex-wrap items-center gap-x-3 gap-y-0.5">
+    <span
+      className={`inline-flex flex-wrap items-center gap-x-3 gap-y-0.5${align === 'end' ? ' min-w-0 justify-end text-right' : ''}`}
+    >
       <StatusDot tone={settlementStatusTone(s.status)} size={size}>
         {ADMIN_SETTLEMENT_STATUS_LABEL[s.status] ?? s.status}
       </StatusDot>
@@ -248,7 +259,7 @@ export function SettlementTable({
                     <p className={`${ADMIN_SUB} whitespace-nowrap tabular-nums`}>
                       {toDateOnly(s.settledAt) ?? '–'}
                     </p>
-                    <RowStatus s={s} size={13} />
+                    <RowStatus s={s} size={13} align="end" />
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <p className={`${ADMIN_SUB} tabular-nums`}>
