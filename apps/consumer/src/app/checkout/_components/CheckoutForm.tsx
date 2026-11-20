@@ -812,7 +812,7 @@ export default function CheckoutForm({
               </p>
             ) : (
               <p
-                className="m-0 min-w-0 leading-[1.55]"
+                className="m-0 min-w-0 leading-[34px]"
                 style={{
                   fontSize: 22,
                   fontVariantNumeric: 'tabular-nums',

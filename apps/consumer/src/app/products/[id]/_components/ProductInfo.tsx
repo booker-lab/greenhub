@@ -210,6 +210,7 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
                 display: 'inline-block',
                 fontSize: 'var(--font-size-xs)',
                 fontWeight: 'var(--fw-bold)',
+                lineHeight: '20px',
                 padding: '2px 7px',
               }}
             >

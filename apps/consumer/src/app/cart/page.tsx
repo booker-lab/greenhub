@@ -373,8 +373,9 @@ function RoundValidationNotice({ validation }: { validation: RoundCartValidation
   if (validation.status === 'eligible') {
     return (
       // 상태는 초록 글자가 아니라 점 + 글자다(초록은 행동에만, design-standard §5 "장바구니").
-      <p className="m-0 mt-1.5 p-0">
-        <StatusDot size={13} className="font-bold">
+      // 문단을 flex로 두고 줄 높이를 이전 글자 줄(text-xs, 13px × 1.4)과 같게 둬 아래 배치가 움직이지 않게 한다.
+      <p className="m-0 mt-1.5 flex p-0">
+        <StatusDot size={13} className="leading-[1.4] font-bold">
           구매 가능
         </StatusDot>
       </p>
@@ -857,7 +858,7 @@ export default function CartPage() {
             총 결제 금액
           </p>
           <p
-            className="m-0 min-w-0 p-0 leading-[1.55]"
+            className="m-0 min-w-0 p-0 leading-[34px]"
             style={{
               color: 'var(--color-text)',
               fontSize: 22,
