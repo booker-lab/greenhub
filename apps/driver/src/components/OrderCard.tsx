@@ -170,9 +170,15 @@ export default function OrderCard({
 
   const rowBody = (
     <>
+      {/* 주소는 찾아갈 곳이라 말줄임으로 지우지 않고 낱말 단위로 줄을 바꾼다. */}
       <p
-        className={cn(text, 'truncate')}
-        style={{ fontWeight: 'var(--fw-bold)', fontVariantNumeric: 'tabular-nums' }}
+        className={text}
+        style={{
+          fontWeight: 'var(--fw-bold)',
+          fontVariantNumeric: 'tabular-nums',
+          wordBreak: 'keep-all',
+          overflowWrap: 'anywhere',
+        }}
       >
         {parts.detail ? `${parts.detail} · ${parts.base}` : parts.base}
       </p>
@@ -282,7 +288,11 @@ function PickupLine({
       data-testid={`driver-order-pickup-${orderId}`}
       className={cn('flex items-center gap-3', indent && 'pl-9')}
     >
-      <p className={cn(text, 'min-w-0 flex-1 truncate')} style={muted}>
+      {/* 수거 장소도 들를 곳이라 말줄임 없이 줄을 바꾼다. */}
+      <p
+        className={cn(text, 'min-w-0 flex-1')}
+        style={{ ...muted, wordBreak: 'keep-all', overflowWrap: 'anywhere' }}
+      >
         {pickup.label}
       </p>
       {pickup.mapHref && (

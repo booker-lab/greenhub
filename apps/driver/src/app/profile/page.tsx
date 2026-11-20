@@ -12,6 +12,9 @@ import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
 import { profileImageSrc } from '@/lib/profile-image';
 import { LogoutButton } from './logout-button';
 
+// 구역은 1px 테두리 상자 대신 연회색 면 한 단계로 나눈다(design-direction.md §3.1, 2026-11-19 사용자 결정).
+const sectionFace = 'rounded-[var(--radius)] border-0 bg-[var(--color-surface-muted)]';
+
 const LOGOUT_REVOKE_TIMEOUT_MS = 5_000;
 /** 로그아웃 확인용 배송 중·보류 주문 수 조회 시간 제한. 늦으면 확인 없이 기존대로 로그아웃한다. */
 const ACTIVE_DELIVERIES_TIMEOUT_MS = 3_000;
@@ -76,7 +79,7 @@ export default async function ProfilePage() {
       <main style={{ flex: 1, padding: '0 16px' }}>
         <div className="flex flex-col gap-4">
           {/* 프로필 */}
-          <Card className={cn(card, 'p-5')}>
+          <Card className={cn(card, sectionFace, 'p-5')}>
             <div className="flex flex-wrap items-center gap-4">
               {imageSrc ? (
                 // 카카오 CDN 사진은 이미지 최적화 허용 대상이 아니라 브라우저가 바로 받는다.
@@ -94,7 +97,9 @@ export default async function ProfilePage() {
                     width: 60,
                     height: 60,
                     borderRadius: '50%',
-                    backgroundColor: 'var(--color-primary-surface)',
+                    // 이름 글자 원은 행동이 아니라 무채색이다(초록은 행동에만, design-direction.md §3.2).
+                    // 카드가 연회색 면이라 원은 바탕색으로 한 단계 띄운다.
+                    backgroundColor: 'var(--color-bg)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -103,7 +108,7 @@ export default async function ProfilePage() {
                   <p
                     className={text}
                     style={{
-                      color: 'var(--color-primary-dark)',
+                      color: 'var(--color-text)',
                       fontWeight: 'var(--fw-bold)',
                       fontSize: 'var(--font-size-xl)',
                     }}
@@ -127,7 +132,7 @@ export default async function ProfilePage() {
           </Card>
 
           {/* 계정 정보 */}
-          <Card className={cn(card, 'p-0')}>
+          <Card className={cn(card, sectionFace, 'p-0')}>
             <div className="flex flex-wrap items-center justify-between gap-4 p-4">
               <p
                 className={text}
@@ -168,7 +173,7 @@ export default async function ProfilePage() {
           </Card>
 
           {/* 오늘 완료 내역: 손님 문의에 답할 때 오늘 마친 배송과 완료 사진을 다시 본다. */}
-          <Card className={cn(card, 'p-0')}>
+          <Card className={cn(card, sectionFace, 'p-0')}>
             <Link
               href="/board/completed"
               prefetch={false}
@@ -198,7 +203,7 @@ export default async function ProfilePage() {
           </Card>
 
           {/* 운영팀 연락(소비자 고객센터와 같은 번호, ops-contact.ts) */}
-          <Card className={cn(card, 'p-0')}>
+          <Card className={cn(card, sectionFace, 'p-0')}>
             <div className="flex flex-wrap items-center justify-between gap-4 p-4">
               <div className="flex flex-col gap-0.5">
                 <p className={text} style={{ fontWeight: 'var(--fw-bold)' }}>

@@ -857,7 +857,9 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
               onClick={startCamera}
               disabled={preparing}
               tone="white"
-              className="rounded-sm"
+              size="md"
+              // 한 손 엄지로 누르는 버튼: 높이 48px·좌우 32px을 뺀 폭(design-direction.md §6).
+              className="h-12 w-full max-w-[calc(100%-64px)]"
               style={{ color: CAMERA_BUTTON_INK }}
             >
               {isRoundDirect ? '카메라 촬영' : '사진 촬영'}
@@ -868,7 +870,8 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
                 loading={preparing}
                 disabled={preparing}
                 tone="white-outline"
-                className="rounded-sm"
+                size="md"
+                className="h-12 w-full max-w-[calc(100%-64px)]"
                 style={{ color: CAMERA_ON }}
               >
                 카메라 앱으로 찍기·사진 선택
@@ -980,7 +983,8 @@ function PhotoCaptureScreen({ orderId, mode }: PhotoCaptureProps) {
           <AppButton
             onClick={upload}
             disabled={!captured || uploading || !sessionReady}
-            size="lg"
+            // 배송을 끝내는 주요 버튼은 상세의 "도착 사진 찍고 완료"와 같은 56px(AppButton xl)이다.
+            size="xl"
             fullWidth
             leftSection={uploading ? <Spinner size={18} className="text-white" /> : null}
           >
