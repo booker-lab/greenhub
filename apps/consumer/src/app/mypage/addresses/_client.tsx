@@ -352,7 +352,8 @@ export default function AddressesClient() {
             <UiAlert role="alert" variant="destructive">
               <AlertDescription>
                 <div className="flex flex-row flex-wrap items-center justify-between gap-3">
-                  <p className={TEXT} style={SMALL_TEXT_STYLE}>
+                  {/* 낱말 중간에서 줄이 끊기지 않게 한다("주세 / 요"). */}
+                  <p className={`${TEXT} break-keep`} style={SMALL_TEXT_STYLE}>
                     {error}
                   </p>
                   {/* 흰 면·검정 글자 외곽선(알림 화면의 "다시 시도"와 같다. 흰 면 위 빨강 글자는 대비 3.3:1이었다) */}
@@ -366,7 +367,7 @@ export default function AddressesClient() {
           {actionError && (
             <UiAlert role="alert" variant="destructive">
               <AlertDescription>
-                <p className={TEXT} style={SMALL_TEXT_STYLE}>
+                <p className={`${TEXT} break-keep`} style={SMALL_TEXT_STYLE}>
                   {actionError}
                 </p>
               </AlertDescription>
