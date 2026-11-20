@@ -2544,7 +2544,12 @@ export const benchmarkScreens = [
     title: '관리자 · 입점 문의 · 삭제 확인',
     path: '/admin/partner-inquiries',
     features: ['partner-inquiry'],
-    steps: [{ click: '삭제' }],
+    // 삭제는 행 끝 ⋮ 메뉴 안에 있다(어드민 행 동작 규칙, 2026-11-19).
+    steps: [
+      { clickSelector: 'button[aria-label="여주 햇살농원 입점 문의 동작 더 보기"]:visible' },
+      { click: '삭제…' },
+    ],
+    returnFocus: 'button[aria-label="여주 햇살농원 입점 문의 동작 더 보기"]:visible',
     viewport: true,
   },
   {

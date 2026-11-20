@@ -10,12 +10,18 @@ import { describePayConfirm } from '../_lib';
 // 체크를 두지 않고 확정을 끈 채 이유를 버튼 위에 쓴다(canPay와 같은 조건).
 export function PayConfirmDialog({
   target,
+  storeNameFallback,
   loading,
   onConfirm,
   onClose,
 }: {
   /** 지급 완료로 기록할 정산. null이면 닫힌다. */
   target: AdminSettlement | null;
+  /**
+   * 그 행에 가게 이름이 없을 때 쓸, 불러온 같은 가게(storeId) 행의 이름. 표의 가게 묶음과 같은 이름을 쓰게 한다.
+   * 같은 가게 어느 행에도 이름이 없으면 null(확인창은 가게 ID를 보인다).
+   */
+  storeNameFallback?: string | null;
   loading: boolean;
   onConfirm: () => void;
   onClose: () => void;
@@ -27,7 +33,12 @@ export function PayConfirmDialog({
     setShownTarget(target);
     setCheckedFor(null);
   }
-  const view = target ? describePayConfirm(target) : null;
+  const view = target
+    ? describePayConfirm({
+        ...target,
+        storeName: target.storeName?.trim() || storeNameFallback || null,
+      })
+    : null;
   const payable = view !== null && view.blocked === null;
   const checked = target !== null && checkedFor === target.id;
   return (
