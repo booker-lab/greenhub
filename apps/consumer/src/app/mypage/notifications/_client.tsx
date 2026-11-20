@@ -19,6 +19,7 @@ import {
   Truck,
   Users,
 } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
@@ -121,35 +122,25 @@ function NotificationItem({
   notification,
   isRead,
   onRead,
-  onOrderClick,
 }: {
   notification: Notification;
   isRead: boolean;
   onRead: () => void;
-  onOrderClick: () => void;
 }) {
   const label = TEMPLATE_LABELS[notification.templateCode] ?? notification.templateCode;
   const { Icon, tone } = TEMPLATE_ICONS[notification.templateCode] ?? DEFAULT_ICON;
   const productName = extractProductName(notification);
   const date = formatDate(notification.sentAt ?? notification.createdAt);
 
-  return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: 교체 전(Mantine Box)과 같은 div다. 역할 변경은 ② 단계에서 다룬다.
-    // biome-ignore lint/a11y/useKeyWithClickEvents: 위와 같다.
-    <div
-      onClick={() => {
-        onRead();
-        if (notification.orderId) onOrderClick();
-      }}
-      style={{
-        display: 'flex',
-        gap: 12,
-        padding: '14px 16px',
-        background: 'var(--color-bg)',
-        borderBottom: '1px solid var(--color-border)',
-        cursor: notification.orderId ? 'pointer' : 'default',
-      }}
-    >
+  const rowStyle = {
+    display: 'flex',
+    gap: 12,
+    padding: '14px 16px',
+    background: 'var(--color-bg)',
+    borderBottom: '1px solid var(--color-border)',
+  } as const;
+  const content = (
+    <>
       <div
         style={{
           width: 36,
@@ -220,6 +211,27 @@ function NotificationItem({
           }}
         />
       )}
+    </>
+  );
+
+  // 주문이 있는 알림은 줄 전체가 주문 상세로 가는 링크다(키보드·화면 읽기로도 갈 수 있다). 누르면 읽음 처리도 한다.
+  if (notification.orderId) {
+    return (
+      <Link
+        href={`/mypage/orders/${notification.orderId}`}
+        onClick={onRead}
+        style={{ ...rowStyle, color: 'inherit', textDecoration: 'none' }}
+      >
+        {content}
+      </Link>
+    );
+  }
+  // 주문이 없는 알림은 갈 곳이 없어 링크가 아니다. 누르면 읽음 처리만 한다(읽음 처리의 키보드 경로는 위 "모두 읽음").
+  return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: 이동이 없는 줄이라 역할을 주지 않는다. 읽음 처리는 "모두 읽음" 버튼으로도 한다.
+    // biome-ignore lint/a11y/useKeyWithClickEvents: 위와 같다.
+    <div onClick={onRead} style={rowStyle}>
+      {content}
     </div>
   );
 }
@@ -353,7 +365,6 @@ export default function NotificationsClient() {
               notification={n}
               isRead={readIds.has(n.id)}
               onRead={() => markRead(n.id)}
-              onOrderClick={() => n.orderId && router.push(`/mypage/orders/${n.orderId}`)}
             />
           ))}
         </div>
