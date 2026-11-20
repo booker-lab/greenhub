@@ -58,10 +58,11 @@ export default function ProductCard({ product }: ProductCardProps) {
         <div style={{ display: 'flex', gap: 4, marginBottom: 4, flexWrap: 'wrap' }}>
           <span
             style={{
+              // 분류 칩: 연회색 면 + 본문 색 글자(이전 보조 글자색은 이 면 위에서 대비 4.43:1이었다).
               fontSize: 'var(--font-size-sm)',
               fontWeight: 'var(--fw-medium)',
-              color: 'var(--color-text-secondary)',
-              background: 'var(--color-border)',
+              color: 'var(--color-text)',
+              background: 'var(--color-surface-muted)',
               borderRadius: 'var(--radius-sm)',
               padding: '1px 8px',
             }}
@@ -99,9 +100,11 @@ export default function ProductCard({ product }: ProductCardProps) {
         </p>
         <p
           style={{
-            fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-bold)',
-            color: 'var(--color-text-secondary)',
+            // 가격은 회차 타일과 같은 값이다(design-standard §3: 가격 16/800 본문 색, 숫자 자리 맞춤).
+            fontSize: 'var(--font-size-md)',
+            fontVariantNumeric: 'tabular-nums',
+            fontWeight: 'var(--fw-extrabold)',
+            color: 'var(--color-text)',
             marginTop: 4,
             marginBottom: 0,
           }}

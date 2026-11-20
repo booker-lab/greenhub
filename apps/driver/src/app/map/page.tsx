@@ -387,7 +387,7 @@ export default function MapPage() {
                             color: 'var(--driver-text-muted)',
                           }}
                         >
-                          {order.buyerName ?? '소비자'}
+                          {order.buyerName || '–'}
                         </p>
                       </div>
                       {mapLink && (
