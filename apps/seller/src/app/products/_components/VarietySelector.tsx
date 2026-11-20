@@ -67,6 +67,7 @@ export default function VarietySelector({
 
   return (
     <Select
+      aria-label="품종 선택"
       placeholder="품종 선택 (선택사항)"
       data={data}
       value={value || null}

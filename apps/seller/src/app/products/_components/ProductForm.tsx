@@ -116,7 +116,7 @@ export default function ProductForm(props: ProductFormProps) {
 
       <StepIndicator step={f.step} />
 
-      <div className="mx-auto max-w-[720px] px-4 pt-4 pb-24">
+      <div className="mx-auto max-w-[720px] px-4 pt-4 pb-24 break-keep [overflow-wrap:anywhere]">
         <div className="flex flex-col gap-3">
           {renderStep()}
           {f.error && (
