@@ -745,23 +745,6 @@ export default function CheckoutForm({
         })}
       </div>
 
-      {error && (
-        // Mantine Alert(mb sm, role="alert") 계산값. 고객이 결제창을 닫은 안내는 문제 상태가 아니라 중립 면이고,
-        // 결제 실패·주문 거절·결제 불가는 빨강 면이다(design-standard.md §2 "빨강은 문제 상태에만").
-        <Alert
-          variant={error.kind === 'canceled' ? 'secondary' : 'destructive'}
-          role="alert"
-          className="mb-3"
-        >
-          <AlertDescription>
-            <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
-              {error.message}
-            </p>
-            {errorAction}
-          </AlertDescription>
-        </Alert>
-      )}
-
       {payBlockers.length > 0 && (
         <div id={payBlockersId} className="mb-3">
           <p className="m-0 text-sm leading-[1.55]" style={{ fontWeight: 'var(--fw-bold)' }}>
@@ -781,20 +764,80 @@ export default function CheckoutForm({
         </div>
       )}
 
-      {closedNotice}
-
-      <LoadingButton
-        size="lg"
-        className="w-full"
-        disabled={!effectiveCanPay}
-        loading={isLoading}
-        aria-describedby={payBlockers.length > 0 ? payBlockersId : undefined}
-        onClick={() => {
-          if (effectiveCanPay) onPay();
+      {/* 하단 고정 바(design-standard §5 "하단 고정 결제 버튼", 2026-11-20 사용자 결정 Q1-A): 폼을 읽는 동안 화면 아래에
+          붙어 결제 금액과 결제 버튼이 늘 보이고, 폼 끝에서는 제자리(사업자 정보 위)에 놓인다. 결제 오류와 마감 안내는
+          어디서 눌러도 보이게 바 안에 둔다. 빠진 조건 목록은 바 바로 앞 본문에 두고 버튼이 가리킨다. */}
+      <div
+        className="sticky bottom-0 z-10 -mx-4 flex flex-col px-4 pt-3"
+        style={{
+          background: 'var(--color-bg)',
+          boxShadow: 'var(--bar-shadow)',
+          paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
         }}
       >
-        {buttonLabel}
-      </LoadingButton>
+        {error && (
+          // Mantine Alert(mb sm, role="alert") 계산값. 고객이 결제창을 닫은 안내는 문제 상태가 아니라 중립 면이고,
+          // 결제 실패·주문 거절·결제 불가는 빨강 면이다(design-standard.md §2 "빨강은 문제 상태에만").
+          <Alert
+            variant={error.kind === 'canceled' ? 'secondary' : 'destructive'}
+            role="alert"
+            className="mb-3"
+          >
+            <AlertDescription>
+              <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
+                {error.message}
+              </p>
+              {errorAction}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {closedNotice}
+
+        {/* 금액 줄은 위 "주문 정보"와 같은 규칙이다(null이면 확인 중, 0이면 숨김). 확인 중 알림(aria-live)은 위 한 곳만 한다. */}
+        {(totalAmount === null || totalAmount > 0) && (
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4">
+            <p
+              className="m-0 leading-[1.55]"
+              style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+            >
+              결제 금액
+            </p>
+            {totalAmount === null ? (
+              <p
+                className="m-0 leading-[1.55]"
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                금액 확인 중...
+              </p>
+            ) : (
+              <p
+                className="m-0 min-w-0 leading-[1.55]"
+                style={{
+                  fontSize: 22,
+                  fontVariantNumeric: 'tabular-nums',
+                  fontWeight: 'var(--fw-extrabold)',
+                }}
+              >
+                {totalAmount.toLocaleString()}원
+              </p>
+            )}
+          </div>
+        )}
+
+        <LoadingButton
+          size="lg"
+          className="w-full"
+          disabled={!effectiveCanPay}
+          loading={isLoading}
+          aria-describedby={payBlockers.length > 0 ? payBlockersId : undefined}
+          onClick={() => {
+            if (effectiveCanPay) onPay();
+          }}
+        >
+          {buttonLabel}
+        </LoadingButton>
+      </div>
     </div>
   );
 }

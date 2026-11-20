@@ -838,10 +838,18 @@ export default function CartPage() {
             {isGuest ? items.reduce((sum, item) => sum + item.quantity, 0) : checkoutCount}개
           </p>
         </div>
-        <div
-          className="flex flex-wrap items-baseline justify-between gap-4 pt-2.5"
-          style={{ borderTop: '1px solid var(--color-border)' }}
-        >
+      </div>
+      {/* 하단 고정 바(design-standard §5 "금액 요약 상자 → 하단 고정 결제 버튼", 2026-11-20 사용자 결정 Q1-A): 상품이 많아도
+          총 결제 금액과 결제 버튼이 하단 메뉴(64px) 바로 위에 붙어 보이고, 화면 끝에서는 요약 상자 아래 제자리에 놓인다. */}
+      <div
+        className="sticky z-10 -mx-4 flex flex-col px-4 py-3"
+        style={{
+          background: 'var(--color-bg)',
+          bottom: 'calc(64px + env(safe-area-inset-bottom))',
+          boxShadow: 'var(--bar-shadow)',
+        }}
+      >
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4">
           <p
             className="m-0 p-0 text-sm"
             style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
@@ -849,7 +857,7 @@ export default function CartPage() {
             총 결제 금액
           </p>
           <p
-            className="m-0 p-0 leading-[1.55]"
+            className="m-0 min-w-0 p-0 leading-[1.55]"
             style={{
               color: 'var(--color-text)',
               fontSize: 22,
@@ -860,50 +868,50 @@ export default function CartPage() {
             {(isGuest ? guestAmount : checkoutAmount).toLocaleString('ko-KR')}원
           </p>
         </div>
-      </div>
-      {hasLegacyValidationIssues && (
-        <p
-          className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
-          style={{ color: 'var(--color-text-secondary)' }}
-        >
-          문제 있는 상품을 다시 선택하면 결제할 수 있어요.
-        </p>
-      )}
-      {isGuest ? (
-        // 비로그인 장바구니(guest-cart): 로그인한 뒤 같은 장바구니로 돌아온다.
-        // 회차 주문이 끝났으면 로그인해도 주문할 수 없으므로 버튼을 막고 이유를 보인다.
-        <>
-          {roundOrderClosed && (
-            <p
-              className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
-              style={{ color: 'var(--color-text-secondary)' }}
+        {hasLegacyValidationIssues && (
+          <p
+            className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            문제 있는 상품을 다시 선택하면 결제할 수 있어요.
+          </p>
+        )}
+        {isGuest ? (
+          // 비로그인 장바구니(guest-cart): 로그인한 뒤 같은 장바구니로 돌아온다.
+          // 회차 주문이 끝났으면 로그인해도 주문할 수 없으므로 버튼을 막고 이유를 보인다.
+          <>
+            {roundOrderClosed && (
+              <p
+                className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                이번 회차 주문이 마감돼서 지금은 주문할 수 없어요.
+              </p>
+            )}
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={roundOrderClosed}
+              onClick={handleCheckout}
             >
-              이번 회차 주문이 마감돼서 지금은 주문할 수 없어요.
-            </p>
-          )}
+              로그인하고 주문하기
+            </Button>
+          </>
+        ) : (
           <Button
             size="lg"
             className="w-full"
-            disabled={roundOrderClosed}
+            disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
             onClick={handleCheckout}
           >
-            로그인하고 주문하기
+            {isChecking
+              ? '구매 가능 여부 확인 중'
+              : isRoundCart
+                ? `${checkoutCount}개 상품 한 번에 결제`
+                : '결제하기'}
           </Button>
-        </>
-      ) : (
-        <Button
-          size="lg"
-          className="w-full"
-          disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
-          onClick={handleCheckout}
-        >
-          {isChecking
-            ? '구매 가능 여부 확인 중'
-            : isRoundCart
-              ? `${checkoutCount}개 상품 한 번에 결제`
-              : '결제하기'}
-        </Button>
-      )}
+        )}
+      </div>
     </div>
   );
 }
