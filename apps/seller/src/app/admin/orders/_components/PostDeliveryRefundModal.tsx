@@ -70,6 +70,7 @@ export function PostDeliveryRefundModal({
         {
           label: '가게 정산',
           value: '지급 전이면 정산에서 빠지고, 이미 지급했으면 정산 화면에 "돌려받을 돈"으로 표시',
+          longText: true,
         },
       ]}
       warning="결제한 금액 전액을 바로 환불합니다. 되돌릴 수 없습니다."

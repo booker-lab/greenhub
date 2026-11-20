@@ -14,6 +14,8 @@ import { type ReactNode, useId } from 'react';
 export interface AdminConfirmRow {
   label: string;
   value: ReactNode;
+  /** 두 줄이 되는 설명문 값. 오른쪽 정렬이면 줄 끝이 들쭉날쭉해 왼쪽 정렬로 쓴다(짧은 값은 오른쪽 그대로). */
+  longText?: boolean;
 }
 
 export interface AdminConfirmCheck {
@@ -159,7 +161,7 @@ function ConfirmRows({ rows, numeric = false }: { rows: AdminConfirmRow[]; numer
         >
           <dt className="shrink-0 text-[var(--color-text-secondary)]">{row.label}</dt>
           <dd
-            className={`m-0 min-w-0 text-right font-medium break-words text-foreground ${numeric ? 'tabular-nums' : ''}`}
+            className={`m-0 min-w-0 ${row.longText ? 'text-left' : 'text-right'} font-medium break-words text-foreground ${numeric ? 'tabular-nums' : ''}`}
           >
             {row.value}
           </dd>
