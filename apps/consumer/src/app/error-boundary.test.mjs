@@ -33,6 +33,9 @@ for (const { fileName, exportName } of boundaries) {
     assert.match(boundarySource, /PUBLIC_BUSINESS_INFO\.phoneHref/);
     assert.match(boundarySource, /PUBLIC_BUSINESS_INFO\.phone\}/);
     assert.doesNotMatch(boundarySource, /010-?4452-?2104/);
+    // 상담 시간은 전화번호와 다른 줄에 "상담 시간 …"으로 쓰고 괄호를 겹치지 않는다(2026-11-21 검수 #1).
+    assert.match(boundarySource, /상담 시간 \{supportHoursMain\}/);
+    assert.doesNotMatch(boundarySource, /\(\{PUBLIC_BUSINESS_INFO\.supportHours\}\)/);
   });
 
   test(`${fileName}: 오류 메시지·스택은 화면에 노출하지 않고 digest만 보여준다`, () => {
