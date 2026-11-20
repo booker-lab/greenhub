@@ -213,7 +213,10 @@ test('MY 내 정보에 공개 사업자 정보의 고객센터 전화 연결을 
   assert.match(source, /<SupportCallLink \/>/);
   assert.match(source, /href=\{PUBLIC_BUSINESS_INFO\.phoneHref\}/);
   assert.match(source, /고객센터 전화 \{PUBLIC_BUSINESS_INFO\.phone\}/);
-  assert.match(source, /상담 시간 \{PUBLIC_BUSINESS_INFO\.supportHours\}/);
+  // 상담 시간은 공개 사업자 정보에서 읽고, 괄호 묶음은 줄 안에서 끊기지 않게 통째로 넘긴다.
+  assert.match(source, /const supportHours = PUBLIC_BUSINESS_INFO\.supportHours;/);
+  assert.match(source, /상담 시간 \{supportHoursMain\}/);
+  assert.match(source, /<span className="whitespace-nowrap">\{supportHoursNote\}<\/span>/);
   // 번호를 화면 코드에 직접 적지 않는다.
   assert.doesNotMatch(source, /tel:\d|010-\d{4}-\d{4}/);
 });
