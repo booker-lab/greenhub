@@ -45,7 +45,7 @@ export function CancelOrderModal({
         if (!open) onClose();
       }}
     >
-      <DialogContent align="top">
+      <DialogContent align="top" className="break-keep [overflow-wrap:anywhere]">
         <DialogHeader>
           <DialogTitle className="leading-[1.55] font-bold">{title}</DialogTitle>
         </DialogHeader>
@@ -97,7 +97,6 @@ export function CancelOrderModal({
               <Button
                 onClick={onConfirm}
                 disabled={actionLoading || cancelReason.trim().length < 5}
-                variant="destructive"
                 className="flex-1"
                 style={{ fontWeight: 'var(--fw-medium)' }}
               >

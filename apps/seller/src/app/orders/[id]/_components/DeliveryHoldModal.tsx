@@ -41,6 +41,9 @@ interface DeliveryHoldModalProps {
 // Checkbox sm(비활성: gray-2 면·gray-3 테두리·gray-5 글자)·NumberInput(오른쪽 24px 위·아래 버튼, 천 단위·'원')·
 // TextInput(datetime-local)과 같은 값.
 const TEXT = 'm-0 p-0 text-base font-normal';
+// 라디오·체크 줄은 누르는 높이를 44px로 잡는다. 동그라미·네모(20px)는 그대로 두고 라벨이 줄 전체를 덮는다.
+const RADIO_ROW =
+  'items-center [&>div:first-child]:shrink-0 [&>div:last-child]:flex-1 [&_label]:flex [&_label]:min-h-11 [&_label]:items-center';
 const GROUP_LABEL =
   'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
 const REQUIRED = (
@@ -65,7 +68,7 @@ function HoldCheckbox({
 }) {
   return (
     <div
-      className="flex"
+      className="flex items-center"
       data-disabled={disabled || undefined}
       style={{ '--checkbox-color': 'var(--color-primary)' } as React.CSSProperties}
     >
@@ -80,10 +83,10 @@ function HoldCheckbox({
         />
         <CheckIcon className="pointer-events-none absolute inset-0 m-auto w-[60%] translate-y-[5px] scale-50 text-white opacity-0 transition-[translate,scale,opacity] duration-100 peer-checked:translate-none peer-checked:scale-100 peer-checked:opacity-100 peer-disabled:text-ui-gray-5" />
       </div>
-      <div className="order-2 inline-flex cursor-pointer flex-col text-sm/[20px]">
+      <div className="order-2 inline-flex flex-1 cursor-pointer flex-col text-sm/[20px]">
         <label
           htmlFor={id}
-          className={`ps-3 ${disabled ? 'cursor-not-allowed text-ui-gray-5' : 'cursor-pointer text-inherit'}`}
+          className={`flex min-h-11 items-center ps-3 ${disabled ? 'cursor-not-allowed text-ui-gray-5' : 'cursor-pointer text-inherit'}`}
         >
           {label}
         </label>
@@ -280,7 +283,7 @@ export function DeliveryHoldModal({
       {/* Mantine Modal 본문은 열린 뒤에도 transform: translateY(0)·backface-visibility: hidden을 갖는다. 이 창은 내용이
           화면 높이(90dvh)보다 길어 본문이 소수점 위치(약 42.2px)에 놓이는데, will-change: opacity만으로는 입력 뒤 다시 그린
           영역이 1px 어긋나고(폰·태블릿) 끄면 처음 열린 모양이 달라져 Mantine과 같은 값을 준다. */}
-      <DialogContent className="will-change-auto [backface-visibility:hidden] [transform:translateY(0px)]">
+      <DialogContent className="will-change-auto break-keep [overflow-wrap:anywhere] [backface-visibility:hidden] [transform:translateY(0px)]">
         <DialogHeader>
           <DialogTitle className="leading-[1.55] font-bold">배송 보류</DialogTitle>
         </DialogHeader>
@@ -303,9 +306,14 @@ export function DeliveryHoldModal({
                 value={reasonCode ?? ''}
                 onValueChange={changeReason}
               >
-                <div className="mt-2.5 flex flex-col gap-2.5">
+                <div className="mt-1 flex flex-col">
                   {SELLER_HOLD_REASON_OPTIONS.map((value) => (
-                    <RadioItem key={value} value={value} label={HOLD_REASON_LABEL[value]} />
+                    <RadioItem
+                      key={value}
+                      value={value}
+                      label={HOLD_REASON_LABEL[value]}
+                      className={RADIO_ROW}
+                    />
                   ))}
                 </div>
               </RadioGroup>
@@ -381,11 +389,11 @@ export function DeliveryHoldModal({
                 {formError || actionError}
               </p>
             )}
-            <div className="flex flex-row flex-wrap items-center justify-start gap-2.5">
+            {/* 저장·닫기는 창 아래에 붙여 둔다. 내용이 화면보다 길어도(작은 휴대폰) 본문만 스크롤되고 버튼은 다 보인다. */}
+            <div className="sticky bottom-0 z-10 -mx-4 -mb-4 flex flex-row flex-wrap items-center justify-start gap-2.5 border-t border-border bg-popover px-4 py-3">
               <Button
                 onClick={() => void submit()}
                 disabled={actionLoading || responsibilityFeeHint !== null}
-                variant="destructive"
                 className="flex-1"
                 style={{ fontWeight: 'var(--fw-medium)' }}
               >

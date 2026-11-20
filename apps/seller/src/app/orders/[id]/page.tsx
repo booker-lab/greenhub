@@ -288,10 +288,11 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
   const reconcileMessage = getOrderDetailMutationOutcomeMessage(reconcileOutcome);
 
   return (
-    <PageShell paddingBottom={showFooter ? 200 : 96}>
+    <PageShell paddingBottom={showFooter ? 216 : 96}>
       <PageHeader title="주문 상세" onBack={() => router.back()} />
 
-      <div className={`${CONTAINER} py-4`}>
+      {/* 한국어는 낱말 단위로 줄을 바꾼다. 띄어쓰기 없는 긴 글자는 넘치지 않게 끊는다. */}
+      <div className={`${CONTAINER} py-4 break-keep [overflow-wrap:anywhere]`}>
         <div className="flex flex-col gap-3">
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             {refreshing ? (
@@ -421,7 +422,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   onClick={() => setShowPrepareForm(true)}
                   disabled={actionLoading}
                   size="md"
-                  className="w-full"
+                  className="h-11 w-full"
                   style={{
                     backgroundColor: 'var(--primary)',
                     fontWeight: 'var(--fw-medium)',
@@ -435,7 +436,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   onClick={handleShipParcel}
                   disabled={actionLoading}
                   size="md"
-                  className="w-full"
+                  className="h-11 w-full"
                   style={{
                     backgroundColor: 'var(--primary)',
                     fontWeight: 'var(--fw-medium)',
@@ -452,7 +453,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   }}
                   disabled={actionLoading}
                   size="md"
-                  className="w-full"
+                  className="h-11 w-full"
                   style={{
                     backgroundColor: 'var(--primary)',
                     fontWeight: 'var(--fw-medium)',
@@ -470,7 +471,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   disabled={actionLoading}
                   size="md"
                   variant="outline-gray"
-                  className="w-full"
+                  className="h-11 w-full"
                 >
                   배송 보류
                 </Button>
@@ -482,7 +483,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   disabled={actionLoading}
                   size="sm"
                   variant="subtle-destructive"
-                  className="self-center"
+                  className="h-11 self-center"
                 >
                   {isHeld ? '주문 취소·환불' : '주문 취소'}
                 </Button>
