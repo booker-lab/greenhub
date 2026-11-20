@@ -1135,6 +1135,33 @@ export const routes = [
       return o ? { body: o } : { status: 404, body: { message: '주문 없음' } };
     },
   ],
+  // 고객 사유 종결 판정(주문 상세). 보류 주문(order-round-held)은 고객 책임·재배송비 5,000원 미결제이고
+  // 보류 시각(2026-10-05T23:30Z)으로 계산한 결제 마지막 날(10월 9일)이 지났고 결제 요청도 24시간을 넘겨
+  // API 판정(customer-fault-closure.service.ts)이 OK다. 그 밖의 주문은 보류가 아니라 NOT_HELD다.
+  [
+    'GET',
+    /^\/stores\/[^/]+\/orders\/([^/]+)\/customer-fault-closure$/,
+    ({ params: [id] }) => ({
+      body:
+        id === 'order-round-held'
+          ? {
+              eligible: true,
+              reason: 'OK',
+              closureReasonCode: 'REDELIVERY_FEE_UNPAID',
+              eligibleAt: '2026-10-09T15:00:00.000Z',
+              paymentDeadlineDate: '2026-10-09',
+              redeliveryFee: 5000,
+            }
+          : {
+              eligible: false,
+              reason: 'NOT_HELD',
+              closureReasonCode: null,
+              eligibleAt: null,
+              paymentDeadlineDate: null,
+              redeliveryFee: null,
+            },
+    }),
+  ],
   // 배송 후 환불 가능 여부(주문 상세, UI 교체 P4): 배송 완료는 기간 안, 구매 확정은 정산 지급 뒤라 막힘.
   [
     'GET',
@@ -1146,6 +1173,8 @@ export const routes = [
           : { eligible: false, reason: 'SETTLEMENT_PAID', deadline: null, amount: 33000 },
     }),
   ],
+  // 경매 시세(회차·준비 화면의 상품별 참고 시세). fixture 상품은 시세 연결이 없어 비어 있다(지어낸 시세를 두지 않는다).
+  ['GET', /^\/stores\/[^/]+\/market-prices$/, () => ({ body: { summaries: {} } })],
   ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
   // 조치(문자 재발송·환불 재시도) 뒤 앱이 기록 한 건을 다시 읽는다.
   [
@@ -1753,9 +1782,9 @@ export const screens = [
   {
     id: 'modal-order-cancel-short',
     group: '판매자 · 모달',
-    title: '주문 상세 · 강제 취소(사유 5자 미만)',
+    title: '주문 상세 · 주문 취소(사유 5자 미만)',
     path: '/orders/order-with-contact',
-    steps: [{ click: '강제 취소' }, { fill: '짧음' }],
+    steps: [{ click: '주문 취소' }, { fill: '짧음' }],
     viewport: true,
   },
   {
@@ -1790,9 +1819,9 @@ export const screens = [
   {
     id: 'order-cancel-submit',
     group: '판매자 · 주문 상세 동작',
-    title: '주문 상세 · 강제 취소 확정 누름',
+    title: '주문 상세 · 주문 취소 확정 누름',
     path: '/orders/order-with-contact',
-    steps: [{ click: '강제 취소' }, { fill: '손님이 취소를 요청함' }, { click: '취소 확정' }],
+    steps: [{ click: '주문 취소' }, { fill: '손님이 취소를 요청함' }, { click: '취소 확정' }],
   },
   {
     id: 'order-post-delivery-refund-submit',
@@ -1896,9 +1925,9 @@ export const screens = [
   {
     id: 'modal-order-cancel',
     group: '판매자 · 모달',
-    title: '주문 상세 · 강제 취소',
+    title: '주문 상세 · 주문 취소',
     path: '/orders/order-with-contact',
-    steps: [{ click: '강제 취소' }],
+    steps: [{ click: '주문 취소' }],
     viewport: true,
   },
   // 어드민 주문 필터 — 가게 검색 Select(열림·거름·맞는 가게 없음), 상태 Select 열림, 고른 상태의 주문 없음.
