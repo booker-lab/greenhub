@@ -458,7 +458,16 @@ function CompletedRow({
           {view.statusLabel && (
             <>
               {' · '}
-              <span style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}>
+              {/* 상태는 점 + 글자다(design-standard §2). 완료 뒤 상태라 점은 무채색이다(2026-11-21 사용자 결정). */}
+              <span
+                className="whitespace-nowrap"
+                style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
+              >
+                <span
+                  aria-hidden="true"
+                  className="mr-1.5 inline-block size-2 rounded-full align-middle"
+                  style={{ backgroundColor: 'var(--driver-text-muted)' }}
+                />
                 {view.statusLabel}
               </span>
             </>
