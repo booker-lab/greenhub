@@ -86,9 +86,10 @@ describe('Admin UsersTable 가입일·전화 표시 (T1)', () => {
     expect(texts.some((t) => t.includes('user-abc'))).toBe(false);
   });
 
-  it('휴대폰 행과 데스크톱 표 모두 전화·KST 가입일을 표시한다', () => {
+  it('휴대폰 행과 데스크톱 표 모두 가린 전화·KST 가입일을 표시한다', () => {
     const texts = textsOf(render([user()]));
-    expect(texts.filter((t) => t === '010-1234-5678')).toHaveLength(2);
+    expect(texts.filter((t) => t === '010-****-5678')).toHaveLength(2);
+    expect(texts).not.toContain('010-1234-5678');
     // 휴대폰 행 1번 + 데스크톱 가입일 칸 1번 + 태블릿 보조 줄 1번
     expect(texts.filter((t) => t === '2026-09-01')).toHaveLength(3);
   });

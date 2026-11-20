@@ -10,19 +10,11 @@ interface BannerImageSectionProps {
   onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
-// ① 외형 유지(UI 교체 P2b): Mantine Paper(lg·xs·lg)·Text·Box·Loader xs와 같은 값.
+// 배너 배경 이미지 구역 — 쉬는 상자 그림자 없이, 구역 제목(16/800)이 칸 이름보다 먼저 읽힌다(어드민 틀 규칙).
 export function BannerImageSection({ imageUrl, uploading, onUpload }: BannerImageSectionProps) {
   return (
-    <div
-      className="block rounded-[16px] bg-card p-5 shadow-paper-xs"
-      style={{ border: '1px solid var(--color-border)' }}
-    >
-      <p
-        className="m-0 mb-3 p-0 text-base"
-        style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
-      >
-        배경 이미지
-      </p>
+    <section className="block">
+      <h2 className="m-0 mb-3 text-[16px] leading-[24px] font-extrabold">배경 이미지</h2>
       {imageUrl && (
         <div
           className="mb-3"
@@ -37,28 +29,17 @@ export function BannerImageSection({ imageUrl, uploading, onUpload }: BannerImag
           />
         </div>
       )}
-      <label
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 8,
-          padding: '8px 16px',
-          borderRadius: 8,
-          border: '1px solid var(--color-border)',
-          cursor: uploading ? 'not-allowed' : 'pointer',
-          fontSize: 'var(--font-size-sm)',
-          color: 'var(--color-text-secondary)',
-        }}
-      >
+      {/* 눌러지는 외곽선 버튼 모양(44px). 파일 입력은 sr-only라 Tab으로 가고, 키보드 초점이면 label에 검정 2px 링을 그린다. */}
+      <label className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[8px] border border-input bg-background px-4 text-[15px] font-bold text-foreground has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ui-ink has-[:disabled]:cursor-not-allowed has-[:disabled]:text-[var(--color-text-secondary)]">
         {uploading ? <Loader size="xs" /> : '이미지 업로드'}
         <input
           type="file"
           accept="image/*"
-          style={{ display: 'none' }}
+          className="sr-only"
           onChange={onUpload}
           disabled={uploading}
         />
       </label>
-    </div>
+    </section>
   );
 }

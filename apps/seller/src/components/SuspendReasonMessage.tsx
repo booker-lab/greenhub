@@ -22,6 +22,7 @@ export function SuspendReasonField({
       <Input
         id={id}
         maxLength={SUSPEND_REASON_MAX_LENGTH}
+        className="rounded-[8px]"
         value={reason}
         onChange={(event) => onReasonChange(event.currentTarget.value)}
       />

@@ -154,6 +154,12 @@ export default function AdminSettlementsClient() {
 
       <PayConfirmDialog
         target={payTarget}
+        storeNameFallback={
+          payTarget
+            ? (settlements.find((row) => row.storeId === payTarget.storeId && row.storeName?.trim())
+                ?.storeName ?? null)
+            : null
+        }
         loading={processingId !== null}
         onConfirm={runPay}
         onClose={() => {
