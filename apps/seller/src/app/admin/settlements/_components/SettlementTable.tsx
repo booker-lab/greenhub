@@ -250,10 +250,15 @@ export function SettlementTable({
               {group.rows.map((s) => (
                 <div key={s.id} className="border-b border-rule py-2">
                   <div className="flex items-baseline justify-between gap-2">
-                    <p className="m-0 text-[15px] whitespace-nowrap tabular-nums">
+                    {/* 보통 번호는 덩어리로, 20자 넘는 번호(옛 주문 ID 등)만 넘칠 때 줄을 바꿔 금액을 밀어내지 않는다(2026-11-20). */}
+                    <p
+                      className={`m-0 min-w-0 text-[15px] tabular-nums ${orderLabel(s).length > 20 ? '[overflow-wrap:anywhere]' : 'whitespace-nowrap'}`}
+                    >
                       {orderLabel(s)}
                     </p>
-                    <p className={`m-0 text-[15px] font-bold ${ADMIN_NUM}`}>{toWon(s.netAmount)}</p>
+                    <p className={`m-0 shrink-0 text-[15px] font-bold ${ADMIN_NUM}`}>
+                      {toWon(s.netAmount)}
+                    </p>
                   </div>
                   <div className="flex items-start justify-between gap-2">
                     <p className={`${ADMIN_SUB} whitespace-nowrap tabular-nums`}>

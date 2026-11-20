@@ -5,12 +5,13 @@ import { Loader } from '@greenhub/ui/components/loader';
 import type { CSSProperties } from 'react';
 
 // ① 외형 유지(UI 교체 P2b): Mantine Button variant="light" color="gray" radius="md" loading.
+// 손가락으로 누르는 폭(≤1100)에서는 누르는 높이 44px(2026-11-20).
 // loading이면 Mantine처럼 글자를 감추고 가운데에 Loader(버튼 높이 ÷ 1.8 = 20px, 글자색)를 두며 누를 수 없다.
 export function RefreshButton({ loading, onClick }: { loading: boolean; onClick: () => void }) {
   return (
     <Button
       variant="secondary"
-      className="rounded-[8px] data-loading:cursor-not-allowed"
+      className="rounded-[8px] data-loading:cursor-not-allowed max-[1100px]:h-11"
       data-loading={loading || undefined}
       aria-busy={loading || undefined}
       onClick={loading ? undefined : onClick}
