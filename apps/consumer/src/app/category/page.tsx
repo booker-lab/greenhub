@@ -1,14 +1,24 @@
 'use client';
 
-import type { Category, ColorOption, Product, SaleType, SalesMode } from '@greenhub/shared';
+import type {
+  Category,
+  ColorOption,
+  Product,
+  SaleRoundItem,
+  SaleType,
+  SalesMode,
+} from '@greenhub/shared';
 import { normalizeSalesMode } from '@greenhub/shared';
 import { Sprout } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 import BlockSkeleton from '@/components/BlockSkeleton';
 import { Button } from '@/components/Button';
 import EmptyStateIcon from '@/components/EmptyStateIcon';
 import ProductCard from '@/components/ProductCard';
+import QuickAddToast, { type QuickAddToastState } from '@/components/QuickAddToast';
 import RoundTileGrid from '@/components/RoundTile';
+import { useCart } from '@/hooks/useCart';
 import { useProducts } from '@/hooks/useProducts';
 import {
   type PublicSaleRound,
@@ -25,6 +35,14 @@ import { BenchmarkCardProvider } from '@/components/benchmark/CardExtras';
 import ProductRequestBox from '@/components/benchmark/ProductRequestBox';
 import { useHomeCardContext } from '@/components/HomeProductList';
 import { isFeatureOn } from '@/lib/features';
+import { cartAddFailureMessage, roundItemCartInput, roundProductHref } from '@/lib/round-quick-add';
+import { fetchNeedsOptionChoice } from '@/lib/round-quick-add-options';
+import {
+  formatOrderCloseStatus,
+  formatOrderOpenLabel,
+  formatRoundDeliveryPromise,
+  isRoundOrderClosed,
+} from '@/lib/round-schedule-label';
 
 const TABS: { label: string; value: Category | undefined; saleType?: SaleType }[] = [
   { label: '전체', value: undefined },
@@ -159,6 +177,30 @@ function RoundDirectCategory({
   refetch,
 }: ReturnType<typeof useSaleRounds> & { products: Product[] }) {
   const card = useHomeCardContext(currentRound?.storeId ?? null, products, currentRound?.id ?? null);
+  // 타일의 + 담기(design-standard §5 "상품 탭 회차 목록도 같은 타일", 2026-11-21 사용자 결정 Q2-A).
+  // 처리는 홈(HomeProductList의 RoundDirectHome)과 같다: 같은 헬퍼로 담고 같은 안내(QuickAddToast)를 보인다.
+  const { addItem } = useCart();
+  const router = useRouter();
+  const [toast, setToast] = useState<QuickAddToastState | null>(null);
+  const closeToast = useCallback(() => setToast(null), []);
+  const handleQuickAdd = useCallback(
+    (item: SaleRoundItem) => {
+      void (async () => {
+        // 옵션(화분 등)을 골라야 하는 상품은 담지 않고 상품 화면의 옵션 시트로 보낸다.
+        if (await fetchNeedsOptionChoice(item.productId)) {
+          router.push(roundProductHref(item));
+          return;
+        }
+        const result = addItem(roundItemCartInput(item));
+        setToast({
+          id: Date.now(),
+          tone: result.ok ? 'success' : 'error',
+          message: result.ok ? '장바구니에 담았어요' : cartAddFailureMessage(result.reason),
+        });
+      })();
+    },
+    [addItem, router],
+  );
   if (loading) {
     return (
       // biome-ignore lint/a11y/useAriaPropsSupportedByRole: 교체 전(Mantine Stack·SimpleGrid·Container)과 같은 div의 aria-label이다. 역할 변경은 ② 단계에서 다룬다.
@@ -259,10 +301,29 @@ function RoundDirectCategory({
               {currentRound.name}
               {currentRound.status === 'CLOSED' ? ' · 주문 마감' : ''}
             </p>
+            {/* 언제까지 주문하면 언제 오는지: 홈과 같은 줄을 회차 일정에서 만든다(2026-11-21 사용자 결정 Q1-A).
+                회차 이름은 운영자가 적는 글자라 날짜가 없을 수 있다. 색 면 없이 글자만 쓴다. */}
+            <div className="-mt-1.5 flex flex-col items-stretch justify-start gap-0.5">
+              {currentRound.status === 'SCHEDULED' && (
+                <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
+                  {formatOrderOpenLabel(currentRound.schedule.orderOpenAt)}
+                </p>
+              )}
+              <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
+                {formatOrderCloseStatus(
+                  currentRound.schedule.orderCloseAt,
+                  isRoundOrderClosed(currentRound, Date.now()),
+                )}
+              </p>
+              <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
+                {formatRoundDeliveryPromise(currentRound.schedule.deliveryEndAt)}
+              </p>
+            </div>
             <RoundTileGrid
               items={currentItems}
               round={currentRound}
               tileLabel={(item) => `${roundCardLabel(currentRound, false)} ${item.productNameSnapshot}`}
+              onQuickAdd={handleQuickAdd}
             />
           </div>
         ) : (
@@ -304,6 +365,7 @@ function RoundDirectCategory({
         )}
       </section>
       {isFeatureOn('product-request') && <ProductRequestBox storeId={currentRound?.storeId ?? null} />}
+      <QuickAddToast toast={toast} onClose={closeToast} />
     </div>
     </BenchmarkCardProvider>
   );
