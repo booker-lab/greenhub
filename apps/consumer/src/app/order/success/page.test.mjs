@@ -94,6 +94,21 @@ new Function(
   }).outputText,
 )(deliveryDateModule, deliveryDateModule.exports);
 
+// 도착일 줄은 실제 lib/order-card-line을 쓴다(그 모듈은 order-delivery-date만 불러온다).
+const cardLineSource = await readFile(
+  new URL('../../../lib/order-card-line.ts', import.meta.url),
+  'utf8',
+);
+const cardLineModule = { exports: {} };
+new Function(
+  'require',
+  'module',
+  'exports',
+  ts.transpileModule(cardLineSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText,
+)(() => deliveryDateModule.exports, cardLineModule, cardLineModule.exports);
+
 const pageModule = { exports: {} };
 const requireForTest = (specifier) => {
   if (specifier === 'react') {
@@ -108,6 +123,7 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/order-cancel-reason') return cancelReasonModule.exports;
   if (specifier === '@/lib/order-status') return orderStatusModule.exports;
   if (specifier === '@/lib/order-delivery-date') return deliveryDateModule.exports;
+  if (specifier === '@/lib/order-card-line') return cardLineModule.exports;
   if (specifier === '@/lib/payment-failure-message') return failureMessageModule.exports;
   if (specifier === '@/lib/payment-checkout-draft') return draftModule.exports;
   if (specifier === '@/hooks/useCart') return { useCart: () => ({ removeRoundItems: () => {} }) };
@@ -119,6 +135,7 @@ const requireForTest = (specifier) => {
   }
   if (
     specifier === '@/components/Button' ||
+    specifier === '@greenhub/ui/components/status-dot' ||
     specifier === 'lucide-react' ||
     specifier === 'next/navigation' ||
     specifier === 'next-auth/react' ||
@@ -260,7 +277,14 @@ test('회차 성공 화면은 주문의 배송 예정일로 만든 문 앞 배�
   assert.match(source, /주문 상품/);
   // 문장과 대체 문구는 lib/order-delivery-date 테스트가 고정한다. 화면은 요일을 직접 쓰지 않는다.
   assert.match(source, /formatOrderDeliveryNotice\(order\?\.requestedDeliveryDate\)/);
+  // 굵은 첫 줄은 MY 주문 카드와 같은 도착일 표기이고, 날짜를 읽지 못할 때만 "배송 안내"를 쓴다(2026-11-20 Q2-A).
+  assert.match(source, /orderCardHeadline\(\{/);
+  assert.match(source, /\{arrivalHeadline \? \(/);
   assert.match(source, />\s*배송 안내\s*</);
+  // 도착일 상자는 주문 상품 상자보다 먼저 그린다.
+  assert.ok(source.indexOf('{arrivalHeadline ? (') < source.search(/>\s*주문 상품\s*</));
+  // 상태는 초록 글자가 아니라 점 + 글자다.
+  assert.match(source, /<StatusDot className="font-bold">\{ORDER_STATUS_LABELS\[validOrder\.status\]\}<\/StatusDot>/);
   assert.doesNotMatch(source, /화요일/);
   assert.match(source, /successOrder\.items\.map/);
 });

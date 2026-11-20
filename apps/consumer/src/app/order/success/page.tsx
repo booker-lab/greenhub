@@ -1,6 +1,7 @@
 'use client';
 
 import type { OrderStatus } from '@greenhub/shared';
+import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { CircleAlert, CircleCheck, CircleX, Clock } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -11,7 +12,8 @@ import { useCart } from '@/hooks/useCart';
 import { useOrderStatus } from '@/hooks/useOrderStatus';
 import { isFeatureOn } from '@/lib/features';
 import { formatCancelReason } from '@/lib/order-cancel-reason';
-import { formatOrderDeliveryNotice } from '@/lib/order-delivery-date';
+import { orderCardHeadline } from '@/lib/order-card-line';
+import { formatOrderDeliveryDate, formatOrderDeliveryNotice } from '@/lib/order-delivery-date';
 import { ORDER_STATUS_LABELS } from '@/lib/order-status';
 import { clearCheckoutDraft } from '@/lib/payment-checkout-draft';
 import { paymentFailureMessage } from '@/lib/payment-failure-message';
@@ -307,6 +309,16 @@ function OrderSuccessContent() {
   );
   const validOrder = orderId ? readOrderRecord(order, orderId) : null;
   const successOrder = !loading && !error && orderId ? readSuccessOrder(order, orderId) : null;
+  // 주문 완료의 굵은 도착일 줄. 날짜를 읽을 수 있을 때만 MY 주문 카드와 같은 표기를 쓴다("11월 24일(화) 도착 예정").
+  const arrivalHeadline =
+    validOrder && formatOrderDeliveryDate(order?.requestedDeliveryDate)
+      ? orderCardHeadline({
+          status: validOrder.status,
+          saleType: order?.saleType,
+          deliveryMethod: order?.deliveryMethod,
+          requestedDeliveryDate: order?.requestedDeliveryDate,
+        })
+      : null;
 
   useEffect(() => {
     if (!orderId && !redirectSearch) router.replace('/');
@@ -401,12 +413,10 @@ function OrderSuccessContent() {
             <h1 className="m-0 leading-[1.3]" style={resultTitleStyle}>
               주문이 완료됐어요
             </h1>
-            <p
-              className="m-0 text-base"
-              style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
-            >
+            {/* 상태는 초록 글자가 아니라 점 + 글자다(design-standard §5). 문단의 글자는 상태 이름 하나다(회차 E2E 계약). */}
+            <p className="m-0">
               {/* 상태 이름은 MY·주문 상세·알림과 같은 공용 표를 써서 같은 주문을 같은 이름(결제 완료 등)으로 부른다. */}
-              {ORDER_STATUS_LABELS[validOrder.status]}
+              <StatusDot className="font-bold">{ORDER_STATUS_LABELS[validOrder.status]}</StatusDot>
             </p>
             {validOrder.status === 'RECRUITING' && (
               <p
@@ -425,8 +435,40 @@ function OrderSuccessContent() {
 
             {successOrder.isRoundOrder && (
               <>
+                {/* 도착일이 주문 상품보다 먼저 읽히게 주문번호 바로 아래에 둔다(2026-11-20 사용자 결정 Q2-A).
+                    굵은 첫 줄은 MY 주문 카드와 같은 도착일 표기이고, 날짜를 읽지 못하면 "배송 안내"다. */}
+                {!isFeatureOn('order-success-guide') && (
+                  <div
+                    className="mt-5 w-full p-4"
+                    style={{
+                      background: 'var(--color-primary-surface)',
+                      borderRadius: 'var(--radius)',
+                    }}
+                  >
+                    {arrivalHeadline ? (
+                      <p
+                        className="m-0 mb-1 leading-[1.4]"
+                        style={{
+                          fontSize: 'var(--font-size-lg)',
+                          fontVariantNumeric: 'tabular-nums',
+                          fontWeight: 'var(--fw-extrabold)',
+                        }}
+                      >
+                        {arrivalHeadline}
+                      </p>
+                    ) : (
+                      <p className="m-0 mb-1 text-sm" style={{ fontWeight: 'var(--fw-extrabold)' }}>
+                        배송 안내
+                      </p>
+                    )}
+                    <p className="m-0 text-sm">
+                      {/* 날짜는 주문의 배송 예정일에서 읽는다(읽지 못하면 고정 문구). */}
+                      {formatOrderDeliveryNotice(order?.requestedDeliveryDate)}
+                    </p>
+                  </div>
+                )}
                 <div
-                  className="mt-5 w-full p-4"
+                  className={`${isFeatureOn('order-success-guide') ? 'mt-5' : 'mt-3'} w-full p-4`}
                   style={{
                     background: 'var(--color-surface-muted)',
                     borderRadius: 'var(--radius)',
@@ -473,30 +515,8 @@ function OrderSuccessContent() {
                   </div>
                 </div>
 
-                {isFeatureOn('order-success-guide') ? (
+                {isFeatureOn('order-success-guide') && (
                   <OrderSuccessGuide requestedDeliveryDate={order?.requestedDeliveryDate ?? null} />
-                ) : (
-                  <div
-                    className="mt-3 w-full p-4"
-                    style={{
-                      background: 'var(--color-primary-surface)',
-                      borderRadius: 'var(--radius)',
-                    }}
-                  >
-                    <p
-                      className="m-0 mb-1 text-sm"
-                      style={{
-                        fontWeight: 'var(--fw-extrabold)',
-                        color: 'var(--color-primary-dark)',
-                      }}
-                    >
-                      배송 안내
-                    </p>
-                    <p className="m-0 text-sm">
-                      {/* 날짜는 주문의 배송 예정일에서 읽는다(읽지 못하면 고정 문구). */}
-                      {formatOrderDeliveryNotice(order?.requestedDeliveryDate)}
-                    </p>
-                  </div>
                 )}
               </>
             )}
