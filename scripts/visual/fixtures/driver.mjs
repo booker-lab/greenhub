@@ -222,6 +222,27 @@ const COMPLETED_TODAY = {
 };
 
 export const scenarioRoutes = {
+  // 재배송비를 결제한 보류 주문: 재개 버튼이 켜지고 재개 확인 창을 연다(API projectRedeliveryPayment의 결제 완료 모양).
+  'held-paid': [
+    [
+      'GET',
+      /^\/driver\/orders\/order-held-1$/,
+      () => ({
+        body: {
+          ...ORDERS.find((o) => o.id === 'order-held-1'),
+          redeliveryPayment: {
+            required: true,
+            holdAt: '2026-10-06T00:30:00.000Z',
+            chargeId: 'charge-visual-0001',
+            status: 'PAID',
+            canPay: false,
+            paid: true,
+            requiresRecovery: false,
+          },
+        },
+      }),
+    ],
+  ],
   // 수거 대기 탭 두 묶음·수거 장소·한 번에 수거(목록과 수거 대기 상세가 같은 주문을 본다).
   'pickup-groups': [
     ['GET', /^\/driver\/orders$/, () => ({ body: PICKUP_ORDERS.map(pickupListView) })],
@@ -368,6 +389,22 @@ export const screens = [
     title: '오늘 완료 내역',
     path: '/board/completed',
     scenario: 'completed-today',
+  },
+  {
+    id: 'board-held-paid',
+    group: '기사',
+    title: '주문 상세 · 배송 보류 · 재배송비 결제 완료',
+    path: '/board/order-held-1',
+    scenario: 'held-paid',
+  },
+  {
+    id: 'modal-resume-confirm',
+    group: '기사',
+    title: '배송 재개 확인 창',
+    path: '/board/order-held-1',
+    scenario: 'held-paid',
+    steps: [{ click: '배송 재개' }],
+    viewport: true,
   },
   { id: 'map', group: '기사', title: '지도', path: '/map' },
   { id: 'profile', group: '기사', title: '내 정보', path: '/profile' },
