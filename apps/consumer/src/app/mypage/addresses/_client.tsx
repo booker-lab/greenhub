@@ -281,6 +281,14 @@ export default function AddressesClient() {
   const [modal, setModal] = useState<{ mode: 'add' } | { mode: 'edit'; addr: SavedAddress } | null>(
     null,
   );
+  // 창을 열 때마다 폼(입력값·저장 중·오류) 상태를 새로 만든다. AddressFormModal은 늘 떠 있어 useState(initial)을 한 번만
+  // 읽으므로, 이 순번을 key로 주지 않으면 수정 창이 빈 칸으로 열리고 직전 입력값과 저장 중 상태가 남는다.
+  // 닫을 때는 순번을 바꾸지 않아 닫힘 동작은 그대로다.
+  const [formSeq, setFormSeq] = useState(0);
+  function openModal(next: { mode: 'add' } | { mode: 'edit'; addr: SavedAddress }) {
+    setFormSeq((seq) => seq + 1);
+    setModal(next);
+  }
   const [actionError, setActionError] = useState<string | null>(null);
   // 삭제 확인창: 닫힘 → 열림 → 처리 중(확정 뒤 삭제 요청이 끝날 때까지) 중 하나이고, 열린 동안 지울 배송지를 함께 든다.
   const [deleteDialog, setDeleteDialog] = useState<
@@ -330,12 +338,13 @@ export default function AddressesClient() {
     <div className="mx-auto max-w-[720px] px-4 pt-5 pb-20">
       <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-2.5">
         <MyPageBackButton />
-        <p
+        {/* 화면 제목은 제목 요소로 둔다(화면 읽기가 제목으로 잡는다). 모양은 그대로다. */}
+        <h1
           className={TEXT}
           style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}
         >
           배송지 관리
-        </p>
+        </h1>
       </div>
 
       {(error || actionError) && (
@@ -344,7 +353,8 @@ export default function AddressesClient() {
             <UiAlert role="alert" variant="destructive">
               <AlertDescription>
                 <div className="flex flex-row flex-wrap items-center justify-between gap-3">
-                  <p className={TEXT} style={SMALL_TEXT_STYLE}>
+                  {/* 낱말 중간에서 줄이 끊기지 않게 한다("주세 / 요"). */}
+                  <p className={`${TEXT} break-keep`} style={SMALL_TEXT_STYLE}>
                     {error}
                   </p>
                   {/* 흰 면·검정 글자 외곽선(알림 화면의 "다시 시도"와 같다. 흰 면 위 빨강 글자는 대비 3.3:1이었다) */}
@@ -358,7 +368,7 @@ export default function AddressesClient() {
           {actionError && (
             <UiAlert role="alert" variant="destructive">
               <AlertDescription>
-                <p className={TEXT} style={SMALL_TEXT_STYLE}>
+                <p className={`${TEXT} break-keep`} style={SMALL_TEXT_STYLE}>
                   {actionError}
                 </p>
               </AlertDescription>
@@ -382,7 +392,7 @@ export default function AddressesClient() {
             <AddressCard
               key={addr.id}
               addr={addr}
-              onEdit={() => setModal({ mode: 'edit', addr })}
+              onEdit={() => openModal({ mode: 'edit', addr })}
               onDelete={() => setDeleteDialog({ state: 'open', addr })}
               onSetDefault={() => handleSetDefault(addr.id)}
             />
@@ -394,12 +404,13 @@ export default function AddressesClient() {
         type="button"
         size="md"
         className="w-full"
-        onClick={() => setModal({ mode: 'add' })}
+        onClick={() => openModal({ mode: 'add' })}
       >
         + 배송지 추가
       </UiButton>
 
       <AddressFormModal
+        key={formSeq}
         opened={modal !== null}
         initial={getInitialForm(modal?.mode === 'edit' ? modal.addr : undefined)}
         onSave={
