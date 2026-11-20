@@ -29,6 +29,13 @@ test('회차 상품은 홈과 같은 도감 타일로 그리고 링크는 produc
   );
   assert.match(tileSource, /item\.roundPrice/);
   assert.match(source, /이번 주 회차/);
+  // 이번 회차는 홈과 같은 일정 줄(주문 마감·문 앞 배송)을 회차 일정에서 만들어 보인다(2026-11-21 Q1-A).
+  assert.match(source, /formatOrderCloseStatus\(\s*currentRound\.schedule\.orderCloseAt,/);
+  assert.match(source, /formatRoundDeliveryPromise\(currentRound\.schedule\.deliveryEndAt\)/);
+  // 이번 회차 타일에는 홈과 같은 + 담기를 연결하고 같은 안내를 쓴다(2026-11-21 Q2-A). 지난 회차에는 연결하지 않는다.
+  assert.equal(source.match(/onQuickAdd=\{handleQuickAdd\}/g)?.length, 1);
+  assert.match(source, /addItem\(roundItemCartInput\(item\)\)/);
+  assert.match(source, /<QuickAddToast toast=\{toast\} onClose=\{closeToast\} \/>/);
   assert.match(source, /지난 회차/);
 });
 
