@@ -3,12 +3,13 @@
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { ChevronLeft, Store } from 'lucide-react';
+import { Store } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { notify } from '@/components/AppToaster';
+import { PageHeader } from '@/components/PageHeader';
 import { ApiError, apiJson } from '@/lib/api';
 import { getFirebaseStorage } from '@/lib/firebase';
 import { logout } from '@/lib/logout';
@@ -44,7 +45,7 @@ function TextField({
           </span>
         )}
       </FieldLabel>
-      <Input id={id} name={name} required={required} className="rounded-[32px]" {...props} />
+      <Input id={id} name={name} required={required} className="h-11 rounded-[32px]" {...props} />
     </Field>
   );
 }
@@ -224,27 +225,25 @@ export default function OnboardingPage() {
   }
 
   return (
-    <main style={{ minHeight: '100vh', backgroundColor: 'var(--frame)', padding: '32px 16px' }}>
-      <div className="mx-auto max-w-[540px] px-4">
-        {isEdit ? (
-          <div className="mb-5 flex flex-row flex-nowrap items-center justify-start gap-3">
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="size-7"
-              onClick={() => router.push('/settings')}
-              aria-label="설정으로 돌아가기"
-            >
-              <ChevronLeft size={20} className="size-5" />
-            </Button>
-            <h2
-              className="m-0 leading-[1.35] font-extrabold"
-              style={{ fontSize: 'var(--font-size-xl)' }}
-            >
-              사업자 프로필 수정
-            </h2>
-          </div>
-        ) : (
+    // 설정에서 들어온 수정 화면은 다른 화면과 같은 머리 부품을 쓴다. 처음 가입할 때는 가운데 제목 그대로다.
+    <main
+      style={{
+        minHeight: '100vh',
+        backgroundColor: 'var(--frame)',
+        ...(isEdit ? {} : { padding: '32px 16px' }),
+      }}
+    >
+      {isEdit && (
+        <PageHeader
+          title="사업자 프로필 수정"
+          onBack={() => router.push('/settings')}
+          containerSize="xs"
+        />
+      )}
+      <div
+        className={isEdit ? 'mx-auto max-w-[540px] px-4 pt-4 pb-8' : 'mx-auto max-w-[540px] px-4'}
+      >
+        {!isEdit && (
           <div className="mb-8 flex flex-col items-center justify-start gap-2.5">
             <h2
               className="m-0 leading-[1.35] font-extrabold"
@@ -402,7 +401,7 @@ export default function OnboardingPage() {
                     onClick={() => void handleStart()}
                     disabled={entering}
                     size="md"
-                    className="w-full"
+                    className="h-11 w-full"
                     style={{ backgroundColor: 'var(--primary)' }}
                   >
                     {entering ? '확인 중...' : '시작하기'}
@@ -413,7 +412,7 @@ export default function OnboardingPage() {
                   type="submit"
                   disabled={loading}
                   size="md"
-                  className="mt-2.5 w-full"
+                  className="mt-2.5 h-11 w-full"
                   style={{ backgroundColor: 'var(--primary)' }}
                 >
                   {loading ? '저장 중...' : isEdit ? '저장' : '저장 후 시작하기'}
@@ -429,7 +428,7 @@ export default function OnboardingPage() {
             type="button"
             variant="ghost"
             size="md"
-            className="mt-4 w-full"
+            className="mt-4 h-11 w-full"
             onClick={() => void logout()}
           >
             다른 계정으로 로그인

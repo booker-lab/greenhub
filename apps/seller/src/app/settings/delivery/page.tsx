@@ -5,6 +5,8 @@ import { Switch } from '@greenhub/ui/components/switch';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
+import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { ApiError, apiJson } from '@/lib/api';
 
@@ -103,44 +105,10 @@ export default function DeliverySettingsPage() {
   }
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        backgroundColor: 'var(--frame)',
-        padding: '32px 16px',
-      }}
-    >
-      <div className="mx-auto max-w-[540px] px-4">
-        <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-3">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="size-7"
-            aria-label="뒤로"
-            onClick={() => router.back()}
-          >
-            <svg
-              className="size-5"
-              width="20"
-              height="20"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              aria-hidden="true"
-              focusable="false"
-            >
-              <path d="M15 18l-6-6 6-6" />
-            </svg>
-          </Button>
-          <h2
-            className="m-0 leading-[1.35] font-extrabold"
-            style={{ fontSize: 'var(--font-size-xl)' }}
-          >
-            배송비 설정
-          </h2>
-        </div>
-
+    <PageShell>
+      {/* 머리는 다른 화면과 같은 부품을 쓴다. 뒤로는 이전 화면이다. */}
+      <PageHeader title="배송비 설정" onBack={() => router.back()} containerSize="xs" />
+      <div className="mx-auto max-w-[540px] px-4 pt-4 pb-8">
         <div className="flex flex-col gap-4">
           {/* 배송 방법별 기본 배송비 */}
           <div className={PAPER}>
@@ -166,7 +134,7 @@ export default function DeliverySettingsPage() {
               ).map(({ label, field }) => (
                 <div
                   key={field}
-                  className="flex flex-row flex-wrap items-center justify-between gap-4"
+                  className="flex flex-row flex-nowrap items-center justify-between gap-4"
                 >
                   <p
                     className={TEXT}
@@ -174,22 +142,26 @@ export default function DeliverySettingsPage() {
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
                       width: 80,
+                      flexShrink: 0,
                     }}
                   >
                     {label}
                   </p>
                   <div
-                    className="flex flex-row flex-wrap items-center justify-start gap-2.5"
+                    className="flex min-w-0 flex-row flex-nowrap items-center justify-start gap-2.5"
                     style={{ flex: 1 }}
                   >
                     <input
                       type="number"
                       min="0"
                       step="500"
+                      aria-label={`${label} 기본 배송비`}
                       value={config[field] as number}
                       onChange={(e) => handleNum(field, e.target.value)}
                       style={{
                         flex: 1,
+                        minWidth: 0,
+                        minHeight: 44,
                         padding: '8px 12px',
                         border: '1px solid var(--color-border)',
                         borderRadius: 12,
@@ -237,7 +209,7 @@ export default function DeliverySettingsPage() {
               ).map(({ label, field }) => (
                 <div
                   key={field}
-                  className="flex flex-row flex-wrap items-center justify-between gap-4"
+                  className="flex flex-row flex-nowrap items-center justify-between gap-4"
                 >
                   <p
                     className={TEXT}
@@ -245,22 +217,26 @@ export default function DeliverySettingsPage() {
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
                       width: 80,
+                      flexShrink: 0,
                     }}
                   >
                     {label}
                   </p>
                   <div
-                    className="flex flex-row flex-wrap items-center justify-start gap-2.5"
+                    className="flex min-w-0 flex-row flex-nowrap items-center justify-start gap-2.5"
                     style={{ flex: 1 }}
                   >
                     <input
                       type="number"
                       min="0"
                       step="1000"
+                      aria-label={`${label} 무료 배송 기준금액`}
                       value={config[field] as number}
                       onChange={(e) => handleNum(field, e.target.value)}
                       style={{
                         flex: 1,
+                        minWidth: 0,
+                        minHeight: 44,
                         padding: '8px 12px',
                         border: '1px solid var(--color-border)',
                         borderRadius: 12,
@@ -331,7 +307,7 @@ export default function DeliverySettingsPage() {
             onClick={handleSave}
             disabled={saving}
             size="md"
-            className="w-full"
+            className="h-11 w-full"
             style={{
               backgroundColor: saved ? 'var(--color-status-info-text)' : 'var(--primary)',
             }}
@@ -340,6 +316,6 @@ export default function DeliverySettingsPage() {
           </Button>
         </div>
       </div>
-    </main>
+    </PageShell>
   );
 }

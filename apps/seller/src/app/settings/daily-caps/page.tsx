@@ -5,6 +5,8 @@ import { notify } from '@/components/AppToaster';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
+import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
 import { todayKST } from '@greenhub/shared';
 import { ApiError, apiJson } from '@/lib/api';
 import { currentMonthKST } from './_lib';
@@ -14,7 +16,8 @@ const TEXT = 'm-0 p-0 text-base';
 const PAPER = 'block rounded-[16px] bg-card';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
-const GRID7 = 'grid grid-cols-7 gap-4';
+// 날짜 칸이 열 폭을 다 써서 누르는 폭이 44px 이상이 되게 칸 사이 틈을 두지 않는다.
+const GRID7 = 'grid grid-cols-7';
 const BACK_ICON = (d: string) => (
   <svg
     className="size-5"
@@ -152,34 +155,12 @@ export default function DailyCapsPage() {
   });
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        backgroundColor: 'var(--frame)',
-        padding: '32px 16px',
-      }}
-    >
-      <div className="mx-auto max-w-[540px] px-4">
-        <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-3">
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="size-7"
-            aria-label="뒤로"
-            onClick={() => router.back()}
-          >
-            {BACK_ICON('M15 18l-6-6 6-6')}
-          </Button>
-          <h2
-            className="m-0 leading-[1.35] font-extrabold"
-            style={{ fontSize: 'var(--font-size-xl)' }}
-          >
-            배송 슬롯 설정
-          </h2>
-        </div>
-
+    <PageShell>
+      {/* 머리는 다른 화면과 같은 부품을 쓴다. 뒤로는 이전 화면이다. */}
+      <PageHeader title="배송 슬롯 설정" onBack={() => router.back()} containerSize="xs" />
+      <div className="mx-auto max-w-[540px] px-4 pt-4 pb-8">
         <p
-          className={`${TEXT} mb-4`}
+          className={`${TEXT} mb-4 break-keep`}
           style={{
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-secondary)',
@@ -195,7 +176,7 @@ export default function DailyCapsPage() {
             <Button
               variant="ghost"
               size="icon-sm"
-              className="size-7"
+              className="size-11"
               aria-label="이전 달"
               onClick={prevMonth}
             >
@@ -207,7 +188,7 @@ export default function DailyCapsPage() {
             <Button
               variant="ghost"
               size="icon-sm"
-              className="size-7"
+              className="size-11"
               aria-label="다음 달"
               onClick={nextMonth}
             >
@@ -322,7 +303,8 @@ export default function DailyCapsPage() {
             >
               {editing} 슬롯 설정
             </p>
-            <div className="flex flex-row flex-wrap items-center justify-start gap-3">
+            {/* 칸과 "개"를 한 줄에 둔다(칸이 카드 밖으로 넘치지 않게 minWidth 0). */}
+            <div className="flex flex-row flex-nowrap items-center justify-start gap-3">
               <input
                 type="number"
                 min="0"
@@ -330,6 +312,7 @@ export default function DailyCapsPage() {
                 onChange={(e) => setEditValue(e.target.value)}
                 style={{
                   flex: 1,
+                  minWidth: 0,
                   padding: '12px 16px',
                   border: '1px solid var(--color-border)',
                   borderRadius: 12,
@@ -351,13 +334,17 @@ export default function DailyCapsPage() {
               0 = 해당일 배송 불가
             </p>
             <div className="mt-4 flex flex-row flex-wrap items-center justify-start gap-2.5">
-              <Button onClick={() => setEditing(null)} className="flex-1" variant="outline-gray">
+              <Button
+                onClick={() => setEditing(null)}
+                className="h-11 flex-1"
+                variant="outline-gray"
+              >
                 취소
               </Button>
               <Button
                 onClick={() => saveCap(editing)}
                 disabled={saving}
-                className="flex-1"
+                className="h-11 flex-1"
                 style={{ backgroundColor: 'var(--primary)' }}
               >
                 {saving ? '저장 중...' : '저장'}
@@ -366,6 +353,6 @@ export default function DailyCapsPage() {
           </div>
         )}
       </div>
-    </main>
+    </PageShell>
   );
 }

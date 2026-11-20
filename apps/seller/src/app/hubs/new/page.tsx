@@ -3,15 +3,16 @@
 import { Button } from '@greenhub/ui/components/button';
 import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { ChevronLeft } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useId, useState } from 'react';
+import { PageHeader } from '@/components/PageHeader';
+import { PageShell } from '@/components/PageShell';
 import { ApiError, apiJson } from '@/lib/api';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(xs 540px)·Group·ActionIcon·Title order 2·Paper(lg·sm·lg)·Stack·
 // TextInput(radius xl)·Text·Button과 같은 값을 Tailwind와 @greenhub/ui로 그린다.
-// 라벨은 Mantine처럼 inline-block이고, 필수 칸은 직접 붙인 빨간 "*" 뒤에 required 별표가 한 번 더 붙는다(지금 화면 그대로).
+// 라벨은 Mantine처럼 inline-block이고, 필수 칸의 빨간 별표는 FieldLabel required가 하나만 붙인다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 
 export default function NewHubPage() {
@@ -59,35 +60,16 @@ export default function NewHubPage() {
   }
 
   return (
-    <main
-      style={{
-        minHeight: '100vh',
-        backgroundColor: 'var(--frame)',
-        padding: '32px 16px',
-      }}
-    >
-      <div className="mx-auto max-w-[540px] px-4">
-        <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-3">
-          <Button size="icon-sm" variant="ghost" className="size-7" onClick={() => router.back()}>
-            <ChevronLeft className="size-5" />
-          </Button>
-          <h2
-            className="m-0 leading-[1.35] font-extrabold"
-            style={{ fontSize: 'var(--font-size-xl)' }}
-          >
-            거점 등록
-          </h2>
-        </div>
-
+    <PageShell>
+      {/* 머리는 다른 화면과 같은 부품을 쓴다. 뒤로는 이전 화면이다. */}
+      <PageHeader title="거점 등록" onBack={() => router.back()} containerSize="xs" />
+      <div className="mx-auto max-w-[540px] px-4 pt-4 pb-8">
         <div className="block rounded-[16px] bg-card p-5">
           <form onSubmit={handleSubmit}>
             <div className="flex flex-col items-stretch justify-start gap-4">
               <Field>
                 <FieldLabel htmlFor={`${formId}-name`} className="inline-block" required>
-                  거점 이름{' '}
-                  <span className={TEXT} style={{ color: 'var(--color-danger)' }}>
-                    *
-                  </span>
+                  거점 이름
                 </FieldLabel>
                 <Input
                   id={`${formId}-name`}
@@ -96,16 +78,13 @@ export default function NewHubPage() {
                   onChange={handleChange}
                   required
                   placeholder="예: 강남 거점"
-                  className="rounded-xl"
+                  className="h-11 rounded-xl"
                 />
               </Field>
 
               <Field>
                 <FieldLabel htmlFor={`${formId}-address`} className="inline-block" required>
-                  주소{' '}
-                  <span className={TEXT} style={{ color: 'var(--color-danger)' }}>
-                    *
-                  </span>
+                  주소
                 </FieldLabel>
                 <Input
                   id={`${formId}-address`}
@@ -114,7 +93,7 @@ export default function NewHubPage() {
                   onChange={handleChange}
                   required
                   placeholder="거점 주소"
-                  className="rounded-xl"
+                  className="h-11 rounded-xl"
                 />
               </Field>
 
@@ -131,7 +110,7 @@ export default function NewHubPage() {
                   value={form.addressDetail}
                   onChange={handleChange}
                   placeholder="동/호수, 층 등"
-                  className="rounded-xl"
+                  className="h-11 rounded-xl"
                 />
               </Field>
 
@@ -148,7 +127,7 @@ export default function NewHubPage() {
                   value={form.operatingHours}
                   onChange={handleChange}
                   placeholder="예: 09:00~18:00"
-                  className="rounded-xl"
+                  className="h-11 rounded-xl"
                 />
               </Field>
 
@@ -165,7 +144,7 @@ export default function NewHubPage() {
                 type="submit"
                 disabled={loading}
                 size="md"
-                className="mt-2.5 w-full"
+                className="mt-2.5 h-11 w-full"
                 style={{ backgroundColor: 'var(--primary)' }}
               >
                 {loading ? '등록 중...' : '거점 등록'}
@@ -174,6 +153,6 @@ export default function NewHubPage() {
           </form>
         </div>
       </div>
-    </main>
+    </PageShell>
   );
 }

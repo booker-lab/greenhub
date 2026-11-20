@@ -162,7 +162,7 @@ export default function HubPickupPage() {
           ) : !orderId ? (
             <div className={`${CENTER_STACK} py-10`}>
               <p
-                className={`${TEXT} text-center`}
+                className={`${TEXT} text-center break-keep`}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-danger)' }}
               >
                 {INVALID_ORDER_ADDRESS_MESSAGE}
@@ -174,7 +174,7 @@ export default function HubPickupPage() {
           ) : (
             <>
               <p
-                className={`${TEXT} text-center`}
+                className={`${TEXT} text-center break-keep`}
                 style={{
                   marginBottom: 4,
                   fontSize: 'var(--font-size-sm)',
@@ -184,7 +184,7 @@ export default function HubPickupPage() {
                 소비자의 픽업 코드 6자리를 입력하세요
               </p>
               <p
-                className={`${TEXT} text-center`}
+                className={`${TEXT} text-center break-keep`}
                 style={{
                   marginBottom: 32,
                   fontSize: 'var(--font-size-sm)',
@@ -205,6 +205,7 @@ export default function HubPickupPage() {
                     }}
                     type="text"
                     inputMode="numeric"
+                    aria-label={`픽업 코드 ${i + 1}번째 자리`}
                     maxLength={1}
                     value={digit}
                     onChange={(e) => handleChange(i, e.target.value)}
@@ -244,7 +245,7 @@ export default function HubPickupPage() {
 
               {step === 'error' && errorMsg && (
                 <p
-                  className={`${TEXT} text-center`}
+                  className={`${TEXT} text-center break-keep`}
                   style={{
                     marginBottom: 16,
                     fontSize: 'var(--font-size-sm)',
@@ -260,7 +261,11 @@ export default function HubPickupPage() {
                 disabled={!isFilled || loading}
                 size="lg"
                 className="w-full max-w-[320px]"
-                style={{ backgroundColor: 'var(--primary)', fontWeight: 'var(--fw-medium)' }}
+                // 꺼졌을 때는 부품의 꺼진 모양(회색 면)을 그대로 쓴다. 초록 면은 누를 수 있을 때만이다.
+                style={{
+                  ...(!isFilled || loading ? {} : { backgroundColor: 'var(--primary)' }),
+                  fontWeight: 'var(--fw-medium)',
+                }}
               >
                 {loading ? '확인 중...' : '픽업 확인'}
               </Button>
