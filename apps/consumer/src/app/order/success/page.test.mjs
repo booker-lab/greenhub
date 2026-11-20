@@ -284,7 +284,10 @@ test('회차 성공 화면은 주문의 배송 예정일로 만든 문 앞 배�
   // 도착일 상자는 주문 상품 상자보다 먼저 그린다.
   assert.ok(source.indexOf('{arrivalHeadline ? (') < source.search(/>\s*주문 상품\s*</));
   // 상태는 초록 글자가 아니라 점 + 글자다.
-  assert.match(source, /<StatusDot className="font-bold">\{ORDER_STATUS_LABELS\[validOrder\.status\]\}<\/StatusDot>/);
+  assert.match(
+    source,
+    /<StatusDot className="font-bold">\{ORDER_STATUS_LABELS\[validOrder\.status\]\}<\/StatusDot>/,
+  );
   assert.doesNotMatch(source, /화요일/);
   assert.match(source, /successOrder\.items\.map/);
 });
