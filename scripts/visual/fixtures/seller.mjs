@@ -885,8 +885,9 @@ const ADMIN_AUDIT_LOGS = [
     actorId: 'admin-visual-0001',
     targetType: 'driver',
     targetId: 'driver-visual-0002',
-    before: { status: 'pending' },
-    after: { status: 'approved' },
+    // 실제 API(admin.service approveDriver)와 같은 모양: driverApproved 참·거짓.
+    before: { driverApproved: false },
+    after: { driverApproved: true },
     reason: null,
     createdAt: '2026-10-05T01:20:00.000Z',
   },
@@ -896,8 +897,9 @@ const ADMIN_AUDIT_LOGS = [
     actorId: 'admin-visual-0001',
     targetType: 'order',
     targetId: 'order-round-multi',
-    before: { status: 'PAID' },
-    after: { status: 'REFUNDED' },
+    // 실제 API(admin.service forceRefund)와 같은 모양: 강제환불 뒤 상태는 CANCELLED.
+    before: { status: 'ACCEPTED' },
+    after: { status: 'CANCELLED' },
     reason: '꽃 상태 불량으로 손님 요청',
     createdAt: '2026-10-04T08:05:00.000Z',
   },
