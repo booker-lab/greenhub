@@ -155,7 +155,7 @@ export default function OrderCard({
               )}
         </div>
         <p className={cn(text, 'mt-1')} style={muted}>
-          받는 분 {order.buyerName ?? '소비자'}
+          받는 분 {order.buyerName || '–'}
         </p>
         {paymentLine && <div className="mt-1">{paymentLine}</div>}
       </Link>
@@ -166,7 +166,7 @@ export default function OrderCard({
   // 한 줄에 이어 붙이면 390px에서 상품 뒤쪽과 수거 시각이 늘 잘려, 수거 시각은 줄어들지 않는 칸에 따로 둔다.
   const rowItemsText = orderItemsSummary(order.items) ?? itemsText;
   const pickupTimeText = tab === 'preparing' ? `수거 ${formatTime(order.preparedAt)}` : null;
-  const buyerLine = [methodText, order.buyerName ?? '소비자'].filter(Boolean).join(' · ');
+  const buyerLine = [methodText, order.buyerName || '–'].filter(Boolean).join(' · ');
 
   const rowBody = (
     <>
