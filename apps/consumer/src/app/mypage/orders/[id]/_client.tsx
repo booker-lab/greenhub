@@ -862,8 +862,14 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     requestedDeliveryDate: detail.requestedDeliveryDate,
   };
   const cardHeadline = orderCardHeadline(headlineSource);
+  // 배송 보류 중에는 그리지 않는다. 그날 배송하지 못해 멈춘 주문에 지난 날짜로 "도착 예정"을 굵게 쓰면 틀린 약속이 된다
+  // (재배송 일정은 아래 보류 안내가 말한다).
   const arrivalHeadline =
-    cardHeadline && cardHeadline !== orderCardMethodLine(headlineSource) ? cardHeadline : null;
+    cardHeadline &&
+    cardHeadline !== orderCardMethodLine(headlineSource) &&
+    detail.status !== 'DELIVERY_HELD'
+      ? cardHeadline
+      : null;
   const showCancelReconcileWarning =
     !isAuthoritativelyCancelled && cancelOutcome.kind === 'reconcile-failed';
   const showCancelCommand =
