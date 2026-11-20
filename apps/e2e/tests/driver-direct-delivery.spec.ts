@@ -178,7 +178,7 @@ test.describe('드라이버 회차 직배송 화면 계약', () => {
 
     await expect(page.getByText('배송 중')).toBeVisible();
     await expect(page.getByRole('button', { name: '수거 완료 / 배송 시작' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /소비자에게 전화/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /받는 분에게 전화/ })).toBeVisible();
   });
 
   test('기상 사유는 고객 책임과 재배송비 없이 새 일정으로 보류한다', async ({

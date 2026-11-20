@@ -455,11 +455,13 @@ export function DeliveryHoldModal({
               />
               {error && <p className={`${text} text-ui-red`}>{error}</p>}
               <div className="flex flex-wrap items-center justify-end gap-4">
-                <AppButton tone="default" onClick={onClose} disabled={loading}>
+                <AppButton tone="default" size="md" className="h-11" onClick={onClose} disabled={loading}>
                   취소
                 </AppButton>
                 <AppButton
                   tone="red"
+                  size="md"
+                  className="h-11"
                   onClick={submit}
                   loading={loading}
                   disabled={loading || responsibilityFeeHint !== null}

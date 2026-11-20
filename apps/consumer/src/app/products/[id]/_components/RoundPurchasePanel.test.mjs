@@ -106,7 +106,13 @@ test('상품 상세은 Task 4.8이 검증한 회차 상품 구조를 패널에 �
 test('상세 첫 화면은 이름 30px 제목 아래 18px 한 줄로 언제·어디서 오는지 쓴다', () => {
   assert.match(panelSource, /fontSize: 30/);
   assert.match(panelSource, /formatRoundDay\(round\.schedule\.deliveryEndAt\)/);
-  assert.match(panelSource, /문 앞 도착` : '화요일 오전 9시까지 문 앞 도착'\} · 경기도\s+이천시 직접 배송/);
+  assert.match(panelSource, /`\$\{deliveryDay\} 문 앞 도착` : '화요일 오전 9시까지 문 앞 도착'/);
+  assert.match(panelSource, /text: '경기도 이천시 직접 배송'/);
+  // 줄은 뜻 묶음 사이에서만 바뀌고(묶음마다 whitespace-nowrap), 줄 머리의 가운뎃점은 가린다.
+  assert.match(panelSource, /arrivalPhrases\.map/);
+  assert.match(panelSource, /whitespace-nowrap/);
+  assert.match(panelSource, /className="m-0 mt-2 overflow-hidden p-0"/);
+  assert.match(panelSource, /\{' · '\}/);
   assert.match(panelSource, /fontSize: 'var\(--font-size-lg\)'/);
   // 제목 위 상태 태그·회차 이름 라벨은 두지 않는다(design-direction.md §4.3).
   assert.doesNotMatch(panelSource, /round\.name/);

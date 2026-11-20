@@ -58,5 +58,8 @@ test('전체가 첫 화면 행 수 이하면 더 보기가 없다', () => {
 test('배송 중 탭은 보류가 있을 때 묶음 제목에 건수를 쓰고 묶음 판단을 순수 함수에 맡긴다', () => {
   assert.match(boardSource, /groupDeliveringOrders\(orders\)/);
   assert.match(boardSource, /title="배송할 주문"/);
-  assert.match(boardSource, /title="보류" total=\{delivering\.held\.length\}/);
+  assert.match(boardSource, /title="보류"\s+total=\{delivering\.held\.length\}/);
+  // 더 보기는 가려진 행이 있는 묶음 끝에 그 묶음의 가려진 수로 둔다(보류 묶음 밑 하나로 두지 않는다).
+  assert.match(boardSource, /footer=\{<ShowMoreButton hidden=\{restHidden\}/);
+  assert.match(boardSource, /footer=\{<ShowMoreButton hidden=\{heldHidden\}/);
 });

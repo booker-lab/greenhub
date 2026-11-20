@@ -76,10 +76,12 @@
   --ui-brand-light: #d2f2df;
   --ui-brand-light-hover: #a6e5c0;
   --ui-brand-light-text: #005c32;
-  /* 빨강: 채운 면(흰 글자)과 글자·테두리는 밝음 값이 같지만 어둠에서 갈린다. */
+  /* 빨강: 글자·테두리(--ui-red)와 채운 면(--ui-red-filled)을 나눈다.
+     채운 면은 흰 글자를 얹으므로 밝음·어둠 모두 #D92D20(흰 글자 4.8:1, design-standard §2·§9.2)이다.
+     #fa5252는 흰 글자 3.3:1이라 꺼진 버튼처럼 보였다(2026-11-19 기사 앱 검수, 사용자 결정). */
   --ui-red: #fa5252;
-  --ui-red-filled: #fa5252;
-  --ui-red-filled-hover: #f03e3e;
+  --ui-red-filled: #d92d20;
+  --ui-red-filled-hover: #b42318;
   --ui-red-light: #ffe3e3;
   --ui-red-light-hover: #ffc9c9;
   --ui-red-light-text: #c92a2a;

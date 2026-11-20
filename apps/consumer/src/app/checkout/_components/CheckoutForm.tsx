@@ -102,6 +102,7 @@ function formatDeliveryDate(iso: string): string {
 // ① 외형 유지: Mantine TextInput·Textarea(InputWrapper)와 같은 구조·연결. 라벨(for) → 설명(p) → 입력칸 → 오류(p).
 // 입력칸은 오류·설명을 aria-describedby로 가리키고 오류가 있으면 aria-invalid다. Mantine 감싸개는 역할이 없는
 // div라 Field의 role="group"은 지운다. 필수 표시는 FieldLabel required(" *", aria-hidden)와 입력칸 required.
+// 라벨 글자에 "(필수)"가 이미 있는 칸은 requiredMark={false}로 빨간 별표를 뺀다(빨강은 문제 상태에만, design-standard §2).
 function useFieldIds(description: ReactNode, error: ReactNode) {
   const id = useId();
   const descriptionId = description ? `${id}-description` : undefined;
@@ -122,6 +123,7 @@ function FieldFrame({
   error,
   errorId,
   required,
+  requiredMark = true,
   style,
   children,
 }: {
@@ -132,6 +134,7 @@ function FieldFrame({
   error?: ReactNode;
   errorId?: string;
   required?: boolean;
+  requiredMark?: boolean;
   style?: CSSProperties;
   children: ReactNode;
 }) {
@@ -139,7 +142,12 @@ function FieldFrame({
     // biome-ignore lint/a11y/useValidAriaRole: Field 기본 role="group"을 지워 Mantine 감싸개(역할 없는 div)와 같은 접근성 트리로 둔다.
     <Field role={undefined} style={style}>
       {label && (
-        <FieldLabel htmlFor={id} required={required}>
+        <FieldLabel
+          htmlFor={id}
+          required={required && requiredMark}
+          // 별표를 빼도 라벨 배치는 별표가 있을 때와 같게 둔다(FieldLabel required의 inline-block).
+          className={required && !requiredMark ? 'inline-block' : undefined}
+        >
           {label}
         </FieldLabel>
       )}
@@ -172,6 +180,7 @@ function TextInput({
   description,
   error,
   required,
+  requiredMark,
   style,
   className,
   ...props
@@ -179,6 +188,7 @@ function TextInput({
   label?: ReactNode;
   description?: ReactNode;
   error?: ReactNode;
+  requiredMark?: boolean;
 }) {
   const { id, descriptionId, errorId, describedBy } = useFieldIds(description, error);
   return (
@@ -190,6 +200,7 @@ function TextInput({
       error={error}
       errorId={errorId}
       required={required}
+      requiredMark={requiredMark}
       style={style}
     >
       {/* 입력칸 높이 44px(design-standard §4). 공용 Input 기본 36px는 그대로다. */}
@@ -568,6 +579,8 @@ export default function CheckoutForm({
             error={deliveryPhoneTouched && deliveryPhoneError ? deliveryPhoneError : undefined}
             autoComplete="tel"
             required
+            // 회차 결제의 라벨은 "(필수)"를 글자로 쓰므로 별표를 겹쳐 쓰지 않는다.
+            requiredMark={!isRoundCheckout}
           />
         )}
         {isRoundCheckout && benchmark?.gift && (
@@ -732,23 +745,6 @@ export default function CheckoutForm({
         })}
       </div>
 
-      {error && (
-        // Mantine Alert(mb sm, role="alert") 계산값. 고객이 결제창을 닫은 안내는 문제 상태가 아니라 중립 면이고,
-        // 결제 실패·주문 거절·결제 불가는 빨강 면이다(design-standard.md §2 "빨강은 문제 상태에만").
-        <Alert
-          variant={error.kind === 'canceled' ? 'secondary' : 'destructive'}
-          role="alert"
-          className="mb-3"
-        >
-          <AlertDescription>
-            <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
-              {error.message}
-            </p>
-            {errorAction}
-          </AlertDescription>
-        </Alert>
-      )}
-
       {payBlockers.length > 0 && (
         <div id={payBlockersId} className="mb-3">
           <p className="m-0 text-sm leading-[1.55]" style={{ fontWeight: 'var(--fw-bold)' }}>
@@ -768,20 +764,80 @@ export default function CheckoutForm({
         </div>
       )}
 
-      {closedNotice}
-
-      <LoadingButton
-        size="lg"
-        className="w-full"
-        disabled={!effectiveCanPay}
-        loading={isLoading}
-        aria-describedby={payBlockers.length > 0 ? payBlockersId : undefined}
-        onClick={() => {
-          if (effectiveCanPay) onPay();
+      {/* 하단 고정 바(design-standard §5 "하단 고정 결제 버튼", 2026-11-20 사용자 결정 Q1-A): 폼을 읽는 동안 화면 아래에
+          붙어 결제 금액과 결제 버튼이 늘 보이고, 폼 끝에서는 제자리(사업자 정보 위)에 놓인다. 결제 오류와 마감 안내는
+          어디서 눌러도 보이게 바 안에 둔다. 빠진 조건 목록은 바 바로 앞 본문에 두고 버튼이 가리킨다. */}
+      <div
+        className="sticky bottom-0 z-10 -mx-4 flex flex-col px-4 pt-3"
+        style={{
+          background: 'var(--color-bg)',
+          boxShadow: 'var(--bar-shadow)',
+          paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
         }}
       >
-        {buttonLabel}
-      </LoadingButton>
+        {error && (
+          // Mantine Alert(mb sm, role="alert") 계산값. 고객이 결제창을 닫은 안내는 문제 상태가 아니라 중립 면이고,
+          // 결제 실패·주문 거절·결제 불가는 빨강 면이다(design-standard.md §2 "빨강은 문제 상태에만").
+          <Alert
+            variant={error.kind === 'canceled' ? 'secondary' : 'destructive'}
+            role="alert"
+            className="mb-3"
+          >
+            <AlertDescription>
+              <p className="m-0 leading-[1.55]" style={{ fontSize: 'var(--font-size-sm)' }}>
+                {error.message}
+              </p>
+              {errorAction}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {closedNotice}
+
+        {/* 금액 줄은 위 "주문 정보"와 같은 규칙이다(null이면 확인 중, 0이면 숨김). 확인 중 알림(aria-live)은 위 한 곳만 한다. */}
+        {(totalAmount === null || totalAmount > 0) && (
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4">
+            <p
+              className="m-0 leading-[1.55]"
+              style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+            >
+              결제 금액
+            </p>
+            {totalAmount === null ? (
+              <p
+                className="m-0 leading-[1.55]"
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+              >
+                금액 확인 중...
+              </p>
+            ) : (
+              <p
+                className="m-0 min-w-0 leading-[34px]"
+                style={{
+                  fontSize: 22,
+                  fontVariantNumeric: 'tabular-nums',
+                  fontWeight: 'var(--fw-extrabold)',
+                }}
+              >
+                {totalAmount.toLocaleString()}원
+              </p>
+            )}
+          </div>
+        )}
+
+        <LoadingButton
+          size="lg"
+          className="w-full"
+          disabled={!effectiveCanPay}
+          loading={isLoading}
+          aria-describedby={payBlockers.length > 0 ? payBlockersId : undefined}
+          onClick={() => {
+            if (effectiveCanPay) onPay();
+          }}
+        >
+          {buttonLabel}
+        </LoadingButton>
+      </div>
     </div>
   );
 }

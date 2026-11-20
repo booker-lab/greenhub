@@ -169,7 +169,11 @@ test('작업 보드 진행 줄의 "오늘 완료 n곳"은 1곳 이상일 때만 
   assert.match(block, /<Link\s+href="\/board\/completed"/);
   assert.match(block, /오늘 완료 \{completedToday\}곳/);
   // 0곳은 링크 없이 글자만 둔다.
-  assert.match(boardSource, /\{completedToday === 0 && <>\{' · '\}오늘 완료 0곳<\/>\}/);
+  // 진행 줄은 항목마다 한 덩어리(whitespace-nowrap)로 묶어 항목 사이에서만 줄을 바꾼다.
+  assert.match(
+    boardSource,
+    /\{completedToday === 0 && \(\s*<>\s*\{' · '\}\s*<span className="whitespace-nowrap">오늘 완료 0곳<\/span>\s*<\/>\s*\)\}/,
+  );
   assert.equal(boardSource.match(/href="\/board\/completed"/g)?.length, 1);
 });
 
