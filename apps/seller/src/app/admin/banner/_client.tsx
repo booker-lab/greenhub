@@ -14,6 +14,7 @@ import {
   PRODUCT_IMAGE_ENCODE,
   reencodeImageToJpeg,
 } from '../../products/_components/image-reencode';
+import { AdminPageHeader } from '../_components/adminList';
 import { BannerCtaSection } from './_components/BannerCtaSection';
 import { BannerImageSection } from './_components/BannerImageSection';
 import { BannerTextSection } from './_components/BannerTextSection';
@@ -101,7 +102,7 @@ export default function AdminBannerClient() {
     // "저장 완료" 표시는 ok confirmed success에서만 설정된다.
   };
 
-  // ① 외형 유지(UI 교체 P2b): Mantine Text·Group·Title order 4(18px·800·줄 높이 1.45)·Paper·Stack·Switch(label)와 같은 값.
+  // ① 외형 유지(UI 교체 P2b): Mantine Text·Paper·Stack·Switch(label)와 같은 값. 머리는 어드민 공용 AdminPageHeader.
   if (loading) {
     return (
       <p
@@ -117,9 +118,7 @@ export default function AdminBannerClient() {
   if (error !== null) {
     return (
       <div>
-        <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
-          <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">히어로 배너 관리</h4>
-        </div>
+        <AdminPageHeader title="배너" />
         <div
           className="block rounded-[16px] bg-card shadow-paper-xs"
           style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
@@ -148,24 +147,26 @@ export default function AdminBannerClient() {
 
   return (
     <div>
-      <div className="mb-4 flex flex-row flex-wrap items-center justify-between gap-4">
-        <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">히어로 배너 관리</h4>
-        {/* Mantine Switch label(오른쪽): 트랙 뒤 12px, 15px·줄 높이 20px 글자. */}
-        <div className="relative">
-          <div className="flex [-webkit-tap-highlight-color:transparent]">
-            <Switch
-              id="banner-active"
-              checked={form.isActive ?? true}
-              onCheckedChange={(checked) => setForm({ ...form, isActive: checked })}
-            />
-            <div className="order-2 inline-flex flex-col text-sm leading-[20px]">
-              <label htmlFor="banner-active" className="ps-3 text-inherit">
-                배너 활성화
-              </label>
+      {/* 머리: h1은 메뉴 이름과 같은 명사 하나("배너", 2026-11-19 사용자 결정). 노출 스위치는 머리 오른쪽 자리. */}
+      <AdminPageHeader
+        title="배너"
+        action={
+          <div className="relative">
+            <div className="flex [-webkit-tap-highlight-color:transparent]">
+              <Switch
+                id="banner-active"
+                checked={form.isActive ?? true}
+                onCheckedChange={(checked) => setForm({ ...form, isActive: checked })}
+              />
+              <div className="order-2 inline-flex flex-col text-sm leading-[20px]">
+                <label htmlFor="banner-active" className="ps-3 text-inherit">
+                  배너 활성화
+                </label>
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        }
+      />
 
       {banner === null && (
         <p
@@ -224,12 +225,7 @@ export default function AdminBannerClient() {
         <BannerTextSection form={form} setForm={setForm} />
         <BannerCtaSection form={form} setForm={setForm} />
 
-        <Button
-          onClick={handleSave}
-          disabled={saving}
-          size="md"
-          style={{ backgroundColor: saved ? 'var(--color-primary-light)' : 'var(--primary)' }}
-        >
+        <Button onClick={handleSave} disabled={saving} size="md">
           {saving ? '저장 중...' : saved ? '저장 완료!' : '저장하기'}
         </Button>
       </div>

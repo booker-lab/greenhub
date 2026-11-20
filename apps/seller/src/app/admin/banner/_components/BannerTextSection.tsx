@@ -11,19 +11,11 @@ interface BannerTextSectionProps {
   setForm: Dispatch<SetStateAction<AdminBanner>>;
 }
 
-// ① 외형 유지(UI 교체 P2b): Mantine Paper(lg·xs·lg)·Text·Stack(gap sm)·TextInput·Textarea(autosize 2줄)와 같은 값.
+// 배너 글자 구역 — 위쪽 1px 선으로 앞 구역과 나누고 구역 제목은 16/800(어드민 틀 규칙). 입력칸은 공용 부품 그대로.
 export function BannerTextSection({ form, setForm }: BannerTextSectionProps) {
   return (
-    <div
-      className="block rounded-[16px] bg-card p-5 shadow-paper-xs"
-      style={{ border: '1px solid var(--color-border)' }}
-    >
-      <p
-        className="m-0 mb-3 p-0 text-base"
-        style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
-      >
-        텍스트
-      </p>
+    <section className="block border-t border-rule pt-4">
+      <h2 className="m-0 mb-3 text-[16px] leading-[24px] font-extrabold">텍스트</h2>
       <div className="flex flex-col gap-3">
         <Field>
           <FieldLabel htmlFor="banner-tag">태그 문구</FieldLabel>
@@ -57,6 +49,6 @@ export function BannerTextSection({ form, setForm }: BannerTextSectionProps) {
           />
         </Field>
       </div>
-    </div>
+    </section>
   );
 }

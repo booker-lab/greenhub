@@ -32,7 +32,7 @@ test.describe('셀러 배너 토글 (인증 필요)', () => {
     await loginViaCredentials(page, BASE, sellerEmail!, sellerPassword!)
 
     await page.goto(`${BASE}/admin/banner`)
-    await page.waitForSelector('text=히어로 배너 관리', { timeout: 10_000 })
+    await page.waitForSelector('h1:text-is("배너")', { timeout: 10_000 })
 
     // 토글 클릭
     const toggle = page.locator('role=switch')

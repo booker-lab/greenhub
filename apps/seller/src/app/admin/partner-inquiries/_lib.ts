@@ -1,10 +1,10 @@
 // 입점 문의 화면 표시용 순수 함수.
 
-/** 받은 날짜를 한국 시각 기준으로 보여 준다(서버·브라우저 시간대와 무관). */
+import { formatAdminDate } from '../_components/adminFormat';
+
+/** 받은 날짜를 어드민 날짜 형식(한국 시각 "2026-10-17")으로 보여 준다. 읽을 수 없으면 빈 문자열. */
 export function formatInquiryDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' });
+  return formatAdminDate(iso) ?? '';
 }
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

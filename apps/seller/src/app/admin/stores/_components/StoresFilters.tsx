@@ -27,7 +27,7 @@ export function StoresFilters({
 }: StoresFiltersProps) {
   return (
     <div className="mb-3 flex flex-row flex-wrap items-end justify-start gap-3">
-      <Field className="w-auto min-w-[180px] flex-1 min-[641px]:max-w-[360px]">
+      <Field className="w-auto min-w-[180px] flex-1 min-[641px]:max-w-[360px] max-[640px]:basis-full">
         <FieldLabel htmlFor="stores-keyword">이 목록에서 찾기</FieldLabel>
         <Input
           id="stores-keyword"
@@ -45,7 +45,7 @@ export function StoresFilters({
             value={toSortValue(sort)}
             onValueChange={(value) => onSortChange(parseSortValue(value))}
             data={SORT_OPTIONS}
-            className="rounded-[8px]"
+            className="rounded-[8px] max-[640px]:h-11"
           />
         </Field>
       </div>

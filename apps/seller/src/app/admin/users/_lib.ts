@@ -28,6 +28,22 @@ export function formatPhone(phone: string | null | undefined): string {
   return trimmed ? trimmed : EMPTY_FIELD;
 }
 
+/**
+ * 목록의 전화 가림(design-direction.md §5 어드민 "식별", 2026-11-19 사용자 결정) — 가운데 숫자 묶음을 *로 바꾼다.
+ * "010-1234-5678" → "010-****-5678", 하이픈 없는 "01012345678" → "010****5678". 앞 3자리·끝 4자리만 남긴다.
+ * 숫자가 8자리 미만이면 가릴 가운데가 없어 그대로 둔다. 전체 번호는 정지 확인창에서만 보여 준다.
+ */
+export function maskPhone(phone: string): string {
+  const value = phone.trim();
+  const digits = value.replace(/\D/g, '').length;
+  if (digits < 8) return value;
+  let seen = 0;
+  return value.replace(/\d/g, (d) => {
+    seen += 1;
+    return seen <= 3 || seen > digits - 4 ? d : '*';
+  });
+}
+
 /** 정지 메뉴·확인창 라벨 — ⋮ 메뉴·확인창·결과 알림 모두 '정지' / '정지 풀기'로 맞춘다. */
 export function suspendActionLabel(currentlySuspended: boolean): string {
   return currentlySuspended ? '정지 풀기' : '정지';

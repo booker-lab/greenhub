@@ -105,19 +105,20 @@ export function formatKstDateTime(value: Date | string | null | undefined): stri
 }
 
 /**
- * 초대 취소 확인창(design-direction.md §5 어드민 "위험 동작 확인창") — 제목 = 동작 + 대상(받는 사람, 없으면 토큰),
- * 대상 정보(토큰·받는 사람·발급·만료 시각). 목록에서 그 초대를 못 찾으면 토큰만 보인다.
+ * 초대 취소 확인창(design-direction.md §5 어드민 "위험 동작 확인창") — 제목 = 동작 + 대상(받는 사람, 없으면 초대 코드),
+ * 대상 정보(초대 코드·받는 사람·발급·만료 시각). 목록에서 그 초대를 못 찾으면 초대 코드만 보인다.
+ * 화면 이름은 발급 내역 표 머리글과 같은 "초대 코드"다(시스템 용어 "토큰"을 쓰지 않는다).
  */
 export function describeInviteRevokeConfirm(
   token: string,
   invite: Pick<InviteToken, 'recipientEmail' | 'createdAt' | 'expiresAt'> | undefined,
 ): { title: string; facts: { label: string; value: string }[] } {
   const recipient = invite?.recipientEmail?.trim();
-  const facts = [{ label: '토큰', value: token }];
+  const facts = [{ label: '초대 코드', value: token }];
   if (recipient) facts.push({ label: '받는 사람', value: recipient });
   if (invite?.createdAt) facts.push({ label: '발급', value: formatKstDateTime(invite.createdAt) });
   if (invite?.expiresAt) facts.push({ label: '만료', value: formatKstDateTime(invite.expiresAt) });
-  return { title: `${recipient ?? `토큰 ${token}`} 초대 취소`, facts };
+  return { title: recipient ? `${recipient} 초대 취소` : `초대 코드 ${token} 취소`, facts };
 }
 
 // 초대 이력 read state — 조회 실패와 성공-empty의 구조적 구분.

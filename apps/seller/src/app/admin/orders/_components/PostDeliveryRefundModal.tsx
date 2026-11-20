@@ -92,9 +92,15 @@ export function PostDeliveryRefundModal({
           value={reasonCode}
           onValueChange={onReasonCodeChange}
         >
-          <div className="mt-1.5 flex flex-col gap-1.5">
+          {/* 사유마다 누르는 높이 44px — 글자(label)에 위아래 12px을 줘 줄 전체를 누를 수 있게 한다. */}
+          <div className="mt-0.5 flex flex-col">
             {POST_DELIVERY_REFUND_REASON_CODES.map((code) => (
-              <RadioItem key={code} value={code} label={POST_DELIVERY_REFUND_REASON_LABEL[code]} />
+              <RadioItem
+                key={code}
+                value={code}
+                label={POST_DELIVERY_REFUND_REASON_LABEL[code]}
+                className="min-h-11 items-center [&_label]:py-3"
+              />
             ))}
           </div>
         </RadioGroup>

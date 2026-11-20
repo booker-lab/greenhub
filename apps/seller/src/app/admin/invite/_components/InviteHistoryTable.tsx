@@ -67,6 +67,28 @@ function InviteDate({ value }: { value: Date | string | null | undefined }) {
   return <span className="whitespace-nowrap tabular-nums">{formatKstDateTime(value)}</span>;
 }
 
+/** "발급 <날짜> · 만료 <날짜>" — 이름과 날짜를 한 덩어리로 묶어, 줄이 꺾여도 "만료"만 윗줄에 남지 않게 한다. */
+function IssuedExpires({
+  createdAt,
+  expDate,
+}: {
+  createdAt: Date | string | null | undefined;
+  expDate: Date | string | null | undefined;
+}) {
+  return (
+    <>
+      <span className="whitespace-nowrap">
+        발급 <InviteDate value={createdAt} />
+      </span>
+      {/* 휴대폰(≤640)은 한 줄에 다 들어가지 않아 "·"만 줄 끝에 남으므로, 구분자를 숨기고 만료를 둘째 줄로 내린다. */}
+      <span className="max-[640px]:hidden"> · </span>
+      <span className="whitespace-nowrap max-[640px]:block">
+        만료 <InviteDate value={expDate} />
+      </span>
+    </>
+  );
+}
+
 export function InviteHistoryTable({
   invites,
   loading,
@@ -138,8 +160,7 @@ export function InviteHistoryTable({
                   </StatusDot>
                 </div>
                 <p className={ADMIN_SUB}>
-                  발급 <InviteDate value={inv.createdAt} /> · 만료{' '}
-                  <InviteDate value={status.expDate} />
+                  <IssuedExpires createdAt={inv.createdAt} expDate={status.expDate} />
                 </p>
                 {usage && <p className={`${ADMIN_SUB} break-all`}>사용 {usage}</p>}
               </div>
@@ -172,12 +193,14 @@ export function InviteHistoryTable({
               <tr key={inv.token}>
                 <td className={`${ADMIN_TD} py-1.5`}>
                   {codeOf(inv)}
-                  {inv.recipientEmail && (
-                    <p className={`${ADMIN_SUB} break-all`}>받는 사람 {inv.recipientEmail}</p>
-                  )}
+                  {/* 휴대폰 행과 같은 받는 사람 줄 — 세 폭에서 보이는 정보를 맞춘다. */}
+                  <p className={`${ADMIN_SUB} break-all`}>
+                    {inv.recipientEmail
+                      ? `받는 사람 ${inv.recipientEmail}`
+                      : '받는 사람 지정 안 함'}
+                  </p>
                   <p className={`${ADMIN_SUB} min-[1101px]:hidden`}>
-                    발급 <InviteDate value={inv.createdAt} /> · 만료{' '}
-                    <InviteDate value={status.expDate} />
+                    <IssuedExpires createdAt={inv.createdAt} expDate={status.expDate} />
                   </p>
                   {usage && (
                     <p className={`${ADMIN_SUB} break-all min-[1101px]:hidden`}>사용 {usage}</p>
