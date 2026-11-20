@@ -6,8 +6,8 @@ import type * as React from 'react';
 import { CloseIcon } from '@greenhub/ui/components/close-button';
 
 // 알림은 packages/ui의 toast 관리자(toast.add)로 띄운다. 여기서는 그 알림을 Mantine Notification과 같은
-// 모양으로 그린다(① 외형 유지, ui-stack-migration-plan.md §7): 오른쪽 아래, 폭 440px까지, 알림 사이 16px,
-// 흰 바탕·16px 모서리·큰 그림자, 왼쪽 색 막대(경고 노랑, 그 밖 주색), 4초 뒤 닫힘, 오래된 알림이 위,
+// 모양으로 그린다(① 외형 유지, ui-stack-migration-plan.md §7): 폭 440px까지, 알림 사이 16px,
+// 흰 바탕·16px 모서리·큰 그림자, 왼쪽 색 막대(경고 검정, 그 밖 주색), 4초 뒤 닫힘, 오래된 알림이 위,
 // 오른쪽에서 밀려 들어오고 나가며 높이가 0에서 늘거나 0으로 준다(250ms). 전환 방식까지 Mantine과 같게 두어야
 // 먼저 뜬 알림이 밀려 올라가는 동안의 그림이 같아진다.
 
@@ -15,7 +15,8 @@ import { CloseIcon } from '@greenhub/ui/components/close-button';
 export const TOAST_WARNING = 'warning';
 
 const BAR_COLOR: Record<string, string> = {
-  [TOAST_WARNING]: '#fab005',
+  // 노랑은 주문 마감에만 쓴다(design-standard §2). 확인 중·미반영 같은 경고는 무채색 막대다(2026-11-20 사용자 결정).
+  [TOAST_WARNING]: 'var(--color-text)',
 };
 
 function ToastList() {
@@ -43,7 +44,8 @@ function ToastList() {
       <ToastPrimitive.Close
         aria-label="닫기"
         aria-hidden={false}
-        className="relative inline-flex size-7 min-h-7 min-w-7 cursor-pointer appearance-none items-center justify-center rounded-[16px] border-0 bg-transparent p-0 leading-none text-ui-gray-7 select-none hover:bg-ui-gray-0"
+        // 한 손 엄지로 누르는 영역 44px(design-standard §4). 아이콘은 16px 그대로다.
+        className="relative inline-flex size-11 min-h-11 min-w-11 cursor-pointer appearance-none items-center justify-center rounded-[16px] border-0 bg-transparent p-0 leading-none text-ui-gray-7 select-none hover:bg-ui-gray-0 focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         <CloseIcon style={{ width: 16, height: 16 }} />
       </ToastPrimitive.Close>
@@ -58,7 +60,8 @@ export function AppToaster({ children }: { children: React.ReactNode }) {
       <ToastPrimitive.Portal>
         <ToastPrimitive.Viewport
           aria-label="알림"
-          className="fixed right-4 bottom-4 z-[400] w-[calc(100%-32px)] max-w-[440px] outline-none"
+          // 화면 위쪽 머리 아래에 띄운다. 아래쪽에 두면 하단 고정 주요 버튼과 하단 바를 4초 동안 덮었다(2026-11-20 사용자 결정 Q1-A).
+          className="fixed right-4 top-[calc(env(safe-area-inset-top,0px)+56px)] z-[400] w-[calc(100%-32px)] max-w-[440px] outline-none"
         >
           <ToastList />
         </ToastPrimitive.Viewport>
