@@ -41,16 +41,6 @@ export default function BusinessRelationshipNotice() {
         padding: '4px 0 24px',
       }}
     >
-      <p
-        style={{
-          color: 'var(--color-primary-dark)',
-          fontSize: 'var(--font-size-xs)',
-          fontWeight: 'var(--fw-bold)',
-          margin: '0 0 8px',
-        }}
-      >
-        그린러브 운영 안내
-      </p>
       <h2
         id="business-relationship-title"
         style={{

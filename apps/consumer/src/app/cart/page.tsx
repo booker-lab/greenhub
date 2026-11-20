@@ -372,11 +372,12 @@ function RoundValidationNotice({ validation }: { validation: RoundCartValidation
   }
   if (validation.status === 'eligible') {
     return (
-      <p
-        className="m-0 mt-1.5 p-0 text-xs"
-        style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
-      >
-        구매 가능
+      // 상태는 초록 글자가 아니라 점 + 글자다(초록은 행동에만, design-standard §5 "장바구니").
+      // 문단을 flex로 두고 줄 높이를 이전 글자 줄(text-xs, 13px × 1.4)과 같게 둬 아래 배치가 움직이지 않게 한다.
+      <p className="m-0 mt-1.5 flex p-0">
+        <StatusDot size={13} className="leading-[1.4] font-bold">
+          구매 가능
+        </StatusDot>
       </p>
     );
   }
@@ -619,7 +620,8 @@ export default function CartPage() {
                 >
                   <Link
                     href={productHref}
-                    className="col-span-2 m-0 justify-self-start p-0 text-sm [overflow-wrap:anywhere] [word-break:keep-all]"
+                    // 누르는 높이 44px: 글자 줄(22px) 위아래로 11px씩 넓히고 같은 만큼 음수 여백으로 배치는 그대로 둔다.
+                    className="col-span-2 -my-[11px] justify-self-start px-0 py-[11px] text-sm [overflow-wrap:anywhere] [word-break:keep-all]"
                     style={{
                       fontWeight: 'var(--fw-extrabold)',
                       color: 'var(--color-text)',
@@ -837,10 +839,18 @@ export default function CartPage() {
             {isGuest ? items.reduce((sum, item) => sum + item.quantity, 0) : checkoutCount}개
           </p>
         </div>
-        <div
-          className="flex flex-wrap items-baseline justify-between gap-4 pt-2.5"
-          style={{ borderTop: '1px solid var(--color-border)' }}
-        >
+      </div>
+      {/* 하단 고정 바(design-standard §5 "금액 요약 상자 → 하단 고정 결제 버튼", 2026-11-20 사용자 결정 Q1-A): 상품이 많아도
+          총 결제 금액과 결제 버튼이 하단 메뉴(64px) 바로 위에 붙어 보이고, 화면 끝에서는 요약 상자 아래 제자리에 놓인다. */}
+      <div
+        className="sticky z-10 -mx-4 flex flex-col px-4 py-3"
+        style={{
+          background: 'var(--color-bg)',
+          bottom: 'calc(64px + env(safe-area-inset-bottom))',
+          boxShadow: 'var(--bar-shadow)',
+        }}
+      >
+        <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-4">
           <p
             className="m-0 p-0 text-sm"
             style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
@@ -848,7 +858,7 @@ export default function CartPage() {
             총 결제 금액
           </p>
           <p
-            className="m-0 p-0 leading-[1.55]"
+            className="m-0 min-w-0 p-0 leading-[34px]"
             style={{
               color: 'var(--color-text)',
               fontSize: 22,
@@ -859,50 +869,50 @@ export default function CartPage() {
             {(isGuest ? guestAmount : checkoutAmount).toLocaleString('ko-KR')}원
           </p>
         </div>
-      </div>
-      {hasLegacyValidationIssues && (
-        <p
-          className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
-          style={{ color: 'var(--color-text-secondary)' }}
-        >
-          문제 있는 상품을 다시 선택하면 결제할 수 있어요.
-        </p>
-      )}
-      {isGuest ? (
-        // 비로그인 장바구니(guest-cart): 로그인한 뒤 같은 장바구니로 돌아온다.
-        // 회차 주문이 끝났으면 로그인해도 주문할 수 없으므로 버튼을 막고 이유를 보인다.
-        <>
-          {roundOrderClosed && (
-            <p
-              className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
-              style={{ color: 'var(--color-text-secondary)' }}
+        {hasLegacyValidationIssues && (
+          <p
+            className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            문제 있는 상품을 다시 선택하면 결제할 수 있어요.
+          </p>
+        )}
+        {isGuest ? (
+          // 비로그인 장바구니(guest-cart): 로그인한 뒤 같은 장바구니로 돌아온다.
+          // 회차 주문이 끝났으면 로그인해도 주문할 수 없으므로 버튼을 막고 이유를 보인다.
+          <>
+            {roundOrderClosed && (
+              <p
+                className="m-0 mb-2.5 p-0 text-center text-sm font-normal"
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                이번 회차 주문이 마감돼서 지금은 주문할 수 없어요.
+              </p>
+            )}
+            <Button
+              size="lg"
+              className="w-full"
+              disabled={roundOrderClosed}
+              onClick={handleCheckout}
             >
-              이번 회차 주문이 마감돼서 지금은 주문할 수 없어요.
-            </p>
-          )}
+              로그인하고 주문하기
+            </Button>
+          </>
+        ) : (
           <Button
             size="lg"
             className="w-full"
-            disabled={roundOrderClosed}
+            disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
             onClick={handleCheckout}
           >
-            로그인하고 주문하기
+            {isChecking
+              ? '구매 가능 여부 확인 중'
+              : isRoundCart
+                ? `${checkoutCount}개 상품 한 번에 결제`
+                : '결제하기'}
           </Button>
-        </>
-      ) : (
-        <Button
-          size="lg"
-          className="w-full"
-          disabled={checkoutItems.length === 0 || isChecking || hasLegacyValidationIssues}
-          onClick={handleCheckout}
-        >
-          {isChecking
-            ? '구매 가능 여부 확인 중'
-            : isRoundCart
-              ? `${checkoutCount}개 상품 한 번에 결제`
-              : '결제하기'}
-        </Button>
-      )}
+        )}
+      </div>
     </div>
   );
 }

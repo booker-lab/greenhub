@@ -78,6 +78,7 @@ test('의미 있는 안내 구획과 제목을 제공한다', () => {
   assert.match(componentSource, /<section/);
   assert.match(componentSource, /aria-labelledby="business-relationship-title"/);
   assert.match(componentSource, /<h2[^>]*id="business-relationship-title"/);
-  assert.match(componentSource, /그린러브 운영 안내/);
+  // 제목 위 작은 라벨(eyebrow)은 두지 않는다(design-direction.md §3.1).
+  assert.doesNotMatch(componentSource, /그린러브 운영 안내/);
   assert.doesNotMatch(componentSource, /['"]use client['"]/);
 });

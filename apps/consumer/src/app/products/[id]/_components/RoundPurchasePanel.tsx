@@ -31,6 +31,15 @@ export default function RoundPurchasePanel({
           ? '판매 예정 회차'
           : '구매 불가';
   const deliveryDay = formatRoundDay(round.schedule.deliveryEndAt);
+  // 18px 줄의 뜻 묶음(구매 불가 사유 → 언제 → 어디서).
+  const arrivalPhrases = [
+    statusLabel ? { text: statusLabel, strong: true } : null,
+    {
+      text: deliveryDay ? `${deliveryDay} 문 앞 도착` : '화요일 오전 9시까지 문 앞 도착',
+      strong: false,
+    },
+    { text: '경기도 이천시 직접 배송', strong: false },
+  ].filter((phrase): phrase is { text: string; strong: boolean } => phrase !== null);
 
   const steps = [
     notOpenYet
@@ -67,21 +76,39 @@ export default function RoundPurchasePanel({
       >
         {item.productNameSnapshot}
       </h1>
+      {/* 줄은 뜻 묶음 사이에서만 바뀐다("직접 배 / 송"처럼 낱말 중간에서 끊기지 않는다). 가운뎃점은 묶음 왼쪽 여백에
+          두고, 줄 머리에 온 것은 바깥 overflow-hidden과 안쪽 음수 여백으로 가린다. 읽히는 글자는 "A · B · C" 그대로다. */}
       <p
-        className="m-0 mt-2 p-0"
+        className="m-0 mt-2 overflow-hidden p-0"
         style={{
           color: 'var(--color-text-secondary)',
           fontSize: 'var(--font-size-lg)',
           lineHeight: 1.45,
         }}
       >
-        {statusLabel && (
-          <span style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}>
-            {statusLabel} ·{' '}
-          </span>
-        )}
-        {deliveryDay ? `${deliveryDay} 문 앞 도착` : '화요일 오전 9시까지 문 앞 도착'} · 경기도
-        이천시 직접 배송
+        <span className="-ml-[0.8em] flex flex-row flex-wrap">
+          {arrivalPhrases.map((phrase, index) => (
+            <span
+              key={phrase.text}
+              className="relative max-w-full pl-[0.8em] whitespace-nowrap"
+              style={
+                phrase.strong
+                  ? { color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }
+                  : undefined
+              }
+            >
+              {index > 0 && (
+                <span
+                  className="absolute top-0 left-0 w-[0.8em] text-center whitespace-pre"
+                  style={{ color: 'var(--color-text-secondary)', fontWeight: 'var(--fw-regular)' }}
+                >
+                  {' · '}
+                </span>
+              )}
+              {phrase.text}
+            </span>
+          ))}
+        </span>
       </p>
       <div className="mt-3 flex flex-row flex-wrap items-baseline justify-start gap-2">
         <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-text-secondary)' }}>
