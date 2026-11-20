@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { EMPTY_FIELD, formatJoinedDate, formatPhone } from './_lib';
+import { EMPTY_FIELD, formatJoinedDate, formatPhone, maskPhone } from './_lib';
 
 describe('formatJoinedDate', () => {
   it('ISO 문자열을 KST 날짜로 표기한다', () => {
@@ -43,5 +43,17 @@ describe('formatPhone', () => {
     ['공백만', '   '],
   ])('%s는 자리표시자를 반환한다', (_label, value) => {
     expect(formatPhone(value)).toBe(EMPTY_FIELD);
+  });
+});
+
+describe('maskPhone', () => {
+  it('앞 3자리·끝 4자리만 남기고 가운데 숫자를 가린다', () => {
+    expect(maskPhone('010-1234-5678')).toBe('010-****-5678');
+    expect(maskPhone(' 01012345678 ')).toBe('010****5678');
+    expect(maskPhone('02-123-4567')).toBe('02-1**-4567');
+  });
+
+  it('8자리 미만이면 그대로 둔다', () => {
+    expect(maskPhone('1588-12')).toBe('1588-12');
   });
 });

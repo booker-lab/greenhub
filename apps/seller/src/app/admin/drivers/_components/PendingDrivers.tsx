@@ -73,7 +73,7 @@ export function PendingDrivers({
               <Button
                 onClick={() => onApprove(driver.id)}
                 disabled={processing}
-                className="rounded-[8px]"
+                className="rounded-[8px] max-[1100px]:h-11"
                 aria-label={`기사 ${driverName(driver)} 승인`}
               >
                 {processing ? '처리 중…' : '승인…'}

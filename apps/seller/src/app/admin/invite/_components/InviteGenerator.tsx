@@ -92,7 +92,9 @@ export function InviteGenerator({
 
   return (
     <div className="mb-8 block rounded-[8px] border border-rule bg-card p-4 min-[641px]:p-5">
-      <p className={`${TEXT} mb-4 text-[15px] leading-[22px] text-[var(--color-text-secondary)]`}>
+      <p
+        className={`${TEXT} mb-4 text-[15px] leading-[22px] text-[var(--color-text-secondary)] [word-break:keep-all]`}
+      >
         판매자 초대 링크를 만듭니다. 링크는 발급 후 <strong>72시간</strong> 동안 한 번만 쓸 수 있고,
         받는 분이 링크를 열어 카카오로 로그인하면 판매자로 가입돼요.
       </p>
