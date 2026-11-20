@@ -289,9 +289,9 @@ function RoundDirectCategory({
         </div>
       )}
       <section aria-labelledby="current-category-round">
-        <h4 id="current-category-round" className={SECTION_TITLE} style={SECTION_TITLE_STYLE}>
+        <h2 id="current-category-round" className={SECTION_TITLE} style={SECTION_TITLE_STYLE}>
           {currentRound?.status === 'SCHEDULED' ? '판매 예정 회차' : '이번 주 회차'}
-        </h4>
+        </h2>
         {currentRound && currentItems.length > 0 ? (
           <div className="flex flex-col items-stretch justify-start gap-3">
             <p
@@ -336,9 +336,9 @@ function RoundDirectCategory({
       <hr className={DIVIDER} />
 
       <section aria-labelledby="past-category-round">
-        <h4 id="past-category-round" className={SECTION_TITLE} style={SECTION_TITLE_STYLE}>
+        <h2 id="past-category-round" className={SECTION_TITLE} style={SECTION_TITLE_STYLE}>
           지난 회차
-        </h4>
+        </h2>
         {pastRoundItems.length > 0 ? (
           <div className="flex flex-col items-stretch justify-start gap-8">
             {pastRoundItems.map(({ round, items }) => (
@@ -577,12 +577,13 @@ export default function CategoryPage() {
   return (
     <div className="mx-auto max-w-[720px] px-4 pb-24">
       <div className="pt-5 pb-4">
-        <h3
+        {/* 화면 제목은 h1, 구역 제목은 h2다(모양은 그대로). */}
+        <h1
           className="m-0 text-[22px] leading-[1.4]"
           style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
         >
           상품
-        </h3>
+        </h1>
       </div>
       <div>{content}</div>
     </div>
