@@ -882,22 +882,20 @@ function OrderDetail({ orderId }: { orderId: string }) {
               // 상자 면을 두지 않는다. 연회색 상자 안에 같은 회색 계열 버튼 면을 두면 어둠에서 버튼 경계가 사라진다.
               className="flex flex-col gap-2"
             >
-              <div className="flex flex-col gap-0.5">
-                <p className={text} style={mutedText}>
-                  수거
-                </p>
-                <p
-                  className={text}
-                  style={{
-                    fontWeight: 'var(--fw-bold)',
-                    color: 'var(--color-text)',
-                    wordBreak: 'keep-all',
-                    overflowWrap: 'anywhere',
-                  }}
-                >
-                  {[pickup.storeName, pickup.address].filter(Boolean).join(' · ')}
-                </p>
-              </div>
+              {/* "수거: 가게 이름 · 주소" 한 줄은 목록 행과 같은 글자이고 회차 E2E가 이 글자로 찾는 계약이다. */}
+              <p
+                className={text}
+                style={{
+                  fontWeight: 'var(--fw-bold)',
+                  color: 'var(--color-text)',
+                  wordBreak: 'keep-all',
+                  overflowWrap: 'anywhere',
+                  // 번지 같은 짧은 낱말 하나만 다음 줄로 넘어가지 않게 줄 끝을 고르게 맞춘다.
+                  textWrap: 'pretty',
+                }}
+              >
+                {pickup.label}
+              </p>
               {pickup.mapHref && (
                 <a
                   href={pickup.mapHref}
