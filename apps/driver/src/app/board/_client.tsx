@@ -926,27 +926,37 @@ function OrderList({
       : takeDeliveringFirstScreen(delivering, FIRST_SCREEN_ROWS);
     const nextCard = shown.next && <OrderCard order={shown.next} tab={tab} variant="next" />;
     const toDeliverTotal = delivering.rest.length + (delivering.next ? 1 : 0);
+    if (delivering.held.length > 0) {
+      // 더 보기는 가려진 행이 있는 묶음 끝에 그 묶음의 가려진 수로 둔다. 보류 묶음 밑에 두면 누른 뒤
+      // 위쪽 "배송할 주문"에 행이 늘어 어디가 펼쳐졌는지 찾아야 한다.
+      const restHidden = delivering.rest.length - shown.rest.length;
+      const heldHidden = delivering.held.length - shown.held.length;
+      return (
+        <>
+          {toDeliverTotal > 0 && (
+            <OrderGroup
+              title="배송할 주문"
+              total={toDeliverTotal}
+              orders={shown.rest}
+              tab={tab}
+              lead={nextCard}
+              footer={<ShowMoreButton hidden={restHidden} onClick={() => setExpanded(true)} />}
+            />
+          )}
+          <OrderGroup
+            title="보류"
+            total={delivering.held.length}
+            orders={shown.held}
+            tab={tab}
+            footer={<ShowMoreButton hidden={heldHidden} onClick={() => setExpanded(true)} />}
+          />
+        </>
+      );
+    }
     return (
       <>
-        {delivering.held.length > 0 ? (
-          <>
-            {toDeliverTotal > 0 && (
-              <OrderGroup
-                title="배송할 주문"
-                total={toDeliverTotal}
-                orders={shown.rest}
-                tab={tab}
-                lead={nextCard}
-              />
-            )}
-            <OrderGroup title="보류" total={delivering.held.length} orders={shown.held} tab={tab} />
-          </>
-        ) : (
-          <>
-            {nextCard}
-            <OrderRows orders={shown.rest} tab={tab} />
-          </>
-        )}
+        {nextCard}
+        <OrderRows orders={shown.rest} tab={tab} />
         <ShowMoreButton hidden={shown.hidden} onClick={() => setExpanded(true)} />
       </>
     );
@@ -967,6 +977,7 @@ function OrderGroup({
   title,
   hint,
   lead,
+  footer,
   total,
   orders,
   tab,
@@ -976,6 +987,8 @@ function OrderGroup({
   hint?: string;
   /** 행 목록 앞에 두는 카드(배송 중 탭의 "다음 배송지"). */
   lead?: ReactNode;
+  /** 행 목록 뒤에 두는 것(이 묶음의 "남은 n곳 더 보기"). */
+  footer?: ReactNode;
   /** 묶음 전체 행 수. orders는 첫 화면에 보이는 앞부분일 수 있다. */
   total: number;
   orders: DriverListOrder[];
@@ -1005,6 +1018,7 @@ function OrderGroup({
       )}
       {lead}
       <OrderRows orders={orders} tab={tab} batch={batch} />
+      {footer}
     </section>
   );
 }
@@ -1120,23 +1134,31 @@ function DeliveryProgress({
           fontSize: 'var(--font-size-sm)',
           color: 'var(--driver-text-muted)',
           fontVariantNumeric: 'tabular-nums',
-          // 항목이 늘어 두 줄이 될 때 "오늘 / 완료"처럼 낱말 중간에서 끊기지 않게 낱말 단위로 줄을 바꾼다.
+          // 항목이 늘어 두 줄이 될 때 "오늘 / 완료"처럼 항목 중간에서 끊기지 않게 항목마다 한 덩어리로 묶고
+          // 항목 사이(" · ")에서만 줄을 바꾼다. keep-all만으로는 낱말 사이 줄바꿈을 막지 못한다.
           wordBreak: 'keep-all',
         }}
       >
-        남은 배송 {toDeliver}곳
+        <span className="whitespace-nowrap">남은 배송 {toDeliver}곳</span>
         {held > 0 && (
           <>
             {' · '}
-            <span style={{ color: 'var(--color-danger)', fontWeight: 'var(--fw-bold)' }}>
+            <span
+              className="whitespace-nowrap"
+              style={{ color: 'var(--color-danger)', fontWeight: 'var(--fw-bold)' }}
+            >
               보류 {held}곳
             </span>
           </>
         )}
-        {' · '}수거 {myPreparing.length}곳
+        {' · '}
+        <span className="whitespace-nowrap">수거 {myPreparing.length}곳</span>
         {preparingGroups && preparingGroups.available.length > 0 && (
           <>
-            {' · '}맡을 수 있는 {preparingGroups.available.length}곳
+            {' · '}
+            <span className="whitespace-nowrap">
+              맡을 수 있는 {preparingGroups.available.length}곳
+            </span>
           </>
         )}
         {completedToday !== null && completedToday > 0 && (
@@ -1147,14 +1169,19 @@ function DeliveryProgress({
               href="/board/completed"
               prefetch={false}
               // 글줄 높이는 그대로 두고 위아래 여백으로 누를 자리만 넓힌다(인라인 요소의 세로 여백은 줄을 밀지 않는다).
-              className="py-2 underline underline-offset-4"
+              className="whitespace-nowrap py-2 underline underline-offset-4"
               style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
             >
               오늘 완료 {completedToday}곳
             </Link>
           </>
         )}
-        {completedToday === 0 && <>{' · '}오늘 완료 0곳</>}
+        {completedToday === 0 && (
+          <>
+            {' · '}
+            <span className="whitespace-nowrap">오늘 완료 0곳</span>
+          </>
+        )}
       </p>
     </div>
   );

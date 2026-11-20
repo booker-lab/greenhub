@@ -349,7 +349,9 @@ export default function MapPage() {
                     {group.orders.length}
                   </span>
                 </h2>
-                {group.orders.map((order) => {
+                {/* 배송판과 같은 목록: 테두리 상자 없이 행 + 행 사이 선(design-direction.md §6, 2026-11-19 사용자 결정). */}
+                <div>
+                {group.orders.map((order, index) => {
                   // 동·호수(상세 주소)를 앞에 쓴다. 거점은 거점 이름이 앞이다.
                   const addr = mapStopAddressLine(order);
                   // stale(error) 상태에서는 목록 행 지도 링크도 fail-closed로 숨긴다.
@@ -361,16 +363,20 @@ export default function MapPage() {
                         display: 'flex',
                         alignItems: 'center',
                         gap: 12,
-                        backgroundColor: 'var(--color-bg)',
-                        borderRadius: 12,
-                        border: 'var(--border)',
-                        padding: '12px 16px',
+                        padding: '12px 0',
+                        borderTop: index === 0 ? undefined : 'var(--border)',
                       }}
                     >
                       <div style={{ flex: 1, minWidth: 0 }}>
+                        {/* 주소는 찾아갈 곳이라 말줄임 없이 낱말 단위로 줄을 바꾼다. */}
                         <p
-                          className={cn(text, 'truncate')}
-                          style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+                          className={text}
+                          style={{
+                            fontSize: 'var(--font-size-md)',
+                            fontWeight: 'var(--fw-bold)',
+                            wordBreak: 'keep-all',
+                            overflowWrap: 'anywhere',
+                          }}
                         >
                           {addr}
                         </p>
@@ -385,20 +391,27 @@ export default function MapPage() {
                         </p>
                       </div>
                       {mapLink && (
-                        <AppButton
+                        // 전화·길 찾기와 같은 회색 면 + 검정 글자, 엄지 44px(초록은 하단 주요 버튼에만).
+                        <a
                           href={mapLink.href}
                           target="_blank"
                           rel="noopener noreferrer"
-                          size="xs"
-                          tone="brand-light"
                           aria-label={`${addr} 카카오맵에서 열기`}
+                          className="inline-flex min-h-11 min-w-16 shrink-0 items-center justify-center rounded-full px-4 no-underline focus-visible:outline-2 focus-visible:outline-offset-2"
+                          style={{
+                            backgroundColor: 'var(--driver-action-surface)',
+                            color: 'var(--color-text)',
+                            fontSize: 'var(--font-size-sm)',
+                            fontWeight: 'var(--fw-bold)',
+                          }}
                         >
                           지도
-                        </AppButton>
+                        </a>
                       )}
                     </div>
                   );
                 })}
+                </div>
               </section>
             ))}
           </div>
@@ -420,13 +433,13 @@ export default function MapPage() {
               target="_blank"
               rel="noopener noreferrer"
               fullWidth
-              size="lg"
+              size="xl"
             >
               다음 배송지 카카오맵에서 열기
             </AppButton>
           ) : (
             <div className="flex flex-col gap-2.5">
-              <AppButton fullWidth size="lg" tone="gray" disabled>
+              <AppButton fullWidth size="xl" tone="gray" disabled>
                 다음 배송지 카카오맵에서 열기
               </AppButton>
               {nextStop ? (
@@ -465,7 +478,7 @@ export default function MapPage() {
           }}
         >
           <div className="flex flex-col gap-2.5">
-            <AppButton fullWidth size="lg" tone="gray" disabled>
+            <AppButton fullWidth size="xl" tone="gray" disabled>
               다음 배송지 카카오맵에서 열기
             </AppButton>
             <p

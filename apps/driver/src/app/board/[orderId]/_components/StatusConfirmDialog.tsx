@@ -106,10 +106,10 @@ export function StatusConfirmDialog({
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center justify-end gap-4">
-                    <AppButton tone="default" onClick={onClose}>
+                    <AppButton tone="default" size="md" className="h-11" onClick={onClose}>
                       취소
                     </AppButton>
-                    <AppButton disabled={confirmDisabled} onClick={onConfirm}>
+                    <AppButton size="md" className="h-11" disabled={confirmDisabled} onClick={onConfirm}>
                       {content.confirmLabel}
                     </AppButton>
                   </div>
