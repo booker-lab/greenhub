@@ -488,6 +488,11 @@ function MenuLink({ label, onClick }: { label: string; onClick: () => void }) {
 
 // 고객센터 전화 연결. 번호·상담 시간은 footer와 같은 공개 사업자 정보(PUBLIC_BUSINESS_INFO)를 쓴다.
 function SupportCallLink() {
+  // 상담 시간 "09:00~18:00 (점심시간 12:00~13:00)"을 첫 괄호 앞뒤로 나눈다. 괄호가 없으면 한 덩어리로 쓴다.
+  const supportHours = PUBLIC_BUSINESS_INFO.supportHours;
+  const noteStart = supportHours.indexOf(' (');
+  const supportHoursMain = noteStart > 0 ? supportHours.slice(0, noteStart) : supportHours;
+  const supportHoursNote = noteStart > 0 ? supportHours.slice(noteStart + 1) : '';
   return (
     <a
       href={PUBLIC_BUSINESS_INFO.phoneHref}
@@ -520,7 +525,14 @@ function SupportCallLink() {
           className={TEXT}
           style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
         >
-          상담 시간 {PUBLIC_BUSINESS_INFO.supportHours}
+          {/* 괄호 묶음("(점심시간 …)")은 통째로 다음 줄로 넘긴다. 읽히는 글자는 그대로다. */}
+          상담 시간 {supportHoursMain}
+          {supportHoursNote && (
+            <>
+              {' '}
+              <span className="whitespace-nowrap">{supportHoursNote}</span>
+            </>
+          )}
         </p>
       </div>
       <ChevronRight size={18} color="var(--color-text-disabled)" aria-hidden />
