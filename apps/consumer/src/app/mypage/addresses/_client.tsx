@@ -338,12 +338,13 @@ export default function AddressesClient() {
     <div className="mx-auto max-w-[720px] px-4 pt-5 pb-20">
       <div className="mb-5 flex flex-row flex-wrap items-center justify-start gap-2.5">
         <MyPageBackButton />
-        <p
+        {/* 화면 제목은 제목 요소로 둔다(화면 읽기가 제목으로 잡는다). 모양은 그대로다. */}
+        <h1
           className={TEXT}
           style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}
         >
           배송지 관리
-        </p>
+        </h1>
       </div>
 
       {(error || actionError) && (

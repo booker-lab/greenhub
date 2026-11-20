@@ -195,12 +195,13 @@ function SettingsHeader({ onBack }: { onBack: () => void }) {
       >
         <ChevronLeft size={20} className="size-5" />
       </Button>
-      <h2
+      {/* 이 화면의 제목이므로 h1이다(모양은 그대로). */}
+      <h1
         className="m-0 leading-[1.35]"
         style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)' }}
       >
         마케팅 알림 설정
-      </h2>
+      </h1>
     </div>
   );
 }

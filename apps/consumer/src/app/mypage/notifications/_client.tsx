@@ -270,12 +270,13 @@ export default function NotificationsClient() {
         }}
       >
         <MyPageBackButton />
-        <p
+        {/* 화면 제목은 제목 요소로 둔다(화면 읽기가 제목으로 잡는다). 모양은 그대로다. */}
+        <h1
           className={TEXT}
           style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-lg)', flex: 1 }}
         >
           알림 내역
-        </p>
+        </h1>
         {unreadCount > 0 && (
           <Button
             type="button"
