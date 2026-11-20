@@ -41,10 +41,12 @@ export function DailySummaryTab({
         </p>
         <input
           type="date"
+          aria-label="조회 날짜"
           value={selectedDate}
           max={today}
           onChange={(e) => setSelectedDate(e.target.value)}
           style={{
+            minHeight: 44,
             padding: '6px 10px',
             border: '1px solid var(--color-border)',
             borderRadius: 12,

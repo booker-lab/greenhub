@@ -77,7 +77,7 @@ export function ResolveIssueModal({ issue, onClose, onConfirm }: ResolveIssueMod
               </p>
             )}
             <p
-              className={TEXT}
+              className={`${TEXT} break-keep`}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               어떻게 처리했는지 메모로 남겨 주세요. 닫으면 홈 "운영 확인"과 아침 요약에서 빠지고,
@@ -119,7 +119,7 @@ export function ResolveIssueModal({ issue, onClose, onConfirm }: ResolveIssueMod
                 onClick={() => void handleConfirm()}
                 loading={submitting}
                 disabled={!valid}
-                className="flex-1"
+                className="h-11 flex-1"
                 style={{ fontWeight: 'var(--fw-medium)' }}
               >
                 해결로 닫기
@@ -128,7 +128,7 @@ export function ResolveIssueModal({ issue, onClose, onConfirm }: ResolveIssueMod
                 onClick={onClose}
                 disabled={submitting}
                 variant="outline-gray"
-                className="flex-1"
+                className="h-11 flex-1"
               >
                 취소
               </Button>

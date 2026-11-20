@@ -23,7 +23,7 @@ export function LoadMoreSettlements({
   return (
     <div className="flex flex-col items-center gap-1.5 py-3">
       <p
-        className={`${TEXT} text-center`}
+        className={`${TEXT} text-center break-keep`}
         style={{ fontSize: 'var(--font-size-xs)', color: 'var(--color-text-secondary)' }}
       >
         {loadedCount}건까지 불러왔습니다. 정산이 더 있으며, CSV에는 불러온 건만 담깁니다.
@@ -36,7 +36,13 @@ export function LoadMoreSettlements({
           {error}
         </p>
       )}
-      <LoadingButton measured variant="light" onClick={onLoadMore} loading={loadingMore}>
+      <LoadingButton
+        measured
+        variant="light"
+        className="h-11"
+        onClick={onLoadMore}
+        loading={loadingMore}
+      >
         더 보기
       </LoadingButton>
     </div>
