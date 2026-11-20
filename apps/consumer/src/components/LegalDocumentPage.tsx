@@ -51,16 +51,7 @@ export default function LegalDocumentPage({
             padding: '20px 0 24px',
           }}
         >
-          <p
-            style={{
-              color: 'var(--color-primary-dark)',
-              fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--fw-bold)',
-              margin: '0 0 8px',
-            }}
-          >
-            {PUBLIC_BUSINESS_INFO.brand} 법적 고지
-          </p>
+          {/* 제목 위 작은 라벨(eyebrow)은 두지 않는다(design-direction.md §3.1). 문서 이름은 아래 제목이 말한다. */}
           <h1
             style={{
               fontSize: 'clamp(1.75rem, 7vw, 2.25rem)',
