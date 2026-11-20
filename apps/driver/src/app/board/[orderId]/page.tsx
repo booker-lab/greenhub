@@ -698,12 +698,13 @@ function OrderDetail({ orderId }: { orderId: string }) {
   });
   // 문 앞에서 가장 중요한 동·호수를 크게 쓴다. 거점은 거점 이름이 제목이고 주소가 보조다.
   const addressParts = readAddressParts(order);
-  // 단계마다 보이는 전화는 하나다(판매자: 수거 대기·거점 배송 중, 소비자: 직배송 배송 중·보류). 노출 규칙은 API가 정한다.
+  // 단계마다 보이는 전화는 하나다(판매자: 수거 대기·거점 배송 중, 받는 분: 직배송 배송 중·보류). 노출 규칙은 API가 정한다.
+  // 손님 쪽 이름은 같은 화면의 "받는 분 OOO"과 같게 "받는 분"으로 쓴다(2026-11-19 사용자 결정).
   const contact =
     isPreparing && order.sellerPhone
       ? { label: '판매자', phone: order.sellerPhone }
       : (isDelivering || isHeld) && !isHub && order.buyerPhone
-        ? { label: '소비자', phone: order.buyerPhone }
+        ? { label: '받는 분', phone: order.buyerPhone }
         : isDelivering && isHub && order.sellerPhone
           ? { label: '판매자', phone: order.sellerPhone }
           : null;
@@ -785,9 +786,22 @@ function OrderDetail({ orderId }: { orderId: string }) {
             {METHOD_LABEL[order.deliveryMethod] ?? order.deliveryMethod}
           </p>
           {isPreparing && (
-            <p className={text} style={mutedText}>
-              · 수거 {preparedAtStr}
-            </p>
+            <>
+              {/* 상태 글자는 "배송 중"·"배송 보류"와 같은 자리·굵기로 쓴다. */}
+              <p
+                className={text}
+                style={{
+                  fontSize: 'var(--font-size-sm)',
+                  fontWeight: 'var(--fw-bold)',
+                  color: 'var(--color-text)',
+                }}
+              >
+                수거 대기
+              </p>
+              <p className={text} style={mutedText}>
+                · 수거 {preparedAtStr}
+              </p>
+            </>
           )}
           {isDelivering && (
             <p
@@ -865,20 +879,25 @@ function OrderDetail({ orderId }: { orderId: string }) {
           {/* 수거 대기에서는 먼저 들를 수거 장소를 배송지보다 위에 둔다. */}
           {pickup && (
             <div
-              className="flex flex-col gap-2 rounded-[var(--radius)] p-4"
-              style={{ backgroundColor: 'var(--color-surface-muted)' }}
+              // 상자 면을 두지 않는다. 연회색 상자 안에 같은 회색 계열 버튼 면을 두면 어둠에서 버튼 경계가 사라진다.
+              className="flex flex-col gap-2"
             >
-              <p
-                className={text}
-                style={{
-                  fontWeight: 'var(--fw-bold)',
-                  color: 'var(--color-text)',
-                  wordBreak: 'keep-all',
-                  overflowWrap: 'anywhere',
-                }}
-              >
-                {pickup.label}
-              </p>
+              <div className="flex flex-col gap-0.5">
+                <p className={text} style={mutedText}>
+                  수거
+                </p>
+                <p
+                  className={text}
+                  style={{
+                    fontWeight: 'var(--fw-bold)',
+                    color: 'var(--color-text)',
+                    wordBreak: 'keep-all',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {[pickup.storeName, pickup.address].filter(Boolean).join(' · ')}
+                </p>
+              </div>
               {pickup.mapHref && (
                 <a
                   href={pickup.mapHref}
@@ -1029,7 +1048,10 @@ function OrderDetail({ orderId }: { orderId: string }) {
                 {paymentPresentation.label}
               </p>
               <p className={text} style={{ ...mutedText, color: 'var(--color-text)' }}>
-                재배송비 결제 · {paymentPresentation.description}
+                {/* 제목이 이미 "재배송비 …"이면 같은 말을 되풀이하지 않는다. "운영 확인 필요"처럼 제목에 없을 때만 붙인다. */}
+                {paymentPresentation.label.startsWith('재배송비')
+                  ? paymentPresentation.description
+                  : `재배송비 결제 · ${paymentPresentation.description}`}
               </p>
               {paymentPresentation.needsOps && (
                 // 운영 확인이 필요한 결제 상태는 기사가 풀 수 없으므로 운영팀 전화로 바로 잇는다(D-18).

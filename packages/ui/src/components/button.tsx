@@ -13,9 +13,9 @@ import { cn } from '../lib/utils';
 // 초점 표시는 Mantine focusRing auto와 같은 주색 2px 외곽선(간격 2px)이다.
 // 모서리는 rounded-full(9999px)이 아니라 Mantine과 같은 32px이고, Mantine처럼 position: relative·overflow: hidden이다.
 // 색은 판매자 앱 대조 화면(/dev/ui-compare, scripts/visual/compare-cells.mjs)에서 Mantine 계산값을 읽어 맞췄다.
-// light·subtle은 Mantine brand-1·brand-9, 회색 글자는 gray-9, 위험은 red-6, 비활성은 gray-2 면·gray-5 글자다.
+// light·subtle은 Mantine brand-1·brand-9, 회색 글자는 gray-9, 위험 채운 면은 #D92D20(흰 글자 4.8:1, 2026-11-19 red-6에서 바꿈), 비활성은 gray-2 면·gray-5 글자다.
 // 마우스 올림 색도 Mantine 9 계산값(판매자 앱 MantineProvider의 --mantine-color-*-hover)과 같다. filled는 한 단계 짙은 색
-// (brand-7 #008A4B·red-7 #f03e3e), light·subtle은 *-light-hover(brand-2·gray-2·red-2·blue-2·green-2),
+// (brand-7 #008A4B·위험 #B42318), light·subtle은 *-light-hover(brand-2·gray-2·red-2·blue-2·green-2),
 // outline은 테두리색 5%, default는 gray-0이다. light 노랑은 theme.ts가 hover를 면색과 같게 둔다.
 const buttonVariants = cva(
   'group/button relative inline-flex shrink-0 overflow-hidden cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-transparent text-sm leading-none font-semibold whitespace-nowrap normal-case no-underline transition-all outline-none select-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary focus-visible:outline-solid active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:cursor-not-allowed disabled:border-transparent disabled:bg-ui-gray-2 disabled:text-ui-gray-5 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*=size-])]:size-4',
