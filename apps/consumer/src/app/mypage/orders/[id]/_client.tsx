@@ -175,7 +175,7 @@ function SegmentedChoice<T extends string>({
               data-active={(selected && !disabled) || undefined}
               data-disabled={disabled || undefined}
               // 한 줄 라벨의 줄 높이를 44px로 두어 눌리는 영역을 맞춘다(design-standard §4).
-              className={`relative block cursor-pointer overflow-hidden rounded-[12px] px-2.5 py-0 text-center text-[15px] leading-11 font-semibold text-ellipsis whitespace-nowrap select-none [-webkit-tap-highlight-color:transparent] peer-focus-visible:outline-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid ${
+              className={`relative block cursor-pointer overflow-hidden rounded-[12px] px-2.5 py-0 text-center text-[15px] leading-11 font-normal text-ellipsis whitespace-nowrap select-none [-webkit-tap-highlight-color:transparent] peer-focus-visible:outline-2 peer-focus-visible:outline-primary peer-focus-visible:outline-solid ${
                 disabled
                   ? 'cursor-not-allowed text-ui-gray-5'
                   : selected

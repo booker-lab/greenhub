@@ -59,7 +59,7 @@ export default function ProductTopBar() {
           }}
         >
           <ChevronLeft size={22} strokeWidth={2.2} />
-          <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}>
+          <span style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-regular)' }}>
             뒤로
           </span>
         </button>

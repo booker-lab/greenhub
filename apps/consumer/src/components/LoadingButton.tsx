@@ -25,7 +25,13 @@ function LoadingButton({
       loading={loading}
       size={size}
       buttonHeight={buttonHeight ?? touchButtonHeight(size)}
-      className={cn(touchButtonClassName(size), loading && REDUCED_MOTION_LOADER, className)}
+      // 글자 굵기 700(font-bold): 소비자 Button과 같다(디자인 기준 §3).
+      className={cn(
+        touchButtonClassName(size),
+        'font-bold',
+        loading && REDUCED_MOTION_LOADER,
+        className,
+      )}
       {...props}
     />
   );

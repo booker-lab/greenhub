@@ -264,6 +264,7 @@ export default function OptionSheet({
 
               <Button
                 size="lg"
+                className="font-bold"
                 disabled={!selection}
                 onClick={() => selection && onConfirm(selection, quantity, intent)}
               >
