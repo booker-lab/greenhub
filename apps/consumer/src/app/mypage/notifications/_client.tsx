@@ -163,7 +163,7 @@ function NotificationItem({
             className={TEXT}
             style={{
               fontSize: 'var(--font-size-sm)',
-              fontWeight: isRead ? 'var(--fw-medium)' : 'var(--fw-bold)',
+              fontWeight: isRead ? 'var(--fw-regular)' : 'var(--fw-bold)',
               color: 'var(--color-text)',
             }}
           >

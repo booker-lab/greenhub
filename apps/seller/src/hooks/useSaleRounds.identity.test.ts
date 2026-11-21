@@ -160,7 +160,7 @@ describe('useSaleRounds — 토큰 갱신과 요청 함수 정체성', () => {
     const signedOut = render({ data: { user: { storeId: 'store-a' } }, status: 'authenticated' });
 
     await expect(signedOut.getRound('round-a')).rejects.toThrow(
-      '셀러 스토어 인증 정보를 확인할 수 없습니다.',
+      '판매자 가게 정보를 확인할 수 없습니다.',
     );
     expect(apiJson).not.toHaveBeenCalled();
   });
@@ -227,7 +227,7 @@ describe('useSaleRounds — 토큰 갱신과 회차 목록 재조회', () => {
 
     expect(apiJson).toHaveBeenCalledTimes(1);
     expect(signedOut.rounds).toEqual([]);
-    expect(signedOut.error).toBe('셀러 스토어 인증 정보를 확인할 수 없습니다.');
+    expect(signedOut.error).toBe('판매자 가게 정보를 확인할 수 없습니다.');
   });
 });
 

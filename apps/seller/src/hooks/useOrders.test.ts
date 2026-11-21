@@ -45,7 +45,7 @@ describe('Seller 주문 recovery — auth prerequisite', () => {
 
   it('인증 오류 메시지는 useSaleRounds와 동일한 계약을 사용한다', () => {
     // apps/seller/src/hooks/useSaleRounds.ts의 동일 분기 메시지와 일치해야 한다.
-    expect(SELLER_ORDERS_AUTH_ERROR).toBe('셀러 스토어 인증 정보를 확인할 수 없습니다.');
+    expect(SELLER_ORDERS_AUTH_ERROR).toBe('판매자 가게 정보를 확인할 수 없습니다.');
   });
 });
 

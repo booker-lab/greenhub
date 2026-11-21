@@ -88,7 +88,7 @@ function StoreContent() {
               {reviewAverage.toFixed(1)} · 후기 {reviewCount}
             </p>
           )}
-          <Button variant="outline" className="mt-3" onClick={() => void share()}>
+          <Button variant="outline" className="mt-3 font-bold" onClick={() => void share()}>
             판매자 공유하기
           </Button>
           {shared && (

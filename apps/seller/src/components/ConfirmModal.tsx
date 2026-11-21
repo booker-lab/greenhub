@@ -84,12 +84,13 @@ export function ConfirmModal({
             ) : (
               message
             )}
+            {/* 확정·취소 버튼은 판매자 앱의 다른 확인창·하단 버튼과 같은 44px(2026-11-21 결정, 어드민 확인창도 같은 부품). */}
             <div className="flex flex-row flex-wrap items-center justify-start gap-2.5">
               <Button
                 onClick={onConfirm}
                 disabled={loading || confirmDisabled}
                 variant={confirm.variant}
-                className={`flex-1 ${confirm.className ?? ''}`}
+                className={`h-11 flex-1 ${confirm.className ?? ''}`}
                 style={{ fontWeight: 'var(--fw-medium)' }}
               >
                 {loading ? '처리 중...' : confirmLabel}
@@ -98,7 +99,7 @@ export function ConfirmModal({
                 onClick={onClose}
                 disabled={loading}
                 variant="outline-gray"
-                className="flex-1"
+                className="h-11 flex-1"
               >
                 {cancelLabel}
               </Button>

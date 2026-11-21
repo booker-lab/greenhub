@@ -148,7 +148,7 @@ export default function OrderDetailExtras({
       {reorderOn && (
         <div>
           <Button
-            className="w-full"
+            className="w-full font-bold"
             variant="outline"
             size="lg"
             disabled={reorderable.length === 0}

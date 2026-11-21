@@ -250,7 +250,7 @@ function AddressField({
   const id = useId();
   return (
     <div>
-      <FieldLabel htmlFor={id} className="inline-block">
+      <FieldLabel htmlFor={id} className="inline-block font-bold">
         {label}
       </FieldLabel>
       <Input

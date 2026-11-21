@@ -19,7 +19,7 @@ import { isOrderCallback, safeCallbackPath, signedInRedirectPath } from './_call
 // 입력칸 묶음은 Field(role="group")를 쓰지 않고 div + 라벨(htmlFor)로 둬 접근성 이름("이메일"·"비밀번호")을 그대로 둔다.
 const DIVIDER =
   "flex items-center text-xs/[1.55] whitespace-nowrap text-ui-gray-6 before:me-2.5 before:h-px before:flex-1 before:border-t before:border-ui-gray-3 before:content-[''] after:ms-2.5 after:h-px after:flex-1 after:border-t after:border-ui-gray-3 after:content-['']";
-const FIELD_LABEL = 'cursor-default text-[15px]';
+const FIELD_LABEL = 'cursor-default text-[15px] font-bold';
 const NOTICE_STYLE = {
   background: 'var(--color-surface-muted)',
   borderRadius: 'var(--radius)',
@@ -100,7 +100,7 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
       <Button
         type="button"
         size="lg"
-        className="w-full"
+        className="w-full font-bold"
         style={{ backgroundColor: '#FEE500', color: '#000000' }}
         onClick={() => signIn('kakao', { callbackUrl: resolveCallbackUrl() })}
       >
@@ -153,7 +153,12 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
                 </Alert>
               )}
 
-              <LoadingButton type="submit" loading={loading} size="lg" className="mt-2.5 w-full">
+              <LoadingButton
+                type="submit"
+                loading={loading}
+                size="lg"
+                className="mt-2.5 w-full font-bold"
+              >
                 로그인
               </LoadingButton>
             </div>

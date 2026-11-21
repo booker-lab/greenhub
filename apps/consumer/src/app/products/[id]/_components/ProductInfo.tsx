@@ -155,7 +155,7 @@ export default function ProductInfo({ product, variety, showSummary = true }: Pr
                     className="m-0 leading-[1.55]"
                     style={{
                       fontSize: 'var(--font-size-sm)',
-                      fontWeight: 'var(--fw-medium)',
+                      fontWeight: 'var(--fw-bold)',
                       color: 'var(--color-text)',
                     }}
                   >
