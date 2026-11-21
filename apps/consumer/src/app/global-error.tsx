@@ -2,6 +2,17 @@
 
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 
+// 상담 시간 "09:00~18:00 (점심시간 12:00~13:00)"을 첫 괄호 앞뒤로 나눈다. 괄호가 없으면 한 덩어리로 쓴다.
+const supportHoursNoteStart = PUBLIC_BUSINESS_INFO.supportHours.indexOf(' (');
+const supportHoursMain =
+  supportHoursNoteStart > 0
+    ? PUBLIC_BUSINESS_INFO.supportHours.slice(0, supportHoursNoteStart)
+    : PUBLIC_BUSINESS_INFO.supportHours;
+const supportHoursNote =
+  supportHoursNoteStart > 0
+    ? PUBLIC_BUSINESS_INFO.supportHours.slice(supportHoursNoteStart + 1)
+    : '';
+
 // 루트 layout까지 실패했을 때 쓰는 최후의 오류 화면. root layout·Providers·전역 CSS가 없으므로
 // html/body를 직접 그리고, 색은 @greenhub/ui 토큰 값을 그대로 옮겨 인라인으로 쓴다.
 // 오류 메시지·스택은 보여주지 않고 digest만 작게 보여준다.
@@ -66,8 +77,16 @@ export default function GlobalError({
             <br />
             <a href={PUBLIC_BUSINESS_INFO.phoneHref} style={{ color: '#111111', fontWeight: 700 }}>
               {PUBLIC_BUSINESS_INFO.phone}
-            </a>{' '}
-            ({PUBLIC_BUSINESS_INFO.supportHours})
+            </a>
+            <br />
+            {/* 상담 시간은 전화번호와 다른 줄에 쓰고, 괄호 묶음은 통째로 넘긴다(앱 안 오류 화면과 같은 표기). */}
+            상담 시간 {supportHoursMain}
+            {supportHoursNote && (
+              <>
+                {' '}
+                <span style={{ whiteSpace: 'nowrap' }}>{supportHoursNote}</span>
+              </>
+            )}
           </p>
           {error.digest ? (
             <p style={{ fontSize: 15, color: '#696F6C', margin: '12px 0 0' }}>

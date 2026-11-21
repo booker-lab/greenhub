@@ -4,6 +4,17 @@ import { TriangleAlert } from 'lucide-react';
 import Link from 'next/link';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 
+// 상담 시간 "09:00~18:00 (점심시간 12:00~13:00)"을 첫 괄호 앞뒤로 나눈다. 괄호가 없으면 한 덩어리로 쓴다.
+const supportHoursNoteStart = PUBLIC_BUSINESS_INFO.supportHours.indexOf(' (');
+const supportHoursMain =
+  supportHoursNoteStart > 0
+    ? PUBLIC_BUSINESS_INFO.supportHours.slice(0, supportHoursNoteStart)
+    : PUBLIC_BUSINESS_INFO.supportHours;
+const supportHoursNote =
+  supportHoursNoteStart > 0
+    ? PUBLIC_BUSINESS_INFO.supportHours.slice(supportHoursNoteStart + 1)
+    : '';
+
 const actionStyle = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -110,8 +121,16 @@ export default function ErrorPage({
             style={{ color: 'var(--color-text)', fontWeight: 'var(--fw-bold)' }}
           >
             {PUBLIC_BUSINESS_INFO.phone}
-          </a>{' '}
-          ({PUBLIC_BUSINESS_INFO.supportHours})
+          </a>
+          <br />
+          {/* 상담 시간은 전화번호와 다른 줄에 쓰고, 괄호 묶음("(점심시간 …)")은 통째로 넘긴다(MY 고객센터 줄과 같은 표기). */}
+          상담 시간 {supportHoursMain}
+          {supportHoursNote && (
+            <>
+              {' '}
+              <span style={{ whiteSpace: 'nowrap' }}>{supportHoursNote}</span>
+            </>
+          )}
         </p>
         {error.digest ? (
           <p
