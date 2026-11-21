@@ -11,8 +11,12 @@ export interface AdminAuditLog {
   id: string;
   action: string;
   actorId: string;
+  /** API가 읽을 때 붙이는 처리한 관리자의 지금 이름. 찾지 못하면 null(옛 API는 없음). */
+  actorName?: string | null;
   targetType: string;
   targetId: string;
+  /** API가 붙이는 대상 이름(판매자 이름·사람 이름·주문번호·농가 이름). 찾지 못하면 null. */
+  targetName?: string | null;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
   reason: string | null;
@@ -59,19 +63,31 @@ export function targetTypeLabel(targetType: string): string {
   return TARGET_LABEL[targetType] ?? '기타';
 }
 
+type TargetFields = Pick<AdminAuditLog, 'targetType' | 'targetId'> &
+  Partial<Pick<AdminAuditLog, 'targetName'>>;
+
 /**
- * 대상 식별 값 — 잘라 쓰지 않고 전체를 보여 준다(design-direction.md §5 "식별").
- * 배너는 하나뿐이라 식별 값을 쓰지 않는다(null).
+ * 대상 식별 — API가 붙인 이름(판매자 이름·주문번호 등)을 먼저 쓰고, 없으면 시스템 ID를 자르지 않고 전체로 쓴다
+ * (design-direction.md §5 "식별"). 배너는 하나뿐이라 식별 값을 쓰지 않는다(null).
  */
-export function targetIdLabel(log: Pick<AdminAuditLog, 'targetType' | 'targetId'>): string | null {
+export function targetIdLabel(log: TargetFields): string | null {
   if (log.targetType === 'banner') return null;
-  return log.targetId;
+  return log.targetName?.trim() || log.targetId;
 }
 
-/** 대상 한 줄(종류 + 전체 식별 값). */
-export function targetLabel(log: Pick<AdminAuditLog, 'targetType' | 'targetId'>): string {
+/** 대상 한 줄(종류 + 이름 또는 전체 식별 값). */
+export function targetLabel(log: TargetFields): string {
   const id = targetIdLabel(log);
   return id ? `${targetTypeLabel(log.targetType)} ${id}` : targetTypeLabel(log.targetType);
+}
+
+/** 처리한 사람 — 나면 "나", 다른 관리자는 이름(없으면 시스템 ID). */
+export function actorLabel(
+  log: Pick<AdminAuditLog, 'actorId'> & Partial<Pick<AdminAuditLog, 'actorName'>>,
+  myId: string | undefined,
+): string {
+  if (log.actorId === myId) return '나';
+  return `다른 관리자 · ${log.actorName?.trim() || log.actorId}`;
 }
 
 // 칸 이름 — API가 before/after에 남기는 키(admin.service·payout-accounts·option-stocks·engagement).

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionLabel, describeChanges, formatLoggedAt, targetLabel } from './_lib';
+import { actionLabel, actorLabel, describeChanges, formatLoggedAt, targetLabel } from './_lib';
 
 describe('actionLabel', () => {
   it('아는 기록 종류는 한국어 이름을 보여 준다', () => {
@@ -21,6 +21,33 @@ describe('targetLabel', () => {
     );
     expect(targetLabel({ targetType: 'banner', targetId: 'main_hero' })).toBe('배너');
     expect(targetLabel({ targetType: 'store', targetId: 'abc' })).toBe('판매자 abc');
+  });
+
+  it('API가 붙인 이름이 있으면 ID 대신 이름을 보여 준다', () => {
+    expect(
+      targetLabel({ targetType: 'store', targetId: 'store-1', targetName: '디어 오키드' }),
+    ).toBe('판매자 디어 오키드');
+    expect(
+      targetLabel({ targetType: 'order', targetId: 'order-1', targetName: '20261128-000014' }),
+    ).toBe('주문 20261128-000014');
+    expect(targetLabel({ targetType: 'driver', targetId: 'driver-2', targetName: null })).toBe(
+      '기사 driver-2',
+    );
+    expect(targetLabel({ targetType: 'banner', targetId: 'main_hero', targetName: '배너' })).toBe(
+      '배너',
+    );
+  });
+});
+
+describe('actorLabel', () => {
+  it('나면 "나", 다른 관리자는 이름(없으면 ID)을 보여 준다', () => {
+    expect(actorLabel({ actorId: 'admin-1', actorName: '김운영' }, 'admin-1')).toBe('나');
+    expect(actorLabel({ actorId: 'admin-2', actorName: '김운영' }, 'admin-1')).toBe(
+      '다른 관리자 · 김운영',
+    );
+    expect(actorLabel({ actorId: 'admin-2', actorName: null }, 'admin-1')).toBe(
+      '다른 관리자 · admin-2',
+    );
   });
 });
 

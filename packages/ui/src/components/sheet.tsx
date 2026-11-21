@@ -89,13 +89,14 @@ function SheetContent({
 }
 
 // Mantine Drawer 머리: 높이 최소 60px, 위아래·왼쪽 16px, 모서리 없는 흰 바탕으로 위에 붙는다(본문이 길면 머리 아래로 스크롤).
+// 바탕은 시트 본체와 같은 popover 색이다(다크에서 background면 머리만 다른 색 띠가 된다, 2026-11-21).
 // 오른쪽은 닫기 버튼(11px + 28px) 자리를 비운다.
 function SheetHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="sheet-header"
       className={cn(
-        'sticky top-0 z-10 flex min-h-[60px] items-center bg-background py-4 pr-[47px] pl-4',
+        'sticky top-0 z-10 flex min-h-[60px] items-center bg-popover py-4 pr-[47px] pl-4',
         className,
       )}
       {...props}

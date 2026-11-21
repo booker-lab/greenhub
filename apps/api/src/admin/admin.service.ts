@@ -105,6 +105,21 @@ export const SALES_MODE_BLOCKING_ROUND_STATUSES = [
 ] as const satisfies readonly SaleRoundStatus[];
 
 
+// 감사 기록 이름 붙이기: 대상 종류마다 이름을 읽을 문서와 칸. 배너는 하나뿐이라 이름이 없다.
+interface AuditNameSource {
+  collection: string;
+  field: string;
+}
+const AUDIT_ACTOR_NAME_SOURCE: AuditNameSource = { collection: 'users', field: 'name' };
+const AUDIT_TARGET_NAME_SOURCE: Record<string, AuditNameSource | undefined> = {
+  store: { collection: 'stores', field: 'name' },
+  user: { collection: 'users', field: 'name' },
+  driver: { collection: 'users', field: 'name' },
+  order: { collection: 'orders', field: 'orderNumber' },
+  settlement: { collection: 'settlements', field: 'orderNumber' },
+  partner_inquiry: { collection: 'partnerInquiries', field: 'farmName' },
+};
+
 type LegacyRefundClaimResult =
   | { kind: 'done' }
   | { kind: 'in_progress' }
@@ -134,8 +149,40 @@ export class AdminService {
     }
   }
 
-  getAuditLogs() {
-    return this.audit.listAdmin();
+  // 기록에는 ID만 남는다. 화면이 시스템 ID 대신 이름을 보이도록 읽을 때 지금 이름을 붙인다(2026-11-21).
+  // 처리한 관리자 → actorName, 대상 → targetName(판매자 이름·사람 이름·주문번호·농가 이름). 찾지 못하면 null이고
+  // 화면은 ID를 그대로 보인다. 이름 읽기가 실패해도 기록 목록은 그대로 돌려준다.
+  async getAuditLogs() {
+    const logs = await this.audit.listAdmin();
+    const nameOf = new Map<string, Promise<string | null>>();
+    const lookup = (source: AuditNameSource | undefined, id: unknown) => {
+      if (!source || typeof id !== 'string' || id.length === 0 || id.includes('/')) return null;
+      const path = `${source.collection}/${id}`;
+      if (!nameOf.has(path)) {
+        nameOf.set(
+          path,
+          this.firestore
+            .doc(path)
+            .get()
+            .then((snap) => {
+              const value = snap.exists ? snap.data()?.[source.field] : undefined;
+              return typeof value === 'string' && value.trim() ? value.trim() : null;
+            })
+            .catch(() => null),
+        );
+      }
+      return nameOf.get(path) ?? null;
+    };
+    return Promise.all(
+      logs.map(async (log) => ({
+        ...log,
+        actorName: await lookup(AUDIT_ACTOR_NAME_SOURCE, log['actorId']),
+        targetName: await lookup(
+          AUDIT_TARGET_NAME_SOURCE[String(log['targetType'])],
+          log['targetId'],
+        ),
+      })),
+    );
   }
 
   // ── Stores ──────────────────────────────────────────────────────

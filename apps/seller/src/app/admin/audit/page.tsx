@@ -13,6 +13,7 @@ import {
 import {
   type AdminAuditLog,
   actionLabel,
+  actorLabel,
   describeChanges,
   formatLoggedAt,
   targetIdLabel,
@@ -21,12 +22,8 @@ import {
 
 // 어드민이 수수료·정지·환불·지급·배너를 바꾼 기록. 최근 100건만 읽기 전용으로 보여 준다.
 // ② 방향(design-direction.md §5 어드민 "모든 목록 화면의 규칙", §8 D7): 카드 대신 다른 목록과 같은 표.
-// 열: 시각 → 기록(굵게) → 대상(종류 + 전체 식별 값) → 바뀐 내용(한국어 칸 이름·값, 사유) → 처리한 사람.
+// 열: 시각 → 기록(굵게) → 대상(종류 + 이름, 없으면 전체 식별 값) → 바뀐 내용(한국어 칸 이름·값, 사유) → 처리한 사람.
 // 태블릿(1100px 이하)은 처리한 사람을 바뀐 내용 아래 보조 줄로, 휴대폰(640px 이하)은 세 줄 행이다.
-
-function actorLabel(log: AdminAuditLog, myId: string | undefined): string {
-  return log.actorId === myId ? '나' : `다른 관리자 · ${log.actorId}`;
-}
 
 function Changes({ log }: { log: AdminAuditLog }) {
   const lines = describeChanges(log);
@@ -47,7 +44,12 @@ function Target({ log }: { log: AdminAuditLog }) {
   return (
     <>
       <span className="whitespace-nowrap">{targetTypeLabel(log.targetType)}</span>
-      {id && <span className={`${ADMIN_SUB} block break-all`}>{id}</span>}
+      {/* 이름이 있으면 이름을 보이고, 원래 ID는 마우스를 올리면 보인다(이름은 바뀔 수 있다). */}
+      {id && (
+        <span className={`${ADMIN_SUB} block break-all`} title={log.targetId}>
+          {id}
+        </span>
+      )}
     </>
   );
 }
