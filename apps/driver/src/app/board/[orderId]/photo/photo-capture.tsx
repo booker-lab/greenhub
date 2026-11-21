@@ -18,18 +18,6 @@ import {
 import { rememberCompletedOrder } from '../../_lib/recent-completion';
 import { uploadLegacyHubPhoto } from './legacy-hub-photo';
 import {
-  type DecodedPhoto,
-  encodeDeliveryJpeg,
-  loadImageSource,
-  PhotoEncodeError,
-} from './photo-encode';
-import {
-  deliveryCompletedMessage,
-  type PhotoOrderSummary,
-  photoOrderSummaryLine,
-  readPhotoOrderSummary,
-} from './photo-order-summary';
-import {
   dismissPendingPhoto,
   enqueuePendingPhoto,
   findPendingPhoto,
@@ -46,6 +34,18 @@ import {
   pendingPhotoStatusMessage,
   shouldEnqueuePendingPhoto,
 } from './pending-photo-policy';
+import {
+  type DecodedPhoto,
+  encodeDeliveryJpeg,
+  loadImageSource,
+  PhotoEncodeError,
+} from './photo-encode';
+import {
+  deliveryCompletedMessage,
+  type PhotoOrderSummary,
+  photoOrderSummaryLine,
+  readPhotoOrderSummary,
+} from './photo-order-summary';
 import {
   decideIdempotencyKey,
   type PhotoUploadFailureKind,

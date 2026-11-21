@@ -121,6 +121,7 @@ export async function encodeDeliveryJpeg(
     canvas.width = 0;
     canvas.height = 0;
 
+    // biome-ignore lint/complexity/useOptionalChain: 빈 결과를 먼저 거르는 판정을 그대로 둔다(board-contract 테스트가 이 글자를 고정한다).
     if (!nextBlob || nextBlob.type !== 'image/jpeg' || nextBlob.size <= 0) {
       throw new PhotoEncodeError('ENCODE_FAILED');
     }

@@ -11,13 +11,13 @@
 
 import { apiPathSegment } from '@greenhub/shared';
 import { readDriverOrderErrorCode } from '../../_lib/driver-order-detail';
+import type { PendingPhotoSendResult } from './pending-photo-policy';
 import {
   classifyPhotoUploadFailure,
   DELIVERY_PHOTO_NO_HOLD,
   DELIVERY_PHOTO_STALE_HOLD_CODE,
   isDeliveryPhotoAck,
 } from './photo-upload-policy';
-import type { PendingPhotoSendResult } from './pending-photo-policy';
 
 export type RoundDirectPhotoSendResult = PendingPhotoSendResult;
 
