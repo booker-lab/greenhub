@@ -225,9 +225,16 @@ export default function AdminBannerClient() {
         <BannerTextSection form={form} setForm={setForm} />
         <BannerCtaSection form={form} setForm={setForm} />
 
-        <Button onClick={handleSave} disabled={saving} size="md">
-          {saving ? '저장 중...' : saved ? '저장 완료!' : '저장하기'}
-        </Button>
+        {/* 다른 어드민 확정 버튼과 같은 모양: 모서리 8px·글자 폭·오른쪽, 손가락 폭(≤1100) 44px, 휴대폰은 폭 전체(2026-11-20 사용자 결정). */}
+        <div className="flex justify-end">
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="h-10 rounded-[8px] px-4 text-[15px] max-[1100px]:h-11 max-sm:w-full"
+          >
+            {saving ? '저장 중...' : saved ? '저장 완료!' : '저장하기'}
+          </Button>
+        </div>
       </div>
     </div>
   );
