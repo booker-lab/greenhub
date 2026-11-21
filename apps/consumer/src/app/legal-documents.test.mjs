@@ -160,3 +160,30 @@ test('방침 개정 안내는 시행 전(한국 시간 2026-11-27까지)에만 �
   assert.match(footer, /import PolicyChangeNotice from '@\/components\/PolicyChangeNotice';/);
   assert.match(footer, /<PolicyChangeNotice \/>/);
 });
+
+test('더 이전 방침·약관 공개본도 글자 그대로 보관하고 현재 문서에서 연결한다', () => {
+  const archives = [
+    ['privacy', '2026-11-01', '2026년 11월 1일', '2026년 11월 1일부터 11월 7일까지', '2026년 11월 8일'],
+    ['privacy', '2026-08-30', '2026년 8월 30일', '2026년 8월 30일부터 10월 31일까지', '2026년 11월 1일'],
+    ['privacy', '2026-08-19', '2026년 8월 19일', '2026년 8월 19일부터 8월 29일까지', '2026년 8월 30일'],
+    ['terms', '2026-08-30', '2026년 8월 30일', '2026년 8월 30일부터 10월 31일까지', '2026년 11월 1일'],
+    ['terms', '2026-08-19', '2026년 8월 19일', '2026년 8월 19일부터 8월 29일까지', '2026년 8월 30일'],
+  ];
+  const current = {
+    privacy: normalizeWhitespace(loadSource('app', 'privacy', 'page.tsx')),
+    terms: normalizeWhitespace(loadSource('app', 'terms', 'page.tsx')),
+  };
+  for (const [doc, slug, effectiveDate, period, next] of archives) {
+    const source = normalizeWhitespace(loadSource('app', doc, slug, 'page.tsx'));
+    assert.match(source, new RegExp(`const EFFECTIVE_DATE = '${effectiveDate}'`), slug);
+    assert.match(source, new RegExp(`canonical: '/${doc}/${slug}'`), slug);
+    assert.match(source, /robots: \{ index: false, follow: true \}/, slug);
+    assert.match(source, /<LegalArchiveNotice /, slug);
+    assert.match(source, new RegExp(`currentHref="/${doc}"`), slug);
+    assert.match(source, new RegExp(`period="${period}"`), slug);
+    assert.match(source, new RegExp(`nextEffectiveDate="${next}"`), slug);
+    assert.match(current[doc], new RegExp(`<a href="/${doc}/${slug}">`), `${doc} → ${slug}`);
+  }
+  // 보관본은 sitemap에 넣지 않는다(검색에는 현재 문서만).
+  assert.doesNotMatch(loadSource('app', 'sitemap.ts'), /\/(privacy|terms)\/20/);
+});
