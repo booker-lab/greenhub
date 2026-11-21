@@ -113,7 +113,8 @@ const ACTION_META: Record<
     title: '회차 주문 마감',
     message: '판매 중인 회차의 주문을 수동 마감합니다. 이 동작은 자동으로 되돌릴 수 없습니다.',
     confirmLabel: '마감 확인',
-    color: 'dark',
+    // 판매자 확인창의 확정 버튼은 초록 하나다(design-standard, 2026-11-21 결정).
+    color: 'brand',
   },
   complete: {
     buttonLabel: '회차 완료',

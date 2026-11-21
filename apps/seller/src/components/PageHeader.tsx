@@ -79,7 +79,10 @@ export function PageHeader({
                 <ChevronLeft size={20} className="size-5" />
               </Button>
             )}
-            <h3 className="m-0 min-w-0 text-[22px] leading-[1.4] font-extrabold">{title}</h3>
+            {/* 좁은 폭에서는 제목을 낱말 단위로만 줄바꿈한다(띄어쓰기 없는 긴 이름은 넘치지 않게 끊는다). */}
+            <h3 className="m-0 min-w-0 text-[22px] leading-[1.4] font-extrabold break-keep [overflow-wrap:anywhere]">
+              {title}
+            </h3>
             {showHome && (
               <ButtonLink
                 variant="ghost"

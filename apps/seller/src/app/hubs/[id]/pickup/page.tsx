@@ -153,7 +153,7 @@ export default function HubPickupPage() {
               <Button
                 onClick={() => router.push(`/hubs/${hubId}`)}
                 size="md"
-                className="mt-4"
+                className="mt-4 h-11"
                 style={{ backgroundColor: 'var(--primary)' }}
               >
                 거점으로 돌아가기
@@ -167,7 +167,12 @@ export default function HubPickupPage() {
               >
                 {INVALID_ORDER_ADDRESS_MESSAGE}
               </p>
-              <Button onClick={() => router.push(`/hubs/${hubId}`)} size="md" variant="light">
+              <Button
+                onClick={() => router.push(`/hubs/${hubId}`)}
+                size="md"
+                variant="light"
+                className="h-11"
+              >
                 거점으로 돌아가기
               </Button>
             </div>

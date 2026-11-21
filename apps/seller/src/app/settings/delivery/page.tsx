@@ -281,16 +281,19 @@ export default function DeliverySettingsPage() {
                   악천후 시 배송 제한 활성화
                 </p>
               </div>
-              <Switch
-                aria-label="기상 제한 배송"
-                checked={config.weatherRestrictionActive}
-                onCheckedChange={(checked) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    weatherRestrictionActive: checked,
-                  }))
-                }
-              />
+              {/* biome-ignore lint/a11y/noLabelWithoutControl: Base UI Switch가 감싼 label 안에 숨은 checkbox를 그린다. 이름은 Switch의 aria-label이다. */}
+              <label className="-my-3 inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-end">
+                <Switch
+                  aria-label="기상 제한 배송"
+                  checked={config.weatherRestrictionActive}
+                  onCheckedChange={(checked) =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      weatherRestrictionActive: checked,
+                    }))
+                  }
+                />
+              </label>
             </div>
           </div>
 
