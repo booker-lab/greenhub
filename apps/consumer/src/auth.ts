@@ -5,8 +5,9 @@ import {
   revokeApiSession,
   type SessionAuthorityResult,
   testSecretsMatch,
+  withSignedOutMarker,
 } from '@greenhub/shared';
-import NextAuth, { CredentialsSignin } from 'next-auth';
+import NextAuth, { CredentialsSignin, type NextAuthConfig } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
 import { isAdmittedLoginCredentials } from '@/auth-credentials';
@@ -154,7 +155,7 @@ async function refreshAccessToken(token: Record<string, unknown>) {
   }
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const authConfig: NextAuthConfig = {
   secret: process.env.AUTH_SECRET,
   trustHost: true,
   providers: [
@@ -347,4 +348,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   pages: {
     signIn: '/login',
   },
-});
+};
+
+// 로그아웃 직전 늦은 세션 응답이 되살린 쿠키는 다음 요청에서 재사용 없이 다시 검증한다
+// (로그아웃 시각 표시 쿠키, @greenhub/shared withSignedOutMarker).
+export const { handlers, auth, signIn, signOut } = NextAuth(withSignedOutMarker(authConfig));

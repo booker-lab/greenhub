@@ -6,9 +6,10 @@ import {
   revokeApiSession,
   type SessionAuthorityResult,
   testSecretsMatch,
+  withSignedOutMarker,
 } from '@greenhub/shared';
 import { cookies } from 'next/headers';
-import NextAuth, { CredentialsSignin } from 'next-auth';
+import NextAuth, { CredentialsSignin, type NextAuthConfig } from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import Kakao from 'next-auth/providers/kakao';
 import { getApiBaseUrl } from '@/lib/api-base-url';
@@ -122,7 +123,7 @@ async function refreshAccessToken(token: Record<string, unknown>) {
   }
 }
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+const authConfig: NextAuthConfig = {
   secret: process.env.AUTH_SECRET,
   trustHost: true,
   providers: [
@@ -313,4 +314,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     // 로그인 거절(AccessDenied 등)을 한국어 안내 화면으로 보인다. 초대 실패 사유도 같은 화면이 받는다.
     error: SIGN_IN_ERROR_PATH,
   },
-});
+};
+
+// 로그아웃 직전 늦은 세션 응답이 되살린 쿠키는 다음 요청에서 재사용 없이 다시 검증한다
+// (로그아웃 시각 표시 쿠키, @greenhub/shared withSignedOutMarker).
+export const { handlers, auth, signIn, signOut } = NextAuth(withSignedOutMarker(authConfig));

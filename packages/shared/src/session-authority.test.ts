@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import {
   AUTHORITY_RECHECK_COOLDOWN_MS,
+  forgetAuthorityVerifiedBefore,
   isSessionEnded,
+  readSignedOutAt,
   recheckSessionAfterRejection,
   revalidateSessionToken,
   SESSION_AUTHORITY_REUSE_MS,
+  SIGNED_OUT_MARKER_COOKIE,
+  SIGNED_OUT_MARKER_MAX_AGE_SECONDS,
   type SessionAuthorityResult,
+  signedOutMarkerCookie,
   watchApiAuthorityRejections,
+  withSignedOutMarker,
+  withSignedOutMarkerOnSignOut,
 } from './session-authority.js';
 
 const T0 = 1_700_000_000_000;
@@ -416,5 +423,107 @@ describe('recheckSessionAfterRejection', () => {
     expect(result).toBe('ended');
     expect(methods).toEqual(['POST']);
     expect(signedOut).toBe(1);
+  });
+});
+
+describe('로그아웃 시각 표시(되살아난 세션 쿠키 정리)', () => {
+  it('표시 쿠키는 재사용 구간의 두 배 동안 남고 https에서만 Secure다', () => {
+    expect(SIGNED_OUT_MARKER_MAX_AGE_SECONDS).toBe(120);
+    expect(signedOutMarkerCookie(T0, true)).toBe(
+      `${SIGNED_OUT_MARKER_COOKIE}=${T0}; Path=/; Max-Age=120; HttpOnly; SameSite=Lax; Secure`,
+    );
+    expect(signedOutMarkerCookie(T0, false)).not.toContain('Secure');
+  });
+
+  it('쿠키 헤더에서 로그아웃 시각을 읽고 없거나 잘못된 값은 null이다', () => {
+    expect(readSignedOutAt(`a=1; ${SIGNED_OUT_MARKER_COOKIE}=${T0}; b=2`)).toBe(T0);
+    for (const header of [
+      null,
+      undefined,
+      '',
+      'a=1',
+      `${SIGNED_OUT_MARKER_COOKIE}=abc`,
+      `${SIGNED_OUT_MARKER_COOKIE}=-5`,
+    ]) {
+      expect(readSignedOutAt(header)).toBeNull();
+    }
+  });
+
+  it('로그아웃 시각 이전에 검증된 토큰만 재사용 표시를 지운다', () => {
+    const verified = baseToken({ authorityVerifiedAt: T0, authorityVerifiedFor: 'fp' });
+    expect(forgetAuthorityVerifiedBefore(verified, T0)).toEqual(baseToken());
+    expect(forgetAuthorityVerifiedBefore(verified, T0 + 1)).toEqual(baseToken());
+    expect(forgetAuthorityVerifiedBefore(verified, T0 - 1)).toBe(verified);
+    expect(forgetAuthorityVerifiedBefore(verified, null)).toBe(verified);
+    const unverified = baseToken();
+    expect(forgetAuthorityVerifiedBefore(unverified, T0)).toBe(unverified);
+  });
+
+  it('되살아난 쿠키(로그아웃 전 검증)는 재사용 구간이어도 API로 다시 검증해 끝낸다', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const config = {
+      session: { strategy: 'jwt' },
+      callbacks: {
+        jwt: async ({ token }: { token: Record<string, unknown> }) => {
+          seen.push(token);
+          return revalidateSessionToken(token, {
+            verify: async () => ({ kind: 'revoked' }),
+            refresh: async () => null,
+            now: () => T0 + 5_000,
+          });
+        },
+      },
+    };
+    const resurrected = baseToken({ authorityVerifiedAt: T0, authorityVerifiedFor: 'fp' });
+    const lazy = withSignedOutMarker(config);
+    const marked = lazy({
+      headers: new Headers({ cookie: `${SIGNED_OUT_MARKER_COOKIE}=${T0 + 1_000}` }),
+    });
+    expect(marked.session).toBe(config.session);
+    expect(await marked.callbacks.jwt({ token: resurrected })).toBeNull();
+    expect(seen.at(-1)).not.toHaveProperty('authorityVerifiedAt');
+  });
+
+  it('표시가 없거나 요청이 없으면 설정을 그대로 쓴다', () => {
+    const config = { callbacks: { jwt: async () => null } };
+    const lazy = withSignedOutMarker(config);
+    expect(lazy(undefined)).toBe(config);
+    expect(lazy({ headers: new Headers({ cookie: 'a=1' }) })).toBe(config);
+  });
+
+  it('로그아웃 응답에만 표시 쿠키를 더하고 원래 쿠키·상태·본문을 지킨다', async () => {
+    const upstream = (status: number) => async () => {
+      const headers = new Headers({ 'content-type': 'application/json' });
+      headers.append('Set-Cookie', 'authjs.session-token=; Max-Age=0; Path=/');
+      return new Response(JSON.stringify({ url: '/login' }), { status, headers });
+    };
+    const signOut = withSignedOutMarkerOnSignOut(upstream(200), () => T0);
+    const response = await signOut(
+      new Request('https://app.test/api/auth/signout', { method: 'POST' }),
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ url: '/login' });
+    expect(response.headers.getSetCookie()).toEqual([
+      'authjs.session-token=; Max-Age=0; Path=/',
+      signedOutMarkerCookie(T0, true),
+    ]);
+
+    const session = await withSignedOutMarkerOnSignOut(
+      upstream(200),
+      () => T0,
+    )(new Request('https://app.test/api/auth/session', { method: 'POST' }));
+    expect(session.headers.getSetCookie()).toEqual(['authjs.session-token=; Max-Age=0; Path=/']);
+
+    const failed = await withSignedOutMarkerOnSignOut(
+      upstream(403),
+      () => T0,
+    )(new Request('https://app.test/api/auth/signout', { method: 'POST' }));
+    expect(failed.headers.getSetCookie()).toEqual(['authjs.session-token=; Max-Age=0; Path=/']);
+
+    const local = await withSignedOutMarkerOnSignOut(
+      upstream(302),
+      () => T0,
+    )(new Request('http://127.0.0.1:3203/api/auth/signout', { method: 'POST' }));
+    expect(local.headers.getSetCookie().at(-1)).toBe(signedOutMarkerCookie(T0, false));
   });
 });
