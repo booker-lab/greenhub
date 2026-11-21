@@ -121,7 +121,8 @@ export default function HubDetailPage() {
               render={<Link href={`/hubs/${encodeURIComponent(hubId)}/edit`} />}
               size="xs"
               variant="secondary"
-              className="rounded-[8px]"
+              // 머리 높이가 다른 화면과 같게 버튼 모양은 그대로 두고 누르는 영역만 위아래로 44px까지 넓힌다.
+              className="relative overflow-visible after:absolute after:inset-x-0 after:-inset-y-2 after:content-[''] rounded-[8px]"
             >
               수정
             </ButtonLink>

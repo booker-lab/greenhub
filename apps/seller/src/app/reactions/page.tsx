@@ -98,10 +98,11 @@ export default function ReactionsPage() {
   return (
     <PageShell>
       <PageHeader title="고객 반응" />
-      <div className="mx-auto max-w-[720px] px-4 py-4">
+      <div className="mx-auto max-w-[720px] px-4 py-4 break-keep [overflow-wrap:anywhere]">
         <div className="flex flex-col gap-3">
           {tabs.length > 1 && (
             <SegmentedTabs<Tab>
+              variant="underline"
               value={tab}
               onChange={setTab}
               tabs={tabs.map(({ value, label }) => ({ key: value, label }))}
@@ -159,10 +160,8 @@ export default function ReactionsPage() {
                       <p className={`${TEXT} text-base font-bold`}>
                         {item.productName ?? '삭제된 상품'}
                       </p>
-                      <p
-                        className={`${TEXT} text-base font-extrabold`}
-                        style={{ color: 'var(--color-primary-dark)' }}
-                      >
+                      {/* 인원은 정보라 초록 대신 검정 굵은 글자다(초록은 누르는 곳에만). */}
+                      <p className={`${TEXT} shrink-0 text-base font-extrabold tabular-nums`}>
                         {item.count}명
                       </p>
                     </div>

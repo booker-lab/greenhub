@@ -13,7 +13,7 @@ import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Paper(lg·sm·lg)·Stack(md)·TextInput(radius xl)·Text·Button과 같은 값.
-// 라벨은 Mantine처럼 inline-block이다(글자 뒤에 붙인 "(선택)"과 사이가 한 칸). 필수 칸은 Mantine처럼 직접 붙인 빨간 "*" 뒤에 required 별표가 한 번 더 붙는다(지금 화면 그대로).
+// 라벨은 Mantine처럼 inline-block이다(글자 뒤에 붙인 "(선택)"과 사이가 한 칸). 필수 칸의 빨간 별표는 FieldLabel required가 하나만 붙인다.
 const TEXT = 'm-0 p-0 text-base font-normal';
 
 const INVALID_HUB_ADDRESS_MESSAGE =
@@ -26,18 +26,6 @@ interface Hub {
   addressDetail: string | null;
   operatingHours: string | null;
   isActive: boolean;
-}
-
-/** 필수 필드 라벨에 빨간 별표를 붙인다. */
-function RequiredLabel({ children }: { children: string }) {
-  return (
-    <>
-      {children}{' '}
-      <span className={TEXT} style={{ color: 'var(--color-danger)' }}>
-        *
-      </span>
-    </>
-  );
 }
 
 /** 선택 필드 라벨에 회색 "(선택)" 표기를 붙인다. */
@@ -148,7 +136,7 @@ export default function EditHubPage() {
               <div className="flex flex-col items-stretch justify-start gap-4">
                 <Field>
                   <FieldLabel htmlFor={`${formId}-name`} required>
-                    <RequiredLabel>거점 이름</RequiredLabel>
+                    거점 이름
                   </FieldLabel>
                   <Input
                     id={`${formId}-name`}
@@ -157,13 +145,13 @@ export default function EditHubPage() {
                     onChange={handleChange}
                     required
                     placeholder="예: 강남 거점"
-                    className="rounded-xl"
+                    className="h-11 rounded-xl"
                   />
                 </Field>
 
                 <Field>
                   <FieldLabel htmlFor={`${formId}-address`} required>
-                    <RequiredLabel>주소</RequiredLabel>
+                    주소
                   </FieldLabel>
                   <Input
                     id={`${formId}-address`}
@@ -172,7 +160,7 @@ export default function EditHubPage() {
                     onChange={handleChange}
                     required
                     placeholder="거점 주소"
-                    className="rounded-xl"
+                    className="h-11 rounded-xl"
                   />
                 </Field>
 
@@ -186,7 +174,7 @@ export default function EditHubPage() {
                     value={form.addressDetail}
                     onChange={handleChange}
                     placeholder="동/호수, 층 등"
-                    className="rounded-xl"
+                    className="h-11 rounded-xl"
                   />
                 </Field>
 
@@ -200,7 +188,7 @@ export default function EditHubPage() {
                     value={form.operatingHours}
                     onChange={handleChange}
                     placeholder="예: 09:00~18:00"
-                    className="rounded-xl"
+                    className="h-11 rounded-xl"
                   />
                 </Field>
 
@@ -217,7 +205,7 @@ export default function EditHubPage() {
                   type="submit"
                   disabled={saving}
                   size="md"
-                  className="mt-2.5 w-full"
+                  className="mt-2.5 h-11 w-full"
                   style={{ backgroundColor: 'var(--primary)' }}
                 >
                   {saving ? '저장 중...' : '변경 저장'}

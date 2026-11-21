@@ -71,7 +71,7 @@ describe('CustomerFaultClosureRecordView', () => {
     );
     expect(html).toContain('고객 사유 종결');
     expect(html).toContain('수령 거부로 11월 14일 10:30에 환불 없이 종결한 주문이에요');
-    expect(html).toContain('손님과 연락한 내용: 11/14 통화, 받지 않겠다고 함');
+    expect(html).toContain('고객과 연락한 내용: 11/14 통화, 받지 않겠다고 함');
     expect(html).not.toContain('정산 다시 맞추기');
   });
 

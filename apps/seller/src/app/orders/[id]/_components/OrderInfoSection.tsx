@@ -100,7 +100,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
                         color: 'var(--color-text-secondary)',
                       }}
                     >
-                      ₩{line.subtotalAmount.toLocaleString()}
+                      {line.subtotalAmount.toLocaleString()}원
                     </p>
                   )}
                 </div>
@@ -115,11 +115,11 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           )}
           <Row
             label="상품 금액"
-            value={`₩${(order.totalAmount - order.deliveryFee).toLocaleString()}`}
+            value={`${(order.totalAmount - order.deliveryFee).toLocaleString()}원`}
           />
-          <Row label="배송비" value={`₩${order.deliveryFee.toLocaleString()}`} />
+          <Row label="배송비" value={`${order.deliveryFee.toLocaleString()}원`} />
           <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, marginTop: 4 }}>
-            <Row label="결제 금액" value={`₩${order.totalAmount.toLocaleString()}`} bold />
+            <Row label="결제 금액" value={`${order.totalAmount.toLocaleString()}원`} bold />
           </div>
         </div>
       </div>

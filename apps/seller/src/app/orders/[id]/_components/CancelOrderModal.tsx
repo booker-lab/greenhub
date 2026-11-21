@@ -45,7 +45,7 @@ export function CancelOrderModal({
         if (!open) onClose();
       }}
     >
-      <DialogContent align="top">
+      <DialogContent align="top" className="break-keep [overflow-wrap:anywhere]">
         <DialogHeader>
           <DialogTitle className="leading-[1.55] font-bold">{title}</DialogTitle>
         </DialogHeader>
@@ -55,7 +55,7 @@ export function CancelOrderModal({
               className={TEXT}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
-              취소 사유를 적어 주세요. 손님에게 알림톡으로 전해져요.
+              취소 사유를 적어 주세요. 고객에게 알림톡으로 전해져요.
             </p>
             {/* 환불 금액·되돌릴 수 없음은 확정 전에 꼭 읽어야 해서 사유 안내보다 진하게 쓴다. */}
             {note && (
@@ -97,7 +97,6 @@ export function CancelOrderModal({
               <Button
                 onClick={onConfirm}
                 disabled={actionLoading || cancelReason.trim().length < 5}
-                variant="destructive"
                 className="flex-1"
                 style={{ fontWeight: 'var(--fw-medium)' }}
               >

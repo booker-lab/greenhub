@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@greenhub/ui/components/button';
+import { useState } from 'react';
 import type { Settlement } from '../_constants';
 import { downloadCSV } from '../_lib';
 import { LoadMoreSettlements } from './LoadMoreSettlements';
@@ -41,6 +42,8 @@ export function PeriodTab({
   onSearch,
   onLoadMore,
 }: PeriodTabProps) {
+  // 조회를 누른 뒤에만 "결과 없음"을 알린다(처음 들어온 화면과 0건 조회를 구분한다).
+  const [searched, setSearched] = useState(false);
   return (
     <div className="flex flex-col items-stretch justify-start gap-4">
       <div className="block rounded-[16px] bg-card p-5">
@@ -54,11 +57,13 @@ export function PeriodTab({
         <div className="mb-4 flex flex-row flex-nowrap items-center justify-start gap-2.5">
           <input
             type="date"
+            aria-label="시작일"
             value={from}
             onChange={(e) => setFrom(e.target.value)}
             style={{
               flex: 1,
               minWidth: 0,
+              minHeight: 44,
               padding: '8px 10px',
               border: '1px solid var(--color-border)',
               borderRadius: 12,
@@ -71,11 +76,13 @@ export function PeriodTab({
           </p>
           <input
             type="date"
+            aria-label="종료일"
             value={to}
             onChange={(e) => setTo(e.target.value)}
             style={{
               flex: 1,
               minWidth: 0,
+              minHeight: 44,
               padding: '8px 10px',
               border: '1px solid var(--color-border)',
               borderRadius: 12,
@@ -85,10 +92,13 @@ export function PeriodTab({
           />
         </div>
         <Button
-          onClick={() => onSearch(from, to)}
+          onClick={() => {
+            setSearched(true);
+            onSearch(from, to);
+          }}
           disabled={listLoading}
           size="md"
-          className="w-full"
+          className="h-11 w-full"
           style={{ backgroundColor: 'var(--primary)' }}
         >
           {listLoading ? '조회 중...' : '조회'}
@@ -104,9 +114,18 @@ export function PeriodTab({
         </p>
       )}
 
+      {searched && !listLoading && !listError && settlements.length === 0 && (
+        <p
+          className={`${TEXT} py-10 text-center`}
+          style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+        >
+          이 기간에 정산 내역이 없습니다
+        </p>
+      )}
+
       {settlements.length > 0 && (
         <div className="flex flex-col items-stretch justify-start gap-2.5">
-          <div className="flex flex-row flex-wrap items-center justify-between gap-4 px-1">
+          <div className="-my-2.5 flex flex-row flex-wrap items-center justify-between gap-4 px-1">
             <p
               className={TEXT}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
@@ -115,7 +134,7 @@ export function PeriodTab({
             </p>
             <button
               type="button"
-              className={UNSTYLED_BUTTON}
+              className={`${UNSTYLED_BUTTON} inline-flex min-h-11 items-center`}
               onClick={() => downloadCSV(settlements, from, to)}
               style={{
                 fontSize: 'var(--font-size-sm)',

@@ -28,14 +28,16 @@ export default async function SignInErrorPage({
       <div className="mx-auto w-full max-w-[540px] px-4">
         <div className="block rounded-[16px] bg-card p-8">
           <div className="flex flex-col items-stretch justify-start gap-4">
-            <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">{notice.title}</h3>
+            <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold break-keep">
+              {notice.title}
+            </h3>
             <p
-              className="m-0 p-0 text-base"
+              className="m-0 p-0 text-base break-keep"
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
               {notice.message}
             </p>
-            <ButtonLink href="/login" variant="outline" className="w-full">
+            <ButtonLink href="/login" variant="outline" className="h-11 w-full">
               로그인 화면으로
             </ButtonLink>
           </div>

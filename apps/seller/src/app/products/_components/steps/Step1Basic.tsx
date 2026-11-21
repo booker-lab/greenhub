@@ -1,6 +1,8 @@
 'use client';
 
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
+import { useId } from 'react';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
 import ImageUpload from '../ImageUpload';
 import { CATEGORIES, type ProductFormData } from '../productForm.types';
@@ -23,6 +25,7 @@ export function Step1Basic({
   setAvailableStemTypes,
   setError,
 }: Step1BasicProps) {
+  const nameId = useId();
   return (
     <div className="flex flex-col gap-3">
       <ImageUpload
@@ -31,13 +34,18 @@ export function Step1Basic({
         onChange={(images) => set('images', images)}
         onError={(msg) => setError(msg)}
       />
-      <Input
-        placeholder="상품명"
-        value={form.name}
-        onChange={(e) => set('name', e.target.value)}
-        size="md"
-        className="rounded-xl"
-      />
+      {/* 값이 들어가도 무슨 칸인지 보이게 이름을 둔다(placeholder는 E2E가 찾는 값이라 그대로다). */}
+      <Field>
+        <FieldLabel htmlFor={nameId}>상품명</FieldLabel>
+        <Input
+          id={nameId}
+          placeholder="상품명"
+          value={form.name}
+          onChange={(e) => set('name', e.target.value)}
+          size="md"
+          className="rounded-xl"
+        />
+      </Field>
       <FieldCard label="카테고리">
         <ChoiceRow
           options={CATEGORIES}

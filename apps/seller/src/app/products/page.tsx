@@ -54,7 +54,10 @@ export default function ProductsPage() {
   });
   const listView = resolveStoreProductsFilteredView(view, filtered.length);
   // 초기 로딩·첫 조회 실패 단계에서는 0건 카운트를 확정 수치처럼 노출하지 않는다.
-  const countLabel = (count: number) => (hasLoaded && !error ? String(count) : '…');
+  // 건수를 아직 모르면(불러오는 중·오류) 라벨 뒤에 "…"만 붙이고 숫자는 주지 않는다.
+  const countsReady = hasLoaded && !error;
+  const tabLabel = (label: string) => (countsReady ? label : `${label} …`);
+  const tabCount = (count: number) => (countsReady ? count : undefined);
   const activeCount = products.filter((p) => p.isActive).length;
   const inactiveCount = products.length - activeCount;
 
@@ -70,14 +73,17 @@ export default function ProductsPage() {
       />
 
       {/* 필터 탭 */}
+      {/* 선택 표시는 검정 3px 밑줄·굵은 글자다(초록을 칠하지 않는다, design-direction §3.2·§5). 건수는 글자로 붙이고 0은 회색이다. */}
       <SegmentedTabs<ProductFilter>
         tabs={[
-          { key: 'all', label: `전체 ${countLabel(products.length)}` },
-          { key: 'active', label: `판매 중 ${countLabel(activeCount)}` },
-          { key: 'inactive', label: `비활성 ${countLabel(inactiveCount)}` },
+          { key: 'all', label: tabLabel('전체'), count: tabCount(products.length) },
+          { key: 'active', label: tabLabel('판매 중'), count: tabCount(activeCount) },
+          { key: 'inactive', label: tabLabel('비활성'), count: tabCount(inactiveCount) },
         ]}
         value={filter}
         onChange={setFilter}
+        variant="underline"
+        ariaLabel="상품 상태"
       />
 
       {/* 상품 목록 — error/empty/filter-empty 분리. 첫 조회 실패는 empty로 collapse하지 않는다. */}
@@ -284,20 +290,24 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             >
               {product.name}
             </p>
-            <Switch
-              checked={product.isActive}
-              onCheckedChange={() => void handleToggleActive()}
-              disabled={toggling}
-              aria-label={
-                product.isActive ? '판매 중 — 클릭하여 비활성' : '비활성 — 클릭하여 판매 중으로'
-              }
-            />
+            {/* 스위치(38×20) 둘레를 눌러도 켜고 끈다: 누르는 영역만 44px로 잡고 줄 높이는 그대로 둔다(-my). */}
+            {/* biome-ignore lint/a11y/noLabelWithoutControl: Base UI Switch가 감싼 label 안에 숨은 checkbox를 그린다. 이름은 Switch의 aria-label이다. */}
+            <label className="-my-3 inline-flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-end">
+              <Switch
+                checked={product.isActive}
+                onCheckedChange={() => void handleToggleActive()}
+                disabled={toggling}
+                aria-label={
+                  product.isActive ? '판매 중 — 클릭하여 비활성' : '비활성 — 클릭하여 판매 중으로'
+                }
+              />
+            </label>
           </div>
           <p
             className={`${TEXT} mt-0.5`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
-            {CATEGORY_LABEL[product.category]} · ₩{product.price.toLocaleString()}
+            {CATEGORY_LABEL[product.category]} · {product.price.toLocaleString()}원
             {product.saleType === 'group' && ' · 공동구매'}
           </p>
           {error && (
@@ -308,11 +318,13 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
               {error}
             </p>
           )}
-          <div className="mt-2.5 flex flex-row flex-wrap items-center justify-start gap-2.5">
+          {/* 수정과 삭제를 잘못 누르지 않게 누르는 영역 44px, 간격 16px로 둔다. */}
+          <div className="mt-1 flex flex-row flex-wrap items-center justify-start gap-4">
             <ButtonLink
               render={<Link href={`/products/${product.id}/edit`} />}
               size="xs"
               variant="ghost"
+              className="h-11 min-w-11"
             >
               수정
             </ButtonLink>
@@ -320,6 +332,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
               <Button
                 size="xs"
                 variant="light"
+                className="h-11 min-w-11"
                 onClick={handleToggleActive}
                 disabled={toggling}
                 aria-busy={toggling}
@@ -330,6 +343,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             <Button
               size="xs"
               variant="subtle-destructive"
+              className="h-11 min-w-11"
               onClick={() => setConfirmOpen(true)}
               disabled={deleting}
               aria-busy={deleting}
@@ -345,6 +359,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
         title="상품 삭제"
         message={`"${product.name}" 상품을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다. 주문·회차에 쓰인 상품은 지울 수 없어요.`}
         confirmLabel="삭제"
+        confirmColor="brand"
         loading={deleting}
         onConfirm={handleDelete}
         onClose={() => {

@@ -1877,7 +1877,7 @@ export const screens = [
     steps: [
       { click: '배송 후 환불' },
       { click: '꽃 상함' },
-      { fill: { label: '메모 (손님에게는 보이지 않아요)', value: '꽃잎이 시들어 도착' } },
+      { fill: { label: '메모 (고객에게는 보이지 않아요)', value: '꽃잎이 시들어 도착' } },
     ],
     viewport: true,
   },
@@ -1897,7 +1897,7 @@ export const screens = [
     steps: [
       { click: '배송 후 환불' },
       { click: '꽃 상함' },
-      { fill: { label: '메모 (손님에게는 보이지 않아요)', value: '꽃잎이 시들어 도착' } },
+      { fill: { label: '메모 (고객에게는 보이지 않아요)', value: '꽃잎이 시들어 도착' } },
       { click: '전액 환불 확정' },
     ],
   },
