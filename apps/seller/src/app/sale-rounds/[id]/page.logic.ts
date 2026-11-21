@@ -149,7 +149,7 @@ export function buildRoundPageData(
   const productIds = new Set<string>();
   for (const product of products) {
     if (!isUsableProduct(product, round.storeId) || productIds.has(product.id)) {
-      throw new Error('스토어 상품 응답이 올바르지 않습니다.');
+      throw new Error('가게 상품 응답이 올바르지 않습니다.');
     }
     productIds.add(product.id);
   }
