@@ -6,7 +6,7 @@ import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { ChevronRight, RefreshCcw, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { ISSUE_DESCRIPTIONS, ISSUE_LABELS } from '@/app/orders/[id]/operation-issues';
+import { describeIssue, ISSUE_LABELS } from '@/app/orders/[id]/operation-issues';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
@@ -47,10 +47,12 @@ function formatDateTime(value: string) {
 
 function IssueRow({
   issue,
+  role,
   canResolve,
   onResolve,
 }: {
   issue: StoreOperationIssue;
+  role: string | null;
   canResolve: boolean;
   onResolve: (issue: StoreOperationIssue) => void;
 }) {
@@ -81,7 +83,7 @@ function IssueRow({
             className={TEXT}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
-            {ISSUE_DESCRIPTIONS[issue.type]}
+            {describeIssue(issue.type, role)}
           </p>
           <p
             className={TEXT}
@@ -195,6 +197,7 @@ export default function OperationsPage() {
             <IssueRow
               key={issue.id}
               issue={issue}
+              role={role}
               canResolve={canManuallyResolve(issue, role)}
               onResolve={setResolving}
             />

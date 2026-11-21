@@ -33,11 +33,11 @@ export const ISSUE_LABELS: Record<OperationIssueType, string> = {
 };
 
 export const ISSUE_DESCRIPTIONS: Record<OperationIssueType, string> = {
-  PAYMENT_LOOKUP_FAILED: '결제 조회 결과를 서버에서 확인 중인 기록입니다.',
-  AUTO_REFUND_FAILED: '자동 환불이 완료되지 않아 서버 재시도가 필요한 기록입니다.',
-  CUSTOMER_NOTICE_FAILED: '알림톡과 문자 대체 발송이 모두 실패한 연락 기록입니다.',
+  PAYMENT_LOOKUP_FAILED: '결제가 됐는지 확인하는 중인 기록입니다.',
+  AUTO_REFUND_FAILED: '자동 환불이 끝나지 않아 다시 시도해야 하는 기록입니다.',
+  CUSTOMER_NOTICE_FAILED: '알림톡과 대신 보낸 문자가 모두 실패한 연락 기록입니다.',
   REDELIVERY_FAILED: '유료 재배송까지 실패해 자동 환불 판단 없이 남긴 분쟁 기록입니다.',
-  RETENTION_DELETE_FAILED: '보관 객체 파기 실패로 관리자 확인이 필요한 기록입니다.',
+  RETENTION_DELETE_FAILED: '보관 기간이 지난 자료를 지우지 못해 관리자 확인이 필요한 기록입니다.',
   FINALIZATION_REFUND_FAILED:
     '결제 확정 중 환불 요청 결과를 확정하지 못했습니다. 재시도하지 말고 PortOne 콘솔에서 환불 여부를 확인하세요.',
   DELIVERY_PHOTO_RECONCILIATION_REQUIRED:
@@ -47,6 +47,25 @@ export const ISSUE_DESCRIPTIONS: Record<OperationIssueType, string> = {
   SETTLEMENT_RECOVERY_REQUIRED:
     '이미 판매자에게 지급한 정산의 주문이 환불됐습니다. 지급한 금액을 판매자에게서 돌려받아야 하며, 관리자가 회수를 확인한 뒤 닫습니다.',
 };
+/**
+ * 판매자에게 보여 줄 문장. 이 기록들은 관리자만 닫고(명세 #510) 판매자는 결제사 콘솔에 들어갈 수 없으므로,
+ * 판매자에게는 누가 처리하는지만 알린다. 관리자는 위 ISSUE_DESCRIPTIONS(결제사 확인 안내)를 그대로 본다.
+ */
+const SELLER_ISSUE_DESCRIPTIONS: Partial<Record<OperationIssueType, string>> = {
+  FINALIZATION_REFUND_FAILED:
+    '결제를 확정하는 중에 환불이 됐는지 확인하지 못했습니다. 결제사 확인이 필요해 관리자가 확인한 뒤 닫습니다.',
+  PROVIDER_REVERSAL_DETECTED:
+    '주문을 받은 뒤 결제사에서 결제가 취소되거나 분쟁이 접수됐습니다. 관리자가 결제사에서 확인한 뒤 닫으며, 그때까지 이 주문의 정산은 보류됩니다.',
+};
+
+/** 로그인한 역할에 맞는 기록 설명. 관리자는 결제사 확인 안내를, 그 밖의 역할은 판매자 문장을 본다. */
+export function describeIssue(type: OperationIssueType, role: string | null | undefined): string {
+  if (role !== 'admin') {
+    const sellerDescription = SELLER_ISSUE_DESCRIPTIONS[type];
+    if (sellerDescription) return sellerDescription;
+  }
+  return ISSUE_DESCRIPTIONS[type];
+}
 const ISSUE_STATUSES = new Set<OperationIssueStatus>(['OPEN', 'RESOLVED', 'DISMISSED']);
 const ISSUE_SEVERITIES = new Set<OperationIssueSeverity>(['info', 'warning', 'critical']);
 const ACTION_TYPES = new Set<OperationIssueActionType>(['RETRY_REFUND', 'RESEND_SMS']);

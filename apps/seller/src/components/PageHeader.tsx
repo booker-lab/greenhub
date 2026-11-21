@@ -33,6 +33,10 @@ interface PageHeaderProps {
   sticky?: boolean;
 }
 
+// 뒤로·홈은 보이는 크기(28px)와 자리를 그대로 두고, 투명한 ::after로 누르는 영역만 사방 9px(1px 테두리 안쪽 기준) 넓혀 44px로 맞춘다.
+const ICON_HIT =
+  "relative size-7 overflow-visible after:absolute after:-inset-[9px] after:content-['']";
+
 /** 페이지 헤더. 셀러앱 전 페이지가 동일 마크업을 공유. */
 export function PageHeader({
   title,
@@ -72,7 +76,7 @@ export function PageHeader({
               <Button
                 variant="ghost"
                 size="icon-sm"
-                className="size-7"
+                className={ICON_HIT}
                 aria-label="뒤로"
                 onClick={handleBack}
               >
@@ -87,7 +91,7 @@ export function PageHeader({
               <ButtonLink
                 variant="ghost"
                 size="icon-sm"
-                className="size-7"
+                className={ICON_HIT}
                 aria-label="홈"
                 render={<Link href="/" />}
               >

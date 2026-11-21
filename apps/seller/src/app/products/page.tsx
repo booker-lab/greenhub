@@ -93,9 +93,9 @@ export default function ProductsPage() {
 
           {!storeId && sessionStatus !== 'loading' && (
             <Alert variant="destructive" role="alert">
-              <AlertTitle>스토어 정보를 확인할 수 없습니다</AlertTitle>
+              <AlertTitle>가게 정보를 확인할 수 없습니다</AlertTitle>
               <AlertDescription>
-                로그인된 셀러 스토어 정보를 확인한 뒤 다시 시도해 주세요.
+                로그인한 판매자 계정의 가게 정보를 확인한 뒤 다시 시도해 주세요.
               </AlertDescription>
             </Alert>
           )}
@@ -125,8 +125,8 @@ export default function ProductsPage() {
               <AlertDescription>
                 <div className="flex flex-col gap-2.5">
                   <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
-                    이전 목록을 표시합니다. 상태 변경·삭제는 서버 기준으로 처리되며 목록이 오래된
-                    상태일 수 있습니다.
+                    지난번에 불러온 목록을 보여 드려요. 실제 상태와 다를 수 있으니 바꾸기 전에 다시
+                    조회해 주세요.
                   </p>
                   {/* ② "이전 목록" 재조회는 노란 면 대신 중립 외곽선(2026-11-01 결정: 노랑은 마감에만). */}
                   <Button size="xs" variant="outline-gray" onClick={retry}>

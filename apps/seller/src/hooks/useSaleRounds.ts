@@ -267,7 +267,7 @@ export function useSaleRounds(): UseSaleRoundsResult {
   const getApiContext = useCallback((): ApiContext => {
     const currentAccessToken = accessTokenRef.current;
     if (!storeId || !hasAccessToken || !currentAccessToken) {
-      throw new Error('셀러 스토어 인증 정보를 확인할 수 없습니다.');
+      throw new Error('판매자 가게 정보를 확인할 수 없습니다.');
     }
     return {
       storeId,
@@ -287,7 +287,7 @@ export function useSaleRounds(): UseSaleRoundsResult {
     if (!storeId || !hasAccessToken || !accessToken) {
       setRounds([]);
       setLoading(false);
-      setError('셀러 스토어 인증 정보를 확인할 수 없습니다.');
+      setError('판매자 가게 정보를 확인할 수 없습니다.');
       return;
     }
 

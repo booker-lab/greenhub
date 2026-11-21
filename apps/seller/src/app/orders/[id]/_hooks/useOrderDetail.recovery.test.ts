@@ -37,7 +37,7 @@ describe('Seller 주문 상세 recovery — auth prerequisite', () => {
   });
 
   it('인증 오류 메시지는 목록 계약과 동일한 문구를 사용한다', () => {
-    expect(SELLER_ORDER_DETAIL_AUTH_ERROR).toBe('셀러 스토어 인증 정보를 확인할 수 없습니다.');
+    expect(SELLER_ORDER_DETAIL_AUTH_ERROR).toBe('판매자 가게 정보를 확인할 수 없습니다.');
   });
 });
 
