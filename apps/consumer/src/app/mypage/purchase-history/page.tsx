@@ -100,7 +100,7 @@ function PurchaseHistoryContent() {
           >
             주문 내역을 불러오지 못했습니다.
           </p>
-          <Button variant="plain" size="xs" onClick={refetch}>
+          <Button variant="plain" size="xs" className="font-bold" onClick={refetch}>
             다시 시도
           </Button>
         </div>
@@ -111,7 +111,9 @@ function PurchaseHistoryContent() {
           <p className={TEXT} style={mutedTextStyle}>
             아직 구매한 꽃이 없어요.
           </p>
-          <ButtonLink render={<Link href="/" />}>이번 회차 보러 가기</ButtonLink>
+          <ButtonLink render={<Link href="/" />} className="font-bold">
+            이번 회차 보러 가기
+          </ButtonLink>
         </div>
       )}
 

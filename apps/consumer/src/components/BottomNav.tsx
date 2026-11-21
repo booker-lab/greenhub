@@ -180,7 +180,7 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
                   className="m-0 p-0 leading-[1.55]"
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    fontWeight: isActive ? 'var(--fw-extrabold)' : 'var(--fw-medium)',
+                    fontWeight: isActive ? 'var(--fw-extrabold)' : 'var(--fw-regular)',
                     color: isActive ? 'var(--color-text)' : 'var(--color-text-secondary)',
                   }}
                 >

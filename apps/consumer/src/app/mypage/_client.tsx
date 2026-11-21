@@ -402,7 +402,7 @@ export default function MyPageClient() {
               className={TEXT}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
+                fontWeight: 'var(--fw-regular)',
                 color: 'var(--color-text)',
               }}
             >
@@ -429,7 +429,7 @@ export default function MyPageClient() {
               className={TEXT}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
+                fontWeight: 'var(--fw-regular)',
                 color: 'var(--color-text)',
               }}
             >
@@ -476,7 +476,7 @@ function MenuLink({ label, onClick }: { label: string; onClick: () => void }) {
         style={{
           color: 'var(--color-text)',
           fontSize: 'var(--font-size-sm)',
-          fontWeight: 'var(--fw-medium)',
+          fontWeight: 'var(--fw-regular)',
         }}
       >
         {label}
@@ -516,7 +516,7 @@ function SupportCallLink() {
           style={{
             color: 'var(--color-text)',
             fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
+            fontWeight: 'var(--fw-regular)',
           }}
         >
           고객센터 전화 {PUBLIC_BUSINESS_INFO.phone}

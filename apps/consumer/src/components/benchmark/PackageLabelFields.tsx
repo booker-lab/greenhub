@@ -97,7 +97,7 @@ export default function PackageLabelFields({
       <div className="leading-[1.55]">
         <div
           id={`${groupId}-label`}
-          className="inline-block cursor-default text-sm font-semibold break-words [-webkit-tap-highlight-color:transparent]"
+          className="inline-block cursor-default text-sm font-bold break-words [-webkit-tap-highlight-color:transparent]"
         >
           포장 라벨 (무료)
         </div>
@@ -129,7 +129,7 @@ export default function PackageLabelFields({
       </div>
       {value.enabled && (
         <div className="leading-[1.55]">
-          <FieldLabel htmlFor={textId} required className="inline-block">
+          <FieldLabel htmlFor={textId} required className="inline-block font-bold">
             라벨 문구
           </FieldLabel>
           <FieldDescription id={`${textId}-description`} className="m-0 mb-[5px] block p-0">

@@ -67,7 +67,9 @@ function WishlistContent() {
           >
             이번 회차에 찜한 꽃이 없어요.
           </p>
-          <ButtonLink render={<Link href="/" />}>이번 회차 보러 가기</ButtonLink>
+          <ButtonLink render={<Link href="/" />} className="font-bold">
+            이번 회차 보러 가기
+          </ButtonLink>
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3">
@@ -95,6 +97,7 @@ function WishlistContent() {
               <div className="mt-2 flex flex-col gap-1.5">
                 {canBuy && item.status === 'ACTIVE' && (
                   <Button
+                    className="font-bold"
                     onClick={async () => {
                       // 옵션(화분 등)을 골라야 하는 상품은 담지 않고 상품 화면의 옵션 시트로 보낸다.
                       if (await fetchNeedsOptionChoice(item.productId)) {
@@ -112,7 +115,11 @@ function WishlistContent() {
                     장바구니 담기
                   </Button>
                 )}
-                <Button variant="secondary" onClick={() => wishlist.toggle(item.productId)}>
+                <Button
+                  variant="secondary"
+                  className="font-bold"
+                  onClick={() => wishlist.toggle(item.productId)}
+                >
                   찜 해제
                 </Button>
               </div>

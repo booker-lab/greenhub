@@ -104,7 +104,7 @@ function PhotoPicker({
             <Button
               size="compact-xs"
               variant="ghost"
-              className="bg-white text-primary hover:bg-white"
+              className="bg-white font-bold text-primary hover:bg-white"
               aria-label={`고른 사진 ${index + 1} 빼기`}
               onClick={() => onChange(files.filter((_, i) => i !== index))}
               style={{ position: 'absolute', right: 2, top: 2 }}
@@ -117,6 +117,7 @@ function PhotoPicker({
           <Button
             variant="plain"
             size="compact-sm"
+            className="font-bold"
             disabled={disabled}
             onClick={() => inputRef.current?.click()}
           >
@@ -302,7 +303,13 @@ function WrittenReview({
             사진 {adding.length}장 올리기
           </LoadingButton>
         )}
-        <Button size="compact-sm" variant="subtle-destructive" disabled={busy} onClick={remove}>
+        <Button
+          size="compact-sm"
+          variant="subtle-destructive"
+          className="font-bold"
+          disabled={busy}
+          onClick={remove}
+        >
           후기 지우기
         </Button>
       </div>
@@ -366,6 +373,7 @@ export default function OrderReviews({
                   <Button
                     size="compact-sm"
                     variant="light"
+                    className="font-bold"
                     onClick={() => setOpenForm(openForm === item.productId ? null : item.productId)}
                   >
                     후기 쓰기
