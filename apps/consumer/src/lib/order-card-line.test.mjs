@@ -35,10 +35,11 @@ const roundOrder = (status, extra = {}) => ({
   ...extra,
 });
 
-const UPCOMING = ['PENDING', 'ACCEPTED', 'PREPARING', 'DELIVERING', 'DELIVERY_HELD'];
+const UPCOMING = ['PENDING', 'ACCEPTED', 'PREPARING', 'DELIVERING'];
 const ARRIVED = ['DELIVERED', 'REVIEWED'];
 // 오지 않는 주문: 취소, 배송 종결(고객 사유로 환불 없이 끝남). 첫 줄을 숨긴다.
-const HIDDEN = ['CANCELLED', 'CLOSED_UNDELIVERED'];
+// 배송 보류: 원래 날짜의 "도착 예정"이 틀린 약속이 되므로 숨긴다(2026-11-22 사용자 결정).
+const HIDDEN = ['CANCELLED', 'CLOSED_UNDELIVERED', 'DELIVERY_HELD'];
 // 도착을 약속하지 않는 상태: 공동구매·거점 전용 상태, 모르는 값.
 const NO_ARRIVAL_PROMISE = [
   'RECRUITING',
@@ -64,7 +65,7 @@ test('회차 직배송 주문은 진행 중이면 "도착 예정", 배송 완료
   }
 });
 
-test('취소·배송 종결된 회차 직배송 주문은 첫 줄을 숨긴다', () => {
+test('취소·배송 종결·배송 보류인 회차 직배송 주문은 첫 줄을 숨긴다', () => {
   for (const status of HIDDEN) {
     assert.equal(orderCardHeadline(roundOrder(status)), null, status);
   }
