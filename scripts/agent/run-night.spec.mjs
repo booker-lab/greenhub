@@ -2367,6 +2367,8 @@ test('KILL TREE — POSIX targets the process group, Windows uses taskkill /T /F
   assert.equal(defaultKillProcessTree({ pid: undefined }).ok, false);
 });
 
+// kill(pid, 0)이 통한 뒤 /proc 읽기 전에 init이 좀비를 거둬 가면 stat 파일이 사라진다(ENOENT).
+// /proc가 있는 곳(Linux)에서 그 경우는 이미 끝난 프로세스다. /proc가 없는 곳은 kill 결과만 믿는다.
 function isProcessAlive(pid) {
   try {
     process.kill(pid, 0);
@@ -2376,7 +2378,8 @@ function isProcessAlive(pid) {
   try {
     const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
     return stat.slice(stat.lastIndexOf(')') + 2, stat.lastIndexOf(')') + 3) !== 'Z';
-  } catch {
+  } catch (error) {
+    if (error?.code === 'ENOENT' && existsSync('/proc/self')) return false;
     return true;
   }
 }
@@ -2425,15 +2428,14 @@ test('KILL TREE — aborting a real BUILD invocation terminates the child and it
       settled.signal === 'SIGTERM' || settled.signal === 'SIGKILL',
       JSON.stringify(settled),
     );
+    // 루프가 마지막으로 본 상태로 판정한다. 다시 물으면 좀비가 거둬지는 순간과 겹쳐 다른 답이 나올 수 있다.
     const exitDeadline = Date.now() + 10000;
-    while (isProcessAlive(grandchildPid) && Date.now() < exitDeadline) {
+    let grandchildAlive = isProcessAlive(grandchildPid);
+    while (grandchildAlive && Date.now() < exitDeadline) {
       await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+      grandchildAlive = isProcessAlive(grandchildPid);
     }
-    assert.equal(
-      isProcessAlive(grandchildPid),
-      false,
-      'the BUILD descendant outlived its process group',
-    );
+    assert.equal(grandchildAlive, false, 'the BUILD descendant outlived its process group');
   } finally {
     if (grandchildPid !== null && isProcessAlive(grandchildPid)) {
       try {
