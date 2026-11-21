@@ -127,3 +127,36 @@ test('파일럿 거래성 주문 알림 8종은 선택 마케팅과 분리되어
   assert.match(source, /거래성 알림/);
   assert.match(source, /선택 마케팅과 별개/);
 });
+
+test('개정 전 개인정보처리방침(2026-11-08 시행판)을 글자 그대로 보관하고 현재 방침에서 연결한다', () => {
+  const archive = normalizeWhitespace(loadSource('app', 'privacy', '2026-11-08', 'page.tsx'));
+  // 보관본은 당시 공개본 그대로라 시행일·알림 표기(내부 코드)가 당시 값이다.
+  assert.match(archive, /const EFFECTIVE_DATE = '2026년 11월 8일'/);
+  assert.match(archive, /<li>ORDER_ACCEPTED<\/li>/);
+  assert.match(archive, /이전 버전의 개인정보처리방침입니다\./);
+  assert.match(archive, /2026년 11월 8일부터 11월 27일까지 적용됩니다\./);
+  assert.match(archive, /<a href="\/privacy">현재 개인정보처리방침<\/a>/);
+  assert.match(archive, /canonical: '\/privacy\/2026-11-08'/);
+  assert.match(archive, /robots: \{ index: false, follow: true \}/);
+
+  const current = normalizeWhitespace(loadSource('app', 'privacy', 'page.tsx'));
+  assert.match(current, /<Section id="changes" title="10\. 방침의 변경">/);
+  assert.match(current, /<a href="\/privacy\/2026-11-08">2026년 11월 8일 시행 개인정보처리방침<\/a>/);
+});
+
+test('방침 개정 안내는 시행 전(한국 시간 2026-11-27까지)에만 브라우저에서 보인다', () => {
+  const source = loadSource('components', 'PolicyChangeNotice.tsx');
+
+  // 홈은 정적으로 만들어지므로 날짜 판단은 브라우저에서 한다. 첫 HTML에는 없다.
+  assert.match(source, /^'use client';/);
+  assert.match(source, /Date\.parse\('2026-11-28T00:00:00\+09:00'\)/);
+  assert.match(source, /useState\(false\)/);
+  assert.match(source, /setVisible\(Date\.now\(\) < NOTICE_END_MS\)/);
+  assert.match(source, /href="\/privacy#changes"/);
+  assert.match(source, /개인정보처리방침 개정\(11월 28일 시행\)/);
+  assert.match(source, /minHeight: 'var\(--touch-target\)'/);
+
+  const footer = loadSource('components', 'BusinessInfoFooter.tsx');
+  assert.match(footer, /import PolicyChangeNotice from '@\/components\/PolicyChangeNotice';/);
+  assert.match(footer, /<PolicyChangeNotice \/>/);
+});
