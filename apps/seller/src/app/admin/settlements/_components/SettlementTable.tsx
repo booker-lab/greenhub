@@ -4,6 +4,8 @@ import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { useState } from 'react';
 import type { AdminPayoutAccount, AdminSettlement } from '@/hooks/useAdmin';
 import {
+  ADMIN_ACTION_PENDING,
+  ADMIN_ACTION_TD,
   ADMIN_NUM,
   ADMIN_SUB,
   ADMIN_TD,
@@ -129,11 +131,7 @@ function PayAction({
 }) {
   if (!canPay(s)) return null;
   if (processingId === s.id) {
-    return (
-      <span className="text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
-        처리 중…
-      </span>
-    );
+    return <span className={ADMIN_ACTION_PENDING}>처리 중…</span>;
   }
   return (
     <button
@@ -317,7 +315,7 @@ export function SettlementTable({
                   {toWon(s.platformFee)}
                 </td>
                 <td className={`${ADMIN_TD} ${ADMIN_NUM}`}>{toWon(s.netAmount)}</td>
-                <td className={`${ADMIN_TD} py-1 text-right align-middle`}>
+                <td className={ADMIN_ACTION_TD}>
                   <PayAction s={s} processingId={processingId} onPay={onPay} />
                 </td>
               </tr>

@@ -3,6 +3,8 @@
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { AdminDriver } from '@/hooks/useAdmin';
 import {
+  ADMIN_ACTION_PENDING,
+  ADMIN_ACTION_TD,
   ADMIN_SUB,
   ADMIN_TD,
   ADMIN_TH,
@@ -82,9 +84,7 @@ export function DriverList({
 
   const actionsOf = (driver: AdminDriver) =>
     processingId === driver.id ? (
-      <span className="text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
-        처리 중…
-      </span>
+      <span className={ADMIN_ACTION_PENDING}>처리 중…</span>
     ) : (
       <AdminRowMenu
         label={`기사 ${driverName(driver)}`}
@@ -158,7 +158,7 @@ export function DriverList({
               <td className={`${ADMIN_TD} max-[1100px]:hidden`}>
                 <DriverJoined driver={driver} />
               </td>
-              <td className={`${ADMIN_TD} py-1 text-right align-middle`}>
+              <td className={ADMIN_ACTION_TD}>
                 <span className="flex justify-end">{actionsOf(driver)}</span>
               </td>
             </tr>
