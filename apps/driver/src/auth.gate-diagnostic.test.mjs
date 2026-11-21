@@ -140,6 +140,7 @@ describe('38B Driver authorize gate-class diagnostic (source contract)', () => {
 
   it('5: fetch throw emits g6 (UPSTREAM_DISPATCH_FAILED, distinct from non-ok)', () => {
     assert.ok(source.includes(`'${G6_DISPATCH}'`), 'g6 code site missing');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 소스 글자 `${API}`를 그대로 찾는다.
     const fetchAt = source.indexOf('fetch(`${API}/auth/login`');
     const g6At = source.indexOf(`'${G6_DISPATCH}'`, fetchAt);
     assert.ok(fetchAt >= 0 && g6At > fetchAt, 'g6 must be at upstream dispatch (catch after fetch)');
@@ -186,11 +187,6 @@ describe('38B Driver authorize gate-class diagnostic (source contract)', () => {
   });
 
   it('gate ordering is runtime, secret, shape, allowlist, then upstream', () => {
-    // Order by throw sites (not type-union order): find each code's first
-    // `throw new DiagnosticCredentialsSignin('...')` occurrence.
-    const throwAt = (code) => source.indexOf(`throw new DiagnosticCredentialsSignin(\n            '${code}'`) >= 0
-      ? source.indexOf(`throw new DiagnosticCredentialsSignin(\n            '${code}'`)
-      : source.indexOf(`throw new DiagnosticCredentialsSignin('${code}'`);
     // Fallback: search for the code after the authorize() entry to skip the
     // type-union preamble (which lists g4 before g5).
     const authzAt = source.indexOf('async authorize(credentials');
@@ -210,6 +206,7 @@ describe('38B Driver authorize gate-class diagnostic (source contract)', () => {
     for (const v of [g2, g3, g5, g4, g6, g7, g8, g9, g10]) assert.ok(v >= 0, 'gate code missing in order check');
     assert.ok(g2 < g3 && g3 < g5 && g5 < g4, 'pre-upstream order must be g2,g3,g5,g4');
     assert.ok(g4 < g6 && g6 < g7 && g7 < g8 && g8 < g9 && g9 < g10, 'post-upstream order must be g4<g6<g7<g8<g9<g10');
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 소스 글자 `${API}`를 그대로 찾는다.
     const fetchAt = source.indexOf('fetch(`${API}/auth/login`', authzAt);
     assert.ok(fetchAt > g4 && fetchAt < g6, 'upstream fetch must stay between allowlist and dispatch gate');
   });
@@ -363,6 +360,7 @@ describe('38B Driver authorize gate-class diagnostic (source contract)', () => {
         `diagnostic must be static closed-enum literal, got: ${arg}`,
       );
     }
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 소스에 없어야 하는 템플릿 글자를 그대로 찾는다.
     for (const forbidden of ['${email}', '${password}', '${got}', '${expected}', '${credentials}', '.length', 'createHash', 'fingerprint', 'Date.now()']) {
       // Codes themselves carry none; the surrounding gate file must not
       // interpolate values into codes (hash use stays in secretsMatch only).

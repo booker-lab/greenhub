@@ -1,9 +1,9 @@
 'use client';
 
 import { Toast as ToastPrimitive } from '@base-ui/react/toast';
+import { CloseIcon } from '@greenhub/ui/components/close-button';
 import { ToastProvider, toast } from '@greenhub/ui/components/toast';
 import type * as React from 'react';
-import { CloseIcon } from '@greenhub/ui/components/close-button';
 
 // 알림은 packages/ui의 toast 관리자(toast.add)로 띄운다. 여기서는 그 알림을 Mantine Notification과 같은
 // 모양으로 그린다(① 외형 유지, ui-stack-migration-plan.md §7): 폭 440px까지, 알림 사이 16px,
