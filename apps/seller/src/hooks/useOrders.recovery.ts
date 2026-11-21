@@ -4,7 +4,7 @@
  * vitest에서 `@/` alias 없이 직접 검증할 수 있도록 Framework 의존성을 두지 않는다.
  */
 
-export const SELLER_ORDERS_AUTH_ERROR = '셀러 스토어 인증 정보를 확인할 수 없습니다.';
+export const SELLER_ORDERS_AUTH_ERROR = '판매자 가게 정보를 확인할 수 없습니다.';
 
 export type SellerOrdersAuthState = 'loading' | 'missing' | 'ready';
 

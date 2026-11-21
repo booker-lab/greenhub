@@ -10,7 +10,7 @@
  * - auth 확정 실패 → AUTH_FAILED (NOT_FOUND/빈 화면으로 collapse 금지)
  */
 
-export const SELLER_ORDER_DETAIL_AUTH_ERROR = '셀러 스토어 인증 정보를 확인할 수 없습니다.';
+export const SELLER_ORDER_DETAIL_AUTH_ERROR = '판매자 가게 정보를 확인할 수 없습니다.';
 
 export const SELLER_ORDER_DETAIL_READ_ERROR = '주문을 불러오지 못했습니다.';
 
