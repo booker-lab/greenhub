@@ -98,6 +98,17 @@ export function resolveNavSalesMode(productsError: unknown, storeMode: StoreMode
   return storeMode.salesMode;
 }
 
+/**
+ * 탭이 지금 화면인지 판정한다. 홈은 정확히 '/'일 때만, 나머지는 경로 앞부분이 같을 때 켠다.
+ * 운영(Vercel)에서 홈을 다시 만들 때(home-server.ts의 revalidate) Next가 경로를 '/index'로 넘겨,
+ * 미리 만든 홈 HTML에 '홈' 탭이 꺼진 채로 담겼다(2026-11-22 운영 HTML의 "c":["","index"]).
+ * 브라우저가 이어받을 때는 스타일 값 차이를 고치지 않으므로 여기서 '/index'도 홈으로 읽는다.
+ */
+export function isNavTabActive(tabHref: string, pathname: string): boolean {
+  if (tabHref === '/') return pathname === '/' || pathname === '/index';
+  return pathname.startsWith(tabHref);
+}
+
 // 숨기는 경로(결제·주문 완료·상품 상세)에서는 상품 목록·매장 프로필 조회가 필요 없으므로
 // 경로부터 판정하고, 보일 때만 조회하는 하위 컴포넌트를 마운트한다.
 export default function BottomNav() {
@@ -138,7 +149,7 @@ function VisibleBottomNav({ pathname }: { pathname: string }) {
     >
       <div style={{ display: 'flex', maxWidth: 430, margin: '0 auto', height: '100%' }}>
         {tabs.map((tab) => {
-          const isActive = tab.href === '/' ? pathname === '/' : pathname.startsWith(tab.href);
+          const isActive = isNavTabActive(tab.href, pathname);
           const { Icon } = tab;
 
           return (
