@@ -165,3 +165,52 @@ describe('AdminService 어드민 행동 기록', () => {
     });
   });
 });
+
+describe('AdminService 감사 기록 이름 붙이기', () => {
+  it('처리한 관리자와 대상에 지금 이름을 붙이고, 찾지 못하면 null로 둔다', async () => {
+    const { audit, service } = makeFixture({
+      'users/admin-1': { name: '김운영' },
+      'users/driver-2': { name: '이기사' },
+      'stores/store-1': { name: '디어 오키드' },
+      'orders/order-1': { orderNumber: '20261128-000014' },
+      'settlements/order-2': { orderNumber: '20261128-000015' },
+      'partnerInquiries/inq-1': { farmName: '푸른 농원' },
+    });
+    audit.listAdmin.mockResolvedValue([
+      { action: 'admin.driver.approved', actorId: 'admin-1', targetType: 'driver', targetId: 'driver-2' },
+      { action: 'store.payout_account.updated', actorId: 'admin-1', targetType: 'store', targetId: 'store-1' },
+      { action: 'admin.order.force_refunded', actorId: 'admin-9', targetType: 'order', targetId: 'order-1' },
+      { action: 'admin.settlement.paid', actorId: 'admin-1', targetType: 'settlement', targetId: 'order-2' },
+      { action: 'admin.partner_inquiry.contacted', actorId: 'admin-1', targetType: 'partner_inquiry', targetId: 'inq-1' },
+      { action: 'admin.partner_inquiry.deleted', actorId: 'admin-1', targetType: 'partner_inquiry', targetId: 'gone' },
+      { action: 'admin.banner.updated', actorId: 'admin-1', targetType: 'banner', targetId: 'main_hero' },
+    ]);
+
+    const logs = await service.getAuditLogs();
+
+    expect(logs.map((log) => [log.actorName, log.targetName])).toEqual([
+      ['김운영', '이기사'],
+      ['김운영', '디어 오키드'],
+      [null, '20261128-000014'],
+      ['김운영', '20261128-000015'],
+      ['김운영', '푸른 농원'],
+      ['김운영', null],
+      ['김운영', null],
+    ]);
+    // 원래 기록 값은 그대로 둔다.
+    expect(logs[0]).toMatchObject({ actorId: 'admin-1', targetId: 'driver-2' });
+  });
+
+  it('경로가 될 수 없는 ID·빈 ID·없는 문서는 이름 없이 그대로 돌려준다', async () => {
+    const { audit, service } = makeFixture({});
+    audit.listAdmin.mockResolvedValue([
+      { action: 'admin.store.archived', actorId: 'admin-1', targetType: 'store', targetId: 'a/b' },
+      { action: 'admin.user.suspended', actorId: '', targetType: 'user', targetId: 'user-1' },
+    ]);
+
+    await expect(service.getAuditLogs()).resolves.toEqual([
+      expect.objectContaining({ targetId: 'a/b', actorName: null, targetName: null }),
+      expect.objectContaining({ targetId: 'user-1', actorName: null, targetName: null }),
+    ]);
+  });
+});
