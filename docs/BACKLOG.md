@@ -838,6 +838,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### ADMIN-ROLE-GRANT-AND-STAFF-PERMISSIONS
 - [ ] **2026-10-30 결정: 지금은 만들지 않는다. 첫 직원을 들일 때 다시 연다.** 현재 운영 관리자는 사용자 본인의 카카오 겸직 계정(관리자 + 디어 오키드 매장) 1개뿐이다. 앱 안에서 관리자 권한을 주거나 회수하는 방법이 없다. 회원가입은 `consumer`·`seller`·`driver`만 받고(`apps/api/src/auth/dto/register.dto.ts`), 관리자 "초대" 탭은 판매자 초대 전용이다. 운영 스크립트(`scripts/ops/`)에도 역할을 바꾸는 것이 없다. 남은 수단은 Firestore `users/{uid}.role` 직접 수정뿐이다. 이 경우 바꾼 뒤 재로그인이 필요하고(`JwtStrategy`가 요청마다 현재 role과 토큰 role을 비교), 누가 권한을 줬는지는 audit에 남지 않는다. `docs/specs/api/admin.md`는 이 방식을 현행 정식 절차로 쓰지 않는다고 적지만, 정식 절차는 아직 정의되지 않았다. 직원이 생기면 먼저 맡을 일을 정한다. (가) 전권 관리자가 필요하면 `lock-account.mjs`·`link-store-owner.mjs` 방식(check/apply 분리, audit 기록)의 관리자 권한 부여·회수 운영 스크립트를 만든다. (나) 조회·일부 기능만 필요하면 권한 분리를 설계한다. 지금 서버는 관리자 API 전체를 `@Roles('admin')` 하나로 막고 있으므로(`apps/api/src/admin/admin.controller.ts`) 엔드포인트별 권한으로 바꿔야 한다. 매장 일을 돕는 직원이면 관리자가 아니라 한 매장의 판매자 직원 여러 명 기능이 필요하다(계정당 매장 1개 구조는 `SUPPLIES-ALWAYS-ON-SALES` 2-B 참고).
 
+### FIREBASE-TOOLS-15-STORAGE-RULES
+- [ ] 2026-11-21 `pnpm audit` high 1건이 남았다: `scripts>firebase-tools@14.11.1>zod@3.25.76`(GHSA-mrhx-c7xc-m3w5, 큰 컬렉션 검증 시 메모리 소진, 패치는 zod 4.6.6 이상만 있고 3.x 패치 없음). firebase-tools는 CI 규칙 시험과 운영 인덱스·규칙 배포에만 쓰고 앱 번들에 들어가지 않으며 저장소가 넘기는 입력만 검증한다. zod 4를 쓰는 firebase-tools 15.35.0으로 올리면 이 건이 닫히지만, 로컬 규칙 에뮬레이터 시험에서 Storage 규칙의 `firestore.get/exists` 교차 판정이 허용 경우까지 거절해 `tests/storage/storage-rules.test.mjs` 8건이 실패했다(14.11.1은 79/79 통과, 같은 컨테이너·Java 21). 원인을 확인하거나 이 회귀가 고쳐진 버전이 나오면 올린다. 같은 날 high였던 body-parser 1.20.8(GHSA-27r3-jxmh-p828)은 루트 `pnpm.overrides`의 `body-parser@<1.20.9` → `^1.20.9`로 닫았다(규칙 시험 79/79 통과).
+
 ---
 
 ## STALE_OR_SUPERSEDED
