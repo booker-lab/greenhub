@@ -52,7 +52,7 @@ export default function NewSaleRoundPage() {
           <LoadingState />
         ) : error ? (
           <Alert variant="destructive" role="alert" icon={<AlertTriangle size={16} />}>
-            <AlertTitle>스토어 상품을 불러오지 못했습니다</AlertTitle>
+            <AlertTitle>가게 상품을 불러오지 못했습니다</AlertTitle>
             <AlertDescription>
               <div className="flex flex-col items-stretch justify-start gap-2.5">
                 <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
@@ -77,7 +77,7 @@ export default function NewSaleRoundPage() {
             </Alert>
             {storeProducts.length === 0 && (
               <Alert variant="warning" role="alert">
-                <AlertTitle>현재 스토어 상품이 없습니다</AlertTitle>
+                <AlertTitle>현재 가게 상품이 없습니다</AlertTitle>
                 <AlertDescription>
                   <div className="flex flex-col items-start justify-start gap-2.5">
                     <span>회차에 넣을 상품을 먼저 등록해 주세요.</span>
