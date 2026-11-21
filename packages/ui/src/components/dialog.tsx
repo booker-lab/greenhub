@@ -181,13 +181,14 @@ function DialogContent({
 }
 
 // Mantine Modal 머리: 높이 최소 60px, 위아래·왼쪽 16px, 위 모서리 16px 흰 바탕으로 위에 붙는다(본문이 길면 머리 아래로 스크롤).
+// 바탕은 창 본체와 같은 popover 색이다. 라이트는 둘 다 흰색이고, 다크에서 background를 쓰면 머리만 다른 색 띠가 됐다(2026-11-21).
 // 오른쪽은 닫기 버튼(11px + 28px) 자리를 비운다.
 function DialogHeader({ className, ...props }: React.ComponentProps<'div'>) {
   return (
     <div
       data-slot="dialog-header"
       className={cn(
-        'sticky top-0 z-10 flex min-h-[60px] items-center rounded-t-lg bg-background py-4 pr-[47px] pl-4',
+        'sticky top-0 z-10 flex min-h-[60px] items-center rounded-t-lg bg-popover py-4 pr-[47px] pl-4',
         className,
       )}
       {...props}

@@ -878,13 +878,17 @@ const VARIETIES = [
 }));
 
 // 감사 기록(/admin/audit) — 종류 이름은 화면의 ACTION_LABEL과 맞춘다.
+// actorName·targetName은 실제 API(admin.service getAuditLogs)가 읽을 때 붙이는 지금 이름이다. 마지막 기록은 대상을
+// 찾지 못한 경우(targetName null)라 화면이 ID를 그대로 보인다.
 const ADMIN_AUDIT_LOGS = [
   {
     id: 'audit-1',
     action: 'admin.driver.approved',
     actorId: 'admin-visual-0001',
+    actorName: '김운영',
     targetType: 'driver',
     targetId: 'driver-visual-0002',
+    targetName: '이대기',
     // 실제 API(admin.service approveDriver)와 같은 모양: driverApproved 참·거짓.
     before: { driverApproved: false },
     after: { driverApproved: true },
@@ -895,8 +899,10 @@ const ADMIN_AUDIT_LOGS = [
     id: 'audit-2',
     action: 'admin.order.force_refunded',
     actorId: 'admin-visual-0001',
+    actorName: '김운영',
     targetType: 'order',
     targetId: 'order-round-multi',
+    targetName: '20261001-000001',
     // 실제 API(admin.service forceRefund)와 같은 모양: 강제환불 뒤 상태는 CANCELLED.
     before: { status: 'ACCEPTED' },
     after: { status: 'CANCELLED' },
@@ -907,8 +913,10 @@ const ADMIN_AUDIT_LOGS = [
     id: 'audit-3',
     action: 'store.payout_account.updated',
     actorId: 'admin-visual-0001',
+    actorName: '김운영',
     targetType: 'store',
     targetId: STORE_ID,
+    targetName: null,
     before: null,
     after: { bankName: '농협은행', accountNumberLast4: '7788' },
     reason: null,
