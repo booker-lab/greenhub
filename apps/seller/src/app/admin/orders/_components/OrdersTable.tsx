@@ -132,7 +132,7 @@ function RowActions({
   const label = orderNumberLabel(order);
   if (processing) {
     return (
-      <span className="text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
+      <span className="inline-flex min-h-11 items-center text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
         처리 중…
       </span>
     );
@@ -299,7 +299,8 @@ export function OrdersTable({
               <td className={`${ADMIN_TD} ${ADMIN_NUM} font-bold`}>
                 {formatWon(order.totalAmount)}
               </td>
-              <td className={`${ADMIN_TD} py-1 text-right align-middle`}>{actionsOf(order)}</td>
+              {/* 처리 칸도 다른 칸처럼 위 정렬 — 44px 동작의 가운데를 상품·금액 첫 줄(위 12px + 줄 22px) 높이에 맞춘다(2026-11-20 사용자 결정). */}
+              <td className={`${ADMIN_TD} pt-px pb-0 text-right`}>{actionsOf(order)}</td>
             </tr>
           ))}
         </tbody>
