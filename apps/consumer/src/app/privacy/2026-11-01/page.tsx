@@ -1,0 +1,318 @@
+import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
+import LegalArchiveNotice from '@/components/LegalArchiveNotice';
+import LegalDocumentPage from '@/components/LegalDocumentPage';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
+
+// 이전 버전 보관본(docs/specs/legal/consumer-legal-documents.md §11): 2026년 11월 1일 시행판을 글자 그대로 둔다.
+// 아래 보관 안내 상자와 메타데이터 외의 본문은 고치지 않는다. 검색에는 현재 문서(/privacy)만 나오게 색인에서 뺀다.
+export const metadata: Metadata = {
+  title: '개인정보처리방침(2026년 11월 1일 시행, 이전 버전) | 그린러브',
+  description: '디어 오키드가 운영하는 그린러브의 2026년 11월 1일 시행 개인정보처리방침(이전 버전)입니다.',
+  alternates: { canonical: '/privacy/2026-11-01' },
+  robots: { index: false, follow: true },
+};
+
+const EFFECTIVE_DATE = '2026년 11월 1일';
+
+const sectionStyle = {
+  marginTop: 34,
+} as const;
+
+const headingStyle = {
+  fontSize: 'var(--font-size-xl)',
+  letterSpacing: '-0.02em',
+  lineHeight: 1.4,
+  margin: '0 0 12px',
+} as const;
+
+const listStyle = {
+  margin: '10px 0 0',
+  paddingLeft: 22,
+} as const;
+
+const cardStyle = {
+  background: 'var(--color-surface-muted)',
+  border: 'var(--border)',
+  borderRadius: 'var(--radius-sm)',
+  marginTop: 12,
+  padding: 16,
+} as const;
+
+function Section({ children, title }: { children: ReactNode; title: string }) {
+  return (
+    <section style={sectionStyle}>
+      <h2 style={headingStyle}>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+export default function PrivacyArchive20261101Page() {
+  return (
+    <LegalDocumentPage
+      title="개인정보처리방침"
+      description="디어 오키드(이하 ‘회사’)는 그린러브 서비스를 운영하며 이용자의 개인정보를 보호합니다."
+      effectiveDate={EFFECTIVE_DATE}
+    >
+      <LegalArchiveNotice
+        documentName="개인정보처리방침"
+        currentHref="/privacy"
+        period="2026년 11월 1일부터 11월 7일까지"
+        nextEffectiveDate="2026년 11월 8일"
+      />
+      <p>
+        회사는 개인정보 보호법 등 관계 법령을 준수하고, 개인정보를 필요한 범위에서 적법하고 안전하게
+        처리합니다. 이 방침은 그린러브 consumer 웹과 연결된 GreenLove API에 적용됩니다.
+      </p>
+
+      <Section title="1. 처리 목적, 항목 및 수집 방법">
+        <div style={cardStyle}>
+          <h3>카카오 로그인·회원 관리</h3>
+          <p>
+            본인 식별, 계정 생성, 로그인 유지, 부정 이용 방지와 문의 대응을 위해 카카오 계정 식별자,
+            이름, 이메일, 로그인 세션·접근 토큰·갱신 토큰, 접속 IP와 로그를 처리합니다. 이용자가
+            카카오 로그인을 선택할 때 Kakao Corp.에서 제공받거나 서비스 이용 과정에서 생성됩니다.
+          </p>
+        </div>
+        <div style={cardStyle}>
+          <h3>회원 프로필·주소록</h3>
+          <p>
+            회원 기능과 연락처·배송지 저장을 위해 이름, 이메일, 선택 입력 전화번호, 역할, 매장 연결
+            정보, 주소명, 우편번호, 기본주소, 상세주소와 선택적 알림 토큰을 처리합니다.
+          </p>
+        </div>
+        <div style={cardStyle}>
+          <h3>장바구니·주문 및 결제 준비 경로</h3>
+          <p>
+            장바구니에는 상품, 가격, 수량, 판매유형, 배송방법, 매장, 요청일이 포함될 수 있습니다.
+            통제된 공개 파일럿의 회차 주문을 이용하면 구매자 이름·전화번호, 배송 연락처, 배송지·우편번호·
+            상세주소, 상품·매장·회차·배송방법·요청일·금액, 주문·결제 식별자, 결제수단과 결제·환불
+            상태를 처리합니다. 주문에 제공된 경우 유입 경로 스냅샷도 주문 운영과 문의 대응을 위해
+            처리할 수 있습니다.
+          </p>
+        </div>
+        <div style={cardStyle}>
+          <h3>배송·알림·보안·감사</h3>
+          <p>
+            상품 준비·배송·배송 보류·재배송·완료와 주문 상태 안내를 위해 배송 보류 사유, 다음 연락·배송
+            예정 시각, 배송 완료 사진 식별자, 이용자·주문 식별자, 수신 전화번호, 메시지 내용·템플릿
+            변수·발송 상태·오류를 처리할 수 있습니다. 장애 대응과 부정 이용 방지를 위해 IP, 작업
+            내용과 발생 시각도 처리합니다.
+          </p>
+          <p>
+            주문·결제·배송에 필요한 거래성 알림은 선택 마케팅과 별개입니다. 현재 파일럿에서는 선택
+            마케팅 동의를 새로 수집하거나 마케팅 발송을 운영하지 않습니다.
+          </p>
+          <p>현재 회차 직배송의 거래성 주문 알림은 다음 8종입니다.</p>
+          <ul style={listStyle}>
+            <li>ORDER_ACCEPTED</li>
+            <li>ORDER_PREPARING</li>
+            <li>ORDER_DELIVERING</li>
+            <li>ORDER_DELIVERY_HELD</li>
+            <li>ORDER_REDELIVERY_PAYMENT_REQUESTED</li>
+            <li>ORDER_REDELIVERY_SCHEDULED</li>
+            <li>ORDER_DELIVERED</li>
+            <li>ORDER_CANCELLED</li>
+          </ul>
+        </div>
+        <p>
+          회사는 주민등록번호, 건강정보 등 민감정보와 만 14세 미만 아동의 개인정보를 의도적으로
+          수집하지 않습니다. 만 14세 미만임을 알게 된 경우 이용을 제한하고 필요한 삭제 조치를
+          합니다.
+        </p>
+      </Section>
+
+      <Section title="2. 보유 및 이용기간">
+        <ul style={listStyle}>
+          <li>회원 프로필·주소록: 회원 탈퇴 또는 삭제 요청 처리 완료 시까지</li>
+          <li>
+            로그인 세션: 마지막 사용 후 최대 30일, API 접근 토큰 약 1시간, consumer 갱신 토큰 기본
+            30일
+          </li>
+          <li>
+            표시·광고 기록이 생성된 경우 6개월, 계약·청약철회 기록 5년, 대금결제·재화 공급 기록
+            5년, 소비자 불만·분쟁처리 기록 3년
+          </li>
+          <li>배송 완료 사진과 배송 보류·재배송 처리 정보: 배송·분쟁 대응에 필요한 기간</li>
+          <li>
+            과거에 이미 저장된 마케팅 선호·동의 기록: 당시의 보존 기준과 법정 보존 필요에 따름. 파일럿
+            마케팅 미사용 전환만을 이유로 과거 기록을 삭제하지 않음
+          </li>
+          <li>
+            접속·감사·보안 로그: 목적 달성 또는 관련 분쟁 종료 시까지. 법령상 더 긴 보존 의무가
+            있으면 해당 기간까지
+          </li>
+        </ul>
+        <p>
+          기간이 끝나고 다른 법적 근거가 없으면 전자 파일은 복구가 곤란한 방법으로 삭제합니다. 일반
+          회원·주문 관련 정보의 자동 만료 삭제는 현재 구현되어 있지 않아 운영자가 권리 요청과 정기
+          점검을 통해 파기합니다. 법정 보존정보와 분쟁 중인 배송 사진·주문 기록은 필요한 기간 동안
+          분리 보관할 수 있습니다.
+        </p>
+      </Section>
+
+      <Section title="3. 개인정보의 제3자 제공">
+        <p>
+          회사는 위 목적 범위에서 개인정보를 처리하며, 이용자의 동의 또는 법률상 근거 없이 외부
+          제3자에게 제공하지 않습니다. 파일럿에서는 디어 오키드 내부 판매 담당자 1명과 디어 오키드
+          MVP 사용자 본인인 배송 담당자 1명이 업무상 필요한 범위에서 접근할 수 있습니다. 판매 담당자는 자기 매장의 주문을 서버가
+          인증·확인한 최소 주문 화면으로 처리하고, 배송 담당자는 배정되었거나 배송을 위해 공개된
+          회차 주문의 이름·주소·상품·상태와 단계별 연락정보를 처리합니다. 원문 주문 전체나 마케팅
+          정보에 임의로 접근하는 권한을 부여하지 않습니다. 관리자는 환불·주문·배송·정산 등 운영에
+          필요한 권한 범위에서 접근할 수 있습니다.
+        </p>
+        <p>
+          향후 적법하게 외부 배송 수행자를 지정하는 경우에는 배송 수행에 필요한 범위의 정보만
+          처리하게 하고, 제공받는 자·목적·항목·보유기간 및 필요한 국외 처리 내용을 실제 도입 전에
+          이 방침과 거래 화면에 추가로 안내합니다. 현재 존재하지 않는 외부 배송업체나 위탁관계를
+          현재 사실로 표시하지 않습니다.
+        </p>
+      </Section>
+
+      <Section title="4. 개인정보 처리위탁과 외부 서비스">
+        <ul style={listStyle}>
+          <li>Vercel Inc.: consumer 웹 호스팅, 서버 렌더링과 인증 콜백 처리</li>
+          <li>Railway Corporation: GreenLove API 호스팅과 보안 운영</li>
+          <li>
+            Google Cloud Korea LLC / Google Cloud·Firebase: Firestore 데이터베이스와 관련 서버 자원
+            제공
+          </li>
+          <li>
+            PortOne 및 결제 화면에 표시되는 PG·간편결제 사업자: 결제 요청·상태 확인·환불 처리. 결제
+            식별자, 금액, 결제수단, 거래·환불 상태 등 결제 처리에 필요한 정보
+          </li>
+          <li>
+            ALIGO: 거래성 카카오 알림톡·SMS 전달 경로. 발송 시 수신 전화번호, 주문·이용자 식별자,
+            알림 본문·템플릿 변수, 발송 채널·결과와 오류
+          </li>
+        </ul>
+        <p>
+          카카오 로그인은 이용자의 선택에 따라 Kakao Corp.가 카카오 계정 정보를 회사에 제공하는 외부
+          로그인 서비스입니다. 다음 우편번호 서비스는 주소 검색 때 브라우저에서 직접 불러오는 Kakao
+          Corp.의 외부 스크립트이며, 각 제공자가 접속정보를 처리할 수 있습니다. 배송 담당자가 길
+          안내를 위해 카카오맵을 열면 받는 분 이름과 동·호수를 뺀 배송지 기본주소 또는 거점 위치가
+          Kakao Corp.의 지도 서비스로 전달됩니다. PortOne·PG의 결제
+          요청·원격 상태 확인·환불과 ALIGO의 거래성 알림 전달은 선택 마케팅과 별도의 거래 처리입니다.
+          실제 provider 계약·활성 범위가 바뀌면 수탁 업무와 데이터 항목을 갱신합니다.
+        </p>
+      </Section>
+
+      <Section title="5. 개인정보의 국외 처리">
+        <div style={cardStyle}>
+          <h3>Vercel Inc.</h3>
+          <p>
+            사이트 접속·로그인 콜백 시 IP, 브라우저·요청 정보와 인증 콜백·세션 처리 정보가
+            네트워크를 통해 미국 등 Vercel과 공개 하위처리자의 운영 지역에서 처리될 수 있습니다.
+            목적은 웹 제공과 로그인 처리이며, 서비스 제공과 계약·법령상 필요한 기간 보관됩니다.
+            문의: privacy@vercel.com
+          </p>
+        </div>
+        <div style={cardStyle}>
+          <h3>Railway Corporation</h3>
+          <p>
+            API 호출 시 회원·주소·주문 준비·결제 준비·알림·로그 관련 요청과 응답이 네트워크를 통해
+            미국 캘리포니아에서 처리됩니다. 목적은 API 제공과 보안 운영이며, 각 항목의 보유기간과
+            계약상 필요한 기간 보관됩니다. 문의: privacy@railway.com
+          </p>
+        </div>
+        <div style={cardStyle}>
+          <h3>Google Cloud Korea LLC와 공개 하위처리자</h3>
+          <p>
+            Firestore의 기본 저장 위치는 대한민국 서울입니다. 기술지원·보안과 하위처리 과정에서
+            회원·주소·주문·결제·알림·감사 정보가 Google의 공개 하위처리자 소재국에서 처리될 수
+            있으며 각 항목의 보유기간을 따릅니다.
+          </p>
+        </div>
+        <p>
+          이용자는 고객센터에 국외 처리 중단을 요청할 수 있습니다. 중단이 기술적으로 어려우면
+          로그인·주소록·주문 관련 기능이 제한될 수 있으나, 로그인하지 않은 공개 콘텐츠는 계속 이용할
+          수 있습니다. 처리 국가와 사업자는{' '}
+          <a href="https://vercel.com/legal/sub-processors">Vercel 하위처리자 목록</a>,{' '}
+          <a href="https://railway.com/legal/subprocessors">Railway 하위처리자 목록</a>,{' '}
+          <a href="https://cloud.google.com/terms/subprocessors">Google Cloud 하위처리자 목록</a>
+          에서 확인할 수 있습니다.
+        </p>
+      </Section>
+
+      <Section title="6. 쿠키와 브라우저 저장소">
+        <ul style={listStyle}>
+          <li>
+            필수 쿠키: Auth.js 로그인 세션, CSRF, callback URL, PKCE, state 등 로그인 유지와 요청
+            위조 방지에 필요한 쿠키
+          </li>
+          <li>
+            유효기간: 로그인 세션은 마지막 사용 후 최대 30일, PKCE·state 등 일회성 OAuth 쿠키는 최대
+            15분
+          </li>
+          <li>
+            브라우저 저장소: 장바구니·알림 읽음 상태는 localStorage, 체크아웃 전달값은
+            sessionStorage에 저장
+          </li>
+        </ul>
+        <p>
+          브라우저 설정에서 쿠키와 사이트 데이터를 삭제하거나 차단할 수 있습니다. 필수 쿠키를
+          차단하면 로그인과 회원 기능이 동작하지 않을 수 있습니다. 현재 광고·행태 분석·마케팅 목적
+          쿠키는 사용하지 않습니다.
+        </p>
+      </Section>
+
+      <Section title="7. 이용자의 권리와 행사 방법">
+        <p>
+          이용자는 개인정보 열람, 정정·삭제, 처리정지, 동의 철회와 카카오 연결 해제를 요청할 수
+          있습니다. 현재 파일럿에서는 선택 마케팅 동의를 새로 수집하지 않지만, 과거에 이미 저장된
+          마케팅 선호·동의 기록에 대한 요청은 보존 의무와 분쟁 대응 필요를 고려해 처리합니다. 자동
+          회원 탈퇴 기능은 아직 제공하지 않으며, 아래 고객센터로 본인 확인에 필요한 최소 정보를
+          보내면 운영자가 확인 후 결과를 안내합니다. 법정 보존정보는 해당 기간 동안 분리 보관할 수
+          있습니다.
+        </p>
+        <ul style={listStyle}>
+          <li>
+            이메일: <a href={PUBLIC_BUSINESS_INFO.emailHref}>{PUBLIC_BUSINESS_INFO.email}</a>
+          </li>
+          <li>
+            전화: <a href={PUBLIC_BUSINESS_INFO.phoneHref}>{PUBLIC_BUSINESS_INFO.phone}</a>
+          </li>
+          <li>상담가능시간: {PUBLIC_BUSINESS_INFO.supportHours}</li>
+        </ul>
+      </Section>
+
+      <Section title="8. 안전성 확보조치와 권리 구제">
+        <p>
+          회사는 접근권한 최소화, 인증정보 보호, 전송구간 암호화, 접속·감사 기록과 정기 업데이트 등
+          필요한 안전조치를 시행합니다. 침해 신고는 개인정보침해 신고센터(privacy.kisa.or.kr, 국번
+          없이 118), 분쟁조정은 개인정보분쟁조정위원회(kopico.go.kr, 1833-6972)를 이용할 수
+          있습니다.
+        </p>
+      </Section>
+
+      <Section title="9. 개인정보 보호책임자">
+        <p>
+          회사는 개인정보 처리에 관한 업무를 총괄하고 이용자의 문의·불만·피해 구제를 처리하기 위해
+          다음과 같이 개인정보 보호책임자를 둡니다.
+        </p>
+        <ul style={listStyle}>
+          <li>개인정보 보호책임자: {PUBLIC_BUSINESS_INFO.representative} (대표)</li>
+          <li>
+            이메일: <a href={PUBLIC_BUSINESS_INFO.emailHref}>{PUBLIC_BUSINESS_INFO.email}</a>
+          </li>
+          <li>
+            전화: <a href={PUBLIC_BUSINESS_INFO.phoneHref}>{PUBLIC_BUSINESS_INFO.phone}</a>
+          </li>
+        </ul>
+      </Section>
+
+      <Section title="10. 방침의 변경">
+        <p>
+          이 방침은 {EFFECTIVE_DATE}부터 시행합니다. 중요한 변경은 시행 전에 서비스 화면에서 적용일,
+          변경 이유와 주요 내용을 알리고 이전 버전을 확인할 수 있도록 보관하겠습니다. 이번 개정은
+          개인정보 보호책임자와 배송 담당자의 카카오맵 길 안내 이용을 추가로 알립니다. 이번 개정 전
+          공개본의 시행일은 2026년 8월 30일이고, 그 전 공개본의 시행일은 2026년 8월 19일입니다.
+        </p>
+        <p>
+          서비스 이용 조건은 <a href="/terms">이용약관</a>에서 확인할 수 있습니다.
+        </p>
+      </Section>
+    </LegalDocumentPage>
+  );
+}
