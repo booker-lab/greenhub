@@ -623,8 +623,9 @@ describe('촬영 뒤 새 보류가 생긴 재배송의 예전 사진(expectedHol
   it('저장 뒤 연결 전에 새 보류가 생기면 트랜잭션이 거절하고 이번 요청이 만든 객체를 지운다', async () => {
     const context = makeService(ROUND_ORDER);
     const upload = context.storage.uploadDeliveryPhoto.getMockImplementation();
+    if (!upload) throw new Error('uploadDeliveryPhoto 기본 mock이 없다');
     context.storage.uploadDeliveryPhoto.mockImplementationOnce(async (input: Data) => {
-      const result = await upload?.(input);
+      const result = await upload(input);
       // 저장과 연결 사이에 보류 → 재개가 끝났다.
       context.patchOrder({ deliveryHold: { heldAt: HELD_AFTER, resolvedAt: HELD_AFTER } });
       return result;

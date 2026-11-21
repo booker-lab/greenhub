@@ -11,6 +11,8 @@ import {
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { AdminOrder } from '@/hooks/useAdmin';
 import {
+  ADMIN_ACTION_PENDING,
+  ADMIN_ACTION_TD,
   ADMIN_NUM,
   ADMIN_SUB,
   ADMIN_TD,
@@ -131,11 +133,7 @@ function RowActions({
     : allItems.filter((item) => item.action !== 'post-delivery-refund');
   const label = orderNumberLabel(order);
   if (processing) {
-    return (
-      <span className="inline-flex min-h-11 items-center text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
-        처리 중…
-      </span>
-    );
+    return <span className={ADMIN_ACTION_PENDING}>처리 중…</span>;
   }
   return (
     <span className="flex items-center justify-end gap-1">
@@ -299,8 +297,7 @@ export function OrdersTable({
               <td className={`${ADMIN_TD} ${ADMIN_NUM} font-bold`}>
                 {formatWon(order.totalAmount)}
               </td>
-              {/* 처리 칸도 다른 칸처럼 위 정렬 — 44px 동작의 가운데를 상품·금액 첫 줄(위 12px + 줄 22px) 높이에 맞춘다(2026-11-20 사용자 결정). */}
-              <td className={`${ADMIN_TD} pt-px pb-0 text-right`}>{actionsOf(order)}</td>
+              <td className={ADMIN_ACTION_TD}>{actionsOf(order)}</td>
             </tr>
           ))}
         </tbody>
