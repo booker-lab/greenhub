@@ -192,8 +192,8 @@ export function PostDeliveryRefundSection({
           <DialogBody>
             <div className="flex flex-col gap-3">
               <p className={TEXT} style={{ ...smallText, color: 'var(--color-text-secondary)' }}>
-                손님에게 {amountText} 전액을 돌려주고 주문을 취소합니다. 되돌릴 수 없어요.
-                손님에게는 카카오 알림톡으로 취소 안내가 갑니다.
+                고객에게 {amountText} 전액을 돌려주고 주문을 취소합니다. 되돌릴 수 없어요.
+                고객에게는 카카오 알림톡으로 취소 안내가 갑니다.
               </p>
               <div>
                 <div id={reasonLabelId} className={GROUP_LABEL}>
@@ -218,7 +218,7 @@ export function PostDeliveryRefundSection({
                 </RadioGroup>
               </div>
               <Field>
-                <FieldLabel htmlFor={memoId}>메모 (손님에게는 보이지 않아요)</FieldLabel>
+                <FieldLabel htmlFor={memoId}>메모 (고객에게는 보이지 않아요)</FieldLabel>
                 <Input
                   id={memoId}
                   value={memo}

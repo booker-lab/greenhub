@@ -307,7 +307,7 @@ function ProductCard({ product, storeId }: { product: Product; storeId: string |
             className={`${TEXT} mt-0.5`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
-            {CATEGORY_LABEL[product.category]} · ₩{product.price.toLocaleString()}
+            {CATEGORY_LABEL[product.category]} · {product.price.toLocaleString()}원
             {product.saleType === 'group' && ' · 공동구매'}
           </p>
           {error && (

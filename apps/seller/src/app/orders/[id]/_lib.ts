@@ -57,7 +57,7 @@ export const CANCELLABLE_STATUSES: OrderStatus[] = [
 export function describeSellerCancelRefund(
   order: Pick<Order, 'status' | 'totalAmount' | 'redeliveryPayment' | 'deliveryHold'>,
 ): string {
-  const amount = `₩${order.totalAmount.toLocaleString()}`;
+  const amount = `${order.totalAmount.toLocaleString()}원`;
   // 상품 파손은 판매자·기사 책임이라 고객이 낸 돈을 모두 돌려준다(이전 보류에서 결제된 재배송비 포함).
   if (
     order.status === 'DELIVERY_HELD' &&

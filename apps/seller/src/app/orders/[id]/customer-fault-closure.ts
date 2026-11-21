@@ -121,7 +121,7 @@ export function customerFaultClosureBlockedMessage(
     case 'PAYMENT_WINDOW_OPEN': {
       const at = formatClosureTimeKST(eligibility.eligibleAt);
       return at
-        ? `손님이 재배송비를 결제하지 않으면 ${at}부터 종결할 수 있어요.`
+        ? `고객이 재배송비를 결제하지 않으면 ${at}부터 종결할 수 있어요.`
         : '재배송비 결제 기한이 지나면 종결할 수 있어요.';
     }
     case 'REDELIVERY_PAYMENT_IN_PROGRESS':
@@ -144,12 +144,12 @@ export function describeCustomerFaultClosureEligible(
   eligibility: Pick<CustomerFaultClosureEligibility, 'closureReasonCode' | 'paymentDeadlineDate'>,
 ): string {
   if (eligibility.closureReasonCode === 'RECEIPT_REFUSED') {
-    return '손님이 수령을 거부했어요. 손님과 연락한 뒤 환불 없이 주문을 종결할 수 있어요.';
+    return '고객이 수령을 거부했어요. 고객과 연락한 뒤 환불 없이 주문을 종결할 수 있어요.';
   }
   const deadline = formatKoreanMonthDayKST(eligibility.paymentDeadlineDate);
   return deadline
-    ? `손님이 ${deadline}까지 재배송비를 결제하지 않았어요. 손님과 연락한 뒤 환불 없이 주문을 종결할 수 있어요.`
-    : '손님이 기한까지 재배송비를 결제하지 않았어요. 손님과 연락한 뒤 환불 없이 주문을 종결할 수 있어요.';
+    ? `고객이 ${deadline}까지 재배송비를 결제하지 않았어요. 고객과 연락한 뒤 환불 없이 주문을 종결할 수 있어요.`
+    : '고객이 기한까지 재배송비를 결제하지 않았어요. 고객과 연락한 뒤 환불 없이 주문을 종결할 수 있어요.';
 }
 
 /** 확인 버튼을 누를 수 있는지: 손님과 연락한 내용(한 줄, 1~200자)이 있어야 한다. */

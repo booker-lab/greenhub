@@ -334,7 +334,7 @@ export function ProductsSection({
                         color: 'var(--color-text-secondary)',
                       }}
                     >
-                      상품 기준가 ₩{basePrice.toLocaleString()}
+                      상품 기준가 {basePrice.toLocaleString()}원
                     </p>
                   )}
                 </div>
@@ -424,7 +424,7 @@ export function ProductsSection({
                 className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
-                상품 기준가 ₩{product.price.toLocaleString()}
+                상품 기준가 {product.price.toLocaleString()}원
               </p>
             </div>
             <Button

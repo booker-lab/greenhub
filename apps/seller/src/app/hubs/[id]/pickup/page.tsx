@@ -186,7 +186,7 @@ export default function HubPickupPage() {
                   color: 'var(--color-text-secondary)',
                 }}
               >
-                소비자의 픽업 코드 6자리를 입력하세요
+                고객의 픽업 코드 6자리를 입력하세요
               </p>
               <p
                 className={`${TEXT} text-center break-keep`}
@@ -196,7 +196,7 @@ export default function HubPickupPage() {
                   color: 'var(--color-text-secondary)',
                 }}
               >
-                소비자가 소비자 앱에서 확인한 코드를 제시합니다
+                고객이 앱에서 확인한 코드를 보여 줍니다
               </p>
 
               {/* 6자리 입력 */}

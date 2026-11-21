@@ -132,7 +132,7 @@ export function CustomerFaultClosureRecordView({
       </p>
       {record?.memo && (
         <p className={TEXT} style={{ ...smallText, color: 'var(--color-text-secondary)' }}>
-          손님과 연락한 내용: {record.memo}
+          고객과 연락한 내용: {record.memo}
         </p>
       )}
       {settlementMissing && onReconcileSettlement && (
@@ -246,7 +246,7 @@ export function CustomerFaultClosurePanel({
               </p>
               <Field>
                 <FieldLabel htmlFor={memoId}>
-                  손님과 연락한 내용 (손님에게는 보이지 않아요)
+                  고객과 연락한 내용 (고객에게는 보이지 않아요)
                 </FieldLabel>
                 <Input
                   id={memoId}

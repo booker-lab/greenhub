@@ -60,7 +60,7 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
               <p className={`${TEXT} break-keep`} style={textSm}>
                 · 초대 링크는 한 번만 쓸 수 있고, 받은 뒤 72시간이 지나면 만료돼요.
                 <br />· 초대받은 이메일을 쓰는 카카오 계정으로 로그인해 주세요.
-                <br />· 이미 손님으로 쓰는 카카오 계정은 판매자로 바꿀 수 없어요. 다른 카카오
+                <br />· 이미 고객으로 쓰는 카카오 계정은 판매자로 바꿀 수 없어요. 다른 카카오
                 계정으로 가입해 주세요.
               </p>
               <form action={startInviteSignup.bind(null, token)}>

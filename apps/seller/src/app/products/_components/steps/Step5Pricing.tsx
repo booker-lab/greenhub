@@ -43,12 +43,13 @@ export function Step5Pricing({
         <NumberInput
           id={priceId}
           placeholder="가격"
-          leftSection={
+          // 금액은 숫자 뒤에 "원"을 붙인다(design-standard, 2026-11-21 결정).
+          rightSection={
             <p
               className={TEXT}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
-              ₩
+              원
             </p>
           }
           thousandSeparator=","

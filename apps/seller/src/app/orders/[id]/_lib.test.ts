@@ -130,13 +130,13 @@ describe('toTelHref', () => {
 describe('describeSellerCancelRefund', () => {
   it('결제 금액 전액 환불과 되돌릴 수 없음을 금액과 함께 알린다', () => {
     expect(describeSellerCancelRefund({ status: 'ACCEPTED', totalAmount: 85000 })).toBe(
-      '결제 금액 ₩85,000 전액을 환불하고 되돌릴 수 없어요.',
+      '결제 금액 85,000원 전액을 환불하고 되돌릴 수 없어요.',
     );
   });
 
   it('배송 보류 주문은 결제된 재배송비도 함께 환불한다고 알린다', () => {
     expect(describeSellerCancelRefund({ status: 'DELIVERY_HELD', totalAmount: 30000 })).toBe(
-      '결제 금액 ₩30,000 전액과 결제된 재배송비를 모두 환불하고 되돌릴 수 없어요.',
+      '결제 금액 30,000원 전액과 결제된 재배송비를 모두 환불하고 되돌릴 수 없어요.',
     );
   });
 
@@ -144,7 +144,7 @@ describe('describeSellerCancelRefund', () => {
     const redeliveryPayment = { paid: true } as Order['redeliveryPayment'];
     expect(
       describeSellerCancelRefund({ status: 'PREPARING', totalAmount: 30000, redeliveryPayment }),
-    ).toBe('결제 금액 ₩30,000 전액과 결제된 재배송비를 모두 환불하고 되돌릴 수 없어요.');
+    ).toBe('결제 금액 30,000원 전액과 결제된 재배송비를 모두 환불하고 되돌릴 수 없어요.');
   });
 
   it('상품 파손 보류 주문은 파손으로 전액 환불한다고 알린다', () => {
@@ -152,7 +152,7 @@ describe('describeSellerCancelRefund', () => {
     expect(
       describeSellerCancelRefund({ status: 'DELIVERY_HELD', totalAmount: 30000, deliveryHold }),
     ).toBe(
-      '상품 파손으로 결제 금액 ₩30,000 전액을 환불해요. 결제된 재배송비가 있으면 함께 환불하고, 되돌릴 수 없어요.',
+      '상품 파손으로 결제 금액 30,000원 전액을 환불해요. 결제된 재배송비가 있으면 함께 환불하고, 되돌릴 수 없어요.',
     );
   });
 });
