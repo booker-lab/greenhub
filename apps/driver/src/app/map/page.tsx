@@ -218,7 +218,7 @@ export default function MapPage() {
           top: 0,
           zIndex: 10,
           backgroundColor: 'var(--color-bg)',
-          borderBottom: 'var(--border)',
+          // 머리 아래 선 없이 여백으로 나눈다(작업 보드 머리와 같다, 2026-11-21 사용자 결정).
           padding: '16px',
         }}
       >
