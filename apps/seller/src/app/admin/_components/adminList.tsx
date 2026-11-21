@@ -62,6 +62,15 @@ export const ADMIN_TH =
   'border-b border-rule px-3 py-2.5 text-left text-[13px] leading-[18px] font-normal whitespace-nowrap text-[var(--color-text-secondary)]';
 /** 표 칸(행 선 1px rule). */
 export const ADMIN_TD = 'border-b border-rule px-3 py-3 align-top text-[15px] leading-[22px]';
+/**
+ * 행 끝 처리 칸(글자 동작·⋮·처리 중). 다른 칸처럼 위 정렬이고, 44px 동작의 가운데가 첫 줄(위 12px + 줄 22px)
+ * 높이에 오도록 위 여백을 1px로 둔다(2026-11-21 사용자 결정, 여섯 표 공통).
+ */
+export const ADMIN_ACTION_TD =
+  'border-b border-rule px-3 pt-px pb-0 align-top text-right text-[15px] leading-[22px]';
+/** 처리 칸의 "처리 중…" 같은 13px 상태 글자 — 동작과 같은 44px 높이 가운데에 둔다. */
+export const ADMIN_ACTION_PENDING =
+  'inline-flex min-h-11 items-center text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]';
 /** 숫자 칸. */
 export const ADMIN_NUM = 'text-right tabular-nums whitespace-nowrap';
 /** 보조 줄(13px 회색). */

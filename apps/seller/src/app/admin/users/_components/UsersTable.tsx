@@ -3,6 +3,8 @@
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { AdminUser } from '@/hooks/useAdmin';
 import {
+  ADMIN_ACTION_PENDING,
+  ADMIN_ACTION_TD,
   ADMIN_SUB,
   ADMIN_TD,
   ADMIN_TH,
@@ -54,9 +56,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
 
   const actionsOf = (user: AdminUser) =>
     processingId === user.id ? (
-      <span className="text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
-        처리 중…
-      </span>
+      <span className={ADMIN_ACTION_PENDING}>처리 중…</span>
     ) : (
       <AdminRowMenu
         label={`소비자 ${userName(user)}`}
@@ -128,7 +128,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
               <td className={`${ADMIN_TD} max-[1100px]:hidden`}>
                 <UserJoined user={user} />
               </td>
-              <td className={`${ADMIN_TD} py-1 text-right align-middle`}>
+              <td className={ADMIN_ACTION_TD}>
                 <span className="flex justify-end">{actionsOf(user)}</span>
               </td>
             </tr>

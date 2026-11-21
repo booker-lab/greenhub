@@ -5,6 +5,7 @@ import { Input, InputSection } from '@greenhub/ui/components/input';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { AdminStore } from '@/hooks/useAdmin';
 import {
+  ADMIN_ACTION_TD,
   ADMIN_SUB,
   ADMIN_TD,
   ADMIN_TH,
@@ -318,7 +319,7 @@ export function StoresTable({
               <td className={`${ADMIN_TD} max-[1100px]:hidden`}>
                 <StoreJoined store={store} />
               </td>
-              <td className={`${ADMIN_TD} py-1 text-right align-middle`}>
+              <td className={ADMIN_ACTION_TD}>
                 <span className="flex justify-end">{menuOf(store)}</span>
               </td>
             </tr>

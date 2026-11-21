@@ -3,6 +3,8 @@
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { InviteToken } from '@/hooks/useAdmin';
 import {
+  ADMIN_ACTION_PENDING,
+  ADMIN_ACTION_TD,
   ADMIN_SUB,
   ADMIN_TD,
   ADMIN_TH,
@@ -114,9 +116,7 @@ export function InviteHistoryTable({
   const toneOf = (revocable: boolean) => (revocable ? 'default' : 'done');
   const actionsOf = (inv: InviteToken, revocable: boolean) =>
     revokingToken === inv.token ? (
-      <span className="text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
-        취소 중…
-      </span>
+      <span className={ADMIN_ACTION_PENDING}>취소 중…</span>
     ) : (
       <AdminRowMenu
         label={`초대 ${inv.token}`}
@@ -218,7 +218,7 @@ export function InviteHistoryTable({
                 <td className={`${ADMIN_TD} break-all text-[13px] max-[1100px]:hidden`}>
                   {usage ?? <span className="text-[var(--color-text-secondary)]">–</span>}
                 </td>
-                <td className={`${ADMIN_TD} py-1 text-right align-middle`}>
+                <td className={ADMIN_ACTION_TD}>
                   <span className="flex justify-end">{actionsOf(inv, status.revocable)}</span>
                 </td>
               </tr>

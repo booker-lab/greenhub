@@ -62,7 +62,10 @@ export function PartnerInquiryCard({
           {item.message}
         </p>
         {error && (
-          <p role="alert" className="m-0 mt-1 text-[13px] leading-[18px] text-[var(--color-danger)]">
+          <p
+            role="alert"
+            className="m-0 mt-1 text-[13px] leading-[18px] text-[var(--color-danger)]"
+          >
             {error}
           </p>
         )}

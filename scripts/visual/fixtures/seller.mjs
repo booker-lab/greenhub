@@ -74,8 +74,20 @@ const SELLER_ORDERS = [
         quantity: 1,
         subtotalAmount: 43000,
         selectedOptions: [
-          { groupId: 'g1', groupName: '화분', choiceId: 'c2', choiceLabel: '백자 도자기 화분', priceDelta: 8000 },
-          { groupId: 'g2', groupName: '축하 토퍼', choiceId: 'c5', choiceLabel: '祝 生辰', priceDelta: 5000 },
+          {
+            groupId: 'g1',
+            groupName: '화분',
+            choiceId: 'c2',
+            choiceLabel: '백자 도자기 화분',
+            priceDelta: 8000,
+          },
+          {
+            groupId: 'g2',
+            groupName: '축하 토퍼',
+            choiceId: 'c5',
+            choiceLabel: '祝 生辰',
+            priceDelta: 5000,
+          },
         ],
       },
     ],
@@ -296,7 +308,8 @@ const ADMIN_ORDERS = [
     buyerName: '김그린',
     productSummary: '동양란 만천홍 외 1개',
     storeName: '디어 오키드',
-    requestNote: '리본 문구: 개업을 축하합니다\n보내는 분: 그린상사 임직원 일동\n오전 중 배송 부탁드립니다\n문 앞에 두세요',
+    requestNote:
+      '리본 문구: 개업을 축하합니다\n보내는 분: 그린상사 임직원 일동\n오전 중 배송 부탁드립니다\n문 앞에 두세요',
   },
   { ...adminOrder('R-REFUNDING', 'CANCELLED', true), cancellationStatus: 'REFUNDING' },
   { ...adminOrder('R-REFUND-FAILED', 'CANCELLED', true), cancellationStatus: 'REFUND_FAILED' },
@@ -315,7 +328,11 @@ const ADMIN_SETTLEMENTS = [
     confirmedAt: '2026-09-27T15:00:00.000Z',
     paidAt: null,
     // 지급 대상 행에만 오는 정산 계좌(지급 완료 기록 버튼·가린 번호·복사).
-    payoutAccount: { bankName: '국민은행', accountHolder: '디어오키드', accountNumber: '123456-01-987654' },
+    payoutAccount: {
+      bankName: '국민은행',
+      accountHolder: '디어오키드',
+      accountNumber: '123456-01-987654',
+    },
   },
   // 상태별 배지·회수 필요(빨강 채움)·지급 보류(주황)·가게 이름·주문번호.
   {
@@ -1002,10 +1019,38 @@ const HUBS = [
 
 // ── 팔도감 벤치마킹 비교 기능(고객 반응·입점 문의) ──
 const STORE_REVIEWS = [
-  ['review-1', 'product-1', 5, '꽃대가 사진보다 튼실하게 왔어요. 화요일 아침에 정확히 문 앞에 있었습니다.', '이*연', '2026-09-30T02:00:00.000Z'],
-  ['review-2', 'product-1', 5, '도자기 화분으로 골랐는데 선물하기 좋네요.', '정*호', '2026-09-23T05:00:00.000Z'],
-  ['review-3', 'product-2', 4, '반쯤 핀 상태로 와서 일주일 뒤에 활짝 폈어요.', '최*은', '2026-09-16T08:00:00.000Z'],
-].map(([id, productId, rating, text, authorName, createdAt]) => ({ id, productId, rating, text, authorName, createdAt }));
+  [
+    'review-1',
+    'product-1',
+    5,
+    '꽃대가 사진보다 튼실하게 왔어요. 화요일 아침에 정확히 문 앞에 있었습니다.',
+    '이*연',
+    '2026-09-30T02:00:00.000Z',
+  ],
+  [
+    'review-2',
+    'product-1',
+    5,
+    '도자기 화분으로 골랐는데 선물하기 좋네요.',
+    '정*호',
+    '2026-09-23T05:00:00.000Z',
+  ],
+  [
+    'review-3',
+    'product-2',
+    4,
+    '반쯤 핀 상태로 와서 일주일 뒤에 활짝 폈어요.',
+    '최*은',
+    '2026-09-16T08:00:00.000Z',
+  ],
+].map(([id, productId, rating, text, authorName, createdAt]) => ({
+  id,
+  productId,
+  rating,
+  text,
+  authorName,
+  createdAt,
+}));
 // 판매자가 숨긴 후기(숨김 배지·사유, UI 교체 P4).
 STORE_REVIEWS.push({
   id: 'review-4',
@@ -1130,7 +1175,9 @@ export const routes = [
   [
     'GET',
     /^\/stores\/[^/]+\/orders\/summary$/,
-    () => ({ body: { archivedStatusCounts: { DELIVERED: 12, PICKED_UP: 1, REVIEWED: 3, CANCELLED: 2 } } }),
+    () => ({
+      body: { archivedStatusCounts: { DELIVERED: 12, PICKED_UP: 1, REVIEWED: 3, CANCELLED: 2 } },
+    }),
   ],
   [
     'GET',
@@ -1214,7 +1261,10 @@ export const routes = [
     /^\/stores\/[^/]+\/settlements$/,
     ({ url }) =>
       url.searchParams.get('cursor')
-        ? { body: { settlements: byStatus(SELLER_SETTLEMENTS_MORE, url), hasMore: false }, delay: 8000 }
+        ? {
+            body: { settlements: byStatus(SELLER_SETTLEMENTS_MORE, url), hasMore: false },
+            delay: 8000,
+          }
         : {
             body: {
               settlements: byStatus(SELLER_SETTLEMENTS, url),
@@ -1417,7 +1467,10 @@ export const screens = [
     group: '판매자 · 주문 목록',
     title: '주문 목록 · 배송 중 탭 · 거점 도착',
     path: '/orders',
-    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("배송 중")' }, { click: '거점 도착' }],
+    steps: [
+      { clickSelector: '[aria-label="주문 상태"] button:has-text("배송 중")' },
+      { click: '거점 도착' },
+    ],
   },
   {
     id: 'orders-done',
@@ -1431,7 +1484,10 @@ export const screens = [
     group: '판매자 · 주문 목록',
     title: '주문 목록 · 완료 탭 · 더 불러오는 중',
     path: '/orders',
-    steps: [{ clickSelector: '[aria-label="주문 상태"] button:has-text("완료")' }, { click: '지난 주문 더 보기' }],
+    steps: [
+      { clickSelector: '[aria-label="주문 상태"] button:has-text("완료")' },
+      { click: '지난 주문 더 보기' },
+    ],
   },
   {
     id: 'orders-cancelled',
@@ -2168,7 +2224,9 @@ export const screens = [
     title: '정산 · 지급 완료 기록 확인',
     path: '/admin/settlements',
     steps: [
-      { clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible' },
+      {
+        clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible',
+      },
     ],
     viewport: true,
   },
@@ -2178,7 +2236,9 @@ export const screens = [
     title: '정산 · 지급 완료 기록(이체 확인 체크)',
     path: '/admin/settlements',
     steps: [
-      { clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible' },
+      {
+        clickSelector: 'button[aria-label="주문 order-settle-0001-abcdef 지급 완료 기록"]:visible',
+      },
       { clickSelector: '[role="dialog"] input[type="checkbox"]' },
     ],
     viewport: true,
@@ -2414,7 +2474,9 @@ export const scenarioRoutes = {
     ],
   ],
   // 공용 LoadingState·EmptyState(회차 목록이 늦게 오거나 비었을 때).
-  'rounds-slow': [['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] }, delay: 8000 })]],
+  'rounds-slow': [
+    ['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: [] }, delay: 8000 })],
+  ],
   // 기사 승인 결과 알림: 승인 요청만 503(서버 오류)이라 앱이 결과를 확정하지 못한다(unknown → 노랑 알림).
   // 목록 조회는 그대로다.
   'driver-approve-unknown': [
@@ -2429,7 +2491,9 @@ export const scenarioRoutes = {
     [
       'GET',
       /^\/stores\/([^/]+)\/public-profile$/,
-      ({ params: [id] }) => ({ body: { id, name: '그린러브 검증 가게', logoUrl: null, salesMode: 'legacy' } }),
+      ({ params: [id] }) => ({
+        body: { id, name: '그린러브 검증 가게', logoUrl: null, salesMode: 'legacy' },
+      }),
     ],
   ],
 };
@@ -2484,7 +2548,12 @@ export const benchmarkScreens = [
     path: '/products/product-1/edit',
     clicks: ['다음', '다음', '다음', '다음'],
     features: [
-      'card-discount', 'size-info', 'care-guide', 'option-sheet', 'quality-guarantee', 'plant-search',
+      'card-discount',
+      'size-info',
+      'care-guide',
+      'option-sheet',
+      'quality-guarantee',
+      'plant-search',
     ],
   },
   {
