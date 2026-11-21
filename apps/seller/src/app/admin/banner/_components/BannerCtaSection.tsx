@@ -10,23 +10,15 @@ interface BannerCtaSectionProps {
   setForm: Dispatch<SetStateAction<AdminBanner>>;
 }
 
-// ① 외형 유지(UI 교체 P2b): Mantine Paper(lg·xs·lg)·Text·Stack(gap sm)·Group grow·TextInput과 같은 값.
+// 배너 버튼 구역 — 위쪽 1px 선으로 앞 구역과 나누고 구역 제목은 16/800(어드민 틀 규칙). 입력칸 두 줄 배치는 그대로.
 // Group grow(gap md): 칸마다 flex-grow 1, 최대 폭 = 100% ÷ 2 - (16px - 16px ÷ 2).
 const GROW =
   'flex flex-row flex-wrap items-center justify-start gap-4 [&>*]:max-w-[calc(50%-8px)] [&>*]:grow';
 
 export function BannerCtaSection({ form, setForm }: BannerCtaSectionProps) {
   return (
-    <div
-      className="block rounded-[16px] bg-card p-5 shadow-paper-xs"
-      style={{ border: '1px solid var(--color-border)' }}
-    >
-      <p
-        className="m-0 mb-3 p-0 text-base"
-        style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
-      >
-        버튼
-      </p>
+    <section className="block border-t border-rule pt-4">
+      <h2 className="m-0 mb-3 text-[16px] leading-[24px] font-extrabold">버튼</h2>
       <div className="flex flex-col gap-3">
         <div className={GROW}>
           <Field>
@@ -81,6 +73,6 @@ export function BannerCtaSection({ form, setForm }: BannerCtaSectionProps) {
           </Field>
         </div>
       </div>
-    </div>
+    </section>
   );
 }

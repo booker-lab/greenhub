@@ -2,6 +2,8 @@
 // 응답 모양은 API DriverService.projectOrder(apps/api/src/driver/driver.service.ts)의 투영을 따른다.
 // 전화번호는 실제 규칙대로 배정 기사에게 보이는 단계에서만 넣는다
 // (판매자 전화: 준비 중, 손님 전화: 직배송 배송 중·보류).
+import { hoursFromNow } from '../clock.mjs';
+
 const STORE_ID = 'store-visual-0001';
 const DRIVER_ID = 'driver-visual-0001';
 
@@ -151,7 +153,106 @@ const MANY_DELIVERING = [
   ),
 ];
 
+// 배정 여부·수거 장소가 있는 수거 대기(내 수거 2 + 맡을 수 있는 1). API 목록 투영(driver-order-read-model.ts)처럼
+// 수거 대기 주문에 assignedToMe·pickupStoreName·pickupAddress를, 회차 직배송 주문에 deliveryDate(회차 배송 시작)와
+// storeId를 싣는다. 한 번에 수거(여러 주문 한 번에 배송 시작)는 내 수거 중 회차 직배송이고 storeId가 있는 주문만 고른다.
+const PICKUP_STORE = {
+  pickupStoreName: '그린러브 이천점',
+  pickupAddress: '경기도 이천시 신둔면 도자예술로 5',
+};
+const PICKUP_ORDERS = [
+  ...ORDERS.map((o) =>
+    o.status === 'PREPARING' ? { ...o, assignedToMe: true, ...PICKUP_STORE } : o,
+  ),
+  driverOrder('order-prep-3', {
+    status: 'PREPARING',
+    buyerName: '조목단',
+    address: '경기도 이천시 관고동 이천로 1 행복아파트 201동 1502호',
+    deliveryAddress: { address: '경기도 이천시 관고동 이천로 1 행복아파트' },
+    productName: '서양란 호접 2대',
+    quantity: 3,
+    preparedAt: '2026-10-05T21:20:00.000Z',
+    assignedToMe: false,
+    ...PICKUP_STORE,
+  }),
+];
+// 오늘 회차(기준 시각 1시간 전 배송 시작)라 목록 행에 배송일을 쓰지 않는다.
+const pickupListView = (order) =>
+  order.status === 'PREPARING'
+    ? { ...listView(order), storeId: order.storeId, deliveryDate: hoursFromNow(-1) }
+    : listView(order);
+
+// 오늘 완료 내역(GET /driver/completed-today). 배송 완료·구매확정(사진 없음)·환불됨 한 건씩.
+const COMPLETED_TODAY = {
+  date: '2026-10-06',
+  orders: [
+    {
+      id: 'done-1',
+      status: 'DELIVERED',
+      deliveredAt: '2026-10-06T00:40:00.000Z',
+      address: '경기도 이천시 증포동 새봄마을아파트 101동 702호',
+      deliveryAddress: {
+        address: '경기도 이천시 증포동 새봄마을아파트',
+        addressDetail: '101동 702호',
+      },
+      productName: '동양란 빅립',
+      quantity: 1,
+      hasPhoto: true,
+    },
+    {
+      id: 'done-2',
+      status: 'REVIEWED',
+      deliveredAt: '2026-10-06T00:10:00.000Z',
+      address: '경기도 이천시 부발읍 경충대로 2091',
+      productName: '서양란 호접 2대',
+      quantity: 2,
+      items: [{ productName: '서양란 호접 2대', quantity: 2 }],
+      hasPhoto: false,
+    },
+    {
+      id: 'done-3',
+      status: 'CANCELLED',
+      deliveredAt: '2026-10-05T23:50:00.000Z',
+      address: '경기도 이천시 마장면 서이천로 578',
+      productName: '동양란 만천홍',
+      quantity: 1,
+      hasPhoto: true,
+    },
+  ],
+};
+
 export const scenarioRoutes = {
+  // 재배송비를 결제한 보류 주문: 재개 버튼이 켜지고 재개 확인 창을 연다(API projectRedeliveryPayment의 결제 완료 모양).
+  'held-paid': [
+    [
+      'GET',
+      /^\/driver\/orders\/order-held-1$/,
+      () => ({
+        body: {
+          ...ORDERS.find((o) => o.id === 'order-held-1'),
+          redeliveryPayment: {
+            required: true,
+            holdAt: '2026-10-06T00:30:00.000Z',
+            chargeId: 'charge-visual-0001',
+            status: 'PAID',
+            canPay: false,
+            paid: true,
+            requiresRecovery: false,
+          },
+        },
+      }),
+    ],
+  ],
+  // 수거 대기 탭 두 묶음·수거 장소·한 번에 수거(목록과 수거 대기 상세가 같은 주문을 본다).
+  'pickup-groups': [
+    ['GET', /^\/driver\/orders$/, () => ({ body: PICKUP_ORDERS.map(pickupListView) })],
+    [
+      'GET',
+      /^\/driver\/orders\/(order-prep-[0-9])$/,
+      ({ params: [id] }) => ({ body: PICKUP_ORDERS.find((o) => o.id === id) }),
+    ],
+  ],
+  'completed-today': [['GET', /^\/driver\/completed-today$/, () => ({ body: COMPLETED_TODAY })]],
   'many-delivering': [['GET', /^\/driver\/orders$/, () => ({ body: MANY_DELIVERING.map(listView) })]],
   // 주문 다시 읽기를 0.8초 늦춘다. 처음 열 때도 늦지만 화면은 같다.
   'slow-order-read': [
@@ -199,7 +300,7 @@ export const screens = [
     group: '기사',
     title: '배송 보류 모달',
     path: '/board/order-deliv-1',
-    steps: [{ click: '부재·문제 알리기' }],
+    steps: [{ click: '배송 못 함 · 보류하기' }],
     viewport: true,
   },
   {
@@ -228,7 +329,81 @@ export const screens = [
     title: '알림 · 상태 변경 확인 못 함',
     path: '/board/order-prep-1',
     scenario: 'slow-order-read',
+    // 배송 시작은 손님 알림이 가는 동작이라 확인 창을 거친다. 창의 「배송 시작」까지 눌러야 요청이 나간다.
+    steps: [{ click: '수거 완료 / 배송 시작' }, { press: '배송 시작' }],
+    viewport: true,
+  },
+  {
+    id: 'board-pickup-groups',
+    group: '기사',
+    title: '배송판 · 수거 대기 탭 · 내 수거·맡을 수 있는 주문',
+    path: '/board',
+    scenario: 'pickup-groups',
+  },
+  {
+    id: 'board-batch-select',
+    group: '기사',
+    title: '배송판 · 여러 주문 한 번에 배송 시작 · 고르기',
+    path: '/board',
+    scenario: 'pickup-groups',
+    steps: [
+      { click: '여러 주문 한 번에 배송 시작' },
+      { clickSelector: 'section[aria-label="내 수거"] li:nth-child(1) input' },
+      { clickSelector: 'section[aria-label="내 수거"] li:nth-child(2) input' },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'modal-batch-start',
+    group: '기사',
+    title: '여러 주문 한 번에 배송 시작 확인 창',
+    path: '/board',
+    scenario: 'pickup-groups',
+    steps: [
+      { click: '여러 주문 한 번에 배송 시작' },
+      { clickSelector: 'section[aria-label="내 수거"] li:nth-child(1) input' },
+      { clickSelector: 'section[aria-label="내 수거"] li:nth-child(2) input' },
+      { click: '2곳 배송 시작' },
+    ],
+    viewport: true,
+  },
+  {
+    id: 'board-preparing-pickup',
+    group: '기사',
+    title: '주문 상세 · 준비 중 · 수거 장소',
+    path: '/board/order-prep-1',
+    scenario: 'pickup-groups',
+  },
+  {
+    id: 'modal-start-confirm',
+    group: '기사',
+    title: '배송 시작 확인 창',
+    path: '/board/order-prep-1',
+    scenario: 'pickup-groups',
     steps: [{ click: '수거 완료 / 배송 시작' }],
+    viewport: true,
+  },
+  {
+    id: 'completed-today',
+    group: '기사',
+    title: '오늘 완료 내역',
+    path: '/board/completed',
+    scenario: 'completed-today',
+  },
+  {
+    id: 'board-held-paid',
+    group: '기사',
+    title: '주문 상세 · 배송 보류 · 재배송비 결제 완료',
+    path: '/board/order-held-1',
+    scenario: 'held-paid',
+  },
+  {
+    id: 'modal-resume-confirm',
+    group: '기사',
+    title: '배송 재개 확인 창',
+    path: '/board/order-held-1',
+    scenario: 'held-paid',
+    steps: [{ click: '배송 재개' }],
     viewport: true,
   },
   { id: 'map', group: '기사', title: '지도', path: '/map' },

@@ -86,16 +86,28 @@ export function OrderStatus({ order, size = 15 }: { order: AdminOrder; size?: 13
   );
 }
 
-/** 주문번호 · 가린 주문자 — 낱말 덩어리마다 줄바꿈 금지. */
+/**
+ * 주문번호 줄바꿈 — 보통 번호(20자 이하, 예: 20261128-000014)는 덩어리로 묶어 하이픈에서도 꺾지 않는다.
+ * 그보다 긴 번호(옛 주문 ID 등)만 칸을 넘칠 때 줄을 바꿔 금액·상품 칸을 밀어내지 않는다(2026-11-20 사용자 결정).
+ */
+const LONG_ORDER_NUMBER = 20;
+function orderNumberWrapClass(label: string): string {
+  return label.length > LONG_ORDER_NUMBER ? '[overflow-wrap:anywhere]' : 'whitespace-nowrap';
+}
+
+/** 주문번호 · 가린 주문자 — 낱말 덩어리마다 줄바꿈 금지.
+ * 태블릿(641~1100) 표 칸은 좁아 "·"만 줄 끝에 남으므로, 그 폭에서는 구분자를 숨기고 주문자를 둘째 줄로 내린다. */
 function OrderIdentity({ order }: { order: AdminOrder }) {
   const buyer = maskPersonName(order.buyerName);
   return (
     <>
-      <span className="whitespace-nowrap tabular-nums">{orderNumberLabel(order)}</span>
+      <span className={`tabular-nums ${orderNumberWrapClass(orderNumberLabel(order))}`}>
+        {orderNumberLabel(order)}
+      </span>
       {buyer && (
         <>
-          {' · '}
-          <span className="whitespace-nowrap">{buyer}</span>
+          <span className="min-[641px]:max-[1100px]:hidden"> · </span>
+          <span className="whitespace-nowrap min-[641px]:max-[1100px]:block">{buyer}</span>
         </>
       )}
     </>
@@ -120,7 +132,7 @@ function RowActions({
   const label = orderNumberLabel(order);
   if (processing) {
     return (
-      <span className="text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
+      <span className="inline-flex min-h-11 items-center text-[13px] whitespace-nowrap text-[var(--color-text-secondary)]">
         처리 중…
       </span>
     );
@@ -287,7 +299,8 @@ export function OrdersTable({
               <td className={`${ADMIN_TD} ${ADMIN_NUM} font-bold`}>
                 {formatWon(order.totalAmount)}
               </td>
-              <td className={`${ADMIN_TD} py-1 text-right align-middle`}>{actionsOf(order)}</td>
+              {/* 처리 칸도 다른 칸처럼 위 정렬 — 44px 동작의 가운데를 상품·금액 첫 줄(위 12px + 줄 22px) 높이에 맞춘다(2026-11-20 사용자 결정). */}
+              <td className={`${ADMIN_TD} pt-px pb-0 text-right`}>{actionsOf(order)}</td>
             </tr>
           ))}
         </tbody>

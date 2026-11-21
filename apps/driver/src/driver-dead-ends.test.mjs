@@ -175,7 +175,11 @@ test('로그인 화면은 callbackUrl을 검증해 카카오·로컬 로그인 �
 // /login으로 가고 로그인한 기사라 proxy가 같은 화면으로 다시 보낸다. 카카오 인증 화면으로 갈 때 로그인 화면
 // 기록을 바꿔치기(replace)해 남기지 않는다(서버 액션 redirect의 기본값은 push).
 test('카카오 로그인은 로그인 화면 기록을 남기지 않고(replace) 카카오 인증 화면으로 간다', () => {
-  assert.match(loginSource, /import \{ redirect, RedirectType \} from 'next\/navigation';/);
+  // import 이름 순서(biome 정렬)와 관계없이 redirect·RedirectType을 함께 가져오는지만 본다.
+  assert.match(
+    loginSource,
+    /import \{ (?:redirect, RedirectType|RedirectType, redirect) \} from 'next\/navigation';/,
+  );
   const start = loginSource.indexOf('async function kakaoSignIn(');
   assert.ok(start !== -1, 'kakaoSignIn 서버 액션이 있어야 한다');
   const action = loginSource.slice(start, loginSource.indexOf('\n}\n', start));

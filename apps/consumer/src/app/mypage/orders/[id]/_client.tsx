@@ -26,6 +26,7 @@ import {
   customerFaultClosureWarning,
 } from '@/lib/order-closure-notice';
 import { deliveryHoldNotice, REDELIVERY_UNPAID_NOTICE } from '@/lib/order-delivery-hold-notice';
+import { orderCardHeadline, orderCardMethodLine } from '@/lib/order-card-line';
 import { formatOrderDeliveryDate } from '@/lib/order-delivery-date';
 import {
   ORDER_DETAIL_STALE_MESSAGE,
@@ -240,77 +241,37 @@ function BackButton({ onClick, className }: { onClick: () => void; className: st
   );
 }
 
-// Mantine Stepper(size sm·vertical·color brand) 계산값: 아이콘 36px 원(테두리 2px gray-2, 완료 = 주색 면·흰 체크,
-// 진행 = 주색 테두리, 모서리 Mantine과 같은 1000px), 단계 최소 높이 36 + 32 + 5, 단계 사이 5px, 세로 연결선 2px,
-// 라벨 15px·600·줄 높이 1. rounded-full(무한대) 모서리와 아래 완료 아이콘 스타일 없이 그렸을 때는 원 가장자리
-// 안티앨리어싱이 Mantine과 달랐고, 둘을 Mantine과 같게 둔 뒤 촬영이 같아졌다.
-const STEP_OUTLINE = 'var(--ui-gray-2)';
-const STEP_COLOR = 'var(--brand)';
-
+// 배송 현황 단계 표시(design-direction.md §3.1·§3.2, 2026-11-20 사용자 결정 Q1-A): 번호 원·초록 채움·연결선 없이
+// 순서 목록(ol)의 점 + 글자로 쓴다. 순서는 위치가 말하고, 초록은 지금 단계에만 쓴다(홈의 단계 표시와 같은 규칙).
+// - 지난 단계: 검정 점·검정 글자 / 지금 단계: 초록 점·굵은 검정 글자(aria-current="step") / 남은 단계: 회색 점·보조 글자
 function DeliverySteps({ labels, active }: { labels: string[]; active: number }) {
   return (
-    <ol className="m-0 flex list-none flex-col flex-nowrap items-start p-0">
+    <ol className="m-0 flex list-none flex-col gap-3 p-0">
       {labels.map((label, index) => {
         const completed = active > index;
         const progress = active === index;
         return (
           <li
             key={label}
-            className="mt-[5px] flex min-h-[73px] justify-start overflow-hidden text-base first:mt-0 last:min-h-auto"
+            aria-current={progress ? 'step' : undefined}
+            className="m-0 flex items-center gap-2.5 text-sm leading-[1.45]"
+            style={{
+              color: completed || progress ? 'var(--color-text)' : 'var(--color-text-secondary)',
+              fontWeight: progress ? 'var(--fw-bold)' : 'var(--fw-regular)',
+            }}
           >
-            <span className="relative">
-              <span
-                className="relative flex size-9 min-h-9 min-w-9 items-center justify-center rounded-[1000px] border-2 border-solid font-bold"
-                style={{
-                  background: completed ? STEP_COLOR : STEP_OUTLINE,
-                  borderColor: completed || progress ? STEP_COLOR : STEP_OUTLINE,
-                  color: completed ? '#fff' : 'var(--ui-gray-7)',
-                  fontSize: 'var(--font-size-sm)',
-                }}
-              >
-                {completed ? (
-                  // Mantine은 완료 아이콘을 Transition(pop, entered)으로 감싸 아래 스타일이 붙는다.
-                  // transform·backface-visibility가 아이콘을 따로 합성하므로 같게 둔다.
-                  <span
-                    className="absolute inset-0 flex items-center justify-center text-white"
-                    style={{
-                      WebkitBackfaceVisibility: 'hidden',
-                      opacity: 1,
-                      transform: 'scale(1)',
-                      transformOrigin: 'center center',
-                    }}
-                  >
-                    <svg
-                      viewBox="0 0 10 7"
-                      fill="none"
-                      xmlns="http://www.w3.org/2000/svg"
-                      aria-hidden
-                      style={{ width: '60%', height: '60%' }}
-                    >
-                      <path
-                        d="M4 4.586L1.707 2.293A1 1 0 1 0 .293 3.707l3 3a.997.997 0 0 0 1.414 0l5-5A1 1 0 1 0 8.293.293L4 4.586z"
-                        fill="currentColor"
-                        fillRule="evenodd"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </span>
-                ) : (
-                  <span className="flex">{index + 1}</span>
-                )}
-              </span>
-              {index < labels.length - 1 && (
-                <span
-                  className="absolute top-[41px] left-[18px] h-screen border-0 border-l-2 border-solid"
-                  style={{ borderColor: completed ? STEP_COLOR : STEP_OUTLINE }}
-                />
-              )}
-            </span>
-            <span className="ms-3 flex flex-col">
-              <span style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, lineHeight: 1 }}>
-                {label}
-              </span>
-            </span>
+            <span
+              aria-hidden
+              className="size-2 shrink-0 rounded-full"
+              style={{
+                background: progress
+                  ? 'var(--color-primary)'
+                  : completed
+                    ? 'var(--color-text)'
+                    : 'var(--color-text-disabled)',
+              }}
+            />
+            {label}
           </li>
         );
       })}
@@ -891,6 +852,24 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     ? (formatOrderDeliveryDate(detail.requestedDeliveryDate) ??
       detail.requestedDeliveryDate.slice(0, 10))
     : null;
+  // 제목 아래 굵은 도착일 줄(design-standard §5: 주문 상세의 주인공은 도착일과 상태). MY 주문 카드와 같은 규칙을 쓴다:
+  // 진행 중 "11월 24일(화) 도착 예정", 도착 뒤 "… 도착", 취소·배송 종결은 줄 없음. 도착일 대신 수령 방식이 나오는
+  // 주문(택배·거점·공동구매, 날짜 없음)은 아래 "배송 방식" 줄이 이미 말하므로 그리지 않는다.
+  const headlineSource = {
+    status: isCancelled ? 'CANCELLED' : detail.status,
+    saleType: detail.saleType,
+    deliveryMethod: detail.deliveryMethod,
+    requestedDeliveryDate: detail.requestedDeliveryDate,
+  };
+  const cardHeadline = orderCardHeadline(headlineSource);
+  // 배송 보류 중에는 그리지 않는다. 그날 배송하지 못해 멈춘 주문에 지난 날짜로 "도착 예정"을 굵게 쓰면 틀린 약속이 된다
+  // (재배송 일정은 아래 보류 안내가 말한다).
+  const arrivalHeadline =
+    cardHeadline &&
+    cardHeadline !== orderCardMethodLine(headlineSource) &&
+    detail.status !== 'DELIVERY_HELD'
+      ? cardHeadline
+      : null;
   const showCancelReconcileWarning =
     !isAuthoritativelyCancelled && cancelOutcome.kind === 'reconcile-failed';
   const showCancelCommand =
@@ -989,6 +968,18 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
           >
             주문 상세
           </h1>
+          {arrivalHeadline && (
+            <p
+              className="m-0 mt-1 leading-[1.4]"
+              style={{
+                fontSize: 'var(--font-size-lg)',
+                fontVariantNumeric: 'tabular-nums',
+                fontWeight: 'var(--fw-extrabold)',
+              }}
+            >
+              {arrivalHeadline}
+            </p>
+          )}
           <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
             주문번호: {detail.orderNumber}
           </p>
@@ -1109,7 +1100,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </p>
             </div>
           )}
-          {deliveryDateText && (
+          {/* 취소된 주문은 오지 않으므로 배송 예정일을 보이지 않는다(MY 주문 카드가 도착일 줄을 숨기는 것과 같다). */}
+          {deliveryDateText && !isCancelled && (
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 배송 예정일
@@ -1175,9 +1167,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
                           }))}
                         />
                       )}
+                      {/* 결제는 행동이라 기본 초록(--primary)이다. 빨강은 둘레의 보류 안내 면에만 쓴다(design-standard §2). */}
                       <LoadingButton
                         className="mt-2.5"
-                        variant="destructive"
                         loading={redeliveryBusy}
                         disabled={redeliveryBusy || isStaleRead}
                         onClick={handleRedeliveryPayment}

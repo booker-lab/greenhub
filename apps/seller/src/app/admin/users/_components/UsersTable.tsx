@@ -11,7 +11,7 @@ import {
   AdminRowMenu,
   formatAdminDate,
 } from '../../_components/adminList';
-import { suspendActionLabel } from '../_lib';
+import { maskPhone, suspendActionLabel } from '../_lib';
 
 interface UsersTableProps {
   users: AdminUser[];
@@ -31,7 +31,7 @@ function userName(user: AdminUser): string {
 function UserPhone({ phone }: { phone?: string }) {
   const value = phone?.trim();
   if (!value) return <span className="text-[var(--color-text-secondary)]">연락처 미등록</span>;
-  return <span className="whitespace-nowrap tabular-nums">{value}</span>;
+  return <span className="whitespace-nowrap tabular-nums">{maskPhone(value)}</span>;
 }
 
 function UserStatus({ user, size }: { user: AdminUser; size: 13 | 15 }) {

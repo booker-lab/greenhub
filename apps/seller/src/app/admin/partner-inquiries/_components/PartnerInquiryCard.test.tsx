@@ -3,7 +3,13 @@ import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { PartnerInquiryCard } from './PartnerInquiryCard';
 
-type Props = { children?: ReactNode; onClick?: () => void; href?: string };
+type MenuItem = { key: string; label: string; onSelect: () => void };
+type Props = {
+  children?: ReactNode;
+  onClick?: () => void;
+  href?: string;
+  items?: MenuItem[];
+};
 
 function inquiry(overrides: Partial<PartnerInquiryItem> = {}): PartnerInquiryItem {
   return {
@@ -56,15 +62,27 @@ const button = (elements: ReactElement<Props>[], label: string) =>
     (element) => element.props.onClick && walk(element.props.children).texts.join('') === label,
   );
 
+/** 행 끝 ⋮ 메뉴(AdminRowMenu)의 항목 이름들과 항목. */
+const menuItems = (elements: ReactElement<Props>[]) =>
+  elements.find((element) => Array.isArray(element.props.items))?.props.items ?? [];
+
 describe('관리자 입점 문의 카드', () => {
-  it('한국 날짜·미연락 상태·누를 수 있는 전화 링크를 보여 준다', () => {
+  it('한국 날짜(어드민 형식)·미연락 상태·누를 수 있는 전화 링크를 보여 준다', () => {
     const { texts, elements } = render(inquiry());
-    expect(texts).toContain('2026. 10. 17.');
+    expect(texts).toContain('2026-10-17');
     expect(texts).toContain('미연락');
     expect(elements.some((element) => element.props.href === 'tel:01012345678')).toBe(true);
   });
 
-  it('연락함 상태면 배지와 되돌리기 버튼을 보이고, 버튼이 각 동작을 부른다', () => {
+  it('미연락 행은 "연락함으로 표시" 글자 버튼과 ⋮ "삭제…"만 둔다', () => {
+    const handlers = { toggle: vi.fn(), remove: vi.fn() };
+    const { elements } = render(inquiry(), handlers);
+    button(elements, '연락함으로 표시')?.props.onClick?.();
+    expect(handlers.toggle).toHaveBeenCalledTimes(1);
+    expect(menuItems(elements).map((item) => item.label)).toEqual(['삭제…']);
+  });
+
+  it('연락함 상태면 되돌리기·삭제를 ⋮ 메뉴에 두고, 항목이 각 동작을 부른다', () => {
     const handlers = { toggle: vi.fn(), remove: vi.fn() };
     const { texts, elements } = render(
       inquiry({ contactedAt: '2026-10-18T00:00:00.000Z', contact: 'farm@example.test' }),
@@ -74,8 +92,10 @@ describe('관리자 입점 문의 카드', () => {
     expect(elements.some((element) => element.props.href === 'mailto:farm@example.test')).toBe(
       true,
     );
-    button(elements, '연락 전으로 되돌리기')?.props.onClick?.();
-    button(elements, '삭제')?.props.onClick?.();
+    expect(button(elements, '연락함으로 표시')).toBeUndefined();
+    const items = menuItems(elements);
+    expect(items.map((item) => item.label)).toEqual(['연락 전으로 되돌리기', '삭제…']);
+    for (const item of items) item.onSelect();
     expect(handlers.toggle).toHaveBeenCalledTimes(1);
     expect(handlers.remove).toHaveBeenCalledTimes(1);
   });

@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { contactHref, formatInquiryDate } from './_lib';
 
 describe('formatInquiryDate', () => {
-  it('한국 시각 날짜로 보여 준다(UTC 전날 밤도 한국 다음 날)', () => {
-    expect(formatInquiryDate('2026-10-16T15:30:00.000Z')).toBe('2026. 10. 17.');
+  it('한국 시각 어드민 날짜로 보여 준다(UTC 전날 밤도 한국 다음 날)', () => {
+    expect(formatInquiryDate('2026-10-16T15:30:00.000Z')).toBe('2026-10-17');
   });
 
   it('읽을 수 없는 시각은 빈 문자열', () => {

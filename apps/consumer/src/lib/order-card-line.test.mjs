@@ -37,9 +37,10 @@ const roundOrder = (status, extra = {}) => ({
 
 const UPCOMING = ['PENDING', 'ACCEPTED', 'PREPARING', 'DELIVERING', 'DELIVERY_HELD'];
 const ARRIVED = ['DELIVERED', 'REVIEWED'];
-// 도착을 약속하지 않는 상태: 배송 종결, 공동구매·거점 전용 상태, 모르는 값.
+// 오지 않는 주문: 취소, 배송 종결(고객 사유로 환불 없이 끝남). 첫 줄을 숨긴다.
+const HIDDEN = ['CANCELLED', 'CLOSED_UNDELIVERED'];
+// 도착을 약속하지 않는 상태: 공동구매·거점 전용 상태, 모르는 값.
 const NO_ARRIVAL_PROMISE = [
-  'CLOSED_UNDELIVERED',
   'RECRUITING',
   'CONFIRMED',
   'HUB_ARRIVED',
@@ -52,7 +53,7 @@ const NO_ARRIVAL_PROMISE = [
   'toString',
   'constructor',
 ];
-const ALL_STATUSES = [...UPCOMING, ...ARRIVED, 'CANCELLED', ...NO_ARRIVAL_PROMISE];
+const ALL_STATUSES = [...UPCOMING, ...ARRIVED, ...HIDDEN, ...NO_ARRIVAL_PROMISE];
 
 test('회차 직배송 주문은 진행 중이면 "도착 예정", 배송 완료·구매 확정이면 "도착"을 첫 줄에 쓴다', () => {
   for (const status of UPCOMING) {
@@ -63,8 +64,10 @@ test('회차 직배송 주문은 진행 중이면 "도착 예정", 배송 완료
   }
 });
 
-test('취소된 회차 직배송 주문은 첫 줄을 숨긴다', () => {
-  assert.equal(orderCardHeadline(roundOrder('CANCELLED')), null);
+test('취소·배송 종결된 회차 직배송 주문은 첫 줄을 숨긴다', () => {
+  for (const status of HIDDEN) {
+    assert.equal(orderCardHeadline(roundOrder(status)), null, status);
+  }
 });
 
 test('도착을 약속할 수 없는 상태는 도착일 대신 수령 방식을 쓴다', () => {
@@ -120,7 +123,7 @@ test('도착일을 읽지 못한 직배송 주문은 지금처럼 수령 방식�
     Number.NaN,
   ];
   for (const requestedDeliveryDate of unreadable) {
-    for (const status of [...UPCOMING, ...ARRIVED, 'CANCELLED']) {
+    for (const status of [...UPCOMING, ...ARRIVED, ...HIDDEN]) {
       assert.equal(
         orderCardHeadline(roundOrder(status, { requestedDeliveryDate })),
         '직배송',

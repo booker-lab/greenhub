@@ -5,7 +5,7 @@ import ts from 'typescript';
 
 const source = await readFile(new URL('./page.tsx', import.meta.url), 'utf8');
 const testableSource = `${source}
-export { readMarketingPreferences, fetchMarketingPreferences, withdrawMarketingPreference };`;
+export { readMarketingPreferences, fetchMarketingPreferences, withdrawMarketingPreference, settingsErrorMessage };`;
 const compiled = ts.transpileModule(testableSource, {
   compilerOptions: {
     esModuleInterop: true,
@@ -15,6 +15,21 @@ const compiled = ts.transpileModule(testableSource, {
   },
   fileName: 'page.tsx',
 }).outputText;
+
+// 연결 실패 판정은 앱 공통 모듈(lib/load-error-message.ts)의 실제 구현을 쓴다.
+const loadErrorSource = await readFile(
+  new URL('../../../../lib/load-error-message.ts', import.meta.url),
+  'utf8',
+);
+const loadErrorModule = { exports: {} };
+new Function(
+  'module',
+  'exports',
+  ts.transpileModule(loadErrorSource, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    fileName: 'load-error-message.ts',
+  }).outputText,
+)(loadErrorModule, loadErrorModule.exports);
 
 const pageModule = { exports: {} };
 const requireForTest = (specifier) => {
@@ -39,6 +54,7 @@ const requireForTest = (specifier) => {
   ) {
     return {};
   }
+  if (specifier === '@/lib/load-error-message') return loadErrorModule.exports;
   if (specifier === '@/lib/api-base-url') {
     return { getApiBaseUrl: () => 'http://localhost:3000' };
   }
@@ -52,8 +68,31 @@ new Function('require', 'module', 'exports', compiled)(
   pageModule.exports,
 );
 
-const { readMarketingPreferences, fetchMarketingPreferences, withdrawMarketingPreference } =
-  pageModule.exports;
+const {
+  readMarketingPreferences,
+  fetchMarketingPreferences,
+  withdrawMarketingPreference,
+  settingsErrorMessage,
+} = pageModule.exports;
+
+test('연결이 끊긴 실패는 브라우저 원문 대신 앱 공통 연결 안내를 보인다', () => {
+  for (const raw of ['Failed to fetch', 'Load failed', 'NetworkError when attempting to fetch resource.']) {
+    assert.equal(
+      settingsErrorMessage(new TypeError(raw), '현재 상태를 확인할 수 없습니다.'),
+      '연결이 불안정해요. 잠시 후 다시 시도해 주세요.',
+      raw,
+    );
+  }
+});
+
+test('서버 오류는 이 화면이 만든 한국어 문구를, 알 수 없는 값은 기본 문구를 그대로 보인다', () => {
+  assert.equal(
+    settingsErrorMessage(new Error('현재 마케팅 동의 상태를 불러오지 못했습니다.'), '기본'),
+    '현재 마케팅 동의 상태를 불러오지 못했습니다.',
+  );
+  assert.equal(settingsErrorMessage(null, '마케팅 동의 철회에 실패했습니다.'), '마케팅 동의 철회에 실패했습니다.');
+  assert.equal(settingsErrorMessage(undefined, '현재 상태를 확인할 수 없습니다.'), '현재 상태를 확인할 수 없습니다.');
+});
 
 test('인증 사용자 응답의 두 채널이 boolean일 때만 현재 상태로 인정한다', () => {
   assert.deepEqual(

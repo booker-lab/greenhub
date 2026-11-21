@@ -155,7 +155,7 @@ export default function OrderCard({
               )}
         </div>
         <p className={cn(text, 'mt-1')} style={muted}>
-          받는 분 {order.buyerName ?? '소비자'}
+          받는 분 {order.buyerName || '–'}
         </p>
         {paymentLine && <div className="mt-1">{paymentLine}</div>}
       </Link>
@@ -166,13 +166,19 @@ export default function OrderCard({
   // 한 줄에 이어 붙이면 390px에서 상품 뒤쪽과 수거 시각이 늘 잘려, 수거 시각은 줄어들지 않는 칸에 따로 둔다.
   const rowItemsText = orderItemsSummary(order.items) ?? itemsText;
   const pickupTimeText = tab === 'preparing' ? `수거 ${formatTime(order.preparedAt)}` : null;
-  const buyerLine = [methodText, order.buyerName ?? '소비자'].filter(Boolean).join(' · ');
+  const buyerLine = [methodText, order.buyerName || '–'].filter(Boolean).join(' · ');
 
   const rowBody = (
     <>
+      {/* 주소는 찾아갈 곳이라 말줄임으로 지우지 않고 낱말 단위로 줄을 바꾼다. */}
       <p
-        className={cn(text, 'truncate')}
-        style={{ fontWeight: 'var(--fw-bold)', fontVariantNumeric: 'tabular-nums' }}
+        className={text}
+        style={{
+          fontWeight: 'var(--fw-bold)',
+          fontVariantNumeric: 'tabular-nums',
+          wordBreak: 'keep-all',
+          overflowWrap: 'anywhere',
+        }}
       >
         {parts.detail ? `${parts.detail} · ${parts.base}` : parts.base}
       </p>
@@ -282,7 +288,11 @@ function PickupLine({
       data-testid={`driver-order-pickup-${orderId}`}
       className={cn('flex items-center gap-3', indent && 'pl-9')}
     >
-      <p className={cn(text, 'min-w-0 flex-1 truncate')} style={muted}>
+      {/* 수거 장소도 들를 곳이라 말줄임 없이 줄을 바꾼다. */}
+      <p
+        className={cn(text, 'min-w-0 flex-1')}
+        style={{ ...muted, wordBreak: 'keep-all', overflowWrap: 'anywhere' }}
+      >
         {pickup.label}
       </p>
       {pickup.mapHref && (

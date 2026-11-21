@@ -4,12 +4,14 @@ import type { PartnerInquiryContactedRequest, PartnerInquiryItem } from '@greenh
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
-import { ConfirmModal } from '@/components/ConfirmModal';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
+import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
 import { AdminFetchError } from '../_components/AdminFetchError';
+import { AdminPageHeader } from '../_components/adminList';
 import { PartnerInquiryCard } from './_components/PartnerInquiryCard';
+import { formatInquiryDate } from './_lib';
 
 // 소비자 앱 '입점 문의'로 들어온 농가·생산자 연락. 개인정보라 1년 뒤 지우는 것을 전제로 받는다.
 // 문의한 사람이 파기를 요청하면 1년을 기다리지 않고 여기서 바로 지운다.
@@ -86,51 +88,64 @@ export default function AdminPartnerInquiriesPage() {
     setDeleteTarget(null);
   };
 
-  // ① 외형 유지(UI 교체 P2b): Mantine Stack(gap sm)·Title order 3(22px·800·줄 높이 1.4)·Text sm.
+  // 머리는 어드민 공용 AdminPageHeader(h1 24px·휴대폰 22px, 아래 15px 설명 줄)로 다른 어드민 화면과 맞춘다(2026-11-20).
   return (
-    <div className="flex flex-col gap-3">
-      <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">입점 문의</h3>
-      <p className="m-0 p-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-        받은 날부터 1년 동안만 보관해요. 연락처는 입점 상담에만 써 주세요. 문의한 분이 지워 달라고
-        하면 바로 삭제해 주세요.
-      </p>
-      {loadFailed ? (
-        <AdminFetchError
-          title="입점 문의를 불러오지 못했습니다."
-          detail="입점 문의 조회 중 오류 발생"
-          onRetry={load}
-        />
-      ) : items === null ? (
-        <LoadingState />
-      ) : items.length === 0 ? (
-        <EmptyState text="입점 문의가 아직 없어요" />
-      ) : (
-        items.map((item) => (
-          <PartnerInquiryCard
-            key={item.id}
-            item={item}
-            busy={busyId === item.id}
-            error={errors[item.id] ?? null}
-            onToggleContacted={() => toggleContacted(item)}
-            onDelete={() => setDeleteTarget(item)}
-          />
-        ))
-      )}
-      <ConfirmModal
-        opened={deleteTarget !== null}
-        title="입점 문의 삭제"
-        message={
-          deleteTarget
-            ? `${deleteTarget.farmName} · ${deleteTarget.region}\n연락처와 내용을 바로 지웁니다. 되돌릴 수 없습니다.`
-            : ''
-        }
-        confirmLabel="삭제"
-        loading={busyId !== null}
-        onConfirm={confirmDelete}
-        onClose={() => {
-          if (busyId === null) setDeleteTarget(null);
-        }}
+    <div>
+      <AdminPageHeader
+        title="입점 문의"
+        subline="받은 날부터 1년 동안만 보관해요. 연락처는 입점 상담에만 써 주세요. 문의한 분이 지워 달라고 하면 바로 삭제해 주세요."
       />
+      <div className="flex flex-col gap-3">
+        {loadFailed ? (
+          <AdminFetchError
+            title="입점 문의를 불러오지 못했습니다."
+            detail="입점 문의 조회 중 오류 발생"
+            onRetry={load}
+          />
+        ) : items === null ? (
+          <LoadingState />
+        ) : items.length === 0 ? (
+          <EmptyState text="입점 문의가 아직 없어요" />
+        ) : (
+          // 행 사이 여백 없이 1px 선으로 나눈 줄 목록(어드민 목록 규칙).
+          <div>
+            {items.map((item) => (
+              <PartnerInquiryCard
+                key={item.id}
+                item={item}
+                busy={busyId === item.id}
+                error={errors[item.id] ?? null}
+                onToggleContacted={() => toggleContacted(item)}
+                onDelete={() => setDeleteTarget(item)}
+              />
+            ))}
+          </div>
+        )}
+        {/* 어드민 위험 동작 확인창 틀: 제목 = 동작 + 대상 → 대상 상자 → 빨간 한 줄 → 닫기 + 초록 확정. 요청은 그대로다. */}
+        <AdminConfirmDialog
+          open={deleteTarget !== null}
+          title={deleteTarget ? `${deleteTarget.farmName} 입점 문의 삭제` : '입점 문의 삭제'}
+          facts={
+            deleteTarget
+              ? [
+                  { label: '농가', value: deleteTarget.farmName },
+                  { label: '지역', value: deleteTarget.region },
+                  ...(formatInquiryDate(deleteTarget.createdAt)
+                    ? [{ label: '받은 날', value: formatInquiryDate(deleteTarget.createdAt) }]
+                    : []),
+                ]
+              : []
+          }
+          warning="연락처와 내용을 바로 지웁니다. 되돌릴 수 없습니다."
+          confirmLabel="삭제"
+          initialFocus="close"
+          loading={busyId !== null}
+          onConfirm={confirmDelete}
+          onClose={() => {
+            if (busyId === null) setDeleteTarget(null);
+          }}
+        />
+      </div>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { describeListCap, readCappedList } from '@/hooks/useAdmin';
 import { ApiError, apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import { AdminFetchError } from '../_components/AdminFetchError';
+import { AdminPageHeader } from '../_components/adminList';
 import { HiddenReviewCard } from './_components/HiddenReviewCard';
 import { UnhideConfirmModal } from './_components/UnhideConfirmModal';
 
@@ -76,52 +77,56 @@ export default function AdminReviewsPage() {
     }
   };
 
-  // ① 외형 유지(UI 교체 P2b): Mantine Stack(gap sm)·Title order 3(22px·800·줄 높이 1.4)·Text sm·xs.
+  // 머리는 어드민 공용 AdminPageHeader(h1 24px·휴대폰 22px, 아래 15px 설명 줄)로 다른 어드민 화면과 맞춘다(2026-11-20).
   return (
-    <div className="flex flex-col gap-3">
-      <h3 className="m-0 text-[22px] leading-[1.4] font-extrabold">숨긴 후기</h3>
-      <p className="m-0 p-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-        숨긴 후기는 고객 화면과 별점에서 빠져 있어요. 사유에 맞지 않게 숨긴 후기는 다시 보이게 해
-        주세요.
-      </p>
-      {loadFailed ? (
-        <AdminFetchError
-          title="숨긴 후기를 불러오지 못했습니다."
-          detail="숨긴 후기 조회 중 오류 발생"
-          onRetry={load}
-        />
-      ) : items === null ? (
-        <LoadingState />
-      ) : items.length === 0 ? (
-        <EmptyState text="숨긴 후기가 없어요" />
-      ) : (
-        <>
-          {cap !== null && (
-            <p className="m-0 p-0 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-              {describeListCap(cap)}
-            </p>
-          )}
-          {items.map((review) => (
-            <HiddenReviewCard
-              key={review.id}
-              review={review}
-              busy={busyId === review.id}
-              error={errors[review.id] ?? null}
-              onUnhide={() => askUnhide(review)}
-            />
-          ))}
-        </>
-      )}
-      <UnhideConfirmModal
-        target={confirmTarget}
-        reason={unhideReason}
-        onReasonChange={setUnhideReason}
-        busy={busyId !== null}
-        onConfirm={unhide}
-        onClose={() => {
-          if (busyId === null) setConfirmTarget(null);
-        }}
+    <div>
+      <AdminPageHeader
+        title="숨긴 후기"
+        subline="숨긴 후기는 고객 화면과 별점에서 빠져 있어요. 사유에 맞지 않게 숨긴 후기는 다시 보이게 해 주세요."
       />
+      <div className="flex flex-col gap-3">
+        {loadFailed ? (
+          <AdminFetchError
+            title="숨긴 후기를 불러오지 못했습니다."
+            detail="숨긴 후기 조회 중 오류 발생"
+            onRetry={load}
+          />
+        ) : items === null ? (
+          <LoadingState />
+        ) : items.length === 0 ? (
+          <EmptyState text="숨긴 후기가 없어요" />
+        ) : (
+          <>
+            {cap !== null && (
+              <p className="m-0 p-0 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                {describeListCap(cap)}
+              </p>
+            )}
+            {/* 행 사이 여백 없이 1px 선으로 나눈 줄 목록(어드민 목록 규칙). */}
+            <div>
+              {items.map((review) => (
+                <HiddenReviewCard
+                  key={review.id}
+                  review={review}
+                  busy={busyId === review.id}
+                  error={errors[review.id] ?? null}
+                  onUnhide={() => askUnhide(review)}
+                />
+              ))}
+            </div>
+          </>
+        )}
+        <UnhideConfirmModal
+          target={confirmTarget}
+          reason={unhideReason}
+          onReasonChange={setUnhideReason}
+          busy={busyId !== null}
+          onConfirm={unhide}
+          onClose={() => {
+            if (busyId === null) setConfirmTarget(null);
+          }}
+        />
+      </div>
     </div>
   );
 }

@@ -70,6 +70,7 @@ export function PostDeliveryRefundModal({
         {
           label: '가게 정산',
           value: '지급 전이면 정산에서 빠지고, 이미 지급했으면 정산 화면에 "돌려받을 돈"으로 표시',
+          longText: true,
         },
       ]}
       warning="결제한 금액 전액을 바로 환불합니다. 되돌릴 수 없습니다."
@@ -92,9 +93,15 @@ export function PostDeliveryRefundModal({
           value={reasonCode}
           onValueChange={onReasonCodeChange}
         >
-          <div className="mt-1.5 flex flex-col gap-1.5">
+          {/* 사유마다 누르는 높이 44px — 글자(label)에 위아래 12px을 줘 줄 전체를 누를 수 있게 한다. */}
+          <div className="mt-0.5 flex flex-col">
             {POST_DELIVERY_REFUND_REASON_CODES.map((code) => (
-              <RadioItem key={code} value={code} label={POST_DELIVERY_REFUND_REASON_LABEL[code]} />
+              <RadioItem
+                key={code}
+                value={code}
+                label={POST_DELIVERY_REFUND_REASON_LABEL[code]}
+                className="min-h-11 items-center [&_label]:py-3"
+              />
             ))}
           </div>
         </RadioGroup>

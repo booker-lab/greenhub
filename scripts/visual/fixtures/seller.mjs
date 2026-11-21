@@ -878,15 +878,20 @@ const VARIETIES = [
 }));
 
 // 감사 기록(/admin/audit) — 종류 이름은 화면의 ACTION_LABEL과 맞춘다.
+// actorName·targetName은 실제 API(admin.service getAuditLogs)가 읽을 때 붙이는 지금 이름이다. 마지막 기록은 대상을
+// 찾지 못한 경우(targetName null)라 화면이 ID를 그대로 보인다.
 const ADMIN_AUDIT_LOGS = [
   {
     id: 'audit-1',
     action: 'admin.driver.approved',
     actorId: 'admin-visual-0001',
+    actorName: '김운영',
     targetType: 'driver',
     targetId: 'driver-visual-0002',
-    before: { status: 'pending' },
-    after: { status: 'approved' },
+    targetName: '이대기',
+    // 실제 API(admin.service approveDriver)와 같은 모양: driverApproved 참·거짓.
+    before: { driverApproved: false },
+    after: { driverApproved: true },
     reason: null,
     createdAt: '2026-10-05T01:20:00.000Z',
   },
@@ -894,10 +899,13 @@ const ADMIN_AUDIT_LOGS = [
     id: 'audit-2',
     action: 'admin.order.force_refunded',
     actorId: 'admin-visual-0001',
+    actorName: '김운영',
     targetType: 'order',
     targetId: 'order-round-multi',
-    before: { status: 'PAID' },
-    after: { status: 'REFUNDED' },
+    targetName: '20261001-000001',
+    // 실제 API(admin.service forceRefund)와 같은 모양: 강제환불 뒤 상태는 CANCELLED.
+    before: { status: 'ACCEPTED' },
+    after: { status: 'CANCELLED' },
     reason: '꽃 상태 불량으로 손님 요청',
     createdAt: '2026-10-04T08:05:00.000Z',
   },
@@ -905,8 +913,10 @@ const ADMIN_AUDIT_LOGS = [
     id: 'audit-3',
     action: 'store.payout_account.updated',
     actorId: 'admin-visual-0001',
+    actorName: '김운영',
     targetType: 'store',
     targetId: STORE_ID,
+    targetName: null,
     before: null,
     after: { bankName: '농협은행', accountNumberLast4: '7788' },
     reason: null,
@@ -1135,20 +1145,9 @@ export const routes = [
       return o ? { body: o } : { status: 404, body: { message: '주문 없음' } };
     },
   ],
-  // 배송 후 환불 가능 여부(주문 상세, UI 교체 P4): 배송 완료는 기간 안, 구매 확정은 정산 지급 뒤라 막힘.
-  [
-    'GET',
-    /^\/stores\/[^/]+\/orders\/([^/]+)\/post-delivery-refund$/,
-    ({ params: [id] }) => ({
-      body:
-        id === 'order-delivered'
-          ? { eligible: true, reason: 'OK', deadline: '2026-11-05T14:59:00.000Z', amount: 33000 }
-          : { eligible: false, reason: 'SETTLEMENT_PAID', deadline: null, amount: 33000 },
-    }),
-  ],
-  // 고객 사유 종결(환불 없음) 판정(주문 상세). 앱은 고객 책임 보류로 재배송비를 기다리는 회차 직배송 주문과
-  // 종결한 주문에서만 묻는다. order-round-held는 보류(서울 10월 6일) 뒤 결제 기한(10월 9일)이 지났고 결제 대기가
-  // 24시간을 넘어 종결할 수 있다(API customer-fault-closure.service 판정과 같은 값, 날짜는 고정 주문 날짜 기준).
+  // 고객 사유 종결 판정(주문 상세). 보류 주문(order-round-held)은 고객 책임·재배송비 5,000원 미결제이고
+  // 보류 시각(2026-10-05T23:30Z)으로 계산한 결제 마지막 날(10월 9일)이 지났고 결제 요청도 24시간을 넘겨
+  // API 판정(customer-fault-closure.service.ts)이 OK다. 그 밖의 주문은 보류가 아니라 NOT_HELD다.
   [
     'GET',
     /^\/stores\/[^/]+\/orders\/([^/]+)\/customer-fault-closure$/,
@@ -1173,6 +1172,19 @@ export const routes = [
             },
     }),
   ],
+  // 배송 후 환불 가능 여부(주문 상세, UI 교체 P4): 배송 완료는 기간 안, 구매 확정은 정산 지급 뒤라 막힘.
+  [
+    'GET',
+    /^\/stores\/[^/]+\/orders\/([^/]+)\/post-delivery-refund$/,
+    ({ params: [id] }) => ({
+      body:
+        id === 'order-delivered'
+          ? { eligible: true, reason: 'OK', deadline: '2026-11-05T14:59:00.000Z', amount: 33000 }
+          : { eligible: false, reason: 'SETTLEMENT_PAID', deadline: null, amount: 33000 },
+    }),
+  ],
+  // 경매 시세(회차·준비 화면의 상품별 참고 시세). fixture 상품은 시세 연결이 없어 비어 있다(지어낸 시세를 두지 않는다).
+  ['GET', /^\/stores\/[^/]+\/market-prices$/, () => ({ body: { summaries: {} } })],
   ['GET', /^\/stores\/[^/]+\/operation-issues$/, () => ({ body: { items: OPERATION_ISSUES } })],
   // 조치(문자 재발송·환불 재시도) 뒤 앱이 기록 한 건을 다시 읽는다.
   [
@@ -1226,21 +1238,6 @@ export const routes = [
   ['GET', /^\/admin\/users$/, () => ({ body: { users: ADMIN_USERS }, delay: 700 })],
   ['GET', /^\/admin\/invite$/, () => ({ body: ADMIN_INVITES })],
   ['GET', /^\/admin\/stores$/, () => ({ body: { stores: ADMIN_STORES } })],
-  // 상품별 경매 시세(회차 가격·구매 목록). fixture 상품은 시세를 연결하지 않아(marketRef 없음) 모두 null이다.
-  [
-    'GET',
-    /^\/stores\/[^/]+\/market-prices$/,
-    ({ url }) => ({
-      body: {
-        summaries: Object.fromEntries(
-          (url.searchParams.get('productIds') ?? '')
-            .split(',')
-            .filter(Boolean)
-            .map((id) => [id, null]),
-        ),
-      },
-    }),
-  ],
   ['GET', /^\/stores\/[^/]+\/sale-rounds$/, () => ({ body: { items: SALE_ROUNDS } })],
   [
     'GET',
@@ -2557,7 +2554,12 @@ export const benchmarkScreens = [
     title: '관리자 · 입점 문의 · 삭제 확인',
     path: '/admin/partner-inquiries',
     features: ['partner-inquiry'],
-    steps: [{ click: '삭제' }],
+    // 삭제는 행 끝 ⋮ 메뉴 안에 있다(어드민 행 동작 규칙, 2026-11-19).
+    steps: [
+      { clickSelector: 'button[aria-label="여주 햇살농원 입점 문의 동작 더 보기"]:visible' },
+      { click: '삭제…' },
+    ],
+    returnFocus: 'button[aria-label="여주 햇살농원 입점 문의 동작 더 보기"]:visible',
     viewport: true,
   },
   {
