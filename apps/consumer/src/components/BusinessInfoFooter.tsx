@@ -1,5 +1,6 @@
 import Image from 'next/image';
 import Link from 'next/link';
+import PolicyChangeNotice from '@/components/PolicyChangeNotice';
 import { isFeatureOn } from '@/lib/features';
 import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
 
@@ -144,6 +145,8 @@ export default function BusinessInfoFooter() {
           </>
         )}
       </nav>
+      {/* 방침 개정 시행 전에만 보이는 한 줄(브라우저 시각 기준, 한국 시간 2026-11-27까지). */}
+      <PolicyChangeNotice />
 
       <h2
         id="business-info-title"
