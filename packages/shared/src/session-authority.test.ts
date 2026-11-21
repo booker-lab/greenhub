@@ -301,7 +301,8 @@ describe('recheckSessionAfterRejection', () => {
         calls.update += 1;
         return updated;
       },
-      fetchImpl: async () => {
+      fetchImpl: async (input) => {
+        if (String(input).endsWith('/csrf')) return json({ csrfToken: 'csrf-1' });
         calls.session += 1;
         return session();
       },
@@ -345,13 +346,75 @@ describe('recheckSessionAfterRejection', () => {
     }
   });
 
-  it('isSessionEnded는 기본으로 같은 출처 세션 조회를 캐시 없이 부른다', async () => {
+  it('isSessionEnded는 CSRF 토큰을 받아 세션 조회를 POST로 보내 재사용 없이 다시 검증한다', async () => {
     const requests: Array<{ url: string; init?: RequestInit }> = [];
     const ended = await isSessionEnded(async (input, init) => {
       requests.push({ url: String(input), init });
-      return json(null);
+      return String(input).endsWith('/csrf') ? json({ csrfToken: 'csrf-1' }) : json(null);
     });
     expect(ended).toBe(true);
-    expect(requests).toEqual([{ url: '/api/auth/session', init: { cache: 'no-store' } }]);
+    expect(requests).toEqual([
+      { url: '/api/auth/csrf', init: { cache: 'no-store' } },
+      {
+        url: '/api/auth/session',
+        init: {
+          method: 'POST',
+          cache: 'no-store',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ csrfToken: 'csrf-1' }),
+        },
+      },
+    ]);
+  });
+
+  it('isSessionEnded는 다른 세션 주소를 받으면 같은 경로의 csrf를 부른다', async () => {
+    const urls: string[] = [];
+    await isSessionEnded(async (input) => {
+      urls.push(String(input));
+      return String(input).endsWith('/csrf') ? json({ csrfToken: 'csrf-1' }) : json({});
+    }, '/base/api/auth/session');
+    expect(urls).toEqual(['/base/api/auth/csrf', '/base/api/auth/session']);
+  });
+
+  it('CSRF 토큰을 받지 못하면 세션을 끝났다고 보지 않는다(일시 장애 보존)', async () => {
+    const cases: Array<() => Promise<Response>> = [
+      async () => {
+        throw new TypeError('Failed to fetch');
+      },
+      async () => json({ message: 'error' }, 500),
+      async () => json({}),
+      async () => json({ csrfToken: '' }),
+    ];
+    for (const csrf of cases) {
+      let sessionCalls = 0;
+      const ended = await isSessionEnded(async (input) => {
+        if (String(input).endsWith('/csrf')) return csrf();
+        sessionCalls += 1;
+        return json(null);
+      });
+      expect(ended).toBe(false);
+      expect(sessionCalls).toBe(0);
+    }
+  });
+
+  it('쿠키를 지운 뒤 늦은 응답이 되살린 세션도 강제 검증이 폐기를 판정하면 로그아웃시킨다', async () => {
+    // update()는 폐기를 판정해 null을 돌려줬지만 늦게 온 GET 응답이 쿠키를 되살린 상황.
+    // GET이라면 재사용 구간이라 사용자가 남아 보였을 것이다. POST 강제 검증은 사용자 없음으로 답한다.
+    const methods: string[] = [];
+    let signedOut = 0;
+    const result = await recheckSessionAfterRejection({
+      update: async () => null,
+      fetchImpl: async (input, init) => {
+        if (String(input).endsWith('/csrf')) return json({ csrfToken: 'csrf-1' });
+        methods.push(init?.method ?? 'GET');
+        return init?.method === 'POST' ? json({}) : json({ user: { role: 'seller' } });
+      },
+      signOut: () => {
+        signedOut += 1;
+      },
+    });
+    expect(result).toBe('ended');
+    expect(methods).toEqual(['POST']);
+    expect(signedOut).toBe(1);
   });
 });
