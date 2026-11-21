@@ -337,8 +337,8 @@ const testCredentialsProvider = Credentials({
       throw new DiagnosticCredentialsSignin('authorize-rejected__driver-g7-upstream-non-ok');
     }
 
-    // biome-ignore lint/suspicious/noExplicitAny: upstream contract is any-shaped;
-    // 38B adds no new validation beyond role/approval, preserves original any-shape.
+    // upstream contract is any-shaped; 38B adds no new validation beyond role/approval,
+    // preserves original any-shape. (biome noExplicitAny는 저장소 설정에서 꺼져 있어 따로 끄지 않는다.)
     let data: any;
     try {
       data = await res.json();
@@ -376,8 +376,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
   providers: [
     Kakao({
-      clientId: process.env.KAKAO_CLIENT_ID!,
-      clientSecret: process.env.KAKAO_CLIENT_SECRET!,
+      // 운영 환경 변수에 늘 있다. 없을 때 값(undefined)은 예전 `!`와 같게 그대로 넘긴다.
+      clientId: process.env.KAKAO_CLIENT_ID as string,
+      clientSecret: process.env.KAKAO_CLIENT_SECRET as string,
     }),
     ...(isTestCredentialsProviderEnabled(process.env) ? [testCredentialsProvider] : []),
   ],

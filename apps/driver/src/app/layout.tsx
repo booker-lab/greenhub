@@ -1,9 +1,9 @@
 import { COLOR_SCHEME_SCRIPT } from '@greenhub/shared';
 import type { Metadata, Viewport } from 'next';
 import { headers } from 'next/headers';
-import Providers from './providers';
 import BottomNav from '@/components/BottomNav';
 import { decodeInitialSession, INITIAL_SESSION_HEADER } from '@/lib/initial-session';
+import Providers from './providers';
 import './globals.css';
 
 export const metadata: Metadata = {
