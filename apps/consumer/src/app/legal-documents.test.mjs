@@ -32,8 +32,9 @@ test('개인정보처리방침은 파일럿의 실제 처리 흐름과 권리 �
   const requiredPhrases = [
     '개인정보처리방침',
     '디어 오키드',
-    "const EFFECTIVE_DATE = '2026년 11월 8일'",
-    '이번 개정 전 공개본의 시행일은 2026년 11월 1일',
+    "const EFFECTIVE_DATE = '2026년 11월 28일'",
+    '이번 개정 전 공개본의 시행일은 2026년 11월 8일',
+    '그 전은 2026년 11월 1일',
     '개인정보 보호책임자: {PUBLIC_BUSINESS_INFO.representative}',
     '회원 탈퇴는 마이페이지의',
     '진행 중인 주문이 있으면 그 주문이 끝난 뒤 탈퇴할 수 있습니다',
@@ -105,20 +106,23 @@ test('파일럿 거래성 주문 알림 8종은 선택 마케팅과 분리되어
   const source = normalizeWhitespace(
     `${loadSource('app', 'terms', 'page.tsx')}\n${loadSource('app', 'privacy', 'page.tsx')}`,
   );
-  const transactionalCodes = [
-    'ORDER_ACCEPTED',
-    'ORDER_PREPARING',
-    'ORDER_DELIVERING',
-    'ORDER_DELIVERY_HELD',
-    'ORDER_REDELIVERY_PAYMENT_REQUESTED',
-    'ORDER_REDELIVERY_SCHEDULED',
-    'ORDER_DELIVERED',
-    'ORDER_CANCELLED',
+  // 공개 방침은 알림 8종을 알림 내역 화면과 같은 이름으로 적는다(2026-11-28 시행 개정). 내부 코드는 보이지 않는다.
+  const transactionalNames = [
+    '결제 완료',
+    '상품 준비 중',
+    '배송 시작',
+    '배송 보류',
+    '재배송비 결제 요청',
+    '재배송 예정',
+    '배송 완료',
+    '주문 취소',
   ];
 
-  for (const code of transactionalCodes) {
-    assert.match(source, new RegExp(code));
+  for (const name of transactionalNames) {
+    assert.match(source, new RegExp(`<li>${name}</li>`));
   }
+  assert.doesNotMatch(loadSource('app', 'privacy', 'page.tsx'), /<li>ORDER_[A-Z_]+<\/li>/);
+  assert.match(source, /현재 회차 직배송의 거래성 주문 알림은 다음 8종입니다/);
 
   assert.match(source, /거래성 알림/);
   assert.match(source, /선택 마케팅과 별개/);

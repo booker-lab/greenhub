@@ -9,7 +9,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/privacy' },
 };
 
-const EFFECTIVE_DATE = '2026년 11월 8일';
+const EFFECTIVE_DATE = '2026년 11월 28일';
 
 const sectionStyle = {
   marginTop: 34,
@@ -95,14 +95,15 @@ export default function PrivacyPage() {
           </p>
           <p>현재 회차 직배송의 거래성 주문 알림은 다음 8종입니다.</p>
           <ul style={listStyle}>
-            <li>ORDER_ACCEPTED</li>
-            <li>ORDER_PREPARING</li>
-            <li>ORDER_DELIVERING</li>
-            <li>ORDER_DELIVERY_HELD</li>
-            <li>ORDER_REDELIVERY_PAYMENT_REQUESTED</li>
-            <li>ORDER_REDELIVERY_SCHEDULED</li>
-            <li>ORDER_DELIVERED</li>
-            <li>ORDER_CANCELLED</li>
+            {/* 알림 내역 화면(mypage/notifications)이 쓰는 이름과 같다. 2026-11-28 개정 전에는 내부 코드로 적었다. */}
+            <li>결제 완료</li>
+            <li>상품 준비 중</li>
+            <li>배송 시작</li>
+            <li>배송 보류</li>
+            <li>재배송비 결제 요청</li>
+            <li>재배송 예정</li>
+            <li>배송 완료</li>
+            <li>주문 취소</li>
           </ul>
         </div>
         <p>
@@ -306,9 +307,11 @@ export default function PrivacyPage() {
         <p>
           이 방침은 {EFFECTIVE_DATE}부터 시행합니다. 중요한 변경은 시행 전에 서비스 화면에서 적용일,
           변경 이유와 주요 내용을 알리고 이전 버전을 확인할 수 있도록 보관하겠습니다. 이번 개정은
-          마이페이지 회원 탈퇴 기능과 탈퇴할 때 지우는 정보·남는 정보를 알립니다. 이번 개정 전
-          공개본의 시행일은 2026년 11월 1일(개인정보 보호책임자와 배송 담당자의 카카오맵 길 안내
-          이용 추가)이고, 그 전 공개본의 시행일은 2026년 8월 30일, 그 전은 2026년 8월 19일입니다.
+          거래성 주문 알림 8종을 내부 코드 대신 알림 화면에 보이는 이름으로 적습니다(알림의 종류와
+          개수는 같습니다). 이번 개정 전 공개본의 시행일은 2026년 11월 8일(마이페이지 회원 탈퇴
+          기능과 탈퇴할 때 지우는 정보·남는 정보 추가)이고, 그 전은 2026년 11월 1일(개인정보
+          보호책임자와 배송 담당자의 카카오맵 길 안내 이용 추가), 2026년 8월 30일, 2026년 8월
+          19일입니다.
         </p>
         <p>
           서비스 이용 조건은 <a href="/terms">이용약관</a>에서 확인할 수 있습니다.
