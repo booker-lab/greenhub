@@ -163,6 +163,7 @@ describe('드라이버 pre-upstream diagnostic projection (38D)', () => {
       assert.ok(!arg.includes('/'), `diagnostic must not carry path/origin value, got: ${arg}`);
       assert.ok(!arg.includes('='), `diagnostic must not carry env assignment, got: ${arg}`);
     }
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: 소스에 없어야 하는 템플릿 글자를 그대로 찾는다.
     for (const forbidden of ['${email}', '${password}', '${got}', '${expected}', '${credentials']) {
       assert.ok(!source.includes(forbidden), `auth.ts must not interpolate ${forbidden}`);
     }

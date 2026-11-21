@@ -38,8 +38,6 @@ const legacyEnd = photoCaptureSource.indexOf('router.replace', legacyStart);
 assert.ok(legacyEnd !== -1, 'legacy branch 뒤에 board 이동이 있어야 한다');
 const legacySlice = photoCaptureSource.slice(legacyStart, legacyEnd);
 
-const UNCERTAINTY_COPY = '결과를 확인할 수 없어요. 주문 상태를 다시 확인해 주세요.';
-
 // 구현과 동일한 의미의 판정 미러다. 소스 계약이 바뀌면 아래 behavioral 테스트와
 // source-contract 테스트 중 최소 하나가 먼저 실패한다.
 function isLegacyHubStatusAck(result, orderId) {
@@ -304,6 +302,7 @@ test('R-03: 사진 화면 뒤로가기는 상세와 같은 판정을 쓰고 기�
     'resolveDriverDetailBackAction(readDriverDetailBackContext(window))',
   );
   const back = slice.indexOf('router.back()');
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: 소스 글자를 그대로 찾는다.
   const replace = slice.indexOf('router.replace(`/board/${encodeURIComponent(orderId)}`)');
   assert.ok(stop !== -1 && stop < decide, '스트림 정리가 먼저여야 한다');
   assert.ok(back > decide && replace > back, '기록 있으면 back, 없으면 상세 replace');
