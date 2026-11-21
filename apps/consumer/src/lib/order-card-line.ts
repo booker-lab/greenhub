@@ -7,16 +7,18 @@ import { formatOrderDeliveryDate } from '@/lib/order-delivery-date';
 type ArrivalPhase = 'upcoming' | 'arrived' | 'hidden';
 
 // 상태 묶음은 카드의 상태 점(mypage/_client.tsx STATUS_TONES)과 같이 주문 상태(order.status) 하나로 정한다.
-// - upcoming: 아직 도착 전(결제 확인 중·결제 완료·준비·배송 중·배송 보류) → "도착 예정"
+// - upcoming: 아직 도착 전(결제 확인 중·결제 완료·준비·배송 중) → "도착 예정"
 // - arrived: 도착함(배송 완료·구매 확정) → "도착"
 // - hidden: 취소·배송 종결(고객 사유로 환불 없이 끝남) 주문은 오지 않으므로 줄을 숨긴다(2026-11-19 사용자 결정).
+//   배송 보류도 숨긴다. 그날 배송하지 못해 멈춘 주문에 원래 날짜로 "도착 예정"을 쓰면 틀린 약속이 된다
+//   (2026-11-22 사용자 결정, 주문 상세와 같게. 재배송 일정은 주문 상세의 보류 안내가 말한다).
 // 표에 없는 상태(공동구매·거점 전용 상태, 모르는 값)는 도착을 약속하지 않고 수령 방식을 쓴다.
 const ARRIVAL_PHASES: Partial<Record<OrderStatus, ArrivalPhase>> = {
   PENDING: 'upcoming',
   ACCEPTED: 'upcoming',
   PREPARING: 'upcoming',
   DELIVERING: 'upcoming',
-  DELIVERY_HELD: 'upcoming',
+  DELIVERY_HELD: 'hidden',
   DELIVERED: 'arrived',
   REVIEWED: 'arrived',
   CANCELLED: 'hidden',
@@ -48,7 +50,7 @@ export function orderCardMethodLine(order: OrderCardLineSource): string {
 
 /**
  * 카드의 굵은 첫 줄. null이면 줄을 그리지 않는다.
- * - 직배송이고 도착일을 읽을 수 있는 주문(공동구매 제외): "11월 10일(화) 도착 예정" / "11월 10일(화) 도착" / 취소·배송 종결은 숨김
+ * - 직배송이고 도착일을 읽을 수 있는 주문(공동구매 제외): "11월 10일(화) 도착 예정" / "11월 10일(화) 도착" / 취소·배송 종결·배송 보류는 숨김
  * - 택배·거점 픽업·공동구매, 도착일을 읽지 못한 주문, 표에 없는 상태: 수령 방식
  */
 export function orderCardHeadline(order: OrderCardLineSource): string | null {
