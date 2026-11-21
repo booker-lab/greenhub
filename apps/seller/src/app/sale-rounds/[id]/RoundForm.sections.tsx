@@ -50,6 +50,10 @@ const COLUMN = 'flex flex-col items-stretch justify-start';
 // ② 디자인 방향(D2): 흰 카드 안의 하위 카드는 그림자·1px 테두리 대신 --frame 면이다(주문 상세 기록 카드와 같은 규칙).
 // 안의 입력칸 선은 유지한다.
 const BORDER_PAPER = 'block rounded-[8px] bg-[var(--frame)] p-3';
+// 고칠 수 없는 회차의 입력칸은 저장된 값을 읽는 자리다. 꺼진 입력칸 기본 글자(gray-5, 대비 1.75:1) 대신
+// 연회색 면 위 보조 글자(4.6:1)로 쓴다(2026-11-19 화면 검수 1장 Q1-A). 저장 중이라 잠긴 입력칸은 기본 모양 그대로다.
+export const READ_ONLY_INPUT =
+  'disabled:bg-muted disabled:text-muted-foreground disabled:opacity-100';
 
 // Mantine NumberInput 값(숫자 또는 글자)을 @greenhub/ui NumberInput 값(숫자 또는 빈 칸)으로 옮긴다.
 function toNumberValue(value: NumericValue): number | '' {
@@ -75,7 +79,7 @@ export function FormSection({
           <h4 className="m-0 text-[18px] leading-[1.45] font-extrabold">{title}</h4>
           {description && (
             <p
-              className={TEXT}
+              className={`${TEXT} break-keep`}
               style={{
                 marginTop: 4,
                 fontSize: 'var(--font-size-sm)',
@@ -95,10 +99,13 @@ export function FormSection({
 export function ScheduleSection({
   draft,
   busy,
+  readOnly = false,
   onChange,
 }: {
   draft: FormDraft;
   busy: boolean;
+  /** 고칠 수 없는 회차: 입력칸 글자를 읽을 수 있는 대비로 쓴다. */
+  readOnly?: boolean;
   onChange: (
     key: 'orderOpenAt' | 'orderCloseAt' | 'auctionAt' | 'deliveryStartAt' | 'deliveryEndAt',
     value: string,
@@ -128,7 +135,7 @@ export function ScheduleSection({
             <Input
               id={`${id}-${key}`}
               type="datetime-local"
-              className="leading-[34px]"
+              className={readOnly ? `leading-[34px] ${READ_ONLY_INPUT}` : 'leading-[34px]'}
               value={draft[key]}
               onChange={(event) => onChange(key, event.currentTarget.value)}
               disabled={busy}
@@ -199,6 +206,7 @@ function NumberField({
   min,
   thousandSeparator,
   disabled,
+  readOnly = false,
   onChange,
 }: {
   label: string;
@@ -206,6 +214,7 @@ function NumberField({
   min: number;
   thousandSeparator?: string;
   disabled: boolean;
+  readOnly?: boolean;
   onChange: (value: NumericValue) => void;
 }) {
   const id = useId();
@@ -223,6 +232,7 @@ function NumberField({
         value={toNumberValue(value)}
         onValueChange={onChange}
         disabled={disabled}
+        className={readOnly ? READ_ONLY_INPUT : undefined}
         required
       />
     </Field>
@@ -233,11 +243,13 @@ export function LimitsSection({
   maxDeliveryAddresses,
   maxItemQuantity,
   busy,
+  readOnly = false,
   onChange,
 }: {
   maxDeliveryAddresses: NumericValue;
   maxItemQuantity: NumericValue;
   busy: boolean;
+  readOnly?: boolean;
   onChange: (key: 'maxDeliveryAddresses' | 'maxItemQuantity', value: NumericValue) => void;
 }) {
   return (
@@ -249,6 +261,7 @@ export function LimitsSection({
           value={maxDeliveryAddresses}
           onChange={(value) => onChange('maxDeliveryAddresses', value)}
           disabled={busy}
+          readOnly={readOnly}
         />
         <NumberField
           label="판매 수량 한도"
@@ -256,6 +269,7 @@ export function LimitsSection({
           value={maxItemQuantity}
           onChange={(value) => onChange('maxItemQuantity', value)}
           disabled={busy}
+          readOnly={readOnly}
         />
       </div>
     </FormSection>
@@ -267,6 +281,7 @@ export function ProductsSection({
   availableProducts,
   productPrices,
   busy,
+  readOnly = false,
   onAdd,
   onRemove,
   onUpdate,
@@ -277,6 +292,7 @@ export function ProductsSection({
   /** 상품 ID별 상품 기준가(스토어 상품 목록의 price). 목록에 없는 상품은 기준가를 숨긴다. */
   productPrices?: ReadonlyMap<string, number>;
   busy: boolean;
+  readOnly?: boolean;
   /** 상품별 경매 시세(연결한 상품만). 회차 가격 옆에 예상 매입가를 보여 준다. */
   marketSummaries?: Readonly<Record<string, MarketPriceSummary | null>>;
   onAdd: (product: Product) => void;
@@ -318,7 +334,7 @@ export function ProductsSection({
                         color: 'var(--color-text-secondary)',
                       }}
                     >
-                      상품 기준가 ₩{basePrice.toLocaleString()}
+                      상품 기준가 {basePrice.toLocaleString()}원
                     </p>
                   )}
                 </div>
@@ -341,6 +357,7 @@ export function ProductsSection({
                   value={item.roundPrice}
                   onChange={(value) => onUpdate(item.key, 'roundPrice', value)}
                   disabled={busy}
+                  readOnly={readOnly}
                 />
                 <NumberField
                   label="상품별 한도"
@@ -348,6 +365,7 @@ export function ProductsSection({
                   value={item.saleLimitQuantity}
                   onChange={(value) => onUpdate(item.key, 'saleLimitQuantity', value)}
                   disabled={busy}
+                  readOnly={readOnly}
                 />
                 <NumberField
                   label="노출 순서"
@@ -355,6 +373,7 @@ export function ProductsSection({
                   value={item.displayOrder}
                   onChange={(value) => onUpdate(item.key, 'displayOrder', value)}
                   disabled={busy}
+                  readOnly={readOnly}
                 />
               </div>
               <RoundPriceMarketHint
@@ -405,7 +424,7 @@ export function ProductsSection({
                 className={TEXT}
                 style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
               >
-                상품 기준가 ₩{product.price.toLocaleString()}
+                상품 기준가 {product.price.toLocaleString()}원
               </p>
             </div>
             <Button

@@ -69,10 +69,10 @@ export default function NewSaleRoundPage() {
             <RoundSalesModeNotice />
             <Alert variant="secondary" role="alert">
               <AlertTitle>기본값을 채워 두었습니다</AlertTitle>
-              <AlertDescription>
+              <AlertDescription className="break-keep">
                 다음 회차 일정(일요일 밤 12시 주문 마감, 화요일 오전 9시까지 배송), 경기도 이천시,
                 배송지 15곳·판매 수량 30개, 판매 중인 상품의 지금 가격을 미리 넣었습니다. 저장하면
-                손님에게는 아직 보이지 않는 ‘작성 중’ 회차로 만들어집니다.
+                고객에게는 아직 보이지 않는 ‘작성 중’ 회차로 만들어집니다.
               </AlertDescription>
             </Alert>
             {storeProducts.length === 0 && (

@@ -53,7 +53,7 @@ export function PrepareForm({
           {roundOrder
             ? '배송일'
             : order.saleType === 'normal'
-              ? '소비자 희망 배송일'
+              ? '고객 희망 배송일'
               : '공동구매 배송 예정일'}
           :{' '}
           <span
@@ -69,7 +69,7 @@ export function PrepareForm({
           className={`${TEXT} mb-3`}
           style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
         >
-          준비를 시작하면 손님께 알림톡이 가고, 기사 화면에 이 주문이 보여요.
+          준비를 시작하면 고객에게 알림톡이 가고, 기사 화면에 이 주문이 보여요.
         </p>
       ) : (
         <>

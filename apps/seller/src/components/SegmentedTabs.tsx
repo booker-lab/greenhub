@@ -76,9 +76,12 @@ export function SegmentedTabs<T extends string>({
         >
           {tabs.map((tab) => {
             const active = tab.key === value;
+            // 칸을 나눠 쓰는 탭(flex)은 폭이 똑같이 나뉘므로 좌우 여백을 줄여도 넓은 화면 모양은 같고,
+            // 폭 320에서도 한 줄에 들어간다. 가로 스크롤 탭은 글자 사이가 붙지 않게 16px 그대로다.
+            const padding = layout === 'flex' ? '12px 8px' : '12px 16px';
             const buttonStyle: CSSProperties = underline
               ? {
-                  padding: '12px 16px',
+                  padding,
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: active ? 700 : 400,
                   textAlign: 'center',
@@ -89,7 +92,7 @@ export function SegmentedTabs<T extends string>({
                   ...(layout === 'flex' ? { flex: 1 } : { flexShrink: 0 }),
                 }
               : {
-                  padding: '12px 16px',
+                  padding,
                   fontSize: 'var(--font-size-sm)',
                   fontWeight: active ? 700 : 'var(--fw-medium)',
                   textAlign: 'center',

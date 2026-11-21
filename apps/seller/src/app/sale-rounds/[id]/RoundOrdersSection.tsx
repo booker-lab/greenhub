@@ -190,7 +190,9 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
                         fontSize: 'var(--font-size-lg)',
                         fontWeight: 'var(--fw-extrabold)',
                         fontVariantNumeric: 'tabular-nums',
-                        color: 'var(--color-text)',
+                        // 0은 회색으로 물러난다(design-direction §3.5).
+                        color:
+                          stat.count === 0 ? 'var(--color-text-secondary)' : 'var(--color-text)',
                       }}
                     >
                       {stat.count.toLocaleString()}건
@@ -213,7 +215,7 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
             {showBulkButton && (
               <div>
                 <Button
-                  className="w-full"
+                  className="h-11 w-full"
                   onClick={() => setConfirming(true)}
                   disabled={running || !storeId}
                 >
@@ -272,7 +274,7 @@ export function RoundOrdersSection({ round }: { round: Pick<SaleRound, 'id' | 's
       <ConfirmModal
         opened={confirming}
         title="모두 준비 시작"
-        message={`결제 완료 주문 ${targets.length.toLocaleString()}건을 한 건씩 준비 시작으로 바꿔요.\n주문마다 손님께 "상품 준비가 시작되었습니다" 알림톡이 한 번씩 가요.\n준비 시작한 주문은 기사 화면에 보여요.`}
+        message={`결제 완료 주문 ${targets.length.toLocaleString()}건을 한 건씩 준비 시작으로 바꿔요.\n주문마다 고객에게 "상품 준비가 시작되었습니다" 알림톡이 한 번씩 가요.\n준비 시작한 주문은 기사 화면에 보여요.`}
         confirmLabel={`${targets.length.toLocaleString()}건 준비 시작`}
         confirmColor="brand"
         onConfirm={startBulkPrepare}

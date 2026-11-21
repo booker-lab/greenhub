@@ -63,7 +63,7 @@ export function RoundCancelModal({
           </DialogTitle>
         </DialogHeader>
         <DialogBody>
-          <div className="flex flex-col items-stretch justify-start gap-3">
+          <div className="flex flex-col items-stretch justify-start gap-3 break-keep">
             {resume && (
               <p
                 className={TEXT}
@@ -104,7 +104,7 @@ export function RoundCancelModal({
               <Button
                 onClick={onConfirm}
                 disabled={!confirmed || loading}
-                variant="destructive"
+                // 판매자 확인창의 확정 버튼은 초록 하나다(design-standard, 2026-11-21 결정).
                 className="flex-1"
                 style={{ fontWeight: 'var(--fw-medium)' }}
               >

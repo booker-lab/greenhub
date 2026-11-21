@@ -21,26 +21,34 @@ const muted = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-second
 
 export function SettlementListItem({ settlement: s, showFee }: SettlementListItemProps) {
   return (
-    // 정산에는 사람이 읽을 주문번호가 없어(orderId만 있음) 잘린 ID 대신 그 주문 상세로 가는 카드로 둔다.
+    // 행 전체가 그 주문 상세로 가는 링크다. 첫 줄은 주문번호(2026-10 이후 정산)이고, 번호가 없는 옛 정산은 "주문 보기"다.
+    // 초록은 화면의 주요 버튼에만 쓰므로 행마다 반복되는 이 줄은 검정 굵은 글자다(design-direction §3).
     <Link
       href={`/orders/${encodeURIComponent(s.orderId)}`}
       className="block rounded-[8px] bg-card px-4 py-3 no-underline outline-0 [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
       style={{ display: 'block', color: 'inherit', textDecoration: 'none' }}
     >
-      <div className={`${GROUP} mb-1 justify-between gap-4`}>
-        <div
-          className={`${GROUP} justify-start gap-0.5`}
-          style={{ color: 'var(--color-primary-dark)' }}
-        >
+      {/* 좁은 화면에서 주문번호와 상태가 한 줄에 안 들어가면 번호를 끊지 않고 상태를 아랫줄 오른쪽으로 내린다. */}
+      <div className="mb-1 flex flex-row flex-wrap items-center justify-between gap-x-4">
+        <div className="flex max-w-full min-w-0 flex-row flex-nowrap items-center justify-start gap-0.5">
           <p
-            className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
+            className={`${TEXT} min-w-0 [overflow-wrap:anywhere]`}
+            style={{
+              fontSize: 'var(--font-size-sm)',
+              fontWeight: 'var(--fw-bold)',
+              fontVariantNumeric: 'tabular-nums',
+            }}
           >
-            주문 보기
+            {s.orderNumber ? `주문 ${s.orderNumber}` : '주문 보기'}
           </p>
-          <ChevronRight size={16} aria-hidden />
+          <ChevronRight
+            size={16}
+            aria-hidden
+            className="shrink-0"
+            style={{ color: 'var(--color-text-secondary)' }}
+          />
         </div>
-        <StatusDot tone={settlementStatusTone(s.status)} size={13}>
+        <StatusDot tone={settlementStatusTone(s.status)} size={13} className="ml-auto shrink-0">
           {STATUS_LABEL[s.status]}
         </StatusDot>
       </div>

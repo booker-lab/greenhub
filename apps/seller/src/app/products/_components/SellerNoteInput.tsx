@@ -33,6 +33,7 @@ export default function SellerNoteInput({ value, onChange }: Props) {
         설명을 작성합니다.
       </p>
       <Textarea
+        aria-label="판매자 메모"
         placeholder="예: 직접 키운 호접란입니다. 남향 베란다에서 3년째 관리 중이며 뿌리가 튼튼합니다..."
         value={value}
         onChange={(e) => onChange(e.target.value.slice(0, MAX))}

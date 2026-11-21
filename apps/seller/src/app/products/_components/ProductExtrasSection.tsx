@@ -353,7 +353,7 @@ export function ProductExtrasSection({
         </FieldCard>
       )}
 
-      <FieldCard label="상품 정보 고시 (손님 상품 화면에 항상 보여요)">
+      <FieldCard label="상품 정보 고시 (고객 상품 화면에 항상 보여요)">
         <div className="flex flex-col gap-2.5">
           {PRODUCT_NOTICE_FIELDS.map((field) => (
             <LabeledInput

@@ -69,7 +69,7 @@ type OwnedProducts = {
 };
 
 function formatWon(value: number): string {
-  return `₩${value.toLocaleString('en-US')}`;
+  return `${value.toLocaleString('en-US')}원`;
 }
 
 test.describe('셀러 상품 등록·수정·삭제 — 실제 저장', () => {

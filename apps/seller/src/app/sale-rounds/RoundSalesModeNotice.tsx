@@ -14,7 +14,7 @@ export function RoundSalesModeNotice() {
     return (
       <Alert variant="secondary" role="status">
         <AlertDescription>
-          판매 방식을 확인하지 못했어요. 회차 판매가 켜져 있지 않으면 손님에게 회차가 보이지 않아요.
+          판매 방식을 확인하지 못했어요. 회차 판매가 켜져 있지 않으면 고객에게 회차가 보이지 않아요.
         </AlertDescription>
       </Alert>
     );
@@ -24,7 +24,7 @@ export function RoundSalesModeNotice() {
     <Alert variant="warning" role="alert">
       <AlertTitle>이 가게는 회차 판매가 켜져 있지 않아요</AlertTitle>
       <AlertDescription>
-        이 가게는 회차 판매가 켜져 있지 않아 손님에게 회차가 보이지 않아요. 운영팀에 회차 판매
+        이 가게는 회차 판매가 켜져 있지 않아 고객에게 회차가 보이지 않아요. 운영팀에 회차 판매
         전환을 요청해 주세요.
       </AlertDescription>
     </Alert>

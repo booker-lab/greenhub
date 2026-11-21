@@ -117,6 +117,7 @@ export default function AIPreviewPanel({
           헤드라인 (AI 생성)
         </p>
         <Input
+          aria-label="헤드라인"
           value={headline}
           onChange={(e) => onHeadlineChange(e.target.value)}
           placeholder="AI가 생성한 마케팅 문구"
@@ -142,6 +143,7 @@ export default function AIPreviewPanel({
           상세 설명 (AI 생성)
         </p>
         <Textarea
+          aria-label="상세 설명"
           value={description}
           onChange={(e) => onDescriptionChange(e.target.value)}
           placeholder="AI가 생성한 상세 설명"
@@ -161,7 +163,7 @@ export default function AIPreviewPanel({
 
       {/* Mantine Modal size xs = 320px. */}
       <Dialog open={confirmOpen} onOpenChange={(open) => !open && setConfirmOpen(false)}>
-        <DialogContent className="w-[320px]">
+        <DialogContent className="w-[320px] break-keep [overflow-wrap:anywhere]">
           <DialogHeader>
             <DialogTitle>다시 생성하기</DialogTitle>
           </DialogHeader>
@@ -173,7 +175,7 @@ export default function AIPreviewPanel({
               <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
                 <ButtonLabel>취소</ButtonLabel>
               </Button>
-              <Button variant="destructive" onClick={handleRegenerate}>
+              <Button onClick={handleRegenerate}>
                 <ButtonLabel>새로 생성</ButtonLabel>
               </Button>
             </div>

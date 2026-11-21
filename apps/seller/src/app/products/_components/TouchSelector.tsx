@@ -13,21 +13,21 @@ const STEM_OPTIONS = [
 ] as const;
 
 const FRAGRANCE_OPTIONS = [
-  { value: 'none', label: '없음', icon: '🚫' },
-  { value: 'light', label: '은은', icon: '🌸' },
-  { value: 'strong', label: '진함', icon: '💐' },
+  { value: 'none', label: '없음' },
+  { value: 'light', label: '은은' },
+  { value: 'strong', label: '진함' },
 ] as const;
 
 const BLOOM_OPTIONS = [
-  { value: 'bud', label: '봉오리', icon: '🌱' },
-  { value: 'half', label: '반개화', icon: '🌷' },
-  { value: 'full', label: '활짝', icon: '🌺' },
+  { value: 'bud', label: '봉오리' },
+  { value: 'half', label: '반개화' },
+  { value: 'full', label: '활짝' },
 ] as const;
 
 const CARE_OPTIONS = [
-  { value: 'easy', label: '쉬움', icon: '😊' },
-  { value: 'normal', label: '보통', icon: '🌿' },
-  { value: 'hard', label: '어려움', icon: '🌡️' },
+  { value: 'easy', label: '쉬움' },
+  { value: 'normal', label: '보통' },
+  { value: 'hard', label: '어려움' },
 ] as const;
 
 export interface SelectionForm {
@@ -102,6 +102,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
               className={STEM_BUTTON}
               size="md"
               variant="outline-gray"
+              aria-pressed={value.stemType === v}
               style={value.stemType === v ? activeStyle : {}}
             >
               <ButtonLabel>
@@ -135,13 +136,17 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
             (복수 선택 가능)
           </span>
         </p>
-        <div className={GROUP} style={{ flexWrap: 'wrap' }}>
+        {/* 칩은 태그 크기(높이 28·글자 13 굵게)로 두고 위아래 8px씩 누르는 영역을 넓힌다(테두리 1px 안쪽 기준이라 9px). 줄 간격이 44px라
+            이웃 줄과 겹치지 않는다(2026-11-20 화면 검수 3장 Q2-B). */}
+        <div className="flex flex-row flex-wrap items-center justify-start gap-x-2.5 gap-y-4 py-2">
           {COLOR_OPTIONS.map((color) => (
             <Badge
               key={color}
               render={<button type="button" />}
               onClick={() => toggleColor(color)}
               variant="outline-gray"
+              aria-pressed={value.colors.includes(color)}
+              className="relative h-7 px-2.5 text-xs text-muted-foreground after:absolute after:inset-x-0 after:-inset-y-[9px] after:content-['']"
               style={{
                 cursor: 'pointer',
                 ...(value.colors.includes(color) ? activeStyle : {}),
@@ -158,18 +163,17 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
           향기
         </p>
         <div className={GROUP}>
-          {FRAGRANCE_OPTIONS.map(({ value: v, label, icon }) => (
+          {FRAGRANCE_OPTIONS.map(({ value: v, label }) => (
             <Button
               key={v}
               onClick={() => set('fragrance', v as SelectionForm['fragrance'])}
               className={OPTION_BUTTON}
               size="md"
               variant="outline-gray"
+              aria-pressed={value.fragrance === v}
               style={value.fragrance === v ? activeStyle : {}}
             >
-              <ButtonLabel>
-                {icon} {label}
-              </ButtonLabel>
+              <ButtonLabel>{label}</ButtonLabel>
             </Button>
           ))}
         </div>
@@ -180,18 +184,17 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
           개화 상태
         </p>
         <div className={GROUP}>
-          {BLOOM_OPTIONS.map(({ value: v, label, icon }) => (
+          {BLOOM_OPTIONS.map(({ value: v, label }) => (
             <Button
               key={v}
               onClick={() => set('bloomCondition', v as SelectionForm['bloomCondition'])}
               className={OPTION_BUTTON}
               size="md"
               variant="outline-gray"
+              aria-pressed={value.bloomCondition === v}
               style={value.bloomCondition === v ? activeStyle : {}}
             >
-              <ButtonLabel>
-                {icon} {label}
-              </ButtonLabel>
+              <ButtonLabel>{label}</ButtonLabel>
             </Button>
           ))}
         </div>
@@ -202,18 +205,17 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
           관리 난이도
         </p>
         <div className={GROUP}>
-          {CARE_OPTIONS.map(({ value: v, label, icon }) => (
+          {CARE_OPTIONS.map(({ value: v, label }) => (
             <Button
               key={v}
               onClick={() => set('careLevel', v as SelectionForm['careLevel'])}
               className={OPTION_BUTTON}
               size="md"
               variant="outline-gray"
+              aria-pressed={value.careLevel === v}
               style={value.careLevel === v ? activeStyle : {}}
             >
-              <ButtonLabel>
-                {icon} {label}
-              </ButtonLabel>
+              <ButtonLabel>{label}</ButtonLabel>
             </Button>
           ))}
         </div>
@@ -224,6 +226,7 @@ export default function TouchSelector({ value, onChange, availableStemTypes }: P
           판매 단위
         </p>
         <Input
+          aria-label="판매 단위"
           placeholder="예: 1분, 3묶음, 1박스"
           value={value.bundleUnit}
           onChange={(e) => set('bundleUnit', e.target.value)}

@@ -40,7 +40,11 @@ const TEXT = 'm-0 p-0';
 const TEXT_MD = `${TEXT} text-base`;
 const TEXT_SM = `${TEXT} text-sm`;
 // text-[15px]를 주면 cn(tailwind-merge)이 Button의 leading-none을 지우므로 줄 높이 1을 다시 준다(Mantine 줄 높이 1).
-const COMPACT_SM = 'h-[26px] px-2 text-[15px] leading-none';
+// 누르는 높이는 44px다(design-standard 터치 영역).
+const COMPACT_SM = 'h-11 min-w-11 px-3 text-[15px] leading-none';
+// 사유 라디오 줄은 누르는 높이를 44px로 잡는다. 동그라미(20px)는 그대로 두고 라벨이 줄 전체를 덮는다.
+const RADIO_ROW =
+  'items-center [&>div:first-child]:shrink-0 [&>div:last-child]:flex-1 [&_label]:flex [&_label]:min-h-11 [&_label]:items-center';
 const DEFAULT_BUTTON = 'border-input bg-background text-ui-ink hover:bg-ui-gray-0';
 const GROUP_LABEL =
   'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
@@ -74,8 +78,9 @@ export function ReviewCard({
         <div className="flex flex-row flex-nowrap items-center justify-start gap-1.5">
           <p
             className={`${TEXT_MD} font-bold`}
+            // 별점은 정보라 초록 대신 검정이다(초록은 누르는 곳에만). 숨긴 후기는 회색이다.
             style={{
-              color: review.hidden ? 'var(--color-text-secondary)' : 'var(--color-primary-dark)',
+              color: review.hidden ? 'var(--color-text-secondary)' : 'var(--color-text)',
             }}
           >
             {'★'.repeat(review.rating)}
@@ -151,9 +156,14 @@ export function ReviewCard({
                 onValueChange={onReasonChange}
                 required
               >
-                <div className="mt-1 flex flex-col gap-1.5">
+                <div className="mt-1 flex flex-col">
                   {HIDE_REASON_OPTIONS.map((option) => (
-                    <RadioItem key={option.value} value={option.value} label={option.label} />
+                    <RadioItem
+                      key={option.value}
+                      value={option.value}
+                      label={option.label}
+                      className={RADIO_ROW}
+                    />
                   ))}
                 </div>
               </RadioGroup>
@@ -179,11 +189,11 @@ export function ReviewCard({
               >
                 취소
               </Button>
+              {/* 확정 버튼은 판매자 확인창과 같이 초록 하나다(design-standard, 2026-11-20 결정). */}
               <LoadingButton
                 measured
-                variant="destructive"
                 className={COMPACT_SM}
-                buttonHeight={26}
+                buttonHeight={36}
                 loading={busy}
                 disabled={!reasonCode}
                 onClick={onConfirmHide}
@@ -193,7 +203,7 @@ export function ReviewCard({
             </div>
           </div>
         ) : (
-          <div className="mt-2 flex flex-row flex-wrap items-center justify-end gap-4">
+          <div className="-mb-2 flex flex-row flex-wrap items-center justify-end gap-4">
             <Button
               variant="subtle-destructive"
               className={COMPACT_SM}

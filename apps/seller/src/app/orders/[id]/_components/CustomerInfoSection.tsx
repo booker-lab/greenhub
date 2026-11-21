@@ -25,7 +25,7 @@ export function CustomerInfoSection({ order }: { order: Order }) {
           color: 'var(--color-text-secondary)',
         }}
       >
-        손님 정보
+        고객 정보
       </p>
       <div className="flex flex-col gap-1.5">
         <Row label="주문자" value={displayBuyerName(order)} />

@@ -79,7 +79,7 @@ export function LoginForm({
         type="button"
         onClick={() => signIn('kakao', { callbackUrl: kakaoCallbackUrl(callbackPath) })}
         size="md"
-        className="w-full"
+        className="h-11 w-full"
         style={{ backgroundColor: '#FEE500', color: '#191919' }}
       >
         <svg

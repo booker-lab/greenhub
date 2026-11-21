@@ -63,15 +63,15 @@ export function OrdersTab({
           style={{ textAlign: 'center', color: 'var(--color-text-secondary)' }}
         >
           <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
-            정산 완료된 주문이 없습니다
+            {activeStatus === 'all' ? '정산 내역이 없습니다' : '이 상태의 정산 내역이 없습니다'}
           </p>
         </div>
       ) : (
         <>
-          <div className="flex flex-row flex-wrap items-center justify-end gap-4 px-1">
+          <div className="-my-2.5 flex flex-row flex-wrap items-center justify-end gap-4 px-1">
             <button
               type="button"
-              className={UNSTYLED_BUTTON}
+              className={`${UNSTYLED_BUTTON} inline-flex min-h-11 items-center`}
               onClick={() => downloadCSV(settlements, '', '')}
               style={{
                 fontSize: 'var(--font-size-sm)',

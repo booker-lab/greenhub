@@ -36,7 +36,7 @@ describe('ProductExtrasSection 상품 정보 고시', () => {
       .map((element) => element.props.label)
       .filter(Boolean);
     expect(labels).toEqual([
-      '상품 정보 고시 (손님 상품 화면에 항상 보여요)',
+      '상품 정보 고시 (고객 상품 화면에 항상 보여요)',
       '품명',
       '원산지',
       '생산자',

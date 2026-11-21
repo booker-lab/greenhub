@@ -37,7 +37,7 @@ export function RoundPurchaseListCard({
         {title}
       </p>
       <p
-        className={TEXT}
+        className={`${TEXT} break-keep`}
         style={{
           marginTop: 2,
           fontSize: 'var(--font-size-sm)',

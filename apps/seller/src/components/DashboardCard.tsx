@@ -35,7 +35,8 @@ export function DashboardCard({
         {moreHref && (
           <Link
             href={moreHref}
-            className="cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
+            // 누르는 높이는 44px로 잡고(-my로 줄 높이는 그대로) 카드 배치는 밀지 않는다.
+            className="-my-2.5 min-h-11 cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]"
             style={{ display: 'flex', alignItems: 'center', gap: 2 }}
           >
             <p

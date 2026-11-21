@@ -125,6 +125,7 @@ export default function PayoutAccountSettingsPage() {
                   <FieldLabel htmlFor="payout-bank">은행</FieldLabel>
                   <Autocomplete
                     id="payout-bank"
+                    className="h-11"
                     placeholder="예: 국민은행"
                     items={COMMON_BANKS}
                     maxLength={20}
@@ -136,6 +137,7 @@ export default function PayoutAccountSettingsPage() {
                   <FieldLabel htmlFor="payout-holder">예금주</FieldLabel>
                   <Input
                     id="payout-holder"
+                    className="h-11"
                     maxLength={ACCOUNT_HOLDER_MAX_LENGTH}
                     value={form.accountHolder}
                     onChange={(event) => patch({ accountHolder: event.currentTarget.value })}
@@ -145,6 +147,7 @@ export default function PayoutAccountSettingsPage() {
                   <FieldLabel htmlFor="payout-number">계좌번호</FieldLabel>
                   <Input
                     id="payout-number"
+                    className="h-11"
                     placeholder="숫자와 하이픈(-)만"
                     inputMode="numeric"
                     autoComplete="off"
@@ -155,7 +158,10 @@ export default function PayoutAccountSettingsPage() {
                     }
                   />
                 </Field>
-                <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
+                <p
+                  className={`${TEXT_SM} break-keep`}
+                  style={{ color: 'var(--color-text-secondary)' }}
+                >
                   사업자 정보와 같은 명의의 계좌를 써 주세요. 계좌는 관리자만 정산 지급에 사용하고,
                   저장한 번호는 끝 4자리만 보여요.
                 </p>
@@ -164,7 +170,13 @@ export default function PayoutAccountSettingsPage() {
                     {error}
                   </p>
                 )}
-                <Button size="md" disabled={saving} aria-busy={saving} onClick={save}>
+                <Button
+                  size="md"
+                  className="h-11"
+                  disabled={saving}
+                  aria-busy={saving}
+                  onClick={save}
+                >
                   저장
                 </Button>
               </div>
