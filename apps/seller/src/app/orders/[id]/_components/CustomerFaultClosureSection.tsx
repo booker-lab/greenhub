@@ -132,7 +132,7 @@ export function CustomerFaultClosureRecordView({
       </p>
       {record?.memo && (
         <p className={TEXT} style={{ ...smallText, color: 'var(--color-text-secondary)' }}>
-          손님과 연락한 내용: {record.memo}
+          고객과 연락한 내용: {record.memo}
         </p>
       )}
       {settlementMissing && onReconcileSettlement && (
@@ -233,7 +233,7 @@ export function CustomerFaultClosurePanel({
           if (!open) close();
         }}
       >
-        <DialogContent align="top">
+        <DialogContent align="top" className="break-keep [overflow-wrap:anywhere]">
           <DialogHeader>
             <DialogTitle className="leading-[1.55] font-bold">
               {CUSTOMER_FAULT_CLOSURE_BUTTON_LABEL}
@@ -246,7 +246,7 @@ export function CustomerFaultClosurePanel({
               </p>
               <Field>
                 <FieldLabel htmlFor={memoId}>
-                  손님과 연락한 내용 (손님에게는 보이지 않아요)
+                  고객과 연락한 내용 (고객에게는 보이지 않아요)
                 </FieldLabel>
                 <Input
                   id={memoId}
@@ -266,7 +266,6 @@ export function CustomerFaultClosurePanel({
                 <Button
                   onClick={confirm}
                   disabled={submitting || !canSubmitCustomerFaultClosure(memo)}
-                  variant="destructive"
                   className="flex-1"
                 >
                   {submitting ? '처리 중...' : '종결 확정'}

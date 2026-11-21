@@ -3,7 +3,7 @@ import { ApiError } from '@/lib/api';
 export const PRODUCT_IN_USE_MESSAGE =
   '주문·회차에 쓰인 상품은 지울 수 없어요. 판매 중지를 눌러 주세요.';
 export const PRODUCT_IN_USE_INACTIVE_MESSAGE =
-  '주문·회차에 쓰인 상품은 지울 수 없어요. 이미 판매 중지된 상품이라 손님에게는 보이지 않아요.';
+  '주문·회차에 쓰인 상품은 지울 수 없어요. 이미 판매 중지된 상품이라 고객에게는 보이지 않아요.';
 
 export type ProductDeleteFailure = {
   message: string;

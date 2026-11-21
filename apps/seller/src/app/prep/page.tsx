@@ -128,15 +128,25 @@ function RoundPurchaseSection({ rounds, loading }: { rounds: SaleRound[]; loadin
         <div key={round.id}>
           <RoundPurchaseListCard round={round} title={`${round.name} 구매 목록`} />
           <div className="mt-1 flex flex-row flex-wrap items-center justify-end gap-4">
-            <Link href={`/sale-rounds/${round.id}`} className={UNSTYLED_BUTTON}>
+            {/* 행 단위 행동은 검정 밑줄 글자 버튼이고 누르는 높이는 44px다(design-direction §5). */}
+            <Link
+              href={`/sale-rounds/${round.id}`}
+              className={`${UNSTYLED_BUTTON} inline-flex min-h-11 items-center`}
+            >
               <div className="flex flex-row flex-wrap items-center justify-start gap-0.5">
                 <p
                   className={TEXT}
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                  style={{
+                    fontSize: 'var(--font-size-sm)',
+                    fontWeight: 'var(--fw-bold)',
+                    color: 'var(--color-text)',
+                    textDecoration: 'underline',
+                    textUnderlineOffset: 4,
+                  }}
                 >
                   회차 보기
                 </p>
-                <ChevronRight size={14} color="var(--color-text-secondary)" />
+                <ChevronRight size={14} color="var(--color-text)" />
               </div>
             </Link>
           </div>
@@ -307,6 +317,7 @@ export default function PrepPage() {
                     alignItems: 'center',
                     justifyContent: 'flex-end',
                     gap: 2,
+                    minHeight: 'var(--touch-target)',
                     paddingTop: 10,
                     borderTop: '1px solid var(--color-border)',
                   }}

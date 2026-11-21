@@ -44,7 +44,7 @@ function LabeledInput({
   return (
     <Field style={style}>
       <FieldLabel htmlFor={id}>{label}</FieldLabel>
-      <Input id={id} {...props} />
+      <Input id={id} className="h-11" {...props} />
     </Field>
   );
 }
@@ -77,13 +77,28 @@ function StockRow({
     }
   };
 
+  // describeStockCounts의 첫 조각이 "남은 n개"다. 나머지(결제 중·판매)는 있을 때만 붙는다.
+  const [remainingText, ...otherCounts] = describeStockCounts(stock).split(' · ');
+
   return (
     <div className={PAPER}>
       <div className="flex flex-col items-stretch justify-start gap-2.5">
         <div>
           <p className={`${TEXT} font-bold`}>{stock.name}</p>
+          {/* 이 화면에서 먼저 읽혀야 하는 남은 개수만 검정 굵게 쓴다. 0개는 회색이다(design-direction §3.5). */}
           <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
-            {describeStockCounts(stock)}
+            <span
+              className="text-base font-bold tabular-nums"
+              style={{
+                color:
+                  stock.remainingQuantity === 0
+                    ? 'var(--color-text-secondary)'
+                    : 'var(--color-text)',
+              }}
+            >
+              {remainingText}
+            </span>
+            {otherCounts.length > 0 && ` · ${otherCounts.join(' · ')}`}
           </p>
         </div>
         <div className={ROW}>
@@ -98,6 +113,7 @@ function StockRow({
           <LoadingButton
             measured
             variant="light-green"
+            className="h-11"
             loading={busy === 'add'}
             onClick={() => submit('add')}
           >
@@ -116,6 +132,7 @@ function StockRow({
           <LoadingButton
             measured
             variant="secondary"
+            className="h-11"
             loading={busy === 'remaining'}
             onClick={() => submit('remaining')}
           >
@@ -204,7 +221,7 @@ export default function OptionStocksSettingsPage() {
   return (
     <PageShell>
       <PageHeader title="옵션 재고 (화분)" backHref="/settings" />
-      <div className="mx-auto max-w-[720px] px-4 py-4">
+      <div className="mx-auto max-w-[720px] px-4 py-4 break-keep [overflow-wrap:anywhere]">
         {!loaded ? (
           <LoadingState />
         ) : (
@@ -257,7 +274,13 @@ export default function OptionStocksSettingsPage() {
                     {createError}
                   </p>
                 )}
-                <LoadingButton measured size="md" loading={creating} onClick={create}>
+                <LoadingButton
+                  measured
+                  size="md"
+                  className="h-11"
+                  loading={creating}
+                  onClick={create}
+                >
                   추가
                 </LoadingButton>
               </div>

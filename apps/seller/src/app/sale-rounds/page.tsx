@@ -15,15 +15,7 @@ import { Input } from '@greenhub/ui/components/input';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Progress } from '@greenhub/ui/components/progress';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
-import {
-  AlertTriangle,
-  CalendarDays,
-  ChevronRight,
-  Copy,
-  MapPin,
-  Plus,
-  RefreshCcw,
-} from 'lucide-react';
+import { AlertTriangle, CalendarDays, ChevronRight, Plus, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { useId, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
@@ -58,6 +50,14 @@ const STATUS_META: Record<
 // Group = 가로 flex(줄바꿈, 가운데 정렬), Stack = 세로 flex(늘임), 간격 xs 10·sm 12·md 16px.
 const TEXT = 'm-0 p-0 text-base font-normal';
 const PAPER = 'block rounded-[16px] bg-card';
+// ② 행 단위 행동(회차 열기·이전 회차 복사)은 초록 면 대신 검정 밑줄 글자 버튼이고 누르는 높이는 44px다
+// (design-direction §5, 2026-11-19 화면 검수 1장 Q2-A). 초록은 화면의 주요 버튼(새 회차) 하나에만 남긴다.
+const ROW_ACTION =
+  'inline-flex min-h-11 cursor-pointer items-center gap-0.5 rounded-[6px] border-0 bg-transparent p-0 text-sm font-bold whitespace-nowrap text-foreground underline underline-offset-4 outline-none [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
+// 일정 이름–값 줄: 이름은 보조 글자, 값은 오른쪽 정렬·자리 맞춘 숫자다.
+const SCHEDULE_ROW = 'flex flex-row items-baseline justify-between gap-3';
+const SCHEDULE_TERM = 'shrink-0 text-sm text-muted-foreground';
+const SCHEDULE_VALUE = 'm-0 min-w-0 text-right text-sm tabular-nums';
 const ROW = 'flex flex-row flex-wrap items-center';
 const COLUMN = 'flex flex-col items-stretch justify-start';
 // datetime 입력칸은 Mantine 입력칸 줄 높이(높이 - 2px = 34px)를 준다. text-sm 1.45로 두면 날짜 글자가 소수점만큼 어긋난다.
@@ -167,11 +167,8 @@ function Metric({
           {ordered.toLocaleString()} / {limit.toLocaleString()}
         </p>
       </div>
-      <Progress
-        value={usage}
-        className="h-[5px] rounded-[32px]"
-        indicatorClassName={usage >= 100 ? 'bg-ui-red' : undefined}
-      />
+      {/* 한도를 다 채워도 막대는 초록이다. 빨강은 배송 보류 같은 문제 상태에만 쓴다(design-standard §2). */}
+      <Progress value={usage} className="h-[5px] rounded-[32px]" />
       {reserved > 0 && (
         <p
           className={TEXT}
@@ -209,43 +206,38 @@ function RoundCard({ round, onCopy }: { round: SaleRound; onCopy: (round: SaleRo
               {round.name}
             </p>
           </div>
-          <div className="flex flex-col items-end justify-start gap-1.5" style={{ flexShrink: 0 }}>
-            <ButtonLink
-              render={<Link href={`/sale-rounds/${encodeURIComponent(round.id)}`} />}
-              size="xs"
-              variant="light"
-            >
+          <div className="flex flex-col items-end justify-start gap-0" style={{ flexShrink: 0 }}>
+            <Link href={`/sale-rounds/${encodeURIComponent(round.id)}`} className={ROW_ACTION}>
               회차 열기
-              <ChevronRight className="size-3.5" data-icon="inline-end" />
-            </ButtonLink>
-            <Button size="xs" variant="secondary" onClick={() => onCopy(round)}>
-              <Copy className="size-3.5" data-icon="inline-start" />
+              <ChevronRight className="size-3.5" aria-hidden />
+            </Link>
+            <button type="button" className={ROW_ACTION} onClick={() => onCopy(round)}>
               이전 회차 복사
-            </Button>
+            </button>
           </div>
         </div>
 
-        <div className={`${COLUMN} gap-1.5`}>
-          <div className="flex flex-row flex-nowrap items-start justify-start gap-2.5">
-            <CalendarDays size={16} color="var(--color-text-disabled)" />
-            <p
-              className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-            >
-              주문 {formatKstDate(round.schedule.orderOpenAt)} ~{' '}
+        {/* 일정은 이름–값 줄로 쓴다. 이 화면에서 먼저 읽혀야 하는 주문 마감만 검정 굵게 쓰고, 시각은 줄바꿈 없이 둔다. */}
+        <dl className="m-0 flex flex-col gap-1.5">
+          <div className={SCHEDULE_ROW}>
+            <dt className={SCHEDULE_TERM}>주문 시작</dt>
+            <dd className={`${SCHEDULE_VALUE} whitespace-nowrap`}>
+              {formatKstDate(round.schedule.orderOpenAt)}
+            </dd>
+          </div>
+          <div className={SCHEDULE_ROW}>
+            <dt className={SCHEDULE_TERM}>주문 마감</dt>
+            <dd className={`${SCHEDULE_VALUE} font-bold whitespace-nowrap text-foreground`}>
               {formatKstDate(round.schedule.orderCloseAt)}
-            </p>
+            </dd>
           </div>
-          <div className="flex flex-row flex-nowrap items-start justify-start gap-2.5">
-            <MapPin size={16} color="var(--color-text-disabled)" />
-            <p
-              className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-            >
+          <div className={SCHEDULE_ROW}>
+            <dt className={SCHEDULE_TERM}>배송 지역</dt>
+            <dd className={`${SCHEDULE_VALUE} break-keep`}>
               {round.deliveryRegion.enabled ? round.deliveryRegion.label : '배송 지역 비활성'}
-            </p>
+            </dd>
           </div>
-        </div>
+        </dl>
 
         <div className="grid grid-cols-1 gap-4 min-[36em]:grid-cols-2">
           <Metric
@@ -383,8 +375,8 @@ export default function SaleRoundsPage() {
         title="판매 회차"
         right={
           <div className="flex flex-row flex-nowrap items-center justify-start gap-2.5">
-            <ButtonLink render={<Link href="/sale-rounds/new" />} size="xs" variant="light">
-              <Plus className="size-3.5" data-icon="inline-start" />새 회차
+            <ButtonLink render={<Link href="/sale-rounds/new" />} variant="light" className="h-11">
+              <Plus className="size-4" data-icon="inline-start" />새 회차
             </ButtonLink>
             <Button
               size="icon-sm"

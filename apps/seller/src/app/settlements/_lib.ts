@@ -8,7 +8,7 @@ import type {
 import { STATUS_LABEL } from './_constants';
 
 export function toKRW(n: number) {
-  return `₩${n.toLocaleString('ko-KR')}`;
+  return `${n.toLocaleString('ko-KR')}원`;
 }
 
 // 브라우저 시간대와 무관하게 항상 KST(Asia/Seoul)로 표시한다.

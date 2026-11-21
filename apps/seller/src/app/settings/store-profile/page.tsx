@@ -142,7 +142,7 @@ export default function StoreProfileSettingsPage() {
             {store && (
               <div className={PAPER}>
                 <div className={STACK}>
-                  <p className={`${TEXT} font-bold`}>소비자에게 보이는 가게 소개</p>
+                  <p className={`${TEXT} font-bold`}>고객에게 보이는 가게 소개</p>
                   <LabeledInput
                     label="한 줄 소개"
                     maxLength={60}
@@ -199,7 +199,7 @@ export default function StoreProfileSettingsPage() {
                     onChange={(event) => patch({ guaranteeTerms: event.currentTarget.value })}
                   />
                   <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
-                    실제로 지킬 수 있는 약속만 써 주세요. 소비자 화면에 그대로 보여요. &quot;받은 날만 환불&quot;처럼
+                    실제로 지킬 수 있는 약속만 써 주세요. 고객 화면에 그대로 보여요. &quot;받은 날만 환불&quot;처럼
                     기한을 줄이는 문구는 쓰지 마세요.
                   </p>
                 </div>
@@ -210,7 +210,7 @@ export default function StoreProfileSettingsPage() {
               <div className={PAPER}>
                 <Checkbox
                   color={GREEN}
-                  label="남은 수량과 이번 회차 주문 수를 소비자에게 보여 줘요"
+                  label="남은 수량과 이번 회차 주문 수를 고객에게 보여 줘요"
                   checked={form.showDemandSignals}
                   onCheckedChange={(showDemandSignals) => patch({ showDemandSignals })}
                 />

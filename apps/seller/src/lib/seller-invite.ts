@@ -78,7 +78,7 @@ const SIGN_IN_ERROR_NOTICES: Record<InviteSignInError | 'AccessDenied', SignInEr
   InviteAccountInUse: {
     title: '이미 가입된 카카오 계정이에요',
     message:
-      '이 카카오 계정은 손님 등 다른 용도로 이미 가입돼 있어요. 다른 카카오 계정으로 가입해 주세요.',
+      '이 카카오 계정은 고객 등 다른 용도로 이미 가입돼 있어요. 다른 카카오 계정으로 가입해 주세요.',
   },
   AccessDenied: {
     title: '판매자 계정으로 로그인할 수 없어요',

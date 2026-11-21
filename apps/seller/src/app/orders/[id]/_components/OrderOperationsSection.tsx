@@ -14,6 +14,7 @@ import {
   ISSUE_LABELS,
   type OrderOperationIssue,
 } from '../operation-issues';
+import { STATUS_LABEL } from '../../_constants';
 import { HOLD_REASON_LABEL } from '../delivery-hold-form';
 import { Row } from './OrderRow';
 
@@ -116,6 +117,23 @@ function issueColor(issue: OrderOperationIssue) {
   return 'gray';
 }
 
+// 결제 상태 이름(packages/shared PaymentStatus). 운영 기록은 값을 글자로 싣기 때문에 표에 없는 값도 올 수 있다.
+const PAYMENT_STATUS_LABEL: Record<string, string> = {
+  PENDING: '결제 대기',
+  PAID: '결제 완료',
+  FAILED: '결제 실패',
+  CANCELLED: '결제 취소',
+};
+
+/** 상태 값을 한국어 이름으로 바꾼다. 표에 없는 값은 "확인 안 됨"(known: false → 회색). */
+function readableState(
+  labels: Readonly<Record<string, string>>,
+  value: string,
+): { value: string; known: boolean } {
+  const label = Object.hasOwn(labels, value) ? labels[value] : undefined;
+  return label ? { value: label, known: true } : { value: '확인 안 됨', known: false };
+}
+
 function IssueCard({
   issue,
   actionIssueId,
@@ -128,9 +146,17 @@ function IssueCard({
   const allowedAction = getAllowedOperationAction(issue);
   const actionVariant = allowedAction === 'RETRY_REFUND' ? 'destructive' : 'default';
   const actionLoading = actionIssueId === issue.id;
+  const orderStatus = issue.currentState?.orderStatus ?? issue.latestSnapshot.orderStatus;
+  const paymentStatus = issue.currentState?.paymentStatus ?? issue.latestSnapshot.paymentStatus;
+  // 주문·결제 상태는 영어 값 대신 한국어 이름으로 쓴다. 표에 없는 값은 회색 "확인 안 됨"이다.
+  const stateRows: { label: string; value: string; known: boolean }[] = [];
+  if (typeof orderStatus === 'string') {
+    stateRows.push({ label: '주문 상태', ...readableState(STATUS_LABEL, orderStatus) });
+  }
+  if (typeof paymentStatus === 'string') {
+    stateRows.push({ label: '결제 상태', ...readableState(PAYMENT_STATUS_LABEL, paymentStatus) });
+  }
   const snapshotRows = [
-    ['주문 상태', issue.currentState?.orderStatus ?? issue.latestSnapshot.orderStatus],
-    ['결제 상태', issue.currentState?.paymentStatus ?? issue.latestSnapshot.paymentStatus],
     ['실패 단계', issue.latestSnapshot.failureStage],
     ['알림 코드', issue.latestSnapshot.templateCode],
     ['결제사 상태', issue.latestSnapshot.providerStatus],
@@ -159,6 +185,9 @@ function IssueCard({
       </div>
 
       <div className="mt-3 flex flex-col gap-1">
+        {stateRows.map((row) => (
+          <Row key={row.label} label={row.label} value={row.value} highlight={row.known} />
+        ))}
         {snapshotRows.map(([label, value]) => (
           <Row key={label} label={label} value={value} />
         ))}

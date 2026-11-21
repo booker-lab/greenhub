@@ -1,7 +1,9 @@
 'use client';
 
 import type { SalesMode } from '@greenhub/shared';
+import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { NumberInput } from '@greenhub/ui/components/number-input';
+import { useId } from 'react';
 import { useOptionStocks } from '@/hooks/useOptionStocks';
 import { isFeatureOn } from '@/lib/features';
 import { showsGroupBuyChoice } from '@/lib/sales-mode';
@@ -32,26 +34,33 @@ export function Step5Pricing({
   salesMode,
 }: Step5PricingProps) {
   const optionStocks = useOptionStocks(storeId, token, isFeatureOn('option-sheet'));
+  const priceId = useId();
   return (
     <div className="flex flex-col gap-3">
-      <NumberInput
-        placeholder="가격"
-        leftSection={
-          <p
-            className={TEXT}
-            style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-          >
-            ₩
-          </p>
-        }
-        thousandSeparator=","
-        min={0}
-        max={100_000_000}
-        value={form.price === '' ? '' : Number(form.price)}
-        onValueChange={(val) => set('price', val === '' ? '' : String(val))}
-        size="md"
-        className="rounded-xl"
-      />
+      {/* 값이 들어가도 무슨 칸인지 보이게 이름을 둔다(placeholder는 E2E가 찾는 값이라 그대로다). */}
+      <Field>
+        <FieldLabel htmlFor={priceId}>가격</FieldLabel>
+        <NumberInput
+          id={priceId}
+          placeholder="가격"
+          // 금액은 숫자 뒤에 "원"을 붙인다(design-standard, 2026-11-21 결정).
+          rightSection={
+            <p
+              className={TEXT}
+              style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+            >
+              원
+            </p>
+          }
+          thousandSeparator=","
+          min={0}
+          max={100_000_000}
+          value={form.price === '' ? '' : Number(form.price)}
+          onValueChange={(val) => set('price', val === '' ? '' : String(val))}
+          size="md"
+          className="rounded-xl"
+        />
+      </Field>
       <FieldCard label="배송 사이즈">
         <ChoiceRow
           options={DELIVERY_SIZES}

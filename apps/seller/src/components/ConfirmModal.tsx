@@ -72,7 +72,7 @@ export function ConfirmModal({
           <div className="flex flex-col gap-4">
             {typeof message === 'string' ? (
               <p
-                className="m-0 p-0 text-base"
+                className="m-0 p-0 text-base break-keep"
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-text-secondary)',

@@ -1,10 +1,9 @@
 'use client';
 
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
-import { CheckCircle2, ChevronRight, RefreshCcw, ShieldCheck } from 'lucide-react';
+import { ChevronRight, RefreshCcw, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { ISSUE_DESCRIPTIONS, ISSUE_LABELS } from '@/app/orders/[id]/operation-issues';
@@ -33,6 +32,10 @@ const TEXT = 'm-0 p-0 text-base font-normal';
 const TONE = { red: 'problem', yellow: 'default', gray: 'done' } as const;
 
 const STATUS_LABELS = { OPEN: '확인 필요', RESOLVED: '해결', DISMISSED: '종료' } as const;
+// 행 조작은 초록 면 버튼 대신 검정 밑줄 글자다(초록은 화면의 주요 버튼 하나, 회차·주문 목록과 같은 규칙).
+// 누르는 높이는 44px이고, 글 아래 한 줄에 두어 설명이 카드 폭을 다 쓴다.
+const ROW_ACTION =
+  'inline-flex min-h-11 cursor-pointer items-center gap-0.5 rounded-[6px] border-0 bg-transparent p-0 text-sm font-bold whitespace-nowrap text-foreground underline underline-offset-4 outline-none [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat('ko-KR', {
@@ -64,7 +67,7 @@ function IssueRow({
           : undefined
       }
     >
-      <div className="flex flex-row flex-nowrap items-start justify-between gap-3">
+      <div className="flex flex-col gap-1 break-keep [overflow-wrap:anywhere]">
         <div className="flex flex-col gap-1" style={{ minWidth: 0 }}>
           <div className="flex flex-row flex-wrap items-center justify-start gap-1.5">
             <StatusDot tone={TONE[open ? severity.color : 'gray']}>
@@ -101,29 +104,21 @@ function IssueRow({
                 {manualResolverLabel(resolution)}가 직접 닫았어요 ·{' '}
                 {formatDateTime(resolution.resolvedAt)}
               </p>
-              <p
-                className={TEXT}
-                style={{ fontSize: 'var(--font-size-sm)', wordBreak: 'break-word' }}
-              >
+              <p className={TEXT} style={{ fontSize: 'var(--font-size-sm)' }}>
                 {resolution.memo}
               </p>
             </div>
           )}
         </div>
-        <div className="flex flex-col items-end gap-1.5" style={{ flexShrink: 0 }}>
-          <ButtonLink
-            render={<Link href={`/orders/${encodeURIComponent(issue.orderId)}`} />}
-            size="xs"
-            variant="light"
-          >
+        <div className="-mb-2 flex flex-row flex-wrap items-center justify-start gap-x-5">
+          <Link href={`/orders/${encodeURIComponent(issue.orderId)}`} className={ROW_ACTION}>
             주문 보기
-            <ChevronRight className="size-3.5" data-icon="inline-end" />
-          </ButtonLink>
+            <ChevronRight className="size-3.5" aria-hidden />
+          </Link>
           {canResolve && (
-            <Button size="xs" variant="ghost" onClick={() => onResolve(issue)}>
-              <CheckCircle2 className="size-3.5" data-icon="inline-start" />
+            <button type="button" className={ROW_ACTION} onClick={() => onResolve(issue)}>
               해결로 닫기
-            </Button>
+            </button>
           )}
         </div>
       </div>
@@ -150,6 +145,7 @@ export default function OperationsPage() {
             measured
             size="xs"
             variant="ghost"
+            className="size-11 px-0"
             onClick={() => void reload()}
             loading={loading}
             aria-label="운영 기록 다시 조회"
@@ -161,7 +157,7 @@ export default function OperationsPage() {
       <div className="mx-auto max-w-[720px] px-4 py-4">
         <div className="flex flex-col gap-4">
           <p
-            className={TEXT}
+            className={`${TEXT} break-keep`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
             결제·환불·고객 연락·배송 사진에서 자동으로 끝내지 못한 일을 모아 보여 줘요. 조치(환불

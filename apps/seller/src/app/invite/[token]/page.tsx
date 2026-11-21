@@ -45,28 +45,29 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
               height={64}
               style={{ borderRadius: 16, display: 'block' }}
             />
-            <h3 className="m-0 text-center text-[22px] leading-[1.4] font-extrabold">
+            {/* 제목 끝 글자만 아랫줄에 남지 않게 낱말 단위로 끊고 두 줄 길이를 맞춘다. */}
+            <h3 className="m-0 text-center text-[22px] leading-[1.4] font-extrabold break-keep [text-wrap:balance]">
               {valid ? '그린러브 판매자로 초대받았어요' : '초대 링크를 확인할 수 없어요'}
             </h3>
           </div>
 
           {valid ? (
             <div className={STACK}>
-              <p className={TEXT} style={textSm}>
+              <p className={`${TEXT} break-keep`} style={textSm}>
                 아래 버튼을 눌러 카카오로 로그인하면 판매자 계정이 만들어지고, 이어서 사업자 정보를
                 입력하게 돼요.
               </p>
-              <p className={TEXT} style={textSm}>
+              <p className={`${TEXT} break-keep`} style={textSm}>
                 · 초대 링크는 한 번만 쓸 수 있고, 받은 뒤 72시간이 지나면 만료돼요.
                 <br />· 초대받은 이메일을 쓰는 카카오 계정으로 로그인해 주세요.
-                <br />· 이미 손님으로 쓰는 카카오 계정은 판매자로 바꿀 수 없어요. 다른 카카오
+                <br />· 이미 고객으로 쓰는 카카오 계정은 판매자로 바꿀 수 없어요. 다른 카카오
                 계정으로 가입해 주세요.
               </p>
               <form action={startInviteSignup.bind(null, token)}>
                 <Button
                   type="submit"
                   size="md"
-                  className="w-full"
+                  className="h-11 w-full"
                   style={{ backgroundColor: '#FEE500', color: '#191919' }}
                 >
                   카카오로 판매자 가입하기
@@ -75,10 +76,10 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             </div>
           ) : (
             <div className={STACK}>
-              <p className={TEXT} style={textSm}>
+              <p className={`${TEXT} break-keep`} style={textSm}>
                 링크 주소가 잘렸거나 잘못된 초대예요. 관리자에게 새 초대 링크를 요청해 주세요.
               </p>
-              <ButtonLink href="/login" variant="outline" className="w-full">
+              <ButtonLink href="/login" variant="outline" className="h-11 w-full">
                 로그인 화면으로
               </ButtonLink>
             </div>

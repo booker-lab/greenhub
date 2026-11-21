@@ -39,6 +39,7 @@ import {
   LimitsSection,
   type NumericValue,
   ProductsSection,
+  READ_ONLY_INPUT,
   ScheduleSection,
 } from './RoundForm.sections';
 
@@ -435,7 +436,7 @@ export function RoundForm({
         {readOnly && (
           <Alert variant="secondary" role="status">
             <AlertTitle>고칠 수 없는 회차예요</AlertTitle>
-            <AlertDescription>
+            <AlertDescription className="break-keep">
               회차 내용은 판매 시작 전에만 고칠 수 있어요. 아래는 저장된 내용이에요.
             </AlertDescription>
           </Alert>
@@ -487,6 +488,7 @@ export function RoundForm({
               value={draft.name}
               onChange={(event) => changeDraft('name', event.currentTarget.value)}
               disabled={locked}
+              className={readOnly ? READ_ONLY_INPUT : undefined}
               required
             />
           </Field>
@@ -494,6 +496,7 @@ export function RoundForm({
         <ScheduleSection
           draft={draft}
           busy={locked}
+          readOnly={readOnly}
           onChange={(key, value) => changeDraft(key, value)}
         />
         <DeliveryRegionSection
@@ -506,12 +509,15 @@ export function RoundForm({
           maxDeliveryAddresses={draft.maxDeliveryAddresses}
           maxItemQuantity={draft.maxItemQuantity}
           busy={locked}
+          readOnly={readOnly}
           onChange={(key, value) => changeDraft(key, value)}
         />
         {!readOnly && (
           <Alert variant="secondary" role="status">
             <AlertTitle>주문이 시작되면 고칠 수 없어요</AlertTitle>
-            <AlertDescription>{roundEditLockNotice(draft.orderOpenAt)}</AlertDescription>
+            <AlertDescription className="break-keep">
+              {roundEditLockNotice(draft.orderOpenAt)}
+            </AlertDescription>
           </Alert>
         )}
         <ProductsSection
@@ -519,6 +525,7 @@ export function RoundForm({
           availableProducts={availableProducts}
           productPrices={productPrices}
           busy={locked}
+          readOnly={readOnly}
           onAdd={addProduct}
           onRemove={(key) =>
             changeDraft(
@@ -551,7 +558,14 @@ export function RoundForm({
           </Alert>
         )}
         {!readOnly && (
-          <LoadingButton measured type="submit" size="md" loading={submitting} disabled={busy}>
+          <LoadingButton
+            measured
+            type="submit"
+            size="md"
+            className="h-11"
+            loading={submitting}
+            disabled={busy}
+          >
             <Save className="size-[18px]" data-icon="inline-start" />
             회차 저장
           </LoadingButton>

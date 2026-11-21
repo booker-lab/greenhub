@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, ButtonLink } from '@greenhub/ui/components/button';
+import { ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -15,6 +15,10 @@ import { ApiError, apiJson } from '@/lib/api';
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Stack·Group·Paper·Text·UnstyledButton·Badge·Button과 같은 값을
 // Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16(그림자는 ② D2로 걷음).
 const TEXT = 'm-0 p-0 text-base font-normal';
+// 행 조작은 면 버튼 대신 글자다(초록은 화면의 주요 버튼 하나, 상품·회차·운영 확인 행과 같은 규칙).
+// 활성화·비활성화는 검정 밑줄 글자, 지우는 동작만 빨강 글자이고 누르는 높이는 44px다.
+const ROW_ACTION =
+  'inline-flex min-h-11 min-w-11 cursor-pointer items-center rounded-[6px] border-0 bg-transparent p-0 text-sm font-bold whitespace-nowrap outline-none [-webkit-tap-highlight-color:transparent] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand';
 const UNSTYLED_BUTTON =
   'cursor-pointer appearance-none border-0 bg-transparent p-0 text-start text-base text-inherit no-underline [-webkit-tap-highlight-color:transparent] [touch-action:manipulation]';
 
@@ -98,7 +102,8 @@ export default function HubsPage() {
           <ButtonLink
             render={<Link href="/hubs/new" />}
             size="xs"
-            className="rounded-[8px]"
+            // 머리 높이가 다른 화면과 같게 버튼 모양은 그대로 두고 누르는 영역만 위아래로 44px까지 넓힌다.
+            className="relative overflow-visible after:absolute after:inset-x-0 after:-inset-y-2 after:content-[''] rounded-[8px]"
             style={{ backgroundColor: 'var(--primary)' }}
           >
             + 거점 등록
@@ -159,11 +164,11 @@ export default function HubsPage() {
           <div className="flex flex-col items-stretch justify-start gap-3">
             {hubs.map((hub) => (
               <div key={hub.id} className="block rounded-[16px] bg-card p-4">
-                <div className="flex flex-row flex-wrap items-start justify-between gap-2.5">
+                <div className="flex flex-col items-stretch justify-start">
                   <Link
                     href={`/hubs/${hub.id}`}
                     className={UNSTYLED_BUTTON}
-                    style={{ flex: 1, minWidth: 0 }}
+                    style={{ display: 'block', minWidth: 0 }}
                   >
                     <div className="mb-1 flex flex-row flex-wrap items-center justify-start gap-2.5">
                       <p
@@ -214,26 +219,21 @@ export default function HubsPage() {
                       </p>
                     )}
                   </Link>
-                  <div
-                    className="flex flex-col items-stretch justify-start gap-1"
-                    style={{ flexShrink: 0 }}
-                  >
-                    <Button
+                  <div className="-mb-2 flex flex-row flex-wrap items-center justify-start gap-x-5">
+                    <button
+                      type="button"
+                      className={`${ROW_ACTION} text-foreground underline underline-offset-4`}
                       onClick={() => toggleActive(hub)}
-                      size="xs"
-                      variant="light-blue"
-                      className="rounded-[8px]"
                     >
                       {hub.isActive ? '비활성화' : '활성화'}
-                    </Button>
-                    <Button
+                    </button>
+                    <button
+                      type="button"
+                      className={`${ROW_ACTION} text-ui-red-light-text`}
                       onClick={() => setDeleteTargetId(hub.id)}
-                      size="xs"
-                      variant="light-destructive"
-                      className="rounded-[8px]"
                     >
                       삭제
-                    </Button>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -247,6 +247,7 @@ export default function HubsPage() {
         title="거점 삭제"
         message="거점을 삭제하시겠습니까?"
         confirmLabel="삭제"
+        confirmColor="brand"
         loading={deleting}
         onConfirm={() => {
           if (deleteTargetId) deleteHub(deleteTargetId);

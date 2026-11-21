@@ -91,9 +91,10 @@ export default function SettingsPage() {
               className={UNSTYLED_BUTTON}
               style={rowStyle(true)}
             >
+              {/* 회색은 꺼짐·끝남에 쓰므로 누를 수 있는 로그아웃은 다른 메뉴와 같은 검정 글자다. */}
               <p
                 className={TEXT}
-                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
+                style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text)' }}
               >
                 로그아웃
               </p>

@@ -44,6 +44,9 @@ const smallText = { fontSize: 'var(--font-size-sm)' } as const;
 // ① 외형 유지(UI 교체 P4): Mantine Text(p, 여백 0, 줄 높이 1.55)·Stack·Button·Modal(가운데 아님, radius lg)·
 // Radio.Group(라벨 600, Radio sm)·TextInput(radius md)과 같은 값. 라디오는 어드민 배송 후 환불 확인창(#714)과 같은 계산값이다.
 const TEXT = 'm-0 p-0 text-base font-normal';
+// 라디오·체크 줄은 누르는 높이를 44px로 잡는다. 동그라미·네모(20px)는 그대로 두고 라벨이 줄 전체를 덮는다.
+const RADIO_ROW =
+  'items-center [&>div:first-child]:shrink-0 [&>div:last-child]:flex-1 [&_label]:flex [&_label]:min-h-11 [&_label]:items-center';
 const GROUP_LABEL =
   'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
 
@@ -182,15 +185,15 @@ export function PostDeliveryRefundSection({
           if (!open) close();
         }}
       >
-        <DialogContent align="top">
+        <DialogContent align="top" className="break-keep [overflow-wrap:anywhere]">
           <DialogHeader>
             <DialogTitle className="leading-[1.55] font-bold">배송 후 환불</DialogTitle>
           </DialogHeader>
           <DialogBody>
             <div className="flex flex-col gap-3">
               <p className={TEXT} style={{ ...smallText, color: 'var(--color-text-secondary)' }}>
-                손님에게 {amountText} 전액을 돌려주고 주문을 취소합니다. 되돌릴 수 없어요.
-                손님에게는 카카오 알림톡으로 취소 안내가 갑니다.
+                고객에게 {amountText} 전액을 돌려주고 주문을 취소합니다. 되돌릴 수 없어요.
+                고객에게는 카카오 알림톡으로 취소 안내가 갑니다.
               </p>
               <div>
                 <div id={reasonLabelId} className={GROUP_LABEL}>
@@ -202,11 +205,12 @@ export function PostDeliveryRefundSection({
                   value={reasonCode}
                   onValueChange={setReasonCode}
                 >
-                  <div className="mt-1.5 flex flex-col gap-1.5">
+                  <div className="mt-1 flex flex-col">
                     {POST_DELIVERY_REFUND_REASON_CODES.map((code) => (
                       <RadioItem
                         key={code}
                         value={code}
+                        className={RADIO_ROW}
                         label={POST_DELIVERY_REFUND_REASON_LABEL[code]}
                       />
                     ))}
@@ -214,7 +218,7 @@ export function PostDeliveryRefundSection({
                 </RadioGroup>
               </div>
               <Field>
-                <FieldLabel htmlFor={memoId}>메모 (손님에게는 보이지 않아요)</FieldLabel>
+                <FieldLabel htmlFor={memoId}>메모 (고객에게는 보이지 않아요)</FieldLabel>
                 <Input
                   id={memoId}
                   value={memo}
@@ -233,7 +237,6 @@ export function PostDeliveryRefundSection({
                 <Button
                   onClick={submit}
                   disabled={loading || !canSubmitPostDeliveryRefund(reasonCode, memo)}
-                  variant="destructive"
                   className="flex-1"
                 >
                   {loading ? '처리 중...' : '전액 환불 확정'}

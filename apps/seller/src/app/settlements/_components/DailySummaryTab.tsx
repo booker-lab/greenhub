@@ -30,6 +30,9 @@ export function DailySummaryTab({
   summaryLoading,
   summaryError,
 }: DailySummaryTabProps) {
+  // 0은 회색으로 쓴다(design-direction §3.5). 값이 있으면 지금 색 그대로다(건수·총 매출은 물려받은 색, 정산 예정은 검정).
+  const ZERO = 'var(--color-text-secondary)';
+  const valueColor = (n: number | undefined) => (n ? undefined : ZERO);
   return (
     <div className="block rounded-[16px] bg-card p-5">
       <div className={`${ROW} mb-4`}>
@@ -41,10 +44,12 @@ export function DailySummaryTab({
         </p>
         <input
           type="date"
+          aria-label="조회 날짜"
           value={selectedDate}
           max={today}
           onChange={(e) => setSelectedDate(e.target.value)}
           style={{
+            minHeight: 44,
             padding: '6px 10px',
             border: '1px solid var(--color-border)',
             borderRadius: 12,
@@ -76,7 +81,10 @@ export function DailySummaryTab({
             >
               완료 건수
             </p>
-            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+            <p
+              className={TEXT}
+              style={{ fontWeight: 'var(--fw-medium)', color: valueColor(summary?.count) }}
+            >
               {summary?.count ?? 0}건
             </p>
           </div>
@@ -87,7 +95,10 @@ export function DailySummaryTab({
             >
               총 매출
             </p>
-            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+            <p
+              className={TEXT}
+              style={{ fontWeight: 'var(--fw-medium)', color: valueColor(summary?.totalAmount) }}
+            >
               {toKRW(summary?.totalAmount ?? 0)}
             </p>
           </div>
@@ -125,8 +136,8 @@ export function DailySummaryTab({
                 fontSize: 'var(--font-size-xl)',
                 fontWeight: 'var(--fw-extrabold)',
                 fontVariantNumeric: 'tabular-nums',
-                // ② 요약 금액은 초록 대신 검정 굵은 글자(판매자 홈과 같은 규칙, 초록은 행동에만).
-                color: 'var(--color-text)',
+                // ② 요약 금액은 초록 대신 검정 굵은 글자(판매자 홈과 같은 규칙, 초록은 행동에만). 0이면 회색.
+                color: summary?.totalNetAmount ? 'var(--color-text)' : ZERO,
               }}
             >
               {toKRW(summary?.totalNetAmount ?? 0)}

@@ -74,25 +74,30 @@ const GROUP_NOWRAP_BETWEEN = 'flex flex-row flex-nowrap items-center justify-bet
 function PriorityItem({
   label,
   count,
-  description,
   urgent,
   onClick,
 }: {
   label: string;
   count: number;
-  description: string;
   urgent: boolean;
   onClick: () => void;
 }) {
+  // 건수가 있으면 빨강, 0건이면 회색으로 물러난다(design-direction §3.5).
+  const countColor = urgent
+    ? 'var(--color-danger)'
+    : count === 0
+      ? 'var(--color-text-secondary)'
+      : 'var(--color-text)';
   return (
     <button
       type="button"
-      className={UNSTYLED_BUTTON}
+      className={`${UNSTYLED_BUTTON} min-h-11`}
       onClick={onClick}
       aria-label={`${label} ${count.toLocaleString()}건 확인`}
       style={{
         width: '100%',
-        padding: 14,
+        minWidth: 0,
+        padding: '0 12px',
         borderRadius: 12,
         backgroundColor: urgent ? 'var(--color-danger-surface)' : 'var(--frame)',
         textAlign: 'left',
@@ -100,7 +105,7 @@ function PriorityItem({
     >
       <div className={GROUP_NOWRAP_BETWEEN}>
         <p
-          className={TEXT}
+          className={`${TEXT} whitespace-nowrap`}
           style={{
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-bold)',
@@ -110,22 +115,17 @@ function PriorityItem({
           {label}
         </p>
         <p
-          className={TEXT}
+          className={`${TEXT} whitespace-nowrap`}
           style={{
-            fontSize: 'var(--font-size-xl)',
+            fontSize: 'var(--font-size-lg)',
             fontWeight: 'var(--fw-bold)',
-            color: urgent ? 'var(--color-danger)' : 'var(--color-text)',
+            fontVariantNumeric: 'tabular-nums',
+            color: countColor,
           }}
         >
           {count.toLocaleString()}건
         </p>
       </div>
-      <p
-        className={`${TEXT} mt-1`}
-        style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-      >
-        {description}
-      </p>
     </button>
   );
 }
@@ -371,53 +371,23 @@ export default function OrdersPage() {
         </div>
       )}
 
+      {/* 업무 우선순위 — 첫 주문 행이 화면 높이 60% 안에서 시작하도록 제목·설명 없이 두 칸 한 줄로 둔다
+          (design-direction §5 휴대폰, 2026-11-20 화면 검수 2장 Q1-A). 같은 건수는 아래 상태 탭에도 있다. */}
       {!loading && (
         <div className={`${CONTAINER} pt-4`}>
-          <div className={`${PAPER} p-4`}>
-            <div className="mb-3 flex flex-row flex-wrap items-end justify-between gap-4">
-              <div>
-                <p
-                  className={TEXT}
-                  style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
-                >
-                  업무 우선순위
-                </p>
-                <p
-                  className={`${TEXT} mt-0.5`}
-                  style={{
-                    fontSize: 'var(--font-size-sm)',
-                    color: 'var(--color-text-secondary)',
-                  }}
-                >
-                  선택한 판매 유형의 확인할 주문입니다.
-                </p>
-              </div>
-              <p
-                className={TEXT}
-                style={{
-                  fontSize: 'var(--font-size-sm)',
-                  color: 'var(--color-text-secondary)',
-                }}
-              >
-                항목을 누르면 확인 필요 목록으로 이동
-              </p>
-            </div>
-            <div className="grid grid-cols-1 gap-2.5 min-[36em]:grid-cols-2">
-              <PriorityItem
-                label="배송 보류"
-                count={priorityCounts.deliveryHeld}
-                description="배송 일정과 고객 안내를 먼저 확인하세요."
-                urgent={priorityCounts.deliveryHeld > 0}
-                onClick={handleDeliveryHeldEntry}
-              />
-              <PriorityItem
-                label="확인 필요"
-                count={priorityCounts.actionRequired}
-                description="기존 처리 필요 주문 상태를 모아 봅니다."
-                urgent={priorityCounts.actionRequired > 0}
-                onClick={handleActionRequiredEntry}
-              />
-            </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            <PriorityItem
+              label="배송 보류"
+              count={priorityCounts.deliveryHeld}
+              urgent={priorityCounts.deliveryHeld > 0}
+              onClick={handleDeliveryHeldEntry}
+            />
+            <PriorityItem
+              label="확인 필요"
+              count={priorityCounts.actionRequired}
+              urgent={priorityCounts.actionRequired > 0}
+              onClick={handleActionRequiredEntry}
+            />
           </div>
         </div>
       )}
@@ -442,7 +412,11 @@ export default function OrdersPage() {
       {saleType === 'normal' && (
         <div style={{ backgroundColor: 'var(--frame)' }}>
           <div className={`${CONTAINER} py-2.5`}>
-            <div className={`${GROUP} gap-2.5`}>
+            {/* 날짜 칩은 줄을 바꾸지 않고 자기 줄 안에서 옆으로 넘긴다(상태 탭과 같은 방식). */}
+            <div
+              className="flex flex-row flex-nowrap items-center justify-start gap-2.5"
+              style={{ overflowX: 'auto', scrollbarWidth: 'none' }}
+            >
               {DATE_PRESETS.map((p) => (
                 <button
                   type="button"
@@ -451,6 +425,8 @@ export default function OrdersPage() {
                   onClick={() => setDatePreset(p.key)}
                   style={{
                     ...chipStyle(datePreset === p.key, 'var(--color-surface-muted)'),
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
                     transition: 'all 0.15s',
                   }}
                 >
