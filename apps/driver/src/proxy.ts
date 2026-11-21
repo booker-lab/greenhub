@@ -98,15 +98,17 @@ const loginGate = auth((request) => {
 
 type AuthGateContext = Parameters<typeof authGate>[1];
 
-export function proxy(request: NextRequest, event: NextFetchEvent) {
+// auth.ts가 NextAuth 설정을 요청마다 만드는 함수로 넘기므로(로그아웃 시각 표시, withSignedOutMarker)
+// auth(콜백) 래퍼는 함수가 아니라 함수를 담은 Promise를 돌려준다(next-auth 지연 설정). 부를 때 기다린다.
+export async function proxy(request: NextRequest, event: NextFetchEvent) {
   const { pathname } = request.nextUrl;
   // auth()는 두 번째 인자를 위 콜백에 그대로 넘길 뿐 쓰지 않는다.
   if (pathname === DRIVER_LOGIN_PATH) {
-    return loginGate(request, event as unknown as AuthGateContext);
+    return (await loginGate)(request, event as unknown as AuthGateContext);
   }
   // 로그인 검사가 없는 경로에서는 세션을 읽거나 갱신하지 않는다.
   if (!isAuthGatedPath(pathname)) return continueWithCsp(request);
-  return authGate(request, event as unknown as AuthGateContext);
+  return (await authGate)(request, event as unknown as AuthGateContext);
 }
 
 export const config = {

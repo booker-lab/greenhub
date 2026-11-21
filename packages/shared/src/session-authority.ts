@@ -101,6 +101,103 @@ export async function revalidateSessionToken(
   return refresh(token);
 }
 
+/**
+ * 로그아웃 시각 표시 쿠키(AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE). 로그아웃(POST /api/auth/signout) 응답에 심는다.
+ * 로그아웃 직전에 출발한 세션 조회의 늦은 응답이 세션 쿠키를 되살려도, 그 쿠키의 마지막 검증 시각은 이
+ * 시각보다 앞이라 다음 요청에서 60초 재사용 없이 API로 다시 검증되고(서버 세션은 이미 폐기) 바로 끝난다.
+ * 값은 로그아웃 시각(epoch ms)뿐이고 비밀이 아니다. 재사용 구간의 두 배 동안만 남는다.
+ */
+export const SIGNED_OUT_MARKER_COOKIE = 'gh-signed-out-at';
+export const SIGNED_OUT_MARKER_MAX_AGE_SECONDS = Math.ceil((SESSION_AUTHORITY_REUSE_MS * 2) / 1000);
+
+/** 쿠키 헤더에서 로그아웃 시각을 읽는다. 없거나 읽을 수 없으면 null. */
+export function readSignedOutAt(cookieHeader: string | null | undefined): number | null {
+  if (!cookieHeader) return null;
+  for (const part of cookieHeader.split(';')) {
+    const [name, ...rest] = part.trim().split('=');
+    if (name !== SIGNED_OUT_MARKER_COOKIE) continue;
+    const value = Number(rest.join('='));
+    return Number.isSafeInteger(value) && value > 0 ? value : null;
+  }
+  return null;
+}
+
+/** 로그아웃 시각 표시 쿠키의 Set-Cookie 값. */
+export function signedOutMarkerCookie(signedOutAt: number, secure: boolean): string {
+  return [
+    `${SIGNED_OUT_MARKER_COOKIE}=${signedOutAt}`,
+    'Path=/',
+    `Max-Age=${SIGNED_OUT_MARKER_MAX_AGE_SECONDS}`,
+    'HttpOnly',
+    'SameSite=Lax',
+    ...(secure ? ['Secure'] : []),
+  ].join('; ');
+}
+
+/** 로그아웃 시각 이전(같은 시각 포함)에 검증된 토큰에서 재사용 표시를 지운다. 그 밖의 토큰은 그대로 돌려준다. */
+export function forgetAuthorityVerifiedBefore(
+  token: SessionToken,
+  signedOutAt: number | null,
+): SessionToken {
+  if (signedOutAt === null) return token;
+  const verifiedAt = token.authorityVerifiedAt;
+  if (typeof verifiedAt !== 'number' || verifiedAt > signedOutAt) return token;
+  const { authorityVerifiedAt: _at, authorityVerifiedFor: _for, ...rest } = token;
+  void _at;
+  void _for;
+  return rest;
+}
+
+type JwtCallbackConfig = {
+  // biome-ignore lint/suspicious/noExplicitAny: next-auth 타입을 들이지 않고 각 앱 jwt 콜백 인자를 그대로 넘긴다.
+  callbacks?: { jwt?: (params: any) => unknown };
+};
+
+/**
+ * NextAuth 설정을 요청마다 만드는 함수로 감싼다. 요청에 로그아웃 시각 표시 쿠키가 있으면 각 앱 jwt 콜백에
+ * 넘기는 토큰에서 그 시각 이전의 재사용 표시를 지워, 되살아난 쿠키를 API로 다시 검증하게 한다.
+ * 요청이 없을 때(서버 컴포넌트 auth())나 표시가 없을 때는 설정을 그대로 쓴다.
+ */
+export function withSignedOutMarker<C extends JwtCallbackConfig>(
+  config: C,
+): (request?: { headers: Headers }) => C {
+  return (request) => {
+    const signedOutAt = readSignedOutAt(request?.headers.get('cookie'));
+    const jwt = config.callbacks?.jwt;
+    if (signedOutAt === null || !jwt) return config;
+    return {
+      ...config,
+      callbacks: {
+        ...config.callbacks,
+        jwt: (params: { token: SessionToken }) =>
+          jwt({ ...params, token: forgetAuthorityVerifiedBefore(params.token, signedOutAt) }),
+      },
+    };
+  };
+}
+
+/**
+ * Auth.js POST 핸들러를 감싸 로그아웃(경로가 /signout으로 끝나는 요청) 응답에 로그아웃 시각 표시 쿠키를 더한다.
+ * 실패 응답(4xx·5xx)에는 더하지 않는다. 다른 POST(세션 갱신·로그인 등)는 그대로 돌려준다.
+ */
+export function withSignedOutMarkerOnSignOut<R extends Request>(
+  handler: (request: R) => Promise<Response>,
+  now: () => number = Date.now,
+): (request: R) => Promise<Response> {
+  return async (request) => {
+    const response = await handler(request);
+    const url = new URL(request.url);
+    if (!url.pathname.endsWith('/signout') || response.status >= 400) return response;
+    const headers = new Headers(response.headers);
+    headers.append('Set-Cookie', signedOutMarkerCookie(now(), url.protocol === 'https:'));
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers,
+    });
+  };
+}
+
 /** 같은 access token의 거절로 강제 재검증을 다시 요청하기까지 쉬는 시간(거절이 이어질 때 요청 폭주 방지). */
 export const AUTHORITY_RECHECK_COOLDOWN_MS = 10_000;
 
