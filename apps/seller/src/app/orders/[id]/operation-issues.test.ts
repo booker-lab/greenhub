@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  describeIssue,
   getAllowedOperationAction,
   ISSUE_DESCRIPTIONS,
   ISSUE_LABELS,
@@ -229,5 +230,33 @@ describe('가게 전체 운영 기록 목록', () => {
 
   it('응답 모양이 다르면 빈 목록으로 위장하지 않는다', () => {
     expect(() => readStoreOperationIssueList({ issues: [] }, 'store-1')).toThrow();
+  });
+});
+
+describe('describeIssue', () => {
+  it('관리자만 닫는 결제사 확인 기록은 판매자에게 콘솔 안내 대신 누가 처리하는지 알린다', () => {
+    for (const type of ['FINALIZATION_REFUND_FAILED', 'PROVIDER_REVERSAL_DETECTED'] as const) {
+      const seller = describeIssue(type, 'seller');
+      expect(seller).not.toContain('PortOne');
+      expect(seller).toContain('관리자가');
+      expect(describeIssue(type, null)).toBe(seller);
+    }
+    expect(describeIssue('PROVIDER_REVERSAL_DETECTED', 'seller')).toContain('정산은 보류');
+  });
+
+  it('관리자는 결제사 확인 안내를 그대로 본다', () => {
+    expect(describeIssue('FINALIZATION_REFUND_FAILED', 'admin')).toBe(
+      ISSUE_DESCRIPTIONS.FINALIZATION_REFUND_FAILED,
+    );
+    expect(describeIssue('PROVIDER_REVERSAL_DETECTED', 'admin')).toContain('PortOne');
+  });
+
+  it('판매자 문장이 따로 없는 기록은 역할과 관계없이 같은 문장이다', () => {
+    expect(describeIssue('AUTO_REFUND_FAILED', 'seller')).toBe(
+      ISSUE_DESCRIPTIONS.AUTO_REFUND_FAILED,
+    );
+    expect(describeIssue('AUTO_REFUND_FAILED', 'admin')).toBe(
+      ISSUE_DESCRIPTIONS.AUTO_REFUND_FAILED,
+    );
   });
 });

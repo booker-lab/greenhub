@@ -357,6 +357,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
             error={operationsError}
             onReload={reloadOperations}
             onAction={executeAction}
+            role={session?.user.role ?? null}
           />
 
           {actionError && (

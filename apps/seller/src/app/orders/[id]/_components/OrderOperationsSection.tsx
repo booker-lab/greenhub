@@ -9,8 +9,8 @@ import {
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import {
+  describeIssue,
   getAllowedOperationAction,
-  ISSUE_DESCRIPTIONS,
   ISSUE_LABELS,
   type OrderOperationIssue,
 } from '../operation-issues';
@@ -68,7 +68,7 @@ function getRedeliveryPaymentPresentation(payment: Order['redeliveryPayment']) {
   if (payment.status === 'PAID' && payment.paid) {
     return {
       label: '재배송비 결제 완료',
-      description: '서버에서 재배송비 결제 완료 상태를 확인했습니다.',
+      description: '재배송비 결제가 끝난 것을 확인했습니다.',
       color: 'brand',
     };
   }
@@ -136,10 +136,12 @@ function readableState(
 
 function IssueCard({
   issue,
+  role,
   actionIssueId,
   onAction,
 }: {
   issue: OrderOperationIssue;
+  role: string | null;
   actionIssueId: string | null;
   onAction: (issue: OrderOperationIssue) => Promise<void>;
 }) {
@@ -178,7 +180,7 @@ function IssueCard({
             className={TEXT}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
-            {ISSUE_DESCRIPTIONS[issue.type]}
+            {describeIssue(issue.type, role)}
           </p>
         </div>
         <StatusDot tone={TONE[issueColor(issue)]}>{STATUS_LABELS[issue.status]}</StatusDot>
@@ -248,7 +250,7 @@ function IssueCard({
             className={`${TEXT} text-center mt-1`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
-            실행 직전 서버의 최신 주문·결제 상태를 다시 확인합니다.
+            누르면 주문·결제 상태를 한 번 더 확인한 뒤 실행합니다.
           </p>
         </>
       )}
@@ -264,6 +266,7 @@ export function OrderOperationsSection({
   error,
   onReload,
   onAction,
+  role,
 }: {
   order: Order;
   issues: OrderOperationIssue[];
@@ -272,6 +275,8 @@ export function OrderOperationsSection({
   error: string | null;
   onReload: () => Promise<void>;
   onAction: (issue: OrderOperationIssue) => Promise<void>;
+  /** 로그인한 역할. 관리자만 닫는 기록의 설명 문장을 역할에 맞게 고른다. */
+  role: string | null;
 }) {
   return (
     <>
@@ -318,7 +323,7 @@ export function OrderOperationsSection({
               label="재배송비"
               value={
                 order.deliveryHold.redeliveryFee === null
-                  ? '서버 미설정'
+                  ? '아직 정해지지 않음'
                   : `${order.deliveryHold.redeliveryFee.toLocaleString('ko-KR')}원`
               }
             />
@@ -327,7 +332,7 @@ export function OrderOperationsSection({
               value={
                 order.deliveryHold.nextContactAt
                   ? formatDateTime(order.deliveryHold.nextContactAt)
-                  : '서버 미설정'
+                  : '아직 정해지지 않음'
               }
             />
             <Row
@@ -335,7 +340,7 @@ export function OrderOperationsSection({
               value={
                 order.deliveryHold.nextDeliveryAt
                   ? formatDateTime(order.deliveryHold.nextDeliveryAt)
-                  : '서버 미설정'
+                  : '아직 정해지지 않음'
               }
               highlight
             />
@@ -344,7 +349,7 @@ export function OrderOperationsSection({
             className={`${TEXT} mt-3`}
             style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
           >
-            재배송비 결제 생성은 주문자 전용이며, 셀러는 서버에 기록된 금액과 일정만 확인합니다.
+            재배송비는 주문자가 결제합니다. 판매자는 정해진 금액과 일정만 확인할 수 있습니다.
           </p>
         </div>
       )}
@@ -359,7 +364,7 @@ export function OrderOperationsSection({
               className={TEXT}
               style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
             >
-              서버가 반환한 운영 기록과 허용 조치만 표시합니다.
+              이 주문에 남은 연락·환불·분쟁 기록과 할 수 있는 조치입니다.
             </p>
           </div>
           <LoadingButton
@@ -396,6 +401,7 @@ export function OrderOperationsSection({
               <IssueCard
                 key={issue.id}
                 issue={issue}
+                role={role}
                 actionIssueId={actionIssueId}
                 onAction={onAction}
               />
