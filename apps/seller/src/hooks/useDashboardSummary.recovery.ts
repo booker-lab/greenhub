@@ -15,7 +15,7 @@
  * - 잘못된 응답 객체를 0원 summary로 렌더하지 않는다.
  */
 
-export const DASHBOARD_SUMMARY_AUTH_ERROR = '셀러 스토어 인증 정보를 확인할 수 없습니다.';
+export const DASHBOARD_SUMMARY_AUTH_ERROR = '판매자 가게 정보를 확인할 수 없습니다.';
 export const DASHBOARD_SUMMARY_READ_ERROR = '정산 정보를 불러오지 못했습니다.';
 export const DASHBOARD_SUMMARY_INVALID_RESPONSE_ERROR = '정산 응답 형식이 올바르지 않습니다.';
 

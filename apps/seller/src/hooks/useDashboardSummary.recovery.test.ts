@@ -49,7 +49,7 @@ describe('Dashboard settlement summary — no auth scope does not hang', () => {
   });
 
   it('인증 오류는 빈 결과로 확정하지 않고 명시적 메시지로 닫는다', () => {
-    expect(DASHBOARD_SUMMARY_AUTH_ERROR).toBe('셀러 스토어 인증 정보를 확인할 수 없습니다.');
+    expect(DASHBOARD_SUMMARY_AUTH_ERROR).toBe('판매자 가게 정보를 확인할 수 없습니다.');
     expect(
       resolveDashboardSummaryView({ hasLoaded: false, loading: false, error: DASHBOARD_SUMMARY_AUTH_ERROR }),
     ).toBe('READ_FAILED');
