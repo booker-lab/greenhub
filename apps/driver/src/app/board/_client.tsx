@@ -10,15 +10,27 @@ import { text } from '@/components/look';
 import OrderCard, { type DriverListOrder, type OrderRowSelection } from '@/components/OrderCard';
 import { PendingPhotoBadge, PendingPhotoBadgeProvider } from '@/components/pending-photo-notice';
 import { apiFetch, apiRead } from '@/lib/api';
+import { groupDeliveringOrders, takeDeliveringFirstScreen } from '@/lib/delivering-groups';
 import {
   buildDriverListScope,
   shouldPreserveDriverListOnReadError,
   toDriverListReadError,
   toDriverListReadErrorKind,
 } from '@/lib/driver-list-read';
-import { groupDeliveringOrders, takeDeliveringFirstScreen } from '@/lib/delivering-groups';
 import { readDriverSummaryCompletedToday } from '@/lib/driver-summary';
 import { groupPreparingOrders, takePreparingFirstScreen } from '@/lib/preparing-groups';
+import { BatchPickupConfirmDialog } from './_components/BatchPickupConfirmDialog';
+import {
+  BATCH_PICKUP_TARGET_STATUS,
+  type BatchPickupSummary,
+  batchPickupBlockLabel,
+  batchPickupBlockReason,
+  buildBatchPickupConfirmContent,
+  buildBatchPickupSummaryText,
+  isBatchPickupSelectable,
+  runBatchPickup,
+  summarizeBatchPickup,
+} from './_lib/batch-pickup';
 import {
   dismissPendingPhoto,
   failStalePendingPhoto,
@@ -35,18 +47,6 @@ import {
   pendingPhotoStaleOrderIds,
   pendingPhotoStatusMessage,
 } from './[orderId]/photo/pending-photo-policy';
-import { BatchPickupConfirmDialog } from './_components/BatchPickupConfirmDialog';
-import {
-  BATCH_PICKUP_TARGET_STATUS,
-  type BatchPickupSummary,
-  batchPickupBlockLabel,
-  batchPickupBlockReason,
-  buildBatchPickupConfirmContent,
-  buildBatchPickupSummaryText,
-  isBatchPickupSelectable,
-  runBatchPickup,
-  summarizeBatchPickup,
-} from './_lib/batch-pickup';
 
 /** 한 번에 수거 고르기 행 상태. null이면 고르기 모드가 아니다. */
 type BatchSelection = {

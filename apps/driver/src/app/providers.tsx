@@ -1,9 +1,9 @@
 'use client';
 
-import type { Session } from 'next-auth';
-import { useEffect, useRef } from 'react';
-import { getSession, SessionProvider, useSession, signOut } from 'next-auth/react';
 import { recheckSessionAfterRejection, watchApiAuthorityRejections } from '@greenhub/shared';
+import type { Session } from 'next-auth';
+import { getSession, SessionProvider, signOut, useSession } from 'next-auth/react';
+import { useEffect, useRef } from 'react';
 import { PendingPhotoUploader } from '@/app/board/[orderId]/photo/pending-photo-uploader';
 import { AppToaster } from '@/components/app-toaster';
 import { useFirebaseAuth } from '@/hooks/useFirebaseAuth';

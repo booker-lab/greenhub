@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { useEffect } from 'react';
 import { getApiBaseUrl } from '@/lib/api-base-url';
 
 // Firebase는 거점 사진 업로드에만 쓰므로 첫 화면 번들에 싣지 않고 로그인할 때 불러온다.

@@ -1,10 +1,10 @@
-import { getApp, getApps, initializeApp, type FirebaseApp } from 'firebase/app';
+import { type FirebaseApp, getApp, getApps, initializeApp } from 'firebase/app';
 import {
+  type Auth,
   browserSessionPersistence,
   connectAuthEmulator,
   getAuth,
   setPersistence,
-  type Auth,
 } from 'firebase/auth';
 import type { FirebaseStorage } from 'firebase/storage';
 
