@@ -304,7 +304,7 @@ function RoundEditor({
   if (error) {
     return (
       <ErrorState
-        title="스토어 상품을 불러오지 못했습니다"
+        title="가게 상품을 불러오지 못했습니다"
         message={error}
         onRetry={() => {
           retryProducts();
@@ -331,7 +331,7 @@ function RoundEditor({
     <div className={`${COLUMN} gap-4`}>
       {pageData.products.length === 0 && (
         <Alert variant="warning" role="alert">
-          <AlertTitle>현재 스토어 상품이 없습니다</AlertTitle>
+          <AlertTitle>현재 가게 상품이 없습니다</AlertTitle>
           <AlertDescription>
             기존 회차 상품은 확인할 수 있지만 새 상품을 추가할 수 없습니다.
           </AlertDescription>

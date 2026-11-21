@@ -164,10 +164,10 @@ describe('판매 회차 상세 라우트 경계', () => {
 
   it('중복되거나 손상된 현재 스토어 상품을 폼 데이터로 승격하지 않는다', () => {
     expect(() => buildRoundPageData(ROUND, [PRODUCT, { ...PRODUCT }])).toThrow(
-      '스토어 상품 응답이 올바르지 않습니다.',
+      '가게 상품 응답이 올바르지 않습니다.',
     );
     expect(() => buildRoundPageData(ROUND, [{ ...PRODUCT, id: 'product/a' }])).toThrow(
-      '스토어 상품 응답이 올바르지 않습니다.',
+      '가게 상품 응답이 올바르지 않습니다.',
     );
   });
 });
