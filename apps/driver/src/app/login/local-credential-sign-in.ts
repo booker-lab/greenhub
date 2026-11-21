@@ -11,12 +11,13 @@
  *   서버 액션이 그 code를 읽어 승인 대기 안내로 보낸다. 그 밖의 실패(틀린 비밀번호·정지 계정·
  *   다른 역할·API 응답 없음 등)는 일반 실패 안내다.
  */
-import { DRIVER_APPROVAL_PENDING_ERROR, DRIVER_LOGIN_FAILED_ERROR } from './login-notice';
+
 import {
   DRIVER_DEFAULT_RETURN_PATH,
   DRIVER_LOGIN_PATH,
   safeDriverReturnPath,
 } from '@/lib/login-redirect';
+import { DRIVER_APPROVAL_PENDING_ERROR, DRIVER_LOGIN_FAILED_ERROR } from './login-notice';
 
 // 승인 전 기사의 로컬 이메일 로그인 거절을 Auth.js `CredentialsSignin.code`로 나르는 값.
 // 고정 문자열만 싣는다(이메일·서버 메시지 없음).

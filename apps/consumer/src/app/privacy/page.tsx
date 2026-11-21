@@ -34,9 +34,9 @@ const cardStyle = {
   padding: 16,
 } as const;
 
-function Section({ children, title }: { children: ReactNode; title: string }) {
+function Section({ children, id, title }: { children: ReactNode; id?: string; title: string }) {
   return (
-    <section style={sectionStyle}>
+    <section id={id} style={sectionStyle}>
       <h2 style={headingStyle}>{title}</h2>
       {children}
     </section>
@@ -303,7 +303,8 @@ export default function PrivacyPage() {
         </ul>
       </Section>
 
-      <Section title="10. 방침의 변경">
+      {/* footer 개정 안내(PolicyChangeNotice)가 #changes로 이 절을 연다. */}
+      <Section id="changes" title="10. 방침의 변경">
         <p>
           이 방침은 {EFFECTIVE_DATE}부터 시행합니다. 중요한 변경은 시행 전에 서비스 화면에서 적용일,
           변경 이유와 주요 내용을 알리고 이전 버전을 확인할 수 있도록 보관하겠습니다. 이번 개정은
@@ -312,6 +313,11 @@ export default function PrivacyPage() {
           기능과 탈퇴할 때 지우는 정보·남는 정보 추가)이고, 그 전은 2026년 11월 1일(개인정보
           보호책임자와 배송 담당자의 카카오맵 길 안내 이용 추가), 2026년 8월 30일, 2026년 8월
           19일입니다.
+        </p>
+        <p>
+          이번 개정 전 방침은{' '}
+          <a href="/privacy/2026-11-08">2026년 11월 8일 시행 개인정보처리방침</a>에서 확인할 수
+          있습니다.
         </p>
         <p>
           서비스 이용 조건은 <a href="/terms">이용약관</a>에서 확인할 수 있습니다.

@@ -1,11 +1,11 @@
-import { AuthError, CredentialsSignin } from 'next-auth';
 import Image from 'next/image';
-import { redirect, RedirectType } from 'next/navigation';
+import { RedirectType, redirect } from 'next/navigation';
+import { AuthError, CredentialsSignin } from 'next-auth';
 import { signIn } from '@/auth';
 import { AppButton } from '@/components/app-button';
 import { PasswordField, TextField } from '@/components/fields';
 import { text } from '@/components/look';
-import { safeDriverReturnPath, resolveDriverReturnPath } from '@/lib/login-redirect';
+import { resolveDriverReturnPath, safeDriverReturnPath } from '@/lib/login-redirect';
 import { DRIVER_OPS_CONTACT } from '@/lib/ops-contact';
 import { LocalCredentialForm } from './local-credential-form';
 import {
