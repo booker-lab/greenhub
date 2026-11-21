@@ -65,6 +65,21 @@ function loadResolveNavSalesMode() {
   return navModule.exports.resolveNavSalesMode;
 }
 
+function loadNavExports() {
+  const compiled = ts.transpileModule(source, {
+    compilerOptions: {
+      esModuleInterop: true,
+      jsx: ts.JsxEmit.ReactJSX,
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2022,
+    },
+    fileName: 'BottomNav.tsx',
+  }).outputText;
+  const navModule = { exports: {} };
+  new Function('require', 'module', 'exports', compiled)(() => ({}), navModule, navModule.exports);
+  return navModule.exports;
+}
+
 test('판매 방식을 확인하는 동안이나 조회가 실패해도 내비게이션을 숨기지 않고 회차 판매 탭을 보인다', () => {
   const resolveNavSalesMode = loadResolveNavSalesMode();
   const legacyReady = { salesMode: 'legacy', status: 'ready' };
@@ -118,4 +133,17 @@ test('숨기는 경로에서는 상품·매장 조회 하위 컴포넌트를 마
 
 test('인증된 사용자의 장바구니 수량은 배지에 표시한다', () => {
   assert.match(source, /visibleItemCount > 99 \? '99\+' : visibleItemCount/);
+});
+
+test("홈 탭은 '/'와, 운영에서 홈을 다시 만들 때 넘어오는 '/index'에서 켜진다", () => {
+  const { isNavTabActive } = loadNavExports();
+
+  assert.equal(isNavTabActive('/', '/'), true);
+  assert.equal(isNavTabActive('/', '/index'), true);
+  assert.equal(isNavTabActive('/', '/category'), false);
+  assert.equal(isNavTabActive('/', '/indexes'), false);
+  assert.equal(isNavTabActive('/category', '/category'), true);
+  assert.equal(isNavTabActive('/category', '/index'), false);
+  assert.equal(isNavTabActive('/mypage', '/mypage/orders/o-1'), true);
+  assert.match(source, /const isActive = isNavTabActive\(tab\.href, pathname\);/);
 });
