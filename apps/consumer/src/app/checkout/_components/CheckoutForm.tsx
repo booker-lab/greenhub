@@ -146,7 +146,7 @@ function FieldFrame({
           htmlFor={id}
           required={required && requiredMark}
           // 별표를 빼도 라벨 배치는 별표가 있을 때와 같게 둔다(FieldLabel required의 inline-block).
-          className={required && !requiredMark ? 'inline-block' : undefined}
+          className={cn('font-bold', required && !requiredMark && 'inline-block')}
         >
           {label}
         </FieldLabel>
@@ -355,7 +355,7 @@ export default function CheckoutForm({
                       className="m-0 leading-[1.55]"
                       style={{
                         fontSize: 'var(--font-size-sm)',
-                        fontWeight: 'var(--fw-medium)',
+                        fontWeight: 'var(--fw-regular)',
                         color: 'var(--color-text)',
                         flex: 1,
                       }}
@@ -734,7 +734,7 @@ export default function CheckoutForm({
               <p
                 className="m-0 leading-[1.55]"
                 style={{
-                  fontWeight: isSelected ? 'var(--fw-bold)' : 'var(--fw-medium)',
+                  fontWeight: isSelected ? 'var(--fw-bold)' : 'var(--fw-regular)',
                   fontSize: 'var(--font-size-sm)',
                 }}
               >

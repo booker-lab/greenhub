@@ -60,7 +60,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             style={{
               // 분류 칩: 연회색 면 + 본문 색 글자(이전 보조 글자색은 이 면 위에서 대비 4.43:1이었다).
               fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--fw-medium)',
+              fontWeight: 'var(--fw-bold)',
               color: 'var(--color-text)',
               background: 'var(--color-surface-muted)',
               borderRadius: 'var(--radius-sm)',
@@ -73,7 +73,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             <span
               style={{
                 fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
+                fontWeight: 'var(--fw-bold)',
                 color: 'var(--color-primary-dark)',
                 background: 'var(--color-primary-surface)',
                 borderRadius: 'var(--radius-sm)',
@@ -87,7 +87,7 @@ export default function ProductCard({ product }: ProductCardProps) {
         <p
           style={{
             fontSize: 'var(--font-size-md)',
-            fontWeight: 'var(--fw-medium)',
+            fontWeight: 'var(--fw-bold)',
             color: 'var(--color-text)',
             margin: 0,
             overflow: 'hidden',
@@ -174,7 +174,7 @@ export default function ProductCard({ product }: ProductCardProps) {
                     color: done ? 'var(--color-text-secondary)' : 'var(--color-primary-dark)',
                     marginTop: 2,
                     marginBottom: 0,
-                    fontWeight: 'var(--fw-medium)',
+                    fontWeight: 'var(--fw-bold)',
                   }}
                 >
                   {statusLabel}

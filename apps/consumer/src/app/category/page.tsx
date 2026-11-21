@@ -496,7 +496,7 @@ function LegacyCategory({
         <>
           <p
             className={`${TEXT_SM} mb-3`}
-            style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}
+            style={{ color: 'var(--color-text-secondary)', fontWeight: 'var(--fw-regular)' }}
           >
             {products.length}개 상품
           </p>

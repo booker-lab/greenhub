@@ -79,15 +79,16 @@ test('체크박스는 네모를 키우지 않고 라벨 줄을 44px로 만든다
   assert.doesNotMatch(TOUCH_CHECKBOX, /size-/);
 });
 
-test('소비자 Button·LoadingButton 래퍼는 공용 부품에 44px 클래스만 덧씌운다', async () => {
+// 굵기 700은 2026-11-22 사용자 결정(공용 버튼 600 → 소비자 화면 700, design-standard §3)으로 더했다.
+test('소비자 Button·LoadingButton 래퍼는 공용 부품에 44px 클래스와 굵기 700만 덧씌운다', async () => {
   const button = await readFile(new URL('../components/Button.tsx', import.meta.url), 'utf8');
   const loading = await readFile(
     new URL('../components/LoadingButton.tsx', import.meta.url),
     'utf8',
   );
   assert.match(button, /from '@greenhub\/ui\/components\/button'/);
-  assert.match(button, /cn\(touchButtonClassName\(size\), className\)/);
+  assert.match(button, /cn\(touchButtonClassName\(size\), 'font-bold', className\)/);
   assert.match(loading, /from '@greenhub\/ui\/components\/loading-button'/);
-  assert.match(loading, /touchButtonClassName\(size\)/);
+  assert.match(loading, /touchButtonClassName\(size\),\s*'font-bold',/);
   assert.match(loading, /buttonHeight=\{buttonHeight \?\? touchButtonHeight\(size\)\}/);
 });

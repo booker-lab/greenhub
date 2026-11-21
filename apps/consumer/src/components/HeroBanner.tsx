@@ -57,7 +57,7 @@ export default async function HeroBanner() {
             style={{
               display: 'inline-block',
               fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--fw-medium)',
+              fontWeight: 'var(--fw-bold)',
               color: 'var(--color-text-secondary)',
               backgroundColor: 'color-mix(in srgb, var(--background) 70%, transparent)',
               padding: '2px 10px',
