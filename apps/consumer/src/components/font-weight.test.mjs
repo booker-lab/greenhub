@@ -102,3 +102,16 @@ test('공용 버튼을 바로 쓰는 보이는 화면은 버튼마다 font-bold�
     });
   }
 });
+
+// 노랑(--color-deadline-surface)은 주문 마감·"얼마 안 남음"에만 쓴다(design-standard §2, design-direction §3.1).
+// 2026-11-26 검수에서 회차 밖 상품 안내·카카오 오픈 알림 상자·홈 지난 정보 안내를 연회색으로 바꿨다.
+test('마감이 아닌 안내 상자는 노란 면을 쓰지 않는다', () => {
+  const read = (path) => files.find((file) => file.path === path)?.source ?? '';
+  for (const path of [
+    'app/products/[id]/ProductDetailClient.tsx',
+    'components/benchmark/KakaoChannelCta.tsx',
+    'components/HomeProductList.tsx',
+  ]) {
+    assert.doesNotMatch(read(path), /--color-deadline-surface/, path);
+  }
+});

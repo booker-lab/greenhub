@@ -11,7 +11,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
 import { isFeatureOn } from '@/lib/features';
-import { hasActiveSession, isSessionExpiredReason } from '@/lib/session-login';
+import { PUBLIC_BUSINESS_INFO } from '@/lib/publicBusinessInfo';
+import { hasActiveSession, isSessionExpiredReason, loginErrorMessage } from '@/lib/session-login';
 import { isOrderCallback, safeCallbackPath, signedInRedirectPath } from './_callback-url';
 
 // ① 외형 유지(UI 교체 P5): Mantine Stack(gap sm 12)·Button lg(radius xl)·Divider(가운데 글자 xs)·
@@ -70,6 +71,8 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
   const forOrder = isFeatureOn('guest-cart') && isOrderCallback(rawCallbackUrl, origin);
   // 세션이 끝나 로그아웃된 경우(providers.tsx): 이유와 복귀를 알려 준다. 주문 안내보다 앞선다.
   const expired = isSessionExpiredReason(searchParams.get('reason'));
+  // 카카오 로그인이 거부되거나 실패해 Auth.js가 돌려보낸 경우(auth.ts pages.error): 실패를 알린다. 만료 안내보다 앞선다.
+  const loginError = loginErrorMessage(searchParams.get('error'), PUBLIC_BUSINESS_INFO.phone);
 
   // 이미 로그인한 손님이 로그인 화면에 오면 복귀 주소(없으면 홈)로 바로 보낸다.
   // 서버 컴포넌트에서 auth()로 확인하면 토큰을 갱신해도 새 쿠키를 저장할 수 없어(proxy.ts 주석)
@@ -86,7 +89,11 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
 
   return (
     <div className="flex flex-col items-stretch justify-start gap-3">
-      {expired ? (
+      {loginError ? (
+        <p role="alert" className="m-0 text-center leading-[1.55] break-keep" style={NOTICE_STYLE}>
+          {loginError}
+        </p>
+      ) : expired ? (
         <p role="status" className="m-0 text-center leading-[1.55]" style={NOTICE_STYLE}>
           로그인이 만료됐어요. 다시 로그인하면 보던 화면으로 돌아가요.
         </p>

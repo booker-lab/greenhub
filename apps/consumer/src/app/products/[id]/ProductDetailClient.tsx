@@ -312,12 +312,13 @@ function RoundUnavailableProductDetail({
             className="p-4"
             role="status"
             aria-label={label}
-            style={{ background: 'var(--color-deadline-surface)', borderRadius: 'var(--radius)' }}
+            // 노랑은 주문 마감에만 쓴다(design-direction.md §3.1). 회차 밖 상품 안내는 연회색 면 + 검정 글자.
+            style={{ background: 'var(--color-surface-muted)', borderRadius: 'var(--radius)' }}
           >
             <p
               className="m-0 leading-[1.55]"
               style={{
-                color: 'var(--color-deadline-text)',
+                color: 'var(--color-text)',
                 fontSize: 'var(--font-size-md)',
                 fontWeight: 'var(--fw-extrabold)',
               }}
