@@ -1,12 +1,12 @@
 'use client';
 
 import type { SalesMode } from '@greenhub/shared';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { NumberInput } from '@greenhub/ui/components/number-input';
 import { useId } from 'react';
 import { useOptionStocks } from '@/hooks/useOptionStocks';
 import { isFeatureOn } from '@/lib/features';
 import { showsGroupBuyChoice } from '@/lib/sales-mode';
+import { Field, FieldLabel } from '../../../../components/Field';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
 import GroupConfigSection from '../GroupConfigSection';
 import { MarketRefSection } from '../MarketRefSection';

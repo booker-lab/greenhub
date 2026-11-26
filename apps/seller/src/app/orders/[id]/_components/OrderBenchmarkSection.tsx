@@ -21,7 +21,7 @@ export function OrderBenchmarkSection({ order }: { order: Order }) {
   if (optionLines.length === 0 && !gift && !packageLabel) return null;
 
   const label = {
-    fontWeight: 'var(--fw-medium)',
+    fontWeight: 'var(--fw-bold)',
     fontSize: 'var(--font-size-sm)',
     color: 'var(--color-text-secondary)',
   } as const;

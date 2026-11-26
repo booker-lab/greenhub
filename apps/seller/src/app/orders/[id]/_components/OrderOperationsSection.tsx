@@ -7,15 +7,15 @@ import {
   type Order,
 } from '@greenhub/shared';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { LoadingButton } from '../../../../components/Button';
+import { STATUS_LABEL } from '../../_constants';
+import { HOLD_REASON_LABEL } from '../delivery-hold-form';
 import {
   describeIssue,
   getAllowedOperationAction,
   ISSUE_LABELS,
   type OrderOperationIssue,
 } from '../operation-issues';
-import { STATUS_LABEL } from '../../_constants';
-import { HOLD_REASON_LABEL } from '../delivery-hold-form';
 import { Row } from './OrderRow';
 
 // ② 디자인 방향(D2·2026-11-01 결정): 카드는 그림자·바깥 테두리 없이 흰 면. 흰 카드 안의 기록 카드는 테두리 대신
@@ -95,7 +95,7 @@ function RedeliveryPaymentPanel({ payment }: { payment: Order['redeliveryPayment
   return (
     <div className={`${PAPER} p-4`} data-testid="seller-redelivery-payment">
       <div className={`${GROUP_BETWEEN} mb-2.5`}>
-        <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+        <p className={TEXT} style={{ fontWeight: 'var(--fw-bold)' }}>
           재배송비 결제
         </p>
         <StatusDot tone={TONE[presentation.color]}>{presentation.label}</StatusDot>
@@ -203,7 +203,7 @@ function IssueCard({
             style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-secondary)',
-              fontWeight: 'var(--fw-medium)',
+              fontWeight: 'var(--fw-bold)',
             }}
           >
             {issue.type === 'CUSTOMER_NOTICE_FAILED' ? '고객 연락 기록' : '조치 감사 기록'}
@@ -285,7 +285,7 @@ export function OrderOperationsSection({
       {order.deliveryHold && (
         <div className={`${PAPER} p-4`}>
           <div className={`${GROUP_BETWEEN} mb-2.5`}>
-            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-bold)' }}>
               배송 보류 운영
             </p>
             <StatusDot tone={order.status === 'DELIVERY_HELD' ? 'problem' : 'done'}>
@@ -357,7 +357,7 @@ export function OrderOperationsSection({
       <div className={`${PAPER} p-4`}>
         <div className={`${GROUP_BETWEEN} mb-3`}>
           <div className="flex flex-col gap-0.5">
-            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-bold)' }}>
               연락·환불·분쟁 기록
             </p>
             <p

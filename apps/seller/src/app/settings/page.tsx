@@ -27,7 +27,7 @@ function SectionCard({ label, children }: { label: string; children: ReactNode }
           className={TEXT}
           style={{
             fontSize: 'var(--font-size-sm)',
-            fontWeight: 'var(--fw-medium)',
+            fontWeight: 'var(--fw-regular)',
             color: 'var(--color-text-secondary)',
           }}
         >

@@ -1,6 +1,5 @@
 'use client';
 
-import { ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -11,6 +10,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
+import { ButtonLink } from '../../components/Button';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Stack·Group·Paper·Text·UnstyledButton·Badge·Button과 같은 값을
 // Tailwind와 @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16(그림자는 ② D2로 걷음).
@@ -153,7 +153,7 @@ export default function HubsPage() {
                   marginTop: 10,
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-primary-dark)',
-                  fontWeight: 500,
+                  fontWeight: 700,
                 }}
               >
                 거점 등록하기 →
@@ -173,7 +173,7 @@ export default function HubsPage() {
                     <div className="mb-1 flex flex-row flex-wrap items-center justify-start gap-2.5">
                       <p
                         className={`${TEXT} truncate`}
-                        style={{ fontWeight: 'var(--fw-medium)', fontSize: 'var(--font-size-sm)' }}
+                        style={{ fontWeight: 'var(--fw-bold)', fontSize: 'var(--font-size-sm)' }}
                       >
                         {hub.name}
                       </p>

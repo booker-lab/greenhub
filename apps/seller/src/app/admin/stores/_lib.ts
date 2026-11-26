@@ -153,7 +153,7 @@ export function describeArchiveConfirm(
   const label = storeLabel(store);
   return {
     title: `${label} 판매자 정리하기`,
-    lead: '정리하면 손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다. 판매자는 계속 로그인할 수 있고, 복구하면 정리하기 전 상태로 돌아갑니다.',
+    lead: '정리하면 고객 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다. 판매자는 계속 로그인할 수 있고, 복구하면 정리하기 전 상태로 돌아갑니다.',
     facts: storeFacts(store),
     note: '주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다. 기록은 지워지지 않습니다.',
     confirmLabel: `${label} 정리하기`,
@@ -173,7 +173,7 @@ export function describeArchiveRecordsConfirm(
   const prefix = storeIdConfirmPrefix(store.id);
   return {
     title: `${label} 판매자 정리하기`,
-    lead: `${label} 판매자는 주문·정산 기록이 있습니다. 주문·정산 기록은 그대로 남고, 복구하면 다시 손님 화면에 보입니다.`,
+    lead: `${label} 판매자는 주문·정산 기록이 있습니다. 주문·정산 기록은 그대로 남고, 복구하면 다시 고객 화면에 보입니다.`,
     facts: [
       { label: '상호', value: label },
       { label: '가게 ID', value: store.id },
@@ -183,21 +183,21 @@ export function describeArchiveRecordsConfirm(
   };
 }
 
-/** 복구 확인창 — 복구하면 손님 화면에 다시 보이고 주문을 받는다. */
+/** 복구 확인창 — 복구하면 고객 화면에 다시 보이고 주문을 받는다. */
 export function describeRestoreConfirm(
   store: Pick<AdminStore, 'name' | 'ceoName' | 'phone' | 'status'>,
 ): StoreConfirmView {
   const label = storeLabel(store);
   return {
     title: `${label} 판매자 복구`,
-    lead: '복구하면 손님 화면에 다시 보이고 새 주문을 받습니다.',
+    lead: '복구하면 고객 화면에 다시 보이고 새 주문을 받습니다.',
     facts: storeFacts(store),
     confirmLabel: `${label} 복구`,
   };
 }
 
 // ── 판매 방식 ─────────────────────────────────────────────────────
-// 손님 화면의 회차(공개 회차 API)와 회차 주문은 회차 판매(round_direct) 가게에서만 동작한다.
+// 고객 화면의 회차(공개 회차 API)와 회차 주문은 회차 판매(round_direct) 가게에서만 동작한다.
 // 판매 방식이 비어 있는 기존 가게는 예전 방식(legacy)으로 읽는다(서버 normalizeSalesMode와 같은 규칙).
 
 export const SALES_MODE_LABEL: Record<SalesMode, string> = {
@@ -220,7 +220,7 @@ export function salesModeActionLabel(target: SalesMode): string {
   return target === 'round_direct' ? '회차 판매로 바꾸기' : '예전 방식으로 바꾸기';
 }
 
-/** 판매 방식 전환 확인창 — 바꾸면 손님 화면에서 회차가 어떻게 되는지 알린다. */
+/** 판매 방식 전환 확인창 — 바꾸면 고객 화면에서 회차가 어떻게 되는지 알린다. */
 export function describeSalesModeConfirm(
   store: AdminStore,
 ): StoreConfirmView & { target: SalesMode } {
@@ -232,8 +232,8 @@ export function describeSalesModeConfirm(
     title: `${label} ${action}`,
     lead:
       target === 'round_direct'
-        ? '회차 판매로 바꾸면 손님에게 회차가 보여요. 예정·판매 중인 회차가 손님 화면에 나타나고 회차 주문을 받아요.'
-        : '예전 방식으로 바꾸면 회차가 손님에게서 숨겨져요. 회차 주문도 더 받지 않아요.',
+        ? '회차 판매로 바꾸면 고객에게 회차가 보여요. 예정·판매 중인 회차가 고객 화면에 나타나고 회차 주문을 받아요.'
+        : '예전 방식으로 바꾸면 회차가 고객에게서 숨겨져요. 회차 주문도 더 받지 않아요.',
     facts: [
       { label: '상호', value: label },
       { label: '지금 판매 방식', value: SALES_MODE_LABEL[current] },
@@ -253,8 +253,8 @@ export function describeSalesModeConfirm(
 export function describeSalesModeSaved(storeName: string, salesMode: SalesMode): string {
   const label = storeName.trim() || '(미설정)';
   return salesMode === 'round_direct'
-    ? `${label} 가게를 회차 판매로 바꿨어요. 손님에게 회차가 보여요.`
-    : `${label} 가게를 예전 방식으로 바꿨어요. 회차는 손님에게서 숨겨져요.`;
+    ? `${label} 가게를 회차 판매로 바꿨어요. 고객에게 회차가 보여요.`
+    : `${label} 가게를 예전 방식으로 바꿨어요. 회차는 고객에게서 숨겨져요.`;
 }
 
 export function sortStores(stores: AdminStore[], sort: StoreSort): AdminStore[] {

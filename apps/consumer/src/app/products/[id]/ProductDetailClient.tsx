@@ -362,7 +362,9 @@ function ProductDetailContent({ product, variety, roundProduct }: ProductDetailC
         {roundProduct && <PanelExtras product={product} item={roundProduct.item} />}
         <ProductInfo product={product} variety={variety} showSummary={!roundProduct} />
         {roundProduct && <DetailExtras product={product} round={roundProduct.round} />}
-        {roundProduct && <RoundPurchaseNotices />}
+        {roundProduct && (
+          <RoundPurchaseNotices deliveryEndAt={roundProduct.round.schedule.deliveryEndAt} />
+        )}
         {roundProduct ? (
           <ProductActions product={product} roundProduct={roundProduct} />
         ) : (

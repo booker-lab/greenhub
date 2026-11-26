@@ -69,7 +69,7 @@ export default function AdminUsersClient() {
   const suspendedCount = users.filter((user) => user.suspended).length;
   const header = (
     <AdminPageHeader
-      title="소비자"
+      title="고객"
       subline={ready ? `가입 ${users.length}명 · 정지 ${suspendedCount}명` : undefined}
       action={<RefreshButton loading={loading} onClick={reload} />}
     />
@@ -88,7 +88,7 @@ export default function AdminUsersClient() {
     return (
       <div>
         {header}
-        <AdminListError title="소비자 목록을 불러오지 못했습니다." error={error} onRetry={reload} />
+        <AdminListError title="고객 목록을 불러오지 못했습니다." error={error} onRetry={reload} />
       </div>
     );
   }

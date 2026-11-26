@@ -223,7 +223,7 @@ export default function AdminStoresClient() {
       notify({
         color: 'brand',
         title: '판매자를 정리했습니다',
-        message: `${store.name || '이름 없는 가게'} — 손님 화면에서 숨고 새 주문을 받지 않습니다.`,
+        message: `${store.name || '이름 없는 가게'} — 고객 화면에서 숨고 새 주문을 받지 않습니다.`,
       });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
@@ -271,7 +271,7 @@ export default function AdminStoresClient() {
       notify({
         color: 'brand',
         title: '판매자를 복구했습니다',
-        message: `${store.name || '이름 없는 가게'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
+        message: `${store.name || '이름 없는 가게'} — 고객 화면에 다시 보이고 주문을 받습니다.`,
       });
     } catch (e) {
       setStoreAction(null);

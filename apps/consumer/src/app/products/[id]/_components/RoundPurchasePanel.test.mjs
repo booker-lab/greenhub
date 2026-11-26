@@ -38,7 +38,8 @@ test('주문 시작 전 회차는 판매 예정 제목과 주문 시작 시각�
 
 test('이천 직접배송과 화요일 배송 및 기상 연기 원칙을 명확히 고지한다', () => {
   assert.match(panelSource, /경기도 이천시 직접배송/);
-  assert.match(panelSource, /화요일 오전 9시까지 문 앞 배송/);
+  // 배송 약속은 회차 도착 시각에서 만들고, 읽지 못할 때만 "화요일 오전 9시까지"(round-schedule-label 고정 문구, 2026-11-26).
+  assert.match(panelSource, /formatRoundDeliveryPromise\(deliveryEndAt\)/);
   assert.match(panelSource, /기상 상황/);
   assert.match(panelSource, /재배송비\s+없이 새 배송 일정/);
 });
@@ -96,7 +97,10 @@ test('상품 상세은 Task 4.8이 검증한 회차 상품 구조를 패널에 �
     pageSource,
     /import RoundPurchasePanel(, \{ RoundPurchaseNotices \})? from '.\/_components\/RoundPurchasePanel'/,
   );
-  assert.match(pageSource, /\{roundProduct && <RoundPurchaseNotices \/>\}/);
+  assert.match(
+    pageSource,
+    /\{roundProduct && \(\s*<RoundPurchaseNotices deliveryEndAt=\{roundProduct\.round\.schedule\.deliveryEndAt\} \/>\s*\)\}/,
+  );
   assert.match(
     pageSource,
     /<RoundPurchasePanel\s+round=\{roundProduct\.round\}\s+item=\{roundProduct\.item\}\s+state=\{roundProduct\.state\}\s+isPurchasable=\{roundProduct\.isPurchasable\}\s+\/>/s,
@@ -116,4 +120,14 @@ test('상세 첫 화면은 이름 30px 제목 아래 18px 한 줄로 언제·어
   assert.match(panelSource, /fontSize: 'var\(--font-size-lg\)'/);
   // 제목 위 상태 태그·회차 이름 라벨은 두지 않는다(design-direction.md §4.3).
   assert.doesNotMatch(panelSource, /round\.name/);
+});
+
+// 2026-11-26 사용자 결정: 상품 상세 필수 고지도 회차의 실제 도착 시각을 쓴다.
+test('상품 상세 필수 고지는 회차 도착 시각으로 배송 약속을 쓴다', () => {
+  assert.match(panelSource, /export function RoundPurchaseNotices\(\{ deliveryEndAt \}/);
+  assert.match(
+    panelSource,
+    /직접배송만 제공하며, \{formatRoundDeliveryPromise\(deliveryEndAt\)\}합니다\./,
+  );
+  assert.doesNotMatch(panelSource, /제공하며, 화요일 오전 9시까지/);
 });

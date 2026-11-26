@@ -59,7 +59,7 @@ export function RoundPurchaseListCard({
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-text)',
-                  fontWeight: 'var(--fw-medium)',
+                  fontWeight: 'var(--fw-bold)',
                 }}
               >
                 {line.productName}
@@ -97,7 +97,7 @@ export function RoundPurchaseListCard({
           style={{
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-secondary)',
-            fontWeight: 'var(--fw-medium)',
+            fontWeight: 'var(--fw-bold)',
           }}
         >
           배송지 {list.orderedDeliveryAddresses.toLocaleString()}곳 · 총{' '}

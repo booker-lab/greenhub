@@ -94,7 +94,7 @@ export function SegmentedTabs<T extends string>({
               : {
                   padding,
                   fontSize: 'var(--font-size-sm)',
-                  fontWeight: active ? 700 : 'var(--fw-medium)',
+                  fontWeight: active ? 700 : 'var(--fw-regular)',
                   textAlign: 'center',
                   borderBottom: `2px solid ${active ? 'var(--color-primary)' : 'transparent'}`,
                   color: active ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',

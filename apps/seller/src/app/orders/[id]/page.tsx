@@ -1,7 +1,6 @@
 'use client';
 
 import { readRouteParam } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import type { ReactNode } from 'react';
@@ -10,6 +9,7 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
+import { Button } from '../../../components/Button';
 import { CancelOrderModal } from './_components/CancelOrderModal';
 import { CustomerFaultClosureSection } from './_components/CustomerFaultClosureSection';
 import { DeliveryHoldModal } from './_components/DeliveryHoldModal';
@@ -64,7 +64,7 @@ export default function OrderDetailPage() {
       <DetailStatusBox>
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}
+          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}
         >
           주문 주소가 올바르지 않습니다.
         </p>
@@ -160,7 +160,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
       <DetailStatusBox>
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}
+          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}
         >
           {SELLER_ORDER_DETAIL_AUTH_ERROR}
         </p>
@@ -192,7 +192,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
       <DetailStatusBox>
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-medium)' }}
+          style={{ fontSize: 'var(--font-size-md)', fontWeight: 'var(--fw-bold)' }}
         >
           주문을 불러오지 못했습니다.
         </p>
@@ -426,7 +426,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   className="h-11 w-full"
                   style={{
                     backgroundColor: 'var(--primary)',
-                    fontWeight: 'var(--fw-medium)',
+                    fontWeight: 'var(--fw-bold)',
                   }}
                 >
                   준비 시작
@@ -440,7 +440,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   className="h-11 w-full"
                   style={{
                     backgroundColor: 'var(--primary)',
-                    fontWeight: 'var(--fw-medium)',
+                    fontWeight: 'var(--fw-bold)',
                   }}
                 >
                   택배 발송 완료
@@ -457,7 +457,7 @@ function OrderDetailContent({ orderId }: { orderId: string }) {
                   className="h-11 w-full"
                   style={{
                     backgroundColor: 'var(--primary)',
-                    fontWeight: 'var(--fw-medium)',
+                    fontWeight: 'var(--fw-bold)',
                   }}
                 >
                   재배송 준비로 돌리기
