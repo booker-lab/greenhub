@@ -42,6 +42,7 @@ const base = {
     resolvedAt: null,
   },
   redeliveryPaid: false,
+  closureEnabled: true,
 };
 
 test('재배송비를 기다리는 고객 책임 보류는 결제 마지막 날과 종결 가능성을 알린다', () => {
@@ -90,6 +91,18 @@ test('기상·상품 파손·고객 책임 아님·결제 완료·해소·택배
     { ...base, deliveryHold: { ...base.deliveryHold, heldAt: 'broken' } },
   ];
   for (const input of cases) assert.equal(customerFaultClosureWarning(input), null);
+});
+
+test('고객 사유 종결 기능이 꺼져 있으면(약관 개정 게시 전) 종결 가능성을 알리지 않는다', () => {
+  assert.equal(customerFaultClosureWarning({ ...base, closureEnabled: false }), null);
+  assert.equal(
+    customerFaultClosureWarning({
+      ...base,
+      closureEnabled: false,
+      deliveryHold: { ...base.deliveryHold, reasonCode: 'RECEIPT_REFUSED' },
+    }),
+    null,
+  );
 });
 
 test('종결 안내는 환불되지 않는 이유와 상품 처리를 알린다', () => {
