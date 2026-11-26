@@ -65,7 +65,7 @@ function ToastList() {
     >
       <div className="me-2.5 flex-1 overflow-hidden">
         {item.title ? (
-          <ToastPrimitive.Title className="m-0 mb-0.5 overflow-hidden text-sm/[1.45] font-medium text-ellipsis text-ui-gray-9" />
+          <ToastPrimitive.Title className="m-0 mb-0.5 overflow-hidden text-sm/[1.45] font-bold text-ellipsis text-ui-gray-9" />
         ) : null}
         <ToastPrimitive.Description
           className={`m-0 overflow-hidden text-sm/[1.45] font-normal text-ellipsis ${item.title ? 'text-ui-gray-6' : 'text-ui-ink'}`}

@@ -1,7 +1,7 @@
-import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import { isInviteTokenFormat } from '@/lib/seller-invite';
+import { Button, ButtonLink } from '../../../components/Button';
 import { startInviteSignup } from './actions';
 
 export const dynamic = 'force-dynamic';

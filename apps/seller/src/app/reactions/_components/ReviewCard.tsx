@@ -1,10 +1,9 @@
 import { type ManagedReview, REVIEW_HIDE_REASON_MAX_LENGTH } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { Textarea } from '@greenhub/ui/components/textarea';
-import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
+import { Button, LoadingButton } from '../../../components/Button';
+import { Field, FieldLabel } from '../../../components/Field';
 import { HIDE_POLICY_NOTE, HIDE_REASON_OPTIONS, hiddenReasonLabel, hiddenSummary } from '../_lib';
 
 // 후기 한 건. 숨기기(사유 고르기·설명 선택)와 숨김 상태를 보여준다. 상태는 부모(page)가 가진다.
@@ -46,8 +45,7 @@ const COMPACT_SM = 'h-11 min-w-11 px-3 text-[15px] leading-none';
 const RADIO_ROW =
   'items-center [&>div:first-child]:shrink-0 [&>div:last-child]:flex-1 [&_label]:flex [&_label]:min-h-11 [&_label]:items-center';
 const DEFAULT_BUTTON = 'border-input bg-background text-ui-ink hover:bg-ui-gray-0';
-const GROUP_LABEL =
-  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
+const GROUP_LABEL = 'inline-block cursor-default text-sm/[1.55] font-bold break-words text-ui-ink';
 
 export function ReviewCard({
   review,

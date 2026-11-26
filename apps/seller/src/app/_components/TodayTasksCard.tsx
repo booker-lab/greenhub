@@ -103,7 +103,7 @@ export function TodayTasksCard({
                   flex: 1,
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-text)',
-                  fontWeight: 'var(--fw-medium)',
+                  fontWeight: 'var(--fw-regular)',
                 }}
               >
                 {t.label}

@@ -2,7 +2,6 @@
 
 import type { Product } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { Switch } from '@greenhub/ui/components/switch';
 import { RefreshCcw } from 'lucide-react';
 import Image from 'next/image';
@@ -20,6 +19,7 @@ import {
   resolveStoreProductsView,
 } from '@/hooks/useStoreProducts.recovery';
 import { ApiError, apiJson } from '@/lib/api';
+import { Button, ButtonLink } from '../../components/Button';
 import { resolveProductDeleteFailure } from './_deleteResult';
 
 type ProductFilter = 'all' | 'active' | 'inactive';
@@ -162,7 +162,7 @@ export default function ProductsPage() {
                   className="m-0 mt-2.5 p-0 text-base no-underline"
                   style={{
                     color: 'var(--color-primary-dark)',
-                    fontWeight: 'var(--fw-medium)',
+                    fontWeight: 'var(--fw-bold)',
                     fontSize: 'var(--font-size-md)',
                   }}
                 >

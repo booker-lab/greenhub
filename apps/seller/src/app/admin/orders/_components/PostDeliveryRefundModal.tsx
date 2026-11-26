@@ -107,7 +107,7 @@ export function PostDeliveryRefundModal({
         </RadioGroup>
       </div>
       <Field>
-        <FieldLabel htmlFor={memoId}>메모 (손님에게는 보이지 않음, 필수)</FieldLabel>
+        <FieldLabel htmlFor={memoId}>메모 (고객에게는 보이지 않음, 필수)</FieldLabel>
         <Input
           id={memoId}
           maxLength={POST_DELIVERY_REFUND_MEMO_MAX_LENGTH}

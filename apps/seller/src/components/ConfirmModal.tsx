@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -9,6 +8,7 @@ import {
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
 import type { ReactNode } from 'react';
+import { Button } from './Button';
 
 interface ConfirmModalProps {
   opened: boolean;
@@ -91,7 +91,7 @@ export function ConfirmModal({
                 disabled={loading || confirmDisabled}
                 variant={confirm.variant}
                 className={`h-11 flex-1 ${confirm.className ?? ''}`}
-                style={{ fontWeight: 'var(--fw-medium)' }}
+                style={{ fontWeight: 'var(--fw-bold)' }}
               >
                 {loading ? '처리 중...' : confirmLabel}
               </Button>

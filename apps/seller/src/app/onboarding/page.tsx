@@ -1,7 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { Store } from 'lucide-react';
 import Image from 'next/image';
@@ -15,6 +13,8 @@ import { getFirebaseStorage } from '@/lib/firebase';
 import { logout } from '@/lib/logout';
 import { confirmSessionStore } from '@/lib/onboarding-session';
 import { useTokenRef } from '@/lib/use-token-ref';
+import { Button } from '../../components/Button';
+import { Field, FieldLabel } from '../../components/Field';
 import {
   ImageReencodeError,
   imageReencodeFailureMessage,
@@ -297,7 +297,7 @@ export default function OnboardingPage() {
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-primary-dark)',
-                      fontWeight: 'var(--fw-medium)',
+                      fontWeight: 'var(--fw-bold)',
                     }}
                   >
                     {logoUploading ? '업로드 중...' : '로고 사진 선택'}

@@ -1,7 +1,6 @@
 'use client';
 
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import { ChevronRight, RefreshCcw, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
@@ -12,6 +11,7 @@ import { PageShell } from '@/components/PageShell';
 import { SegmentedTabs } from '@/components/SegmentedTabs';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useStoreOperationIssues } from '@/hooks/useStoreOperationIssues';
+import { LoadingButton } from '../../components/Button';
 import {
   canManuallyResolve,
   manualResolverLabel,

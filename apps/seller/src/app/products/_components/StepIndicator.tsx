@@ -38,7 +38,7 @@ export function StepIndicator({ step }: { step: number }) {
                     alignItems: 'center',
                     justifyContent: 'center',
                     fontSize: 'var(--font-size-sm)',
-                    fontWeight: 'var(--fw-medium)',
+                    fontWeight: 'var(--fw-bold)',
                     color: active
                       ? 'white'
                       : done

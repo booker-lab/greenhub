@@ -1,10 +1,10 @@
 'use client';
 
-import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { ChevronLeft, Home } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import type { ReactNode } from 'react';
+import { Button, ButtonLink } from './Button';
 import { canGoBackInApp } from './inAppNavigation';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container 폭(xs 540·sm 720·md 960·lg 1140, 좌우 16px),

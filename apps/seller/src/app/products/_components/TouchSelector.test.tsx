@@ -1,6 +1,6 @@
-import { Button } from '@greenhub/ui/components/button';
 import type { ReactElement, ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
+import { Button } from '../../../components/Button';
 import TouchSelector, { type SelectionForm } from './TouchSelector';
 
 // 상품 폼 2단계(터치 선택)의 선택 버튼이 휴대폰 폭(360·390)에서 글자보다 좁아져 글자가 잘렸다.

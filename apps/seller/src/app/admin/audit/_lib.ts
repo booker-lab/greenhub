@@ -28,8 +28,8 @@ export const ACTION_LABEL: Record<string, string> = {
   'admin.store.archived': '판매자 정리',
   'admin.store.restored': '판매자 복구',
   'admin.store.sales_mode_changed': '판매 방식 변경',
-  'admin.user.suspended': '소비자 정지',
-  'admin.user.unsuspended': '소비자 정지 해제',
+  'admin.user.suspended': '고객 정지',
+  'admin.user.unsuspended': '고객 정지 해제',
   'admin.driver.approved': '기사 승인',
   'admin.driver.suspended': '기사 정지',
   'admin.driver.unsuspended': '기사 정지 해제',
@@ -46,7 +46,7 @@ export const ACTION_LABEL: Record<string, string> = {
 
 const TARGET_LABEL: Record<string, string> = {
   store: '판매자',
-  user: '소비자',
+  user: '고객',
   driver: '기사',
   order: '주문',
   settlement: '정산',
