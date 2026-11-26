@@ -67,7 +67,7 @@ function rootClassName({
 }: CommonProps & { disabled?: boolean }) {
   const s = SIZE[size];
   return cn(
-    'relative inline-block w-auto cursor-pointer overflow-hidden rounded-full border border-solid border-transparent bg-clip-border py-0 text-center align-middle font-semibold no-underline transition-none select-none disabled:opacity-100',
+    'relative inline-block w-auto cursor-pointer overflow-hidden rounded-full border border-solid border-transparent bg-clip-border py-0 text-center align-middle font-bold no-underline transition-none select-none disabled:opacity-100',
     s.root,
     // 글자 크기 유틸리티가 줄 높이도 정하므로 크기 뒤에 둔다(Mantine 버튼 줄 높이 1).
     'leading-none',
