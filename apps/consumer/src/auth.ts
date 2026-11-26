@@ -347,6 +347,9 @@ const authConfig: NextAuthConfig = {
   },
   pages: {
     signIn: '/login',
+    // 로그인 거부(AccessDenied: API 응답 실패·판매자·기사 계정 등)와 그 밖의 오류(Configuration)도 로그인 화면으로 보낸다.
+    // 지정하지 않으면 Auth.js 기본 영어 오류 화면(/api/auth/error)이 보인다(2026-11-26 검수).
+    error: '/login',
   },
 };
 

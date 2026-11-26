@@ -1427,3 +1427,10 @@ test('취소된 주문 안내는 빨강(문제 상태)이 아니라 중립 면�
   // 안내 상자의 역할(alert)은 DetailAlert가 그대로 준다.
   assert.match(source, /function DetailAlert\([\s\S]*?role="alert"/);
 });
+
+test('배송 보류·취소 주문 상세는 지난 배송 예정일 줄을 보이지 않는다', () => {
+  assert.match(
+    source,
+    /\{deliveryDateText && !isCancelled && detail\.status !== 'DELIVERY_HELD' && \(/,
+  );
+});
