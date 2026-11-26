@@ -1,5 +1,8 @@
 import { Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
+  CUSTOMER_FAULT_CLOSURE_ENABLED_ENV,
+  isLegalGatedFeatureEnabled,
   isProductionRuntime,
   RuntimeConfigurationError,
   resolveAdcProjectIds,
@@ -373,5 +376,20 @@ describe('배포 커밋 SHA', () => {
     ).toBeNull();
     expect(resolveDeployedCommitSha({ GREENHUB_COMMIT_SHA: 'not a sha' })).toBeNull();
     expect(resolveDeployedCommitSha({})).toBeNull();
+  });
+});
+
+describe('법무 검토 전 기능 스위치', () => {
+  it('고객 사유 종결은 정확히 문자열 true일 때만 켠다', () => {
+    const key = CUSTOMER_FAULT_CLOSURE_ENABLED_ENV;
+    expect(isLegalGatedFeatureEnabled(new ConfigService({ [key]: 'true' }), key)).toBe(true);
+    for (const value of [undefined, '', 'false', 'TRUE', 'True', ' true', 'true ', '1', 'yes']) {
+      expect(isLegalGatedFeatureEnabled(new ConfigService({ [key]: value }), key)).toBe(false);
+    }
+  });
+
+  it('설정이 없으면 끈 것으로 본다', () => {
+    expect(isLegalGatedFeatureEnabled(undefined, CUSTOMER_FAULT_CLOSURE_ENABLED_ENV)).toBe(false);
+    expect(isLegalGatedFeatureEnabled(null, CUSTOMER_FAULT_CLOSURE_ENABLED_ENV)).toBe(false);
   });
 });
