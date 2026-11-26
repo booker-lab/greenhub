@@ -4,7 +4,9 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   customerFaultClosureEligibleAtMs,
   customerFaultClosureReasonFor,
@@ -15,6 +17,10 @@ import {
   type CustomerFaultClosureEligibility,
   type CustomerFaultClosureRecord,
 } from '@greenhub/shared';
+import {
+  CUSTOMER_FAULT_CLOSURE_ENABLED_ENV,
+  isLegalGatedFeatureEnabled,
+} from '../config/runtime-config';
 import { FirestoreService } from '../firestore/firestore.service';
 import { OrderChargePaymentService } from '../payments/order-charge-payment.service';
 import { timestampMillis } from '../sale-rounds/sale-round-state.contract';
@@ -28,6 +34,30 @@ import {
 } from './redelivery-resume-gate';
 
 type OrderRecord = Record<string, any>;
+
+/** 기능이 꺼져 있을 때 종결 요청에 붙이는 오류 코드. */
+export const CUSTOMER_FAULT_CLOSURE_DISABLED = 'CUSTOMER_FAULT_CLOSURE_DISABLED';
+
+export function customerFaultClosureDisabled(): ForbiddenException {
+  return new ForbiddenException({
+    statusCode: 403,
+    message: '환불 없는 종결은 약관 개정 뒤 사용할 수 있습니다.',
+    error: 'Forbidden',
+    code: CUSTOMER_FAULT_CLOSURE_DISABLED,
+  });
+}
+
+/**
+ * 기능이 꺼져 있을 때의 판정. 이미 종결한 주문(ALREADY_CLOSED)은 기록과 정산 다시 맞추기를 위해 그대로 두고,
+ * 그 밖의 주문은 종결할 수 없음(FEATURE_DISABLED)으로 바꾼다.
+ */
+export function applyCustomerFaultClosureSwitch(
+  decision: CustomerFaultClosureEligibility,
+  enabled: boolean,
+): CustomerFaultClosureEligibility {
+  if (enabled || decision.reason === 'ALREADY_CLOSED') return decision;
+  return { ...decision, eligible: false, reason: 'FEATURE_DISABLED' };
+}
 
 /** 결제를 시작한 재배송비(PENDING)를 진행 중으로 보는 시간. 지나면 버려진 결제로 보고 종결을 허용한다. */
 export const REDELIVERY_PAYMENT_IN_PROGRESS_MS = 24 * 60 * 60 * 1000;
@@ -186,7 +216,10 @@ export function isRoundCancellationStarted(round: OrderRecord | undefined): bool
   return status === 'CANCELLING' || status === 'LOCAL_FAILED';
 }
 
-const BLOCK_MESSAGES: Record<Exclude<CustomerFaultClosureBlockReason, 'OK'>, string> = {
+const BLOCK_MESSAGES: Record<
+  Exclude<CustomerFaultClosureBlockReason, 'OK' | 'FEATURE_DISABLED'>,
+  string
+> = {
   ALREADY_CLOSED: '이미 종결한 주문입니다.',
   NOT_ROUND_ORDER: '고객 사유 종결은 회차 주문만 할 수 있습니다.',
   NOT_DIRECT_DELIVERY: '고객 사유 종결은 직배송 주문만 할 수 있습니다.',
@@ -215,6 +248,10 @@ const BLOCK_MESSAGES: Record<Exclude<CustomerFaultClosureBlockReason, 'OK'>, str
  *
  * 손님 알림은 보내지 않는다. 기존 알림톡 템플릿(ORDER_CANCELLED)은 환불을 안내하므로 맞지 않고,
  * 새 템플릿은 외부(카카오·ALIGO) 승인이 필요하다. 손님은 주문 상세 화면에서 종결 안내를 본다.
+ *
+ * 법무 검토 전 기능이라 CUSTOMER_FAULT_CLOSURE_ENABLED='true'일 때만 판정·종결한다(2026-11-26 사용자 결정).
+ * 꺼져 있으면 GET은 FEATURE_DISABLED(이미 종결한 주문은 ALREADY_CLOSED 그대로), POST는 403
+ * CUSTOMER_FAULT_CLOSURE_DISABLED로 주문을 건드리지 않는다. 이미 종결한 주문의 정산 다시 맞추기(같은 POST)는 받는다.
  */
 @Injectable()
 export class CustomerFaultClosureService {
@@ -223,7 +260,14 @@ export class CustomerFaultClosureService {
     private readonly capacity: OrderCapacityService,
     private readonly settlements: SettlementsService,
     private readonly chargePayments: OrderChargePaymentService,
+    // 설정이 없으면(테스트에서 직접 만든 서비스 등) 기능이 꺼진 것으로 본다(fail closed).
+    @Optional() private readonly config?: ConfigService,
   ) {}
+
+  /** 고객 사유 종결 기능 스위치(CUSTOMER_FAULT_CLOSURE_ENABLED). 정확히 'true'일 때만 켠다. */
+  isEnabled(): boolean {
+    return isLegalGatedFeatureEnabled(this.config, CUSTOMER_FAULT_CLOSURE_ENABLED_ENV);
+  }
 
   async getEligibility(storeId: string, orderId: string): Promise<CustomerFaultClosureEligibility> {
     const orderSnap = await this.firestore.doc(`orders/${orderId}`).get();
@@ -241,7 +285,10 @@ export class CustomerFaultClosureService {
         data: chargeSnap.exists ? (chargeSnap.data() as OrderRecord) : null,
       };
     }
-    const decision = decideCustomerFaultClosure(order, charge, Date.now());
+    const decision = applyCustomerFaultClosureSwitch(
+      decideCustomerFaultClosure(order, charge, Date.now()),
+      this.isEnabled(),
+    );
     if (decision.reason === 'ALREADY_CLOSED') {
       // 종결 뒤 정산 생성이 실패했으면 판매자 화면이 "정산 다시 맞추기"를 보인다.
       return {
@@ -255,6 +302,11 @@ export class CustomerFaultClosureService {
   async close(input: CustomerFaultClosureInput) {
     const memo = input.memo.trim();
     if (!memo) throw new BadRequestException('손님과 연락한 내용을 적어 주세요.');
+
+    // 기능이 꺼져 있으면 이미 종결한 주문의 정산 다시 맞추기만 받는다. 종결 전 주문은 PortOne 확인(뒤늦은
+    // 결제 확정이 주문을 바꿀 수 있다)이나 트랜잭션 전에 거절해 주문을 건드리지 않는다.
+    const enabled = this.isEnabled();
+    if (!enabled) await this.assertAlreadyClosedWhileDisabled(input);
 
     await this.confirmPendingChargeWithProvider(input);
 
@@ -270,6 +322,8 @@ export class CustomerFaultClosureService {
         // 이미 종결됨: 집계·주문은 건드리지 않고 정산만 이어서 맞춘다.
         return { order, alreadyClosed: true };
       }
+      // 기능이 꺼져 있으면 트랜잭션 안에서도 다시 막는다(앞 확인과 이 읽기 사이에 상태가 바뀐 경우).
+      if (!enabled) throw customerFaultClosureDisabled();
 
       const chargeId = this.currentChargeId(order);
       let charge: ChargeRead = null;
@@ -355,6 +409,17 @@ export class CustomerFaultClosureService {
    * 해야 한다), 확인하지 못하면 거절한다(fail closed). 결제되지 않았으면 트랜잭션이 청구를 다시 읽어
    * 기존 판정표(24시간 진행 중 등)를 그대로 적용한다.
    */
+  /** 기능이 꺼져 있을 때: 없는 주문은 404, 종결 전 주문은 403 CUSTOMER_FAULT_CLOSURE_DISABLED. */
+  private async assertAlreadyClosedWhileDisabled(input: CustomerFaultClosureInput) {
+    const orderSnap = await this.firestore.doc(`orders/${input.orderId}`).get();
+    if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {
+      throw new NotFoundException();
+    }
+    if (orderSnap.data()?.['status'] !== CUSTOMER_FAULT_CLOSED_STATUS) {
+      throw customerFaultClosureDisabled();
+    }
+  }
+
   private async confirmPendingChargeWithProvider(input: CustomerFaultClosureInput) {
     const orderSnap = await this.firestore.doc(`orders/${input.orderId}`).get();
     if (!orderSnap.exists || orderSnap.data()?.['storeId'] !== input.storeId) {

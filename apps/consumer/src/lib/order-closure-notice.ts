@@ -34,6 +34,11 @@ export interface ClosureWarningInput {
   } | null;
   /** 재배송비 결제가 끝났으면 종결 경고를 보이지 않는다. */
   redeliveryPaid: boolean;
+  /**
+   * API의 고객 사유 종결 기능 스위치. 꺼져 있으면(약관 개정 게시 전) 종결 가능성을 알리지 않는다.
+   * 이미 종결된 주문의 안내(CLOSED_UNDELIVERED)는 이 값과 상관없이 보인다.
+   */
+  closureEnabled: boolean;
 }
 
 /**
@@ -43,6 +48,7 @@ export interface ClosureWarningInput {
 export function customerFaultClosureWarning(input: ClosureWarningInput): string | null {
   const hold = input.deliveryHold;
   if (
+    !input.closureEnabled ||
     !input.isRoundOrder ||
     input.deliveryMethod !== 'direct' ||
     (input.status !== 'DELIVERY_HELD' && input.status !== 'PREPARING') ||

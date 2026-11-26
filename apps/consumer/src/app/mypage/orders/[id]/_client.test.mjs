@@ -1427,3 +1427,19 @@ test('취소된 주문 안내는 빨강(문제 상태)이 아니라 중립 면�
   // 안내 상자의 역할(alert)은 DetailAlert가 그대로 준다.
   assert.match(source, /function DetailAlert\([\s\S]*?role="alert"/);
 });
+
+test('고객 사유 종결 기능 스위치는 서버가 true를 보냈을 때만 켠 것으로 읽는다', () => {
+  assert.equal(readOrderDetail(activeOrder, activeOrder.id).customerFaultClosureEnabled, false);
+  for (const value of [false, 'true', 1, null]) {
+    assert.equal(
+      readOrderDetail({ ...activeOrder, customerFaultClosureEnabled: value }, activeOrder.id)
+        .customerFaultClosureEnabled,
+      false,
+    );
+  }
+  assert.equal(
+    readOrderDetail({ ...activeOrder, customerFaultClosureEnabled: true }, activeOrder.id)
+      .customerFaultClosureEnabled,
+    true,
+  );
+});
