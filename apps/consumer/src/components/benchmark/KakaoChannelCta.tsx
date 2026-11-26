@@ -20,18 +20,20 @@ export default function KakaoChannelCta({
       className={compact ? 'p-3' : 'p-4'}
       style={{
         alignItems: 'center',
-        background: 'var(--color-deadline-surface)',
+        // 노랑은 주문 마감에만 쓴다(design-direction.md §3.1). 상자는 연회색 면이고, 채널 추가 버튼만 카카오 노랑이다.
+        background: 'var(--color-surface-muted)',
         borderRadius: 'var(--radius)',
         display: 'flex',
         gap: 12,
         justifyContent: 'space-between',
       }}
     >
-      <div style={{ minWidth: 0 }}>
+      {/* 좁은 폭에서 "알려드려 / 요"처럼 낱말 중간에서 줄이 바뀌지 않게 낱말 단위로 줄을 바꾼다. */}
+      <div className="break-keep" style={{ minWidth: 0 }}>
         <p
           className="m-0 p-0 leading-[1.55]"
           style={{
-            color: 'var(--color-deadline-text)',
+            color: 'var(--color-text)',
             fontSize: 'var(--font-size-sm)',
             fontWeight: 'var(--fw-bold)',
           }}

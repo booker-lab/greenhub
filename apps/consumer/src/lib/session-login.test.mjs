@@ -9,7 +9,8 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const module = { exports: {} };
 new Function('module', 'exports', compiled)(module, module.exports);
-const { buildSessionExpiredLoginUrl, isSessionExpiredReason, hasActiveSession } = module.exports;
+const { buildSessionExpiredLoginUrl, isSessionExpiredReason, hasActiveSession, loginErrorMessage } =
+  module.exports;
 
 const parse = (url) => {
   const parsed = new URL(url, 'https://shop.example.test');
@@ -86,5 +87,18 @@ test('로그인 화면을 건너뛸 세션: 소비자·관리자 역할이 있�
     { user: { role: 'consumer', tokenError: true } },
   ]) {
     assert.equal(hasActiveSession(session), false, JSON.stringify(session));
+  }
+});
+
+test('로그인 실패 표시(error)를 손님 안내로 바꾸고 오류 이름은 보이지 않는다', () => {
+  const phone = '010-0000-0000';
+  assert.equal(loginErrorMessage(null, phone), null);
+  assert.equal(loginErrorMessage('', phone), null);
+  assert.equal(loginErrorMessage('CredentialsSignin', phone), '이메일 또는 비밀번호를 확인해 주세요.');
+  for (const error of ['AccessDenied', 'Configuration', 'OAuthCallbackError', '<script>']) {
+    const message = loginErrorMessage(error, phone);
+    assert.match(message, /^카카오 로그인을 마치지 못했어요\./, error);
+    assert.match(message, /010-0000-0000/, error);
+    assert.ok(!message.includes(error), error);
   }
 });
