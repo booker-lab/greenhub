@@ -30,6 +30,16 @@ export function buildSessionExpiredLoginUrl(pathname: string, search: string): s
   return `${LOGIN_PATH}?${params.toString()}`;
 }
 
+/**
+ * 로그인 화면 주소의 error 값(Auth.js가 로그인 실패 때 붙인다)을 손님 안내로 바꾼다. 없으면 null.
+ * 오류 종류 이름은 화면에 그대로 보이지 않는다. 이메일 로그인 실패 말고는 모두 카카오 로그인 실패로 안내한다.
+ */
+export function loginErrorMessage(error: string | null | undefined, phone: string): string | null {
+  if (!error) return null;
+  if (error === 'CredentialsSignin') return '이메일 또는 비밀번호를 확인해 주세요.';
+  return `카카오 로그인을 마치지 못했어요. 잠시 후 다시 시도해 주세요. 계속 안 되면 고객센터(${phone})로 알려 주세요.`;
+}
+
 /** 로그인 화면 주소의 reason 값이 세션 만료인지. */
 export function isSessionExpiredReason(reason: string | null | undefined): boolean {
   return reason === SESSION_EXPIRED_REASON;

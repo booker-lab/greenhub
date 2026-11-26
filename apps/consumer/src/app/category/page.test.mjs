@@ -48,7 +48,7 @@ test('round_direct 분기는 로딩·오류·빈 상태를 명확히 처리한�
   assert.match(roundDirectSource, /판매 회차 불러오는 중/);
   assert.match(roundDirectSource, /role="alert"/);
   assert.match(roundDirectSource, /다시 시도/);
-  assert.match(roundDirectSource, /판매 중인 호접란이 없습니다/);
+  assert.match(roundDirectSource, /판매 중인 상품이 없습니다/);
 });
 
 test('round_direct 분기에는 공동구매·택배·거점픽업·전체 상품 목록이 없다', () => {

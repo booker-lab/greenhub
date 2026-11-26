@@ -243,7 +243,7 @@ function RoundDirectCategory({
       <div className={EMPTY_STACK}>
         <EmptyStateIcon icon={Sprout} />
         <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
-          현재 또는 지난 판매 회차에 판매 중인 호접란이 없습니다.
+          현재 또는 지난 판매 회차에 판매 중인 상품이 없습니다.
         </p>
       </div>
     );
@@ -328,7 +328,7 @@ function RoundDirectCategory({
           </div>
         ) : (
           <p className={`${TEXT_SM} py-4`} style={{ color: 'var(--color-text-secondary)' }}>
-            현재 회차에 판매 중인 호접란이 없습니다.
+            현재 회차에 판매 중인 상품이 없습니다.
           </p>
         )}
       </section>
@@ -360,7 +360,7 @@ function RoundDirectCategory({
           </div>
         ) : (
           <p className={`${TEXT_SM} py-4`} style={{ color: 'var(--color-text-secondary)' }}>
-            지난 회차에 공개된 호접란이 없습니다.
+            지난 회차에 공개된 상품이 없습니다.
           </p>
         )}
       </section>
