@@ -1,5 +1,5 @@
-import { ButtonLink } from '@greenhub/ui/components/button';
 import { describeSignInError } from '@/lib/seller-invite';
+import { ButtonLink } from '../../../components/Button';
 
 export const dynamic = 'force-dynamic';
 

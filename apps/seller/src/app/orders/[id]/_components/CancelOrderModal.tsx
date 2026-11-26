@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -9,6 +8,7 @@ import {
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
 import { Textarea } from '@greenhub/ui/components/textarea';
+import { Button } from '../../../../components/Button';
 
 interface CancelOrderModalProps {
   opened: boolean;
@@ -64,7 +64,7 @@ export function CancelOrderModal({
                 style={{
                   fontSize: 'var(--font-size-sm)',
                   color: 'var(--color-text)',
-                  fontWeight: 'var(--fw-medium)',
+                  fontWeight: 'var(--fw-bold)',
                 }}
               >
                 {note}
@@ -98,7 +98,7 @@ export function CancelOrderModal({
                 onClick={onConfirm}
                 disabled={actionLoading || cancelReason.trim().length < 5}
                 className="flex-1"
-                style={{ fontWeight: 'var(--fw-medium)' }}
+                style={{ fontWeight: 'var(--fw-bold)' }}
               >
                 {actionLoading ? '처리 중...' : '취소 확정'}
               </Button>

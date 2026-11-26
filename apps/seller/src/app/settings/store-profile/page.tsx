@@ -2,20 +2,20 @@
 
 import type { StoreProfileExtras } from '@greenhub/shared';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
-import { notify } from '@/components/AppToaster';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import { useTokenRef } from '@/lib/use-token-ref';
+import { LoadingButton } from '../../../components/Button';
+import { Field, FieldLabel } from '../../../components/Field';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·Paper(radius lg·p md; 그림자는 ② D2로 걷음)·
 // Stack(gap sm)·Text(sm = 15px·줄 높이 1.45)·TextInput·Textarea(autosize, 라벨)·Checkbox green(green-6)과 같은 값.

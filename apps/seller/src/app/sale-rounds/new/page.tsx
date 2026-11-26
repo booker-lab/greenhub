@@ -1,7 +1,6 @@
 'use client';
 
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import { AlertTriangle, PackagePlus } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -12,6 +11,7 @@ import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { type CreateSaleRoundInput, useSaleRounds } from '@/hooks/useSaleRounds';
 import { useStoreProducts } from '@/hooks/useStoreProducts';
+import { Button, ButtonLink } from '../../../components/Button';
 import { RoundForm } from '../[id]/RoundForm';
 import { RoundSalesModeNotice } from '../RoundSalesModeNotice';
 import { buildNewRoundTemplate } from './new-round.logic';

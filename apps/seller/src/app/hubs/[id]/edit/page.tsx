@@ -1,8 +1,6 @@
 'use client';
 
 import { apiPathSegment, readRouteParam } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -11,6 +9,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
+import { Button } from '../../../../components/Button';
+import { Field, FieldLabel } from '../../../../components/Field';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Paper(lg·sm·lg)·Stack(md)·TextInput(radius xl)·Text·Button과 같은 값.
 // 라벨은 Mantine처럼 inline-block이다(글자 뒤에 붙인 "(선택)"과 사이가 한 칸). 필수 칸의 빨간 별표는 FieldLabel required가 하나만 붙인다.

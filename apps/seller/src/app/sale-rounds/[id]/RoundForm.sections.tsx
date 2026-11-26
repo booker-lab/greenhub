@@ -2,8 +2,6 @@
 
 import type { MarketPriceSummary, Product, SaleRoundDeliveryRegion } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { NumberInput } from '@greenhub/ui/components/number-input';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
@@ -11,6 +9,8 @@ import { Switch } from '@greenhub/ui/components/switch';
 import { Copy, Link2, PackagePlus, Trash2 } from 'lucide-react';
 import { type ReactNode, useId } from 'react';
 import { checkRoundPrice, MARKET_PRICE_SOURCE, roundPriceCheckText } from '@/lib/market-price';
+import { Button } from '../../../components/Button';
+import { Field, FieldLabel } from '../../../components/Field';
 
 export type NumericValue = number | string;
 
@@ -166,7 +166,7 @@ export function DeliveryRegionSection({
       description="이 회차에서 주문을 받는 지역입니다. 끄면 이 지역 주문을 받지 않습니다."
     >
       <div className="flex flex-row flex-nowrap items-center justify-between gap-4">
-        <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+        <p className={TEXT} style={{ fontWeight: 'var(--fw-bold)' }}>
           {region.label}
         </p>
         {/* Mantine Switch sm + 오른쪽 라벨(15px·줄 높이 20px·왼쪽 12px, 잠기면 gray-5). */}
@@ -323,7 +323,7 @@ export function ProductsSection({
             <div className={`${COLUMN} gap-3`}>
               <div className="flex flex-row flex-nowrap items-start justify-between gap-4">
                 <div>
-                  <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+                  <p className={TEXT} style={{ fontWeight: 'var(--fw-bold)' }}>
                     {item.name}
                   </p>
                   {basePrice !== undefined && (
@@ -396,7 +396,7 @@ export function ProductsSection({
       <div className={`${COLUMN} gap-2.5`}>
         <p
           className={TEXT}
-          style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
+          style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
         >
           추가 가능한 상품
         </p>
@@ -466,7 +466,7 @@ function LinkRow({
           <div style={{ minWidth: 0 }}>
             <p
               className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
+              style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
             >
               {label}
             </p>

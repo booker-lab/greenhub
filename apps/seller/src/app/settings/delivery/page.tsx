@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { Switch } from '@greenhub/ui/components/switch';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -9,6 +8,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { ApiError, apiJson } from '@/lib/api';
+import { Button } from '../../../components/Button';
 
 interface DeliveryConfig {
   directFee: number;
@@ -116,7 +116,7 @@ export default function DeliverySettingsPage() {
               className={`${TEXT} mb-4`}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
+                fontWeight: 'var(--fw-bold)',
                 color: 'var(--color-text-secondary)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
@@ -191,7 +191,7 @@ export default function DeliverySettingsPage() {
               className={`${TEXT} mb-4`}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
+                fontWeight: 'var(--fw-bold)',
                 color: 'var(--color-text-secondary)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
@@ -268,7 +268,7 @@ export default function DeliverySettingsPage() {
                   className={TEXT}
                   style={{
                     fontSize: 'var(--font-size-sm)',
-                    fontWeight: 'var(--fw-medium)',
+                    fontWeight: 'var(--fw-bold)',
                     color: 'var(--color-text)',
                   }}
                 >

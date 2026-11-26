@@ -8,8 +8,6 @@ import {
   POST_DELIVERY_REFUND_REASON_LABEL,
   type PostDeliveryRefundReasonCode,
 } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
-import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import {
   Dialog,
   DialogBody,
@@ -17,11 +15,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
+import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useId, useState } from 'react';
 import { apiJson } from '@/lib/api';
+import { Button } from '../../../../components/Button';
+import { Field, FieldLabel } from '../../../../components/Field';
 import {
   canSubmitPostDeliveryRefund,
   formatRefundDeadline,
@@ -47,8 +47,7 @@ const TEXT = 'm-0 p-0 text-base font-normal';
 // 라디오·체크 줄은 누르는 높이를 44px로 잡는다. 동그라미·네모(20px)는 그대로 두고 라벨이 줄 전체를 덮는다.
 const RADIO_ROW =
   'items-center [&>div:first-child]:shrink-0 [&>div:last-child]:flex-1 [&_label]:flex [&_label]:min-h-11 [&_label]:items-center';
-const GROUP_LABEL =
-  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
+const GROUP_LABEL = 'inline-block cursor-default text-sm/[1.55] font-bold break-words text-ui-ink';
 
 /**
  * 배송 완료 주문의 "배송 후 환불" 버튼과 확인 창(계획서 R6).

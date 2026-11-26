@@ -1,7 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -9,6 +7,8 @@ import { useId, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { ApiError, apiJson } from '@/lib/api';
+import { Button } from '../../../components/Button';
+import { Field, FieldLabel } from '../../../components/Field';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(xs 540px)·Group·ActionIcon·Title order 2·Paper(lg·sm·lg)·Stack·
 // TextInput(radius xl)·Text·Button과 같은 값을 Tailwind와 @greenhub/ui로 그린다.

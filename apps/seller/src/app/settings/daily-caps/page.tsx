@@ -1,14 +1,14 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
-import { notify } from '@/components/AppToaster';
+import { todayKST } from '@greenhub/shared';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useCallback, useEffect, useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
-import { todayKST } from '@greenhub/shared';
 import { ApiError, apiJson } from '@/lib/api';
+import { Button } from '../../../components/Button';
 import { currentMonthKST } from './_lib';
 
 // ① 외형 유지(UI 교체 P2b): Mantine Text(p, 여백 0)·Paper(그림자는 ② D2로 걷음)·UnstyledButton·SimpleGrid(7칸, 간격 16) 값.
@@ -182,7 +182,7 @@ export default function DailyCapsPage() {
             >
               {BACK_ICON('M15 18l-6-6 6-6')}
             </Button>
-            <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+            <p className={TEXT} style={{ fontWeight: 'var(--fw-bold)' }}>
               {monthLabel}
             </p>
             <Button
@@ -251,7 +251,7 @@ export default function DailyCapsPage() {
                         className={TEXT}
                         style={{
                           fontSize: 'var(--font-size-sm)',
-                          fontWeight: 'var(--fw-medium)',
+                          fontWeight: 'var(--fw-regular)',
                           color: isToday
                             ? 'var(--color-primary-dark)'
                             : 'var(--color-text-secondary)',
@@ -263,7 +263,7 @@ export default function DailyCapsPage() {
                         className={`${TEXT} mt-0.5`}
                         style={{
                           fontSize: 'var(--font-size-sm)',
-                          fontWeight: cap ? 'var(--fw-medium)' : undefined,
+                          fontWeight: cap ? 'var(--fw-bold)' : undefined,
                           color: cap
                             ? 'var(--color-status-info-text)'
                             : 'var(--color-text-secondary)',
@@ -297,7 +297,7 @@ export default function DailyCapsPage() {
               className={`${TEXT} mb-3`}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
+                fontWeight: 'var(--fw-bold)',
                 color: 'var(--color-text)',
               }}
             >

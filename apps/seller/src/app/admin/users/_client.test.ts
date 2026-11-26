@@ -22,7 +22,7 @@ describe('AdminUsersClient 조회 실패/복구 배선', () => {
     // loading 분기가 먼저 early return하므로 error 분기는 loading이 아닐 때만 그려진다.
     expect(source).toContain('if (error !== null)');
     expect(source.indexOf('if (loading)')).toBeLessThan(source.indexOf('if (error !== null)'));
-    expect(source).toContain('<AdminListError title="소비자 목록을 불러오지 못했습니다."');
+    expect(source).toContain('<AdminListError title="고객 목록을 불러오지 못했습니다."');
     expect(source).toContain('error={error}');
     expect(source).toContain('onRetry={reload}');
     // 공통 AdminListError가 다시 조회 버튼을 onRetry에 연결한다.

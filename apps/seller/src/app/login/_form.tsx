@@ -1,12 +1,12 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { Input } from '@greenhub/ui/components/input';
 import { PasswordInput } from '@greenhub/ui/components/password-input';
 import { useRouter } from 'next/navigation';
 import { getSession, signIn } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import { kakaoCallbackUrl, postLoginPath } from '@/lib/admin-landing';
+import { Button } from '../../components/Button';
 
 // ① 외형 유지(UI 교체 P4): Mantine Stack(gap md·sm)·Button md(radius xl, 꽉 찬 폭, 왼쪽 그림)·
 // Divider(가운데 글자)·TextInput·PasswordInput md(radius xl)·Text와 같은 값.

@@ -33,7 +33,7 @@ export function buildAdminNavGroups(features: {
       label: '사람과 가게',
       items: [
         { href: '/admin/stores', label: '판매자' },
-        { href: '/admin/users', label: '소비자' },
+        { href: '/admin/users', label: '고객' },
         { href: '/admin/invite', label: '초대' },
         ...(features.partnerInquiry
           ? [{ href: '/admin/partner-inquiries', label: '입점 문의' }]

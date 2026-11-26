@@ -75,7 +75,7 @@ export default function BottomNav() {
                   style={{
                     fontSize: 'var(--font-size-sm)',
                     // 안 고른 탭도 보조 글자(틀 위 4.8:1)라 초록(5.0:1)과 밝기가 거의 같다. 고른 탭은 색만이 아니라 굵기로도 구분한다.
-                    fontWeight: isActive ? 'var(--fw-bold)' : 'var(--fw-medium)',
+                    fontWeight: isActive ? 'var(--fw-bold)' : 'var(--fw-regular)',
                     color: isActive ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
                   }}
                 >
