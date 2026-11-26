@@ -12,6 +12,7 @@ import { signIn, useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
 import { isFeatureOn } from '@/lib/features';
 import { hasActiveSession, isSessionExpiredReason } from '@/lib/session-login';
+import { TOUCH_HEIGHT } from '@/lib/touch-target';
 import { isOrderCallback, safeCallbackPath, signedInRedirectPath } from './_callback-url';
 
 // ① 외형 유지(UI 교체 P5): Mantine Stack(gap sm 12)·Button lg(radius xl)·Divider(가운데 글자 xs)·
@@ -127,6 +128,7 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="example@email.com"
+                  className={TOUCH_HEIGHT}
                 />
               </div>
               <div>
@@ -136,6 +138,8 @@ export function LoginForm({ showCredentials }: { showCredentials: boolean }) {
                 <PasswordInput
                   id={passwordId}
                   size="sm"
+                  // 누르는 높이 44px(design-standard §4). 글자 줄 높이도 칸에 맞춘다.
+                  boxClassName={`${TOUCH_HEIGHT} min-h-11 leading-[42px]`}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
