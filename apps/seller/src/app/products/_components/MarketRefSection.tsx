@@ -2,18 +2,18 @@
 
 import { FLOWER_MARKET_GUBN_LABELS, FLOWER_MARKET_GUBNS } from '@greenhub/shared';
 import { Autocomplete } from '@greenhub/ui/components/autocomplete';
-import { Field, FieldDescription, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { NativeSelect } from '@greenhub/ui/components/native-select';
 import { useId } from 'react';
 import { useMarketCatalog, useMarketLookup } from '@/hooks/useMarketPrices';
 import {
   MARKET_PRICE_SOURCE,
-  marketLookupQuery,
   type MarketRefForm,
+  marketLookupQuery,
   marketSummaryLines,
   marketUnitLabel,
 } from '@/lib/market-price';
+import { Field, FieldDescription, FieldLabel } from '../../../components/Field';
 import { FieldCard } from './FormPrimitives';
 
 // 다른 상품 편집 칸과 같은 글자(Text p, 여백 0)와 입력칸 모양(md, rounded-xl)을 쓴다.

@@ -89,7 +89,7 @@ export function AdminShell({
         <div className="flex items-center gap-4 text-sm">
           {showSellerLink && (
             <a href="/orders" className="text-foreground underline underline-offset-4">
-              셀러 화면으로
+              판매자 화면으로
             </a>
           )}
           <AdminLogoutButton />

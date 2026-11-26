@@ -1,9 +1,7 @@
 'use client';
 
 import type { OptionStock } from '@greenhub/shared';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
 import { notify } from '@/components/AppToaster';
@@ -11,6 +9,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { apiJson } from '@/lib/api';
+import { LoadingButton } from '../../../components/Button';
+import { Field, FieldLabel } from '../../../components/Field';
 import {
   describeStockCounts,
   OPTION_STOCK_NAME_MAX_LENGTH,

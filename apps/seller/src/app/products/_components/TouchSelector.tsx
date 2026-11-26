@@ -2,8 +2,8 @@
 
 import { COLOR_OPTIONS } from '@greenhub/shared';
 import { Badge } from '@greenhub/ui/components/badge';
-import { Button, ButtonLabel } from '@greenhub/ui/components/button';
 import { Input } from '@greenhub/ui/components/input';
+import { Button, ButtonLabel } from '../../../components/Button';
 
 const STEM_OPTIONS = [
   { value: '외대', label: '외대', desc: '1줄기' },
@@ -60,7 +60,7 @@ const OPTION_BUTTON = 'h-11 min-w-fit flex-1 px-2';
 const STEM_BUTTON = 'h-auto min-h-11 min-w-fit flex-1 px-2 py-1';
 const LABEL_STYLE = {
   fontSize: 'var(--font-size-sm)',
-  fontWeight: 'var(--fw-medium)',
+  fontWeight: 'var(--fw-bold)',
   color: 'var(--color-text-secondary)',
 } as const;
 

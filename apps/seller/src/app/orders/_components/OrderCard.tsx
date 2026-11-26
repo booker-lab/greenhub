@@ -135,7 +135,7 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
           <AlertDescription>
             <p
               className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
+              style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
             >
               공동구매 모집 중
             </p>
@@ -162,7 +162,7 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
             style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-primary-dark)',
-              fontWeight: 'var(--fw-medium)',
+              fontWeight: 'var(--fw-bold)',
             }}
           >
             픽업 코드

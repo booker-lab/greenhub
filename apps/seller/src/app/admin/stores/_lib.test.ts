@@ -214,7 +214,7 @@ describe('판매자 검색·연락처·정리하기 안내', () => {
       status: 'active',
     });
     expect(view.title).toBe('난플렉스 판매자 정리하기');
-    expect(view.lead).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다');
+    expect(view.lead).toContain('고객 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다');
     expect(view.lead).toContain('계속 로그인할 수 있고');
     expect(view.note).toContain(
       '기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다',
@@ -240,7 +240,7 @@ describe('판매자 검색·연락처·정리하기 안내', () => {
   it('복구 확인창은 다시 보이고 주문을 받는다고 알린다', () => {
     const view = describeRestoreConfirm({ name: '난플렉스', status: 'archived' });
     expect(view.title).toBe('난플렉스 판매자 복구');
-    expect(view.lead).toContain('손님 화면에 다시 보이고 새 주문을 받습니다');
+    expect(view.lead).toContain('고객 화면에 다시 보이고 새 주문을 받습니다');
     expect(view.confirmLabel).toBe('난플렉스 복구');
   });
 });
@@ -272,11 +272,11 @@ describe('판매 방식 전환', () => {
     expect(SALES_MODE_LABEL).toEqual({ legacy: '예전 방식', round_direct: '회차 판매' });
   });
 
-  it('예전 방식 가게 확인창은 회차가 손님에게 보인다고 알리고 막힘 안내는 없다', () => {
+  it('예전 방식 가게 확인창은 회차가 고객에게 보인다고 알리고 막힘 안내는 없다', () => {
     const view = describeSalesModeConfirm(base);
     expect(view.target).toBe('round_direct');
     expect(view.title).toBe('디어 오키드 회차 판매로 바꾸기');
-    expect(view.lead).toContain('회차 판매로 바꾸면 손님에게 회차가 보여요');
+    expect(view.lead).toContain('회차 판매로 바꾸면 고객에게 회차가 보여요');
     expect(view.facts).toEqual([
       { label: '상호', value: '디어 오키드' },
       { label: '지금 판매 방식', value: '예전 방식' },
@@ -290,7 +290,7 @@ describe('판매 방식 전환', () => {
     const view = describeSalesModeConfirm(withMode('round_direct'));
     expect(view.target).toBe('legacy');
     expect(view.title).toBe('디어 오키드 예전 방식으로 바꾸기');
-    expect(view.lead).toContain('예전 방식으로 바꾸면 회차가 손님에게서 숨겨져요');
+    expect(view.lead).toContain('예전 방식으로 바꾸면 회차가 고객에게서 숨겨져요');
     expect(view.facts[1]).toEqual({ label: '지금 판매 방식', value: '회차 판매' });
     expect(view.facts[2]).toEqual({ label: '바꿀 판매 방식', value: '예전 방식' });
     expect(view.note).toContain('끝나지 않은 회차');
@@ -305,10 +305,10 @@ describe('판매 방식 전환', () => {
 
   it('성공 안내는 바뀐 결과를 알린다', () => {
     expect(describeSalesModeSaved('디어 오키드', 'round_direct')).toBe(
-      '디어 오키드 가게를 회차 판매로 바꿨어요. 손님에게 회차가 보여요.',
+      '디어 오키드 가게를 회차 판매로 바꿨어요. 고객에게 회차가 보여요.',
     );
     expect(describeSalesModeSaved('', 'legacy')).toBe(
-      '(미설정) 가게를 예전 방식으로 바꿨어요. 회차는 손님에게서 숨겨져요.',
+      '(미설정) 가게를 예전 방식으로 바꿨어요. 회차는 고객에게서 숨겨져요.',
     );
   });
 });

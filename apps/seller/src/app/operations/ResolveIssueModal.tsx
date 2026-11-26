@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -8,10 +7,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
 import { useEffect, useState } from 'react';
 import { ISSUE_LABELS } from '@/app/orders/[id]/operation-issues';
+import { Button, LoadingButton } from '../../components/Button';
 import {
   isValidManualResolveMemo,
   MANUAL_RESOLVE_MEMO_MAX_LENGTH,
@@ -72,7 +71,7 @@ export function ResolveIssueModal({ issue, onClose, onConfirm }: ResolveIssueMod
         <DialogBody>
           <div className="flex flex-col gap-3">
             {issue && (
-              <p className={TEXT} style={{ fontWeight: 'var(--fw-medium)' }}>
+              <p className={TEXT} style={{ fontWeight: 'var(--fw-bold)' }}>
                 {ISSUE_LABELS[issue.type]}
               </p>
             )}
@@ -120,7 +119,7 @@ export function ResolveIssueModal({ issue, onClose, onConfirm }: ResolveIssueMod
                 loading={submitting}
                 disabled={!valid}
                 className="h-11 flex-1"
-                style={{ fontWeight: 'var(--fw-medium)' }}
+                style={{ fontWeight: 'var(--fw-bold)' }}
               >
                 해결로 닫기
               </LoadingButton>

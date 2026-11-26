@@ -190,7 +190,7 @@ test.describe('어드민 로컬 — 판매자 정리하기·복구', () => {
       `${fx.storeName} 판매자 정리하기`,
       `${fx.storeName} 정리하기`,
     );
-    expect(archiveMessage).toContain('손님 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다.');
+    expect(archiveMessage).toContain('고객 화면에서 가게와 상품이 숨고 새 주문을 받지 않습니다.');
     expect(archiveMessage).toContain(
       '주문·정산 기록이 있는 판매자는 가게 ID 앞 8자리를 한 번 더 입력해야 정리됩니다.',
     );
@@ -212,7 +212,7 @@ test.describe('어드민 로컬 — 판매자 정리하기·복구', () => {
       `${fx.storeName} 판매자 복구`,
       `${fx.storeName} 복구`,
     );
-    expect(restoreMessage).toContain('복구하면 손님 화면에 다시 보이고 새 주문을 받습니다.');
+    expect(restoreMessage).toContain('복구하면 고객 화면에 다시 보이고 새 주문을 받습니다.');
     await expect(storeRow(page)).toContainText('운영 중', { timeout: 15_000 });
     const restored = await readDoc(`stores/${fx.storeId}`);
     expect(restored?.status).toBe('active');

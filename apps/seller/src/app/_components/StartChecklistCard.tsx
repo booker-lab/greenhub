@@ -71,7 +71,7 @@ export function StartChecklistCard({ checklist }: { checklist: StartChecklist })
                     fontSize: 'var(--font-size-sm)',
                     color:
                       item.status === 'done' ? 'var(--color-text-secondary)' : 'var(--color-text)',
-                    fontWeight: item.status === 'done' ? undefined : 'var(--fw-medium)',
+                    fontWeight: item.status === 'done' ? undefined : 'var(--fw-bold)',
                     textDecoration: item.status === 'done' ? 'line-through' : undefined,
                   }}
                 >

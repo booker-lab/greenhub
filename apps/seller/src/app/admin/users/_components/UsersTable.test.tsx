@@ -114,7 +114,7 @@ describe('Admin UsersTable 가입일·전화 표시 (T1)', () => {
     expect(onToggle).toHaveBeenCalledWith(active);
   });
 
-  it('정지된 소비자는 정지 상태와 ⋮ 정지 풀기…를 보인다', () => {
+  it('정지된 고객은 정지 상태와 ⋮ 정지 풀기…를 보인다', () => {
     const tree = render([user({ suspended: true })]);
     expect(textsOf(tree)).toContain('정지');
     expect(menuItemsOf(tree).map((item) => item.label)).toContain('정지 풀기…');
@@ -127,6 +127,6 @@ describe('Admin UsersTable 가입일·전화 표시 (T1)', () => {
   });
 
   it('0건이면 기존 빈 목록 문구를 유지한다', () => {
-    expect(textsOf(render([]))).toContain('등록된 소비자가 없습니다.');
+    expect(textsOf(render([]))).toContain('등록된 고객이 없습니다.');
   });
 });

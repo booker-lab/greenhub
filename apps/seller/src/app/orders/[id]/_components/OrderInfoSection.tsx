@@ -35,7 +35,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
                 order.status === 'RECRUITING'
                   ? 'var(--color-status-warning-text)'
                   : 'var(--color-text-secondary)',
-              fontWeight: order.status === 'RECRUITING' ? 'var(--fw-medium)' : undefined,
+              fontWeight: order.status === 'RECRUITING' ? 'var(--fw-bold)' : undefined,
             }}
           >
             {order.status === 'RECRUITING' && groupConfig
@@ -63,7 +63,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
         <p
           className={`${TEXT} mb-2.5`}
           style={{
-            fontWeight: 'var(--fw-medium)',
+            fontWeight: 'var(--fw-bold)',
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-secondary)',
           }}
@@ -85,7 +85,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
                       minWidth: 0,
                       wordBreak: 'break-word',
                       fontSize: 'var(--font-size-sm)',
-                      fontWeight: 'var(--fw-medium)',
+                      fontWeight: 'var(--fw-bold)',
                       color: 'var(--color-text)',
                     }}
                   >
@@ -131,7 +131,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           <p
             className={`${TEXT} mb-2.5`}
             style={{
-              fontWeight: 'var(--fw-medium)',
+              fontWeight: 'var(--fw-bold)',
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-text-secondary)',
             }}
@@ -161,7 +161,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
         <p
           className={`${TEXT} mb-2.5`}
           style={{
-            fontWeight: 'var(--fw-medium)',
+            fontWeight: 'var(--fw-bold)',
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text-secondary)',
           }}
@@ -238,7 +238,7 @@ export function OrderInfoSection({ order, productName, groupConfig }: OrderInfoS
           <p
             className={`${TEXT} mb-2.5`}
             style={{
-              fontWeight: 'var(--fw-medium)',
+              fontWeight: 'var(--fw-bold)',
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-danger)',
             }}

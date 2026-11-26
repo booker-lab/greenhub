@@ -1,7 +1,6 @@
 'use client';
 
 import { apiPathSegment, InvalidApiPathSegmentError, isSafeApiPathSegment } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
@@ -9,6 +8,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { ApiError, apiJson } from '@/lib/api';
+import { Button } from '../../../../components/Button';
 
 type Step = 'input' | 'success' | 'error';
 
@@ -269,7 +269,7 @@ export default function HubPickupPage() {
                 // 꺼졌을 때는 부품의 꺼진 모양(회색 면)을 그대로 쓴다. 초록 면은 누를 수 있을 때만이다.
                 style={{
                   ...(!isFilled || loading ? {} : { backgroundColor: 'var(--primary)' }),
-                  fontWeight: 'var(--fw-medium)',
+                  fontWeight: 'var(--fw-bold)',
                 }}
               >
                 {loading ? '확인 중...' : '픽업 확인'}
