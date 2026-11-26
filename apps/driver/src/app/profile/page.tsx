@@ -146,7 +146,7 @@ export default async function ProfilePage() {
                 />
                 <p
                   className={text}
-                  style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
+                  style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-regular)' }}
                 >
                   카카오
                 </p>
