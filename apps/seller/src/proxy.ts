@@ -76,11 +76,13 @@ const authGate = auth((request) => {
 
 type AuthGateContext = Parameters<typeof authGate>[1];
 
-export function proxy(request: NextRequest, event: NextFetchEvent) {
+// auth.ts가 NextAuth 설정을 요청마다 만드는 함수로 넘기므로(로그아웃 시각 표시, withSignedOutMarker)
+// auth(콜백) 래퍼는 함수가 아니라 함수를 담은 Promise를 돌려준다(next-auth 지연 설정). 부를 때 기다린다.
+export async function proxy(request: NextRequest, event: NextFetchEvent) {
   // 로그인 화면처럼 검사 대상이 아닌 경로에서는 세션을 읽거나 갱신하지 않는다.
   if (!AUTH_GATED_PATH.test(request.nextUrl.pathname)) return continueWithCsp(request);
   // auth()는 두 번째 인자를 위 콜백에 그대로 넘길 뿐 쓰지 않는다.
-  return authGate(request, event as unknown as AuthGateContext);
+  return (await authGate)(request, event as unknown as AuthGateContext);
 }
 
 export const config = {
