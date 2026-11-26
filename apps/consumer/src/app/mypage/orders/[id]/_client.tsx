@@ -919,6 +919,8 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
     status: detail.status,
     deliveryHold: detail.deliveryHold,
     redeliveryPaid: paymentIsDone,
+    // 고객 사유 종결 기능이 꺼져 있으면(API customerFaultClosureEnabled가 true가 아님) 알리지 않는다.
+    closureEnabled: detail.customerFaultClosureEnabled,
   });
   const isClosedUndelivered = detail.status === 'CLOSED_UNDELIVERED';
   // 배송 보류·취소는 문제 상태라 빨강 계열 배지로 보인다
