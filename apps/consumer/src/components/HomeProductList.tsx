@@ -280,14 +280,15 @@ function RoundDirectHome({
         <div
           className="p-4"
           role="alert"
+          // 노랑은 주문 마감에만 쓴다(design-direction.md §3.1). 지난 정보 안내는 연회색 면 + 검정 글자.
           style={{
-            background: 'var(--color-deadline-surface)',
+            background: 'var(--color-surface-muted)',
             borderRadius: 'var(--radius)',
           }}
         >
           <p
             className={TEXT_SM}
-            style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-deadline-text)' }}
+            style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text)' }}
           >
             {error ?? saleRoundsErrorMessage(null)}
           </p>
