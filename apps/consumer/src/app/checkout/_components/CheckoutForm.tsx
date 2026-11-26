@@ -40,6 +40,7 @@ import {
 import type { PaymentFailureNotice } from '@/lib/payment-failure-message';
 import { PAYMENT_METHOD_OPTIONS, paymentButtonLabel } from '@/lib/payment-method-options';
 import { roundPayBlockers } from '@/lib/payment-readiness';
+import { formatRoundDeliveryPromise } from '@/lib/round-schedule-label';
 import { TOUCH_CHECKBOX, TOUCH_HEIGHT } from '@/lib/touch-target';
 
 const DELIVERY_LABELS: Record<DeliveryMethod, string> = {
@@ -85,6 +86,8 @@ export interface CheckoutFormProps {
   roundPayReadiness?: { phoneValid: boolean; giftReady: boolean; packageLabelReady: boolean };
   /** 회차 주문이 마감됐을 때 결제 버튼 바로 위에 보일 안내(C-13). 있으면 빠진 조건 목록은 보이지 않는다. */
   closedNotice?: ReactNode;
+  /** 회차 결제의 문 앞 도착 시각(schedule.deliveryEndAt). 필수 고지의 배송 약속을 이 값으로 쓴다. 없으면 고정 문구. */
+  roundDeliveryEndAt?: string | null;
 }
 
 export function isIcheonDeliveryAddress(value: string): boolean {
@@ -250,6 +253,7 @@ export default function CheckoutForm({
   benchmark,
   roundPayReadiness,
   closedNotice,
+  roundDeliveryEndAt,
 }: CheckoutFormProps) {
   const [roundDetailsConfirmed, setRoundDetailsConfirmed] = useState(false);
   const [deliveryPhoneTouched, setDeliveryPhoneTouched] = useState(false);
@@ -653,7 +657,9 @@ export default function CheckoutForm({
                 className="m-0 text-sm"
                 style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-primary-dark)' }}
               >
-                경기도 이천시 직접배송만 제공하며 화요일 오전 9시까지 문 앞 배송합니다.
+                {/* 고지는 손님에게 하는 약속이라 회차의 실제 도착 시각을 쓴다(2026-11-26 사용자 결정). 읽지 못할 때만 "화요일 오전 9시까지". */}
+                경기도 이천시 직접배송만 제공하며 {formatRoundDeliveryPromise(roundDeliveryEndAt)}
+                합니다.
               </p>
               <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 안전한 배송이 어려운 기상 상황에는 배송이 연기될 수 있으며, 판매자 책임으로 재배송비

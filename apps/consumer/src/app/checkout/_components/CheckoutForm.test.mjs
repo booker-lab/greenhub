@@ -110,6 +110,15 @@ const requireForTest = (specifier) => {
   if (specifier === '@/lib/payment-method-options') return loadPaymentMethodOptions({});
   if (specifier === '@/lib/payment-readiness') return readinessModule.exports;
   if (specifier === '@/lib/checkout-address') return checkoutAddressModule.exports;
+  // 필수 고지의 배송 약속(회차 도착 시각). 값이 없으면 실제 모듈처럼 고정 문구를 돌려준다.
+  if (specifier === '@/lib/round-schedule-label') {
+    return {
+      formatRoundDeliveryPromise: (value) =>
+        typeof value === 'string'
+          ? `${value} 도착까지 문 앞 배송`
+          : '화요일 오전 9시까지 문 앞 배송',
+    };
+  }
   throw new Error(`예상하지 못한 결제 폼 모듈 요청: ${specifier}`);
 };
 new Function('require', 'module', 'exports', compiled)(
@@ -285,4 +294,17 @@ test('주소 검색을 쓸 수 없거나 고객이 고르면 주소·우편번�
   assert.ok(formSource.includes('hasAddress: hasDeliveryAddress(address),'));
   assert.equal((pageSource.match(/hasDeliveryAddress\(address\) &&/g) ?? []).length, 3);
   assert.ok(!pageSource.includes('!!address.zipCode'));
+});
+
+// 2026-11-26 사용자 결정: 필수 고지의 배송 약속은 회차의 실제 도착 시각으로 쓴다("화요일"은 읽지 못할 때만).
+test('회차 결제 필수 고지는 회차 도착 시각으로 배송 약속을 쓴다', () => {
+  assert.match(
+    formSource,
+    /직접배송만 제공하며 \{formatRoundDeliveryPromise\(roundDeliveryEndAt\)\}\s*합니다\./,
+  );
+  assert.doesNotMatch(formSource, /제공하며 화요일 오전 9시까지/);
+  assert.match(
+    pageSource,
+    /roundDeliveryEndAt=\{schedule\?\.round\.schedule\.deliveryEndAt \?\? null\}/,
+  );
 });

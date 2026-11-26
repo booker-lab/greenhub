@@ -808,6 +808,7 @@ function RoundCartCheckoutContent({ cartItems }: { cartItems: RoundCartItem[] })
             />
           ) : undefined
         }
+        roundDeliveryEndAt={schedule?.round.schedule.deliveryEndAt ?? null}
         benchmark={{
           arrivalLabel:
             isFeatureOn('arrival-everywhere') && schedule
