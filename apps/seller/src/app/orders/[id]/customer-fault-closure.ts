@@ -40,6 +40,7 @@ const BLOCK_REASONS: readonly CustomerFaultClosureBlockReason[] = [
   'REDELIVERY_PAYMENT_NEEDS_REVIEW',
   'PAYMENT_WINDOW_OPEN',
   'REDELIVERY_PAYMENT_IN_PROGRESS',
+  'FEATURE_DISABLED',
 ];
 
 type ClosureCheckOrder = Pick<
@@ -112,12 +113,21 @@ export function formatClosureTimeKST(iso: string | null | undefined): string | n
 }
 
 /**
+ * 고객 사유 종결 기능이 꺼져 있을 때(API 판정 FEATURE_DISABLED)의 안내. 약관 개정 게시 전이라 기본으로 끈다
+ * (2026-11-26 사용자 결정). 종결 버튼은 보이지 않는다. 이미 종결한 주문의 기록·정산 다시 맞추기는 그대로 보인다.
+ */
+export const CUSTOMER_FAULT_CLOSURE_DISABLED_MESSAGE =
+  '환불 없는 종결은 약관 개정 뒤 사용할 수 있어요.';
+
+/**
  * 버튼 대신 보여 줄 안내. null이면 아무것도 보여 주지 않는다(종결 대상이 아닌 주문).
  */
 export function customerFaultClosureBlockedMessage(
   eligibility: Pick<CustomerFaultClosureEligibility, 'reason' | 'eligibleAt'>,
 ): string | null {
   switch (eligibility.reason) {
+    case 'FEATURE_DISABLED':
+      return CUSTOMER_FAULT_CLOSURE_DISABLED_MESSAGE;
     case 'PAYMENT_WINDOW_OPEN': {
       const at = formatClosureTimeKST(eligibility.eligibleAt);
       return at

@@ -25,7 +25,7 @@ const inputBase =
   'block w-full min-w-0 cursor-text appearance-none rounded-[16px] border border-solid border-input bg-background text-start text-ui-ink transition-[border-color] duration-100 ease-[ease] outline-none placeholder:text-muted-foreground placeholder:opacity-100 focus:border-brand disabled:cursor-not-allowed disabled:bg-ui-gray-2 disabled:text-ui-gray-5 disabled:opacity-60 [-webkit-tap-highlight-color:transparent]';
 
 const labelClass =
-  'inline-flex cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink select-auto';
+  'inline-flex cursor-default text-sm/[1.55] font-bold break-words text-ui-ink select-auto';
 
 function FieldLabel({
   htmlFor,

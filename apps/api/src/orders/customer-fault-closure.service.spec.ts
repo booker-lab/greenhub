@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 // 고객 사유 종결(환불 없음) 회귀 — 판정표·보류 집계·정산·재시도·뒤늦은 재배송비 결제·회차 완료/취소.
 // 가짜 Firestore(OCC 하네스)로 실제 CustomerFaultClosureService·OrderCapacityService·SettlementsService를 구동한다.
 
@@ -10,6 +11,8 @@ import { readOrderPayoutHoldInTransaction } from '../settlements/_lib/order-payo
 import { SettlementsService } from '../settlements/settlements.service';
 import { CustomerFaultClosureController } from './customer-fault-closure.controller';
 import {
+  applyCustomerFaultClosureSwitch,
+  CUSTOMER_FAULT_CLOSURE_DISABLED,
   CustomerFaultClosureService,
   decideCustomerFaultClosure,
 } from './customer-fault-closure.service';
@@ -134,7 +137,10 @@ function paidPayment(transactionId = 'tx-paid') {
   };
 }
 
-function makeService(occ: Occ, options: { portone?: ReturnType<typeof makePortone> } = {}) {
+function makeService(
+  occ: Occ,
+  options: { portone?: ReturnType<typeof makePortone>; closureEnabled?: boolean } = {},
+) {
   const capacity = new OrderCapacityService(occ.firestore as never);
   const settlements = new SettlementsService(
     occ.firestore as never,
@@ -145,11 +151,16 @@ function makeService(occ: Occ, options: { portone?: ReturnType<typeof makePorton
   const createSettlement = jest.spyOn(settlements, 'createSettlement');
   const adjustHeld = jest.spyOn(capacity, 'adjustHeldOrderCountInTransaction');
   const refundByOrderId = jest.spyOn(chargePayments, 'refundByOrderId');
+  // 이 판정표·종결 시험은 기능이 켜진 운영을 전제로 한다. 꺼진 경우는 아래 '기능 스위치'에서 따로 본다.
+  const config = new ConfigService(
+    options.closureEnabled === false ? {} : { CUSTOMER_FAULT_CLOSURE_ENABLED: 'true' },
+  );
   const service = new CustomerFaultClosureService(
     occ.firestore as never,
     capacity,
     settlements,
     chargePayments,
+    config,
   );
   return { service, createSettlement, adjustHeld, portone, refundByOrderId };
 }
@@ -438,6 +449,8 @@ describe('CustomerFaultClosureService.close', () => {
       'OrderCapacityService',
       'SettlementsService',
       'OrderChargePaymentService',
+      // 기능 스위치(CUSTOMER_FAULT_CLOSURE_ENABLED)를 읽는 설정. 환불과 무관하다.
+      'ConfigService',
     ]);
 
     // 결제되지 않은 PENDING 재배송비를 확인하고 종결해도 환불은 부르지 않는다.
@@ -1158,5 +1171,59 @@ describe('종결 기록의 읽기 범위', () => {
     expect(projectSellerOrder(occ.getData(ORDER_PATH)!, 'list')).not.toHaveProperty(
       'customerFaultClosure',
     );
+  });
+});
+
+describe('고객 사유 종결 기능 스위치(약관 개정 게시 전 기본 꺼짐)', () => {
+  it('꺼져 있으면 GET 판정은 FEATURE_DISABLED이고 종결 요청은 403으로 주문·집계·정산을 건드리지 않는다', async () => {
+    setNow(AFTER_WINDOW_MS);
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge: { status: 'FAILED' } });
+    const orderBefore = occ.getData(ORDER_PATH);
+    const roundBefore = occ.getData(ROUND_PATH);
+    const { service, createSettlement, adjustHeld, portone } = makeService(occ, {
+      closureEnabled: false,
+    });
+
+    await expect(service.getEligibility('store-1', ORDER_ID)).resolves.toMatchObject({
+      eligible: false,
+      reason: 'FEATURE_DISABLED',
+    });
+    await expect(service.close(closeInput)).rejects.toMatchObject({
+      status: 403,
+      response: expect.objectContaining({ code: CUSTOMER_FAULT_CLOSURE_DISABLED }),
+    });
+    expect(occ.getData(ORDER_PATH)).toEqual(orderBefore);
+    expect(occ.getData(ROUND_PATH)).toEqual(roundBefore);
+    expect(adjustHeld).not.toHaveBeenCalled();
+    expect(createSettlement).not.toHaveBeenCalled();
+    expect(portone.getPayment).not.toHaveBeenCalled();
+  });
+
+  it('꺼져 있어도 없는 주문·다른 매장 주문은 404다', async () => {
+    const occ = createOccFirestore();
+    seed(occ, { order: linkedCharge, charge: { status: 'FAILED' } });
+    const { service } = makeService(occ, { closureEnabled: false });
+    await expect(service.close({ ...closeInput, storeId: 'store-other' })).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it('applyCustomerFaultClosureSwitch: 이미 종결한 주문은 꺼져 있어도 ALREADY_CLOSED 그대로다', () => {
+    const closed = {
+      eligible: false,
+      reason: 'ALREADY_CLOSED' as const,
+      closureReasonCode: 'RECEIPT_REFUSED' as const,
+      eligibleAt: null,
+      paymentDeadlineDate: null,
+      redeliveryFee: FEE,
+    };
+    expect(applyCustomerFaultClosureSwitch(closed, false)).toBe(closed);
+    const ok = { ...closed, eligible: true, reason: 'OK' as const };
+    expect(applyCustomerFaultClosureSwitch(ok, true)).toBe(ok);
+    expect(applyCustomerFaultClosureSwitch(ok, false)).toMatchObject({
+      eligible: false,
+      reason: 'FEATURE_DISABLED',
+    });
   });
 });
