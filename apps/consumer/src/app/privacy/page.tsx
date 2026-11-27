@@ -15,8 +15,10 @@ const sectionStyle = {
   marginTop: 34,
 } as const;
 
+// 섹션 제목 18/800(design-standard.md §3). 화면 제목(22/800)보다 한 단계 작다. 보관본(/privacy/<시행일>)은 당시 모양 그대로 둔다.
 const headingStyle = {
-  fontSize: 'var(--font-size-xl)',
+  fontSize: 'var(--font-size-lg)',
+  fontWeight: 'var(--fw-extrabold)',
   letterSpacing: '-0.02em',
   lineHeight: 1.4,
   margin: '0 0 12px',

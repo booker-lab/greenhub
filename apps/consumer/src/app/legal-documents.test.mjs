@@ -141,7 +141,10 @@ test('개정 전 개인정보처리방침(2026-11-08 시행판)을 글자 그대
 
   const current = normalizeWhitespace(loadSource('app', 'privacy', 'page.tsx'));
   assert.match(current, /<Section id="changes" title="10\. 방침의 변경">/);
-  assert.match(current, /<a href="\/privacy\/2026-11-08">2026년 11월 8일 시행 개인정보처리방침<\/a>/);
+  assert.match(
+    current,
+    /<a href="\/privacy\/2026-11-08">2026년 11월 8일 시행 개인정보처리방침<\/a>/,
+  );
 });
 
 test('방침 개정 안내는 시행 전(한국 시간 2026-11-27까지)에만 브라우저에서 보인다', () => {
@@ -163,11 +166,41 @@ test('방침 개정 안내는 시행 전(한국 시간 2026-11-27까지)에만 �
 
 test('더 이전 방침·약관 공개본도 글자 그대로 보관하고 현재 문서에서 연결한다', () => {
   const archives = [
-    ['privacy', '2026-11-01', '2026년 11월 1일', '2026년 11월 1일부터 11월 7일까지', '2026년 11월 8일'],
-    ['privacy', '2026-08-30', '2026년 8월 30일', '2026년 8월 30일부터 10월 31일까지', '2026년 11월 1일'],
-    ['privacy', '2026-08-19', '2026년 8월 19일', '2026년 8월 19일부터 8월 29일까지', '2026년 8월 30일'],
-    ['terms', '2026-08-30', '2026년 8월 30일', '2026년 8월 30일부터 10월 31일까지', '2026년 11월 1일'],
-    ['terms', '2026-08-19', '2026년 8월 19일', '2026년 8월 19일부터 8월 29일까지', '2026년 8월 30일'],
+    [
+      'privacy',
+      '2026-11-01',
+      '2026년 11월 1일',
+      '2026년 11월 1일부터 11월 7일까지',
+      '2026년 11월 8일',
+    ],
+    [
+      'privacy',
+      '2026-08-30',
+      '2026년 8월 30일',
+      '2026년 8월 30일부터 10월 31일까지',
+      '2026년 11월 1일',
+    ],
+    [
+      'privacy',
+      '2026-08-19',
+      '2026년 8월 19일',
+      '2026년 8월 19일부터 8월 29일까지',
+      '2026년 8월 30일',
+    ],
+    [
+      'terms',
+      '2026-08-30',
+      '2026년 8월 30일',
+      '2026년 8월 30일부터 10월 31일까지',
+      '2026년 11월 1일',
+    ],
+    [
+      'terms',
+      '2026-08-19',
+      '2026년 8월 19일',
+      '2026년 8월 19일부터 8월 29일까지',
+      '2026년 8월 30일',
+    ],
   ];
   const current = {
     privacy: normalizeWhitespace(loadSource('app', 'privacy', 'page.tsx')),
@@ -186,4 +219,21 @@ test('더 이전 방침·약관 공개본도 글자 그대로 보관하고 현�
   }
   // 보관본은 sitemap에 넣지 않는다(검색에는 현재 문서만).
   assert.doesNotMatch(loadSource('app', 'sitemap.ts'), /\/(privacy|terms)\/20/);
+});
+
+test('법적 문서 제목은 화면 제목 기준 22/800이다', () => {
+  const source = loadSource('components', 'LegalDocumentPage.tsx');
+  assert.match(source, /<h1\s+style=\{\{\s*fontSize: 22,\s*fontWeight: 'var\(--fw-extrabold\)'/);
+  assert.doesNotMatch(source, /clamp\(1\.75rem/);
+});
+
+test('현재 방침·약관의 절 제목은 섹션 제목 기준 18/800이다', () => {
+  for (const doc of ['privacy', 'terms']) {
+    const source = loadSource('app', doc, 'page.tsx');
+    assert.match(
+      source,
+      /const headingStyle = \{\s*fontSize: 'var\(--font-size-lg\)',\s*fontWeight: 'var\(--fw-extrabold\)'/,
+      doc,
+    );
+  }
 });
