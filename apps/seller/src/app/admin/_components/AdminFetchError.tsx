@@ -1,6 +1,6 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
+import { Button } from '../../../components/Button';
 
 interface AdminFetchErrorProps {
   /** 예: '숨긴 후기를 불러오지 못했습니다.' */
@@ -23,7 +23,7 @@ export function AdminFetchError({ title, detail, onRetry }: AdminFetchErrorProps
       style={{ border: '1px solid var(--color-border)', overflow: 'hidden' }}
     >
       <div className="flex flex-col items-center justify-start gap-3 px-4 py-16">
-        <p className={TEXT} style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+        <p className={TEXT} style={{ fontWeight: 700, color: 'var(--color-text-secondary)' }}>
           {title}
         </p>
         <p

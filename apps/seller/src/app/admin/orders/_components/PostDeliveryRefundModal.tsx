@@ -6,11 +6,11 @@ import {
   POST_DELIVERY_REFUND_REASON_LABEL,
   type PostDeliveryRefundReasonCode,
 } from '@greenhub/shared';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import { useId } from 'react';
 import type { AdminOrder } from '@/hooks/useAdmin';
+import { Field, FieldLabel } from '../../../../components/Field';
 import { AdminConfirmDialog } from '../../_components/AdminConfirmDialog';
 import { formatWon } from '../../_components/adminList';
 import { describeRefundTarget } from '../_lib';
@@ -123,5 +123,4 @@ export function PostDeliveryRefundModal({
 
 // ① 외형 유지(UI 교체 P2b): Mantine Radio.Group 라벨(InputWrapper 라벨, div)과 Radio(sm: 원 20px, 테두리 gray-4,
 // 고르면 주색 바탕·흰 점, 글자 14px/20px·왼쪽 12px) 값. 기사 앱 RadioGroupField와 같은 계산값이다.
-const GROUP_LABEL =
-  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
+const GROUP_LABEL = 'inline-block cursor-default text-sm/[1.55] font-bold break-words text-ui-ink';

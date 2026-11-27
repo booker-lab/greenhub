@@ -115,7 +115,7 @@ export function SettlementCard({
   hasLoaded?: boolean;
   onRetry?: () => void;
 }) {
-  const effectiveHasLoaded = hasLoaded ?? (summary !== null);
+  const effectiveHasLoaded = hasLoaded ?? summary !== null;
   const view = resolveDashboardSummaryView({
     hasLoaded: effectiveHasLoaded,
     loading,

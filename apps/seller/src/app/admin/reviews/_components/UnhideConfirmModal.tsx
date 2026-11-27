@@ -1,9 +1,9 @@
 'use client';
 
 import { type AdminHiddenReview, REVIEW_HIDE_REASON_MAX_LENGTH } from '@greenhub/shared';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Textarea } from '@greenhub/ui/components/textarea';
 import { useId } from 'react';
+import { Field, FieldLabel } from '../../../../components/Field';
 import { hiddenReasonLabel } from '../../../reactions/_lib';
 import { AdminConfirmDialog } from '../../_components/AdminConfirmDialog';
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
+import { LoadingButton } from '../../../../components/Button';
 
 interface LoadMoreButtonProps {
   loadedCount: number;

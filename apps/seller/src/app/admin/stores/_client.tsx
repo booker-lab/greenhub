@@ -1,7 +1,5 @@
 'use client';
 
-import { ButtonLink } from '@greenhub/ui/components/button';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -16,6 +14,8 @@ import {
   useAdminStores,
 } from '@/hooks/useAdmin';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { ButtonLink } from '../../../components/Button';
+import { Field, FieldLabel } from '../../../components/Field';
 import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
 import { AdminListError, AdminPageHeader } from '../_components/adminList';
 import { StoresFilters } from './_components/StoresFilters';

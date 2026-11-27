@@ -1,9 +1,9 @@
 'use client';
 
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import type { Dispatch, SetStateAction } from 'react';
 import type { AdminBanner } from '@/hooks/useAdmin';
+import { Field, FieldLabel } from '../../../../components/Field';
 
 interface BannerCtaSectionProps {
   form: AdminBanner;
