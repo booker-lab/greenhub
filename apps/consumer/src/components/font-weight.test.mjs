@@ -111,6 +111,8 @@ test('마감이 아닌 안내 상자는 노란 면을 쓰지 않는다', () => {
     'app/products/[id]/ProductDetailClient.tsx',
     'components/benchmark/KakaoChannelCta.tsx',
     'components/HomeProductList.tsx',
+    // 결제 확인 중 아이콘(2026-11-27)
+    'app/order/success/page.tsx',
   ]) {
     assert.doesNotMatch(read(path), /--color-deadline-surface/, path);
   }

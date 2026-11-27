@@ -52,11 +52,13 @@ export default function LegalDocumentPage({
           }}
         >
           {/* 제목 위 작은 라벨(eyebrow)은 두지 않는다(design-direction.md §3.1). 문서 이름은 아래 제목이 말한다. */}
+          {/* 화면 제목 22/800(design-standard.md §3). 예전에는 28~36px(clamp)·700이었다. */}
           <h1
             style={{
-              fontSize: 'clamp(1.75rem, 7vw, 2.25rem)',
-              letterSpacing: '-0.03em',
-              lineHeight: 1.25,
+              fontSize: 22,
+              fontWeight: 'var(--fw-extrabold)',
+              letterSpacing: '-0.01em',
+              lineHeight: 1.3,
               margin: 0,
             }}
           >
