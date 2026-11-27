@@ -2,7 +2,6 @@
 
 import type { SaleRound } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
 import { ChevronRight, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
@@ -20,6 +19,7 @@ import { resolveStoreProductsView } from '@/hooks/useStoreProducts.recovery';
 import { apiJson } from '@/lib/api';
 import { aggregatePrep, type PrepLine } from '@/lib/prep';
 import { isPurchaseListRound } from '@/lib/round-purchase-list';
+import { Button } from '../../components/Button';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px, 좌우 16px)·Paper(radius lg = 16px; 그림자는 ② D2로 걷음)·
 // Group·Stack·Text(p, 여백 0, 줄 높이 1.55)·UnstyledButton·Alert light(제목 있음)와 같은 값.
@@ -43,7 +43,7 @@ function PrepRow({ line, index, accent }: { line: PrepLine; index: number; accen
           style={{
             fontSize: 'var(--font-size-sm)',
             color: 'var(--color-text)',
-            fontWeight: 'var(--fw-medium)',
+            fontWeight: 'var(--fw-bold)',
           }}
         >
           {line.productName}
@@ -282,7 +282,7 @@ export default function PrepPage() {
                     style={{
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
-                      fontWeight: 'var(--fw-medium)',
+                      fontWeight: 'var(--fw-bold)',
                     }}
                   >
                     {today.length}개 상품 · 총 {todayTotal}개

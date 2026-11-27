@@ -1,7 +1,5 @@
 'use client';
 
-import { ButtonLink } from '@greenhub/ui/components/button';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -16,6 +14,8 @@ import {
   useAdminStores,
 } from '@/hooks/useAdmin';
 import { useDebouncedCallback } from '@/hooks/useDebouncedCallback';
+import { ButtonLink } from '../../../components/Button';
+import { Field, FieldLabel } from '../../../components/Field';
 import { AdminConfirmDialog } from '../_components/AdminConfirmDialog';
 import { AdminListError, AdminPageHeader } from '../_components/adminList';
 import { StoresFilters } from './_components/StoresFilters';
@@ -223,7 +223,7 @@ export default function AdminStoresClient() {
       notify({
         color: 'brand',
         title: '판매자를 정리했습니다',
-        message: `${store.name || '이름 없는 가게'} — 손님 화면에서 숨고 새 주문을 받지 않습니다.`,
+        message: `${store.name || '이름 없는 가게'} — 고객 화면에서 숨고 새 주문을 받지 않습니다.`,
       });
     } catch (e) {
       const classified = classifyAdminCommandError(e);
@@ -271,7 +271,7 @@ export default function AdminStoresClient() {
       notify({
         color: 'brand',
         title: '판매자를 복구했습니다',
-        message: `${store.name || '이름 없는 가게'} — 손님 화면에 다시 보이고 주문을 받습니다.`,
+        message: `${store.name || '이름 없는 가게'} — 고객 화면에 다시 보이고 주문을 받습니다.`,
       });
     } catch (e) {
       setStoreAction(null);

@@ -1,7 +1,6 @@
 'use client';
 
 import { apiPathSegment, readRouteParam } from '@greenhub/shared';
-import { ButtonLink } from '@greenhub/ui/components/button';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -11,6 +10,7 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { ApiError, apiJson } from '@/lib/api';
+import { ButtonLink } from '../../../components/Button';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container(sm)·Stack·Group·Paper·Text·Badge·Button과 같은 값을 Tailwind와
 // @greenhub/ui로 그린다. Text = p(16px·줄 높이 1.55·여백 0), Paper = 흰 바탕·모서리 16·윤곽선 없음(그림자는 ② D2로 걷음).
@@ -195,7 +195,7 @@ export default function HubDetailPage() {
                   <p
                     className={TEXT}
                     style={{
-                      fontWeight: 'var(--fw-medium)',
+                      fontWeight: 'var(--fw-bold)',
                       fontSize: 'var(--font-size-sm)',
                       color: 'var(--color-text-secondary)',
                     }}
@@ -270,7 +270,7 @@ export default function HubDetailPage() {
                                 className={`${TEXT} truncate`}
                                 style={{
                                   fontSize: 'var(--font-size-sm)',
-                                  fontWeight: 'var(--fw-medium)',
+                                  fontWeight: 'var(--fw-bold)',
                                 }}
                               >
                                 {order.items[0].name}

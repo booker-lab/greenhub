@@ -46,6 +46,8 @@ NextAuth callback은 Kakao에서 받은 access token을 `POST /auth/kakao-login`
 
 `KAKAO_APP_ID`가 설정돼 있으면 API는 `/v1/user/access_token_info`의 `app_id`가 이 값과 같은지, 토큰 정보의 사용자 id가 사용자 정보와 같은지 확인하고, 다르거나 `app_id`가 없거나 조회가 실패하면 401로 거부한다. `KAKAO_APP_ID`가 없으면 `app_id` 비교 없이 로그인하며, 운영 runtime에서는 경고 로그만 한 번 남긴다(`apps/api/src/auth/kakao.client.ts`, `kakao.client.spec.ts` `토큰 발급 앱·사용자 확인`). Kakao API 호출에는 시간 상한이 있고, 넘기면 인증 실패로 끝난다.
 
+소비자 앱은 카카오 로그인 실패를 모두 로그인 화면으로 돌려보낸다(`apps/consumer/src/auth.ts` `pages.error: '/login'`, 2026-11-26). 로그인 거부(`signIn` 콜백 false → `AccessDenied`: 액세스 토큰 없음·`POST /auth/kakao-login` 실패·소비자/관리자 아닌 역할)와 그 밖의 오류(`Configuration`)가 Auth.js 기본 영어 화면(`/api/auth/error`) 대신 `/login?error=<종류>`로 오고, 화면은 종류 이름을 보이지 않고 "카카오 로그인을 마치지 못했어요 … 고객센터" 안내를 띄운다(`lib/session-login.ts` `loginErrorMessage`). 판매자·기사 앱의 오류 화면 설정은 각 앱이 따로 정한다.
+
 `packages/shared`의 `AuthProvider`에는 과거 호환을 위해 `'naver' | 'email'`이 남아 있지만, **현재 세 앱의 NextAuth 운영 provider 목록에는 Naver가 없다.** Naver 로그인을 현재 지원 기능으로 문서화하지 않는다.
 
 ## 3. Credentials의 현재 용도
@@ -491,6 +493,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-26 | 소비자 앱 로그인 오류를 `/login?error=`로 모으고 한국어 실패 안내를 띄운다(`pages.error: '/login'`, `loginErrorMessage`). 이전에는 로그인 거부·설정 오류가 Auth.js 기본 영어 화면으로 갔다(소비자 화면 검수) |
 | 2026-10-27 | 결제사(카카오페이) 연동 심사용 이메일 로그인: 운영 API `login`은 `emailLoginAllowedUntil`이 남은 계정만 통과(그 밖은 조회·bcrypt 비교 뒤 같은 403), 소비자 앱 Credentials provider를 모든 런타임에 등록하되 E2E 헤더 게이트는 테스트 게이트 런타임에서만, 로그인 폼은 `?method=email`에서 노출, 계정은 `ops-create-email-review-account.yml`로 생성 |
 | 2026-10-24 | 강제 재검증 결과가 `null`이고 세션 조회도 비어 있으면 세 앱이 `signOut`해 현재 탭도 로그인 화면으로 바꾼다(`recheckSessionAfterRejection`). `auth-session-lifecycle.spec.ts`에 현재 탭 `/login` 전환 확인 추가 |
 | 2026-10-24 | 화면의 API 요청이 401/403으로 거절되면 세 앱 `Providers`가 `update({})`로 세션을 재사용 없이 다시 검증해 그 자리에서 끊는다(`watchApiAuthorityRejections`). `auth-session-lifecycle.spec.ts` 정지·철회 시험을 "폐기 뒤 화면 API 거절 → 즉시 세션 종료" 확인으로 변경 |

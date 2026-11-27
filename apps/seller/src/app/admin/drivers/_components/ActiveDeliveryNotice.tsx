@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -8,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
+import { Button } from '../../../../components/Button';
 
 interface ActiveDeliveryNoticeProps {
   /** 안내 문구. null이면 닫혀 있다. */

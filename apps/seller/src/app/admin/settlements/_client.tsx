@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { notify } from '@/components/AppToaster';
@@ -11,6 +10,7 @@ import {
   useAdminSettlements,
   useAdminStores,
 } from '@/hooks/useAdmin';
+import { Button } from '../../../components/Button';
 import { AdminPageHeader } from '../_components/adminList';
 import { LoadMoreButton } from './_components/LoadMoreButton';
 import { PayConfirmDialog } from './_components/PayConfirmDialog';
@@ -118,7 +118,7 @@ export default function AdminSettlementsClient() {
 
       {error !== null && !loading ? (
         <div className="flex flex-col items-center gap-3 rounded-[8px] border border-rule px-4 py-16">
-          <p className="m-0 text-[15px] font-medium text-foreground">
+          <p className="m-0 text-[15px] font-bold text-foreground">
             정산 목록을 불러오지 못했습니다.
           </p>
           <p className="m-0 text-center text-[13px] text-[var(--color-text-secondary)]">{error}</p>

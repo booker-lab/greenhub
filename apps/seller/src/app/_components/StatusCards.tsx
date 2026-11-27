@@ -1,7 +1,6 @@
 'use client';
 
 import type { Product } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import { ChevronRight, RefreshCcw } from 'lucide-react';
 import Link from 'next/link';
 import { Fragment } from 'react';
@@ -13,6 +12,7 @@ import {
   resolveDashboardSummaryAmountText,
   resolveDashboardSummaryView,
 } from '@/hooks/useDashboardSummary.recovery';
+import { Button } from '../../components/Button';
 
 // ① 외형 유지(UI 교체 P4): Mantine Text·Group·Stack·UnstyledButton·Button과 같은 값을 Tailwind로 그린다.
 // Group은 가로 flex(줄바꿈, 가운데 정렬), Stack은 세로 flex(늘임)이고 gap xs는 10px, lg는 20px이다.
@@ -115,7 +115,7 @@ export function SettlementCard({
   hasLoaded?: boolean;
   onRetry?: () => void;
 }) {
-  const effectiveHasLoaded = hasLoaded ?? (summary !== null);
+  const effectiveHasLoaded = hasLoaded ?? summary !== null;
   const view = resolveDashboardSummaryView({
     hasLoaded: effectiveHasLoaded,
     loading,

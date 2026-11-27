@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, ButtonLabel } from '@greenhub/ui/components/button';
+import { Button, ButtonLabel } from '../../../components/Button';
 
 const GROUP_DELIVERY_METHODS = [
   { value: 'direct', label: '꽃차 직배송' },

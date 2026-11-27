@@ -1,7 +1,7 @@
 'use client';
 
 import type { Order } from '@greenhub/shared';
-import { ButtonLink } from '@greenhub/ui/components/button';
+import { ButtonLink } from '../../../../components/Button';
 import { displayBuyerName, displayBuyerPhone, displayRequestNote, toTelHref } from '../_lib';
 import { Row } from './OrderRow';
 
@@ -20,7 +20,7 @@ export function CustomerInfoSection({ order }: { order: Order }) {
       <p
         className={`${TEXT} mb-2.5`}
         style={{
-          fontWeight: 'var(--fw-medium)',
+          fontWeight: 'var(--fw-bold)',
           fontSize: 'var(--font-size-sm)',
           color: 'var(--color-text-secondary)',
         }}
@@ -57,7 +57,7 @@ export function CustomerInfoSection({ order }: { order: Order }) {
             variant="light"
             size="md"
             className="mt-2.5 w-full hover:bg-ui-brand-light-hover"
-            style={{ fontWeight: 'var(--fw-medium)' }}
+            style={{ fontWeight: 'var(--fw-bold)' }}
           >
             전화 걸기
           </ButtonLink>

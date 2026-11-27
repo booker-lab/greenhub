@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -9,6 +8,7 @@ import {
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
 import { type ReactNode, useId } from 'react';
+import { Button } from '../../../components/Button';
 
 /** 확인창 이름–값 상자의 한 줄. */
 export interface AdminConfirmRow {
@@ -97,7 +97,7 @@ export function AdminConfirmDialog({
             {flow && flow.length > 0 && <ConfirmRows rows={flow} numeric />}
             {children}
             {warning && (
-              <p className="m-0 text-[14px] leading-[20px] font-semibold text-[var(--color-danger)]">
+              <p className="m-0 text-[14px] leading-[20px] font-bold text-[var(--color-danger)]">
                 {warning}
               </p>
             )}
@@ -161,7 +161,7 @@ function ConfirmRows({ rows, numeric = false }: { rows: AdminConfirmRow[]; numer
         >
           <dt className="shrink-0 text-[var(--color-text-secondary)]">{row.label}</dt>
           <dd
-            className={`m-0 min-w-0 ${row.longText ? 'text-left' : 'text-right'} font-medium break-words text-foreground ${numeric ? 'tabular-nums' : ''}`}
+            className={`m-0 min-w-0 ${row.longText ? 'text-left font-normal' : 'text-right font-bold'} break-words text-foreground ${numeric ? 'tabular-nums' : ''}`}
           >
             {row.value}
           </dd>

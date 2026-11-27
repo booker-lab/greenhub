@@ -1,8 +1,8 @@
 'use client';
 
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { useId } from 'react';
+import { Field, FieldLabel } from '../../../../components/Field';
 import { ChoiceRow, FieldCard } from '../FormPrimitives';
 import ImageUpload from '../ImageUpload';
 import { CATEGORIES, type ProductFormData } from '../productForm.types';

@@ -1,10 +1,10 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { useStoreSalesMode } from '@/hooks/useStoreSalesMode';
+import { Button } from '../../../components/Button';
 import AIPreviewPanel from './AIPreviewPanel';
 import type { ProductFormProps } from './productForm.types';
 import SellerNoteInput from './SellerNoteInput';
@@ -104,7 +104,7 @@ export default function ProductForm(props: ProductFormProps) {
               className={UNSTYLED_BUTTON}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
+                fontWeight: 'var(--fw-bold)',
                 color: f.draftSaved ? 'var(--color-primary-dark)' : 'var(--color-text-secondary)',
               }}
             >
@@ -138,7 +138,7 @@ export default function ProductForm(props: ProductFormProps) {
                 onClick={f.goNext}
                 size="lg"
                 className="flex-1"
-                style={{ backgroundColor: 'var(--primary)', fontWeight: 'var(--fw-medium)' }}
+                style={{ backgroundColor: 'var(--primary)', fontWeight: 'var(--fw-bold)' }}
               >
                 다음
               </Button>
@@ -148,7 +148,7 @@ export default function ProductForm(props: ProductFormProps) {
                 disabled={f.submitting}
                 size="lg"
                 className="flex-1"
-                style={{ backgroundColor: 'var(--primary)', fontWeight: 'var(--fw-medium)' }}
+                style={{ backgroundColor: 'var(--primary)', fontWeight: 'var(--fw-bold)' }}
               >
                 {f.submitting ? '처리 중...' : mode === 'create' ? '등록하기' : '저장하기'}
               </Button>

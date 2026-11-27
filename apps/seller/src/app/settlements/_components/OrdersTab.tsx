@@ -76,7 +76,7 @@ export function OrdersTab({
               style={{
                 fontSize: 'var(--font-size-sm)',
                 color: 'var(--color-primary-dark)',
-                fontWeight: 500,
+                fontWeight: 700,
               }}
             >
               CSV 다운로드

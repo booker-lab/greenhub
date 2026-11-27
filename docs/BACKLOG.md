@@ -457,6 +457,13 @@ commit과 경로만 추적 가능한 `HISTORICAL_EVIDENCE`로 남긴다. 현재 
 - 결제 전(`PENDING`)·이미 취소된 주문은 제외하고, 사유는 고정 문구 `고객 요청`, 멱등 키 `round-consumer-cancel:<orderId>`를 사용한다.
 - 계약 정본: `docs/specs/api/notifications.md`. 직접 근거: `legacy-consumer-cancel-convergence.spec.ts` S9~S12.
 
+### ROLLBACK-PATH-AND-LEGACY-EXPOSURE
+
+상태: `RESOLVED` — 2026-11-10 롤백 dry-run 절차 정리 중 발견, 같은 날 사용자가 두 건을 결정했다. 계약 정본은 `docs/specs/ops/mvp-sales-round-runbook.md` §7.
+
+- [x] **비상 신규 주문 중단 수단**: **사용자 결정: `legacy` 전환 대신 회차 마감·취소로 멈춘다**(런북 §7.2). 판매 중 회차는 판매자 앱 "주문 마감"(`OPEN → CLOSED`, `closeReason=MANUAL`, 자동 재개 없음 — `apps/api/src/sale-rounds/sale-rounds.service.spec.ts`), 주문 시작 전 회차나 결제까지 되돌릴 때는 관리자 "회차 취소"(결제 주문 환불·`ORDER_CANCELLED`)를 쓴다. 이유: `legacy`면 회차 주문 생성은 거부되지만(`apps/api/src/orders/round-order-create.service.ts`) 소비자 상품 상세가 예전 구매 버튼을 보이고(`apps/consumer/src/app/products/[id]/ProductDetailClient.tsx`), 예전 흐름의 일반 E2E는 최근 100회 성공이 없다(`LEGACY-E2E-WORKFLOW-VARS`).
+- [x] **`legacy` 전환 경로**: **사용자 결정: 스크립트를 정본으로 한다**(`scripts/enable-dear-orchid-round-direct.mjs`, 런북 §7.4). `legacy` 전환은 비상 수단이 아니며 예전 구매 흐름 재검증과 별도 승인 뒤에만 한다. 관리자 화면 판매 방식 전환(`PATCH /admin/stores/:storeId/sales-mode`, `apps/api/src/admin/admin.service.ts` `setSalesMode`)은 `SCHEDULED`·`OPEN`·`CLOSED` 회차가 있으면 409로 거부하는 지금 동작 그대로 평상시 전환에만 쓴다(`apps/api/src/admin/admin-store-sales-mode.spec.ts`). 비상 우회는 만들지 않는다.
+
 ### CONSUMER-UX-AUDIT-FOLLOWUPS
 
 상태: `DECISION_REQUIRED` — 2026-11-07 소비자 UX 감사(#826 병합) 뒤 남은 사람 결정·확인. 자료: `docs/ux-audit/consumer/plan.md` 3·10·11절. C-28·재주문·우선순위는 결정됐고, C-01 실기기 확인과 그 결과에 따른 C-02 판단이 남았다.
@@ -649,6 +656,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 
 ### API-LINT-BASELINE
 - [ ] **2026-10-13 #516 병합**: API ESLint 오류를 1건까지 줄였다(`main` `b48a22b1`, 남은 1건은 `apps/api/src/payments/payments.service.spec.ts:311` `no-unnecessary-type-assertion`). **2026-10-18 ① 완료**: 그 1건(불필요한 `as jest.Mock` 캐스트)을 고쳐 API ESLint 오류를 0으로 만들고, CI `lint · typecheck` job에 `pnpm --filter api exec eslint "{src,apps,libs,test}/**/*.ts" --quiet` 단계를 넣었다(오류만 실패, `lint` 스크립트는 `--fix`라 CI·검증에 쓰지 않는다). 처음에는 #426 병합 뒤 고치기로 했으나 #426은 #540으로 대체돼 닫혔고, #540은 LIVE 채널이 생길 때까지 병합 보류라 main에서 먼저 고쳤다(#540은 이 spec의 다른 줄만 바꾼다). 남은 일: ② 경고로 남긴 동작 관련 지적 `require-await` 8건, `no-base-to-string` 25건, `no-floating-promises` 1건을 하나씩 판정한다. 타입 관련 `no-unsafe-*` 경고 약 2,240건은 `any` 정리 때 함께 줄인다. 이전 기록: auth `any`, spec mock 타입, lint command 분리
+
+### FRONTEND-FORMAT-BASELINE
+- [ ] **2026-11-27 보류(사용자 결정 "추천안대로")**: `npx biome format apps/consumer packages` 기준 102개 파일이 포맷과 다르다(소비자 76개 — 지난 방침·약관 판 8개 포함, `packages/shared` 21개, `packages/ui` 4개, 루트 1개). 모두 줄 너비(줄바꿈) 차이라 동작은 같고, CI는 `biome lint`만 보고 포맷은 검사하지 않는다. `biome check`의 import 정렬(`assist/source/organizeImports`) 28건도 같은 성격이다. 보류 이유: 여러 세션이 같은 소비자 파일을 동시에 고치는 중이라 일괄 정리가 충돌을 만든다. 할 때: 열린 프런트 PR이 없는 시점에 한 PR로 정리한다. 지난 방침·약관 판(`apps/consumer/src/app/{privacy,terms}/<날짜>/`)은 역사 문서라 제외한다. `packages/shared/src`를 고치면 `dist/`도 다시 빌드해 같은지 확인한다. CI에 포맷 검사를 더할지는 그때 함께 정한다.
 
 ### LOCAL-DEV-FULLSTACK
 - [ ] API/consumer/seller/driver launcher·CORS·`dev.bat` 정책

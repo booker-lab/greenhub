@@ -1,9 +1,9 @@
 'use client';
 
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Textarea } from '@greenhub/ui/components/textarea';
 import { useId, useState } from 'react';
 import type { AdminOrder } from '@/hooks/useAdmin';
+import { Field, FieldLabel } from '../../../../components/Field';
 import { AdminConfirmDialog, type AdminConfirmRow } from '../../_components/AdminConfirmDialog';
 import { formatWon, maskPersonName } from '../../_components/adminList';
 import { describeRefundTarget, formatOrderedAt, REFUND_REASON_MAX_LENGTH } from '../_lib';

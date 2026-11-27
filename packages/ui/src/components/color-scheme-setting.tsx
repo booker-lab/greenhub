@@ -78,7 +78,7 @@ function ColorSchemeSetting({
     >
       <p
         id={labelId}
-        className="m-0 p-0 text-(length:--font-size-sm) leading-[1.55] font-medium text-(--color-text)"
+        className="m-0 p-0 text-(length:--font-size-sm) leading-[1.55] font-normal text-(--color-text)"
       >
         화면 모드
       </p>
@@ -89,7 +89,7 @@ function ColorSchemeSetting({
             <label
               key={option.value}
               data-checked={checked || undefined}
-              className="relative inline-flex min-h-(--touch-target) min-w-16 cursor-pointer items-center justify-center rounded-(--radius-full) border-2 border-solid border-(--color-border) px-3 text-(length:--font-size-sm) leading-none font-medium text-(--color-text-secondary) select-none [-webkit-tap-highlight-color:transparent] has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-(--ring) has-focus-visible:outline-solid data-checked:border-(--color-text) data-checked:font-bold data-checked:text-(--color-text)"
+              className="relative inline-flex min-h-(--touch-target) min-w-16 cursor-pointer items-center justify-center rounded-(--radius-full) border-2 border-solid border-(--color-border) px-3 text-(length:--font-size-sm) leading-none font-normal text-(--color-text-secondary) select-none [-webkit-tap-highlight-color:transparent] has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:outline-(--ring) has-focus-visible:outline-solid data-checked:border-(--color-text) data-checked:font-bold data-checked:text-(--color-text)"
             >
               <input
                 type="radio"

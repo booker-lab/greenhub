@@ -131,6 +131,21 @@ describe('판정 응답 읽기', () => {
 });
 
 describe('안내 문구', () => {
+  it('종결 기능이 꺼져 있으면(FEATURE_DISABLED) 버튼 대신 약관 개정 뒤 쓸 수 있다고 알린다', () => {
+    const parsed = parseCustomerFaultClosureEligibility({
+      eligible: false,
+      reason: 'FEATURE_DISABLED',
+      closureReasonCode: 'RECEIPT_REFUSED',
+      eligibleAt: '2026-11-13T06:00:00.000Z',
+      paymentDeadlineDate: '2026-11-16',
+      redeliveryFee: 5000,
+    });
+    expect(parsed?.reason).toBe('FEATURE_DISABLED');
+    expect(customerFaultClosureBlockedMessage({ reason: 'FEATURE_DISABLED', eligibleAt: null })).toBe(
+      '환불 없는 종결은 약관 개정 뒤 사용할 수 있어요.',
+    );
+  });
+
   it('결제 기한 안이면 종결 가능 시각(한국 시간)을 알려 준다', () => {
     expect(
       customerFaultClosureBlockedMessage({

@@ -3,21 +3,21 @@
 import {
   LIGHT_LABELS,
   LIGHT_LEVELS,
+  type OptionStock,
   PLACEMENT_LABELS,
   PLACEMENTS,
   PRODUCT_NOTICE_FIELDS,
   PRODUCT_OPTION_CHOICE_MAX,
   PRODUCT_OPTION_GROUP_MAX,
-  type OptionStock,
 } from '@greenhub/shared';
-import { Button, ButtonLabel } from '@greenhub/ui/components/button';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
 import { Chip } from '@greenhub/ui/components/chip';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { NativeSelect } from '@greenhub/ui/components/native-select';
 import { useId } from 'react';
 import { isFeatureOn } from '@/lib/features';
+import { Button, ButtonLabel } from '../../../components/Button';
+import { Field, FieldLabel } from '../../../components/Field';
 import { FieldCard } from './FormPrimitives';
 import {
   CARE_TEXT_MAX,

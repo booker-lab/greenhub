@@ -2,20 +2,20 @@
 
 import type { StoreProfileExtras } from '@greenhub/shared';
 import { Checkbox } from '@greenhub/ui/components/checkbox';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Textarea } from '@greenhub/ui/components/textarea';
-import { notify } from '@/components/AppToaster';
 import { notFound } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useEffect, useId, useState } from 'react';
+import { notify } from '@/components/AppToaster';
 import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { LoadingState } from '@/components/StateViews';
 import { apiJson } from '@/lib/api';
 import { isFeatureOn } from '@/lib/features';
 import { useTokenRef } from '@/lib/use-token-ref';
+import { LoadingButton } from '../../../components/Button';
+import { Field, FieldLabel } from '../../../components/Field';
 
 // ① 외형 유지(UI 교체 P4): Mantine Container size sm(최대 720px·좌우 md)·Paper(radius lg·p md; 그림자는 ② D2로 걷음)·
 // Stack(gap sm)·Text(sm = 15px·줄 높이 1.45)·TextInput·Textarea(autosize, 라벨)·Checkbox green(green-6)과 같은 값.
@@ -85,7 +85,10 @@ function toForm(profile: StoreProfileExtras): FormState {
 
 function toBody(form: FormState): StoreProfileExtras | string {
   const sinceYear = form.sinceYear.trim() ? Number(form.sinceYear) : undefined;
-  if (sinceYear !== undefined && (!Number.isInteger(sinceYear) || sinceYear < 1950 || sinceYear > 2100)) {
+  if (
+    sinceYear !== undefined &&
+    (!Number.isInteger(sinceYear) || sinceYear < 1950 || sinceYear > 2100)
+  ) {
     return '운영 시작 연도를 확인해 주세요.';
   }
   const terms = form.guaranteeTerms
@@ -129,7 +132,8 @@ export default function StoreProfileSettingsPage() {
       .catch(() => setForm(toForm({})));
   }, [storeId, hasToken, tokenRef]);
 
-  const patch = (next: Partial<FormState>) => setForm((current) => (current ? { ...current, ...next } : current));
+  const patch = (next: Partial<FormState>) =>
+    setForm((current) => (current ? { ...current, ...next } : current));
 
   return (
     <PageShell>
@@ -170,7 +174,9 @@ export default function StoreProfileSettingsPage() {
                     inputMode="numeric"
                     maxLength={4}
                     value={form.sinceYear}
-                    onChange={(event) => patch({ sinceYear: event.currentTarget.value.replace(/[^0-9]/g, '') })}
+                    onChange={(event) =>
+                      patch({ sinceYear: event.currentTarget.value.replace(/[^0-9]/g, '') })
+                    }
                   />
                 </div>
               </div>
@@ -199,8 +205,8 @@ export default function StoreProfileSettingsPage() {
                     onChange={(event) => patch({ guaranteeTerms: event.currentTarget.value })}
                   />
                   <p className={TEXT_SM} style={{ color: 'var(--color-text-secondary)' }}>
-                    실제로 지킬 수 있는 약속만 써 주세요. 고객 화면에 그대로 보여요. &quot;받은 날만 환불&quot;처럼
-                    기한을 줄이는 문구는 쓰지 마세요.
+                    실제로 지킬 수 있는 약속만 써 주세요. 고객 화면에 그대로 보여요. &quot;받은 날만
+                    환불&quot;처럼 기한을 줄이는 문구는 쓰지 마세요.
                   </p>
                 </div>
               </div>
@@ -236,7 +242,10 @@ export default function StoreProfileSettingsPage() {
                 setSaving(true);
                 setError(null);
                 try {
-                  await apiJson(`/stores/${storeId}`, token, { method: 'PATCH', body: JSON.stringify(body) });
+                  await apiJson(`/stores/${storeId}`, token, {
+                    method: 'PATCH',
+                    body: JSON.stringify(body),
+                  });
                   notify({ message: '저장했어요' });
                 } catch (e) {
                   setError(e instanceof Error ? e.message : '저장하지 못했어요.');

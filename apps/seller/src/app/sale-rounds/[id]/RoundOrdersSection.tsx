@@ -2,7 +2,6 @@
 
 import type { SaleRound } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button } from '@greenhub/ui/components/button';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -20,6 +19,7 @@ import {
   runBulkPrepare,
   summarizeBulkPrepare,
 } from '@/lib/round-orders';
+import { Button } from '../../../components/Button';
 
 // ① 외형 유지(UI 교체 P4): Mantine Paper(lg·xs·md)·Stack(sm 12px)·Group·SimpleGrid(4칸·10px)·UnstyledButton·
 // Text·Alert·Button과 같은 값을 Tailwind와 @greenhub/ui로 그린다.

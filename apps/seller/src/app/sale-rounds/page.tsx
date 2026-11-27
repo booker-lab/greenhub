@@ -2,7 +2,6 @@
 
 import type { SaleRound, SaleRoundSchedule, SaleRoundStatus } from '@greenhub/shared';
 import { Alert, AlertDescription, AlertTitle } from '@greenhub/ui/components/alert';
-import { Button, ButtonLink } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -10,9 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
-import { LoadingButton } from '@greenhub/ui/components/loading-button';
 import { Progress } from '@greenhub/ui/components/progress';
 import { StatusDot, type StatusDotTone } from '@greenhub/ui/components/status-dot';
 import { AlertTriangle, CalendarDays, ChevronRight, Plus, RefreshCcw } from 'lucide-react';
@@ -22,6 +19,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { PageShell } from '@/components/PageShell';
 import { EmptyState, LoadingState } from '@/components/StateViews';
 import { useSaleRounds } from '@/hooks/useSaleRounds';
+import { Button, ButtonLink, LoadingButton } from '../../components/Button';
+import { Field, FieldLabel } from '../../components/Field';
 import { copyFormFieldChange } from './copy-form';
 import { RoundSalesModeNotice } from './RoundSalesModeNotice';
 
@@ -266,7 +265,7 @@ function RoundCard({ round, onCopy }: { round: SaleRound; onCopy: (round: SaleRo
               className={TEXT}
               style={{
                 fontSize: 'var(--font-size-sm)',
-                fontWeight: 'var(--fw-medium)',
+                fontWeight: 'var(--fw-bold)',
                 color: requiresAttention ? 'var(--color-danger)' : 'var(--color-text-secondary)',
               }}
             >

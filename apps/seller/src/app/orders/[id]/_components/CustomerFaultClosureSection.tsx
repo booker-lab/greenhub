@@ -5,7 +5,6 @@ import {
   type CustomerFaultClosureEligibility,
   type Order,
 } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -13,9 +12,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { useCallback, useId, useState } from 'react';
+import { Button } from '../../../../components/Button';
+import { Field, FieldLabel } from '../../../../components/Field';
+import { useCustomerFaultClosure } from '../_hooks/useCustomerFaultClosure';
 import {
   CUSTOMER_FAULT_CLOSURE_BUTTON_LABEL,
   CUSTOMER_FAULT_CLOSURE_CONFIRM_MESSAGE,
@@ -27,7 +28,6 @@ import {
   shouldCheckCustomerFaultClosure,
   shouldCheckCustomerFaultClosureSettlement,
 } from '../customer-fault-closure';
-import { useCustomerFaultClosure } from '../_hooks/useCustomerFaultClosure';
 
 type ClosureOrder = Pick<
   Order,
@@ -124,7 +124,7 @@ export function CustomerFaultClosureRecordView({
       className="flex flex-col gap-1.5 py-2.5"
       style={{ borderTop: '1px solid var(--color-border)' }}
     >
-      <p className={TEXT} style={{ ...smallText, fontWeight: 'var(--fw-medium)' }}>
+      <p className={TEXT} style={{ ...smallText, fontWeight: 'var(--fw-bold)' }}>
         고객 사유 종결
       </p>
       <p className={TEXT} style={{ ...smallText, color: 'var(--color-text-secondary)' }}>
