@@ -16,7 +16,7 @@
 | `--color-primary` · `--brand` · `bg-brand` | `#00A65A` | 같음 | 작은 글자를 얹지 않는 면: 진행 막대, 체크박스·라디오·스위치의 켜진 면, 입력칸 초점 선, 선택 표시 테두리. **면 전용** |
 | `--color-primary-dark` · `brand.8` | `#007A43` | `#4FD08C` | 초록 글자(판매자명, 태그 글자, 링크, 강조 숫자) |
 | `--color-primary-surface` · `brand.0` | `#E9F9EF` | `#10301F` | 배송 흐름 상자, 판매자 요약 숫자 바탕, 품질 보장 태그. 소비자 회차 상품 타일의 도착 태그는 2026-11-02에 없앴다(`design-direction.md` §4.1) |
-| `--color-deadline` | `#FFD43B` | `#F2C21D` | 회차 마감 카운트다운 띠 |
+| `--color-deadline` | `#FFD43B` | `#F2C21D` | 회차 마감 카운트다운 알약(홈 배송일 제목 옆, 2026-11-13 결정으로 전체 폭 띠를 대체) |
 | `--color-deadline-surface` / `--color-deadline-text` | `#FFF4CC` / `#3B2F00` | `#2B2410` / `#FFD866` | 마감 안내 상자, "얼마 안 남음" 태그 |
 | `--color-text` | `#111111` | `#E8ECEA` | 본문, 가격 |
 | `--color-text-secondary` · `--muted-foreground` | `#696F6C` | `#A1AAA5` | 설명 글자. 흰 바탕 5.1:1, 연회색 면(`#F1F3F2`) 4.6:1(2026-11-02 `#6B716E`에서 바꿈, 면 위 4.47:1이 4.5 아래였다) |
