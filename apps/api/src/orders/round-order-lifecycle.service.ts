@@ -22,6 +22,7 @@ import {
 import { PaymentsService } from '../payments/payments.service';
 import { SettlementsService } from '../settlements/settlements.service';
 import { assertDeliveryHoldPolicy } from './delivery-hold-policy';
+import { detachDeliveryPhotosOnHold, hasCurrentCycleDeliveryPhoto } from './delivery-photo-cycle';
 import { deliveryTransitionViolation } from './orders.helpers';
 import {
   isAllowedRedeliveryFee,
@@ -158,10 +159,12 @@ export class RoundOrderLifecycleService {
         }
         throw new ConflictException(message);
       }
+      // 이번 배송 회차에 연결된 사진만 완료 근거로 본다. 보류 전 사진은 보류 전이가 떼고,
+      // 연결 시점을 알 수 없는 예전 연결은 보류 이력이 있으면 인정하지 않는다(delivery-photo-cycle).
       if (
         input.dto.status === 'DELIVERED' &&
         order['deliveryMethod'] === 'direct' &&
-        (!Array.isArray(order['deliveryPhotoIds']) || order['deliveryPhotoIds'].length === 0)
+        !hasCurrentCycleDeliveryPhoto(order)
       ) {
         if (input.requesterRole === 'driver') {
           throwDriverOrderStateConflict('배송 사진 연결 후에만 배송을 완료할 수 있습니다.');
@@ -642,6 +645,8 @@ export class RoundOrderLifecycleService {
       };
       // 보류 회차 번호. 보류·재개 알림의 멱등 키와 반복 상한(order-transition-notice)에 쓴다.
       update['deliveryHoldCount'] = readDeliveryHoldCount(order) + 1;
+      // 완료되지 않은 채 연결된 사진은 이 보류로 떼어 다음 배송 회차가 사진 없이 시작한다.
+      Object.assign(update, detachDeliveryPhotosOnHold(order, dto.status, this.toIso(now)));
     } else if (
       (dto.status === 'DELIVERING' && isCurrentRedeliveryPaymentRequired(order)) ||
       (order['status'] === 'DELIVERY_HELD' && !isCurrentRedeliveryPaymentRequired(order))
