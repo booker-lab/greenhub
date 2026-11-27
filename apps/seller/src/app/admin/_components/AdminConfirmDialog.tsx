@@ -161,7 +161,7 @@ function ConfirmRows({ rows, numeric = false }: { rows: AdminConfirmRow[]; numer
         >
           <dt className="shrink-0 text-[var(--color-text-secondary)]">{row.label}</dt>
           <dd
-            className={`m-0 min-w-0 ${row.longText ? 'text-left' : 'text-right'} font-bold break-words text-foreground ${numeric ? 'tabular-nums' : ''}`}
+            className={`m-0 min-w-0 ${row.longText ? 'text-left font-normal' : 'text-right font-bold'} break-words text-foreground ${numeric ? 'tabular-nums' : ''}`}
           >
             {row.value}
           </dd>
