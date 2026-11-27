@@ -134,8 +134,9 @@ function SearchView({ urlQuery }: { urlQuery: string }) {
                   className={CLEAR_BUTTON}
                   style={{ color: 'var(--color-text-secondary)' }}
                   onClick={() => setQuery('')}
+                  aria-label="검색어 지우기"
                 >
-                  <span>✕</span>
+                  <span aria-hidden="true">✕</span>
                 </button>
               </InputSection>
             ) : null}

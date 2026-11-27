@@ -37,9 +37,14 @@ const passwordSizeClassName = {
 
 function PasswordInput({
   className,
+  boxClassName,
   size = 'md',
   ...props
-}: Omit<React.ComponentProps<'input'>, 'size' | 'type'> & { size?: 'sm' | 'md' }) {
+}: Omit<React.ComponentProps<'input'>, 'size' | 'type'> & {
+  size?: 'sm' | 'md';
+  /** 테두리 상자에 더할 클래스(예: 누르는 높이 44px `h-11 min-h-11`). 없으면 크기별 기본 모양 그대로다. */
+  boxClassName?: string;
+}) {
   const [reveal, setReveal] = useState(false);
   const sized = passwordSizeClassName[size];
   return (
@@ -48,6 +53,7 @@ function PasswordInput({
         className={cn(
           'relative cursor-text overflow-hidden border border-solid border-input bg-background text-ui-ink transition-[border-color] duration-100 ease-[ease] focus-within:border-brand',
           sized.box,
+          boxClassName,
         )}
       >
         <input

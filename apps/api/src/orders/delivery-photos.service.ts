@@ -13,6 +13,7 @@ import { stripJpegMetadata } from '../firestore/jpeg-metadata';
 import { type DeliveryPhotoReconciliation, StorageService } from '../firestore/storage.service';
 import { OperationIssueWriterService } from '../operations/operation-issue-writer.service';
 import { RetentionService } from '../retention/retention.service';
+import { deliveryPhotoAttachFields, isDetachedDeliveryPhoto } from './delivery-photo-cycle';
 import { DriverOrderScopeService } from './driver-order-scope.service';
 import {
   throwDriverOrderAuthorityDenied,
@@ -244,6 +245,7 @@ export class DeliveryPhotosService {
       });
       // 사진을 연결하거나(처음) 연결된 사진으로 완료하기(전이만 빠졌던 재전송) 전에 본다.
       this.assertHoldUnchangedSinceCapture(order, input.expectedHoldAt);
+      this.assertNotDetachedByHold(order, input.photoId);
 
       if (photoIds.includes(input.photoId)) return;
       if (photoIds.length > 0) {
@@ -261,6 +263,8 @@ export class DeliveryPhotosService {
       });
       transaction.update(orderRef, {
         deliveryPhotoIds: [input.photoId],
+        // 연결 순간의 보류 표시. 완료 게이트가 이 사진이 이번 배송 회차 것인지 본다.
+        ...deliveryPhotoAttachFields(order),
         updatedAt: now,
       });
     });
@@ -304,6 +308,7 @@ export class DeliveryPhotosService {
     // Storage 객체를 쓰기 전에 거절한다. 그 사이 보류가 생기면 연결 트랜잭션이 다시 거절하고
     // 이번 요청이 만든 객체를 지운다(attach 실패 보상 경로).
     this.assertHoldUnchangedSinceCapture(order, expectedHoldAt);
+    this.assertNotDetachedByHold(order, photoId);
 
     if (photoIds.length > 0 && !photoIds.includes(photoId)) {
       throwDriverOrderStateConflict('배송 사진이 이미 연결되어 있습니다.', true);
@@ -507,6 +512,18 @@ export class DeliveryPhotosService {
     const heldAt = (order['deliveryHold'] as OrderRecord | null | undefined)?.['heldAt'];
     const current = typeof heldAt === 'string' && heldAt.trim().length > 0 ? heldAt : null;
     if (current === expected) return;
+    this.throwStaleHold();
+  }
+
+  /**
+   * 보류 전이가 연결에서 뗀 사진(보류 전 사진)은 다시 연결하지 않는다. 촬영 때 보류 표시를 보내지 않는
+   * 예전 앱의 재전송도 여기서 막힌다. 응답은 보류 표시 불일치와 같은 코드다.
+   */
+  private assertNotDetachedByHold(order: OrderRecord, photoId: string): void {
+    if (isDetachedDeliveryPhoto(order, photoId)) this.throwStaleHold();
+  }
+
+  private throwStaleHold(): never {
     throw new ConflictException({
       statusCode: 409,
       message: '사진을 찍은 뒤 배송 보류가 있었습니다. 다시 배송할 때 찍은 사진만 쓸 수 있습니다.',
