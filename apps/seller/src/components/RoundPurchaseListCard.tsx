@@ -64,15 +64,20 @@ export function RoundPurchaseListCard({
               >
                 {line.productName}
               </p>
-              {hasEstimate && estimate.lines[index].unitCost !== null && (
-                <p
-                  className={TEXT}
-                  style={{ fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' }}
-                >
-                  개당 약 {formatWon(estimate.lines[index].unitCost!)} · 예상{' '}
-                  {formatWon(estimate.lines[index].cost!)}
-                </p>
-              )}
+              {hasEstimate &&
+                estimate.lines[index].unitCost !== null &&
+                estimate.lines[index].cost !== null && (
+                  <p
+                    className={TEXT}
+                    style={{
+                      fontSize: 'var(--font-size-sm)',
+                      color: 'var(--color-text-secondary)',
+                    }}
+                  >
+                    개당 약 {formatWon(estimate.lines[index].unitCost)} · 예상{' '}
+                    {formatWon(estimate.lines[index].cost)}
+                  </p>
+                )}
             </div>
             <p
               className={TEXT}

@@ -18,12 +18,18 @@ import { FieldCard } from './FormPrimitives';
 
 // 다른 상품 편집 칸과 같은 글자(Text p, 여백 0)와 입력칸 모양(md, rounded-xl)을 쓴다.
 const TEXT = 'm-0 p-0 text-base font-normal';
-const HINT_STYLE = { fontSize: 'var(--font-size-sm)', color: 'var(--color-text-secondary)' } as const;
+const HINT_STYLE = {
+  fontSize: 'var(--font-size-sm)',
+  color: 'var(--color-text-secondary)',
+} as const;
 const INPUT_CLASS = 'rounded-xl';
 
 const GUBN_OPTIONS = [
   { value: '', label: '연결 안 함' },
-  ...FLOWER_MARKET_GUBNS.map((gubn) => ({ value: String(gubn), label: FLOWER_MARKET_GUBN_LABELS[gubn] })),
+  ...FLOWER_MARKET_GUBNS.map((gubn) => ({
+    value: String(gubn),
+    label: FLOWER_MARKET_GUBN_LABELS[gubn],
+  })),
 ];
 
 /**
@@ -47,7 +53,8 @@ export function MarketRefSection({
   const set = (patch: Partial<MarketRefForm>) => onChange({ ...value, ...patch });
 
   const pumNames = catalog?.items.map((item) => item.pumName) ?? [];
-  const goodNames = catalog?.items.find((item) => item.pumName === value.pumName.trim())?.goodNames ?? [];
+  const goodNames =
+    catalog?.items.find((item) => item.pumName === value.pumName.trim())?.goodNames ?? [];
   const unit = marketUnitLabel(value.flowerGubn);
 
   return (
@@ -98,7 +105,9 @@ export function MarketRefSection({
               className={`h-10.5 px-3.5 text-base ${INPUT_CLASS}`}
             />
             <Field>
-              <FieldLabel htmlFor={unitsId}>{`상품 1개에 드는 경매 단위 수 (1${unit} 기준)`}</FieldLabel>
+              <FieldLabel
+                htmlFor={unitsId}
+              >{`상품 1개에 드는 경매 단위 수 (1${unit} 기준)`}</FieldLabel>
               <FieldDescription>
                 {unit === '속' ? '예: 꽃다발 하나에 2속이 들면 2' : '예: 화분 하나에 1분이면 1'}
               </FieldDescription>
@@ -113,7 +122,11 @@ export function MarketRefSection({
             </Field>
             {lookup.summary &&
               marketSummaryLines(lookup.summary).map((line) => (
-                <p key={line} className={TEXT} style={{ ...HINT_STYLE, color: 'var(--color-text)' }}>
+                <p
+                  key={line}
+                  className={TEXT}
+                  style={{ ...HINT_STYLE, color: 'var(--color-text)' }}
+                >
                   {line}
                 </p>
               ))}
@@ -129,7 +142,8 @@ export function MarketRefSection({
             )}
             {catalog && catalog.items.length === 0 && (
               <p className={TEXT} style={HINT_STYLE}>
-                아직 수집된 경매 이름이 없어요. 경매 이름을 그대로 적어 두면 수집 뒤에 시세가 보여요.
+                아직 수집된 경매 이름이 없어요. 경매 이름을 그대로 적어 두면 수집 뒤에 시세가
+                보여요.
               </p>
             )}
           </>

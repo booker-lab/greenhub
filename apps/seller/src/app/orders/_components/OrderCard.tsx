@@ -125,8 +125,6 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
       </div>
 
       {order.status === 'RECRUITING' && (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: 카드 클릭을 막는 안내 상자다(Mantine Alert 그대로).
-        // biome-ignore lint/a11y/noStaticElementInteractions: 위와 같다.
         <Alert
           variant="secondary"
           className="mt-2.5 rounded-[8px] py-2.5"

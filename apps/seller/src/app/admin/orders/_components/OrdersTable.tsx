@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,6 +9,7 @@ import {
 } from '@greenhub/ui/components/dropdown-menu';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { AdminOrder } from '@/hooks/useAdmin';
+import { Button } from '../../../../components/Button';
 import {
   ADMIN_ACTION_PENDING,
   ADMIN_ACTION_TD,
@@ -190,7 +190,7 @@ export function OrdersTable({
   if (readState === 'FETCH_ERROR') {
     return (
       <div className="flex flex-col items-center gap-3 rounded-[8px] border border-rule px-4 py-16">
-        <p className="m-0 text-[15px] font-medium text-foreground">
+        <p className="m-0 text-[15px] font-bold text-foreground">
           주문 목록을 불러오지 못했습니다.
         </p>
         <p className="m-0 text-center text-[13px] text-[var(--color-text-secondary)]">{error}</p>

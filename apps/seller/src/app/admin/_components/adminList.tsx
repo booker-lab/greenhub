@@ -1,4 +1,3 @@
-import { Button } from '@greenhub/ui/components/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -7,6 +6,7 @@ import {
   DropdownMenuTrigger,
 } from '@greenhub/ui/components/dropdown-menu';
 import type { ReactNode } from 'react';
+import { Button } from '../../../components/Button';
 
 export { formatAdminDate, formatAdminDateTime, parseAdminTime } from './adminFormat';
 
@@ -148,7 +148,7 @@ export function AdminListError({
 }) {
   return (
     <div className="flex flex-col items-center gap-3 rounded-[8px] border border-rule px-4 py-16">
-      <p className="m-0 text-[15px] font-medium text-foreground">{title}</p>
+      <p className="m-0 text-[15px] font-bold text-foreground">{title}</p>
       {error && (
         <p className="m-0 text-center text-[13px] text-[var(--color-text-secondary)]">{error}</p>
       )}
