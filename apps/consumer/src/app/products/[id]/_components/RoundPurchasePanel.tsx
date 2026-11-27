@@ -1,6 +1,10 @@
 import type { SaleRound, SaleRoundItem } from '@greenhub/shared';
 import { roundOrderCloseStep } from '@/lib/round-close-step';
-import { formatRoundDay, formatRoundTime } from '@/lib/round-schedule-label';
+import {
+  formatRoundDay,
+  formatRoundDeliveryPromise,
+  formatRoundTime,
+} from '@/lib/round-schedule-label';
 
 interface RoundPurchasePanelProps {
   round: SaleRound;
@@ -177,8 +181,11 @@ export default function RoundPurchasePanel({
   );
 }
 
-/** 회차 상품의 필수 고지(배송 지역·기상 연기·청약철회). 상품 설명 아래, 구매 버튼 위에 둔다. */
-export function RoundPurchaseNotices() {
+/**
+ * 회차 상품의 필수 고지(배송 지역·기상 연기·청약철회). 상품 설명 아래, 구매 버튼 위에 둔다.
+ * 배송 약속은 그 회차의 문 앞 도착 시각(deliveryEndAt)으로 쓰고, 읽지 못할 때만 "화요일 오전 9시까지"(2026-11-26 사용자 결정).
+ */
+export function RoundPurchaseNotices({ deliveryEndAt }: { deliveryEndAt?: string | null }) {
   return (
     // ① 외형 유지(UI 교체 P5): Mantine Box(px md·pb xs·mt md·p md)·Stack(gap 4)·Text sm(15/1.45) 계산값.
     <section aria-label="회차 배송·청약철회 안내" className="px-4 pb-2.5">
@@ -190,7 +197,7 @@ export function RoundPurchaseNotices() {
           경기 이천 직접배송
         </p>
         <p className="m-0 p-0 text-sm font-normal" style={{ color: 'var(--color-text-secondary)' }}>
-          경기도 이천시 직접배송만 제공하며, 화요일 오전 9시까지 문 앞 배송합니다.
+          경기도 이천시 직접배송만 제공하며, {formatRoundDeliveryPromise(deliveryEndAt)}합니다.
         </p>
       </div>
 

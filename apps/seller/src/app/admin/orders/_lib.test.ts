@@ -202,7 +202,7 @@ describe('강제환불 확인창 대상 표시', () => {
   it('주문번호와 금액을 보여 준다', () => {
     expect(describeRefundTarget({ id: 'o1', orderNumber: 'ORD-1', totalAmount: 12000 })).toEqual({
       orderLabel: 'ORD-1',
-      amountLabel: '₩12,000',
+      amountLabel: '12,000원',
     });
   });
 

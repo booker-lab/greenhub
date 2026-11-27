@@ -83,7 +83,7 @@ export default function ImageUpload({ storeId, images, onChange, onError }: Imag
         className={`${TEXT} mb-2.5`}
         style={{
           fontSize: 'var(--font-size-sm)',
-          fontWeight: 'var(--fw-medium)',
+          fontWeight: 'var(--fw-bold)',
           color: 'var(--color-text-secondary)',
         }}
       >

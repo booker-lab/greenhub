@@ -125,8 +125,6 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
       </div>
 
       {order.status === 'RECRUITING' && (
-        // biome-ignore lint/a11y/useKeyWithClickEvents: 카드 클릭을 막는 안내 상자다(Mantine Alert 그대로).
-        // biome-ignore lint/a11y/noStaticElementInteractions: 위와 같다.
         <Alert
           variant="secondary"
           className="mt-2.5 rounded-[8px] py-2.5"
@@ -135,7 +133,7 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
           <AlertDescription>
             <p
               className={TEXT}
-              style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-medium)' }}
+              style={{ fontSize: 'var(--font-size-sm)', fontWeight: 'var(--fw-bold)' }}
             >
               공동구매 모집 중
             </p>
@@ -162,7 +160,7 @@ export const OrderCard = memo(function OrderCard({ order }: { order: Order }) {
             style={{
               fontSize: 'var(--font-size-sm)',
               color: 'var(--color-primary-dark)',
-              fontWeight: 'var(--fw-medium)',
+              fontWeight: 'var(--fw-bold)',
             }}
           >
             픽업 코드

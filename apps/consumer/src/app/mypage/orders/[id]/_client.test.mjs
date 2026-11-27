@@ -1443,3 +1443,10 @@ test('고객 사유 종결 기능 스위치는 서버가 true를 보냈을 때�
     true,
   );
 });
+
+test('배송 보류·취소 주문 상세는 지난 배송 예정일 줄을 보이지 않는다', () => {
+  assert.match(
+    source,
+    /\{deliveryDateText && !isCancelled && detail\.status !== 'DELIVERY_HELD' && \(/,
+  );
+});

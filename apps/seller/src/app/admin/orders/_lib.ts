@@ -107,7 +107,7 @@ export function describeRefundTarget(order: {
 }): { orderLabel: string; amountLabel: string } {
   return {
     orderLabel: order.orderNumber ?? order.id,
-    amountLabel: `₩${order.totalAmount.toLocaleString()}`,
+    amountLabel: `${order.totalAmount.toLocaleString()}원`,
   };
 }
 

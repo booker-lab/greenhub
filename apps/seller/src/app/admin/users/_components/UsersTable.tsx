@@ -52,14 +52,14 @@ function UserJoined({ user }: { user: AdminUser }) {
 }
 
 export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
-  if (users.length === 0) return <AdminListNotice>등록된 소비자가 없습니다.</AdminListNotice>;
+  if (users.length === 0) return <AdminListNotice>등록된 고객이 없습니다.</AdminListNotice>;
 
   const actionsOf = (user: AdminUser) =>
     processingId === user.id ? (
       <span className={ADMIN_ACTION_PENDING}>처리 중…</span>
     ) : (
       <AdminRowMenu
-        label={`소비자 ${userName(user)}`}
+        label={`고객 ${userName(user)}`}
         items={[
           {
             key: 'suspend',
@@ -73,7 +73,7 @@ export function UsersTable({ users, processingId, onToggle }: UsersTableProps) {
   return (
     <>
       {/* 휴대폰(640px 이하): 세 줄 행 — 1줄 이름, 2줄 연락처와 오른쪽 상태, 3줄 이메일·가입일, 옆에 ⋮ 한 자리. */}
-      <ul className="m-0 list-none p-0 min-[641px]:hidden" aria-label="소비자 목록">
+      <ul className="m-0 list-none p-0 min-[641px]:hidden" aria-label="고객 목록">
         {users.map((user) => (
           <li
             key={user.id}

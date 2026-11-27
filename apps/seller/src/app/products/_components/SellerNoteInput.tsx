@@ -19,7 +19,7 @@ export default function SellerNoteInput({ value, onChange }: Props) {
         className={`${TEXT} mb-1`}
         style={{
           fontSize: 'var(--font-size-sm)',
-          fontWeight: 'var(--fw-medium)',
+          fontWeight: 'var(--fw-bold)',
           color: 'var(--color-text-secondary)',
         }}
       >

@@ -1036,7 +1036,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <p className="m-0 text-sm">
                 {item.productName} × {item.quantity}
               </p>
-              <p className="m-0 text-sm">{item.subtotalAmount.toLocaleString('ko-KR')}원</p>
+              <p className="m-0 text-sm tabular-nums">{item.subtotalAmount.toLocaleString('ko-KR')}원</p>
             </div>
           ))}
           {/* Mantine Divider(gray-3 1px 위 테두리, 구분선 역할) */}
@@ -1046,7 +1046,7 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 배송비
               </p>
-              <p className="m-0 text-sm">{detail.deliveryFee.toLocaleString('ko-KR')}원</p>
+              <p className="m-0 text-sm tabular-nums">{detail.deliveryFee.toLocaleString('ko-KR')}원</p>
             </div>
           )}
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -1102,8 +1102,9 @@ export default function OrderDetailPage({ params }: { params: Promise<{ id: stri
               </p>
             </div>
           )}
-          {/* 취소된 주문은 오지 않으므로 배송 예정일을 보이지 않는다(MY 주문 카드가 도착일 줄을 숨기는 것과 같다). */}
-          {deliveryDateText && !isCancelled && (
+          {/* 취소된 주문은 오지 않으므로 배송 예정일을 보이지 않는다(MY 주문 카드가 도착일 줄을 숨기는 것과 같다).
+              배송 보류 주문도 원래 날짜가 지난 약속이 되므로 숨긴다(2026-11-22 결정 #881과 같게, 재배송 일정은 보류 안내가 말한다). */}
+          {deliveryDateText && !isCancelled && detail.status !== 'DELIVERY_HELD' && (
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="m-0 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
                 배송 예정일

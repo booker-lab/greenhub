@@ -1,6 +1,5 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import {
   Dialog,
   DialogBody,
@@ -8,9 +7,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
-import { Field, FieldDescription, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { useEffect, useId, useState } from 'react';
+import { Button } from '../../../components/Button';
+import { Field, FieldDescription, FieldLabel } from '../../../components/Field';
 import { isRoundCancelConfirmationValid } from './page.logic';
 
 interface RoundCancelModalProps {
@@ -106,7 +106,7 @@ export function RoundCancelModal({
                 disabled={!confirmed || loading}
                 // 판매자 확인창의 확정 버튼은 초록 하나다(design-standard, 2026-11-21 결정).
                 className="flex-1"
-                style={{ fontWeight: 'var(--fw-medium)' }}
+                style={{ fontWeight: 'var(--fw-bold)' }}
               >
                 {loading ? '취소하는 중…' : resume ? '다시 진행' : '회차 취소'}
               </Button>

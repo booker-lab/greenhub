@@ -223,7 +223,8 @@ type StatusTone = 'success' | 'waiting' | 'danger';
 
 const STATUS_TONE: Record<StatusTone, { background: string; color: string }> = {
   success: { background: 'var(--color-primary-surface)', color: 'var(--color-primary)' },
-  waiting: { background: 'var(--color-deadline-surface)', color: 'var(--color-deadline-text)' },
+  // 결제 확인 중은 마감이 아니라 노랑을 쓰지 않는다(design-direction.md §3.1 "노랑은 주문 마감에만"). 연회색 원 + 검정 아이콘.
+  waiting: { background: 'var(--color-surface-muted)', color: 'var(--color-text)' },
   danger: { background: 'var(--color-danger-surface)', color: 'var(--color-danger)' },
 };
 
@@ -392,7 +393,7 @@ function OrderSuccessContent() {
               결제 확인 중...
             </h1>
             <p
-              className="m-0 text-center leading-[1.55]"
+              className="m-0 text-center leading-[1.55] break-keep"
               style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--font-size-sm)' }}
             >
               {isPending && pollingExpired

@@ -113,9 +113,10 @@ export default function ProductCard({ product }: ProductCardProps) {
         </p>
         {(() => {
           const label = dogamLabel(product);
+          // 도감 라벨은 두 줄까지 낱말 단위로 보인다(회차 타일과 같다, 2026-11-26 사용자 결정).
           return label ? (
             <p
-              className="truncate"
+              className="line-clamp-2 [word-break:keep-all]"
               style={{
                 fontSize: 'var(--font-size-xs)',
                 fontWeight: 'var(--fw-bold)',

@@ -1,8 +1,8 @@
 'use client';
 
-import { Field, FieldDescription, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { useId } from 'react';
+import { Field, FieldDescription, FieldLabel } from './Field';
 
 // 계정 정지·정지 풀기 확인창의 사유 입력칸. 사유는 선택이고 어드민 행동 기록에 남는다(API SuspendUserDto.reason, 최대 200자).
 export const SUSPEND_REASON_MAX_LENGTH = 200;

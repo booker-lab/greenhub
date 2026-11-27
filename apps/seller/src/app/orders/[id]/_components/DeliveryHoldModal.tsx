@@ -1,8 +1,6 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { CheckIcon } from '@greenhub/ui/components/checkbox';
-import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import {
   Dialog,
   DialogBody,
@@ -10,10 +8,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@greenhub/ui/components/dialog';
-import { Field, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
+import { RadioGroup, RadioItem } from '@greenhub/ui/components/radio';
 import { Textarea } from '@greenhub/ui/components/textarea';
 import { useEffect, useId, useState } from 'react';
+import { Button } from '../../../../components/Button';
+import { Field, FieldLabel } from '../../../../components/Field';
 import {
   buildDeliveryHoldPayload,
   type DeliveryHoldPayload,
@@ -44,8 +44,7 @@ const TEXT = 'm-0 p-0 text-base font-normal';
 // 라디오·체크 줄은 누르는 높이를 44px로 잡는다. 동그라미·네모(20px)는 그대로 두고 라벨이 줄 전체를 덮는다.
 const RADIO_ROW =
   'items-center [&>div:first-child]:shrink-0 [&>div:last-child]:flex-1 [&_label]:flex [&_label]:min-h-11 [&_label]:items-center';
-const GROUP_LABEL =
-  'inline-block cursor-default text-sm/[1.55] font-semibold break-words text-ui-ink';
+const GROUP_LABEL = 'inline-block cursor-default text-sm/[1.55] font-bold break-words text-ui-ink';
 const REQUIRED = (
   <span className="text-ui-red" aria-hidden>
     {' *'}
@@ -395,7 +394,7 @@ export function DeliveryHoldModal({
                 onClick={() => void submit()}
                 disabled={actionLoading || responsibilityFeeHint !== null}
                 className="flex-1"
-                style={{ fontWeight: 'var(--fw-medium)' }}
+                style={{ fontWeight: 'var(--fw-bold)' }}
               >
                 {actionLoading ? '처리 중...' : '보류 저장'}
               </Button>

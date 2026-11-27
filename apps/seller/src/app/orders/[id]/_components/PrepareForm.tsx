@@ -1,8 +1,8 @@
 'use client';
 
 import type { Order } from '@greenhub/shared';
-import { Button } from '@greenhub/ui/components/button';
 import { isRoundOrder } from '@/lib/round-purchase-list';
+import { Button } from '../../../../components/Button';
 import { makePreparedAtOptions } from '../_lib';
 
 // ① 외형 유지(UI 교체 P4): Mantine Paper(radius lg = 16px, p md; 그림자는 ② D2로 걷음)·Group(gap xs = 10px)·
@@ -38,7 +38,7 @@ export function PrepareForm({
       <p
         className={`${TEXT} mb-3`}
         style={{
-          fontWeight: 'var(--fw-medium)',
+          fontWeight: 'var(--fw-bold)',
           fontSize: 'var(--font-size-sm)',
           color: 'var(--color-text-secondary)',
         }}
@@ -58,7 +58,7 @@ export function PrepareForm({
           :{' '}
           <span
             className={TEXT}
-            style={{ fontWeight: 'var(--fw-medium)', color: 'var(--color-text-secondary)' }}
+            style={{ fontWeight: 'var(--fw-bold)', color: 'var(--color-text-secondary)' }}
           >
             {new Date(deliveryDate).toLocaleDateString('ko-KR')}
           </span>
@@ -80,7 +80,7 @@ export function PrepareForm({
                 size="xs"
                 variant={preparedAt === opt.iso ? 'default' : 'outline-gray'}
                 onClick={() => setPreparedAt(preparedAt === opt.iso ? null : opt.iso)}
-                style={{ flex: 1, fontWeight: 'var(--fw-medium)' }}
+                style={{ flex: 1, fontWeight: 'var(--fw-bold)' }}
               >
                 {opt.label}
               </Button>
@@ -104,7 +104,7 @@ export function PrepareForm({
           className="flex-1"
           style={{
             backgroundColor: 'var(--primary)',
-            fontWeight: 'var(--fw-medium)',
+            fontWeight: 'var(--fw-bold)',
           }}
         >
           {actionLoading ? '처리 중...' : '준비 시작 확인'}

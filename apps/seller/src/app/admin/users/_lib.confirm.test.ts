@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { describeUserSuspendConfirm, EMPTY_FIELD, suspendActionLabel } from './_lib';
 
-describe('소비자 정지 라벨', () => {
+describe('고객 정지 라벨', () => {
   it("⋮ 메뉴·확인창 라벨을 '정지' / '정지 풀기'로 맞춘다('복구' 없음)", () => {
     expect(suspendActionLabel(false)).toBe('정지');
     expect(suspendActionLabel(true)).toBe('정지 풀기');
   });
 });
 
-describe('소비자 정지 확인창', () => {
+describe('고객 정지 확인창', () => {
   it('정지 확인창은 제목 = 동작 + 대상, 대상 정보(이메일·연락처·가입일)를 보여 준다', () => {
     const confirm = describeUserSuspendConfirm({
       name: '홍길동',

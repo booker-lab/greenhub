@@ -83,7 +83,7 @@ export function DailySummaryTab({
             </p>
             <p
               className={TEXT}
-              style={{ fontWeight: 'var(--fw-medium)', color: valueColor(summary?.count) }}
+              style={{ fontWeight: 'var(--fw-bold)', color: valueColor(summary?.count) }}
             >
               {summary?.count ?? 0}건
             </p>
@@ -97,7 +97,7 @@ export function DailySummaryTab({
             </p>
             <p
               className={TEXT}
-              style={{ fontWeight: 'var(--fw-medium)', color: valueColor(summary?.totalAmount) }}
+              style={{ fontWeight: 'var(--fw-bold)', color: valueColor(summary?.totalAmount) }}
             >
               {toKRW(summary?.totalAmount ?? 0)}
             </p>

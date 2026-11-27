@@ -73,8 +73,9 @@ function DogamLabel({ productId }: { productId: string }) {
   const label = dogamLabel(product);
   if (!label) return null;
   return (
+    // 한 줄에서 잘리면 뒤쪽 정보(높이·관리)가 사라져 두 줄까지 낱말 단위로 보인다(2026-11-26 사용자 결정).
     <p
-      className="m-0 mt-1 truncate p-0"
+      className="m-0 mt-1 line-clamp-2 p-0 [word-break:keep-all]"
       style={{ ...smallLabel, color: 'var(--color-text-secondary)' }}
     >
       {label}

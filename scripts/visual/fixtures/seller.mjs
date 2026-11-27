@@ -2152,10 +2152,10 @@ export const screens = [
     title: '소비자 · 정지 확인(사유)',
     path: '/admin/users',
     steps: [
-      { clickSelector: 'button[aria-label="소비자 김그린 동작 더 보기"]:visible' },
+      { clickSelector: 'button[aria-label="고객 김그린 동작 더 보기"]:visible' },
       { clickSelector: '[role="menuitem"]:has-text("정지")' },
     ],
-    returnFocus: 'button[aria-label="소비자 김그린 동작 더 보기"]:visible',
+    returnFocus: 'button[aria-label="고객 김그린 동작 더 보기"]:visible',
     viewport: true,
   },
   // 어드민 초대. 표와 휴대폰 행이 같은 버튼을 함께 그려 보이는 것만 누른다. 취소는 유효 행의 ⋮ 메뉴에 있다.
@@ -2275,7 +2275,7 @@ export const screens = [
       { clickSelector: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible' },
       { clickSelector: '[role="menuitem"]:has-text("배송 후 환불")' },
       { click: '꽃 상함' },
-      { fill: { label: '메모 (손님에게는 보이지 않음, 필수)', value: '꽃잎이 상해 도착' } },
+      { fill: { label: '메모 (고객에게는 보이지 않음, 필수)', value: '꽃잎이 상해 도착' } },
     ],
     returnFocus: 'button[aria-label="주문 R-DELIVERED-NOTE 동작 더 보기"]:visible',
     viewport: true,
