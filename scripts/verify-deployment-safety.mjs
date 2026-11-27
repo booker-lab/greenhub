@@ -15,7 +15,7 @@ for (const app of apps) {
   const config = JSON.parse(readFileSync(path, 'utf8'));
 
   // 커밋 푸시로 생기는 자동 배포는 모든 브랜치에서 끈다. Preview(E2E용 exact)와
-  // production은 검증된 SHA를 지정해 REST API로만 만든다(Vercel Hobby 하루 100건 한도 보호).
+  // production은 검증된 SHA를 지정해 REST API로만 만든다(Vercel 배포 수·사용량 보호).
   assert.equal(
     config.git?.deploymentEnabled,
     false,
