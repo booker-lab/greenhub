@@ -1,10 +1,10 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@greenhub/ui/components/field';
 import { Input } from '@greenhub/ui/components/input';
 import { type ChangeEvent, useId } from 'react';
 import type { IssuedInvite } from '@/hooks/useAdmin';
+import { Button } from '../../../../components/Button';
+import { Field, FieldDescription, FieldError, FieldLabel } from '../../../../components/Field';
 import { formatKstDateTime, INVITE_RECIPIENT_EMAIL_MAX_LENGTH } from '../_lib';
 
 // ② 방향(design-direction.md §5 어드민, §8 D7): 쉬는 상자에 그림자·색 면을 쓰지 않고 1px rule 테두리만 둔다.
@@ -122,7 +122,7 @@ export function InviteGenerator({
             className={`${TEXT} mb-1`}
             style={{
               fontSize: 'var(--font-size-sm)',
-              fontWeight: 'var(--fw-medium)',
+              fontWeight: 'var(--fw-bold)',
               color: 'var(--color-danger)',
             }}
           >

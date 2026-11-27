@@ -1,12 +1,12 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { Switch } from '@greenhub/ui/components/switch';
 import { useSession } from 'next-auth/react';
 import { useEffect, useRef, useState } from 'react';
 import { type AdminBanner, useAdminBanner } from '@/hooks/useAdmin';
 import { useResettableTimeout } from '@/hooks/useResettableTimeout';
 import { getFirebaseStorage } from '@/lib/firebase';
+import { Button } from '../../../components/Button';
 import {
   ImageReencodeError,
   imageFileRejection,
@@ -126,7 +126,7 @@ export default function AdminBannerClient() {
           <div className="flex flex-col items-center gap-3 px-4 py-16">
             <p
               className="m-0 p-0 text-base"
-              style={{ fontWeight: 500, color: 'var(--color-text-secondary)' }}
+              style={{ fontWeight: 700, color: 'var(--color-text-secondary)' }}
             >
               배너 정보를 불러오지 못했습니다.
             </p>
@@ -185,7 +185,7 @@ export default function AdminBannerClient() {
           <div className="flex flex-col items-center gap-2.5">
             <p
               className="m-0 p-0 text-base"
-              style={{ fontWeight: 500, color: 'var(--color-danger)' }}
+              style={{ fontWeight: 700, color: 'var(--color-danger)' }}
             >
               배너 저장에 실패했습니다.
             </p>

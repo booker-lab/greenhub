@@ -1,9 +1,9 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { Input, InputSection } from '@greenhub/ui/components/input';
 import { StatusDot } from '@greenhub/ui/components/status-dot';
 import type { AdminStore } from '@/hooks/useAdmin';
+import { Button } from '../../../../components/Button';
 import {
   ADMIN_ACTION_TD,
   ADMIN_SUB,

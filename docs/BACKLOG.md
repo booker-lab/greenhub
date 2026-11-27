@@ -650,6 +650,9 @@ success/failure는 새 claimant의 claim·status·audit를 덮지 않는다.
 ### API-LINT-BASELINE
 - [ ] **2026-10-13 #516 병합**: API ESLint 오류를 1건까지 줄였다(`main` `b48a22b1`, 남은 1건은 `apps/api/src/payments/payments.service.spec.ts:311` `no-unnecessary-type-assertion`). **2026-10-18 ① 완료**: 그 1건(불필요한 `as jest.Mock` 캐스트)을 고쳐 API ESLint 오류를 0으로 만들고, CI `lint · typecheck` job에 `pnpm --filter api exec eslint "{src,apps,libs,test}/**/*.ts" --quiet` 단계를 넣었다(오류만 실패, `lint` 스크립트는 `--fix`라 CI·검증에 쓰지 않는다). 처음에는 #426 병합 뒤 고치기로 했으나 #426은 #540으로 대체돼 닫혔고, #540은 LIVE 채널이 생길 때까지 병합 보류라 main에서 먼저 고쳤다(#540은 이 spec의 다른 줄만 바꾼다). 남은 일: ② 경고로 남긴 동작 관련 지적 `require-await` 8건, `no-base-to-string` 25건, `no-floating-promises` 1건을 하나씩 판정한다. 타입 관련 `no-unsafe-*` 경고 약 2,240건은 `any` 정리 때 함께 줄인다. 이전 기록: auth `any`, spec mock 타입, lint command 분리
 
+### FRONTEND-FORMAT-BASELINE
+- [ ] **2026-11-27 보류(사용자 결정 "추천안대로")**: `npx biome format apps/consumer packages` 기준 102개 파일이 포맷과 다르다(소비자 76개 — 지난 방침·약관 판 8개 포함, `packages/shared` 21개, `packages/ui` 4개, 루트 1개). 모두 줄 너비(줄바꿈) 차이라 동작은 같고, CI는 `biome lint`만 보고 포맷은 검사하지 않는다. `biome check`의 import 정렬(`assist/source/organizeImports`) 28건도 같은 성격이다. 보류 이유: 여러 세션이 같은 소비자 파일을 동시에 고치는 중이라 일괄 정리가 충돌을 만든다. 할 때: 열린 프런트 PR이 없는 시점에 한 PR로 정리한다. 지난 방침·약관 판(`apps/consumer/src/app/{privacy,terms}/<날짜>/`)은 역사 문서라 제외한다. `packages/shared/src`를 고치면 `dist/`도 다시 빌드해 같은지 확인한다. CI에 포맷 검사를 더할지는 그때 함께 정한다.
+
 ### LOCAL-DEV-FULLSTACK
 - [ ] API/consumer/seller/driver launcher·CORS·`dev.bat` 정책
 
