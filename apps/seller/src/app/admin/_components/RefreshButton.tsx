@@ -1,8 +1,8 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import { Loader } from '@greenhub/ui/components/loader';
 import type { CSSProperties } from 'react';
+import { Button } from '../../../components/Button';
 
 // ① 외형 유지(UI 교체 P2b): Mantine Button variant="light" color="gray" radius="md" loading.
 // 손가락으로 누르는 폭(≤1100)에서는 누르는 높이 44px(2026-11-20).

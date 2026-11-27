@@ -1,7 +1,7 @@
 'use client';
 
-import { Button } from '@greenhub/ui/components/button';
 import type { AdminDriver } from '@/hooks/useAdmin';
+import { Button } from '../../../../components/Button';
 import { ADMIN_SUB, formatAdminDate, parseAdminTime } from '../../_components/adminList';
 import { waitingDays } from '../_lib';
 import { DriverPhone, driverName } from './DriverList';
