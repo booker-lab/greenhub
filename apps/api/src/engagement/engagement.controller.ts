@@ -29,6 +29,8 @@ import {
   UnhideReviewDto,
 } from './dto/engagement.dto';
 import { EngagementService } from './engagement.service';
+import { ReviewPhotoUploadSlotsInterceptor } from './review-photo-upload-slots.interceptor';
+import { ReviewPhotoOwnerGuard } from './review-photo-upload.guard';
 import { type ReviewPhotoUpload, ReviewsService } from './reviews.service';
 
 // 공개 쓰기(찾는 상품 제안·입점 문의)는 기본 1분 100회보다 좁게 막는다.
@@ -106,12 +108,14 @@ export class MyEngagementController {
     return this.reviews.createReview(orderId, user.sub, dto);
   }
 
-  // 역할 가드는 multipart 파싱(FilesInterceptor)보다 먼저 실행된다. 쓴 사람 확인은 서비스가 한다.
+  // 가드(역할 → 쓴 사람·남은 자리)는 multipart 파싱(FilesInterceptor)보다 먼저 실행돼, 올릴 수 없는
+  // 요청의 본문을 메모리에 받지 않는다. 동시 처리 상한은 파싱 앞에서 자리를 잡는다. 최종 판정은 서비스가 한다.
   @Post('reviews/:reviewId/photos')
-  @UseGuards(RolesGuard)
+  @UseGuards(RolesGuard, ReviewPhotoOwnerGuard)
   @Roles('consumer', 'admin')
   @HttpCode(HttpStatus.OK)
   @UseInterceptors(
+    ReviewPhotoUploadSlotsInterceptor,
     FilesInterceptor('photos', REVIEW_PHOTO_MAX_COUNT, { limits: REVIEW_PHOTO_UPLOAD_LIMITS }),
   )
   addReviewPhotos(

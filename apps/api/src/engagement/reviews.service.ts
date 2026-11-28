@@ -184,6 +184,17 @@ export class ReviewsService {
     return created!;
   }
 
+  /**
+   * 사진 본문(multipart)을 받기 전에 부르는 빠른 확인(ReviewPhotoOwnerGuard).
+   * 없는 후기·남의 후기·숨긴 후기·남은 자리 없음을 addReviewPhotos와 같은 오류로 먼저 거절해,
+   * 올릴 수 없는 요청의 사진 바이트를 메모리에 받지 않는다. 최종 판정은 addReviewPhotos가 다시 한다.
+   */
+  async assertCanAddPhotos(reviewId: string, userId: string): Promise<void> {
+    this.assertReviewId(reviewId);
+    const snap = await this.firestore.doc(`reviews/${reviewId}`).get();
+    this.assertPhotoSlots(snap.exists ? snap.data() : undefined, userId, 1);
+  }
+
   /** 쓴 사람이 자기 후기에 사진을 더한다. 후기 하나에 모두 REVIEW_PHOTO_MAX_COUNT장까지. */
   async addReviewPhotos(
     reviewId: string,
