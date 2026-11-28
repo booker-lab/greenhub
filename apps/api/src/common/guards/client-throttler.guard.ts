@@ -94,7 +94,7 @@ export class ClientThrottlerGuard extends ThrottlerGuard {
   /** 로그인 IP 상한을 넘으면 기본 버킷과 같은 ThrottlerException(429)을 던진다. */
   private async enforceLoginPerIpLimit({ context, throttler }: ThrottlerRequest): Promise<void> {
     const { req, res } = this.getRequestResponse(context);
-    const tracker = `login-ip:${clientIp(req)}`;
+    const tracker = `login-ip:${await this.trackerIp(req)}`;
     const key = this.generateKey(context, tracker, throttler.name ?? 'default');
     const record = await this.storageService.increment(
       key,
@@ -121,7 +121,7 @@ export class ClientThrottlerGuard extends ThrottlerGuard {
     req: TrackerRequest,
     context?: ExecutionContext,
   ): Promise<string> {
-    const ip = clientIp(req);
+    const ip = await this.trackerIp(req);
 
     // eslint-disable-next-line @typescript-eslint/unbound-method -- 핸들러 동일성 비교일 뿐 호출하지 않는다.
     if (isHandler(context, AuthController.prototype.login)) {
@@ -138,6 +138,17 @@ export class ClientThrottlerGuard extends ThrottlerGuard {
 
     const sub = this.verifiedSubject(bearerToken(req), 'access');
     return sub ? `user:${sub}` : `ip:${ip}`;
+  }
+
+  /**
+   * 집계 키에 쓰는 클라이언트 IP. `@nestjs/throttler` 6.8의 기본 getTracker처럼 IPv6는 /64
+   * (`ipv6SubnetPrefix`) 단위로 묶는다. 이 가드는 getTracker를 덮어쓰므로 라이브러리의 묶음 처리를
+   * 그대로 거치지 않으면, IPv6 /64 하나를 가진 사용자가 요청마다 출발 주소를 바꿔 매번 새 버킷을 받는다.
+   * 묶음 규칙은 라이브러리 기본 구현에 맡기고(IPv4는 그대로, IPv4 매핑 IPv6는 IPv4로), 여기서는 trust proxy가
+   * 반영된 IP만 넘긴다.
+   */
+  private async trackerIp(req: TrackerRequest): Promise<string> {
+    return super.getTracker({ ip: clientIp(req) });
   }
 
   private verifiedSubject(token: unknown, expected: TokenType): string | undefined {
