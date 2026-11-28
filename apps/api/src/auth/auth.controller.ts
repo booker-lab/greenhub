@@ -42,6 +42,9 @@ export const FIREBASE_TOKEN_THROTTLE = { default: { limit: 60, ttl: 60000 } };
 // 나눠 써도 손님끼리 버킷을 공유하지 않는다. 앱은 429를 일시 장애로 보고 세션을 유지한 채 다음
 // 호출에서 다시 확인한다. 정상 사용으로는 닿지 않게 넉넉히 두되, 한 계정의 토큰으로 이 경로를
 // 끝없이 불러 사용자 문서 읽기를 반복시키지는 못하게 한다.
+// 만료된 access token은 서명 검증을 통과하지 못해 사용자 키가 아니라 접속 IP(Vercel 서버) 버킷으로
+// 센다. 앱은 refresh보다 이 재검증을 먼저 부르므로 만료 직후 호출은 같은 서버 IP를 쓰는 사용자끼리
+// 버킷을 나눠 쓰지만, 429여도 앱이 곧바로 refresh로 넘어가(만료 토큰이면 refresh) 세션은 유지된다.
 export const SESSION_AUTHORITY_THROTTLE = { default: { limit: 120, ttl: 60000 } };
 
 @Controller('auth')
