@@ -47,5 +47,5 @@
 - 새 현행 API 계약은 도메인 이름의 `*.md`에 유지한다.
 - 일회성 리팩터링·배포·마이그레이션 계획을 현행 domain spec에 섞지 않는다.
 - 완료된 계획 문서는 삭제하지 않아도 되지만, 현재 상태 판정 근거로 인용하지 않는다.
-- 외부 provider 승인·환경 변수 현재값은 API spec에 복제하지 않고 `docs/memory.md`와 활성 HANDOFF/PLAN에서 관리한다.
+- 외부 provider 승인·환경 변수 현재값은 API spec에 복제하지 않고 `docs/memory.md`(활성 PLAN이 있으면 `docs/memory.md`가 지정한 PLAN)에서 관리한다.
 - 공개 DTO·enum·상태의 정본이 `packages/shared`에 있으면 spec은 해당 파일을 명시하고 중복 정의를 최소화한다.

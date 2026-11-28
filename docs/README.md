@@ -7,7 +7,7 @@
 1. `docs/memory.md` — 현재 Git/제품/외부 차단 상태
 2. `docs/PROJECT_MAP.md` — 코드·문서 Context 라우터
 3. `docs/BACKLOG.md` — 현재 미완료·향후 작업
-4. `docs/memory.md`가 지정한 활성 HANDOFF·PLAN — 현재 실행 순서와 승인 게이트
+4. `docs/memory.md`의 `다음 작업` — 재개 지점. 활성 PLAN이 있으면 `docs/memory.md`가 지정하며 실행 순서와 승인 게이트를 소유한다
 5. 직접 관련 current spec — 동작 계약
 6. `docs/DOCUMENT_CONSISTENCY.md` — 문서 정합성 감사·판정 기준
 7. `docs/CRITICAL_LOGIC.md` — 설계 결정 이력
@@ -33,9 +33,16 @@
 
 ## 현재 출시에서 특별히 주의할 계약
 
-현재 production `/privacy`, `/terms`는 비판매 상태를 전제로 한다. 회차 직배송 실제 판매 공개 전에는 `docs/specs/legal/README.md`의 판매 활성화 재정합화 게이트를 수행한다.
+production `/privacy`, `/terms`는 판매 활성화 이후 판이다. 시행 중인 판·이전 공개본·변경 검증 게이트는 `docs/specs/legal/README.md`가 소유하므로 여기에 판 목록을 복제하지 않는다. 데이터 흐름이 바뀌면 release SHA를 확정하기 전에 그 문서 기준으로 재대조한다.
 
-현재 외부 차단점과 정확한 실행 순서는 `docs/memory.md`와 활성 HANDOFF·PLAN이 정본이다.
+현재 외부 차단점과 재개 지점은 `docs/memory.md`(`다음 작업`)가 정본이고, 활성 PLAN이 있으면 `docs/memory.md`가 지정한다.
+
+## 그 밖의 디렉터리
+
+- `docs/ux-audit/<앱>/` — 특정 날짜·SHA 기준 앱별 UX 여정 감사 기록(`findings.md`·스크린샷)과 후속 계획(`plan.md`). 남은 결정·작업은 `docs/BACKLOG.md`가 소유하며 문서 안의 실행 순서를 현재 지시로 승계하지 않는다.
+- `docs/release/ui-migration-freeze.json` — UI 교체 동결 단계 상태 파일. CI `UI 교체 동결` job이 `scripts/release/freeze-guard.mjs`로 읽으며 현재 단계는 이 파일 값이 정본이다.
+- `docs/devops/toolchain.md` — 툴체인 계약 요약. 실제 버전·설정은 그 문서가 정본으로 지정한 루트·각 package의 `package.json`·`biome.json` 등이 우선한다.
+- `docs/goals/*.goal.json` — 에이전트 Goal Contract 입력(`node scripts/agent/run-goal.mjs --goal <file>`). 파일 안의 기준·작업 목록은 실행 입력이지 현재 상태나 미완료 작업 목록이 아니다.
 
 ## 역사 자료로 보는 문서
 
