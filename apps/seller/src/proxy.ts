@@ -31,8 +31,10 @@ function continueWithCsp(request: NextRequest, session?: Session): NextResponse 
 
 // 로그인 검사 대상은 이전 matcher와 같은 식으로 고른다(config.matcher의 첫 항목과 같다).
 // 판매자 초대 링크(/invite/[token])는 로그인 전에 여는 화면이라 검사하지 않는다.
+// 서비스워커 파일(sw.js·workbox-*.js·사용자 정의 worker-*.js)도 로그아웃 상태에서 새 서비스워커를
+// 설치할 때 받아야 하므로 검사하지 않는다.
 const AUTH_GATED_PATH =
-  /^\/(?!login|invite\/|api|_next\/static|_next\/image|favicon.ico|manifest.json|icons|sw.js|workbox-.*\.js)/;
+  /^\/(?!login|invite\/|api|_next\/static|_next\/image|favicon.ico|manifest.json|icons|sw.js|workbox-.*\.js|worker-.*\.js)/;
 
 // auth() 래퍼로 감싸야 proxy에서 토큰이 갱신될 때 새 세션 쿠키가 응답에 실린다.
 // 인자 없이 `await auth()`를 부르면 갱신된 쿠키가 버려져 다음 요청이 이미 회전된
@@ -88,7 +90,7 @@ export async function proxy(request: NextRequest, event: NextFetchEvent) {
 export const config = {
   matcher: [
     // 로그인 검사 경로(이전 matcher 그대로). 프리페치 요청도 이전처럼 검사한다.
-    '/((?!login|invite/|api|_next/static|_next/image|favicon.ico|manifest.json|icons|sw.js|workbox-.*\\.js).*)',
+    '/((?!login|invite/|api|_next/static|_next/image|favicon.ico|manifest.json|icons|sw.js|workbox-.*\\.js|worker-.*\\.js).*)',
     // 그 밖의 페이지 문서(/login 등)에는 CSP nonce만 붙인다. API, Next 내부 경로, 확장자가
     // 있는 정적 파일과 프리페치 요청은 제외한다.
     {

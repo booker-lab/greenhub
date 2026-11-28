@@ -1,0 +1,1 @@
+(()=>{let e=["start-url"];function t(){return Promise.all(e.map(e=>self.caches.delete(e)))}self.addEventListener("activate",e=>{e.waitUntil(t())}),self.addEventListener("fetch",e=>{"navigate"===e.request.mode&&e.waitUntil(t())})})();
