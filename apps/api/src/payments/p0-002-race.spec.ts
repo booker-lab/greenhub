@@ -170,7 +170,11 @@ function makeFixture(orderOverrides: Data = {}) {
       schedule: { orderCloseAt: '2099-08-23T00:00:00.000Z' },
     },
   });
-  const portone = { refund: jest.fn().mockResolvedValue(undefined) };
+  const portone = {
+    refund: jest.fn().mockResolvedValue(undefined),
+    // UNKNOWN 환불 재시도는 POST 전에 PortOne 상태를 다시 읽는다. 기본값은 아직 환불되지 않은 PAID.
+    getPayment: jest.fn().mockResolvedValue({ id: 'order-1', status: 'PAID', amount: { total: 100000 } }),
+  };
   const issueWriter = { createOrMergeIssue: jest.fn().mockResolvedValue({ id: 'issue-1' }) };
   const retention = { saveRecord: jest.fn().mockResolvedValue({}) };
   const refunds = new PaymentRefundService(
@@ -221,7 +225,7 @@ function makeFixture(orderOverrides: Data = {}) {
     settlements as never,
     capacity as never,
   );
-  return { firestore, records, portone, payments, finalization, lifecycle };
+  return { firestore, records, portone, payments, finalization, lifecycle, notifications, capacity };
 }
 
 const paidPayment = {
@@ -230,6 +234,45 @@ const paidPayment = {
   method: { type: 'CARD' },
   transactionId: 'tx-1',
 } as never;
+
+type Fixture = ReturnType<typeof makeFixture>;
+
+// 진행 중 취소(LOCAL_PENDING) 주문에 PAID가 확인됐는데 환불 요청 결과가 불명확(시간 초과)한 상태를
+// 실제 첫 finalization으로 만든다: 주문 PENDING + REFUND_FAILED, 결제 PAID + refundClaim UNKNOWN.
+async function leaveRefundFailedPendingOrder(fixture: Fixture): Promise<string> {
+  fixture.portone.refund.mockRejectedValueOnce(new Error('PortOne timeout'));
+  await expect(fixture.finalization.finalizePaidOrder('order-1', paidPayment)).rejects.toThrow(
+    'PortOne timeout',
+  );
+  expect(fixture.records.get('orders/order-1')).toMatchObject({
+    status: 'PENDING',
+    cancellation: { status: 'REFUND_FAILED' },
+  });
+  expect(fixture.records.get('payments/order-1')).toMatchObject({
+    status: 'PAID',
+    refundClaim: expect.objectContaining({ owner: 'payment-refund', status: 'UNKNOWN' }),
+  });
+  const providerKey = (fixture.records.get('payments/order-1')?.['refundClaim'] as Data)[
+    'providerKey'
+  ];
+  expect(typeof providerKey).toBe('string');
+  return providerKey as string;
+}
+
+function expectNotAccepted(fixture: Fixture) {
+  expect(fixture.records.get('orders/order-1')?.['status']).toBe('PENDING');
+  expect(fixture.capacity.consumeReservationInTransaction).not.toHaveBeenCalled();
+  expect(fixture.notifications.sendToUser).not.toHaveBeenCalledWith(
+    'user-1',
+    'ORDER_ACCEPTED',
+    expect.anything(),
+    'order-1',
+  );
+}
+
+function refundProviderKeys(fixture: Fixture): unknown[] {
+  return (fixture.portone.refund.mock.calls as unknown[][]).map((call) => call[3]);
+}
 
 describe('P0-002 회차 취소와 결제 finalization 경합', () => {
   it('cancel first: 완료된 취소 뒤 늦은 PAID를 기존 환불 경로로 수렴시킨다', async () => {
@@ -381,6 +424,101 @@ describe('P0-002 회차 취소와 결제 finalization 경합', () => {
       status: 'PAID',
       refundClaim: expect.objectContaining({ owner: 'payment-refund', status: 'UNKNOWN' }),
     });
+  });
+
+  it('REFUND_FAILED로 남은 PENDING 주문의 PAID 재확정은 ACCEPTED 대신 같은 providerKey로 재조회 후 환불한다', async () => {
+    const fixture = makeFixture({
+      cancellation: { status: 'LOCAL_PENDING', reason: '회차 취소' },
+    });
+    const providerKey = await leaveRefundFailedPendingOrder(fixture);
+
+    const result = await fixture.finalization.finalizePaidOrder('order-1', paidPayment);
+
+    expect(result).toEqual({ ok: false, reason: 'cancelled_paid_refunded' });
+    expectNotAccepted(fixture);
+    // 재시도는 PortOne 상태를 먼저 읽고, 첫 요청과 같은 provider 멱등 키로만 다시 요청한다.
+    expect(fixture.portone.getPayment).toHaveBeenCalledTimes(1);
+    expect(fixture.portone.getPayment.mock.invocationCallOrder[0]).toBeLessThan(
+      fixture.portone.refund.mock.invocationCallOrder[1],
+    );
+    expect(refundProviderKeys(fixture)).toEqual([providerKey, providerKey]);
+    expect(fixture.records.get('payments/order-1')).toMatchObject({
+      status: 'CANCELLED',
+      refundAmount: 100000,
+    });
+  });
+
+  it('REFUND_FAILED 재확정에서 첫 환불이 이미 반영됐으면 다시 요청하지 않고 결제를 환불 완료로 맞춘다', async () => {
+    const fixture = makeFixture({
+      cancellation: { status: 'LOCAL_PENDING', reason: '회차 취소' },
+    });
+    await leaveRefundFailedPendingOrder(fixture);
+    fixture.portone.getPayment.mockResolvedValueOnce({
+      id: 'order-1',
+      status: 'CANCELLED',
+      amount: { total: 100000 },
+    });
+
+    const result = await fixture.finalization.finalizePaidOrder('order-1', paidPayment);
+
+    expect(result).toEqual({ ok: false, reason: 'cancelled_paid_refunded' });
+    expectNotAccepted(fixture);
+    expect(fixture.portone.refund).toHaveBeenCalledTimes(1);
+    expect(fixture.records.get('payments/order-1')).toMatchObject({
+      status: 'CANCELLED',
+      refundAmount: 100000,
+    });
+  });
+
+  it('REFUND_FAILED 재확정에서 PortOne 재조회가 실패하면 refundClaim과 providerKey를 지우지 않는다', async () => {
+    const fixture = makeFixture({
+      cancellation: { status: 'LOCAL_PENDING', reason: '회차 취소' },
+    });
+    const providerKey = await leaveRefundFailedPendingOrder(fixture);
+    fixture.portone.getPayment.mockRejectedValueOnce(new Error('PortOne 조회 실패'));
+
+    await expect(fixture.finalization.finalizePaidOrder('order-1', paidPayment)).rejects.toThrow(
+      'PortOne 조회 실패',
+    );
+
+    expectNotAccepted(fixture);
+    expect(fixture.portone.refund).toHaveBeenCalledTimes(1);
+    expect(fixture.records.get('orders/order-1')).toMatchObject({
+      cancellation: { status: 'REFUND_FAILED' },
+    });
+    expect(fixture.records.get('payments/order-1')).toMatchObject({
+      status: 'PAID',
+      refundClaim: expect.objectContaining({ status: 'UNKNOWN', providerKey }),
+    });
+  });
+
+  it('환불 소유 기록이 남은 결제 문서는 정상 확정 경로에서도 PAID로 덮어쓰지 않는다', async () => {
+    const fixture = makeFixture();
+    const refundClaim = {
+      token: 'refund-token-1',
+      owner: 'payment-refund',
+      status: 'UNKNOWN',
+      providerKey: 'ghr-payment-refund-existing-key',
+      expiresAt: 0,
+    };
+    fixture.records.set('payments/order-1', {
+      id: 'order-1',
+      orderId: 'order-1',
+      status: 'PAID',
+      amount: 100000,
+      portonePaymentId: 'order-1',
+      refundClaim,
+    });
+
+    await expect(fixture.finalization.finalizePaidOrder('order-1', paidPayment)).rejects.toThrow(
+      '환불 기록이 남은 결제 문서는 PAID로 덮어쓰지 않습니다.',
+    );
+
+    // 트랜잭션 전체가 중단되므로 주문 전환·결제 덮어쓰기 모두 커밋되지 않는다.
+    expect(fixture.records.get('orders/order-1')?.['status']).toBe('PENDING');
+    expect(fixture.notifications.sendToUser).not.toHaveBeenCalled();
+    expect(fixture.records.get('payments/order-1')?.['refundClaim']).toEqual(refundClaim);
+    expect(fixture.portone.refund).not.toHaveBeenCalled();
   });
 
   it('normal payment: 취소 claim이 없는 PAID는 기존 ACCEPTED 전환을 유지한다', async () => {

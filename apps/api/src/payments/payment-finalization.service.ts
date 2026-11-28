@@ -14,6 +14,7 @@ import {
   OrderCapacityService,
 } from '../orders/order-capacity.service';
 import { collectOptionStockLines } from '../orders/_lib/round-order-extras';
+import { isOrderCancellationInProgress } from '../orders/order-cancellation-state';
 import { RetentionService } from '../retention/retention.service';
 import { PortoneClient } from './portone.client';
 import { PaymentRefundService } from './payment-refund.service';
@@ -161,6 +162,7 @@ export class PaymentFinalizationService {
                 tx,
                 orderId,
                 freshOrder,
+                payment,
                 paymentData,
                 now,
                 freshOrder['status'],
@@ -171,6 +173,11 @@ export class PaymentFinalizationService {
           return { kind: 'noop' };
         }
         if (!this.canFinalize(freshOrder)) return { kind: 'noop' };
+        // 결제 문서는 아래 capacity·주문 write보다 먼저 읽는다(트랜잭션은 읽기가 쓰기보다 앞선다).
+        const existingPaymentSnap = await tx.get(paymentRef);
+        const existingPayment = existingPaymentSnap.exists
+          ? (existingPaymentSnap.data() as Record<string, any>)
+          : null;
 
         if (this.isLegacyTimeoutPaymentCandidate(freshOrder)) {
           await reacquireLegacyDailyCapacityInTransaction(this.firestore, tx, orderId, freshOrder);
@@ -231,6 +238,7 @@ export class PaymentFinalizationService {
           tx,
           orderId,
           freshOrder,
+          existingPayment,
           paymentData,
           now,
           finalStatus,
@@ -714,10 +722,12 @@ export class PaymentFinalizationService {
     );
   }
 
+  // 진행 중 취소 판정은 주문 쪽 정본(order-cancellation-state)을 그대로 쓴다. 이 경로가 남긴
+  // REFUND_FAILED도 환불 재시도 대기 중인 취소이므로 정상 접수(ACCEPTED)로 확정하지 않는다.
   private isCancellationSettlementCandidate(order: Record<string, any>) {
     return (
       (order['status'] === 'CANCELLED' && order['cancelReason'] !== 'timeout') ||
-      ['LOCAL_PENDING', 'LOCAL_FAILED', 'REFUNDING'].includes(order['cancellation']?.['status'])
+      isOrderCancellationInProgress(order)
     );
   }
 
@@ -742,10 +752,22 @@ export class PaymentFinalizationService {
     tx: any,
     orderId: string,
     order: Record<string, any>,
+    existingPayment: Record<string, any> | null,
     paymentData: PaymentData,
     now: any,
     orderStatus: string,
   ) {
+    // 이 write는 결제 문서 전체를 PAID로 덮어쓴다. 환불 소유 기록(refundClaim)이나 환불 결과가
+    // 남아 있으면 PortOne 환불이 실제로 됐는지 같은 providerKey로 다시 확인할 근거가 사라지므로
+    // 덮어쓰지 않고 트랜잭션을 중단한다(fail closed).
+    if (
+      existingPayment &&
+      (existingPayment['refundClaim'] != null ||
+        existingPayment['refundedAt'] ||
+        existingPayment['status'] === 'CANCELLED')
+    ) {
+      throw new Error('환불 기록이 남은 결제 문서는 PAID로 덮어쓰지 않습니다.');
+    }
     const paymentRef = this.firestore.doc(`payments/${orderId}`);
     tx.set(paymentRef, {
       id: orderId,
