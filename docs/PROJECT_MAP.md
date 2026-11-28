@@ -17,7 +17,7 @@ Task를 시작할 때 필요한 문서만 연다.
 | Ops 계약 | `docs/specs/ops/README.md` |
 | 판매 활성화 법적 문서 | `docs/specs/legal/README.md` |
 | 보안 문서 | `docs/security/README.md` |
-| 현재 실행 순서 | `docs/memory.md`가 지정한 활성 HANDOFF·PLAN |
+| 재개 지점·실행 순서 | `docs/memory.md`의 `다음 작업`. 활성 PLAN이 있으면 `docs/memory.md`가 지정 |
 | 미완료 작업 | `docs/BACKLOG.md` |
 | 중요한 설계 결정 | `docs/CRITICAL_LOGIC.md` |
 | 장애 해결 이력 | `docs/TROUBLESHOOTING.md` |
@@ -30,7 +30,7 @@ Task를 시작할 때 필요한 문서만 연다.
 - 저장소: `booker-lab/greenhub`
 - 기본 기준 브랜치: `main`
 - 회차 직배송 기능 통합 기준 SHA: `e55f25914cc7d01576fbd4639583daaf0fe6385e`
-- 구조·라우팅 재검증일: `2026-08-23 KST`
+- 구조·라우팅 재검증일: `2026-11-28 KST`
 - `codex/mvp-sales-round-direct`는 통합 완료된 과거 개발 branch이며 신규 작업의 기준 branch가 아니다.
 - 기능 통합 뒤 문서 정합화 commit 때문에 `main` HEAD는 위 기능 기준 SHA보다 앞설 수 있다. 새 작업 시작 시 현재 `main` HEAD를 다시 조회한다.
 
@@ -44,7 +44,7 @@ Task를 시작할 때 필요한 문서만 연다.
 | `apps/api` | NestJS API와 중앙 비즈니스 로직 |
 | `apps/e2e` | Playwright 다역할 E2E |
 | `packages/shared` | 앱 간 공개 도메인 타입·순수 유틸리티 |
-| `packages/ui` | 공통 Mantine theme·CSS |
+| `packages/ui` | 공통 UI 컴포넌트(shadcn/ui·Base UI)·Tailwind 토큰 CSS·브랜드 자산·폰트 |
 | `scripts` | 시드·마이그레이션·진단·E2E/운영 도구 |
 | `tests` | Firebase Rules·k6 등 저장소 레벨 검증 |
 | 루트 인프라 | Firebase, Vercel, Railway, Docker, GitHub Actions 설정 |
@@ -96,7 +96,7 @@ scripts ───> Firebase Admin·배포 서비스·운영 환경
 | API | module/controller/service/DTO/spec | `docs/specs/api/README.md`에서 current domain spec 선택 | 공개 계약이면 shared와 소비 앱, Firebase 쿼리면 Rules/index, 결제·알림 공급자/개인정보 흐름이면 ops+legal |
 | E2E | config, global setup, 대상 spec/helper | 회차 E2E/ops 문서 | 실패한 흐름의 직접 화면·API까지만 확장 |
 | shared | 대상 타입·유틸·test | 대응 domain spec | 실제 import 사용처만 검색 |
-| UI | theme/style/component | 직접 관련 frontend 문서 | 실제 소비 앱만 확인 |
+| UI | component/style | 직접 관련 frontend 문서 | 실제 소비 앱만 확인 |
 | scripts | 대상 script + 호출 workflow/package script | 직접 관련 ops/gate 문서 | 데이터면 domain/shared, 배포면 infrastructure |
 | infrastructure | `.github/workflows`, Firebase/Vercel/Railway 설정 | 직접 관련 ops/security 문서 + 배포 작업이면 활성 deployment safety PLAN | 증거가 있을 때만 앱 소스로 확장 |
 
@@ -107,12 +107,21 @@ scripts ───> Firebase Admin·배포 서비스·운영 환경
 | 인증 | `apps/api/src/auth`, 각 앱 `src/auth.ts` | `docs/specs/api/auth.md` |
 | 상품 | `apps/api/src/products`, `apps/api/src/varieties`, AI 사용 시 `apps/api/src/ai` | `docs/specs/api/products.md`; AI 상세 생성은 실제 AI 코드 우선 + `docs/specs/ai_product_content.md`는 설계 참고 |
 | 주문 | `apps/api/src/orders` | `docs/specs/api/orders.md` |
+| 기사 배송 조회 | `apps/api/src/driver`, driver 앱 | `docs/specs/api/orders.md`(Driver FSM·주문 read 경계) + `docs/specs/mvp-sales-round-direct-delivery.md` 드라이버 API |
+| 옵션 재고 | `apps/api/src/option-stocks` | 전용 spec 없음 — `docs/specs/mvp-sales-round-direct-delivery.md` `orders`(옵션 재고 예약) |
 | 결제 | `apps/api/src/payments`, consumer payment flow | `docs/specs/api/payments.md` + 판매 공개 시 `docs/specs/legal/README.md` |
 | 알림 | `apps/api/src/notifications` | `docs/specs/api/notifications.md` + 실제 고객 발송 시 legal 검토 |
-| 정산 | `apps/api/src/settlements` | `docs/specs/api/settlements.md` |
+| 정산 | `apps/api/src/settlements`, 정산 계좌 `apps/api/src/payout-accounts` | `docs/specs/api/settlements.md` |
 | 회차 직배송 | `apps/api/src/sale-rounds`, 관련 orders | `docs/specs/mvp-sales-round-direct-delivery.md` |
+| 운영 예외 | `apps/api/src/operations` | `docs/specs/mvp-sales-round-direct-delivery.md` `operationIssues` + `docs/specs/ops/mvp-sales-round-runbook.md` |
 | 거점 | `apps/api/src/hubs` | `docs/specs/api/hubs.md` |
+| 가게 | `apps/api/src/stores` | 전용 spec 없음 — `docs/specs/api/admin.md` §3 Store 관리 |
+| 후기·재입고·입점 문의 | `apps/api/src/engagement` | 전용 spec 없음 — `docs/specs/api/admin.md` 후기·입점 문의 관리 |
+| 화훼 경매 시세 | `apps/api/src/market-prices` | `docs/specs/api/market-prices.md` |
 | 관리자 | `apps/api/src/admin`, seller admin UI | `docs/specs/api/admin.md` |
+| 운영자 알림 | `apps/api/src/ops-alerts` | `docs/specs/ops/ops-alerts.md` |
+| 보관·파기 | `apps/api/src/retention` | 전용 spec 없음 — `docs/specs/mvp-sales-round-direct-delivery.md` 보관·보안 계약 + `docs/specs/legal/consumer-legal-documents.md` §3 |
+| 정기 작업 호출 | `apps/api/src/scheduled-jobs` | 전용 spec 없음 — `docs/specs/ops/api-cloud-run-runbook.md` R12 |
 | 개인정보·약관 | consumer privacy/terms, 결제·알림·배송 데이터 흐름 | `docs/specs/legal/README.md`, `consumer-legal-documents.md` |
 | Firebase 권한 | `firestore.rules`, `storage.rules`, indexes | `docs/security/README.md` + 직접 관련 ops/spec |
 | CI·Preview | `.github/workflows`, `apps/e2e`, scripts | 현행 workflow·E2E 문서. 완료된 `*-plan.md`는 역사 자료 |
@@ -126,11 +135,17 @@ scripts ───> Firebase Admin·배포 서비스·운영 환경
 ```text
 pnpm build
 pnpm --filter api test --runInBand
+pnpm --filter api test:e2e
+pnpm --filter api test:node
 pnpm --filter seller test
+pnpm --filter driver test
+pnpm --filter consumer test
 pnpm --filter @greenhub/shared typecheck
 pnpm --filter @greenhub/shared test
 pnpm test:firestore-rules
 pnpm test:storage-rules
+node --test --test-concurrency=1 'scripts/**/*.spec.mjs' 'scripts/**/*.test.mjs'
+node --test 'apps/e2e/tests/_helpers/*.test.mjs'
 pnpm test:e2e
 pnpm load:smoke
 pnpm test:git-safety
@@ -144,6 +159,7 @@ pnpm test:agent-build
 
 - 루트 `pnpm lint`와 API lint는 수정형 동작이 포함될 수 있으므로 read-only 감사 명령으로 간주하지 않는다.
 - 루트 `pnpm typecheck`가 모든 앱의 typecheck를 보장한다고 가정하지 않는다.
+- `test:firestore-rules`·`test:storage-rules`는 실행 중인 Firebase 에뮬레이터가 필요하다. CI는 두 파일을 `scripts/node_modules/.bin/firebase emulators:exec --only firestore,storage --project demo-greenhub "node --test --test-concurrency=1 tests/firestore/firestore-rules.test.mjs tests/storage/storage-rules.test.mjs"`로 감싸 실행한다.
 - build/test/format이 만든 산출물과 의도한 소스 변경을 구분한다.
 - seed, migration, deploy, 외부 발송, 운영 데이터 변경은 문서에 명령이 있어도 별도 승인 없이 실행하지 않는다.
 

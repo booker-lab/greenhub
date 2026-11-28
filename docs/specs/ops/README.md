@@ -10,7 +10,7 @@
 - `morning-ops-check.md` — 아침 운영 점검 보고(읽기 전용 점검 열쇠·판정 기준표·권한 경계, 어드민 운영 자동화 1단계)
 - `platform-modernization-plan.md` — 개발 환경 현대화(의존성·런타임 버전) 결정·단계(2026-10-23 확정). API 이전은 아래 Cloud Run 계획서
 
-현재 외부 상태와 출시 순서는 `docs/memory.md`와 활성 HANDOFF·PLAN이 우선한다.
+현재 외부 상태와 재개 지점은 `docs/memory.md`(`다음 작업`)가 우선하고, 활성 PLAN이 있으면 `docs/memory.md`가 지정한다.
 
 배포 방식·`main` 통합·exact-SHA production 배포 판단은 `docs/plans/PLAN_deployment_safety_guards_20260823.md`를 함께 확인한다.
 
@@ -18,7 +18,7 @@
 
 운영 런북은 일상 운영·장애·롤백 절차를 설명하지만 **출시 dependency의 정본은 아니다.**
 
-현재 production `/privacy`, `/terms`는 시행일 2026-08-30 판매 활성화 판이다. 이후 데이터 흐름이 바뀌면 release SHA를 확정하기 전에 `docs/specs/legal/README.md` 기준으로 재대조한다.
+production `/privacy`, `/terms`의 시행 중인 판과 이전 공개본은 `docs/specs/legal/README.md`가 소유한다. 데이터 흐름이 바뀌면 release SHA를 확정하기 전에 그 문서 기준으로 재대조한다.
 
 런북의 판매 모드 전환 조건을 읽을 때는 `docs/memory.md`의 현재 상태가 우선한다. `PLAN_mvp_round_direct_launch_blockers.md`는 2026-09-05 snapshot인 역사 자료다.
 
