@@ -1,5 +1,9 @@
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
 import { createOccFirestore } from '../../test/helpers/firestore-occ-fake';
+import { sanitizedValidationPipeOptions } from '../common/validation/sanitized-validation';
+import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { ArchiveStoreDto } from './dto/admin.dto';
 
 jest.mock('firebase-admin', () => ({
   auth: jest.fn(() => ({ revokeRefreshTokens: jest.fn().mockResolvedValue(undefined) })),
@@ -169,5 +173,33 @@ describe('AdminService 판매자 복구', () => {
     const { service } = makeFixture();
 
     await expect(service.restoreStore('none', 'admin-1')).rejects.toMatchObject({ status: 404 });
+  });
+});
+
+describe('AdminController 판매자 치우기 본문 검증', () => {
+  // main.ts와 같은 전역 파이프 설정으로, 컨트롤러 매개변수 메타데이터가 가리키는 타입을 검증한다.
+  const pipe = new ValidationPipe(sanitizedValidationPipeOptions());
+  const bodyMetatype = () =>
+    (Reflect.getMetadata('design:paramtypes', AdminController.prototype, 'archiveStore') as unknown[])[1];
+  const validate = (value: unknown) =>
+    pipe.transform(value, { type: 'body', metatype: bodyMetatype() as never });
+
+  it('본문 매개변수 메타데이터가 ArchiveStoreDto라 전역 ValidationPipe가 검증한다', () => {
+    expect(bodyMetatype()).toBe(ArchiveStoreDto);
+  });
+
+  it('본문이 없거나 가게 ID 확인만 있으면 통과한다', async () => {
+    // 본문이 없으면 빈 객체로 검증한 뒤 원래 값(undefined)을 넘긴다. 컨트롤러는 dto?.로 읽는다.
+    await expect(validate(undefined)).resolves.toBeUndefined();
+    await expect(validate({ confirmStoreIdPrefix: 'abcdef12' })).resolves.toEqual({
+      confirmStoreIdPrefix: 'abcdef12',
+    });
+  });
+
+  it('문자열이 아닌 가게 ID 확인과 정의되지 않은 필드는 400으로 거절한다', async () => {
+    await expect(validate({ confirmStoreIdPrefix: 1 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(validate({ confirmStoreIdPrefix: 'abcdef12', extra: true })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });
