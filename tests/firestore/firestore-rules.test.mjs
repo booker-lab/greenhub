@@ -134,7 +134,10 @@ async function seedFixtures() {
       'stores/store-missing-mode': { name: '모드 누락 매장' },
       'stores/store-null-mode': { name: 'null 모드 매장', salesMode: null },
       'stores/store-invalid-mode': { name: '잘못된 모드 매장', salesMode: 'unsupported' },
+      'stores/store-archived': { name: '정리된 매장', salesMode: 'round_direct', status: 'archived' },
       'dailyCaps/store-1_2026-07-18': { storeId: 'store-1', date: '2026-07-18' },
+      'dailyCaps/store-2_2026-07-18': { storeId: 'store-2', date: '2026-07-18', usedSlots: 7 },
+      'dailyCaps/store-archived_2026-07-18': { storeId: 'store-archived', date: '2026-07-18' },
       'groupProductConfig/product-1': {
         storeId: 'store-1',
         productId: 'product-1',
@@ -796,7 +799,7 @@ test('공개 dailyCaps 단건 조회와 배송일 picker 범위 쿼리를 보존
   );
 });
 
-test('dailyCaps는 limit 없는 목록과 상한을 넘는 limit 목록을 거부한다', async () => {
+test('dailyCaps는 limit 없는 목록, 상한을 넘는 limit, 매장 조건 없는 목록, 정리된 매장을 거부한다', async () => {
   const database = testEnvironment.unauthenticatedContext().firestore();
 
   await assertFails(getDocs(collection(database, 'dailyCaps')));
@@ -804,6 +807,39 @@ test('dailyCaps는 limit 없는 목록과 상한을 넘는 limit 목록을 거�
     getDocs(query(collection(database, 'dailyCaps'), where('storeId', '==', 'store-1'))),
   );
   await assertFails(getDocs(query(collection(database, 'dailyCaps'), limit(63))));
+  // 매장 조건 없는 목록·정렬·필터로 모든 매장의 일별 주문 수를 열거하지 못한다.
+  // 결과가 활성 매장 문서뿐이어도 쿼리에 storeId 조건이 없으면 거부된다.
+  await assertFails(getDocs(query(collection(database, 'dailyCaps'), limit(62))));
+  await assertFails(
+    getDocs(query(collection(database, 'dailyCaps'), orderBy('usedSlots', 'desc'), limit(62))),
+  );
+  await assertFails(
+    getDocs(query(collection(database, 'dailyCaps'), where('usedSlots', '==', 7), limit(62))),
+  );
+  // 매장을 여러 개 지정해도 정리된 매장이 섞이면 거부한다.
+  await assertFails(
+    getDocs(
+      query(
+        collection(database, 'dailyCaps'),
+        where('storeId', 'in', ['store-1', 'store-archived']),
+        limit(62),
+      ),
+    ),
+  );
+  // 정리(archived)된 매장과 없는 매장은 picker 형태여도 거부한다.
+  for (const storeId of ['store-archived', 'store-not-exist']) {
+    await assertFails(
+      getDocs(
+        query(
+          collection(database, 'dailyCaps'),
+          where('storeId', '==', storeId),
+          where('date', '>=', '2026-07-01'),
+          where('date', '<=', '2026-08-31'),
+          limit(62),
+        ),
+      ),
+    );
+  }
   await assertFails(
     getDocs(
       query(
