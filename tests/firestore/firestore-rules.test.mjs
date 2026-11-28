@@ -136,6 +136,7 @@ async function seedFixtures() {
       'stores/store-invalid-mode': { name: '잘못된 모드 매장', salesMode: 'unsupported' },
       'stores/store-archived': { name: '정리된 매장', salesMode: 'round_direct', status: 'archived' },
       'dailyCaps/store-1_2026-07-18': { storeId: 'store-1', date: '2026-07-18' },
+      'dailyCaps/store-legacy_2026-07-18': { storeId: 'store-legacy', date: '2026-07-18' },
       'dailyCaps/store-2_2026-07-18': { storeId: 'store-2', date: '2026-07-18', usedSlots: 7 },
       'dailyCaps/store-archived_2026-07-18': { storeId: 'store-archived', date: '2026-07-18' },
       'groupProductConfig/product-1': {
@@ -791,6 +792,24 @@ test('공개 dailyCaps 단건 조회와 배송일 picker 범위 쿼리를 보존
       query(
         collection(database, 'dailyCaps'),
         where('storeId', '==', 'store-1'),
+        where('date', '>=', '2026-07-01'),
+        where('date', '<=', '2026-08-31'),
+        limit(62),
+      ),
+    ),
+  );
+});
+
+test('status 필드가 없는 legacy 매장의 배송일 picker 쿼리를 허용한다', async () => {
+  // 배송일 picker는 legacy 매장 상품 화면(LegacyProductActions)에서 그린다. legacy 매장 문서에는
+  // status가 없을 수 있으므로, 정리 여부 판정이 필드 없음을 허용해야 한다.
+  const database = testEnvironment.unauthenticatedContext().firestore();
+
+  await assertSucceeds(
+    getDocs(
+      query(
+        collection(database, 'dailyCaps'),
+        where('storeId', '==', 'store-legacy'),
         where('date', '>=', '2026-07-01'),
         where('date', '<=', '2026-08-31'),
         limit(62),
