@@ -8,7 +8,8 @@
 >
 > - 원문 전체: `git show 4866a2c:docs/memory.md`(406행). 각 절 제목 아래에 원문 행 범위를 적었다.
 >   본문은 원문 그대로다. 고친 곳은 두 군데뿐이다: 74행 SHA 오타(`49c53bf953` → `49c53fb953`),
->   77행 상대 링크 위치(`plans/` → `../plans/`).
+>   77행 상대 링크 위치(`plans/` → `../plans/`), 172행 Railway 배포 ID 2개를 다른 기록과 같은 앞 8자리 표기로 줄임
+>   (비밀값 검사의 Railway 토큰 형식 오탐을 피하려고. 전체 값은 위 `git show`에 있다).
 > - 다른 정본이 같은 내용을 가지지만 원문도 이 문서에 그대로 남긴 절(현재 판단은 정본을 따른다):
 >   - 190–200행 `6. Consumer self-cancel ORDER_CANCELLED`·`7. Pilot marketing wording` →
 >     `docs/BACKLOG.md` `Consumer self-cancel ORDER_CANCELLED notification`·DOC_DELTA `Pilot marketing contract`,
@@ -169,7 +170,7 @@ revocation window 결정(D2, 2026-09-28, 2026-10-23 조정: API 데이터 요청
 
 | 대상 | 새 배포 | 이전(되돌리기) |
 |---|---|---|
-| API (Railway production) | `3f851757-ee67-48b2-9197-9eb29a2fb5db` SUCCESS | `aee6057b-8cac-4ba5-8613-607f21f19ab3` (`e55f2591`) |
+| API (Railway production) | `3f851757…` SUCCESS | `aee6057b…` (`e55f2591`) |
 | consumer (Vercel) | `dpl_79CBcA2hcxsUt88u2fQNv7NRfDWF` | `dpl_DmjsrFiKga82mHjvc7e3Srw3taQ5` |
 | seller (Vercel) | `dpl_FXtMd6FkhLGZgikQD48mHjqXi7yg` | `dpl_5CdhRd1XAW7LFxUTiEe2HHY7qTqP` |
 | driver (Vercel) | `dpl_FBSZWeeMnzSMM6njySy5DwNJT3gx` | `dpl_FZbbKMh362QGayFyeTNLTBSU5cKi` |
