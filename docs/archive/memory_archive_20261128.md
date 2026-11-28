@@ -1,0 +1,419 @@
+<!-- Language: ko -->
+
+# memory 아카이브 — 2026-11-28 이전 snapshot과 Release 이전 운영 배포 이력
+
+> `docs/memory.md`를 현재 상태만 남기도록 줄이면서 옮긴 역사 기록이다. 이 문서는 역사 기록(`HISTORICAL`)이며
+> 현재 상태의 권위나 실행 지시가 아니다. 현재 상태는 [../memory.md](../memory.md), 미완료 작업은
+> [../BACKLOG.md](../BACKLOG.md), 현재 운영 SHA와 2026-10-24 밤 이후 배포 이력은 GitHub Release(Latest)를 따른다.
+>
+> - 원문 전체: `git show 4866a2c:docs/memory.md`(406행). 각 절 제목 아래에 원문 행 범위를 적었다.
+>   본문은 원문 그대로다. 고친 곳은 세 군데뿐이다: 74행 SHA 오타(`49c53bf953` → `49c53fb953`),
+>   77행 상대 링크 위치(`plans/` → `../plans/`), 172행 Railway 배포 ID 2개를 다른 기록과 같은 앞 8자리 표기로 줄임
+>   (비밀값 검사의 Railway 토큰 형식 오탐을 피하려고. 전체 값은 위 `git show`에 있다).
+> - 다른 정본이 같은 내용을 가지지만 원문도 이 문서에 그대로 남긴 절(현재 판단은 정본을 따른다):
+>   - 190–200행 `6. Consumer self-cancel ORDER_CANCELLED`·`7. Pilot marketing wording` →
+>     `docs/BACKLOG.md` `Consumer self-cancel ORDER_CANCELLED notification`·DOC_DELTA `Pilot marketing contract`,
+>     `docs/specs/api/notifications.md` 소비자 직접 취소 알림 정책
+>   - 210–313행 `HISTORICAL / CLOSED BY REL-STATE-01` 과거 P0 11건 →
+>     `docs/archive/BACKLOG_archive_20261107.md`의 같은 이름 절(항목별 현재 근거·추적)
+>   - 326–352행 `역사적 provider snapshot`(2026-08-27) → `docs/reports/REPORT_aligo_template_approval_20260827.md`,
+>     코드 수준 재시도·fallback 회귀는 `docs/BACKLOG.md` `NOTIFICATION-RETRY-POLICY`
+> - 주의: 아래 5절의 `--target-mode=legacy` 롤백 명령은 지금 비상 수단이 아니다. 2026-11-10 사용자 결정(#897)으로
+>   비상 신규 주문 중단은 회차 마감·취소이고, `legacy` 전환은 `docs/specs/ops/mvp-sales-round-runbook.md`
+>   §7.2·§7.4를 따른다.
+> - 아래 SHA·run·배포 ID·회차 일정·"남은 확인"은 당시 기록이다. 현재 release 증거나 현재 할 일로 쓰지 않는다.
+
+## 검증 기준 (당시 발췌)
+
+원문 9–10행.
+
+- Git·GitHub와 #63/#70/#71 release state: `2026-09-06 KST` 직접 재조회
+- 파일럿 준비 재판정: `2026-09-28 KST` — live `main`, 원격 회차 E2E, Auth.js 세션 E2E, ALIGO 콘솔, 운영 Railway 배포 기록을 직접 재조회
+
+## Git·배포 기준선 (당시 원문)
+
+원문 15–28행.
+
+
+- 저장소: `booker-lab/greenhub`
+- 기본 브랜치: `main`; HEAD는 작업 시작 시 직접 재조회한다.
+- 회차 직배송 기능 통합 기준 SHA(역사적 기능 기준선): `e55f25914cc7d01576fbd4639583daaf0fe6385e`
+- #63이 accepted한 pre-publication main 기준 SHA: `ffd999423f8a98b0c1f34d020d832d7929feab72` — historical baseline
+- #70/#71 publication 직후(2026-09-06) live `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` — historical baseline. 현재 `main`은 작업 시작 시 직접 재조회한다.
+- `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`는 historical exact-source Preview 기준선이며 현재 main이나 production source가 아니다.
+- PR #30/#31로 세 프런트의 `main` Vercel Git auto-production과 pure-doc build를 repo-side 차단했다.
+- docs-only main 변경은 Preview sync/일반 E2E 제외.
+- `AGENTS.md` + deployment safety CI가 branch+PR 원칙을 소유한다.
+- GitHub `main`은 직접 재조회에서 `protected=true`이며 PR required, strict `verify` check, force-push·branch 삭제 차단이 적용됐다. Issue #32는 `CLOSED`다.
+
+`main` merge는 production 배포 승인이 아니다. production은 검증된 exact release SHA + 별도 승인 절차를 사용한다.
+
+<!-- 원문 30–77행 -->
+
+## S2 → R1 Public Readiness 종료 상태
+
+> 아래 `CLOSED`·`PASS` 상태는 #63이 인정한 closure와 historical Preview/browser/fixture evidence를 구분해 기록한다. 이 docs-only 작업에서는 Browser R3, physical device, fixture provisioning/cleanup을 재실행하지 않았으며, 새로운 runtime proof를 만들지 않는다.
+
+- S2 Browser Readiness: `CLOSED`
+- exact-source Browser R3: `PASS`
+- physical-device disposition: `PHYSICAL_DEVICE_NOT_REQUIRED` — physical-device proof를 수행했다고 주장하지 않는다.
+- canonical R3 fixture cleanup: `CLOSED`
+  - project: `greenhub-round-direct-e2e`
+  - runId: `s2-authbound-20260904-r3`
+  - manifest ownership: `4/4`
+  - exact Firestore documents: `4 deleted`
+  - Storage targets: `0`
+  - independent readback: `4/4 HTTP 404`
+- R1 Combined Public Readiness: `PUBLIC_READINESS_CLOSED`
+- S2 → R1 campaign: `TERMINAL_SUCCESS`
+- historical exact-source Preview source: `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`
+- historical Driver Preview: deployment `dpl_4UVQ2BuTNfrBc1zm68X5Kjbvu9PE`, target `preview`, state `READY`. 당시 metadata가 해당 historical source와 일치했다는 뜻이며 현재 main·candidate·production proof가 아니다.
+- pre-publication main accepted by #63: `ffd999423f8a98b0c1f34d020d832d7929feab72`; PR #60/#61/#62가 merge된 historical publication baseline이다.
+- live main right after #70/#71(historical): `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`; PR #70이 merge된 Sale Round publication state다.
+
+## Readiness·publication·production 구분
+
+> 2026-09-06 snapshot이다. 이후 2026-09-28 운영 배포, 2026-09-29 activation(`salesMode=round_direct`, 첫 회차 `SCHEDULED`), Auth.js 세션 `RUNTIME_PROVEN`(Preview)으로 바뀌었다. 현재 상태는 아래 `제품 현재 상태`와 `현재 release residual`을 따른다.
+
+- `IMPLEMENTATION`: #66이 `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`의 구현과 race/recovery proof를 accepted하여 `IMPLEMENTATION_PROVEN`이다.
+- `VERIFICATION`: Sale Round focused/integration/regression proof는 `PROVEN`; exact-release Preview/browser/runtime과 Auth.js session/logout/rotation/stale-claim lifecycle은 별도 `PENDING`/`EXTERNAL_RUNTIME_BLOCKED` gate다.
+- `CANDIDATE`: 기존 documentation candidate는 `9c921684a26597cb57887b6049288f1143b017c8`; 후속 candidate는 PR #69 head로 갱신한다.
+- `REMOTE_ADDRESSABLE`: #70 semantic candidate와 현재 live main `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`는 remote-addressable이며, 문서 후속 candidate도 PR #69 원격 head로 read-back한다.
+- `PR`: PR #70은 `MERGED`; documentation PR #69도 2026-09-05에 `MERGED`.
+- `PUBLISHED/MERGED`: Sale Round publication은 `PUBLISHED`; live main read-back은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`다.
+- `PREVIEW_PROOF`: exact-release runtime/browser proof는 `PENDING`; `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c` Preview deployment는 historical evidence다.
+- production deployment/activation, live round, actual payment, actual notification, first-round completion: `PRODUCTION_AUTHORITY_PENDING` / `NOT CLAIMED`.
+
+## #63·#71 당시 source·publication 기준 (2026-09-06 historical snapshot)
+
+#63/#68 작업의 pre-publication 기준과 #71 publication 후 live authority를 read-only로 확인한 결과를 기록한다. 문서 변경 후 생기는 commit은 이 source baseline과 별도의 documentation publication candidate다.
+
+- 작업 시작 branch: `main`
+- 작업 시작 source HEAD/local `main`: `ffd999423f8a98b0c1f34d020d832d7929feab72`
+- 작업 시작 local `origin/main`: `ffd999423f8a98b0c1f34d020d832d7929feab72`
+- 작업 시작 live remote `main`: `fe5e680fa58c8b3af5e508d07115bb8ab9df272a` — #71 publication read-back
+- pre-publication live baseline `ffd999423f8a98b0c1f34d020d832d7929feab72`는 #63/#68의 historical baseline이다.
+- #70 semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는 `PUBLISHED`; documentation candidate PR #69는 2026-09-05에 merge됐다.
+- historical `7cc4d9862dd49b68fb1542e49c53fb953bfdf59c`와 이전 provider snapshot은 current SHA·current provider metadata·production proof로 사용하지 않는다.
+- GitHub main 보호 때문에 direct main commit/push는 금지되며, 문서 변경은 purpose branch + PR 경계를 따른다.
+
+기존 Task 2F-B candidate의 상세는 [Task 2D integration closeout report](../plans/REPORT_task_2d_integration_closeout.md)와 해당 historical handoff를 따른다. 아래 출시 P0 서술은 S2 → R1 campaign 종료와 별개의 broader release dependency이며, 이번 문서화로 자동 종료하거나 다시 열지 않는다.
+
+## 제품 현재 상태 (당시 발췌)
+
+원문 86–88행.
+
+- **운영 배포 완료(2026-09-28, 출시 SHA `197f84a4`)**: API·프런트 3개·Firestore/Storage 규칙·인덱스가 같은 SHA로 반영됐다. 이후 2026-09-30 `389066c8`(회차 주문 요청사항 칸 포함), 2026-10-03 `f89f9ed9`(회차 자동 오픈·55분 로그아웃 방지 등 #325~#340)로 API·프런트 3개를 갱신했고, 10/3~10/8 사이 여러 차례 더 갱신했다(규칙·인덱스 변경 없음). 2026-10-12 `55ed02d9`(API·프런트 3개·Firestore/Storage 규칙)를 거쳐 `bd159830`(2026-10-13 오전, API·프런트 3개·Firestore 규칙·인덱스 3개 추가)을 거쳐 `098affbc`(2026-10-13 저녁, API·프런트 3개, 규칙·인덱스 변경 없음)를 거쳐 `032b221a`(2026-10-13 밤, API·seller, 규칙·인덱스 변경 없음)를 거쳐 `030f4c1e`(2026-10-15, API 기기별 refresh 세션 #526, 규칙·인덱스 변경 없음)를 거쳐 `98185c23`(2026-10-18, 프런트만, consumer 검색 노출 기본 설정 #539·통신판매업 footer 칸 #541)과 `71085566`(2026-10-20, API·프런트 3개)을 거쳐 `951044f2`(2026-10-23 오후, API·프런트 3개·Storage 규칙)와 `75634885`(2026-10-23 밤, API·프런트 3개), `dd7b3952`(2026-10-24 오후, API·프런트 3개), `2ee48162`(2026-10-24 저녁, API·seller), `7ad5b07b`(2026-10-24 밤, API·consumer)를 거쳐 그 뒤 배포 이력과 현재 운영 SHA는 GitHub Release(Latest)가 소유한다(2026-11-21 KST 기준 `1b5e88a1`, Release `prod-20261121-1b5e88a1`, 범위 `all`). 배포 ID는 Release `prod-<날짜>-<SHA>`에 있다. 상세는 아래 5절과 GitHub Release.
+- production 배포 완료. 첫 회차 "12월 1일 배송 회차"가 `SCHEDULED`다(주문 11/22 10:00 자동 오픈, 2026-10-28 PortOne LIVE 채널 부재로 11/1에서 미룸. BACKLOG `PORTONE-CHANNEL-CHECK`).
+- 판매 모드: **`round_direct`**(2026-09-29 전환). 파일럿 운영 시작은 **2026-11-22로 연기**했다(LIVE 채널이 그 전에 없으면 다시 미룬다).
+
+<!-- 원문 90–188행(1~5절). 6·7절은 아래 원문 190–200행. -->
+
+## 현재 release residual
+
+> #63 accepted classification을 현재 release 문서의 기준으로 사용한다. 아래 상태는 implementation, verification, external/runtime, authority, product policy, docs delta를 서로 합치지 않는다.
+
+### 1. Sale-round state atomicity and recovery
+
+상태: `IMPLEMENTATION_PROVEN` + `PUBLISHED` — `SALE-ROUND-STATE-ATOMICITY-AND-RECOVERY`.
+
+#66이 회차 수정·수동 개방·주문 예약·취소 복구의 fresh state/time/ownership 경계를 직접 검증하고
+구현 proof를 accepted했다. semantic candidate `4169bf250d3bdf4a5196209090307ca979e8d32a`는
+PR #70으로 merge되었고, #71 publication read-back 당시 live `main`은
+`fe5e680fa58c8b3af5e508d07115bb8ab9df272a`였다.
+
+이 상태는 implementation과 repository publication에 대한 proof다. 이 proof만으로 production
+deployment·activation·live round·actual payment/notification을 주장하지 않는다. 이후 운영 배포·activation
+상태는 아래 5절이 소유한다.
+
+### 2. Preview·exact-SHA proof
+
+상태: `PRE_RELEASE_PROVEN` — 출시 SHA 확정 뒤 같은 절차로 재실행이 필요하다.
+
+2026-09-28 원격 회차 E2E가 exact-SHA Preview 3개 + 스테이징 API로 전건 통과했다.
+
+- run `36338292480`(SHA `31d122c5`): Playwright 52/52, fixture cleanup 잔여 0
+- run `36341189483`(SHA `9ba65c1f`, #309): 52/52 + 세션 수명주기 12/12, cleanup 잔여 0
+- run `36348002412`(live `main` `c8bec1f5`, #310 포함): 52/52 + 세션 12/12, cleanup 잔여 0 — 가장 최근 증거
+- 절차: `docs/specs/ops/mvp-sales-round-e2e-environment.md` §2의 exact Preview 생성 방식
+
+이 결과는 해당 SHA에 대한 증거이며 출시 SHA의 증거를 대신하지 않는다.
+
+### 3. Auth.js session runtime
+
+상태: `RUNTIME_PROVEN`(Preview, 2026-09-28).
+
+run `36341189483`에서 consumer·seller·driver × chromium·mobile로 다음을 실제 Preview 브라우저에서 확인했다(`apps/e2e/tests/auth-session-lifecycle.spec.ts`, 12건).
+
+- Credentials 로그인 쿠키 발급과 같은 컨텍스트 유지
+- Auth.js 로그아웃 후 쿠키·세션 소멸
+- 계정 정지(consumer·seller)·기사 승인 철회(driver) 뒤 다음 세션 조회에서 세션 종료, 복원 후 재로그인
+
+revocation window 결정(D2, 2026-09-28, 2026-10-23 조정: API 데이터 요청 즉시·앱 Auth.js 세션 최대 60초, 2026-10-24 보강: 화면의 API 요청이 거절되면 즉시)은 `docs/specs/api/auth.md`를 따른다. 로그아웃 시 서버 refresh token 폐기는 출시 후 `AUTH-LOGOUT-SERVER-REVOCATION`으로 다룬다.
+
+### 4. ALIGO provider metadata
+
+상태: 템플릿 `VERIFIED`(콘솔) / 운영 반영·IP·실발송 `RELEASE_GATE`.
+
+- 템플릿 8종과 운영 매핑 `ALIGO_TEMPLATE_CODES_JSON`(Railway 저장값)은 일치한다.
+- 2026-09-28 출시 배포로 운영 API 프로세스에 ALIGO 변수가 반영됐다.
+- ALIGO는 등록 IP만 허용한다. Railway 현재 요금제에 고정 송신 IP가 없어 Fixie 고정 IP 프록시(`ALIGO_OUTBOUND_PROXY_URL`)를 거친다. 2026-09-28 운영 컨테이너 조회에서 `code=0`, 템플릿 8종 API 기준 글자 단위 일치를 확인했다.
+- 격리 실발송: 알림톡은 휴대폰 도착까지 확인했다. 문자는 처음에 개인 휴대폰 발신번호가 통신사 번호도용 문자차단 서비스에 막혔고, 2026-10-08 운영 `ALIGO_SENDER_PHONE`을 ALIGO 승인된 사업자 번호(끝 2104)로 바꾸고 격리 실발송 알림톡(`TEST-1008`)·문자(`TEST-1008-SMS`)가 모두 접수·1회 시도·휴대폰 실수신됐다(사용자 확인).
+
+### 5. Production activation
+
+상태: production deployment `DONE`(2026-09-28) / activation `DONE`(2026-09-29, 아래 activation 항목) / live round·실제 결제 `NOT DONE`(파일럿 2026-11-01).
+
+> 배포 기록: `production-deploy.yml`의 `record` job이 배포가 성공할 때마다 GitHub Release(tag `prod-<KST 날짜>-<SHA 8자리>`)에 SHA·배포 ID·E2E run·직전 배포·변경 PR 목록을 남긴다. 현재 운영 SHA는 Latest Release(범위 `all`)로 확인하고, 이 절에는 Release가 생기기 전 이력과 Release에 없는 판단만 남긴다.
+
+출시 SHA `197f84a4`(원격 회차 E2E run `36372493414` 52/52 + 세션 12/12, cleanup 잔여 0)를 사용자 승인(Task 3.1)으로 배포했다. 순서는 API → 프런트 3개 → 규칙·인덱스다. 옛 프런트(8/11·8/23 배포본)가 Firestore를 직접 읽었으므로 규칙을 앱보다 먼저 배포하지 않았다.
+
+| 대상 | 새 배포 | 이전(되돌리기) |
+|---|---|---|
+| API (Railway production) | `3f851757…` SUCCESS | `aee6057b…` (`e55f2591`) |
+| consumer (Vercel) | `dpl_79CBcA2hcxsUt88u2fQNv7NRfDWF` | `dpl_DmjsrFiKga82mHjvc7e3Srw3taQ5` |
+| seller (Vercel) | `dpl_FXtMd6FkhLGZgikQD48mHjqXi7yg` | `dpl_5CdhRd1XAW7LFxUTiEe2HHY7qTqP` |
+| driver (Vercel) | `dpl_FBSZWeeMnzSMM6njySy5DwNJT3gx` | `dpl_FZbbKMh362QGayFyeTNLTBSU5cKi` |
+| Firestore 규칙 | ruleset `2562b836-5c66-4253-a672-023e7c580afc` | `32837978-27e9-4076-a953-b42e1838e2fa` (2026-07-31) |
+| Storage 규칙 | ruleset `b723c937-fb80-4cfc-8bc8-d112b5177c26` | `798bd8ce-8f20-46a9-b8f3-648f3e2afe45` (2026-07-31) |
+
+- 배포 뒤 확인: 배포 기록 SHA 일치, API health 200, 운영 도메인 주요 페이지 200, CORS 허용, 비인증 driver API 401, 5xx 없음, 규칙 재조회 저장소 일치, 인덱스 41개 반영(운영 전용 미사용 인덱스 1개 유지).
+- 운영 규칙 반영으로 driver 전체 주문 읽기 등 7/31 이후 수정된 경계가 운영에서도 적용된다.
+- 2026-09-28 운영 API `781285ea`(ALIGO 송신 프록시, 배포 `1e3e57b1…`), 판매자 앱 `437af74b`(새 회차 화면, `dpl_7bcozKG2bkMhoHWXMumUoH1B27Yr`, 이전 `dpl_FXtMd6FkhLGZgikQD48mHjqXi7yg`)로 갱신했다. 각 SHA는 원격 회차 E2E 52 + 세션 12를 통과했다(run `36383185604`, `36410582745`).
+- 2026-09-30 API·프런트 3개를 `389066c8`로 갱신했다(프런트 PR #314~#320·#323·#332, API는 #332 요청사항 칸). 배포 전 같은 SHA exact Preview로 원격 회차 E2E 52 + 세션 12 통과, fixture 잔여 0(run `36727676723`). Railway 배포 `7f956a35…` SUCCESS·health 200, Vercel production consumer `dpl_4ByBmtSMWAsfEpJXSwT4DLF5mZQB`·seller `dpl_EgQY1EYSJjpk2vB6h4bXSbpWWbWn`·driver `dpl_A748dkEL9DU9hWSpuFhK48TFCRz6`, 배포 기록 SHA 일치, 운영 도메인 주요 페이지 200·CORS 정상·비인증 401. 롤백 대상: API `1e3e57b1…`(`781285ea`), consumer `dpl_79CBcA2hcxsUt88u2fQNv7NRfDWF`·seller `dpl_7bcozKG2bkMhoHWXMumUoH1B27Yr`·driver `dpl_FBSZWeeMnzSMM6njySy5DwNJT3gx`.
+- 2026-10-03 API·프런트 3개를 `f89f9ed9`로 갱신했다. 포함: 회차 주문 경로의 자동 `OPEN` 판정(#326 — 저장값 `SCHEDULED`여도 `orderOpenAt` 경과 시 예약·장바구니 검증 통과, 첫 예약 때 `OPEN` 저장), Auth.js proxy 쿠키 반영과 refresh 회전 60초 유예(#333), 기사 연락처·Mantine CSS·카메라 정책(#327·#329·#331·#336·#337), 소비자 결제 재시도·MY 주문·손님 화면(#328·#330·#335), 자동 배포 끔(#339). 배포 전 같은 SHA exact Preview로 원격 회차 E2E 52 + 세션 12 통과·cleanup 성공(run `37023360349`). Railway 배포 `3272e92b…` SUCCESS·health 200, Vercel production consumer `dpl_5PkihD5zHMUAa14HWRxDH54cdueC`·seller `dpl_D3aUXpRxg5ZYgNzBhoQLhDYCP9j3`·driver `dpl_CriRnQ2sccPvj6LaLFqCEGzmifUH`, 운영 최신 배포 SHA 일치, 운영 도메인 주요 페이지 200·CORS 정상·비인증 401. 롤백 대상: API `7f956a35…`(`389066c8`), consumer `dpl_4ByBmtSMWAsfEpJXSwT4DLF5mZQB`·seller `dpl_EgQY1EYSJjpk2vB6h4bXSbpWWbWn`·driver `dpl_A748dkEL9DU9hWSpuFhK48TFCRz6`.
+- 2026-10-03(오후) API·프런트 3개를 `aa713e12`로 갱신했다. 포함: 프런트 디자인 개편(#343~#356, 새 색·글꼴 기준과 소비자 회차 구매 동선 7화면, 판매자 어드민 넓은 레이아웃·상태 색), 새 로고·앱 아이콘(#358, Nunito "Green Love"·두 잎 하트), ALIGO 영구 오류 처리(#357), 기사 지도·상세·사진 업로드(#359~#361), 소비자 모바일 결제 리다이렉트 처리(#362). 규칙·인덱스 변경 없음. 배포 전 같은 SHA exact Preview로 원격 회차 E2E run `37108803974`: 1차에서 세션 1건(mobile seller 로그아웃 뒤 세션 재생성) 실패 → 같은 Preview로 실패 작업만 재실행해 52/52 + 세션 12/12 통과(BACKLOG `AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE`). Railway 배포 `1a8b032d…` SUCCESS·health 200, Vercel production consumer `dpl_9kwxyHT7SG84gbYbikt6o7P8JM9z`·seller `dpl_7B7TFhLJGw7aUy5N4wkZ1Y73wm8J`·driver `dpl_DvqHy3NzPmjideZ4zuJQSkzs99V8`, 운영 최신 배포 SHA 일치, 운영 주요 페이지·새 아이콘·글꼴·대체 그림 200, CORS 정상, 비인증 driver API 401. 롤백 대상: API `3272e92b…`(`f89f9ed9`), consumer `dpl_5PkihD5zHMUAa14HWRxDH54cdueC`·seller `dpl_D3aUXpRxg5ZYgNzBhoQLhDYCP9j3`·driver `dpl_CriRnQ2sccPvj6LaLFqCEGzmifUH`.
+- 2026-10-03(저녁) API·consumer를 `53f8e374`로 갱신했다. 포함: 홈 배너 겹침 수정(#365). 규칙·인덱스 변경 없음. 배포 전 같은 SHA exact Preview로 원격 회차 E2E run `37111848578`: 1차에서 세션 1건(chromium driver 로그아웃 뒤 세션 재생성) 실패 → 실패 작업만 재실행해 52/52 + 세션 12/12 통과(BACKLOG `AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE` 두 번째 관측). Railway 배포 `073908bd…` SUCCESS·health 200, Vercel production consumer `dpl_6VFMSqKwksK2KPQoVupuWzgMMUVe`. seller·driver 운영 배포는 빌드 생략 규칙(`scripts/vercel/ignore-build.mjs`, 두 앱 관련 변경 없음)으로 취소돼 같은 코드의 `aa713e12` 배포가 계속 서비스한다. 운영 홈에서 새 배너 배치 반영과 "공구 참여하기" 미노출을 확인했다. 운영 데이터 변경: `banners/main_hero.cta2`를 빈 값으로 바꿨다(이전 값 "공구 참여하기 " → `/groupbuy`). 롤백 대상: API `1a8b032d…`(`aa713e12`), consumer `dpl_9kwxyHT7SG84gbYbikt6o7P8JM9z`.
+- 2026-10-03(밤) consumer를 `0ea8b52b`로 갱신했다. 포함: 한국어 404 화면(#367, 없는 주소·내려간 상품). API 코드 변경이 없어 API는 `53f8e374` 배포를 유지한다. 규칙·인덱스 변경 없음. 배포 전 같은 SHA exact Preview로 원격 회차 E2E run `37116860727`: 1차에 52/52 + 세션 12/12 통과. Vercel production consumer `dpl_7PUDZbCYBZuiQ27v7zUmJmDBtGiv`. seller·driver는 빌드 생략 규칙으로 취소돼 `aa713e12` 배포가 계속 서비스한다. 운영에서 `/no-such-page` 404와 내려간 상품 주소가 한국어 안내를 보이고 홈이 정상임을 브라우저로 확인했다. 운영 데이터 변경: `banners/main_hero.isActive`를 false로 바꿨다(배너 내용 보존, 어드민 배너 탭에서 다시 켤 수 있음). 롤백 대상: consumer `dpl_6VFMSqKwksK2KPQoVupuWzgMMUVe`(`53f8e374`).
+- 2026-10-04(새벽) consumer·seller를 `6628842b`로 갱신했다. 포함: 판매자 머리줄 겹침·기준 밖 색 정리(#370), 회차 노란 마감 띠·연두 요약·노랑 연한 변형 글자색(#371), Mantine 글자 크기=디자인 토큰(xs 13·sm 15)·소비자 작은 설명 글씨 15px·결제 주문 정보 흰 카드(#373), MY 주문 썸네일(#374), 홈 footer 개편(#375), round 없는 상품 주소를 공개 현재 회차 상품으로 연결(#376), 주문 상세 "주문자" 라벨(#369). API·driver는 코드 변경이 없어 각각 `53f8e374`·`aa713e12` 배포를 유지한다. 규칙·인덱스 변경 없음. 배포 전 같은 SHA exact Preview로 원격 회차 E2E run `37154470721`: 1차에 52/52 + 세션 12/12 통과. Vercel production consumer `dpl_8fhnwLHXdwxuZL2Z8yqUonBFn6bj`·seller `dpl_5qiPrx9uYATyKRg4Gu9RhfPjrwgV`(driver는 빌드 생략 규칙으로 취소). 운영 확인: 홈 대표 판매상품 빅립·만천홍은 11월 10일 배송 회차로 연결되고, 오렌지 글로우는 현재 회차에 없어 "이번 회차에서 판매하지 않는 상품이에요" 안내, 새 footer 반영, 판매자 로그인 200. 롤백 대상: consumer `dpl_7PUDZbCYBZuiQ27v7zUmJmDBtGiv`(`0ea8b52b`), seller `dpl_7B7TFhLJGw7aUy5N4wkZ1Y73wm8J`(`aa713e12`).
+- 2026-10-04(아침) API·consumer·driver를 `f259b433`으로 갱신했다. 포함: 회차에 없는 상품 화면 개선(#382), 로그인 후 원래 화면 복귀(#377), 기사 앱 관리자 계정 차단(#381), ALIGO 알림톡·문자 HTTP 8초 시간 제한(#378), 기사 앱 API 시간 제한·명령 시간 초과 후 실제 상태 수렴(#379). seller는 코드 변경이 없어 `6628842b` 배포를 유지한다. 규칙·인덱스 변경 없음. 배포 전 같은 SHA exact Preview로 원격 회차 E2E run `37156347524`: 1차에 52/52 + 세션 12/12 통과. Railway 배포 `86d66af9…` SUCCESS·health 200, Vercel production consumer `dpl_EPSQ37VPh95yyzLVMvgeme3tZwyW`·driver `dpl_BfKcgzHxabu349hk85xtwJMmjqLQ`(seller는 빌드 생략 규칙으로 취소). 운영 확인: 오렌지 글로우 상품 주소가 사진·설명과 "이번 회차에서 판매하지 않는 상품이에요" 안내를 보이고 구매 버튼 없음, 기사 로그인 200, 비인증 driver API 401. 대표 판매상품 3개는 사용자 결정으로 카카오톡 채널 승인 전까지 바꾸지 않는다. 롤백 대상: API `073908bd…`(`53f8e374`), consumer `dpl_8fhnwLHXdwxuZL2Z8yqUonBFn6bj`·driver `dpl_7SkzbqrsYtEA8FFUai61ZfCGaSZz`(`6628842b`).
+- 2026-10-23(밤) API·consumer·seller·driver를 `75634885`로 갱신했다(사용자 지시 "지금 배포해", 릴리스 세션 실행). `951044f2` 뒤 병합분 #621~#637: 세션 검증 성공 60초 재사용 #627(정지·철회 E2E는 #635로 60초 뒤 확인), 소비자 홈 조회 병렬화 #623, 기사 배송 목록 첫 화면 세션 재조회 제거 #624, 아침 점검 테스트 가게 제외 #622, 회차 생성 상품 확인을 저장 transaction 안으로 #626, 알림 발송 기록 90일 정기 파기 #632(배포 뒤 확인: 다음 03:00 KST 파기 로그의 `notificationsDeletedCount`), 화분 옵션 재고(주문 예약·판매자 관리·소비자 품절 표시) #636, Cloud Run 확인 주소 #625, 문서 #621·#628·#631·#637. Cloud Run 도구 #629·#630과 동결 중 병합된 #634는 포함하지 않았다. 규칙·인덱스 변경 없음. exact Preview(consumer `dpl_Du3wSXX9f9A5meHwMeqjo9jjnmh6`·seller `dpl_2bhnZBgZuWipPrYnJkxmGL3aR4bi`·driver `dpl_DJ5VTSvBw1wgJHX5iTKgiohEkJcQ`)로 원격 회차 E2E run `40020823840`: 64/64 + 세션 12/12, cleanup 성공(Playwright 설치가 12분 걸림, 결과와 무관). `production-deploy.yml` run `40024524081`(scope all, `api_platform=railway`): **배포 job이 `production` Environment 승인 대기로 31분 멈췄다가 사용자 승인 뒤 진행**(10/20 run에도 같은 대기가 있었다) → 인덱스 READY → Railway 배포 `907af3a1…` SUCCESS·`/health` commit `75634885` → Cloud Run 예비 단계: 이미지 `asia-northeast3-docker.pkg.dev/green-e4fe3/greenhub/api:75634885`를 Artifact Registry에 올렸으나 예비 서버 배포는 `Cannot find service [greenhub-api]`로 실패(서비스는 절차서 R9 전이라 없음, 운영 배포는 막지 않음. GitHub `production` 변수 `GCP_*`가 R9 전에 들어가 있어 배포마다 같은 실패 표시가 남는다) → Vercel consumer `dpl_C4ng9EmMoMKLc74XaNw8kcVyDgza`·seller `dpl_5h3eH4Gso2nfuXNEXXx3LiYLC4nd`·driver `dpl_6evaFYivKSGV8Gy8PswAZrWPQRhu` → 규칙(변경 없음) → `post-deploy-smoke --expect-sha=75634885` 9/9 통과(21:51:29 UTC). 롤백 대상: API Railway `faa88380…`(`951044f2`), Vercel consumer `dpl_fu7qRhX5wMaZoA24BkJvvV4h9xmU`·seller `dpl_6p7H8f1tBgHb9aEKRk3B8YP6fxgn`·driver `dpl_2Qhvq76N2PycY4YPnuXxcGjqptyF`.
+- 2026-10-24(오후 2시대 KST) API만 `75634885`로 다시 배포했다(`production-deploy` run `40031281939`, scope `api`): 사용자가 Railway 비밀값(Gemini·PortOne 웹훅 시크릿·ALIGO 키)을 바꾸고 발급처에서 옛 키를 무효화해서, 새 값으로 다시 기동하려는 것이다. Railway 배포 `53ac4662…` SUCCESS, `/health` commit `75634885`, smoke 9/9. 이 배포는 `production` Environment 승인을 7시간 기다린 뒤 사용자 승인으로 진행됐다. 같은 날 06:50 UTC run은 승인 대기 없이 진행됐지만 07:37 UTC run은 승인을 기다렸고, 17:29 KST 사용자 설정 화면에서는 Required reviewers(`booker-lab`)가 켜져 있었다. 그 뒤 18:57 KST run `40083963710`은 승인 대기 없이 진행됐다. 사용자가 해제를 저장했다고 보며, 지금은 dispatch하면 바로 배포된다.
+- 2026-10-24(오후) 운영 배포가 두 번 있었다(둘 다 smoke 9/9, 규칙·인덱스 변경 없음). ① 다른 세션이 릴리스 동결 중에 `bed4b97c`(#634·#638·#639·#643/#644, E2E run `40070977572`)를 배포했다(run `40071755765`, Railway `83748f31…`, Vercel consumer `dpl_pnhqmn4fpqJuismfpKVsvNCuVvBW`·seller `dpl_CdUxVE9g4FHPgYe9QscHmAykHsfm`·driver `dpl_CTCfKhNuCddruPtxGzcuwYeizJGU`). ② 릴리스 세션이 `dd7b3952`(① + #633·#640·#630·#642, exact Preview consumer `dpl_81YW2XPjn8rxdQRPugSKZXn4FkP1`·seller `dpl_GGZZmFnYTvZiLFQSffvjc1mSj28M`·driver `dpl_Hsik8b2XKbsCAqJ9z6rBKzaSHp5C`, E2E run `40072512472` 64/64 + 세션 12/12)를 배포했다(run `40074882199`, 사용자 승인 뒤 진행, Railway `349a5fd0…`, `/health` commit `dd7b3952`, Vercel consumer `dpl_6wDmufWcz8jeDpTqY9MUkKHpq3p8`·seller `dpl_5a7ogucY9vHHd8DvSbwn5Dtuv5rR`·driver `dpl_qjJrwNLPYXKaeqnNLjHTD795P8xc`). 롤백 대상은 ①이다. 두 run 모두 남은 문제가 둘 있다. Cloud Run 예비 서버(R9에서 만든 `greenhub-api`)의 새 리비전 `00002-kwj`·`00003-4px`이 시작 검사에 실패해 Ready가 되지 않았다(단계는 비차단, Railway 영향 없음, 예비 서버로 대피 불가). #642 `record` job이 만든 Release 본문에는 배포 ID 표가 비어 있다(`Skip output 'results' since it may contain secret`). 비밀값으로 가려지는 문자열이 결과에 섞여 job output이 버려지기 때문이다. 그래서 이 두 배포의 ID는 여기에 남긴다.
+- 2026-10-24(저녁) `2ee48162`(#646 배송 후 환불·회차 취소가 재배송비 환불 완료를 기다림·판매자 RETRY_AVAILABLE, #649 Cloud Run 비밀값 도구, #650 시험)를 배포했다. exact Preview는 consumer `dpl_DjTdhi5RabAgMkmte2EQJ2996tWo`·seller `dpl_EKqjsFdFFF6njGeSUJgWy2heFSfh`·driver `dpl_D1oMmGL1w73wLUEejXDCTcutfuBX`, 원격 회차 E2E run `40082938863`은 64/64 + 세션 12/12였다. 배포 run은 `40083963710`이다. Railway `14337488…` SUCCESS, `/health` commit `2ee48162`. Vercel seller `dpl_9XHQSCr4esGC8W9y7My43ZpU5WLS`를 새로 배포했고 consumer(`dpl_BU7kzXKuVah2AgWVtVACqedzVDS8`)와 driver(`dpl_2WyVbzwnB9fwcppMPJ1GZ95jGpeK`)는 앱 변경이 없어 빌드를 생략했다. smoke 9/9. 롤백 대상은 `dd7b3952`(Railway `349a5fd0…`, seller `dpl_5a7ogucY9vHHd8DvSbwn5Dtuv5rR`)다. Cloud Run 예비 리비전 `00004-d2t`도 시작 검사에 실패했고, Release 본문 배포 ID 표도 비어 있다(위와 같은 원인).
+- 2026-10-24(밤) `7ad5b07b`(#653 Release 결과 base64 전달, #654 네이버 서치어드바이저 소유 확인 meta)를 배포했다. run `40099093754`, E2E `40098064288`, smoke 9/9. 이 배포부터 배포 ID 표가 Release [`prod-20261024-7ad5b07b`](https://github.com/booker-lab/greenhub/releases/tag/prod-20261024-7ad5b07b)에 남는다(Railway `a41dd177…`, consumer `dpl_EMLmKX3a1Qf569owmEQwKGCwaDJW`, seller·driver는 빌드 생략). Cloud Run 예비 리비전 `00005-42t`는 여전히 시작 검사에 실패하고, 실패한 단계는 Release 표에 행이 없다.
+- 2026-10-27 `56f9b6a1`(#657 CI 필수 검사 집계 job, #658 가게 등록 직후 판매자 세션 유지, #659 다른 고객의 결제 시도 키로 결제 예약을 가져가지 못하게 함, #660 결제사 웹훅 재전송이 닫힌 되돌림 기록을 다시 열지 않음, #661 판매자 토큰 갱신 때 폼 유지, #662 장바구니 서버 안내 문구 유지)를 배포했다. run `40457561529`, E2E `40454750738`(2차 시도). Release `prod-20261027-56f9b6a1`.
+- 2026-10-31(KST 0시대) `8dfc1e10`을 배포했다(사용자 승인 "8dfc1e10 운영 배포해", scope `all`). `747808af` 뒤 병합분 #668~#687과 #683·#685·#686이 포함된다. 운영 화면·서버에 영향이 있는 것: 통신판매업 신고번호 footer(#668), 상품 상세·결제 화면 사업자 정보 footer(#685, PG·카드사 입점 심사 요건), Cloud Scheduler 정기 작업 인증 경로(#676), re2js 보안 패치(#682). exact Preview consumer `dpl_137HR5cJ1iFc52v6TPkmSmtCPJfZ`·seller `dpl_4vPY6DGbk3DQGRrLtvn48Q2jdvTd`·driver `dpl_Hv6T6FZLT5p9kbaU8y6CN1562k79`로 원격 회차 E2E run `41082315592` 통과. 배포 run `41084083336`: 인덱스 READY → Railway `f2b790e7…` SUCCESS·`/health` commit `8dfc1e10` → Cloud Run 예비 `greenhub-api-00009-4pb` → Vercel consumer `dpl_2ujru7MRHqeQHqGz2413YFnyRvUP`·seller `dpl_6UfkFHJd3siSH75zTEZNAe9xLpUz`·driver `dpl_7tAnS9NwZxKi7rPo89GuVxExbcHy` → 규칙 → smoke 통과. UI 교체 동결(`consumer-freeze`) 배포 검사도 통과했다(교체 흔적 없음). Release [`prod-20261031-8dfc1e10`](https://github.com/booker-lab/greenhub/releases/tag/prod-20261031-8dfc1e10). 배포 뒤 운영 홈·상품 상세 HTML에서 사업자 정보 footer와 신고번호를 확인했다(결제 화면은 로그인 필요라 미확인). 그 전 2026-10-30 저녁 사용자가 Vercel consumer Production에 `NEXT_PUBLIC_PORTONE_CARD_CHANNEL_KEY`(토스페이먼츠 TEST 채널)를 넣고 `747808af` consumer를 Redeploy했다(BACKLOG `PORTONE-CHANNEL-CHECK`). 롤백 대상: API Railway `93b5bbfa…`(`747808af`), Cloud Run `greenhub-api-00008-zcw`, consumer는 10/30 카드 키 Redeploy 배포("Redeploy of HLsE8bTXY", 이것으로 돌려야 카드 선택지가 남는다), seller·driver는 Release `prod-20261028-747808af`가 가리키는 직전 운영 배포.
+- 2026-10-31(KST 새벽) consumer·seller·driver를 `7b22d9ab`로 갱신했다(사용자 승인 "7b22d9ab 운영 배포해", scope `frontends`). `8dfc1e10` 뒤 병합분 #688·#689·#690·#691·#693·#695·#696이 포함된다. 운영 화면에 영향이 있는 것은 판매자 앱뿐이다: UI 교체 P2a(Tailwind 연결·컴포넌트 대조 화면 #693), P2b 설정 화면 교체(#695), 회차 판매 가게에 공동구매 선택 숨기기(#696: 주문 화면 일반/공동구매 전환과 상품 판매 방식 선택을 `legacy` 가게에서만 노출). 나머지는 `packages/ui` 토큰·컴포넌트(#689)·촬영 도구(#690)·문서(#688·#691)다. API·규칙·인덱스 변경이 없어 API는 `8dfc1e10` 배포를 유지한다. consumer·driver는 앱 코드 변경이 없지만 `packages/ui`·`pnpm-lock.yaml` 변경으로 다시 빌드됐고, UI 교체 동결(`consumer-freeze`) 배포 검사(`freeze-guard.mjs deploy`, 로컬 실행)는 통과했다. exact Preview consumer `dpl_6PxLPnqA6S9MLJNf8sjnr4sBeAJt`·seller `dpl_38DStVMPDejrDZ5pQMpztXWeZvNL`·driver `dpl_4AdDLaRLGLAqjwxDHkUjU7saGhFE`(driver 생성 run은 READY 대기 시간 초과로 실패했으나 같은 deployment를 E2E가 READY·SHA로 확인)로 원격 회차 E2E run `41107556562` 64/64 + 세션 12/12, cleanup 성공. 배포 run `41109001427`: Vercel consumer `dpl_4e2hL4Gq5mY9nkFRkrSnDueUz9R9`·seller `dpl_3keeV7jrVHyVc9EGXdELuHkfhRh7`·driver `dpl_DbTTPxBPGhoELHqpRkvuueoDBmy3` → smoke 9/9 통과. Release [`prod-20261031-7b22d9ab`](https://github.com/booker-lab/greenhub/releases/tag/prod-20261031-7b22d9ab). 배포 뒤 운영 seller 로그인 페이지 JS 25개 중 9개가 새 빌드로 바뀐 것을 확인했다. 같은 날 사용자가 로그인한 운영 판매자 화면에서 공동구매 버튼과 상품 등록의 "판매 방식" 칸이 없는 것을 확인했다(E2E는 이 항목을 검사하지 않는다). 롤백 대상: consumer·seller·driver는 Release `prod-20261031-8dfc1e10`이 가리키는 직전 운영 배포.
+- 2026-10-23 API·consumer·seller·driver를 `951044f2`로 갱신했다(다른 세션 실행, 이 기록은 2026-10-23 릴리스 세션이 Actions 로그로 재구성). `71085566` 뒤 병합분 #568~#620(Cloud Run 이전 준비 #605·#619·#620 포함, 배송 뒤 환불 R1~R9, 판매자별 수수료율·지급 후 환불 회수 표시·정산 계좌 #592, 토스페이먼츠 카드 결제 #570, 상품정보제공고시 #571, 어드민 행동 기록 #576, 서버 5xx·새 결제 주문 텔레그램 알림 #569·#577, 소비자 직접 회원 탈퇴 #594, 초대 링크 → 카카오 판매자 가입 #589, 주문 상태 변경 응답 뒤 알림 발송 #602, 주문·회차에 쓰인 상품 삭제 409 #609, 공유 패키지 정리 #617 등). Storage 규칙 변경(+6줄)이 포함되나 배포 단계에서는 '이미 최신'으로 업로드를 생략했다. Firestore 규칙·인덱스 변경 없음. 원격 회차 E2E run `39926207118`(같은 SHA). `production-deploy.yml` run `39988322711`: 인덱스 READY → Railway 배포 `faa88380…` SUCCESS·`/health` commit `951044f2` → Vercel production consumer `dpl_fu7qRhX5wMaZoA24BkJvvV4h9xmU`·seller `dpl_6p7H8f1tBgHb9aEKRk3B8YP6fxgn`·driver `dpl_2Qhvq76N2PycY4YPnuXxcGjqptyF` → 규칙 → `post-deploy-smoke --expect-sha=951044f2` 9/9 통과(16:48:49 UTC). 직전 run `39535253514`(`703c9494`)·`39567169977`(`e4d781db`)은 실패로 끝났고 운영 SHA는 `71085566`에 남아 있었다. 롤백 대상: API Railway `eb497664…`(`71085566`), Vercel consumer `dpl_ArTUDhUDLmTxVov4TUouiYVzFxiw`·seller `dpl_C8UMfHSENGZhW8ULQ424Mk1FmkgS`·driver `dpl_EN3YdE6qwfRnwPrN8ebFWLmwh11q`.
+- 2026-10-20 API·consumer·seller·driver를 `71085566`으로 갱신했다(다른 세션 실행, 2026-10-23 Actions 로그로 재구성). `98185c23` 뒤 병합분 #543~#567(프록시 홉 기본값 2 #565, 구매안전서비스 인증마크 #567 포함, 운영 이메일 인증 경로 제한 #543, 회차 결제 품목별 1인 수량 상한 #546, 주문 상태 전이·알림 경계 #549, 비밀값 자동화 심층 방어 #553, 선물 정보 GREENHUB_FEATURES 게이트 #557, 벤치마킹 기능 #547·#550·#551·#554·#555(토글 기본 꺼짐), 테스트 계정 정리 도구 #556·#560 등). 규칙·인덱스 변경 없음. 원격 회차 E2E run `39273695880`(같은 SHA). `production-deploy.yml` run `39375904912`: 인덱스 READY → Railway 배포 `eb497664…` SUCCESS·`/health` commit `71085566` → Vercel consumer `dpl_ArTUDhUDLmTxVov4TUouiYVzFxiw`·seller `dpl_C8UMfHSENGZhW8ULQ424Mk1FmkgS`·driver `dpl_EN3YdE6qwfRnwPrN8ebFWLmwh11q` → 규칙(변경 없음) → smoke 9/9(06:33:45 UTC). 롤백 대상: API Railway `42e600f1…`(`030f4c1e`), 프런트는 `98185c23` 배포.
+- 2026-10-18 consumer·seller·driver를 `98185c23`으로 갱신했다(scope `frontends`). `030f4c1e` 뒤 병합분 중 앱 코드 변경은 consumer뿐이다: 검색 노출 기본 설정(#539: `robots.txt`·`sitemap.xml`, 홈 사업자 JSON-LD, 상품 JSON-LD는 현재 회차 가격·판매 상태, 상품 canonical, 공유 그림 `og-default.png` 1200×630)과 통신판매업 신고번호 footer 칸(#541). 나머지는 E2E(#545)·운영 도구(#527·#531·#533·#537)·문서다. API·규칙·인덱스 변경이 없어 API는 `030f4c1e` 배포를 유지한다. 로컬 `98185c23`에서 consumer 테스트 380/380·tsc 통과. 같은 SHA exact Preview(consumer `dpl_4RgSJyzdY2QmkkJrws6db8Gk1Sya`·seller `dpl_PyU2zoMu9U9fQUWA7ZeVfUHpb45H`·driver `dpl_566caqR3U2VBJNSkAb6DVPsVxF94`, 로컬 `vercel-exact-preview.mjs`는 토큰 만료 403이라 `create-exact-preview-deployment.yml`로 만들었고 driver run은 빌드 대기열로 READY 확인 시간 초과였으나 배포는 READY가 됐다)로 원격 회차 E2E run `39111381761`: 64/64 + 세션 12/12. `production-deploy.yml` run `39112138049`(scope frontends): Vercel production consumer `dpl_4pigS8Bu3stP7aFdJsHsyMx5k5cx`·seller `dpl_3knkrekr25EK96BvCv7WMeRa2u1f`·driver `dpl_CfibW7cBY5riRW6aMopq4qAGbazP` → `post-deploy-smoke` 9/9 통과(08:43:15 UTC). 운영 확인: `/robots.txt`·`/sitemap.xml`(상품 5개)·`/og-default.png` 200, 홈 JSON-LD 1개, 빅립 상품 JSON-LD 가격 30000 KRW·`OutOfStock`(판매 예정)·canonical, 화면 가격 표시와 콘솔 오류 없음. 상품 화면은 스트리밍 Suspense 조각(`div[hidden] S:0`)이 DOM에 남아 같은 JSON-LD가 숨은 사본으로 한 번 더 있다(홈 Suspense에도 같은 숨은 조각이 남는 기존 동작, 내용은 동일). 사용자 작업: Google Search Console·네이버 서치어드바이저에 사이트맵 제출, 카카오 공유 디버거 캐시 삭제. 롤백 대상: consumer `dpl_ELpMr9cEUxqjvtWuMzncAPmBQjXo`·driver `dpl_DWQCLX19Lr2ebj4X63QFmySXDRHY`(`030f4c1e`), seller `dpl_CrQXQ2ukhdfXCjKi5xEWWQgagQbz`(`032b221a`).
+- 2026-10-15 API를 `030f4c1e`로 갱신했다(#526 refresh 세션을 기기·로그인별로 나눔: `refreshTokens/{sub}.sessions`, 로그아웃은 해당 sid만 폐기, sid 없는 이전 refresh 토큰은 401이라 **배포 시점에 로그인해 있던 사용자는 한 번 다시 로그인**). 같이 들어간 문서: #523·#524(카카오페이 가맹점 심사 지연과 11/1 자동 오픈 결정 필요)·#525. 앱 코드·규칙·인덱스·마이그레이션 변경 없음(Vercel은 consumer `dpl_ELpMr9cEUxqjvtWuMzncAPmBQjXo`·driver `dpl_DWQCLX19Lr2ebj4X63QFmySXDRHY` 재빌드, seller는 빌드 생략). 동결 중 문서 PR #528(`19afc15a`)이 병합됐으나 문서만이라 배포 SHA는 `030f4c1e`로 유지했다. 같은 SHA exact Preview(consumer `dpl_3zfwWXjFhW9gUbrHzRAkHT9SNvKa`·seller `dpl_HqBEnY8DJFBCyYa4q1JZLLtnpBFa`·driver `dpl_3rzuPE6iq8ksJRrTGy2YCu9EHuaU`)로 원격 회차 E2E run `38711092518`: 64/64 + 세션 12/12, cleanup 성공. `production-deploy.yml` run `38712474480`(scope all): 인덱스 READY → Railway 배포 `42e600f1…` SUCCESS·`/health` commit `030f4c1e` → Vercel → 규칙(변경 없음) → `post-deploy-smoke --expect-sha=030f4c1e` 9/9 통과(09:28:12 UTC). 롤백 대상: API Railway `59634fb7…`(`032b221a`). 롤백해도 #526 이후 발급된 sid refresh 토큰은 이전 코드에서 그대로 검증되는지 확인하지 않았으므로, 롤백 시 다시 로그인이 필요할 수 있다.
+- 2026-10-13(밤) API·seller를 `032b221a`로 갱신했다. `098affbc` 뒤 병합분 #518(판매자 초대 발급에 받는 사람 이메일 필수, API → seller 순서)·#494(로컬 에이전트 러너, 운영 영향 없음)·#519·#520(문서)·#521(E2E 장바구니 확인을 결제 버튼 role로 한정)이 포함된다. consumer·driver는 앱 변경이 없어 Vercel 빌드가 생략됐다(consumer `dpl_8hP2KBWZZyMwB2PU7T9p34ffgZJJ`·driver `dpl_BzKXPUyr8gkm8NbgxG2yfmv6dCZo`, 운영 화면은 `098affbc` 빌드와 같음). 규칙·인덱스 변경 없음. 첫 후보 `5d2197d1`의 원격 회차 E2E run `38410433258`은 63/64였다: 장바구니 테스트 `getByText(/한 번에 결제/)`가 서버 확인 완료 뒤 안내 문장과 결제 버튼 두 곳에 걸려 strict mode 실패(확인 속도에 따라 통과·실패가 갈리는 테스트 locator 결함, 제품 코드 무관). #521로 고친 `032b221a` exact Preview(consumer `dpl_3NRk8ubBfyiZrSkjRm1Eb2AWQsm9`·seller `dpl_3thkquGtAMjtDctvRmtLQ8ta9Ki7`·driver `dpl_CB7Ch8SBFoMaxvmAtzkek8FGHtq5`)로 원격 회차 E2E run `38414310235`: 64/64 + 세션 12/12, cleanup 성공. `production-deploy.yml` run `38415945105`(scope all): 인덱스 READY → Railway 배포 `59634fb7…` SUCCESS·`/health` commit `032b221a` → Vercel production seller `dpl_CrQXQ2ukhdfXCjKi5xEWWQgagQbz` 배포 → 규칙(변경 없음) → `post-deploy-smoke --expect-sha=032b221a` 9/9 통과(14:49:22 UTC). 롤백 대상: API Railway `d597d880…`(`098affbc`), seller `dpl_4vWnnm3bS3SWAGCwrMoV5RSsRuXL`. 배포 전 운영 설정 점검 run `38407326491`은 전 항목 PASS(`PORTONE_STORE_ID`가 consumer 값과 일치)였고, 운영에만 있는 인덱스 1개(`orders` status·deliveryMethod·preparedAt)는 현재 코드 미사용 잔재로 WARN만 났다.
+- 2026-10-13(저녁) API·consumer·seller·driver를 `098affbc`로 갱신했다. `bd159830` 뒤 병합분 #484~#517과 #509가 포함된다(주요: 요청 한도 집계 기준·API 경계 #404, firebase-token 한도와 refresh·품종 입력 검증 #488, 회차 결제 화면 휴대폰 번호 확인 #504, 운영 기록 메모와 함께 해결 #510, 판매자 초대 받는 사람 지정·72시간·취소 #512·#501·#502, 어드민 정산 status 필터 #392, 소비자 상품 상세 병렬 조회 #509). 규칙·인덱스 파일 변경 없음(배포 단계에서 같은 내용 재배포). 배포 전 운영 설정 점검(`prod-config-check`)은 `portone_store_id_set`만 FAIL이었고(현재 코드 미사용, 같은 날 사용자가 Railway에 `PORTONE_STORE_ID` 추가), `CORS_ALLOW_VERCEL_PREVIEWS`·`TRUST_PROXY_HOPS`는 미설정으로 PASS. 같은 SHA exact Preview(consumer `dpl_HYLkSUxVGPmY1xpRewUWGtcN4EQK`·seller `dpl_3a8jEdSeuk6SyosyCjvSH5L2rHoc`·driver `dpl_2bFsaaBFd5yMJMjxcpZNMyJP9gtf`)로 원격 회차 E2E run `38403498965`: 64/64 + 세션 12/12, cleanup 성공. `production-deploy.yml` run `38405083355`(scope all): 인덱스 배포·READY → Railway 배포 `d597d880…` SUCCESS·`/health` commit `098affbc` → Vercel production consumer `dpl_8NMKZGuPfEodEux8Qk5GgpjeyQQS`·seller `dpl_4vWnnm3bS3SWAGCwrMoV5RSsRuXL`·driver `dpl_3v3bVvQoU2LP6dwzJ6FeqWeWh2KD` → 규칙(변경 없음) → `post-deploy-smoke --expect-sha=098affbc` 9/9 통과(13:34:40 UTC). 롤백 대상: API Railway `75561dcc…`(`bd159830`), Vercel consumer `dpl_2fv7QH7WX5KjowMBQ5f7KA5d4vEu`·seller `dpl_5dRLzb5XPcTfmRkADccERnznDSDe`·driver `dpl_EepeCX5L2wipGJtQiALyPGEWHG8e`. 규칙·인덱스는 그대로 둔다.
+- 2026-10-13 API·consumer·seller·driver, Firestore 인덱스·규칙을 `bd159830`으로 갱신했다. `55ed02d9` 뒤 병합분(#460~#495 중 병합된 것)이 포함된다. 규칙은 #469(`dailyCaps` 목록 조회에 limit≤62 요구), 인덱스는 `notifications(userId, createdAt desc)`(#485)·`orders(driverId, status)`·`orders(status, deliveryMethod)`(#480) 추가. 배포 전 같은 SHA exact Preview(consumer `dpl_DNxP1LWfn5r6RRJhRZEp5PPvM65w`·seller `dpl_BEuucQTTTw2wGCzBveN8sN19KARg`·driver `dpl_CdWE6dUvkDeo9UYMHCS5vrftkHQZ`)로 원격 회차 E2E run `38268465874`: 1차에 64/64 + 세션 12/12 통과, cleanup 성공. 감사 세션이 같은 SHA 로컬 테스트·타입·빌드와 인덱스·규칙·환경 변수 대조를 마쳤다. 첫 수동 배포 시도 뒤 2026-10-13 06:03 UTC smoke에서 API가 아직 `55ed02d9`로 확인돼, 사용자 승인으로 #496 `production-deploy.yml` run `38364473240`(scope all)으로 다시 배포했다: 인덱스 배포·READY(5분) → Railway 배포 `75561dcc…` SUCCESS·`/health` commit `bd159830` → Vercel production consumer `dpl_2fv7QH7WX5KjowMBQ5f7KA5d4vEu`·seller `dpl_5dRLzb5XPcTfmRkADccERnznDSDe`·driver `dpl_EepeCX5L2wipGJtQiALyPGEWHG8e` → Firestore 규칙 배포(Storage 규칙은 변경 없음) → `post-deploy-smoke --expect-sha=bd159830` 9/9 통과(07:54:49 UTC). 인덱스 배포 때 `firestore.indexes.json`에 없는 운영 인덱스 1개가 있다는 안내가 나왔다(삭제하지 않음, `--force` 미사용). 롤백 대상: API Railway의 `55ed02d9` 배포(#457), consumer `greenhubconsumer-iy6xxw374-…`·seller `greenhub-seller-k1srlzat8-…`·driver `greenhub-driver-b0hh97ett-…`(모두 `55ed02d9`, 첫 수동 시도에서 프런트가 먼저 바뀌었다면 Vercel 배포 목록에서 `55ed02d9` 것을 고른다), 규칙은 `55ed02d9`의 `firestore.rules` 재배포. 추가한 인덱스는 그대로 두어도 된다.
+- 2026-10-12 API·consumer·seller·driver와 Firestore·Storage 규칙을 `55ed02d9`로 갱신했다. `0bcceaea` 뒤 병합분 전체(#399~#457 중 병합된 것)가 포함되며, 규칙은 #402(주문·판매 회차 원문 직접 조회 차단, Storage 공개 경로 단건 조회, 상품 이미지 쓰기에 매장 `ownerId` 일치 요구)다. 인덱스 변경 없음. 배포 전 같은 SHA exact Preview(consumer `dpl_FpiLLJDA1DV8NAGVNq1HdsAVpwfo`·seller `dpl_9rzPqFkqE9SD78wpoXAQbXETmQKi`·driver `dpl_3VzPtQuFPqc2Tcxd7ptmNpuDab1x`)로 원격 회차 E2E run `38203648625`: 1차에 64/64 + 세션 12/12 통과, cleanup 성공(직전 후보 `a81a150b`도 run `38082922454`로 통과했으나 동결 중 #457 병합으로 후보를 바꿨다). 배포 전 운영 데이터 점검(`pre-deploy-check.mjs`, 읽기 전용) 6개 중 5개 통과, 1건은 아래 디어 오키드 고아 매장(이번 배포로 동작이 바뀌지 않아 진행). Vercel 세 프로젝트 모두 `VERCEL_ENV` 사용자 정의 값 없음. Railway(Dockerfile 빌드) 배포 ACTIVE, `/health` commit `55ed02d9662096a30b6d8c6c4794a0d818948768`. Vercel production consumer `greenhubconsumer-iy6xxw374-…`·seller `greenhub-seller-k1srlzat8-…`·driver `greenhub-driver-b0hh97ett-…`(배포 URL 기준, `dpl_` ID와 Railway 배포 ID는 기록하지 않음). `firebase deploy --only firestore:rules,storage`: Storage 교차 서비스 규칙용 IAM 역할 부여 질문에 Yes. 운영 확인: `post-deploy-smoke --expect-sha=55ed02d9` 9/9 통과(2026-10-12T08:56:57Z), Uptime check run `38225331836` 정상. `cors.json`(GET·HEAD만 허용)은 적용하지 않았다. 롤백 대상: API `a77cdbb3…`, consumer `dpl_EzjHKz5t2Jh7pQvqhxe8L8Dfmk5g`·seller `dpl_2ESYHG9rBnw7vXbLTsMH9dQgcCfR`·driver `dpl_7chh41tQrbFbbxHEBKwCnNUURtof`(모두 `0bcceaea`), 규칙은 `0bcceaea`의 `firestore.rules`·`storage.rules` 재배포.
+- 2026-10-08(오후) API·consumer·seller·driver를 `0bcceaea`로 갱신했다. 포함: 판매자 주문 목록 손님 이름 표시·전화번호 서버 검색(#383, API `GET /stores/:storeId/orders?phone=`, 전화번호는 목록 응답에 싣지 않음), 회차 만들기·정산 쉬운 말과 정산 예정 연두 상자(#386), 기사 앱 "총 N개" 수량·기준 밖 색·지도 문구(#395), 상품 등록 단계 표시줄·등록 버튼(#396), 정산 기간별 조회 기본 기간(이번 달 1일~오늘)·주문별 상세 "주문 보기" 링크·정산 상태 색(#397). 규칙·인덱스 변경 없음. 배포 전 같은 SHA exact Preview로 원격 회차 E2E run `37735343338`: 1차에 52/52 + 세션 12/12 통과. Railway 배포 `a77cdbb3…` SUCCESS·health 200, Vercel production consumer `dpl_EzjHKz5t2Jh7pQvqhxe8L8Dfmk5g`·seller `dpl_2ESYHG9rBnw7vXbLTsMH9dQgcCfR`·driver `dpl_7chh41tQrbFbbxHEBKwCnNUURtof`. 운영 확인: 소비자 홈·판매자 로그인·기사 로그인 200, 비인증 driver API·판매자 주문 API 401. 롤백 대상: API `86d66af9…`·consumer `dpl_EPSQ37VPh95yyzLVMvgeme3tZwyW`·driver `dpl_BfKcgzHxabu349hk85xtwJMmjqLQ`(`f259b433`), seller `dpl_5qiPrx9uYATyKRg4Gu9RhfPjrwgV`(`6628842b`).
+- **activation(2026-09-29)**: 첫 회차 `e8ca686f-a9db-4c6b-8ebf-2bf190351a3c` "10월 6일 배송 회차"를 판매자 앱에서 만들어 `SCHEDULED`로 예약했다(주문 10/1 목 10:00 ~ 10/5 월 00:00, 경매 10/5 07:00, 배송 10/6 00:00~09:00, 경기도 이천시, 배송지 15곳·수량 30개, 빅립 30,000·만천홍 25,000·v3 45,000원 각 10개). 2026-09-29 파일럿 연기에 맞춰 같은 회차를 "11월 10일 배송 회차"(주문 11/1 일 10:00 ~ 11/9 월 00:00, 경매 11/9 07:00, 배송 11/10 00:00~09:00)로 옮겼다(`SCHEDULED` 유지, 공개 API 반영 확인). 사용자 승인으로 `salesMode`를 `legacy → round_direct`로 전환했고(dry-run 대상 1곳 확인 후 `--confirm` 적용), 공개 회차 API에서 회차와 상품 3개를 확인했다. 전환 시점 미해결 운영 예외 0건.
+- 회차 상태는 조회 시 계산된다: `SCHEDULED`는 `orderOpenAt` 경과 시 자동 `OPEN`, `orderCloseAt` 경과 시 자동 `CLOSED`다. 공개 회차에는 `SCHEDULED`도 노출된다.
+- 롤백: `node scripts/enable-dear-orchid-round-direct.mjs --apply --target-mode=legacy --confirm=80189070-2c3d-45f2-bc11-68a870b13951:round_direct:legacy`
+- live round 주문, 실제 결제·환불, first-round completion은 `NOT DONE`이다. 파일럿 운영은 2026-11-01로 연기했다.
+<!-- 원문 190–200행. 정본: docs/BACKLOG.md `Consumer self-cancel ORDER_CANCELLED notification`·DOC_DELTA `Pilot marketing contract`, docs/specs/api/notifications.md -->
+
+### 6. Consumer self-cancel `ORDER_CANCELLED`
+
+상태: `RESOLVED` — 2026-09-28 결정(D1)과 #310 구현.
+
+소비자 회차 직접 취소도 `ORDER_CANCELLED`를 보낸다. 결제 전·이미 취소된 주문은 제외하고 사유는 고정 문구 `고객 요청`이다. 계약은 `docs/specs/api/notifications.md`가 소유한다.
+
+### 7. Pilot marketing wording
+
+상태: `VERIFIED` — 2026-10-10 코드·테스트·공개 문서 대조.
+
+Pilot 정책 `MARKETING_NOT_USED_IN_PILOT`이 코드와 공개 문서에 반영돼 있다. 회차 주문 API는 `marketingConsent`를 거부하고(`apps/api/src/orders/round-order-create.service.ts`, 회귀 `mvp-order-flow.spec.ts`), 결제 화면은 동의를 받지 않으며, MY 마케팅 설정은 파일럿 미운영 안내만 보인다. `/privacy`·`/terms`와 `docs/specs/legal/README.md`도 같은 정책을 적는다. 마케팅 재도입은 별도 product·legal·provider 결정이다.
+
+<!-- 원문 202–208행 -->
+
+### 8. UI 교체 동결 (Mantine → shadcn/ui)
+
+상태: `DECIDED` — 2026-10-30 사용자 결정(`docs/specs/frontend/ui-stack-migration-plan.md` §8·§10 M2, 같은 날 다시 정함).
+
+첫 회차(11/22 주문·12/1 배송 일정)는 UI 교체가 끝난 뒤로 미룬다. 회차 일정 변경은 운영 데이터라 사용자가 한다. 교체는 단계마다 증명이 끝나는 대로 `main`에 병합한다. 카카오페이 심사·LIVE 결제 전환·실결제 1건 확인이 끝날 때까지는 소비자 앱 화면만 묶는다(소비자 동결).
+
+도구 강제: 상태 파일 `docs/release/ui-migration-freeze.json`(현재 `consumer-freeze`)을 `scripts/release/freeze-guard.mjs`가 읽는다. PR CI `UI 교체 동결` job(`ci-ok`에 포함)이 base SHA의 상태로 `apps/consumer`의 교체 흔적과 `packages/ui/src/theme.ts`·`style.css` 수정을 막는다. **사용자가 심사·LIVE·실결제 확인이 끝났다고 알려 주면 상태를 `open`으로 바꾸는 커밋을 병합한다.** 다음 회차 일정을 잡으면 그 회차 기준으로 `pre-candidate`·`candidate`를 다시 쓴다(계획 §8 "회차 기준 동결"). 소비자 동결 중의 운영 배포는 소비자 빌드가 바뀌지 않았는지 확인한다.
+<!-- 원문 210–352행. 과거 P0 11건의 현재 근거는 docs/archive/BACKLOG_archive_20261107.md, ALIGO 현재 상태는 docs/memory.md `ALIGO 상태`, 2026-08-27 승인 증거는 docs/reports/REPORT_aligo_template_approval_20260827.md -->
+
+## HISTORICAL / CLOSED BY REL-STATE-01
+
+> 2026-09-28 재대조: 아래 P0의 구현·직접 회귀는 현재 `main`에 있다(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, admin 강제환불·권한, 정산 lifecycle, auth 세션 폐기 근거 spec 7개 191건 통과, 당시 `firestore.rules`의 orders read는 seller·admin만 허용 — #402 이후 `main` 규칙은 `orders` 원문 직접 읽기·쓰기를 모든 클라이언트에 거부한다). 각 절의 "미완료" 서술은 당시 기록이다.
+
+> 아래 과거 P0 서술은 #63의 `A-N closed semantic work` 분류에 따른 historical record다. 현재 release blocker, current implementation finding, current verification proof, remote-addressable candidate, PR, merged, Preview, production 상태를 이 기록만으로 추론하지 않는다.
+
+> S2 → R1 campaign의 종료는 아래 broader release P0를 production-ready로 만들지 않으며, 닫힌 S2·S3A·S3B·S4 작업을 새로 재수용하지 않는다.
+
+### 1. Driver 승인·세션 권한 — 최우선 security coupling
+
+관리자 승인 전 driver 권한을 얻을 수 없어야 한다. 현재 accepted source에서 다음 approval-gate 하위 범위가 검증됐다.
+
+- public `register(role=driver)`는 `driverApproved: false`를 저장하고 client approval 주입을 거부한다.
+- public `register → login`의 false/missing approval driver는 token side effect 전에 거부된다.
+- 신규/legacy Kakao driver 자동승인이 제거됐고, JWT strategy/Firebase custom-token 경계가 current user 상태를 확인한다.
+
+**S4 Driver/Auth Initial Gate = CLOSED**. `AUTH-SESSION-CLAIM-REVOCATION`의 refresh/stale-claim/session lifecycle은 **OPEN**이며, broad driver Firestore read와 결합 위험도 남는다.
+
+이 P0는 broad driver Firestore read가 남아 있는 `ORDER-DIRECT-READ-AUTHORIZATION-AND-MINIMIZATION`과 결합 위험이 크므로 우선 함께 닫는다.
+
+정본: `docs/specs/api/auth.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
+
+### 2. 주문 direct Firestore read·개인정보 최소화
+
+API driver read는 배정 경계가 있고 직접 테스트로 `VERIFIED`지만 current Rules는 driver role에 broad order read를 허용하며 seller/driver frontend는 raw document를 사용한다.
+
+**시스템 전체 driver read authorization + seller/driver data minimization = P0 IMPLEMENTATION FINDING**.
+
+API query authorization 자체는 `VERIFIED`를 유지하며 direct Firestore 경계와 혼동하지 않는다.
+
+### 3. 재배송비 결제·재개 상태머신
+
+운영 계약은 고객 책임 유료 재배송에서 `결제 전 재배송 금지`를 요구한다.
+
+2026-08-24 감사에서 다음 두 우회/불일치가 확인됐다.
+
+- driver `DELIVERY_HELD → DELIVERING`: charge `PAID` 확인 없음 + UI `배송 재개` 항상 노출.
+- seller `DELIVERY_HELD → PREPARING`: 고객 책임+양수 재배송비에서도 성공하며 hold를 해소하지만, charge 생성 API와 consumer 결제 UI는 `status === DELIVERY_HELD`를 요구해 payment-request 뒤 결제 dead-end가 가능하다. 이후 `PREPARING → DELIVERING`도 과거 미결제 hold를 확인하지 않는다.
+
+따라서 **`ORDER-REDELIVERY-PAID-RESUME-GATE` = P0 재배송 상태머신 `IMPLEMENTATION FINDING`**이다.
+
+정본: `docs/specs/api/orders.md`, `docs/BACKLOG.md`, 운영 근거 `docs/specs/ops/mvp-sales-round-runbook.md`.
+
+### 4. 관리자 강제 환불 lifecycle
+
+admin refund는 본 결제 환불 뒤 주문을 직접 `CANCELLED` write하며 정상 cancellation의 추가 charge·reservation/capacity·held counter·settlement 후속효과를 재사용하지 않는다.
+
+**`ADMIN-FORCE-REFUND-CONSISTENCY` = P0 IMPLEMENTATION FINDING**.
+
+### 5. Admin privileged mutation coverage
+
+`AdminController`의 JWT + admin role guard와 `markAsPaid()` transaction 구현은 존재한다. 그러나 admin 전용 server unit/API E2E가 없고 현재 Playwright admin 테스트는 UI redirect/read smoke 중심이라 high-impact mutation의 non-admin 직접 거부·side-effect 0 및 settlement 지급 상태/race를 직접 고정하지 않는다.
+
+**`ADMIN-PRIVILEGED-MUTATION-COVERAGE` = IMPLEMENTED / UNVERIFIED + P0 COVERAGE GAP**.
+
+정본: `docs/specs/api/admin.md`, `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_auth_orders_admin_verification_audit_20260824.md`.
+
+### 6. Settlement core lifecycle coverage
+
+`SettlementsService`는 transaction 기반 생성·`pending → confirmed`·취소·paid 역전 방지를 구현한다. 회차 E2E fixture도 실제 service를 주입한다.
+
+그러나 전용 settlement lifecycle test가 없고 회차 통합 E2E도 settlement 생성 1건, 중복 방지, confirm cutoff/race, cancel/paid 보존을 직접 assertion하지 않는다. 실제 service의 간접 실행은 core 금전 상태의 직접 증거로 세지 않는다.
+
+**`SETTLEMENT-LIFECYCLE-COVERAGE` = IMPLEMENTED / UNVERIFIED + P0 COVERAGE GAP**.
+
+Admin `confirmed → paid`는 기존 `ADMIN-PRIVILEGED-MUTATION-COVERAGE`가 별도로 소유한다.
+
+정본: `docs/specs/api/settlements.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+
+### 7. 역사적 marketing consent lifecycle finding
+
+round checkout에는 선택 마케팅 consent가 있고 consent retention record도 생성한다. 반면 MY 설정은 별도 `users.notificationPreferences`만 사용하고, checkout consent는 이를 동기화하지 않으며 신규 user 기본 preference도 없다. “즉시 철회”는 preference만 false로 바꾸고 withdrawal retention evidence를 남기지 않는다.
+
+현재 실제 선택 마케팅 sender는 확인되지 않았고, 주문·결제·배송 정보성 연락은 선택 마케팅과 별개의 계약이다.
+
+**`MARKETING-CONSENT-LIFECYCLE-CONSISTENCY` = historical P0 finding**. 현재 Pilot 정책은 `MARKETING_NOT_USED_IN_PILOT`이며, 이 기록으로 현재 implementation blocker나 marketing runtime을 주장하지 않는다.
+
+MVP에서 마케팅을 사용하지 않으면 consent 수집/설정 노출을 비활성화·제거하는 선택도 가능하고, 유지한다면 user-level SSOT + checkout sync + withdrawal evidence + sender gating을 구현한다.
+
+정본: `docs/specs/api/notifications.md`, `docs/specs/legal/README.md`; 증거: `docs/reports/REPORT_settlements_notifications_legal_ops_audit_20260824.md`.
+
+### 8. 결제 finalization provider 상태 방어
+
+`finalizePaidOrder()` boundary가 비`PAID` provider 입력을 자체 차단하지 않는다.
+
+**`PAYMENT-FINALIZATION-PAID-GUARD` = P0 IMPLEMENTATION FINDING**.
+
+### 9. PortOne webhook signature 검증 coverage
+
+webhook signature 구현은 raw body + id/timestamp/signature, timestamp ±5분, HMAC SHA-256 timing-safe 검증을 사용한다. 그러나 현재 회차 E2E의 signature verifier는 mock이며 real verifier의 valid HMAC 성공·non-empty invalid HMAC 거부·body/id/timestamp 변조 거부를 직접 고정한 증거가 부족하다.
+
+**`PAYMENT-WEBHOOK-SIGNATURE-COVERAGE` = IMPLEMENTED / PARTIALLY VERIFIED + P0 COVERAGE GAP**. 구현 결함으로 단정하지 않는다.
+
+정본: `docs/specs/api/payments.md`; 증거: `docs/reports/REPORT_payment_webhook_signature_coverage_20260824.md`.
+
+### 10. 주문 mutation authorization 회귀
+
+ownership guard는 구현돼 있으나 타-store seller·비담당 driver·first-claim 외 action과 거부 side-effect 0 직접 회귀가 부족하다.
+
+**`ORDER-MUTATION-AUTHORIZATION-COVERAGE` = IMPLEMENTED / UNVERIFIED + P0 COVERAGE GAP**.
+
+### 11. GitHub main protection
+
+repo-side 배포 방어와 GitHub main 보호를 직접 재확인했다. `protected=true`, PR required, strict `verify` required check, force-push·delete 차단이며 Issue #32는 `CLOSED`다.
+
+## ALIGO 상태
+
+현재 상태:
+
+- repository logical 8-code contract: `VERIFIED` — #65에서 8개 logical code/body/required-variable 계약을 확인했다.
+- provider 템플릿 metadata: `VERIFIED`(2026-09-28 콘솔) — UK_5691~5698 코드·이름·승인완료·본문·변수가 저장소 계약과 일치하고, 채널 `@greenlove`는 정상, 버튼은 없다. 템플릿 대체문자는 `발송안함`이며 SMS fallback은 코드가 별도로 수행한다.
+- production mapping: Railway production 변수 `ALIGO_TEMPLATE_CODES_JSON`이 8종을 올바른 코드로 매핑하고, 2026-09-28 출시 배포로 운영 API 프로세스에 반영됐다.
+- 운영 송신 IP: Railway 송신 IP는 재배포로 바뀐다(`152.55.176.19` → `152.55.177.34`). 그래서 ALIGO 호출은 Fixie 고정 IP 2개를 거치며, 두 IP를 ALIGO 허용 IP에 등록했다(2026-09-28, 조회 `code=0`). Railway Pro 전환 시에는 고정 IP 3개를 먼저 추가 등록한 뒤 `ALIGO_OUTBOUND_PROXY_URL`을 삭제한다.
+- actual Alimtalk: 2026-09-28 격리 시험(`ORDER_PREPARING`, 가짜 주문번호 `TEST-0928`)에서 `@greenlove` 채널로 휴대폰 도착 확인. 첫 시도는 ALIGO 선불 잔액 부족으로 거부됐고 충전 뒤 성공했다.
+- actual SMS: 처음엔 개인 번호 발신이 `이통사 번호도용문자차단서비스에 가입된 발신번호 사용`으로 차단됐다. 2026-10-08 운영 `ALIGO_SENDER_PHONE`을 ALIGO 승인된 사업자 번호(끝 2104)로 바꾸고 격리 실발송 알림톡(`TEST-1008`)·문자(`TEST-1008-SMS`)가 모두 접수·1회 시도·휴대폰 실수신됐다(사용자 확인). 알림톡 실패 뒤 문자로 넘어가는 자동 fallback 자체는 운영에서 따로 재현하지 않았다(코드 회귀만 있음).
+
+### 역사적 provider snapshot
+
+마지막 provider snapshot — 2026-08-27 15:06 KST 경:
+
+- 발신 프로필·senderkey 준비 완료.
+- 회차 알림 템플릿 8종 등록·심사 요청 완료.
+- 8종 모두 `승인완료`.
+- provider 심사 외부 blocker 해소.
+- 실제 알림톡·SMS 발송 0건.
+- production ALIGO 자격 증명·매핑 미반영.
+
+승인 템플릿:
+
+- `UK_5691` 주문 접수
+- `UK_5692` 상품 준비 시작
+- `UK_5693` 배송 시작
+- `UK_5694` 배송 보류
+- `UK_5695` 재배송비 결제 요청
+- `UK_5696` 재배송 예정
+- `UK_5697` 배송 완료
+- `UK_5698` 주문 취소
+
+코드 레벨 알림톡 3회 retry→SMS fallback, 설정 fail-closed, notification delivery idempotency는 직접 테스트가 있다. 이를 실제 provider 발송 증거로 확장하지 않는다.
+
+승인 증거: `docs/reports/REPORT_aligo_template_approval_20260827.md`.
+
+위 snapshot은 현재 provider metadata read-back이 아니다. 다음 ALIGO gate는 provider code 1:1 매핑 확인 → 승인된 템플릿 격리 알림톡 → SMS fallback 실제 검증이며, 실제 발송과 production 설정은 별도 승인 없이는 수행하지 않는다.
+
+<!-- 원문 354–362행 -->
+
+## 판매 활성화 legal 상태
+
+- production `/privacy`, `/terms`는 시행일 2026-08-30 판이며 2026-09-28 출시 배포(`197f84a4`)부터 운영에 반영됐다. 8/30 판은 회차 거래·취소·환불·배송 보류·유료 재배송, PortOne/PG·ALIGO, 내부 판매·배송 접근, 파일럿 마케팅 미사용을 반영했다(`docs/specs/legal/README.md` 개정 이력).
+- 2026-10-10 8/30 판 이후 흐름을 재대조했다(`docs/specs/legal/README.md`). 보호책임자(대표자)·카카오맵 길 안내·늦은 결제 환불을 담은 2026-11-01 시행 개정판을 만들었고 2026-10-12 운영 배포(`55ed02d9`)로 반영됐다. 통신판매업 신고는 2026-10-21 끝났고 번호를 footer에 실었다(#668). 상세는 BACKLOG `법무·출시 후보 정합성`.
+- 2026-08-19 consumer legal baseline의 “마케팅 수신 동의 기능 없음” 사실은 현재 코드와 달라 `docs/specs/legal/README.md`의 2026-08-24 errata가 해당 구현 사실을 우선한다.
+- Pilot marketing policy는 `MARKETING_NOT_USED_IN_PILOT`이며 공개 문서에 반영됐다(위 7절).
+- broad read를 legal 문구로 정당화하지 않는다.
+- 재배송 payment-required 상태머신과 admin refund 실제 정책을 legal의 재배송비·환불 설명에 반영한다.
+- settlement 생성·확정·취소·지급 검증 결과를 legal 확정 전에 반영한다.
+<!-- 원문 364–373행 -->
+
+## 검증 상태
+
+- 최근 원격 회차 E2E: run `42404687874`(2026-11-08 운영 SHA `0c0e402e`) 64/64 + 세션 12/12, cleanup 성공. 직전 `2cbc1b9c` run `42400911353`은 소비자 4개 테스트 × 2(8건)가 #826의 의도한 문구 변경을 옛 문구로 찾아 실패했고, E2E 문구만 #837로 맞춘 뒤 통과했다. 로그아웃 뒤 세션이 되살아나는 간헐 실패(`AUTH-SIGNOUT-SESSION-RESURRECTION-FLAKE`)는 #834가 판매자 로그인 화면의 원인 요청 하나를 없앴고 근본 해결은 남아 있다. 운영에 나갈 SHA가 바뀌면 그 SHA로 다시 판정한다.
+- 운영 배포 대기: 현재 운영 SHA(Latest Release) 뒤 `main`에 병합된 변경은 원격 회차 E2E로 판정하지 않았고 운영에 나가지 않았다(`git log <운영 SHA>..origin/main`).
+- 원격 회차 E2E 판정 기준은 #447부터 64건(소비자·셀러·드라이버 32건 × chromium·mobile) + 세션 수명주기 12건이다. 셀러 상품 등록·수정·삭제(`seller-product-lifecycle`)는 #839로 넣었다가 원격 Preview에서 통과할 수 없어 다시 뺐다(BACKLOG `SELLER-PRODUCT-E2E-REMOTE-FIREBASE`).
+- 이전 운영 SHA 증거: `55ed02d9` run `38203648625`(64/64 + 세션 12/12), `0bcceaea` run `37735343338`(52/52 + 세션 12/12), 출시 `197f84a4` run `36372493414`, API `781285ea` run `36383185604`, 판매자 앱 `437af74b` run `36410582745`(각 52/52 + 세션 12/12, cleanup 0).
+- 이전 역사 증거: SHA `6e0fc9d4cec08073ed2504208cc8bb1ea395ee7d`, run `32351887404`(52건).
+- 과거 run을 현재 release 증거로 확장하지 않는다.
+- 2026-10-10 결제·인증·규칙 재대조(`main` `680a190`, API 단위 1768건·통합 26건 통과, CI Firebase rules 에뮬레이터 통과): 과거 P0(결제 PAID guard, webhook 서명, 재배송 PAID 게이트, 관리자 강제 환불)와 #402 규칙은 `VERIFIED`. 남은 일은 BACKLOG `AUTH-MULTI-DEVICE-SESSION`(결정 필요), `CHARGE-REFUND-ISSUE-ROUTING`(구현 결함, 같은 날 수정·운영 미배포), `PORTONE-CHANNEL-CHECK`(#426 미병합), `RATE-LIMIT-CLIENT-IP`(#404 미병합), `STORAGE-CORS-APPLY`. 상세: `docs/reports/REPORT_payments_auth_rules_reaudit_20261010.md`.
+- exact-SHA Preview/browser/fixture와 필요한 legal/release proof는 actual release candidate에서 다시 판정한다.
+<!-- 원문 392–406행 -->
+
+## 다음 작업
+
+1. 파일럿 시작(2026-11-01) 전 프런트엔드 점검: 첫 회차는 `orderOpenAt`(11/1 10:00)에 자동 `OPEN`된다. 일정을 다시 미루면 그 전에 회차 일정을 옮긴다. 파일럿 전 결정 3건은 2026-10-04에 정리됐다(환불 재시도 버튼 만들지 않음, 판매자 목록 손님 이름·검색 #383, 어드민 넓은 레이아웃 #354). 파일럿용 기사 계정은 2026-10-31 사업자 휴대폰으로 기사 가입 → 관리자 승인 → 기사 앱 로그인까지 마쳤다(사용자 확인. 기사 앱은 기사 역할만 허용하므로 관리자 계정과 다른 계정이다, #381).
+2. SMS 발신번호 교체는 완료(2026-10-08): 2026-10-08 운영 `ALIGO_SENDER_PHONE`을 ALIGO 승인된 사업자 번호(끝 2104)로 바꾸고 격리 실발송 알림톡(`TEST-1008`)·문자(`TEST-1008-SMS`)가 모두 접수·1회 시도·휴대폰 실수신됐다(사용자 확인). 이때 운영 변수 변경이 Railway 재배포를 일으켜 검증 안 된 `main` HEAD가 나갔고, 곧바로 검증 SHA `f259b433`으로 다시 배포했다. **운영 Railway 변수(예: 텔레그램 `OPS_TELEGRAM_*`)를 바꿀 때는 변경 직후 검증된 SHA로 다시 배포하거나 운영 배포와 함께 넣는다.**
+3. 파일럿 시작 직후 실제 결제 1건(결제 → 접수 알림톡 → 소비자 취소·환불 → 취소 알림톡)으로 운영 PortOne 경로를 확인한다. 결제는 지금까지 E2E 모의 결제로만 검증됐다. 2026-10-13 사용자 PortOne 콘솔 확인 결과 운영 상점에 LIVE 채널이 없고 테스트 채널만 있다(테스트 채널 결제는 전부 환불됨). 11/1 10:00 자동 오픈 전에 LIVE 채널을 발급받아 consumer 채널 키를 교체해야 실결제가 된다. #426(PortOne 채널 확인)과 결제 정합성 PR은 LIVE 채널이 생길 때까지 병합하지 않는다(BACKLOG `PORTONE-CHANNEL-CHECK`).
+4. 운영 배포는 검증된 SHA를 지정해 API → 프런트 → 규칙 순으로 한다. Railway UI "Deploy"는 `main` HEAD를 배포하므로 병합 후 미검증 코드가 나갈 수 있다.
+   - 자동 배포: `.github/workflows/production-deploy.yml`(사용자가 채팅에서 SHA를 지정해 승인한 뒤 dispatch). 같은 SHA 회차 E2E run 확인 → 인덱스(READY 대기) → Railway API(`/health` commit 확인) → Vercel 3개 → 규칙 → `post-deploy-smoke`를 한 번에 하고, `scope`로 일부만 다시 할 수 있다. production Environment 비밀값 4개(파일 머리 주석)가 등록돼야 동작한다. `pre-deploy-check`는 포함하지 않는다.
+   - 2026-10-13 `bd159830` 배포에 적용한 순서(이후 배포도 인덱스·규칙이 바뀌면 같은 원칙): 배포 전 `node scripts/release/pre-deploy-check.mjs`(읽기 전용) → **Firestore 인덱스 먼저**(`firebase deploy --only firestore:indexes`, 새 복합 인덱스 3개 `notifications(userId, createdAt desc)`(#485)·`orders(driverId, status)`·`orders(status, deliveryMethod)`(#480)가 콘솔에서 READY인지 확인. 없으면 `GET /notifications/me`와 기사 주문 목록이 실패) → API → 프런트 3개(consumer가 규칙보다 먼저: #469 `dailyCaps` 목록 조회에 limit 필수) → Firestore 규칙.
+   - `bd159830`으로 운영 동작이 바뀐 것: consumer·driver 운영 이메일 가입 거부(#474, 로그아웃·정지 시 세션 폐기와 refresh 토큰 해시 저장 포함), 세 앱 전 페이지 동적 렌더링과 nonce CSP Report-Only(#476), 결제사 취소·분쟁 확인 전 정산 확정·지급 보류(#473), 재배송비 환불 기록 수정(#460).
+   - `098affbc`으로 운영 동작이 바뀐 것: 요청 한도 IP 집계가 Railway 엣지 프록시 1홉 기준이 되고 운영 API는 Vercel Preview origin을 거부하며 JWT 두 secret이 같으면 기동하지 않는다(#404), firebase-token 사용자당 60회/분(#488), 판매자 초대 받는 사람 지정·72시간 만료·취소(#512·#501·#502), 운영 기록 메모와 함께 해결(#510), 회차 결제 화면 휴대폰 번호 확인(#504).
+   - `032b221a`으로 운영 동작이 바뀐 것: 판매자 초대 발급에 받는 사람 이메일 필수(#518). 배포 뒤 확인: 판매자 앱 관리자 초대 화면에서 이메일 입력 후 발급.
+   - `098affbc` 배포 뒤 남은 확인: Railway HTTP 로그의 요청자 IP가 실제 클라이언트 IP인지 1회(#404), 판매자·기사 앱 firebase-token 정상(#488), 판매자 앱 운영 기록 해결·초대 화면(#510·#512), 소비자 상품 상세 `/products/<id>`(`?round=` 포함)와 링크 미리보기 메타데이터(#509).
+   - `bd159830` 배포 뒤 남은 확인(사용자): 첫 cron 실행 때 API가 운영 Firestore에 `jobLeases` 문서 2개를 만든다(#491, 일일 운영 요약·보관 파기를 하루 1회로 제한). 상품 문구 생성은 `@google/genai` SDK로 바뀌었으므로(#493) 판매자 앱에서 한 번 생성해 실제 응답을 확인하고, Railway 운영 변수에 `GOOGLE_GEMINI_BASE_URL`이 없는지 본다(SDK가 이 값을 읽으면 호출 주소가 바뀜). 웹 Firebase 클라이언트 12.19(#492)는 세 앱 재배포 때 반영된다.
+5. 디어 오키드 매장(`stores/80189070-…`)의 `ownerId`는 2026-10-15 사용자 승인으로 카카오 로그인 관리자 겸 판매자 계정(uid `6c176cb5…`, role `admin`, `users.storeId`는 이미 이 매장)으로 바꿨다(이전 값 `7ec0e26b-…`는 사용자 문서가 없는 삭제된 `seller_test`). `Ops link store owner` run `38757569432`, audit `store.owner_linked_by_owner_maintenance`. 이 계정의 `users.phone`은 비어 있다(`DEAR-ORCHID-OWNER-PHONE`). `cors.json`(Storage CORS를 GET·HEAD로 축소, `gsutil cors set`)은 아직 적용하지 않았다. 선택 환경 변수 `OPS_TELEGRAM_BOT_TOKEN`·`OPS_TELEGRAM_CHAT_ID`(없으면 운영자 휴대폰 알림만 꺼짐)·`KAKAO_APP_ID`(없으면 카카오 토큰 앱 확인을 건너뛰고 경고 로그)의 설정 여부는 확인하지 않았다.
+6. 사용자 작업(코드 밖, 2026-10-24 재대조): PortOne LIVE 채널(`PORTONE-CHANNEL-CHECK`, 10/27까지 없으면 자동 오픈 전에 회차 일정 이동 결정). 파일럿용 기사 계정 준비(1번)는 2026-10-31 끝났다. 통신판매업 신고는 2026-10-21 끝났다(제 2026-경기이천-0718 호, footer 반영 #668, consumer 배포 뒤 운영 노출). 환불 안내 문구(2026-10-15)와 개인정보 보호책임자(2026-10-10)는 끝났다. 2026-10-24에 CI 필수 검사 지정(`CI-REQUIRED-CHECK`), 텔레그램 비밀값 등록(`OPS-ALERTING`), Firestore 복구 연습(`FIRESTORE-MANAGED-BACKUP`)도 끝났다. 검색 노출 사용자 작업도 2026-10-24에 모두 끝났다. Google Search Console은 도메인 소유 확인(가비아 TXT)과 sitemap 제출을 마쳤다. 네이버 서치어드바이저는 소유확인(meta는 `7ad5b07b`로 반영)과 sitemap 제출, 홈 수집 요청을 마쳤다. 카카오톡 URL 메타 캐시(https://greenlove.co.kr)도 초기화했다.

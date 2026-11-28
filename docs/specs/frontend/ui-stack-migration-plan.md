@@ -177,7 +177,7 @@ P1에서는 **값을 하나도 바꾸지 않고 이름만 대응**시킨다. 기
 3. **동결을 도구로 막는다** (`scripts/release/freeze-guard.mjs`)
    - 상태 파일 `docs/release/ui-migration-freeze.json`에 구간(`open`·`pre-candidate`·`candidate`)과 후보 SHA를 적는다. 구간 전환은 이 파일을 바꾸는 커밋으로 한다. 날짜로 자동 전환하지 않는다(§8은 상태 기준이다).
    - **PR 검사**(`ci.yml`의 `UI 교체 동결` job, `ci-ok`에 포함): 상태 파일을 PR 쪽이 아니라 **base SHA**에서 읽는다(PR이 파일을 같이 고쳐 동결을 풀지 못하게). `pre-candidate`·`candidate`에서는 교체 흔적을 막는다. 교체 전용 경로(`packages/ui/src/{components,styles,lib}/`, `components.json`, 앱 `postcss.config`, `.claude/skills/`)와, 프런트 소스·패키지 매니페스트에 새로 들어온 줄의 교체 흔적(`@greenhub/ui/{components,styles,lib}`, `tailwindcss`, `@base-ui/react`, `tw-animate-css`, `shadcn`)이다. `packages/ui/package.json`은 경로로 막지 않고 이 흔적 줄만 막는다. `candidate`에서는 프런트를 다시 빌드하게 하는 변경(판정은 `scripts/vercel/ignore-build.mjs` 그대로)에 수정·revert 라벨 `freeze-fix`를 요구한다. 라벨은 교체 흔적을 통과시키지 않는다. 라벨 변화에 다시 돌도록 `pull_request`에 `labeled`·`unlabeled`를 넣었다.
-   - **배포 검사**(`production-deploy.yml`의 "UI 교체 동결 확인"): 10/24 사고는 병합이 아니라 동결 중 **배포**였다(`docs/memory.md`). `candidate` 구간에는 상태 파일의 후보 SHA이거나 그 뒤의 SHA만, 그 사이에 교체 흔적이 없을 때만 배포한다.
+   - **배포 검사**(`production-deploy.yml`의 "UI 교체 동결 확인"): 10/24 사고는 병합이 아니라 동결 중 **배포**였다(`docs/archive/memory_archive_20261128.md` 5절 2026-10-24(오후) 기록). `candidate` 구간에는 상태 파일의 후보 SHA이거나 그 뒤의 SHA만, 그 사이에 교체 흔적이 없을 때만 배포한다.
    - 필수 검사는 이미 `ci-ok`이고 branch protection이 strict라, 상태 파일이 바뀐 뒤 열린 PR은 최신 `main`을 반영해 다시 검사받는다. GitHub 설정은 바꾸지 않았다.
 - Taste 실행 래퍼는 P0.5에서 빼고 M4(② 단계 시작 때)로 옮긴다.
 - 완료 기준: `main`에서 만든 기준 촬영·기준 E2E 결과가 있다. 같은 커밋을 두 번 찍어 비교하면 차이 0이고, 민감도 시험의 1px 변화는 차이로 잡힌다. 경로 검사가 막힌 경로 PR을 실제로 실패시킨다.
