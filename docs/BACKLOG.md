@@ -20,7 +20,7 @@
 
 ## PUBLIC READINESS DOCUMENTATION CONVERGENCE
 
-S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증거는 [현재 상태 SSOT](memory.md)에 기록한다. 이 Backlog는 그 종료 상태를 다시 열지 않으며, production release·activation과 혼동하지 않는다.
+S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증거는 [memory 아카이브](archive/memory_archive_20261128.md)에 역사 기록으로 있다. 이 Backlog는 그 종료 상태를 다시 열지 않으며, production release·activation과 혼동하지 않는다.
 
 - S2 Browser Readiness: `CLOSED`
 - exact-source Browser R3: `PASS` — 아래 source와 deployment는 역사적 Preview 증거다.
@@ -47,7 +47,7 @@ S2 → R1 Public Readiness의 accepted 종료 상태와 exact-source Preview 증
 | PR | documentation PR #69는 2026-09-05 `MERGED` |
 | published / merged | PR #70은 `MERGED`; 당시 live `main`은 `fe5e680fa58c8b3af5e508d07115bb8ab9df272a`(historical) |
 | Preview runtime proof | Auth.js 세션 런타임 `RUNTIME_PROVEN`(Preview); 출시 SHA 기준 재실행은 `PENDING` |
-| production deployment | `DONE` — 2026-09-28 출시 SHA `197f84a4`, 이후 갱신 이력과 현재 운영 SHA는 `memory.md` 5절 |
+| production deployment | `DONE` — 2026-09-28 출시 SHA `197f84a4`, 이후 갱신 이력과 현재 운영 SHA는 GitHub Release(Latest), Release 이전 이력은 `memory.md` 5절이 가리키는 아카이브 |
 | production activation | `DONE` — 2026-09-29 `salesMode=round_direct`, 첫 회차 `SCHEDULED` |
 | first live round | `NOT DONE` — 첫 회차 "12월 1일 배송 회차" 주문 11/22 10:00 자동 오픈(2026-10-28 LIVE 채널 부재로 11/1에서 미룸) |
 
@@ -129,7 +129,7 @@ deployment·activation·live round·actual payment/notification을 주장하지 
 
 상태: deployment `DONE`(2026-09-28) / activation `DONE`(2026-09-29) / live round·실제 결제 `NOT DONE`.
 
-- 운영 배포 이력과 현재 운영 SHA는 `memory.md` 5절이 소유한다.
+- 현재 운영 SHA와 배포 이력은 GitHub Release(Latest)가 소유한다. Release 이전(2026-09-28~10-24) 이력은 `memory.md` 5절이 가리키는 아카이브에 있다.
 - 남은 일: 파일럿 시작(2026-11-01)과 시작 직후 실제 결제·환불 1건 시험(아래 NEXT).
 - 운영 배포는 계속 exact release SHA와 별도 사용자 승인으로만 한다.
 

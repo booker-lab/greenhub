@@ -182,7 +182,7 @@
 ### 5-3. 서버 08:30 텔레그램 요약과의 관계 (D6)
 
 - 서버 요약은 그대로 둔다. PC가 꺼진 날의 대비책이다.
-- 다만 운영 Railway와 GitHub에 `OPS_TELEGRAM_*` 값이 들어갔는지는 확인된 적이 없다(`docs/memory.md` 6번 항목, BACKLOG `OPS-ALERTING`). 들어가 있지 않다면 지금은 대비책이 없는 상태다. 이 값을 넣는 일은 사용자가 한다(`ops-alerts.md` §2).
+- 운영 Railway와 GitHub Actions의 `OPS_TELEGRAM_*` 값은 2026-10-24에 들어갔고, 같은 날 08:30 KST 아침 운영 요약이 텔레그램에 실제로 도착했다(BACKLOG `OPS-ALERTING`, `docs/memory.md` `다음 작업` 5번). 이 값을 바꾸는 일은 사용자가 한다(`ops-alerts.md` §2).
 
 ## 6. 아토믹 구현 단계
 
