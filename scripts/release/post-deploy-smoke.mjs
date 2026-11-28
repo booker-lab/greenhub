@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 배포 후 점검(읽기 전용). docs/memory.md 운영 배포 기록의 "배포 뒤 확인"을 한 번에 실행한다.
+ * 배포 후 점검(읽기 전용). 운영 배포 기록(docs/archive/memory_archive_20261128.md 5절)의 "배포 뒤 확인"을 한 번에 실행한다.
  *
  *   node scripts/release/post-deploy-smoke.mjs                      # 운영 canonical URL
  *   node scripts/release/post-deploy-smoke.mjs --expect-sha=0bcceaea  # API가 그 SHA로 떠 있는지도 확인
