@@ -3,7 +3,7 @@
 import type { Order } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
-import { ApiError, apiJson } from '@/lib/api';
+import { apiJson } from '@/lib/api';
 import { buildSellerOrdersPath } from './useOrders.recovery';
 
 const DEBOUNCE_MS = 300;
