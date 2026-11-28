@@ -93,7 +93,8 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
         next: () => void,
       ) => {
         const role = req.headers['x-test-role'];
-        if (role) req.user = { sub: `${role}-1`, role };
+        // 동시 업로드 시험은 x-test-user로 사용자를 나눈다(사용자별 동시 처리 상한 때문).
+        if (role) req.user = { sub: req.headers['x-test-user'] ?? `${role}-1`, role };
         next();
       },
     );
@@ -112,7 +113,7 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
    * 사진 파트를 4MB로 알리고 앞 64KB만 보낸 채 연결을 열어 둔다.
    * multer가 본문을 읽기 시작했다면 나머지를 기다리느라 응답하지 못한다.
    */
-  const startPartialUpload = (path: string, role: string): PartialUpload => {
+  const startPartialUpload = (path: string, role: string, user?: string): PartialUpload => {
     const head = Buffer.from(
       `--${BOUNDARY}\r\nContent-Disposition: form-data; name="photos"; filename="a.jpg"\r\n` +
         'Content-Type: image/jpeg\r\n\r\n',
@@ -129,6 +130,7 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
         'content-type': `multipart/form-data; boundary=${BOUNDARY}`,
         'content-length': String(head.length + declaredFileBytes + tail.length),
         'x-test-role': role,
+        ...(user ? { 'x-test-user': user } : {}),
       },
     });
     req.on('error', () => undefined);
@@ -165,8 +167,10 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
     return upload;
   };
 
-  const post = (path: string, role: string) =>
-    request(app.getHttpServer()).post(path).set('x-test-role', role);
+  const post = (path: string, role: string, user?: string) => {
+    const req = request(app.getHttpServer()).post(path).set('x-test-role', role);
+    return user ? req.set('x-test-user', user) : req;
+  };
 
   it('고객이 올린 사진 3장까지는 서비스로 전달된다', async () => {
     const response = await post(PHOTO_PATH, 'consumer')
@@ -232,16 +236,18 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
           finish.push(() => resolve({ id: 'order-1_product-1', hidden: false })),
         ),
     );
-    const send = () =>
-      post(PHOTO_PATH, 'consumer')
+    const send = (user: string) =>
+      post(PHOTO_PATH, 'consumer', user)
         .attach('photos', JPEG, { filename: 'a.jpg', contentType: 'image/jpeg' })
         .then((response) => response);
 
-    const running = Array.from({ length: REVIEW_PHOTO_UPLOAD_CONCURRENCY }, send);
+    const running = Array.from({ length: REVIEW_PHOTO_UPLOAD_CONCURRENCY }, (_, i) =>
+      send(`consumer-${i + 1}`),
+    );
     await waitUntil(() => finish.length === REVIEW_PHOTO_UPLOAD_CONCURRENCY);
     expect(uploadSlots().inFlight).toBe(REVIEW_PHOTO_UPLOAD_CONCURRENCY);
 
-    const over = await startPartialUpload(PHOTO_PATH, 'consumer').response;
+    const over = await startPartialUpload(PHOTO_PATH, 'consumer', 'consumer-over').response;
     expect(over.status).toBe(429);
     expect(over.body).toMatchObject({ statusCode: 429, message: THROTTLE_MESSAGE });
     expect(reviews.addReviewPhotos).toHaveBeenCalledTimes(REVIEW_PHOTO_UPLOAD_CONCURRENCY);
@@ -251,19 +257,92 @@ describe('후기 사진·삭제·숨기기 HTTP 경계', () => {
     expect(uploadSlots().inFlight).toBe(0);
 
     reviews.addReviewPhotos.mockResolvedValue({ id: 'order-1_product-1', hidden: false });
-    expect((await send()).status).toBe(200);
+    expect((await send('consumer-1')).status).toBe(200);
     expect(uploadSlots().inFlight).toBe(0);
+  });
+
+  it('같은 사용자의 두 번째 동시 업로드는 본문을 읽기 전에 429이고, 다른 사용자는 그대로 올린다', async () => {
+    const finish: Array<() => void> = [];
+    reviews.addReviewPhotos.mockImplementation(
+      () =>
+        new Promise((resolve) =>
+          finish.push(() => resolve({ id: 'order-1_product-1', hidden: false })),
+        ),
+    );
+    const first = post(PHOTO_PATH, 'consumer', 'consumer-a')
+      .attach('photos', JPEG, { filename: 'a.jpg', contentType: 'image/jpeg' })
+      .then((response) => response);
+    await waitUntil(() => finish.length === 1);
+
+    const again = await startPartialUpload(PHOTO_PATH, 'consumer', 'consumer-a').response;
+    expect(again.status).toBe(429);
+    expect(uploadSlots().inFlight).toBe(1);
+
+    const other = post(PHOTO_PATH, 'consumer', 'consumer-b')
+      .attach('photos', JPEG, { filename: 'b.jpg', contentType: 'image/jpeg' })
+      .then((response) => response);
+    await waitUntil(() => finish.length === 2);
+
+    for (const done of finish.splice(0)) done();
+    expect((await first).status).toBe(200);
+    expect((await other).status).toBe(200);
+    expect(uploadSlots().inFlight).toBe(0);
+  });
+
+  it('본문을 다 보낸 뒤 연결을 끊어도 핸들러가 끝날 때까지 자리를 돌려주지 않는다', async () => {
+    let finish: (() => void) | undefined;
+    reviews.addReviewPhotos.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({ id: 'order-1_product-1', hidden: false });
+        }),
+    );
+    const body = Buffer.concat([
+      Buffer.from(
+        `--${BOUNDARY}\r\nContent-Disposition: form-data; name="photos"; filename="a.jpg"\r\n` +
+          'Content-Type: image/jpeg\r\n\r\n',
+      ),
+      JPEG,
+      Buffer.from(`\r\n--${BOUNDARY}--\r\n`),
+    ]);
+    const { port } = app.getHttpServer().address() as AddressInfo;
+    const req = httpRequest({
+      host: '127.0.0.1',
+      port,
+      method: 'POST',
+      path: PHOTO_PATH,
+      headers: {
+        'content-type': `multipart/form-data; boundary=${BOUNDARY}`,
+        'content-length': String(body.length),
+        'x-test-role': 'consumer',
+        'x-test-user': 'consumer-c',
+      },
+    });
+    req.on('error', () => undefined);
+    req.end(body);
+    await waitUntil(() => finish !== undefined);
+    expect(uploadSlots().inFlight).toBe(1);
+
+    // 핸들러가 사진 버퍼를 든 채 도는 동안 클라이언트가 끊는다.
+    req.destroy();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(uploadSlots().inFlight).toBe(1);
+
+    finish!();
+    await waitUntil(() => uploadSlots().inFlight === 0);
   });
 
   it('본문을 올리다 연결이 끊긴 업로드도 자리를 돌려준다', async () => {
     // 끊긴 업로드는 multer의 'Request aborted' 오류로 끝나며 Nest가 오류 로그를 남긴다(기존 동작).
     const quiet = jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
     try {
-      const uploads = Array.from({ length: REVIEW_PHOTO_UPLOAD_CONCURRENCY }, () =>
-        startPartialUpload(PHOTO_PATH, 'consumer'),
+      const uploads = Array.from({ length: REVIEW_PHOTO_UPLOAD_CONCURRENCY }, (_, i) =>
+        startPartialUpload(PHOTO_PATH, 'consumer', `consumer-${i + 1}`),
       );
       await waitUntil(() => uploadSlots().inFlight === REVIEW_PHOTO_UPLOAD_CONCURRENCY);
-      expect((await startPartialUpload(PHOTO_PATH, 'consumer').response).status).toBe(429);
+      expect(
+        (await startPartialUpload(PHOTO_PATH, 'consumer', 'consumer-over').response).status,
+      ).toBe(429);
 
       for (const upload of uploads) upload.abort();
       await waitUntil(() => uploadSlots().inFlight === 0);
