@@ -366,6 +366,8 @@ DELETE /auth/me
 
 모두 `JwtAuthGuard`가 적용된다. `firebase-token`은 JWT 인증이 필요하고, 서명 검증된 access token의 사용자(`sub`) 단위로 1분 60회 throttle이 걸린다(`FIREBASE_TOKEN_THROTTLE`, `apps/api/src/auth/auth.controller.ts`, #488). 또 Firebase 클라이언트를 쓰는 `seller`·`driver`·`admin`만 받는다(`consumer`는 403).
 
+`GET /auth/session`(세 앱 Auth.js 서버의 세션 재검증)도 서명 검증된 access token의 사용자(`sub`) 단위로 1분 120회 throttle이 걸린다(`SESSION_AUTHORITY_THROTTLE`). 세 앱은 429를 일시 장애로 보고 세션을 유지한 채 다음 호출에서 다시 확인하므로, 한도에 닿아도 로그아웃되지 않는다. 직접 근거: `apps/api/src/common/guards/client-throttler.guard.spec.ts`의 `/auth/session` 시험.
+
 ### 소비자 회원 탈퇴 (`DELETE /auth/me`)
 
 2026-10-20 사용자 결정: 진행 중인 주문이 있으면 탈퇴를 막고, 탈퇴하면 개인정보를 바로 지우며 같은 카카오 계정으로 바로 다시 가입할 수 있다. 판정 목록은 `apps/api/src/auth/account-withdrawal.ts`가 소유한다.
@@ -493,6 +495,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-28 | `GET /auth/session`에 사용자(`sub`)별 1분 120회 throttle을 건다. 이전에는 `@SkipThrottle()`로 한도가 없어, 계정 하나의 access token으로 사용자 문서 읽기를 끝없이 반복시킬 수 있었다(야간 보안 감사 AUTH-2) |
 | 2026-11-26 | 소비자 앱 로그인 오류를 `/login?error=`로 모으고 한국어 실패 안내를 띄운다(`pages.error: '/login'`, `loginErrorMessage`). 이전에는 로그인 거부·설정 오류가 Auth.js 기본 영어 화면으로 갔다(소비자 화면 검수) |
 | 2026-10-27 | 결제사(카카오페이) 연동 심사용 이메일 로그인: 운영 API `login`은 `emailLoginAllowedUntil`이 남은 계정만 통과(그 밖은 조회·bcrypt 비교 뒤 같은 403), 소비자 앱 Credentials provider를 모든 런타임에 등록하되 E2E 헤더 게이트는 테스트 게이트 런타임에서만, 로그인 폼은 `?method=email`에서 노출, 계정은 `ops-create-email-review-account.yml`로 생성 |
 | 2026-10-24 | 강제 재검증 결과가 `null`이고 세션 조회도 비어 있으면 세 앱이 `signOut`해 현재 탭도 로그인 화면으로 바꾼다(`recheckSessionAfterRejection`). `auth-session-lifecycle.spec.ts`에 현재 탭 `/login` 전환 확인 추가 |
