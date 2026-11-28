@@ -79,9 +79,16 @@ service cloud.firestore {
     // 단건 get은 공개, list는 picker 조회 범위(당월 1일~익월 말일, 최대 62일 =
     // 매장당 최대 62문서)에 맞춘 limit을 명시한 쿼리만 허용한다.
     // 클라이언트 useDeliverySlots의 DELIVERY_SLOTS_QUERY_LIMIT과 같은 값을 유지한다.
+    // list는 매장을 지정한 쿼리만 연다: 결과 문서의 매장을 get()으로 확인하므로 쿼리에 storeId
+    // 조건(== 또는 in)이 있어야 통과한다(규칙은 필터가 아니다). 매장 조건 없는 목록·정렬로 모든
+    // 매장의 일별 주문 수(usedSlots)를 열거하거나, 정리(archived)된 매장을 조회하는 것을 막는다.
+    // status가 없는 매장(legacy)은 허용하고, 매장 문서가 없으면 get()이 실패해 거부한다
+    // (API store-availability는 문서 없음을 허용 쪽으로 다루지만, 공개 열거 경계는 닫는 쪽을 택한다).
+    // 비용: 쿼리당 매장 문서 읽기 1회(in은 값마다 1회).
     match /dailyCaps/{docId} {
       allow get: if true;
-      allow list: if request.query.limit != null && request.query.limit <= 62;
+      allow list: if request.query.limit != null && request.query.limit <= 62 &&
+        get(/databases/$(database)/documents/stores/$(resource.data.storeId)).data.get('status', null) != 'archived';
       allow write: if false;
     }
 
