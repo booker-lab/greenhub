@@ -135,7 +135,7 @@ webhook-signature
 
 중복 webhook은 최종화 service의 주문 상태 검사와 transaction으로 멱등 처리한다. “PENDING 아니면 무조건 skip”보다 실제 구현의 `canFinalize()` 조건을 따른다.
 
-`timeout`이 아닌 사유로 `CANCELLED`됐거나 취소가 진행 중(`cancellation.status`가 `LOCAL_PENDING`·`LOCAL_FAILED`·`REFUNDING`)인 주문에 `PAID`가 확인되면, 정상 확정 대신 `PAID` 결제를 기록한 뒤 `refundByOrderId()`로 환불한다. 환불이 실패하면 `cancellation.status = REFUND_FAILED`로 남긴다.
+`timeout`이 아닌 사유로 `CANCELLED`됐거나 취소가 진행 중(`cancellation.status`가 `LOCAL_PENDING`·`LOCAL_FAILED`·`REFUNDING`·`REFUND_FAILED`, 판정 정본 `apps/api/src/orders/order-cancellation-state.ts`)인 주문에 `PAID`가 확인되면, 정상 확정 대신 `PAID` 결제를 기록한 뒤 `refundByOrderId()`로 환불한다. 환불이 실패하면 `cancellation.status = REFUND_FAILED`로 남긴다. 같은 결제의 다음 확정 시도(웹훅 재전송·`PENDING` 정리 scheduler)도 정상 접수(`ACCEPTED`)가 아니라 이 환불을 다시 시도하며, 결제 문서에 남은 `refundClaim`(`UNKNOWN`) 때문에 PortOne 재조회 뒤 같은 `providerKey`로만 다시 요청한다. 결제 문서를 `PAID`로 덮어쓰는 기록은 그 문서에 `refundClaim`·`refundedAt`·`CANCELLED` 같은 환불 기록이 남아 있으면 쓰지 않고 중단한다.
 
 ## 6. 결제 성공 최종화
 
@@ -512,6 +512,7 @@ export interface Payment {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-28 | 결제 확정의 취소 진행 판정에 `REFUND_FAILED`를 더함(주문 쪽 정본 `isOrderCancellationInProgress()` 재사용) — 취소 후 환불이 실패한 주문에 같은 `PAID`가 다시 와도 `ACCEPTED`·접수 알림·`refundClaim` 삭제로 가지 않고 PortOne 재조회·같은 `providerKey`로 환불을 다시 시도. `PAID` 결제 기록은 환불 기록이 남은 결제 문서를 덮어쓰지 않고 중단 |
 | 2026-11-07 | 손님 재배송비 결제 확인 `POST /payments/orders/:orderId/redelivery-charge/check` 추가 — 주문 당사자만, 연결된 `PENDING` 청구만 PortOne 조회, 청구별 10초 간격 하한, `PAID`일 때만 기존 `finalizePaid()`로 확정하고 그 밖에는 변경 없음. 주문 상세가 PC 결제창 성공 직후 1번, 모바일 복귀 대기 중 6·20·45초에 요청 |
 | 2026-11-07 | 재배송비 웹훅 밖 수렴 추가 — 매분 15분 넘은 `PENDING` 청구를 PortOne에 조회해 `PAID`면 기존 `finalizePaid()`로 확정(필요 없는 결제는 기록 뒤 환불), 비`PAID`는 현재 보류에 필요하면 그대로 두고 다시 필요해질 수 없는 24시간 넘은 청구만 기존 `markFailed()`로 `FAILED`. 청구별 조회 간격 5분·1시간, 동시 4·실행당 50건, `orderCharges` `status`·`createdAt` 인덱스, Cloud Scheduler 작업 `payments-reconcile-pending-charges` |
 | 2026-11-06 | 손님 결제 확인 `POST /payments/orders/:orderId/check` 추가 — 주문 당사자만, `PENDING`일 때만 PortOne 조회, 주문별 10초 간격 하한, `PAID`일 때만 기존 `finalizePaidOrder()`로 확정하고 그 밖에는 변경·취소 없음. 결제 완료·주문 상세 화면이 `PENDING` 6·20·45초 뒤 요청 |
