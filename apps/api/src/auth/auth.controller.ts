@@ -10,7 +10,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { Throttle, SkipThrottle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -36,6 +36,16 @@ const RELAYED_AUTH_THROTTLE = { default: { limit: 120, ttl: 60000 } };
 // 한 사용자가 여러 탭·기기를 함께 열어도 닿지 않을 만큼 두되, 전역 기본(100/분)보다는 낮춰 커스텀 토큰
 // 발급이 반복 호출로 몰리지 않게 한다.
 export const FIREBASE_TOKEN_THROTTLE = { default: { limit: 60, ttl: 60000 } };
+// 세션 재검증(GET /auth/session)은 세 앱의 Auth.js 서버가 같은 access token마다 최대 60초에 한 번
+// (서버 인스턴스마다) 부르고, 화면의 API 요청이 거절되면 그 자리에서 한 번 더 부른다. 집계는
+// ClientThrottlerGuard가 서명 검증된 access token의 사용자(sub) 단위로 하므로 Vercel 서버 IP를
+// 나눠 써도 손님끼리 버킷을 공유하지 않는다. 앱은 429를 일시 장애로 보고 세션을 유지한 채 다음
+// 호출에서 다시 확인한다. 정상 사용으로는 닿지 않게 넉넉히 두되, 한 계정의 토큰으로 이 경로를
+// 끝없이 불러 사용자 문서 읽기를 반복시키지는 못하게 한다.
+// 만료된 access token은 서명 검증을 통과하지 못해 사용자 키가 아니라 접속 IP(Vercel 서버) 버킷으로
+// 센다. 앱은 refresh보다 이 재검증을 먼저 부르므로 만료 직후 호출은 같은 서버 IP를 쓰는 사용자끼리
+// 버킷을 나눠 쓰지만, 429여도 앱이 곧바로 refresh로 넘어가(만료 토큰이면 refresh) 세션은 유지된다.
+export const SESSION_AUTHORITY_THROTTLE = { default: { limit: 120, ttl: 60000 } };
 
 @Controller('auth')
 export class AuthController {
@@ -70,7 +80,7 @@ export class AuthController {
 
   @Get('session')
   @UseGuards(JwtAuthGuard)
-  @SkipThrottle()
+  @Throttle(SESSION_AUTHORITY_THROTTLE)
   getSession(@CurrentUser() user: JwtPayload) {
     return this.authService.getSession(user);
   }

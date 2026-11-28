@@ -11,6 +11,7 @@ import { AuthController } from '../../auth/auth.controller';
 import { AuthService } from '../../auth/auth.service';
 import { JWT_ALGORITHM, JWT_AUDIENCE, type TokenType } from '../../auth/token-claims';
 import { RAILWAY_TRUST_PROXY_HOPS } from '../../config/runtime-config';
+import { JwtAuthGuard } from './jwt-auth.guard';
 import {
   ClientThrottlerGuard,
   clientIp,
@@ -27,6 +28,8 @@ const THROTTLE_MESSAGE = '요청이 너무 많아요. 잠시 후 다시 시도�
 const DEFAULT_LIMIT = 100;
 const AUTH_LIMIT = 10;
 const RELAYED_AUTH_LIMIT = 120;
+// GET /auth/session은 서명 검증된 access token의 sub 단위로 @Throttle 120/분.
+const SESSION_AUTHORITY_LIMIT = 120;
 
 @Controller('probe')
 class ProbeController {
@@ -53,6 +56,7 @@ async function createApp(trustProxyHops: number | false): Promise<INestApplicati
     refresh: jest.fn().mockResolvedValue({ ok: true }),
     kakaoLogin: jest.fn().mockResolvedValue({ ok: true }),
     register: jest.fn().mockResolvedValue({ ok: true }),
+    getSession: jest.fn().mockResolvedValue({ role: 'consumer' }),
   };
   const config = {
     get: jest.fn((key: string) =>
@@ -78,7 +82,11 @@ async function createApp(trustProxyHops: number | false): Promise<INestApplicati
       JwtService,
       { provide: APP_GUARD, useClass: ClientThrottlerGuard },
     ],
-  }).compile();
+  })
+    // 세션 경로의 JwtAuthGuard(passport)는 이 시험의 관심사가 아니다. 전역 요청 한도 가드가 먼저 돈다.
+    .overrideGuard(JwtAuthGuard)
+    .useValue({ canActivate: () => true })
+    .compile();
 
   const app = moduleRef.createNestApplication<NestExpressApplication>();
   app.set('trust proxy', trustProxyHops);
@@ -373,6 +381,24 @@ describe('ClientThrottlerGuard 집계 기준', () => {
     expect(statuses[RELAYED_AUTH_LIMIT]).toBe(429);
     // 다른 클라이언트 IP는 별도 버킷이다.
     expect((await kakaoLogin('203.0.113.71')).status).toBe(200);
+  });
+
+  it('/auth/session은 같은 서버 IP를 나눠 써도 서명 검증된 access token의 sub별로 120회 한도를 둔다', async () => {
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
+    const server = app.getHttpServer();
+    // 세 앱의 Auth.js 서버(Vercel)가 대신 부르는 경로라 접속 IP는 여러 손님이 함께 쓴다.
+    const session = (token: string) =>
+      request(server)
+        .get('/auth/session')
+        .set('X-Forwarded-For', '198.51.100.20')
+        .set('Authorization', `Bearer ${token}`);
+
+    const userA = await hit(SESSION_AUTHORITY_LIMIT + 1, () => session(accessToken('user-a')));
+
+    expect(userA.slice(0, SESSION_AUTHORITY_LIMIT).every((status) => status === 200)).toBe(true);
+    expect(userA[SESSION_AUTHORITY_LIMIT]).toBe(429);
+    // 같은 서버 IP의 다른 사용자는 별도 버킷이다.
+    expect((await session(accessToken('user-b'))).status).toBe(200);
   });
 });
 
