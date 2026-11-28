@@ -131,6 +131,14 @@ describe('판매자 proxy 로그인 검사', () => {
     expect(state.authPaths).toEqual([]);
   });
 
+  it('서비스워커가 불러오는 사용자 정의 워커(worker-*.js)는 세션 없이도 로그인 화면으로 보내지 않는다', async () => {
+    // 로그아웃 뒤 /login에서 새 서비스워커가 설치될 때도 importScripts가 이 파일을 받아야
+    // 이전 "start-url" 캐시 정리(worker/index.js)가 실행된다.
+    const response = await run('/worker-1a2b3c.js');
+    expect(response.headers.get('location')).toBeNull();
+    expect(state.authPaths).toEqual([]);
+  });
+
   it('초대 링크와 이름만 비슷한 경로는 그대로 로그인 검사를 한다', async () => {
     const response = await run('/invites');
     expect(response.headers.get('location')).toBe(
@@ -252,6 +260,7 @@ describe('판매자 proxy matcher', () => {
       '/favicon.ico',
       '/sw.js',
       '/workbox-1a2b3c.js',
+      '/worker-1a2b3c.js',
       '/manifest.json',
       '/icons/icon-192x192.png',
     ]) {

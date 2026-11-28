@@ -62,29 +62,36 @@ const precacheExclude = [
   /PretendardVariable\.subset\.\d+\.[0-9a-f]+\.woff2$/,
 ];
 
+export const pwaOptions = {
+  dest: 'public',
+  cacheOnFrontEndNav: false,
+  aggressiveFrontEndNavCaching: false,
+  reloadOnOnline: true,
+  cleanupOutdatedCaches: true,
+  disable: process.env.NODE_ENV === 'development',
+  // 첫 화면('/') 문서에는 루트 layout이 넘긴 판매자 세션(API 토큰·이름·이메일·가게 ID)이 실린다.
+  // next-pwa 기본값은 이 문서를 "start-url" 캐시에 남겨(서비스워커 NetworkFirst 규칙 + 화면 이동 때
+  // fetch('/') 저장) 로그아웃 뒤에도 기기에 남고 오프라인에서 그대로 돌려준다. 두 값을 모두 꺼야 한다:
+  // cacheStartUrl만 끄면 dynamicStartUrl(기본 true)이 같은 규칙과 저장 코드를 계속 넣고,
+  // dynamicStartUrl만 끄면 '/' 문서를 precache한다. 이미 남은 캐시는 worker/index.js가 지운다.
+  cacheStartUrl: false,
+  dynamicStartUrl: false,
+  workboxOptions: {
+    exclude: precacheExclude,
+    runtimeCaching: [
+      // Firestore WebChannel — 캐시 불가
+      {
+        urlPattern: /firestore\.googleapis\.com/,
+        handler: 'NetworkOnly',
+      },
+      // Next.js JS 청크 — 구 캐시로 인한 404 방지
+      {
+        urlPattern: /\/_next\/static\/chunks\//,
+        handler: 'NetworkFirst',
+      },
+    ],
+  },
+};
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export default withBundleAnalyzer(
-  withPWA({
-    dest: 'public',
-    cacheOnFrontEndNav: false,
-    aggressiveFrontEndNavCaching: false,
-    reloadOnOnline: true,
-    cleanupOutdatedCaches: true,
-    disable: process.env.NODE_ENV === 'development',
-    workboxOptions: {
-      exclude: precacheExclude,
-      runtimeCaching: [
-        // Firestore WebChannel — 캐시 불가
-        {
-          urlPattern: /firestore\.googleapis\.com/,
-          handler: 'NetworkOnly',
-        },
-        // Next.js JS 청크 — 구 캐시로 인한 404 방지
-        {
-          urlPattern: /\/_next\/static\/chunks\//,
-          handler: 'NetworkFirst',
-        },
-      ],
-    },
-  } as any)(nextConfig),
-);
+export default withBundleAnalyzer(withPWA(pwaOptions as any)(nextConfig));
