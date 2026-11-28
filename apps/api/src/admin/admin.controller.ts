@@ -54,7 +54,10 @@ export class AdminController {
   @Patch('stores/:storeId/archive')
   archiveStore(
     @Param('storeId') storeId: string,
-    @Body() dto: ArchiveStoreDto | undefined,
+    // `ArchiveStoreDto | undefined`로 적으면 데코레이터 메타데이터가 Object가 되어 전역
+    // ValidationPipe가 본문을 검증하지 않는다. 본문이 없으면 파이프가 빈 객체로 검증한 뒤
+    // 원래 값(undefined)을 넘기므로 아래에서 dto?.로 읽는다.
+    @Body() dto: ArchiveStoreDto,
     @CurrentUser() user: JwtPayload,
   ) {
     // 기록 없는 판매자는 본문 없이 보낸다.
