@@ -11,6 +11,7 @@ import { AuthModule } from './auth/auth.module';
 import { AuditModule } from './common/audit/audit.module';
 import { FirestoreRetryableErrorFilter } from './common/filters/firestore-retryable-error.filter';
 import { ClientThrottlerGuard } from './common/guards/client-throttler.guard';
+import { THROTTLE_ERROR_MESSAGE } from './common/guards/throttle-message';
 import { shouldEnableScheduledJobs, validateRuntimeConfig, isApiUnitTestEnv } from './config/runtime-config';
 import { DriverModule } from './driver/driver.module';
 import { EngagementModule } from './engagement/engagement.module';
@@ -60,7 +61,7 @@ const scheduleModule = shouldEnableScheduledJobs(process.env)
     // 집계 기준(검증된 sub·login IP+이메일·클라이언트 IP)은 ClientThrottlerGuard가 정한다.
     ThrottlerModule.forRoot({
       throttlers: [{ name: 'default', ttl: 60000, limit: 100 }],
-      errorMessage: '요청이 너무 많아요. 잠시 후 다시 시도해 주세요.',
+      errorMessage: THROTTLE_ERROR_MESSAGE,
     }),
     FirestoreModule,
     OpsAlertModule,

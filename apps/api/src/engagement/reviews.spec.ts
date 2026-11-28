@@ -5,7 +5,7 @@ import {
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
-import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { GUARDS_METADATA, INTERCEPTORS_METADATA } from '@nestjs/common/constants';
 import { ROLES_KEY } from '../common/decorators/roles.decorator';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -15,6 +15,8 @@ import {
   MyEngagementController,
   SellerEngagementController,
 } from './engagement.controller';
+import { ReviewPhotoUploadSlotsInterceptor } from './review-photo-upload-slots.interceptor';
+import { ReviewPhotoOwnerGuard } from './review-photo-upload.guard';
 import { ADMIN_HIDDEN_REVIEW_LIMIT, adjustReviewStats, ReviewsService } from './reviews.service';
 
 // 8x8 JPEG (Pillow) + EXIF APP1(기기·GPS) + COM. jpeg-metadata.spec.ts와 같은 표본.
@@ -92,12 +94,21 @@ describe('후기 쓰기 권한(로그인한 본인의 배송 완료 주문만)',
     expect(Reflect.getMetadata(GUARDS_METADATA, MyEngagementController)).toEqual([JwtAuthGuard]);
     for (const handler of [
       MyEngagementController.prototype.createReview,
-      MyEngagementController.prototype.addReviewPhotos,
       MyEngagementController.prototype.deleteReview,
     ]) {
       expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toEqual([RolesGuard]);
       expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual(['consumer', 'admin']);
     }
+    // 사진 업로드는 역할 다음에 쓴 사람·남은 자리를 multipart 파싱 전에 확인한다.
+    const addReviewPhotos = MyEngagementController.prototype.addReviewPhotos;
+    expect(Reflect.getMetadata(GUARDS_METADATA, addReviewPhotos)).toEqual([
+      RolesGuard,
+      ReviewPhotoOwnerGuard,
+    ]);
+    expect(Reflect.getMetadata(ROLES_KEY, addReviewPhotos)).toEqual(['consumer', 'admin']);
+    const interceptors = Reflect.getMetadata(INTERCEPTORS_METADATA, addReviewPhotos) as unknown[];
+    expect(interceptors).toHaveLength(2);
+    expect(interceptors[0]).toBe(ReviewPhotoUploadSlotsInterceptor);
   });
 
   it('숨기기는 판매자·관리자 경로에, 숨김 해제·숨긴 후기 목록은 관리자 경로에만 있다', () => {
@@ -256,6 +267,42 @@ describe('후기 사진(최대 3장, JPEG, 5MB, 메타데이터 제거)', () => 
       BadRequestException,
     );
     expect(storage.saveReviewPhoto).not.toHaveBeenCalled();
+  });
+
+  it('본문 받기 전 확인은 사진 저장과 같은 오류로 남의 후기·없는 후기·숨긴 후기·다 찬 자리를 거절한다', async () => {
+    const { service, storage, records } = setup();
+    await seedTwoReviews(service);
+    const own = 'order-delivered_product-1';
+
+    await expect(service.assertCanAddPhotos(own, 'user-1')).resolves.toBeUndefined();
+    await expect(service.assertCanAddPhotos(own, 'user-2')).rejects.toThrow(
+      new ForbiddenException('내가 쓴 후기에만 사진을 올릴 수 있습니다.'),
+    );
+    // 관리자도 저장 경로와 같이 자기가 쓴 후기에만 올릴 수 있다.
+    await expect(service.assertCanAddPhotos(own, 'admin-1')).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+    await expect(service.assertCanAddPhotos('order-delivered_product-9', 'user-1')).rejects.toThrow(
+      new NotFoundException('후기를 찾을 수 없습니다.'),
+    );
+    await expect(service.assertCanAddPhotos('../users', 'user-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+
+    await service.hideReview('order-other_product-1', SELLER, 'spam');
+    await expect(service.assertCanAddPhotos('order-other_product-1', 'user-2')).rejects.toThrow(
+      new BadRequestException('숨겨진 후기에는 사진을 더할 수 없습니다.'),
+    );
+
+    await service.addReviewPhotos(own, 'user-1', [jpeg(), jpeg()]);
+    await expect(service.assertCanAddPhotos(own, 'user-1')).resolves.toBeUndefined();
+    await service.addReviewPhotos(own, 'user-1', [jpeg()]);
+    await expect(service.assertCanAddPhotos(own, 'user-1')).rejects.toThrow(
+      new BadRequestException('사진은 후기 하나에 3장까지 올릴 수 있어요.'),
+    );
+    // 확인만 하고 아무것도 쓰지 않는다.
+    expect(storage.saveReviewPhoto).toHaveBeenCalledTimes(3);
+    expect(records.get(`reviews/${own}`)?.['photoPaths']).toHaveLength(3);
   });
 
   it('저장 뒤 후기 갱신이 실패하면 올린 사진을 지운다', async () => {
