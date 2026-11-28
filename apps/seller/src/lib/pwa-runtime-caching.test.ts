@@ -45,6 +45,9 @@ describe('서비스워커 런타임 캐시: 판매자 세션이 실린 화면 �
     ).not.toBe(true);
   });
 
+  // 이 시험은 사용자 정의 runtimeCaching만 본다. '/' "start-url" 규칙은 next-pwa가 빌드 때 넣으므로
+  // 여기로는 잡히지 않고, 그 회귀는 위의 cacheStartUrl·dynamicStartUrl 단언이 막는다
+  // (빌드 결과 확인: public/sw.js에 "start-url"이 없어야 한다).
   it.each([
     '/',
     '/orders',
