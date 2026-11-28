@@ -3,7 +3,7 @@
 import type { Order } from '@greenhub/shared';
 import { useSession } from 'next-auth/react';
 import { useEffect, useState } from 'react';
-import { ApiError, apiJson } from '@/lib/api';
+import { apiJson } from '@/lib/api';
 import { buildSellerOrdersPath } from './useOrders.recovery';
 
 const DEBOUNCE_MS = 300;
@@ -23,16 +23,10 @@ export function buildOrderPhoneSearchRequest(
 }
 
 /**
- * @deprecated POST phone-search 경로가 없는 이전 API 배포용 GET(?phone=) 경로.
- * API와 판매자 앱이 따로 배포되는 동안만 쓰며, 두 앱이 모두 배포된 뒤 제거한다.
- */
-export function buildLegacyOrderPhoneSearchPath(storeId: string, digits: string): string {
-  return `${buildSellerOrdersPath(storeId)}?phone=${encodeURIComponent(digits)}`;
-}
-
-/**
- * POST 본문으로 검색하고, API가 아직 그 경로를 모르는 이전 배포(404)일 때만
- * deprecated GET으로 한 번 대체한다. 다른 오류는 그대로 던진다.
+ * 전화 검색을 POST 본문으로만 보낸다. 오류는 그대로 던진다.
+ * 이전에는 404면 전화번호를 쿼리 문자열에 붙인 GET으로 한 번 대체했는데, POST 경로가 운영 API에
+ * 배포된 뒤(2026-11-28 운영 Release `prod-20261128-72fac307`에서 API·판매자 앱 모두 POST 사용 확인)에는
+ * 매장 없음 같은 다른 404에서 전화번호를 URL·접속 기록에 남기기만 해서 지웠다.
  */
 export async function requestOrderPhoneSearch<T>(
   storeId: string,
@@ -40,14 +34,7 @@ export async function requestOrderPhoneSearch<T>(
   request: (path: string, init?: RequestInit) => Promise<T>,
 ): Promise<T> {
   const { path, init } = buildOrderPhoneSearchRequest(storeId, digits);
-  try {
-    return await request(path, init);
-  } catch (error) {
-    if (error instanceof ApiError && error.status === 404) {
-      return request(buildLegacyOrderPhoneSearchPath(storeId, digits));
-    }
-    throw error;
-  }
+  return request(path, init);
 }
 
 interface PhoneSearchState {

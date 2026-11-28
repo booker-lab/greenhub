@@ -1,11 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '@/lib/api';
-import {
-  buildLegacyOrderPhoneSearchPath,
-  buildOrderPhoneSearchRequest,
-  requestOrderPhoneSearch,
-} from './useOrderPhoneSearch';
+import { buildOrderPhoneSearchRequest, requestOrderPhoneSearch } from './useOrderPhoneSearch';
 
 // vi.mock은 import보다 먼저 적용된다.
 vi.mock('next-auth/react', () => ({ useSession: () => ({ data: null }) }));
@@ -52,20 +48,13 @@ describe('판매자 주문 전화 검색 요청', () => {
     });
   });
 
-  it('POST 경로가 없는 이전 API 배포(404)면 deprecated GET으로 한 번만 대체한다', async () => {
-    const request = vi
-      .fn()
-      .mockRejectedValueOnce(new ApiError(404, 'Cannot POST /stores/store-1/orders/phone-search'))
-      .mockResolvedValueOnce([{ id: 'order-2' }]);
+  it('404여도 전화번호를 쿼리에 붙인 GET으로 다시 보내지 않고 그대로 던진다', async () => {
+    const error = new ApiError(404, '스토어를 찾을 수 없습니다.');
+    const request = vi.fn().mockRejectedValue(error);
 
-    await expect(requestOrderPhoneSearch('store-1', '5678', request)).resolves.toEqual([
-      { id: 'order-2' },
-    ]);
-    expect(request).toHaveBeenCalledTimes(2);
-    expect(request).toHaveBeenLastCalledWith(buildLegacyOrderPhoneSearchPath('store-1', '5678'));
-    expect(buildLegacyOrderPhoneSearchPath('store-1', '5678')).toBe(
-      '/stores/store-1/orders?phone=5678',
-    );
+    await expect(requestOrderPhoneSearch('store-1', '5678', request)).rejects.toBe(error);
+    expect(request).toHaveBeenCalledTimes(1);
+    for (const [path] of request.mock.calls) expect(String(path)).not.toContain('5678');
   });
 
   it.each([
@@ -73,7 +62,7 @@ describe('판매자 주문 전화 검색 요청', () => {
     ['권한 오류', new ApiError(403, '해당 스토어 주문을 조회할 권한이 없습니다.')],
     ['서버 오류', new ApiError(500, '서버 오류 (500)')],
     ['네트워크 오류', new TypeError('Failed to fetch')],
-  ])('%s는 GET으로 대체하지 않고 그대로 던진다', async (_label, error) => {
+  ])('%s는 그대로 던진다', async (_label, error) => {
     const request = vi.fn().mockRejectedValue(error);
 
     await expect(requestOrderPhoneSearch('store-1', '5678', request)).rejects.toBe(error);
@@ -86,5 +75,7 @@ describe('판매자 주문 전화 검색 요청', () => {
 
     expect(hookBody).toContain('requestOrderPhoneSearch(');
     expect(hookBody).not.toContain('?phone=');
+    // 모듈 어디에도 전화번호를 쿼리에 붙이는 경로가 없다.
+    expect(source).not.toContain('?phone=');
   });
 });
