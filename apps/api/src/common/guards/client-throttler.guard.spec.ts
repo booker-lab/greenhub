@@ -141,6 +141,48 @@ describe('ClientThrottlerGuard 집계 기준', () => {
     expect(statuses.every((status) => status === 200)).toBe(true);
   });
 
+  it('IPv6는 /64 단위로 묶어, 같은 /64 안에서 출발 주소를 바꿔도 한 버킷을 쓴다', async () => {
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
+    const server = app.getHttpServer();
+    let host = 0;
+
+    // 같은 /64(2001:db8:1:2::/64) 안에서 요청마다 인터페이스 ID를 바꾼다.
+    const statuses = await hit(DEFAULT_LIMIT + 1, () => {
+      host += 1;
+      return request(server)
+        .get('/probe')
+        .set('X-Forwarded-For', `2001:db8:1:2::${host.toString(16)}, 198.18.0.1`);
+    });
+
+    expect(statuses.slice(0, DEFAULT_LIMIT).every((status) => status === 200)).toBe(true);
+    expect(statuses[DEFAULT_LIMIT]).toBe(429);
+
+    // 다른 /64는 별도 버킷이다.
+    const otherSubnet = await request(server)
+      .get('/probe')
+      .set('X-Forwarded-For', '2001:db8:1:3::1, 198.18.0.1');
+    expect(otherSubnet.status).toBe(200);
+  });
+
+  it('/auth/login의 IP 상한도 IPv6 /64 단위로 센다', async () => {
+    app = await createApp(RAILWAY_TRUST_PROXY_HOPS);
+    const server = app.getHttpServer();
+    let counter = 0;
+    // 이메일과 /64 안의 출발 주소를 모두 바꿔 가며 보낸다.
+    const loginFromSameSubnet = () => {
+      counter += 1;
+      return request(server)
+        .post('/auth/login')
+        .set('X-Forwarded-For', `2001:db8:9:9::${counter.toString(16)}, 198.18.0.1`)
+        .send({ email: `person-${counter}@example.test`, password: 'password' });
+    };
+
+    const statuses = await hit(LOGIN_PER_IP_LIMIT + 1, loginFromSameSubnet);
+
+    expect(statuses.slice(0, LOGIN_PER_IP_LIMIT).every((status) => status === 200)).toBe(true);
+    expect(statuses[LOGIN_PER_IP_LIMIT]).toBe(429);
+  });
+
   it('trust proxy를 끄면 X-Forwarded-For를 무시하고 소켓 주소로 집계한다', async () => {
     app = await createApp(false);
     const server = app.getHttpServer();

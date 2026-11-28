@@ -332,7 +332,7 @@ POST /auth/kakao-login
 POST /auth/refresh
 ```
 
-`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `login`은 클라이언트 IP+정규화한 이메일 단위로 세고, 이메일과 무관한 클라이언트 IP 단위 1분 60회 상한을 함께 둔다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다(`apps/api/src/auth/auth.controller.ts`). `refresh`는 서명 검증된 refresh token의 사용자 단위로 세고(검증 실패 시 IP 단위), 그 밖의 인증 요청은 서명 검증된 access token의 사용자 단위, 없으면 클라이언트 IP 단위로 센다. 집계 기준은 `ClientThrottlerGuard`가 정하고, 클라이언트 IP는 `trust proxy` 홉 수(`TRUST_PROXY_HOPS`, 미설정 시 Railway 런타임 2·그 밖 0, 단 Railway 밖 배포 환경(`GREENHUB_ENVIRONMENT_NAME` 있음)은 미설정이면 기동을 거부한다, `apps/api/src/config/runtime-config.ts` `resolveTrustProxyHops`, #605)로 해석한 Express `req.ip`다. 이 한도와 집계 기준은 `apps/api/src/common/guards/client-throttler.guard.spec.ts`가 검증한다.
+`register`, `login`, `kakao-login`, `refresh`에는 인증 brute-force 방어용 별도 throttle이 적용된다. `register`·`login`은 1분 10회다. `login`은 클라이언트 IP+정규화한 이메일 단위로 세고, 이메일과 무관한 클라이언트 IP 단위 1분 60회 상한을 함께 둔다. `kakao-login`·`refresh`는 세 앱의 Auth.js 서버(Vercel)가 대신 호출해 여러 손님이 같은 서버 IP를 나눠 쓰고, 유효한 카카오·리프레시 토큰이 있어야만 성공하므로 1분 120회다(`apps/api/src/auth/auth.controller.ts`). `refresh`는 서명 검증된 refresh token의 사용자 단위로 세고(검증 실패 시 IP 단위), 그 밖의 인증 요청은 서명 검증된 access token의 사용자 단위, 없으면 클라이언트 IP 단위로 센다. 집계 기준은 `ClientThrottlerGuard`가 정하고, 클라이언트 IP는 `trust proxy` 홉 수(`TRUST_PROXY_HOPS`, 미설정 시 Railway 런타임 2·그 밖 0, 단 Railway 밖 배포 환경(`GREENHUB_ENVIRONMENT_NAME` 있음)은 미설정이면 기동을 거부한다, `apps/api/src/config/runtime-config.ts` `resolveTrustProxyHops`, #605)로 해석한 Express `req.ip`다. IPv6 주소는 `@nestjs/throttler` 기본 규칙과 같이 /64 단위로 묶어 센다(같은 /64 안에서 출발 주소를 바꿔도 한 버킷). 이 한도와 집계 기준은 `apps/api/src/common/guards/client-throttler.guard.spec.ts`가 검증한다.
 
 주의:
 
@@ -493,6 +493,7 @@ interface SavedAddress {
 
 | 날짜 | 내용 |
 |---|---|
+| 2026-11-28 | 요청 한도의 클라이언트 IP 키를 IPv6 /64 단위로 묶는다. `ClientThrottlerGuard`가 getTracker를 덮어써 `@nestjs/throttler` 6.8의 기본 /64 묶음을 거치지 않아, IPv6 /64 하나로 요청마다 주소를 바꾸면 매번 새 버킷을 받을 수 있었다(야간 보안 감사 AUTHZ-2) |
 | 2026-11-26 | 소비자 앱 로그인 오류를 `/login?error=`로 모으고 한국어 실패 안내를 띄운다(`pages.error: '/login'`, `loginErrorMessage`). 이전에는 로그인 거부·설정 오류가 Auth.js 기본 영어 화면으로 갔다(소비자 화면 검수) |
 | 2026-10-27 | 결제사(카카오페이) 연동 심사용 이메일 로그인: 운영 API `login`은 `emailLoginAllowedUntil`이 남은 계정만 통과(그 밖은 조회·bcrypt 비교 뒤 같은 403), 소비자 앱 Credentials provider를 모든 런타임에 등록하되 E2E 헤더 게이트는 테스트 게이트 런타임에서만, 로그인 폼은 `?method=email`에서 노출, 계정은 `ops-create-email-review-account.yml`로 생성 |
 | 2026-10-24 | 강제 재검증 결과가 `null`이고 세션 조회도 비어 있으면 세 앱이 `signOut`해 현재 탭도 로그인 화면으로 바꾼다(`recheckSessionAfterRejection`). `auth-session-lifecycle.spec.ts`에 현재 탭 `/login` 전환 확인 추가 |
